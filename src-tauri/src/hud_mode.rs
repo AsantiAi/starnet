@@ -172,16 +172,16 @@ fn apply_rect(win: &tauri::WebviewWindow, r: HudRect) {
     let _ = win.set_position(PhysicalPosition::new(r.x, r.y));
 }
 
-/// The rect to open the HUD at: the remembered one if it is still reachable, else the default
-/// corner of the monitor the window is on.
-fn target_rect(win: &tauri::WebviewWindow, remembered: Option<HudRect>) -> Option<HudRect> {
+/// The rect to open the HUD at: the remembered one if it is still reachable (`true`: it is exactly
+/// where the Commander left it), else the default corner of the monitor the window is on (`false`).
+fn target_rect(win: &tauri::WebviewWindow, remembered: Option<HudRect>) -> Option<(HudRect, bool)> {
     let areas: Vec<WorkArea> = win
         .available_monitors()
         .map(|ms| ms.iter().map(work_area_of).collect())
         .unwrap_or_default();
     if let Some(r) = remembered {
         if let Some(area) = areas.iter().find(|a| rect_reachable(&r, std::slice::from_ref(*a))) {
-            return Some(fit_rect(r, *area));
+            return Some((fit_rect(r, *area), true));
         }
     }
     let here = win
@@ -191,7 +191,14 @@ fn target_rect(win: &tauri::WebviewWindow, remembered: Option<HudRect>) -> Optio
         .or_else(|| win.primary_monitor().ok().flatten())
         .map(|m| work_area_of(&m))
         .or_else(|| areas.first().copied())?;
-    Some(default_rect(here))
+    Some((default_rect(here), false))
+}
+
+/// The default corner is computed for the page (inner) width, but an undecorated Windows window
+/// keeps invisible resize borders on its left/right, so its outer rect is wider. Shift left by the
+/// border so the VISIBLE panel, not the invisible frame, sits HUD_MARGIN from the screen edge.
+fn corner_x(r: HudRect, outer_w: u32, inner_w: u32) -> i32 {
+    r.x - (outer_w.saturating_sub(inner_w) / 2) as i32
 }
 
 fn view(win: Option<&tauri::WebviewWindow>, g: &Inner) -> HudView {
@@ -261,8 +268,13 @@ pub fn starnet_hud_set(
             .zip(win.scale_factor().ok())
             .is_some_and(|(s, f)| (s.width as f64) / f > HUD_SANE_MAX_W);
         if fresh || oversized {
-            if let Some(r) = target_rect(&win, if fresh { rect } else { None }) {
+            if let Some((r, remembered)) = target_rect(&win, if fresh { rect } else { None }) {
                 apply_rect(&win, r);
+                if !remembered {
+                    if let (Ok(outer), Ok(inner)) = (win.outer_size(), win.inner_size()) {
+                        let _ = win.set_position(PhysicalPosition::new(corner_x(r, outer.width, inner.width), r.y));
+                    }
+                }
             }
         }
         let _ = win.unminimize();
@@ -349,14 +361,15 @@ pub fn starnet_hud_fold(
     Ok(view(Some(&win), &g))
 }
 
+/// Whether the HUD currently owns the main window (other window commands defer to it).
+pub(crate) fn is_active(app: &AppHandle) -> bool {
+    app.try_state::<HudState>().map(|s| lock(&s).active).unwrap_or(false)
+}
+
 /// Tray entry points: ask the page to switch (it owns the layout and calls starnet_hud_set).
 /// `false` is only sent while the HUD is actually on, so Open StarNet stays a plain reveal otherwise.
 pub(crate) fn request(app: &AppHandle, active: bool) {
-    let on = app
-        .try_state::<HudState>()
-        .map(|s| lock(&s).active)
-        .unwrap_or(false);
-    if active || on {
+    if active || is_active(app) {
         let _ = app.emit_to("main", HUD_EVENT, serde_json::json!({ "active": active }));
     }
 }
@@ -406,6 +419,14 @@ mod tests {
         let a = area(0, 0, 1920, 1040, 1.0);
         assert_eq!(fit_rect(HudRect { x: 10, y: 10, w: 100, h: 20 }, a), HudRect { x: 10, y: 10, w: 300, h: 72 });
         assert_eq!(fit_rect(HudRect { x: 10, y: 10, w: 5000, h: 5000 }, a), HudRect { x: 10, y: 10, w: 1920, h: 1040 });
+    }
+
+    #[test]
+    fn the_corner_accounts_for_invisible_resize_borders() {
+        let r = HudRect { x: 1504, y: 16, w: 400, h: 640 };
+        assert_eq!(corner_x(r, 416, 400), 1496); // 8px border each side: visible edge lands 16px in
+        assert_eq!(corner_x(r, 400, 400), 1504); // no border (macOS / decorated): unchanged
+        assert_eq!(corner_x(r, 390, 400), 1504); // a smaller outer never pushes it right
     }
 
     #[test]

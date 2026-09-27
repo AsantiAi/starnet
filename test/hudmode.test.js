@@ -151,6 +151,9 @@ A.eq([H.fmtAgo(10_000), H.fmtAgo(5 * 60_000), H.fmtAgo(2 * 3_600_000)], ['just n
   A.ok(/pub\(crate\) const HUD_EVENT: &str = "starnet-hud";/.test(hud) && /const TAURI_EVENT = 'starnet-hud';/.test(read('frontend/app/hudmode.js')),
     'tray event name matches on both sides');
   A.ok(/win\.set_always_on_top\(false\);\s*let _ = win\.set_min_size\(Some\(LogicalSize::new\(MAIN_MIN_W, MAIN_MIN_H\)\)\);/.test(hud), 'exit unpins before restoring the station floor');
+  const fsCmd = main.slice(main.indexOf('fn starnet_toggle_fullscreen('), main.indexOf('fn starnet_toggle_fullscreen(') + 500);
+  A.ok(/^fn starnet_toggle_fullscreen\(app: AppHandle\) -> Result<bool, String> \{[\s\S]*?if hud_mode::is_active\(&app\) \{\s*return Ok\(false\);\s*\}\s*let win = app/.test(fsCmd),
+    'F11 cannot blow the pinned HUD up to fullscreen (checked before the window is touched)');
   const caps = JSON.parse(read('src-tauri/capabilities/default.json'));
   A.ok(!caps.permissions.some(p => /always-on-top|set-size|set-position/.test(String(p))), 'the renderer gets no new raw window powers; the shell owns HUD geometry');
 }

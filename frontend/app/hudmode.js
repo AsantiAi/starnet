@@ -449,6 +449,8 @@
     S.tickT = root.setInterval(render, 1000);   // elapsed clocks + "ago" words only; no data invented between polls
     announceLayout();
     return invoke('starnet_hud_set', { active: true, pinned: S.pinned, rect: prefs.rect })
+      // a remembered rect the shell cannot take must never strand the HUD layout in a full-size window
+      .then(v => v || (prefs.rect && S.desktop ? invoke('starnet_hud_set', { active: true, pinned: S.pinned }) : v))
       .then(v => { if (v) { S.pinned = !!v.pinned; syncButtons(); } return true; })
       .finally(() => {
         S.busy = false;

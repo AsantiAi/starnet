@@ -4108,6 +4108,11 @@ static FS_RESTORE_MAXIMIZE: AtomicBool = AtomicBool::new(false);
 /// Toggle the main StarNet desktop window between windowed and fullscreen mode.
 #[tauri::command]
 fn starnet_toggle_fullscreen(app: AppHandle) -> Result<bool, String> {
+    // HUD mode owns the window as a pinned corner panel; F11 there would blow the HUD up over the
+    // game it floats above. The window is not fullscreen, so that is the honest answer.
+    if hud_mode::is_active(&app) {
+        return Ok(false);
+    }
     let win = app
         .get_webview_window("main")
         .ok_or_else(|| "main window unavailable".to_string())?;
