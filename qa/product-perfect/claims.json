@@ -18,8 +18,8 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "698b26779057aa3e6a4890bdee350c847843c7fa",
-    "pathSetSha256": "d399b7dc9c6d8ef4e165d0c6560b5770636dbaf73b81f662e7c4b31d7cc55045",
+    "sourceCommit": "2db0d330a9d1336337e8fc00324def73b64a3ec3",
+    "pathSetSha256": "c199669eb085a575613064f1d6b46dc9bcd6e61efdf0a70e8efaa3527db76159",
     "files": [
       {
         "path": "INSTALL.md",
@@ -498,8 +498,8 @@
       },
       {
         "path": "frontend/app/glass-demo.js",
-        "bytes": 11464,
-        "sha256": "99f4f32fb63028383ee76b6cc8cebab9c5565b37adf45d62d2c0597a6f0a8669"
+        "bytes": 11839,
+        "sha256": "68b724a0a639f8664964ea675098a9ece4e7a2a614e23626bbb73259e1320825"
       },
       {
         "path": "frontend/app/glossary.js",
@@ -535,6 +535,11 @@
         "path": "frontend/app/hint.js",
         "bytes": 8259,
         "sha256": "616da3009c0cc1be260dbf0d2ab28e758ac83cb8e672b8254a8751222a2c2e96"
+      },
+      {
+        "path": "frontend/app/hudmode.js",
+        "bytes": 25717,
+        "sha256": "d7d73c73d6beec96b0787024962bd7b3e5574702933a7725f179af488bb3cb4c"
       },
       {
         "path": "frontend/app/industrialtextures.js",
@@ -1437,6 +1442,11 @@
         "sha256": "5210396774641896b8ac20e3d0eb7c08d0bb0e2c40333ea49cb64584a5f72fd7"
       },
       {
+        "path": "frontend/css/hudmode.css",
+        "bytes": 6243,
+        "sha256": "f534dbb0716bd808c1dedc9688128ea1ebfb890d797d5f7aa4e96eb444edb2d6"
+      },
+      {
         "path": "frontend/css/interface.css",
         "bytes": 29872,
         "sha256": "8c0d245dee790f8b520d9b61ef28818a3e06eb7e8cc5d874860e364e544b3f9e"
@@ -1618,8 +1628,8 @@
       },
       {
         "path": "frontend/index.html",
-        "bytes": 87519,
-        "sha256": "193209f36485e09d7906e54e81dac35690b36b3419f61946bc9b039ceba9768e"
+        "bytes": 88001,
+        "sha256": "a7128b679171cc66954c9c440987ca910996ef01b68b5af39026f11661b62f72"
       },
       {
         "path": "frontend/js/arcade.js",
