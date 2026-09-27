@@ -1,0 +1,129 @@
+/* STARNET hudmode.css — HUD MODE (app/hudmode.js): the station folded down to a glanceable panel.
+   body.hud-mode hides every station region except the HUD deck and the real COMMS panel, which
+   then fill the (desktop: small, always-on-top) window. body.hud-folded also folds COMMS away so
+   only the deck remains. Everything rides the theme vars; state changes are border/fill changes,
+   never glow washes (matte chrome). The selectors lead with `html body.hud-mode` so they outrank
+   every responsive #screen-game.active breakpoint (a 400px HUD sits inside all of them). */
+
+#hud-deck { display: none; }
+#comms-hud { display: none; }
+
+/* ---- the COMMS header button that opens the HUD (hudmode.js unhides it once wired) ---- */
+#comms-hud:not([hidden]) {
+  display: inline-block;
+  flex: 0 0 auto; padding: 3px 7px; min-height: 26px;
+  font: 13px/1 'VT323', monospace; letter-spacing: .6px;
+  color: var(--ph-bright); background: var(--panel); border: 1px solid var(--ph-dim);
+  border-radius: 3px; cursor: pointer;
+}
+#comms-hud:is(:hover, :focus-visible) { border-color: var(--ph-bright); background: var(--ph-faint); }
+#comms-hud:focus-visible { outline: 2px solid var(--ph-bright); outline-offset: 2px; }
+
+/* ---- frame: deck on top, COMMS below; nothing else of the station ---- */
+html body.hud-mode #screen-game.active {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "hud" "chat";
+  padding: 6px; gap: 6px;
+  overflow: hidden;
+}
+/* The station's own regions leave; #terms (the station windows COMMS opens: ADD AGENTS, files,
+   settings) stays, so every door the conversation opens still opens inside the HUD. */
+html body.hud-mode #screen-game.active > :is(#topbar, #left, #stage-wrap, #crew-resizer, #bottombar, #nav-coach) { display: none !important; }
+html body.hud-mode #logo { display: none !important; }
+/* the HUD deck is its own drag strip; the themed MIN/MAX/CLOSE bar would offer MAXIMIZE on a corner panel */
+html body.hud-mode.sn-chrome #sn-titlebar { display: none !important; }
+html body.hud-mode.sn-chrome .screen { top: 0; }
+html body.hud-mode #chat-panel { grid-area: chat; flex: 1 1 auto; min-height: 0; }
+html body.hud-mode :is(#comms-resizer, #comms-expand, #comms-hud) { display: none !important; }
+
+html body.hud-mode.hud-folded #screen-game.active {
+  grid-template-rows: auto;
+  grid-template-areas: "hud";
+  align-content: start;
+}
+html body.hud-mode.hud-folded #chat-panel { display: none !important; }
+
+/* ---- the deck ---- */
+html body.hud-mode #hud-deck {
+  grid-area: hud;
+  display: flex; flex-direction: column; min-width: 0;
+  border-radius: 7px;
+  background: var(--panel);
+  box-shadow: 0 0 0 2px var(--ph-dim), 0 0 0 3.5px rgba(0, 0, 0, .9), inset 0 0 28px rgba(0, 0, 0, .75);
+  font-family: 'VT323', 'Courier New', monospace;
+  overflow: hidden;
+}
+
+#hud-deck .hud-bar {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  padding: 4px 6px 4px 10px;
+  color: var(--ink); background: var(--ph);
+  border-radius: 5px 5px 0 0;
+  user-select: none; -webkit-user-select: none;
+  cursor: default;
+}
+#hud-deck .hud-mark { flex: 0 0 auto; font-size: 16px; letter-spacing: 3px; }
+#hud-deck .hud-sum {
+  flex: 1 1 auto; min-width: 0;
+  font-size: 15px; letter-spacing: 1.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#hud-deck .hud-sum.hud-tone-dim { opacity: .72; }
+#hud-deck .hud-sum.hud-tone-bad,
+#hud-deck .hud-sum.hud-tone-ask { text-decoration: underline; text-underline-offset: 3px; }
+#hud-deck .hud-ctl { flex: 0 0 auto; display: inline-flex; gap: 4px; }
+#hud-deck .hud-btn {
+  padding: 2px 6px; min-height: 22px;
+  font: 13px/1 'VT323', monospace; letter-spacing: .6px;
+  color: var(--ink); background: transparent;
+  border: 1px solid rgba(0, 0, 0, .45); border-radius: 3px;
+  cursor: pointer;
+}
+#hud-deck .hud-btn[hidden] { display: none; }
+#hud-deck .hud-btn:is(:hover, :focus-visible) { background: rgba(0, 0, 0, .18); border-color: var(--ink); }
+#hud-deck .hud-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+#hud-deck .hud-btn.on { background: var(--ink); color: var(--ph); border-color: var(--ink); }
+
+/* ---- live feed rows: dot · NAME · step · clock ---- */
+#hud-deck .hud-feed {
+  list-style: none; margin: 0; padding: 4px 0;
+  max-height: 188px; overflow-y: auto;
+  scrollbar-color: var(--ph-dim) transparent;
+}
+#hud-deck .hud-row {
+  display: grid; grid-template-columns: 8px auto minmax(0, 1fr) auto; align-items: center; gap: 7px;
+  padding: 2px 10px;
+  font-size: 16px; line-height: 1.15;
+  color: var(--ph);
+  cursor: pointer;
+}
+#hud-deck .hud-row:hover { background: var(--ph-faint); }
+#hud-deck .hud-dot {
+  width: 7px; height: 7px; border-radius: 1px;
+  background: var(--hud-suit, var(--ph));
+}
+#hud-deck .hud-live .hud-dot { animation: hud-pulse 1.6s steps(2, end) infinite; }
+#hud-deck .hud-name { color: var(--ph-bright); letter-spacing: 1px; font-weight: normal; white-space: nowrap; }
+#hud-deck .hud-step { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ph); }
+#hud-deck .hud-step i { font-style: normal; color: var(--ph-dim); }
+#hud-deck .hud-time { color: var(--ph-dim); font-size: 14px; white-space: nowrap; }
+#hud-deck .hud-waiting .hud-step { color: var(--gold, #e9c46a); }
+#hud-deck .hud-recent .hud-dot { opacity: .55; }
+#hud-deck .hud-recent .hud-step { color: var(--ph-dim); }
+#hud-deck .hud-recent.hud-tone-ask .hud-step { color: var(--gold, #e9c46a); }
+#hud-deck .hud-recent.hud-tone-bad .hud-step { color: var(--bad, #ff4a3d); }
+#hud-deck .hud-more,
+#hud-deck .hud-empty { display: block; cursor: default; color: var(--ph-dim); font-size: 15px; }
+#hud-deck .hud-more:hover,
+#hud-deck .hud-empty:hover { background: none; }
+
+@keyframes hud-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { #hud-deck .hud-live .hud-dot { animation: none; } }
+
+/* ---- COMMS inside the HUD: same panel, tighter frame ---- */
+html body.hud-mode #chat-panel {
+  border-radius: 7px;
+  box-shadow: 0 0 0 2px var(--ph-dim), 0 0 0 3.5px rgba(0, 0, 0, .9), inset 0 0 28px rgba(0, 0, 0, .75);
+}
+html body.hud-mode #chat-panel > h3 { padding: 3px 10px; border-radius: 5px 5px 0 0; }
