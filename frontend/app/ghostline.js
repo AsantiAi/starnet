@@ -240,7 +240,8 @@ const GhostLine = (() => {
         note(info.tile.x, info.tile.y, '◇ IT WOULD SORT HERE — ' + String(info.tag || 'general').toUpperCase() + ' ' + (ARROW[info.lane] || ''));
         push({ kind: 'sort', tile: info.tile, tag: info.tag, lane: info.lane });
       } else if (info.kind === 'split') {
-        note(info.tile.x, info.tile.y, '◇ IT WOULD BALANCE ACROSS LANES');
+        // a split with a JOINER downstream runs every branch (the compiled `fanout`); without one, jobs take turns
+        note(info.tile.x, info.tile.y, info.fanout ? '◇ EVERY BRANCH WOULD GET A COPY' : '◇ JOBS WOULD TAKE TURNS HERE');
         push({ kind: 'split', tile: info.tile, lane: info.lane });
       }
     }
