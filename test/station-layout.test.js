@@ -1,15 +1,17 @@
 'use strict';
 /* test/station-layout.test.js — station.layout, the lead's read-only view of the floor (2026-09-28; builds on PR #48
-   by @mvanhorn). Runs the REAL page verb (frontend/app/stationcommands.js in a vm) over a REAL WorldModel station, the
-   REAL Pipeline compiler and the REAL WorkflowLine readers, through the sidecar tool and a bridge stub, so what the
-   model reads is what the Workflow panel shows. Held to:
-     1. order and hand-offs are COMPILED and keyed by BAY: one agent crewing two Bays is two steps, each with its own
-        hand-off (the agent-keyed plan.chains view answered the second Bay with the first Bay's record);
-     2. a brief is the text the agent RECEIVES (the compiled brief + its HANDS OFF phrase);
-     3. status and blockers are the panel's readiness, so a crew with no workstation is NOT reported clean;
-     4. what starts a line comes from the panel's three reads, and an unread fact is said, never read as "nothing";
-     5. routing is the plan poster's verdict, and one blocking error means routing is off for the WHOLE station;
-     6. it never mutates the station or posts a plan, and every refusal is an answer. */
+   by @mvanhorn; audit fixes the same day). Runs the REAL page verb (frontend/app/stationcommands.js in a vm) over a
+   REAL WorldModel station, the REAL Pipeline compiler and the REAL WorkflowLine readers, through the REAL sidecar tool
+   (bridge stub + harness-fact stubs), so what the model reads is what the Workflow panel shows. Held to:
+     1. order and hand-offs are COMPILED and keyed by BAY; a brief is the text the agent RECEIVES (brief + HANDS OFF);
+     2. status is the panel's readiness: the per-BAY workstation gate, a blocking finding ANYWHERE on the floor, crew
+        membership, a loop's dead escalation lane and a belt CYCLE are all read, never guessed;
+     3. starts come from the panel's three reads; a PAUSED start (E-STOP, scheduler off, a waiting trigger, a
+        disconnected channel) is named with its reason, and an UNREAD fact is said, never read as "nothing";
+     4. routing is the plan poster's verdict in RUN NOW's order, CONFIRMED against the router's own plan;
+     5. Bays on no line, filter rules, the loop's escalation lane, budgets, today's numbers and last runs are reported;
+     6. the overview is compact, `line` gives one line in full, and the answer always fits the budget as valid JSON;
+     7. it never mutates the station or posts a plan, and every refusal is an answer. */
 const A = require('./_assert.js');
 const fs = require('node:fs');
 const vm = require('node:vm');
@@ -24,10 +26,13 @@ const commands = fs.readFileSync(require.resolve('../frontend/app/stationcommand
 const LIVE = { station: true, pending: false, errors: [], hash: 'h1', lastHash: 'k1', refusedHash: null, pendingHash: null, inflight: false, retryPending: false, stale: false };
 const BUILD = { nagLabel: c => 'LABEL:' + c, nagWhy: c => (c === 'CYCLE' ? 'WHY:' + c : 'LABEL:' + c) };
 const QUIET = { '/api/cron': { enabled: true, halted: false, jobs: [] }, '/api/channels/status': {}, '/api/routing/triggers': { triggers: [] } };
+const DEFAULT_BUDGET = { maxHops: 6, maxUsdPerMessage: 2, maxUsdPerDay: null, clamped: [] };
+const FACTS = { routed: () => ({ hash: 'h1' }), budget: () => DEFAULT_BUDGET, today: () => ({ lines: [], docks: {} }) };
 const liveWorld = over => ({ planStatus: () => Object.assign({}, LIVE, over || {}),
   syncPlan: () => { throw new Error('a read must never recompile or post the plan'); } });
+const app = (st, agents) => ({ station: () => st, agents: () => agents || [] });
 
-// boot the page verb in a vm. `server` maps GET urls to answers (an Error = network failure, missing = 404).
+// boot the page verb in a vm; `server` maps GET urls to answers (an Error = network failure, missing = 404)
 function boot(o) {
   o = o || {};
   const acks = [], calls = [];
@@ -46,12 +51,13 @@ function boot(o) {
   }, o.globals || {});
   vm.createContext(context);
   const S = vm.runInContext(commands + '\nStationCommands;', context);
-  const tools = makeStationTools({ station: { request: async (verb, args) => { await S.run('r' + acks.length, verb, args); return acks.at(-1); } } });
+  const tools = makeStationTools({ station: { request: async (verb, args) => { await S.run('r' + acks.length, verb, args); return acks.at(-1); } },
+    layoutFacts: o.facts === undefined ? FACTS : o.facts, now: o.now === undefined ? () => Date.now() : o.now });
   return { tools, calls };
 }
-async function layout(o, args) {
+async function layout(o, args, ctx) {
   const b = boot(o);
-  const out = await b.tools.layoutTool.run(args || {});
+  const out = await b.tools.layoutTool.run(args || {}, ctx || {});
   return { out, calls: b.calls, r: /^REFUSED/.test(out.content) ? null : JSON.parse(out.content) };
 }
 // the Creative Studio preset: INBOX -> Draft Bay -> Review Bay -> OUTBOX. crew[i] crews bay i; desks = a workstation each.
@@ -63,235 +69,343 @@ function creative(crew, desks) {
   for (let i = crew.length - 1; i >= 0; i--) if (crew[i]) A.ok(st.assignPropAgent(bays[i], crew[i]).ok, 'fixture: ' + crew[i] + ' crews bay ' + (i + 1));
   return { st, bays };
 }
+// a shelf blueprint stamped into a big fresh room (the workflow-line test's helper); bays crewed a1, a2… when `bind`
+function stamp(bp, bind, desks) {
+  const s = WorldModel.create(); const z = s.rooms()[0].rects[0];
+  s.addRoom({ kind: 'hab', rect: { x1: z.x2 + 1, y1: z.y1, x2: z.x2 + 40, y2: z.y1 + 30 } });
+  let ok = null;
+  for (let y = z.y1; y < z.y1 + 25 && !ok; y++) for (let x = z.x1; x < z.x2 + 30 && !ok; x++) { const r = s.stampBlueprint(bp, x, y); if (r.ok) ok = r; }
+  A.ok(!!ok, 'fixture: ' + bp + ' stamps');
+  let n = 0;
+  if (bind) for (const p of s.props()) if (p.t === 'bay') { const aid = 'a' + (++n); s.assignPropAgent(p.id, aid); if (desks) s.ensureWorkstation(aid); }
+  return s;
+}
+// hand-built floor in a fresh lab room: props [{name,t,x,y,w,h,agentId}] + belts [[x,y,dir]] relative to the room corner
+function build(props, belts, s) {
+  s = s || WorldModel.create();
+  const z = s.rooms()[0].rects[0];
+  s.addRoom({ kind: 'lab', rect: { x1: z.x2 + 1, y1: z.y1, x2: z.x2 + 50, y2: z.y1 + 30 } });
+  const R = s.rooms().find(r => r.kind === 'lab').rects[0], ox = R.x1 + 5, oy = R.y1 + 5, ids = {};
+  for (const p of props) {
+    const q = Object.assign({}, p, { x: ox + p.x, y: oy + p.y }); delete q.name; delete q.agentId;
+    const r = s.addProp(q); A.ok(!!(r && r.id), 'fixture: prop ' + p.t);
+    ids[p.name] = r.id;
+    if (p.agentId) s.assignPropAgent(r.id, p.agentId);
+  }
+  for (const [x, y, d] of belts) A.ok(s.setBelt(ox + x, oy + y, d).ok, 'fixture: belt ' + [x, y, d]);
+  return { s, ids };
+}
+const beltRun = (a, b, d) => { const out = []; if (d === 'E') for (let x = a[0]; x <= b[0]; x++) out.push([x, a[1], 'E']);
+  if (d === 'W') for (let x = a[0]; x >= b[0]; x--) out.push([x, a[1], 'W']); if (d === 'S') for (let y = a[1]; y <= b[1]; y++) out.push([a[0], y, 'S']); return out; };
 const lineKeyOf = st => Pipeline.lineComponents(st.projectGeometry()).find(c => c.bays.length).key;
 const refs = list => list.map(x => typeof x === 'string' ? x : x.step + ':' + x.agent);
+const detail = async (o, line) => (await layout(o, { line: line || 'draft & review' })).r.line;
 
 (async () => {
-  /* ---- 1. a crewed, equipped line: compiled order, hand-offs, briefs, rooms, tools, READY, read-only ---- */
+  /* ---- 1. the OVERVIEW: compact, confirmed, read-only ---- */
   {
     const { st, bays } = creative(['drafter', 'reviewer'], true);
     const agents = [{ id: 'drafter', name: 'Ada' }, { id: 'reviewer', name: 'Rex' }];
     const before = JSON.stringify(st.serialize());
-    const { out, r, calls } = await layout({ app: { station: () => st, agents: () => agents } });
+    const { out, r, calls } = await layout({ app: app(st, agents) });
     A.ok(!!r, 'the layout answers: ' + out.content.slice(0, 160));
     A.eq(JSON.stringify(st.serialize()), before, 'reading the layout never mutates the station');
-    A.ok(!calls.some(c => /\/api\/routing (POST|PUT)/.test(c)), 'and never posts a routing plan: ' + calls.join(', '));
+    A.ok(!calls.some(c => /\/api\/routing (POST|PUT)/.test(c)), 'and never posts a routing plan');
     A.eq(calls.filter(c => / GET$/.test(c)).sort(), ['/api/channels/status GET', '/api/cron GET', '/api/routing/triggers GET'], 'it reads exactly the three facts the Workflow panel reads');
     A.eq(out.summary, '"CREATIVE · DRAFT & REVIEW": READY TO RUN · routing live', 'a one-line floor: the summary names the line and its pill');
-    A.eq(r.routing.state, 'live', 'routing is live when the poster says the router holds this floor');
-    A.eq(r.lines.length, 1, 'one assembly line');
+    A.eq([r.routing.state, r.routing.confirmed, 'planHash' in r.routing], ['live', true, false], 'routing is live AND confirmed against the router\'s own plan');
+    A.eq(r.automation, { scheduler: 'on' }, 'the scheduler state rides along');
     const L = r.lines[0];
-    A.eq(L.name, 'CREATIVE · DRAFT & REVIEW', 'the line is named by its Inbox label');
-    A.eq(L.status, 'READY TO RUN', 'the status is the panel\'s own pill');
-    A.eq(L.ready, true, 'and it is ready');
-    A.eq(L.blocking, [], 'nothing blocks it');
-    A.ok(L.hints.some(h => /^nothing starts it yet/.test(h)), 'the panel\'s hint says nothing starts it: ' + JSON.stringify(L.hints));
+    A.eq([L.name, L.status, L.ready], ['CREATIVE · DRAFT & REVIEW', 'READY TO RUN', true], 'name, the panel\'s pill, ready');
     A.ok(/^Nothing starts it on its own yet .* it runs when you test it\. ADA works on it then REX works on it; the result goes to the OUTBOX\.$/.test(L.howItRuns), 'the panel sentence, verbatim: ' + L.howItRuns);
-    A.eq(L.steps.map(s => s.agent && s.agent.name), ['Ada', 'Rex'], 'steps follow the compiled hand-off, not the reverse assignment order');
-    A.eq(L.steps.map(s => s.propId), bays, 'step 1 is the Draft Bay, step 2 the Review Bay');
-    const [s1, s2] = L.steps;
-    A.ok(/^Draft a response/.test(s1.brief) && /^Review the incoming draft/.test(s2.brief), 'each step carries its Bay brief');
-    A.eq([s1.fedByInbox, s2.fedByInbox], [true, false], 'only step 1 is fed by the Inbox');
-    A.eq(refs(s1.getsWorkFrom), ['INBOX'], 'step 1 gets its work from the INBOX');
-    A.eq(refs(s1.sendsTo), ['2:REX'], 'step 1 hands off to step 2');
-    A.eq(refs(s2.getsWorkFrom), ['1:ADA'], 'step 2 gets its work from step 1');
-    A.eq(refs(s2.sendsTo), ['OUTBOX'], 'step 2 ships to the OUTBOX');
-    A.eq([s1.room, s2.room], ['DRAFT & REVIEW', 'DRAFT & REVIEW'], 'steps name their room');
-    A.ok(s1.tools.indexOf('computer') >= 0 && s2.tools.indexOf('computer') >= 0, 'a crewed step lists the tools its run gets there: ' + JSON.stringify(s1.tools));
-    A.eq([s1.routed, s2.routed], [true, true], 'both steps are routed today');
-    A.eq(L.issues, [], 'a configured line carries no routing issue');
-    A.eq(r.otherIssues, [], 'and the floor has none off the line');
-    A.eq(r.rooms.length, 3, 'rooms are listed, corridors are not');
-    A.ok(r.rooms.some(x => x.name === 'DRAFT & REVIEW'), 'rooms carry their names');
-    const desks = r.workstations.filter(w => w.type === 'desk');
-    A.eq(desks.map(w => w.agent.agentId).sort(), ['drafter', 'reviewer'], 'workstations list their holders');
-    A.ok(desks.every(w => w.grants === 'computer'), 'a desk grants computer access');
-    A.ok(r.workstations.every(w => w.type !== 'bay'), 'Bays are steps, never listed twice');
-    A.ok(!r.note, 'no brief was cut, so there is no truncation note');
+    A.eq(L.steps.map(s => [s.step, s.propId, s.agent, s.room]), [[1, bays[0], 'Ada', 'DRAFT & REVIEW'], [2, bays[1], 'Rex', 'DRAFT & REVIEW']], 'compact steps in compiled order');
+    A.ok(L.steps.every(s => !('brief' in s) && !('tools' in s)), 'the overview carries no briefs or tool lists (that is what `line` is for)');
+    A.eq(L.budget, { maxHops: 6, maxUsdPerMessage: 2, maxUsdPerDay: null }, 'each line carries the runner\'s effective budget');
+    A.eq(L.today, null, 'no numbers are claimed for a line the router reports nothing on');
+    A.ok(/call station\.layout with line/.test(r.more), 'the overview says how to get one line in full');
+    A.ok(r.rooms.indexOf('DRAFT & REVIEW') >= 0 && r.rooms.length === 3, 'rooms by name, corridors left out: ' + JSON.stringify(r.rooms));
+    A.eq(r.workstations.filter(w => w.type === 'desk').map(w => w.agent).sort(), ['Ada', 'Rex'], 'workstations name their holders');
+    A.ok(!('loneBays' in r) && !('otherIssues' in r), 'nothing empty is sent');
   }
 
-  /* ---- 2. ONE agent crewing BOTH Bays (multi-bay): each Bay reports its OWN compiled hand-off ---- */
+  /* ---- 2. `line`: one line in FULL — received briefs, compiled hand-offs, tools, gates, filters ---- */
+  {
+    const { st, bays } = creative(['drafter', 'reviewer'], true);
+    const L = await detail({ app: app(st, [{ id: 'drafter', name: 'Ada' }, { id: 'reviewer', name: 'Rex' }]) });
+    const [s1, s2] = L.steps;
+    A.ok(/^Draft a response/.test(s1.brief) && /^Review the incoming draft/.test(s2.brief), 'each step carries the brief its agent receives');
+    A.eq([s1.fedByInbox, s2.fedByInbox], [true, false], 'only step 1 is fed by the Inbox');
+    A.eq([refs(s1.getsWorkFrom), refs(s1.sendsTo), refs(s2.getsWorkFrom), refs(s2.sendsTo)], [['INBOX'], ['2:REX'], ['1:ADA'], ['OUTBOX']], 'compiled hand-offs, both ways');
+    A.ok(s1.tools.indexOf('computer') >= 0, 'a crewed step lists the tools its run gets there');
+    A.eq([L.gates, L.filters, L.issues], [[], [], []], 'no gates, filters or issues on a plain line');
+    A.eq(L.steps.map(s => s.propId), bays, 'step order is the Draft Bay then the Review Bay');
+  }
+
+  /* ---- 3. ONE agent crewing BOTH Bays (multi-bay): each Bay reports its OWN compiled hand-off ---- */
   {
     const { st, bays } = creative(['writer', 'writer'], true);
-    const { r } = await layout({ app: { station: () => st, agents: () => [{ id: 'writer', name: 'Wren' }] } });
-    const L = r.lines[0], [s1, s2] = L.steps;
-    A.eq(L.steps.map(s => s.propId), bays, 'two Bays, two steps, in hand-off order');
-    A.eq([s1.fedByInbox, s2.fedByInbox], [true, false], 'the second Bay is fed by the first, NOT by the Inbox');
-    A.eq(refs(s1.sendsTo), ['2:WREN'], 'the first Bay hands off to the second');
-    A.eq(refs(s2.sendsTo), ['OUTBOX'], 'the second Bay hands off to no one and ships to the OUTBOX');
-    A.eq(refs(s2.getsWorkFrom), ['1:WREN'], 'the second Bay gets its work from the first');
+    const L = await detail({ app: app(st, [{ id: 'writer', name: 'Wren' }]) });
+    const [s1, s2] = L.steps;
+    A.eq([s1.fedByInbox, s2.fedByInbox, refs(s1.sendsTo), refs(s2.sendsTo)], [true, false, ['2:WREN'], ['OUTBOX']], 'per-Bay reach and hand-offs');
     const plan = Pipeline.compileRoutingPlan(st.projectGeometry());
-    for (const s of L.steps) {
-      A.eq(s.fedByInbox, !!plan.reachDock[s.propId], 'fedByInbox is the compiler\'s own dock reach (' + s.propId + ')');
-      A.eq(s.sendsTo.indexOf('OUTBOX') >= 0, !!(plan.dockChains[s.propId] || {}).outbox, 'OUTBOX is the compiler\'s own dock chain (' + s.propId + ')');
-    }
-    A.eq(L.status, 'READY TO RUN', 'a legal multi-bay line is ready');
+    for (const s of L.steps) A.eq(s.fedByInbox, !!plan.reachDock[s.propId], 'fedByInbox is the compiler\'s own dock reach (' + s.propId + ')');
+    A.eq(L.steps.map(s => s.propId), bays, 'two Bays, two steps');
   }
 
-  /* ---- 3. HANDS OFF: the brief is what the agent RECEIVES ---- */
+  /* ---- 4. HANDS OFF: the brief is what the agent RECEIVES ---- */
   {
     const { st, bays } = creative(['drafter', 'reviewer'], true);
-    A.ok(st.setPropHands(bays[0], 'a 200-word draft').ok, 'fixture: a HANDS OFF phrase on the Draft Bay');
-    const { r } = await layout({ app: { station: () => st, agents: () => [] } });
-    const s1 = r.lines[0].steps[0];
-    const received = Pipeline.compileRoutingPlan(st.projectGeometry()).dockBays.find(d => d.propId === bays[0]).brief;
-    A.eq(s1.brief, received, 'the step brief is the compiled brief the agent receives');
-    A.ok(/\n\nWhen you're done, hand off: a 200-word draft$/.test(s1.brief), 'including its HANDS OFF phrase: ' + JSON.stringify(s1.brief.slice(-60)));
-    A.ok(/DRAFTER works on it, handing off a 200-word draft/.test(r.lines[0].howItRuns), 'and the sentence says the hand-off: ' + r.lines[0].howItRuns);
+    A.ok(st.setPropHands(bays[0], 'a 200-word draft').ok, 'fixture: a HANDS OFF phrase');
+    const L = await detail({ app: app(st, []) });
+    A.ok(/\n\nWhen you're done, hand off: a 200-word draft$/.test(L.steps[0].brief), 'the brief includes the HANDS OFF phrase');
+    A.ok(/DRAFTER works on it, handing off a 200-word draft/.test(L.howItRuns), 'and the sentence says the hand-off');
   }
 
-  /* ---- 4. the WORKSTATION gate: a crewed line with no desks is blocked, never reported clean ---- */
+  /* ---- 5. the WORKSTATION gate — and it is per BAY (router.stationFor isolates by the dock a run is at) ---- */
   {
     const { st } = creative(['drafter', 'reviewer'], false);
-    const { r } = await layout({ app: { station: () => st, agents: () => [] } });
-    const L = r.lines[0];
-    A.eq(L.status, '2 TO FIX · BAY 1 NEEDS A WORKSTATION', 'the panel\'s own pill: ' + L.status);
-    A.eq(L.ready, false, 'not ready');
-    A.eq(L.blocking, ['BAY 1 needs a workstation', 'BAY 2 needs a workstation'], 'both Bays need a workstation');
-    A.eq(L.steps.map(s => s.tools), [[], []], 'and neither run has a tool there');
-    A.eq(L.issues, [], '(the compiler has nothing to say: readiness is what blocks it)');
+    const L = (await layout({ app: app(st, []) })).r.lines[0];
+    A.eq([L.status, L.blocking], ['2 TO FIX · BAY 1 NEEDS A WORKSTATION', ['BAY 1 needs a workstation', 'BAY 2 needs a workstation']], 'no desks: both Bays blocked');
+    // one desk-less agent, bays in two rooms, a computer only in the first: the second Bay's run has none
+    const s = WorldModel.create(); const z = s.rooms()[0].rects[0]; const X = z.x2 + 1, Y = z.y1;
+    s.addRoom({ kind: 'lab', rect: { x1: X, y1: Y, x2: X + 14, y2: Y + 10 } });
+    s.addRoom({ kind: 'hab', rect: { x1: X + 15, y1: Y, x2: X + 30, y2: Y + 10 } });
+    s.addProp({ t: 'intake', x: X + 1, y: Y + 4, w: 2, h: 2 });
+    const a = s.addProp({ t: 'bay', x: X + 6, y: Y + 4, w: 2, h: 2 }).id;
+    s.addProp({ t: 'desk', x: X + 2, y: Y + 1, w: 2, h: 1 });
+    const b = s.addProp({ t: 'bay', x: X + 20, y: Y + 4, w: 2, h: 2 }).id;
+    s.addProp({ t: 'outbox', x: X + 26, y: Y + 4, w: 2, h: 2 });
+    s.assignPropAgent(a, 'sam'); s.assignPropAgent(b, 'sam');
+    for (const [p, q] of [[X + 3, X + 5], [X + 8, X + 19], [X + 22, X + 25]]) for (let x = p; x <= q; x++) s.setBelt(x, Y + 5, 'E');
+    A.eq([s.bayObjects('sam', a).indexOf('computer') >= 0, s.bayObjects('sam', b).indexOf('computer') >= 0], [true, false], 'fixture: only the first Bay\'s room computes');
+    const S2 = (await layout({ app: app(s, [{ id: 'sam', name: 'Sam' }]) })).r.lines[0];
+    A.ok(!S2.ready && S2.blocking.indexOf('BAY 2 needs a workstation') >= 0, 'the second Bay is blocked, never READY TO RUN: ' + JSON.stringify(S2.blocking));
+    A.ok(S2.blocking.indexOf('BAY 1 needs a workstation') < 0, 'and the first is not');
   }
 
-  /* ---- 5. uncrewed Bays: listed with a note, the floor's own issue labels, blocked on an agent ---- */
+  /* ---- 6. uncrewed Bays: listed, with the floor's own issue labels ---- */
   {
     const { st } = creative([null, null], false);
-    const { r } = await layout({ app: { station: () => st, agents: () => [] } });
-    const L = r.lines[0];
-    A.eq(L.steps.map(s => s.agent), [null, null], 'unassigned steps are still listed');
-    A.ok(L.steps.every(s => /^no agent yet/.test(s.note) && !s.routed && s.sendsTo.length === 0), 'each says it has no agent and routes nothing');
-    A.eq(L.issues.map(i => [i.code, i.label, i.blocking]), [['UNBOUND_BAY', 'LABEL:UNBOUND_BAY', false], ['UNBOUND_BAY', 'LABEL:UNBOUND_BAY', false]], 'issues carry the floor\'s own label and are warnings');
-    A.ok(L.issues.every(i => !('fix' in i)), 'no fix sentence when it would only repeat the label');
+    const L = (await layout({ app: app(st, []) })).r.lines[0];
+    A.ok(L.steps.every(s => s.agent === null && /^no agent yet/.test(s.note)), 'unassigned steps are listed with a note');
+    A.eq(L.issues.map(i => [i.code, i.label, i.blocking]), [['UNBOUND_BAY', 'LABEL:UNBOUND_BAY', false], ['UNBOUND_BAY', 'LABEL:UNBOUND_BAY', false]], 'issues carry the floor\'s own label');
     A.ok(/^\d+ TO FIX · BAY 1 NEEDS AN AGENT$/.test(L.status), 'the pill names the missing agent: ' + L.status);
-    A.ok(/\[pick an agent\]/.test(L.howItRuns) && /\[the result reaches the OUTBOX once every step has an agent\]/.test(L.howItRuns), 'the sentence marks the gaps: ' + L.howItRuns);
   }
 
-  /* ---- 6. what STARTS the line: routines, channels, folder triggers, from the panel's three reads ---- */
+  /* ---- 7. what STARTS the line, and what is PAUSED — never "nothing starts it" over a stopped start ---- */
   {
     const { st } = creative(['drafter', 'reviewer'], true);
-    const key = lineKeyOf(st);
-    const server = {
-      '/api/cron': { enabled: true, halted: false, jobs: [{ id: 'j1', name: 'Morning run', agentId: 'drafter', runsLine: true, enabled: true, scheduleDisplay: 'daily 09:00', prompt: 'x' },
-        { id: 'j2', name: 'Review only', agentId: 'reviewer', runsLine: true, enabled: true, scheduleDisplay: 'hourly' }] },
-      '/api/channels/status': { telegram: { configured: true, connected: true, agentName: 'Ada' } },
-      '/api/routing/triggers': { triggers: [{ id: 't1', lineId: key, kind: 'folder', enabled: true, blockedBy: null, config: { path: 'C:\\Drops' } }] }
-    };
-    const { r } = await layout({ app: { station: () => st, agents: () => [{ id: 'drafter', name: 'Ada' }, { id: 'reviewer', name: 'Rex' }] }, server });
+    const key = lineKeyOf(st), agents = [{ id: 'drafter', name: 'Ada' }, { id: 'reviewer', name: 'Rex' }];
+    const job = { id: 'j1', name: 'Morning run', agentId: 'drafter', runsLine: true, enabled: true, scheduleDisplay: 'daily 09:00', prompt: 'x' };
+    const folder = { id: 't1', lineId: key, kind: 'folder', enabled: true, blockedBy: null, config: { path: 'C:\\Drops' } };
+    const live = await layout({ app: app(st, agents), server: { '/api/cron': { enabled: true, halted: false, jobs: [job] },
+      '/api/channels/status': { telegram: { configured: true, connected: true, agentName: 'Ada' } }, '/api/routing/triggers': { triggers: [folder] } } });
+    const L = live.r.lines[0];
+    A.eq([L.starts.schedules, L.starts.channels, L.starts.events, L.starts.paused], [['daily 09:00'], ['Telegram'], ['when a file lands in C:\\Drops'], []], 'live starts, nothing paused');
+    A.ok(/^Daily 09:00, when a Telegram message arrives or when a file lands in C:\\Drops, ADA works on it/.test(L.howItRuns), 'the sentence leads with the starts');
+    const D = await detail({ app: app(st, agents), server: { '/api/cron': { enabled: true, halted: false, jobs: [job] }, '/api/channels/status': { telegram: { configured: true, connected: true, agentName: 'Ada' } }, '/api/routing/triggers': { triggers: [folder] } } });
+    A.eq(D.starts.routines.map(x => [x.name, x.agent, x.startsLine]), [['Morning run', 'ADA', true]], 'the detail lists the routines');
+    A.ok(D.starts.routines.every(x => !('prompt' in x)), 'routine prompts are never copied into the answer');
+    // E-STOP: the scheduler is frozen, the trigger waits, the channel is down — the answer names every one
+    const halted = await layout({ app: app(st, agents), server: { '/api/cron': { enabled: true, halted: true, jobs: [job] },
+      '/api/channels/status': { telegram: { configured: true, connected: false, agentName: 'Ada' } },
+      '/api/routing/triggers': { triggers: [Object.assign({}, folder, { blockedBy: 'automation is stopped (E-STOP) — resume it and this trigger fires again' })] } } });
+    const H = halted.r.lines[0];
+    A.eq(halted.r.automation, { scheduler: 'stopped by E-STOP' }, 'the answer says the scheduler is stopped by E-STOP');
+    A.eq([H.starts.schedules, H.starts.channels, H.starts.events], [[], [], []], 'nothing starts it right now');
+    A.eq(H.starts.paused, ['its folder trigger (C:\\Drops) is waiting: automation is stopped (E-STOP) — resume it and this trigger fires again',
+      'its routine "Morning run" (daily 09:00) is saved but the scheduler is stopped (E-STOP)', 'its Telegram channel answers as its first step but is not connected'], 'each paused start is named with its reason');
+    A.ok(/^Nothing starts it right now \(its folder trigger .*E-STOP.*; its routine "Morning run" .* stopped \(E-STOP\); its Telegram channel .* not connected\); it runs when you test it\./.test(H.howItRuns), 'the sentence says why nothing starts it: ' + H.howItRuns);
+    A.ok(H.hints.some(h => /^nothing starts it right now: /.test(h)) && !H.hints.some(h => /no schedule, channel, folder or webhook/.test(h)), 'the hint names the pause, never "no schedule"');
+    const off = (await layout({ app: app(st, agents), server: { '/api/cron': { enabled: false, halted: false, jobs: [job] }, '/api/channels/status': {}, '/api/routing/triggers': { triggers: [] } } })).r;
+    A.eq([off.automation, off.lines[0].starts.paused], [{ scheduler: 'off' }, ['its routine "Morning run" (daily 09:00) is saved but the scheduler is off']], 'a disabled scheduler reads "off"');
+  }
+
+  /* ---- 8. an UNREAD fact is said, never turned into "nothing starts it" ---- */
+  {
+    const { st } = creative(['drafter', 'reviewer'], true);
+    const L = (await layout({ app: app(st, []), server: { '/api/cron': new Error('down'), '/api/routing/triggers': { triggers: [] } } })).r.lines[0];
+    A.eq(L.startsUnread, ['routines', 'channels'], 'the unread facts are named');
+    A.ok(/^What starts it could not be fully read right now \(routines, channels unavailable\); /.test(L.howItRuns), 'the sentence says so: ' + L.howItRuns);
+    A.ok(!L.hints.some(h => /^nothing starts it/.test(h)) && L.hints.some(h => /could not be read/.test(h)), 'and so do the hints');
+  }
+
+  /* ---- 9. ROUTING: RUN NOW's order, confirmed against the router ---- */
+  {
+    const { st } = creative(['drafter', 'reviewer'], true);
+    const a = app(st, []);
+    const at = async (world, facts) => (await layout({ app: a, world, facts })).r.routing;
+    const off = await at(liveWorld({ errors: [{ code: 'CYCLE' }], refusedHash: 'k1' }));
+    A.ok(off.state === 'off' && /OFF for the whole station/.test(off.note) && /LABEL:CYCLE/.test(off.note), 'a refused floor is off for the whole station: ' + off.note);
+    A.eq((await at(liveWorld({ errors: [{ code: 'CYCLE' }], stale: true }))).state, 'unconfirmed', 'a FAILED post of a broken floor is unconfirmed — the router may still run the previous floor');
+    A.eq((await at(liveWorld({ errors: [{ code: 'CYCLE' }], inflight: true }))).state, 'unconfirmed', 'so is one still in flight');
+    A.eq((await at(liveWorld({ errors: [{ code: 'CYCLE' }] }))).state, 'off', 'blocking errors on the posted floor: off');
+    A.eq((await at(liveWorld({ lastHash: null }))).state, 'unknown', 'no answer yet: unknown');
+    const pend = await at(liveWorld({ pending: true }));
+    A.ok(pend.state === 'live' && pend.pendingEdits && /running the floor as last sent\./.test(pend.note) && /newer edits the router has not received yet/.test(pend.note), 'unsent edits: ' + pend.note);
+    const pendOff = await at(liveWorld({ pending: true, errors: [{ code: 'CYCLE' }], refusedHash: 'k1' }));
+    A.ok(/they are checked when sent\./.test(pendOff.note) && !/routes by/.test(pendOff.note), 'off + unsent edits never claims work routes: ' + pendOff.note);
+    A.eq((await at(null)).state, 'unknown', 'no world: unknown, never live');
+    const none = await at(undefined, Object.assign({}, FACTS, { routed: () => null }));
+    A.ok(none.state === 'off' && none.confirmed === false && /holds no routing plan/.test(none.note), 'the router holds nothing: OFF, whatever the page believed');
+    const other = await at(undefined, Object.assign({}, FACTS, { routed: () => ({ hash: 'someone-else' }) }));
+    A.ok(other.state === 'unconfirmed' && /different version of the floor/.test(other.note), 'the router holds another floor: unconfirmed');
+  }
+
+  /* ---- 10. one blocking finding ANYWHERE: every line is not ready, and the pill says why ---- */
+  {
+    const { s } = build(
+      [{ name: 'IN', t: 'intake', x: 0, y: 2, w: 2, h: 2 }, { name: 'A', t: 'bay', x: 5, y: 2, w: 2, h: 2, agentId: 'ann' }, { name: 'B', t: 'bay', x: 11, y: 2, w: 2, h: 2, agentId: 'bob' }],
+      [].concat(beltRun([2, 2], [4, 2], 'E'), beltRun([7, 2], [10, 2], 'E'), beltRun([13, 3], [13, 4], 'S'), beltRun([13, 5], [5, 5], 'W'), [[4, 5, 'N'], [4, 4, 'N']]));
+    const z = s.rooms()[0].rects[0];
+    let ok = null; for (let y = z.y1; y < z.y2 && !ok; y++) for (let x = z.x1; x < z.x2 && !ok; x++) { const r = s.stampBlueprint('front_desk', x, y); if (r.ok) ok = r; }
+    s.setPropLabel(ok.ids.find(id => s.propById(id).t === 'intake'), 'SUPPORT');
+    s.assignPropAgent(ok.ids.map(id => s.propById(id)).find(p => p.t === 'bay').id, 'cat');
+    for (const a of ['ann', 'bob', 'cat']) s.ensureWorkstation(a);
+    const plan = Pipeline.compileRoutingPlan(s.projectGeometry());
+    A.ok(plan.errors.some(e => e.code === 'CHAIN_CYCLE') && !Pipeline.ok(plan), 'fixture: a CHAIN_CYCLE elsewhere makes the router refuse the floor');
+    const L = await detail({ app: app(s, []), world: liveWorld({ errors: plan.errors.filter(e => !e.warn), refusedHash: 'k1' }) }, 'SUPPORT');
+    A.eq(L.ready, false, 'the healthy-looking line is NOT ready');
+    A.ok(/^routing is off for the whole station until this is fixed: LABEL:CHAIN_CYCLE$/.test(L.blocking[0]), 'its first blocker is the station-wide one: ' + JSON.stringify(L.blocking));
+    A.ok(/^1 TO FIX · ROUTING IS OFF FOR THE WHOLE STATION/.test(L.status), 'and the pill says so: ' + L.status);
+  }
+
+  /* ---- 11. a stray belt CYCLE: the loop is the finding, never "not connected" / "not fed" ---- */
+  {
+    const s = stamp('front_desk', true, true);
+    const z = s.rooms()[0].rects[0];
+    s.addRoom({ kind: 'lab', rect: { x1: z.x1, y1: z.y2 + 60, x2: z.x1 + 10, y2: z.y2 + 70 } });
+    const lab = s.rooms().find(r => r.kind === 'lab').rects[0], x = lab.x1 + 3, y = lab.y1 + 3;
+    for (const [bx, by, d] of [[x, y, 'E'], [x + 1, y, 'S'], [x + 1, y + 1, 'W'], [x, y + 1, 'N']]) A.ok(s.setBelt(bx, by, d).ok, 'fixture: loop belt');
+    const r = (await layout({ app: app(s, []), world: liveWorld({ errors: [{ code: 'CYCLE' }], refusedHash: 'k1' }) })).r;
     const L = r.lines[0];
-    A.eq(L.starts.schedules, ['daily 09:00'], 'a whole-line routine at the entry Bay is a schedule');
-    A.eq(L.starts.channels, ['Telegram'], 'a connected channel answering as the entry agent starts the line');
-    A.eq(L.starts.events, ['when a file lands in C:\\Drops'], 'an armed folder trigger of this line starts it');
-    A.eq(L.starts.routines.map(x => [x.name, x.agent, x.startsLine, x.atEntry]), [['Morning run', 'ADA', true, true], ['Review only', 'REX', false, false]],
-      'every routine on the line is listed, with whether it starts the whole line');
-    A.ok(L.starts.routines.every(x => !('prompt' in x)), 'routine prompts are not copied into the answer');
-    A.eq(L.starts.channelBots, [{ label: 'Telegram', connected: true, answersAs: 'Ada', feedsThisLine: true }], 'channel rows say who they answer as and whether that feeds this line');
-    A.ok(/^Daily 09:00, when a Telegram message arrives or when a file lands in C:\\Drops, ADA works on it/.test(L.howItRuns), 'the sentence leads with what starts it: ' + L.howItRuns);
-    A.ok(!L.hints.some(h => /nothing starts it/.test(h)), 'and the "nothing starts it" hint is gone');
-    A.ok(!('startsUnread' in L), 'every fact was read');
+    A.ok(/^\[a belt LOOP on the floor stops all routing: break the circle, then this line can run\]/.test(L.howItRuns), 'the sentence names the loop: ' + L.howItRuns);
+    A.ok(!L.blocking.some(b => /not connected/.test(b)), 'no Bay is called "not connected" on a guess: ' + JSON.stringify(L.blocking));
+    A.ok(/whole station until this is fixed: WHY:CYCLE/.test(L.blocking[0]), 'the loop is the first blocker, in the panel\'s fix words: ' + L.blocking[0]);
+    const cyc = (r.otherIssues || []).find(i => i.code === 'CYCLE');
+    A.ok(cyc && cyc.blocking && cyc.fix === 'WHY:CYCLE' && !!cyc.room, 'the CYCLE is reported with its fix and WHERE it is: ' + JSON.stringify(cyc));
+    A.ok(!JSON.stringify(r).includes('BAY_NOT_FED'), 'and no bay is shamed BAY_NOT_FED');
   }
 
-  /* ---- 7. an UNREAD fact is said, never turned into "nothing starts it" ---- */
+  /* ---- 12. the LOOP's ESCALATION lane: conditional, never "then"; dead when the loop has no pass condition ---- */
   {
-    const { st } = creative(['drafter', 'reviewer'], true);
-    const server = { '/api/cron': new Error('network down'), '/api/routing/triggers': { triggers: [] } };   // channels: 404
-    const { r } = await layout({ app: { station: () => st, agents: () => [] }, server });
-    const L = r.lines[0];
-    A.eq(L.startsUnread, ['routines', 'channels'], 'the facts that could not be read are named');
-    A.ok(/^What starts it could not be fully read right now \(routines, channels unavailable\); /.test(L.howItRuns), 'the sentence says so instead of "nothing starts it": ' + L.howItRuns);
-    A.ok(!L.hints.some(h => /^nothing starts it/.test(h)), 'the "nothing starts it" hint is withdrawn');
-    A.ok(L.hints.some(h => /could not be read/.test(h)), 'and replaced by an honest re-check hint: ' + JSON.stringify(L.hints));
+    const s = stamp('fire_escape', true, true);
+    const r = await layout({ app: app(s, []) });
+    const L = r.r.lines[0];
+    A.ok(/A2 reviews it and sends it back to A1 until it is approved \(3 tries max\); if it is still not approved after 3 tries, A3 fixes what the loop could not; the result goes to the OUTBOX\.$/.test(L.howItRuns), 'escalation is conditional in the sentence: ' + L.howItRuns);
+    const D = await detail({ app: app(s, []) }, L.lineId);
+    const rev = D.steps.find(x => x.role === 'REVIEWER'), fix = D.steps.find(x => x.role === 'FIXER');
+    A.eq(refs(rev.sendsTo), ['OUTBOX'], 'the reviewer hands off to the OUTBOX only — the fixer is not a plain next step');
+    A.eq(rev.escalatesTo.map(e => [e.agent, e.runs, e.when]), [['A3', true, 'if it is still not approved after 3 tries']], 'it ESCALATES to the fixer, with the condition');
+    A.ok(/^runs only on the LOOP's escalation lane: if it is still not approved after 3 tries$/.test(fix.note) && fix.getsWorkFrom.some(g => g.onEscalation), 'the fixer says when it runs: ' + fix.note);
+    A.eq([D.gates[0].escalatesTo.agent, D.gates[0].escalation], ['A3', 'if it is still not approved after 3 tries'], 'the gate names its escalation lane');
+    // the same floor with the pass condition cleared: the runner never escalates (chain.js loopDecision needs `when`)
+    const loop = s.props().find(p => p.t === 'loop');
+    A.ok(s.configureJunction(loop.id, { done: 'E', esc: 'S', maxIter: 3 }).ok, 'fixture: clear the loop\'s pass condition');
+    const dead = (await layout({ app: app(s, []) })).r.lines[0];
+    A.ok(/sends it back to A1 every pass \(3 tries max\); \[A3 on the escalation lane never runs: the LOOP has no pass condition\]/.test(dead.howItRuns), 'a dead escalation lane is said to be dead: ' + dead.howItRuns);
+    A.ok(dead.hints.some(h => /escalation lane never runs: give the LOOP a pass condition/.test(h)), 'and the hint says how to fix it');
+    const DD = await detail({ app: app(s, []) }, dead.lineId);
+    A.eq(DD.steps.find(x => x.role === 'FIXER').routed, false, 'the dead lane\'s fixer is not routed');
   }
 
-  /* ---- 8. ROUTING STATE is the poster's verdict; one blocking error is off for the WHOLE station ---- */
+  /* ---- 13. "connect a belt" is never said about a belt that exists ---- */
   {
-    const { st } = creative(['drafter', 'reviewer'], true);
-    const app = { station: () => st, agents: () => [] };
-    const off = (await layout({ app, world: liveWorld({ errors: [{ code: 'CYCLE' }] }) })).r.routing;
-    A.eq(off.state, 'off', 'a blocking error on the posted floor: routing is off');
-    A.ok(/OFF for the whole station/.test(off.note) && /no line routes work/.test(off.note) && /LABEL:CYCLE/.test(off.note), 'and it says the whole station stops, with the floor\'s label: ' + off.note);
-    A.eq((await layout({ app, world: liveWorld({ refusedHash: 'k1', lastHash: 'k1' }) })).r.routing.state, 'off', 'a refused post: routing is off');
-    A.eq((await layout({ app, world: liveWorld({ stale: true }) })).r.routing.state, 'unconfirmed', 'a failed post: unconfirmed, never live');
-    A.eq((await layout({ app, world: liveWorld({ inflight: true }) })).r.routing.state, 'unconfirmed', 'a post in flight: unconfirmed');
-    A.eq((await layout({ app, world: liveWorld({ lastHash: null }) })).r.routing.state, 'unknown', 'no server answer yet: unknown');
-    const pend = (await layout({ app, world: liveWorld({ pending: true }) })).r.routing;
-    A.eq([pend.state, pend.pendingEdits], ['live', true], 'unsent edits: the router runs the previous floor');
-    A.ok(/newer edits the router has not received yet/.test(pend.note), 'and the note says so: ' + pend.note);
-    A.ok(/running the floor as last sent\./.test(pend.note) && !/running this floor/.test(pend.note), 'it never says the router runs THIS floor while edits are unsent: ' + pend.note);
-    A.ok(/running this floor\./.test((await layout({ app })).r.routing.note), 'with nothing pending it runs this floor');
-    A.eq((await layout({ app, world: null })).r.routing.state, 'unknown', 'no world on the page: unknown, never live');
-    A.eq((await layout({ app, world: liveWorld({ station: false }) })).r.routing.state, 'unknown', 'no floor loaded in the world: unknown');
-    // a floor whose DRAWN state has a blocking error (a belt loop) that the router has not been sent yet
-    const loopGeo = { props: [], belts: [{ x: 0, y: 0, dir: 'E' }, { x: 1, y: 0, dir: 'S' }, { x: 1, y: 1, dir: 'W' }, { x: 0, y: 1, dir: 'N' }] };
-    const fake = { projectGeometry: () => loopGeo, rooms: () => [], bayObjects: () => [], propById: () => null, roomAt: () => null, roomById: () => null, props: () => [] };
-    const drawn = (await layout({ app: { station: () => fake, agents: () => [] }, world: liveWorld({ pending: true }) })).r;
-    A.ok(/As drawn now, the floor has a blocking error the router will refuse: LABEL:CYCLE\./.test(drawn.routing.note), 'a drawn blocking error is named before it is sent: ' + drawn.routing.note);
-    A.eq(drawn.otherIssues.map(i => [i.code, i.blocking, i.fix]), [['CYCLE', true, 'WHY:CYCLE']], 'a finding on no line is reported floor-wide, with its fix sentence');
+    const { st } = creative(['drafter', null], true);
+    const L = await detail({ app: app(st, []) });
+    A.eq(L.steps[0].note, 'its belt leads on to step 2, which has no agent yet', 'the missing piece is an agent, not a belt');
   }
 
-  /* ---- 9. a finding on NO line is still reported ---- */
+  /* ---- 14. a Bay crewed by an id that is not on the crew still runs — on the station's default identity ---- */
+  {
+    const { st } = creative(['ghost1', 'reviewer'], true);
+    const agents = [{ id: 'reviewer', name: 'Rex' }];
+    const r = (await layout({ app: app(st, agents) })).r;
+    A.eq(r.lines[0].steps[0].agent, 'ghost1 (not on the crew)', 'the overview flags it');
+    A.ok(r.lines[0].hints.some(h => /BAY 1's agent "ghost1" is not on the crew: its runs use the station's default identity/.test(h)), 'and the hints say what that means');
+    const D = await detail({ app: app(st, agents) });
+    A.eq(D.steps[0].agent, { agentId: 'ghost1', name: 'ghost1', onCrew: false }, 'the detail marks it off the crew');
+  }
+
+  /* ---- 15. Bays on NO line are listed — a crewed lone BAY is a complete dock ---- */
   {
     const plain = WorldModel.create(Templates.build('default', WorldModel, Sprites));
-    const home = (await layout({ app: { station: () => plain, agents: () => [] } })).r;
-    A.eq([home.rooms.length, home.lines, home.otherIssues], [1, [], []], 'a plain station: one room, no lines, no findings');
     const rect = plain.rooms()[0].rects[0];
-    let orphan = null;
-    for (let y = rect.y1; y <= rect.y2 && !orphan; y++) for (let x = rect.x1; x <= rect.x2 && !orphan; x++) {
-      const res = plain.addProp({ t: 'intake', x, y });
-      if (res && res.ok !== false && res.id) orphan = res.id;
-    }
-    A.ok(!!orphan, 'fixture: a beltless Inbox on the plain floor');
-    const loose = (await layout({ app: { station: () => plain, agents: () => [] } })).r;
-    const found = loose.otherIssues.concat(...loose.lines.map(l => l.issues)).filter(i => i.propId === orphan);
-    A.eq(found.map(i => [i.code, i.blocking]), [['ORPHAN_SOURCE', false]], 'the beltless Inbox\'s finding is reported, never dropped: ' + JSON.stringify(loose.otherIssues));
+    const place = t => { for (let y = rect.y1; y <= rect.y2; y++) for (let x = rect.x1; x <= rect.x2; x++) { const res = plain.addProp({ t, x, y }); if (res && res.ok !== false && res.id) return res.id; } return null; };
+    const lone = place('bay'), empty = place('bay');
+    A.ok(lone && empty, 'fixture: two beltless bays');
+    plain.assignPropAgent(lone, 'ada'); plain.setPropBrief(lone, 'Answer every support ticket.');
+    const r = (await layout({ app: app(plain, [{ id: 'ada', name: 'Ada' }]) })).r;
+    A.eq(r.lines, [], 'no belts, no lines');
+    const l = r.loneBays.find(b => b.propId === lone), e = r.loneBays.find(b => b.propId === empty);
+    A.ok(l && l.agent === 'Ada' && /^not on a belt line: work addressed to ADA arrives at this BAY directly/.test(l.note) && l.brief === 'Answer every support ticket.', 'the crewed lone Bay is listed with its brief: ' + JSON.stringify(l));
+    A.ok(e && e.agent === null && /^no agent and not on a belt line/.test(e.note), 'the uncrewed one says it does nothing');
   }
 
-  /* ---- 10. a LOOP gate: said in the compiler's words, with its back-arc and pass limit ---- */
+  /* ---- 16. FILTER rules: which tagged work goes to which step ---- */
   {
-    const s = WorldModel.create(), z = s.rooms()[0].rects[0];
-    s.addRoom({ kind: 'hab', rect: { x1: z.x2 + 1, y1: z.y1, x2: z.x2 + 40, y2: z.y1 + 30 } });
-    let ok = null;
-    for (let y = z.y1; y < z.y1 + 25 && !ok; y++) for (let x = z.x1; x < z.x2 + 30 && !ok; x++) { const res = s.stampBlueprint('revision_loop', x, y); if (res.ok) ok = res; }
-    A.ok(!!ok, 'fixture: the revision loop stamps');
-    let n = 0; for (const p of s.props()) if (p.t === 'bay') s.assignPropAgent(p.id, 'a' + (++n));
-    const L = (await layout({ app: { station: () => s, agents: () => [] } })).r.lines[0];
-    const g = L.gates.find(x => x.kind === 'loop');
-    A.ok(!!g, 'the loop gate is listed: ' + JSON.stringify(L.gates));
-    const plan = Pipeline.compileRoutingPlan(s.projectGeometry());
-    const jk = Object.keys(plan.junctions).find(k => plan.junctions[k].kind === 'loop');
-    A.eq(g.maxPasses, plan.junctions[jk].max, 'with the compiled pass limit');
-    A.eq(refs([g.sendsBackTo]), ['1:A1'], 'it sends work back to step 1');
-    A.ok(/sends it back to A1 until it is approved \(\d+ tries max\)/.test(L.howItRuns), 'and the sentence says it: ' + L.howItRuns);
+    const s = stamp('triage_desk', true, true);
+    const L = await detail({ app: app(s, []) }, lineKeyOf(s));
+    const f = L.filters[0], roleAt = rf => (L.steps.find(x => x.propId === rf.propId) || {}).role;
+    A.ok(!!f, 'the filter is reported');
+    A.eq(f.rules.map(x => [x.tag, x.goesTo.map(roleAt)]), [['code', ['ENGINEER']], ['research', ['RESEARCHER']]], 'each tag names the step it goes to');
+    A.eq(f.otherwise.map(roleAt), ['GENERALIST'], 'and the rest takes the default lane');
   }
 
-  /* ---- 11. `line`: one line with full briefs; the overview cuts long briefs and says so ---- */
+  /* ---- 17. the harness facts: budget, today's numbers, each Bay's last run ---- */
   {
     const { st, bays } = creative(['drafter', 'reviewer'], true);
-    const long = 'Draft carefully. ' + 'x'.repeat(900);
-    A.ok(st.setPropBrief(bays[0], long).ok, 'fixture: a long brief');
-    const app = { station: () => st, agents: () => [] };
-    const all = (await layout({ app })).r;
-    const s1 = all.lines[0].steps[0];
-    A.eq([s1.brief.length, s1.briefTruncated], [401, true], 'the overview cuts a long brief at 400 characters');
-    A.ok(/pass line for one line with full briefs/.test(all.note), 'and says how to get the rest');
-    const one = await layout({ app }, { line: 'draft & review' });
-    A.eq(one.r.lines.length, 1, 'a unique name fragment picks the line');
-    A.eq(one.r.lines[0].steps[0].brief, long, 'with the brief in full');
-    A.ok(!one.r.note && !one.r.lines[0].steps[0].briefTruncated, 'nothing is cut');
-    A.ok(/^"CREATIVE · DRAFT & REVIEW": READY TO RUN · routing live$/.test(one.out.summary), 'summary names the line and its pill: ' + one.out.summary);
-    A.eq((await layout({ app }, { line: lineKeyOf(st) })).r.lines.length, 1, 'an exact lineId picks the line');
-    const miss = (await layout({ app }, { line: 'nope' })).out.content;
+    const key = lineKeyOf(st), now = Date.now();
+    const facts = { routed: FACTS.routed, budget: id => (id === key ? { maxHops: 4, maxUsdPerMessage: 1, maxUsdPerDay: 5, clamped: [] } : null),
+      today: () => ({ lines: [{ lineId: key, runs: 3, shipped: 1, failed: 1, tests: 2, usdToday: 0.1234, capUsdPerDay: 5, medianMs: 42000, spendDay: 'utc' }],
+        docks: { [bays[0]]: { runId: 'r1', reason: 'budget', failed: true, ts: now - 5 * 60000 } } }) };
+    const L = (await layout({ app: app(st, []), facts })).r.lines[0];
+    A.eq(L.budget, { maxHops: 4, maxUsdPerMessage: 1, maxUsdPerDay: 5 }, 'the effective budget');
+    A.eq(L.today, { runs: 3, shipped: 1, failed: 1, tests: 2, usd: 0.1234, capUsdPerDay: 5, medianMs: 42000, day: 'UTC day' }, 'today\'s numbers, with the day they are counted in');
+    A.eq(L.steps[0].lastRun, 'budget, 5m ago', 'the Bay\'s last run, as the lamp reads it');
+    A.eq((await layout({ app: app(st, []), facts, now: null })).r.lines[0].steps[0].lastRun, 'budget', 'with no injected clock, "how long ago" is never guessed');
+    const D = await detail({ app: app(st, []), facts });
+    A.eq([D.steps[0].lastRun.result, D.steps[0].lastRun.failed, D.steps[0].lastRun.runId], ['budget', true, 'r1'], 'the detail carries the run id to look it up');
+    const r = (await layout({ app: app(st, []), facts: {} })).r;
+    A.eq(r.todayUnread, true, 'no stats reader: today is said to be unread, never zero');
+  }
+
+  /* ---- 18. the answer FITS the model's budget, as valid JSON, and names what it left out ---- */
+  {
+    const { st, bays } = creative(['drafter', 'reviewer'], true);
+    A.ok(st.setPropBrief(bays[0], 'Draft carefully. ' + 'x'.repeat(1900)).ok, 'fixture: a long brief');
+    const big = await layout({ app: app(st, []) }, { line: 'draft & review' });
+    A.eq(big.r.line.steps[0].brief.length, 1917, 'with room to spare, `line` returns the brief in full');
+    const tight = await layout({ app: app(st, []) }, { line: 'draft & review' }, { outputMax: 3000 });
+    A.ok(tight.out.content.length <= 3000 && tight.r.shortened === true, 'a tight budget is honored: ' + tight.out.content.length);
+    const [t1, t2] = tight.r.line.steps;
+    A.ok(t1.briefTruncated === true && t1.brief.length <= 601 && /…$/.test(t1.brief), 'the LONG brief is cut first, and says so: ' + t1.brief.length);
+    A.ok(!t2.briefTruncated && /^Review the incoming draft/.test(t2.brief), 'a short brief is left whole');
+    // a two-line floor squeezed hard: whole lines kept from the front, the rest NAMED
+    const s = stamp('front_desk', true, true);
+    const z = s.rooms()[0].rects[0];
+    s.addRoom({ kind: 'lab', rect: { x1: z.x1, y1: z.y2 + 40, x2: z.x1 + 40, y2: z.y2 + 70 } });
+    const lab = s.rooms().find(rm => rm.kind === 'lab').rects[0];
+    let ok = null; for (let y = lab.y1; y < lab.y2 && !ok; y++) for (let x = lab.x1; x < lab.x2 && !ok; x++) { const res = s.stampBlueprint('research_line', x, y); if (res.ok) ok = res; }
+    A.ok(!!ok, 'fixture: a second line');
+    const small = await layout({ app: app(s, []) }, {}, { outputMax: 1200 });
+    let parsed = null; try { parsed = JSON.parse(small.out.content); } catch (_) { parsed = null; }
+    A.ok(!!parsed && small.out.content.length <= 2000 && parsed.shortened === true, 'even a tiny budget gets valid JSON: ' + small.out.content.length);
+    A.ok(!parsed.omittedLines || parsed.omittedLines.every(n => typeof n === 'string' && /\(/.test(n)), 'anything left out is named');
+  }
+
+  /* ---- 19. refusals are answers, never an empty success ---- */
+  {
+    const { st } = creative(['drafter', 'reviewer'], true);
+    A.ok(/^REFUSED: the station layout is not ready yet/.test((await layout({ app: { agents: () => [] } })).out.content), 'no station on the page');
+    A.ok(/^REFUSED: workflow routing is not loaded/.test((await layout({ app: app(st, []), globals: { Pipeline: undefined } })).out.content), 'no compiler');
+    A.ok(/^REFUSED: the workflow line reader is not loaded/.test((await layout({ app: app(st, []), globals: { WorkflowLine: undefined } })).out.content), 'no line reader');
+    A.ok(/^REFUSED: .*no station bridge/.test((await makeStationTools({}).layoutTool.run({})).content), 'no bridge');
+    const miss = (await layout({ app: app(st, []) }, { line: 'nope' })).out.content;
     A.ok(/^REFUSED: there is no line called "nope"\. Lines: CREATIVE · DRAFT & REVIEW \(/.test(miss), 'an unknown line is refused with the real names: ' + miss);
   }
 
-  /* ---- 12. refusals are answers, never an empty success ---- */
-  {
-    const { st } = creative(['drafter', 'reviewer'], true);
-    A.ok(/^REFUSED: the station layout is not ready yet/.test((await layout({ app: { agents: () => [] } })).out.content), 'no station on the page: refused');
-    A.ok(/^REFUSED: workflow routing is not loaded/.test((await layout({ app: { station: () => st, agents: () => [] }, globals: { Pipeline: undefined } })).out.content), 'no compiler: refused');
-    A.ok(/^REFUSED: the workflow line reader is not loaded/.test((await layout({ app: { station: () => st, agents: () => [] }, globals: { WorkflowLine: undefined } })).out.content), 'no line reader: refused');
-    A.ok(/^REFUSED: .*no station bridge/.test((await makeStationTools({}).layoutTool.run({})).content), 'no bridge: refused');
-  }
-
-  /* ---- 13. the capability registry is an allowlist: declared read-only and consent-free ---- */
+  /* ---- 20. the capability registry is an allowlist: declared read-only and consent-free ---- */
   {
     const registry = fs.readFileSync(require.resolve('../sidecar/capability/registry.js'), 'utf8');
     A.ok(/capId: 'orchestrator', tool: 'station\.layout', scope: 'read', requiresConsent: false, network: false/.test(registry), 'station.layout is an allowlisted orchestrator read');

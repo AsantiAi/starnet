@@ -42,7 +42,7 @@ A.eq(P.stripVerdictLine('VERDICT: approved'), 'VERDICT: approved', 'a reply that
 A.ok(/Pipeline\.stripVerdictLine\(rawReply\)/.test(outbox), 'the OUTBOX strips it for a work line stage');
 
 /* R3 */
-A.ok(/const schedOff = !!\(cron && !cron\.enabled && jobs\.some/.test(world) && /feedState\.schedOff \? 'SCHEDULE OFF — CLICK' : 'NO FEED — CLICK'/.test(world), 'the INBOX says SCHEDULE OFF when that is what is missing');
+A.ok(/const offJobs = \(cron && !cron\.enabled\) \? jobs\.filter\(j => j && j\.enabled !== false\)/.test(world) && /label: schedOffFor\(p\.id\) \? 'SCHEDULE OFF — CLICK' : 'NO FEED — CLICK'/.test(world), 'the INBOX says SCHEDULE OFF when that is what is missing (per line since the 2026-09-28 retest)');
 A.ok(/if \(opts\.schedOff\) \{/.test(chat) && /Harness\.api\.post\('\/api\/cron\/arm', \{ enabled: true \}\)/.test(chat), 'the INBOX card carries the scheduling switch');
 A.ok(/hoverPlate\.lineId === p\.lineId\) continue;/.test(world), 'the hover glance replaces the resting plate');
 A.ok(/function yieldTour\(\)/.test(dialogue) && /Dialogue\.yieldTour\(\)/.test(chat), 'a quick tour covering COMMS steps aside for the INBOX card');

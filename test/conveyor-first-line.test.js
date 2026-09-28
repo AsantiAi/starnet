@@ -64,7 +64,8 @@ const on = W.lineStarts(f, { cron: { enabled: true, jobs: [job] }, human: () => 
 A.eq(on.schedules, ['every day at 9:00 AM'], 'scheduling ON: it starts the line');
 A.eq(on.offSchedules, [], '…and is not listed as off');
 const said = W.sentenceText(W.howItRuns(f, { triggers: off, nameOf: a => String(a).toUpperCase() }));
-A.ok(/^It is scheduled \(every day at 9:00 AM\), but scheduling is OFF/.test(said), 'the sentence says it is scheduled but OFF (' + said.slice(0, 80) + ')');
+// (the station.layout audit, 2026-09-28, folded this into ONE "paused starts" sentence — the fact it must carry is unchanged)
+A.ok(/^Nothing starts it right now \(its routine "news" \(every day at 9:00 AM\) is saved but the scheduler is off\)/.test(said), 'the sentence says it is scheduled but the scheduler is OFF (' + said.slice(0, 110) + ')');
 A.ok(!/no schedule/.test(said), '…never "no schedule"');
 A.ok(/'SCHEDULE · OFF'/.test(panel) && /scheduling is off' : 'no trigger yet'/.test(panel), 'the INBOX node says SCHEDULE · OFF');
 A.ok(/id="trg-arm">▶ TURN SCHEDULING ON/.test(panel) && /api\('\/api\/cron\/arm', 'POST', \{ enabled: true \}\)/.test(panel), 'the panel carries the switch, on the same route AUTOMATION uses');

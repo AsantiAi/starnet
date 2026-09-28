@@ -137,13 +137,17 @@ const StationCommands = (() => {
      Asked to explain or fix a workflow, the lead could not see the floor, so it guessed. This answers from the live
      WorldModel through the Workflow panel's OWN readers, never a second derivation: WorkflowLine.lineFlow (the run
      order, keyed by BAY, so one agent crewing two Bays is two steps), readiness + pillText (what blocks the line,
-     the workstation gate included), howItRuns (the sentence), and lineStarts (schedules, channels, folder and
-     webhook triggers, from the same three reads the panel makes). So the lead says what the panel shows, and a
-     panel fix is a lead fix. A brief is the text the agent RECEIVES (the compiled dockBays brief = brief + HANDS
-     OFF). Routing is the plan poster's own verdict (World.planStatus), and one blocking error switches routing off
-     for the WHOLE floor, which the answer says outright. A fact that could not be read is reported as unread,
-     never as "nothing". ⛔ READ-ONLY: nothing here assigns, edits, saves, or posts a plan. */
-  const LAYOUT_BRIEF_CAP = 400;   // the overview cuts a long brief here; `line` returns one line with full briefs
+     the per-BAY workstation gate and a blocking finding anywhere on the floor included), howItRuns (the sentence),
+     and lineStarts (schedules, channels, folder and webhook triggers — and the PAUSED ones, with the server's own
+     reason — from the same three reads the panel makes). So the lead says what the panel shows, and a panel fix is
+     a lead fix. A brief is the text the agent RECEIVES (the compiled dockBays brief = brief + HANDS OFF). Routing is
+     the plan poster's verdict (World.planStatus), read in RUN NOW's order. A fact that could not be read is
+     reported as unread, never as "nothing". Bays on no line (a crewed lone BAY is a complete dock) are listed too.
+     The page answers with the WHOLE floor in full; the sidecar (sidecar/tools/builtin/station.js) adds what only the
+     harness knows — the router's own plan, each line's effective budget, today's numbers, each BAY's last run — and
+     shapes the answer to the model's window. ⛔ READ-ONLY: nothing here assigns, edits, saves, or posts a plan.
+     (Audit 2026-09-28: lone Bays, paused starts, the station-wide refusal, per-BAY compute, the loop's escalation
+     lane, the routing verdict order, the belt CYCLE, crew membership and filter rules were fixed here.) */
   const LAYOUT_FACT_MS = 2500;    // each server read gets this long (the bridge itself gives up at 6 s)
   async function readFact(url) {
     let timer = null;
@@ -164,19 +168,25 @@ const StationCommands = (() => {
     return f;
   }
   const uniq = xs => xs.filter((v, i, a) => a.indexOf(v) === i);
-  // the poster's verdict, read by the same tests REFIT's RUN NOW gate applies (build.js finPlanGate)
+  /* the poster's verdict, read in the order REFIT's RUN NOW gate reads it (build.js finPlanGate): a REFUSED post is
+     off; a post that failed or is still in flight is UNCONFIRMED — the router may still be running the previous
+     floor — before any compiler finding is read as "off". planHash rides along so the sidecar can confirm the claim
+     against the plan the router actually holds. */
   function routingState(sync, drawnBlocking, label) {
     const labels = errs => uniq(errs.map(e => label(e.code))).join(' · ');
+    const errs = (sync && sync.errors) || [];
     let out;
     if (!sync || !sync.station) out = { state: 'unknown', note: 'The page could not say whether the router holds this floor.' };
-    else if ((sync.errors || []).length) out = { state: 'off', note: 'Routing is OFF for the whole station: the router refuses the entire floor while any blocking error is on it, so no line routes work. Fix: ' + labels(sync.errors) + '.' };
-    else if (sync.refusedHash && sync.refusedHash === sync.lastHash) out = { state: 'off', note: 'Routing is OFF: the router refused the last floor it was sent, so no line routes work.' };
-    else if (sync.stale || sync.inflight || sync.retryPending) out = { state: 'unconfirmed', note: 'The router has not confirmed it holds this floor (the last send failed or is still in flight), so it may be routing by an older floor.' };
+    else if (sync.refusedHash && sync.refusedHash === sync.lastHash) out = { state: 'off', note: 'Routing is OFF for the whole station: the router refused the floor it was last sent, so no line routes work.' + (errs.length ? ' Fix: ' + labels(errs) + '.' : '') };
+    else if (sync.stale || sync.inflight || sync.retryPending) out = { state: 'unconfirmed', note: 'The router has not confirmed this floor (the last send failed or is still in flight), so it may still be routing by the previous floor.' };
+    else if (errs.length) out = { state: 'off', note: 'Routing is OFF for the whole station: the router refuses the entire floor while any blocking error is on it, so no line routes work. Fix: ' + labels(errs) + '.' };
     else if (!sync.lastHash) out = { state: 'unknown', note: 'The router has not answered for this floor yet.' };
     else out = { state: 'live', note: 'Routing is live: the router is running ' + (sync.pending ? 'the floor as last sent.' : 'this floor.') };
+    if (sync && sync.station) out.planHash = sync.hash || null;
     if (sync && sync.station && sync.pending) {
       out.pendingEdits = true;
-      out.note += ' The floor has newer edits the router has not received yet (Build mode sends them when it closes, and running a line sends them first); until then work routes by the previous floor.';
+      out.note += ' The floor has newer edits the router has not received yet (Build mode sends them when it closes, and running a line sends them first)'
+        + (out.state === 'off' ? '; they are checked when sent.' : '.');
       if (drawnBlocking.length) out.note += ' As drawn now, the floor has a blocking error the router will refuse: ' + labels(drawnBlocking) + '.';
     }
     return out;
@@ -193,24 +203,42 @@ const StationCommands = (() => {
     throw new Error(hits.length > 1 ? 'more than one line matches "' + want + '" — name it exactly. Lines: ' + names
       : 'there is no line called "' + want + '"' + (names ? '. Lines: ' + names : ' — this station has no assembly lines'));
   }
+  // when a LOOP's escalation lane is taken — the router's own rule (chain.js loopDecision), in words
+  function escWhen(g) {
+    const tries = ' after ' + (g.max || 5) + ' tries';
+    if (!g.when) return 'never: the LOOP has no pass condition, so it never gives up';
+    return g.when === 'approved' ? 'if it is still not approved' + tries : g.when === 'revise' ? 'if the verdict still does not say revise' + tries
+      : 'if it still reads as ' + g.when + ' work' + tries;
+  }
   function describeLayout(st, agents, facts, sync, want) {
     const P = Pipeline, W = WorkflowLine, B = typeof Build !== 'undefined' ? Build : null;
-    const names = {}; for (const a of (agents || [])) if (a && a.id) names[a.id] = a.name || a.id;
-    const who = id => id ? { agentId: id, name: names[id] || id } : null;
+    const roster = (agents || []).filter(a => a && a.id);
+    const names = {}; for (const a of roster) names[a.id] = a.name || a.id;
+    // an id the roster does not hold still RUNS, on the station's default identity; an unread roster says nothing
+    const onCrew = id => !roster.length || Object.prototype.hasOwnProperty.call(names, id);
+    const who = id => id ? Object.assign({ agentId: id, name: names[id] || id }, onCrew(id) ? {} : { onCrew: false }) : null;
     const upper = id => String(names[id] || id || 'AGENT').toUpperCase();   // the panel's agent label (build.js agentLabelFor)
     const label = code => (B && B.nagLabel) ? B.nagLabel(code) : code;       // the floor's short nag
     const why = code => (B && B.nagWhy) ? B.nagWhy(code) : label(code);      // the panel's full fix sentence (its labelOf)
-    const issue = e => { const o = { code: e.code, label: label(e.code), blocking: !e.warn, propId: e.propId || null }; const f = why(e.code); if (f !== o.label) o.fix = f; return o; };
     const propOf = id => (id && st.propById(id)) || null;
     const roomName = p => { const id = p ? st.roomAt(p.x, p.y) : null; const r = id && st.roomById(id); return r ? (r.name || r.kind || id) : null; };
     const toolsAt = (aid, pid) => { try { return (aid && st.bayObjects(aid, pid)) || []; } catch (_) { return []; } };
+    const hasCompute = (aid, pid) => !!aid && toolsAt(aid, pid).indexOf('computer') >= 0;   // PER BAY: router.stationFor(agentId, dockId)
     const toolName = o => (o && typeof o === 'object') ? (o.objectType + (o.connectorId ? ':' + o.connectorId : '')) : String(o);
     // a routine's schedule in words, exactly as the panel says it (build.js wfHost.human)
     const human = d => { const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return ''; } })();
       return (typeof CronHuman !== 'undefined' && CronHuman.describeDisplay) ? CronHuman.describeDisplay(d, { tz }) : String(d == null ? '' : d); };
 
-    // geometry props carry the projected frame; every room lookup uses the station's own prop tile
+    // geometry props carry the projected frame (station tile = geometry tile + origin); room lookups use station tiles
     const geo = st.projectGeometry(), plan = P.compileRoutingPlan(geo) || {};
+    const origin = geo.origin || { tx: 0, ty: 0 };
+    const roomAtTile = t => { const id = st.roomAt(t.x + origin.tx, t.y + origin.ty); const r = id && st.roomById(id); return r ? (r.name || r.kind || id) : null; };
+    const issue = e => {
+      const o = { code: e.code, label: label(e.code), blocking: !e.warn, propId: e.propId || null };
+      const f = why(e.code); if (f !== o.label) o.fix = f;
+      if (!o.propId && e.tile) { const room = roomAtTile(e.tile); if (room) o.room = room; }   // a belt CYCLE has only a tile: say where it is
+      return o;
+    };
     const D = P.dockLayer(plan), dockChains = D.dockChains || {};
     const received = {}; for (const d of (plan.dockBays || [])) received[d.propId] = d.brief || '';
     // a crewed Bay: the compiled brief its agent receives; an uncrewed one: what it WILL receive once crewed
@@ -223,68 +251,107 @@ const StationCommands = (() => {
     const onLine = (c, e) => (e.propId != null && c.props.indexOf(e.propId) >= 0) || !!(e.tile && c.tiles && c.tiles[e.tile.x + ',' + e.tile.y])
       || (e.propId == null && !e.tile && [].concat(e.agentId || [], e.agents || []).some(a => c.bays.some(b => b.agentId === a)));
     const unread = (facts && facts.unread) || [];
+    // FILTER rules: a filter junction's routes (tag -> lane) and default, each lane named by the docks it leads to
+    const laneDocks = (P.junctionLaneDocks ? P.junctionLaneDocks(plan) : {}) || {};
+    const I = P._internals || {};
+    const junctionKeyOf = p => (plan.belts && plan.belts[p.x + ',' + p.y]) ? p.x + ',' + p.y
+      : (I.beltTileNear ? (t => t ? t.x + ',' + t.y : null)(I.beltTileNear(plan.belts || {}, p.x, p.y, p.w || 1, p.h || 1)) : null);
+    const comps = (P.lineComponents(geo) || []).filter(c => c.intakes.length || c.bays.length || c.outboxes.length);
 
-    let lines = (P.lineComponents(geo) || []).filter(c => c.intakes.length || c.bays.length || c.outboxes.length).map(c => {
+    let lines = comps.map(c => {
       const flow = W.lineFlow(plan, c, P, geo.props);
       const starts = W.lineStarts(flow, { lt: facts.lt, lineKey: c.key, cron: facts.cron, chans: facts.chans, agents, human });
       const anyStart = !!(starts.schedules.length || starts.channels.length || starts.events.length);
-      // the panel's facts, verbatim (build.js wfHost: hasCompute; workflowpanel.js paintHead: briefOf, labelOf)
-      const ready = W.readiness(flow, c, { hasCompute: aid => !!aid && toolsAt(aid).indexOf('computer') >= 0, errors: plan.errors || [],
-        labelOf: why, briefOf: pid => { const p = propOf(pid); return p && (p.brief || p.hands); }, triggers: starts });
+      // the panel's facts, verbatim (build.js wfHost: hasCompute per BAY; workflowpanel.js paintHead: briefOf, labelOf, isCrew)
+      const ready = W.readiness(flow, c, { hasCompute, errors: plan.errors || [], labelOf: why, isCrew: onCrew,
+        briefOf: pid => { const p = propOf(pid); return p && (p.brief || p.hands); }, triggers: starts });
       const segs = W.howItRuns(flow, { nameOf: upper, handsOf: pid => { const p = propOf(pid); return p && p.hands; }, triggers: starts });
       let hints = ready.hints.map(h => h.what);
-      if (unread.length && flow.trigger.propId && !anyStart) {
+      if (unread.length && flow.trigger.propId && !anyStart && !flow.cyclic) {
         // a start the page could not read is unknown, not absent: never let "nothing starts it" stand on a failed read
-        const unsure = 'What starts it could not be fully read right now (' + unread.join(', ') + ' unavailable); ';
+        const unsure = 'What starts it could not be fully read right now (' + unread.join(', ') + ' unavailable)' + (starts.paused.length ? '; paused: ' + starts.paused.join('; ') : '') + '; ';
         if (segs[0] && /^Nothing starts it/.test(segs[0].s)) segs[0] = { t: 'text', s: unsure };
         hints = hints.filter(h => !/^nothing starts it/.test(h)).concat(['check what starts this line again: ' + unread.join(', ') + ' could not be read']);
       }
       const step = {}; flow.order.forEach((pid, i) => { step[pid] = i + 1; });
       const ref = pid => ({ step: step[pid] || null, propId: pid, agent: flow.docks[pid] && flow.docks[pid].agentId ? upper(flow.docks[pid].agentId) : null });
+      // the ESCALATION lanes: gate -> the docks it runs after, and the dock it escalates to (never a plain hand-off)
+      const escGates = flow.gates.filter(g => g.kind === 'loop' && g.escTo);
+      const escFrom = (from, to) => escGates.some(g => g.escTo === to && (g.after || []).indexOf(from) >= 0);
       const MODE = { all: 'in parallel', turns: 'taking turns', oneof: 'whichever the content routes to' };
       const colMode = {}; for (const col of flow.cols) for (const d of col.docks) colMode[d.propId] = col.docks.length > 1 ? (MODE[col.mode] || null) : null;
       const steps = flow.order.map(pid => {
         const d = flow.docks[pid], sp = propOf(pid), nb = W.neighbours(flow, pid), ch = dockChains[pid];
         const fed = !!(D.reachDock || {})[pid];
         const s = { step: step[pid], propId: pid, role: d.role || null, room: roomName(sp), agent: who(d.agentId),
-          routed: !!d.routed, fedByInbox: fed, getsWorkFrom: (fed ? ['INBOX'] : []).concat(nb.prev.map(ref)),
-          sendsTo: d.agentId ? nb.next.map(ref).concat(ch && ch.outbox ? ['OUTBOX'] : []) : [],
+          routed: !!d.routed, fedByInbox: fed,
+          getsWorkFrom: (fed ? ['INBOX'] : []).concat(nb.prev.map(p => escFrom(p, pid) ? Object.assign(ref(p), { onEscalation: true }) : ref(p))),
+          sendsTo: d.agentId ? nb.next.filter(n => !escFrom(pid, n)).map(ref).concat(ch && ch.outbox ? ['OUTBOX'] : []) : [],
           brief: briefFor(pid), tools: d.agentId ? toolsAt(d.agentId, pid).map(toolName) : [] };
+        const esc = escGates.filter(g => (g.after || []).indexOf(pid) >= 0);
+        if (esc.length && d.agentId) s.escalatesTo = esc.map(g => Object.assign(ref(g.escTo), { when: escWhen(g), runs: !!g.when }));
         if (colMode[pid]) s.runsWith = colMode[pid];
+        const gate = escGates.find(g => g.escTo === pid);
         if (!d.agentId) s.note = 'no agent yet: not routed until one is assigned';
+        else if (flow.cyclic) s.note = 'a belt LOOP on the floor stops all routing';
+        else if (d.escalation && gate) s.note = gate.when ? 'runs only on the LOOP\'s escalation lane: ' + escWhen(gate) : 'on the LOOP\'s escalation lane, which never runs: the LOOP has no pass condition';
         else if (d.detached) s.note = 'not connected to the INBOX';
+        else if (flow.probeNext && flow.probeNext[pid]) s.note = 'its belt leads on to ' + flow.probeNext[pid].map(n => 'step ' + (step[n] || '?')).join(' or ') + ', which has no agent yet';
         else if (d.deadEnd) s.note = 'its work goes nowhere: connect a belt onward';
+        if (d.agentId && !onCrew(d.agentId)) s.note = (s.note ? s.note + '; ' : '') + 'its agent is not on the crew, so its runs use the station\'s default identity';
         return s;
       });
       const gates = flow.gates.map(g => g.kind === 'loop'
-        ? { kind: 'loop', propId: g.propId || null, after: (g.after || []).map(ref), sendsBackTo: g.backTo ? ref(g.backTo) : null, until: g.when || null, maxPasses: g.max || null }
+        ? Object.assign({ kind: 'loop', propId: g.propId || null, after: (g.after || []).map(ref), sendsBackTo: g.backTo ? ref(g.backTo) : null, until: g.when || null, maxPasses: g.max || null },
+          g.escTo ? { escalatesTo: ref(g.escTo), escalation: escWhen(g) } : {})
         : { kind: g.kind, propId: g.propId || null, after: (g.after || []).map(ref) });
+      // FILTER rules on this line: which tagged work goes to which step (the rest takes the default lane)
+      const filters = [];
+      for (const fp of (geo.props || [])) {
+        if (fp.t !== 'filter' || c.props.indexOf(fp.id) < 0) continue;
+        const jk = junctionKeyOf(fp), j = jk && plan.junctions && plan.junctions[jk], lanes = (jk && laneDocks[jk]) || {};
+        if (!j || j.kind !== 'filter') continue;
+        const to = dir => (lanes[dir] || []).filter(pid => step[pid]).map(ref);
+        filters.push({ propId: fp.id, rules: Object.keys(j.routes || {}).map(tag => ({ tag, goesTo: to(j.routes[tag]) })), otherwise: j.def ? to(j.def) : [] });
+      }
       const mine = errors.filter(e => onLine(c, e)); mine.forEach(e => claimed.add(e));
       const out = { lineId: c.key, name: (c.intakes.map(id => propOf(id)).find(p => p && p.label) || {}).label || null,
         status: W.pillText(ready), ready: !!ready.ready, howItRuns: W.sentenceText(segs),
         blocking: ready.blocking.map(b => b.what), hints,
-        starts: { schedules: starts.schedules, channels: starts.channels, events: starts.events,
+        starts: { schedules: starts.schedules, channels: starts.channels, events: starts.events, paused: starts.paused,
           routines: starts.routines.map(r => ({ name: r.name, agent: upper(r.agentId), enabled: r.enabled, runsWholeLine: r.runsLine, atEntry: r.atEntry, startsLine: r.startsLine, schedule: human(r.display) })),
           channelBots: starts.chanRows.map(r => ({ label: r.label, connected: r.connected, answersAs: r.answersAs, feedsThisLine: r.feeds })) },
-        steps, gates, issues: mine.map(issue) };
+        steps, gates, filters, issues: mine.map(issue) };
       if (unread.length) out.startsUnread = unread;
       return out;
     });
+    // BAYS ON NO LINE: a crewed lone BAY is a complete dock (work addressed to its agent lands there, with its brief and
+    // its room's tools — router.stationFor); an uncrewed one does nothing. Never invisible, never only an issue code.
+    const onAnyLine = {}; for (const c of comps) for (const b of c.bays) onAnyLine[b.propId] = true;
+    const loneBays = (st.props() || []).filter(p => p && p.t === 'bay' && !onAnyLine[p.id]).map(p => {
+      const aid = p.agentId || null;
+      const o = { propId: p.id, role: p.role || null, room: roomName(p), agent: who(aid), brief: briefFor(p.id), tools: aid ? toolsAt(aid, p.id).map(toolName) : [] };
+      o.note = !aid ? 'no agent and not on a belt line: it does nothing until an agent is assigned'
+        : 'not on a belt line: work addressed to ' + upper(aid) + ' arrives at this BAY directly, with this brief and this room\'s tools'
+          + (hasCompute(aid, p.id) ? '' : '; it has no workstation here, so those runs cannot compute')
+          + (onCrew(aid) ? '' : '; its agent is not on the crew, so its runs use the station\'s default identity');
+      return o;
+    });
     if (want) lines = [pickLine(lines, want)];
-    let cut = false;
-    if (!want) for (const l of lines) for (const s of l.steps) if (s.brief.length > LAYOUT_BRIEF_CAP) { s.brief = s.brief.slice(0, LAYOUT_BRIEF_CAP) + '…'; s.briefTruncated = true; cut = true; }
     const drawnBlocking = errors.filter(e => !e.warn);
-    const res = {
+    const cron = facts && facts.cron;
+    return {
       routing: routingState(sync, drawnBlocking, label),
+      // the scheduler as the routines panel reads it: E-STOP freezes it even while its arm intent stays on
+      automation: cron ? { scheduler: cron.halted ? 'stopped by E-STOP' : cron.enabled ? 'on' : 'off' } : null,
       lines,
-      // a finding on no line (a beltless Inbox or Bay, a buried belt) is still a finding: reported floor-wide, never dropped
+      loneBays: want ? [] : loneBays,
+      // a finding on no line (a beltless Inbox, a buried belt, a stray CYCLE) is still a finding: reported, never dropped
       otherIssues: want ? [] : errors.filter(e => !claimed.has(e)).map(issue),
       rooms: (st.rooms() || []).filter(r => r && r.kind !== 'corridor').map(r => ({ id: r.id, name: r.name || null, kind: r.kind || null })),
       workstations: (st.props() || []).filter(p => p && p.agentId && p.t !== 'bay').map(p => ({ propId: p.id, type: p.t, room: roomName(p), agent: who(p.agentId),
         grants: (typeof WorldModel !== 'undefined' && WorldModel.capForProp && WorldModel.capForProp(p.t)) || null }))
     };
-    if (cut) res.note = 'Briefs over ' + LAYOUT_BRIEF_CAP + ' characters are cut here; pass line for one line with full briefs.';
-    return res;
   }
 
   const VERBS = {
