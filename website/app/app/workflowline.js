@@ -342,11 +342,14 @@
     const run = flow.cols.filter(c => !c.detached), apart = flow.cols.filter(c => c.detached);
     run.forEach((c, i) => {
       if (i > 0) T(i === run.length - 1 && !c.gate ? ' then ' : '; ');
+      // a lone step in front of a LOOP gate says its hand-off AFTER the loop clause — "reviews it, handing off the approved
+      // draft and sends it back to NOVA…" read as two sentences glued together (2026-09-28 retest)
+      const loopHands = (c.gate && c.gate.kind === 'loop' && c.docks.length === 1 && o.handsOf) ? o.handsOf(c.docks[0].propId) : null;
       c.docks.forEach((d, j) => {
         if (j > 0) T(c.mode === 'all' ? ' and ' : ' or ');
         if (d.agentId) segs.push({ t: 'agent', s: nameOf(d.agentId), propId: d.propId });
         else segs.push({ t: 'miss', s: '[pick ' + (d.role ? 'a ' + d.role.toLowerCase() : 'an agent') + ']', propId: d.propId });
-        const hands = o.handsOf ? o.handsOf(d.propId) : null;
+        const hands = loopHands ? null : (o.handsOf ? o.handsOf(d.propId) : null);
         T(' ' + roleInfo(d.role).verb + (hands ? ', handing off ' + hands : ''));
       });
       if (c.docks.length > 1) T(c.mode === 'all' ? ' (in parallel)' : c.mode === 'turns' ? ' (taking turns)' : ' (whichever the content routes to)');
@@ -357,6 +360,7 @@
         const until = g.when === 'approved' ? 'until it is approved' : g.when === 'revise' ? 'until the verdict says revise'
           : g.when ? 'while it reads as ' + g.when + ' work' : 'every pass';
         segs.push({ t: 'loop', s: ' and sends it back to ' + who + ' ' + until + ' (' + (g.max || 5) + ' tries max)' });
+        if (loopHands) T(', then hands off ' + loopHands);
       } else if (g && g.kind === 'join') T(' and the parts wait at the JOINER, then continue as one');
     });
     /* NOT CONNECTED (2026-09-23): a dock no INBOX reaches is named, never sequenced — the old walk chained such

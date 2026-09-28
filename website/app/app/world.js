@@ -1569,7 +1569,7 @@ const World = (() => {
       // Checked first: when the NO-FEED nag is also up (which needs the same live line), the card carries the
       // CHANNELS door itself, so the nag's promised click-through is never lost — see intakeSampleAt.
       const ismp = intakeSampleAt(wp);
-      if (ismp && onIntakeSample) { onIntakeSample({ propId: ismp.id, fed: feedState.known ? !!feedState.fed : null, schedOff: !!(feedState.known && !feedState.fed && feedState.schedOff) }); return; }
+      if (ismp && onIntakeSample) { onIntakeSample({ propId: ismp.id, fed: feedState.known ? !!feedState.fed : null, schedOff: !!(feedState.known && !feedState.fed && schedOffFor(ismp.id)) }); return; }
       // a NO-FEED intake's nag says CLICK — the click opens the CHANNELS panel (the fix is wiring a feed)
       const inf = intakeFeedAt(wp);
       if (inf && onIntakeFeed) onIntakeFeed(inf.id);
@@ -1610,7 +1610,14 @@ const World = (() => {
     frame(performance.now());
   }
 
-  function start() { if (running) return; running = true; last = performance.now(); if (!floorLiveAt) floorLiveAt = last; frame(last); }
+  function start() {
+    if (running) return;
+    running = true; last = performance.now(); if (!floorLiveAt) floorLiveAt = last;
+    // a floor coming back to life (REFIT exit) re-asks its line numbers NOW — a step test run while the editor held the
+    // floor otherwise waited up to a minute before the INBOX plate counted it (2026-09-28 retest)
+    try { if (typeof LineWatch !== 'undefined' && typeof fetch !== 'undefined') lineStatsSoon(); } catch (_) {}
+    frame(last);
+  }
   function stop() { cancelArrival(); running = false; if (raf) { cancelAnimationFrame(raf); raf = 0; } }
   function wakeIn() { wakeAt = performance.now(); }
 
@@ -6617,7 +6624,14 @@ const World = (() => {
       for (const it of items) it.draw();
     }
     if (convey) convey.drawBoxes(ctx, now, T);   // boxes ride on top of the belts
-    if (ghost) ghost.draw(ctx, now, T, 8);       // the projection + its WOULD-captions (NAG_FONT size)
+    if (ghost) {
+      // the projection + its WOULD-captions (NAG_FONT size). A caption never prints over a line's plate (2026-09-28 retest:
+      // the dock caption moved UNDER its tile — the plates own the space above docks — where an INBOX plate can sit). The
+      // plate is the resting truth and the caption only a projection, so a caption that would collide sits that pass out.
+      const plates = lwDrawOff ? [] : lwPlateBoxes();
+      const onPlate = bx => plates.some(p => p.box && bx.x < p.box.x + p.box.w && bx.x + bx.w > p.box.x && bx.y < p.box.y + p.box.h && bx.y + bx.h > p.box.y);
+      ghost.draw(ctx, now, T, 8, plates.length ? (bx, paint) => { if (!onPlate(bx)) paint(); } : null);
+    }
     drawHandoffBoxes(now);   // Stage 2: lead→worker delegation boxes fly over the entities
     drawQueueJam(now);   // the live backlog as a physical jam of waiting crates at the INTAKE (world-space, under the lightmap)
     drawShippedPallet(now);   // SHIPPED TODAY: completed jobs stack as product crates at the OUTBOX (server-truth count)
@@ -7919,7 +7933,7 @@ const World = (() => {
     if (feedState.known && !feedState.fed && beltLiveSet && Object.keys(beltLiveSet).length) {
       for (const p of geo.props) {
         if (p.t !== 'intake') continue;
-        out.push({ x: p.x, y: p.y, w: p.w || 1, h: p.h || 1, label: feedState.schedOff ? 'SCHEDULE OFF — CLICK' : 'NO FEED — CLICK', warn: true });
+        out.push({ x: p.x, y: p.y, w: p.w || 1, h: p.h || 1, label: schedOffFor(p.id) ? 'SCHEDULE OFF — CLICK' : 'NO FEED — CLICK', warn: true });
         feedNagOn = true;
       }
     }
@@ -7931,6 +7945,16 @@ const World = (() => {
      routine, or an armed LINE TRIGGER (a watched folder / a webhook the server reports enabled with nothing
      blocking it — GET /api/routing/triggers blockedBy). Server-proven only — `fed` stays true until a real
      response says otherwise, so a fetch hiccup can never fire the nag. */
+  /* SCHEDULE OFF is a fact about ONE line (2026-09-28 retest): the floor-wide flag labelled every INBOX "SCHEDULE OFF",
+     even a line that has no schedule at all (that one is simply unfed). A waiting routine belongs to the line its dock
+     sits on — or, for a routine addressed to an agent, the dock work addressed to that agent enters at. */
+  function schedOffFor(intakeId, plan) {
+    const pl = plan || routingPlan;   // REFIT passes ITS plan: a line stamped this session is not in the frozen world's yet
+    if (!feedState.schedOff || !intakeId || !pl || !pl.lineOfProp) return false;
+    const line = pl.lineOfProp[intakeId]; if (!line) return false;
+    const entry = pl.entryDock || {};
+    return (feedState.offJobs || []).some(j => { const d = j.dockId || (j.agentId && entry[j.agentId]) || null; return !!d && pl.lineOfProp[d] === line; });
+  }
   function pollFeedState() {
     if (typeof fetch === 'undefined') return;
     const get = u => { try { return fetch(apiUrl(u)).then(r => (r.ok ? r.json() : null)).catch(() => null); } catch (_) { return Promise.resolve(null); } };
@@ -7940,10 +7964,13 @@ const World = (() => {
       const jobs = (cron && Array.isArray(cron.jobs)) ? cron.jobs : [];
       const cronFeeds = !!(cron && cron.enabled && jobs.some(j => j && j.enabled !== false));
       const trgFeeds = !!(trg && Array.isArray(trg.triggers) && trg.triggers.some(t => t && t.enabled && !t.blockedBy));
-      // a schedule is SAVED but scheduling is off (2026-09-27 audit R3): the INBOX says so instead of "NO FEED"
-      const schedOff = !!(cron && !cron.enabled && jobs.some(j => j && j.enabled !== false));
-      const next = { known: true, fed: chan || cronFeeds || trgFeeds, schedOff };
-      const changed = next.known !== feedState.known || next.fed !== feedState.fed || next.schedOff !== feedState.schedOff;
+      // a schedule is SAVED but scheduling is off (2026-09-27 audit R3): the INBOX of THAT line says so instead of
+      // "NO FEED" (offJobs names where each waiting routine lands — see schedOffFor)
+      const offJobs = (cron && !cron.enabled) ? jobs.filter(j => j && j.enabled !== false).map(j => ({ dockId: j.dockId || null, agentId: j.agentId || null })) : [];
+      const schedOff = offJobs.length > 0;
+      const next = { known: true, fed: chan || cronFeeds || trgFeeds, schedOff, offJobs };
+      const offSig = s => (s.offJobs || []).map(j => j.dockId + '|' + j.agentId).join(',');
+      const changed = next.known !== feedState.known || next.fed !== feedState.fed || next.schedOff !== feedState.schedOff || offSig(next) !== offSig(feedState);
       feedState = next;
       if (changed) routingNags = buildRoutingNags();   // feed truth changed → refresh the callouts
     });
@@ -10328,7 +10355,9 @@ const World = (() => {
           if (!j || !Array.isArray(j.runs)) return;   // no answer — keep the last known truth
           // SHIPPED = done AND provably worked (successful tools or artifacts on the server's run row).
           // Rows older than the toolsOk field count only via artifacts — under-claiming, never over.
-          shipStats = { day: shipDay(), done: j.runs.filter(r => r && r.reason === 'done' && (((r.toolsOk | 0) > 0) || (Array.isArray(r.artifacts) && r.artifacts.length > 0))).length, known: true };
+          // A STEP TEST is not a shipment (2026-09-28 retest: the pallet said SHIPPED 1 after a test the panel said
+          // "is not put in the OUTBOX") — the same rule the line plates keep (line-stats: stepTest rows are TESTS).
+          shipStats = { day: shipDay(), done: j.runs.filter(r => r && r.reason === 'done' && r.stepTest !== true && (((r.toolsOk | 0) > 0) || (Array.isArray(r.artifacts) && r.artifacts.length > 0))).length, known: true };
         }).catch(() => {});
     } catch (_) {}
   }
@@ -10544,6 +10573,9 @@ const World = (() => {
     // FEED TRUTH accessor (guided workflows): the exact server-proven state the NO FEED nag keys on —
     // REFIT's finish-the-line card reads THIS, never a parallel poll, so the two can never disagree.
     feedState: () => ({ known: feedState.known, fed: feedState.fed }),
+    // does this INBOX's line wait on a routine saved while scheduling is off? (the floor's SCHEDULE OFF — CLICK) — REFIT's
+    // finish card asks it with ITS OWN compiled plan (plan param), so a line stamped this session answers too
+    schedOffFor: (intakeId, plan) => schedOffFor(intakeId, plan),
     // FEED RE-CHECK on demand (2026-08-22): the INBOX card's CREATE ROUTINE path awaits this so the card, the
     // NO FEED nag and the finish checklist flip on the server's answer NOW, not on the next 60s poll / reload.
     pollFeed: () => pollFeedState(),

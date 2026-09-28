@@ -1631,15 +1631,27 @@ const WorldModel = (() => {
       for (const p of probes) delete p.agentId;
       return ok;
     }
-    /* the + button's DRY RUN (2026-09-27 audit B3): would insertBayBetween even try here? Same lane rules, nothing moved —
-       the Workflow panel greys out a "+" that can only refuse and says why on hover, instead of offering a role picker
-       that ends in an error. (Room for the new bay is still only known by trying: NO_ROOM stays an honest refusal.) */
-    function canInsertBayBetween(fromId, toId) {
+    /* the + button's DRY RUN (2026-09-27 audit B3): would insertBayBetween succeed here? The Workflow panel greys out a "+"
+       that can only refuse and says why on hover, instead of offering a role picker that ends in an error. The lane rules
+       alone were not enough (2026-09-28 retest): the "+" between a REVISION LOOP's two bays in the starter room passed them,
+       and the insert then refused NO_ROOM. So the answer is the REAL insert, run on a throwaway copy of this floor (the
+       replaceLayout probe pattern) with the same bay size, cached per floor version so the panel's repaints stay free. */
+    const insertProbe = { seq: -1, memo: {} };
+    function canInsertBayBetween(fromId, toId, o) {
       const A = propById(fromId), B = propById(toId);
       if (!A || !B) return fail('NOT_FOUND', 'no such prop');
       if (!CONNECTABLE[A.t] || !CONNECTABLE[B.t]) return fail('NOT_CONNECTABLE', 'insert between workflow machines');
       const lane = directLane(A, B);
-      return lane.ok ? { ok: true, beforeJoin: !!lane.beforeJoin } : lane;
+      if (!lane.ok) return lane;
+      if (insertProbe.seq !== seq) { insertProbe.seq = seq; insertProbe.memo = {}; }
+      const size = { w: (o && o.w) | 0, h: (o && o.h) | 0, block: !(o && o.block === false) };
+      const k = fromId + '>' + toId + ':' + size.w + 'x' + size.h + (size.block ? '' : 'w');
+      if (!insertProbe.memo[k]) {
+        let r;
+        try { r = makeStation(clone(doc)).insertBayBetween(fromId, toId, size); } catch (e) { r = fail('THREW', String((e && e.message) || e)); }
+        insertProbe.memo[k] = (r && r.ok) ? { ok: true, beforeJoin: !!lane.beforeJoin } : (r || fail('NO_ROOM', 'no room for a new BAY here'));
+      }
+      return insertProbe.memo[k];
     }
     function insertBayBetween(fromId, toId, o) {
       const A = propById(fromId), B = propById(toId);

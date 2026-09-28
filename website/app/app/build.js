@@ -273,6 +273,7 @@ const Build = (() => {
       projectionDirty = true;
       planDirty = true;   // every edit refreshes navigation, routing and sprite state
       clearLineFields();   // …and so is every cached "where can this blueprint go" answer
+      scheduleLineFitSync();   // …so the line cards on screen re-say NO ROOM / fits once the floor settles
       bumpGeo();           // …and every per-edit derived memo (bounds / belts / bayObjects / mounts / the readout census)
       /* A GLOBAL EDIT CANNOT BE INVALIDATED BY A RECTANGLE. The bake is cached in CHUNKS here, and
          `bakeDirtyRects` re-bakes only the chunks a rect touches — right for a deck or a prop, and
@@ -368,7 +369,7 @@ const Build = (() => {
           <button class="bb sm" id="refit-redo" title="redo (Ctrl+Shift+Z)">↷ REDO</button>
         </span>
         <button class="bb sm" id="refit-fit" title="frame the station">⊹ FIT</button>
-        <button class="bb sm" id="refit-test" title="Preview routing with an animated example. This does not run an AI task; use Run a sample job on a configured line for real work.">${esc(PREVIEW_LABEL)}</button>
+        <button class="bb sm" id="refit-test" title="Animates how work would move through your line. Free: no agent runs. For a real run, use RUN ONE REAL JOB once every step has an agent.">${esc(PREVIEW_LABEL)}</button>
         <button class="bb sm" id="refit-help" title="how to build">? HELP</button>
         <button class="bb sm refit-primary" id="refit-done" title="finish + save (or press Esc twice)">SAVE & EXIT</button>
       </div>
@@ -1120,26 +1121,9 @@ const Build = (() => {
         const why = document.createElement('span'); why.className = 'refit-linetile-why';
         why.textContent = LINE_PURPOSE[bp.id] || '';
         b.appendChild(why);
-        /* DECK-FIT HONESTY. Offering a line the current floor has nowhere to put it is an offer the
-           deck cannot keep — the user aims, gets red everywhere, and learns nothing. The card says
-           so up front, from the SAME canPlaceBlueprint scan the ghost snaps to. It stays selectable
-           (sandbox law: never gate) — arming it just shows an empty field and this reason. */
-        let make = null;
-        if (!lineFits(bp.id)) {
-          b.classList.add('nofit');
-          const nf = document.createElement('span'); nf.className = 'refit-linetile-nofit';
-          nf.textContent = 'NO ROOM ON THIS DECK — NEEDS ' + bp.w + '×' + bp.h + ' OF CLEAR FLOOR';
-          b.appendChild(nf);
-          /* MAKE ROOM (2026-09-27 audit B1): 8 of the 19 lines never fit the starter room and nothing said how to get more
-             floor. One click builds a room big enough, touching the station (auto-doors connect it), and arms the line
-             over it. One UNDO removes the room. A sibling button — a button inside the card's button is not allowed. */
-          make = document.createElement('button'); make.type = 'button'; make.className = 'bb sm refit-linetile-makeroom';
-          make.textContent = '＋ MAKE ROOM FOR IT'; make.setAttribute('aria-label', 'Build a room big enough for ' + bp.label);
-          make.onclick = e => makeRoomFor(bp.id, e);
-        }
         b.onclick = () => { lineType = bp.id; selectTool('line'); };
         grid.appendChild(b);
-        if (make) grid.appendChild(make);
+        setLineTileFit(b, bp);   // DECK-FIT HONESTY — and kept current as the floor changes (see setLineTileFit)
       }
       pal.appendChild(grid);
       const note = document.createElement('div');
@@ -1767,6 +1751,39 @@ const Build = (() => {
       try { const o = JSON.parse(localStorage.getItem('starnet.refit.wftests.' + stationKeyOf(st)) || '{}'); const j = o && o.__jobs && o.__jobs[c.key]; if (typeof j === 'string') text = j.trim().slice(0, 2000); } catch (e) {}
       return { line: c.key, text };
     } catch (e) { return null; }
+  }
+  /* DECK-FIT HONESTY. Offering a line the current floor has nowhere to put it is an offer the deck cannot keep — the
+     user aims, gets red everywhere, and learns nothing. The card says so up front, from the SAME canPlaceBlueprint scan
+     the ghost snaps to. It stays selectable (sandbox law: never gate) — arming it just shows an empty field and this reason.
+     MAKE ROOM (2026-09-27 audit B1): 8 of the 19 lines never fit the starter room and nothing said how to get more floor.
+     One click builds a room big enough, touching the station (auto-doors connect it), and arms the line over it. One UNDO
+     removes the room. A sibling button — a button inside the card's button is not allowed.
+     KEPT CURRENT (2026-09-28 retest): the cards were fit-checked only when the palette rendered, so an UNDO left eight of
+     them claiming to fit a floor they no longer fit — the B1 trap again. setLineTileFit reconciles one card in place;
+     scheduleLineFitSync re-reads every card on screen once the floor settles after an edit. */
+  function setLineTileFit(b, bp) {
+    const fits = lineFits(bp.id);
+    b.classList.toggle('nofit', !fits);
+    let nf = b.querySelector('.refit-linetile-nofit');
+    const next = b.nextElementSibling;
+    const make = next && next.classList.contains('refit-linetile-makeroom') ? next : null;
+    if (fits) { if (nf) nf.remove(); if (make) make.remove(); return; }
+    if (!nf) { nf = document.createElement('span'); nf.className = 'refit-linetile-nofit'; b.appendChild(nf); }
+    nf.textContent = 'NO ROOM ON THIS DECK — NEEDS ' + bp.w + '×' + bp.h + ' OF CLEAR FLOOR';
+    if (make) return;
+    const mk = document.createElement('button'); mk.type = 'button'; mk.className = 'bb sm refit-linetile-makeroom';
+    mk.textContent = '＋ MAKE ROOM FOR IT'; mk.setAttribute('aria-label', 'Build a room big enough for ' + bp.label);
+    mk.onclick = e => makeRoomFor(bp.id, e);
+    b.after(mk);
+  }
+  let lineFitSyncT = 0;
+  function scheduleLineFitSync() {
+    if (lineFitSyncT) clearTimeout(lineFitSyncT);
+    lineFitSyncT = setTimeout(() => {
+      lineFitSyncT = 0;
+      if (!running || !root) return;
+      for (const b of root.querySelectorAll('.refit-linetile[data-line]')) { const bp = blueprintOf(b.dataset.line); if (bp) setLineTileFit(b, bp); }
+    }, 350);
   }
   function makeRoomFor(bpId, ev) {
     const bp = blueprintOf(bpId);
@@ -2443,7 +2460,8 @@ const Build = (() => {
         const labels = jt ? loopExitLabels(valPlan, { x: jt.x - o.tx, y: jt.y - o.ty }, agentLabel) : [];
         // the compass prefix ("E → ") is builder shorthand; the panel names the belt by where it goes
         const plain = t => String(t || '').replace(/^[NSEW]\s*\S\s+/, '');
-        return { cfg, lanes: dirs.map(d => ({ dir: d, label: plain((labels.find(x => x.dir === d) || {}).label) || ('the ' + ({ N: 'north', S: 'south', E: 'east', W: 'west' }[d] || d) + ' belt') })) };
+        return { cfg, lanes: dirs.map(d => { const ex = labels.find(x => x.dir === d) || {};
+          return { dir: d, dock: ex.dock || null, label: plain(ex.label) || ('the ' + ({ N: 'north', S: 'south', E: 'east', W: 'west' }[d] || d) + ' belt') }; }) };
       },
       machineDiagram: id => machineDiagramSVG(id),
       loopExits: id => {
@@ -2452,7 +2470,11 @@ const Build = (() => {
       },
       loopRuleTxt, loopBackTxt,
       lineCycles: () => { let errs = []; try { errs = Pipeline.compileRoutingPlan(station.projectGeometry()).errors || []; } catch (e) { errs = []; } return errs.some(e => e.code === 'CYCLE' || e.code === 'CHAIN_CYCLE'); },
-      canInsertBay: (fromId, toId) => (typeof station.canInsertBayBetween === 'function' ? station.canInsertBayBetween(fromId, toId) : { ok: true }),
+      canInsertBay: (fromId, toId) => {
+        if (typeof station.canInsertBayBetween !== 'function') return { ok: true };
+        const sp = propSpec('bay');   // the SAME bay insertBay places — the dry run must try the size the real insert will
+        return station.canInsertBayBetween(fromId, toId, { w: sp.w, h: sp.h, block: sp.blocks !== false });
+      },
       insertBay: (fromId, toId, role) => {
         if (typeof station.insertBayBetween !== 'function') return { ok: false, msg: 'this station model cannot insert a step' };
         const sp = propSpec('bay');
@@ -2637,18 +2659,21 @@ const Build = (() => {
     if (!plan || !plan.belts || !tile) return out;
     const DIRV = { E: [1, 0], W: [-1, 0], S: [0, 1], N: [0, -1] }, OPP = { E: 'W', W: 'E', S: 'N', N: 'S' };
     const map = plan.belts, bayAt = plan.bayTileToAgent || {}, junctions = plan.junctions || {};
+    const dockAt = plan.bayTileToDock || {}, emptyAt = plan.unboundBayTile || {};   // which BAY a lane lands on — crewed or not
     const outs = {}; for (const o of (plan.outs || [])) if (o && o.tile) outs[o.tile.x + ',' + o.tile.y] = true;
     const KIND = { split: 'SPLITTER', merge: 'MERGER', join: 'JOINER', loop: 'LOOP', filter: 'FILTER' };
     const home = tile.x + ',' + tile.y;
     for (const d of ['E', 'S', 'W', 'N']) {
       const v = DIRV[d], nb = map[(tile.x + v[0]) + ',' + (tile.y + v[1])];
       if (!nb || nb === OPP[d]) continue;                       // not an out-lane (no belt, or it flows back in)
-      let t = { x: tile.x + v[0], y: tile.y + v[1] }, to = 'nowhere yet', kind = 'none', guard = 0;
+      let t = { x: tile.x + v[0], y: tile.y + v[1] }, to = 'nowhere yet', kind = 'none', guard = 0, dock = null;
       const seen = {};
       while (t && guard++ < 4096) {
         const k = t.x + ',' + t.y;
         if (k === home) { to = 'round again'; kind = 'self'; break; }
-        if (bayAt[k]) { to = 'to ' + String(nameOf ? nameOf(bayAt[k]) : bayAt[k]).toUpperCase(); kind = 'bay'; break; }
+        if (bayAt[k]) { to = 'to ' + String(nameOf ? nameOf(bayAt[k]) : bayAt[k]).toUpperCase(); kind = 'bay'; dock = dockAt[k] || null; break; }
+        // a BAY with no agent yet is still where the belt goes (2026-09-28 retest: a fresh split read "nowhere yet" twice)
+        if (emptyAt[k]) { to = 'to a BAY with no agent yet'; kind = 'bay'; dock = emptyAt[k]; break; }
         if (outs[k]) { to = 'OUTBOX'; kind = 'outbox'; break; }
         if (junctions[k]) { to = 'a ' + (KIND[junctions[k].kind] || 'JUNCTION'); kind = 'junction'; break; }
         if (seen[k]) break;
@@ -2656,7 +2681,7 @@ const Build = (() => {
         const dir = map[k]; if (!dir) break;                    // hookups + mouths are belt tiles, so off-belt = the lane ends
         const w = DIRV[dir]; t = { x: t.x + w[0], y: t.y + w[1] };
       }
-      out.push({ dir: d, to: to, kind: kind, label: d + ' → ' + to });
+      out.push({ dir: d, to: to, kind: kind, dock: dock, label: d + ' → ' + to });
     }
     return out;
   }
@@ -3148,7 +3173,11 @@ const Build = (() => {
     const feed = (opts && opts.world && opts.world.feedState) ? opts.world.feedState() : { known: false, fed: false };
     const hasIntake = c.intakes.length > 0;
     const feedDone = hasIntake && feed.known && feed.fed;
-    return { unbound, crewLeft: unbound.length, hasIntake, feed, feedDone,
+    // a routine IS saved for this line but scheduling is off (2026-09-28 retest): ② says so, and still opens the INBOX section,
+    // where the TURN SCHEDULING ON switch is — never "choose what starts this line" over a start the Commander already chose
+    let schedOff = false;
+    try { schedOff = hasIntake && feed.known && !feed.fed && !!(opts && opts.world && opts.world.schedOffFor && opts.world.schedOffFor(c.intakes[0], valPlan)); } catch (_) { schedOff = false; }
+    return { unbound, crewLeft: unbound.length, hasIntake, feed, feedDone, schedOff,
       todo: unbound.length > 0 || (hasIntake && feed.known && !feed.fed) };
   }
   function finPick() {
@@ -3262,7 +3291,7 @@ const Build = (() => {
     // keep the generic header. In the sig so a rename repaints without a topology edit.
     const lname = lineNameOf(c);
     const overview = workflowReadout(c, valPlan, agentLabelFor);
-    const sig = [c.key, st.crewLeft, st.hasIntake, st.feed.known, st.feed.fed, finSample, lname || '', overview.compact, finSampleRes ? finSampleRes.key + ':' + finSampleRes.stamp : ''].join('|');
+    const sig = [c.key, st.crewLeft, st.hasIntake, st.feed.known, st.feed.fed, st.schedOff, finSample, lname || '', overview.compact, finSampleRes ? finSampleRes.key + ':' + finSampleRes.stamp : ''].join('|');
     if (!finCardEl) {
       finCardEl = document.createElement('div');
       root.appendChild(finCardEl);
@@ -3276,12 +3305,12 @@ const Build = (() => {
     const crewTxt = crewDone ? '✓ AGENTS ASSIGNED' : '① ASSIGN STEP AGENTS — ' + st.crewLeft + ' TO GO';
     const feedTxt = !st.hasIntake ? '② FEED IT — TASK THE AGENT, OR WIRE A ROUTINE'
       : !st.feed.known ? '② CHECKING WHAT STARTS THIS LINE…'
-      : st.feed.fed ? '✓ AUTOMATIC START CONFIGURED' : '② CHOOSE WHAT STARTS THIS LINE';
+      : st.feed.fed ? '✓ AUTOMATIC START CONFIGURED' : st.schedOff ? '② SCHEDULING IS OFF — TURN IT ON' : '② CHOOSE WHAT STARTS THIS LINE';
     // the sample RESULT belongs to the line it rode (finSampleRes.key) — another line's card shows none
     const sr = (finSampleRes && finSampleRes.key === c.key) ? finSampleRes : null;
     const sampleOn = finSample === true && crewDone && !(sr && sr.pending);
-    const sampleTip = finSample !== true ? 'coming online soon' : (crewDone ? 'feed ONE real, clearly-labeled sample job through the whole line' : 'Assign each step an agent first');
-    const sampleTxt = (sr && sr.pending) ? (sr.phase === 'post' ? '③ POSTING LINE…' : '③ RUNNING — SAMPLE RIDING THE LINE…') : (sr && sr.view && sr.view.ok) ? '✓ SAMPLE DELIVERED — RUN ANOTHER' : '③ RUN ONE REAL JOB';
+    const sampleTip = finSample !== true ? 'coming online soon' : (crewDone ? 'run ONE real job through the whole line (your INBOX test job, if you wrote one)' : 'Assign each step an agent first');
+    const sampleTxt = (sr && sr.pending) ? (sr.phase === 'post' ? '③ POSTING LINE…' : '③ RUNNING — THE JOB IS RIDING THE LINE…') : (sr && sr.view && sr.view.ok) ? '✓ JOB DELIVERED — RUN ANOTHER' : '③ RUN ONE REAL JOB';
     finCardEl.innerHTML = `
       <div class="fl-head"><span class="fl-title">▸ ${lname ? 'FINISH ' + esc(lname.toUpperCase()) : 'FINISH THE LINE'}</span><button type="button" class="bb sm fl-x" title="dismiss for this line">✕</button></div>
       <div class="fl-overview">${esc(overview.compact)}</div>
@@ -3435,7 +3464,7 @@ const Build = (() => {
     const o = cacheGeo.origin || { tx: 0, ty: 0 }, t = T();
     const lsig = 'l|' + uiVer + '|' + zoom + '|' + panX + '|' + panY + '|' + t + '|' + o.tx + ',' + o.ty
       + '|' + window.innerWidth + '|' + window.innerHeight + '|' + U.uiZoom()
-      + '|' + c.key + '|' + c.bbox.x1 + ',' + c.bbox.y1 + ',' + c.bbox.x2 + ',' + c.bbox.y2 + coachKey;
+      + '|' + c.key + '|' + c.bbox.x1 + ',' + c.bbox.y1 + ',' + c.bbox.x2 + ',' + c.bbox.y2 + '|' + geoVer + coachKey;   // geoVer: a machine placed under the card moves it
     if (lsig === finPosSig) return;
     const r = cv.getBoundingClientRect();
     if (!r.width || !r.height) return;
@@ -3457,12 +3486,21 @@ const Build = (() => {
     }
     const rightX = sx((c.bbox.x2 + 1 + o.tx) * t) + 14;
     const leftX = sx((c.bbox.x1 + o.tx) * t) - w - 14;
-    let x, y;
-    if (rightX + w <= edgeR - 8) { x = rightX; y = sy((c.bbox.y1 + o.ty) * t) - 4; }          // beside, to the right
-    else if (leftX >= minX) { x = leftX; y = sy((c.bbox.y1 + o.ty) * t) - 4; }                            // beside, to the left
-    else { x = sx((c.bbox.x2 + 1 + o.tx) * t) - w; y = sy((c.bbox.y2 + 1 + o.ty) * t) + 12; }             // no side room — under the line
-    x = Math.max(minX, Math.min(x, edgeR - w - 8));
-    y = Math.max(56, Math.min(y, maxY));
+    const topY = sy((c.bbox.y1 + o.ty) * t) - 4;
+    const cands = [];
+    if (rightX + w <= edgeR - 8) cands.push({ x: rightX, y: topY });                                            // beside, to the right
+    if (leftX >= minX) cands.push({ x: leftX, y: topY });                                                        // beside, to the left
+    cands.push({ x: sx((c.bbox.x2 + 1 + o.tx) * t) - w, y: sy((c.bbox.y2 + 1 + o.ty) * t) + 12 });              // under the line
+    cands.push({ x: sx((c.bbox.x2 + 1 + o.tx) * t) - w, y: sy((c.bbox.y1 + o.ty) * t) - h - 12 });              // above it
+    const clampX = v => Math.max(minX, Math.min(v, edgeR - w - 8)), clampY = v => Math.max(56, Math.min(v, maxY));
+    /* NEVER OVER A MACHINE (2026-09-28 retest): beside-the-line is DOWNSTREAM, where a builder places the next machines —
+       the card landed on the JOINER and OUTBOX a first-time user had placed and was about to belt. The card is advice; the
+       machines are the work. The first spot that covers no workflow machine wins; the old order is the fallback. */
+    const FIN_AVOID = { intake: 1, bay: 1, outbox: 1, filter: 1, splitter: 1, merger: 1, joiner: 1, loop: 1 };
+    const boxes = station.props().filter(p => FIN_AVOID[p.t]).map(p => ({ l: sx(p.x * t), t: sy(p.y * t), r: sx((p.x + (p.w || 1)) * t), b: sy((p.y + (p.h || 1)) * t) }));
+    const spots = cands.map(q => ({ x: clampX(q.x), y: clampY(q.y) }));
+    const clear = q => !boxes.some(m => q.x < m.r && q.x + w > m.l && q.y < m.b && q.y + h > m.t);
+    let { x, y } = spots.find(clear) || spots[0];
     // a coach bubble over the same spot: stack the checklist UNDER it (never hide it, never cover it)
     if (coach && x < coach.right && x + w > coach.left && y < coach.bottom && y + h > coach.top) {
       y = Math.min(coach.bottom + 10, maxY);
@@ -5184,6 +5222,15 @@ const Build = (() => {
       ghost.tick(dt, now, belts, ghostMap, { blocked, feed });
     }
     convey.drawBelts(ctx, now, t, belts, valLive);
+    /* DROP IT ON A BELT (2026-09-27 audit P5): with a junction in hand, every belt tile it can go on wears a crisp dashed
+       edge — drawn geometry, never a glow — so the shelf's "drop it ON a belt" points at something on the floor. */
+    if (tool === 'prop' && JUNCTION_TAG_TYPES[propType] && belts.length) {
+      const ins = 1.5 / zoom;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(95,216,255,0.6)'; ctx.lineWidth = 1 / zoom; ctx.setLineDash([3 / zoom, 2 / zoom]);
+      for (const b of belts) ctx.strokeRect(b.x * t + ins, b.y * t + ins, t - ins * 2, t - ins * 2);
+      ctx.restore();
+    }
   }
   function drawConveyorBoxes(now, t) {
     if (!convey) return;
@@ -5305,6 +5352,7 @@ const Build = (() => {
      COMPILED cfg (the same fact the sidecar routes by). Only one at a time — a tag on every junction at rest was the "wall of
      text" the one-voice law exists to stop; the Workflow panel carries the same facts for the whole line. */
   const JUNCTION_TAG_TYPES = { splitter: 1, joiner: 1, merger: 1, filter: 1, loop: 1 };
+  const RING_DOCK_T = { bay: 1, intake: 1, outbox: 1 };   // machines that hook belts through a 1-tile ring (the spacing tip)
   /* A SPLIT'S MODE ONCE CREWED (2026-09-27): the compiler marks a split fan-out only when a crewed branch reaches its JOINER,
      so on a freshly stamped line (no agents yet) every split read TAKES TURNS — while the Workflow panel's strip (which compiles
      with a stand-in agent on each uncrewed bay) said ALL RUN, and the ghost said "jobs would take turns". The WOULD-voices (the
@@ -5911,6 +5959,13 @@ const Build = (() => {
     if (!ok) lines.push(((footprint && footprint.msg) || placementReason(g)).toUpperCase());
     // the hover preview teaches BOTH gestures: this size on a click, any size on a drag
     else if (g.stamp) lines.push(g.kind === 'prop' ? 'CLICK TO PLACE' : 'CLICK TO PLACE · DRAG TO SIZE');
+    /* SPACING (2026-09-27 audit B4): a dock hooks every belt in the 1-tile ring around it, so two docks with one empty tile
+       between them share that tile — a belt there hooks BOTH, and the job goes nowhere. Said while the ghost is in hand,
+       never refused (sandbox law): the Commander may still want them tight. */
+    if (ok && g.kind === 'prop' && tool === 'prop' && RING_DOCK_T[propType]) {
+      const near = station.props().find(p => RING_DOCK_T[p.t] && p.x - 1 <= r0.x2 + 1 && r0.x1 - 1 <= p.x + (p.w || 1) && p.y - 1 <= r0.y2 + 1 && r0.y1 - 1 <= p.y + (p.h || 1));
+      if (near) lines.push('CLOSE TO THE ' + String(propLabel(near.t)).toUpperCase() + ' — LEAVE 2 TILES OR THEIR BELTS TOUCH');
+    }
     if (links) lines.push('WILL CONNECT TO ' + linkNames(links));
     if (ok && g.leftBehind) lines.push('ITS BELTS STAY HERE — RECONNECT WITH BELT');
     if (g.kind === 'prop' && canTurn(propType) && !propSpec(propType).flat) {
