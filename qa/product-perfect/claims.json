@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "0486473bd43c8478dad20ca0a66fbfd6584bfe6a",
+    "sourceCommit": "c854e18203be29c9570ed3c86c26418af201502e",
     "pathSetSha256": "d399b7dc9c6d8ef4e165d0c6560b5770636dbaf73b81f662e7c4b31d7cc55045",
     "files": [
       {
@@ -703,8 +703,8 @@
       },
       {
         "path": "frontend/app/pipeline.js",
-        "bytes": 104928,
-        "sha256": "1444b3b535419b51b975d54464c16d0208aaccc7a979f48d2495528de0586fb0"
+        "bytes": 119603,
+        "sha256": "33d8487bada4ab668e9cf5df4bf5426eb92e685866f915129b882f4586188e13"
       },
       {
         "path": "frontend/app/pitch.js",
@@ -1333,8 +1333,8 @@
       },
       {
         "path": "frontend/app/worldmodel.js",
-        "bytes": 192962,
-        "sha256": "16e58b29ba6c87e5223c362b7779a59f087ac2b6dd4d883c0220d1ea3710f60d"
+        "bytes": 197079,
+        "sha256": "189f43f95fc5f234ee4fb273d79ce6ddd86da1d483d3d49caf26f0569f003151"
       },
       {
         "path": "frontend/app/worldrenderer.js",
