@@ -281,7 +281,7 @@ const Tutorial = (() => {
     Dialogue.node({
       lines: [seg('Ask for work in COMMS. Review the reply and files.\nBUILD › REFIT STATION: pick a prop, click a clear tile. Press Esc to cancel. Select a placed prop to move it.\nPresets furnish rooms. To chain agents step by step, open WORK › WORKFLOWS: belts carry the job from one agent to the next.', 64, 0)],
       options: [
-        ...(resumeFirstTask ? [{ label: '▸ CONTINUE MY FIRST TASK', value: 'handoff' }]
+        ...(resumeFirstTask ? [{ label: '▸ CONTINUE MY FIRST TASK', value: 'handoff', yield: true }]   // the tour's way out when a first task is waiting (Dialogue.yieldTour)
           : typeof FirstValue !== 'undefined' ? [{ label: '▸ CHOOSE MY FIRST TASK', value: 'value' }] : []),
         ...(caps && caps.includes('cabinet') ? [{ label: 'TRY A SMALL FILE EXAMPLE', value: 'demo' }] : []),
         ...(!resumeFirstTask ? [{ label: 'Finish tour · I’ll type in COMMS', value: 'done', skip: true }] : [])
@@ -1093,7 +1093,7 @@ const Tutorial = (() => {
      (2026-09-23 playtest). The fallback is only for a context where build.js is not loaded (headless tests). */
   function refitNames() {
     try { if (typeof Build !== 'undefined' && Build.refitNames) { const r = Build.refitNames(); if (r && r.machines && r.machines.length) return r; } } catch (e) { /* fall back to the static names below */ }
-    return { tab: 'CONVEYORS', lines: 'CONVEYOR LINES', belt: 'BELT', lineKey: '9', beltKey: '7', preview: '▸ PREVIEW FLOW', lineCount: null, machinesShelf: 'MACHINES',
+    return { tab: 'CONVEYORS', lines: 'CONVEYOR LINES', belt: 'BELT', lineKey: '9', beltKey: '7', preview: '▸ PREVIEW (FREE)', lineCount: null, machinesShelf: 'MACHINES',
       machines: [
         { label: 'SPLITTER', purpose: 'one belt into several: every branch gets a copy when a JOINER follows, otherwise jobs take turns', junction: true },
         { label: 'JOINER', purpose: 'waits for every branch, then sends one merged result on', junction: true },

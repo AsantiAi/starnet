@@ -34,6 +34,22 @@ function parseVerdict(text) {
   return null;
 }
 
+/* stripVerdict(text) -> the text without its VERDICT line (the one parseVerdict reads, within the tail), for the work that
+   LEAVES an approved gate: the line is the gate's control signal, not part of the work (2026-09-27 audit R1). A text with no
+   verdict line comes back unchanged. Pure. */
+function stripVerdict(text) {
+  if (typeof text !== 'string' || !parseVerdict(text)) return text;
+  const lines = text.split(/\r?\n/);
+  let seen = 0;
+  for (let i = lines.length - 1; i >= 0 && seen < TAIL_LINES; i--) {
+    if (!lines[i].trim()) continue;
+    seen++;
+    const l = lines[i].trim().replace(/^[\s>*\-_`#]+/, '').replace(/[\s*_`.!]+$/, '');
+    if (/^verdict\s*[:=\-–—]\s*[A-Za-z]/i.test(l)) { lines.splice(i, 1); break; }
+  }
+  return lines.join('\n').replace(/\s+$/, '');
+}
+
 /* verdictBrief(when) -> the instruction a reviewer dock receives when its lane meets a LOOP gate keyed on a
    verdict word; '' when the gate is not verdict-keyed. Prompt text only. */
 function verdictBrief(when) {
@@ -41,7 +57,9 @@ function verdictBrief(when) {
   const other = when.toLowerCase() === 'approved' ? 'revise' : 'approved';
   return 'YOUR VERDICT DECIDES THE LOOP GATE AFTER YOU: end your reply with one final line, exactly '
     + '"VERDICT: ' + when.toLowerCase() + '" when the work should leave the loop, or "VERDICT: ' + other + '" when it should go '
-    + 'back round. Nothing after that line. A reply with no VERDICT line is treated as "' + other + '".';
+    + 'back round. Nothing after that line. A reply with no VERDICT line is treated as "' + other + '". '
+    + 'When the work passes, your reply is what moves on past the gate: lead with the finished work itself (with any fixes '
+    + 'applied), and keep review notes short.';
 }
 
-module.exports = { parseVerdict, isVerdictWord, verdictBrief, VERDICT_WORDS };
+module.exports = { parseVerdict, stripVerdict, isVerdictWord, verdictBrief, VERDICT_WORDS };

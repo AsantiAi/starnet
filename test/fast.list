@@ -645,6 +645,7 @@ test/conveyor-visible-connections.test.js
 test/conveyor-connect-junctions.test.js
 test/conveyor-legibility.test.js
 test/conveyor-first-line.test.js
+test/conveyor-results.test.js
 test/refit-flow-polish.test.js
 test/refit-junction-cards.test.js
 test/refit-footprint.test.js
