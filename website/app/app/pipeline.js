@@ -455,7 +455,17 @@
     // valid outbound lanes; the chainFed clause is the same correction for valid stage-two docks, which are fed
     // by an agent rather than by a door and were being shamed for it. Per DOCK: a writer's second bay is judged
     // on its own belts, never excused by its first.
-    for (const b of bays) if (!reachDock[b.propId] && !chainFed[b.propId] && !flowsToOutbox(b.tile)) errors.push({ code: 'BAY_NOT_FED', propId: b.propId, agentId: b.agentId, warn: true });
+    /* …and when that bay's belt starts INSIDE the ring of the machine feeding it (an INBOX mouth, or another
+       dock's hookup), the two machines are TOO CLOSE (2026-09-27 audit B4): a job is never delivered on the tile
+       it was born on, and a tile two docks share belongs to one of them only — so the belt the Commander can SEE
+       running into the bay carries nothing. Saying "NOT FED — belt into it" there sends them to redo what they
+       already did; BAY_TOO_CLOSE names the real fix (move one a tile apart). Same warn standing as BAY_NOT_FED. */
+    const sharedRing = {};
+    for (const s of sources) for (const st of srcTiles(s)) sharedRing[key(st.x, st.y)] = 'src';
+    const ringOwners = {};
+    for (const b of bays) for (const t of bayTilesOf(b)) { const k = key(t.x, t.y); (ringOwners[k] = ringOwners[k] || []).push(b.propId); }
+    const tooClose = b => bayTilesOf(b).some(t => { const k = key(t.x, t.y); return sharedRing[k] === 'src' || (ringOwners[k] || []).length > 1; });
+    for (const b of bays) if (!reachDock[b.propId] && !chainFed[b.propId] && !flowsToOutbox(b.tile)) errors.push({ code: tooClose(b) ? 'BAY_TOO_CLOSE' : 'BAY_NOT_FED', propId: b.propId, agentId: b.agentId, warn: true });
     // A CHAIN LOOP IS A BLOCKING ERROR — and it is INVISIBLE to detectCycle. A's ship tile feeding B's dock and
     // B's ship tile feeding A's dock are two separate physical lanes with no belt cycle anywhere; the loop only
     // exists across the docks (consume here, respawn there). Left unguarded that is an infinite chain of PAID

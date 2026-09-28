@@ -299,7 +299,13 @@ const Conveyor = (() => {
       if (jt.kind === 'split') {
         const n = rr.get(k) || 0;
         rr.set(k, (n + 1) % lanes.length);
-        return lanes[n % lanes.length];
+        const dir = lanes[n % lanes.length];
+        // REPORT THE DECISION (2026-09-27 audit X2): the REFIT preview and the ghost projection caption splitters from
+        // this seam, and it never fired for unowned work — no preview ever said what a splitter does. `fanout` is the
+        // compiled cfg: a split with a JOINER downstream sends EVERY branch a copy (the sidecar runs them all; this
+        // sim still moves one crate per lane — the caller narrates and draws the copies).
+        if (onAdvance) onAdvance(bx, { kind: 'split', tile: { x, y }, lane: dir, fanout: !!jt.fanout });
+        return dir;
       }
       if (jt.kind === 'filter') {
         const tag = (bx.payload && bx.payload.tag) || 'general';

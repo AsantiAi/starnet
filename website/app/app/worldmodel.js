@@ -1560,10 +1560,15 @@ const WorldModel = (() => {
       let why = null;
       for (const h0 of heads) {
         const tiles = [], seen = new Set();
-        let t = h0, reached = false, bad = null;
+        let t = h0, reached = false, bad = null, mergeAt = -1;
         while (t && doc.belts[beltKey(t.x, t.y)] && !seen.has(beltKey(t.x, t.y))) {
           const k = beltKey(t.x, t.y); seen.add(k);
-          if (tiles.length && feeders(t.x, t.y) > 1) { bad = 'MERGES'; break; }
+          /* ANOTHER BELT JOINS HERE (2026-09-27 audit B3). On a stamped REVISION LOOP the gate's return belt joins the
+             INBOX lane just before the writer, so every insert between INBOX and WRITER — the natural place for a
+             research step — was refused. The new BAY goes in BEFORE the join: only the lane's own segment up to the
+             join is lifted, the shared part stays (it still carries the other belt's work to B), and the new bay is
+             belted into B on a lane of its own. The walk carries on so PASSES and reaching B are still checked. */
+          if (tiles.length && mergeAt < 0 && feeders(t.x, t.y) > 1) mergeAt = tiles.length;
           if (!aRing.has(k) && !bRing.has(k) && touchesOther(t.x, t.y)) { bad = 'PASSES'; break; }
           tiles.push({ x: t.x, y: t.y });
           if (bRing.has(k)) reached = true;
@@ -1571,19 +1576,44 @@ const WorldModel = (() => {
           if (reached && !bRing.has(beltKey(nx, ny))) break;   // the lane's tail runs out along B's ring
           t = { x: nx, y: ny };
         }
-        if (reached && !bad) return { ok: true, tiles };
+        if (reached && !bad) return mergeAt > 0 ? { ok: true, tiles: tiles.slice(0, mergeAt), beforeJoin: true } : { ok: true, tiles };
         if (bad) why = bad;
       }
-      if (why === 'MERGES') return fail('LANE_SHARED', 'another belt joins this one — add the BAY by hand (PROPS, then BELT)');
-      if (why === 'PASSES') return fail('LANE_PASSES', 'this belt passes another machine — add the BAY by hand (PROPS, then BELT)');
-      return fail('NO_DIRECT_LANE', 'no single belt runs straight from the first machine to the next — add the BAY by hand (PROPS, then BELT)');
+      if (why === 'PASSES') return fail('LANE_PASSES', 'this belt passes another machine, so a step cannot be added here automatically. Add it by hand: Conveyors › MACHINES › BAY, then connect it with BELT');
+      return fail('NO_DIRECT_LANE', 'no single belt runs straight from the first machine to the next, so a step cannot be added here automatically. Add it by hand: Conveyors › MACHINES › BAY, then connect it with BELT');
     }
     /* the compiler's own verdict on a trial insert: with probe agents on any uncrewed endpoint, the compiled plan
        must hand A's work to the new bay and the new bay's to B (or ship it to B when B is an OUTBOX), with no
        new blocking error. The probe ids never persist — the props are restored before returning. */
-    function insertCompiles(A, newId, B) {
+    /* what the REST of the floor routes to, with probe agents on the named uncrewed bays: every loop gate's back target
+       and every dock's hand-off targets (dock-keyed — prop ids survive an origin shift). insertBayBetween compares this
+       before and after, so an insert can never quietly re-route a lane it was not asked to touch (2026-09-27: a new
+       research step parked beside a REVISION LOOP's return belt became the gate's back target). */
+    function routingSummary(probeIds) {
+      const P = pipelineModule();
+      if (!P || !P.compileRoutingPlan) return null;
+      const probes = [];
+      for (const id of probeIds) { const p = doc.props.find(q => q.id === id); if (p && p.t === 'bay' && !p.agentId) { p.agentId = '__insert_probe_' + probes.length; probes.push(p); } }
+      let out = null;
+      try {
+        const plan = P.compileRoutingPlan(projectGeometry());
+        const backs = [];
+        for (const k in (plan.gateDocks || {})) { const g = plan.gateDocks[k]; backs.push(String(g && g.backTo || '') + '>' + String(g && g.escTo || '')); }
+        const next = {};
+        for (const d in (plan.dockChains || {})) next[d] = (plan.dockChains[d].next || []).slice().sort().join(',') + (plan.dockChains[d].outbox ? '+out' : '');
+        out = { backs: backs.sort().join('|'), next };
+      } catch (e) { out = null; }
+      for (const p of probes) delete p.agentId;
+      return out;
+    }
+    function insertCompiles(A, newId, B, before) {
       const P = pipelineModule();
       if (!P || !P.compileRoutingPlan) return true;   // no compiler loaded: the geometric checks stand alone
+      if (before) {
+        const after = routingSummary([A.id, newId, B.id]);
+        if (!after || after.backs !== before.backs) return false;   // a loop gate would send work somewhere new
+        for (const d in before.next) if (d !== A.id && d !== newId && after.next[d] !== before.next[d]) return false;   // another dock re-routed
+      }
       const probes = [];
       const probe = id => { const p = doc.props.find(q => q.id === id); if (p && p.t === 'bay' && !p.agentId) { p.agentId = '__insert_probe_' + probes.length; probes.push(p); } return p; };
       const a = probe(A.id), n = probe(newId), b = probe(B.id);
@@ -1601,6 +1631,16 @@ const WorldModel = (() => {
       for (const p of probes) delete p.agentId;
       return ok;
     }
+    /* the + button's DRY RUN (2026-09-27 audit B3): would insertBayBetween even try here? Same lane rules, nothing moved —
+       the Workflow panel greys out a "+" that can only refuse and says why on hover, instead of offering a role picker
+       that ends in an error. (Room for the new bay is still only known by trying: NO_ROOM stays an honest refusal.) */
+    function canInsertBayBetween(fromId, toId) {
+      const A = propById(fromId), B = propById(toId);
+      if (!A || !B) return fail('NOT_FOUND', 'no such prop');
+      if (!CONNECTABLE[A.t] || !CONNECTABLE[B.t]) return fail('NOT_CONNECTABLE', 'insert between workflow machines');
+      const lane = directLane(A, B);
+      return lane.ok ? { ok: true, beforeJoin: !!lane.beforeJoin } : lane;
+    }
     function insertBayBetween(fromId, toId, o) {
       const A = propById(fromId), B = propById(toId);
       if (!A || !B) return fail('NOT_FOUND', 'no such prop');
@@ -1614,6 +1654,7 @@ const WorldModel = (() => {
       const cands = [];
       for (let dy = -6; dy <= 6; dy++) for (let dx = -6; dx <= 6; dx++) cands.push({ x: mid.x + dx - (W >> 1), y: mid.y + dy - (H >> 1), d: dx * dx + dy * dy });
       cands.sort((a, b) => a.d - b.d || a.y - b.y || a.x - b.x);
+      const before = routingSummary([A.id, B.id]);
       return transact(() => {
         for (const t of lane.tiles) delete doc.belts[beltKey(t.x, t.y)];
         emit(lane.tiles.map(t => ({ x1: t.x, y1: t.y, x2: t.x, y2: t.y })));
@@ -1626,6 +1667,12 @@ const WorldModel = (() => {
           // a dock's 1-tile ring is its hookup zone: a new bay whose ring touches another machine (or its ring)
           // would share hookup tiles with it and the compiler would read the wrong hand-offs — keep clear
           if (doc.props.some(p => CONNECTABLE[p.t] && p.x - 1 <= c.x + W && p.x + (p.w || 1) >= c.x - 1 && p.y - 1 <= c.y + H && p.y + (p.h || 1) >= c.y - 1)) continue;
+          // …and clear of every OTHER belt: a bay whose ring touches a passing lane HOOKS that lane (the lanes this insert
+          // lays for itself come after, and belong to it)
+          let brushes = false;
+          for (let y = c.y - 1; y <= c.y + H && !brushes; y++) for (let x = c.x - 1; x <= c.x + W && !brushes; x++)
+            if (!(x >= c.x && x < c.x + W && y >= c.y && y < c.y + H) && doc.belts[beltKey(x, y)]) brushes = true;
+          if (brushes) continue;
           tried++;
           const pre = snap();
           const add = addProp({ t: 'bay', x: c.x, y: c.y, w: W, h: H, block });
@@ -1634,10 +1681,10 @@ const WorldModel = (() => {
           const c1 = connectBelt(A.id, add.id);
           const c2 = c1.ok ? connectBelt(add.id, B.id) : c1;
           if (!c1.ok || !c2.ok) { restore(pre); continue; }
-          if (!insertCompiles(A, add.id, B)) { restore(pre); continue; }
+          if (!insertCompiles(A, add.id, B, before)) { restore(pre); continue; }
           return { ok: true, id: add.id, x: c.x, y: c.y, removed: lane.tiles.length, laid: (c1.count || 0) + (c2.count || 0) };
         }
-        return fail('NO_ROOM', 'no clear spot near this belt fits a new BAY with both belts — make floor space, or place one with PROPS and connect it with BELT');
+        return fail('NO_ROOM', 'no clear spot near this belt fits a new BAY with both belts. Make floor space, or place one yourself (Conveyors › MACHINES › BAY) and connect it with BELT');
       });
     }
 
@@ -1706,6 +1753,24 @@ const WorldModel = (() => {
         const corner = (t.x < B.x || t.x >= B.x + (B.w || 1)) && (t.y < B.y || t.y >= B.y + (B.h || 1));
         (corner ? goalCorner : goalEdge).add(t.x + ',' + t.y);
       }
+      /* TOO CLOSE (2026-09-27 audit B4): when a job SOURCE (an INBOX, or a BAY shipping its result) sits within a
+         tile of the BAY it feeds, their 1-tile rings overlap, and a belt tile inside BOTH rings is read as the
+         source's own mouth AND the bay's hookup at once. A job born there is never delivered on its birth tile, and
+         a bay's result starting there can count as the bay's OWN tile — so the shortest lane (often a single tile)
+         looked connected while the floor said NOT FED. The lane must START outside the destination's ring and END
+         outside the source's ring; when no such tiles exist the two machines are simply too close, and we say so
+         instead of laying a belt that can never carry work. (BAY→OUTBOX is exempt: a shared tile there is a valid
+         ship-out mouth — chainWalk starts ON the hookup.) */
+      if (!aJ && !bJ && B.t === 'bay' && (A.t === 'intake' || A.t === 'bay')) {
+        const ringKeys = p => new Set(ring(p).map(t => t.x + ',' + t.y));
+        const aRing = ringKeys(A), bRing = ringKeys(B);
+        const tooClose = () => fail('TOO_CLOSE', 'these two machines are too close — a belt between them would touch both at once, so the job would never arrive. Move the ' + B.t.toUpperCase() + ' one tile further away, then connect again');
+        for (let i = starts.length - 1; i >= 0; i--) if (bRing.has(starts[i].x + ',' + starts[i].y)) starts.splice(i, 1);
+        if (!starts.length) return tooClose();
+        for (const k of [...goalEdge]) if (aRing.has(k)) goalEdge.delete(k);
+        for (const k of [...goalCorner]) if (aRing.has(k)) goalCorner.delete(k);
+        if (!goalEdge.size && !goalCorner.size) return tooClose();
+      }
       const goals = goalEdge.size ? goalEdge : goalCorner;
       if (!goals.size) return fail('TO_BLOCKED', bJ ? 'no free tile beside the ' + B.t.toUpperCase() + ' to enter it from — clear one of its four sides' : 'no free tile beside the destination');
       /* A LANE THAT BRUSHES A THIRD MACHINE HOOKS IT (2026-08-22): the compiler treats EVERY belt tile in a
@@ -1773,7 +1838,12 @@ const WorldModel = (() => {
         for (const k in doc.belts) map[k] = doc.belts[k];
         for (let i = 0; i < path.length; i++) map[path[i].x + ',' + path[i].y] = dirs[i];
         if (bJ) {
-          const entry = path.length > 1 ? path[path.length - 2] : null;   // the tile that feeds the junction
+          // the tile that feeds the junction. A beltless junction is ENTERED through its own tile, so the path ends
+          // ON it and the feeder is the tile before; a junction already on a line is reached at a free 4-neighbour,
+          // so the path's LAST tile is the feeder. Reading path[len-2] there (2026-09-27 audit W1) picked a tile
+          // diagonal to the junction whenever the lane turned on its last step — a correct second in-lane into a
+          // JOINER/MERGER was refused and the split-then-join shape could not be wired with clicks.
+          const entry = bOn ? path[path.length - 1] : (path.length > 1 ? path[path.length - 2] : null);
           const sideIn = entry ? dirTo({ x: B.x, y: B.y }, entry) : null;
           const ins = P._internals.inLanes(map, B.x, B.y);
           if (!map[B.x + ',' + B.y] || (sideIn && ins.indexOf(sideIn) < 0))
@@ -2688,7 +2758,7 @@ const WorldModel = (() => {
       // mutations
       addRoom, placeHallway, removeRoom, moveRoom, setFloor, setMaterial, setDeck, setWalls, setHull, paintTiles, renameRoom,
       addProp, removeProp, moveProp, rotateProp, faceProp, mirrorProp, assignPropAgent, ensureWorkstation, configureJunction, bindConnector, setDoorState, setPropProject, setPropBrief, setPropHands, setPropLabel, setPropLimits,
-      setBelt, removeBelt, removeBelts, placeBeltRun, connectBelt, connectionPreview, hookedBelts, stampBlueprint, insertBayBetween, transact,
+      setBelt, removeBelt, removeBelts, placeBeltRun, connectBelt, connectionPreview, hookedBelts, stampBlueprint, insertBayBetween, canInsertBayBetween, transact,
       // agent-bay binding queries
       propsByType, propsByAgent, pipelineEdges, setPipelineEdges, addPipelineEdge, removePipelineEdge, agentRoomId, bayObjects,
       capForProp: t => CAP_PROP_MAP[t] || null,   // a prop type's capability objectType (single source for the UI)

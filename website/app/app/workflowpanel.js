@@ -290,8 +290,12 @@ const WorkflowPanel = (() => {
         const prev = nodes[i - 1], a = machineOf(prev), b = machineOf(n);
         const carry = prev.kind === 'trigger' ? 'the job' : prev.kind === 'col' && prev.col.docks.length === 1 ? ((prop(prev.col.docks[0].propId) || {}).hands || '…') : prev.kind === 'gate' ? (prev.gate.kind === 'loop' ? 'on DONE' : 'as one') : '…';
         const canPlus = !!(a && b && S.lineKey);
+        // a + that can only refuse is shown OFF with its reason (2026-09-27 audit B3) — never a role picker that ends in an error
+        const chk = canPlus && H.canInsertBay ? (H.canInsertBay(a, b) || { ok: true }) : { ok: true };
         html += '<div class="wf-belt"><span class="carry">' + esc(carry) + '</span><span class="rail"></span>'
-          + (canPlus ? '<button type="button" class="wf-plus" data-plus="' + i + '" data-from="' + esc(a) + '" data-to="' + esc(b) + '" aria-label="Add a step here">+</button>' : '')
+          + (canPlus ? (chk.ok
+            ? '<button type="button" class="wf-plus" data-plus="' + i + '" data-from="' + esc(a) + '" data-to="' + esc(b) + '" aria-label="Add a step here" data-tip="Add a step here">+</button>'
+            : '<button type="button" class="wf-plus off" aria-disabled="true" data-plus-off="' + esc(chk.msg || 'a step cannot be added here') + '" aria-label="Adding a step here is not possible" data-tip="' + esc(chk.msg || 'a step cannot be added here') + '">+</button>') : '')
           + '</div>';
       }
       html += nodeHTML(n, f);
@@ -302,7 +306,7 @@ const WorkflowPanel = (() => {
     ins.hidden = !open;
     if (open) open.classList.add('on');
     strip.querySelectorAll('[data-node]').forEach(b => { b.onclick = () => { if (b.dataset.node) { H.sfx('click'); select(b.dataset.node); } }; });
-    strip.querySelectorAll('.wf-plus').forEach(b => { b.onclick = e => { e.stopPropagation(); S.insertAt = S.insertAt === +b.dataset.plus ? null : +b.dataset.plus; paintStrip(flow()); }; });
+    strip.querySelectorAll('.wf-plus').forEach(b => { b.onclick = e => { e.stopPropagation(); if (b.dataset.plusOff) { H.sfx('bad'); H.flashTip(b.dataset.plusOff, false); return; } S.insertAt = S.insertAt === +b.dataset.plus ? null : +b.dataset.plus; paintStrip(flow()); }; });
     ins.querySelectorAll('[data-ins-role]').forEach(b => { b.onclick = e => { e.stopPropagation(); insertStep(open.dataset.from, open.dataset.to, b.dataset.insRole); }; });
     const cx = ins.querySelector('[data-ins-close]'); if (cx) cx.onclick = () => { S.insertAt = null; paintStrip(flow()); };
     drawArcs(strip, f);
@@ -1200,7 +1204,7 @@ const WorkflowPanel = (() => {
       const shipped = done && !s.ended && typeof s.final === 'string';
       const meta = s ? '<div class="wf-meta"><span>total cost <b>$' + (+s.totalUsd || 0).toFixed(4) + '</b></span>' + (+s.droppedUsd > 0 ? '<span>incl. <b>$' + (+s.droppedUsd).toFixed(4) + '</b> from rewound steps</span>' : '')
         + '<span>' + s.hops.length + ' step run' + (s.hops.length === 1 ? '' : 's') + '</span><span>' + s.hops.filter(h => h.edited).length + ' edited by you</span></div>' : '';
-      main = (shipped ? '<div class="wf-sec"><h3>✓ Reached the OUTBOX</h3><div class="wf-io out">' + esc(s.final) + '</div>' + meta + '</div>'
+      main = (shipped ? '<div class="wf-sec"><h3>✓ Test finished at the OUTBOX</h3><p class="wf-help">This is what the line would deliver. A test is not put in the OUTBOX; real runs are.</p><div class="wf-io out">' + esc(s.final) + '</div>' + meta + '</div>'
         : done ? '<div class="wf-sec"><h3>The line ended before the OUTBOX</h3><p class="wf-help">' + esc(s.ended || 'there was no next step') + '</p>'
           + (lastH ? '<div class="wf-from"><span>LAST OUTPUT · ' + esc(nameOf(lastH.agentId)) + '</span></div><div class="wf-io">' + esc(lastH.output || '') + '</div>' : '') + meta + '</div>' : '')
         + (stopped ? '<div class="wf-sec"><h3>' + (s.state === 'failed' ? 'Test failed' : 'Test stopped') + '</h3><p class="wf-help">' + esc(s.error || 'Stopped by you · nothing shipped.') + '</p>' + meta + '</div>' : '')
@@ -1247,10 +1251,10 @@ const WorkflowPanel = (() => {
       + (s.paused.next && s.paused.next.blocked ? '<div class="wf-warnline">⚠ Continuing will stop here: ' + esc(s.paused.next.blocked) + '</div>' : '');
     return '<section class="wf-sec"><h3>✓ ' + esc(nameOf(h.agentId)) + ' finished' + (h.pass > 1 ? ' (pass ' + h.pass + ')' : '') + '</h3>'
       + '<div class="wf-meta"><span>cost <b>$' + (+h.usd || 0).toFixed(4) + '</b></span><span>' + (Array.isArray(h.tools) ? h.tools.length : (+h.tools || 0)) + ' tool calls</span>' + (h.ms ? '<span>' + Math.round(h.ms / 1000) + 's</span>' : '') + '</div>' + v
-      + '<div class="wf-from"><span>' + (toOut ? 'FINAL RESULT · WHAT SHIPS' : nx.kind === 'end' ? 'THE LINE ENDS HERE · ' + esc(nx.label) : 'EXACT TEXT ' + esc(nx.label) + ' WILL GET') + '</span><span class="wf-tag" id="wf-edtag"' + (edited ? '' : ' hidden') + '>EDITED BY YOU</span></div>'
+      + '<div class="wf-from"><span>' + (toOut ? 'FINAL RESULT · WHAT THE LINE WOULD DELIVER' : nx.kind === 'end' ? 'THE LINE ENDS HERE · ' + esc(nx.label) : 'EXACT TEXT ' + esc(nx.label) + ' WILL GET') + '</span><span class="wf-tag" id="wf-edtag"' + (edited ? '' : ' hidden') + '>EDITED BY YOU</span></div>'
       + '<textarea id="wf-handoff" class="wf-io' + (edited ? ' edited' : '') + '" rows="7" aria-label="Handoff text">' + esc(S.handoff) + '</textarea>'
       + '<div class="wf-row"><button type="button" class="bb sm" id="wf-restore"' + (edited ? '' : ' hidden') + '>UNDO MY EDIT</button></div>'
-      + '<div class="wf-row"><button type="button" class="bb sm refit-primary' + (edited ? ' cyan' : '') + '" id="wf-cont"' + (S.busy ? ' disabled' : '') + '>' + (edited ? (toOut ? '▶ SHIP MY VERSION' : '▶ CONTINUE WITH MY EDIT') : (toOut ? '▶ SHIP IT' : '▶ CONTINUE')) + '</button>'
+      + '<div class="wf-row"><button type="button" class="bb sm refit-primary' + (edited ? ' cyan' : '') + '" id="wf-cont"' + (S.busy ? ' disabled' : '') + '>' + (edited ? (toOut ? '▶ FINISH WITH MY EDIT' : '▶ CONTINUE WITH MY EDIT') : (toOut ? '▶ FINISH TEST' : '▶ CONTINUE')) + '</button>'
       + '<button type="button" class="bb sm" id="wf-rerun"' + (S.busy ? ' disabled' : '') + '>↻ RE-RUN STEP</button><button type="button" class="bb sm" id="wf-toend"' + (S.busy ? ' disabled' : '') + '>▶▶ RUN TO END</button><button type="button" class="bb sm" id="wf-st-stop2"' + (S.busy ? ' disabled' : '') + '>■ STOP</button></div>'
       + (pid ? '<details class="wf-more" id="wf-rebrief"><summary>Rewrite ' + esc((p.role || nameOf(h.agentId))) + '’s brief &amp; re-run</summary>'
         + '<textarea id="wf-rebrief-in" data-keep="rebrief:' + esc(pid) + '" class="wf-io" rows="4">' + esc(p.brief || '') + '</textarea>'
@@ -1269,7 +1273,7 @@ const WorkflowPanel = (() => {
       S.handoff = ta.value;
       const ed = ta.value !== s.paused.text;
       tag.hidden = !ed; rs.hidden = !ed; ta.classList.toggle('edited', ed); cont.classList.toggle('cyan', ed);
-      cont.textContent = ed ? (toOut ? '▶ SHIP MY VERSION' : '▶ CONTINUE WITH MY EDIT') : (toOut ? '▶ SHIP IT' : '▶ CONTINUE');
+      cont.textContent = ed ? (toOut ? '▶ FINISH WITH MY EDIT' : '▶ CONTINUE WITH MY EDIT') : (toOut ? '▶ FINISH TEST' : '▶ CONTINUE');
     };
     ta.addEventListener('input', sync);
     rs.onclick = () => { ta.value = s.paused.text; sync(); };

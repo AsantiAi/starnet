@@ -141,6 +141,9 @@
   transition: background-color var(--t-fast) var(--ease-soft), border-color var(--t-fast) var(--ease-soft), color var(--t-fast) var(--ease-soft); }
 .wf-plus:hover { border-color: var(--gold); color: var(--gold); background: linear-gradient(180deg, rgba(var(--gold-rgb),.14), rgba(var(--gold-rgb),.04)), var(--panel2); }
 .wf-plus.on { border-color: var(--gold); color: var(--gold); background: linear-gradient(180deg, rgba(var(--gold-rgb),.2), rgba(var(--gold-rgb),.08)), var(--panel2); box-shadow: inset 0 0 0 1px rgba(var(--gold-rgb),.4), 0 1px 3px rgba(0,0,0,.4); }
+/* a "+" that can only refuse (2026-09-27 audit B3): dimmed and dashed; hover shows WHY (data-tip) */
+.wf-plus.off { opacity: .45; border-style: dashed; cursor: not-allowed; }
+.wf-plus.off:hover { border-color: var(--wf-edge); color: inherit; background: var(--panel2); opacity: .7; }
 .wf-ins { flex: 0 0 auto; padding: 8px 14px; border-bottom: 1px solid var(--wf-edge); background: linear-gradient(180deg, rgba(var(--gold-rgb),.05), rgba(var(--gold-rgb),.015)); box-shadow: inset 0 1px 0 rgba(var(--gold-rgb),.12); }
 .wf-inserter { display: grid; gap: 6px; }
 .wf-inserter .h { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; letter-spacing: 1.3px; color: var(--gold); }
