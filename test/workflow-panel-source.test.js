@@ -21,7 +21,7 @@ A.ok(!/<select/.test(code), 'no bare <select> (the OS arrow cannot be themed)');
 
 // feature detection + the fallback
 A.ok(/api\('\/api\/routing\/steptest'\)\.then\(r => \{\s*S\.seam = !!\(r && r\.status !== 404 && r\.status !== 405/.test(panel), 'the step-test route is probed; a 404/405 means an older sidecar');
-A.ok(/S\.seam === false[\s\S]{0,1400}H\.runSample\(c,/.test(panel) && /H\.sampleHTML\(mine\.view\)/.test(panel), 'without the route the footer keeps the whole-line sample job');
+A.ok(/return m === 'step' && S\.seam !== true \? 'real' : m;/.test(panel) && /H\.runSample\(c, \{ text: t \|\| undefined/.test(panel) && /H\.sampleHTML\(mine\.view\)/.test(panel), 'without the route the TEST view keeps the whole-line real job (STEP THROUGH is off, RUN ONE REAL JOB stays)');
 A.ok(/if \(!c \|\| !p\.agentId \|\| S\.seam !== true\) return none;/.test(panel), 'Try this step is hidden unless the route answered');
 
 // the contract

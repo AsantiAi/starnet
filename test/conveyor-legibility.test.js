@@ -41,7 +41,8 @@ A.ok(/one step of a workflow/.test(cat('bay').desc), 'the BAY card calls a bay o
 /* P1 — the splitter says its mode */
 const plain = panel.slice(panel.indexOf('  function paintPlain(body, f, p) {'), panel.indexOf('  function paintFilter('));
 A.ok(/cfg\.fanout/.test(plain) && /Every branch gets a copy/.test(plain) && /Branches take turns/.test(plain), 'the splitter’s panel section reads the compiled mode and names it');
-A.ok(/add a JOINER where the branches meet/.test(plain) && /remove the JOINER/.test(plain), '…and says how to switch it');
+// (2026-09-28: switching is now a button pair — COPY TO EACH / TAKE TURNS — that swaps the JOINER/MERGER; conveyor-choices.test.js)
+A.ok(/pick\('copy', 'COPY TO EACH'/.test(plain) && /pick\('turns', 'TAKE TURNS'/.test(plain) && /Switching swaps the JOINER or MERGER where the branches meet/.test(plain), '…and switching it is one click, which says what it does');
 A.ok(/Every branch gets a copy: a JOINER follows the branches\./.test(build) && /Jobs take turns between the branches/.test(build), 'the splitter’s hover card says its live mode');
 A.ok(/SPLITTER · COPY TO EACH/.test(build) && /SPLITTER · TAKES TURNS/.test(build), 'the splitter’s floor tag says its live mode');
 A.ok(/p\.id !== hoverPropId && p\.id !== selectedPropId/.test(build), 'junction tags speak only for the hovered or selected junction (one voice, no wall of text)');

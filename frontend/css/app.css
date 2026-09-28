@@ -4139,6 +4139,8 @@ body.crew-rail-off #screen-game.active {
   color: var(--ph-dim); text-shadow: 0 0 5px var(--ph-glow2);
 }
 .refit-linegrid { display: flex; flex-direction: column; gap: 7px; width: 100%; }
+/* START FROM INTENT (2026-09-28): the line with the shape of the Commander's goal, marked apart from the library below it */
+.refit-goalgrid .refit-linetile { border-color: var(--gold); }
 /* THE MACHINES SHELF (Conveyors tab): single workflow machines as a first-class palette — the same
    matte card language as the line cards, a small live thumbnail + name + one-line purpose per row */
 .refit-machines { display: flex; flex-direction: column; gap: 5px; width: 100%; margin-bottom: 6px; }

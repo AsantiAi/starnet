@@ -26,7 +26,7 @@ const WorkflowPanel = (() => {
     lineKey: null, lone: null, sel: null, view: 'edit', insertAt: null,
     seam: null, trying: {}, tryErr: {}, session: null, sessionErr: null, pollTimer: 0, pollFor: null,
     hop: null, handoff: null, handoffFor: null, busy: false,
-    cron: null, chans: null, trgOpen: false, trgDock: null, drafts: {}, testJob: {},
+    cron: null, chans: null, trgOpen: false, trgDock: null, drafts: {}, testJob: {}, testMode: null,   // testMode: the TEST view's last-picked mode
     projects: null, projectMsg: null,   // GET /api/projects answer (trusted folders for the INBOX working-folder pick)
     lt: null, ltSig: null, ltForm: null, ltMsg: null, ltReveal: null, ltTimer: 0,   // LINE TRIGGERS (folder / webhook), server truth + the once-only key
   };
@@ -385,20 +385,17 @@ const WorkflowPanel = (() => {
     const foot = $('#wf-foot'); if (!foot) return;
     const c = comp(), W = WL();
     const s = S.session && S.session.lineId === S.lineKey ? S.session : null;
-    let html = '<span class="wf-foot-note">' + (S.view === 'test' ? 'Test runs are real runs and count against the LINE BUDGET.' : 'Edits save as you go.') + '</span>';
-    if (c && S.seam === true) {
+    let html = '<span class="wf-foot-note">' + (S.view === 'test' ? (testModeNow() === 'watch' && !(S.session && S.session.lineId === S.lineKey && WL() && WL().isLive(S.session)) ? 'WATCH IT is free: no agent runs.' : 'Real test runs count against the LINE BUDGET.') : 'Edits save as you go.') + '</span>';
+    /* ONE TEST CONTROL (2026-09-28): the footer's single TEST opens the TEST view, whose modes say what each test is —
+       WATCH IT (free) · STEP THROUGH (real, pauses) · RUN ONE REAL JOB (real, lands in the OUTBOX). */
+    if (c && S.seam !== null) {
       html += S.view === 'test' ? '<button type="button" class="bb sm" id="wf-back">◂ SETUP</button>'
-        : '<button type="button" class="bb sm refit-primary" id="wf-steptest">' + (s && W.isLive(s) ? '▶ STEP TEST · ' + s.state.toUpperCase() : '▶ STEP-TEST · REAL RUN') + '</button>';
-    } else if (c && S.seam === false) {
-      const sr = H.sampleState(), mine = sr && sr.key === c.key ? sr : null;
-      if (mine && mine.view) html = '<div class="wf-sample-res">' + H.sampleHTML(mine.view) + '</div>' + html;   // the server's own verdict on the sample, on the panel
-      html += '<button type="button" class="bb sm refit-primary" id="wf-sample"' + (mine && mine.pending ? ' disabled' : '') + '>' + (mine && mine.pending ? (mine.phase === 'post' ? 'POSTING LINE…' : 'SAMPLE RIDING THE LINE…') : '▶ RUN ONE REAL JOB') + '</button>';
+        : '<button type="button" class="bb sm refit-primary" id="wf-test">' + (s && W.isLive(s) ? '▶ TEST · ' + s.state.toUpperCase() : '▶ TEST') + '</button>';
     }
     html += '<button type="button" class="bb sm" id="wf-done">✓ DONE</button>';
     foot.innerHTML = html;
-    const b1 = $('#wf-steptest'); if (b1) b1.onclick = () => { H.sfx('click'); S.view = 'test'; paint(true); if (s && s.state === 'paused') refreshPaused(); };
+    const b1 = $('#wf-test'); if (b1) b1.onclick = () => { H.sfx('click'); S.view = 'test'; paint(true); if (s && s.state === 'paused') refreshPaused(); };
     const b2 = $('#wf-back'); if (b2) b2.onclick = () => { H.sfx('click'); S.view = 'edit'; paint(true); };
-    const b3 = $('#wf-sample'); if (b3) b3.onclick = () => { H.runSample(c, { text: (S.testJob[S.lineKey] || '').trim() || undefined, onUpdate: () => paint(false) }); };
     $('#wf-done').onclick = () => { H.sfx('click'); close(); };
   }
 
@@ -598,7 +595,7 @@ const WorkflowPanel = (() => {
     } else outHtml = '<p class="wf-help">Runs ' + esc(nameOf(p.agentId)) + ' once with this step\'s real brief and model, for real cost. Nothing else on the line runs.</p>';
     const canRun = !pending && !S.busy;
     const html = '<section class="wf-sec wf-try"><h3>Try this step</h3>' + inputHtml
-      + '<div class="wf-row"><button type="button" class="bb sm' + (t ? '' : ' refit-primary') + '" id="wf-run"' + (canRun ? '' : ' disabled') + '>▶ ' + (t ? 'RUN AGAIN' : 'RUN THIS STEP') + '</button>'
+      + '<div class="wf-row"><button type="button" class="bb sm' + (t ? '' : ' refit-primary') + '" id="wf-run"' + (canRun ? '' : ' disabled') + '>▶ ' + (t ? 'TEST IT AGAIN' : 'TEST THIS STEP') + '</button>'
       + (firstPid && firstPid !== p.id && !src ? '' : '') + '</div>' + outHtml + '</section>';
     return { html, wire() {
       $$('[data-go]').forEach(b => { if (!b._go) { b._go = true; b.onclick = () => { if (b.dataset.go) select(b.dataset.go); }; } });
@@ -711,7 +708,13 @@ const WorkflowPanel = (() => {
         + (docks.length > 1 ? '<details class="wf-more"><summary>Starting agent · ' + esc(nameOf(trgAgent())) + '</summary><p class="wf-help">Usually, start with the first step. Choosing a later step skips the steps before it.</p><div class="wf-chips" id="trg-docks">' + docks.map(dockChip).join('') + '</div><div class="wf-help trg-dock-hint" id="trg-dock-hint">' + esc(dockHint(S.trgDock)) + '</div></details>'
           : docks.length === 1 ? '<div class="wf-help">fires at ' + thumb(docks[0].agentId, 16, 20, 'wf-ithumb') + '<b>' + esc((docks[0].role ? docks[0].role + ' · ' : '') + nameOf(docks[0].agentId)) + '</b> — this line’s first step</div>'
           : '<div class="wf-warnline">Assign an agent to a connected BAY first. A schedule needs an agent to start the work.</div>')
-        + '<div class="wf-row"><button type="button" class="bb sm refit-primary" id="trg-create"' + (docks.length ? '' : ' disabled') + '>▸ SAVE SCHEDULE</button><button type="button" class="bb sm" id="trg-cancel">CANCEL</button></div>'
+        /* SAVE, AND TURN IT ON (2026-09-28 — "have saving the first schedule offer to turn scheduling on"): while scheduling is off
+           for the station, saving offers the switch in the same click — a schedule saved under a switched-off scheduler was the
+           T1 trap. SAVE ONLY stays one tap away; an E-STOP is never lifted from here (that is a deliberate act in AUTOMATION). */
+        + ((S.cron && !S.cron.enabled && !S.cron.halted)
+          ? '<div class="wf-row"><button type="button" class="bb sm refit-primary" id="trg-create" data-arm="1"' + (docks.length ? '' : ' disabled') + '>▸ SAVE · TURN SCHEDULING ON</button><button type="button" class="bb sm" id="trg-create-only"' + (docks.length ? '' : ' disabled') + '>SAVE ONLY</button><button type="button" class="bb sm" id="trg-cancel">CANCEL</button></div>'
+            + '<div class="wf-help dim">Scheduling is off for the whole station. Turning it on lets every saved schedule run at its time.</div>'
+          : '<div class="wf-row"><button type="button" class="bb sm refit-primary" id="trg-create"' + (docks.length ? '' : ' disabled') + '>▸ SAVE SCHEDULE</button><button type="button" class="bb sm" id="trg-cancel">CANCEL</button></div>')
         + '</div><div class="wf-help trg-msg' + (S.trgMsg && S.trgMsg.bad ? ' bad' : '') + '" id="trg-msg"' + (S.trgMsg ? '' : ' hidden') + '>' + esc(S.trgMsg ? S.trgMsg.t : '') + '</div>'
       + '<h4>Channels</h4><div class="trg-list" id="wf-chans">' + chanRows + '</div>'
       + '<div class="wf-row"><button type="button" class="bb sm" id="trg-chan">CONNECT A CHANNEL ▸</button></div>'
@@ -1025,15 +1028,16 @@ const WorkflowPanel = (() => {
     const showForm = on => { S.trgOpen = on; S.trgMsg = null; const m = $('#trg-msg'); if (m) m.hidden = true; formEl.hidden = !on; newBtn.classList.toggle('active', on); newBtn.setAttribute('aria-expanded', on ? 'true' : 'false'); if (on) promptEl.focus(); else newBtn.focus(); };
     newBtn.onclick = () => { H.sfx('click'); showForm(formEl.hidden); };
     $('#trg-cancel').onclick = () => { H.sfx('click'); showForm(false); };
-    $('#trg-create').onclick = () => {
+    const create = arm => {
       const prompt = promptEl.value.trim(), schedule = schedEl.value.trim();
       if (!prompt || !schedule) { H.sfx('bad'); say('a task and a schedule are required', true); return; }
       const dockId = S.trgDock, agentId = agentOfDock(dockId);
       if (!dockId || !agentId) { H.sfx('bad'); say('assign an agent to a step first — a routine fires at an agent', true); return; }
-      const btn = $('#trg-create'); btn.disabled = true; say('saving…');
+      const btns = [$('#trg-create'), $('#trg-create-only')].filter(Boolean), hold = on => btns.forEach(b => { b.disabled = on; });
+      hold(true); say('saving…');
       const ln = lineName();
       const name = (ln ? ln + ' — ' : '') + (prompt.length > 48 ? prompt.slice(0, 45) + '…' : prompt);
-      const refuse = m => { btn.disabled = false; H.sfx('bad'); say('✕ ' + m, true); };
+      const refuse = m => { hold(false); H.sfx('bad'); say('✕ ' + m, true); };
       // FIRES AT a bay: the agent that runs + WHICH of its bays (multi-bay; cron-store keeps dockId additively)
       api('/api/cron', 'POST', { name, prompt, schedule, agentId, dockId, provider: H.provider(), tz, runsLine: true }).then(async ({ status, j: r }) => {
         if (r && r.error) return refuse(r.error);
@@ -1043,18 +1047,32 @@ const WorkflowPanel = (() => {
         const rb = await api('/api/cron');
         const cur = rb.j, saved = cur && Array.isArray(cur.jobs) && cur.jobs.find(x => x.id === r.job.id);
         if (!saved || cur.degraded) return refuse('save not confirmed — check AUTOMATION before retrying');
-        S.cron = cur; btn.disabled = false; H.sfx('chime');
-        const armedNow = !!(cur.enabled && !cur.halted);
+        S.cron = cur; hold(false); H.sfx('chime');
+        let armedNow = !!(cur.enabled && !cur.halted), armedHere = false, armFailed = false;
+        // SAVE · TURN SCHEDULING ON: the same POST /api/cron/arm the switch and AUTOMATION use — then the truth is re-read
+        if (arm && !armedNow && !cur.halted && saved.enabled) {
+          const ar = await api('/api/cron/arm', 'POST', { enabled: true }).catch(() => null);
+          if (ar && ar.status === 200 && ar.j && ar.j.ok) {
+            const rb2 = await api('/api/cron').catch(() => null);
+            if (rb2 && rb2.j && Array.isArray(rb2.j.jobs)) S.cron = rb2.j;
+            armedNow = !!(S.cron.enabled && !S.cron.halted); armedHere = armedNow; armFailed = !armedNow;
+          } else armFailed = true;
+        }
         if (!S.testJob[S.lineKey]) { S.testJob[S.lineKey] = prompt; saveTests(); }
         // saved: the form starts clean (un-flag the fields too, or the next paint's keepDrafts re-remembers them)
         S.drafts['trgprompt:' + p.id] = ''; delete S.drafts[schedKey]; promptEl.dataset.typed = ''; schedEl.dataset.typed = '';
         S.trgOpen = false;
         H.pollFeed().then(() => paint(true), () => paint(true));
         say(saved.state === 'completed' ? '✓ routine completed — see its result in AUTOMATION' : !saved.enabled ? '✓ saved — this routine is paused; manage it in AUTOMATION'
-          : armedNow ? '✓ schedule saved — fires at ' + nameOf(agentId) : '✓ saved — but scheduling is off for the whole station: press TURN SCHEDULING ON above', !saved.enabled || !armedNow);
+          : armedHere ? '✓ schedule saved and scheduling is on — fires at ' + nameOf(agentId)
+          : armedNow ? '✓ schedule saved — fires at ' + nameOf(agentId)
+          : armFailed ? '✓ saved — but scheduling could not be turned on: press TURN SCHEDULING ON above'
+          : '✓ saved — scheduling is off for the whole station, so it will not run until you turn it on (above)', !saved.enabled || !armedNow);
         paint(true);
       }).catch(() => refuse('save not confirmed — check AUTOMATION before retrying'));
     };
+    $('#trg-create').onclick = () => create(!!$('#trg-create').dataset.arm);
+    const createOnly = $('#trg-create-only'); if (createOnly) createOnly.onclick = () => create(false);
   }
 
   /* ===== LOOP / JOINER gates — the same configureJunction path, the same compiled-plan labels ===== */
@@ -1159,15 +1177,34 @@ const WorkflowPanel = (() => {
       ? '<ul class="wf-branches">' + lanes.map(l => '<li>' + esc(laneName(f, l, true)) + '</li>').join('') + '</ul>'
       : '<p class="wf-warnline">' + n + '</p>';
     if (p.t === 'splitter') {
-      const copies = !!(cfg && cfg.fanout);
+      /* THE MODE IS A CHOICE (2026-09-28): COPY TO EACH / TAKE TURNS, right here. The floor's rule stands — a JOINER where
+         the branches meet makes a split copy, a MERGER lets it take turns — and the switch swaps that junction for you. */
+      const sm = H.splitModeInfo ? H.splitModeInfo(p.id) : null;
+      const copies = sm ? sm.mode === 'copy' : !!(cfg && cfg.fanout);
+      const pick = (mode, label, sub) => {
+        const on = (mode === 'copy') === copies, step = sm ? (mode === 'copy' ? sm.toCopy : sm.toTurns) : null;
+        const off = !on && (!step || !step.ok);
+        return '<button type="button" class="wf-chip wf-modepick' + (off ? ' off' : '') + '" data-smode="' + mode + '" aria-pressed="' + on + '"'
+          + (off ? ' aria-disabled="true" data-tip="' + esc((step && step.msg) || 'not available on this floor yet') + '"' : '') + '><b>' + label + '</b><small>' + esc(sub) + '</small></button>';
+      };
       body.innerHTML = '<section class="wf-sec"><h3><span class="n">SPLITTER</span>' + (copies ? 'Every branch gets a copy' : 'Branches take turns') + '</h3>'
+        + '<div class="wf-modepicks" role="group" aria-label="What this splitter does with each job">'
+        + pick('copy', 'COPY TO EACH', 'every branch works the same job; a JOINER combines the results')
+        + pick('turns', 'TAKE TURNS', 'each job goes down one branch; a MERGER sends each result on')
+        + '</div>'
         + '<div class="wf-mode">' + dia + '<p>' + (copies
           ? 'Each job is copied to <b>every</b> branch. The JOINER after the branches waits for all of them, then sends one combined result on.'
           : 'Each job goes down <b>one</b> branch, and the next job takes the next branch. Use this to share a heavy load between agents.') + '</p></div>'
         + '<h4 class="wf-sub">Branches</h4>' + branches('No branches yet. Run two belts OUT of the splitter: BELT, click the SPLITTER, then the next machine. Repeat for the second branch.')
-        + '<p class="wf-help">' + (copies
-          ? 'To make the branches take turns instead, remove the JOINER after them.'
-          : 'To send every branch a copy instead, add a JOINER where the branches meet (Conveyors › MACHINES › JOINER) and belt each branch into it.') + '</p></section>';
+        + '<p class="wf-help" id="split-note">Switching swaps the JOINER or MERGER where the branches meet. Same belts, one UNDO.</p></section>';
+      body.querySelectorAll('[data-smode]').forEach(b => { b.onclick = () => {
+        const note = $('#split-note');
+        if (b.getAttribute('aria-pressed') === 'true') return;
+        if (b.classList.contains('off')) { H.sfx('bad'); if (note) note.textContent = '✕ ' + (b.getAttribute('data-tip') || 'not available on this floor yet'); return; }
+        const r = H.setSplitMode ? H.setSplitMode(p.id, b.dataset.smode) : null;
+        if (!r || !r.ok) { H.sfx('bad'); if (note) note.textContent = '✕ ' + ((r && r.msg) || 'could not switch'); return; }
+        H.sfx('click'); paint(true);
+      }; });
       return;
     }
     if (p.t === 'merger') {
@@ -1269,6 +1306,53 @@ const WorkflowPanel = (() => {
   // the BAY a hop ran at: its own dockId (multi-bay), else the first bay the agent crews on this line (older sessions)
   function hopDock(f, h) { if (!f || !h) return null; if (h.dockId && f.docks[h.dockId]) return h.dockId; const pid = f.order.find(x => f.docks[x].agentId === h.agentId); return pid || null; }
   const nextDockOf = (f, nx) => !f || !nx || nx.kind !== 'agent' ? null : ((nx.dockId && f.docks[nx.dockId]) ? nx.dockId : f.order.find(x => f.docks[x].agentId === nx.agentId) || null);
+  /* THE TEST VIEW'S MODES (2026-09-28 — one TEST control instead of four buttons that meant four different things). Each
+     mode says what it spends and where its result goes; STEP THROUGH needs the sidecar's step-test seam, and a station
+     without it says so and offers RUN ONE REAL JOB. The test job typed here is the INBOX's test job. */
+  const TEST_MODES = [
+    ['watch', 'WATCH IT · FREE', 'a crate rides the belts; no agent runs'],
+    ['step', 'STEP THROUGH · REAL', 'pauses at every hand-off; nothing is delivered'],
+    ['real', 'RUN ONE REAL JOB', 'end to end; the result lands in the OUTBOX']
+  ];
+  function testModeNow() {
+    const m = S.testMode || (S.seam === true ? 'step' : 'real');
+    return m === 'step' && S.seam !== true ? 'real' : m;
+  }
+  function testPickerHTML(s) {
+    const mode = testModeNow(), c = comp();
+    const chips = TEST_MODES.map(([m, label, sub]) => {
+      const off = m === 'step' && S.seam !== true;
+      return '<button type="button" class="wf-chip wf-modepick' + (off ? ' off' : '') + '" data-tmode="' + m + '" aria-pressed="' + (mode === m) + '"'
+        + (off ? ' aria-disabled="true" data-tip="this station cannot pause a line between steps — RUN ONE REAL JOB runs it end to end"' : '')
+        + '><b>' + label + '</b><small>' + esc(sub) + '</small></button>';
+    }).join('');
+    const input = '<textarea id="wf-st-in" data-keep="stin" class="wf-io" rows="4" aria-label="Test job" placeholder="What should the line work on?">' + esc(S.testJob[S.lineKey] || '') + '</textarea>';
+    let body;
+    if (mode === 'watch') {
+      body = '<p class="wf-help">A crate rides the belts and every machine says what it <b>would</b> do: who works it, where it splits, where it waits, where it ships. No agent runs and nothing is spent.</p>'
+        + '<div class="wf-row"><button type="button" class="bb sm refit-primary" id="wf-watch">▶ WATCH IT</button></div>';
+    } else if (mode === 'step') {
+      body = '<p class="wf-help">Your test job runs through the real line and <b>pauses after each step</b>, showing the exact text handed to the next one. Edit it, re-run a step with a better brief, or add a BAY right there. A paused test holds no model connection and spends nothing. Nothing is put in the OUTBOX.</p>'
+        + input
+        + '<div class="wf-chips" role="group" aria-label="When to pause"><button type="button" class="wf-chip" data-pause="every" aria-pressed="' + (S.pauseMode !== 'none') + '">PAUSE AT EVERY HANDOFF</button><button type="button" class="wf-chip" data-pause="none" aria-pressed="' + (S.pauseMode === 'none') + '">RUN TO THE END</button></div>'
+        + '<div class="wf-row"><button type="button" class="bb sm refit-primary" id="wf-st-go"' + (S.busy ? ' disabled' : '') + '>▶ START STEP-THROUGH</button></div>';
+    } else {
+      const sr = H.sampleState ? H.sampleState() : null, mine = sr && c && sr.key === c.key ? sr : null;   // the server's own verdict on the job, here
+      body = '<p class="wf-help">Your test job runs through the line for real, end to end: real agents, real cost, and the result lands in the <b>OUTBOX</b> like any job.</p>'
+        + input
+        + (mine && mine.view ? '<div class="wf-sample-res">' + H.sampleHTML(mine.view) + '</div>' : '')
+        + '<div class="wf-row"><button type="button" class="bb sm refit-primary" id="wf-real"' + (mine && mine.pending ? ' disabled' : '') + '>'
+        + (mine && mine.pending ? (mine.phase === 'post' ? 'POSTING LINE…' : 'THE JOB IS RIDING THE LINE…') : '▶ RUN ONE REAL JOB') + '</button></div>';
+    }
+    return '<section class="wf-sec"><h3>' + (s ? 'Test it again' : 'How do you want to test it?') + '</h3>'
+      + '<div class="wf-modepicks wf-modepicks-3" role="group" aria-label="How to test">' + chips + '</div>' + body + '</section>';
+  }
+  function showTest(mode) {   // the top bar's TEST opens this view on the panel's line (build.js openTest)
+    if (!el) return false;
+    if (mode) S.testMode = mode;
+    S.view = 'test'; paint(true);
+    return true;
+  }
   function paintTest(body, f) {
     const W = WL(), s = S.session && S.session.lineId === S.lineKey ? S.session : null;
     const live = s && W.isLive(s);
@@ -1288,18 +1372,26 @@ const WorkflowPanel = (() => {
         : done ? '<div class="wf-sec"><h3>The line ended before the OUTBOX</h3><p class="wf-help">' + esc(s.ended || 'there was no next step') + '</p>'
           + (lastH ? '<div class="wf-from"><span>LAST OUTPUT · ' + esc(nameOf(lastH.agentId)) + '</span></div><div class="wf-io">' + esc(lastH.output || '') + '</div>' : '') + meta + '</div>' : '')
         + (stopped ? '<div class="wf-sec"><h3>' + (s.state === 'failed' ? 'Test failed' : 'Test stopped') + '</h3><p class="wf-help">' + esc(s.error || 'Stopped by you · nothing shipped.') + '</p>' + meta + '</div>' : '')
-        + '<section class="wf-sec"><h3>' + (s ? 'Run it again' : 'Step-test the whole line') + '</h3>'
-        + '<p class="wf-help">Your input runs through the real line and <b>pauses after each step</b>, showing the exact text handed to the next one. Edit it, re-run a step with a better brief, or add a BAY right there. A paused test holds no model connection and spends nothing.</p>'
-        + '<textarea id="wf-st-in" data-keep="stin" class="wf-io" rows="4" aria-label="Test input" placeholder="What should the line work on?">' + esc(S.testJob[S.lineKey] || '') + '</textarea>'
-        + '<div class="wf-chips" role="group" aria-label="When to pause"><button type="button" class="wf-chip" data-pause="every" aria-pressed="' + (S.pauseMode !== 'none') + '">PAUSE AT EVERY HANDOFF</button><button type="button" class="wf-chip" data-pause="none" aria-pressed="' + (S.pauseMode === 'none') + '">RUN TO THE END</button></div>'
-        + '<div class="wf-row"><button type="button" class="bb sm refit-primary" id="wf-st-go"' + (S.busy ? ' disabled' : '') + '>▶ START STEP TEST</button></div></section>';
+        + testPickerHTML(s);
     } else if (s.state === 'running') {
       const who = s.running ? nameOf(s.running.agentId) : 'the line';
       main = '<section class="wf-sec"><h3><span class="wf-spin"></span>' + (s.running ? thumb(s.running.agentId, 16, 20, 'wf-ithumb') : '') + esc(who) + ' is working…</h3><p class="wf-help">A real run. It pauses when this step hands off.</p>'
         + '<div class="wf-row"><button type="button" class="bb sm" id="wf-st-stop">■ STOP</button></div></section>';
     } else if (s.state === 'paused') main = pausedHTML(s, f);
-    body.innerHTML = '<section class="wf-sec wf-sthead"><h3><span class="n">STEP TEST</span>' + esc(lineName() || 'This line') + '</h3>' + budget + '</section>' + err + log + main;
+    body.innerHTML = '<section class="wf-sec wf-sthead"><h3><span class="n">TEST</span>' + esc(lineName() || 'This line') + '</h3>' + budget + '</section>' + err + log + main;
     // wiring
+    $$('[data-tmode]').forEach(b => b.onclick = () => {
+      if (b.classList.contains('off')) { H.sfx('bad'); H.flashTip(b.getAttribute('data-tip') || 'not available here', false); return; }
+      const inp = $('#wf-st-in'); if (inp) S.testJob[S.lineKey] = inp.value;   // the test job rides along to the next mode
+      S.testMode = b.dataset.tmode; H.sfx('click'); paint(true);
+    });
+    const watch = $('#wf-watch'); if (watch) watch.onclick = () => { H.sfx('click'); if (H.preview) H.preview(); };
+    const real = $('#wf-real'); if (real) real.onclick = () => {
+      const c = comp(); if (!c) return;
+      const t = (($('#wf-st-in') || {}).value || '').trim();
+      S.testJob[S.lineKey] = t;
+      H.runSample(c, { text: t || undefined, onUpdate: () => paint(false) });
+    };
     $$('[data-hop]').forEach(b => b.onclick = () => { S.hop = S.hop === +b.dataset.hop ? null : +b.dataset.hop; paint(true); });
     $$('[data-pause]').forEach(b => b.onclick = () => { S.pauseMode = b.dataset.pause; $$('[data-pause]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
     const go = $('#wf-st-go'); if (go) go.onclick = () => { const t = $('#wf-st-in').value.trim(); if (!t) { H.sfx('bad'); H.flashTip('give the test an input first', false); return; } H.sfx('click'); startSession(t, S.pauseMode === 'none' ? 'none' : 'every'); };
@@ -1395,7 +1487,7 @@ const WorkflowPanel = (() => {
     });
   }
 
-  return { open, close, isOpen, refresh, select, selectFromFloor, _state: S, _flow: () => flow() };
+  return { open, close, isOpen, refresh, select, selectFromFloor, showTest, _state: S, _flow: () => flow() };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = WorkflowPanel;

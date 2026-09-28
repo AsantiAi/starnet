@@ -85,7 +85,7 @@ const tutorialSrc = read('tutorial.js');
   const live = renderLines({ refitNames: () => names });
   A.ok(live.length > 200, 'the LINES chapter rendered with REFIT\'s names');
   A.ok(/CONVEYORS › MACHINES/.test(live) && /CONVEYORS › CONVEYOR LINES/.test(live) && /19 ready-made layouts/.test(live), 'LINES names the real tab, shelf, tool and live line count');
-  A.ok(/▸ PREVIEW FLOW/.test(live) && /STEP TEST/.test(live) && /Workflow panel/.test(live), 'LINES explains PREVIEW FLOW vs the Workflow panel\'s STEP TEST');
+  A.ok(/▸ PREVIEW FLOW/.test(live) && /STEP THROUGH/.test(live) && /RUN ONE REAL JOB/.test(live) && /Workflow panel/.test(live), 'LINES explains the one TEST control and its modes (2026-09-28: WATCH IT · STEP THROUGH · RUN ONE REAL JOB)');
   A.ok(/<b>JOINER<\/b>/.test(live) && /<b>LOOP<\/b>/.test(live) && /<b>SPLITTER<\/b>/.test(live), 'BRANCHES lists every junction the shelf offers (JOINER and LOOP included)');
   A.ok(!/<b>INBOX<\/b>:/.test(live), '…and only junctions, not the docks');
   for (const stale of ['PROPS › WORKFLOW', 'for <b>LAYOUTS</b>', 'Use <b>TEST</b>']) A.ok(live.indexOf(stale) < 0, 'LINES no longer says "' + stale + '"');

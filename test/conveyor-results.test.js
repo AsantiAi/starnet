@@ -18,8 +18,9 @@ const build = read('frontend/app/build.js'), panel = read('frontend/app/workflow
 const world = read('frontend/app/world.js'), outbox = read('frontend/app/windows/outbox.js'), dialogue = read('frontend/app/dialogue.js');
 
 /* X1 */
-A.ok(/const PREVIEW_LABEL = '▸ PREVIEW \(FREE\)';/.test(build), 'the animation-only preview says FREE');
-A.ok(/'▶ STEP-TEST · REAL RUN'/.test(panel), 'the step test says it is a real run');
+// (2026-09-28: the four controls became ONE TEST control with modes — conveyor-retest.test.js pins the modes)
+A.ok(/const PREVIEW_LABEL = '▶ TEST';/.test(build), 'the top bar has one TEST control');
+A.ok(/\['watch', 'WATCH IT · FREE'/.test(panel) && /\['step', 'STEP THROUGH · REAL'/.test(panel), 'the free mode says FREE, the step-through says REAL');
 A.ok(/'▶ RUN ONE REAL JOB'/.test(panel) && /'③ RUN ONE REAL JOB'/.test(build) && (chat.match(/'▸ RUN ONE REAL JOB'/g) || []).length === 2, 'every sample control says ONE REAL JOB');
 A.ok(!/RUN A SAMPLE JOB/.test(panel + build + chat), 'the old "sample job" label is gone');
 A.ok(/function testJobForProp\(propId\)/.test(build) && /testJobForProp, close,/.test(build), 'Build answers the test job saved for a prop’s line');
