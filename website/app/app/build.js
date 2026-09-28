@@ -85,7 +85,7 @@ const Build = (() => {
   }
 
   const SEEN_KEY = 'starnet.refit.seen';
-  const PREVIEW_LABEL = '▸ PREVIEW (FREE)';   // 2026-09-27 audit X1: the one test control that runs no agent says so   // the top-bar preview button — the guide and Field Manual name it by this constant
+  const PREVIEW_LABEL = '▶ TEST';   // 2026-09-28: ONE test control (the name kept: the guide and Field Manual quote it) — it opens the line's TEST view (WATCH IT free · STEP THROUGH · RUN ONE REAL JOB) and plays the free walkthrough   // the top-bar preview button — the guide and Field Manual name it by this constant
   // machines the BELT tool connects with two clicks (mirrors worldmodel CONNECTABLE)
   const CONNECT_TYPES = { intake: 1, bay: 1, outbox: 1, filter: 1, splitter: 1, merger: 1, joiner: 1, loop: 1 };
 
@@ -373,7 +373,7 @@ const Build = (() => {
           <button class="bb sm" id="refit-redo" title="redo (Ctrl+Shift+Z)">↷ REDO</button>
         </span>
         <button class="bb sm" id="refit-fit" title="frame the station">⊹ FIT</button>
-        <button class="bb sm" id="refit-test" title="Animates how work would move through your line. Free: no agent runs. For a real run, use RUN ONE REAL JOB once every step has an agent.">${esc(PREVIEW_LABEL)}</button>
+        <button class="bb sm" id="refit-test" title="Test this line: WATCH IT is free (a crate rides the belts, no agent runs); STEP THROUGH and RUN ONE REAL JOB run it for real.">${esc(PREVIEW_LABEL)}</button>
         <button class="bb sm" id="refit-help" title="how to build">? HELP</button>
         <button class="bb sm refit-primary" id="refit-done" title="finish + save (or press Esc twice)">SAVE & EXIT</button>
       </div>
@@ -463,7 +463,7 @@ const Build = (() => {
     root.querySelector('#refit-zin').onclick = () => zoomStep(+1);
     root.querySelector('#refit-zout').onclick = () => zoomStep(-1);
     root.querySelector('#refit-zlvl').onclick = () => zoomTo(2);   // 2 = the entering default (a tile reads at 24px)
-    root.querySelector('#refit-test').onclick = (e) => sendTestBoxes(e);
+    root.querySelector('#refit-test').onclick = (e) => openTest(e);
     undoBtn.onclick = () => { if (station.undo().ok) sfx('click'); else sfx('bad'); };
     redoBtn.onclick = () => { if (station.redo().ok) sfx('click'); else sfx('bad'); };
 
@@ -1079,6 +1079,18 @@ const Build = (() => {
       intro.className = 'refit-lineintro';
       intro.textContent = LINE_SENTENCE + ' Place single machines, or a whole line, then make it yours.';
       pal.appendChild(intro);
+      /* START FROM INTENT (2026-09-28): the ready-made line with the SHAPE of the Commander's own goal leads the tab — their
+         words quoted, so it is clear why — one click arms it (MAKE ROOM FOR IT when the deck is too small). */
+      const goal = goalLine();
+      if (goal) {
+        const gh = document.createElement('div'); gh.className = 'refit-linegroup refit-palsection refit-goalhd';
+        gh.innerHTML = '<span class="refit-linegroup-nm">FOR YOUR GOAL</span><span class="refit-linegroup-why"></span>';
+        gh.querySelector('.refit-linegroup-why').textContent = '“' + goal.quote + '” — ' + goal.why;
+        pal.appendChild(gh);
+        const gg = document.createElement('div'); gg.className = 'refit-linegrid refit-goalgrid'; gg.setAttribute('aria-label', 'Suggested for your goal');
+        const gb = makeLineTile(goal.bp); gg.appendChild(gb); setLineTileFit(gb, goal.bp);
+        pal.appendChild(gg);
+      }
       pal.appendChild(machinePalette());
       const lhd = document.createElement('div'); lhd.className = 'refit-linegroup refit-palsection';
       lhd.innerHTML = '<span class="refit-linegroup-nm">CONVEYOR LINES · ' + blueprints().length + '</span><span class="refit-linegroup-why">whole layouts, pre-wired — stamp one, then assign its bays</span>';
@@ -1103,29 +1115,7 @@ const Build = (() => {
           continue;
         }
         const bp = row.bp;
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'refit-linetile' + (tool === 'line' && bp.id === lineType ? ' active' : '');
-        b.dataset.line = bp.id;
-        b.setAttribute('aria-pressed', tool === 'line' && bp.id === lineType ? 'true' : 'false');
-        b.title = bp.desc;   // adopted by tooltip.js into the station card (never the OS bubble)
-        const view = document.createElement('span'); view.className = 'refit-linetile-view';
-        view.appendChild(lineSchematic(bp));
-        b.appendChild(view);
-        const hd = document.createElement('span'); hd.className = 'refit-linetile-hd';
-        const nm = document.createElement('span'); nm.className = 'refit-matname'; nm.textContent = bp.label;
-        hd.appendChild(nm);
-        // footprint + dock count, derived from the catalog (never hand-kept). Mixed VT323 glyphs
-        // ('×', '·') fall back fonts, so the chip is BOX-centred in CSS — never padded by font math.
-        const docks = bp.props.filter(p => p.t === 'bay').length;
-        const stat = document.createElement('span'); stat.className = 'refit-linetile-stat';
-        stat.textContent = bp.w + '×' + bp.h + ' · ' + docks + (docks === 1 ? ' DOCK' : ' DOCKS');
-        hd.appendChild(stat);
-        b.appendChild(hd);
-        const why = document.createElement('span'); why.className = 'refit-linetile-why';
-        why.textContent = LINE_PURPOSE[bp.id] || '';
-        b.appendChild(why);
-        b.onclick = () => { lineType = bp.id; selectTool('line'); };
+        const b = makeLineTile(bp);
         grid.appendChild(b);
         setLineTileFit(b, bp);   // DECK-FIT HONESTY — and kept current as the floor changes (see setLineTileFit)
       }
@@ -1755,6 +1745,47 @@ const Build = (() => {
       try { const o = JSON.parse(localStorage.getItem('starnet.refit.wftests.' + stationKeyOf(st)) || '{}'); const j = o && o.__jobs && o.__jobs[c.key]; if (typeof j === 'string') text = j.trim().slice(0, 2000); } catch (e) {}
       return { line: c.key, text };
     } catch (e) { return null; }
+  }
+  /* the line for the Commander's GOAL: their own dossier words (goals, then ambitions, then pain points — what onboarding
+     asked), read by WorkflowLine.suggestLineFor for the shape of the work. The first belief that names a shape wins; none
+     does → no card (never a guess). */
+  function goalLine() {
+    if (typeof DossierStore === 'undefined' || typeof WorkflowLine === 'undefined' || !WorkflowLine.suggestLineFor) return null;
+    let texts = [];
+    try { for (const k of ['goals', 'ambition', 'pain']) texts = texts.concat((DossierStore.beliefs(k) || []).map(b => String((b && b.text) || '').trim()).filter(Boolean)); }
+    catch (e) { return null; }
+    for (const t of texts) {
+      const s = WorkflowLine.suggestLineFor(t), bp = s && blueprintOf(s.id);
+      if (bp) return { bp, why: s.why, quote: t.length > 90 ? t.slice(0, 88).trimEnd() + '…' : t };
+    }
+    return null;
+  }
+  /* one ready-made line's card (the line library AND the FOR YOUR GOAL card) — its fit is set by setLineTileFit once it is in a grid */
+  function makeLineTile(bp) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'refit-linetile' + (tool === 'line' && bp.id === lineType ? ' active' : '');
+    b.dataset.line = bp.id;
+    b.setAttribute('aria-pressed', tool === 'line' && bp.id === lineType ? 'true' : 'false');
+    b.title = bp.desc;   // adopted by tooltip.js into the station card (never the OS bubble)
+    const view = document.createElement('span'); view.className = 'refit-linetile-view';
+    view.appendChild(lineSchematic(bp));
+    b.appendChild(view);
+    const hd = document.createElement('span'); hd.className = 'refit-linetile-hd';
+    const nm = document.createElement('span'); nm.className = 'refit-matname'; nm.textContent = bp.label;
+    hd.appendChild(nm);
+    // footprint + dock count, derived from the catalog (never hand-kept). Mixed VT323 glyphs
+    // ('×', '·') fall back fonts, so the chip is BOX-centred in CSS — never padded by font math.
+    const docks = bp.props.filter(p => p.t === 'bay').length;
+    const stat = document.createElement('span'); stat.className = 'refit-linetile-stat';
+    stat.textContent = bp.w + '×' + bp.h + ' · ' + docks + (docks === 1 ? ' DOCK' : ' DOCKS');
+    hd.appendChild(stat);
+    b.appendChild(hd);
+    const why = document.createElement('span'); why.className = 'refit-linetile-why';
+    why.textContent = LINE_PURPOSE[bp.id] || '';
+    b.appendChild(why);
+    b.onclick = () => { lineType = bp.id; selectTool('line'); };
+    return b;
   }
   /* DECK-FIT HONESTY. Offering a line the current floor has nowhere to put it is an offer the deck cannot keep — the
      user aims, gets red everywhere, and learns nothing. The card says so up front, from the SAME canPlaceBlueprint scan
@@ -2468,6 +2499,9 @@ const Build = (() => {
           return { dir: d, dock: ex.dock || null, label: plain(ex.label) || ('the ' + ({ N: 'north', S: 'south', E: 'east', W: 'west' }[d] || d) + ' belt') }; }) };
       },
       machineDiagram: id => machineDiagramSVG(id),
+      preview: () => sendTestBoxes(null),               // the TEST view's WATCH IT: the free walkthrough on the floor
+      splitModeInfo: id => splitModeInfo(id),            // { mode: 'copy'|'turns', toCopy, toTurns } — the SPLITTER switch
+      setSplitMode: (id, mode) => setSplitMode(id, mode), // swaps the JOINER/MERGER where the branches meet (one undo)
       loopExits: id => {
         const p = station.propById(id), jt = p && junctionBeltTile(p), o = (cacheGeo && cacheGeo.origin) || { tx: 0, ty: 0 };
         return jt ? loopExitLabels(valPlan, { x: jt.x - o.tx, y: jt.y - o.ty }, agentLabel) : [];
@@ -3028,6 +3062,24 @@ const Build = (() => {
   let _testN = 0;
   // fire one box per content tag at the INTAKE so you watch them SORT through your FILTERs to the right
   // bays. Returns true only when boxes actually rode — the auto first ride burns its one-shot on that.
+  /* ONE TEST CONTROL (2026-09-28 — "replace the four test buttons with one TEST control that has modes"). The top bar's TEST
+     opens the Workflow panel's TEST view on the line — the one the panel already shows, else the first line with an INBOX
+     and a BAY — and plays the free walkthrough straight away, so the old one-click preview stays one click and the real
+     modes sit right beside it. No line yet: the walkthrough alone, which says what is missing. */
+  function openTest(e) {
+    const WP = typeof WorkflowPanel !== 'undefined' ? WorkflowPanel : null;
+    if (WP && WP.showTest) {
+      try {
+        if (!(WP.isOpen && WP.isOpen())) {
+          const c = (valComps || []).find(x => x.intakes.length && x.bays.length) || (valComps || [])[0];
+          const pid = c ? (c.intakes[0] || (c.bays[0] && c.bays[0].propId)) : null;
+          if (pid) openFlowCard(pid);
+        }
+        WP.showTest('watch');
+      } catch (err) { /* the walkthrough below still runs */ }
+    }
+    return sendTestBoxes(e);
+  }
   function sendTestBoxes(ev, auto, agentId) {
     if (!convey) return false;
     // reach-verified mouth first; the doc-order intake only for a MANUAL test on a floor where
@@ -3040,7 +3092,7 @@ const Build = (() => {
     const sorts = !!(valPlan && valPlan.junctions && Object.keys(valPlan.junctions).some(k => valPlan.junctions[k] && valPlan.junctions[k].kind === 'filter'));
     for (const tag of (sorts ? ['code', 'research', 'general'] : ['general'])) convey.enqueueAt(t.x, t.y, { workitemId: 'test-' + (++_testN), tag, preview: 'test ' + tag, test: true });
     note(t.x, t.y, '① WORK COMES IN HERE', '#e8c860');
-    flashTip(ev, auto ? 'LINE COMPLETE — the first crate rides itself. ' + PREVIEW_LABEL + ' replays this any time' : 'test work riding — watch the loop', true);
+    flashTip(ev, auto ? 'LINE COMPLETE — the first crate rides itself. ' + PREVIEW_LABEL + ' › WATCH IT replays it any time' : 'test work riding — watch the loop', true);
     sfx('click');
     return true;
   }
@@ -5364,20 +5416,66 @@ const Build = (() => {
      some are not. Keyed by LOCAL junction tile; memoized per compiled plan. */
   let fanoutMemo = null, fanoutPlan = null;
   let ghostMap = null, ghostMapFor = null, ghostMapFo = null;   // the ghost's junction map (the live one + once-crewed split modes)
+  // the floor compiled as if every BAY had an agent — what the line WILL do once crewed (the real plan when all are crewed)
+  let probePlanFor = null, probePlanMemo = null;
+  function probePlanOnceCrewed() {
+    if (!valPlan || !cacheGeo) return null;
+    if (probePlanFor === valPlan) return probePlanMemo;
+    let out = valPlan;
+    const props = cacheGeo.props || [];
+    if (typeof Pipeline !== 'undefined' && Pipeline.compileRoutingPlan && props.some(p => p.t === 'bay' && !p.agentId)) {
+      try { out = Pipeline.compileRoutingPlan(Object.assign({}, cacheGeo, { props: props.map(p => (p.t === 'bay' && !p.agentId) ? Object.assign({}, p, { agentId: '__probe_' + p.id }) : p) })); }
+      catch (e) { out = valPlan; /* the real plan's answer stands */ }
+    }
+    probePlanFor = valPlan; probePlanMemo = out;
+    return out;
+  }
   function fanoutOnceCrewed() {
     if (!valPlan || !cacheGeo) return {};
     if (fanoutPlan === valPlan && fanoutMemo) return fanoutMemo;
     const out = {};
     for (const k in (valPlan.junctions || {})) if (valPlan.junctions[k].kind === 'split') out[k] = !!valPlan.junctions[k].fanout;
-    const props = cacheGeo.props || [];
-    if (typeof Pipeline !== 'undefined' && Pipeline.compileRoutingPlan && props.some(p => p.t === 'bay' && !p.agentId)) {
-      try {
-        const probe = Pipeline.compileRoutingPlan(Object.assign({}, cacheGeo, { props: props.map(p => (p.t === 'bay' && !p.agentId) ? Object.assign({}, p, { agentId: '__probe_' + p.id }) : p) }));
-        for (const k in (probe.junctions || {})) if (probe.junctions[k].kind === 'split' && probe.junctions[k].fanout) out[k] = true;
-      } catch (e) { /* the real plan's answer stands */ }
-    }
+    const probe = probePlanOnceCrewed();
+    if (probe && probe !== valPlan) for (const k in (probe.junctions || {})) if (probe.junctions[k].kind === 'split' && probe.junctions[k].fanout) out[k] = true;
     fanoutPlan = valPlan; fanoutMemo = out;
     return out;
+  }
+  /* THE SPLITTER'S MODE, AS A CHOICE (2026-09-28 — "make hidden behavior an explicit choice"). A split COPIES when a
+     JOINER is where its branches meet and TAKES TURNS when a MERGER is; the switch swaps that one junction in place
+     (worldmodel.swapJoinerMerger — same tile, same belts, one undo). Read on the once-crewed plan, so a freshly stamped
+     line answers the same as a crewed one. A choice the floor cannot make says why instead of half-doing it. */
+  function splitModeInfo(splitId) {
+    const p = station && station.propById(splitId);
+    if (!p || p.t !== 'splitter' || typeof Pipeline === 'undefined' || !Pipeline.rejoinOf) return null;
+    const jt = junctionBeltTile(p), o = (cacheGeo && cacheGeo.origin) || { tx: 0, ty: 0 };
+    const lk = jt ? (jt.x - o.tx) + ',' + (jt.y - o.ty) : null;
+    const plan = probePlanOnceCrewed();
+    if (!lk || !plan || !plan.junctions || !plan.junctions[lk]) return null;
+    const copies = !!fanoutOnceCrewed()[lk];
+    const lanes = Pipeline.rejoinOf(plan, lk).lanes;
+    const propAt = k => { const q = String(k).split(','), x = +q[0] + o.tx, y = +q[1] + o.ty; const hit = station.props().find(r => (r.t === 'joiner' || r.t === 'merger') && r.x === x && r.y === y); return hit ? hit.id : null; };
+    const meet = lanes.length > 1 && lanes.every(l => l.at && l.at === lanes[0].at) ? lanes[0] : null;
+    const joins = [...new Set(lanes.filter(l => l.kind === 'join').map(l => propAt(l.at)).filter(Boolean))];
+    const toTurns = copies
+      ? (joins.length ? { ok: true, swap: joins } : { ok: false, msg: 'a JOINER further down the line combines these branches — make that one a MERGER to let them take turns' })
+      : { ok: true, already: true };
+    const toCopy = !copies
+      ? (lanes.length < 2 ? { ok: false, msg: 'run a second belt OUT of the splitter first: BELT, click the SPLITTER, then the next machine' }
+        : meet && meet.kind === 'merge' && propAt(meet.at) ? { ok: true, swap: [propAt(meet.at)] }
+        : { ok: false, msg: 'the branches never meet at one MERGER — belt them into one JOINER where they come back together (Conveyors › MACHINES › JOINER)' })
+      : { ok: true, already: true };
+    return { mode: copies ? 'copy' : 'turns', toCopy, toTurns };
+  }
+  function setSplitMode(splitId, mode) {
+    const info = splitModeInfo(splitId);
+    if (!info) return { ok: false, msg: 'this splitter is not on a line yet' };
+    const step = mode === 'copy' ? info.toCopy : info.toTurns;
+    if (step.already) return { ok: true, already: true };
+    if (!step.ok) return { ok: false, msg: step.msg };
+    const res = step.swap.length === 1 ? station.swapJoinerMerger(step.swap[0])
+      : station.transact(() => { for (const id of step.swap) { const r = station.swapJoinerMerger(id); if (!r.ok) return r; } return { ok: true }; });
+    if (res && res.ok) { try { rebake(); } catch (e) { /* the frame loop recompiles */ } }
+    return res && res.ok ? { ok: true, mode } : { ok: false, msg: (res && (res.msg || res.error)) || 'could not switch' };
   }
   function junctionTagText(p) {
     const cfg = (valPlan && valPlan.junctions && valPlan.junctions[p.x + ',' + p.y]) || null;

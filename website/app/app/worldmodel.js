@@ -2453,6 +2453,23 @@ const WorldModel = (() => {
       return { ok: true, id: propId, door: p.door || 'open' };
     }
     // set/replace a FILTER's routes+def or a MERGER's bufferSize (cfg null/empty clears). Mirrors assignPropAgent.
+    /* JOINER <-> MERGER, in place (2026-09-28 — the splitter's COPY TO EACH / TAKE TURNS switch). On the floor they are the
+       SAME machine — a 1x1 junction on the belt that several lanes run into and one runs out of — and differ only in what
+       they do with a job's parts: a JOINER waits for every branch and sends ONE combined result on (it is what makes the
+       split upstream COPY), a MERGER lets each job go on alone (the split TAKES TURNS). Swapping the type keeps the tile,
+       every belt and the prop id; the JOINER-only wait limit goes with the JOINER. One undo step. */
+    const JOIN_SWAP = { joiner: 'merger', merger: 'joiner' };
+    function swapJoinerMerger(propId) {
+      const p = doc.props.find(q => q.id === propId);
+      if (!p) return fail('NOT_FOUND', 'no such prop');
+      const to = JOIN_SWAP[p.t];
+      if (!to) return fail('BAD_TYPE', 'only a JOINER and a MERGER swap');
+      snapshot();
+      p.t = to;
+      delete p.timeoutMin;
+      emit([propFootprint(p)], { staticBakeUnchanged: true });
+      return { ok: true, id: p.id, t: to };
+    }
     function configureJunction(propId, cfg) {
       const p = doc.props.find(q => q.id === propId);
       if (!p) return fail('NOT_FOUND', 'no such prop');
@@ -2769,7 +2786,7 @@ const WorldModel = (() => {
       },
       // mutations
       addRoom, placeHallway, removeRoom, moveRoom, setFloor, setMaterial, setDeck, setWalls, setHull, paintTiles, renameRoom,
-      addProp, removeProp, moveProp, rotateProp, faceProp, mirrorProp, assignPropAgent, ensureWorkstation, configureJunction, bindConnector, setDoorState, setPropProject, setPropBrief, setPropHands, setPropLabel, setPropLimits,
+      addProp, removeProp, moveProp, rotateProp, faceProp, mirrorProp, assignPropAgent, ensureWorkstation, configureJunction, swapJoinerMerger, bindConnector, setDoorState, setPropProject, setPropBrief, setPropHands, setPropLabel, setPropLimits,
       setBelt, removeBelt, removeBelts, placeBeltRun, connectBelt, connectionPreview, hookedBelts, stampBlueprint, insertBayBetween, canInsertBayBetween, transact,
       // agent-bay binding queries
       propsByType, propsByAgent, pipelineEdges, setPipelineEdges, addPipelineEdge, removePipelineEdge, agentRoomId, bayObjects,

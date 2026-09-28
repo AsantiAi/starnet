@@ -96,6 +96,40 @@
   }
 
 
+  /* rejoinOf(plan, splitKey) -> { lanes: [{ dir, at: junctionKey|null, kind: 'join'|'merge'|null }] } — where each branch of
+     a SPLIT comes back together. Every lane out of the split is walked the way work goes (in at a dock's hookup, out at its
+     ship tile — the FAN-OUT walk in compileRoutingPlan) to the FIRST join or merge junction on it. The splitter's COPY TO
+     EACH / TAKE TURNS switch (2026-09-28) swaps exactly that junction: a JOINER there is what makes the split copy, a
+     MERGER lets each job go on alone. Pure; a plan whose docks are uncrewed walks no further than them (callers that
+     want the "once crewed" answer pass a stand-in-crew compile, as REFIT's WOULD-voices do). */
+  function rejoinOf(plan, splitKey) {
+    const jc = plan && plan.junctions && plan.junctions[splitKey];
+    if (!jc || jc.kind !== 'split' || !plan.belts) return { lanes: [] };
+    const map = plan.belts, junctions = plan.junctions, dockAt = plan.bayTileToDock || {}, chains = plan.dockChains || {};
+    const p0 = String(splitKey).split(','), sx = +p0[0], sy = +p0[1];
+    const lanes = [];
+    for (const d of outLanes(map, sx, sy)) {
+      const v = DIRV[d], start = { x: sx + v[0], y: sy + v[1] }, sk = key(start.x, start.y);
+      const seen = { [splitKey]: true, [sk]: true }, q = [start];
+      let at = null, kind = null;
+      const j0 = junctions[sk];
+      if (j0 && (j0.kind === 'join' || j0.kind === 'merge')) { at = sk; kind = j0.kind; }
+      while (q.length && !at) {
+        const t = q.shift(), owner = dockAt[key(t.x, t.y)];
+        const ship = owner && chains[owner] && chains[owner].tile;
+        const nts = (ship && !(ship.x === t.x && ship.y === t.y)) ? [ship] : nextTiles(map, junctions, t);
+        for (const nt of nts) {
+          const nk = key(nt.x, nt.y); if (seen[nk]) continue; seen[nk] = true;
+          const j = junctions[nk];
+          if (j && (j.kind === 'join' || j.kind === 'merge')) { at = nk; kind = j.kind; break; }
+          q.push(nt);
+        }
+      }
+      lanes.push({ dir: d, at, kind });
+    }
+    return { lanes };
+  }
+
   // the tile(s) a box flows to next from t (a junction fans out to ALL its out-lanes for reachability/cycle)
   function nextTiles(map, junctions, t) {
     if (!map[key(t.x, t.y)]) return [];
@@ -1478,7 +1512,7 @@
     return rec && typeof rec === 'object' ? rec : null;
   }
 
-  return { compileRoutingPlan, composeStageBrief, HANDS_LEAD, resolveTarget, lineOf, lineOriginOf, lineLimitsOf, normalizeLineLimits, LINE_LIMIT_DEFAULTS, LINE_LIMIT_CEILINGS, sourceFor, ok, liveTiles, routeFrom, junctionLaneOwners, chainNext, chainStep, fanSiblings, handoffPrompt, parseHandoff, stripVerdictLine, joinPayload, lineComponents, LOOP_MAX_DEFAULT, LOOP_MAX_CEILING,
+  return { rejoinOf, compileRoutingPlan, composeStageBrief, HANDS_LEAD, resolveTarget, lineOf, lineOriginOf, lineLimitsOf, normalizeLineLimits, LINE_LIMIT_DEFAULTS, LINE_LIMIT_CEILINGS, sourceFor, ok, liveTiles, routeFrom, junctionLaneOwners, chainNext, chainStep, fanSiblings, handoffPrompt, parseHandoff, stripVerdictLine, joinPayload, lineComponents, LOOP_MAX_DEFAULT, LOOP_MAX_CEILING,
     // THE DOCK LAYER (multi-bay agents, 2026-09-22) — the dock-keyed truth the agent readings above are views of
     resolveDock, chainNextDock, chainStepDock, fanSiblingsDock, junctionLaneDocks, lineOfDock, lineOriginOfDock, entryDockOf, docksOf, dockOf, agentOfDock: agentOfDockIn, deriveDockLayer, dockLayer, hasDockLayer, stepToAgents, propIdCmp,
     _internals: { DIRV, OPP, LANE_ORDER, key, buildBeltMap, outLanes, inLanes, loopLanes, beltTileNear, nextTiles, detectCycle, hashStr, compileChains, compileDockChains, chainCycle, shipFrom, propIdCmp, entryDocksOf, agentChainsView } };

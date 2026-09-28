@@ -204,6 +204,14 @@
   transition: background-color var(--t-fast) var(--ease-soft), border-color var(--t-fast) var(--ease-soft), color var(--t-fast) var(--ease-soft); }
 .wf-chip:hover { border-color: rgba(var(--ph-rgb),.45); color: var(--ph-bright); background: var(--wf-hover); }
 .wf-chip[aria-pressed="true"] { background: var(--wf-on); border-color: var(--ph); color: var(--ph-bright); box-shadow: var(--wf-light), inset 0 -2px 0 rgba(var(--ph-rgb),.65); }
+/* the SPLITTER mode switch (2026-09-28): two chips that each say what the choice does — a pressed one is the mode the floor has */
+.wf-modepicks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0 0 8px; }
+.wf-modepick { display: grid; gap: 2px; text-align: left; padding: 6px 9px; }
+.wf-modepick b { font-weight: normal; letter-spacing: .8px; }
+.wf-modepick small { font-size: 13px; line-height: 1.2; color: var(--muted, var(--text)); }
+.wf-modepick.off { opacity: .5; border-style: dashed; cursor: not-allowed; }
+.wf-modepick.off:hover { border-color: var(--wf-edge); color: var(--ph); background: var(--refit-glass, var(--wf-plate)); }
+.wf-modepicks-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }   /* the TEST view: WATCH IT · STEP THROUGH · RUN ONE REAL JOB */
 .wf-contract { display: grid; border: 1px solid var(--wf-edge); border-radius: 8px; overflow: hidden; background: var(--wf-well); box-shadow: var(--wf-well-shadow);
   transition: border-color var(--t-fast) var(--ease-soft); }
 .wf-contract:focus-within { border-color: rgba(var(--ph-rgb),.55); }
