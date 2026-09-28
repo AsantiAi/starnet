@@ -278,7 +278,7 @@
   const utcDay = s => !!(s && s.spendDay === 'utc');
   function plateLines(s) {
     if (!s || typeof s !== 'object') return null;
-    const a = (s.runs | 0) + ' RUN' + ((s.runs | 0) === 1 ? '' : 'S') + ' · ' + (s.shipped | 0) + ' SHIPPED · ' + (s.failed | 0) + ' FAILED';
+    const a = (s.runs | 0) + ' RUN' + ((s.runs | 0) === 1 ? '' : 'S') + ((s.tests | 0) > 0 ? ' · ' + (s.tests | 0) + ' TEST' + ((s.tests | 0) === 1 ? '' : 'S') : '') + ' · ' + (s.shipped | 0) + ' SHIPPED · ' + (s.failed | 0) + ' FAILED';
     const day = utcDay(s) ? ' TODAY (UTC)' : ' TODAY';
     const b = fmtUsd(s.usdToday) + (s.capUsdPerDay != null ? ' / ' + fmtUsd(s.capUsdPerDay) : '') + day + (s.medianMs != null ? ' · ~' + fmtDur(s.medianMs) + '/RUN' : '');
     return [a, b, 'TODAY · ' + a + ' · ' + b.replace(day, utcDay(s) ? ' (UTC DAY)' : '') + (s.capUsdPerDay == null ? ' · NO DAILY CAP' : '')];

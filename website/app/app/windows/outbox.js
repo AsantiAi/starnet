@@ -92,7 +92,8 @@
       const usd = (+rw.usd > 0 && typeof U !== 'undefined' && U.usd) ? ' · ' + esc(U.usd(+rw.usd)) : '';
       // title: routine name wins (it's the human name of the job); else the run title until the
       // transcript's real ask replaces it (stored run titles can be prompt+reply mush).
-      const provisionalTitle = rw.routine ? ('“' + rw.routine + '”') : firstLine(rw.title || 'an unnamed run', 64);
+      const lineTitle = /^PIPELINE HANDOFF — /.test(String(rw.title || ''));   // a work line's later stage (its stored title is the machine prompt)
+      const provisionalTitle = rw.routine ? ('“' + rw.routine + '”') : lineTitle ? 'work line result' : firstLine(rw.title || 'an unnamed run', 64);
       row.innerHTML =
         '<div class="ob-head" role="button" tabindex="0" aria-expanded="false">' +
           '<div class="ob-title">◷ <b></b><span class="ob-caret">▸</span></div>' +
@@ -126,12 +127,17 @@
         }
         const users = (turns || []).filter(m => m && m.role === 'user' && String(m.content || '').trim());
         const replies = (turns || []).filter(m => m && m.role === 'assistant' && String(m.content || '').trim() && String(m.content).trim() !== '[SILENT]');
-        const lastReply = replies.length ? String(replies[replies.length - 1].content) : '';
-        if (!rw.routine && users.length) row.querySelector('.ob-title b').textContent = firstLine(users[0].content, 64);
+        // a work line's later stage was HANDED a machine prompt; the Commander asked for the ORIGINAL request (R2)
+        const hand = (users.length && typeof Pipeline !== 'undefined' && Pipeline.parseHandoff) ? Pipeline.parseHandoff(users[0].content) : null;
+        // …and a reviewer's trailing "VERDICT: approved" is the loop gate's control signal, not part of the work (R1) — shown without it
+        const rawReply = replies.length ? String(replies[replies.length - 1].content) : '';
+        const lastReply = (hand && Pipeline.stripVerdictLine) ? Pipeline.stripVerdictLine(rawReply) : rawReply;
+        if (!rw.routine && users.length) row.querySelector('.ob-title b').textContent = firstLine(hand ? hand.original : users[0].content, 64);
         desc.textContent = lastReply ? firstLine(plain(lastReply), 150)
           : (turns === null ? 'couldn’t read the result — is the station running?'
             : (turns && turns.length ? 'the run finished with nothing to report.' : 'no transcript recorded for this run. Open the session for older work without run attribution.'));
-        const askFull = users.length ? String(users[0].content) : '';
+        const askFull = hand ? String(hand.original) + '\n\n— the result of a work line: this reply is from step ' + hand.stage + ', after ' + String(hand.from).toUpperCase() + '.'
+          : users.length ? String(users[0].content) : '';
         ask.textContent = askFull ? (askFull.length > 1500 ? askFull.slice(0, 1500) + ' …' : askFull) : (rw.title || '—');
         out.textContent = lastReply ? (lastReply.length > 4000 ? lastReply.slice(0, 4000) + '\n\n… output truncated — ↗ OPEN SESSION opens the conversation.' : lastReply)
           : (turns === null ? '⚠ couldn’t load the output — the run’s transcript wasn’t reachable.'

@@ -1569,7 +1569,7 @@ const World = (() => {
       // Checked first: when the NO-FEED nag is also up (which needs the same live line), the card carries the
       // CHANNELS door itself, so the nag's promised click-through is never lost — see intakeSampleAt.
       const ismp = intakeSampleAt(wp);
-      if (ismp && onIntakeSample) { onIntakeSample({ propId: ismp.id, fed: feedState.known ? !!feedState.fed : null }); return; }
+      if (ismp && onIntakeSample) { onIntakeSample({ propId: ismp.id, fed: feedState.known ? !!feedState.fed : null, schedOff: !!(feedState.known && !feedState.fed && feedState.schedOff) }); return; }
       // a NO-FEED intake's nag says CLICK — the click opens the CHANNELS panel (the fix is wiring a feed)
       const inf = intakeFeedAt(wp);
       if (inf && onIntakeFeed) onIntakeFeed(inf.id);
@@ -7919,7 +7919,7 @@ const World = (() => {
     if (feedState.known && !feedState.fed && beltLiveSet && Object.keys(beltLiveSet).length) {
       for (const p of geo.props) {
         if (p.t !== 'intake') continue;
-        out.push({ x: p.x, y: p.y, w: p.w || 1, h: p.h || 1, label: 'NO FEED — CLICK', warn: true });
+        out.push({ x: p.x, y: p.y, w: p.w || 1, h: p.h || 1, label: feedState.schedOff ? 'SCHEDULE OFF — CLICK' : 'NO FEED — CLICK', warn: true });
         feedNagOn = true;
       }
     }
@@ -7940,8 +7940,10 @@ const World = (() => {
       const jobs = (cron && Array.isArray(cron.jobs)) ? cron.jobs : [];
       const cronFeeds = !!(cron && cron.enabled && jobs.some(j => j && j.enabled !== false));
       const trgFeeds = !!(trg && Array.isArray(trg.triggers) && trg.triggers.some(t => t && t.enabled && !t.blockedBy));
-      const next = { known: true, fed: chan || cronFeeds || trgFeeds };
-      const changed = next.known !== feedState.known || next.fed !== feedState.fed;
+      // a schedule is SAVED but scheduling is off (2026-09-27 audit R3): the INBOX says so instead of "NO FEED"
+      const schedOff = !!(cron && !cron.enabled && jobs.some(j => j && j.enabled !== false));
+      const next = { known: true, fed: chan || cronFeeds || trgFeeds, schedOff };
+      const changed = next.known !== feedState.known || next.fed !== feedState.fed || next.schedOff !== feedState.schedOff;
       feedState = next;
       if (changed) routingNags = buildRoutingNags();   // feed truth changed → refresh the callouts
     });
@@ -9135,6 +9137,7 @@ const World = (() => {
     ctx.globalAlpha = linkStaleDim ? 0.35 : 1;   // link down → last-known numbers, dimmed like the SHIPPED pallet
     for (const p of plates) {
       const b = p.box; if (!b || !propOnScreen(p.ip)) continue;
+      if (hoverPlate && !hoverAgent && hoverPlate.lineId === p.lineId) continue;   // the glance says it all while hovered — never two plates
       ctx.fillStyle = '#0d1311'; ctx.fillRect(b.x, b.y, b.w, b.h);
       ctx.strokeStyle = '#3f4c47'; ctx.lineWidth = 0.35; ctx.strokeRect(b.x, b.y, b.w, b.h);
       ctx.strokeStyle = '#4f7f6c'; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.moveTo(b.x + 2, b.y + b.h - 0.8); ctx.lineTo(b.x + b.w - 2, b.y + b.h - 0.8); ctx.stroke();

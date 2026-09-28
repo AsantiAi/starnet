@@ -401,7 +401,20 @@ const Dialogue = (() => {
   // codename() is also exported so the WAKE funnel (app.js) can persist a real minted name instead of the bland
   // 'AGENT' when the Commander leaves the name blank — keeping the world nameplate / dossier consistent with the
   // speaker label. isUnnamed() lets a caller cheaply detect the blank/placeholder case.
-  return { open: openPanel, close: closePanel, say, node, answer, setName, setStage, ink, isOpen: () => open, codename, isUnnamed };
+  /* THE TOUR YIELDS (2026-09-27 conveyor audit R3). The quick tour's panel covers the COMMS column, and it stays up until one of
+     its options is picked — so a card the Commander explicitly asked for elsewhere (clicking the INBOX on the floor posts the
+     ONE-REAL-JOB card into COMMS) landed hidden under it, and the click read as dead. yieldTour() answers the tour's own way
+     out — its skip option, or the option it marks `yield` (the step that leaves the tour for the first task) — the same pick
+     a click on that button makes, so no new state exists. Returns true when the tour stepped aside. */
+  function yieldTour() {
+    if (!open || !panel || !panel.classList.contains('fnv-tour') || !pendingPick || !pendingPick.cfg) return false;
+    const opts = Array.isArray(pendingPick.cfg.options) ? pendingPick.cfg.options : [];
+    const out = opts.find(o => o && o.skip) || opts.find(o => o && o.yield);
+    if (!out) return false;
+    pendingPick.finishPick({ value: out.value != null ? out.value : out.label, label: out.label, skip: !!out.skip });
+    return true;
+  }
+  return { open: openPanel, close: closePanel, say, node, answer, setName, setStage, ink, yieldTour, isOpen: () => open, codename, isUnnamed };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { Dialogue };

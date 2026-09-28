@@ -335,6 +335,7 @@
     const trig = o.triggers || { schedules: [], channels: [] };
     const starts = [].concat((trig.schedules || []), (trig.channels || []).map(c => 'when a ' + c + ' message arrives'), (trig.events || []));
     if (!flow || !flow.trigger.propId) T('This line has no INBOX yet, so nothing can start it. ');
+    else if (!starts.length && (trig.offSchedules || []).length) T('It is scheduled (' + trig.offSchedules[0] + '), but scheduling is OFF, so nothing starts it on its own yet; it runs when you test it. ');
     else if (!starts.length) T('Nothing starts it on its own yet (no schedule, channel, folder or webhook runs this line); it runs when you test it. ');
     else T(cap(joinOr(starts)) + ', ');
     if (!flow || !flow.cols.length) { T('there is no BAY on it yet.'); return segs; }
@@ -505,14 +506,16 @@
   const entryAgentsOf = flow => entryDocksOf(flow).map(p => flow.docks[p].agentId);
   const dockAgentsOf = flow => flow ? flow.order.map(p => flow.docks[p].agentId).filter(Boolean) : [];
   function lineStarts(flow, facts) {
-    const x = facts || {}, out = { schedules: [], channels: [], routines: [], chanRows: [], events: [] };
+    const x = facts || {}, out = { schedules: [], channels: [], routines: [], chanRows: [], events: [], offSchedules: [] };
     if (!flow) return out;
     // LINE TRIGGERS: only the ones the server reports enabled with nothing blocking them start the line
     if (x.lt) out.events = lineEventTriggers(x.lt.triggers, x.lineKey).sentences;
     if (x.cron && Array.isArray(x.cron.jobs)) {
       out.routines = lineRoutines(x.cron.jobs, dockAgentsOf(flow), entryAgentsOf(flow), entryDocksOf(flow));
       const armed = !!(x.cron.enabled && !x.cron.halted);
-      for (const r of out.routines) if (r.startsLine && armed) out.schedules.push(x.human ? x.human(r.display) : String(r.display == null ? '' : r.display));
+      /* a line-starting schedule the scheduler will NOT fire (scheduling off / halted) is still NAMED, apart (2026-09-27 audit
+         T1): the panel said "no schedule" right above the schedule the Commander had just saved */
+      for (const r of out.routines) if (r.startsLine && r.enabled !== false) (armed ? out.schedules : out.offSchedules).push(x.human ? x.human(r.display) : String(r.display == null ? '' : r.display));
     }
     if (x.chans) {
       out.chanRows = channelFeeds(x.chans, entryAgentsOf(flow), x.agents);
