@@ -113,6 +113,39 @@ A.ok(/after ' \+ String\(agentName\(hand\.from\)\)\.toUpperCase\(\)/.test(outbox
   A.ok(Object.values(plan0.unboundBayTile || {}).some(id => id === empty[0].id), 'a bay with no agent has its ring belt tiles on the plan');
 }
 
+/* ---------- B4: TOO CLOSE only when the shared tile is the bay's way in ---------- */
+{
+  // the retest's floor: two bays one tile apart, the BELT tool's lane going ROUND the shared column, and no INBOX at all
+  const s = WM.create();
+  A.ok(s.addRoom({ kind: 'hab', rect: { x1: 30, y1: 0, x2: 50, y2: 14 } }).ok, 'fixture: a deck');
+  const c = s.addProp({ t: 'bay', x: 33, y: 3, w: 2, h: 2, block: true }), d = s.addProp({ t: 'bay', x: 36, y: 3, w: 2, h: 2, block: true });
+  A.ok(c.ok && d.ok, 'fixture: two bays with ONE empty tile between them');
+  s.assignPropAgent(c.id, 'c1'); s.assignPropAgent(d.id, 'd1');
+  for (const [x, y, dir] of [[34, 2, 'E'], [35, 2, 'E'], [36, 2, 'S']]) s.setBelt(x, y, dir);
+  const plan = P.compileRoutingPlan(s.projectGeometry());
+  const errOf = id => (plan.errors || []).filter(e => e.propId === id).map(e => e.code);
+  A.eq((plan.dockChains[c.id] || {}).next, [d.id], 'the lane round the shared tile hands the first bay\'s work to the second');
+  A.ok(errOf(c.id).indexOf('BAY_NOT_FED') >= 0 && errOf(c.id).indexOf('BAY_TOO_CLOSE') < 0, 'the first bay has no INBOX: it is NOT FED — never "too close" (' + errOf(c.id).join(',') + ')');
+  A.eq(errOf(d.id).filter(x => /FED|CLOSE/.test(x)), [], 'the second bay is fed by the first');
+  A.ok(/\(sharedRing\[k\] === 'src' \|\| \(ringOwners\[k\] \|\| \[\]\)\.length > 1\) && aimsInto\(t, b\.propId\)/.test(read('frontend/app/pipeline.js')), 'TOO CLOSE needs the shared tile to aim INTO the bay');
+}
+
+/* ---------- the loop's sentence reads as one sentence ---------- */
+{
+  const W = require('../frontend/app/workflowline.js');
+  const s = WM.create(), z = s.rooms()[0].rects[0];
+  let ok = null;
+  for (let y = z.y1; y <= z.y2 && !ok; y++) for (let x = z.x1; x <= z.x2 && !ok; x++) { const r = s.stampBlueprint('revision_loop', x, y); if (r.ok) ok = r; }
+  A.ok(!!ok, 'fixture: REVISION LOOP stamps');
+  const bays = s.props().filter(p => p.t === 'bay').sort((a, b) => a.x - b.x);
+  s.assignPropAgent(bays[0].id, 'nova'); s.assignPropAgent(bays[1].id, 'rev');
+  const geo = s.projectGeometry(), plan = P.compileRoutingPlan(geo), f = W.lineFlow(plan, P.lineComponents(geo)[0], P, geo.props);
+  const hands = { [bays[0].id]: 'a 200-word draft', [bays[1].id]: 'the approved draft' };
+  const said = W.sentenceText(W.howItRuns(f, { nameOf: a => String(a).toUpperCase(), handsOf: id => hands[id] || null }));
+  A.ok(/NOVA writes it up, handing off a 200-word draft; REV reviews it and sends it back to NOVA until it is approved \(3 tries max\), then hands off the approved draft;/.test(said), 'the reviewer\'s hand-off follows its loop clause (' + said + ')');
+  A.ok(!/handing off the approved draft and sends it back/.test(said), '…never glued in front of it');
+}
+
 /* ---------- P5 + B4: what the floor says while a machine is in hand ---------- */
 A.ok(/if \(tool === 'prop' && JUNCTION_TAG_TYPES\[propType\] && belts\.length\)/.test(build) && /ctx\.setLineDash\(\[3 \/ zoom, 2 \/ zoom\]\)/.test(build), 'a junction in hand: every belt tile wears a dashed edge (drawn geometry, never a glow)');
 A.ok(/const RING_DOCK_T = \{ bay: 1, intake: 1, outbox: 1 \}/.test(build) && /'CLOSE TO THE ' \+ String\(propLabel\(near\.t\)\)\.toUpperCase\(\) \+ ' — LEAVE 2 TILES OR THEIR BELTS TOUCH'/.test(build), 'a dock in hand near another dock: the spacing advice (never a refusal)');

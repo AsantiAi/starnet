@@ -466,7 +466,16 @@
     for (const s of sources) for (const st of srcTiles(s)) sharedRing[key(st.x, st.y)] = 'src';
     const ringOwners = {};
     for (const b of bays) for (const t of bayTilesOf(b)) { const k = key(t.x, t.y); (ringOwners[k] = ringOwners[k] || []).push(b.propId); }
-    const tooClose = b => bayTilesOf(b).some(t => { const k = key(t.x, t.y); return sharedRing[k] === 'src' || (ringOwners[k] || []).length > 1; });
+    /* …but only when the SHARED tile is the bay's way IN — a belt aimed into the bay's footprint from a tile another ring
+       also owns (2026-09-28 retest). Two docks a tile apart whose lane goes round the shared tile are wired fine; if the
+       first one has no INBOX it is simply NOT FED, and "move it a tile away" would have sent the Commander the wrong way. */
+    const footOf = {}; for (const p of props) if (p && p.t === 'bay') footOf[p.id] = p;
+    const aimsInto = (t, pid) => {
+      const v = DIRV[map[key(t.x, t.y)]], f = footOf[pid]; if (!v || !f) return false;
+      const nx = t.x + v[0], ny = t.y + v[1];
+      return nx >= f.x && nx < f.x + (f.w || 1) && ny >= f.y && ny < f.y + (f.h || 1);
+    };
+    const tooClose = b => bayTilesOf(b).some(t => { const k = key(t.x, t.y); return (sharedRing[k] === 'src' || (ringOwners[k] || []).length > 1) && aimsInto(t, b.propId); });
     for (const b of bays) if (!reachDock[b.propId] && !chainFed[b.propId] && !flowsToOutbox(b.tile)) errors.push({ code: tooClose(b) ? 'BAY_TOO_CLOSE' : 'BAY_NOT_FED', propId: b.propId, agentId: b.agentId, warn: true });
     // A CHAIN LOOP IS A BLOCKING ERROR — and it is INVISIBLE to detectCycle. A's ship tile feeding B's dock and
     // B's ship tile feeding A's dock are two separate physical lanes with no belt cycle anywhere; the loop only
