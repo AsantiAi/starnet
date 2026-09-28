@@ -1124,14 +1124,22 @@ const Build = (() => {
            deck cannot keep — the user aims, gets red everywhere, and learns nothing. The card says
            so up front, from the SAME canPlaceBlueprint scan the ghost snaps to. It stays selectable
            (sandbox law: never gate) — arming it just shows an empty field and this reason. */
+        let make = null;
         if (!lineFits(bp.id)) {
           b.classList.add('nofit');
           const nf = document.createElement('span'); nf.className = 'refit-linetile-nofit';
           nf.textContent = 'NO ROOM ON THIS DECK — NEEDS ' + bp.w + '×' + bp.h + ' OF CLEAR FLOOR';
           b.appendChild(nf);
+          /* MAKE ROOM (2026-09-27 audit B1): 8 of the 19 lines never fit the starter room and nothing said how to get more
+             floor. One click builds a room big enough, touching the station (auto-doors connect it), and arms the line
+             over it. One UNDO removes the room. A sibling button — a button inside the card's button is not allowed. */
+          make = document.createElement('button'); make.type = 'button'; make.className = 'bb sm refit-linetile-makeroom';
+          make.textContent = '＋ MAKE ROOM FOR IT'; make.setAttribute('aria-label', 'Build a room big enough for ' + bp.label);
+          make.onclick = e => makeRoomFor(bp.id, e);
         }
         b.onclick = () => { lineType = bp.id; selectTool('line'); };
         grid.appendChild(b);
+        if (make) grid.appendChild(make);
       }
       pal.appendChild(grid);
       const note = document.createElement('div');
@@ -1747,6 +1755,38 @@ const Build = (() => {
     const links = ghostLinks({ props: bp.props.map(p => ({ t: p.t, x: o.x + p.x, y: o.y + p.y, w: p.w, h: p.h })), belts: bp.belts.map(b => ({ x: o.x + b.x, y: o.y + b.y, d: b.d })) });
     return { rects, v: station.canPlaceBlueprint(bp.id, o.x, o.y), kind: 'line', label: bp.label, snapped: s.snapped, links };
   }
+  function makeRoomFor(bpId, ev) {
+    const bp = blueprintOf(bpId);
+    if (!bp || !station) return;
+    const W = bp.w + 2, H = bp.h + 2;   // a tile of walking room round the line
+    const b = boundsMemoed();
+    const cands = [];
+    // right of the station, below it, left of it, above it — each slid along the edge; nearest to the station middle first
+    const midY = (b.minTy + b.maxTy) >> 1, midX = (b.minTx + b.maxTx) >> 1;
+    for (let y = b.minTy - H + 1; y <= b.maxTy; y++) cands.push({ x: b.maxTx + 1, y, d: Math.abs(y + (H >> 1) - midY) });
+    for (let x = b.minTx - W + 1; x <= b.maxTx; x++) cands.push({ x, y: b.maxTy + 1, d: 1000 + Math.abs(x + (W >> 1) - midX) });
+    for (let y = b.minTy - H + 1; y <= b.maxTy; y++) cands.push({ x: b.minTx - W, y, d: 2000 + Math.abs(y + (H >> 1) - midY) });
+    for (let x = b.minTx - W + 1; x <= b.maxTx; x++) cands.push({ x, y: b.minTy - H, d: 3000 + Math.abs(x + (W >> 1) - midX) });
+    cands.sort((p, q) => p.d - q.d || p.y - q.y || p.x - q.x);
+    const touches = (x, y) => {   // orthogonally adjacent to an existing deck tile, or the auto-doors can't join it
+      for (let yy = y; yy < y + H; yy++) if (station.roomAt(x - 1, yy) || station.roomAt(x + W, yy)) return true;
+      for (let xx = x; xx < x + W; xx++) if (station.roomAt(xx, y - 1) || station.roomAt(xx, y + H)) return true;
+      return false;
+    };
+    for (const c of cands) {
+      if (!touches(c.x, c.y)) continue;
+      const res = station.addRoom({ kind: 'hab', rect: { x1: c.x, y1: c.y, x2: c.x + W - 1, y2: c.y + H - 1 } });
+      if (!res || !res.ok) continue;
+      clearLineFields();
+      lineType = bp.id; selectTool('line');
+      sfx('chime');
+      flashTip(ev, 'ROOM ADDED — click inside it to place ' + bp.label + ' · UNDO removes the room', true);
+      try { fitCamera(); } catch (e) {}
+      return;
+    }
+    sfx('bad');
+    flashTip(ev, 'no clear space beside the station for a ' + W + '×' + H + ' room — use Rooms to draw one where you want it', false);
+  }
   function stampLine(w, ev) {
     const bp = blueprintOf(lineType);
     if (!bp) return;
@@ -1766,7 +1806,15 @@ const Build = (() => {
       // click on the fresh line inspects a dock instead of stamping a second copy on top of it.
       // (Deselect BEFORE the tip: selectTool hides any tip it finds.)
       deselectTool({ silent: true });
-      flashTip(ev, bp.label + ' STAMPED — now click each BAY to assign an agent', true);
+      /* WHAT NOW? (2026-09-27 audit B2): the stamp used to leave "Nothing is selected yet" and a tip, and the part that guides you
+         — the Workflow panel, starting with "Who works here?" — only appeared if you thought to click a BAY. It opens now, on the
+         line's first BAY, the moment the line lands (compiled first, so it names the line). */
+      let firstBay = null;
+      try { for (const id of (res.ids || [])) { const sp = station.propById(id); if (sp && sp.t === 'bay') { firstBay = sp.id; break; } } } catch (_) {}
+      if (firstBay && typeof WorkflowPanel !== 'undefined') {
+        try { rebake(); openFlowCard(firstBay); } catch (_) {}
+        flashTip(ev, bp.label + ' PLACED — choose who works each BAY in the panel', true);
+      } else flashTip(ev, bp.label + ' STAMPED — now click each BAY to assign an agent', true);
       if (typeof StationUI !== 'undefined' && StationUI.pokeQuests) { try { StationUI.pokeQuests(); } catch (_) {} }
       // belts just landed — the same first-touch coach a hand-laid run earns (points at ▸ PREVIEW)
       if (typeof Tutorial !== 'undefined' && Tutorial.onBeltPlaced) Tutorial.onBeltPlaced();
@@ -2375,7 +2423,9 @@ const Build = (() => {
       junctionInfo: id => {
         const p = station.propById(id); if (!p) return null;
         const jt = junctionBeltTile(p), o = (cacheGeo && cacheGeo.origin) || { tx: 0, ty: 0 };
-        const cfg = (jt && valPlan && valPlan.junctions) ? (valPlan.junctions[(jt.x - o.tx) + ',' + (jt.y - o.ty)] || null) : null;
+        const lk = jt ? (jt.x - o.tx) + ',' + (jt.y - o.ty) : null;
+        const cfg0 = (lk && valPlan && valPlan.junctions) ? (valPlan.junctions[lk] || null) : null;
+        const cfg = cfg0 && cfg0.kind === 'split' ? Object.assign({}, cfg0, { fanout: !!fanoutOnceCrewed()[lk] }) : cfg0;
         const dirs = jt ? junctionOutLanes(jt.x, jt.y) : [];
         const labels = jt ? loopExitLabels(valPlan, { x: jt.x - o.tx, y: jt.y - o.ty }, agentLabel) : [];
         // the compass prefix ("E → ") is builder shorthand; the panel names the belt by where it goes
@@ -5112,7 +5162,13 @@ const Build = (() => {
       const blocked = buildGroup !== 'workflow' || tutorialCoaching() || ridePending || !!rideTimer
         || !!(root && root.querySelector('.refit-firstrun')) || convey.boxCount() > 0;
       const feed = (opts && opts.world && opts.world.feedState) ? opts.world.feedState() : { known: false, fed: false };
-      ghost.tick(dt, now, belts, jmap, { blocked, feed });
+      // the ghost is the WOULD-voice: its splits carry the once-crewed mode (the live sim keeps the real plan's)
+      const fo = jmap ? fanoutOnceCrewed() : null;
+      if (ghostMapFor !== jmap || ghostMapFo !== fo) {   // rebuilt only when the plan (or its once-crewed read) changes — never per frame
+        ghostMapFor = jmap; ghostMapFo = fo; ghostMap = jmap;
+        if (jmap && fo) { const o = cacheGeo.origin || { tx: 0, ty: 0 }; for (const k in fo) if (fo[k]) { const q = k.split(','), wk = (+q[0] + o.tx) + ',' + (+q[1] + o.ty), j = jmap.get(wk); if (j && !j.fanout) { if (ghostMap === jmap) ghostMap = new Map(jmap); ghostMap.set(wk, Object.assign({}, j, { fanout: true })); } } }
+      }
+      ghost.tick(dt, now, belts, ghostMap, { blocked, feed });
     }
     convey.drawBelts(ctx, now, t, belts, valLive);
   }
@@ -5236,9 +5292,31 @@ const Build = (() => {
      COMPILED cfg (the same fact the sidecar routes by). Only one at a time — a tag on every junction at rest was the "wall of
      text" the one-voice law exists to stop; the Workflow panel carries the same facts for the whole line. */
   const JUNCTION_TAG_TYPES = { splitter: 1, joiner: 1, merger: 1, filter: 1, loop: 1 };
+  /* A SPLIT'S MODE ONCE CREWED (2026-09-27): the compiler marks a split fan-out only when a crewed branch reaches its JOINER,
+     so on a freshly stamped line (no agents yet) every split read TAKES TURNS — while the Workflow panel's strip (which compiles
+     with a stand-in agent on each uncrewed bay) said ALL RUN, and the ghost said "jobs would take turns". The WOULD-voices (the
+     ghost, the tags, the card, the panel section) all read this: the real plan where every bay is crewed, the probe compile where
+     some are not. Keyed by LOCAL junction tile; memoized per compiled plan. */
+  let fanoutMemo = null, fanoutPlan = null;
+  let ghostMap = null, ghostMapFor = null, ghostMapFo = null;   // the ghost's junction map (the live one + once-crewed split modes)
+  function fanoutOnceCrewed() {
+    if (!valPlan || !cacheGeo) return {};
+    if (fanoutPlan === valPlan && fanoutMemo) return fanoutMemo;
+    const out = {};
+    for (const k in (valPlan.junctions || {})) if (valPlan.junctions[k].kind === 'split') out[k] = !!valPlan.junctions[k].fanout;
+    const props = cacheGeo.props || [];
+    if (typeof Pipeline !== 'undefined' && Pipeline.compileRoutingPlan && props.some(p => p.t === 'bay' && !p.agentId)) {
+      try {
+        const probe = Pipeline.compileRoutingPlan(Object.assign({}, cacheGeo, { props: props.map(p => (p.t === 'bay' && !p.agentId) ? Object.assign({}, p, { agentId: '__probe_' + p.id }) : p) }));
+        for (const k in (probe.junctions || {})) if (probe.junctions[k].kind === 'split' && probe.junctions[k].fanout) out[k] = true;
+      } catch (e) { /* the real plan's answer stands */ }
+    }
+    fanoutPlan = valPlan; fanoutMemo = out;
+    return out;
+  }
   function junctionTagText(p) {
     const cfg = (valPlan && valPlan.junctions && valPlan.junctions[p.x + ',' + p.y]) || null;
-    if (p.t === 'splitter') return cfg ? (cfg.fanout ? 'SPLITTER · COPY TO EACH' : 'SPLITTER · TAKES TURNS') : 'SPLITTER';
+    if (p.t === 'splitter') return cfg ? (fanoutOnceCrewed()[p.x + ',' + p.y] ? 'SPLITTER · COPY TO EACH' : 'SPLITTER · TAKES TURNS') : 'SPLITTER';
     if (p.t === 'joiner') return cfg && cfg.expect > 1 ? 'JOINER · WAITS FOR ' + cfg.expect : 'JOINER · WAITS';
     if (p.t === 'loop') return 'LOOP · UP TO ' + ((cfg && cfg.max) || (typeof Pipeline !== 'undefined' && Pipeline.LOOP_MAX_DEFAULT) || 5) + '×';
     if (p.t === 'filter') return 'FILTER · SORTS';
@@ -5811,7 +5889,7 @@ const Build = (() => {
     // no — the reason on its own line right under them. (Was a DOM tip trailing into a screen corner.)
     const r0 = g.rects[0], w = r0.x2 - r0.x1 + 1, h = r0.y2 - r0.y1 + 1;
     let dims = g.belt ? ('BELT ' + g.dir + ' · ' + Math.max(w, h) + ' LONG')
-      : g.kind === 'line' ? (String(g.label || '').toUpperCase() + ' — CLICK TO STAMP')
+      : g.kind === 'line' ? (String(g.label || '').toUpperCase() + (ok ? ' — CLICK TO STAMP' : ''))   // a red ghost never invites the click (2026-09-27 audit B1)
       : g.move ? ('MOVE ' + (g.dx >= 0 ? '+' : '') + g.dx + ', ' + (g.dy >= 0 ? '+' : '') + g.dy)
       : (tool === 'hall' ? (Math.max(w, h) + ' LONG × ' + Math.min(w, h) + ' WIDE') : (w + ' × ' + h));
     const lines = [dims];
@@ -5921,7 +5999,7 @@ const Build = (() => {
     let out = '';
     if (JUNCTION_TAG_TYPES[placed.t] && valPlan && cacheGeo) {
       const o = cacheGeo.origin || { tx: 0, ty: 0 }, cfg = valPlan.junctions && valPlan.junctions[(placed.x - o.tx) + ',' + (placed.y - o.ty)];
-      const mode = placed.t === 'splitter' ? (cfg ? (cfg.fanout ? 'Every branch gets a copy: a JOINER follows the branches.' : 'Jobs take turns between the branches (no JOINER after them).') : null)
+      const mode = placed.t === 'splitter' ? (cfg ? (fanoutOnceCrewed()[(placed.x - o.tx) + ',' + (placed.y - o.ty)] ? 'Every branch gets a copy: a JOINER follows the branches.' : 'Jobs take turns between the branches (no JOINER after them).') : null)
         : placed.t === 'joiner' ? (cfg && cfg.expect > 1 ? 'Waits for ' + cfg.expect + ' branches, then sends one combined result on.' : null)
         : placed.t === 'loop' ? (cfg ? 'Sends work back up to ' + (cfg.max || 5) + ' times' + (cfg.when ? ', until the verdict is ' + String(cfg.when).toUpperCase() : '') + '.' : null) : null;
       if (mode) out += '<div class="pc-assign ok">▸ ' + esc(mode) + '</div>';

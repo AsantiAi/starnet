@@ -80,7 +80,7 @@ const WorkflowPanel = (() => {
   // what starts this line — composed by WorkflowLine.lineStarts, the ONE reader the lead's station.layout shares
   function triggers(f) {
     const W = WL();
-    if (!W || !f) return { schedules: [], channels: [], routines: [], chanRows: [], events: [] };
+    if (!W || !f) return { schedules: [], channels: [], routines: [], chanRows: [], events: [], offSchedules: [] };
     return W.lineStarts(f, { lt: S.lt, lineKey: S.lineKey, cron: S.cron, chans: S.chans, agents: H.agents(), human: H.human });
   }
   function refreshServerFacts() {
@@ -268,11 +268,11 @@ const WorkflowPanel = (() => {
     const tr = triggers(f);
     if (f && comp()) {
       const ip = f.trigger.propId;
-      const sch = tr.schedules.length, ch = tr.channels.length, ev = tr.events.length;
+      const sch = tr.schedules.length, ch = tr.channels.length, ev = tr.events.length, off = (tr.offSchedules || []).length;
       const kinds = (sch ? 1 : 0) + (ch ? 1 : 0) + (ev ? 1 : 0);
       nodes.push({ kind: 'trigger', propId: ip, cls: 'wf-term' + (ip ? '' : ' none'), ok: !!ip && (sch + ch + ev) > 0,
-        html: '<span class="k">INBOX</span><span class="t">' + (ip ? (kinds > 1 ? 'AUTO' : sch ? 'SCHEDULE' : ch ? 'CHANNEL' : ev ? 'TRIGGER' : 'MANUAL') : 'NO INBOX') + '</span>'
-          + '<span class="a">' + esc(ip ? (tr.channels.concat(tr.schedules.slice(0, 1), tr.events.length ? [tr.events.length === 1 ? tr.events[0].replace(/^when /, '') : tr.events.length + ' events'] : []).join(' · ') || 'no trigger yet') : 'add one on the floor') + '</span>' });
+        html: '<span class="k">INBOX</span><span class="t">' + (ip ? (kinds > 1 ? 'AUTO' : sch ? 'SCHEDULE' : ch ? 'CHANNEL' : ev ? 'TRIGGER' : off ? 'SCHEDULE · OFF' : 'MANUAL') : 'NO INBOX') + '</span>'
+          + '<span class="a">' + esc(ip ? (tr.channels.concat(tr.schedules.slice(0, 1), tr.events.length ? [tr.events.length === 1 ? tr.events[0].replace(/^when /, '') : tr.events.length + ' events'] : []).join(' · ') || (off ? tr.offSchedules[0] + ' · scheduling is off' : 'no trigger yet')) : 'add one on the floor') + '</span>' });
       f.cols.forEach(col => {
         nodes.push({ kind: 'col', col, ok: col.docks.every(d => d.agentId && H.hasCompute(d.agentId)) });
         if (col.gate) nodes.push({ kind: 'gate', gate: col.gate, propId: col.gate.propId });
@@ -659,6 +659,16 @@ const WorkflowPanel = (() => {
             : r.runsLine ? ' · <span class="trg-warn">runs from a mid-line step</span>' : ' · <span class="dim">runs only that agent</span>')
           + (r.enabled ? '' : ' · paused') + '</div></div>';
       }).join('');
+    // the switch next to the schedule it blocks: the same POST /api/cron/arm the AUTOMATION panel uses, then re-read the truth
+    const wireArm = () => { const b = $('#trg-arm'); if (!b || b._wired) return; b._wired = true; b.onclick = () => {
+      b.disabled = true; b.textContent = '… turning on';
+      api('/api/cron/arm', 'POST', { enabled: true }).then(({ status, j: r }) => {
+        if (status === 200 && r && r.ok) { H.sfx('chime'); S.trgMsg = { t: '✓ scheduling is on — saved schedules will fire at their times', bad: false }; }
+        else { H.sfx('bad'); S.trgMsg = { t: 'could not turn scheduling on' + (r && r.error ? ' — ' + r.error : ''), bad: true }; }
+        refreshServerFacts();
+      }).catch(() => { H.sfx('bad'); S.trgMsg = { t: 'sidecar unreachable — scheduling was not changed', bad: true }; paint(true); });
+    }; };
+    setTimeout(wireArm, 0);
     const chanRows = !S.chans ? '<div class="wf-help dim">checking channels…</div>'
       : !tr.chanRows.length ? '<div class="wf-help dim">No channel is connected yet.</div>'
       : tr.chanRows.map(r => '<div class="trg-row"><span class="trg-state' + (r.connected ? ' on' : '') + '">' + (r.connected ? '●' : '○') + '</span> <b>' + esc(r.label) + '</b>'
@@ -680,6 +690,8 @@ const WorkflowPanel = (() => {
     body.innerHTML = '<section class="wf-sec"><h3><span class="n">INBOX</span>What starts this line?</h3>'
       + '<p class="wf-help">A schedule, a message on a connected channel, a file landing in a watched folder, or a webhook call runs the <b>whole line</b>. A direct COMMS message only runs the agent you message.</p>'
       + '<h4>Schedules</h4><div class="trg-list" id="wf-routines">' + rtRows + '</div>'
+      + (S.cron && !armed && routines.some(r => r.startsLine && r.enabled !== false)
+        ? '<div class="wf-warnline trg-armline">Scheduling is ' + (S.cron.halted ? 'STOPPED' : 'OFF') + ' for the whole station, so ' + (routines.filter(r => r.startsLine).length === 1 ? 'this schedule' : 'these schedules') + ' will not run. <button type="button" class="bb sm refit-primary" id="trg-arm">▶ TURN SCHEDULING ON</button></div>' : '')
       + '<div class="wf-row"><button type="button" class="bb sm' + (S.trgOpen ? ' active' : '') + '" id="trg-new" aria-expanded="' + S.trgOpen + '" aria-controls="trg-form">⊕ ADD A SCHEDULE</button><button type="button" class="bb sm" id="trg-auto">MANAGE SCHEDULES</button></div>'
       + '<div id="trg-form" class="trg-form"' + (S.trgOpen ? '' : ' hidden') + '>'
         + '<label class="trg-form-k" for="trg-prompt">What task should start each run?</label>'
@@ -1030,7 +1042,7 @@ const WorkflowPanel = (() => {
         S.trgOpen = false;
         H.pollFeed().then(() => paint(true), () => paint(true));
         say(saved.state === 'completed' ? '✓ routine completed — see its result in AUTOMATION' : !saved.enabled ? '✓ saved — this routine is paused; manage it in AUTOMATION'
-          : armedNow ? '✓ schedule saved — fires at ' + nameOf(agentId) : '✓ saved — but scheduling is OFF or STOPPED; enable it in AUTOMATION', !saved.enabled || !armedNow);
+          : armedNow ? '✓ schedule saved — fires at ' + nameOf(agentId) : '✓ saved — but scheduling is off for the whole station: press TURN SCHEDULING ON above', !saved.enabled || !armedNow);
         paint(true);
       }).catch(() => refuse('save not confirmed — check AUTOMATION before retrying'));
     };
