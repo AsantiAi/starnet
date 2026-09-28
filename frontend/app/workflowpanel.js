@@ -1046,12 +1046,12 @@ const WorkflowPanel = (() => {
     const loopMaxCeil = (typeof Pipeline !== 'undefined' && Pipeline.LOOP_MAX_CEILING) || 20;
     const loopDoneCur = (p.done && loopExits.some(x => x.dir === p.done)) ? p.done : (loopExits[0] ? loopExits[0].dir : null);
     const joinerHtml = isJoiner
-      ? '<section class="wf-sec"><h3><span class="n">JOINER</span>How long should it wait?</h3><p class="wf-help">Work waits here for every parallel part of the same job, then continues as one combined result.</p>'
+      ? '<section class="wf-sec"><h3><span class="n">JOINER</span>How long should it wait?</h3><div class="wf-mode">' + (H.machineDiagram ? H.machineDiagram('joiner') : '') + '<p>Work waits here for <b>every</b> branch of the same job, then continues as <b>one combined result</b>. (A MERGER is different: it only lets belts share one, nothing waits.)</p></div>'
         + jnField('jn-timeout', 'minutes to wait for a late branch', 1, 120, 1, p.timeoutMin ? String(p.timeoutMin) : '', '10')
         + '<div class="wf-help" id="jn-note">If a part is late, the available results continue without it, marked PARTIAL. Leave blank for 10 minutes. Choose 1–120 minutes.</div></section>'
       : '';
     const loopHtml = isLoop
-      ? '<section class="wf-sec"><h3><span class="n">LOOP</span>Where should finished work go?</h3>'
+      ? '<section class="wf-sec"><h3><span class="n">LOOP</span>Where should finished work go?</h3><div class="wf-mode">' + (H.machineDiagram ? H.machineDiagram('loop') : '') + '<p>The loop sends work <b>back</b> to an earlier step for another pass, until the reviewer approves it or the passes run out, then sends it <b>on</b>.</p></div>'
         + (loopExits.length
             ? '<div class="wf-chips loop-exits" id="loop-exits">' + loopExits.map(x => '<button type="button" class="bb sm loop-exit' + (x.dir === loopDoneCur ? ' active' : '') + '" data-dir="' + x.dir + '">' + esc(x.label) + '</button>').join('') + '</div>'
               + '<div class="wf-help" id="loop-back">' + esc(H.loopBackTxt(loopExits, loopDoneCur)) + '</div>'
@@ -1119,14 +1119,66 @@ const WorkflowPanel = (() => {
     });
   }
   // OUTBOX / MERGER / SPLITTER — pure topology, explained (no settings to fill in)
+  /* ===== SPLITTER · MERGER · FILTER · OUTBOX (2026-09-27 audit P1/P3/P4) =====
+     Each machine says what it DOES here, in plain words, with its wiring drawn — and the splitter says which MODE it is in, read
+     from the compiled plan (a JOINER downstream = every branch gets a copy; none = the branches take turns) plus how to switch.
+     The FILTER's routes are edited here too (they used to open a full-screen modal): pick the belt each task type takes. */
   function paintPlain(body, f, p) {
+    if (p.t === 'filter') return paintFilter(body, f, p);
+    const info = H.junctionInfo ? H.junctionInfo(p.id) : null, cfg = (info && info.cfg) || null, lanes = (info && info.lanes) || [];
+    const dia = H.machineDiagram ? H.machineDiagram(p.t) : '';
+    const branches = n => lanes.length
+      ? '<ul class="wf-branches">' + lanes.map(l => '<li>' + esc(l.label) + '</li>').join('') + '</ul>'
+      : '<p class="wf-warnline">' + n + '</p>';
+    if (p.t === 'splitter') {
+      const copies = !!(cfg && cfg.fanout);
+      body.innerHTML = '<section class="wf-sec"><h3><span class="n">SPLITTER</span>' + (copies ? 'Every branch gets a copy' : 'Branches take turns') + '</h3>'
+        + '<div class="wf-mode">' + dia + '<p>' + (copies
+          ? 'Each job is copied to <b>every</b> branch. The JOINER after the branches waits for all of them, then sends one combined result on.'
+          : 'Each job goes down <b>one</b> branch, and the next job takes the next branch. Use this to share a heavy load between agents.') + '</p></div>'
+        + '<h4 class="wf-sub">Branches</h4>' + branches('No branches yet. Run two belts OUT of the splitter: BELT, click the SPLITTER, then the next machine. Repeat for the second branch.')
+        + '<p class="wf-help">' + (copies
+          ? 'To make the branches take turns instead, remove the JOINER after them.'
+          : 'To send every branch a copy instead, add a JOINER where the branches meet (Conveyors › MACHINES › JOINER) and belt each branch into it.') + '</p></section>';
+      return;
+    }
+    if (p.t === 'merger') {
+      body.innerHTML = '<section class="wf-sec"><h3><span class="n">MERGER</span>Several belts share one</h3>'
+        + '<div class="wf-mode">' + dia + '<p>Belts that run into the merger continue as one belt. <b>Nothing waits and nothing is combined</b>: every job goes on by itself.</p></div>'
+        + '<p class="wf-help">Want the branches of ONE job combined into a single result? Use a JOINER instead.</p></section>';
+      return;
+    }
     const TXT = {
       outbox: ['OUTBOX', 'Collect the finished work', 'The OUTBOX receives completed work. Leave build mode and click it to browse delivered work in the Logbook.' + (f && f.outbox.reached ? ' This line reaches it.' : ' Connect the last BAY to it with the BELT tool.')],
-      merger: ['MERGER', 'Bring paths together', 'Connect several belts into one outgoing belt. Each task keeps going separately. This joins paths, not the contents of the tasks.'],
-      splitter: ['SPLITTER', 'Send work down different paths', 'Connect one incoming belt to several outgoing belts. Tasks without an assigned agent are spread across those paths. Tasks already assigned to an agent follow that agent’s path. Feed a JOINER to run every path for the same job.'],
     }[p.t] || [String(p.t).toUpperCase(), 'Part of the line', 'Connections are made with the BELT tool.'];
     body.innerHTML = '<section class="wf-sec workflow-no-settings"><h3><span class="n">' + esc(TXT[0]) + '</span>' + esc(TXT[1]) + '</h3><p class="wf-help">' + esc(TXT[2]) + '</p>'
       + '<p class="wf-help dim">No extra settings needed — the belts you draw decide the paths.</p></section>';
+  }
+  function paintFilter(body, f, p) {
+    const info = H.junctionInfo ? H.junctionInfo(p.id) : null, lanes = (info && info.lanes) || [];
+    const cur = { routes: (p.routes && typeof p.routes === 'object') ? Object.assign({}, p.routes) : {}, def: p.def || null };
+    const selOf = tag => (tag === '__def__' ? cur.def : cur.routes[tag]);
+    const ROWS = [['code', 'CODE', 'building or fixing software'], ['research', 'RESEARCH', 'finding and reading sources'], ['__def__', 'EVERYTHING ELSE', 'the fallback for any other task']];
+    const rows = ROWS.map(([tag, label, hint]) => '<div class="wf-route"><span class="wf-route-k">' + label + '<small>' + esc(hint) + '</small></span><span class="wf-chips">'
+      + (lanes.length ? lanes.map(l => '<button type="button" class="wf-chip" data-ftag="' + tag + '" data-fdir="' + l.dir + '" aria-pressed="' + (selOf(tag) === l.dir) + '">' + esc(l.label) + '</button>').join('') : '<span class="dim">no belt out yet</span>')
+      + '</span></div>').join('');
+    body.innerHTML = '<section class="wf-sec"><h3><span class="n">FILTER</span>Send each type of task its own way</h3>'
+      + '<div class="wf-mode">' + (H.machineDiagram ? H.machineDiagram('filter') : '') + '<p>The filter reads each task and sorts it by <b>type</b>: code, research, or everything else. Pick the belt each type takes.</p></div>'
+      + (lanes.length ? '' : '<p class="wf-warnline">Run belts OUT of the filter first (BELT: click the FILTER, then the next machine). Each belt out appears here.</p>')
+      + '<div class="wf-routes">' + rows + '</div>'
+      + '<p class="wf-help" id="flt-note">' + (cur.def ? 'Saved as you choose.' : 'Choose a belt for EVERYTHING ELSE so no task is left without a way out.') + '</p>'
+      + '<p class="wf-help dim">The filter only knows these three types. A task already addressed to one agent follows that agent’s belt instead.</p></section>';
+    const note = $('#flt-note');
+    body.querySelectorAll('[data-ftag]').forEach(b => { b.onclick = () => {
+      const tag = b.dataset.ftag, dir = b.dataset.fdir;
+      if (tag === '__def__') cur.def = cur.def === dir ? null : dir;
+      else if (cur.routes[tag] === dir) delete cur.routes[tag]; else cur.routes[tag] = dir;
+      const res = H.station().configureJunction(p.id, { routes: cur.routes, def: cur.def });
+      if (!res || !res.ok) { H.sfx('bad'); if (note) note.textContent = '✕ not saved — ' + ((res && (res.msg || res.error)) || 'try again'); return; }
+      H.sfx('click');
+      body.querySelectorAll('[data-ftag="' + tag + '"]').forEach(x => x.setAttribute('aria-pressed', String(selOf(tag) === x.dataset.fdir)));
+      if (note) note.textContent = cur.def ? '✓ saved' : 'Saved. Now choose a belt for EVERYTHING ELSE so no task is left without a way out.';
+    }; });
   }
 
   /* ===== THE STEP TEST — the whole line, pausing at every handoff (STEPTEST contract) ===== */

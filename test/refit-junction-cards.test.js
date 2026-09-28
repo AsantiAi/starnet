@@ -152,7 +152,8 @@ for (const id of ['intake', 'bay', 'filter', 'merger', 'splitter', 'joiner', 'lo
 A.ok(/b\.setAttribute\('aria-description', c\.label[^\n]*purpose/.test(build), 'the tile accessible description carries the purpose');
 const tile = build.slice(build.indexOf('function propTile('), build.indexOf('function renderPropPreview('));
 A.ok(/setAttribute\('data-tip'/.test(tile) && !/b\.title\s*=|setAttribute\('data-no-tip'/.test(tile), 'catalog tiles use the shared brief tooltip without a native bubble');
-A.ok(/wait here/i.test(pm) && /straight through/.test(pm), 'MERGER (rides straight through) vs JOINER (branches wait) are distinguishable by tooltip alone');
+// 2026-09-27 audit P3: named by OUTCOME — the JOINER waits and combines, the MERGER shares a belt and combines nothing
+A.ok(/joiner: 'waits until every branch has finished, then sends ONE combined result on'/.test(pm) && /merger: '[^']*nothing waits and nothing is combined/.test(pm), 'MERGER (nothing waits, nothing combined) vs JOINER (waits, one combined result) are distinguishable by tooltip alone');
 
 // sample-run feedback: rendered on the card, scoped to its line, ③ ticks only on delivered
 const fin = build.slice(build.indexOf('function renderFinCard'), build.indexOf('function positionFinCard'));

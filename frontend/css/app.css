@@ -4156,6 +4156,14 @@ body.crew-rail-off #screen-game.active {
 .refit-machinetile-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .refit-machinetile-nm { font-size: 12px; letter-spacing: 1.2px; color: inherit; }
 .refit-machinetile-why { font-size: 10.5px; line-height: 1.25; letter-spacing: .3px; color: var(--ph-dim); white-space: normal; overflow-wrap: break-word; }
+/* the shelf in plain groups (2026-09-27 audit P2): THE LINE · BRANCH & COMBINE · REPEAT — a small rule + name + how-to line */
+.refit-machinegroup { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; margin: 6px 2px 1px; }
+.refit-machinegroup .nm { font-size: 10.5px; letter-spacing: 1.6px; color: var(--ph); }
+.refit-machinegroup .why { font-size: 10px; letter-spacing: .3px; color: var(--ph-dim); }
+/* each machine's wiring as a tiny in→out diagram (fork / wait-bar / funnel / three-way / back arrow) — theme stroke, no fill */
+.refit-machinediagram { flex: 0 0 auto; width: 40px; height: 24px; margin-left: auto; color: var(--ph-dim); fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; opacity: .9; pointer-events: none; }
+.refit-machinediagram .md-fill { fill: currentColor; stroke: none; }
+.refit-machinetile:hover .refit-machinediagram, .refit-machinetile.active .refit-machinediagram { color: var(--ph-bright); }
 /* the LINE LIBRARY's section headers — a rule line + name + one-line blurb, matte phosphor */
 .refit-linegroup {
   display: flex; flex-direction: column; gap: 1px; width: 100%; min-width: 0;

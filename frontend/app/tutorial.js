@@ -279,7 +279,7 @@ const Tutorial = (() => {
     const caps = equipmentInScope();
     if (Dialogue.setStage) Dialogue.setStage('QUICK TOUR · 2 OF 2', 'Start with a task');
     Dialogue.node({
-      lines: [seg('Ask for work in COMMS. Review the reply and files.\nBUILD › REFIT STATION: pick a prop, click a clear tile. Press Esc to cancel. Select a placed prop to move it.\nPresets furnish rooms. Conveyors are optional for passing work between agents.', 64, 0)],
+      lines: [seg('Ask for work in COMMS. Review the reply and files.\nBUILD › REFIT STATION: pick a prop, click a clear tile. Press Esc to cancel. Select a placed prop to move it.\nPresets furnish rooms. To chain agents step by step, open WORK › WORKFLOWS: belts carry the job from one agent to the next.', 64, 0)],
       options: [
         ...(resumeFirstTask ? [{ label: '▸ CONTINUE MY FIRST TASK', value: 'handoff' }]
           : typeof FirstValue !== 'undefined' ? [{ label: '▸ CHOOSE MY FIRST TASK', value: 'value' }] : []),
@@ -1095,11 +1095,11 @@ const Tutorial = (() => {
     try { if (typeof Build !== 'undefined' && Build.refitNames) { const r = Build.refitNames(); if (r && r.machines && r.machines.length) return r; } } catch (e) { /* fall back to the static names below */ }
     return { tab: 'CONVEYORS', lines: 'CONVEYOR LINES', belt: 'BELT', lineKey: '9', beltKey: '7', preview: '▸ PREVIEW FLOW', lineCount: null, machinesShelf: 'MACHINES',
       machines: [
-        { label: 'SPLITTER', purpose: 'fans one lane into several branches', junction: true },
+        { label: 'SPLITTER', purpose: 'one belt into several: every branch gets a copy when a JOINER follows, otherwise jobs take turns', junction: true },
         { label: 'JOINER', purpose: 'waits for every branch, then sends one merged result on', junction: true },
-        { label: 'FILTER', purpose: 'sorts work by its content into different lanes', junction: true },
-        { label: 'MERGER', purpose: 'funnels several lanes into one', junction: true },
-        { label: 'LOOP', purpose: 'sends work back round until it passes', junction: true }] };
+        { label: 'FILTER', purpose: 'sorts by task type (code, research or everything else) onto its own belt', junction: true },
+        { label: 'MERGER', purpose: 'lets several belts share one; nothing waits, nothing is combined', junction: true },
+        { label: 'LOOP', purpose: 'sends work back for another pass until the reviewer approves it', junction: true }] };
   }
   function fmEntry(tag, title, body) {
     const t = tag ? '<span class="fm-tag">' + tag + '</span>' : '';

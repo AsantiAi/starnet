@@ -49,7 +49,7 @@ function fixture(caps = essentials, configured = false, handoff = false) {
   full.events['agent.run.start']({ agentId: 'nova', runId: 'unrelated' });
   full.events['agent.run.end']({ agentId: 'nova', runId: 'unrelated', reason: 'done' });
   assert.equal(full.lines.length, 0, 'ordinary work cannot hijack a tour that did not launch a demo');
-  await full.choose('next'); assert.match(full.text(), /Conveyors are optional/);
+  await full.choose('next'); assert.match(full.text(), /WORK › WORKFLOWS/);   // 2026-09-27 audit F2: belts are the workflow, not optional
   assert.match(full.text(), /Esc to cancel/);
   await full.choose('done');
   assert.equal(full.sent.length, 0, 'reading the tour never sends a task');

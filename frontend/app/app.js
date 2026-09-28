@@ -3107,6 +3107,8 @@ const App = (() => {
         bbBuild.onclick = () => { SFX.click(); bbBuild.classList.remove('refit-nudge'); Build.toggle(); if (typeof Tutorial !== 'undefined' && Tutorial.onBuildOpen && Build.isOpen && Build.isOpen()) Tutorial.onBuildOpen(); };
       }
     }
+    const bbWorkflows = el('bb-workflows');
+    if (bbWorkflows) bbWorkflows.onclick = () => { SFX.click(); if (typeof Build !== 'undefined' && Build.openWorkflows) Build.openWorkflows(); };
     const bbRecruit = el('bb-recruit');
     if (bbRecruit) bbRecruit.onclick = openSummonBay;   // the ONE recruit door — bay carries both verbs (summon new / deploy to current)
 
