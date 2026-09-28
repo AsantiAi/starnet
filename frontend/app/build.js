@@ -2664,7 +2664,7 @@ const Build = (() => {
   function loopBackTxt(exits, done) {
     const back = (exits || []).find(x => x.dir !== done) || null;
     if (!back) return 'no BACK lane yet — the gate needs a second exit that leads upstream, or nothing goes round';
-    if (back.kind === 'bay') return 'BACK lane: ' + back.label + ' — the crate re-enters the line there';
+    if (back.kind === 'bay') return 'BACK lane: ' + back.label + ' — work goes back there for another pass';
     return 'BACK lane: ' + back.label + ' — a back lane must lead to an upstream dock';
   }
   /* the sample run's readout — ONLY what the server's answer proves. `resp` = the parsed JSON of

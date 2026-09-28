@@ -380,7 +380,7 @@ const WorkflowPanel = (() => {
     const foot = $('#wf-foot'); if (!foot) return;
     const c = comp(), W = WL();
     const s = S.session && S.session.lineId === S.lineKey ? S.session : null;
-    let html = '<span class="wf-foot-note">' + (S.view === 'test' ? 'Test runs are real runs and count against the LINE BUDGET.' : 'Edits save as you leave a field.') + '</span>';
+    let html = '<span class="wf-foot-note">' + (S.view === 'test' ? 'Test runs are real runs and count against the LINE BUDGET.' : 'Edits save as you go.') + '</span>';
     if (c && S.seam === true) {
       html += S.view === 'test' ? '<button type="button" class="bb sm" id="wf-back">◂ SETUP</button>'
         : '<button type="button" class="bb sm refit-primary" id="wf-steptest">' + (s && W.isLive(s) ? '▶ STEP TEST · ' + s.state.toUpperCase() : '▶ STEP-TEST · REAL RUN') + '</button>';
