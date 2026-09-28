@@ -65,6 +65,7 @@ const ghost = read('frontend/app/ghostline.js'), outbox = read('frontend/app/win
   A.ok(/schedOff: !!\(feedState\.known && !feedState\.fed && schedOffFor\(ismp\.id\)\)/.test(world), 'the INBOX card offers the scheduling switch only on that line');
   A.ok(/schedOffFor: \(intakeId, plan\) => schedOffFor\(intakeId, plan\)/.test(world), 'REFIT asks with ITS plan (a line stamped this session is not in the frozen world yet)');
   A.ok(/opts\.world\.schedOffFor\(c\.intakes\[0\], valPlan\)/.test(build) && /st\.schedOff \? '② SCHEDULING IS OFF — TURN IT ON'/.test(build), 'the FINISH card says scheduling is off instead of "choose what starts this line"');
+  A.ok(/\(tr\.offSchedules \|\| \[\]\)\.length \? 'SCHEDULE OFF — this line’s schedule is saved/.test(read('frontend/app/workflowpanel.js')), 'the INBOX section says SCHEDULE OFF, not "NO FEED — nothing is wired"');
   // the fact it rests on: every INBOX and every dock of a line map to the SAME line id
   const s = WM.create(), z = s.rooms()[0].rects[0];
   let ok = null;
@@ -100,6 +101,9 @@ A.ok(/after ' \+ String\(agentName\(hand\.from\)\)\.toUpperCase\(\)/.test(outbox
   A.ok(/plan\.unboundBayTile = unboundBayTile;/.test(read('frontend/app/pipeline.js')), 'the plan carries the uncrewed bays\' ring tiles (legibility, outside the hash)');
   A.ok(/if \(emptyAt\[k\]\) \{ to = 'to a BAY with no agent yet'; kind = 'bay'; dock = emptyAt\[k\]; break; \}/.test(build), 'the exit walker names a bay with no agent yet');
   A.ok(/return \{ dir: d, dock: ex\.dock \|\| null, label:/.test(build), 'each junction lane carries the dock it lands on');
+  const panel = read('frontend/app/workflowpanel.js');
+  A.ok(/function laneName\(f, l, arrow\)/.test(panel) && /dockLabel\(f, l\.dock\) \+ \(d\.agentId \? '' : ' \(no agent yet\)'\)/.test(panel), 'the panel names that BAY its own way ("→ BAY 2 (no agent yet)")');
+  A.ok(/esc\(laneName\(f, l, true\)\)/.test(panel) && /esc\(laneName\(f, l, false\)\)/.test(panel), '…in the SPLITTER branches and the FILTER route chips');
   // the fact: an uncrewed bay's belt ring tiles are on the plan, and the hash does not move for them
   const s = WM.create(), z = s.rooms()[0].rects[0];
   let ok = null;

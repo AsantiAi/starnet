@@ -676,7 +676,10 @@ const WorkflowPanel = (() => {
         + (r.feeds === true ? '<b class="wf-okc">a message runs this whole line</b>' : r.feeds === false ? 'not this line’s first step — a message runs only that agent' : 'the floor routes it')
         + (r.connected ? '' : ' · <span class="trg-warn">not connected</span>') + '</div></div>').join('');
     const feed = H.feedState();
-    const feedTxt = !feed.known ? 'Checking what feeds this floor…' : feed.fed ? '✓ FED — a channel, an armed routine, a watched folder or a webhook is wired to drop work on this floor.' : 'NO FEED — nothing is wired to drop work on this floor yet.';
+    // a schedule SAVED for this line while scheduling is off is not "nothing wired" (2026-09-28 retest) — the switch is right above
+    const feedTxt = !feed.known ? 'Checking what feeds this floor…' : feed.fed ? '✓ FED — a channel, an armed routine, a watched folder or a webhook is wired to drop work on this floor.'
+      : (tr.offSchedules || []).length ? 'SCHEDULE OFF — this line’s schedule is saved, but scheduling is off for the whole station, so nothing starts it yet. Turn it on above.'
+      : 'NO FEED — nothing is wired to drop work on this floor yet.';
     const dockChip = d => '<button type="button" class="bb sm trg-dock' + (d.propId === S.trgDock ? ' active' : '') + '" data-dock="' + esc(d.propId) + '" data-aid="' + esc(d.agentId) + '">' + thumb(d.agentId, 16, 20, 'wf-ithumb') + esc(dockLabel(f, d.propId)) + '</button>';   // the BAY, not just the agent: one agent may crew several (sweep 2026-09-25)
     const dockHint = pid => { const order = docks.map(d => d.propId), i = order.indexOf(pid); if (i <= 0) return 'starts at the first step — the whole line runs, ' + docks.length + ' step' + (docks.length === 1 ? '' : 's');
       return 'skips ' + order.slice(0, i).map(x => dockLabel(f, x)).join(' and ') + ' — the line runs from ' + dockLabel(f, pid) + ' on (' + (docks.length - i) + ' of ' + docks.length + ' steps)'; };
@@ -1135,12 +1138,19 @@ const WorkflowPanel = (() => {
      Each machine says what it DOES here, in plain words, with its wiring drawn — and the splitter says which MODE it is in, read
      from the compiled plan (a JOINER downstream = every branch gets a copy; none = the branches take turns) plus how to switch.
      The FILTER's routes are edited here too (they used to open a full-screen modal): pick the belt each task type takes. */
+  /* a junction's belt, named by where it lands: a BAY on this line by the panel's own name for it ("BAY 2 · NOVA", or "BAY 2
+     (no agent yet)" — 2026-09-28 retest: a fresh split listed both branches as "nowhere yet"); anything else keeps the floor's label */
+  function laneName(f, l, arrow) {
+    const d = l && l.dock && f && f.docks ? f.docks[l.dock] : null;
+    if (!d) return l.label;
+    return (arrow ? '→ ' : '') + dockLabel(f, l.dock) + (d.agentId ? '' : ' (no agent yet)');
+  }
   function paintPlain(body, f, p) {
     if (p.t === 'filter') return paintFilter(body, f, p);
     const info = H.junctionInfo ? H.junctionInfo(p.id) : null, cfg = (info && info.cfg) || null, lanes = (info && info.lanes) || [];
     const dia = H.machineDiagram ? H.machineDiagram(p.t) : '';
     const branches = n => lanes.length
-      ? '<ul class="wf-branches">' + lanes.map(l => '<li>' + esc(l.label) + '</li>').join('') + '</ul>'
+      ? '<ul class="wf-branches">' + lanes.map(l => '<li>' + esc(laneName(f, l, true)) + '</li>').join('') + '</ul>'
       : '<p class="wf-warnline">' + n + '</p>';
     if (p.t === 'splitter') {
       const copies = !!(cfg && cfg.fanout);
@@ -1172,7 +1182,7 @@ const WorkflowPanel = (() => {
     const selOf = tag => (tag === '__def__' ? cur.def : cur.routes[tag]);
     const ROWS = [['code', 'CODE', 'building or fixing software'], ['research', 'RESEARCH', 'finding and reading sources'], ['__def__', 'EVERYTHING ELSE', 'the fallback for any other task']];
     const rows = ROWS.map(([tag, label, hint]) => '<div class="wf-route"><span class="wf-route-k">' + label + '<small>' + esc(hint) + '</small></span><span class="wf-chips">'
-      + (lanes.length ? lanes.map(l => '<button type="button" class="wf-chip" data-ftag="' + tag + '" data-fdir="' + l.dir + '" aria-pressed="' + (selOf(tag) === l.dir) + '">' + esc(l.label) + '</button>').join('') : '<span class="dim">no belt out yet</span>')
+      + (lanes.length ? lanes.map(l => '<button type="button" class="wf-chip" data-ftag="' + tag + '" data-fdir="' + l.dir + '" aria-pressed="' + (selOf(tag) === l.dir) + '">' + esc(laneName(f, l, false)) + '</button>').join('') : '<span class="dim">no belt out yet</span>')
       + '</span></div>').join('');
     body.innerHTML = '<section class="wf-sec"><h3><span class="n">FILTER</span>Send each type of task its own way</h3>'
       + '<div class="wf-mode">' + (H.machineDiagram ? H.machineDiagram('filter') : '') + '<p>The filter reads each task and sorts it by <b>type</b>: code, research, or everything else. Pick the belt each type takes.</p></div>'
