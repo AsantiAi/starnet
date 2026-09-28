@@ -10955,11 +10955,12 @@ async function stepTestRunDock(h) {
   if (h.entry) { try { brief = router.stageBrief(h.agentId, h.dockId); } catch (e) { failNote('steptest.brief', e); brief = null; } }
   const system = h.entry ? dockSystem(persona, brief, true) : persona;
   const runId = (typeof h.runId === 'string' && /^[0-9a-f-]{36}$/i.test(h.runId)) ? h.runId : crypto.randomUUID();   // the step test chose + persisted it
-  const st = { buf: '', err: null, usd: 0, tools: 0 };
+  const st = { buf: '', err: null, usd: 0, tools: 0, calls: {}, denied: [] };
   const sink = (name, payload) => {
     let p; try { p = redact(payload); } catch (_) { p = payload; }
     if (name === 'agent.token') st.buf += (p && p.delta) || '';
-    else if (name === 'agent.tool_call') { st.buf = ''; st.tools++; }
+    else if (name === 'agent.tool_call') { st.buf = ''; st.tools++; if (p && p.callId) st.calls[p.callId] = String(p.name || 'a tool'); }
+    else if (name === 'agent.tool_result' && p && p.summary === 'denied') { const t = st.calls[p.callId] || 'a tool'; if (st.denied.indexOf(t) < 0 && st.denied.length < 6) st.denied.push(t); }
     else if (name === 'agent.run.error') st.err = (p && p.message) || 'run error';
     else if (name === 'capdenied') st.err = st.err || ('no ' + ((p && p.need) || 'capability') + ' — ' + ((p && p.reason) || ''));
     else if (name === 'agent.run.end') { if (p && typeof p.usd === 'number' && isFinite(p.usd)) st.usd = Math.max(st.usd, p.usd); }
@@ -11001,7 +11002,7 @@ async function stepTestRunDock(h) {
     if (done) chanEmit('workitem.delivered', { workitemId, finalQueueId: h.agentId, agentId: h.agentId, box: '', ms: Date.now() - t0, ts: Date.now(), dockId: h.dockId || undefined });
     else chanEmit('workitem.superseded', { workitemId, agentId: h.agentId, ts: Date.now(), dockId: h.dockId || undefined });
   } catch (e) { failNote('steptest.crate', e); }
-  return { text: st.buf, usd: st.usd, tools: st.tools, runId, ms: Date.now() - t0, error: st.err };
+  return { text: st.buf, usd: st.usd, tools: st.tools, denied: st.denied, runId, ms: Date.now() - t0, error: st.err };
 }
 function getStepTest() {
   if (stepTest) return stepTest;

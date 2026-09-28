@@ -8,7 +8,8 @@
    compile; test/pipeline.multibay.test.js asserts the migrated compiler reproduces them exactly. */
 'use strict';
 // fields the migration ADDS to a plan — excluded so the comparison is "every old field, unchanged"
-const DOCK_FIELDS = ['bayTileToDock', 'agentOfDock', 'docksOfAgent', 'dockChains', 'reachDock', 'gateDocks', 'lineOfDock', 'entryDock', 'homeDock'];
+// (+ unboundBayTile, 2026-09-28: an additive legibility map — ring belt tile -> uncrewed bay — outside the hash)
+const DOCK_FIELDS = ['bayTileToDock', 'agentOfDock', 'docksOfAgent', 'dockChains', 'reachDock', 'gateDocks', 'lineOfDock', 'entryDock', 'homeDock', 'unboundBayTile'];
 function stripDock(plan) {
   const out = {};
   for (const k of Object.keys(plan)) if (DOCK_FIELDS.indexOf(k) < 0) out[k] = plan[k];

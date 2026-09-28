@@ -21,6 +21,14 @@ A.eq(V.parseVerdict(''), null); A.eq(V.parseVerdict(null), null);
 A.ok(V.isVerdictWord('approved') && V.isVerdictWord('REVISE') && !V.isVerdictWord('code') && !V.isVerdictWord(null), 'isVerdictWord: the two words, any case; never a classifier tag');
 A.ok(/"VERDICT: approved"/.test(V.verdictBrief('approved')) && /"VERDICT: revise"/.test(V.verdictBrief('approved')) && /no VERDICT line is treated as "revise"/.test(V.verdictBrief('approved')), 'the reviewer brief names both words and what silence means');
 A.eq(V.verdictBrief('code'), '', 'a classifier-tag gate gets no verdict brief');
+// R1 (2026-09-27 audit): the VERDICT line is the gate's control signal — it is stripped from the work that leaves an approved gate
+const NL = String.fromCharCode(10);
+A.eq(V.stripVerdict(['Here is the post.', '', 'VERDICT: approved'].join(NL)), 'Here is the post.', 'the verdict line comes off the work');
+A.eq(V.stripVerdict(['post', '**VERDICT: Approved.**', ''].join(NL)), 'post', 'dressed verdicts too');
+A.eq(V.stripVerdict('no verdict'), 'no verdict', 'a text without one is unchanged');
+const quoted = ['VERDICT: approved', 'line', 'line', 'line', 'line'].join(NL);
+A.eq(V.stripVerdict(quoted), quoted, 'a verdict quoted above the tail is not stripped');
+A.ok(/lead with the finished work itself/.test(V.verdictBrief('approved')), 'the reviewer is told its approving reply is what moves on');
 
 // the handoff prompt carries the brief as its own paragraph, and is byte-identical without it
 const base = P.handoffPrompt('req', 'writer', 'draft', 1, 'be picky');
@@ -114,7 +122,8 @@ const handedText = (entry) => (entry.text.split('produced:\n')[1] || '').split('
     const res = await R.c.advance({ agentId: 'writer', text: 'draft', originalText: 'go', lineId: R.lineId, runId: 'v3' });
     A.eq(res.stopped, null, 'ran to its end (' + res.stopped + ')');
     A.eq(res.hops.map(h => h.agentId).join(','), 'reviewer,writer,reviewer', 'silence = round again; approval = out');
-    A.ok(/APPROVED/.test(res.text) && !res.loopExhausted, 'the delivered answer is the approving review');
+    // R1 (2026-09-27 audit): the approving review ships WITHOUT its VERDICT line — the line is the gate's control signal
+    A.ok(res.text === 'fine' && !res.loopExhausted, 'the delivered answer is the approving review, minus its VERDICT control line (' + JSON.stringify(res.text) + ')');
   }
   /* when = revise: the mirror — round while the verdict is not "revise" */
   {

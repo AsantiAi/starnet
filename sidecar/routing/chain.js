@@ -103,8 +103,11 @@ function loopDecision(step, ctx, n, visited, text) {
     return { again: true, target: step.backTo, exhausted: false,
       text: '[LOOP — pass ' + (n + 1) + ' of ' + step.max + ' round the gate at ' + step.loop + ']\n' + text };
   }
-  // spent (or the verdict passed): leave on the done lane
-  let target = step.next, out = text, exhausted = false;
+  // spent (or the verdict passed): leave on the done lane — an APPROVED crate leaves without its VERDICT line (R1: the line is the
+  // gate's control signal; it never ships as part of the work). An exhausted crate keeps it: the reviewer's last word is evidence.
+  // (a reply that is ONLY the verdict line keeps it: stripping it would hand on an empty crate, which the next hop refuses)
+  const stripped = (byVerdict && !wants) ? Verdict.stripVerdict(text) : text;
+  let target = step.next, out = (typeof stripped === 'string' && stripped.trim()) ? stripped : text, exhausted = false;
   if (step.when && wants && n >= step.max) {
     exhausted = true;
     /* THE ESCALATION LANE (2026-08-30): a gate with a third wired lane sends verdict-exhausted

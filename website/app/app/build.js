@@ -32,7 +32,7 @@ const Build = (() => {
        did not (the key map, the drag mode, the model verb and every saved reference key ride it). */
     { id: 'reclaim', key: '5', label: 'DELETE', verb: 'click anything to delete it', hint: 'click a room, prop, or belt to delete it · drag across a belt to clear the whole run (UNDO restores it)', cursor: 'not-allowed' },
     { id: 'prop', key: '6', label: 'PROPS', verb: 'click the deck to place it', hint: 'browse equipment and decoration, then click the deck to place your selection', cursor: 'crosshair' },
-    { id: 'belt', key: '7', label: 'BELT', verb: 'click one machine, then another', hint: 'CLICK one machine, then another — the belt lays itself · (or drag to lay tiles by hand)', cursor: 'crosshair' },
+    { id: 'belt', key: '7', label: 'BELT', verb: 'click one machine, then another · or drag across the floor to lay belt by hand', hint: 'CLICK one machine, then another — the belt lays itself · (or drag to lay tiles by hand)', cursor: 'crosshair' },
     { id: 'dupe', key: '8', label: 'COPY', verb: 'click a room or prop to copy it', hint: 'click a room or prop to copy it · then every click stamps a copy — mirror your build fast', cursor: 'copy' },
     { id: 'line', key: '9', label: 'CONVEYOR LINES', verb: 'choose a conveyor line below, then click clear floor to place it', hint: 'add connected workflow equipment to your existing station — choose a line, then place it on clear floor', cursor: 'copy' },
   ];
@@ -85,7 +85,7 @@ const Build = (() => {
   }
 
   const SEEN_KEY = 'starnet.refit.seen';
-  const PREVIEW_LABEL = '▸ PREVIEW FLOW';   // the top-bar preview button — the guide and Field Manual name it by this constant
+  const PREVIEW_LABEL = '▶ TEST';   // 2026-09-28: ONE test control (the name kept: the guide and Field Manual quote it) — it opens the line's TEST view (WATCH IT free · STEP THROUGH · RUN ONE REAL JOB) and plays the free walkthrough   // the top-bar preview button — the guide and Field Manual name it by this constant
   // machines the BELT tool connects with two clicks (mirrors worldmodel CONNECTABLE)
   const CONNECT_TYPES = { intake: 1, bay: 1, outbox: 1, filter: 1, splitter: 1, merger: 1, joiner: 1, loop: 1 };
 
@@ -105,6 +105,8 @@ const Build = (() => {
     // a belt that only TOUCHES the junction corner feeds nothing: the lane must run THROUGH the junction tile
     // (SHORT on the floor — the full sentence rides the hover card, VAL_WHY: the long form ran wider than a room)
     BAY_NOT_FED: 'NOT FED — BELT INTO IT',
+    // the belt into it starts inside the ring of the machine feeding it (placed a tile apart), so moving it is the fix
+    BAY_TOO_CLOSE: 'TOO CLOSE — MOVE IT 1 TILE AWAY',
     CYCLE: 'LOOP! — BREAK THE CIRCLE', FILTER_NO_DEFAULT: 'NO DEFAULT LANE — CLICK', SPLIT_CREW: 'PLACE A DESK — TOOLS FOLLOW THE DOCK',
     UNBOUND_BAY: 'NO AGENT — CLICK', SPLIT_ONE_LANE: 'NEEDS 2 OUT-LANES',
     JOIN_ONE_LANE: 'NEEDS 2 IN-LANES',
@@ -121,6 +123,7 @@ const Build = (() => {
      hints carry this — a glance says what is wrong, the card says exactly how to fix it. */
   const VAL_WHY = {
     BAY_NOT_FED: 'Not fed — no belt brings work into this BAY. Run a belt INTO it (BELT tool: click the machine before it, then this BAY). If the lane passes a junction, it must run THROUGH the junction’s tile, not past its corner.',
+    BAY_TOO_CLOSE: 'Too close — this BAY sits right beside the machine that feeds it, so the belt between them touches both at once and the job never arrives. Move one of them a tile further apart, then connect them again with BELT.',
     SPLIT_ONE_LANE: 'This SPLITTER needs two out-lanes — run belts THROUGH its tile: in on one side, out on two others.',
     JOIN_ONE_LANE: 'This JOINER needs two in-lanes — run a second belt INTO its tile.',
     LOOP_NO_DONE: 'This LOOP has no DONE lane — run a belt OUT of its tile onward (the first exit, in E/S/W/N order, is DONE unless you choose one).',
@@ -141,6 +144,13 @@ const Build = (() => {
   let selectedPropId=null, movingPropId=null;
   let propSection = 'decoration', propAbility = '', equipmentAgentId = '';
   let buildGroup = 'props';
+  /* WHERE REFIT OPENS (2026-09-27 audit F1/B5): WORK › WORKFLOWS opens it straight on the Conveyors tab (openWorkflows), and a
+     Commander who was building a line last time comes back to the Conveyors tab instead of the furniture catalog. Only that
+     tab is remembered: every other session still starts on Props, where the tutorial expects it. */
+  let pendingGroup = null;
+  const LAST_GROUP_KEY = 'starnet.refit.lastGroup';
+  const readLastGroup = () => { try { return localStorage.getItem(LAST_GROUP_KEY) === 'workflow' ? 'workflow' : null; } catch (e) { return null; } };
+  const writeLastGroup = g => { try { localStorage.setItem(LAST_GROUP_KEY, g === 'workflow' ? 'workflow' : 'props'); } catch (e) {} };
   const propShelfScroll = new Map();
   const BUILD_GROUPS = [
     ['props', 'Props', ['prop']], ['rooms', 'Rooms', ['room','hall']],
@@ -247,7 +257,7 @@ const Build = (() => {
     for (const k in layerFailed) delete layerFailed[k];
     propCardKey = null; ordersSeenDone = null; propQuery = ''; lastTier = '';
     propShelfScroll.clear();
-    buildGroup = 'props'; propSection = 'decoration'; propAbility = ''; propCat = 'all'; propType = PropSprites.STARTER[0];
+    buildGroup = pendingGroup || readLastGroup() || 'props'; pendingGroup = null; propSection = 'decoration'; propAbility = ''; propCat = 'all'; propType = PropSprites.STARTER[0];
     equipmentAgentId = ''; equipmentAccessKey = ''; equipmentAccessView = null; equipmentAccessTicket++;
     tool = 'select';   // SELECT is the default mode — a fresh REFIT session never opens with a placement tool armed
     escExitArmedAt = 0;   // a fresh session never inherits a half-pressed exit
@@ -267,6 +277,7 @@ const Build = (() => {
       projectionDirty = true;
       planDirty = true;   // every edit refreshes navigation, routing and sprite state
       clearLineFields();   // …and so is every cached "where can this blueprint go" answer
+      scheduleLineFitSync();   // …so the line cards on screen re-say NO ROOM / fits once the floor settles
       bumpGeo();           // …and every per-edit derived memo (bounds / belts / bayObjects / mounts / the readout census)
       /* A GLOBAL EDIT CANNOT BE INVALIDATED BY A RECTANGLE. The bake is cached in CHUNKS here, and
          `bakeDirtyRects` re-bakes only the chunks a rect touches — right for a deck or a prop, and
@@ -362,7 +373,7 @@ const Build = (() => {
           <button class="bb sm" id="refit-redo" title="redo (Ctrl+Shift+Z)">↷ REDO</button>
         </span>
         <button class="bb sm" id="refit-fit" title="frame the station">⊹ FIT</button>
-        <button class="bb sm" id="refit-test" title="Preview routing with an animated example. This does not run an AI task; use Run a sample job on a configured line for real work.">${esc(PREVIEW_LABEL)}</button>
+        <button class="bb sm" id="refit-test" title="Test this line: WATCH IT is free (a crate rides the belts, no agent runs); STEP THROUGH and RUN ONE REAL JOB run it for real.">${esc(PREVIEW_LABEL)}</button>
         <button class="bb sm" id="refit-help" title="how to build">? HELP</button>
         <button class="bb sm refit-primary" id="refit-done" title="finish + save (or press Esc twice)">SAVE & EXIT</button>
       </div>
@@ -422,7 +433,7 @@ const Build = (() => {
     for (const [id,name,ids] of BUILD_GROUPS) {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'bb';
       b.dataset.buildGroup = id; b.textContent = name;
-      b.onclick = () => { if (buildGroup === id) return; buildGroup = id; selectTool('select'); };
+      b.onclick = () => { if (buildGroup === id) return; buildGroup = id; writeLastGroup(id); selectTool('select'); };
       tabs.appendChild(b);
     }
     tools.setAttribute('role', 'toolbar'); tools.setAttribute('aria-label', 'Build tools');
@@ -452,7 +463,7 @@ const Build = (() => {
     root.querySelector('#refit-zin').onclick = () => zoomStep(+1);
     root.querySelector('#refit-zout').onclick = () => zoomStep(-1);
     root.querySelector('#refit-zlvl').onclick = () => zoomTo(2);   // 2 = the entering default (a tile reads at 24px)
-    root.querySelector('#refit-test').onclick = (e) => sendTestBoxes(e);
+    root.querySelector('#refit-test').onclick = (e) => openTest(e);
     undoBtn.onclick = () => { if (station.undo().ok) sfx('click'); else sfx('bad'); };
     redoBtn.onclick = () => { if (station.redo().ok) sfx('click'); else sfx('bad'); };
 
@@ -1068,6 +1079,18 @@ const Build = (() => {
       intro.className = 'refit-lineintro';
       intro.textContent = LINE_SENTENCE + ' Place single machines, or a whole line, then make it yours.';
       pal.appendChild(intro);
+      /* START FROM INTENT (2026-09-28): the ready-made line with the SHAPE of the Commander's own goal leads the tab — their
+         words quoted, so it is clear why — one click arms it (MAKE ROOM FOR IT when the deck is too small). */
+      const goal = goalLine();
+      if (goal) {
+        const gh = document.createElement('div'); gh.className = 'refit-linegroup refit-palsection refit-goalhd';
+        gh.innerHTML = '<span class="refit-linegroup-nm">FOR YOUR GOAL</span><span class="refit-linegroup-why"></span>';
+        gh.querySelector('.refit-linegroup-why').textContent = '“' + goal.quote + '” — ' + goal.why;
+        pal.appendChild(gh);
+        const gg = document.createElement('div'); gg.className = 'refit-linegrid refit-goalgrid'; gg.setAttribute('aria-label', 'Suggested for your goal');
+        const gb = makeLineTile(goal.bp); gg.appendChild(gb); setLineTileFit(gb, goal.bp);
+        pal.appendChild(gg);
+      }
       pal.appendChild(machinePalette());
       const lhd = document.createElement('div'); lhd.className = 'refit-linegroup refit-palsection';
       lhd.innerHTML = '<span class="refit-linegroup-nm">CONVEYOR LINES · ' + blueprints().length + '</span><span class="refit-linegroup-why">whole layouts, pre-wired — stamp one, then assign its bays</span>';
@@ -1092,40 +1115,9 @@ const Build = (() => {
           continue;
         }
         const bp = row.bp;
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'refit-linetile' + (tool === 'line' && bp.id === lineType ? ' active' : '');
-        b.dataset.line = bp.id;
-        b.setAttribute('aria-pressed', tool === 'line' && bp.id === lineType ? 'true' : 'false');
-        b.title = bp.desc;   // adopted by tooltip.js into the station card (never the OS bubble)
-        const view = document.createElement('span'); view.className = 'refit-linetile-view';
-        view.appendChild(lineSchematic(bp));
-        b.appendChild(view);
-        const hd = document.createElement('span'); hd.className = 'refit-linetile-hd';
-        const nm = document.createElement('span'); nm.className = 'refit-matname'; nm.textContent = bp.label;
-        hd.appendChild(nm);
-        // footprint + dock count, derived from the catalog (never hand-kept). Mixed VT323 glyphs
-        // ('×', '·') fall back fonts, so the chip is BOX-centred in CSS — never padded by font math.
-        const docks = bp.props.filter(p => p.t === 'bay').length;
-        const stat = document.createElement('span'); stat.className = 'refit-linetile-stat';
-        stat.textContent = bp.w + '×' + bp.h + ' · ' + docks + (docks === 1 ? ' DOCK' : ' DOCKS');
-        hd.appendChild(stat);
-        b.appendChild(hd);
-        const why = document.createElement('span'); why.className = 'refit-linetile-why';
-        why.textContent = LINE_PURPOSE[bp.id] || '';
-        b.appendChild(why);
-        /* DECK-FIT HONESTY. Offering a line the current floor has nowhere to put it is an offer the
-           deck cannot keep — the user aims, gets red everywhere, and learns nothing. The card says
-           so up front, from the SAME canPlaceBlueprint scan the ghost snaps to. It stays selectable
-           (sandbox law: never gate) — arming it just shows an empty field and this reason. */
-        if (!lineFits(bp.id)) {
-          b.classList.add('nofit');
-          const nf = document.createElement('span'); nf.className = 'refit-linetile-nofit';
-          nf.textContent = 'NO ROOM ON THIS DECK — NEEDS ' + bp.w + '×' + bp.h + ' OF CLEAR FLOOR';
-          b.appendChild(nf);
-        }
-        b.onclick = () => { lineType = bp.id; selectTool('line'); };
+        const b = makeLineTile(bp);
         grid.appendChild(b);
+        setLineTileFit(b, bp);   // DECK-FIT HONESTY — and kept current as the floor changes (see setLineTileFit)
       }
       pal.appendChild(grid);
       const note = document.createElement('div');
@@ -1173,17 +1165,38 @@ const Build = (() => {
   /* ---------- visual prop palette: a scrollable gallery of LIVE animated previews ----------
      Each tile carries its own mini-canvas; paintThumbs() blits the real PropSprites art into it every
      few frames (driven by the main loop) so the screens/LEDs animate exactly like the placed prop. */
-  // one line per WORKFLOW machine — what it DOES, in the words the flow card will repeat (never a footprint)
+  /* one line per WORKFLOW machine — what it DOES, by OUTCOME, in plain words (2026-09-27 audit P2/P3/P4: the old lines spoke
+     factory — lane, crate, out-lane — and JOINER and MERGER read as the same machine). Never a footprint. */
   const PALETTE_PURPOSE = {
-    intake: 'the front door — outside work (channels, routines) arrives here and rides the belts in',
-    bay: 'an agent’s dock — work that reaches it runs as that agent; one step of the line',
-    filter: 'sorts work by its content — each kind takes a different out-lane',
-    merger: 'several lanes become one — every crate rides straight through, nothing waits',
-    splitter: 'one lane fans into several — parallel branches of the same job, or load-balanced work',
-    joiner: 'parallel branches WAIT here — one merged crate leaves once every branch has delivered',
-    loop: 'the gate that sends work round again — one lane back upstream, one lane onward when done',
-    outbox: 'the exit — every finished result ships here; click it for the logbook'
+    intake: 'where work comes in: a schedule, a chat message, a watched folder or another app calling in starts the line here',
+    bay: 'one step: the agent you put here does this part of the job and passes the result on',
+    filter: 'sorts by task type (code, research or everything else) and sends each type down its own belt',
+    merger: 'lets several belts share one; nothing waits and nothing is combined, each job goes on alone',
+    splitter: 'one belt into several. With a JOINER after the branches every branch gets a copy; without one, jobs take turns',
+    joiner: 'waits until every branch has finished, then sends ONE combined result on',
+    loop: 'sends the work back for another pass until the reviewer approves it (or passes run out), then on',
+    outbox: 'where the finished result comes out; click it on the live floor to read every result'
   };
+  /* HOW EACH MACHINE IS WIRED, drawn (2026-09-27 audit P2): a tiny in→out diagram on every shelf tile, so SPLIT (one in, two
+     out), JOINER (two in, a wait bar, one out), MERGER (two in, one out, no bar), FILTER (one in, three typed outs) and LOOP
+     (a back arrow) differ at a glance — their sprites are all small grey gadgets. Stroke = currentColor (the theme). */
+  const MACHINE_DIAGRAM = {
+    intake: '<rect x="2" y="6" width="10" height="12"/><path d="M12 12H32"/><path class="md-fill" d="M32 9L36 12L32 15z"/>',
+    bay: '<path d="M1 12H9"/><path class="md-fill" d="M9 9L13 12L9 15z"/><rect x="14" y="6" width="11" height="12"/><path d="M25 12H32"/><path class="md-fill" d="M32 9L36 12L32 15z"/>',
+    outbox: '<path d="M2 12H21"/><path class="md-fill" d="M21 9L25 12L21 15z"/><rect x="27" y="6" width="10" height="12"/>',
+    splitter: '<path d="M2 12H12"/><path d="M12 12V5H29"/><path class="md-fill" d="M29 2L33 5L29 8z"/><path d="M12 12V19H29"/><path class="md-fill" d="M29 16L33 19L29 22z"/>',
+    joiner: '<path d="M2 5H12V12"/><path d="M2 19H12V12"/><rect class="md-fill" x="13" y="6" width="3" height="12"/><path d="M16 12H30"/><path class="md-fill" d="M30 9L34 12L30 15z"/>',
+    merger: '<path d="M2 5H14V12"/><path d="M2 19H14V12"/><path d="M14 12H30"/><path class="md-fill" d="M30 9L34 12L30 15z"/>',
+    filter: '<path d="M2 12H11"/><path d="M11 12V4H29"/><path class="md-fill" d="M29 1L33 4L29 7z"/><path d="M11 12H29"/><path class="md-fill" d="M29 9L33 12L29 15z"/><path d="M11 12V20H29"/><path class="md-fill" d="M29 17L33 20L29 23z"/>',
+    loop: '<path d="M2 18H30"/><path class="md-fill" d="M30 15L34 18L30 21z"/><path d="M25 18V6H10V12"/><path class="md-fill" d="M7 12L10 16L13 12z"/>'
+  };
+  const machineDiagramSVG = id => MACHINE_DIAGRAM[id] ? '<svg class="refit-machinediagram" viewBox="0 0 40 24" aria-hidden="true" focusable="false">' + MACHINE_DIAGRAM[id] + '</svg>' : '';
+  // the shelf in the order work meets them, in three plain groups (a junction goes ON a belt)
+  const MACHINE_GROUPS = [
+    ['THE LINE', 'work comes in, agents do the steps, the result comes out', ['intake', 'bay', 'outbox']],
+    ['BRANCH & COMBINE', 'drop these ON a belt', ['splitter', 'joiner', 'merger', 'filter']],
+    ['REPEAT', 'a reviewer can send work back', ['loop']]
+  ];
   /* THE MACHINES SHELF (2026-09-23 playtest fix). The Conveyors tab offered whole LINES and the BELT tool,
      but no single machine: INBOX, BAY, OUTBOX and every junction were reachable only by typing into the
      Props search. The shelf is computed from the catalog (every cat:'workflow' entry — a machine added
@@ -1191,7 +1204,7 @@ const Build = (() => {
      live art and its one-line purpose (PALETTE_PURPOSE). A pick arms the ordinary PROP placement for
      that machine while the Conveyors tab stays up. */
   const MACHINES_LABEL = 'MACHINES';   // the Conveyors tab's single-machine shelf — the guide + Field Manual name it by this
-  const MACHINE_ORDER = ['intake', 'bay', 'outbox', 'splitter', 'joiner', 'filter', 'merger', 'loop'];
+  const MACHINE_ORDER = ['intake', 'bay', 'outbox', 'splitter', 'joiner', 'merger', 'filter', 'loop'];   // JOINER beside MERGER: the pair people confuse
   function workflowMachines() {
     const all = catalog().filter(c => c && c.cat === 'workflow');
     const rank = id => { const i = MACHINE_ORDER.indexOf(id); return i < 0 ? MACHINE_ORDER.length : i; };
@@ -1203,8 +1216,19 @@ const Build = (() => {
     const hd = document.createElement('div'); hd.className = 'refit-linegroup refit-palsection';
     hd.innerHTML = '<span class="refit-linegroup-nm">' + MACHINES_LABEL + ' · ' + ms.length + '</span><span class="refit-linegroup-why">one piece at a time — place it, then connect it with BELT</span>';
     wrap.appendChild(hd);
-    const grid = document.createElement('div'); grid.className = 'refit-machinegrid'; grid.setAttribute('aria-label', 'Workflow machines');
+    // grouped the way work meets them (every catalog machine lands in a group; an unknown one joins the last)
+    const groupOf = id => { const g = MACHINE_GROUPS.findIndex(x => x[2].indexOf(id) >= 0); return g < 0 ? MACHINE_GROUPS.length - 1 : g; };
+    let grid = null, curGroup = -1;
     for (const c of ms) {
+      const gi = groupOf(c.id);
+      if (gi !== curGroup) {
+        curGroup = gi;
+        const gh = document.createElement('div'); gh.className = 'refit-machinegroup';
+        gh.innerHTML = '<span class="nm">' + esc(MACHINE_GROUPS[gi][0]) + '</span><span class="why">' + esc(MACHINE_GROUPS[gi][1]) + '</span>';
+        wrap.appendChild(gh);
+        grid = document.createElement('div'); grid.className = 'refit-machinegrid'; grid.setAttribute('aria-label', MACHINE_GROUPS[gi][0] + ' machines');
+        wrap.appendChild(grid);
+      }
       const b = document.createElement('button'); b.type = 'button';
       const on = tool === 'prop' && propType === c.id;
       b.className = 'refit-machinetile' + (on ? ' active' : ''); b.dataset.machine = c.id; b.dataset.prop = c.id;
@@ -1223,10 +1247,11 @@ const Build = (() => {
       const nm = document.createElement('span'); nm.className = 'refit-machinetile-nm'; nm.textContent = c.label;
       const why = document.createElement('span'); why.className = 'refit-machinetile-why'; why.textContent = purpose;
       txt.append(nm, why); b.append(cvEl, txt);
+      if (MACHINE_DIAGRAM[c.id]) b.insertAdjacentHTML('beforeend', machineDiagramSVG(c.id));
       b.onclick = () => {
         propType = c.id;
         setLibraryPlacement(true);
-        grid.querySelectorAll('.refit-machinetile').forEach(t => { const a = t.dataset.machine === c.id; t.classList.toggle('active', a); t.setAttribute('aria-pressed', String(a)); });
+        wrap.querySelectorAll('.refit-machinetile').forEach(t => { const a = t.dataset.machine === c.id; t.classList.toggle('active', a); t.setAttribute('aria-pressed', String(a)); });
         root.querySelectorAll('.refit-linetile.active').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-pressed', 'false'); });
         hidePropCard(); setHint(); sfx('click');
       };
@@ -1234,7 +1259,6 @@ const Build = (() => {
       b.onmouseleave = () => { hoverThumb = null; };
       grid.appendChild(b);
     }
-    wrap.appendChild(grid);
     try { paintThumbs(performance.now(), true); } catch (e) {}   // paint once; the frame loop animates the armed/hovered one
     return wrap;
   }
@@ -1709,6 +1733,125 @@ const Build = (() => {
     const links = ghostLinks({ props: bp.props.map(p => ({ t: p.t, x: o.x + p.x, y: o.y + p.y, w: p.w, h: p.h })), belts: bp.belts.map(b => ({ x: o.x + b.x, y: o.y + b.y, d: b.d })) });
     return { rects, v: station.canPlaceBlueprint(bp.id, o.x, o.y), kind: 'line', label: bp.label, snapped: s.snapped, links };
   }
+  /* the test job the Workflow panel saved for the line this prop is on (localStorage, per station — the panel's own store),
+     plus the line key; read by the live INBOX's COMMS card so ONE REAL JOB runs the Commander's own input (2026-09-27 X1) */
+  function testJobForProp(propId) {
+    try {
+      const st = station || (opts && typeof opts.getStation === 'function' ? opts.getStation() : null);
+      if (!st || typeof Pipeline === 'undefined' || !Pipeline.lineComponents) return null;
+      const c = Pipeline.lineComponents(st.projectGeometry()).find(x => x.props.indexOf(propId) >= 0);
+      if (!c) return null;
+      let text = '';
+      try { const o = JSON.parse(localStorage.getItem('starnet.refit.wftests.' + stationKeyOf(st)) || '{}'); const j = o && o.__jobs && o.__jobs[c.key]; if (typeof j === 'string') text = j.trim().slice(0, 2000); } catch (e) {}
+      return { line: c.key, text };
+    } catch (e) { return null; }
+  }
+  /* the line for the Commander's GOAL: their own dossier words (goals, then ambitions, then pain points — what onboarding
+     asked), read by WorkflowLine.suggestLineFor for the shape of the work. The first belief that names a shape wins; none
+     does → no card (never a guess). */
+  function goalLine() {
+    if (typeof DossierStore === 'undefined' || typeof WorkflowLine === 'undefined' || !WorkflowLine.suggestLineFor) return null;
+    let texts = [];
+    try { for (const k of ['goals', 'ambition', 'pain']) texts = texts.concat((DossierStore.beliefs(k) || []).map(b => String((b && b.text) || '').trim()).filter(Boolean)); }
+    catch (e) { return null; }
+    for (const t of texts) {
+      const s = WorkflowLine.suggestLineFor(t), bp = s && blueprintOf(s.id);
+      if (bp) return { bp, why: s.why, quote: t.length > 90 ? t.slice(0, 88).trimEnd() + '…' : t };
+    }
+    return null;
+  }
+  /* one ready-made line's card (the line library AND the FOR YOUR GOAL card) — its fit is set by setLineTileFit once it is in a grid */
+  function makeLineTile(bp) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'refit-linetile' + (tool === 'line' && bp.id === lineType ? ' active' : '');
+    b.dataset.line = bp.id;
+    b.setAttribute('aria-pressed', tool === 'line' && bp.id === lineType ? 'true' : 'false');
+    b.title = bp.desc;   // adopted by tooltip.js into the station card (never the OS bubble)
+    const view = document.createElement('span'); view.className = 'refit-linetile-view';
+    view.appendChild(lineSchematic(bp));
+    b.appendChild(view);
+    const hd = document.createElement('span'); hd.className = 'refit-linetile-hd';
+    const nm = document.createElement('span'); nm.className = 'refit-matname'; nm.textContent = bp.label;
+    hd.appendChild(nm);
+    // footprint + dock count, derived from the catalog (never hand-kept). Mixed VT323 glyphs
+    // ('×', '·') fall back fonts, so the chip is BOX-centred in CSS — never padded by font math.
+    const docks = bp.props.filter(p => p.t === 'bay').length;
+    const stat = document.createElement('span'); stat.className = 'refit-linetile-stat';
+    stat.textContent = bp.w + '×' + bp.h + ' · ' + docks + (docks === 1 ? ' DOCK' : ' DOCKS');
+    hd.appendChild(stat);
+    b.appendChild(hd);
+    const why = document.createElement('span'); why.className = 'refit-linetile-why';
+    why.textContent = LINE_PURPOSE[bp.id] || '';
+    b.appendChild(why);
+    b.onclick = () => { lineType = bp.id; selectTool('line'); };
+    return b;
+  }
+  /* DECK-FIT HONESTY. Offering a line the current floor has nowhere to put it is an offer the deck cannot keep — the
+     user aims, gets red everywhere, and learns nothing. The card says so up front, from the SAME canPlaceBlueprint scan
+     the ghost snaps to. It stays selectable (sandbox law: never gate) — arming it just shows an empty field and this reason.
+     MAKE ROOM (2026-09-27 audit B1): 8 of the 19 lines never fit the starter room and nothing said how to get more floor.
+     One click builds a room big enough, touching the station (auto-doors connect it), and arms the line over it. One UNDO
+     removes the room. A sibling button — a button inside the card's button is not allowed.
+     KEPT CURRENT (2026-09-28 retest): the cards were fit-checked only when the palette rendered, so an UNDO left eight of
+     them claiming to fit a floor they no longer fit — the B1 trap again. setLineTileFit reconciles one card in place;
+     scheduleLineFitSync re-reads every card on screen once the floor settles after an edit. */
+  function setLineTileFit(b, bp) {
+    const fits = lineFits(bp.id);
+    b.classList.toggle('nofit', !fits);
+    let nf = b.querySelector('.refit-linetile-nofit');
+    const next = b.nextElementSibling;
+    const make = next && next.classList.contains('refit-linetile-makeroom') ? next : null;
+    if (fits) { if (nf) nf.remove(); if (make) make.remove(); return; }
+    if (!nf) { nf = document.createElement('span'); nf.className = 'refit-linetile-nofit'; b.appendChild(nf); }
+    nf.textContent = 'NO ROOM ON THIS DECK — NEEDS ' + bp.w + '×' + bp.h + ' OF CLEAR FLOOR';
+    if (make) return;
+    const mk = document.createElement('button'); mk.type = 'button'; mk.className = 'bb sm refit-linetile-makeroom';
+    mk.textContent = '＋ MAKE ROOM FOR IT'; mk.setAttribute('aria-label', 'Build a room big enough for ' + bp.label);
+    mk.onclick = e => makeRoomFor(bp.id, e);
+    b.after(mk);
+  }
+  let lineFitSyncT = 0;
+  function scheduleLineFitSync() {
+    if (lineFitSyncT) clearTimeout(lineFitSyncT);
+    lineFitSyncT = setTimeout(() => {
+      lineFitSyncT = 0;
+      if (!running || !root) return;
+      for (const b of root.querySelectorAll('.refit-linetile[data-line]')) { const bp = blueprintOf(b.dataset.line); if (bp) setLineTileFit(b, bp); }
+    }, 350);
+  }
+  function makeRoomFor(bpId, ev) {
+    const bp = blueprintOf(bpId);
+    if (!bp || !station) return;
+    const W = bp.w + 2, H = bp.h + 2;   // a tile of walking room round the line
+    const b = boundsMemoed();
+    const cands = [];
+    // right of the station, below it, left of it, above it — each slid along the edge; nearest to the station middle first
+    const midY = (b.minTy + b.maxTy) >> 1, midX = (b.minTx + b.maxTx) >> 1;
+    for (let y = b.minTy - H + 1; y <= b.maxTy; y++) cands.push({ x: b.maxTx + 1, y, d: Math.abs(y + (H >> 1) - midY) });
+    for (let x = b.minTx - W + 1; x <= b.maxTx; x++) cands.push({ x, y: b.maxTy + 1, d: 1000 + Math.abs(x + (W >> 1) - midX) });
+    for (let y = b.minTy - H + 1; y <= b.maxTy; y++) cands.push({ x: b.minTx - W, y, d: 2000 + Math.abs(y + (H >> 1) - midY) });
+    for (let x = b.minTx - W + 1; x <= b.maxTx; x++) cands.push({ x, y: b.minTy - H, d: 3000 + Math.abs(x + (W >> 1) - midX) });
+    cands.sort((p, q) => p.d - q.d || p.y - q.y || p.x - q.x);
+    const touches = (x, y) => {   // orthogonally adjacent to an existing deck tile, or the auto-doors can't join it
+      for (let yy = y; yy < y + H; yy++) if (station.roomAt(x - 1, yy) || station.roomAt(x + W, yy)) return true;
+      for (let xx = x; xx < x + W; xx++) if (station.roomAt(xx, y - 1) || station.roomAt(xx, y + H)) return true;
+      return false;
+    };
+    for (const c of cands) {
+      if (!touches(c.x, c.y)) continue;
+      const res = station.addRoom({ kind: 'hab', rect: { x1: c.x, y1: c.y, x2: c.x + W - 1, y2: c.y + H - 1 } });
+      if (!res || !res.ok) continue;
+      clearLineFields();
+      lineType = bp.id; selectTool('line');
+      sfx('chime');
+      flashTip(ev, 'ROOM ADDED — click inside it to place ' + bp.label + ' · UNDO removes the room', true);
+      try { fitCamera(); } catch (e) {}
+      return;
+    }
+    sfx('bad');
+    flashTip(ev, 'no clear space beside the station for a ' + W + '×' + H + ' room — use Rooms to draw one where you want it', false);
+  }
   function stampLine(w, ev) {
     const bp = blueprintOf(lineType);
     if (!bp) return;
@@ -1728,7 +1871,15 @@ const Build = (() => {
       // click on the fresh line inspects a dock instead of stamping a second copy on top of it.
       // (Deselect BEFORE the tip: selectTool hides any tip it finds.)
       deselectTool({ silent: true });
-      flashTip(ev, bp.label + ' STAMPED — now click each BAY to assign an agent', true);
+      /* WHAT NOW? (2026-09-27 audit B2): the stamp used to leave "Nothing is selected yet" and a tip, and the part that guides you
+         — the Workflow panel, starting with "Who works here?" — only appeared if you thought to click a BAY. It opens now, on the
+         line's first BAY, the moment the line lands (compiled first, so it names the line). */
+      let firstBay = null;
+      try { for (const id of (res.ids || [])) { const sp = station.propById(id); if (sp && sp.t === 'bay') { firstBay = sp.id; break; } } } catch (_) {}
+      if (firstBay && typeof WorkflowPanel !== 'undefined') {
+        try { rebake(); openFlowCard(firstBay); } catch (_) {}
+        flashTip(ev, bp.label + ' PLACED — choose who works each BAY in the panel', true);
+      } else flashTip(ev, bp.label + ' STAMPED — now click each BAY to assign an agent', true);
       if (typeof StationUI !== 'undefined' && StationUI.pokeQuests) { try { StationUI.pokeQuests(); } catch (_) {} }
       // belts just landed — the same first-touch coach a hand-laid run earns (points at ▸ PREVIEW)
       if (typeof Tutorial !== 'undefined' && Tutorial.onBeltPlaced) Tutorial.onBeltPlaced();
@@ -1807,7 +1958,11 @@ const Build = (() => {
     // this prop actually honours — a prop with one authored facing never mentions R.
     if (tool === 'prop' && !msg) {
       const spec = catalog().find(c => c.id === propType);
-      verb = (spec ? spec.label + ' · ' : '') + 'click a clear deck tile to place';
+      /* a 1×1 JUNCTION goes ON a belt (2026-09-27 audit P5): the compiler reads a splitter/joiner/filter/merger/loop by the
+         belt under its own tile, and dropping one onto an existing lane is how every ready-made line is built — the old
+         'clear deck tile' copy steered people to empty floor and three hand-wired belts. */
+      const JUNC = { splitter: 1, joiner: 1, filter: 1, merger: 1, loop: 1 };
+      verb = (spec ? spec.label + ' · ' : '') + (JUNC[propType] ? 'drop it ON a belt to put it on that line, or on clear floor' : 'click a clear deck tile to place');
       const bits = [];
       if (canTurn(propType)) bits.push('R turn (facing ' + FACE_WORD[propFacing(propType)] + ')');
       if (canFlip(propType)) bits.push('M flip' + (propFlipOn(propType) ? ' ✓' : ''));
@@ -1824,7 +1979,7 @@ const Build = (() => {
         move: 'Drag a room or prop to its new position. Furniture moves with its room.',
         dupe: 'Click the room or prop you want to copy, then click a clear space to place the copy.',
         reclaim: 'Click a room, prop or belt to remove it. Undo brings it back.',
-        belt: 'Click the machine where work starts, then its destination. A conveyor connects them.',
+        belt: 'Click the machine where work starts, then the one it goes to next, and the belt lays itself. Or drag across the floor to lay belt by hand; work flows the way you drag.',
         line: 'Choose a conveyor line, then click clear floor to place it. Assign agents after placing.'
       };
       help.querySelector('span').textContent = msg || guidance[tool] || verb;
@@ -2328,12 +2483,36 @@ const Build = (() => {
         bumpUi(); insMemo = null;
       },
       lineRenamed: () => { if (running) { finSig = ''; renderFinCard(); } },
+      /* a junction's compiled cfg + where each of its out-belts leads, for the panel's SPLITTER / FILTER sections (2026-09-27 audit
+         P1/P4): the same compiled plan the floor tags read, the same lane labels the loop's DONE picker uses */
+      junctionInfo: id => {
+        const p = station.propById(id); if (!p) return null;
+        const jt = junctionBeltTile(p), o = (cacheGeo && cacheGeo.origin) || { tx: 0, ty: 0 };
+        const lk = jt ? (jt.x - o.tx) + ',' + (jt.y - o.ty) : null;
+        const cfg0 = (lk && valPlan && valPlan.junctions) ? (valPlan.junctions[lk] || null) : null;
+        const cfg = cfg0 && cfg0.kind === 'split' ? Object.assign({}, cfg0, { fanout: !!fanoutOnceCrewed()[lk] }) : cfg0;
+        const dirs = jt ? junctionOutLanes(jt.x, jt.y) : [];
+        const labels = jt ? loopExitLabels(valPlan, { x: jt.x - o.tx, y: jt.y - o.ty }, agentLabel) : [];
+        // the compass prefix ("E → ") is builder shorthand; the panel names the belt by where it goes
+        const plain = t => String(t || '').replace(/^[NSEW]\s*\S\s+/, '');
+        return { cfg, lanes: dirs.map(d => { const ex = labels.find(x => x.dir === d) || {};
+          return { dir: d, dock: ex.dock || null, label: plain(ex.label) || ('the ' + ({ N: 'north', S: 'south', E: 'east', W: 'west' }[d] || d) + ' belt') }; }) };
+      },
+      machineDiagram: id => machineDiagramSVG(id),
+      preview: () => sendTestBoxes(null),               // the TEST view's WATCH IT: the free walkthrough on the floor
+      splitModeInfo: id => splitModeInfo(id),            // { mode: 'copy'|'turns', toCopy, toTurns } — the SPLITTER switch
+      setSplitMode: (id, mode) => setSplitMode(id, mode), // swaps the JOINER/MERGER where the branches meet (one undo)
       loopExits: id => {
         const p = station.propById(id), jt = p && junctionBeltTile(p), o = (cacheGeo && cacheGeo.origin) || { tx: 0, ty: 0 };
         return jt ? loopExitLabels(valPlan, { x: jt.x - o.tx, y: jt.y - o.ty }, agentLabel) : [];
       },
       loopRuleTxt, loopBackTxt,
       lineCycles: () => { let errs = []; try { errs = Pipeline.compileRoutingPlan(station.projectGeometry()).errors || []; } catch (e) { errs = []; } return errs.some(e => e.code === 'CYCLE' || e.code === 'CHAIN_CYCLE'); },
+      canInsertBay: (fromId, toId) => {
+        if (typeof station.canInsertBayBetween !== 'function') return { ok: true };
+        const sp = propSpec('bay');   // the SAME bay insertBay places — the dry run must try the size the real insert will
+        return station.canInsertBayBetween(fromId, toId, { w: sp.w, h: sp.h, block: sp.blocks !== false });
+      },
       insertBay: (fromId, toId, role) => {
         if (typeof station.insertBayBetween !== 'function') return { ok: false, msg: 'this station model cannot insert a step' };
         const sp = propSpec('bay');
@@ -2518,18 +2697,21 @@ const Build = (() => {
     if (!plan || !plan.belts || !tile) return out;
     const DIRV = { E: [1, 0], W: [-1, 0], S: [0, 1], N: [0, -1] }, OPP = { E: 'W', W: 'E', S: 'N', N: 'S' };
     const map = plan.belts, bayAt = plan.bayTileToAgent || {}, junctions = plan.junctions || {};
+    const dockAt = plan.bayTileToDock || {}, emptyAt = plan.unboundBayTile || {};   // which BAY a lane lands on — crewed or not
     const outs = {}; for (const o of (plan.outs || [])) if (o && o.tile) outs[o.tile.x + ',' + o.tile.y] = true;
     const KIND = { split: 'SPLITTER', merge: 'MERGER', join: 'JOINER', loop: 'LOOP', filter: 'FILTER' };
     const home = tile.x + ',' + tile.y;
     for (const d of ['E', 'S', 'W', 'N']) {
       const v = DIRV[d], nb = map[(tile.x + v[0]) + ',' + (tile.y + v[1])];
       if (!nb || nb === OPP[d]) continue;                       // not an out-lane (no belt, or it flows back in)
-      let t = { x: tile.x + v[0], y: tile.y + v[1] }, to = 'nowhere yet', kind = 'none', guard = 0;
+      let t = { x: tile.x + v[0], y: tile.y + v[1] }, to = 'nowhere yet', kind = 'none', guard = 0, dock = null;
       const seen = {};
       while (t && guard++ < 4096) {
         const k = t.x + ',' + t.y;
         if (k === home) { to = 'round again'; kind = 'self'; break; }
-        if (bayAt[k]) { to = 'to ' + String(nameOf ? nameOf(bayAt[k]) : bayAt[k]).toUpperCase(); kind = 'bay'; break; }
+        if (bayAt[k]) { to = 'to ' + String(nameOf ? nameOf(bayAt[k]) : bayAt[k]).toUpperCase(); kind = 'bay'; dock = dockAt[k] || null; break; }
+        // a BAY with no agent yet is still where the belt goes (2026-09-28 retest: a fresh split read "nowhere yet" twice)
+        if (emptyAt[k]) { to = 'to a BAY with no agent yet'; kind = 'bay'; dock = emptyAt[k]; break; }
         if (outs[k]) { to = 'OUTBOX'; kind = 'outbox'; break; }
         if (junctions[k]) { to = 'a ' + (KIND[junctions[k].kind] || 'JUNCTION'); kind = 'junction'; break; }
         if (seen[k]) break;
@@ -2537,7 +2719,7 @@ const Build = (() => {
         const dir = map[k]; if (!dir) break;                    // hookups + mouths are belt tiles, so off-belt = the lane ends
         const w = DIRV[dir]; t = { x: t.x + w[0], y: t.y + w[1] };
       }
-      out.push({ dir: d, to: to, kind: kind, label: d + ' → ' + to });
+      out.push({ dir: d, to: to, kind: kind, dock: dock, label: d + ' → ' + to });
     }
     return out;
   }
@@ -2545,7 +2727,7 @@ const Build = (() => {
   function loopBackTxt(exits, done) {
     const back = (exits || []).find(x => x.dir !== done) || null;
     if (!back) return 'no BACK lane yet — the gate needs a second exit that leads upstream, or nothing goes round';
-    if (back.kind === 'bay') return 'BACK lane: ' + back.label + ' — the crate re-enters the line there';
+    if (back.kind === 'bay') return 'BACK lane: ' + back.label + ' — work goes back there for another pass';
     return 'BACK lane: ' + back.label + ' — a back lane must lead to an upstream dock';
   }
   /* the sample run's readout — ONLY what the server's answer proves. `resp` = the parsed JSON of
@@ -2723,48 +2905,117 @@ const Build = (() => {
     const a = list.find(x => x.id === aid);
     return ((a && a.name) || aid || 'AGENT').toUpperCase();
   };
-  // world-frame stops map for the preview sim: bound-bay hookup tiles (LOCAL plan keys rebased by origin)
+  // world-frame stops map for the preview sim: bound-bay hookup tiles (LOCAL plan keys rebased by origin).
+  // DOCK-KEYED (2026-09-27 audit X2): every stop names its DOCK as well as its agent, so a preview hand-off is
+  // consumed at the NEXT dock and never at the dock that produced it — the same rule the live floor rides
+  // (conveyor.js: a stop object {agentId, dockId} + payload.fromDockId). Memoized per compiled plan + origin:
+  // the frame loop asks for it every tick.
+  let stopsMemo = null, stopsPlan = null, stopsOx = 0, stopsOy = 0;
   function testStops() {
     if (!valPlan || !valPlan.bayTileToAgent || !cacheGeo) return null;
-    const o = cacheGeo.origin || { tx: 0, ty: 0 }, out = {};
-    for (const k in valPlan.bayTileToAgent) { const p = k.split(','); out[(+p[0] + o.tx) + ',' + (+p[1] + o.ty)] = valPlan.bayTileToAgent[k]; }
+    const o = cacheGeo.origin || { tx: 0, ty: 0 };
+    if (stopsMemo && stopsPlan === valPlan && stopsOx === o.tx && stopsOy === o.ty) return stopsMemo;
+    const out = {}, docks = valPlan.bayTileToDock || {};
+    for (const k in valPlan.bayTileToAgent) {
+      const p = k.split(','), wk = (+p[0] + o.tx) + ',' + (+p[1] + o.ty), a = valPlan.bayTileToAgent[k];
+      out[wk] = docks[k] ? { agentId: a, dockId: docks[k] } : a;
+    }
+    stopsMemo = out; stopsPlan = valPlan; stopsOx = o.tx; stopsOy = o.ty;
     return out;
   }
+  const stopAgent = s => (s && typeof s === 'object') ? s.agentId : (s || null);
+  const stopDock = s => (s && typeof s === 'object') ? (s.dockId || null) : null;
+  const planOrigin = () => (cacheGeo && cacheGeo.origin) || { tx: 0, ty: 0 };
+  const localKeyOf = (x, y) => { const o = planOrigin(); return (x - o.tx) + ',' + (y - o.ty); };
+  // the tile a dock SHIPS its result from (the compiled ship hookup — the same tile the sidecar spawns the real
+  // hand-off crate on), in WORLD tiles; null for a dock with no belt out
+  function shipTileOf(dockId) {
+    const r = dockId && valPlan && valPlan.dockChains && valPlan.dockChains[dockId];
+    if (!r || !r.tile) return null;
+    const o = planOrigin();
+    return { x: r.tile.x + o.tx, y: r.tile.y + o.ty };
+  }
+  const isOutboxMouth = (x, y) => { const k = localKeyOf(x, y); return ((valPlan && valPlan.outs) || []).some(o => o.tile && (o.tile.x + ',' + o.tile.y) === k); };
+  const junctionCfgAt = (x, y) => (valPlan && valPlan.junctions && valPlan.junctions[localKeyOf(x, y)]) || null;
+  const PREVIEW_MAX_HOPS = 8;   // a preview crate stops narrating after this many docks (a loop can't spin it forever)
+  const previewJoins = {};      // family -> copies that reached their JOINER (the preview's own barrier)
+  /* THE NARRATED RIDE follows the REAL line (2026-09-27 audit X2). The product crate used to be born on the tile
+     where the job ARRIVED (the dock's input side) and flagged outbound, so it fell off the belt into the dock's
+     own footprint and the preview announced "…AND OUT. THAT IS THE WHOLE LOOP" after step one of every
+     multi-step line. Now: a dock that gets a job works it, and its result is born on the dock's compiled SHIP
+     tile as a hand-off crate, so it rides on to the next dock (and the next), through splitters, joiners and
+     loop gates, until it reaches the OUTBOX or the belt ends. Every caption says what the engine just did. */
   function onBuildDeliver(bx, x, y) {
     pushFlash([{ x1: x, y1: y, x2: x, y2: y }], false); sfx('click');
     const p = bx.payload || {};
     if (!p.test) return;
-    const stops = testStops() || {};
-    const owner = stops[x + ',' + y];
-    if (!p.outbound && owner) {
-      // stage ③ + ④: the dock consumed the job — and the finished work ships back out from the same dock.
-      // fromAgentId stamps the PRODUCER on the return crate (same field the live handoff physics rides —
-      // conveyor.js: a dock never eats its own output), so stage ⑤ below can tell a handoff from a ship-out.
-      note(x, y, '③ DELIVERED — ' + agentLabelFor(owner) + "'S DOCK (they work it at their desk)", '#e8c860');
-      convey.enqueueAt(x, y, { test: true, outbound: true, box: 'product', fromAgentId: owner, workitemId: 'test-out-' + (++_testN) });
-      setTimeout(() => note(x, y + 1, '④ THE RESULT SHIPS FROM THE DOCK…', '#9adcb0'), 900);
-    } else if (p.outbound) {
-      // stage ⑤ forks on WHERE the outbound crate landed: a FOREIGN bound dock's hookup tile is a HANDOFF
-      // (this dock's output becomes that agent's input — the chain layer), not a ship-out. Only an open
-      // end / outbox mouth is the whole loop. The stops map knows the tile's owner; the crate knows its
-      // producer — so the caption can only say what the engine actually did.
-      if (owner && owner !== p.fromAgentId) {
-        note(x, y, '⑤ HANDED OFF TO ' + agentLabelFor(owner) + ' — its output becomes their input', '#e8c860');
-      } else {
-        note(x, y, '⑤ …AND OUT. THAT IS THE WHOLE LOOP', '#7ee2a8');
-      }
+    const st = (testStops() || {})[x + ',' + y];
+    const owner = stopAgent(st), dock = stopDock(st);
+    // a result riding off the belt END beside its OWN dock (the ship tile is often also the OUTBOX mouth) is a ship-out, never a
+    // hand-off to itself — conveyor.js calls onDeliver at an open end without asking whose hookup the tile is
+    const own = !!(p.product && owner && ((dock && p.fromDockId) ? p.fromDockId === dock : p.fromAgentId === owner));
+    if (owner && !p.outbound && !own) {
+      const hops = (p.hops | 0) + 1;
+      note(x, y, p.product ? (p.joined ? 'COMBINED RESULT → ' : 'HANDED TO ') + agentLabelFor(owner) : agentLabelFor(owner) + ' WORKS IT', '#e8c860');
+      if (hops >= PREVIEW_MAX_HOPS) { setTimeout(() => note(x, y + 1, '…PREVIEW STOPS HERE', '#9adcb0'), 900); return; }
+      const ship = shipTileOf(dock);
+      if (!ship) { setTimeout(() => note(x, y + 1, 'NO BELT OUT — RESULT GOES BACK', '#ffbe3c'), 900); return; }
+      setTimeout(() => {
+        if (!running || !convey) return;
+        convey.enqueueAt(ship.x, ship.y, { test: true, product: true, box: 'product', fromAgentId: owner, fromDockId: dock || undefined,
+          hops, iteration: p.iteration | 0, family: p.family, familySize: p.familySize, workitemId: 'test-out-' + (++_testN) });
+        note(ship.x, ship.y, 'RESULT GOES ON…', '#9adcb0');
+      }, 900);
+      return;
+    }
+    if (owner && !own) return;   // a legacy outbound crate reaching a dock tile: nothing to narrate
+    if (p.product || p.outbound) {
+      const out = isOutboxMouth(x, y);
+      note(x, y, out ? '✓ OUT AT THE OUTBOX' : 'BELT ENDS — NO OUTBOX', out ? '#7ee2a8' : '#ffbe3c');
     } else {
-      note(x, y, '③ SANK — no assigned dock on this line', '#ffbe3c');
+      note(x, y, 'SANK — NO AGENT HERE YET', '#ffbe3c');
     }
   }
-  // stage-② watcher: caption the junction decision the moment the engine makes it (same onAdvance seam
-  // the telemetry uses — the caption can only ever say what the engine actually did)
+  // junction watcher: caption each decision the moment the engine makes it (the same onAdvance seam the telemetry
+  // uses — a caption can only ever say what the engine actually did), plus the two behaviours the belt sim does
+  // not perform by itself and the sidecar does: a fan-out SPLIT sends every branch a copy, and a JOINER waits for
+  // every copy before ONE combined result goes on.
   function onBuildAdvance(bx, info) {
     if (!bx.payload || !bx.payload.test || !info || !info.tile) return;
-    if (info.kind === 'filter') note(info.tile.x, info.tile.y, '② SORTED: ' + (info.tag || '?') + ' → ' + info.lane, '#5ad0ff');
-    else if (info.kind === 'split') note(info.tile.x, info.tile.y, '② SPLIT: balancing lanes', '#5ad0ff');
-    // no merge caption: the merger is a LANE FUNNEL — conveyor.js never emits `absorbed` (the old
-    // "held for the batch" branch described a combine the harness never performed; see chooseExit).
+    const { x, y } = info.tile, cfg = junctionCfgAt(x, y) || {};
+    if (info.kind === 'filter') note(x, y, 'SORTED: ' + String(info.tag || 'general').toUpperCase() + ' → THIS BELT', '#5ad0ff');
+    else if (info.kind === 'split') {
+      if ((info.fanout || cfg.fanout) && typeof Pipeline !== 'undefined' && Pipeline._internals && station) {
+        const map = {};
+        for (const b of station.belts()) map[b.x + ',' + b.y] = b.dir;
+        const lanes = Pipeline._internals.outLanes(map, x, y) || [];
+        const V = Pipeline._internals.DIRV || {};
+        const fam = bx.payload.family || ('fam-' + (++_testN));
+        bx.payload.family = fam; bx.payload.familySize = Math.max(lanes.length, 1);
+        for (const d of lanes) {
+          if (d === info.lane || !V[d]) continue;
+          convey.enqueueAt(x + V[d][0], y + V[d][1], Object.assign({}, bx.payload, { workitemId: 'test-copy-' + (++_testN) }));
+        }
+        note(x, y, 'SPLIT: A COPY TO EACH BRANCH', '#5ad0ff');
+      } else note(x, y, 'SPLIT: BRANCHES TAKE TURNS', '#5ad0ff');
+    }
+    else if (info.kind === 'join') {
+      const fam = bx.payload.family, need = bx.payload.familySize | 0;
+      if (fam && need > 1) {
+        const got = previewJoins[fam] = (previewJoins[fam] || 0) + 1;
+        if (got < need) { convey.dropWorkitem(bx.payload.workitemId); note(x, y, 'JOINER: ' + got + ' OF ' + need + ' IN — WAITING', '#5ad0ff'); }
+        else { delete previewJoins[fam]; bx.payload.family = undefined; bx.payload.familySize = undefined; bx.payload.joined = true; note(x, y, 'JOINER: ALL ' + need + ' IN → ONE RESULT', '#5ad0ff'); }
+      } else note(x, y, 'JOINER: PASSES IT ON', '#5ad0ff');
+    }
+    else if (info.kind === 'loop') {
+      if (cfg.back && info.lane === cfg.back) {
+        // one revision round is enough to show the gate; the real gate follows the reviewer's VERDICT line
+        bx.payload.iteration = 99;
+        note(x, y, 'LOOP: BACK FOR A REWRITE', '#5ad0ff');
+      } else if (info.escalated) note(x, y, 'LOOP: OUT OF PASSES → FIXER', '#ffbe3c');
+      else note(x, y, 'LOOP: APPROVED → ON', '#7ee2a8');
+    }
+    else if (info.kind === 'merge') note(x, y, 'MERGER: ONE SHARED BELT', '#5ad0ff');
   }
   // the INTAKE's belt-adjacent tile (where a box spawns), or null if no INTAKE sits on a belt.
   // DOC-ORDER FIRST INTAKE — kept ONLY as the manual ▸ PREVIEW's last-resort fallback when no
@@ -2811,6 +3062,24 @@ const Build = (() => {
   let _testN = 0;
   // fire one box per content tag at the INTAKE so you watch them SORT through your FILTERs to the right
   // bays. Returns true only when boxes actually rode — the auto first ride burns its one-shot on that.
+  /* ONE TEST CONTROL (2026-09-28 — "replace the four test buttons with one TEST control that has modes"). The top bar's TEST
+     opens the Workflow panel's TEST view on the line — the one the panel already shows, else the first line with an INBOX
+     and a BAY — and plays the free walkthrough straight away, so the old one-click preview stays one click and the real
+     modes sit right beside it. No line yet: the walkthrough alone, which says what is missing. */
+  function openTest(e) {
+    const WP = typeof WorkflowPanel !== 'undefined' ? WorkflowPanel : null;
+    if (WP && WP.showTest) {
+      try {
+        if (!(WP.isOpen && WP.isOpen())) {
+          const c = (valComps || []).find(x => x.intakes.length && x.bays.length) || (valComps || [])[0];
+          const pid = c ? (c.intakes[0] || (c.bays[0] && c.bays[0].propId)) : null;
+          if (pid) openFlowCard(pid);
+        }
+        WP.showTest('watch');
+      } catch (err) { /* the walkthrough below still runs */ }
+    }
+    return sendTestBoxes(e);
+  }
   function sendTestBoxes(ev, auto, agentId) {
     if (!convey) return false;
     // reach-verified mouth first; the doc-order intake only for a MANUAL test on a floor where
@@ -2818,9 +3087,12 @@ const Build = (() => {
     // line powered on, and a decorative intake would spend the one narration on a sink.
     const t = rideMouthFor(agentId) || (auto ? null : intakeBeltTile());
     if (!t) { if (!auto) { flashTip(ev, 'place an INBOX on a belt first', false); sfx('bad'); } return false; }
-    for (const tag of ['code', 'research', 'general']) convey.enqueueAt(t.x, t.y, { workitemId: 'test-' + (++_testN), tag, preview: 'test ' + tag, test: true });
-    note(t.x, t.y, '① OUTSIDE WORK ENTERS HERE (DMs · routines)', '#e8c860');
-    flashTip(ev, auto ? 'LINE COMPLETE — the first crate rides itself. ' + PREVIEW_LABEL + ' replays this any time' : 'test work riding — watch the loop', true);
+    // ONE crate tells a plain line's story; three (one per task type) only when a FILTER is there to sort them —
+    // three narrations of the same unsorted line just stacked their captions on top of each other (2026-09-27 audit X2)
+    const sorts = !!(valPlan && valPlan.junctions && Object.keys(valPlan.junctions).some(k => valPlan.junctions[k] && valPlan.junctions[k].kind === 'filter'));
+    for (const tag of (sorts ? ['code', 'research', 'general'] : ['general'])) convey.enqueueAt(t.x, t.y, { workitemId: 'test-' + (++_testN), tag, preview: 'test ' + tag, test: true });
+    note(t.x, t.y, '① WORK COMES IN HERE', '#e8c860');
+    flashTip(ev, auto ? 'LINE COMPLETE — the first crate rides itself. ' + PREVIEW_LABEL + ' › WATCH IT replays it any time' : 'test work riding — watch the loop', true);
     sfx('click');
     return true;
   }
@@ -2957,7 +3229,11 @@ const Build = (() => {
     const feed = (opts && opts.world && opts.world.feedState) ? opts.world.feedState() : { known: false, fed: false };
     const hasIntake = c.intakes.length > 0;
     const feedDone = hasIntake && feed.known && feed.fed;
-    return { unbound, crewLeft: unbound.length, hasIntake, feed, feedDone,
+    // a routine IS saved for this line but scheduling is off (2026-09-28 retest): ② says so, and still opens the INBOX section,
+    // where the TURN SCHEDULING ON switch is — never "choose what starts this line" over a start the Commander already chose
+    let schedOff = false;
+    try { schedOff = hasIntake && feed.known && !feed.fed && !!(opts && opts.world && opts.world.schedOffFor && opts.world.schedOffFor(c.intakes[0], valPlan)); } catch (_) { schedOff = false; }
+    return { unbound, crewLeft: unbound.length, hasIntake, feed, feedDone, schedOff,
       todo: unbound.length > 0 || (hasIntake && feed.known && !feed.fed) };
   }
   function finPick() {
@@ -3071,7 +3347,7 @@ const Build = (() => {
     // keep the generic header. In the sig so a rename repaints without a topology edit.
     const lname = lineNameOf(c);
     const overview = workflowReadout(c, valPlan, agentLabelFor);
-    const sig = [c.key, st.crewLeft, st.hasIntake, st.feed.known, st.feed.fed, finSample, lname || '', overview.compact, finSampleRes ? finSampleRes.key + ':' + finSampleRes.stamp : ''].join('|');
+    const sig = [c.key, st.crewLeft, st.hasIntake, st.feed.known, st.feed.fed, st.schedOff, finSample, lname || '', overview.compact, finSampleRes ? finSampleRes.key + ':' + finSampleRes.stamp : ''].join('|');
     if (!finCardEl) {
       finCardEl = document.createElement('div');
       root.appendChild(finCardEl);
@@ -3085,12 +3361,12 @@ const Build = (() => {
     const crewTxt = crewDone ? '✓ AGENTS ASSIGNED' : '① ASSIGN STEP AGENTS — ' + st.crewLeft + ' TO GO';
     const feedTxt = !st.hasIntake ? '② FEED IT — TASK THE AGENT, OR WIRE A ROUTINE'
       : !st.feed.known ? '② CHECKING WHAT STARTS THIS LINE…'
-      : st.feed.fed ? '✓ AUTOMATIC START CONFIGURED' : '② CHOOSE WHAT STARTS THIS LINE';
+      : st.feed.fed ? '✓ AUTOMATIC START CONFIGURED' : st.schedOff ? '② SCHEDULING IS OFF — TURN IT ON' : '② CHOOSE WHAT STARTS THIS LINE';
     // the sample RESULT belongs to the line it rode (finSampleRes.key) — another line's card shows none
     const sr = (finSampleRes && finSampleRes.key === c.key) ? finSampleRes : null;
     const sampleOn = finSample === true && crewDone && !(sr && sr.pending);
-    const sampleTip = finSample !== true ? 'coming online soon' : (crewDone ? 'feed ONE real, clearly-labeled sample job through the whole line' : 'Assign each step an agent first');
-    const sampleTxt = (sr && sr.pending) ? (sr.phase === 'post' ? '③ POSTING LINE…' : '③ RUNNING — SAMPLE RIDING THE LINE…') : (sr && sr.view && sr.view.ok) ? '✓ SAMPLE DELIVERED — RUN ANOTHER' : '③ RUN A SAMPLE JOB';
+    const sampleTip = finSample !== true ? 'coming online soon' : (crewDone ? 'run ONE real job through the whole line (your INBOX test job, if you wrote one)' : 'Assign each step an agent first');
+    const sampleTxt = (sr && sr.pending) ? (sr.phase === 'post' ? '③ POSTING LINE…' : '③ RUNNING — THE JOB IS RIDING THE LINE…') : (sr && sr.view && sr.view.ok) ? '✓ JOB DELIVERED — RUN ANOTHER' : '③ RUN ONE REAL JOB';
     finCardEl.innerHTML = `
       <div class="fl-head"><span class="fl-title">▸ ${lname ? 'FINISH ' + esc(lname.toUpperCase()) : 'FINISH THE LINE'}</span><button type="button" class="bb sm fl-x" title="dismiss for this line">✕</button></div>
       <div class="fl-overview">${esc(overview.compact)}</div>
@@ -3244,7 +3520,7 @@ const Build = (() => {
     const o = cacheGeo.origin || { tx: 0, ty: 0 }, t = T();
     const lsig = 'l|' + uiVer + '|' + zoom + '|' + panX + '|' + panY + '|' + t + '|' + o.tx + ',' + o.ty
       + '|' + window.innerWidth + '|' + window.innerHeight + '|' + U.uiZoom()
-      + '|' + c.key + '|' + c.bbox.x1 + ',' + c.bbox.y1 + ',' + c.bbox.x2 + ',' + c.bbox.y2 + coachKey;
+      + '|' + c.key + '|' + c.bbox.x1 + ',' + c.bbox.y1 + ',' + c.bbox.x2 + ',' + c.bbox.y2 + '|' + geoVer + coachKey;   // geoVer: a machine placed under the card moves it
     if (lsig === finPosSig) return;
     const r = cv.getBoundingClientRect();
     if (!r.width || !r.height) return;
@@ -3266,12 +3542,21 @@ const Build = (() => {
     }
     const rightX = sx((c.bbox.x2 + 1 + o.tx) * t) + 14;
     const leftX = sx((c.bbox.x1 + o.tx) * t) - w - 14;
-    let x, y;
-    if (rightX + w <= edgeR - 8) { x = rightX; y = sy((c.bbox.y1 + o.ty) * t) - 4; }          // beside, to the right
-    else if (leftX >= minX) { x = leftX; y = sy((c.bbox.y1 + o.ty) * t) - 4; }                            // beside, to the left
-    else { x = sx((c.bbox.x2 + 1 + o.tx) * t) - w; y = sy((c.bbox.y2 + 1 + o.ty) * t) + 12; }             // no side room — under the line
-    x = Math.max(minX, Math.min(x, edgeR - w - 8));
-    y = Math.max(56, Math.min(y, maxY));
+    const topY = sy((c.bbox.y1 + o.ty) * t) - 4;
+    const cands = [];
+    if (rightX + w <= edgeR - 8) cands.push({ x: rightX, y: topY });                                            // beside, to the right
+    if (leftX >= minX) cands.push({ x: leftX, y: topY });                                                        // beside, to the left
+    cands.push({ x: sx((c.bbox.x2 + 1 + o.tx) * t) - w, y: sy((c.bbox.y2 + 1 + o.ty) * t) + 12 });              // under the line
+    cands.push({ x: sx((c.bbox.x2 + 1 + o.tx) * t) - w, y: sy((c.bbox.y1 + o.ty) * t) - h - 12 });              // above it
+    const clampX = v => Math.max(minX, Math.min(v, edgeR - w - 8)), clampY = v => Math.max(56, Math.min(v, maxY));
+    /* NEVER OVER A MACHINE (2026-09-28 retest): beside-the-line is DOWNSTREAM, where a builder places the next machines —
+       the card landed on the JOINER and OUTBOX a first-time user had placed and was about to belt. The card is advice; the
+       machines are the work. The first spot that covers no workflow machine wins; the old order is the fallback. */
+    const FIN_AVOID = { intake: 1, bay: 1, outbox: 1, filter: 1, splitter: 1, merger: 1, joiner: 1, loop: 1 };
+    const boxes = station.props().filter(p => FIN_AVOID[p.t]).map(p => ({ l: sx(p.x * t), t: sy(p.y * t), r: sx((p.x + (p.w || 1)) * t), b: sy((p.y + (p.h || 1)) * t) }));
+    const spots = cands.map(q => ({ x: clampX(q.x), y: clampY(q.y) }));
+    const clear = q => !boxes.some(m => q.x < m.r && q.x + w > m.l && q.y < m.b && q.y + h > m.t);
+    let { x, y } = spots.find(clear) || spots[0];
     // a coach bubble over the same spot: stack the checklist UNDER it (never hide it, never cover it)
     if (coach && x < coach.right && x + w > coach.left && y < coach.bottom && y + h > coach.top) {
       y = Math.min(coach.bottom + 10, maxY);
@@ -3816,7 +4101,8 @@ const Build = (() => {
     const t = p.t;
     if (WORKSTATION_TYPES[t]) return openWorkstationPicker(p.id, ev);
     if (t === 'bay') return openStepCard(p.id, ev);   // the per-dock STEP EDITOR (step + agent + job brief — one card)
-    if (t === 'filter') return openJunctionEditor(p.id, ev);
+    // routes are edited in the docked Workflow panel like every other machine (2026-09-27 audit P4); the modal stays as the fallback
+    if (t === 'filter') return typeof WorkflowPanel !== 'undefined' ? openFlowCard(p.id) : openJunctionEditor(p.id, ev);
     if (t === 'airlock') return openDoorPicker(p.id, ev);
     if (t === 'connector_portal') return openConnectorEditor(p.id, ev);
     if (t === 'intake' || t === 'outbox' || t === 'merger' || t === 'splitter' || t === 'joiner' || t === 'loop') return openFlowCard(p.id);
@@ -4625,6 +4911,7 @@ const Build = (() => {
     if (!nextLight) drawLayer('glows', () => drawGlows(now));
     drawLayer('flashes', () => drawFlashes(now, t));
     drawLayer('validation', () => drawRoutingValidation(t, now));
+    drawLayer('junctionTags', () => drawJunctionTags(t));   // what each 1×1 junction IS and will DO, under its tile (Conveyors tab)
     drawLayer('workflow', () => drawWorkflowMarks(t, now));   // the docked panel's selection + a paused step test's waiting handoff   // plain-words callouts on any broken piece, IN build mode (cost-safety + guidance)
     drawLayer('beltEndpoints', () => drawBeltEndpointGlow(t, now)); // BELT tool armed → INTAKE glows FROM, BAY/OUTBOX glow TO (what connects to what)
     drawLayer('bayNames', () => {
@@ -4982,9 +5269,24 @@ const Build = (() => {
       const blocked = buildGroup !== 'workflow' || tutorialCoaching() || ridePending || !!rideTimer
         || !!(root && root.querySelector('.refit-firstrun')) || convey.boxCount() > 0;
       const feed = (opts && opts.world && opts.world.feedState) ? opts.world.feedState() : { known: false, fed: false };
-      ghost.tick(dt, now, belts, jmap, { blocked, feed });
+      // the ghost is the WOULD-voice: its splits carry the once-crewed mode (the live sim keeps the real plan's)
+      const fo = jmap ? fanoutOnceCrewed() : null;
+      if (ghostMapFor !== jmap || ghostMapFo !== fo) {   // rebuilt only when the plan (or its once-crewed read) changes — never per frame
+        ghostMapFor = jmap; ghostMapFo = fo; ghostMap = jmap;
+        if (jmap && fo) { const o = cacheGeo.origin || { tx: 0, ty: 0 }; for (const k in fo) if (fo[k]) { const q = k.split(','), wk = (+q[0] + o.tx) + ',' + (+q[1] + o.ty), j = jmap.get(wk); if (j && !j.fanout) { if (ghostMap === jmap) ghostMap = new Map(jmap); ghostMap.set(wk, Object.assign({}, j, { fanout: true })); } } }
+      }
+      ghost.tick(dt, now, belts, ghostMap, { blocked, feed });
     }
     convey.drawBelts(ctx, now, t, belts, valLive);
+    /* DROP IT ON A BELT (2026-09-27 audit P5): with a junction in hand, every belt tile it can go on wears a crisp dashed
+       edge — drawn geometry, never a glow — so the shelf's "drop it ON a belt" points at something on the floor. */
+    if (tool === 'prop' && JUNCTION_TAG_TYPES[propType] && belts.length) {
+      const ins = 1.5 / zoom;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(95,216,255,0.6)'; ctx.lineWidth = 1 / zoom; ctx.setLineDash([3 / zoom, 2 / zoom]);
+      for (const b of belts) ctx.strokeRect(b.x * t + ins, b.y * t + ins, t - ins * 2, t - ins * 2);
+      ctx.restore();
+    }
   }
   function drawConveyorBoxes(now, t) {
     if (!convey) return;
@@ -5014,7 +5316,7 @@ const Build = (() => {
      Ghost captions additionally mute while ANY other layer speaks anywhere, or while the pointer
      is over the floor (the user is looking at machines, not the projection).
      All rects are WORLD px (the frame's zoom/pan transform is live at flush time). */
-  const LAYER_PRI = { activeFlow: 5, hover: 4, topNag: 3, ghostCaption: 2, rolePlacard: 1 };
+  const LAYER_PRI = { activeFlow: 5, hover: 4, topNag: 3, ghostCaption: 2, rolePlacard: 1, junctionTag: 0.5 };
   const voiceReqs = [];
   function voiceBegin() { voiceReqs.length = 0; }
   // anchor = the machine/tile the label speaks about; box = the label's own rect; draw paints it
@@ -5097,6 +5399,110 @@ const Build = (() => {
       ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(tx2, ty2);
       ctx.moveTo(tx2 - ux * a - uy * a * 0.7, ty2 - uy * a + ux * a * 0.7); ctx.lineTo(tx2, ty2); ctx.lineTo(tx2 - ux * a + uy * a * 0.7, ty2 - uy * a - ux * a * 0.7);
       ctx.stroke();
+    }
+    ctx.restore();
+  }
+  /* JUNCTION NAME TAGS (2026-09-27 audit P1/P2). The five 1×1 junctions share one size and read as belt pieces, and a splitter's
+     mode (a copy to every branch, or turns) was decided by a JOINER somewhere downstream with nothing on the splitter saying so.
+     The junction under the pointer (or selected) wears a short tag UNDER its tile: what it is and what it will do, read from the
+     COMPILED cfg (the same fact the sidecar routes by). Only one at a time — a tag on every junction at rest was the "wall of
+     text" the one-voice law exists to stop; the Workflow panel carries the same facts for the whole line. */
+  const JUNCTION_TAG_TYPES = { splitter: 1, joiner: 1, merger: 1, filter: 1, loop: 1 };
+  const RING_DOCK_T = { bay: 1, intake: 1, outbox: 1 };   // machines that hook belts through a 1-tile ring (the spacing tip)
+  /* A SPLIT'S MODE ONCE CREWED (2026-09-27): the compiler marks a split fan-out only when a crewed branch reaches its JOINER,
+     so on a freshly stamped line (no agents yet) every split read TAKES TURNS — while the Workflow panel's strip (which compiles
+     with a stand-in agent on each uncrewed bay) said ALL RUN, and the ghost said "jobs would take turns". The WOULD-voices (the
+     ghost, the tags, the card, the panel section) all read this: the real plan where every bay is crewed, the probe compile where
+     some are not. Keyed by LOCAL junction tile; memoized per compiled plan. */
+  let fanoutMemo = null, fanoutPlan = null;
+  let ghostMap = null, ghostMapFor = null, ghostMapFo = null;   // the ghost's junction map (the live one + once-crewed split modes)
+  // the floor compiled as if every BAY had an agent — what the line WILL do once crewed (the real plan when all are crewed)
+  let probePlanFor = null, probePlanMemo = null;
+  function probePlanOnceCrewed() {
+    if (!valPlan || !cacheGeo) return null;
+    if (probePlanFor === valPlan) return probePlanMemo;
+    let out = valPlan;
+    const props = cacheGeo.props || [];
+    if (typeof Pipeline !== 'undefined' && Pipeline.compileRoutingPlan && props.some(p => p.t === 'bay' && !p.agentId)) {
+      try { out = Pipeline.compileRoutingPlan(Object.assign({}, cacheGeo, { props: props.map(p => (p.t === 'bay' && !p.agentId) ? Object.assign({}, p, { agentId: '__probe_' + p.id }) : p) })); }
+      catch (e) { out = valPlan; /* the real plan's answer stands */ }
+    }
+    probePlanFor = valPlan; probePlanMemo = out;
+    return out;
+  }
+  function fanoutOnceCrewed() {
+    if (!valPlan || !cacheGeo) return {};
+    if (fanoutPlan === valPlan && fanoutMemo) return fanoutMemo;
+    const out = {};
+    for (const k in (valPlan.junctions || {})) if (valPlan.junctions[k].kind === 'split') out[k] = !!valPlan.junctions[k].fanout;
+    const probe = probePlanOnceCrewed();
+    if (probe && probe !== valPlan) for (const k in (probe.junctions || {})) if (probe.junctions[k].kind === 'split' && probe.junctions[k].fanout) out[k] = true;
+    fanoutPlan = valPlan; fanoutMemo = out;
+    return out;
+  }
+  /* THE SPLITTER'S MODE, AS A CHOICE (2026-09-28 — "make hidden behavior an explicit choice"). A split COPIES when a
+     JOINER is where its branches meet and TAKES TURNS when a MERGER is; the switch swaps that one junction in place
+     (worldmodel.swapJoinerMerger — same tile, same belts, one undo). Read on the once-crewed plan, so a freshly stamped
+     line answers the same as a crewed one. A choice the floor cannot make says why instead of half-doing it. */
+  function splitModeInfo(splitId) {
+    const p = station && station.propById(splitId);
+    if (!p || p.t !== 'splitter' || typeof Pipeline === 'undefined' || !Pipeline.rejoinOf) return null;
+    const jt = junctionBeltTile(p), o = (cacheGeo && cacheGeo.origin) || { tx: 0, ty: 0 };
+    const lk = jt ? (jt.x - o.tx) + ',' + (jt.y - o.ty) : null;
+    const plan = probePlanOnceCrewed();
+    if (!lk || !plan || !plan.junctions || !plan.junctions[lk]) return null;
+    const copies = !!fanoutOnceCrewed()[lk];
+    const lanes = Pipeline.rejoinOf(plan, lk).lanes;
+    const propAt = k => { const q = String(k).split(','), x = +q[0] + o.tx, y = +q[1] + o.ty; const hit = station.props().find(r => (r.t === 'joiner' || r.t === 'merger') && r.x === x && r.y === y); return hit ? hit.id : null; };
+    const meet = lanes.length > 1 && lanes.every(l => l.at && l.at === lanes[0].at) ? lanes[0] : null;
+    const joins = [...new Set(lanes.filter(l => l.kind === 'join').map(l => propAt(l.at)).filter(Boolean))];
+    const toTurns = copies
+      ? (joins.length ? { ok: true, swap: joins } : { ok: false, msg: 'a JOINER further down the line combines these branches — make that one a MERGER to let them take turns' })
+      : { ok: true, already: true };
+    const toCopy = !copies
+      ? (lanes.length < 2 ? { ok: false, msg: 'run a second belt OUT of the splitter first: BELT, click the SPLITTER, then the next machine' }
+        : meet && meet.kind === 'merge' && propAt(meet.at) ? { ok: true, swap: [propAt(meet.at)] }
+        : { ok: false, msg: 'the branches never meet at one MERGER — belt them into one JOINER where they come back together (Conveyors › MACHINES › JOINER)' })
+      : { ok: true, already: true };
+    return { mode: copies ? 'copy' : 'turns', toCopy, toTurns };
+  }
+  function setSplitMode(splitId, mode) {
+    const info = splitModeInfo(splitId);
+    if (!info) return { ok: false, msg: 'this splitter is not on a line yet' };
+    const step = mode === 'copy' ? info.toCopy : info.toTurns;
+    if (step.already) return { ok: true, already: true };
+    if (!step.ok) return { ok: false, msg: step.msg };
+    const res = step.swap.length === 1 ? station.swapJoinerMerger(step.swap[0])
+      : station.transact(() => { for (const id of step.swap) { const r = station.swapJoinerMerger(id); if (!r.ok) return r; } return { ok: true }; });
+    if (res && res.ok) { try { rebake(); } catch (e) { /* the frame loop recompiles */ } }
+    return res && res.ok ? { ok: true, mode } : { ok: false, msg: (res && (res.msg || res.error)) || 'could not switch' };
+  }
+  function junctionTagText(p) {
+    const cfg = (valPlan && valPlan.junctions && valPlan.junctions[p.x + ',' + p.y]) || null;
+    if (p.t === 'splitter') return cfg ? (fanoutOnceCrewed()[p.x + ',' + p.y] ? 'SPLITTER · COPY TO EACH' : 'SPLITTER · TAKES TURNS') : 'SPLITTER';
+    if (p.t === 'joiner') return cfg && cfg.expect > 1 ? 'JOINER · WAITS FOR ' + cfg.expect : 'JOINER · WAITS';
+    if (p.t === 'loop') return 'LOOP · UP TO ' + ((cfg && cfg.max) || (typeof Pipeline !== 'undefined' && Pipeline.LOOP_MAX_DEFAULT) || 5) + '×';
+    if (p.t === 'filter') return 'FILTER · SORTS';
+    if (p.t === 'merger') return 'MERGER · SHARES';
+    return null;
+  }
+  const TAG_FONT = () => Math.max(6, 8 / zoom) + "px 'VT323','Courier New',monospace";
+  function drawJunctionTags(t) {
+    if (!cacheGeo || buildGroup !== 'workflow' || !valPlan) return;
+    const o = cacheGeo.origin || { tx: 0, ty: 0 }, fh = Math.max(6, 8 / zoom);
+    ctx.save(); ctx.font = TAG_FONT();
+    for (const p of (cacheGeo.props || [])) {
+      if (!JUNCTION_TAG_TYPES[p.t] || (p.id !== hoverPropId && p.id !== selectedPropId)) continue;
+      const text = junctionTagText(p); if (!text) continue;
+      const X = (p.x + o.tx) * t, Y = (p.y + o.ty) * t, tw = ctx.measureText(text).width;
+      const bx = X + t / 2 - tw / 2, by = Y + t + 2 / zoom;
+      voiceSay('junctionTag', { x: X, y: Y, w: t, h: t }, { x: bx - 2 / zoom, y: by - 1 / zoom, w: tw + 4 / zoom, h: fh + 2 / zoom }, c => {
+        c.save(); c.font = TAG_FONT(); c.textAlign = 'center'; c.textBaseline = 'top';
+        c.globalAlpha = 0.9; c.fillStyle = 'rgba(3,2,1,.74)'; c.fillRect(bx - 2 / zoom, by - 1 / zoom, tw + 4 / zoom, fh + 2 / zoom);
+        c.fillStyle = '#86dcff'; c.shadowBlur = 2; c.shadowColor = '#3ab8ff';
+        c.fillText(text, X + t / 2, by);
+        c.restore();
+      });
     }
     ctx.restore();
   }
@@ -5646,7 +6052,7 @@ const Build = (() => {
     // no — the reason on its own line right under them. (Was a DOM tip trailing into a screen corner.)
     const r0 = g.rects[0], w = r0.x2 - r0.x1 + 1, h = r0.y2 - r0.y1 + 1;
     let dims = g.belt ? ('BELT ' + g.dir + ' · ' + Math.max(w, h) + ' LONG')
-      : g.kind === 'line' ? (String(g.label || '').toUpperCase() + ' — CLICK TO STAMP')
+      : g.kind === 'line' ? (String(g.label || '').toUpperCase() + (ok ? ' — CLICK TO STAMP' : ''))   // a red ghost never invites the click (2026-09-27 audit B1)
       : g.move ? ('MOVE ' + (g.dx >= 0 ? '+' : '') + g.dx + ', ' + (g.dy >= 0 ? '+' : '') + g.dy)
       : (tool === 'hall' ? (Math.max(w, h) + ' LONG × ' + Math.min(w, h) + ' WIDE') : (w + ' × ' + h));
     const lines = [dims];
@@ -5655,6 +6061,13 @@ const Build = (() => {
     if (!ok) lines.push(((footprint && footprint.msg) || placementReason(g)).toUpperCase());
     // the hover preview teaches BOTH gestures: this size on a click, any size on a drag
     else if (g.stamp) lines.push(g.kind === 'prop' ? 'CLICK TO PLACE' : 'CLICK TO PLACE · DRAG TO SIZE');
+    /* SPACING (2026-09-27 audit B4): a dock hooks every belt in the 1-tile ring around it, so two docks with one empty tile
+       between them share that tile — a belt there hooks BOTH, and the job goes nowhere. Said while the ghost is in hand,
+       never refused (sandbox law): the Commander may still want them tight. */
+    if (ok && g.kind === 'prop' && tool === 'prop' && RING_DOCK_T[propType]) {
+      const near = station.props().find(p => RING_DOCK_T[p.t] && p.x - 1 <= r0.x2 + 1 && r0.x1 - 1 <= p.x + (p.w || 1) && p.y - 1 <= r0.y2 + 1 && r0.y1 - 1 <= p.y + (p.h || 1));
+      if (near) lines.push('CLOSE TO THE ' + String(propLabel(near.t)).toUpperCase() + ' — LEAVE 2 TILES OR THEIR BELTS TOUCH');
+    }
     if (links) lines.push('WILL CONNECT TO ' + linkNames(links));
     if (ok && g.leftBehind) lines.push('ITS BELTS STAY HERE — RECONNECT WITH BELT');
     if (g.kind === 'prop' && canTurn(propType) && !propSpec(propType).flat) {
@@ -5682,19 +6095,15 @@ const Build = (() => {
     tip.classList.toggle('ok', !!ok);
     tip.classList.toggle('bad', !ok);
     tip.style.display = 'block';
-    // clamp within the viewport so it never clips off the right/bottom edge
-    const tw = tip.offsetWidth || 80, th = tip.offsetHeight || 18;
-    const x = Math.min(lastClient.x + 16, window.innerWidth - tw - 6);
-    const y = Math.min(lastClient.y + 14, window.innerHeight - th - 6);
-    tip.style.left = Math.max(6, x) + 'px';
-    tip.style.top = Math.max(6, y) + 'px';
+    placeOverlay(tip, lastClient.x, lastClient.y, 16, 14, false);   // on screen, clear of the Workflow panel, zoom-correct
   }
   function hideTip() { if (tip) tip.style.display = 'none'; }
   let tipTimer = 0;
   function flashTip(ev, text, ok) {
     if (ev) lastClient = { x: ev.clientX, y: ev.clientY };   // ev-less callers (the auto first ride) anchor at the last pointer spot
     showTip(text, ok); clearTimeout(tipTimer);
-    tipTimer = setTimeout(hideTip, 1300);
+    // a refusal is a sentence that names the fix: give it time to be read (1.3 s was gone before the second clause)
+    tipTimer = setTimeout(hideTip, Math.min(6500, Math.max(1300, String(text || '').length * (ok ? 30 : 48))));
   }
 
   /* ---------- Fallout-style prop description card ----------
@@ -5758,6 +6167,13 @@ const Build = (() => {
   function placedFindingsHTML(placed) {
     if (!placed || !CONNECT_TYPES[placed.t]) return '';
     let out = '';
+    if (JUNCTION_TAG_TYPES[placed.t] && valPlan && cacheGeo) {
+      const o = cacheGeo.origin || { tx: 0, ty: 0 }, cfg = valPlan.junctions && valPlan.junctions[(placed.x - o.tx) + ',' + (placed.y - o.ty)];
+      const mode = placed.t === 'splitter' ? (cfg ? (fanoutOnceCrewed()[(placed.x - o.tx) + ',' + (placed.y - o.ty)] ? 'Every branch gets a copy: a JOINER follows the branches.' : 'Jobs take turns between the branches (no JOINER after them).') : null)
+        : placed.t === 'joiner' ? (cfg && cfg.expect > 1 ? 'Waits for ' + cfg.expect + ' branches, then sends one combined result on.' : null)
+        : placed.t === 'loop' ? (cfg ? 'Sends work back up to ' + (cfg.max || 5) + ' times' + (cfg.when ? ', until the verdict is ' + String(cfg.when).toUpperCase() : '') + '.' : null) : null;
+      if (mode) out += '<div class="pc-assign ok">▸ ' + esc(mode) + '</div>';
+    }
     const seen = {};
     for (const e of ((valPlan && valPlan.errors) || [])) {
       if (e.propId !== placed.id || seen[e.code] || !VAL_WHY[e.code]) continue;
@@ -5776,14 +6192,28 @@ const Build = (() => {
       : ('c:' + c.id);
     if (key !== propCardKey) { propCard.innerHTML = propCardHTML(c, placed); propCardKey = key; }
     propCard.style.display = 'block';
-    const w = propCard.offsetWidth || 230, h = propCard.offsetHeight || 96;
-    const ax = (cx == null ? lastClient.x : cx), ay = (cy == null ? lastClient.y : cy);
-    let x = ax + 16, y = ay - h - 14;            // prefer above-right of the cursor
-    if (y < 6) y = ay + 20;                       // flip below if it would clip the top
-    x = Math.min(x, window.innerWidth - w - 8);
-    y = Math.min(y, window.innerHeight - h - 8);
-    propCard.style.left = Math.max(6, x) + 'px';
-    propCard.style.top = Math.max(6, y) + 'px';
+    placeOverlay(propCard, cx == null ? lastClient.x : cx, cy == null ? lastClient.y : cy, 16, 14, true);   // prefer above-right of the cursor
+  }
+  /* position a floating REFIT overlay (the prop card, the action tip) beside the pointer — kept on screen and clear of the docked
+     Workflow panel (2026-09-27 audit P6: the OUTBOX/LOOP cards and the joiner refusal ran off the right edge, and the insert-step
+     error hid behind the panel). Reads are VISUAL px (clientX, getBoundingClientRect, innerWidth); style px live in the element's
+     zoomed space, so the result is divided by the zoom actually applied above it — once (the uiZoom law, U.elZoom). A card that
+     would overflow on the right flips to the LEFT of the pointer instead of being shoved under it. */
+  function placeOverlay(el, ax, ay, dx, dy, above) {
+    if (!el) return;
+    const z = (typeof U !== 'undefined' && U.elZoom) ? (U.elZoom(el.parentElement || el) || 1) : 1;
+    const r = el.getBoundingClientRect(), w = r.width || 230, h = r.height || 40;
+    let right = window.innerWidth;
+    const dock = root && root.querySelector('.wf-panel');
+    if (dock && dock.offsetParent !== null) { const dr = dock.getBoundingClientRect(); if (dr.width > 0 && ax < dr.left) right = Math.min(right, dr.left); }
+    let x = ax + dx;
+    if (x + w > right - 8) x = ax - dx - w;               // flip to the left of the pointer
+    x = Math.max(6, Math.min(x, right - w - 8));
+    let y = above ? ay - h - dy : ay + dy;
+    if (y < 6) y = ay + 20;                                  // flip below when it would clip the top
+    y = Math.max(6, Math.min(y, window.innerHeight - h - 8));
+    el.style.left = (x / z) + 'px';
+    el.style.top = (y / z) + 'px';
   }
   function hidePropCard() { if (propCard) { propCard.style.display = 'none'; propCardKey = null; } }
 
@@ -5990,7 +6420,20 @@ const Build = (() => {
     });
   }
 
-  const api = { init, open, close, toggle, isOpen, requisition, refitNames: guideNames, openAssign, noteLineDelivered, lineOfAgentInfo, nagLabel: code => VAL_LABEL[code] || code,
+  /* WORK › WORKFLOWS (2026-09-27 audit F1): the conveyor builder had no door named for what people come to do. This one opens
+     REFIT on the Conveyors tab and, when the floor already has a line, docks that line's Workflow panel so its sentence and
+     steps are the first thing on screen; with no line yet the CONVEYOR LINES library is what shows. */
+  function openWorkflows() {
+    pendingGroup = 'workflow'; writeLastGroup('workflow');
+    if (!running) open(); else { buildGroup = 'workflow'; selectTool('select'); }
+    if (!running || !station) return;
+    // the panel names the line from the compiled line groups (valComps): compile NOW, or it opens on a bare "single BAY"
+    try { rebake(); } catch (e) { /* the frame loop compiles on its next tick; the panel repaints when it does */ }
+    const first = station.props().find(p => p.t === 'intake') || station.props().find(p => p.t === 'bay');
+    if (first && typeof WorkflowPanel !== 'undefined') { try { openFlowCard(first.id); } catch (e) {} }
+    else if (!first) { try { selectTool('line'); } catch (e) {} }
+  }
+  const api = { init, open, openWorkflows, testJobForProp, close, toggle, isOpen, requisition, refitNames: guideNames, openAssign, noteLineDelivered, lineOfAgentInfo, nagLabel: code => VAL_LABEL[code] || code,
     nagWhy: valWhy };   // nagLabel: the floor's own nag copy for a compiler code (ROUTINES RUN NOW refusal reads it); nagWhy: the full fix sentence the hover card + Workflow panel say (station.layout reads it)
   if (typeof window !== 'undefined' && window.__STARNET_DEV__) api.__test__ = __test__;
   return api;

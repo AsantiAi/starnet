@@ -698,6 +698,8 @@
         <button class="bb" data-term="tasks" data-hint="task"><span class="bb-i">☑</span><span class="bb-tx"><b>TASKS</b><small>track planned work, review results &amp; mark complete</small></span></button>
         <button class="bb" data-term="deliverables" data-hint="deliverable"><span class="bb-i">▣</span><span class="bb-tx"><b>DELIVERABLES</b><small>outputs, Workshop builds &amp; cleanup</small></span></button>
         <button class="bb" id="bb-missions" data-hint="recipe"><span class="bb-i">❒</span><span class="bb-tx"><b>RECIPES</b><small>ready-made jobs to launch — they land on TASKS</small></span></button>
+        <!-- WORKFLOWS (2026-09-27 audit F1): the conveyor line builder — several agents, one after another — had no door named for it -->
+        <button class="bb" id="bb-workflows" data-hint="workflow"><span class="bb-i">⇶</span><span class="bb-tx"><b>WORKFLOWS</b><small>chain agents step by step on conveyor belts — research, write, review, ship</small></span></button>
         <button class="bb" data-term="automation" data-hint="automation"><span class="bb-i">∞</span><span class="bb-tx"><b>AUTOMATION</b><small>routines &amp; loops — any job on a schedule, or repeated until it’s done</small></span></button>
         <button class="bb" data-term="quests" data-hint="quest"><span class="bb-i">⚑</span><span class="bb-tx"><b>QUESTS</b><small>small steps toward your goals &amp; recorded progress</small></span></button>
       </div>
@@ -705,7 +707,7 @@
     <div class="bb-group" data-group="build">
       <button class="bb-grp" data-hint="build" aria-haspopup="menu" aria-expanded="false" title="Shape the station — refit the floor, abilities, channels"><span class="bb-gi">⚒</span>BUILD</button>
       <div class="bb-menu" role="menu">
-        <button class="bb" id="bb-build" data-hint="refit"><span class="bb-i">⌂</span><span class="bb-tx"><b>REFIT STATION</b><small>place rooms, corridors &amp; gear</small></span></button>
+        <button class="bb" id="bb-build" data-hint="refit"><span class="bb-i">⌂</span><span class="bb-tx"><b>REFIT STATION</b><small>rooms, corridors, gear &amp; workflow lines</small></span></button>
         <!-- direction-honest subtitles (audit finding 5): ABILITIES = the agent's tools OUT (switches, connectors,
              skills); CHANNELS = YOUR way in. NAV CONDENSE 2: the SKILLS window merged into ABILITIES (per-agent
              capability readout lives in the AGENTS dossier's SKILLS tab). -->

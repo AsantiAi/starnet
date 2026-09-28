@@ -96,6 +96,40 @@
   }
 
 
+  /* rejoinOf(plan, splitKey) -> { lanes: [{ dir, at: junctionKey|null, kind: 'join'|'merge'|null }] } — where each branch of
+     a SPLIT comes back together. Every lane out of the split is walked the way work goes (in at a dock's hookup, out at its
+     ship tile — the FAN-OUT walk in compileRoutingPlan) to the FIRST join or merge junction on it. The splitter's COPY TO
+     EACH / TAKE TURNS switch (2026-09-28) swaps exactly that junction: a JOINER there is what makes the split copy, a
+     MERGER lets each job go on alone. Pure; a plan whose docks are uncrewed walks no further than them (callers that
+     want the "once crewed" answer pass a stand-in-crew compile, as REFIT's WOULD-voices do). */
+  function rejoinOf(plan, splitKey) {
+    const jc = plan && plan.junctions && plan.junctions[splitKey];
+    if (!jc || jc.kind !== 'split' || !plan.belts) return { lanes: [] };
+    const map = plan.belts, junctions = plan.junctions, dockAt = plan.bayTileToDock || {}, chains = plan.dockChains || {};
+    const p0 = String(splitKey).split(','), sx = +p0[0], sy = +p0[1];
+    const lanes = [];
+    for (const d of outLanes(map, sx, sy)) {
+      const v = DIRV[d], start = { x: sx + v[0], y: sy + v[1] }, sk = key(start.x, start.y);
+      const seen = { [splitKey]: true, [sk]: true }, q = [start];
+      let at = null, kind = null;
+      const j0 = junctions[sk];
+      if (j0 && (j0.kind === 'join' || j0.kind === 'merge')) { at = sk; kind = j0.kind; }
+      while (q.length && !at) {
+        const t = q.shift(), owner = dockAt[key(t.x, t.y)];
+        const ship = owner && chains[owner] && chains[owner].tile;
+        const nts = (ship && !(ship.x === t.x && ship.y === t.y)) ? [ship] : nextTiles(map, junctions, t);
+        for (const nt of nts) {
+          const nk = key(nt.x, nt.y); if (seen[nk]) continue; seen[nk] = true;
+          const j = junctions[nk];
+          if (j && (j.kind === 'join' || j.kind === 'merge')) { at = nk; kind = j.kind; break; }
+          q.push(nt);
+        }
+      }
+      lanes.push({ dir: d, at, kind });
+    }
+    return { lanes };
+  }
+
   // the tile(s) a box flows to next from t (a junction fans out to ALL its out-lanes for reachability/cycle)
   function nextTiles(map, junctions, t) {
     if (!map[key(t.x, t.y)]) return [];
@@ -403,6 +437,8 @@
     }
     const plan = { sources, bays, junctions, belts: map, bayTileToAgent, unboundBays, dockBays, outs, reach, errors };
     plan.bayTileToDock = bayTileToDock;
+    plan.unboundBayTile = unboundBayTile;   // ring belt tile -> UNCREWED bay (legibility only, outside the hash): a lane that
+                                            // ends at a bay with no agent yet is named "BAY n (no agent yet)", never "nowhere"
     /* SPLIT_CREW (multi-bay, 2026-09-22): a DESK-LESS agent whose bays sit in more than one room gets a
        different toolbox at each bay (station isolation is per dock — never the union), which is surprising.
        Advice, never a blocker: "PLACE A DESK — TOOLS FOLLOW THE DOCK" — a desk pins every bay to one room.
@@ -455,11 +491,30 @@
     // valid outbound lanes; the chainFed clause is the same correction for valid stage-two docks, which are fed
     // by an agent rather than by a door and were being shamed for it. Per DOCK: a writer's second bay is judged
     // on its own belts, never excused by its first.
+    /* …and when that bay's belt starts INSIDE the ring of the machine feeding it (an INBOX mouth, or another
+       dock's hookup), the two machines are TOO CLOSE (2026-09-27 audit B4): a job is never delivered on the tile
+       it was born on, and a tile two docks share belongs to one of them only — so the belt the Commander can SEE
+       running into the bay carries nothing. Saying "NOT FED — belt into it" there sends them to redo what they
+       already did; BAY_TOO_CLOSE names the real fix (move one a tile apart). Same warn standing as BAY_NOT_FED. */
+    const sharedRing = {};
+    for (const s of sources) for (const st of srcTiles(s)) sharedRing[key(st.x, st.y)] = 'src';
+    const ringOwners = {};
+    for (const b of bays) for (const t of bayTilesOf(b)) { const k = key(t.x, t.y); (ringOwners[k] = ringOwners[k] || []).push(b.propId); }
+    /* …but only when the SHARED tile is the bay's way IN — a belt aimed into the bay's footprint from a tile another ring
+       also owns (2026-09-28 retest). Two docks a tile apart whose lane goes round the shared tile are wired fine; if the
+       first one has no INBOX it is simply NOT FED, and "move it a tile away" would have sent the Commander the wrong way. */
+    const footOf = {}; for (const p of props) if (p && p.t === 'bay') footOf[p.id] = p;
+    const aimsInto = (t, pid) => {
+      const v = DIRV[map[key(t.x, t.y)]], f = footOf[pid]; if (!v || !f) return false;
+      const nx = t.x + v[0], ny = t.y + v[1];
+      return nx >= f.x && nx < f.x + (f.w || 1) && ny >= f.y && ny < f.y + (f.h || 1);
+    };
+    const tooClose = b => bayTilesOf(b).some(t => { const k = key(t.x, t.y); return (sharedRing[k] === 'src' || (ringOwners[k] || []).length > 1) && aimsInto(t, b.propId); });
     // UNDER A BELT CYCLE reach is deliberately never computed (all false — a glowing lane must mean "a route runs
     // here", and nothing routes while the loop stands), so "not fed" would be a GUESS: it sent the Commander to
     // belt bays that were already fed while the real fault — the CYCLE, a blocking error — went unread (station.layout
     // audit 2026-09-28). Only the CYCLE speaks until it is broken.
-    if (!cyc) for (const b of bays) if (!reachDock[b.propId] && !chainFed[b.propId] && !flowsToOutbox(b.tile)) errors.push({ code: 'BAY_NOT_FED', propId: b.propId, agentId: b.agentId, warn: true });
+    if (!cyc) for (const b of bays) if (!reachDock[b.propId] && !chainFed[b.propId] && !flowsToOutbox(b.tile)) errors.push({ code: tooClose(b) ? 'BAY_TOO_CLOSE' : 'BAY_NOT_FED', propId: b.propId, agentId: b.agentId, warn: true });
     // A CHAIN LOOP IS A BLOCKING ERROR — and it is INVISIBLE to detectCycle. A's ship tile feeding B's dock and
     // B's ship tile feeding A's dock are two separate physical lanes with no belt cycle anywhere; the loop only
     // exists across the docks (consume here, respawn there). Left unguarded that is an infinite chain of PAID
@@ -1275,6 +1330,33 @@
       + 'output — build on it. Answer with the work itself, not a description of what you would do.';
   }
 
+  /* parseHandoff(text) -> { stage, original, from } | null — the INVERSE of handoffPrompt, for surfaces that show a work line's
+     result to the Commander (2026-09-27 audit R2: the OUTBOX titled a line's result "PIPELINE HANDOFF — you are stage 2 of a work
+     line on this stati…" and showed the whole machine prompt under WHAT YOU ASKED FOR). Reads only the fixed frame handoffPrompt
+     writes; anything else is null. Pure. */
+  const HANDOFF_RE = /^PIPELINE HANDOFF — you are stage (\d+) of a work line on this station\.\n\nThe original request was:\n([\s\S]*?)\n\nThe upstream stage \(([^)]*)\) produced:\n/;
+  function parseHandoff(text) {
+    const m = HANDOFF_RE.exec(String(text == null ? '' : text));
+    return m ? { stage: +m[1], original: m[2], from: m[3] } : null;
+  }
+  /* stripVerdictLine(text) -> the text without a trailing reviewer VERDICT line (one of its last 3 non-empty lines), for showing
+     a work line's result: the line is the loop gate's control signal, not part of the work (R1; sidecar/routing/verdict.js holds
+     the gate's own reader). A text that is ONLY the verdict line is returned unchanged. Pure. */
+  function stripVerdictLine(text) {
+    const s = String(text == null ? '' : text), lines = s.split(/\r?\n/);
+    let seen = 0;
+    for (let i = lines.length - 1; i >= 0 && seen < 3; i--) {
+      if (!lines[i].trim()) continue;
+      seen++;
+      const l = lines[i].trim().replace(/^[\s>*\-_`#]+/, '').replace(/[\s*_`.!]+$/, '');
+      if (/^verdict\s*[:=\-–—]\s*(approved|approve|accepted|pass|lgtm|revise|revision|rejected|reject|needs[-_]work)$/i.test(l)) {
+        const out = lines.slice(0, i).concat(lines.slice(i + 1)).join('\n').replace(/\s+$/, '');
+        return out.trim() ? out : s;
+      }
+    }
+    return s;
+  }
+
   /* fanSiblings(plan, agentId) -> the OTHER first docks of the fan-out split that feeds this dock, sorted
      (2026-08-21). The entry dispatcher (resolveTarget) still names ONE dock for an inbound message — that is
      the one that ran. When that dock sits on a lane of a split that feeds a JOINER, the remaining lanes are
@@ -1430,7 +1512,7 @@
     return rec && typeof rec === 'object' ? rec : null;
   }
 
-  return { compileRoutingPlan, composeStageBrief, HANDS_LEAD, resolveTarget, lineOf, lineOriginOf, lineLimitsOf, normalizeLineLimits, LINE_LIMIT_DEFAULTS, LINE_LIMIT_CEILINGS, sourceFor, ok, liveTiles, routeFrom, junctionLaneOwners, chainNext, chainStep, fanSiblings, handoffPrompt, joinPayload, lineComponents, LOOP_MAX_DEFAULT, LOOP_MAX_CEILING,
+  return { rejoinOf, compileRoutingPlan, composeStageBrief, HANDS_LEAD, resolveTarget, lineOf, lineOriginOf, lineLimitsOf, normalizeLineLimits, LINE_LIMIT_DEFAULTS, LINE_LIMIT_CEILINGS, sourceFor, ok, liveTiles, routeFrom, junctionLaneOwners, chainNext, chainStep, fanSiblings, handoffPrompt, parseHandoff, stripVerdictLine, joinPayload, lineComponents, LOOP_MAX_DEFAULT, LOOP_MAX_CEILING,
     // THE DOCK LAYER (multi-bay agents, 2026-09-22) — the dock-keyed truth the agent readings above are views of
     resolveDock, chainNextDock, chainStepDock, fanSiblingsDock, junctionLaneDocks, lineOfDock, lineOriginOfDock, entryDockOf, docksOf, dockOf, agentOfDock: agentOfDockIn, deriveDockLayer, dockLayer, hasDockLayer, stepToAgents, propIdCmp,
     _internals: { DIRV, OPP, LANE_ORDER, key, buildBeltMap, outLanes, inLanes, loopLanes, beltTileNear, nextTiles, detectCycle, hashStr, compileChains, compileDockChains, chainCycle, shipFrom, propIdCmp, entryDocksOf, agentChainsView } };

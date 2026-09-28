@@ -3549,7 +3549,14 @@ const Chat = (() => {
   function sampleCard(opts) {
     opts = opts || {};
     if (!log) return;
-    if (sampleCardEl && sampleCardEl.isConnected) { autoscroll(); return; }   // one live card at a time
+    // the Commander asked for this card by clicking the INBOX: a quick tour covering COMMS steps aside so it is not posted unseen
+    try { if (typeof Dialogue !== 'undefined' && Dialogue.yieldTour && Dialogue.isOpen && Dialogue.isOpen()) Dialogue.yieldTour(); } catch (_) {}
+    /* …any OTHER open conversation is the Commander's to answer — never answered for them (its "not now" is a real decline
+       the learning loop records). The card still posts below it, so SAY where it went: a silent click read as a dead INBOX
+       (2026-09-28 retest, the goal-path question covering COMMS). */
+    const covered = () => { try { return typeof Dialogue !== 'undefined' && Dialogue.isOpen && Dialogue.isOpen(); } catch (_) { return false; } };
+    const sayCovered = () => { if (covered() && typeof StationUI !== 'undefined' && StationUI.notify) StationUI.notify('The INBOX card is in COMMS, under the question your agent is asking. Answer it, and the card is right there.', 'info', undefined, { transient: true }); };
+    if (sampleCardEl && sampleCardEl.isConnected) { autoscroll(); sayCovered(); return; }   // one live card at a time
     const r = row('agent'); r.d.classList.add('tool'); r.d.classList.add('turnin'); r.d.classList.add('sample-card');
     sampleCardEl = r.d;
     const title = document.createElement('span'); title.className = 'turnin-title';
@@ -3557,17 +3564,35 @@ const Chat = (() => {
     r.body.appendChild(title);
     const item = document.createElement('div'); item.className = 'turnin-item';
     const text = document.createElement('span'); text.className = 'turnin-text';
-    text.textContent = 'a labeled test crate (“SAMPLE JOB…”) rides the real belts — the router picks the dock, the run spends real budget, and the reply lands on the OUTBOX.';
+    const job = (typeof Build !== 'undefined' && Build.testJobForProp) ? Build.testJobForProp(opts.propId) : null;
+    text.textContent = (job && job.text
+      ? 'your test job (“' + (job.text.length > 70 ? job.text.slice(0, 70) + '…' : job.text) + '”) rides the real belts'
+      : 'a labeled test crate (“SAMPLE JOB…”) rides the real belts — write your own test job in the INBOX’s Workflow panel —')
+      + ' — the router picks the dock, the run spends real budget, and the reply lands on the OUTBOX.';
     const btns = document.createElement('span'); btns.className = 'consent-btns';
     item.appendChild(text); item.appendChild(btns);
     r.body.appendChild(item);
     const note = document.createElement('div');   // refusal / result area (below the action row)
     r.body.appendChild(note);
-    const run = document.createElement('button'); run.className = 'consent-btn primary'; run.textContent = '▸ RUN A SAMPLE JOB';
+    const run = document.createElement('button'); run.className = 'consent-btn primary'; run.textContent = '▸ RUN ONE REAL JOB';
     const later = document.createElement('button'); later.className = 'consent-btn deny'; later.textContent = 'not now';
     later.onclick = () => vanish(r.d);
     btns.appendChild(run); btns.appendChild(later);
-    if (opts.fed === false && typeof StationUI !== 'undefined' && StationUI.openTerm) {
+    if (opts.schedOff) {
+      // a schedule IS saved; the station's scheduling is off — the fix is one click, right here (R3)
+      const arm = document.createElement('button'); arm.className = 'consent-btn'; arm.textContent = '▸ TURN SCHEDULING ON';
+      arm.onclick = () => {
+        arm.disabled = true; arm.textContent = '… turning on';
+        Harness.api.post('/api/cron/arm', { enabled: true }).then(res => {
+          const ok = !!(res && res.ok && res.j && res.j.ok);
+          arm.textContent = ok ? '✓ scheduling is on' : 'could not turn scheduling on';
+          if (!ok) arm.disabled = false;
+          if (ok && typeof World !== 'undefined' && World.pollFeed) { try { World.pollFeed(); } catch (_) {} }
+        }).catch(() => { arm.disabled = false; arm.textContent = '▸ TURN SCHEDULING ON'; });
+      };
+      btns.appendChild(arm);
+    }
+    if (opts.fed === false && !opts.schedOff && typeof StationUI !== 'undefined' && StationUI.openTerm) {
       // the floor PROVABLY has no feed wired (server-answered, never guessed) — keep the promised door here
       const feed = document.createElement('button'); feed.className = 'consent-btn'; feed.textContent = '▸ WIRE A REAL FEED — CHANNELS';
       feed.onclick = () => StationUI.openTerm('messaging');
@@ -3577,14 +3602,14 @@ const Chat = (() => {
       const err = document.createElement('span'); err.className = 'consent-result err';
       err.textContent = msg;
       note.textContent = ''; note.appendChild(err);
-      run.disabled = false; later.disabled = false; run.textContent = '▸ RUN A SAMPLE JOB';
+      run.disabled = false; later.disabled = false; run.textContent = '▸ RUN ONE REAL JOB';
       autoscroll();
     };
     run.onclick = () => {
       run.disabled = true; later.disabled = true;
-      run.textContent = '⌛ the sample is riding the line…';   // honest: the POST is genuinely open until the line delivers
+      run.textContent = '⌛ the job is riding the line…';   // honest: the POST is genuinely open until the line delivers
       note.textContent = '';
-      Harness.api.post('/api/routing/sample', {}).then(res => {
+      Harness.api.post('/api/routing/sample', job ? Object.assign({}, job.text ? { text: job.text } : {}, job.line ? { line: job.line } : {}) : {}).then(res => {
         if (!res.ok) return fail(String((res.j && res.j.error) || ('the station refused (http ' + res.status + ')')));   // the server's reason, VERBATIM
         const j = res.j || {};
         btns.remove();
@@ -3595,11 +3620,14 @@ const Chat = (() => {
         const clean = !!(j.delivered && j.delivered.reason === 'done');
         let folded = false;
         if (clean) { try { if (typeof ReturnStore !== 'undefined' && ReturnStore.foldRow) folded = ReturnStore.foldRow(j.delivered); } catch (_) {} }
-        const who = (j.delivered && j.delivered.agentId) || j.agentId || 'agent';
+        const whoId = (j.delivered && j.delivered.agentId) || j.agentId || 'agent';
+        // the agent's NAME, not its internal id (the seeded hero's id is literally "agent")
+        const whoRec = (typeof App !== 'undefined' && App.agents) ? (App.agents() || []).find(a => a && a.id === whoId) : null;
+        const who = String((whoRec && whoRec.name) || whoId).toUpperCase();
         const cost = (+j.totalUsd > 0 && typeof U !== 'undefined' && U.usd) ? (' · ' + U.usd(+j.totalUsd)) : '';
         text.textContent = clean
-          ? ('✔ sample delivered — ' + who + ' shipped it' + cost + '.' + (folded ? ' the crate is on the OUTBOX.' : ''))
-          : ('⚠ the sample rode the line, but the run did not finish clean — the reply below says why.');
+          ? ('✔ job delivered — ' + who + ' finished the last step' + cost + '.' + (folded ? ' the result is on the OUTBOX.' : ''))
+          : ('⚠ the job rode the line, but the run did not finish clean — the reply below says why.');
         const reply = (j.replies && j.replies.length) ? String(j.replies[j.replies.length - 1]).replace(/\s+/g, ' ').trim() : '';
         if (reply) {
           const out = document.createElement('div'); out.className = 'turnin-text';
@@ -3620,6 +3648,7 @@ const Chat = (() => {
       }).catch(() => fail('the station didn’t answer — is the sidecar running?'));
     };
     autoscroll();
+    sayCovered();
   }
 
   /* W3 — THE DELIVERY CARD (reshaped 2026-07-15). WorkshopStore adopts one SESSION per idle-work

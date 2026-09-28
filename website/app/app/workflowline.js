@@ -390,11 +390,14 @@
         T('; ' + (e.when === 'approved' ? 'if it is still not approved' + tries : e.when === 'revise' ? 'if the verdict still does not say revise' + tries
           : 'if it still reads as ' + e.when + ' work' + tries) + ', ');
       } else if (i > 0) T(i === run.length - 1 && !c.gate ? ' then ' : '; ');
+      // a lone step in front of a LOOP gate says its hand-off AFTER the loop clause — "reviews it, handing off the approved
+      // draft and sends it back to NOVA…" read as two sentences glued together (2026-09-28 retest)
+      const loopHands = (c.gate && c.gate.kind === 'loop' && c.docks.length === 1 && o.handsOf) ? o.handsOf(c.docks[0].propId) : null;
       c.docks.forEach((d, j) => {
         if (j > 0) T(c.mode === 'all' ? ' and ' : ' or ');
         if (d.agentId) segs.push({ t: 'agent', s: nameOf(d.agentId), propId: d.propId });
         else segs.push({ t: 'miss', s: '[pick ' + (d.role ? 'a ' + d.role.toLowerCase() : 'an agent') + ']', propId: d.propId });
-        const hands = o.handsOf ? o.handsOf(d.propId) : null;
+        const hands = loopHands ? null : (o.handsOf ? o.handsOf(d.propId) : null);
         T(' ' + roleInfo(d.role).verb + (hands ? ', handing off ' + hands : ''));
       });
       if (c.docks.length > 1) T(c.mode === 'all' ? ' (in parallel)' : c.mode === 'turns' ? ' (taking turns)' : ' (whichever the content routes to)');
@@ -405,6 +408,7 @@
         const until = g.when === 'approved' ? 'until it is approved' : g.when === 'revise' ? 'until the verdict says revise'
           : g.when ? 'while it reads as ' + g.when + ' work' : 'every pass';
         segs.push({ t: 'loop', s: ' and sends it back to ' + who + ' ' + until + ' (' + (g.max || 5) + ' tries max)' });
+        if (loopHands) T(', then hands off ' + loopHands);
       } else if (g && g.kind === 'join') T(' and the parts wait at the JOINER, then continue as one');
     });
     /* NOT CONNECTED (2026-09-23): a dock no INBOX reaches is named, never sequenced — the old walk chained such
@@ -577,7 +581,7 @@
   const entryAgentsOf = flow => entryDocksOf(flow).map(p => flow.docks[p].agentId);
   const dockAgentsOf = flow => flow ? flow.order.map(p => flow.docks[p].agentId).filter(Boolean) : [];
   function lineStarts(flow, facts) {
-    const x = facts || {}, out = { schedules: [], channels: [], routines: [], chanRows: [], events: [], paused: [] };
+    const x = facts || {}, out = { schedules: [], channels: [], routines: [], chanRows: [], events: [], paused: [], offSchedules: [] };
     if (!flow) return out;
     const said = d => (x.human ? x.human(d) : String(d == null ? '' : d));
     // LINE TRIGGERS: only the ones the server reports enabled with nothing blocking them start the line; an enabled one
@@ -594,7 +598,12 @@
       for (const r of out.routines) {
         if (!r.startsLine) continue;
         if (armed) out.schedules.push(said(r.display));
-        else out.paused.push('its routine "' + r.name + '" (' + said(r.display) + ') is saved but ' + (x.cron.halted ? 'the scheduler is stopped (E-STOP)' : 'the scheduler is off'));
+        else {
+          out.paused.push('its routine "' + r.name + '" (' + said(r.display) + ') is saved but ' + (x.cron.halted ? 'the scheduler is stopped (E-STOP)' : 'the scheduler is off'));
+          // …and named apart for the INBOX node and the INBOX section (2026-09-27 audit T1: the panel said "no schedule"
+          // right above the schedule the Commander had just saved)
+          if (r.enabled !== false) out.offSchedules.push(said(r.display));
+        }
       }
     }
     if (x.chans) {
@@ -655,7 +664,31 @@
   const TERMINAL = { done: 1, stopped: 1, failed: 1 };
   const isLive = s => !!s && !TERMINAL[s.state];
 
+  /* suggestLineFor(text) -> { id, why } | null — START FROM INTENT (2026-09-28). The Commander's own words (their onboarding goal)
+     read for the SHAPE of the work they describe — a draft that a reviewer approves, research that gets written up, code
+     that gets reviewed, a decision that wants two takes — and mapped to the ready-made line that has that shape. Pure and
+     conservative: a goal naming ONE kind of work suggests nothing (a single agent already does that), and a schedule in the
+     words only adds a pointer to the INBOX, never a guess at the time. */
+  const INTENT = {
+    research: /\b(research|dig|look(ing)? (up|into)|gather|sources?|news|monitor|scan)\b/i,
+    write: /\b(write|writ(es|ing)|draft|compose|blurb|post|article|newsletter|summar(y|ies|ise|ize)|report|email)\b/i,
+    review: /\b(review(er|ers|s|ed|ing)?|proof ?read(s|ing)?|edit(or|ors|s|ed|ing)?|approv(e|es|al|ed)|fact.?check(s|ed|ing)?|sign.?off|before (i|we) (publish|post|send|ship))\b/i,
+    code: /\b(code|coding|bugs?|pull requests?|refactor|repo|commits?)\b/i,
+    compare: /\b(second opinion|two takes|compare|pressure.?test)\b/i,
+    schedule: /\b(every|each|daily|weekly|hourly|morning|evening|nightly|mondays?|weekdays?)\b/i
+  };
+  function suggestLineFor(text) {
+    const t = String(text == null ? '' : text); if (!t.trim()) return null;
+    const has = k => INTENT[k].test(t);
+    let s = null;
+    if (has('code') && has('review')) s = { id: 'code_foundry', why: 'an engineer builds it and a reviewer sends it back until it passes' };
+    else if (has('write') && has('review')) s = { id: 'revision_loop', why: 'a writer drafts it and a reviewer sends it back until it is approved' + (has('research') ? ' (add a RESEARCHER in front with + in its Workflow panel)' : '') };
+    else if (has('research') && has('write')) s = { id: 'research_line', why: 'one agent digs, the next writes it up' };
+    else if (has('compare')) s = { id: 'second_opinion', why: 'two agents take the same job on their own, and you get both answers' };
+    if (s && has('schedule')) s.why += '; its INBOX can run it on your schedule';
+    return s;
+  }
   return { ROLE, GENERIC, roleInfo, starters, lineFlow, physicalOrder, neighbours, howItRuns, readiness, pillText,
     costEstimate, channelFeeds, lineRoutines, lineEventTriggers, lineStarts, entryDocksOf, entryAgentsOf, dockAgentsOf, sentenceText,
-    triggerSig, rowPatch, testInputFor, pausedNext, hopLabel, isLive, CHAN_LABEL };
+    triggerSig, rowPatch, testInputFor, pausedNext, hopLabel, isLive, CHAN_LABEL, suggestLineFor };
 });

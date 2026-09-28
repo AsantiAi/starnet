@@ -372,5 +372,16 @@ const settle = async (R, id) => { for (let i = 0; i < 50; i++) { await R.st.sett
     A.ok(!/the belt from writer /.test(s.ended || ''), 'the raw id is not what the owner reads');
   }
 
+  /* ---- X3 (2026-09-27 audit): a tool the consent gate REFUSED in a step is recorded on the hop (never a clean checkmark) ---- */
+  {
+    const R = rig(twoDock({}), { research: { text: 'please grant approval for fs.write', usd: 0.01, denied: ['fs.write', 42, 'fs.write2'] }, writer: { text: 'ok', usd: 0.01 } });
+    const r = R.st.start({ line: R.lineId, text: 'go' });
+    const s = await settle(R, r.session.id);
+    A.eq(s.hops[0].denied, ['fs.write', 'fs.write2'], 'the refused tools ride the hop (strings only)');
+    const R2 = rig(twoDock({}), { research: { text: 'fine', usd: 0.01 }, writer: { text: 'ok', usd: 0.01 } });
+    const s2 = await settle(R2, R2.st.start({ line: R2.lineId, text: 'go' }).session.id);
+    A.eq(s2.hops[0].denied, [], 'a clean step records none');
+  }
+
   A.report('routing.steptest');
 })().catch(e => { console.log('FAIL: ' + (e && e.stack || e)); process.exit(1); });
