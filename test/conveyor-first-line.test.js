@@ -19,9 +19,10 @@ const read = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
 const build = read('frontend/app/build.js'), panel = read('frontend/app/workflowpanel.js');
 
 /* B1 — the way out of NO ROOM */
-const tiles = build.slice(build.indexOf('let make = null;'), build.indexOf('if (make) grid.appendChild(make);') + 40);
-A.ok(/if \(!lineFits\(bp\.id\)\)/.test(tiles) && /MAKE ROOM FOR IT/.test(tiles) && /make\.onclick = e => makeRoomFor\(bp\.id, e\)/.test(tiles), 'a card with NO ROOM carries MAKE ROOM FOR IT');
-A.ok(/grid\.appendChild\(make\)/.test(tiles), '…as a sibling button (never a button inside the card button)');
+// (the card's fit lives in setLineTileFit since the 2026-09-28 retest — kept current as the floor changes; conveyor-retest.test.js)
+const tiles = build.slice(build.indexOf('  function setLineTileFit(b, bp) {'), build.indexOf('  function makeRoomFor(bpId, ev) {'));
+A.ok(/const fits = lineFits\(bp\.id\)/.test(tiles) && /MAKE ROOM FOR IT/.test(tiles) && /mk\.onclick = e => makeRoomFor\(bp\.id, e\)/.test(tiles), 'a card with NO ROOM carries MAKE ROOM FOR IT');
+A.ok(/b\.after\(mk\)/.test(tiles), '…as a sibling button (never a button inside the card button)');
 const mr = build.slice(build.indexOf('  function makeRoomFor(bpId, ev) {'), build.indexOf('  function stampLine(w, ev) {'));
 A.ok(/const W = bp\.w \+ 2, H = bp\.h \+ 2;/.test(mr), 'the room is the line plus a tile of walking room');
 A.ok(/touches\(c\.x, c\.y\)/.test(mr) && /station\.addRoom\(\{ kind: 'hab'/.test(mr), 'it only builds a room that touches the station (auto-doors join it)');

@@ -403,6 +403,8 @@
     }
     const plan = { sources, bays, junctions, belts: map, bayTileToAgent, unboundBays, dockBays, outs, reach, errors };
     plan.bayTileToDock = bayTileToDock;
+    plan.unboundBayTile = unboundBayTile;   // ring belt tile -> UNCREWED bay (legibility only, outside the hash): a lane that
+                                            // ends at a bay with no agent yet is named "BAY n (no agent yet)", never "nowhere"
     /* SPLIT_CREW (multi-bay, 2026-09-22): a DESK-LESS agent whose bays sit in more than one room gets a
        different toolbox at each bay (station isolation is per dock — never the union), which is surprising.
        Advice, never a blocker: "PLACE A DESK — TOOLS FOLLOW THE DOCK" — a desk pins every bay to one room.

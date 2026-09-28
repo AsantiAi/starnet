@@ -160,7 +160,7 @@ const fin = build.slice(build.indexOf('function renderFinCard'), build.indexOf('
 A.ok(/finSampleRes\.key === c\.key/.test(fin), 'the readout belongs to the line it rode');
 A.ok(/sampleResultView\(j, r\.status, agentLabel\)/.test(fin), 'the response is parsed through the pure view (never discarded)');
 A.ok(/sr && sr\.view && sr\.view\.ok \? ' done' : ''/.test(fin), '③ ticks only on the view\'s ok (= server `delivered`)');
-A.ok(/SAMPLE RIDING THE LINE/.test(fin), 'an in-flight sample is shown as in flight, not as done');
+A.ok(/THE JOB IS RIDING THE LINE/.test(fin), 'an in-flight job is shown as in flight, not as done');
 A.ok(/finSampleHTML\(sr\.view\)/.test(fin) && /fl-result/.test(fin), 'the result block is rendered into the card');
 A.ok(!/sample job dispatched — watch the line/.test(fin), 'the old fire-and-forget flash is gone');
 
