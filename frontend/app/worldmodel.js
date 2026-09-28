@@ -382,9 +382,14 @@ const WorldModel = (() => {
      on migrate for docs saved before this existed, and never touched again. Injectable so tests and
      any future importer stay deterministic. */
   function stationId() { return (typeof Date !== 'undefined' && Date.now) ? Date.now() : 1; }
+  /* SAVE VERSION. 2 (2026-09-28, the conveyor-links plan): the doc carries `links` — the explicit machine-to-machine
+     connections its belts make (Pipeline.deriveLinks). Belts stay in the save, so an older build that opens a v2 save
+     still routes by tiles; this build re-derives the links from the belts on load, so a save an older build edited
+     can never carry stale ones. */
+  const STATION_VERSION = 2;
   function freshDoc(createdAt) {
     const doc = {
-      schema: 'starnet.station', version: 1, _nid: 1,
+      schema: 'starnet.station', version: STATION_VERSION, _nid: 1,
       meta: { name: 'STARNET STATION', createdAt: createdAt || stationId(), tier: 0, spawnRoomId: null, trunkRoomId: null },
       rooms: {}, order: [], props: [], belts: {}, edges: []
     };
@@ -870,6 +875,44 @@ const WorldModel = (() => {
     const subs = [];
     const undoStack = [], redoStack = [];
 
+    /* ---------- LINKS (the conveyor-links plan, phase A, 2026-09-28) ----------
+       doc.links = the floor's explicit machine-to-machine connections (Pipeline.deriveLinks), in world tiles. Until the
+       link tools land every belt edit is still a tile edit, so the links FOLLOW the belts: a cache re-derived whenever
+       what the derivation reads changes (the belts, a belt machine's place or size, a FILTER's routes, a LOOP's exit),
+       checked on its identity too (an undo or a load hands in other links — re-derived, never trusted). A derivation
+       is ADOPTED only when the plan its links compile to is identical to the ring rule's, so this phase can never move a
+       line; null = not adopted (no compiler loaded, or a floor they would not reproduce) and the compiler keeps the ring
+       rule, exactly as before links existed. The derivation reads the junction config projectGeometry hands the
+       compiler (routes / def / done — not esc, which the projection does not carry), so the two can never disagree. */
+    const LINK_MACHINES = { intake: 1, bay: 1, outbox: 1, splitter: 1, filter: 1, merger: 1, joiner: 1, loop: 1 };
+    const linkCache = { sig: null, links: undefined };
+    function currentLinks() {
+      const P = pipelineModule();
+      if (!P || typeof P.deriveLinks !== 'function') { doc.links = null; return null; }
+      const props = [], geoProps = [], belts = [];
+      for (const p of doc.props) {
+        if (!LINK_MACHINES[p.t]) continue;
+        const o = { id: p.id, t: p.t, x: p.x, y: p.y, w: p.w || 1, h: p.h || 1 };
+        if (p.routes) o.routes = p.routes; if (p.def) o.def = p.def; if (p.done) o.done = p.done;
+        props.push(o);
+        const g = Object.assign({}, o);
+        if (p.agentId) g.agentId = p.agentId; if (p.when) g.when = p.when; if (p.maxIter) g.maxIter = p.maxIter; if (p.timeoutMin) g.timeoutMin = p.timeoutMin;
+        geoProps.push(g);
+      }
+      for (const k in doc.belts) { const q = k.split(','); belts.push({ x: +q[0], y: +q[1], dir: doc.belts[k] }); }
+      const sig = JSON.stringify([props, belts]);
+      if (linkCache.sig === sig && linkCache.links === doc.links) return doc.links;
+      let links = null;
+      try {
+        const derived = P.deriveLinks({ props, belts });
+        const geo = { props: geoProps, belts };
+        if (JSON.stringify(P.compileRoutingPlan(geo)) === JSON.stringify(P.compileRoutingPlan(Object.assign({}, geo, { links: derived })))) links = derived;
+      } catch (e) { links = null; }
+      doc.links = links;
+      linkCache.sig = sig; linkCache.links = links;
+      return links;
+    }
+
     const fail = (code, msg) => ({ ok: false, error: code, msg: msg || code });
 
     /* ---------- read accessors ---------- */
@@ -1032,7 +1075,7 @@ const WorldModel = (() => {
       if (!r || !r.ok) { restore(undoStack.pop()); emit([], { global: true }); }
       return r;
     }
-    function restore(s) { dropRoomIdx(); doc.rooms = s.rooms; doc.order = s.order; doc.meta = s.meta; doc._nid = s._nid; doc.props = s.props || []; doc.belts = s.belts || {}; doc.edges = s.edges || []; }
+    function restore(s) { dropRoomIdx(); doc.rooms = s.rooms; doc.order = s.order; doc.meta = s.meta; doc._nid = s._nid; doc.props = s.props || []; doc.belts = s.belts || {}; doc.edges = s.edges || []; doc.links = Array.isArray(s.links) ? s.links : null; }
     /* `global: true` means THIS EDIT CANNOT BE INVALIDATED BY A RECTANGLE — a listener holding a
        tile-cached render must throw the whole cache away, not just the chunks the rects touch.
        Additive: the field is simply absent on every other mutation, and a listener that ignores it
@@ -2237,6 +2280,10 @@ const WorldModel = (() => {
       // are never added to blockedTiles (floor machinery; boxes ride above, agents step across).
       const beltsLocal = [];
       for (const k in doc.belts) { const p = k.split(','); beltsLocal.push({ x: +p[0] - ox, y: +p[1] - oy, dir: doc.belts[k] }); }
+      // the floor's LINKS, shifted the same way — the compiler reads hookups and FILTER / LOOP ports from them (absent when
+      // the floor's links could not be adopted: the compiler then keeps the ring rule, exactly as before links existed)
+      const lk = currentLinks();
+      const linksLocal = lk ? lk.map(l => { const o = { id: l.id, from: l.from, to: l.to, path: l.path.map(t => ({ x: t.x - ox, y: t.y - oy, d: t.d })) }; if (l.ring) o.ring = true; return o; }) : null;
       const walkable = (lx, ly, extra) => {
         if (lx < 0 || ly < 0 || lx >= COLS || ly >= ROWS) return false;
         if (zoneGrid[idx(lx, ly)] == null) return false;
@@ -2410,7 +2457,7 @@ const WorldModel = (() => {
       return {
         TILE, COLS, ROWS, W: COLS * TILE, H: ROWS * TILE + HULL_PAD,
         origin: { tx: ox, ty: oy },
-        allRects, zones, ROOM_IDS, isCorridor, chamfers, windows: [], props: propsLocal, belts: beltsLocal,
+        allRects, zones, ROOM_IDS, isCorridor, chamfers, windows: [], props: propsLocal, belts: beltsLocal, ...(linksLocal ? { links: linksLocal } : {}),
         doorDefs, zoneGrid, idx, canStep, baseColorOf, walkable, path, clearFootSegment, footPoint, blockedTiles,
         nameOf: id => (doc.rooms[id] ? doc.rooms[id].name : ''),
         kindOf: id => (doc.rooms[id] ? doc.rooms[id].kind : null),
@@ -2744,7 +2791,7 @@ const WorldModel = (() => {
     }
 
     /* ---------- serialize / subscribe ---------- */
-    const serialize = () => clone(doc);
+    const serialize = () => { currentLinks(); return clone(doc); };
     function onChange(fn) { subs.push(fn); return () => { const i = subs.indexOf(fn); if (i >= 0) subs.splice(i, 1); }; }
 
     return {
@@ -2794,6 +2841,8 @@ const WorldModel = (() => {
       undo, redo, canUndo, canRedo, replaceLayout,
       // projection + io
       projectGeometry, serialize, onChange,
+      // the floor's explicit connections (world tiles), or null when not adopted — see LINKS above
+      links: () => { const l = currentLinks(); return l ? clone(l) : null; },
     };
   }
 
@@ -2802,7 +2851,10 @@ const WorldModel = (() => {
     if (!doc || typeof doc !== 'object') return doc;
     if (!doc.schema) doc.schema = 'starnet.station';
     if (!doc.version) doc.version = 1;
-    // future: while (doc.version < CURRENT && migrations[doc.version]) ...
+    // v1 -> v2: links are added — derived from the belts on the first read after load (makeStation's link cache), which is
+    // the same compile that routes the floor now, and adopted only when they compile to the identical plan
+    if (doc.version < 2) doc.version = 2;
+    if (doc.links != null && !Array.isArray(doc.links)) doc.links = null;
     // make deserialize TOTAL over any partial/legacy/corrupted v1 blob (it's the persistence seam):
     if (!doc.rooms || typeof doc.rooms !== 'object') doc.rooms = {};
     if (!Array.isArray(doc.order)) doc.order = Object.keys(doc.rooms);
