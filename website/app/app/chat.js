@@ -2176,6 +2176,7 @@ const Chat = (() => {
   const BROADCAST_COALESCE_MS = 3000;
   const BROADCAST_QUEUE_CAP = 8;   // bounded FIFO: a celebration flood drops the OLDEST queued line, never grows unbounded
   let lastBroadcastAt = 0;
+  let lastTrophyLine = null, lastTrophyAt = 0;   // the moment's trophy line (see ONE MOMENT, ONE TROPHY LINE)
   const broadcastQueue = [];       // {text, opts} coalesced inside the window — drained in order, one per window slot
   let broadcastDrainTimer = null;
   function broadcastBlocked() {
@@ -2237,6 +2238,31 @@ const Chat = (() => {
     const line = document.createElement('span');
     line.className = 'bc-line' + (opts.tone === 'gold' ? ' bc-gold' : '');   // tone rides the LINE (a shared block can mix tones)
     const raw = String(text == null ? '' : text);
+    // ONE MOMENT, ONE TROPHY LINE (first-hour walk 2026-09-28: three TROPHY EARNED rows landed back to back after the
+    // first good answer). A trophy that joins a block whose last line is already a trophy line folds into it —
+    // "◆ 3 trophies — FIRST LIGHT · PACK RAT · NIGHT SHIFT (see GROWTH)". Every name still shows; one row, not three.
+    const TROPHY = 'TROPHY EARNED · ';
+    // the moment's trophy line: the last trophy line, if it landed in the last 10s — even when a card (a REMEMBERED
+    // fact landed between them in the walk) started a new block since. An older trophy line is a different moment.
+    const prevLine = (lastTrophyLine && lastTrophyLine.isConnected && Date.now() - lastTrophyAt < 10000) ? lastTrophyLine : null;
+    if (raw.indexOf(TROPHY) === 0 && prevLine && prevLine.dataset && prevLine.dataset.trophies) {
+      let names = [];
+      try { names = JSON.parse(prevLine.dataset.trophies) || []; } catch (_) { names = []; }
+      const nm = raw.slice(TROPHY.length).trim();
+      if (nm && names.indexOf(nm) < 0) names.push(nm);
+      prevLine.dataset.trophies = JSON.stringify(names);
+      prevLine.textContent = '';
+      const g = document.createElement('span'); g.className = 'bc-glyph'; g.textContent = '▸ ';
+      const em = document.createElement('span'); em.className = 'bc-name'; em.textContent = names.join(' · ');
+      prevLine.appendChild(g);
+      prevLine.appendChild(document.createTextNode('◆ ' + names.length + ' trophies — '));
+      prevLine.appendChild(em);
+      prevLine.appendChild(document.createTextNode(' (see GROWTH)'));
+      lastTrophyAt = Date.now();
+      autoscroll();
+      return true;
+    }
+    if (raw.indexOf(TROPHY) === 0) { line.dataset.trophies = JSON.stringify([raw.slice(TROPHY.length).trim()]); lastTrophyLine = line; lastTrophyAt = Date.now(); }
     const hi = opts.highlight ? String(opts.highlight) : '';
     const ix = hi ? raw.indexOf(hi) : -1;
     // prefix glyph
@@ -2821,7 +2847,7 @@ const Chat = (() => {
       const label = String(sum.textContent || '').split(' · ')[0];
       const bits = [];
       if (Number(entry.durationMs) > 0) bits.push(fmtMs(Number(entry.durationMs)));
-      bits.push(leadCalls + ' lead ' + (leadCalls === 1 ? 'call' : 'calls'));
+      bits.push(leadCalls + ' tool ' + (leadCalls === 1 ? 'call' : 'calls'));   // the LEAD's tool calls (runCallCount = toolTrace) — not model calls
       if (children.length) bits.push(workerCalls + ' worker ' + (workerCalls === 1 ? 'call' : 'calls'));
       const identity = [entry.model && entry.model !== '(unknown)' ? entry.model : '', (entry.reasoningEffort && entry.reasoningEffort !== 'none') ? entry.reasoningEffort : ''].filter(Boolean).join(' ');
       if (identity) bits.push(identity);
