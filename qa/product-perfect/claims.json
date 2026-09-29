@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "30a1a516812e5dbe48b7f72f2492bb484db39db8",
+    "sourceCommit": "248564e993d48f678814690335be572cb9c2d3df",
     "pathSetSha256": "d399b7dc9c6d8ef4e165d0c6560b5770636dbaf73b81f662e7c4b31d7cc55045",
     "files": [
       {
@@ -253,8 +253,8 @@
       },
       {
         "path": "frontend/app/autonomy.js",
-        "bytes": 9807,
-        "sha256": "db4d6f361f8e0a040b8090eef855fc31f5be8b152e8d02ae1653ebd0e75f45b4"
+        "bytes": 10552,
+        "sha256": "0047a3dd95608449dc1fdbb3e3afc2973daa84f5c6601ad6ba16d6400bb62908"
       },
       {
         "path": "frontend/app/autonomystore.js",
@@ -328,8 +328,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 671295,
-        "sha256": "629ff3e1bde29daf5b9ed2b315ba21be3b388a4800c8ae3e1aae21d10fb57d6f"
+        "bytes": 672834,
+        "sha256": "8edd541205a9c96b855593cf592a8843f93cd96bf328ced7c9194c5db8d322d7"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -518,8 +518,8 @@
       },
       {
         "path": "frontend/app/goalstore.js",
-        "bytes": 45216,
-        "sha256": "ea18ed5be8b5dcc05eb37eb0b17f181ed688d287c9cc4d4b608a617d709c3c17"
+        "bytes": 47247,
+        "sha256": "6839b920f6dcda94f82976f299c5f2faeb069262a1869822ab2032d821ac0a60"
       },
       {
         "path": "frontend/app/group-chat.js",
@@ -528,8 +528,8 @@
       },
       {
         "path": "frontend/app/harness.js",
-        "bytes": 85921,
-        "sha256": "2687e7386b4bc8209b663b04b557e987e466dca9c3a1cf370b34f199f728b681"
+        "bytes": 86405,
+        "sha256": "f908073e1a5f72ef1fa1ac5b0b6fcd02a842657dd072754922fad6e62846591c"
       },
       {
         "path": "frontend/app/hint.js",
@@ -673,8 +673,8 @@
       },
       {
         "path": "frontend/app/onboarding.js",
-        "bytes": 58847,
-        "sha256": "2f48251b49e44c347a9d840138fcbbcbeba9511b4efd06f7c355a29d648887c2"
+        "bytes": 62880,
+        "sha256": "9bc498d1b1fdcc9ec6c8d528baf5b44364815a0192e34bf8b12600e087b5edde"
       },
       {
         "path": "frontend/app/overseer-setup.js",
@@ -1073,8 +1073,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 737739,
-        "sha256": "54eafb79d484178035be7a286a0de9f6667c803a147befc40170e46282e03f48"
+        "bytes": 738578,
+        "sha256": "f1ef787f651e91ce0850616338742c5bf3886c815539786a1c20577b5ede449b"
       },
       {
         "path": "frontend/app/study.js",
@@ -1393,8 +1393,8 @@
       },
       {
         "path": "frontend/css/app.css",
-        "bytes": 404396,
-        "sha256": "5cc95b130f6a580d667c58e0030a21ba54302f937180d2c225b91d8924e2d77e"
+        "bytes": 404412,
+        "sha256": "6b20b994c03f84c999880ebd70a443e0e98f19594041baac4e0aaa0ca5d79194"
       },
       {
         "path": "frontend/css/asciifx.css",
