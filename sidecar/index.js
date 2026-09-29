@@ -9790,6 +9790,11 @@ const ROUTES = [
   { m: 'GET', exact: '/api/auth/kimi/status', h: (req, res) => handleOAuthStatus(req, res, 'kimi') },
   { m: 'GET', exact: '/api/auth/kimi/models', h: (req, res) => handleOAuthModels(req, res, 'kimi') },
   { m: 'POST', exact: '/api/auth/kimi/logout', h: (req, res) => handleOAuthLogout(req, res, 'kimi') },
+  { m: 'GET', exact: '/api/auth/claude-cli/status', h: (req, res) => handleClaudeCliAuth(req, res, 'status') },
+  { m: 'POST', exact: '/api/auth/claude-cli/start', h: (req, res) => handleClaudeCliAuth(req, res, 'start') },
+  { m: 'POST', exact: '/api/auth/claude-cli/poll', h: (req, res) => handleClaudeCliAuth(req, res, 'poll') },
+  { m: 'POST', exact: '/api/auth/claude-cli/code', h: (req, res) => handleClaudeCliAuth(req, res, 'code') },
+  { m: 'POST', exact: '/api/auth/claude-cli/cancel', h: (req, res) => handleClaudeCliAuth(req, res, 'cancel') },
   { m: 'GET', exact: '/api/providers', h: handleProviders },
   { m: 'POST', exact: '/api/providers/probe', h: handleProviderProbe },
   { m: 'POST', exact: '/api/providers/validate', h: handleProviderValidate },
@@ -10326,6 +10331,7 @@ function gracefulShutdown(signal) {
   try { if (typeof lspManager !== 'undefined' && lspManager && lspManager.closeAll) Promise.resolve(lspManager.closeAll()).catch(() => {}); } catch (_) {}   // reap detected language-server children
   try { if (typeof subagents !== 'undefined' && subagents && subagents.interruptAll) subagents.interruptAll(); } catch (_) {}   // stop watchable background workers
   try { if (typeof connectors !== 'undefined' && connectors && connectors.close) Promise.resolve(connectors.close()).catch(() => {}); } catch (_) {}   // close MCP connectors (stdio children get taskkill/SIGTERM)
+  try { if (_claudeCliLogin) _claudeCliLogin.shutdown(); } catch (e) { failNote('claudecli.login.shutdown', e); }   // a half-finished `claude auth login` never outlives the station
   try { stopTelegram(); } catch (_) {}   // disconnect the Telegram long-poll adapter
   try { stopAllTelegramBots(); } catch (_) {}   // …and every agent-bound bot's poller
   try { stopDiscord(); } catch (_) {}    // disconnect the Discord gateway socket
@@ -21249,6 +21255,36 @@ function handleOAuthLogout(req, res, id) {
   if (!clearOAuthTokens(id)) return json(500, { error: 'logout could not be persisted; credentials remain connected', code: 'oauth_logout_persist_failed' });
   entry.tokens = null;
   json(200, { connected: false });
+}
+
+/* -------------------- Claude CLI — SIGN IN WITH CLAUDE --------------------
+   Not an OAuth client: the sidecar runs the user's own `claude auth login`, which owns the browser handshake and
+   the token (claude-cli-login.js). These routes only start/watch/cancel that child and relay a pasted one-time
+   code to its stdin. Nothing here stores, logs or returns a credential.
+     GET  /status                     -> { installed, loggedIn, authMethod, email?, subscription?, signingIn, error? }
+     POST /start                      -> { status:'pending', login_id, url } | { status:'connected'|'error', … }
+     POST /poll   { login_id }        -> { status:'pending'|'connected'|'error', … }
+     POST /code   { login_id, code }  -> { ok, error? }
+     POST /cancel { login_id }        -> { ok } */
+let _claudeCliLogin = null;
+function claudeCliLogin() {
+  if (!_claudeCliLogin) _claudeCliLogin = require('./providers/claude-cli-login.js').makeClaudeCliLogin();
+  return _claudeCliLogin;
+}
+async function handleClaudeCliAuth(req, res, verb) {
+  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  const login = claudeCliLogin();
+  try {
+    if (verb === 'status') return json(200, await login.status());
+    if (verb === 'start') return json(200, await login.start());
+    let body; try { body = JSON.parse(await readBody(req, 1 << 12)) || {}; } catch (e) { return json(400, { status: 'error', error: 'bad json' }); }
+    if (verb === 'poll') return json(200, await login.poll(body.login_id));
+    if (verb === 'code') return json(200, login.submitCode(body.login_id, body.code));
+    if (verb === 'cancel') return json(200, login.cancel(body.login_id));
+    json(404, { error: 'unknown verb' });
+  } catch (e) {
+    json(200, { status: 'error', error: (e && e.message) || 'Claude sign-in failed', code: 'claude_cli_auth_error' });
+  }
 }
 
 /* ------------------------------- helpers ------------------------------- */

@@ -227,6 +227,9 @@
                 <button class="prov tail" data-prov="perplexity" aria-pressed="false">PERPLEXITY</button>
                 <button class="prov tail" data-prov="cerebras" aria-pressed="false">CEREBRAS</button>
                 <button class="prov tail" data-prov="custom" aria-pressed="false">CUSTOM</button>
+                <!-- CLAUDE CLI: the locally installed Claude Code CLI as the brain — no key; its own sign-in is the
+                     credential. #claude-cli-block below reports what the sidecar actually detected. -->
+                <button class="prov" data-prov="claude-cli" aria-pressed="false">CLAUDE CODE</button>
                 <!-- label is COMPUTED by setProviderRowExpanded() from the live .prov.tail count — never hardcoded -->
                 <button type="button" id="prov-more" class="prov-more" aria-expanded="false">＋ MORE</button>
               </div>
@@ -283,6 +286,36 @@
               <div class="codex-signin">
                 <div id="ollama-status" class="codex-status">checking for ollama on this machine…</div>
                 <div class="dim hint" id="ollama-hint">Free and fully local — no key, no account, no bill. Needs <b>Ollama</b> installed and running on this machine (ollama.com), with at least one model pulled (e.g. <code>ollama pull llama3.1</code>). Honest caveat: local models are smaller than the cloud ones — expect slower, rougher work on long tasks.</div>
+              </div>
+            </div>
+
+            <!-- CLAUDE CLI block — the codex-block twin (same classes, same rhythm). Every line is a PROJECTION of the
+                 sidecar's /api/auth/claude-cli/status, which asks the user's own `claude auth status`: "signed in" is
+                 only ever said after the CLI proved it. SIGN IN WITH CLAUDE runs the CLI's own `claude auth login`;
+                 StarNet never holds the Claude credential (app.js claudeCli*). -->
+            <div id="claude-cli-block" class="hidden">
+              <div class="codex-signin">
+                <div id="claude-cli-status" class="codex-status">checking for Claude Code on this computer…</div>
+                <div id="claude-cli-install" class="claude-cli-install hidden">
+                  <div class="dim hint">Install Claude Code once — paste this into <span id="claude-cli-shell">a terminal</span>:</div>
+                  <code id="claude-cli-install-cmd" class="claude-cli-cmd"></code>
+                </div>
+                <div class="codex-actions">
+                  <button type="button" id="btn-claude-signin" class="btn hidden">⏼ SIGN IN WITH CLAUDE ▸</button>
+                  <button type="button" id="btn-claude-copy" class="btn hidden">⧉ COPY INSTALL COMMAND</button>
+                  <button type="button" id="btn-claude-guide" class="btn hidden">↗ INSTALL GUIDE</button>
+                  <button type="button" id="btn-claude-open" class="btn hidden">↗ OPEN SIGN-IN PAGE</button>
+                  <button type="button" id="btn-claude-cancel" class="btn hidden">✕ CANCEL</button>
+                  <button type="button" id="btn-claude-recheck" class="btn hidden">↻ CHECK AGAIN</button>
+                </div>
+                <div id="claude-cli-code-row" class="claude-cli-code-row hidden">
+                  <label class="dim hint" for="in-claude-code">Did the page show a code instead? Paste it here:</label>
+                  <div class="claude-cli-code-in">
+                    <input id="in-claude-code" class="key-input" type="text" autocomplete="off" spellcheck="false" placeholder="paste the code from the Claude page">
+                    <button type="button" id="btn-claude-code" class="btn">SUBMIT ▸</button>
+                  </div>
+                </div>
+                <div class="dim hint" id="claude-cli-hint">Uses your Claude subscription (Pro, Max, Team or Enterprise) through <b>Claude Code</b> on this computer. Claude Code keeps your sign-in — StarNet never sees or stores it. StarNet keeps every Claude Code tool switched off and runs its own, so your station's permissions still apply. Subscription turns are booked at $0; an API-key sign-in is booked at the cost Claude Code reports.</div>
               </div>
             </div>
 
