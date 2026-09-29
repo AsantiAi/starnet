@@ -1721,6 +1721,37 @@ const Build = (() => {
   function clearLineFields() {
     for (const k of Object.keys(lineFields)) delete lineFields[k];
     for (const k of Object.keys(lineFitsMemo)) delete lineFitsMemo[k];
+    for (const k of Object.keys(lineLaidMemo)) delete lineLaidMemo[k];
+    lineLaidQueue.length = 0;
+  }
+  /* LAID OUT TO FIT (conveyor-links phase E): when a line's DRAWN tile map fits nowhere, the layout engine may still lay the
+     same line out on this floor — its tidy shape where a clear rectangle holds it, else anchored on its INBOX round what
+     stands here (LineEdit.canPlaceBlueprint). That answer is dearer than the drawn-shape scan, so a card asks it in the
+     background, one line at a time, and is re-said when it lands; it is cached until the floor changes, like lineFits. */
+  const lineLaidMemo = Object.create(null), lineLaidQueue = [];
+  let lineLaidT = 0;
+  const lineLaidFits = bpId => (bpId in lineLaidMemo) ? lineLaidMemo[bpId] : undefined;
+  function queueLineLaid(bpId) {
+    if (typeof LineEdit === 'undefined' || !LineEdit.canPlaceBlueprint || (bpId in lineLaidMemo) || lineLaidQueue.indexOf(bpId) >= 0) return;
+    lineLaidQueue.push(bpId);
+    if (!lineLaidT) lineLaidT = setTimeout(stepLineLaid, 30);
+  }
+  function stepLineLaid() {
+    lineLaidT = 0;
+    const id = lineLaidQueue.shift();
+    if (!id || !running || !station) return;
+    let r = null;
+    try { r = LineEdit.canPlaceBlueprint(station, id, lineNearTile()); } catch (e) { r = null; }
+    lineLaidMemo[id] = r && r.ok ? { ok: true, via: r.via } : { ok: false, needs: (r && r.needs) || null };
+    if (root) for (const b of root.querySelectorAll('.refit-linetile[data-line="' + id + '"]')) { const bp = blueprintOf(id); if (bp) setLineTileFit(b, bp); }
+    if (lineLaidQueue.length) lineLaidT = setTimeout(stepLineLaid, 30);
+  }
+  // where a line would be laid when no click says: the middle of the view, else the middle of the station
+  function lineNearTile() {
+    const v = viewCenterTile();
+    if (v) return v;
+    const b = boundsMemoed();
+    return { x: (b.minTx + b.maxTx) >> 1, y: (b.minTy + b.maxTy) >> 1 };
   }
   function lineField(bpId) {
     const bp = blueprintOf(bpId);
@@ -1806,7 +1837,9 @@ const Build = (() => {
     const rects = bp.props.map(p => ({ x1: o.x + p.x, y1: o.y + p.y, x2: o.x + p.x + p.w - 1, y2: o.y + p.y + p.h - 1 }))
       .concat(bp.belts.map(b => ({ x1: o.x + b.x, y1: o.y + b.y, x2: o.x + b.x, y2: o.y + b.y })));
     const links = ghostLinks({ props: bp.props.map(p => ({ t: p.t, x: o.x + p.x, y: o.y + p.y, w: p.w, h: p.h })), belts: bp.belts.map(b => ({ x: o.x + b.x, y: o.y + b.y, d: b.d })) });
-    return { rects, v: station.canPlaceBlueprint(bp.id, o.x, o.y), kind: 'line', label: bp.label, snapped: s.snapped, links };
+    const laid = lineLaidFits(bp.id);
+    if (laid === undefined && !lineFits(bp.id)) queueLineLaid(bp.id);
+    return { rects, v: station.canPlaceBlueprint(bp.id, o.x, o.y), kind: 'line', label: bp.label, snapped: s.snapped, links, laid: !!(laid && laid.ok) };
   }
   /* the test job the Workflow panel saved for the line this prop is on (localStorage, per station — the panel's own store),
      plus the line key; read by the live INBOX's COMMS card so ONE REAL JOB runs the Commander's own input (2026-09-27 X1) */
@@ -1873,14 +1906,24 @@ const Build = (() => {
      them claiming to fit a floor they no longer fit — the B1 trap again. setLineTileFit reconciles one card in place;
      scheduleLineFitSync re-reads every card on screen once the floor settles after an edit. */
   function setLineTileFit(b, bp) {
-    const fits = lineFits(bp.id);
+    const drawn = lineFits(bp.id), laid = drawn ? null : lineLaidFits(bp.id);
+    if (!drawn && laid === undefined) queueLineLaid(bp.id);   // (asked in the background — the card is re-said when it lands)
+    const fits = drawn || !!(laid && laid.ok);
     b.classList.toggle('nofit', !fits);
+    b.classList.toggle('laidfit', !drawn && fits);
     let nf = b.querySelector('.refit-linetile-nofit');
     const next = b.nextElementSibling;
     const make = next && next.classList.contains('refit-linetile-makeroom') ? next : null;
-    if (fits) { if (nf) nf.remove(); if (make) make.remove(); return; }
+    if (drawn) { if (nf) nf.remove(); if (make) make.remove(); return; }
     if (!nf) { nf = document.createElement('span'); nf.className = 'refit-linetile-nofit'; b.appendChild(nf); }
-    nf.textContent = 'NO ROOM ON THIS DECK — NEEDS ' + bp.w + '×' + bp.h + ' OF CLEAR FLOOR';
+    if (fits) {   // the drawn shape fits nowhere, but the line does, laid out round what stands here
+      nf.textContent = 'FITS LAID OUT — CLICK THE FLOOR WHERE YOU WANT IT';
+      if (make) make.remove();
+      return;
+    }
+    const need = laid && laid.needs ? laid.needs : { w: bp.w, h: bp.h };
+    nf.textContent = laid === undefined ? 'CHECKING WHERE IT FITS…' : 'NO ROOM ON THIS DECK — NEEDS ' + need.w + '×' + need.h + ' OF CLEAR FLOOR';
+    if (laid === undefined) { if (make) make.remove(); return; }
     if (make) return;
     const mk = document.createElement('button'); mk.type = 'button'; mk.className = 'bb sm refit-linetile-makeroom';
     mk.textContent = '＋ MAKE ROOM FOR IT'; mk.setAttribute('aria-label', 'Build a room big enough for ' + bp.label);
@@ -1899,7 +1942,8 @@ const Build = (() => {
   function makeRoomFor(bpId, ev) {
     const bp = blueprintOf(bpId);
     if (!bp || !station) return;
-    const W = bp.w + 2, H = bp.h + 2;   // a tile of walking room round the line
+    const laid = lineLaidFits(bp.id), need = laid && laid.needs ? laid.needs : { w: bp.w, h: bp.h };
+    const W = Math.min(bp.w, need.w) + 2, H = Math.min(bp.h, need.h) + 2;   // the smaller of the drawn and the laid-out line, a tile of walking room round it
     const b = boundsMemoed();
     const cands = [];
     // right of the station, below it, left of it, above it — each slid along the edge; nearest to the station middle first
@@ -1934,14 +1978,22 @@ const Build = (() => {
     // the SAME snap the ghost showed — the click commits exactly what was on screen, never the raw tile
     const s = lineSnap(w.tx, w.ty);
     const o = lineOrigin(bp, s.tx, s.ty);
-    const res = station.stampBlueprint(bp.id, o.x, o.y, lineStampOpts(bp));   // ONE undoable action, with the card's cap + tries — see worldmodel.stampBlueprint
+    let res = station.stampBlueprint(bp.id, o.x, o.y, lineStampOpts(bp));   // ONE undoable action, with the card's cap + tries — see worldmodel.stampBlueprint
+    /* LAID OUT TO FIT (phase E): where the drawn tile map will not go, the same line is laid out on the floor near the click —
+       its tidy shape, or anchored on its INBOX round what stands here — with the same cap and tries, one UNDO */
+    let laidOut = false;
+    if (!(res && res.ok) && typeof LineEdit !== 'undefined' && LineEdit.placeBlueprint) {
+      const lr = LineEdit.placeBlueprint(station, bp.id, { x: w.tx, y: w.ty }, { stamp: lineStampOpts(bp) });
+      if (lr && lr.ok) { res = lr; laidOut = true; } else if (lr && lr.msg) res = lr;
+    }
     if (res && res.ok) {
       lastStampIds = res.ids || null;   // the finish-the-line card adopts this line on the next recompile
       // LINE NAMING: a stamp leaves the intake's `label` UNSET (the save carries only what the Commander
       // typed) — but this session remembers which blueprint stamped it, so the intake card's name field
       // can offer the blueprint's name as its placeholder (session-scoped, like lastStampIds).
       try { for (const id of (res.ids || [])) { const sp = station.propById(id); if (sp && sp.t === 'intake') stampNameOf[id] = bp.label; } } catch (_) {}
-      pushFlash(bp.props.map(p => ({ x1: o.x + p.x, y1: o.y + p.y, x2: o.x + p.x + p.w - 1, y2: o.y + p.y + p.h - 1 })), false);
+      if (laidOut) pushFlash((res.ids || []).map(id => station.propById(id)).filter(Boolean).map(p => ({ x1: p.x, y1: p.y, x2: p.x + (p.w || 1) - 1, y2: p.y + (p.h || 1) - 1 })), false);
+      else pushFlash(bp.props.map(p => ({ x1: o.x + p.x, y1: o.y + p.y, x2: o.x + p.x + p.w - 1, y2: o.y + p.y + p.h - 1 })), false);
       sfx('chime');
       // PLACEMENT FLOW: a blueprint stamps ONCE, then the tool drops back to SELECT — the next
       // click on the fresh line inspects a dock instead of stamping a second copy on top of it.
@@ -1954,7 +2006,7 @@ const Build = (() => {
       try { for (const id of (res.ids || [])) { const sp = station.propById(id); if (sp && sp.t === 'bay') { firstBay = sp.id; break; } } } catch (_) {}
       if (firstBay && typeof WorkflowPanel !== 'undefined') {
         try { rebake(); openFlowCard(firstBay); } catch (_) {}
-        flashTip(ev, bp.label + ' PLACED — choose who works each BAY in the panel', true);
+        flashTip(ev, bp.label + (laidOut ? ' LAID OUT TO FIT HERE' : ' PLACED') + ' — choose who works each BAY in the panel', true);
       } else flashTip(ev, bp.label + ' STAMPED — now click each BAY to assign an agent', true);
       if (typeof StationUI !== 'undefined' && StationUI.pokeQuests) { try { StationUI.pokeQuests(); } catch (_) {} }
       // belts just landed — the same first-touch coach a hand-laid run earns (points at ▸ PREVIEW)
@@ -6283,13 +6335,14 @@ const Build = (() => {
     // no — the reason on its own line right under them. (Was a DOM tip trailing into a screen corner.)
     const r0 = g.rects[0], w = r0.x2 - r0.x1 + 1, h = r0.y2 - r0.y1 + 1;
     let dims = g.belt ? ('BELT ' + g.dir + ' · ' + Math.max(w, h) + ' LONG')
-      : g.kind === 'line' ? (String(g.label || '').toUpperCase() + (ok ? ' — CLICK TO STAMP' : ''))   // a red ghost never invites the click (2026-09-27 audit B1)
+      : g.kind === 'line' ? (String(g.label || '').toUpperCase() + (ok ? ' — CLICK TO STAMP' : g.laid ? ' — CLICK TO LAY IT OUT HERE' : ''))   // a red ghost invites the click only when the line fits laid out (2026-09-27 audit B1; phase E)
       : g.move ? ('MOVE ' + (g.dx >= 0 ? '+' : '') + g.dx + ', ' + (g.dy >= 0 ? '+' : '') + g.dy)
       : (tool === 'hall' ? (Math.max(w, h) + ' LONG × ' + Math.min(w, h) + ' WIDE') : (w + ' × ' + h));
     const lines = [dims];
     // a sized footprint also gets its area — "how much floor is this?" is the other question a drag asks
     if (!g.belt && !g.move && g.kind !== 'line' && w * h > 1) lines[0] = dims + '   ' + (w * h) + ' TILES';
-    if (!ok) lines.push(((footprint && footprint.msg) || placementReason(g)).toUpperCase());
+    // (a line that fits laid out: the drawn shape will not go here, but the click lays the same line out round what stands here)
+    if (!ok) lines.push(g.kind === 'line' && g.laid ? 'THE DRAWN SHAPE DOES NOT FIT HERE — IT WILL BE LAID OUT TO FIT' : ((footprint && footprint.msg) || placementReason(g)).toUpperCase());
     // the hover preview teaches BOTH gestures: this size on a click, any size on a drag
     else if (g.stamp) lines.push(g.kind === 'prop' ? 'CLICK TO PLACE' : 'CLICK TO PLACE · DRAG TO SIZE');
     /* SPACING (2026-09-27 audit B4): a dock hooks every belt in the 1-tile ring around it, so two docks with one empty tile
