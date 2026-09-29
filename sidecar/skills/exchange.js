@@ -50,7 +50,10 @@ function parseDocument(text, sourceUrl) {
   // a standard SKILL.md keeps author/version (and sometimes license) under `metadata:`; top-level wins when both exist
   const md = fm.meta.metadata && typeof fm.meta.metadata === 'object' && !Array.isArray(fm.meta.metadata) ? fm.meta.metadata : {};
   const scalarText = (v) => (v == null || typeof v === 'object') ? '' : str(v);
-  const name = scalarText(fm.meta.name).trim();
+  // the spec `name` is an identifier (pdf-processing); a StarNet export also carries its display title under
+  // metadata.title, which reads better in the panel and round-trips the original name
+  const title = scalarText(md.title).replace(/\s+/g, ' ').trim();
+  const name = (title && title.length <= 80 ? title : scalarText(fm.meta.name)).trim();
   const description = scalarText(fm.meta.description).replace(/\s+/g, ' ').trim();
   const body = str(fm.body).trim();
   if (!name) throw new Error('SKILL.md frontmatter must include name');
@@ -216,14 +219,48 @@ function makeSkillExchange(deps) {
   function exportPackage(input) {
     const agentId = str(input && input.agentId) || 'agent';
     const current = skillStore && skillStore.view(agentId, str(input && input.id), { includeArchived: true, bump: false });
-    if (!current) throw new Error('no such installed skill');
-    if (!current.packageDigest || !Array.isArray(current.packageFiles) || !current.packageFiles.length || current.packageDiverged) {
-      throw new Error('this skill has local changes; export requires a complete sealed package generation');
-    }
+    if (!current) throw new Error('no such skill');
+    const sealed = !!(current.packageDigest && Array.isArray(current.packageFiles) && current.packageFiles.length && !current.packageDiverged);
+    // An untouched install exports its exact source bytes. Anything written or changed here (by the Commander or an
+    // agent) exports as a fresh standard package built from what the skill holds now.
+    if (!sealed) return exportAuthored(current);
     const pkg = packageFormat.fromEnvelope({ format: packageFormat.FORMAT, digest: current.packageDigest, files: current.packageFiles });
     return { filename: (current.id || 'skill') + '.starnet-skill.json', digest: pkg.digest, envelope: packageFormat.toEnvelope(pkg, {
       name: current.name, summary: current.summary || '', category: current.category || '', requires: current.requires || [], platforms: current.platforms || [],
       sourceUrl: current.sourceUrl || '', sourceDigest: current.sourceDigest || '', sourceFetchedAt: current.sourceFetchedAt || 0,
+      sourceVersion: current.sourceVersion || '', sourceAuthor: current.sourceAuthor || '', sourceLicense: current.sourceLicense || ''
+    }) };
+  }
+  /* EXPORT WHAT WE WROTE (2026-09-29). Export used to refuse every skill without a sealed install package, i.e.
+     everything the Commander or their agents authored: the one kind of skill most worth sharing. This builds a
+     standard Agent Skills folder from the skill as it is now: SKILL.md with a spec name (lowercase letters, digits,
+     hyphens, max 64), the description, license when known, and the display title under metadata.title so StarNet
+     can show the same name after import; setup notes and body below; support files at their own paths. A skill the
+     guard BLOCKED is never packaged for someone else. */
+  function specName(name) {
+    return str(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64).replace(/-+$/, '') || 'skill';
+  }
+  function exportAuthored(current) {
+    if (str(current.guardAction).toLowerCase() === 'block') throw new Error('the skill guard blocked this skill, so it cannot be exported');
+    const q = (v) => JSON.stringify(str(v));
+    const description = str(current.description || current.summary || current.name).replace(/\s+/g, ' ').trim().slice(0, 1024);
+    const meta = ['metadata:', '  title: ' + q(current.name)];
+    if (current.category) meta.push('  category: ' + q(current.category));
+    if (current.sourceAuthor) meta.push('  author: ' + q(current.sourceAuthor));
+    if (current.sourceVersion) meta.push('  version: ' + q(current.sourceVersion));
+    if (current.sourceUrl && /^https:\/\//.test(str(current.sourceUrl))) meta.push('  derived-from: ' + q(current.sourceUrl));
+    const head = ['---', 'name: ' + specName(current.name), 'description: ' + q(description)];
+    if (current.sourceLicense) head.push('license: ' + q(current.sourceLicense));
+    const setup = str(current.setup).trim();
+    const skillMd = head.concat(meta, ['---', '']).join('\n') + '\n'
+      + (setup ? '## Setup\n' + setup + '\n\n' : '') + str(current.body).trim() + '\n';
+    const files = [{ path: 'SKILL.md', content: skillMd }].concat((Array.isArray(current.files) ? current.files : [])
+      .filter(f => f && f.path && f.path !== 'SKILL.md')
+      .map(f => ({ path: f.path, encoding: f.encoding === 'base64' ? 'base64' : 'utf8', content: str(f.content) })));
+    const pkg = packageFormat.canonicalize(files);
+    return { filename: specName(current.name) + '.starnet-skill.json', digest: pkg.digest, envelope: packageFormat.toEnvelope(pkg, {
+      name: current.name, summary: current.summary || description, category: current.category || '', requires: current.requires || [], platforms: current.platforms || [],
+      sourceUrl: '', sourceDigest: '', sourceFetchedAt: 0,
       sourceVersion: current.sourceVersion || '', sourceAuthor: current.sourceAuthor || '', sourceLicense: current.sourceLicense || ''
     }) };
   }
