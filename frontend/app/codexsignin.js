@@ -127,7 +127,12 @@ function makeOAuthAccounts(pid) {
   };
   return {
     async accounts() {
-      try { const j = await (await fetch(base + 'accounts')).json(); return (j && Array.isArray(j.accounts)) ? j : null; } catch (_) { return null; }
+      try {
+        const r = await fetch(base + 'accounts');
+        if (!r.ok) return null;   // a refused answer is not an empty account list
+        const j = await r.json();
+        return (j && Array.isArray(j.accounts)) ? j : null;
+      } catch (_) { return null; }
     },
     add(cb) { return run(base + 'add', cb); },
     signIn(account, cb) { return run(base + 'account-start?account=' + encodeURIComponent(account), cb); },
