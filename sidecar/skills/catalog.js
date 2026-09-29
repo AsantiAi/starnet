@@ -232,6 +232,7 @@
       slug: s.slug, name: s.name, description: s.description, category: s.category,
       requires: (s.requires || []).slice(), author: s.author, license: s.license, version: s.version,
       default: s.default, body: s.body,
+      market: !!s.market, shelf: s.shelf || '',   // installed from the Skill Market (skills/market.js), not bundled
       enabled: isEnabled(s, opts.overrides),
       available: isAvailable(s, placed)
     }));
