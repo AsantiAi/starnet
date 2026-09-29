@@ -86,8 +86,8 @@ and the floor (`rects` deck, `blocked` props, `belts` already laid, optional `ju
   relative to the machine feeding it (a branch moves as one), stepping to the nearest clear lane or spot if taken;
   unpinned, the line is routed on an empty floor of its own and that shape goes to the first clear spot (rows top
   first) where no old belt runs into it and none of its belts sits beside another line's junction.
-- Locked by test/line-layout.test.js: every blueprint, laid out fresh, routes EXACTLY as the stamped original; 11 of 19
-  fit a fresh starter room as-is (as many as the hand-drawn ones; the rest in a room grown for them) and every machine
+- Locked by test/line-layout.test.js: every blueprint, laid out fresh, routes EXACTLY as the stamped original; as many
+  fit a fresh starter room as-is as the hand-drawn ones do (12 of 20 on 09-29; the rest in a room grown for them) and every machine
   and belt passes the station's own placement checks; on cluttered decks (free and pinned) every line it lays still
   routes the same; a junction pinned against a wall keeps its lane order or answers NO_ROUTE.
 - Speed (measured 09-29): ~2 ms on average for a line on a cluttered 60×36 deck (worst seen 45 ms); 9–21 ms on a
