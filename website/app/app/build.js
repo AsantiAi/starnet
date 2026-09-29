@@ -1089,6 +1089,7 @@ const Build = (() => {
         pal.appendChild(gh);
         const gg = document.createElement('div'); gg.className = 'refit-linegrid refit-goalgrid'; gg.setAttribute('aria-label', 'Suggested for your goal');
         const gb = makeLineTile(goal.bp); gg.appendChild(gb); setLineTileFit(gb, goal.bp);
+        if (tool === 'line' && goal.bp.id === lineType) gg.appendChild(linePrefsEl(goal.bp));
         pal.appendChild(gg);
       }
       pal.appendChild(machinePalette());
@@ -1098,9 +1099,10 @@ const Build = (() => {
       const grid = document.createElement('div'); grid.className = 'refit-linegrid';
       grid.setAttribute('aria-label', 'Line library');
       const groups = {};
-      for (const bp of blueprints()) { const k = LINE_GROUPS.some(g => g.id === bp.grp) ? bp.grp : 'flagship'; (groups[k] = groups[k] || []).push(bp); }
+      const lastWork = LINE_WORK_GROUPS[LINE_WORK_GROUPS.length - 1].id;
+      for (const bp of blueprints()) { const k = LINE_WORK_GROUPS.some(g => g.id === LINE_WORK[bp.id]) ? LINE_WORK[bp.id] : lastWork; (groups[k] = groups[k] || []).push(bp); }
       const ordered = [];
-      for (const g of LINE_GROUPS) {
+      for (const g of LINE_WORK_GROUPS) {
         if (!groups[g.id] || !groups[g.id].length) continue;
         ordered.push({ hd: g });
         for (const bp of groups[g.id]) ordered.push({ bp });
@@ -1118,6 +1120,7 @@ const Build = (() => {
         const b = makeLineTile(bp);
         grid.appendChild(b);
         setLineTileFit(b, bp);   // DECK-FIT HONESTY — and kept current as the floor changes (see setLineTileFit)
+        if (tool === 'line' && bp.id === lineType) grid.appendChild(linePrefsEl(bp));   // the armed card's settings, right under it
       }
       pal.appendChild(grid);
       const note = document.createElement('div');
@@ -1498,16 +1501,69 @@ const Build = (() => {
     load_balancer: 'jobs alternate between two desks; one door ships it all',
     fire_escape: 'a third lane on the gate — out-of-passes work drops to a fixer',
   };
-  /* the LIBRARY's sections — what a line is FOR, simplest family first. `id` matches the catalog's
-     `grp` field on each blueprint (worldmodel.js); the render falls an unknown grp into the last
-     section so a catalog entry can never vanish from the shelf. */
-  const LINE_GROUPS = [
-    { id: 'chain', label: 'THE BASICS', blurb: 'door to door — one desk, a budgeted desk, or a hand-off chain' },
-    { id: 'sort', label: 'SORTERS', blurb: 'the right work to the right desk, read from the job itself' },
-    { id: 'crew', label: 'CREWS', blurb: 'many agents on one stream — split the load, or run every take' },
-    { id: 'gate', label: 'QUALITY GATES', blurb: 'a reviewer holds the door — nothing ships unapproved' },
-    { id: 'flagship', label: 'FLAGSHIPS', blurb: 'the whole machine — sorters, crews and gates on one floor' },
+  /* PLAIN NAMES (2026-09-28): a card leads with what the line does in everyday words; the catalog's station name
+     (REVISION LOOP …) rides beside it as a small tag, so a Commander who knows the old names still finds them. */
+  const LINE_PLAIN = {
+    front_desk: 'One agent', allowance_desk: 'One agent, capped', ship_out: 'Straight to outbox', two_doors: 'Two doors, one agent',
+    revision_loop: 'Draft + review', crucible: 'Two review rounds', fire_escape: 'Review + a fixer',
+    build_test: 'Build + test', code_foundry: 'Build + review',
+    research_line: 'Research + write', swarm_synthesis: 'Three researchers', deep_dive: 'Deep dive + review', assembly_line: 'Four-step chain',
+    sorting_office: 'Sort by type', triage_desk: 'Three specialists', parallel_crew: 'Split across three', load_balancer: 'Take turns', mission_control: 'Full triage',
+    second_opinion: 'Second opinion', gauntlet: 'Two takes, reviewed',
+  };
+
+  /* THE SHELF BY KIND OF WORK (2026-09-28): the same kinds the station presets are for. A line with no entry here falls
+     into the last section, so a catalog entry can never vanish from the shelf. */
+  const LINE_WORK = {
+    front_desk: 'any', allowance_desk: 'any', ship_out: 'any', two_doors: 'any',
+    revision_loop: 'write', crucible: 'write', fire_escape: 'write',
+    build_test: 'code', code_foundry: 'code',
+    research_line: 'research', swarm_synthesis: 'research', deep_dive: 'research', assembly_line: 'research',
+    sorting_office: 'volume', triage_desk: 'volume', parallel_crew: 'volume', load_balancer: 'volume', mission_control: 'volume',
+    second_opinion: 'decide', gauntlet: 'decide',
+  };
+  const LINE_WORK_GROUPS = [
+    { id: 'any', label: 'ANY JOB', blurb: 'one agent takes the work door to door' },
+    { id: 'write', label: 'WRITING & CONTENT', blurb: 'a draft, and a reviewer who can send it back' },
+    { id: 'code', label: 'BUILDING SOFTWARE', blurb: 'a builder makes the change, and it is checked before it ships' },
+    { id: 'research', label: 'RESEARCH', blurb: 'dig up sources, then write it up' },
+    { id: 'volume', label: 'LOTS OF REQUESTS', blurb: 'sort the incoming work, or share it across agents' },
+    { id: 'decide', label: 'DECISIONS', blurb: 'more than one take before you decide' },
   ];
+  /* SET UP BEFORE YOU PLACE (2026-09-28): the armed card offers the line's daily spending cap (when it has an INBOX) and
+     its review tries (when it has a LOOP). Session-scoped per line; stampLine passes them INTO the stamp
+     (worldmodel.stampBlueprint opts), so one UNDO still removes the whole line. Defaults are the catalog's own. */
+  const LINE_CAPS = [[null, 'No cap'], [1, '$1'], [5, '$5'], [20, '$20']];
+  const linePrefs = {};
+  function linePrefsOf(bp) {
+    const intake = bp.props.find(p => p.t === 'intake'), loop = bp.props.find(p => p.t === 'loop');
+    const base = { cap: intake && intake.limits && intake.limits.maxUsdPerDay != null ? intake.limits.maxUsdPerDay : null, tries: loop ? (loop.maxIter || 3) : null };
+    return Object.assign(base, linePrefs[bp.id] || {});
+  }
+  function lineStampOpts(bp) {
+    const p = linePrefsOf(bp), o = {};
+    if (bp.props.some(x => x.t === 'intake')) o.limits = { maxUsdPerDay: p.cap };
+    if (p.tries != null) o.maxIter = p.tries;
+    return o;
+  }
+  function linePrefsEl(bp) {
+    const hasIn = bp.props.some(x => x.t === 'intake'), p = linePrefsOf(bp);
+    const el = document.createElement('div'); el.className = 'refit-lineprefs';
+    el.setAttribute('role', 'group'); el.setAttribute('aria-label', 'Set up ' + (LINE_PLAIN[bp.id] || bp.label) + ' before you place it');
+    const row = (label, opts, cur, key) => '<div class="refit-lineprefs-row"><span class="refit-lineprefs-k">' + label + '</span>'
+      + opts.map(([v, t]) => '<button type="button" class="bb sm" data-pref="' + key + '" data-val="' + (v == null ? '' : v) + '" aria-pressed="' + (v === cur) + '">' + esc(t) + '</button>').join('') + '</div>';
+    el.innerHTML = '<div class="refit-lineprefs-hd">SET UP BEFORE YOU PLACE</div>'
+      + (hasIn ? row('DAILY CAP', LINE_CAPS, p.cap, 'cap') : '')
+      + (p.tries != null ? row('REVIEW TRIES', [1, 2, 3, 4, 5].map(n => [n, String(n)]), p.tries, 'tries') : '')
+      + '<div class="refit-lineprefs-note">Then click the floor to place it. Who works each step comes next, in the panel.</div>';
+    el.querySelectorAll('[data-pref]').forEach(b => b.onclick = ev => {
+      ev.stopPropagation();
+      const v = b.dataset.val === '' ? null : +b.dataset.val;
+      linePrefs[bp.id] = Object.assign({}, linePrefs[bp.id] || {}, { [b.dataset.pref]: v });
+      el.replaceWith(linePrefsEl(bp)); sfx('click');
+    });
+    return el;
+  }
   /* schematic v2 — the card draws a MINIATURE of what will stamp, in the floor's own colour
      economy (hex families lifted from propsprites.js RAMP.steel/ACC and conveyor.js's belt bed)
      so the schematic teaches the real floor: the INBOX feeds amber, a BAY is a steel berth with
@@ -1773,8 +1829,9 @@ const Build = (() => {
     view.appendChild(lineSchematic(bp));
     b.appendChild(view);
     const hd = document.createElement('span'); hd.className = 'refit-linetile-hd';
-    const nm = document.createElement('span'); nm.className = 'refit-matname'; nm.textContent = bp.label;
+    const nm = document.createElement('span'); nm.className = 'refit-matname'; nm.textContent = LINE_PLAIN[bp.id] || bp.label;
     hd.appendChild(nm);
+    if (LINE_PLAIN[bp.id]) { const tg = document.createElement('span'); tg.className = 'refit-linetile-tag'; tg.textContent = bp.label; hd.appendChild(tg); }
     // footprint + dock count, derived from the catalog (never hand-kept). Mixed VT323 glyphs
     // ('×', '·') fall back fonts, so the chip is BOX-centred in CSS — never padded by font math.
     const docks = bp.props.filter(p => p.t === 'bay').length;
@@ -1859,7 +1916,7 @@ const Build = (() => {
     // the SAME snap the ghost showed — the click commits exactly what was on screen, never the raw tile
     const s = lineSnap(w.tx, w.ty);
     const o = lineOrigin(bp, s.tx, s.ty);
-    const res = station.stampBlueprint(bp.id, o.x, o.y);   // ONE undoable action — see worldmodel.stampBlueprint
+    const res = station.stampBlueprint(bp.id, o.x, o.y, lineStampOpts(bp));   // ONE undoable action, with the card's cap + tries — see worldmodel.stampBlueprint
     if (res && res.ok) {
       lastStampIds = res.ids || null;   // the finish-the-line card adopts this line on the next recompile
       // LINE NAMING: a stamp leaves the intake's `label` UNSET (the save carries only what the Commander
