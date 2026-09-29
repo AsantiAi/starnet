@@ -6860,7 +6860,13 @@ const Chat = (() => {
     if (!activeWs) return localLine('No active workstream to retry in.');
     if (isBusy()) return localLine('This stream is still running — stop it first, then /retry.');
     const h = activeWs.history;
-    if (h.length && h[h.length - 1].role === 'assistant' && (h[h.length - 1].error || h[h.length - 1].stopped)) h.pop();   // drop the failed/stopped partial reply
+    /* A retry re-runs the LAST user turn, so every row after it is the attempt being replaced — drop all of them,
+       not just the ⚠ row. A failed run that streamed several replies ("The tool needs the required objective
+       field." …) used to leave them after the user turn, the retry request then ENDED ON AN ASSISTANT MESSAGE, and
+       current Claude models refuse that outright ("This model does not support assistant message prefill") — every
+       Try again failed in ~1.5s with "Provider returned error" (first-hour walk 2026-09-28). */
+    const lastUser = h.map(m => m && m.role).lastIndexOf('user');
+    if (lastUser >= 0) h.length = lastUser + 1;
     let text = null;
     for (let i = h.length - 1; i >= 0; i--) { if (h[i].role === 'user') { text = h[i].content; break; } }
     if (text == null) return localLine('Nothing to retry yet — send a message first.');
