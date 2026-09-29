@@ -20,6 +20,7 @@
 
 const Onboarding = (() => {
   let docs = null, commit = null, doneCb = null, notifyFn = null, NAME = 'AGENT';
+  let stationsApi = null, purposeSaid = '';   // CHOOSE YOUR STATION: the app's preset seam (opts.stations) + the purpose they gave
   let taughtCb = null;    // fired once the awakening's closing line lands — hands off to the FIRST COMMAND tutorial
   let steps = [], i = 0, ignited = false, kindleTimer = null;
   let running = false;   // true between start() and finish()/stop() — lets other COMMS flows (the intake interview) avoid hijacking the awakening's input handler
@@ -138,6 +139,7 @@ const Onboarding = (() => {
     specialty = opts.specialty || null;
     role = opts.role || 'orchestrator';
     persona = opts.persona || null;
+    stationsApi = opts.stations || null; purposeSaid = '';
     getSystem = opts.getSystem || null;
     steps = buildSteps(); i = 0; beatN = 0; ignited = false; running = true;
     // THE FIRST WORDS, LIVE (full birth script): kick ONE prefetched call the moment the wake begins — the
@@ -536,6 +538,7 @@ const Onboarding = (() => {
       }
       const text = isSkip ? '' : String(res.value).trim();
       if (!isSkip && commit) { const patch = s.build(text); if (patch) commit(patch); }
+      if (!isSkip && s.field === 'purpose') purposeSaid = text;   // the station pick reads what they said they want help with
       // a beat that targets a dossier dimension (not a config .md) writes its answer STRAIGHT to the station-wide
       // dossier — same authoring path the COMMANDER panel uses (recomposes the live prompt + persists at the edge).
       if (!isSkip && s.dossierDim && typeof DossierStore !== 'undefined' && DossierStore.upsert) { DossierStore.upsert(s.dossierDim, { text, source: 'onboarding', weight: 'stated' }); ink(s.dossierDim, text); }   // V3: always the Commander's own words now (steer chips can't write); the ink stamp shows the write landing
@@ -837,6 +840,7 @@ const Onboarding = (() => {
           if (missionBelief) pathPending = Promise.resolve(GoalStore.proposeDecomposition(missionBelief)).catch(() => null);
         }
         if (commit) commit({ purpose: purposeT });
+        purposeSaid = purposeT;
         // the one durable belief only this conversation could surface: the stack/domain they live in.
         if (syn.stack && typeof DossierStore !== 'undefined' && DossierStore.upsert) DossierStore.upsert('stack', { text: syn.stack, source: 'onboarding', weight: 'synth' });
         if (typeof ProfileStore !== 'undefined' && typeof Classify !== 'undefined') ProfileStore.seed(Classify.getTag(purposeT));
@@ -878,7 +882,46 @@ const Onboarding = (() => {
     if (specialty) { beatTotal = Math.max(1, steps.length); await runSteps(steps); }
     else { beatTotal = 6; await runLeadMeeting(); }   // pain, its follow-up, ambition, its follow-up, purpose, cadence
     if (!running) return;
+    if (!specialty && role === 'orchestrator') { await pickStation(); if (!running) return; }
     finish();
+  }
+
+  /* CHOOSE YOUR STATION (2026-09-28): the lead's last question, asked while the room is still dark so the dawn reveals
+     the station they chose. The recommendation reads the purpose they just gave (StationTemplates.recommend: the five
+     purpose chips map one to one onto the five work presets); no clear match recommends one room, never a guess. It
+     is offered only over the untouched starter room (stations.fresh()), so a resumed briefing after a pick, or any
+     station already built, never has its floor swapped. A deferred interview (offerDeferred) never reaches it. Every
+     question stays: this ADDS a beat. The app's seam (opts.stations) builds the preset through the same
+     StationTemplates.build + replaceLayout path Build mode's Presets use. */
+  const titleCase = s => String(s || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  async function pickStation() {
+    const S = stationsApi;
+    if (!S || typeof S.fresh !== 'function' || !S.fresh() || typeof Dialogue === 'undefined') return;
+    const works = (S.catalog() || []).filter(c => c && c.group === 'work');
+    if (!works.length) return;
+    const recId = S.recommend ? S.recommend(purposeSaid) : null, rec = works.find(c => c.id === recId) || null;
+    const ordered = rec ? [rec].concat(works.filter(c => c !== rec)) : works;
+    stage('YOUR STATION', 'Where the work happens');
+    const ask = 'one more question: which station should i build for you? '
+      + (rec ? 'from what you told me, i’d start with the ' + rec.name.toLowerCase() + ': ' + rec.pitch + '.'
+             : 'pick the kind of work you’ll do most, or start with one room and build it yourself.')
+      + ' you can change it any time in BUILD › Presets.';
+    const res = await Dialogue.node({
+      lines: [seg(ask, 46, 0)],
+      // each choice names its kind of work in the purpose question's own words ("Software Studio — Code & build")
+      options: ordered.map(c => ({ label: titleCase(c.name) + (c.purposeLabel ? ' — ' + c.purposeLabel : '') + (c === rec ? ' (recommended)' : ''), value: c.id }))
+        .concat([{ label: 'Start with one room', value: 'default' }])
+    });
+    if (!running) return;
+    const id = res && !res.skip ? String(res.value || '') : '';
+    const pick = works.find(c => c.id === id);
+    if (!pick) { await Dialogue.say([seg('one room it is. you can pick a station any time in BUILD › Presets.', 44, 360)]); return; }
+    let r = null;
+    try { r = S.apply(pick.id); } catch (_) { r = null; }
+    if (!running) return;
+    await Dialogue.say([seg(r && r.ok
+      ? 'done. the ' + pick.name.toLowerCase() + ' is built, and its line is waiting for a crew: WORK › WORKFLOWS walks you through who works each step.'
+      : 'i couldn’t build that station here, so we’ll keep one room. you can try again in BUILD › Presets.', 44, 360)]);
   }
 
   // DAWN — the pull-back reveals its whole world, the light blooms, and it speaks its first WHOLE sentences

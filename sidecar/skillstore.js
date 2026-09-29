@@ -532,9 +532,11 @@
         } catch (_) {}
       }
       if (opts2.bump !== false) {
+        // A view counts views and freshness only. useCount means "runs that loaded this skill": the run host
+        // calls markUsed ONCE per run for the skills that run actually loaded (2026-09-28; it used to call it for
+        // every skill merely LISTED in the prompt index, so every indexed skill looked used on every run).
         const bumped = {
           viewCount: (s.viewCount || 0) + 1,
-          useCount: (s.useCount || 0) + 1,
           lastUsedAt: now(),
           state: s.state === 'stale' ? 'active' : s.state
         };
@@ -591,7 +593,12 @@
         const base = s.lastUsedAt || s.updatedAt || s.createdAt || t;
         const age = Math.max(0, t - base);
         const entry = clone(s);
-        if (age >= archiveMs) { entry.state = 'archived'; archived++; }
+        // Only a MODEL-authored skill (the agent, a review, the curator) retires itself. A skill the Commander wrote
+        // or chose to install can go stale, never auto-archive: it is theirs to retire (Hermes parity: its curator
+        // only ages curator-managed skills). This matters since 2026-09-28, when lastUsedAt stopped being refreshed
+        // for every skill merely listed in the index, so the aging clock now measures real loads.
+        const autoArchive = trustSource(s.createdBy) === 'agent-created';
+        if (age >= archiveMs && autoArchive) { entry.state = 'archived'; archived++; }
         else if (age >= staleMs) { entry.state = 'stale'; stale++; }
         else continue;
         entry.updatedAt = t;

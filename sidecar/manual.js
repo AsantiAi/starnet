@@ -65,7 +65,7 @@ const NAV_REST =
   'message agents FROM those apps. This is the INBOUND direction and is NOT where a platform becomes ' +
   'an agent tool — that is ABILITIES.\n' +
   '- SETTINGS › PROVIDERS: the AI model providers and their keys (OpenRouter, Anthropic, ChatGPT ' +
-  'sign-in, …). Model keys live here, platform keys live in ABILITIES › KEYS — do not confuse them.\n' +
+  'sign-in, …). Model keys live here, platform keys live in ABILITIES (INSTALLED › SAVED API CONNECTIONS) — do not confuse them.\n' +
   '- REFIT: the full-screen station builder. Lay out rooms, paint decks, and place props/bays. This is ' +
   'where capabilities are granted — you give an agent a power by placing the matching prop in its room.\n' +
   '- Recruitment Bay: where the Commander SUMMONS a new agent. They pick a class seal (a specialist ' +
@@ -131,7 +131,7 @@ const CONNECTING =
 const TROUBLESHOOTING =
   'TROUBLESHOOTING — when the Commander is stuck, name the concrete fix:\n' +
   '- “How do I connect <platform>?” / “can you use my Google Drive?” → open ⇄ ABILITIES, search the name ' +
-  'in its search box, and follow the card. If nothing matches, use ABILITIES › KEYS: paste that platform’s ' +
+  'in its search box, and follow the card. If nothing matches, use ABILITIES › CREATE / ADVANCED › Add a custom API key: paste that platform’s ' +
   'API key and you call its REST API directly. Do NOT send them to REFIT for this.\n' +
   '- “My agent can’t search the web / read files / run code” → open REFIT and place the matching ' +
   'prop in THAT agent’s room: DISH for web, INTEL CAB for files, WORKBENCH for the terminal.\n' +

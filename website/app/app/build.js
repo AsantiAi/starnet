@@ -216,6 +216,11 @@ const Build = (() => {
      cannot change without an onChange, and every consumer (conveyor.tick, conveyor.drawBelts, the
      ghost engine) treats it strictly read-only, so hand them all the SAME array for the edit. */
   const beltsMemoed = () => (beltsVer === geoVer && beltsMemo) ? beltsMemo : (beltsVer = geoVer, beltsMemo = station.belts());
+  /* does this floor build by LINKS (conveyor-links phase B — every floor this build adopted)? Once per edit. On a linked
+     floor a belt joins exactly the two machines it runs between, so the ring-rule advice (the spacing tip, "its belts
+     stay behind") has nothing to say; it still speaks on a floor whose links were never adopted. */
+  let linkedVer = 0, linkedMemo = false;
+  const linkedFloor = () => (linkedVer === geoVer) ? linkedMemo : (linkedVer = geoVer, linkedMemo = !!(station && typeof station.isLinked === 'function' && station.isLinked()));
   /* bayObjects, per (agentId, geometry). Also DEFENSIVE: world.js has always wrapped this call in a
      try/catch and REFIT called it bare, so one throw took out the whole validation layer (and with
      it every routing callout on the floor) instead of one bay's NO-COMPUTE check. */
@@ -1089,6 +1094,7 @@ const Build = (() => {
         pal.appendChild(gh);
         const gg = document.createElement('div'); gg.className = 'refit-linegrid refit-goalgrid'; gg.setAttribute('aria-label', 'Suggested for your goal');
         const gb = makeLineTile(goal.bp); gg.appendChild(gb); setLineTileFit(gb, goal.bp);
+        if (tool === 'line' && goal.bp.id === lineType) gg.appendChild(linePrefsEl(goal.bp));
         pal.appendChild(gg);
       }
       pal.appendChild(machinePalette());
@@ -1098,9 +1104,10 @@ const Build = (() => {
       const grid = document.createElement('div'); grid.className = 'refit-linegrid';
       grid.setAttribute('aria-label', 'Line library');
       const groups = {};
-      for (const bp of blueprints()) { const k = LINE_GROUPS.some(g => g.id === bp.grp) ? bp.grp : 'flagship'; (groups[k] = groups[k] || []).push(bp); }
+      const lastWork = LINE_WORK_GROUPS[LINE_WORK_GROUPS.length - 1].id;
+      for (const bp of blueprints()) { const k = LINE_WORK_GROUPS.some(g => g.id === LINE_WORK[bp.id]) ? LINE_WORK[bp.id] : lastWork; (groups[k] = groups[k] || []).push(bp); }
       const ordered = [];
-      for (const g of LINE_GROUPS) {
+      for (const g of LINE_WORK_GROUPS) {
         if (!groups[g.id] || !groups[g.id].length) continue;
         ordered.push({ hd: g });
         for (const bp of groups[g.id]) ordered.push({ bp });
@@ -1118,6 +1125,7 @@ const Build = (() => {
         const b = makeLineTile(bp);
         grid.appendChild(b);
         setLineTileFit(b, bp);   // DECK-FIT HONESTY — and kept current as the floor changes (see setLineTileFit)
+        if (tool === 'line' && bp.id === lineType) grid.appendChild(linePrefsEl(bp));   // the armed card's settings, right under it
       }
       pal.appendChild(grid);
       const note = document.createElement('div');
@@ -1487,6 +1495,7 @@ const Build = (() => {
     second_opinion: 'two independent takes on the same job, shipped as one',
     ship_out: 'one agent, straight to the outbox — the minimal line',
     assembly_line: 'four agents deep — each stage builds on the last',
+    build_test: 'a builder makes it, a tester sends it back until it passes',
     code_foundry: 'code is built and review-looped; the rest takes a side lane',
     gauntlet: 'two takes, one synthesis, and a reviewer holding the door',
     crucible: 'two review gates in series — approved, then approved again',
@@ -1497,16 +1506,69 @@ const Build = (() => {
     load_balancer: 'jobs alternate between two desks; one door ships it all',
     fire_escape: 'a third lane on the gate — out-of-passes work drops to a fixer',
   };
-  /* the LIBRARY's sections — what a line is FOR, simplest family first. `id` matches the catalog's
-     `grp` field on each blueprint (worldmodel.js); the render falls an unknown grp into the last
-     section so a catalog entry can never vanish from the shelf. */
-  const LINE_GROUPS = [
-    { id: 'chain', label: 'THE BASICS', blurb: 'door to door — one desk, a budgeted desk, or a hand-off chain' },
-    { id: 'sort', label: 'SORTERS', blurb: 'the right work to the right desk, read from the job itself' },
-    { id: 'crew', label: 'CREWS', blurb: 'many agents on one stream — split the load, or run every take' },
-    { id: 'gate', label: 'QUALITY GATES', blurb: 'a reviewer holds the door — nothing ships unapproved' },
-    { id: 'flagship', label: 'FLAGSHIPS', blurb: 'the whole machine — sorters, crews and gates on one floor' },
+  /* PLAIN NAMES (2026-09-28): a card leads with what the line does in everyday words; the catalog's station name
+     (REVISION LOOP …) rides beside it as a small tag, so a Commander who knows the old names still finds them. */
+  const LINE_PLAIN = {
+    front_desk: 'One agent', allowance_desk: 'One agent, capped', ship_out: 'Straight to outbox', two_doors: 'Two doors, one agent',
+    revision_loop: 'Draft + review', crucible: 'Two review rounds', fire_escape: 'Review + a fixer',
+    build_test: 'Build + test', code_foundry: 'Build + review',
+    research_line: 'Research + write', swarm_synthesis: 'Three researchers', deep_dive: 'Deep dive + review', assembly_line: 'Four-step chain',
+    sorting_office: 'Sort by type', triage_desk: 'Three specialists', parallel_crew: 'Split across three', load_balancer: 'Take turns', mission_control: 'Full triage',
+    second_opinion: 'Second opinion', gauntlet: 'Two takes, reviewed',
+  };
+
+  /* THE SHELF BY KIND OF WORK (2026-09-28): the same kinds the station presets are for. A line with no entry here falls
+     into the last section, so a catalog entry can never vanish from the shelf. */
+  const LINE_WORK = {
+    front_desk: 'any', allowance_desk: 'any', ship_out: 'any', two_doors: 'any',
+    revision_loop: 'write', crucible: 'write', fire_escape: 'write',
+    build_test: 'code', code_foundry: 'code',
+    research_line: 'research', swarm_synthesis: 'research', deep_dive: 'research', assembly_line: 'research',
+    sorting_office: 'volume', triage_desk: 'volume', parallel_crew: 'volume', load_balancer: 'volume', mission_control: 'volume',
+    second_opinion: 'decide', gauntlet: 'decide',
+  };
+  const LINE_WORK_GROUPS = [
+    { id: 'any', label: 'ANY JOB', blurb: 'one agent takes the work door to door' },
+    { id: 'write', label: 'WRITING & CONTENT', blurb: 'a draft, and a reviewer who can send it back' },
+    { id: 'code', label: 'BUILDING SOFTWARE', blurb: 'a builder makes the change, and it is checked before it ships' },
+    { id: 'research', label: 'RESEARCH', blurb: 'dig up sources, then write it up' },
+    { id: 'volume', label: 'LOTS OF REQUESTS', blurb: 'sort the incoming work, or share it across agents' },
+    { id: 'decide', label: 'DECISIONS', blurb: 'more than one take before you decide' },
   ];
+  /* SET UP BEFORE YOU PLACE (2026-09-28): the armed card offers the line's daily spending cap (when it has an INBOX) and
+     its review tries (when it has a LOOP). Session-scoped per line; stampLine passes them INTO the stamp
+     (worldmodel.stampBlueprint opts), so one UNDO still removes the whole line. Defaults are the catalog's own. */
+  const LINE_CAPS = [[null, 'No cap'], [1, '$1'], [5, '$5'], [20, '$20']];
+  const linePrefs = {};
+  function linePrefsOf(bp) {
+    const intake = bp.props.find(p => p.t === 'intake'), loop = bp.props.find(p => p.t === 'loop');
+    const base = { cap: intake && intake.limits && intake.limits.maxUsdPerDay != null ? intake.limits.maxUsdPerDay : null, tries: loop ? (loop.maxIter || 3) : null };
+    return Object.assign(base, linePrefs[bp.id] || {});
+  }
+  function lineStampOpts(bp) {
+    const p = linePrefsOf(bp), o = {};
+    if (bp.props.some(x => x.t === 'intake')) o.limits = { maxUsdPerDay: p.cap };
+    if (p.tries != null) o.maxIter = p.tries;
+    return o;
+  }
+  function linePrefsEl(bp) {
+    const hasIn = bp.props.some(x => x.t === 'intake'), p = linePrefsOf(bp);
+    const el = document.createElement('div'); el.className = 'refit-lineprefs';
+    el.setAttribute('role', 'group'); el.setAttribute('aria-label', 'Set up ' + (LINE_PLAIN[bp.id] || bp.label) + ' before you place it');
+    const row = (label, opts, cur, key) => '<div class="refit-lineprefs-row"><span class="refit-lineprefs-k">' + label + '</span>'
+      + opts.map(([v, t]) => '<button type="button" class="bb sm" data-pref="' + key + '" data-val="' + (v == null ? '' : v) + '" aria-pressed="' + (v === cur) + '">' + esc(t) + '</button>').join('') + '</div>';
+    el.innerHTML = '<div class="refit-lineprefs-hd">SET UP BEFORE YOU PLACE</div>'
+      + (hasIn ? row('DAILY CAP', LINE_CAPS, p.cap, 'cap') : '')
+      + (p.tries != null ? row('REVIEW TRIES', [1, 2, 3, 4, 5].map(n => [n, String(n)]), p.tries, 'tries') : '')
+      + '<div class="refit-lineprefs-note">Then click the floor to place it. Who works each step comes next, in the panel.</div>';
+    el.querySelectorAll('[data-pref]').forEach(b => b.onclick = ev => {
+      ev.stopPropagation();
+      const v = b.dataset.val === '' ? null : +b.dataset.val;
+      linePrefs[bp.id] = Object.assign({}, linePrefs[bp.id] || {}, { [b.dataset.pref]: v });
+      el.replaceWith(linePrefsEl(bp)); sfx('click');
+    });
+    return el;
+  }
   /* schematic v2 — the card draws a MINIATURE of what will stamp, in the floor's own colour
      economy (hex families lifted from propsprites.js RAMP.steel/ACC and conveyor.js's belt bed)
      so the schematic teaches the real floor: the INBOX feeds amber, a BAY is a steel berth with
@@ -1772,8 +1834,9 @@ const Build = (() => {
     view.appendChild(lineSchematic(bp));
     b.appendChild(view);
     const hd = document.createElement('span'); hd.className = 'refit-linetile-hd';
-    const nm = document.createElement('span'); nm.className = 'refit-matname'; nm.textContent = bp.label;
+    const nm = document.createElement('span'); nm.className = 'refit-matname'; nm.textContent = LINE_PLAIN[bp.id] || bp.label;
     hd.appendChild(nm);
+    if (LINE_PLAIN[bp.id]) { const tg = document.createElement('span'); tg.className = 'refit-linetile-tag'; tg.textContent = bp.label; hd.appendChild(tg); }
     // footprint + dock count, derived from the catalog (never hand-kept). Mixed VT323 glyphs
     // ('×', '·') fall back fonts, so the chip is BOX-centred in CSS — never padded by font math.
     const docks = bp.props.filter(p => p.t === 'bay').length;
@@ -1858,7 +1921,7 @@ const Build = (() => {
     // the SAME snap the ghost showed — the click commits exactly what was on screen, never the raw tile
     const s = lineSnap(w.tx, w.ty);
     const o = lineOrigin(bp, s.tx, s.ty);
-    const res = station.stampBlueprint(bp.id, o.x, o.y);   // ONE undoable action — see worldmodel.stampBlueprint
+    const res = station.stampBlueprint(bp.id, o.x, o.y, lineStampOpts(bp));   // ONE undoable action, with the card's cap + tries — see worldmodel.stampBlueprint
     if (res && res.ok) {
       lastStampIds = res.ids || null;   // the finish-the-line card adopts this line on the next recompile
       // LINE NAMING: a stamp leaves the intake's `label` UNSET (the save carries only what the Commander
@@ -2109,6 +2172,25 @@ const Build = (() => {
   // an opener calls this FIRST: whatever is up closes properly, then the new card takes the surface.
   function cardCloseAll() { for (let i = 0; i < 16; i++) { const el = cardTop(); if (!el) break; cardClose(el); } }
 
+  /* STATION PRESETS (reimagined 2026-09-28). Two groups: WORK presets — a whole station for one kind of work, its line
+     wired, every step's instructions written, a sample job ready — and LOOK presets (rooms and furniture only). Picking
+     a card previews what it builds; applying replaces the layout in one undoable step (the old one is backed up), and a
+     WORK preset opens its setup guide straight after. Staffing is that guide's next click — a preset never hires. */
+  const PRESET_GROUPS = [
+    ['work', 'BUILT FOR YOUR WORK', 'A whole station for one kind of work. Its line is wired, every step has instructions, and a sample job is ready to try.'],
+    ['look', 'JUST THE LOOK', 'Rooms and furniture only. Add a line from the Lines shelf whenever you want one.'],
+  ];
+  function presetPreviewHTML(item, doc) {
+    const guide = StationTemplates.guides && StationTemplates.guides[item.id];
+    const rooms = item.rooms + (item.rooms === 1 ? ' room' : ' rooms');
+    if (!guide) return '<span><b>' + esc(item.name) + '</b> · ' + rooms + ' · ' + doc.props.length + ' props</span><span class="station-build-need">Rooms and furniture only; add a line from the Lines shelf whenever you want one.</span>';
+    const steps = Object.values(guide.roles).map(r => r.name);
+    return '<span><b>' + esc(item.name) + '</b> · ' + rooms + '</span>'
+      + '<span class="station-build-flow">' + guide.flow.map(esc).join(' <i>→</i> ') + '</span>'
+      + '<span>' + esc(guide.purpose) + '</span>'
+      + '<span class="station-build-need">Next you choose who works ' + (steps.length === 1 ? 'its one step' : 'its ' + steps.length + ' steps') + ' (' + esc(steps.join(', ')) + '). One agent can work every step.'
+      + (item.purpose === 'code' ? ' Point its Inbox at your project folder so the Builder works on your code.' : '') + '</span>';
+  }
   function showStationBuilds() {
     if (!root || !station || typeof StationTemplates === 'undefined') return;
     cardCloseAll();
@@ -2116,16 +2198,18 @@ const Build = (() => {
     g.className = 'refit-guide refit-station-builds refit-workflow-editor';
     g.setAttribute('role','dialog');g.setAttribute('aria-modal','true');g.setAttribute('aria-label','Station presets');
     g.innerHTML = '<div class="refit-guide-box station-build-box"><div class="station-build-heading"><div><span class="station-build-eyebrow">BUILD MODE / STATION PRESETS</span><h2>A place for your work</h2></div><button class="bb sm" data-workflow-close>BACK TO BUILD</button></div>' +
-      '<p class="station-build-intro">Choose your starting layout, then make it yours. Every station includes your workstation and all five essentials.</p>' +
-      '<div class="station-build-grid" aria-label="Available station presets"></div><div class="station-build-footer"><p class="station-build-status" role="status">Select a preset to continue. You can customize every room afterward.</p>' +
+      '<p class="station-build-intro">Pick a station for the kind of work you do, then make it yours. Every station includes your workstation and all five essentials.</p>' +
+      '<div class="station-build-scroll">' + PRESET_GROUPS.map(([id, label, blurb]) => '<section class="station-build-section" data-build-section="' + id + '"><div class="station-build-section-head"><h3>' + label + '</h3><p>' + esc(blurb) + '</p></div><div class="station-build-grid" aria-label="' + esc(label.toLowerCase()) + '"></div></section>').join('') + '</div>' +
+      '<div class="station-build-footer"><div class="station-build-status" role="status">Select a preset to see what it builds.</div>' +
       '<div class="station-build-actions"><button class="bb" data-restore-build>RESTORE PREVIOUS</button><button class="bb refit-primary" data-use-build disabled>CHOOSE A PRESET</button></div><small class="station-build-note">Applying replaces rooms, props and conveyors. Your current layout is backed up; agents and conversations stay.</small></div></div>';
     g.style.setProperty('--station-build-scale', typeof U.uiZoom === 'function' ? U.uiZoom() : 1);
     const closeP = () => { g.remove(); root?.querySelector('#refit-stations')?.focus(); };
     cardRegister(g, closeP); root.appendChild(g);
     g.querySelector('[data-workflow-close]').onclick = closeP;
     const status = g.querySelector('.station-build-status'), apply = g.querySelector('[data-use-build]');
-    if (currentPresetExample()) {
-      const setup = document.createElement('button'); setup.className='bb'; setup.textContent='SET UP CURRENT STUDIO';
+    const current = currentPresetExample();
+    if (current) {
+      const setup = document.createElement('button'); setup.className='bb'; setup.textContent='SET UP ' + String(current.title).toUpperCase();
       setup.onclick=openPresetExample; g.querySelector('.station-build-actions').prepend(setup);
     }
     const backupKey = 'starnet.layoutBackup.' + station.doc().meta.createdAt;
@@ -2133,11 +2217,12 @@ const Build = (() => {
     const backupButton = g.querySelector('[data-restore-build]');
     try { backupButton.disabled = !localStorage.getItem(backupKey); } catch (_) { backupButton.disabled = true; }
     for (const item of StationTemplates.catalog) {
+      const grid = g.querySelector('[data-build-section="' + (item.group === 'work' ? 'work' : 'look') + '"] .station-build-grid');
       const button = document.createElement('button'); button.className = 'bb station-build-card';
       button.type = 'button'; button.dataset.stationBuild = item.id; button.setAttribute('aria-pressed','false');
       const doc = StationTemplates.build(item.id, WorldModel, PropSprites);
       const bays = doc.props.filter(p=>p.t==='bay').length;
-      button.innerHTML = '<div class="station-build-art"><canvas width="460" height="280" aria-hidden="true"></canvas><span class="station-build-check" aria-hidden="true">✓</span></div><div class="station-build-copy"><div class="station-build-meta"><span>' + item.rooms + (item.rooms === 1 ? ' ROOM' : ' ROOMS') + '</span>' + (bays ? '<span>'+bays+' WORKFLOW '+(bays===1?'STEP':'STEPS')+'</span>' : '') + '</div><b>' + esc(item.name) + '</b><small>' + esc(item.description) + '</small></div>';
+      button.innerHTML = '<div class="station-build-art"><canvas width="460" height="280" aria-hidden="true"></canvas><span class="station-build-check" aria-hidden="true">✓</span></div><div class="station-build-copy"><div class="station-build-meta"><span>' + item.rooms + (item.rooms === 1 ? ' ROOM' : ' ROOMS') + '</span>' + (bays ? '<span>'+bays+'-STEP LINE</span>' : '') + '</div><b>' + esc(item.name) + '</b><small>' + esc(item.description) + '</small></div>';
       const bounds = WorldModel.create(doc).bounds(), ctx = button.querySelector('canvas').getContext('2d');
       ctx.scale(2,2);
       const theme = getComputedStyle(root), accent = theme.getPropertyValue('--ph').trim() || '#b6a375';
@@ -2153,9 +2238,9 @@ const Build = (() => {
       button.onclick = () => {
         selected=item;armed=false;apply.disabled=false;apply.textContent='USE '+item.name;
         for(const b of g.querySelectorAll('[data-station-build]'))b.setAttribute('aria-pressed',b===button?'true':'false');
-        status.textContent=item.name+' · '+item.rooms+' '+(item.rooms===1?'room':'rooms')+' · '+doc.props.length+' props'+(bays?' · Optional conveyor workflow; set up agents whenever you want to use it.':'.');
+        status.innerHTML=presetPreviewHTML(item, doc);
       };
-      g.querySelector('.station-build-grid').appendChild(button);
+      grid.appendChild(button);
     }
     apply.onclick = () => {
       if(!selected)return;
@@ -2165,6 +2250,7 @@ const Build = (() => {
         localStorage.setItem(backupKey,JSON.stringify(station.serialize()));
         const result=station.replaceLayout(doc);if(!result.ok)throw Error(result.msg||result.error);
         fitCamera();closeP();sfx('click');
+        if (currentPresetExample()) openPresetExample();   // a WORK preset: choosing who works it is the next click
       }catch(e){armed=false;status.textContent='Layout unchanged: '+e.message;apply.textContent='USE '+selected.name;}
     };
     backupButton.onclick = () => {
@@ -2181,47 +2267,81 @@ const Build = (() => {
 
   function currentPresetExample() {
     return typeof StationTemplates !== 'undefined' && StationTemplates.example
-      ? StationTemplates.example(station.serialize(),WorldModel,Pipeline) : null;
+      ? StationTemplates.example(station.serialize(),WorldModel,Pipeline,typeof WorkflowLine !== 'undefined' ? WorkflowLine : null) : null;
   }
+  /* THE SETUP GUIDE (every WORK preset, 2026-09-28; was Creative Studio only, and refused one agent on both steps). Steps
+     come in the line's run order. Each offers the crew, a one-click RECRUIT of that step's specialist (summonForRole —
+     the Workflow panel's own seam) and, when the step's agent has no computer of its own there, the panel's ADD A
+     WORKSTATION fix (requisitionPcFor). One agent may work every step (multi-bay). Readiness is StationTemplates.example
+     → WorkflowLine.readiness: the Workflow panel pill's own blocking list. RUN SAMPLE posts the plan and runs the
+     preset's sample job through the real harness (finRunSample). */
   function openPresetExample() {
-    if (!root || !currentPresetExample()) return;
+    const first = currentPresetExample();
+    if (!root || !first) return;
     cardCloseAll();
     const g = document.createElement('div');
     g.className = 'refit-guide refit-preset-example';
-    g.setAttribute('role','dialog'); g.setAttribute('aria-modal','true'); g.setAttribute('aria-label','Set up Creative Studio');
-    g.innerHTML = '<div class="refit-guide-card"><header class="refit-prop-actions-head"><div><span class="ui-overline">WORKING EXAMPLE</span><h3>Creative Studio</h3></div><button class="bb" data-workflow-close>CLOSE</button></header><div data-example-body></div></div>';
+    g.setAttribute('role','dialog'); g.setAttribute('aria-modal','true'); g.setAttribute('aria-label','Set up '+first.title);
+    g.innerHTML = '<div class="refit-guide-card"><header class="refit-prop-actions-head"><div><span class="ui-overline">SET UP YOUR STATION</span><h3>'+esc(first.title)+'</h3></div><button class="bb" data-workflow-close>CLOSE</button></header><div data-example-body></div></div>';
     let unsubscribe;
     const closeP = () => { unsubscribe?.(); g.remove(); root?.querySelector('[data-build-group="workflow"]')?.focus(); };
     cardRegister(g,closeP); root.appendChild(g); g.querySelector('[data-workflow-close]').onclick = closeP;
+    const say = t => { const el = g.querySelector('.example-status'); if (el) el.textContent = t; };
+    const needsPc = r => !!r.agentId && bayObjectsMemoed(r.agentId, r.propId).indexOf('computer') < 0;
     const refresh = () => {
       if (!g.isConnected) return;
       const e = currentPresetExample(); if (!e) return closeP();
       const agents = (opts.agents && opts.agents()) || [];
       const pending = !!finSampleRes?.pending;
-      const rosterOK = e.roles.length===2 && e.roles.every(r=>agents.some(a=>a.id===r.agentId));
+      const rosterOK = e.roles.length > 0 && e.roles.every(r=>agents.some(a=>a.id===r.agentId));
       const ready = e.ready && rosterOK;
       const signature = JSON.stringify(station.serialize());
       const sr = finSampleRes?.key===e.key && finSampleRes?.exampleSignature===signature ? finSampleRes : null;
-      const status = e.issue ? e.issue : !rosterOK ? 'Choose an agent for each role.' : !ready ? 'Each role needs a different agent and a clear route to the outbox.' : sr?.pending ? 'Sample in progress…' : sr?.view?.ok ? 'Sample completed · the harness confirmed delivery to the outbox.' : 'Configured · ready to try a sample.';
+      const status = e.issue ? e.issue : !rosterOK ? 'Choose an agent from your crew for each step.' : sr?.pending ? 'Sample in progress…' : sr?.view?.ok ? 'Sample completed · the harness confirmed delivery to the outbox.' : 'Ready · try the sample job.';
+      const canSummon = typeof App !== 'undefined' && !!App.summonAgent;
+      const firstAid = e.roles[0] && e.roles[0].agentId;
+      const offerAll = e.roles.length > 1 && !!firstAid && e.roles.some(r=>r.agentId!==firstAid);
+      const software = station.doc().meta.templateId === 'software';
       const body = g.querySelector('[data-example-body]');
-      body.innerHTML = '<p class="example-purpose">'+esc(e.purpose)+'</p><div class="example-flow" aria-label="Example flow"><span>Your brief</span><b>→</b><span>Drafter</span><b>→</b><span>Reviewer</span><b>→</b><span>Outbox</span></div>'+
-        '<h4>Choose who does each step</h4><div class="example-roles">'+e.roles.map((r,i)=>'<label class="example-role"><b>'+(i+1)+'. '+esc(r.name)+'</b><span>'+esc(r.description)+'</span><select class="refit-input" aria-label="'+esc(r.name)+' agent" data-example-agent="'+esc(r.propId)+'"'+(pending?' disabled':'')+'><option value="">Choose an agent</option>'+agents.map(a=>'<option value="'+esc(a.id)+'"'+(a.id===r.agentId?' selected':'')+'>'+esc(a.name||a.id)+'</option>').join('')+'</select></label>').join('')+'</div>'+
-        (agents.length<2?'<p class="example-note">This example needs two different agents. Recruit another agent from Crew, then return to Conveyors → Set up Creative Studio.</p>':'')+
-        '<p class="example-note">Assignments save when selected. The prepared instructions belong to the Bays; you can edit them by clicking those props.</p>'+
-        '<section class="example-sample"><h4>Try a small task</h4><p>'+esc(e.sample.replace(/^SAMPLE JOB: /,''))+'</p><p class="example-note">Runs the selected agents using their configured models. Normal model costs apply.</p><button class="bb refit-primary" data-example-run'+(!ready||pending?' disabled':'')+'>'+(pending?'SAMPLE IN PROGRESS…':sr?.view?.ok?'RUN SAMPLE AGAIN':'RUN SAMPLE TASK')+'</button></section>'+
+      body.innerHTML = '<p class="example-purpose">'+esc(e.purpose)+'</p><div class="example-flow" aria-label="How the line runs">'+e.flow.map(x=>'<span>'+esc(x)+'</span>').join('<b>→</b>')+'</div>'+
+        '<h4>Choose who works each step</h4><div class="example-roles">'+e.roles.map((r,i)=>'<div class="example-role"><b>'+(i+1)+'. '+esc(r.name)+'</b><span>'+esc(r.description)+'</span>'+
+          '<div class="example-role-pick"><select class="refit-input" aria-label="'+esc(r.name)+' agent" data-example-agent="'+esc(r.propId)+'"'+(pending?' disabled':'')+'><option value="">Choose an agent</option>'+agents.map(a=>'<option value="'+esc(a.id)+'"'+(a.id===r.agentId?' selected':'')+'>'+esc(a.name||a.id)+'</option>').join('')+'</select>'+
+          (canSummon && r.role ? '<button type="button" class="bb sm" data-example-recruit="'+esc(r.propId)+'"'+(pending?' disabled':'')+'>+ RECRUIT</button>' : '')+'</div>'+
+          (needsPc(r) ? '<div class="example-role-fix"><span>This agent has no workstation of its own here.</span><button type="button" class="bb sm" data-example-pc="'+esc(r.propId)+'"'+(pending?' disabled':'')+'>+ ADD A WORKSTATION</button></div>' : '')+'</div>').join('')+'</div>'+
+        (offerAll ? '<button type="button" class="bb sm example-all" data-example-all'+(pending?' disabled':'')+'>USE '+esc(String(agentLabelFor(firstAid)).toUpperCase())+' FOR EVERY STEP</button>' : '')+
+        '<p class="example-note">'+(agents.length ? 'One agent can work every step. ' : 'You have no agents yet. ')+(canSummon ? 'RECRUIT adds that step\'s specialist to your crew; it costs nothing until it works.' : '')+'</p>'+
+        '<p class="example-note">Assignments save when selected. Each step\'s instructions live on its Bay; click the Bay to edit them.</p>'+
+        '<section class="example-sample"><h4>Try the sample job</h4><p>'+esc(e.sample.replace(/^SAMPLE JOB: /,''))+'</p><p class="example-note">This is one real job: the agents you chose run it on their own models, and normal model costs apply.</p><button class="bb refit-primary" data-example-run'+(!ready||pending?' disabled':'')+'>'+(pending?'SAMPLE IN PROGRESS…':sr?.view?.ok?'RUN THE SAMPLE AGAIN':'RUN THE SAMPLE JOB')+'</button></section>'+
         '<p class="example-status" role="status">'+esc(status)+'</p>'+
         (sr?.view ? '<div class="example-result">'+finSampleHTML(sr.view)+(sr.output?'<details><summary>Read the finished result</summary><pre>'+esc(sr.output)+'</pre></details>':'')+'</div>' : '')+
-        '<p class="example-note">To use this workflow afterward, open its Inbox to configure a schedule or connected source. The Outbox opens delivered work in the Logbook.</p>';
+        /* NEXT: USE IT FOR REAL — one click to the Inbox's own settings in the Workflow panel (what starts it; the working
+           folder a software line builds in), instead of a sentence about where to click */
+        '<section class="example-next"><h4>Use it for real</h4><p>'+(software ? 'Choose the project folder the Builder works in, and when the line runs: on a schedule or from a chat app.' : 'Choose when the line runs: on a schedule or from a chat app.')+' Finished work lands in the Outbox and opens in the Logbook.</p>'+
+        (e.inboxId ? '<button type="button" class="bb" data-example-inbox'+(pending?' disabled':'')+'>'+(software ? 'OPEN THE INBOX: FOLDER + START' : 'OPEN THE INBOX: HOW IT STARTS')+'</button>' : '')+'</section>';
       body.querySelectorAll('[data-example-agent]').forEach(select => { select.onchange = () => {
-        const propId = select.dataset.exampleAgent, aid = select.value;
-        if (aid && e.roles.some(r=>r.propId!==propId && r.agentId===aid)) {
-          select.value = e.roles.find(r=>r.propId===propId).agentId;
-          body.querySelector('.example-status').textContent = 'Choose a different agent for each role so the draft can hand off to its reviewer.'; return;
-        }
-        const result = station.assignPropAgent(propId,aid);
-        if (!result.ok) body.querySelector('.example-status').textContent = result.msg || 'Assignment could not be saved.';
+        const propId = select.dataset.exampleAgent;
+        const result = station.assignPropAgent(propId,select.value);
+        if (!result.ok) say(result.msg || 'That assignment could not be saved.');
         else { refresh(); g.querySelector('[data-example-agent="'+propId+'"]')?.focus(); }
       }; });
+      body.querySelectorAll('[data-example-recruit]').forEach(b => { b.onclick = () => {
+        const r = e.roles.find(x=>x.propId===b.dataset.exampleRecruit); if (!r) return;
+        b.disabled = true;
+        const ri = WorldModel.bayRoleInfo ? WorldModel.bayRoleInfo(r.role) : null;
+        const a = summonForRole(r.role, ri), res = a && station.assignPropAgent(r.propId, a.id);
+        if (res && res.ok) { sfx('chime'); refresh(); }
+        else { b.disabled = false; sfx('bad'); say(a ? 'Recruited, but the step refused the assignment. Pick the new agent from the list.' : 'Recruiting failed. Pick an agent from your crew instead.'); }
+      }; });
+      body.querySelectorAll('[data-example-pc]').forEach(b => { b.onclick = () => {
+        b.disabled = true;
+        const res = requisitionPcFor(b.dataset.examplePc);
+        if (res.ok) { bumpGeo(); sfx('chime'); refresh(); }
+        else { b.disabled = false; sfx('bad'); say(res.reason === 'no-room-for-a-desk' ? 'There is no clear floor for a desk in this room. Make some space, then try again.' : 'A workstation could not be placed here.'); }
+      }; });
+      const inboxBtn = body.querySelector('[data-example-inbox]');
+      if (inboxBtn) inboxBtn.onclick = () => { closeP(); try { rebake(); openFlowCard(e.inboxId); } catch (_) {} };
+      const all = body.querySelector('[data-example-all]');
+      if (all) all.onclick = () => { for (const r of e.roles) station.assignPropAgent(r.propId, firstAid); sfx('click'); refresh(); };
       body.querySelector('[data-example-run]').onclick = () => {
         const now = currentPresetExample();
         if (!now?.ready || finSampleRes?.pending) return;
@@ -2319,6 +2439,9 @@ const Build = (() => {
     const duty = 'You crew this station line as its ' + role + ' — you ' + ((ri && ri.desc) || 'work this dock') + '.';
     const spec = Object.assign({}, cls || { name: role, model: 'balanced' });
     spec.purpose = duty + (cls && cls.purpose ? '\n\n' + cls.purpose : '');
+    // a role that borrows another class (TESTER rides the reviewer class) names its recruit for the STEP — the button said
+    // "a new tester" — through the creation-time name key, so the class still drives the specialty and the id
+    if (ri && ri.name) spec.agentName = ri.name;
     try { return App.summonAgent(spec, { activate: false, desk: true }); } catch (e) { return null; }
   }
   /* ---------- THE STEP CARD (workflow studio, 2026-08-05) ----------
@@ -2772,7 +2895,19 @@ const Build = (() => {
       ? Pipeline.routeFrom(valPlan, tx - o.tx, ty - o.ty) : null;
     const DIRWORD = { E: 'EAST ▸', W: '◂ WEST', N: '▴ NORTH', S: '▾ SOUTH' };
     const li = [];
-    if (r) {
+    // A LINKED FLOOR says which connection this belt is — or that it is LOOSE: it joins no two machines, so it is in
+    // no plan and nothing rides it (conveyor-links phase B; the plan's belts are its links' paths)
+    const loose = linkedFloor() && !!valPlan && !!valPlan.belts && !valPlan.belts[(tx - o.tx) + ',' + (ty - o.ty)];
+    if (linkedFloor() && !loose) {
+      const seen = new Set();
+      for (const l of (station.links() || [])) {
+        if (l.from.prop == null || l.to.prop == null || !l.path.some(q => q.x === tx && q.y === ty)) continue;
+        const k = l.from.prop + '>' + l.to.prop; if (seen.has(k)) continue; seen.add(k);
+        li.push('This belt runs from <b>' + esc(machineName(l.from.prop)) + '</b> to <b>' + esc(machineName(l.to.prop)) + '</b>.');
+      }
+    }
+    if (loose) li.push('This belt is <b>loose</b> — it joins no two machines, so nothing rides it. Run it from one machine into another, or use BELT: click a machine, then the next.');
+    else if (r) {
       if (r.agents.length) li.push('Work riding this lane reaches <b>' + r.agents.map(a => esc(agentLabelFor(a))).join(' + ') + '</b>.');
       if (r.unbound) li.push('It passes <b>' + r.unbound + ' uncrewed dock' + (r.unbound === 1 ? '' : 's') + '</b> — crew them or crates ride past.');
       if (r.outbox) li.push('It <b>ships out at the OUTBOX</b>.');
@@ -2792,6 +2927,16 @@ const Build = (() => {
     g.querySelector('[data-workflow-close]').onclick = closeP;
     g.querySelector('#belt-ok').onclick = () => { sfx('click'); closeP(); };
     g.addEventListener('click', e => { if (e.target === g) closeP(); });
+  }
+
+  // a machine as the floor names it: the agent crewing a BAY, a named line's INBOX, else the machine
+  function machineName(id) {
+    const p = station.propById(id);
+    if (!p) return 'a removed machine';
+    if (p.t === 'bay') return p.agentId ? String(agentLabelFor(p.agentId)).toUpperCase() : 'AN EMPTY BAY';
+    if (p.t === 'intake') return p.label ? 'LINE ' + String(p.label).toUpperCase() : 'THE INBOX';
+    if (p.t === 'outbox') return 'THE OUTBOX';
+    return 'THE ' + String(propLabel(p.t)).toUpperCase();
   }
 
   function openJunctionEditor(propId, ev) {
@@ -3378,7 +3523,7 @@ const Build = (() => {
     finCardEl.querySelector('.fl-x').onclick = () => { finMark(station, c.key, 'dis'); sfx('click'); renderFinCard(); };
     const example = currentPresetExample();
     const overviewButton = finCardEl.querySelector('[data-act="overview"]');
-    if (example?.key === c.key) overviewButton.textContent = 'SET UP CREATIVE STUDIO';
+    if (example?.key === c.key) overviewButton.textContent = 'SET UP ' + String(example.title).toUpperCase();
     overviewButton.onclick = () => { if (example?.key === c.key) openPresetExample(); else if (c.intakes.length) openFlowCard(c.intakes[0]); else if (c.bays.length) openStepCard(c.bays[0].propId); };
     const bCrew = finCardEl.querySelector('[data-act="crew"]');
     if (bCrew && !crewDone) bCrew.onclick = () => finFocusCrew(c);
@@ -3872,7 +4017,7 @@ const Build = (() => {
         if(!p){movingPropId=null;return;}
         const left=beltsLeftBehind(p,w.tx,w.ty);
         const res=station.moveProp(p.id,w.tx-p.x,w.ty-p.y);
-        feedback(res,ev,left?'moved — its belts stayed behind · reconnect with BELT (Undo puts it back)':'moved · Undo restores the previous position');
+        feedback(res,ev,moveMsg(res,left,'moved · Undo restores the previous position'));
         if(res&&res.ok){const id=p.id;selectTool('select');selectedPropId=id;renderSelection();}
         return;
       }
@@ -4086,14 +4231,14 @@ const Build = (() => {
     if(canFlip(p.t))add('FLIP',()=>{feedback(station.mirrorProp(p.id),orientEv(),'flipped');renderSelection();});
     add('COPY',()=>{selectTool('dupe');pickupDupe({tx:p.x,ty:p.y},orientEv(),p.id);});
     if(isEditableProp(p.t))add('CONFIGURE',()=>configureProp(p,orientEv()));
-    add('DELETE',()=>{feedback(station.removeProp(p.id),orientEv(),'removed · Undo restores it');selectedPropId=null;movingPropId=null;renderSelection();setHint();});
+    add('DELETE',()=>{const had=linkedFloor()&&isWorkflowType(p.t)&&(station.links()||[]).some(l=>l.from.prop===p.id||l.to.prop===p.id);feedback(station.removeProp(p.id),orientEv(),had?'removed · its belts stay, loose — nothing rides them until a machine stands where they end · Undo restores it':'removed · Undo restores it');selectedPropId=null;movingPropId=null;renderSelection();setHint();});
     add('DESELECT',()=>{selectedPropId=null;renderSelection();setHint();});
     const position=document.createElement('details');position.className='refit-position';
     position.innerHTML='<summary>Position on grid</summary><label>X <input aria-label="Object grid X" type="number" step="1" value="'+p.x+'"></label><label>Y <input aria-label="Object grid Y" type="number" step="1" value="'+p.y+'"></label><button class="bb sm" type="button">APPLY POSITION</button>';
     position.querySelector('button').onclick=()=>{
       const inputs=position.querySelectorAll('input'),x=Number(inputs[0].value),y=Number(inputs[1].value);
       if(!Number.isInteger(x)||!Number.isInteger(y)){feedback({ok:false,msg:'Use whole tile coordinates'},orientEv());return;}
-      feedback(station.moveProp(p.id,x-p.x,y-p.y),orientEv(),'position updated');renderSelection();
+      const res=station.moveProp(p.id,x-p.x,y-p.y);feedback(res,orientEv(),moveMsg(res,0,'position updated'));renderSelection();
     };host.append(position);
   }
   function configureProp(p, ev) {
@@ -4200,9 +4345,8 @@ const Build = (() => {
     }
     // belts never ride along with a machine: say so at the drop (the ghost already warned amber)
     const left = mp ? beltsLeftBehind(mp, mp.x + dx, mp.y + dy) : 0;
-    if (left) okMsg = 'moved — its belts stayed behind · reconnect with BELT (Undo puts it back)';
     const moved = station.moveProp(d.propId, dx, dy);
-    feedback(moved, ev, okMsg);
+    feedback(moved, ev, moveMsg(moved, left, okMsg));
     if(moved && moved.ok){selectedPropId=d.propId;renderSelection();}
   }
   function commitPaint(d, ev) {
@@ -4637,11 +4781,20 @@ const Build = (() => {
     }
     return names.length > 3 ? names.slice(0, 3).join(' + ') + ' +' + (names.length - 3) : names.join(' + ');
   }
-  // a MOVE of a workflow machine: which of its belt hookups would it leave behind at the new spot?
+  // a MOVE of a workflow machine: which of its belt hookups would it leave behind at the new spot? (a ring-rule floor
+  // only — on a linked floor its belts come with it)
   function beltsLeftBehind(p, nx, ny) {
-    if (!p || !isWorkflowType(p.t) || typeof station.hookedBelts !== 'function') return 0;
+    if (!p || !isWorkflowType(p.t) || typeof station.hookedBelts !== 'function' || linkedFloor()) return 0;
     const w = p.w || 1, h = p.h || 1;
     return station.hookedBelts(p.id).filter(b => !(b.x >= nx - 1 && b.x <= nx + w && b.y >= ny - 1 && b.y <= ny + h)).length;
+  }
+  // what a MOVE did, said as it happened: on a linked floor its belts came with it — or one found no route and stayed off
+  function moveMsg(res, left, okMsg) {
+    if (!res || !res.ok) return okMsg;
+    const lost = Array.isArray(res.lost) ? res.lost.length : 0, relaid = Array.isArray(res.relaid) ? res.relaid.length : 0;
+    if (lost) return 'moved — ' + lost + ' of its belts found no clear route and ' + (lost === 1 ? 'was' : 'were') + ' taken up · reconnect with BELT (Undo puts it back)';
+    if (relaid) return okMsg.replace(/ · Undo restores the previous position$/, '') + ' · its belt' + (relaid === 1 ? '' : 's') + ' came with it';
+    return left ? 'moved — its belts stayed behind · reconnect with BELT (Undo puts it back)' : okMsg;
   }
   function ghostInfo() {
     if (!drag) {
@@ -4846,7 +4999,9 @@ const Build = (() => {
     }
     if (bakeDirty || !cache || planDirty) rebake();
     // an armed first ride waits out the tutorial + the first-run card (.refit-firstrun, never .refit-guide)
-    if (ridePending && !tutorialCoaching() && !(root && root.querySelector('.refit-firstrun'))) fireFirstRide();
+    // ONE VOICE: the first ride waits while the presets dialog or a preset's setup guide is open (staffing in the guide is
+    // what completes the line) — it narrates on the floor once that card closes, never over it
+    if (ridePending && !tutorialCoaching() && !(root && root.querySelector('.refit-firstrun, .refit-preset-example, .refit-station-builds'))) fireFirstRide();
     // finish-the-line card: slow re-derive (feed truth changes on the world's poll, not on edits) + per-frame pin
     if (finCardEl && now - finPollTs > 2000) { finPollTs = now; renderFinCard(); }
     const hT0 = perfAcc ? performance.now() : 0;
@@ -5600,8 +5755,43 @@ const Build = (() => {
      INTAKE pulses green "FROM", bound BAYs and OUTBOX pulse cyan "TO" — so "what do I connect to what"
      is answered by the floor itself before the first tile is laid. Desks never glow: belts don't run to
      workstations (the agent carries work the last leg). */
+  /* THE LANE BEFORE THE CLICK (conveyor-links phase B — the plan's "port marks"): mid-connect, the hovered destination
+     shows the very belt the click would lay (station.previewBelt runs the connect planner without laying), tile by tile
+     with its flow — or, when it cannot, why. Once per (edit, pair). */
+  let beltPvKey = '', beltPvMemo = null;
+  function beltPreview(from, to) {
+    if (!station || typeof station.previewBelt !== 'function') return null;
+    const k = geoVer + '|' + from + '|' + to;
+    if (k === beltPvKey) return beltPvMemo;
+    let r = null;
+    try { r = station.previewBelt(from, to); } catch (_) { r = null; }
+    beltPvKey = k; beltPvMemo = r;
+    return r;
+  }
+  const NO_ROUTE = { FROM_BLOCKED: 'NO FREE SIDE TO LEAVE FROM', TO_BLOCKED: 'NO FREE SIDE TO RUN INTO', TOO_CLOSE: 'TOO CLOSE — MOVE IT A TILE AWAY', JUNCTION_NO_IN: 'THE BELT CANNOT RUN INTO IT', JUNCTION_NO_OUT: 'THE BELT CANNOT RUN OUT OF IT' };
+  function drawBeltPreview(t, pv, col) {
+    const V = { E: [1, 0], W: [-1, 0], S: [0, 1], N: [0, -1] };
+    ctx.save();
+    ctx.globalAlpha = 0.85; ctx.strokeStyle = col; ctx.lineWidth = 1.5 / zoom;
+    ctx.setLineDash([3 / zoom, 2 / zoom]);
+    for (const q of pv.path) ctx.strokeRect(q.x * t + 2 / zoom, q.y * t + 2 / zoom, t - 4 / zoom, t - 4 / zoom);
+    ctx.setLineDash([]);
+    for (const q of pv.path) {   // a chevron the way the belt will flow
+      const v = V[q.d] || V.E, cx = q.x * t + t / 2, cy = q.y * t + t / 2, r = t * 0.22;
+      ctx.beginPath();
+      ctx.moveTo(cx - v[0] * r - v[1] * r, cy - v[1] * r + v[0] * r);
+      ctx.lineTo(cx + v[0] * r, cy + v[1] * r);
+      ctx.lineTo(cx - v[0] * r + v[1] * r, cy - v[1] * r - v[0] * r);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
   function drawBeltEndpointGlow(t, now) {
     if (tool !== 'belt' || !station) return;
+    if (connectFrom && hoverPropId && hoverPropId !== connectFrom) {
+      const hp = station.propById(hoverPropId), pv = hp && CONNECT_TYPES[hp.t] ? beltPreview(connectFrom, hoverPropId) : null;
+      if (pv && pv.ok) drawBeltPreview(t, pv, '#7ee2a8');
+    }
     const pulse = 0.45 + 0.3 * Math.sin(now / 260);
     const placed = [];
     ctx.save();
@@ -5624,7 +5814,8 @@ const Build = (() => {
          every target at once, a wall of the same words). The other targets keep their pulsing glow — that
          alone says "these are the endpoints"; the caption answers "this one?" where the pointer is. */
       if (!isFrom && hoverPropId !== p.id) continue;
-      const role = isFrom ? 'FROM ▸ NOW CLICK A DESTINATION' : 'CLICK TO CONNECT';
+      const pv = isFrom ? null : beltPreview(connectFrom, p.id);
+      const role = isFrom ? 'FROM ▸ NOW CLICK A DESTINATION' : (pv && !pv.ok) ? 'NO ROUTE — ' + (NO_ROUTE[pv.error] || 'NO CLEAR PATH') : 'CLICK TO CONNECT';
       const tw = ctx.measureText(role).width;
       // baseline-top label below the prop: colliders step DOWN (dir +1), away from the machinery
       const lh = Math.max(9, 11 / zoom) + 2 / zoom;
@@ -6064,7 +6255,7 @@ const Build = (() => {
     /* SPACING (2026-09-27 audit B4): a dock hooks every belt in the 1-tile ring around it, so two docks with one empty tile
        between them share that tile — a belt there hooks BOTH, and the job goes nowhere. Said while the ghost is in hand,
        never refused (sandbox law): the Commander may still want them tight. */
-    if (ok && g.kind === 'prop' && tool === 'prop' && RING_DOCK_T[propType]) {
+    if (ok && g.kind === 'prop' && tool === 'prop' && RING_DOCK_T[propType] && !linkedFloor()) {
       const near = station.props().find(p => RING_DOCK_T[p.t] && p.x - 1 <= r0.x2 + 1 && r0.x1 - 1 <= p.x + (p.w || 1) && p.y - 1 <= r0.y2 + 1 && r0.y1 - 1 <= p.y + (p.h || 1));
       if (near) lines.push('CLOSE TO THE ' + String(propLabel(near.t)).toUpperCase() + ' — LEAVE 2 TILES OR THEIR BELTS TOUCH');
     }
@@ -6429,6 +6620,11 @@ const Build = (() => {
     if (!running || !station) return;
     // the panel names the line from the compiled line groups (valComps): compile NOW, or it opens on a bare "single BAY"
     try { rebake(); } catch (e) { /* the frame loop compiles on its next tick; the panel repaints when it does */ }
+    /* ONE DOOR TO SET UP A PRESET (2026-09-28): while a work preset's line still has a step nobody works, WORKFLOWS opens its
+       setup guide (who works each step + the sample job) — the onboarding pick's closing line points here. Once every
+       step is staffed it opens the Workflow panel as always. */
+    const ex = currentPresetExample();
+    if (ex && ex.roles.length && ex.roles.some(r => !r.agentId)) { openPresetExample(); return; }
     const first = station.props().find(p => p.t === 'intake') || station.props().find(p => p.t === 'bay');
     if (first && typeof WorkflowPanel !== 'undefined') { try { openFlowCard(first.id); } catch (e) {} }
     else if (!first) { try { selectTool('line'); } catch (e) {} }

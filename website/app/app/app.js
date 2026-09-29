@@ -814,6 +814,7 @@ const App = (() => {
       cerebras: 'CEREBRAS',
       starnet: 'STARNET MANAGED',
       ollama: 'OLLAMA',
+      'claude-cli': 'CLAUDE CODE',
       custom: 'CUSTOM'
     };
     return map[provider] || String(provider || 'openrouter').toUpperCase();
@@ -839,16 +840,17 @@ const App = (() => {
     // managed credits — its bearer is the linked device token, never a key the user pastes
     if (p === 'starnet' || p === 'starnet-cloud' || p === 'managed') return 'starnet';
     if (p === 'ollama' || p === 'ollama-local') return 'ollama';
+    if (p === 'claude-cli' || p === 'claude-code' || p === 'claude-code-cli') return 'claude-cli';
     if (p === 'custom' || p === 'openai-compatible' || p === 'local' || p === 'vllm' || p === 'lmstudio') return 'custom';
     return 'openrouter';
   }
   function providerNeedsKey(provider) {
     const p = normalizeProviderId(provider);
-    return p !== 'codex' && p !== 'grok' && p !== 'kimi' && p !== 'ollama' && p !== 'custom' && p !== 'starnet';
+    return p !== 'codex' && p !== 'grok' && p !== 'kimi' && p !== 'ollama' && p !== 'custom' && p !== 'starnet' && p !== 'claude-cli';
   }
   function providerUsesKeyBox(provider) {
     const p = normalizeProviderId(provider);
-    return p !== 'codex' && p !== 'grok' && p !== 'kimi' && p !== 'ollama' && p !== 'starnet';
+    return p !== 'codex' && p !== 'grok' && p !== 'kimi' && p !== 'ollama' && p !== 'starnet' && p !== 'claude-cli';
   }
   function providerNeedsBaseUrl(provider) {
     return normalizeProviderId(provider) === 'custom';
@@ -1588,6 +1590,7 @@ const App = (() => {
     perplexity: ['sonar-pro', 'sonar', 'sonar-reasoning-pro'],
     cerebras: ['llama-4-scout-17b-16e-instruct', 'llama3.1-8b', 'qwen-3-coder-480b'],
     ollama: ['llama3.1', 'qwen2.5-coder', 'mistral'],
+    'claude-cli': ['sonnet', 'opus', 'haiku'],
     openrouter: ['gpt-5.5', 'anthropic/claude-sonnet-4.6', 'anthropic/claude-opus-4.8', 'openai/gpt-5', 'google/gemini-2.5-pro']
   });
   // The genesis model catalog for the ACTIVE provider — {id, name, pricing, context_length, fallback?} items
@@ -1999,10 +2002,13 @@ const App = (() => {
     // repainted by loadModels() from the sidecar's live catalog for 127.0.0.1:11434.
     const isOllama = pickedProvider === 'ollama';
     { const ob = el('ollama-block'); if (ob) ob.classList.toggle('hidden', !isOllama); }
+    const isClaudeCli = pickedProvider === 'claude-cli';
+    { const cb = el('claude-cli-block'); if (cb) cb.classList.toggle('hidden', !isClaudeCli); }
+    if (isClaudeCli) refreshClaudeCliStatus(); else stopClaudeCliTimer();   // an in-flight sign-in resumes on re-pick
     // the BYOK note talks about your key on 127.0.0.1 / the OS keychain — irrelevant and contradictory on the
     // keyless subscription paths (no key at all), so hide the whole disclosure there. On BYOK it stays collapsed
     // behind its toggle (progressive disclosure) — the note's own .hidden is owned by #byok-toggle, not this switch.
-    { const bd = el('byok-disclose'); if (bd) bd.classList.toggle('hidden', isOAuth || isStarnet || isOllama); }   // ollama: no key exists to ask about
+    { const bd = el('byok-disclose'); if (bd) bd.classList.toggle('hidden', isOAuth || isStarnet || isOllama || isClaudeCli); }   // ollama: no key exists to ask about
     // Switching providers must drop any OTHER provider's in-flight device-code poll — a code minted for the
     // previous pick has no business connecting the new one's block. The active pick's own poll survives a re-click.
     cancelOAuthPolls(isOpenAI ? 'codex' : pickedProvider);   // the OPENAI card's sign-in IS the codex poll — keep it alive
@@ -2247,6 +2253,156 @@ const App = (() => {
     el('codex-code').classList.add('hidden'); el('btn-codex-open').classList.add('hidden');
     if (typeof OAuthSignIn !== 'undefined') await OAuthSignIn.for(pid).logout();   // also cancels any in-flight poll
     refreshOAuthGenesisStatus(pid);
+  }
+
+  /* ---------- CLAUDE CLI on the genesis screen ----------
+     SIGN IN WITH CLAUDE, as smooth as the ChatGPT/Grok doors without StarNet ever holding the credential: the
+     sidecar runs the user's own `claude auth login` (it opens the browser and keeps the token) and this tile only
+     paints /api/auth/claude-cli/* truth. States:
+       checking · missing (install command + guide; re-checks itself, so installing flips the tile on its own)
+       · signedout (SIGN IN) · signing (browser opened; OPEN SIGN-IN PAGE + paste-a-code fallback; CANCEL)
+       · connected — said ONLY after `claude auth status` proved it · offline/error (the fix, never a dead end). */
+  let claudeCliState = null;   // last /status answer from the sidecar
+  let claudeCliFlow = null;    // { login_id, url } while a sign-in child runs
+  let claudeCliTimer = null, claudeCliSeq = 0;
+  const CLAUDE_INSTALL_GUIDE = 'https://code.claude.com/docs/en/setup';
+  function claudeCliInstallCommand() {
+    const ua = String(navigator.userAgent || '') + ' ' + String(navigator.platform || '');
+    if (/Win/i.test(ua)) return { shell: 'PowerShell', cmd: 'irm https://claude.ai/install.ps1 | iex' };
+    return { shell: 'Terminal', cmd: 'curl -fsSL https://claude.ai/install.sh | bash' };
+  }
+  function stopClaudeCliTimer() { if (claudeCliTimer) { clearTimeout(claudeCliTimer); claudeCliTimer = null; } }
+  // a WAKE refusal ('sign in with Claude first') is answered the moment the Commander acts on it
+  function clearClaudeWakeMsg() { const m = el('connect-msg'); if (m && /Claude/.test(m.textContent)) { m.textContent = ''; m.className = 'msg'; } }
+  function paintClaudeCli(mode, text) {
+    const st = el('claude-cli-status'); if (!st) return;
+    const show = (id, on) => { const n = el(id); if (n) n.classList.toggle('hidden', !on); };
+    st.textContent = text;
+    st.className = 'codex-status' + (mode === 'connected' ? ' ok' : (mode === 'error' || mode === 'offline') ? ' bad' : '');
+    show('claude-cli-install', mode === 'missing');
+    show('btn-claude-copy', mode === 'missing');
+    show('btn-claude-guide', mode === 'missing');
+    show('btn-claude-recheck', mode === 'missing' || mode === 'offline');
+    show('btn-claude-signin', mode === 'signedout' || mode === 'error');
+    show('btn-claude-open', mode === 'signing' && !!(claudeCliFlow && claudeCliFlow.url));
+    show('btn-claude-cancel', mode === 'signing');
+    show('claude-cli-code-row', mode === 'signing');
+    if (mode === 'missing') {
+      const ic = claudeCliInstallCommand();
+      const c = el('claude-cli-install-cmd'); if (c) c.textContent = ic.cmd;
+      const sh = el('claude-cli-shell'); if (sh) sh.textContent = ic.shell;
+    }
+  }
+  async function claudeCliCall(verb, body) {
+    try {
+      const r = await fetch('/api/auth/claude-cli/' + verb, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      return await r.json();
+    } catch (_) { return null; }
+  }
+  function claudeCliWho(j) {
+    if (j.authMethod === 'api_key' || j.authMethod === 'apiKey') return ' with an Anthropic API key';
+    const plan = j.subscription ? ' (' + String(j.subscription).charAt(0).toUpperCase() + String(j.subscription).slice(1) + ')' : '';
+    return (j.email ? ' as ' + j.email : '') + plan;
+  }
+  async function refreshClaudeCliStatus() {
+    const seq = ++claudeCliSeq;
+    stopClaudeCliTimer();
+    if (!claudeCliState) paintClaudeCli('checking', 'checking for Claude Code on this computer…');
+    const j = await claudeCliCall('status');
+    if (seq !== claudeCliSeq || pickedProvider !== 'claude-cli') return claudeCliState;
+    if (!j || typeof j.installed !== 'boolean') { paintClaudeCli('offline', '○ couldn’t check Claude Code right now — press CHECK AGAIN.'); return null; }
+    claudeCliState = j;
+    if (claudeCliFlow && j.signingIn) { paintClaudeCli('signing', '◐ finish signing in in the browser window Claude Code opened…'); pollClaudeCli(); return j; }
+    claudeCliFlow = null;
+    if (!j.installed) {
+      paintClaudeCli('missing', '○ Claude Code isn’t installed on this computer yet.');
+      claudeCliTimer = setTimeout(refreshClaudeCliStatus, 5000);   // installing it flips this tile on its own
+      return j;
+    }
+    if (!j.loggedIn) { paintClaudeCli('signedout', '○ Claude Code is installed — sign in with your Claude account.'); return j; }
+    paintClaudeCli('connected', '● Signed in to Claude' + claudeCliWho(j) + ' — pick a model and WAKE.');
+    return j;
+  }
+  // THE STATUS IS THE TRUTH: before any sign-in error is painted, ask the CLI. A sign-in that already landed (the
+  // browser callback beat a paste, or a second press found the first flow finished) reads as connected, never 'not running'.
+  async function claudeCliProvenSignedIn() {
+    const st = await claudeCliCall('status');
+    if (st && st.loggedIn && pickedProvider === 'claude-cli') { onClaudeCliConnected(st); return true; }
+    return false;
+  }
+  function onClaudeCliConnected(j) {
+    claudeCliFlow = null; stopClaudeCliTimer();
+    claudeCliState = Object.assign({ installed: true, loggedIn: true, signingIn: false }, j);
+    SFX.open(); clearClaudeWakeMsg();
+    paintClaudeCli('connected', '● Signed in to Claude' + claudeCliWho(claudeCliState) + ' — pick a model and WAKE.');
+    loadModels('claude-cli');   // the catalog was offline while signed out; it is live now
+  }
+  async function startClaudeSignIn() {
+    SFX.click(); stopClaudeCliTimer(); clearClaudeWakeMsg();
+    claudeCliFlow = null;
+    paintClaudeCli('starting', '◐ starting Claude sign-in…');
+    const j = await claudeCliCall('start', {});
+    if (pickedProvider !== 'claude-cli') return;
+    if (!j) { paintClaudeCli('error', '○ couldn’t start the Claude sign-in — press SIGN IN WITH CLAUDE to try again.'); return; }
+    if (j.status === 'connected') { onClaudeCliConnected(j); return; }
+    if (j.status !== 'pending') {
+      if (j.code === 'not_installed') { claudeCliState = null; refreshClaudeCliStatus(); return; }
+      paintClaudeCli('error', '○ ' + (j.error || 'Claude sign-in failed') ); return;
+    }
+    claudeCliFlow = { login_id: j.login_id, url: j.url || '' };
+    paintClaudeCli('signing', '◐ finish signing in in the browser window Claude Code just opened…');
+    pollClaudeCli();
+  }
+  function pollClaudeCli() {
+    stopClaudeCliTimer();
+    claudeCliTimer = setTimeout(async () => {
+      claudeCliTimer = null;
+      const f = claudeCliFlow; if (!f || pickedProvider !== 'claude-cli') return;
+      const j = await claudeCliCall('poll', { login_id: f.login_id });
+      if (claudeCliFlow !== f || pickedProvider !== 'claude-cli') return;
+      if (!j || j.status === 'pending') { pollClaudeCli(); return; }   // a transient network blip keeps polling
+      claudeCliFlow = null;
+      if (j.status === 'connected') { onClaudeCliConnected(j); return; }
+      if (await claudeCliProvenSignedIn()) return;   // a flow that ended on a finished sign-in is not an error
+      paintClaudeCli('error', '○ ' + (j.error || 'Claude sign-in did not finish — press SIGN IN WITH CLAUDE to try again.'));
+    }, 1500);
+  }
+  async function cancelClaudeSignIn() {
+    SFX.click();
+    const f = claudeCliFlow; claudeCliFlow = null; stopClaudeCliTimer();
+    if (f) await claudeCliCall('cancel', { login_id: f.login_id });
+    refreshClaudeCliStatus();
+  }
+  async function submitClaudeCode() {
+    const inp = el('in-claude-code'); const f = claudeCliFlow;
+    const code = inp ? inp.value.trim() : '';
+    if (!f || !code) return;
+    SFX.click();
+    const j = await claudeCliCall('code', { login_id: f.login_id, code });
+    if (claudeCliFlow !== f) return;
+    const st = el('claude-cli-status');
+    if (j && j.ok) { if (inp) inp.value = ''; if (st) { st.textContent = '◐ checking the code with Claude…'; st.className = 'codex-status'; } pollClaudeCli(); }
+    else if (await claudeCliProvenSignedIn()) return;
+    else if (st) { st.textContent = '○ ' + ((j && j.error) || 'that code didn’t go through — try pasting it again.'); st.className = 'codex-status bad'; }
+  }
+  function copyClaudeInstall() {
+    const cmd = claudeCliInstallCommand().cmd, btn = el('btn-claude-copy');
+    const done = ok => { if (!btn) return; btn.textContent = ok ? '✓ COPIED' : 'SELECT IT ABOVE'; setTimeout(() => { btn.textContent = '⧉ COPY INSTALL COMMAND'; }, 2000); };
+    // the shared clipboard helper (Clipboard API, then the execCommand fallback a locked-down WebView still allows)
+    const copy = (typeof Diag !== 'undefined' && Diag.copyText) ? Diag.copyText : (t => navigator.clipboard.writeText(t).then(() => true));
+    try { Promise.resolve(copy(cmd)).then(ok => done(ok !== false), () => done(false)); } catch (_) { done(false); }
+  }
+  function wireClaudeCliTile() {
+    const on = (id, fn) => { const n = el(id); if (n) n.onclick = fn; };
+    on('btn-claude-signin', startClaudeSignIn);
+    on('btn-claude-cancel', cancelClaudeSignIn);
+    on('btn-claude-open', () => { if (claudeCliFlow && claudeCliFlow.url) openExternalUrl(claudeCliFlow.url); });
+    on('btn-claude-recheck', () => { SFX.click(); claudeCliState = null; refreshClaudeCliStatus(); });
+    on('btn-claude-guide', () => openExternalUrl(CLAUDE_INSTALL_GUIDE));
+    on('btn-claude-copy', copyClaudeInstall);
+    on('btn-claude-code', submitClaudeCode);
+    const ci = el('in-claude-code');
+    if (ci) ci.onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); submitClaudeCode(); } };
   }
 
   /* ---------- STARNET MANAGED on the genesis screen ----------
@@ -2638,6 +2794,7 @@ const App = (() => {
     // On the merged OPENAI card the sign-in half IS ChatGPT/codex.
     const codexHere = () => pickedProvider === 'codex' || pickedProvider === 'openai';
     el('btn-codex-signin').onclick = () => (codexHere() ? startCodexSignIn() : startOAuthSignIn(pickedProvider));
+    wireClaudeCliTile();
     el('btn-codex-logout').onclick = () => (codexHere() ? codexLogout() : oauthGenesisLogout(pickedProvider));
     // STARNET MANAGED: reveal the hero only when this station actually has a cloud seam, and wire its link
     // flow. On a fresh create the revealed hero also becomes the default pick (the promoted easiest start);
@@ -2843,6 +3000,14 @@ const App = (() => {
       if (!creditState.linked) { msg.textContent = 'link your StarNet account first — press 🔗 LINK YOUR STARNET ACCOUNT above.'; return false; }
       if (!(creditState.balanceUsd > 0)) { msg.className = 'msg bad'; msg.textContent = 'your StarNet account has no credits yet — waking your agent uses credits right away. Press ＄ ADD CREDITS above, then WAKE again.'; return false; }
       Harness.setModel(model); Harness.setProv('starnet');
+    } else if (pickedProvider === 'claude-cli') {
+      const cst = (claudeCliState && claudeCliState.loggedIn) ? claudeCliState : await refreshClaudeCliStatus();
+      if (!cst || !cst.loggedIn) {
+        msg.textContent = (cst && cst.installed === false) ? 'install Claude Code first — the command is above — then sign in with Claude.' : 'sign in with Claude first — press ⏼ SIGN IN WITH CLAUDE above.';
+        return false;
+      }
+      Harness.setModel(model); Harness.setProv('claude-cli');
+      wireVia = 'your Claude sign-in';
     } else if (isOAuthProviderId(pickedProvider)) {
       if (!oauthConnected[pickedProvider]) { msg.textContent = 'sign in with ' + OAUTH_GENESIS[pickedProvider].name + ' first, or switch to OpenRouter.'; return false; }
       Harness.setModel(model); Harness.setProv(pickedProvider);
@@ -3602,6 +3767,18 @@ const App = (() => {
         persona: (typeof Personas !== 'undefined') ? Personas.get(agent.personaId) : null,   // the voice was chosen on the create screen — the awakening acknowledges it instead of re-asking
         specialty: opts.specialty || null,                   // (reserved) a pre-specced wake skips re-asking the mission; the orchestrator authors it live
         commit: applyAgentConfig,                            // each answer folds a real doc into the live prompt + persists
+        /* CHOOSE YOUR STATION (2026-09-28): the awakening's last question builds a work preset over the UNTOUCHED
+           starter room, through the same StationTemplates.build + replaceLayout path Build mode's Presets use
+           (one undo slot; the lead keeps its desk). fresh() = still the one-room starter no preset has built. */
+        stations: (typeof StationTemplates !== 'undefined' && typeof WorldModel !== 'undefined' && typeof PropSprites !== 'undefined') ? {
+          catalog: () => StationTemplates.catalog,
+          recommend: text => (StationTemplates.recommend ? StationTemplates.recommend(text) : null),
+          fresh: () => { const d = station && station.doc(); return !!d && !(d.meta && d.meta.templateId) && station.rooms().filter(r => r.kind !== 'corridor').length === 1; },
+          apply: id => {
+            try { return station.replaceLayout(StationTemplates.build(id, WorldModel, PropSprites, station.doc()._nid + 100)); }
+            catch (e) { return { ok: false, msg: e && e.message }; }
+          }
+        } : null,
         getSystem: () => agent ? agent.systemPrompt : '',    // Interview 2.0: the generated beats (wakemind.js) reason on the LIVE prompt (persona + dossier already folded in)
         done: () => { if (agent) agent.onboarded = true; persist(); if (typeof KeyCTA !== 'undefined' && KeyCTA.arm) KeyCTA.arm(); },   // the awakening landed — mark onboarded so a later refresh resumes into the game, not back into the ceremony; arm the keyless-brain CTA (shows only if no key is truly stored)
         notify: (typeof StationUI !== 'undefined') ? StationUI.notify : null,
