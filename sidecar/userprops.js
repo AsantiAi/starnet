@@ -197,6 +197,21 @@ function makeUserProps(deps) {
       return entry;
     });
   }
+  // The player's SIZE for a made prop (library-wide). Only a number is stored; the page derives the box from it.
+  const SCALES = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
+  async function setScale(propId, scale) {
+    if (!isPropId(propId)) return { ok: false, code: 'bad_id', message: 'No such made prop.' };
+    const s = Number(scale);
+    if (!SCALES.includes(s)) return { ok: false, code: 'bad_scale', message: 'Pick a size from 50% to 300%.' };
+    return serial(() => {
+      const props = list();
+      const entry = props.find((p) => p.id === propId);
+      if (!entry) return { ok: false, code: 'not_found', message: 'No such made prop.' };
+      entry.scale = s;
+      writeJson(indexFile, { version: 1, props, deleted: deleted() });
+      return { ok: true, id: propId, scale: s };
+    });
+  }
   // Delete a made prop: its files and index entry go, its id is tombstoned. Refused while a job for it runs.
   // Credits already spent are not refunded (the cloud billed real upstream work) — the page says so.
   async function remove(propId) {
@@ -278,7 +293,7 @@ function makeUserProps(deps) {
   function stop() { stopped = true; if (timer) { clearTimer(timer); timer = null; } }
   function activeJobs() { return pending().map((pj) => job(pj.id)).filter(Boolean); }
 
-  return { list, deleted, remove, imageFile, start, startSide, job, activeJobs, resume, stop, pollOnce, _internals: { slugOf, validResult, isPropId } };
+  return { list, deleted, remove, setScale, imageFile, start, startSide, job, activeJobs, resume, stop, pollOnce, _internals: { slugOf, validResult, isPropId } };
 }
 
 module.exports = { makeUserProps, isPropId };

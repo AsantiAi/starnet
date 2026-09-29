@@ -110,6 +110,14 @@ const SIDE = (over = {}) => ({ view: 'w', noun: 'a jukebox', footprint: { w: 2, 
     A.eq((await up2.startSide(barrel.id)).code, 'symmetric', 'no paid side view for a prop that looks the same turned');
     A.eq(cloud.state.calls.length, beforeCalls, 'and no cloud call is made');
     A.eq(up2.list().find((p) => p.id === lamp.id).symmetric, false, 'a prop without the flag is not symmetric');
+
+    // ---- SIZE: only the allowed steps are stored, and only for a real made prop
+    A.eq((await up2.setScale(lamp.id, 1.5)).scale, 1.5, 'a made prop takes an allowed size');
+    A.eq(up2.list().find((p) => p.id === lamp.id).scale, 1.5, 'the size persists on the entry');
+    A.eq((await up2.setScale(lamp.id, 1.7)).code, 'bad_scale', 'an off-step size is refused');
+    A.eq((await up2.setScale(lamp.id, 10)).code, 'bad_scale', 'an oversized value is refused');
+    A.eq((await up2.setScale('user_missing_zzzzzz', 2)).code, 'not_found', 'an unknown prop is refused');
+    A.eq(up2.list().find((p) => p.id === lamp.id).scale, 1.5, 'a refused size leaves the stored one alone');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
   A.report();
 })();

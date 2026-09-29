@@ -86,4 +86,26 @@ PropSprites.markUserDeleted(['user_old_deleted_aaaaaa']);
 A.eq(PropSprites.ruleFor('user_old_deleted_aaaaaa'), null, 'a tombstoned id from the station is pruned too');
 A.eq(PropSprites.ruleFor('user_still_protected_bbbbbb'), { mount: null, stack: false, surface: false, flat: false }, 'other unregistered made props stay protected');
 
+// ---- SIZE: pure geometry, row resize, and a copy saved at another size draws SCALED into its own box
+global.window = undefined;
+const UP = require('../frontend/app/userprops.js');
+const base = { footprint: { w: 2, h: 1 }, bounds: { x: -2, y: -10, width: 28, height: 22 }, side: { footprint: { w: 1, h: 2 }, bounds: { x: -2, y: 2, width: 16, height: 22 } } };
+const g2 = UP.geometry(base, 2);
+A.eq([g2.front.footprint, g2.front.bounds.height, g2.side.footprint], [{ w: 4, h: 2 }, 44, { w: 2, h: 4 }], 'size 200% doubles footprint and height (front and side)');
+A.eq(UP.geometry(base, 0.5).front.bounds.height, 14, 'size 50% never drops below the 14px minimum');
+A.eq(UP.geometry({ ...base, bounds: { ...base.bounds, height: 100 } }, 3).front.bounds.height, 192, 'the renderer ceiling (192px) holds');
+A.eq(UP.geometry(base, 1.7).scale, 1, 'an off-step size falls back to 100%');
+A.eq(UP.geometry({ ...base, scale: 1.5 }).scale, 1.5, 'the stored size is used by default');
+const big = PropSprites.registerUserProp({ id: 'user_big_statue_c0ffee', label: 'big statue', footprint: { w: 2, h: 2 } });
+A.eq(PropSprites.resizeUserProp(big.id, { w: 4, h: 4 }, null), true, 'a made prop row resizes');
+A.eq(PropSprites.footprintAt(big.id, 0), { w: 4, h: 4 }, 'and footprintAt follows');
+A.eq(PropSprites.resizeUserProp('chair', { w: 9, h: 9 }), false, 'a built-in prop can never be resized this way');
+const calls = [];
+const scaleCtx = new Proxy({}, { get: (_, k2) => ['save', 'restore', 'translate', 'scale', 'fillRect', 'strokeRect', 'setLineDash'].includes(k2) ? (...args) => calls.push([k2, ...args]) : undefined, set: () => true });
+PropSprites.setCtx(scaleCtx);
+const hadPR = global.PropRemaster; global.PropRemaster = { draw: () => true };   // stub renderer: exercise the scaled path
+PropSprites.draw({ t: big.id, x: 1, y: 1, w: 2, h: 2 }, false, {});
+global.PropRemaster = hadPR;
+A.ok(calls.some((c) => c[0] === 'scale' && Math.abs(c[1] - 0.5) < 1e-9 && Math.abs(c[2] - 0.5) < 1e-9), 'a copy saved at the old 2x2 size is drawn scaled 0.5 into its own box');
+
 A.report();

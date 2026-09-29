@@ -15,6 +15,20 @@ const UserProps = (() => {
   const apiFetch = (url, init) => (typeof Harness !== 'undefined' && Harness.apiFetch) ? Harness.apiFetch(url, init) : fetch(url, init);
   const changed = () => { try { window.dispatchEvent(new CustomEvent('starnet:userprops-changed', { detail: { count: props.length } })); } catch (_) {} };
 
+  // A made prop's boxes at the player's SIZE. Height scales (floor: the 14px minimum, ceiling: the renderer's 192);
+  // footprints scale and round to whole tiles (1..16). Pure: same entry + scale -> same boxes, everywhere.
+  const SCALES = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
+  function geometry(p, scaleIn) {
+    const k = SCALES.includes(Number(scaleIn)) ? Number(scaleIn) : (SCALES.includes(Number(p && p.scale)) ? Number(p.scale) : 1);
+    const box = (fp, b) => {
+      const w = Math.max(1, Math.min(16, Math.round(fp.w * k))), h = Math.max(1, Math.min(16, Math.round(fp.h * k)));
+      const H = Math.max(14, Math.min(192, Math.round(b.height * k)));
+      return { footprint: { w, h }, bounds: { x: -2, y: h * 12 - H, width: Math.min(192, w * 12 + 4), height: H } };
+    };
+    const front = box(p.footprint, p.bounds);
+    const side = p.side ? box(p.side.footprint, p.side.bounds) : null;
+    return { scale: k, front, side };
+  }
   async function decode(id, view) {
     const r = await apiFetch('/api/userprops/image?id=' + encodeURIComponent(id) + (view === 'w' ? '&view=w' : ''));
     if (!r.ok) throw new Error('image ' + r.status);
@@ -32,11 +46,13 @@ const UserProps = (() => {
     let d = null;
     try {
       d = await decode(p.id);
+      const g = geometry(p);
+      if (g.scale !== 1 && PropSprites.resizeUserProp) PropSprites.resizeUserProp(p.id, g.front.footprint, null);
       const ok = await PropRemaster.registerRuntime(p.id, { image: p.id + '.png', sourceWidth: p.sourceWidth, sourceHeight: p.sourceHeight,
-        footprint: { w: p.footprint.w, h: p.footprint.h }, bounds: p.bounds, mode: 'approved', exposure: 1, effects: false }, d.im);
+        footprint: g.front.footprint, bounds: g.front.bounds, mode: 'approved', exposure: 1, effects: false }, d.im);
       // A round object looks the same turned: its own front art IS its side view (box turned, same height), free.
       if (ok && p.symmetric && !p.side && PropSprites.registerUserSide) {
-        const fp = { w: p.footprint.h, h: p.footprint.w }, H = p.bounds.height;
+        const gf = geometry(p).front, fp = { w: gf.footprint.h, h: gf.footprint.w }, H = gf.bounds.height;
         if (PropSprites.registerUserSide(p.id, { footprint: fp })) {
           sided.add(p.id);
           await PropRemaster.registerRuntime(p.id, { image: p.id + '.png', sourceWidth: p.sourceWidth, sourceHeight: p.sourceHeight, footprint: fp,
@@ -50,14 +66,15 @@ const UserProps = (() => {
   // the left-facing side view, once the station has one (made later, from REFIT)
   async function registerSide(p) {
     if (!p || !p.side || sided.has(p.id) || !registered.has(p.id) || !PropSprites.registerUserSide) return false;
-    if (!PropSprites.registerUserSide(p.id, p.side)) return false;
+    const gs = geometry(p).side;
+    if (!PropSprites.registerUserSide(p.id, { footprint: gs.footprint })) return false;
     sided.add(p.id);
     if (typeof PropRemaster === 'undefined' || !PropRemaster.registerRuntime) return false;
     let d = null;
     try {
       d = await decode(p.id, 'w');
       return await PropRemaster.registerRuntime(p.id, { image: p.id + '-w.png', sourceWidth: p.side.sourceWidth, sourceHeight: p.side.sourceHeight,
-        footprint: { w: p.side.footprint.w, h: p.side.footprint.h }, bounds: p.side.bounds, mode: 'approved', exposure: 1, effects: false }, d.im, 'w');
+        footprint: gs.footprint, bounds: gs.bounds, mode: 'approved', exposure: 1, effects: false }, d.im, 'w');
     } catch (_) { return false; }
     finally { if (d) URL.revokeObjectURL(d.url); }
   }
@@ -86,6 +103,41 @@ const UserProps = (() => {
       const r = await apiFetch('/api/userprops/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ noun }) });
       return await r.json();
     } catch (_) { return { ok: false, code: 'unreachable', message: 'The station did not answer. Try again.' }; }
+  }
+  // SIZE: store the player's size, then re-register the art at it (no regeneration, no credits).
+  async function setScale(id, scale) {
+    const p = props.find((x) => x.id === id);
+    if (!p) return { ok: false, code: 'not_found', message: 'No such made prop.' };
+    let j;
+    try {
+      const r = await apiFetch('/api/userprops/scale', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, scale }) });
+      j = await r.json();
+    } catch (_) { return { ok: false, code: 'unreachable', message: 'The station did not answer. Try again.' }; }
+    if (!j || !j.ok) return j || { ok: false, code: 'failed', message: 'That size could not be saved.' };
+    p.scale = j.scale;
+    const g = geometry(p);
+    PropSprites.resizeUserProp(id, g.front.footprint, g.side && (p.symmetric && !p.side ? null : g.side.footprint));
+    let d = null;
+    try {
+      d = await decode(id);
+      await PropRemaster.registerRuntime(id, { image: id + '.png', sourceWidth: p.sourceWidth, sourceHeight: p.sourceHeight, footprint: g.front.footprint, bounds: g.front.bounds, mode: 'approved', exposure: 1, effects: false }, d.im, 's', true);
+      if (p.symmetric && !p.side) {
+        const fp = { w: g.front.footprint.h, h: g.front.footprint.w }, H = g.front.bounds.height;
+        PropSprites.resizeUserProp(id, g.front.footprint, fp);
+        await PropRemaster.registerRuntime(id, { image: id + '.png', sourceWidth: p.sourceWidth, sourceHeight: p.sourceHeight, footprint: fp, bounds: { x: -2, y: fp.h * 12 - H, width: Math.min(192, fp.w * 12 + 4), height: H }, mode: 'approved', exposure: 1, effects: false }, d.im, 'w', true);
+      }
+    } catch (_) { /* the row already has its new box; the art re-registers on the next load */ }
+    finally { if (d) URL.revokeObjectURL(d.url); }
+    if (p.side) {
+      let e = null;
+      try {
+        e = await decode(id, 'w');
+        await PropRemaster.registerRuntime(id, { image: id + '-w.png', sourceWidth: p.side.sourceWidth, sourceHeight: p.side.sourceHeight, footprint: g.side.footprint, bounds: g.side.bounds, mode: 'approved', exposure: 1, effects: false }, e.im, 'w', true);
+      } catch (_) {}
+      finally { if (e) URL.revokeObjectURL(e.url); }
+    }
+    if (PropSprites.userArtChanged) PropSprites.userArtChanged();
+    return { ok: true, scale: p.scale, geometry: g };
   }
   async function makeSide(id) {
     try {
@@ -126,6 +178,6 @@ const UserProps = (() => {
   const list = () => props.slice();
   if (typeof window !== 'undefined') setTimeout(() => { load(); }, 0);
   const get = (id) => props.find((p) => p.id === id) || null;
-  return { load, list, get, generate, makeSide, remove, job, watch };
+  return { load, list, get, generate, makeSide, remove, setScale, geometry, SCALES, job, watch };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = UserProps;

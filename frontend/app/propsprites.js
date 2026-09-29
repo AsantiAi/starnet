@@ -11854,12 +11854,29 @@ const PropSprites = (() => {
     const row = { id, label: String(p.label || 'MADE PROP').toUpperCase().slice(0, 24), cat: 'yours', tier: 'cosmetic', w, h, animated: false, blocks: true, user: true,
       desc: 'Made by you' + (p.noun ? ': ' + String(p.noun).slice(0, 60) : '') + '. Decoration only.' };
     CATALOG.push(row); BY_ID[id] = row; (CATS.yours = CATS.yours || []).push(row);
-    F[id] = (x, y, w2, h2, o = {}) => {
-      const drawn = typeof PropRemaster !== 'undefined' && typeof PropRemaster.draw === 'function' &&
-        PropRemaster.draw(ctx, id, 's', x, y, w2, h2, { ...o, now, still: !!o.still }, null);
-      if (!drawn) drawUserPlaceholder(x, y, w2, h2);
-    };
+    F[id] = (x, y, w2, h2, o = {}) => drawUserView(id, 's', row.w, row.h, x, y, w2, h2, o);
     return row;
+  }
+  // Draw a made prop's view. A copy saved at another SIZE (resized later, or placed in another crew member's station)
+  // is drawn from the current art scaled into its own saved box, so it keeps its size and never turns into a placeholder.
+  function drawUserView(id, view, fw, fh, x, y, w2, h2, o) {
+    const ok = typeof PropRemaster !== 'undefined' && typeof PropRemaster.draw === 'function';
+    const st = { ...o, now, still: !!o.still };
+    if (ok && w2 === fw * 12 && h2 === fh * 12) { if (PropRemaster.draw(ctx, id, view, x, y, w2, h2, st, null)) return; }
+    else if (ok && ctx && w2 > 0 && h2 > 0) {
+      ctx.save();
+      try { ctx.translate(x, y); ctx.scale(w2 / (fw * 12), h2 / (fh * 12)); if (PropRemaster.draw(ctx, id, view, 0, 0, fw * 12, fh * 12, st, null)) return; }
+      finally { ctx.restore(); }
+    }
+    drawUserPlaceholder(x, y, w2, h2);
+  }
+  // The player resized a made prop: its catalog box (and side box) follow the new size.
+  function resizeUserProp(id, fp, sideFp) {
+    const row = USER_ID.test(String(id || '')) && BY_ID[id];
+    if (!row || !fp) return false;
+    row.w = Math.max(1, Math.min(16, fp.w | 0)); row.h = Math.max(1, Math.min(16, fp.h | 0));
+    if (sideFp && row.side) row.side = { w: Math.max(1, Math.min(16, sideFp.w | 0)), h: Math.max(1, Math.min(16, sideFp.h | 0)) };
+    return true;
   }
   // The left-facing side view of a made prop: F['id:w'] (viewAt then offers WEST, and EAST as its mirror, so
   // R turns it like a shipped side view). Its footprint rides on the row for footprintAt.
@@ -11867,11 +11884,7 @@ const PropSprites = (() => {
     const row = USER_ID.test(String(id || '')) && BY_ID[id];
     if (!row || !side || !side.footprint) return false;
     row.side = { w: Math.max(1, Math.min(16, Math.floor(+side.footprint.w || 1))), h: Math.max(1, Math.min(16, Math.floor(+side.footprint.h || 1))) };
-    F[viewKey(id, 'w')] = (x, y, w2, h2, o = {}) => {
-      const drawn = typeof PropRemaster !== 'undefined' && typeof PropRemaster.draw === 'function' &&
-        PropRemaster.draw(ctx, id, 'w', x, y, w2, h2, { ...o, now, still: !!o.still }, null);
-      if (!drawn) drawUserPlaceholder(x, y, w2, h2);
-    };
+    F[viewKey(id, 'w')] = (x, y, w2, h2, o = {}) => drawUserView(id, 'w', row.side.w, row.side.h, x, y, w2, h2, o);
     return true;
   }
   // Placement/save rules for a prop type. A player-made id is KEPT even before its row is registered (the
@@ -11936,7 +11949,7 @@ const PropSprites = (() => {
     // value is DIALLED on a real deck and copied back into the constant, never guessed.
     setChroma(k) { CHROMA = (k == null ? 1 : +k) || 1; _cboost.clear(); },
     getChroma: () => CHROMA,
-    registerUserProp, registerUserSide, unregisterUserProp, markUserDeleted, ruleFor, isUserProp: (t) => USER_ID.test(String(t || '')),
+    registerUserProp, registerUserSide, unregisterUserProp, resizeUserProp, markUserDeleted, ruleFor, isUserProp: (t) => USER_ID.test(String(t || '')),
     // After player-made art decodes: drop the caches that were built while those props were placeholders.
     userArtChanged() { shadowMasks.clear(); invalidateLightResponse(); _ink.clear(); if (typeof World !== 'undefined' && typeof World.rebake === 'function') World.rebake(); },
     draw, drawBayNames, drawOver, hasOver, drawSeatFront, get CATALOG(){return projectionCatalog()?CATALOG.map(c=>spec(c.id)):CATALOG;}, CATS, spec, has, TILE,

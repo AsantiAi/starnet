@@ -605,6 +605,17 @@ const Build = (() => {
     const go = root.querySelector('#refit-makeprop-go');
     if (go) go.disabled = busy;
     // MAKE SIDE VIEW: offered only for a selected made prop that has no side view yet
+    const size = root.querySelector('#refit-makeprop-size');
+    if (size) {
+      const mine = typeof UserProps !== 'undefined' && UserProps.get ? UserProps.get(propType) : null;
+      size.hidden = !mine;
+      if (mine) {
+        const k = UserProps.SCALES.includes(mine.scale) ? mine.scale : 1;
+        size.querySelector('.refit-makeprop-sizeval').textContent = Math.round(k * 100) + '%';
+        size.querySelector('[data-size="-1"]').disabled = busy || k === UserProps.SCALES[0];
+        size.querySelector('[data-size="1"]').disabled = busy || k === UserProps.SCALES[UserProps.SCALES.length - 1];
+      }
+    }
     const del = root.querySelector('#refit-makeprop-del');
     if (del) {
       const mine = typeof UserProps !== 'undefined' && UserProps.get ? UserProps.get(propType) : null;
@@ -662,6 +673,34 @@ const Build = (() => {
     if (makeJob || makeWatching || typeof UserProps === 'undefined') return;
     UserProps.load().then((r) => { const j = r && r.jobs && r.jobs[0]; if (j && !makeJob) watchMakeJob(j); });
   }
+  // SIZE a made prop (library-wide, free): the art re-registers at the new size and this floor's copies are
+  // re-laid at the new box as ONE undo. A copy that no longer fits aborts the whole resize and says so.
+  async function sizeMadeProp(dir) {
+    const made = typeof UserProps !== 'undefined' && UserProps.get ? UserProps.get(propType) : null;
+    if (!made) return;
+    const steps = UserProps.SCALES, cur = steps.includes(made.scale) ? made.scale : 1;
+    const next = steps[Math.max(0, Math.min(steps.length - 1, steps.indexOf(cur) + dir))];
+    if (next === cur) return;
+    const g = UserProps.geometry(made, next);
+    // check this floor first: every copy must fit at the new box before anything changes
+    const copies = station ? station.props().filter((p) => p.t === made.id) : [];
+    const boxOf = (p) => ((p.r | 0) & 1) && g.side ? g.side.footprint : ((p.r | 0) & 1) && made.symmetric ? { w: g.front.footprint.h, h: g.front.footprint.w } : g.front.footprint;
+    let res = { ok: true };
+    if (copies.length && station.transact) {
+      res = station.transact(() => {
+        for (const p of copies) { const x = station.removeProp(p.id); if (!x.ok) return x; }
+        for (const p of copies) { const b = boxOf(p); const x = station.addProp({ t: p.t, x: p.x, y: p.y, w: b.w, h: b.h, r: p.r, m: p.m }); if (!x.ok) return x; }
+        return { ok: true };
+      });
+    }
+    if (!res.ok) { makeJob = null; makeMsg = { text: 'At ' + Math.round(next * 100) + '% ' + copies.length + ' placed ' + (copies.length === 1 ? 'copy does' : 'copies do') + ' not fit where ' + (copies.length === 1 ? 'it stands' : 'they stand') + '. Move things aside or pick a smaller size.', tone: 'bad' }; paintMakeStatus(); return; }
+    const r = await UserProps.setScale(made.id, next);
+    if (!r || !r.ok) { if (copies.length && station.undo) station.undo(); makeJob = null; makeMsg = { text: (r && r.message) || 'That size could not be saved.', tone: 'bad' }; paintMakeStatus(); return; }
+    makeJob = null;
+    makeMsg = { text: (made.label || 'Prop') + ' size ' + Math.round(next * 100) + '% \u00b7 ' + g.front.footprint.w + '\u00d7' + g.front.footprint.h + ' tiles' + (copies.length ? ' \u00b7 ' + copies.length + ' placed ' + (copies.length === 1 ? 'copy' : 'copies') + ' resized' : ''), tone: 'ok' };
+    if (root) renderPalette();
+    paintMakeStatus();
+  }
   // DELETE a made prop: the station deletes it first (files, index, tombstone); only then are its placed copies on
   // this floor removed, as one undo. Credits spent are not refunded, and the armed label says so before it happens.
   async function deleteMadeProp() {
@@ -685,6 +724,7 @@ const Build = (() => {
       '<button type="button" class="bb sm" id="refit-makeprop-go">MAKE</button></div>' +
       '<div class="refit-makeprop-foot"><span class="refit-makeprop-status" id="refit-makeprop-status" role="status" aria-live="polite"></span>' +
       '<button type="button" class="bb sm" id="refit-makeprop-door" hidden>\u25b8 OPEN PROVIDERS</button></div>' +
+      '<div class="refit-makeprop-size" id="refit-makeprop-size" hidden><span class="refit-makeprop-sizelbl">SIZE</span><button type="button" class="bb sm" data-size="-1" aria-label="Smaller">\u2212</button><b class="refit-makeprop-sizeval">100%</b><button type="button" class="bb sm" data-size="1" aria-label="Bigger">+</button></div>' +
       '<div class="refit-makeprop-actions"><button type="button" class="bb sm refit-makeprop-sidebtn" id="refit-makeprop-side" hidden>\u21bb MAKE SIDE VIEW</button>' +
       '<button type="button" class="bb sm" id="refit-makeprop-del" hidden>\u2715 DELETE</button></div>';
     const inp = box.querySelector('#refit-makeprop-input'), go = box.querySelector('#refit-makeprop-go');
@@ -696,6 +736,7 @@ const Build = (() => {
       inp.blur();
     };
     box.querySelector('#refit-makeprop-side').onclick = () => { startMakeSide(); sfx('click'); };
+    box.querySelectorAll('[data-size]').forEach((b) => { b.onclick = () => { sizeMadeProp(Number(b.dataset.size)); sfx('click'); }; });
     const delBtn = box.querySelector('#refit-makeprop-del');
     if (typeof ArmConfirm !== 'undefined' && ArmConfirm.wire) ArmConfirm.wire(delBtn, { armedLabel: '\u2715 DELETE FOR GOOD? \u00b7 credits are not refunded', onArm: () => sfx('bad'), onConfirm: () => deleteMadeProp() });
     box.querySelector('#refit-makeprop-door').onclick = () => {
