@@ -3192,6 +3192,8 @@ body.rows-inbox #workstreams .ws-kebab { grid-area: meta; }
 
 #chat-panel h3 .h3-right { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; flex: 0 1 auto; overflow: hidden; }
 #chat-panel h3 #chat-status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* Idle "online" is noise in the COMMS header (Andrew 09-28): only run-state and link faults show. */
+#chat-panel h3 #chat-status.status-idle { display: none; }
 #chat-status.status-thinking { color: var(--ph-bright); text-shadow: 0 0 7px var(--ph-glow2); }
 /* pre-confirmation: the sidecar hasn't acknowledged the run yet — dimmer than thinking (an honest "in transit") */
 #chat-status.status-connecting { color: var(--ph); opacity: .8; }

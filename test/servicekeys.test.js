@@ -161,6 +161,17 @@ const K = require('../sidecar/servicekeys.js');
   A.ok(/unattended unsupported/i.test(K.promptBlock(add.list)), 'prompt truthfully labels watched-only access');
 }
 
+// ---- a MODEL-PROVIDER key name never resolves for an outbound request, and says why (2026-09-28) ----
+{
+  const reserved = { reservedEnv: new Set(['OPENROUTER_API_KEY', 'OPENROUTER_KEY']) };
+  A.eq(K.resolveForRequest([], 'OPENROUTER_API_KEY', 'interactive', reserved), { ok: false, reason: 'reserved' }, 'a provider key name resolves as reserved, not unknown');
+  A.eq(K.resolveForRequest([], 'NOPE_API_KEY', 'interactive', reserved), { ok: false, reason: 'unknown' }, 'an ordinary missing key is still unknown');
+  // a list saved before the name was reserved still carries the row: the reserved check runs first, so it is never spent
+  const legacy = K.upsert([], { name: 'OpenRouter', key: 'sk-or-legacy' }, 1).list;
+  A.eq(legacy[0].envVar, 'OPENROUTER_API_KEY', 'fixture: a pre-reservation row carrying the provider var');
+  A.eq(K.resolveForRequest(legacy, 'OPENROUTER_API_KEY', 'interactive', reserved), { ok: false, reason: 'reserved' }, 'a legacy row carrying a provider var is never spent');
+}
+
 // report() LAST — it is what calls process.exit(fail?1:0). This file ended in a bare console.log,
 // which is why it could sit in NO gate for months and then be adopted into one without anybody
 // noticing it could never turn the gate red.
