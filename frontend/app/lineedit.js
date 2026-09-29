@@ -196,7 +196,8 @@
       const plain = n => n && n.t === 'bay' && insOf(g, n.id).length === 1 && outsOf(g, n.id).length === 1 && !backsAt(g, n.id).length;
       if (!plain(X)) return fail('NOT_SIMPLE', 'only a step with one way in and one way out moves along the line');
       const other = dir < 0 ? nodeOf(g, insOf(g, X.id)[0].from.node) : nodeOf(g, outsOf(g, X.id)[0].to.node);
-      if (!plain(other)) return fail('NO_NEIGHBOUR', dir < 0 ? 'there is no step before it to swap with' : 'there is no step after it to swap with');
+      if (!other || other.t !== 'bay') return fail('NO_NEIGHBOUR', dir < 0 ? 'there is no step before it to swap with' : 'there is no step after it to swap with');
+      if (!plain(other)) return fail('NO_NEIGHBOUR', (dir < 0 ? 'the step before it' : 'the step after it') + ' is part of a loop or a branch, so they cannot swap places');
       const [P, Q] = dir < 0 ? [other, X] : [X, other];   // P → Q becomes Q → P
       const inP = insOf(g, P.id)[0], mid = outsOf(g, P.id)[0], outQ = outsOf(g, Q.id)[0];
       drop(g, [inP, mid, outQ]);
@@ -211,6 +212,25 @@
       for (const n of g.nodes) if (n !== anchor) delete n.pin;
       for (const l of g.links) delete l.path;
       return { ok: true, graph: g, focus: anchor.id };
+    },
+    /* ADD AN OUTBOX after the machine a line ends on (one that sends its work nowhere yet) */
+    addOutbox(g, a, o) {
+      const X = nodeOf(g, a.after);
+      if (!X || X.t === 'outbox' || X.t === 'intake') return fail('NOT_AN_END', 'an OUTBOX goes after the last step of a line');
+      if (outsOf(g, X.id).length) return fail('NOT_AN_END', 'this machine already sends its work on');
+      const id = fresh(g), O = box(g, id('o'), 'outbox', o);
+      g.links.push(link(id('l'), X.id, O.id, X.t === 'loop' ? 'done' : 'out'));   // after a LOOP, finished work leaves on DONE
+      return { ok: true, graph: g, focus: O.id };
+    },
+    /* MAKE A LONE STEP A LINE: an INBOX feeds it and an OUTBOX takes its work */
+    wrapLine(g, a, o) {
+      const X = nodeOf(g, a.id);
+      if (!X || X.t !== 'bay') return fail('NOT_A_STEP', 'pick a step (a BAY)');
+      if (g.links.length || g.nodes.length !== 1) return fail('ON_A_LINE', 'this step is already on a line');
+      const id = fresh(g);
+      const I = box(g, id('i'), 'intake', o), O = box(g, id('o'), 'outbox', o);
+      g.links.push(link(id('l'), I.id, X.id), link(id('l'), X.id, O.id));
+      return { ok: true, graph: g, focus: I.id };
     },
     /* A NEW LINE: INBOX → one step → OUTBOX, placed on clear floor near the middle of the view */
     newLine(g, a, o) {
@@ -243,7 +263,15 @@
     const e = OPS[op](clone(g.graph), args || {}, opts || {});
     if (!e.ok) return e;
     const L = LL.layout(e.graph, g.floor, { near: opts && opts.near });
-    if (!L.ok) return why(L);
+    if (!L.ok) {
+      /* say what would actually help: TIDY LINE only when the same edit fits with the line laid out afresh; when even that
+         cannot fit, the floor is too small for this line — a bigger room is the answer, never "tidy it" in a circle */
+      if (op === 'tidy' || op === 'newLine') return op === 'tidy' ? fail('NO_FIT', 'this whole line does not fit here laid out afresh — give it a bigger room (Rooms), or keep it as it is') : why(L);
+      const t = OPS.tidy(clone(e.graph));
+      const T = t.ok ? LL.layout(t.graph, g.floor, { near: opts && opts.near }) : null;
+      if (T && T.ok) return Object.assign(fail('NEEDS_TIDY', 'there is no room for that with the line where it stands — TIDY LINE first, then try again'), { canTidy: true });
+      return fail(L.error === 'NO_SPACE' || L.error === 'NO_ROOM' ? L.error : 'NO_FIT', 'there is not enough clear floor round this line for that — give it a bigger room (Rooms), or clear some space');
+    }
     const r = station.applyLineLayout(e.graph, L);
     if (!r || !r.ok) return r || fail('NOT_APPLIED', 'the edit could not be laid');
     return { ok: true, focus: (r.ids && r.ids[e.focus]) || e.focus, ids: r.ids, removed: r.removed || [] };

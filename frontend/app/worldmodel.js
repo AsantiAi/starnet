@@ -2897,6 +2897,19 @@ const WorldModel = (() => {
        work. PROMPT TEXT ONLY: it rides the compiled plan into run prompts and never changes who runs or
        what tools they hold. Mirrors assignPropAgent's shape; empty clears; bounded at 2000 chars (the
        same cap migrate()/the compiler enforce, so no path can smuggle an unbounded blob into a save). */
+    // a BAY's ROLE — the step's name on its line (RESEARCHER, WRITER, …): one of BAY_ROLES, or none (the Workflow panel's ROLE
+    // chips, conveyor-links phase D). No change, no undo slot.
+    function setPropRole(propId, role) {
+      const p = doc.props.find(q => q.id === propId);
+      if (!p) return fail('NOT_FOUND', 'no such prop');
+      if (p.t !== 'bay') return fail('BAD_TYPE', 'only a BAY has a role');
+      const r = (typeof role === 'string' && BAY_ROLES[role]) ? role : null;
+      if ((p.role || null) === r) return { ok: true, id: propId, role: r };
+      snapshot();
+      if (r) p.role = r; else delete p.role;
+      emit([{ x1: p.x, y1: p.y, x2: p.x + (p.w || 1) - 1, y2: p.y + (p.h || 1) - 1 }]);
+      return { ok: true, id: propId, role: r };
+    }
     function setPropBrief(propId, brief) {
       const p = doc.props.find(q => q.id === propId);
       if (!p) return fail('NOT_FOUND', 'no such prop');
@@ -3188,7 +3201,7 @@ const WorldModel = (() => {
       },
       // mutations
       addRoom, placeHallway, removeRoom, moveRoom, setFloor, setMaterial, setDeck, setWalls, setHull, paintTiles, renameRoom,
-      addProp, removeProp, moveProp, rotateProp, faceProp, mirrorProp, assignPropAgent, ensureWorkstation, configureJunction, swapJoinerMerger, bindConnector, setDoorState, setPropProject, setPropBrief, setPropHands, setPropLabel, setPropLimits,
+      addProp, removeProp, moveProp, rotateProp, faceProp, mirrorProp, assignPropAgent, ensureWorkstation, configureJunction, swapJoinerMerger, bindConnector, setDoorState, setPropProject, setPropBrief, setPropRole, setPropHands, setPropLabel, setPropLimits,
       setBelt, removeBelt, removeBelts, placeBeltRun, connectBelt, connectionPreview, hookedBelts, stampBlueprint, insertBayBetween, canInsertBayBetween, transact, lineGraph, applyLineLayout,
       // agent-bay binding queries
       propsByType, propsByAgent, pipelineEdges, setPipelineEdges, addPipelineEdge, removePipelineEdge, agentRoomId, bayObjects,
