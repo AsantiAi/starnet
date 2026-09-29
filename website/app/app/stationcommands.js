@@ -374,7 +374,11 @@ const StationCommands = (() => {
     if (typeof Build !== 'undefined' && Build.isOpen && Build.isOpen()) throw new Error('Build mode is open, so the Commander is editing the floor. Ask them to close Build mode, then plan again.');
     const crew = (App.agents ? App.agents() : []).map(x => ({ id: x.id, name: x.name }));
     return { st, env: { WorldModel, Pipeline, WorkflowLine, crew, heroId: App.heroId ? App.heroId() : null,
-      StationTemplates: typeof StationTemplates !== 'undefined' ? StationTemplates : null, PropSprites: typeof PropSprites !== 'undefined' ? PropSprites : null } };
+      StationTemplates: typeof StationTemplates !== 'undefined' ? StationTemplates : null, PropSprites: typeof PropSprites !== 'undefined' ? PropSprites : null,
+      EquipmentHelp: typeof EquipmentHelp !== 'undefined' ? EquipmentHelp : null,
+      // a step marked "new" recruits that role's specialist exactly as the setup guide's RECRUIT does (Build.summonForRole: its desk comes with it)
+      canRecruit: typeof Build !== 'undefined' && typeof Build.summonForRole === 'function' && !!App.summonAgent,
+      recruit: role => Build.summonForRole(role, WorldModel.bayRoleInfo ? WorldModel.bayRoleInfo(role) : null) } };
   }
 
   const VERBS = {
@@ -400,7 +404,7 @@ const StationCommands = (() => {
       const { st, env } = builderReady();
       const p = park(StationBuilder.plan(st.serialize(), (a && a.request) || {}, env));
       return { planId: p.planId, summary: p.plan.summary, line: p.plan.line, where: p.plan.where, steps: p.plan.steps, ready: p.plan.ready, blocking: p.plan.blocking,
-        notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
+        recruits: p.plan.recruits, picked: p.plan.picked, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
     },
     // ROOMS & DECOR (phase 2): a hand-designed room kit (a new room, or furnishing one with clear floor), or every room of a preset
     'station.plan_room': (a) => {
@@ -420,13 +424,27 @@ const StationCommands = (() => {
       const planId = String((a && a.planId) || '').trim();
       const e = builderPlans.get(planId);
       if (!e || Date.now() - e.at > PLAN_TTL_MS) { builderPlans.delete(planId); throw new Error('There is no plan "' + planId.slice(0, 40) + '" (plans last ten minutes and are used once). Plan it again.'); }
+      // a swap backs the current layout up to Build mode's own slot first, so RESTORE PREVIOUS in Build → Presets brings it back
+      let backup = null;
+      if (e.plan.spec && e.plan.spec.kind === 'swap') {
+        const key = 'starnet.layoutBackup.' + st.doc().meta.createdAt;
+        try { backup = { key, old: localStorage.getItem(key) }; localStorage.setItem(key, JSON.stringify(st.serialize())); }
+        catch (_) { throw new Error('Your current layout could not be backed up, so nothing was changed.'); }
+      }
       const r = StationBuilder.apply(st, e.plan, env);
-      if (!r.ok) throw new Error(r.error);
+      if (!r.ok) {
+        if (backup) { try { if (backup.old == null) localStorage.removeItem(backup.key); else localStorage.setItem(backup.key, backup.old); } catch (_) {} }
+        throw new Error(r.error);
+      }
       builderPlans.delete(planId);
-      const what = r.line ? r.line.name + ' in ' + r.where : r.kind === 'restyle' ? 'the restyle of ' + r.where : (r.rooms || []).map(x => x.name).join(', ');
-      try { if (typeof StationUI !== 'undefined' && StationUI.notify) StationUI.notify('Built ' + what + ' · open BUILD and press UNDO to remove it', 'good'); } catch (_) {}
+      const what = r.line ? r.line.name + ' in ' + r.where : r.kind === 'restyle' ? 'the restyle of ' + r.where : r.kind === 'swap' ? (r.preset ? r.preset.name : 'the preset') + ' (RESTORE PREVIOUS in Build → Presets brings your old station back)' : (r.rooms || []).map(x => x.name).join(', ');
+      const lead = (env.crew || []).find(x => x.id === env.heroId);
+      try { if (typeof StationUI !== 'undefined' && StationUI.notify) StationUI.notify('Built by ' + (lead ? lead.name : 'your lead') + ': ' + what + ' · open BUILD and press UNDO to remove it', 'good'); } catch (_) {}
+      // the camera shows what was built: the one room, or the whole station when a preset added several
+      const ids = r.roomIds || [];
+      setTimeout(() => { try { if (typeof World !== 'undefined' && World.frameReviewRoom) World.frameReviewRoom(ids.length === 1 ? ids[0] : ''); } catch (_) {} }, 700);
       return Object.assign({ built: true, undo: 'The Commander can remove all of it with one UNDO in Build mode.' }, r.line
-        ? { summary: r.summary, line: r.line, where: r.where, steps: r.steps, lineId: r.lineKey, ready: r.ready, blocking: r.blocking }
+        ? { summary: r.summary, line: r.line, where: r.where, steps: r.steps, lineId: r.lineKey, ready: r.ready, blocking: r.blocking, recruited: r.recruited }
         : { summary: r.summary, rooms: r.rooms, lines: r.lines });
     },
 
