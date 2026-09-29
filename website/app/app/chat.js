@@ -5283,7 +5283,7 @@ const Chat = (() => {
     const card0 = recCard({
       kind: 'thread', evidence: prop.spec ? recWhy(recCite(prop.spec, threadCiteKind(prop))) : '',
       label: 'THREAD', proposal: prop.title,
-      note: 'kept threads feed the night shift'
+      note: 'kept threads feed autonomy'
     });
     if (!card0) return false;
     const r = { d: card0.row };

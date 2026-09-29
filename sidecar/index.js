@@ -6840,7 +6840,7 @@ async function runNightshiftBeat(opts) {
   // +1 per delivered draft until restart. Place it NOW (a job was selected — work genuinely starts) and settle it
   // on every exit below, exactly like the act/workshop/cron paths do.
   const beatItemId = 'nsbeat-' + crypto.randomUUID();
-  try { placeCronWorkitem(agentId, '✦ night-shift: ' + String(sel.selected.title || 'draft'), beatItemId); } catch (_) {}
+  try { placeCronWorkitem(agentId, '✦ autonomy: ' + String(sel.selected.title || 'draft'), beatItemId); } catch (_) {}
   let beatDelivered = false;
   try {
   // 3) DO — the do directive stays on the declared focus too.
@@ -6865,7 +6865,7 @@ async function runNightshiftBeat(opts) {
   // morning report needs an app-closure absence and the drafts nudge waits for N unseen. 'notify' is a
   // registered bare-string bus event with no other emitter; the station HUD toasts it on arrival. (The
   // built-artifact path needs no twin: workshop.built already fires there and the HUD presents that card.)
-  try { chanEmit('notify', '✦ night shift — drafted “' + entry.title + '” while you were away · review it in the NIGHT SHIFT panel'); } catch (_) {}
+  try { chanEmit('notify', '✦ autonomy — drafted “' + entry.title + '” while you were away · review it in SETTINGS › AUTONOMY'); } catch (_) {}
   beatDelivered = true;
   return { delivered: true, reason: 'delivered', title: deliverable.title, archetype: sel.selected.archetype, verdict: crit.verdict };
   } finally {
@@ -6974,7 +6974,7 @@ async function runNightshiftActShift(opts) {
     target: sel.selected.threadId || targetRoot || '', evidence: [{ id: sel.selected.threadId ? 'thread:' + sel.selected.threadId : (targetRoot ? 'project:' + targetRoot : 'nightshift-grounds'), type: sel.selected.threadId ? 'thread' : (targetRoot ? 'project' : 'context'), quote: sel.selected.grounds || focusHeader || '' }],
     readiness: { ready: rd.tier === 'hot', reasons: rd.tier === 'hot' ? [] : [rd.tier] }, score: sel.selected.score, modelVersion: 'autopilot-v2' }, Date.now()).catch(swallow('recledger.record'));
   const backlogId = 'ns-act-' + runId;
-  const title = String(sel.selected.title || 'Night-shift build').slice(0, 200);
+  const title = String(sel.selected.title || 'Autonomy build').slice(0, 200);
   try { await workshopStore.queue(agentId, { id: backlogId, title, detail: String(sel.selected.spec || ''), source: 'nightshift', grounds: String(sel.selected.grounds || '') }, Date.now()); }
   catch (_) { /* a queue hiccup (e.g. a title the Commander earlier discarded) → stand down honestly */ return { delivered: false, reason: 'queue-refused' }; }
   await workshopStore.claimNext(agentId, runId, isRunLive).catch(swallow('workshop.claim', null));   // stamp buildingRunId (zombie-reap aware)
@@ -6985,7 +6985,7 @@ async function runNightshiftActShift(opts) {
   const sig = signal || (ac && ac.signal);
   if (ac) runs.set(runId, ac);
   runsMeta.set(runId, { agentId, startedAt: Date.now(), source: 'nightshift' });
-  try { placeCronWorkitem(agentId, '✦ night-shift: ' + title, runId); } catch (_) {}
+  try { placeCronWorkitem(agentId, '✦ autonomy: ' + title, runId); } catch (_) {}
   let threw = null;
   try {
     await runOnce({
@@ -12841,7 +12841,7 @@ function lifecycleArmedSnapshot(now) {
   const reasons = [];
   if (routines.armed) reasons.push(routines.count === 1 ? '1 routine armed' : (routines.count + ' routines armed'));
   for (const id of channels.connected) reasons.push((id.charAt(0).toUpperCase() + id.slice(1)) + ' connected');
-  if (nsArmedActive) reasons.push('Night shift armed');
+  if (nsArmedActive) reasons.push('Autonomy armed');
   if (terminals.armed) reasons.push(terminals.count === 1 ? '1 terminal running' : (terminals.count + ' terminals running'));
   return { armed: armed, categories: { routines: routines, channels: channels, nightshift: nightshift, terminals: terminals }, reasons: reasons, ts: now };
 }
@@ -14575,7 +14575,7 @@ async function applyNightPatch(agentId, runId, relDir, target, title) {
     return { ok: false, error: 'the patch failed to apply after branching (rolled back, no change kept):\n' + String(ap.stderr).slice(0, 400), branch };
   }
   await runGit(root, ['add', '-A']);
-  const commit = await runGit(root, ['-c', 'user.name=StarNet Night Shift', '-c', 'user.email=nightshift@starnet.local', 'commit', '-m', 'night-shift: ' + String(title || 'patch').slice(0, 80)]);
+  const commit = await runGit(root, ['-c', 'user.name=StarNet Autonomy', '-c', 'user.email=autonomy@starnet.local', 'commit', '-m', 'autonomy: ' + String(title || 'patch').slice(0, 80)]);
   if (!commit.ok) return { ok: false, error: 'applied the patch but could not commit it:\n' + String(commit.stderr).slice(0, 300), branch };
   const head = await runGit(root, ['rev-parse', '--short', 'HEAD']);
   return { ok: true, branch, commit: head.stdout.trim(), root, prevBranch: curBranch };

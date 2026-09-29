@@ -55,7 +55,7 @@ export const NAV = [
   { id: 'automation', group: 'Repeat & automate', description: 'Reuse good work, schedule routines, and configure unattended runs.', items: [
     { url: 'docs/guides/routines.html', title: 'Create repeatable work', kind: 'Guide' },
     { url: 'docs/skills.html', title: 'Skills & routines reference', kind: 'Reference' },
-    { url: 'docs/guides/night-shift.html', title: 'Set up Night Shift', kind: 'Guide' },
+    { url: 'docs/guides/night-shift.html', title: 'Set up autonomy', kind: 'Guide' },
     { url: 'docs/autonomy.html', title: 'Autonomy controls', kind: 'Reference' },
   ]},
   { id: 'connections', group: 'Connect your tools', description: 'Connect services, message your station, or work with another harness.', items: [

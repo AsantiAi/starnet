@@ -80,7 +80,7 @@
     const ms = status && Number(status.awayAfterMs);
     const mins = (Number.isFinite(ms) && ms > 0) ? Math.round(ms / 60000) : 0;
     const span = mins > 0 ? (mins + ' min without clicks or keys') : 'a stretch without clicks or keys';
-    return 'Leave the app running — “away” just means ' + span + '. The night shift starts by itself once you stop using the station, and stands down the moment you’re back.';
+    return 'Leave the app running — “away” just means ' + span + '. Autonomy starts by itself once you stop using the station, and stands down the moment you’re back.';
   }
 
   // ---- report composition ----------------------------------------------------------------------------------------
@@ -211,7 +211,7 @@
         away: away,
         halted: true,
         stateText: '⛔ HALTED — E-STOP engaged',
-        why: 'the night shift is stopped and will not run until you re-set the autonomy dial — press any LEVEL or dial button above to lift the halt',
+        why: 'autonomy is stopped and will not run until you re-set the autonomy dial — press any LEVEL or dial button above to lift the halt',
         presence: away ? 'you’re away' : 'you’re present',
         awayRuleText: awayRuleText(s),
         leashText: leashText,
