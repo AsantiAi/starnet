@@ -9910,7 +9910,10 @@ const World = (() => {
       if (floor) floor.onEvent('provider.fallback', p, Date.now());
       if (p && typeof StationUI !== 'undefined' && StationUI.notify) {
         const how = p.rotate ? 'rotated credential' : 'switched model';
-        StationUI.notify('⤳ failover (' + (p.reason || 'error') + ') · ' + how + ': ' + (p.fromModel || '?') + ' → ' + (p.toModel || '?'), 'warn');
+        // subscription stacking: a hop between connected sign-ins keeps the model — name the account it moved to
+        StationUI.notify(p.toAccount
+          ? '⤳ failover (' + (p.reason || 'error') + ') · continued on ' + p.toAccount + ' · ' + (p.toModel || '?')
+          : '⤳ failover (' + (p.reason || 'error') + ') · ' + how + ': ' + (p.fromModel || '?') + ' → ' + (p.toModel || '?'), 'warn');
       }
     });
     // THROUGHPUT + DWELL: pair each work-item's placement with its delivery (a reliable Date.now() clock,

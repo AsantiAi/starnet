@@ -53,6 +53,14 @@
 .settings-console .prov-stat { grid-column: 2; padding: 0; text-align: left; font-size: 12px; }
 .settings-console .prov-stat-t { font-size: 12px; line-height: 1.4; }
 .settings-console .prov-key-edit, .settings-console .prov-oauth-inline { grid-column: 1 / -1; }
+/* subscription stacking: the CLAUDE CODE card's connected sign-ins + ＋ ADD ACCOUNT, full width under the card head */
+.settings-console .prov-accounts { grid-column: 1 / -1; display: grid; gap: 8px; margin-top: 4px; }
+.settings-console .prov-accounts .key-row { padding: 10px 12px; background: rgba(0,0,0,.12); flex-wrap: wrap; }
+.settings-console .prov-accounts .key-main { flex: 1 1 160px; }
+.settings-console .prov-accounts .key-mask { max-width: 100%; overflow-wrap: anywhere; }
+.settings-console .prov-accounts .key-acts { flex-direction: row; margin-left: auto; }
+.settings-console .prov-accounts .key-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.settings-console .prov-accounts-add { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 13px; line-height: 1.4; }
 .settings-console .key-edit:not([hidden]) { display: flex; flex-wrap: wrap; gap: 10px; padding: 14px; border-radius: 8px; background: rgba(0,0,0,.16); }
 .settings-console .key-edit input { flex: 1 1 200px; }
 .settings-console .key-row { padding: 14px; gap: 12px; border-radius: 9px; border-color: rgba(var(--ph-rgb), .2); box-shadow: none; }
@@ -128,6 +136,7 @@
   .settings-console .prov-select { grid-column:1; grid-row:1; }
   .settings-console .prov-addkey { grid-column:1; grid-row:2; justify-self:start; margin-left:42px; }
   .settings-console .prov-stat,.settings-console .prov-card:not(:has(.prov-addkey)) .prov-stat { grid-column:1; grid-row:3; justify-content:flex-start; text-align:left; padding-left:42px; }
+  .settings-console .prov-accounts { grid-row:4; }   /* the card's own status line stays above its accounts */
   .settings-console [data-provider="starnet"] :is(.prov-addkey,.prov-stat) { margin-left:0; padding-left:0; }
 }
 @container settings-pane (max-width:340px) {
