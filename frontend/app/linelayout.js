@@ -74,7 +74,9 @@
       if (!l || !l.from || !l.to) return;
       const a = l.from.node, b = l.to.node;
       if (!nodes[a] || !nodes[b] || a === b) return;
-      links.push({ idx: i, id: l.id != null ? l.id : 'l' + (i + 1), from: l.from, to: l.to, a, b });
+      // a link may arrive with the belt it already rides (path): kept verbatim when both its machines are pinned (keptOf)
+      const path = Array.isArray(l.path) && l.path.length ? l.path.map(t => ({ x: t.x | 0, y: t.y | 0, d: t.d })) : null;
+      links.push({ idx: i, id: l.id != null ? l.id : 'l' + (i + 1), from: l.from, to: l.to, a, b, path });
     });
     const out = {}, inn = {};
     for (const id of order) { out[id] = []; inn[id] = []; }
@@ -255,7 +257,8 @@
      of its own — the one it wants where it can — and the lanes the compiler reads E, S, W, N keep the order they are
      meant to have. Four sides, at most four links: every assignment is tried, and the fewest links off their wanted
      side wins (the first found, wanted sides tried first, on a tie). A junction that cannot seat its links fails. */
-  function sidesOf(a, at, G) {
+  function sidesOf(a, at, G, kept) {
+    kept = kept || new Set();
     const sides = {};   // link id -> { a: its side at the junction it leaves, b: its side at the junction it enters }
     for (const id of a.order) {
       const n = a.nodes[id];
@@ -263,12 +266,14 @@
       const p = at[id], me = n.i + 1;
       const free = ORDER.filter(d => {
         const x = p.x + DIRV[d][0], y = p.y + DIRV[d][1], t = G.idx(x, y);
-        if (t < 0 || G.open[t] !== 1) return false;
+        if (t < 0 || G.open[t] !== 1 || G.used[t] === 1) return false;   // (a kept belt already rides it)
         for (let k = 0; k < 4; k++) { const u = G.idx(x + DX[k], y + DY[k]); if (u >= 0 && G.junc[u] && G.junc[u] !== me) return false; }   // beside another junction too: it can serve neither
         return true;
       });
-      const ends = a.out[id].map(l => ({ l, out: true, want: sideOf(a, l, id, l.b, true) }))
-        .concat(a.inn[id].map(l => ({ l, out: false, want: sideOf(a, l, id, l.a, false) })));
+      // a kept link's side is the one its belt already takes (fixed); the rest are chosen
+      const fixedSide = (l, out) => !kept.has(l) ? null : out ? dirTo(p, l.path[0]) : dirTo(p, l.path[l.path.length - 1]);
+      const ends = a.out[id].map(l => ({ l, out: true, want: sideOf(a, l, id, l.b, true), fixed: fixedSide(l, true) }))
+        .concat(a.inn[id].map(l => ({ l, out: false, want: sideOf(a, l, id, l.a, false), fixed: fixedSide(l, false) })));
       const kids = (n.t === 'splitter' || n.t === 'filter') ? kidsOf(a, id) : [];
       const readsRight = pick => {
         if (kids.length < 2) return true;
@@ -281,8 +286,9 @@
       const walk = (i, cost) => {
         if (cost >= bestCost) return;
         if (i === ends.length) { if (readsRight(pick)) { bestCost = cost; best = pick.slice(); } return; }
-        for (const d of [ends[i].want].concat(free.filter(f => f !== ends[i].want))) {
-          if (taken[d] || free.indexOf(d) < 0) continue;
+        const e = ends[i];
+        for (const d of (e.fixed ? [e.fixed] : [e.want].concat(free.filter(f => f !== e.want)))) {
+          if (taken[d] || (!e.fixed && free.indexOf(d) < 0)) continue;
           taken[d] = true; pick[i] = d;
           walk(i + 1, cost + (d === ends[i].want ? 0 : 1));
           taken[d] = false;
@@ -371,20 +377,51 @@
     return path;
   }
 
+  /* a link's given belt is KEPT when both its machines are pinned and the belt still joins them: every tile steps to the
+     next, none lies under a pinned machine, it leaves from beside its source (a junction's side, a box's ring) and its
+     last tile points into the machine it feeds (a junction's tile, a box's footprint). Anything else is routed afresh. */
+  function keptOf(a, at) {
+    const kept = new Set();
+    const inFoot = (n, p, x, y) => x >= p.x && x < p.x + n.w && y >= p.y && y < p.y + n.h;
+    const nextTo = (p, q) => Math.abs(p.x - q.x) + Math.abs(p.y - q.y) === 1;
+    const inRing = (n, p, q) => q.x >= p.x - 1 && q.x <= p.x + n.w && q.y >= p.y - 1 && q.y <= p.y + n.h && !inFoot(n, p, q.x, q.y);
+    for (const l of a.links) {
+      const A = a.nodes[l.a], B = a.nodes[l.b], path = l.path;
+      if (!path || !A.pin || !B.pin) continue;
+      let ok = true;
+      for (let i = 0; i < path.length && ok; i++) {
+        const t = path[i], v = DIRV[t.d];
+        if (!v || (i + 1 < path.length && (t.x + v[0] !== path[i + 1].x || t.y + v[1] !== path[i + 1].y))) ok = false;
+        for (const id of a.order) if (ok && a.nodes[id].pin && inFoot(a.nodes[id], at[id], t.x, t.y)) ok = false;
+      }
+      if (!ok) continue;
+      const pa = at[l.a], pb = at[l.b], f = path[0], t = path[path.length - 1], v = DIRV[t.d];
+      const leaves = JUNCTION[A.t] ? nextTo(pa, f) : inRing(A, pa, f);
+      const lands = JUNCTION[B.t] ? (t.x + v[0] === pb.x && t.y + v[1] === pb.y) : inFoot(B, pb, t.x + v[0], t.y + v[1]);
+      if (leaves && lands) kept.add(l);
+    }
+    return kept;
+  }
+
   /* lay every link at one placement: the main run first (by column, then lane), ways back last. A link that finds no
      way (the belts laid before it walled it in) is laid FIRST on the next try and the rest go round it — a few tries,
      then the answer is NO_ROUTE and which link. */
   const RETRIES = 4;
-  function routeAll(a, at, fl) {
+  function routeAll(a, at, fl, kept) {
+    kept = kept || new Set();
     const G = gridOf(a, at, fl);
     if (!G) return { ok: false, error: 'NO_ROUTE', link: null };
-    const S = sidesOf(a, at, G);
+    // a kept belt is where it is: its tiles are taken before anything is routed, and it is never routed again
+    for (const l of kept) for (const t of l.path) { const k = G.idx(t.x, t.y); if (k >= 0) G.used[k] = 1; }
+    G.used0 = G.used.slice();
+    const S = sidesOf(a, at, G, kept);
     if (S.fail != null) return { ok: false, error: 'NO_ROUTE', link: null, why: 'SIDES', node: S.fail };
-    let order = a.links.slice().sort((p, q) => (a.back.has(p) - a.back.has(q)) || (a.rank[p.a] - a.rank[q.a]) || (a.lane[p.a] - a.lane[q.a]) || (a.lane[p.b] - a.lane[q.b]) || (p.idx - q.idx));
+    let order = a.links.filter(l => !kept.has(l)).sort((p, q) => (a.back.has(p) - a.back.has(q)) || (a.rank[p.a] - a.rank[q.a]) || (a.lane[p.a] - a.lane[q.a]) || (a.lane[p.b] - a.lane[q.b]) || (p.idx - q.idx));
     let failed = null;
     for (let tries = 0; tries <= RETRIES; tries++) {
       G.used.set(G.used0);
       const paths = {};
+      for (const l of kept) paths[l.id] = l.path.map(t => ({ x: t.x, y: t.y, d: t.d }));
       failed = null;
       for (const l of order) {
         const path = routeLink(l, at, a, G, S.sides);
@@ -392,7 +429,7 @@
         for (const t of path) G.used[G.idx(t.x, t.y)] = 1;
         paths[l.id] = path;
       }
-      if (!failed) return orderKept(a, at, paths) ? { ok: true, paths } : { ok: false, error: 'NO_ROUTE', link: null, why: 'LANE_ORDER' };
+      if (!failed) return orderKept(a, at, paths) ? { ok: true, paths, kept } : { ok: false, error: 'NO_ROUTE', link: null, why: 'LANE_ORDER' };
       if (order[0] === failed) break;   // it found no way with the floor to itself: no order helps
       order = [failed].concat(order.filter(l => l !== failed));
     }
@@ -411,7 +448,7 @@
     const a = analyze(graph);
     if (!a.order.length) return { ok: false, error: 'EMPTY' };
     const fl = floorOf(floor);
-    const finish = (at, paths) => {
+    const finish = (at, paths, kept) => {
       const nodes = {};
       for (const id of a.order) nodes[id] = { x: at[id].x, y: at[id].y };
       const links = [], belts = [], seen = new Set();
@@ -420,7 +457,9 @@
         const from = { prop: l.a, port: l.from.port || 'out' };
         if (Array.isArray(l.from.tags) && l.from.tags.length) from.tags = l.from.tags.slice();
         if (l.from.else) from.else = true;
-        links.push({ id: l.id, from, to: { prop: l.b, port: 'in' }, path: path.map(t => ({ x: t.x, y: t.y, d: t.d })) });
+        const out = { id: l.id, from, to: { prop: l.b, port: 'in' }, path: path.map(t => ({ x: t.x, y: t.y, d: t.d })) };
+        if (kept && kept.has(l)) out.kept = true;   // this belt was already on the floor, exactly as given
+        links.push(out);
         for (const t of path) if (!seen.has(key(t.x, t.y))) { seen.add(key(t.x, t.y)); belts.push({ x: t.x, y: t.y, d: t.d }); }
       }
       // a junction's own tile is a belt too, aimed at its first way out (its arrow is the floor's, never the compiler's)
@@ -450,12 +489,17 @@
         const occ = new Set();
         const mark = (id, p) => { const n = a.nodes[id]; for (let y = p.y - 1; y <= p.y + n.h; y++) for (let x = p.x - 1; x <= p.x + n.w; x++) occ.add(key(x, y)); };
         for (const id of pinned) mark(id, at[id]);
+        // the belts that stay (a link between two pinned machines that still joins them): no machine lands on one, and no
+        // new junction stands beside one (it would sit beside a lane it does not serve)
+        const kept = keptOf(a, at), keptTile = new Set();
+        for (const l of kept) for (const t of l.path) { keptTile.add(key(t.x, t.y)); occ.add(key(t.x, t.y)); }
         // a spot is clear when its tiles are, and — for a junction — when the sides its links want are free and there is
         // a free side for every link it carries
         const clear = (id, p) => {
           const n = a.nodes[id];
           for (let y = p.y; y < p.y + n.h; y++) for (let x = p.x; x < p.x + n.w; x++) if (!fl.free(x, y) || occ.has(key(x, y)) || fl.inflow(x, y)) return false;
           if (!JUNCTION[n.t]) return true;
+          for (const d of ORDER) if (keptTile.has(key(p.x + DIRV[d][0], p.y + DIRV[d][1]))) return false;
           const want = new Set(a.out[id].map(l => sideOf(a, l, id, l.b, true)).concat(a.inn[id].map(l => sideOf(a, l, id, l.a, false))));
           let sides = 0;
           for (const d of ORDER) {
@@ -484,8 +528,8 @@
           at[id] = p; mark(id, p);
         }
         if (!placed) continue;
-        const routed = routeAll(a, at, fl);
-        if (routed.ok) return finish(at, routed.paths);
+        const routed = routeAll(a, at, fl, kept);
+        if (routed.ok) return finish(at, routed.paths, kept);
         last = { ok: false, error: routed.error, link: routed.link, why: routed.why };
       }
       return last;
@@ -536,5 +580,5 @@
     return routedAny ? { ok: false, error: 'NO_ROOM', needs } : Object.assign({ ok: false, error: 'NO_ROUTE' }, why);
   }
 
-  return { layout, GAP_X, PITCHES, _internals: { analyze, arrange, gridOf, sidesOf, routeLink, routeAll, floorOf, sizeOf } };
+  return { layout, GAP_X, PITCHES, _internals: { analyze, arrange, gridOf, sidesOf, keptOf, routeLink, routeAll, floorOf, sizeOf } };
 });
