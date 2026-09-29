@@ -76,9 +76,17 @@ const PropRemaster = (() => {
     return {x:bounds.x+(bounds.width-crop.width*s)/2,y:bounds.y+bounds.height-(contact?(contact.y*sourceHeight-(crop.y||0)):crop.height)*s,
       width:crop.width*s,height:crop.height*s};
   }
-  async function prepare(key,v) {
+  // PLAYER-MADE PROPS (userprops.js): a runtime view arrives with its image ALREADY decoded (fetched with the API
+  // token and turned into a blob URL — the master token never rides in a URL, and ROOT holds only shipped art).
+  // It is held to every manifest rule except the bare-filename one, and only in the plain approved mode.
+  const USER_KEY=/^user_[a-z0-9_]{3,60}:s$/;
+  function runtimeOK(key,v,im){
+    return USER_KEY.test(key)&&v&&v.mode==='approved'&&v.effects===false&&!v.contact&&!v.foreground&&!v.nativeLayers&&!v.nativeMask&&!v.screenPower&&!v.activity&&
+      validate({...v,image:'runtime.png'})&&im&&im.width===v.sourceWidth&&im.height===v.sourceHeight;
+  }
+  async function prepare(key,v,preloaded) {
     try {
-      if(!validate(v))throw Error('invalid manifest view');
+      if(!(preloaded?runtimeOK(key,v,preloaded):validate(v)))throw Error('invalid manifest view');
       const id=key.split(':')[0];
       if(v.mode==='content'&&(typeof AuthoredPropContent==='undefined'||!AuthoredPropContent.regions[id]))throw Error('authored content unavailable');
       if(v.mode==='service'&&(typeof AuthoredServiceContent==='undefined'||!AuthoredServiceContent.regions[id]))throw Error('authored service content unavailable');
@@ -93,7 +101,7 @@ const PropRemaster = (() => {
         }
         if(!AuthoredPropMotion.register(id,machine.motion,layers))throw Error('invalid authored mechanism');
       }
-      const im=await image(v.image);
+      const im=preloaded||await image(v.image);
       if(im.width!==v.sourceWidth || im.height!==v.sourceHeight)throw Error('source dimensions differ');
       const view=key.split(':')[1];
       const projectionHandled=projectionReview&&typeof ProjectionPropEffects!=='undefined'&&ProjectionPropEffects.matches(id,view,v);
@@ -403,7 +411,17 @@ const PropRemaster = (() => {
     const px=Math.floor((x-e.frame.x)*DENSITY),py=Math.floor((y-e.frame.y)*DENSITY);
     return px>=0&&py>=0&&px<e.body.width&&py<e.body.height&&e.pickAlpha[py*e.body.width+px]>=24;
   }
-  return Object.freeze({ready,enabled,draw,drawForeground,emitter,screenEmission,viewGeometry,hitTest,isProjection:()=>projectionReview,revision:()=>revision,
+  let runtimeViews=0;
+  // Register one player-made view after boot. Resolves true when the art is prepared and drawable.
+  async function registerRuntime(id,v,im){
+    const key=String(id)+':s';
+    if(entries.has(key))return true;
+    if(runtimeViews>=400){failures.push({view:key,reason:'too many player-made props'});return false;}
+    runtimeViews++;
+    await prepare(key,v,im);
+    return entries.has(key);
+  }
+  return Object.freeze({ready,enabled,draw,registerRuntime,drawForeground,emitter,screenEmission,viewGeometry,hitTest,isProjection:()=>projectionReview,revision:()=>revision,
     status:()=>({views:Array.from(entries.keys()),failures:failures.slice(),pixels:pixelBudget}),
     // Pure contracts exposed for deterministic headless geometry validation.
     validate,fit});
