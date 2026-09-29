@@ -4437,12 +4437,13 @@ const Chat = (() => {
   // context, about a real decision, immediately acted on; + the R4 receipt proves it stuck) AND continues
   // the conversation as the Commander's next message so the task proceeds with it. "you decide" banks
   // nothing and hands the choice back. One fork per reply by construction (parse reads the first marker).
-  function offerFork(fk) {
+  function offerFork(fk, runId) {
     clearNudge();   // same law as offerTaskQuestion: the fork claims the moment; a live nudge leaves WITH its chips
     const items = fk.options.map(o => ({ label: o, value: o }));
     items.push({ label: 'you decide', value: '', skip: true });
     const q = row('agent'); q.d.classList.add('nudge');
     q.body.textContent = '⌖ ' + fk.question;
+    taskQuestionDoor(q.body, runId);   // the fork's chips replace this run's connect chip in the one slot — the card carries the door
     autoscroll();
     choices(items, item => {
       vanish(q.d);
@@ -4486,7 +4487,7 @@ const Chat = (() => {
         // send() routes this whole answer back into the same durable brief.
         send(text);vanish(r.d);return true;
       });
-      taskQuestionDoor(r.body);
+      taskQuestionDoor(r.body, tq.runId);
       autoscroll();return;
     }
     // TWO KINDS of suggestion, and they must never be confused. GROUNDED comes from the Commander's own
@@ -4537,7 +4538,7 @@ const Chat = (() => {
       ? 'these aren\'t exclusive — tap all that apply, then confirm; or type your own answer'
       : 'or ignore these and type your own answer — more than one is fine';
     q.body.appendChild(hint);
-    taskQuestionDoor(q.body);
+    taskQuestionDoor(q.body, tq.runId);
     autoscroll();
     choices(items, item => {
       vanish(q.d);
@@ -6935,10 +6936,12 @@ const Chat = (() => {
     App.persist();
     return true;
   }
-  // The door for the displayed stream's durable connector handoff, drawn inside the task-question card (fresh or
-  // restored after a reload). Opening the connect screen does NOT answer the question — it stays open.
-  function taskQuestionDoor(body) {
+  // The door for the displayed stream's durable connector handoff, drawn inside a question card — a task question
+  // or a FORK, fresh or restored after a reload. Opening the connect screen does NOT answer the question. A fresh
+  // card passes its runId so an older run's handoff never rides along on every later question in the stream.
+  function taskQuestionDoor(body, runId) {
     const h = (activeWs && typeof Workstreams !== 'undefined') ? Workstreams.connectorHandoff(activeWs.id) : null;
+    if (h && runId && h.runId && h.runId !== runId) return null;
     const door = (h && typeof Friendly !== 'undefined' && Friendly.connectorDoor) ? Friendly.connectorDoor(h) : null;
     if (!door || !body) return null;
     const b = document.createElement('button');
@@ -8902,7 +8905,7 @@ const Chat = (() => {
           }, 1500);
         }
         if (isActiveWs(ws) && activeLiveRow) activeLiveRow.done();
-        if (isActiveWs(ws) && taskQuestion) presentTaskQuestion(ws, taskQuestion);   // enriches with the stored recommendation, then renders
+        if (isActiveWs(ws) && taskQuestion) presentTaskQuestion(ws, Object.assign({ runId: thisRunId }, taskQuestion));   // enriches with the stored recommendation, then renders
         // Belt-and-braces (live-caught 2026-07-16): a run can end 'clarifying' with the marker unparseable
         // client-side (e.g. a malformed/glued reply line) while the DURABLE brief holds the real validated
         // question — re-present from the store so the Commander is never left with a question-less pause.
@@ -8912,7 +8915,7 @@ const Chat = (() => {
         // one-tap chips at the run boundary; a malformed marker parses null and stays plain text.
         if (isActiveWs(ws) && replyText && typeof Fork !== 'undefined' && Fork.parse) {
           const fk = Fork.parse(replyText);
-          if (fk) { offerFork(fk); if (!voiceQuestion && fk.question) voiceQuestion = fk.question; }
+          if (fk) { offerFork(fk, thisRunId); if (!voiceQuestion && fk.question) voiceQuestion = fk.question; }
         }
         /* THE WORK LINE. This dock has answered; if the Commander drew stages past it, run them now — still
            INSIDE the run's try, so the stream stays busy and Stop/E-STOP reach the whole line rather than a

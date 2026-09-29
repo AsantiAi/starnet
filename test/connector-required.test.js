@@ -247,7 +247,10 @@ function ctxFor(runId) {
     // (first-hour walk 2026-09-28: the agent said "tap the ⇄ CONNECT chip" three times and none was drawn).
     A.ok(/if \(taskQuestion\) holdConnectorDoor\(thisRunId, ws\);/.test(src), 'a question-ending run still records the connector handoff');
     const tqFn = A.fnBody(src, 'function offerTaskQuestion(');
-    A.eq((tqFn.match(/taskQuestionDoor\((?:r|q)\.body\)/g) || []).length, 2, 'both task-question cards (chips and conversation) carry the door');
+    A.eq((tqFn.match(/taskQuestionDoor\((?:r|q)\.body, tq\.runId\)/g) || []).length, 2, 'both task-question cards (chips and conversation) carry the door');
+    // a FORK's chips take the same slot and replaced the connect chip live (2026-09-28: composio door lost) — it carries the door too
+    A.ok(/taskQuestionDoor\(q\.body, runId\)/.test(A.fnBody(src, 'function offerFork(')), 'the FORK card carries the door');
+    A.ok(/offerFork\(fk, thisRunId\)/.test(src) && /presentTaskQuestion\(ws, Object\.assign\(\{ runId: thisRunId \}, taskQuestion\)\)/.test(src), 'fresh question cards are scoped to their own run');
     // behavior: hold records the handoff once; the door renders inside the given card and opens the connect screen
     const vm = require('node:vm');
     const hold = A.fnBody(src, 'function holdConnectorDoor(');
@@ -273,6 +276,9 @@ function ctxFor(runId) {
     A.eq(ctx.btn.textContent, '⇄ CONNECT GMAIL', 'the door names the connector');
     ctx.btn.onclick();
     A.eq(opened.join(), 'gmail', 'tapping the door opens the connect screen for that connector');
+    vm.runInContext('this.other = taskQuestionDoor(card, "run-2"); this.same = taskQuestionDoor(card, "run-1");', ctx);
+    A.eq(ctx.other, null, 'an older run\'s handoff never rides on a later run\'s question card');
+    A.ok(ctx.same && ctx.same.textContent === '⇄ CONNECT GMAIL', 'the run that raised the connector gets its door');
     delete handoffs['ws-1'];
     vm.runInContext('this.none = taskQuestionDoor(card);', ctx);
     A.eq(ctx.none, null, 'no handoff, no door');
