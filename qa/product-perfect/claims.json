@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "47f978f50c6c99fc27c8149c9871409966e7b66c",
+    "sourceCommit": "152061f907fe6f784ecc9bd50789c6353ac73eb5",
     "pathSetSha256": "c0518383f546b32d1b6b5723ecdca25c7650fb72ba7a6f702ffb7ac486a15a58",
     "files": [
       {
@@ -318,8 +318,8 @@
       },
       {
         "path": "frontend/app/build.js",
-        "bytes": 460638,
-        "sha256": "a2f75dea0bc4aa2a46c47995861473d5ddf5746301fc494bfcddf5975003f811"
+        "bytes": 460653,
+        "sha256": "32442a81b22a7d675c6bdff47d50c20cca53e509e2b7c5a5132ea426e507a089"
       },
       {
         "path": "frontend/app/channels.js",
@@ -328,8 +328,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 678405,
-        "sha256": "4a87bde339c82be765b9c46707c3c8550268c220150309d8243f2a34a507a880"
+        "bytes": 678408,
+        "sha256": "744051227760c816a27615ac5f86fbf81667f2df2b70cf5a0119fac06e3604d1"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -1058,13 +1058,13 @@
       },
       {
         "path": "frontend/app/stationbuilder.js",
-        "bytes": 41626,
-        "sha256": "1807222a2e06333b1043ed910f7e5a9710e50cfc8d3409be2c4214e39d3b6c6c"
+        "bytes": 51857,
+        "sha256": "37c5a90157a85ed4149b091326def1e53200d866777ed28624319094ae297c48"
       },
       {
         "path": "frontend/app/stationcommands.js",
-        "bytes": 53150,
-        "sha256": "e2d60d3f986a285536e9b2df59a621b0f4ebf9e091ad8883844ecc4caf0a23c8"
+        "bytes": 54943,
+        "sha256": "8367ea004098b134032aae248c4e00fba6648a10bffc3cffb9b06cdbdfbf22a3"
       },
       {
         "path": "frontend/app/stationquests.js",
