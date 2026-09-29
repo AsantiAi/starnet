@@ -1204,6 +1204,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     body.innerHTML = '';
     // pick the section to land on: remembered > first. A stale remembered id (section removed) falls back.
     let activeId = consoleSection[key];
+    if (key === 'settings' && activeId === 'nightshift') activeId = 'autonomy';   // folded into AUTONOMY (ONE WORD: AUTONOMY)
     if (!sections.some(s => s.id === activeId)) activeId = sections[0] && sections[0].id;
 
     // ---- left: optional rail-top slot (e.g. the dossier roster) + optional search + the section rail (role=tablist) ----
@@ -2103,7 +2104,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
      can arrive from a routine, a night shift, or a messaging channel — and "the agent believes this about me" and
      "someone said this in a group chat" are different claims. 'commander' renders NO chip: the ordinary case must
      stay quiet, or the label becomes noise nobody reads. */
-  const ORIGIN_LABEL = { schedule: '⏱ routine', nightshift: '☾ night shift', api: '⇄ external app' };
+  const ORIGIN_LABEL = { schedule: '⏱ routine', nightshift: '◈ autonomy', api: '⇄ external app' };
   function originChip(origin) {
     const o = String(origin || 'commander');
     if (o === 'commander') return null;
@@ -6024,7 +6025,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         '<button class="set-theme" data-pace="12" title="as much as it&#39;s allowed — up to 12 jobs a day">MAX</button>' +
       '</div>' +
       // DIRECTION (autonomy-tuning 2026-07-17) — the dial says HOW MUCH it may run on its own; this block says
-      // WHERE that work should go. Same server truth the Night Shift panel reads (GET/POST/DELETE
+      // WHERE that work should go. Same server truth the away status below reads (GET/POST/DELETE
       // /api/nightshift/focus + POST/DELETE /api/nightshift/avoid) — one directive, surfaced where the user tunes
       // autonomy, so "tune it" and "aim it" live together. Every line maps to a route field; the cold states are
       // honest, never an invented priority or a fake learned profile.
@@ -6043,7 +6044,12 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // before this row a runaway helper could not be stopped from anywhere in the UI.
       '<div class="set-sub"><span class="set-sub-k">LIVE HELPERS</span><span class="set-sub-d">background sub-agents running now</span></div>' +
       '<div class="key-list" id="auto-helpers"><p class="set-about">reading helpers…</p></div>';
-    const secNightShift =
+    /* ONE WORD: AUTONOMY (2026-09-29, Andrew: "should simply be autonomy"). What the Commander saw as two things —
+       the AUTONOMY dial and a separate NIGHT SHIFT section — is one thing: the dial, and what it did while they were
+       away. This block (status, decision trail, last report) now renders INSIDE the AUTONOMY section, under the dial
+       it reports on. "Night shift" stays only as the internal name of the server-side driver (routes, ids, files). */
+    const secAwayActivity =
+      '<h4 class="ms-h">WHILE YOU’RE AWAY <span class="dim">— what autonomy did, and why</span></h4>' +
       // NIGHT SHIFT — the honest live status of the server-owned night shift (NS-4). Every line maps to a field of
       // GET /api/nightshift/status + /api/autonomy/ledger; painted live from the routes (never invented). The
       // decision trail is the scrollable recent act/decline log. Loading/error states are honest, never fake-zero.
@@ -6072,14 +6078,10 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       '</div>' +
       '<p class="set-about ns-note" id="ns-why"></p>' +
       '<p class="set-about ns-note" id="ns-readiness"></p>' +
-      // FOCUS (NS-5b) — what the night will chase, and the STEER that lets the Commander redirect it. The readout
-      // maps to status.focus (server truth); the steer rides GET/POST/DELETE /api/nightshift/focus. A steer only
-      // re-ranks the night's ONE priority — it grants nothing and reaches nothing new (route-enforced).
-      '<h4 class="ms-h">FOCUS</h4>' +
-      '<div class="set-row ns-focus-row"><span id="ns-focus" class="dim">…</span></div>' +
-      '<div class="set-row ns-steer"><input id="ns-steer" class="key-input" type="text" autocomplete="off" placeholder="point it at a project folder, or type what to focus on"><button class="bb xs" id="ns-steer-set">SET FOCUS</button><button class="bb xs" id="ns-steer-clear" style="display:none">CLEAR</button></div>' +
-      '<div class="mc-hint">a steer outranks learned evidence (~7 days, or until cleared). It only redirects the night’s one priority — no new access.</div>' +
-      '<h4 class="ms-h">RECENT DECISIONS</h4>' +
+      // FOCUS lives ONCE, in DIRECTION above (same GET/POST/DELETE /api/nightshift/focus route, same status.focus
+      // truth) — the second SET FOCUS box this section used to carry was the same control twice. The ns-focus /
+      // ns-steer wiring below is null-guarded, so it simply finds nothing to paint.
+      '<div class="set-sub"><span class="set-sub-k">RECENT DECISIONS</span><span class="set-sub-d">each time it acted or held back</span></div>' +
       '<div class="key-list" id="ns-trail"><p class="set-about">reading the decision trail…</p></div>' +
       // LAST REPORT (NS visibility 2026-07-13) — the morning-report beat is one-shot (fired=true spends it even on
       // dismiss, and vanish() loses the digest). This re-composes the most recent night's digest ON DEMAND from the
@@ -6471,8 +6473,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
 
     const sections = [
       { id: 'providers', label: 'PROVIDERS', glyph: '⌁', desc: 'Connect an AI service and manage its saved credentials.', build: frag(secProviders) },
-      { id: 'autonomy', label: 'AUTONOMY', glyph: '◈', desc: 'Choose when agents start work, what they can do, and how often.', build: frag(secAutonomy) },
-      { id: 'nightshift', label: 'NIGHT SHIFT', glyph: '☾', desc: 'See unattended activity, its current focus, and recent decisions.', build: frag(secNightShift) },
+      // ONE WORD: AUTONOMY — the dial and what it did while you were away are one section (the old NIGHT SHIFT
+      // section folded in; openTerm maps its id here so an old deep link still lands).
+      { id: 'autonomy', label: 'AUTONOMY', glyph: '◈', desc: 'Choose when agents work on their own, where that work goes, and see what they did while you were away.', build: frag(secAutonomy + secAwayActivity) },
       { id: 'permissions', label: 'PERMISSIONS', glyph: '⊘', desc: 'Set access and approval rules for the station or individual agents.', build: frag(secPermissions) },
       { id: 'budget', label: 'SPENDING LIMITS', glyph: '$', desc: 'Set spending limits and review recorded usage.', build: frag(secBudget) },
       { id: 'models', label: 'MODEL DEFAULTS', glyph: '⇄', desc: 'Choose backup models and defaults for new agents.', build: frag(secModels) },
@@ -6688,7 +6691,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
             const why = (v.reasons && v.reasons.length) ? v.reasons.join(', ') : 'armed background work';
             lifeDesc.textContent = 'Right now, closing the window KEEPS the station running in the background (' + why + '). Quit fully from the tray icon. Otherwise closing would fully quit.';
           } else {
-            lifeDesc.textContent = 'Right now, nothing is armed — closing the window fully quits StarNet (no background process). Arm a routine, connect a channel, or turn on the night shift to keep it running while closed.';
+            lifeDesc.textContent = 'Right now, nothing is armed — closing the window fully quits StarNet (no background process). Arm a routine, connect a channel, or set autonomy to BUILD or FREE to keep it running while closed.';
           }
         }).catch(() => { lifeDesc.textContent = 'Closing the window keeps the station running only when armed work needs it — otherwise it fully quits.'; });
       };
@@ -6788,16 +6791,15 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       paintAuto();
     }
     // DIRECTION (autonomy-tuning) — focus/steer/off-limits/learned-interests, every value painted from a route's
-    // response (server truth, never an optimistic local flip). Shares the Night Shift panel's directive routes so
-    // both surfaces always tell the SAME story; interests ride GET /api/scout (evidence-cited or honestly empty).
+    // response (server truth, never an optimistic local flip). Rides the away driver's directive routes — the ONE
+    // focus/off-limits control (the old NIGHT SHIFT section's duplicate steer is gone); interests ride GET /api/scout (evidence-cited or honestly empty).
     {
       const dFocus = host.querySelector('#auto-focus'), dSteer = host.querySelector('#auto-steer'),
             dSteerSet = host.querySelector('#auto-steer-set'), dSteerClear = host.querySelector('#auto-steer-clear'),
             dAvoid = host.querySelector('#auto-avoid'), dAvoidRef = host.querySelector('#auto-avoid-ref'),
             dAvoidAdd = host.querySelector('#auto-avoid-add'), dInterests = host.querySelector('#auto-interests');
       const dMsg = (t) => { if (dFocus) dFocus.textContent = t; };
-      // "thread:<id>" and the literal "goal" select their kinds; anything else is a project path (the same grammar
-      // as the Night Shift steer box, so the two inputs never disagree).
+      // "thread:<id>" and the literal "goal" select their kinds; anything else is a project path.
       const parseRef = (raw) => {
         if (raw.toLowerCase() === 'goal') return { ref: 'goal', kind: 'goal' };
         if (/^thread:/i.test(raw)) return { ref: raw.slice(7).trim(), kind: 'thread' };
@@ -6993,9 +6995,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       const nsAwayRule = host.querySelector('#ns-awayrule'),
             nsState = host.querySelector('#ns-state'), nsWhy = host.querySelector('#ns-why'), nsLeash = host.querySelector('#ns-leash'),
             nsLast = host.querySelector('#ns-last'), nsNext = host.querySelector('#ns-next'), nsTrail = host.querySelector('#ns-trail'),
-            nsMode = host.querySelector('#ns-mode'), nsReadiness = host.querySelector('#ns-readiness'),
-            nsFocus = host.querySelector('#ns-focus'), nsSteer = host.querySelector('#ns-steer'),
-            nsSteerSet = host.querySelector('#ns-steer-set'), nsSteerClear = host.querySelector('#ns-steer-clear');
+            nsMode = host.querySelector('#ns-mode'), nsReadiness = host.querySelector('#ns-readiness');   // FOCUS + its steer live once, in DIRECTION above (ONE WORD: AUTONOMY)
       const tz = () => { try { return -new Date().getTimezoneOffset(); } catch (_) { return 0; } };
       const setDim = (el, txt) => { if (el) el.textContent = txt; };
       const paintPanel = (status) => {
@@ -7007,7 +7007,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         if (!m.reachable) {
           setDim(nsState, m.stateText);        // "station telemetry unreachable" — never a fake 0/3
           setDim(nsAwayRule, ''); setDim(nsWhy, ''); setDim(nsLeash, '—'); setDim(nsLast, '—'); setDim(nsNext, '—');
-          setDim(nsMode, '—'); setDim(nsReadiness, ''); setDim(nsFocus, '—');
+          setDim(nsMode, '—'); setDim(nsReadiness, '');
           return;
         }
         setDim(nsAwayRule, m.awayRuleText || '');
@@ -7021,60 +7021,14 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         setDim(nsLeash, m.leashText + ' · ' + m.presence);
         setDim(nsLast, m.lastBeatText);
         setDim(nsNext, m.nextEligibleText);
-        paintFocus(status);
       };
-      // FOCUS readout + steer visibility — every claim maps to status.focus (nightFocusView: {ref,label,why,source,
-      // steered} or null). Null renders the honest cold state, never an invented priority.
-      const paintFocus = (status) => {
-        if (!nsFocus) return;
-        const f = status && status.focus;
-        // f.steered is the LIVE steer bit (a durable steer is currently set); f.source is only the focus's
-        // provenance — after a CLEAR the focus record lingers with source:'steer' until the next re-resolve,
-        // so claiming "you steered this" (or offering CLEAR) off source alone overstates the live state.
-        if (f && (f.label || f.ref)) {
-          const why = Array.isArray(f.why) ? f.why.filter(Boolean).join('; ') : '';
-          nsFocus.textContent = String(f.label || f.ref) + (f.steered ? ' · you steered this' : '') + (why ? ' — ' + why : '');
-        } else {
-          nsFocus.textContent = 'none declared — the night improvises from evidence';
-        }
-        if (nsSteerClear) nsSteerClear.style.display = (f && f.steered) ? '' : 'none';
-      };
-      // STEER — POST/DELETE /api/nightshift/focus; the readout repaints from the ROUTE's response (server truth,
-      // never an optimistic local flip). "thread:<id>" and the literal "goal" select their kinds; else project.
-      const steerMsg = (t) => { if (nsFocus) nsFocus.textContent = t; };
-      if (nsSteerSet) nsSteerSet.addEventListener('click', () => {
-        const raw = nsSteer ? String(nsSteer.value).trim() : '';
-        if (!raw) { steerMsg('enter a blessed project path, thread:<id>, or goal'); sfx('bad'); return; }
-        let ref = raw, kind;
-        if (raw.toLowerCase() === 'goal') { kind = 'goal'; }
-        else if (/^thread:/i.test(raw)) { kind = 'thread'; ref = raw.slice(7).trim(); }
-        steerMsg('steering…');
-        fetch('/api/nightshift/focus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(kind ? { ref, kind } : { ref }) })
-          .then(r => r.json().then(j => ({ ok: r.ok, j })))
-          .then(({ ok, j }) => {
-            if (!ok || !j || j.ok === false) { steerMsg((j && j.error) || 'could not steer'); sfx('bad'); return; }
-            if (nsSteer) nsSteer.value = '';
-            sfx('click'); refreshPanel();   // repaint FOCUS from the status route's truth
-          })
-          .catch(() => { steerMsg('could not reach the sidecar'); sfx('bad'); });
-      });
-      if (nsSteerClear) nsSteerClear.addEventListener('click', () => {
-        steerMsg('clearing…');
-        fetch('/api/nightshift/focus', { method: 'DELETE' })
-          .then(r => r.json().then(j => ({ ok: r.ok, j })))
-          .then(({ ok, j }) => {
-            if (!ok || !j || j.ok === false) { steerMsg((j && j.error) || 'could not clear the steer'); sfx('bad'); return; }
-            sfx('click'); refreshPanel();
-          })
-          .catch(() => { steerMsg('could not reach the sidecar'); sfx('bad'); });
-      });
       const paintTrail = (entries) => {
         if (!nsTrail) return;
         // COLLAPSED trail (clarity fix 2026-07-15): the driver records one decision per ~minute, so raw rows were
         // twelve identical "declined · you were here" lines — pure noise. trailLines groups consecutive same-reason
         // rows into "4:26–4:37 PM · declined ×12 · …" (every row still derives from real ledger entries).
         const lines = NightReport.trailLines(Array.isArray(entries) ? entries : [], tz()).slice(0, 12);
-        if (!lines.length) { nsTrail.innerHTML = '<p class="set-about">no night-shift decisions yet — nothing has run unattended.</p>'; return; }
+        if (!lines.length) { nsTrail.innerHTML = '<p class="set-about">no autonomy decisions yet — nothing has run unattended.</p>'; return; }
         nsTrail.innerHTML = lines.map(t => '<div class="set-row"><span class="dim">' + esc(t) + '</span></div>').join('');
       };
       // paint honest "reading…" first, then replace with the live truth (or an honest unreachable/error state).
@@ -7107,7 +7061,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
           const drafts = (draftsRes && Array.isArray(draftsRes.drafts)) ? draftsRes.drafts : [];
           let rep; try { rep = NightReport.compose({ status, ledger, drafts, awaySince, nowMs: now, tzOffsetMin: tzMin() }); } catch (_) { rep = null; }
           if (!rep || !rep.hasReport) {
-            nsReport.innerHTML = '<p class="set-about">no report to show — the night shift recorded no acts or declines in the last 24h.</p>';
+            nsReport.innerHTML = '<p class="set-about">no report to show — autonomy recorded no acts or declines in the last 24h.</p>';
             return;
           }
           const lines = [];
@@ -8286,7 +8240,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const foot = mkEl('div', 'cd-brief-foot');
     const flows = mkEl('div', 'cd-flows',
       '<span class="cd-flow" title="composeSystemPrompt folds this block into the system prompt of every agent on the station — including a freshly-summoned one">▸ every agent’s briefing</span>' +
-      '<span class="cd-flow" title="mirrored to the sidecar so autonomous scheduled runs (cron, night shift) that compose their own persona still know who they serve">▸ autonomous &amp; scheduled runs</span>' +
+      '<span class="cd-flow" title="mirrored to the sidecar so autonomous scheduled runs (routines, autonomy) that compose their own persona still know who they serve">▸ autonomous &amp; scheduled runs</span>' +
       '<span class="cd-flow" title="the pitch engine and recruitment matcher read your goals, pain points and ambitions to propose work and crew">▸ pitches &amp; recruitment</span>' +
       '<span class="cd-flow" title="the quest board turns still-blank dimensions into get-to-know-you quests">▸ quest board</span>');
     foot.appendChild(flows);
@@ -9840,6 +9794,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const al = TERM_ALIAS[key];
     if (al) { section = (section && al.map[section]) || al.section; key = al.term; }
     const def = BUILDERS[key]; if (!def) return;
+    // the old NIGHT SHIFT settings section is part of AUTONOMY now (ONE WORD: AUTONOMY) — an old link still lands.
+    if (key === 'settings' && section === 'nightshift') section = 'autonomy';
     // optional section arg (Lane A error-door routing): land the console rail on a specific section — same
     // mechanism as the dossier's "jump to CONFIG" (consoleSection is what mountConsole reads at render).
     if (section) consoleSection[key] = section;
