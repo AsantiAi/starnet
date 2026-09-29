@@ -151,9 +151,9 @@ A.eq(sfx, sfxBefore, '…and no sting');
 // a badge earned LIVE still announces — over COMMS only (notification diet: no bell entry), with its real
 // trophy-case label, never a raw slug.
 bus.emit('workitem.delivered', { agentId: 'agent', workitemId: 'w1', finalQueueId: 'q1' });
-A.ok(oldHero.stats.milestones.indexOf('night_shift') !== -1, 'a real delivery still earns NIGHT SHIFT live');
+A.ok(oldHero.stats.milestones.indexOf('night_shift') !== -1, 'a real delivery still earns FIRST DELIVERY live');
 A.eq(notices.length, noticesBefore, 'notification diet: a live milestone never toasts (sting + broadcast carry it)');
-A.ok(broadcasts.some(b => b.text === 'TROPHY EARNED · NIGHT SHIFT'), 'the broadcast shouts the trophy-case label');
+A.ok(broadcasts.some(b => b.text === 'TROPHY EARNED · FIRST DELIVERY'), 'the broadcast shouts the trophy-case label');
 A.ok(!broadcasts.some(b => /night_shift/.test(b.text)), 'no raw slug reaches the Commander');
 // the label comes from the xp.js catalogue, so a badge added there can never announce as an id.
 A.ok(Xp.MILESTONES.every(m => broadcasts.every(b => !b.text.includes('_'))), 'every announced name is a real label');

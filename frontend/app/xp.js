@@ -225,7 +225,7 @@
     { id: 'hands_on',    label: 'HANDS ON',    hint: '25 tool calls',     when: (c) => (c.toolsOk || 0) >= 25 },      // S4: 25 tools that really ran and really succeeded
     { id: 'workhorse',   label: 'WORKHORSE',   hint: '25 tasks',          when: (c) => (c.tasksDone || 0) >= 25 },    // 25 tasks shipped
     { id: 'centurion',   label: 'CENTURION',   hint: '100 tasks',         when: (c) => (c.tasksDone || 0) >= 100 },   // 100 tasks shipped
-    { id: 'night_shift', label: 'NIGHT SHIFT', hint: '1 delivery',        when: (c) => (c.delivered || 0) >= 1 },     // delivered work via an external channel
+    { id: 'night_shift', label: 'FIRST DELIVERY', hint: '1 delivery',        when: (c) => (c.delivered || 0) >= 1 },     // delivered work via an external channel
     { id: 'trusted',     label: 'TRUSTED',     hint: 'satisfaction 85%',  when: (c, s) => s.samples >= MIN_SAMPLES && s.confidence >= 85 },   // satisfaction -> TRUSTED
     { id: 'dependable',  label: 'DEPENDABLE',  hint: '85% of 10+ runs',   when: (c, s) => (c.runsOwned || 0) >= 10 && reliability(s).band === 'dependable' },   // S4: the harness's own read, SUSTAINED
     { id: 'seasoned',    label: 'SEASONED',    hint: 'reach Lv 5',        when: (c, s) => s.level >= 5 },             // S4: the one rung on an otherwise empty Lv1 -> Lv10 ladder
