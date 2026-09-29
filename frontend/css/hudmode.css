@@ -1,13 +1,12 @@
-/* STARNET hudmode.css — HUD MODE (app/hudmode.js): the station folded down to a glanceable panel.
-   body.hud-mode hides every station region except the HUD deck and the real COMMS panel, which
-   then fill the (desktop: small, always-on-top) window. body.hud-folded also folds COMMS away so
-   only the deck remains.
+/* STARNET hudmode.css — HUD MODE (app/hudmode.js): StarNet folded down to a small always-on-top strip.
+   body.hud-mode hides every station region except the HUD strip and the real COMMS panel. The HUD
+   opens SMALL (body.hud-folded): the strip alone — the crew as portraits with their lamps, one line on
+   the agent a glance most needs, three icons. Opening it reveals COMMS under the strip.
 
-   MATERIAL: the station glass, copied, never invented. The deck is a glass panel exactly like #left /
-   #chat-panel (glass-demo.css): --gd-face fill, --gd-edge hairline, --gd-shadow. Its header is the same
-   ▮ gradient strip as CREW / COMMS; its rows are #crew .crew-row with the glass overrides (transparent at
-   rest, --gd-hover + edge + top light when hovered or on the line); its buttons are .gd-controls buttons;
-   the folded reply is the station glass card. COMMS itself is untouched: it is already designed.
+   MATERIAL: the station glass, copied, never invented. The strip is a glass panel exactly like #left /
+   #chat-panel (glass-demo.css): --gd-face fill, --gd-edge hairline, --gd-shadow. A tile is the CREW rail's
+   portrait well with the station .dot lamp; tiles and the line take the crew row's glass hover/selected
+   state; the icons are .gd-controls buttons. COMMS itself is untouched: it is already designed.
    State changes are edge/fill changes, never glow (matte). Every --gd-* read carries a fallback so the
    ?glass=0 diagnostic material still draws a sane panel. The selectors lead with `html body.hud-mode`
    so they outrank every responsive #screen-game.active breakpoint (a 400px HUD sits inside all of them). */
@@ -26,24 +25,25 @@
 #comms-hud:is(:hover, :focus-visible) { color: var(--ph-bright); background: var(--gd-hover, var(--ph-faint)); border-color: var(--ph); }
 #comms-hud:focus-visible { outline: 1px solid var(--ph); outline-offset: 1px; }
 
-/* ---- frame: deck on top, COMMS below; nothing else of the station ---- */
+/* ---- frame: the strip on top, COMMS below; nothing else of the station ---- */
 html body.hud-mode #screen-game.active {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   grid-template-areas: "hud" "chat";
-  padding: 6px; gap: 6px;
+  padding: 4px; gap: 4px;
   overflow: hidden;
 }
 /* The station's own regions leave; #terms (the station windows COMMS opens: ADD AGENTS, files,
    settings) stays, so every door the conversation opens still opens inside the HUD. */
 html body.hud-mode #screen-game.active > :is(#topbar, #left, #stage-wrap, #crew-resizer, #bottombar, #nav-coach) { display: none !important; }
 html body.hud-mode #logo { display: none !important; }
-/* the HUD deck is its own drag strip; the themed MIN/MAX/CLOSE bar would offer MAXIMIZE on a corner panel */
+/* the strip is its own drag handle; the themed MIN/MAX/CLOSE bar would offer MAXIMIZE on a corner panel */
 html body.hud-mode.sn-chrome #sn-titlebar { display: none !important; }
 html body.hud-mode.sn-chrome .screen { top: 0; }
 html body.hud-mode #chat-panel { grid-area: chat; flex: 1 1 auto; min-height: 0; }
 html body.hud-mode :is(#comms-resizer, #comms-hud) { display: none !important; }
 
+/* SMALL: the strip alone */
 html body.hud-mode.hud-folded #screen-game.active {
   grid-template-rows: auto;
   grid-template-areas: "hud";
@@ -51,10 +51,10 @@ html body.hud-mode.hud-folded #screen-game.active {
 }
 html body.hud-mode.hud-folded #chat-panel { display: none !important; }
 
-/* ---- the deck: a glass panel (the #left / #chat-panel material) ---- */
+/* ---- the strip: a glass panel (the #left / #chat-panel material) ---- */
 html body.hud-mode #hud-deck {
   grid-area: hud;
-  display: flex; flex-direction: column; min-width: 0;
+  display: block; min-width: 0;
   background: var(--gd-face, var(--panel));
   border: 1px solid var(--gd-edge, var(--ph-dim)); border-radius: 5px;
   box-shadow: var(--gd-shadow, none);
@@ -62,121 +62,94 @@ html body.hud-mode #hud-deck {
   color: var(--text);
   overflow: hidden;
 }
-/* something is waiting on the Commander: the panel's hairline turns gold (an edge, not a glow) */
+/* something is waiting on the Commander: the strip's hairline turns gold (an edge, not a glow) */
 html body.hud-mode #hud-deck.hud-asking { border-color: var(--gold, #e9c46a); }
+html body.hud-mode #hud-deck.hud-nolink { border-color: var(--bad, #ff4a3d); }
 
-/* header: the ▮ CREW / ▮ COMMS glass strip */
-#hud-deck .hud-bar {
-  display: flex; align-items: center; gap: 10px; min-width: 0;
-  margin: 0; padding: 4px 6px 4px 12px; min-height: 27px;
-  font: 15px/1.22 'VT323', 'Courier New', monospace; letter-spacing: 2px; font-weight: normal;
-  color: var(--ph-bright);
-  background: linear-gradient(180deg, rgba(var(--ph-rgb), .14), rgba(var(--ph-rgb), .025));
-  border: 0; border-bottom: 1px solid var(--gd-edge, var(--ph-dim)); border-radius: 5px 5px 0 0;
-  box-shadow: inset 0 1px 0 var(--gd-light, transparent);
+#hud-deck .hud-mini {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+  padding: 5px 6px;
   user-select: none; -webkit-user-select: none;
-  cursor: default;
 }
-#hud-deck .hud-bar::before, #hud-deck .hud-bar::after { content: none; display: none; }
-#hud-deck .hud-mark { flex: 0 0 auto; white-space: nowrap; }
-#hud-deck .hud-sum {
-  flex: 1 1 auto; min-width: 0;
-  font-size: 13px; letter-spacing: 1px; color: var(--ph);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  text-shadow: none;
-}
-#hud-deck .hud-sum.hud-tone-dim { color: var(--ph-dim); }
-#hud-deck .hud-sum.hud-tone-live { color: var(--ph-bright); }
-#hud-deck .hud-sum.hud-tone-ask { color: var(--gold, #e9c46a); }
-#hud-deck .hud-sum.hud-tone-bad { color: var(--bad, #ff4a3d); }
-html body.hud-mode #hud-deck.hud-asking .hud-bar { background: linear-gradient(180deg, rgba(233, 196, 106, .16), rgba(233, 196, 106, .03)); }
 
-/* header buttons: the .gd-controls button recipe */
-#hud-deck .hud-ctl { flex: 0 0 auto; display: inline-flex; gap: 5px; }
-#hud-deck .hud-btn {
-  font: 12px/1 'VT323', monospace; letter-spacing: .5px; padding: 3px 8px; cursor: pointer;
-  color: var(--ph); background: rgba(0, 0, 0, .22);
-  border: 1px solid var(--gd-edge, var(--ph-dim)); border-radius: 3px;
-  text-shadow: none; box-shadow: none;
-}
-#hud-deck .hud-btn[hidden] { display: none; }
-#hud-deck .hud-btn:is(:hover, :focus-visible) { color: var(--ph-bright); background: var(--gd-hover, var(--ph-faint)); border-color: var(--ph); }
-#hud-deck .hud-btn:focus-visible { outline: 1px solid var(--ph); outline-offset: 1px; }
-#hud-deck .hud-btn.on { color: var(--ph-bright); background: var(--gd-hover, var(--ph-faint)); border-color: var(--ph); }
-
-/* ---- the crew: #crew .crew-row, glass ---- */
-#hud-deck .hud-crew {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  padding: 2px 0 3px;
-  max-height: 176px; overflow-y: auto;
-  scrollbar-width: thin; scrollbar-color: var(--ph-dim) transparent;
-}
-#hud-deck .hud-crew:empty { display: none; }
-#hud-deck .hud-row {
-  position: relative; display: flex; align-items: center; gap: 9px; min-width: 0;
-  margin: 3px 4px; padding: 9px 8px;
-  font: inherit; font-size: 18px; text-align: left; color: var(--text);
+/* tiles: never squeezed — the line gives way instead */
+#hud-deck .hud-tiles { display: flex; gap: 3px; flex: 0 0 auto; }
+#hud-deck .hud-tile {
+  position: relative; flex: 0 0 auto; display: block;
+  padding: 3px; margin: 0;
+  font: inherit; color: var(--ph);
   background: transparent; border: 1px solid transparent; border-radius: 4px; box-shadow: none;
   cursor: pointer;
   transition: background var(--t-fast) var(--ease-soft), border-color var(--t-fast) var(--ease-soft), box-shadow var(--t-fast) var(--ease-soft);
 }
-#hud-deck .hud-row:is(:hover, :focus-visible, .on) {
+/* the crew row's glass hover / selected state; the agent on the line (HUD open) is the selected one */
+#hud-deck .hud-tile:is(:hover, :focus-visible),
+html body.hud-mode:not(.hud-folded) #hud-deck .hud-tile.on {
   background: var(--gd-hover, var(--ph-faint)); border-color: var(--gd-edge, var(--ph-dim));
   box-shadow: inset 0 1px 0 var(--gd-light, transparent), 0 2px 8px rgba(0, 0, 0, .2);
 }
-#hud-deck .hud-row:focus-visible { outline: 1px solid var(--ph); outline-offset: -2px; }
+#hud-deck .hud-tile:focus-visible { outline: 1px solid var(--ph); outline-offset: -2px; }
+#hud-deck .hud-more { min-width: 36px; height: 42px; font-size: 15px; letter-spacing: .5px; color: var(--ph-dim); }
+#hud-deck .hud-more:is(:hover, :focus-visible) { color: var(--ph-bright); }
 /* the portrait well: .crew-portrait, glass */
 #hud-deck .hud-portrait {
-  display: flex; align-items: center; justify-content: center; flex: 0 0 auto; overflow: hidden;
-  width: 35px; height: 43px;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+  width: 28px; height: 34px;
   background: rgba(0, 0, 0, .25); border: 1px solid var(--gd-edge, var(--ph-dim)); border-radius: 3px;
   box-shadow: inset 0 1px 6px rgba(0, 0, 0, .5);
 }
-#hud-deck .hud-portrait img { width: 27px; height: 33px; object-fit: contain; image-rendering: pixelated; }
+#hud-deck .hud-portrait img { width: 22px; height: 27px; object-fit: contain; image-rendering: pixelated; }
 /* the lamp: the station's own .dot, seated on the portrait's corner exactly as in the CREW rail */
-#hud-deck .hud-row > .dot { position: absolute; left: 38px; bottom: 9px; width: 6px; height: 6px; margin: 0; outline: 2px solid var(--panel); }
+#hud-deck .hud-tile > .dot { position: absolute; left: 28px; bottom: 5px; width: 6px; height: 6px; margin: 0; outline: 2px solid var(--panel); }
 #hud-deck .hud-lamp-idle > .dot { animation: none; opacity: .64; }
-#hud-deck .hud-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-#hud-deck .hud-name { font-size: 18px; letter-spacing: 1px; line-height: 1.2; color: var(--ph-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: none; }
-#hud-deck .hud-status {
-  display: flex; gap: 6px; align-items: baseline; min-width: 0; margin-top: 3px;
-  font-size: 14px; letter-spacing: .45px; line-height: 1.3; color: var(--text);
-}
-#hud-deck .hud-step { min-width: 0; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#hud-deck .hud-time { flex: 0 0 auto; margin-left: auto; color: var(--ph-dim); font-size: 13px; white-space: nowrap; }
-#hud-deck .hud-tone-dim { opacity: .75; }
-#hud-deck .hud-tone-live .hud-step { color: var(--ph-bright); }
-#hud-deck .hud-tone-ask .hud-step { color: var(--gold, #e9c46a); }
-#hud-deck .hud-tone-bad .hud-step { color: var(--bad, #ff4a3d); }
-/* the CREW rail's in-flight work bar: collapsed at rest, a thin shimmering rail while the agent works */
-#hud-deck .hud-prog { display: block; height: 0; margin-top: 0; overflow: hidden; transition: height var(--t-med) var(--ease-out), margin-top var(--t-med) var(--ease-out); }
-#hud-deck .hud-lamp-live .hud-prog { height: 3px; margin-top: 4px; }
-#hud-deck .hud-prog > span { display: block; height: 100%; width: 100%; background: var(--ph); }
-/* unread: a finish not yet looked at — a small solid mark on the row's corner, ranked by tone */
+/* unread: a finish not yet looked at — a small solid mark on the tile's corner, ranked by tone */
 #hud-deck .hud-pip {
-  position: absolute; top: 6px; right: 6px;
+  position: absolute; top: 1px; right: 1px;
   width: 6px; height: 6px; border-radius: 1px;
   background: var(--ph-bright); outline: 2px solid var(--panel);
 }
 #hud-deck .hud-unread-ask .hud-pip { background: var(--gold, #e9c46a); }
 #hud-deck .hud-unread-bad .hud-pip { background: var(--bad, #ff4a3d); }
-#hud-deck .hud-unread .hud-name { color: var(--ph-bright); }
 
-/* ---- folded: the newest reply of the conversation on the line, on the station glass card ---- */
-#hud-deck .hud-reply { display: none; }
-html body.hud-mode.hud-folded #hud-deck .hud-reply:not([hidden]) {
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3;
-  overflow: hidden;
-  margin: 0 8px 8px; padding: 8px 10px;
-  font-size: 16px; line-height: 1.3; color: var(--text);
-  background: var(--gd-face, var(--panel)); border: 1px solid var(--gd-edge, var(--ph-dim)); border-radius: 4px;
-  box-shadow: inset 0 1px 0 var(--gd-light, transparent);
+/* the line: the agent a glance most needs — name (+ how many are busy) over what it is doing or said */
+#hud-deck .hud-line {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px;
+  margin: 0; padding: 3px 7px;
+  font: inherit; text-align: left; color: var(--text);
+  background: transparent; border: 1px solid transparent; border-radius: 4px; box-shadow: none;
   cursor: pointer;
 }
-html body.hud-mode.hud-folded #hud-deck .hud-reply:hover { background: var(--gd-hover, var(--ph-faint)); }
-#hud-deck .hud-reply b { font-weight: normal; letter-spacing: 1px; margin-right: 8px; color: var(--ph-bright); }
+#hud-deck .hud-line[hidden] { display: none; }
+#hud-deck .hud-line:is(:hover, :focus-visible) {
+  background: var(--gd-hover, var(--ph-faint)); border-color: var(--gd-edge, var(--ph-dim));
+  box-shadow: inset 0 1px 0 var(--gd-light, transparent);
+}
+#hud-deck .hud-line:focus-visible { outline: 1px solid var(--ph); outline-offset: -2px; }
+#hud-deck .hud-line-top { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+#hud-deck .hud-line-top b { font-weight: normal; font-size: 16px; letter-spacing: 1px; line-height: 1.1; color: var(--ph-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#hud-deck .hud-line-top i { font-style: normal; font-size: 12px; letter-spacing: .5px; color: var(--ph-dim); white-space: nowrap; }
+#hud-deck .hud-time { margin-left: auto; flex: 0 0 auto; font-size: 13px; color: var(--ph-dim); white-space: nowrap; }
+#hud-deck .hud-line-text { font-size: 14px; letter-spacing: .3px; line-height: 1.15; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#hud-deck .hud-tone-dim { opacity: .75; }
+#hud-deck .hud-tone-live { color: var(--ph-bright); }
+#hud-deck .hud-tone-ask { color: var(--gold, #e9c46a); }
+#hud-deck .hud-tone-bad { color: var(--bad, #ff4a3d); opacity: 1; }
+
+/* icons: the .gd-controls button recipe, square */
+#hud-deck .hud-mini-ctl { flex: 0 0 auto; display: inline-flex; gap: 3px; }
+#hud-deck .hud-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0; cursor: pointer;
+  color: var(--ph); background: rgba(0, 0, 0, .22);
+  border: 1px solid var(--gd-edge, var(--ph-dim)); border-radius: 3px; box-shadow: none;
+}
+#hud-deck .hud-icon[hidden] { display: none; }
+#hud-deck .hud-icon svg { width: 13px; height: 13px; stroke-linecap: square; }
+#hud-deck .hud-icon:is(:hover, :focus-visible) { color: var(--ph-bright); background: var(--gd-hover, var(--ph-faint)); border-color: var(--ph); }
+#hud-deck .hud-icon:focus-visible { outline: 1px solid var(--ph); outline-offset: 1px; }
+#hud-deck .hud-icon.on { color: var(--ph-bright); background: var(--gd-hover, var(--ph-faint)); border-color: var(--ph); }
 
 @media (prefers-reduced-motion: reduce) {
-  #hud-deck :is(.hud-row, .hud-prog) { transition: none; }
-  #hud-deck .hud-row > .dot { animation: none; }
+  #hud-deck .hud-tile { transition: none; }
+  #hud-deck .hud-tile > .dot { animation: none; }
 }

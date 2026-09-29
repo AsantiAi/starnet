@@ -252,7 +252,8 @@
       watched run.start proves) · 'idle'. status/tone: what that run is doing, else its latest finish this
       page received (within the recent window), else IDLE. unread: the tone of a finish not yet looked at.
       A running agent missing from the roster still gets a row, under its id, never a made-up name. */
-  function crew(feed, agents, onLine, now) {
+  function crew(feed, agents, onLine, now, seen) {
+    const read = seen === undefined ? onLine : seen;   // whose finish is on screen, so not news
     const t = isFinite(now) ? now : Date.now();
     const runsOf = new Map();
     for (const r of Array.from(feed.runs.values()).sort((x, y) => (x.startedAt || t) - (y.startedAt || t))) {
@@ -264,7 +265,7 @@
     return list.map(a => {
       const runs = runsOf.get(a.id) || [];
       const asking = runs.find(r => feed.prompts.has(r.runId));
-      const unread = a.id === onLine ? null : (feed.unread.get(a.id) || null);
+      const unread = a.id === read ? null : (feed.unread.get(a.id) || null);
       const row = { id: a.id, name: a.name, color: a.color, skin: a.skin, online: a.id === onLine, unread, lamp: 'idle', status: 'IDLE', tone: 'dim', time: '' };
       if (runs.length) {
         const r = asking || runs[0];
@@ -287,6 +288,25 @@
       }
       return row;
     });
+  }
+
+  /** The compact strip's one line: the agent a glance most needs, from the crew rows.
+      Priority: needs your OK > working > an unread finish > the agent on the line > the first agent.
+      An idle pick shows what it last SAID (`replyOf(id)` = the newest reply in its own conversation,
+      '' when it has none), else its status word. `busy` counts agents with a live or asking lamp. */
+  function glance(rows, replyOf) {
+    const list = Array.isArray(rows) ? rows : [];
+    if (!list.length) return null;
+    const pick = list.find(r => r.lamp === 'ask') || list.find(r => r.lamp === 'live') ||
+      list.find(r => r.unread) || list.find(r => r.online) || list[0];
+    const out = { id: pick.id, name: pick.name, color: pick.color, lamp: pick.lamp, text: pick.status, tone: pick.tone, time: pick.time,
+      busy: list.filter(r => r.lamp !== 'idle').length };
+    if (pick.lamp === 'idle') {
+      let said = '';
+      try { said = replyOf ? String(replyOf(pick.id) || '') : ''; } catch (_) { said = ''; }
+      if (said) { out.text = said; out.tone = pick.unread === 'ok' ? 'live' : pick.tone; }
+    }
+    return out;
   }
 
   /** The newest reply in a COMMS history (the rows COMMS itself renders), flattened to one line for
@@ -380,6 +400,15 @@
   function gameScreen() { return doc && doc.getElementById('screen-game'); }
   function inGame() { const g = gameScreen(); return !!(g && g.classList.contains('active')); }
 
+  const ICON = {
+    grow: 'M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9',
+    shrink: 'M13.5 6.5h-4v-4M2.5 9.5h4v4M9.5 6.5l4-4M6.5 9.5l-4 4',
+    pin: 'M6 2.5h4M7 2.5v4l-2.5 2.5h7L9 6.5v-4M8 9v4.5',
+    station: 'M2 3.5h12v9H2zM2 6.5h12'
+  };
+  const icon = k => '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.4"><path d="' + ICON[k] + '"/></svg>';
+  const TILE_MAX = 5;   // more agents than this: the rest fold into a +N tile (which opens the HUD)
+
   function buildDeck() {
     if (S.deck) return S.deck;
     const g = gameScreen();
@@ -387,84 +416,73 @@
     const deck = doc.createElement('section');
     deck.id = 'hud-deck';
     deck.setAttribute('aria-label', 'StarNet HUD');
-    // The deck is a station glass panel: the same ▮ header strip as CREW / COMMS, then the crew as the
-    // CREW rail draws it (portrait · lamp · name · status · work bar). The header is the window's drag strip.
+    // The HUD is ONE glass strip: the crew as portraits with their lamps, one line on the agent a glance most
+    // needs, and three icons. It opens SMALL (the strip alone). Clicking an agent (or grow) opens that
+    // agent's conversation under the strip; shrink puts it away again. The strip is the window's drag handle.
     deck.innerHTML =
-      '<h3 class="hud-bar" data-tauri-drag-region>' +
-        '<span class="hud-mark" data-tauri-drag-region>▮ HUD</span>' +
-        '<span class="hud-sum" id="hud-sum" data-tauri-drag-region role="status" aria-live="polite"></span>' +
-        '<span class="hud-ctl">' +
-          '<button type="button" class="hud-btn" id="hud-pin" aria-pressed="true" title="Keep the HUD above other windows" hidden>PIN</button>' +
-          '<button type="button" class="hud-btn" id="hud-fold" aria-pressed="false" aria-controls="chat-panel" title="Fold the conversation away and keep only your crew">FOLD</button>' +
-          '<button type="button" class="hud-btn" id="hud-min" title="Minimize the HUD" hidden>MIN</button>' +
-          '<button type="button" class="hud-btn" id="hud-exit" title="Back to the full station">STATION</button>' +
+      '<div class="hud-mini" data-tauri-drag-region>' +
+        '<div class="hud-tiles" id="hud-tiles" role="group" aria-label="Your crew: open a conversation"></div>' +
+        '<button type="button" class="hud-line" id="hud-line" hidden></button>' +
+        '<span class="hud-mini-ctl">' +
+          '<button type="button" class="hud-icon" id="hud-fold" aria-controls="chat-panel"></button>' +
+          '<button type="button" class="hud-icon" id="hud-pin" aria-pressed="true" hidden>' + icon('pin') + '</button>' +
+          '<button type="button" class="hud-icon" id="hud-exit" aria-label="Back to the full station" title="Back to the full station">' + icon('station') + '</button>' +
         '</span>' +
-      '</h3>' +
-      '<div class="hud-crew" id="hud-crew" role="group" aria-label="Your crew: pick who is on the line"></div>' +
-      '<p class="hud-reply" id="hud-reply" hidden></p>';
+      '</div>';
     g.insertBefore(deck, g.firstChild);
     S.deck = deck;
     S.els = {
-      sum: deck.querySelector('#hud-sum'), crew: deck.querySelector('#hud-crew'), reply: deck.querySelector('#hud-reply'),
-      pin: deck.querySelector('#hud-pin'), fold: deck.querySelector('#hud-fold'),
-      min: deck.querySelector('#hud-min'), exit: deck.querySelector('#hud-exit')
+      tiles: deck.querySelector('#hud-tiles'), line: deck.querySelector('#hud-line'),
+      fold: deck.querySelector('#hud-fold'), pin: deck.querySelector('#hud-pin'), exit: deck.querySelector('#hud-exit')
     };
     S.els.exit.addEventListener('click', () => exit());
     S.els.fold.addEventListener('click', () => setFolded(!S.folded));
     S.els.pin.addEventListener('click', () => setPinned(!S.pinned));
-    S.els.min.addEventListener('click', () => {
-      try { const w = root.__TAURI__.window.getCurrentWindow(); Promise.resolve(w.minimize()).catch(() => {}); } catch (_) {}
-    });
-    // A crew row puts that agent ON THE LINE.
-    S.els.crew.addEventListener('click', e => {
-      const row = e.target && e.target.closest && e.target.closest('[data-agent]');
-      if (row) switchTo(row.getAttribute('data-agent'));
-    });
-    // The folded reply line opens the conversation it quotes.
-    S.els.reply.addEventListener('click', () => { if (S.folded) setFolded(false); });
+    // Any agent opens that agent's conversation; the +N tile just opens the HUD.
+    const pickAgent = e => {
+      const el = e.target && e.target.closest && e.target.closest('[data-agent],[data-more]');
+      if (!el) return;
+      if (el.hasAttribute('data-more')) { if (S.folded) setFolded(false); return; }
+      switchTo(el.getAttribute('data-agent'));
+    };
+    S.els.tiles.addEventListener('click', pickAgent);
+    S.els.line.addEventListener('click', pickAgent);
     return deck;
   }
 
   const UNREAD_WORDS = { ok: 'new reply', ask: 'asked you something', bad: 'hit a fault' };
+  const tileWords = c => c.name + ' · ' + c.status.toLowerCase() + (c.time ? ' ' + c.time : '') + (c.unread ? ' · ' + UNREAD_WORDS[c.unread] : '') + (c.online ? ' · on the line' : '');
 
-  function rowHTML(c) {
-    const words = c.name + ' · ' + c.status.toLowerCase() + (c.time ? ' ' + c.time : '') + (c.unread ? ' · ' + UNREAD_WORDS[c.unread] : '') + (c.online ? ' · on the line' : '');
-    return '<button type="button" class="hud-row hud-lamp-' + c.lamp + (c.online ? ' on' : '') + (c.unread ? ' hud-unread hud-unread-' + c.unread : '') + '"' +
-        ' data-agent="' + esc(c.id) + '" aria-pressed="' + c.online + '" aria-label="' + esc(words) + '"' + (c.online ? '' : ' title="Talk to ' + esc(c.name) + '"') + '>' +
+  // A tile: the crew rail's portrait well + the station .dot lamp + the unread mark, nothing else.
+  function tileHTML(c) {
+    if (c.more) return '<button type="button" class="hud-tile hud-more" data-more aria-label="' + c.more + ' more agents: open the HUD" title="' + c.more + ' more agents">+' + c.more + '</button>';
+    return '<button type="button" class="hud-tile hud-lamp-' + c.lamp + (c.online ? ' on' : '') + (c.unread ? ' hud-unread hud-unread-' + c.unread : '') + '"' +
+        ' data-agent="' + esc(c.id) + '" aria-pressed="' + c.online + '" aria-label="' + esc(tileWords(c)) + '" title="' + esc(c.name + ' · ' + c.status + (c.time ? ' ' + c.time : '')) + '">' +
       '<span class="hud-portrait" aria-hidden="true"><img alt="" draggable="false" hidden></span>' +
       '<span class="dot' + (c.lamp === 'ask' ? ' alert' : '') + '" aria-hidden="true"></span>' +
-      '<span class="hud-main">' +
-        '<span class="hud-name"' + (c.color ? ' style="color:' + esc(c.color) + '"' : '') + '>' + esc(c.name) + '</span>' +
-        '<span class="hud-status hud-tone-' + c.tone + '"><span class="hud-step">' + esc(c.status) + '</span><span class="hud-time">' + esc(c.time) + '</span></span>' +
-        '<span class="hud-prog bar-active" aria-hidden="true"><span></span></span>' +
-      '</span>' +
       (c.unread ? '<span class="hud-pip" aria-hidden="true"></span>' : '') +
     '</button>';
   }
 
-  function renderCrew() {
-    const line = onLineId();
-    clearUnread(S.feed, line);   // the conversation on screen is the one being read
-    const agents = roster();
-    const rows = crew(S.feed, agents, line, now());
-    // Keyed patch: a row is rewritten only when its own content moved, so the 1s clock tick never
-    // replaces the row under the pointer (its hover card would drop) or the one holding keyboard focus,
-    // and its portrait is painted once, not re-cropped every second.
-    const list = S.els.crew;
+  // Keyed patch: a tile is rewritten only when its own content moved, so the 1s clock tick never replaces
+  // the tile under the pointer (its hover card would drop) or the one holding keyboard focus, and its
+  // portrait is painted once, not re-cropped every second.
+  function patchTiles(list, rows, agents) {
+    const key = c => c.more ? '+more' : c.id;
     const have = new Map();
-    for (const el of Array.from(list.children)) have.set(el.getAttribute('data-agent'), el);
+    for (const el of Array.from(list.children)) have.set(el.__hudKey, el);
     let prev = null;
     for (const c of rows) {
-      const html = rowHTML(c);
-      let el = have.get(c.id);
-      if (el) have.delete(c.id);
-      if (!el || el.__hudHtml !== html) {
-        const tmp = doc.createElement('div'); tmp.innerHTML = html;
+      const h = tileHTML(c);
+      let el = have.get(key(c));
+      if (el) have.delete(key(c));
+      if (!el || el.__hudHtml !== h) {
+        const tmp = doc.createElement('div'); tmp.innerHTML = h;
         const fresh = tmp.firstChild;
         const hadFocus = el && doc.activeElement === el;
         if (el) el.replaceWith(fresh);
-        el = fresh; el.__hudHtml = html;
-        const a = agents.find(x => x && x.id === c.id);
+        el = fresh; el.__hudHtml = h; el.__hudKey = key(c);
+        const a = !c.more && agents.find(x => x && x.id === c.id);
         try { if (a && typeof AgentPortraits !== 'undefined') AgentPortraits.paint(el.querySelector('.hud-portrait img'), a); } catch (_) {}
         if (hadFocus) el.focus();
       }
@@ -475,28 +493,49 @@
     for (const el of have.values()) el.remove();
   }
 
-  // Folded, the deck quotes the newest reply of the conversation on the line, so a Commander mid-game
-  // reads the answer without opening anything. It is the COMMS history row, verbatim, flattened.
-  function renderReply() {
-    let text = '';
-    if (S.folded) { try { text = typeof Chat !== 'undefined' && Chat.getHistory ? lastReply(Chat.getHistory()) : ''; } catch (_) { text = ''; } }
-    const w = text ? who(onLineId()) : null;
-    const html = text ? '<b' + (w && w.color ? ' style="color:' + esc(w.color) + '"' : '') + '>' + esc((w && w.name) || 'AGENT') + '</b>' + esc(text) : '';
-    if (S.els.reply.innerHTML !== html) S.els.reply.innerHTML = html;
-    S.els.reply.hidden = !text;
-    if (text) S.els.reply.title = 'Open the conversation'; else S.els.reply.removeAttribute('title');
+  // What an agent last said: the newest reply in its own conversation (the one on screen for the agent on
+  // the line, else its most recent stream), flattened to one line. '' when it has said nothing yet.
+  function replyOf(id) {
+    try {
+      if (id === onLineId() && typeof Chat !== 'undefined' && Chat.getHistory) return lastReply(Chat.getHistory(), 140);
+      if (typeof Workstreams === 'undefined' || !Workstreams.list) return '';
+      for (const w of Workstreams.list()) {
+        if ((w.agentId || 'agent') !== id) continue;
+        const said = lastReply(w.history, 140);
+        if (said) return said;
+      }
+    } catch (_) {}
+    return '';
   }
 
   function render() {
     if (!S.els) return;
     const v = view(S.feed, who, now());
-    S.els.sum.textContent = v.summary.text;
-    S.els.sum.className = 'hud-sum hud-tone-' + v.summary.tone;
-    // Anything waiting on the Commander turns the deck's edge gold: the one state a glance from across
+    // Anything waiting on the Commander turns the strip's edge gold: the one state a glance from across
     // the room must catch. An edge change, never a glow (matte glass).
     S.deck.classList.toggle('hud-asking', v.summary.tone === 'ask');
-    renderCrew();
-    renderReply();
+    S.deck.classList.toggle('hud-nolink', v.summary.tone === 'bad' && v.summary.text === 'NO LINK');
+    const line = onLineId();
+    // The conversation on the line is being read only while it IS on screen (the HUD is open).
+    if (!S.folded) clearUnread(S.feed, line);
+    const agents = roster();
+    const rows = crew(S.feed, agents, line, now(), S.folded ? null : line);
+    const shown = rows.length > TILE_MAX ? rows.slice(0, TILE_MAX - 1).concat([{ more: rows.length - (TILE_MAX - 1) }]) : rows;
+    patchTiles(S.els.tiles, shown, agents);
+    const g = glance(rows, replyOf);
+    const el = S.els.line;
+    if (!g) { el.hidden = true; el.removeAttribute('data-agent'); }
+    else {
+      const top = v.summary.text === 'NO LINK' ? '<i class="hud-tone-bad">NO LINK</i>' : g.busy > 1 ? '<i>' + g.busy + ' WORKING</i>' : '';
+      const html =
+        '<span class="hud-line-top"><b' + (g.color ? ' style="color:' + esc(g.color) + '"' : '') + '>' + esc(g.name) + '</b>' + top +
+          '<span class="hud-time">' + esc(g.time) + '</span></span>' +
+        '<span class="hud-line-text hud-tone-' + g.tone + '">' + esc(g.text) + '</span>';
+      if (el.__hudHtml !== html) { el.innerHTML = html; el.__hudHtml = html; }
+      el.hidden = false;
+      el.setAttribute('data-agent', g.id);
+      el.setAttribute('aria-label', 'Open ' + g.name + ': ' + g.text);
+    }
     refitFolded();
   }
 
@@ -533,13 +572,16 @@
 
   function syncButtons() {
     if (!S.els) return;
+    const f = S.els.fold, grow = S.folded;
+    f.innerHTML = icon(grow ? 'grow' : 'shrink');
+    f.setAttribute('aria-label', grow ? 'Open the conversation' : 'Shrink the HUD to the strip');
+    f.setAttribute('title', grow ? 'Open the conversation' : 'Shrink the HUD to the strip');
+    f.setAttribute('aria-expanded', String(!grow));
     S.els.pin.hidden = !S.desktop;
-    S.els.min.hidden = !S.desktop;
-    S.els.pin.textContent = S.pinned ? 'PINNED' : 'PIN';
     S.els.pin.setAttribute('aria-pressed', String(S.pinned));
+    S.els.pin.setAttribute('aria-label', S.pinned ? 'Pinned above other windows: unpin' : 'Keep the HUD above other windows');
+    S.els.pin.setAttribute('title', S.pinned ? 'Pinned above other windows' : 'Keep the HUD above other windows');
     S.els.pin.classList.toggle('on', S.pinned);
-    S.els.fold.textContent = S.folded ? 'UNFOLD' : 'FOLD';
-    S.els.fold.setAttribute('aria-pressed', String(S.folded));
   }
 
   function announceLayout() { try { root.dispatchEvent(new root.Event('resize')); } catch (_) {} }
@@ -566,12 +608,12 @@
     S.busy = true;
     const prefs = readPrefs(root.localStorage);
     S.pinned = prefs.pinned;
-    S.folded = false;
+    // The HUD opens SMALL: the crew strip only. Clicking an agent (or the grow icon) opens the conversation.
+    S.folded = true;
     S.desktop = !!tauriCore(root);
     S.active = true;
     bindBus();
-    doc.body.classList.add('hud-mode');
-    doc.body.classList.remove('hud-folded');
+    doc.body.classList.add('hud-mode', 'hud-folded');
     // The station is not on screen: stop the world renderer so a game in the foreground gets the GPU.
     // (World.start() on exit resumes the same floor; nothing about the station's state lives in frames.)
     try { if (typeof World !== 'undefined' && World.stop) { World.stop(); S.worldStopped = true; } } catch (_) {}
@@ -585,10 +627,9 @@
       // a remembered rect the shell cannot take must never strand the HUD layout in a full-size window
       .then(v => v || (prefs.rect && S.desktop ? invoke('starnet_hud_set', { active: true, pinned: S.pinned }) : v))
       .then(v => { if (v) { S.pinned = !!v.pinned; syncButtons(); } return true; })
-      .finally(() => {
-        S.busy = false;
-        try { const input = doc.getElementById('chat-input'); if (input) input.focus(); } catch (_) {}
-      });
+      // the shell opened the HUD at its full rect: now hug the strip
+      .then(ok => { S.foldedH = deckHeight(); return invoke('starnet_hud_fold', { folded: true, height: S.foldedH }).then(() => ok); })
+      .finally(() => { S.busy = false; });
   }
 
   function exit() {
@@ -617,10 +658,11 @@
     S.folded = !!folded;
     doc.body.classList.toggle('hud-folded', S.folded);
     syncButtons();
-    render();   // the folded deck carries the reply line: lay it out before the window hugs it
+    render();   // lay the strip (or the open deck) out before the window hugs it
     announceLayout();
-    // Folded, the window hugs the deck; unfolded, it returns to the height it had.
+    // Small, the window hugs the strip; open, it returns to the height it had.
     S.foldedH = S.folded ? deckHeight() : 0;
+    if (!S.folded) { try { const input = doc.getElementById('chat-input'); if (input) input.focus(); } catch (_) {} }
     return invoke('starnet_hud_fold', { folded: S.folded, height: S.folded ? S.foldedH : null }).then(() => true);
   }
 
@@ -678,7 +720,7 @@
     enter, exit, toggle, setFolded, setPinned,
     active: () => S.active, folded: () => S.folded, pinned: () => S.pinned,
     // pure model — exported for tests
-    createFeed, markUnread, clearUnread, crew, lastReply, onRunStart, onToolCall, onToolResult, onToken, onRunEnd, onRunError, applySnapshot, snapshotFailed, view, toolLabel, fmtElapsed, fmtAgo, readPrefs, writePrefs,
+    createFeed, markUnread, clearUnread, crew, glance, lastReply, onRunStart, onToolCall, onToolResult, onToken, onRunEnd, onRunError, applySnapshot, snapshotFailed, view, toolLabel, fmtElapsed, fmtAgo, readPrefs, writePrefs,
     _feed: () => S.feed, _render: render, _poll: poll
   };
 });

@@ -137,7 +137,26 @@ const T0 = 1_800_000_000_000;
   A.eq(H.crew(f, agents, 'agent', T0 + 20 * 60 * 1000)[1].status, 'IDLE', 'a finish older than the recent window reads IDLE again');
 }
 
-// ---- folded reply line: the newest real reply, flattened ----
+// ---- the strip's line: the agent a glance most needs ----
+{
+  const row = (id, lamp, extra) => Object.assign({ id, name: id.toUpperCase(), color: '', lamp, status: lamp === 'idle' ? 'IDLE' : 'WORKING', tone: lamp === 'idle' ? 'dim' : 'live', time: '', unread: null, online: false }, extra);
+  const said = { a: 'All clear.', b: '', c: 'Draft is ready.' };
+  const replyOf = id => said[id] || '';
+  A.eq(H.glance([], replyOf), null, 'no crew, no line');
+  let g = H.glance([row('a', 'idle', { online: true }), row('b', 'live', { time: '4s' }), row('c', 'ask', { status: 'NEEDS YOUR OK', tone: 'ask' })], replyOf);
+  A.eq([g.id, g.text, g.tone, g.busy], ['c', 'NEEDS YOUR OK', 'ask', 2], 'a pending OK outranks everything; busy counts every lit lamp');
+  g = H.glance([row('a', 'idle', { online: true }), row('b', 'live', { time: '4s' })], replyOf);
+  A.eq([g.id, g.text, g.time], ['b', 'WORKING', '4s'], 'then whoever is working');
+  g = H.glance([row('a', 'idle', { online: true }), row('c', 'idle', { unread: 'ok', status: 'DONE' })], replyOf);
+  A.eq([g.id, g.text, g.tone], ['c', 'Draft is ready.', 'live'], 'then an unread finish, quoting what that agent said');
+  g = H.glance([row('b', 'idle'), row('a', 'idle', { online: true })], replyOf);
+  A.eq([g.id, g.text], ['a', 'All clear.'], 'then the agent on the line');
+  g = H.glance([row('b', 'idle')], replyOf);
+  A.eq([g.id, g.text], ['b', 'IDLE'], 'an agent that has said nothing reads its status, never an invented line');
+  A.eq(H.glance([row('a', 'idle')], () => { throw new Error('x'); }).text, 'IDLE', 'a failing history read degrades to the status');
+}
+
+// ---- reply flattening: the newest real reply, one line ----
 A.eq(H.lastReply([{ role: 'user', content: 'hi' }, { role: 'assistant', content: '## Done\n\nThree **files** changed. See [the log](http://x).' }, { role: 'assistant', content: 'boom', error: true }]),
   'Done Three files changed. See the log.', 'skips error markers, strips markdown to one line');
 A.eq(H.lastReply([{ role: 'assistant', content: 'ok ```js\nlet a=1\n``` then' }]), 'ok [code] then', 'code blocks fold to a marker');
@@ -188,9 +207,13 @@ A.eq([H.fmtAgo(10_000), H.fmtAgo(5 * 60_000), H.fmtAgo(2 * 3_600_000)], ['just n
   const deckRule = /html body\.hud-mode #hud-deck \{([^}]*)\}/.exec(css);
   A.ok(!!deckRule && /background: var\(--gd-face/.test(deckRule[1]) && /border: 1px solid var\(--gd-edge/.test(deckRule[1]),
     'the deck is the station glass panel (--gd-face fill, --gd-edge hairline)');
-  const barRule = /#hud-deck \.hud-bar \{([^}]*)\}/.exec(css);
-  A.ok(!!barRule && /linear-gradient\(180deg, rgba\(var\(--ph-rgb\), \.14\), rgba\(var\(--ph-rgb\), \.025\)\)/.test(barRule[1]) && !/background: var\(--ph\)/.test(barRule[1]),
-    'the header is the CREW/COMMS glass strip, never the retired solid phosphor bar');
+  A.ok(!/background: var\(--ph\)\s*;/.test(css) && !/0 0 0 2px var\(--ph-dim\)/.test(css),
+    'no retired CRT chrome: no solid phosphor bar, no phosphor ring');
+  // The HUD opens SMALL: the strip alone, and a click on an agent opens the conversation under it.
+  A.ok(/S\.folded = true;/.test(js) && /doc\.body\.classList\.add\('hud-mode', 'hud-folded'\)/.test(js), 'the HUD opens as the small strip');
+  A.ok(/html body\.hud-mode\.hud-folded #chat-panel \{ display: none !important; \}/.test(css), 'the small strip carries no conversation');
+  A.ok(/if \(S\.folded\) setFolded\(false\);/.test(js), 'picking an agent opens its conversation');
+  A.ok(/\.hud-tiles \{[^}]*flex: 0 0 auto/.test(css), 'portraits are never squeezed by a long line');
 }
 
 // ---- desktop wiring ----
