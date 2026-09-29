@@ -355,6 +355,13 @@ const StationCommands = (() => {
   }
 
   const VERBS = {
+    /* A crew-written plugin DRAFT's window, previewed (plugin.preview tool): sandboxed, a throwaway store, no backend.
+       The sidecar names the draft, its digest and its screens; PluginHost opens (or reloads) the DRAFT window. */
+    'plugin.preview': (a) => {
+      if (typeof PluginHost === 'undefined' || !PluginHost.preview) throw new Error('plugin windows are not loaded on this page');
+      return PluginHost.preview(a || {});
+    },
+
     /* The floor, read-only, for the lead: routing state, every assembly line as the Workflow panel reads it, rooms,
        and workstation holders. Refuses honestly when the station, routing, or the line reader is not loaded. */
     'station.layout': async (a) => {

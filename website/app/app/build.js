@@ -3036,6 +3036,43 @@ const Build = (() => {
     }).catch(() => { rowsEl.innerHTML = '<div class="refit-conn-note">sidecar offline — start it to bind a connector.</div>'; });
   }
 
+  /* PLUGIN TERMINAL binder — the connector portal's card, for plugins: which approved plugin this terminal IS. The list
+     is the sidecar's own (/api/plugins): only a plugin that is ON can be bound, and each row says what it brings. */
+  function openPluginBinder(propId, ev) {
+    if (!root) return;
+    cardCloseAll();
+    const p = station.propById(propId); if (!p || p.t !== 'plugin_terminal') return;
+    const g = document.createElement('div');
+    g.className = 'refit-guide refit-connector-editor';
+    const closeP = () => { if (g.parentNode) g.parentNode.removeChild(g); };
+    cardRegister(g, closeP);
+    g.innerHTML = '<div class="refit-guide-card"><h3>▮ PLUGIN TERMINAL — choose its plugin</h3>'
+      + '<ul><li>This terminal gives its room’s agent the chosen plugin’s <b>tools</b> (each call asks you first).</li>'
+      + '<li>Clicking it in the station opens that plugin’s window.</li></ul>'
+      + '<div class="refit-conn-rows" id="pl-rows">loading…</div>'
+      + '<div class="refit-actions"><button type="button" class="btn-sm" id="pl-unbind">✕ UNBIND</button><button type="button" class="btn-sm" id="pl-cancel">CANCEL</button></div></div>';
+    root.appendChild(g);
+    requestAnimationFrame(() => g.classList.add('refit-swap'));
+    const rowsEl = g.querySelector('#pl-rows');
+    const bind = (id, label) => { const res = station.bindPlugin(propId, id); if (res && res.ok) { sfx('click'); flashTip(ev, 'bound → ' + (label || id), true); closeP(); } else sfx('bad'); };
+    g.querySelector('#pl-unbind').onclick = () => { station.bindPlugin(propId, ''); sfx('click'); flashTip(ev, 'terminal unbound', true); closeP(); };
+    g.querySelector('#pl-cancel').onclick = closeP;
+    g.addEventListener('click', e => { if (e.target === g) closeP(); });
+    if (typeof fetch === 'undefined') { rowsEl.innerHTML = '<div class="refit-conn-note">no sidecar — can’t list plugins here.</div>'; return; }
+    fetch('/api/plugins').then(r => { if (!r.ok) throw new Error('http ' + r.status); return r.json(); }).then(j => {
+      const list = ((j && j.plugins) || []).filter(x => x.active);
+      if (!list.length) { rowsEl.innerHTML = '<div class="refit-conn-note">No plugins are on yet — create or approve one in <b>⇄ ABILITIES → EXTENSIONS</b>, then bind it here.</div>'; return; }
+      rowsEl.innerHTML = list.map(x => {
+        const sel = (x.id === p.pluginId);
+        const tools = Array.isArray(x.tools) ? x.tools.length : 0, wins = Array.isArray(x.screens) ? x.screens.length : 0;
+        const meta = [tools ? tools + ' tool' + (tools === 1 ? '' : 's') : '', wins ? wins + ' window' + (wins === 1 ? '' : 's') : ''].filter(Boolean).join(' · ') || 'hooks only';
+        return '<button type="button" class="bb sm conn-row' + (sel ? ' active' : '') + '" data-id="' + esc(x.id) + '" data-label="' + esc(x.name || x.id) + '">'
+          + '<span class="conn-dot ok">●</span> ' + esc(x.name || x.id) + ' <span class="conn-meta">' + esc(meta) + '</span></button>';
+      }).join('');
+      rowsEl.querySelectorAll('.conn-row').forEach(b => b.onclick = () => bind(b.dataset.id, b.dataset.label));
+    }).catch(() => { rowsEl.innerHTML = '<div class="refit-conn-note">sidecar offline — start it to bind a plugin.</div>'; });
+  }
+
   /* ---------- test run (Polish B): send work down your belts with NO bot connected, and watch it sort to the
      bays right here in REFIT — the build-time payoff + the first thing a tutorial points at.
      THE NARRATED RIDE (2026-07-05): ▸ PREVIEW now teaches the whole two-trip model as it happens — numbered
@@ -4250,6 +4287,7 @@ const Build = (() => {
     if (t === 'filter') return typeof WorkflowPanel !== 'undefined' ? openFlowCard(p.id) : openJunctionEditor(p.id, ev);
     if (t === 'airlock') return openDoorPicker(p.id, ev);
     if (t === 'connector_portal') return openConnectorEditor(p.id, ev);
+    if (t === 'plugin_terminal') return openPluginBinder(p.id, ev);
     if (t === 'intake' || t === 'outbox' || t === 'merger' || t === 'splitter' || t === 'joiner' || t === 'loop') return openFlowCard(p.id);
     // no config surface: answer the click honestly instead of doing nothing
     const sp = propSpec(t);
@@ -4257,7 +4295,7 @@ const Build = (() => {
     flashTip(ev, ((sp.label || t) + '').toUpperCase() + ' — MOVE (4) relocates · DELETE (5) removes', true);
   }
   const openPropEditor = (id, t, ev) => { const p = station && station.propById(id); if (p) configureProp(p, ev); };
-  const PROP_EDITABLE = { bay: 1, filter: 1, merger: 1, splitter: 1, joiner: 1, loop: 1, airlock: 1, connector_portal: 1, intake: 1, outbox: 1 };   // merger/splitter = flow card only (no config)
+  const PROP_EDITABLE = { bay: 1, filter: 1, merger: 1, splitter: 1, joiner: 1, loop: 1, airlock: 1, connector_portal: 1, plugin_terminal: 1, intake: 1, outbox: 1 };   // merger/splitter = flow card only (no config)
   const isEditableProp = t => !!PROP_EDITABLE[t] || !!WORKSTATION_TYPES[t];   // a workstation binds an agent + opens its picker on place/click
   function commitPropStamp(d, ev) {
     // CLICK-ON-MACHINE WINS: a click (no drag) on ANY existing prop inspects it instead of attempting
@@ -6335,6 +6373,10 @@ const Build = (() => {
         assign = ri ? '<div class="pc-assign">NEEDS A ' + esc(placed.role) + ' — ' + esc(ri.desc) + ' — click to crew</div>'
           : '<div class="pc-assign">NO AGENT — click to assign</div>';
       }
+    } else if (placed && placed.t === 'plugin_terminal') {
+      assign = placed.pluginId
+        ? '<div class="pc-assign ok">▸ PLUGIN ' + esc(placed.pluginId) + '</div>'
+        : '<div class="pc-assign">UNBOUND — click to choose a plugin</div>';
     } else if (placed && placed.t === 'connector_portal') {
       assign = placed.connectorId
         ? '<div class="pc-assign ok">▸ BOUND ' + esc(placed.connectorId) + '</div>'

@@ -458,6 +458,18 @@
       const hits = Array.isArray(f.hits) && f.hits.length ? ' — ' + f.hits.map(h => esc(String(h))).join(', ') : '';
       return '<div class="mc-hint">scanner: <b>' + esc(String(f.level)) + '</b>' + hits + '</div>';
     }
+    // A plugin's TOOLS (what its process actually registered) and its terminal in the station — the tools reach an
+    // agent only through that terminal (object = capability), so the row says where it stands or offers to place it.
+    function extTools(p) {
+      const tools = Array.isArray(p.tools) ? p.tools : [];
+      if (!p.active || !tools.length) return '';
+      const host = typeof PluginHost !== 'undefined' ? PluginHost : null;
+      const term = host && host.terminalOf ? host.terminalOf(p.id) : null;
+      return '<div class="mc-hint">Tools: ' + tools.map(t => '<code>' + esc(t) + '</code>').join(' ') + '<br>' +
+        (term ? 'Its terminal stands in the station: agents in that room can use these (each call asks you first).'
+          : 'No terminal in the station yet, so no agent can use these. <button class="bb xs" data-ext="plugin-place" data-id="' + esc(p.id) + '">PLACE TERMINAL</button>') +
+        '</div>';
+    }
     // A plugin's windows (plugin.json `screens`), openable only while it is approved and live.
     function extScreens(p) {
       const list = Array.isArray(p.screens) ? p.screens : [];
@@ -537,6 +549,8 @@
           '<div class="mc-acts">' + (p.active ? extScreens(p) : '') + '<button class="bb xs" data-ext="plugin-' + (p.active ? 'revoke' : 'allow') + '" data-id="' + esc(p.id) + '" data-digest="' + esc(p.digest || '') + '">' +
           (p.active ? 'TURN OFF' : 'APPROVE &amp; ENABLE') + '</button></div>' +
           (!p.active ? extScreens(p) : '') +
+          extTools(p) +
+          (p.process && p.process.state === 'crashed' ? '<div class="mc-hint" style="color:var(--bad)">Its code crashed: ' + esc(p.process.error || 'unknown') + '. It restarts on its next use.</div>' : '') +
           '<details class="ext-details"><summary>Details &amp; code</summary>' +
           '<p class="mc-hint">Folder: <code>' + esc(p.id) + '</code> · Version ' + esc(p.version || '0') +
           '<br>Open its folder to edit the code. Starters use <code>index.js</code> and <code>ui/index.html</code>.</p>' +
@@ -585,6 +599,15 @@
       else if (kind === 'hook-delete') ok = await extPost('/api/hooks/delete', { event: btn.dataset.event, command: btn.dataset.command }, btn);
       else if (kind === 'plugin-allow') ok = await extPost('/api/plugins/allow', { id: btn.dataset.id, digest: btn.dataset.digest }, btn);
       else if (kind === 'plugin-revoke') ok = await extPost('/api/plugins/revoke', { id: btn.dataset.id }, btn);
+      else if (kind === 'plugin-place') {
+        const host = typeof PluginHost !== 'undefined' ? PluginHost : null;
+        const r = host ? host.placeTerminal(btn.dataset.id) : { ok: false, msg: 'plugin windows are not available in this build' };
+        if (!r || !r.ok) { extSay('Could not place its terminal: ' + ((r && (r.msg || r.error)) || 'unknown') + '. Place a PLUGIN TERMINAL in REFIT instead.', true); return; }
+        try { sfx('ok'); } catch (_) {}
+        await renderExtensions();
+        extSay('Its terminal now stands in the lead’s room.');
+        return;
+      }
       else if (kind === 'plugin-open') {
         const host = typeof PluginHost !== 'undefined' ? PluginHost : null;
         if (!host) { extSay('plugin windows are not available in this build', true); return; }
@@ -626,7 +649,21 @@
         try { sfx('ok'); } catch (_) {}
         // plugin windows follow approval immediately: a turned-off plugin's open window says so, a new one can open
         if (/^plugin-/.test(kind) && typeof PluginHost !== 'undefined') {
-          try { await PluginHost.refresh(); if (openAfter && !PluginHost.open(openAfter)) done = 'Plugin created. Find its code under Details & code.'; } catch (_) {}
+          try {
+            await PluginHost.refresh();
+            if (openAfter && !PluginHost.open(openAfter)) done = 'Plugin created. Find its code under Details & code.';
+            // INSTALL PLACES THE TERMINAL: a plugin that came up with tools gets its body in the lead's room now,
+            // so "approve" is the only step between writing a tool and the crew being able to use it.
+            const pid = openAfter || (kind === 'plugin-allow' ? btn.dataset.id : '');
+            const p = pid ? PluginHost.list().find(x => x.id === pid) : null;
+            if (p && p.active && Array.isArray(p.tools) && p.tools.length) {
+              const r = PluginHost.placeTerminal(pid);
+              const n = p.tools.length + ' tool' + (p.tools.length === 1 ? '' : 's');
+              const note = r && r.ok ? (r.existing ? '' : ' Its terminal now stands in the lead’s room, so the lead can use its ' + n + '.')
+                : ' Its terminal could not be placed (' + ((r && (r.msg || r.error)) || 'unknown') + ') — place a PLUGIN TERMINAL in REFIT.';
+              done = (done || 'Plugin on.') + note;
+            }
+          } catch (_) {}
         }
         const refreshed = await renderExtensions(); if (done && refreshed) extSay(done);
       }

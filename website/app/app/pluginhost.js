@@ -15,7 +15,7 @@
    frame says hello and whenever <body>'s theme class or inline theme vars change — a custom hue repaints every
    plugin window in the same frame as the station.
 
-   Exposes window.PluginHost = { refresh, open, list, _test } */
+   Exposes window.PluginHost = { refresh, open, placeTerminal, terminalOf, list, _test } */
 (function (root) {
   'use strict';
   if (typeof document === 'undefined') return;
@@ -34,8 +34,12 @@
   let plugins = [];
   let lastError = '';
 
+  // DRAFT previews (phase 4): a crew-written plugin shown before it is installed. Same window, same sandbox, a DRAFT
+  // plate, a THROWAWAY in-memory store (a draft never writes to the station) and no backend (its code never runs).
+  const DRAFT_PREFIX = 'plugindraft.';
+  const draftStores = new Map();   // draft id -> Map(key -> JSON text)
   const plainTitle = (s) => String(s == null ? '' : s).replace(/[&<>"'`\u0000-\u001f\u007f]/g, '').trim().slice(0, 40) || 'PLUGIN';
-  const keyOf = (pluginId, screenId) => KEY_PREFIX + pluginId + '.' + screenId;
+  const keyOf = (pluginId, screenId, draft) => (draft ? DRAFT_PREFIX : KEY_PREFIX) + pluginId + '.' + screenId;
   const UI = () => (typeof StationUI !== 'undefined' ? StationUI : null);
   const zoom = () => { try { return (typeof U !== 'undefined' && U.uiZoom) ? U.uiZoom() : 1; } catch (_) { return 1; } };
 
@@ -81,6 +85,17 @@
   }
 
   async function storeOp(entry, op, a) {
+    if (entry.draft) {
+      let m = draftStores.get(entry.plugin.id);
+      if (!m) { m = new Map(); draftStores.set(entry.plugin.id, m); }
+      const key = String((a && a.key) || '');
+      if (op === 'keys') return Array.from(m.keys());
+      if (!/^[A-Za-z0-9_.:-]{1,128}$/.test(key)) throw new Error('a store key is 1-128 letters, numbers, _ . : or -');
+      if (op === 'get') return m.has(key) ? JSON.parse(m.get(key)) : null;
+      if (op === 'set') { m.set(key, JSON.stringify(a.value === undefined ? null : a.value)); return null; }
+      if (op === 'delete') { m.delete(key); return null; }
+      throw new Error('unknown store operation');
+    }
     const r = await fetch('/api/plugins/store', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: entry.plugin.id, op, key: a && a.key, value: a && a.value })
@@ -102,6 +117,17 @@
     'store.set': (entry, a) => storeOp(entry, 'set', a),
     'store.delete': (entry, a) => storeOp(entry, 'delete', a),
     'store.keys': (entry) => storeOp(entry, 'keys', {}),
+    // the plugin's OWN backend (api.handle in its main), run in its own process by the sidecar
+    'backend.call': async (entry, a) => {
+      if (entry.draft) throw new Error('a draft preview has no backend — its code runs only after it is installed and approved');
+      const r = await fetch('/api/plugins/call', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: entry.plugin.id, fn: String((a && a.fn) || ''), args: a && a.args })
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error((j && j.error) || ('the station refused (' + r.status + ')'));
+      return j.value;
+    },
     'ui.toast': (entry, a) => { toastFor(entry, a && a.text, a && a.kind); return null; },
     'ui.height': (entry, a) => { fitHeight(entry, a && a.px); return null; },
     'ui.title': (entry, a) => {
@@ -113,7 +139,7 @@
     },
     'ui.open': (entry, a) => {
       const sid = String((a && a.screen) || '');
-      const key = keyOf(entry.plugin.id, sid);
+      const key = keyOf(entry.plugin.id, sid, entry.draft);
       if (!screens.has(key)) throw new Error('this plugin has no screen named "' + sid + '"');
       const ui = UI(); if (ui && ui.openTerm) ui.openTerm(key);
       return null;
@@ -155,13 +181,16 @@
     body.innerHTML = '';
     body.classList.add('plugin-body');
     const w = body.closest && body.closest('.term');
+    if (w && def && def.draft) w.classList.add('plugin-draft-win');   // one class token per add (the window manager adds className whole)
     if (w && !w.querySelector('.plugin-plate')) {
       const title = w.querySelector('.term-title');
       if (title) {
         const plate = document.createElement('span');
-        plate.className = 'plugin-plate';
-        plate.textContent = 'PLUGIN';
-        plate.setAttribute('data-tip', 'Drawn by a plugin you approved, not by StarNet');
+        const draft = !!(def && def.draft);
+        plate.className = 'plugin-plate' + (draft ? ' draft' : '');
+        plate.textContent = draft ? 'DRAFT' : 'PLUGIN';
+        plate.setAttribute('data-tip', draft ? 'A plugin draft your crew wrote — not installed; its code does not run and nothing it saves is kept'
+          : 'Drawn by a plugin you approved, not by StarNet');
         title.insertAdjacentElement('afterend', plate);
       }
     }
@@ -178,7 +207,9 @@
       body.appendChild(note);
       return;
     }
-    const url = (typeof ApiTicket !== 'undefined' && ApiTicket.pluginUrl) ? ApiTicket.pluginUrl(def.plugin.id, def.plugin.digest, def.screen.entry) : '';
+    const url = (typeof ApiTicket === 'undefined') ? ''
+      : (def.draft ? (ApiTicket.draftUrl ? ApiTicket.draftUrl(def.plugin.id, def.plugin.digest, def.screen.entry) : '')
+        : (ApiTicket.pluginUrl ? ApiTicket.pluginUrl(def.plugin.id, def.plugin.digest, def.screen.entry) : ''));
     if (!url) { body.innerHTML = '<div class="plugin-gone">The station could not open this window (no session).</div>'; return; }
     const iframe = document.createElement('iframe');
     iframe.className = 'plugin-frame';
@@ -189,7 +220,7 @@
     iframe.dataset.digest = def.plugin.digest;
     iframe.dataset.plugin = def.plugin.id;
     iframe.style.height = '240px';
-    const entry = { key, iframe, plugin: def.plugin, screen: def.screen };
+    const entry = { key, iframe, plugin: def.plugin, screen: def.screen, draft: !!def.draft };
     frames.add(entry);
     iframe.src = url;
     body.appendChild(iframe);
@@ -227,12 +258,38 @@
     }
     // A plugin turned off or edited: its registry entry goes; any open window re-renders into the honest notice
     // (off) or the newly approved code (edited). Never leave old code looking live.
-    for (const key of Array.from(screens.keys())) if (!live.has(key)) screens.delete(key);
+    for (const key of Array.from(screens.keys())) if (!live.has(key) && key.indexOf(DRAFT_PREFIX) !== 0) screens.delete(key);
     for (const f of Array.from(frames)) {
       const def = screens.get(f.key);
       if (!def || def.plugin.digest !== f.iframe.dataset.digest) { if (ui && ui.rerender) ui.rerender(f.key); }
     }
     return true;
+  }
+
+  /* preview({ id, digest, screen, name, screens }) — the station bridge verb 'plugin.preview' (the crew's
+     plugin.preview tool). Registers every screen of the draft at THIS digest and opens (or reloads) the one asked
+     for; a later preview of an edited draft re-renders the open window onto the new code. */
+  function preview(a) {
+    const id = String((a && a.id) || '');
+    const digest = String((a && a.digest) || '');
+    const list = Array.isArray(a && a.screens) ? a.screens : [];
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(id) || !/^[0-9a-f]{64}$/.test(digest) || !list.length) throw new Error('that draft has no window to preview');
+    const ui = UI();
+    if (!ui || !ui.registerWindow || !ui.openTerm) throw new Error('the station windows are not ready');
+    const plugin = { id, name: String((a && a.name) || id).slice(0, 60), version: 'draft', digest };
+    for (const s of list) {
+      if (!s || !s.id || !s.entry) continue;
+      const key = keyOf(id, s.id, true);
+      screens.set(key, { plugin, screen: { id: String(s.id), title: String(s.title || s.id), entry: String(s.entry), size: s.size === 'wide' ? 'wide' : 'panel' }, draft: true });
+      keyPlugin.set(key, id);
+      ui.registerWindow(key, plainTitle(s.title || s.id), (body) => build(key, body), { className: 'plugin-win', wide: s.size === 'wide' });
+    }
+    const want = list.find((s) => s && s.id === (a && a.screen)) || list[0];
+    const key = keyOf(id, want.id, true);
+    let already = false;
+    for (const f of frames) if (f.key === key) already = true;
+    if (already && ui.rerender) ui.rerender(key); else ui.openTerm(key);
+    return { title: plainTitle(want.title || want.id) };
   }
 
   function open(pluginId, screenId) {
@@ -242,6 +299,24 @@
     if (!screens.has(key)) return false;
     const ui = UI(); if (ui && ui.openTerm) ui.openTerm(key);
     return true;
+  }
+
+  /* A plugin with TOOLS needs a body in the station (object = capability): its PLUGIN TERMINAL. Installing places one
+     in the lead's room (Andrew 2026-09-29) — a real prop through the world model's ordinary placement rules, saved
+     like any REFIT edit, idempotent (an existing terminal for the plugin is reused, never duplicated). */
+  function station() { try { return (typeof App !== 'undefined' && App.station) ? App.station() : null; } catch (_) { return null; } }
+  function terminalOf(pluginId) {
+    const st = station();
+    const doc = st && st.serialize ? st.serialize() : null;
+    const p = doc && Array.isArray(doc.props) ? doc.props.find((x) => x && x.t === 'plugin_terminal' && x.pluginId === pluginId) : null;
+    return p ? { id: p.id, x: p.x, y: p.y } : null;
+  }
+  function placeTerminal(pluginId) {
+    const st = station();
+    if (!st || typeof st.placePluginTerminal !== 'function') return { ok: false, error: 'NO_STATION', msg: 'the station floor is not loaded' };
+    const r = st.placePluginTerminal(pluginId, 'agent');
+    if (r && r.ok && !r.existing) { try { if (typeof App !== 'undefined' && App.persist) App.persist(); } catch (_) {} }
+    return r;
   }
 
   function init() {
@@ -257,7 +332,7 @@
   }
 
   const api = {
-    refresh, open,
+    refresh, open, preview, placeTerminal, terminalOf,
     list: () => plugins.slice(),
     _test: { frames, screens, themeVars, METHODS, get lastError() { return lastError; } }
   };

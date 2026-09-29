@@ -7,6 +7,7 @@
 
      await starnet.ready                    → { plugin: {id, name, version}, screen: {id, title} }
      starnet.store.get(key) / set(key, v) / delete(key) / keys()      the plugin's own durable data (JSON values)
+     starnet.backend.call(name, args)                                   the plugin's own code: api.handle(name, fn)
      starnet.ui.toast(text, 'ok'|'warn'|'bad')                          a station notification
      starnet.ui.setTitle(text)                                          this window's title (plain text)
      starnet.ui.open(screenId)                                          open another of THIS plugin's screens
@@ -89,6 +90,10 @@
     theme: {
       get vars() { return theme.vars; },
       onChange(fn) { if (typeof fn === 'function') themeListeners.push(fn); return () => { const i = themeListeners.indexOf(fn); if (i >= 0) themeListeners.splice(i, 1); }; }
+    },
+    // the plugin's own code in the station (api.handle(name, fn) in its main file)
+    backend: {
+      call: (fn, args) => call('backend.call', { fn: String(fn || ''), args: args === undefined ? null : args })
     },
     store: {
       get: (key) => call('store.get', { key }),
