@@ -428,6 +428,7 @@ const WorldModel = (() => {
     CREW:       { desc: 'works its share of the stream',   cls: 'chief' },
     SHIPPER:    { desc: 'finishes the job & ships it',     cls: 'chief' },
     REVIEWER:   { desc: 'judges the draft & calls the verdict', cls: 'reviewer' },
+    TESTER:     { desc: 'checks the change & calls the verdict', cls: 'reviewer' },
     ANALYST:    { desc: 'turns the branches into one answer',   cls: 'analyst' },
     FIXER:      { desc: 'takes over when the loop gives up',    cls: 'chief' },
   };
@@ -699,6 +700,28 @@ const WorldModel = (() => {
         // the ESCALATION lane: down out of the gate, into the fixer — then the fixer ships too
         { x: 13, y: 5, d: 'S' }, { x: 13, y: 6, d: 'E' }, { x: 14, y: 6, d: 'E' },
         { x: 17, y: 6, d: 'E' }, { x: 18, y: 6, d: 'N' }, { x: 18, y: 5, d: 'N' },
+      ] },
+    /* BUILD & TEST (2026-09-28, from PR #47 by @mvanhorn): the software loop without CODE FOUNDRY's sorter. The
+       TESTER's verdict decides — a failing change goes back up and over into the BUILDER's top edge (the CODE
+       FOUNDRY back-lane shape), a passing one ships; the pass count ends it either way. `when: 'approved'` is the
+       gate word verdict.js also reads from "VERDICT: pass". The SOFTWARE STUDIO preset stamps this same line. */
+    { id: 'build_test', grp: 'gate', label: 'BUILD & TEST', w: 16, h: 4,
+      desc: 'INBOX ▸ BUILDER ▸ TESTER ▸ LOOP GATE ▸ OUTBOX — the tester checks the change and sends it back to the builder until it passes (3 passes max), then it ships.',
+      props: [
+        { t: 'intake', x: 0, y: 2, w: 2, h: 2 },
+        { t: 'bay', x: 4, y: 2, w: 2, h: 2, role: 'ENGINEER' },
+        { t: 'bay', x: 8, y: 2, w: 2, h: 2, role: 'TESTER' },
+        { t: 'loop', x: 12, y: 3, w: 1, h: 1, block: false, done: 'E', when: 'approved', maxIter: 3 },
+        { t: 'outbox', x: 14, y: 2, w: 2, h: 2 },
+      ],
+      belts: [
+        { x: 2, y: 3, d: 'E' }, { x: 3, y: 3, d: 'E' },
+        { x: 6, y: 3, d: 'E' }, { x: 7, y: 3, d: 'E' },
+        { x: 10, y: 3, d: 'E' }, { x: 11, y: 3, d: 'E' }, { x: 12, y: 3, d: 'E' }, { x: 13, y: 3, d: 'E' },
+        // the back lane: up out of the gate, west over the tester, down into the builder's top edge
+        { x: 12, y: 2, d: 'N' }, { x: 12, y: 1, d: 'N' }, { x: 12, y: 0, d: 'W' },
+        { x: 11, y: 0, d: 'W' }, { x: 10, y: 0, d: 'W' }, { x: 9, y: 0, d: 'W' }, { x: 8, y: 0, d: 'W' },
+        { x: 7, y: 0, d: 'W' }, { x: 6, y: 0, d: 'W' }, { x: 5, y: 0, d: 'S' }, { x: 5, y: 1, d: 'S' },
       ] },
     { id: 'code_foundry', grp: 'gate', label: 'CODE FOUNDRY', w: 19, h: 7,
       desc: 'INBOX ▸ FILTER ▸ ENGINEER ▸ REVIEWER ▸ LOOP GATE ▸ OUTBOX — code work is built, reviewed, and sent back round until the verdict is APPROVED; everything else takes the generalist lane.',
