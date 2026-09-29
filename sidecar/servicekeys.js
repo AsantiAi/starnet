@@ -174,11 +174,15 @@
        { ok:true, value }                      — spend it
        { ok:false, reason:'unknown' }          — no such key (or it is disabled)
        { ok:false, reason:'unattended', name } — real key, but not granted for unattended runs
+       { ok:false, reason:'reserved' }         — a model-provider key name (opts.reservedEnv): KEYS can never
+                                                 hold one, so no Commander action can make it resolve
      `surface` is the RUN's surface, not the user's intent: an autonomous run can never talk itself
      into a grant, because the flag lives on the stored record and nothing in the run can write it. */
-  function resolveForRequest(list, envVar, surface) {
+  function resolveForRequest(list, envVar, surface, opts) {
     const want = String(envVar || '').trim();
     if (!want) return { ok: false, reason: 'unknown' };
+    // Checked before the list: a legacy or hand-edited row carrying a provider var is still never spent here.
+    if (reservedSet(opts).has(want)) return { ok: false, reason: 'reserved' };
     const row = cleanList(list).find(r => r.envVar === want && r.enabled !== false && r.key);
     if (!row) return { ok: false, reason: 'unknown' };
     if (surface !== 'interactive' && (row.autonomous !== true || row.unattendedSupported === false)) {

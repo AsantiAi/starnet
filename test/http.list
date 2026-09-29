@@ -129,6 +129,7 @@ test/task-conversation.http.test.js
 test/emergency-recovery.http.test.js
 test/growth-rating-upgrade.e2e.test.js
 test/managed-image.e2e.test.js
+test/transparent-image.e2e.test.js
 test/managed-endpoint.e2e.test.js
 test/tool-projection.e2e.test.js
 test/request-idempotency.e2e.test.js
