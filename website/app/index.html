@@ -45,6 +45,7 @@
 <link rel="stylesheet" href="css/utility-menus.css?v=1">
 <link rel="stylesheet" href="css/glass-demo.css">
 <link rel="stylesheet" href="css/glass-comms.css">
+<link rel="stylesheet" href="css/plugins.css"><!-- PLUGIN WINDOWS: the station chrome around a plugin's sandboxed page (pluginhost.js) -->
 <link rel="stylesheet" href="css/onboarding.css">
 <link rel="stylesheet" href="css/readability.css"><!-- Shared readable text roles at STANDARD; cabinet and CRT geometry are unchanged. -->
 <link rel="stylesheet" href="css/beat-cards.css"><!-- Transient work cards share glass materials and semantic text sizes. -->
@@ -942,6 +943,7 @@
 <script src="app/windows/loops.js"></script><!-- LOOPS lane — standing objectives (thin polling client over /api/loops); needs loop-templates.js above -->
 <script src="app/windows/connectors.js"></script><!-- TOOLSETS & CONNECTORS — toolset kill-switches, MCP manager, catalog + service keys (Spotify flow embedded) -->
 <script src="app/windows/messaging.js"></script><!-- CHANNELS — messaging platforms catalog (Telegram/Discord/Slack/Matrix/Signal cards) -->
+<script src="app/pluginhost.js"></script><!-- PLUGIN WINDOWS: an approved plugin's screens as real station windows, a sandboxed frame + the starnet bridge (needs stationui.js + apiticket.js above) -->
 <script src="app/navdock.js"></script>
 <script src="app/emergency-control.js"></script>
 <script src="app/chatresize.js"></script>
