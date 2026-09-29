@@ -8672,7 +8672,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     }
     // LAST OUTCOME — the most recent honest attempt (minted/none/rejected/skipped/error) the refresher recorded.
     const last = s && s.ledger && s.ledger.length ? s.ledger[s.ledger.length - 1] : null;
-    const OUTCOME_LABEL = { minted: 'added a quest', none: 'nothing new needed', rejected: 'nothing passed', skipped: 'skipped', error: 'error' };
+    const OUTCOME_LABEL = { minted: 'added a quest', advanced: 'step finished', none: 'nothing new needed', rejected: 'nothing passed', skipped: 'skipped', error: 'error' };
     // The engine's own reason is kept verbatim on the row; these say what it MEANS for the Commander. A
     // rejected cycle is the confusing one — it reads as a failure when it is the station refusing to invent
     // a quest it cannot ground, so it says that outright rather than leaving "rejected" to be guessed at.

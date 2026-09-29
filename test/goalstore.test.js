@@ -452,5 +452,28 @@ const { GoalStore } = require('../frontend/app/goalstore.js');
   }
   global.Harness.chat = async () => { throw new Error('offline'); };
   A.eq((await GoalStore.suggestPlan('Try a new idea')).ok, false, 'offline planning returns an actionable failure');
+
+  /* ============ USER-STUDY LOOP: the sidecar gets the plan, and a step it settled folds back on ============ */
+  GoalStore.reset();
+  posts.length = 0;
+  const made = await GoalStore.createGoal('Launch the newsletter', 'Ten real subscribers', ['Pick a niche', 'Write issue one', 'Get ten subscribers']);
+  A.ok(made.goalId, 'a goal with a three-step plan is created');
+  const pushed = posts.filter(p => p.url === '/api/goals').slice(-1)[0];
+  A.eq(pushed && pushed.body.goal.milestones.map(m => m.status), ['open', 'open', 'open'], 'the sidecar mirror receives the whole ordered plan');
+  A.ok(pushed && pushed.body.goal.milestones.every(m => m.id && m.text && m.evidence === undefined), 'the mirror carries ids + text + status only, never evidence');
+  const first = GoalStore.listGoals().find(g => g.id === made.goalId).milestones[0];
+  const beforeFold = journeyPosts.length;
+  global.JourneyStore.status = () => ({ goals: [], milestones: [{ goalId: made.goalId, milestoneId: first.id, evidence: 'Every quest planned for this step is settled', verifiedBy: 'harness-contract', at: 4242 }] });
+  GoalStore.sync();
+  const folded = GoalStore.listGoals().find(g => g.id === made.goalId);
+  A.eq([folded.milestones[0].status, folded.milestones[0].source, folded.milestones[0].journeySyncedAt], ['done', 'harness', 4242], 'a step the sidecar settled folds onto the local tree as already-synced harness work');
+  A.eq(folded.milestones[0].evidence, 'Every quest planned for this step is settled', 'the fold keeps the journey\'s own evidence');
+  A.eq(Goals.nextMilestone(folded).text, 'Write issue one', 'the plan moves to the next step');
+  A.eq(folded.status, 'active', 'a settled step never completes the life goal');
+  await new Promise(r => setTimeout(r, 0));
+  A.eq(journeyPosts.length, beforeFold, 'the outbox never re-posts a step the journey already holds');
+  GoalStore.sync();
+  A.eq(GoalStore.listGoals().find(g => g.id === made.goalId).milestones.filter(m => m.status === 'done').length, 1, 'the fold is idempotent');
+  delete global.JourneyStore.status;
   A.report('goalstore.test');
 })();

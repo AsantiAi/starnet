@@ -174,6 +174,12 @@
     if (str(ctx.goalNote).trim()) {
       lines.push('ACTIVE GOAL (set by the Commander — this IS the north star; never override it):');
       lines.push(str(ctx.goalNote).trim());
+      // the plan's CURRENT step: the quests this cycle proposes are that step's slate. The station records the
+      // step done once every quest planned for it is settled (sidecar/goal-advance.js), then plans the next one.
+      if (str(ctx.nextStep).trim()) {
+        lines.push('THE STEP YOU ARE PLANNING NOW: ' + str(ctx.nextStep).trim());
+        lines.push('Propose the quests that, completed together, finish this step. The station marks the step done once every quest planned for it is settled, then plans the step after it — so never propose work for later steps yet.');
+      }
     } else if (ctx.northStar && str(ctx.northStar.text).trim()) {
       lines.push('CURRENT NORTH STAR (inferred previously — keep it unless the evidence below clearly shifted):');
       lines.push(str(ctx.northStar.text).trim());

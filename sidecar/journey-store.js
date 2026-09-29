@@ -250,8 +250,19 @@ function makeJourneyStore(deps) {
       goals: rec.goals, progression: progressionFor(rec),
       metrics: rec.metrics.filter(m => m.status !== 'retired'),
       outcomes: rec.outcomes.slice(-50), mastery: rec.mastery.slice(), receipts: rec.receipts.slice(-20),
+      // every recorded plan-step completion (not only the last 50 outcomes): the webview folds these onto its
+      // goal tree, so a step the sidecar settled while the window was closed shows done when it reopens.
+      milestones: rec.outcomes.filter(o => o.kind === 'milestone').slice(-100)
+        .map(o => ({ goalId: o.goalId, milestoneId: o.milestoneId, evidence: o.evidence, verifiedBy: o.verifiedBy, at: o.at })),
       suppressed: rec.suppressed, evolution: evolutionFor(rec.goalsReached)
     };
+  }
+
+  // lifetime set of completed plan steps, keyed goalId + ':' + milestoneId (the outcome rows are capped for
+  // display; the source-key ledger is not, so an old completion can never read as open again).
+  function milestoneDoneKeys() {
+    const rec = read();
+    return new Set(rec.outcomeKeys.filter(k => k.indexOf('milestone:') === 0).map(k => k.slice('milestone:'.length)));
   }
 
   async function recordQuest(q, activeGoal, now) {
@@ -283,15 +294,19 @@ function makeJourneyStore(deps) {
     return { ok: true, duplicate: !result.changed && !result.skipped, skipped: !!result.skipped, outcome: result.outcome, receipt: result.receipt };
   }
 
-  async function recordMilestone(d, now) {
+  // opts.harness (sidecar-internal ONLY — the POST /api/journey route never passes a third argument, so a client
+  // can never claim it): the step was settled by the harness itself (every quest planned for it completed by
+  // contract, sidecar/goal-advance.js), so the outcome carries 'harness-contract' authority.
+  async function recordMilestone(d, now, opts) {
     d = d || {}; let result = null;
     const sourceId = 'milestone:' + clip(d.goalId, 64) + ':' + clip(d.milestoneId, 80);
     if (!clip(d.goalId, 64) || !clip(d.milestoneId, 80) || clip(d.evidence, 1000).length < 4) return { ok: false, error: 'goal, milestone, and evidence are required' };
+    const verifiedBy = (opts && opts.harness === true) ? 'harness-contract' : d.source === 'commander' ? 'commander-confirmed' : 'commander-client';
     await durable.update(STORE_KEY, cur => {
       const rec = normalize(cur);
       result = foldOutcome(rec, {
         sourceId, kind: 'milestone', goalId: d.goalId, milestoneId: d.milestoneId, agentId: d.agentId,
-        domain: d.domain, title: d.milestoneText || d.goalText, evidence: d.evidence, verifiedBy: d.source === 'commander' ? 'commander-confirmed' : 'commander-client', goalDone: false
+        domain: d.domain, title: d.milestoneText || d.goalText, evidence: d.evidence, verifiedBy, goalDone: false
       }, now);
       if (result.changed) award(rec, { key: sourceId, goalId: d.goalId, kind: 'milestone',
         title: d.milestoneText || d.goalText, evidence: d.evidence, verifiedBy: d.source === 'commander' ? 'commander-confirmed' : 'commander-client' }, now);
@@ -439,7 +454,7 @@ function makeJourneyStore(deps) {
     return lines.join('\n');
   }
 
-  return { read, snapshot, currentEpoch, registerGoal, confirmGoal, recordQuest, recordMilestone, createMetric, updateMetric, retireMetric, setSuppressed, reset, adaptationBlock, _durable: durable };
+  return { read, snapshot, milestoneDoneKeys, currentEpoch, registerGoal, confirmGoal, recordQuest, recordMilestone, createMetric, updateMetric, retireMetric, setSuppressed, reset, adaptationBlock, _durable: durable };
 }
 
 module.exports = { makeJourneyStore, normalize, tierFor, evolutionFor, progressionFor, DOMAINS, _internals: { normMetric, normOutcome, reached, foldOutcome } };
