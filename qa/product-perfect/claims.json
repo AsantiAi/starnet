@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "192ddfd11b64ad279fe437c9560ad081aa34a0b0",
+    "sourceCommit": "5c73de5b1678290541ac08746c9525376a3fc594",
     "pathSetSha256": "7ae81c6513a7583a28af97695a8d4e857b2244726ab7ec4cfab1fa9225842937",
     "files": [
       {
@@ -1568,8 +1568,8 @@
       },
       {
         "path": "frontend/css/workflow-panel.css",
-        "bytes": 31741,
-        "sha256": "f22dcf04161cddfef595c9d5c96fa4751bb87d9c0184ef4d99cb3e1465ee456b"
+        "bytes": 31811,
+        "sha256": "e4c829123fdd48a946af011c8f91a300808b0ff9cf57eea54fdf8372e46b333e"
       },
       {
         "path": "frontend/css/workhub.css",
