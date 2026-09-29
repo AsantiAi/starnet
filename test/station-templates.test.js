@@ -125,7 +125,11 @@ for(const P of [legacySprites,remasterContext.module.exports])for(const item of 
   for(const p of doc.props.filter(p=>!P.spec(p.t).flat))assert.ok(g.path(origin[0],origin[1],p.x-g.origin.tx,p.y+p.h-g.origin.ty),item.id+': reachable front of '+p.t);
   const current=M.create(M.starterDoc());current.ensureWorkstation('agent');current.ensureWorkstation('crew');
   const before=current.serialize(),identity=before.meta.createdAt;
+  // conveyor links phase B keeps the floor's links as built: a preset's links survive the id renumbering and the apply
+  const pids=new Set(doc.props.map(p=>p.id)),ends=l=>[l.from&&l.from.prop,l.to&&l.to.prop];
+  assert.ok((doc.links||[]).every(l=>ends(l).every(e=>!e||pids.has(e))),item.id+': every link names a machine the preset built');
   assert.equal(current.replaceLayout(doc).ok,true);
+  assert.deepEqual((current.links()||[]).map(ends),(doc.links||[]).map(ends),item.id+': applying keeps the preset\'s links exactly');
   assert.equal(current.doc().meta.createdAt,identity);
   for(const id of ['agent','crew'])assert.equal(current.props().filter(p=>p.agentId===id).length,1);
   assert.equal(current.undo().ok,true);assert.deepEqual(current.serialize(),before);
