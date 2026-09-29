@@ -79,7 +79,7 @@ const PropRemaster = (() => {
   // PLAYER-MADE PROPS (userprops.js): a runtime view arrives with its image ALREADY decoded (fetched with the API
   // token and turned into a blob URL — the master token never rides in a URL, and ROOT holds only shipped art).
   // It is held to every manifest rule except the bare-filename one, and only in the plain approved mode.
-  const USER_KEY=/^user_[a-z0-9_]{3,60}:s$/;
+  const USER_KEY=/^user_[a-z0-9_]{3,60}:[sw]$/;   // south view + the left-facing side view (east = its mirror)
   function runtimeOK(key,v,im){
     return USER_KEY.test(key)&&v&&v.mode==='approved'&&v.effects===false&&!v.contact&&!v.foreground&&!v.nativeLayers&&!v.nativeMask&&!v.screenPower&&!v.activity&&
       validate({...v,image:'runtime.png'})&&im&&im.width===v.sourceWidth&&im.height===v.sourceHeight;
@@ -413,8 +413,9 @@ const PropRemaster = (() => {
   }
   let runtimeViews=0;
   // Register one player-made view after boot. Resolves true when the art is prepared and drawable.
-  async function registerRuntime(id,v,im){
-    const key=String(id)+':s';
+  async function registerRuntime(id,v,im,view='s'){
+    if(view!=='s'&&view!=='w')return false;
+    const key=String(id)+':'+view;
     if(entries.has(key))return true;
     if(runtimeViews>=400){failures.push({view:key,reason:'too many player-made props'});return false;}
     runtimeViews++;

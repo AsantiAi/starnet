@@ -587,6 +587,7 @@ const Build = (() => {
     if (makeMsg) return makeMsg;
     if (!makeJob) return { text: 'Uses StarNet credits \u00b7 usually about $0.35 a prop', tone: '' };
     const j = makeJob, spent = j.costUsd > 0 ? ' \u00b7 $' + j.costUsd.toFixed(2) + ' so far' : '';
+    if (j.status === 'done' && j.kind === 'side') return { text: 'Side view made \u00b7 cost $' + (Number(j.costUsd) || 0).toFixed(2) + (j.costPending ? ' (final cost settling)' : '') + ' \u00b7 press R to turn it', tone: 'ok' };
     if (j.status === 'done') return { text: 'Made ' + (j.label || j.noun) + ' \u00b7 cost $' + (Number(j.costUsd) || 0).toFixed(2) + (j.costPending ? ' (final cost settling)' : '') + ' \u00b7 in MADE BY YOU', tone: 'ok' };
     if (j.status === 'failed') return { text: ((j.error && j.error.message) || 'That prop could not be made.') + (j.costUsd > 0 ? ' Spent $' + j.costUsd.toFixed(2) + '.' : ''), tone: 'bad' };
     const step = MAKE_STEP[j.step] || 'Working';
@@ -600,8 +601,27 @@ const Build = (() => {
     el.textContent = st.text; el.className = 'refit-makeprop-status' + (st.tone ? ' ' + st.tone : '');
     const door = root.querySelector('#refit-makeprop-door');
     if (door) door.hidden = !(makeMsg && makeMsg.door);
+    const busy = !!(makeJob && makeJob.status !== 'done' && makeJob.status !== 'failed');
     const go = root.querySelector('#refit-makeprop-go');
-    if (go) go.disabled = !!(makeJob && makeJob.status !== 'done' && makeJob.status !== 'failed');
+    if (go) go.disabled = busy;
+    // MAKE SIDE VIEW: offered only for a selected made prop that has no side view yet
+    const side = root.querySelector('#refit-makeprop-side');
+    if (side) {
+      const made = typeof UserProps !== 'undefined' && UserProps.get ? UserProps.get(propType) : null;
+      side.hidden = !(made && !made.side);
+      side.disabled = busy;
+      side.textContent = made ? '\u21bb MAKE SIDE VIEW \u00b7 ' + (made.label || 'this prop') : '\u21bb MAKE SIDE VIEW';
+    }
+  }
+  async function startMakeSide() {
+    const made = typeof UserProps !== 'undefined' && UserProps.get ? UserProps.get(propType) : null;
+    if (!made || made.side) return;
+    makeMsg = { text: 'Starting the side view\u2026', tone: 'busy' }; paintMakeStatus();
+    const r = await UserProps.makeSide(made.id);
+    if (r && r.ok && r.job) { watchMakeJob(r.job); return; }
+    makeJob = null;
+    makeMsg = { text: (r && r.message) || 'That side view could not be started.', tone: 'bad', door: r && (r.code === 'not_linked' || r.code === 'insufficient_credits') };
+    paintMakeStatus();
   }
   function watchMakeJob(job) {
     makeJob = job; makeMsg = null;
@@ -611,7 +631,8 @@ const Build = (() => {
     UserProps.watch(job.id, (j) => { makeJob = j; paintMakeStatus(); }).then((j) => {
       makeWatching = '';
       makeJob = j;
-      if (j.status === 'done' && j.propId && typeof PropSprites !== 'undefined' && PropSprites.spec(j.propId)) {
+      if (j.status === 'done' && j.kind === 'side') { if (root) renderPalette(); }
+      else if (j.status === 'done' && j.propId && typeof PropSprites !== 'undefined' && PropSprites.spec(j.propId)) {
         makeJob.label = PropSprites.spec(j.propId).label;
         propType = j.propId; propCat = 'yours'; propQuery = '';
         if (root) { renderPalette(); setLibraryPlacement(true); }
@@ -642,7 +663,8 @@ const Build = (() => {
       '<div class="refit-makeprop-row"><input type="text" class="refit-input refit-searchfield" id="refit-makeprop-input" maxlength="60" spellcheck="false" autocomplete="off" aria-label="Object to make" placeholder="e.g. a grandfather clock">' +
       '<button type="button" class="bb sm" id="refit-makeprop-go">MAKE</button></div>' +
       '<div class="refit-makeprop-foot"><span class="refit-makeprop-status" id="refit-makeprop-status" role="status" aria-live="polite"></span>' +
-      '<button type="button" class="bb sm" id="refit-makeprop-door" hidden>\u25b8 OPEN PROVIDERS</button></div>';
+      '<button type="button" class="bb sm" id="refit-makeprop-door" hidden>\u25b8 OPEN PROVIDERS</button></div>' +
+      '<button type="button" class="bb sm refit-makeprop-sidebtn" id="refit-makeprop-side" hidden>\u21bb MAKE SIDE VIEW</button>';
     const inp = box.querySelector('#refit-makeprop-input'), go = box.querySelector('#refit-makeprop-go');
     go.onclick = () => { startMakeProp(inp.value); sfx('click'); };
     inp.onkeydown = (ev) => {
@@ -651,6 +673,7 @@ const Build = (() => {
       ev.stopPropagation();   // like the search field: Escape leaves the field, never closes REFIT behind it
       inp.blur();
     };
+    box.querySelector('#refit-makeprop-side').onclick = () => { startMakeSide(); sfx('click'); };
     box.querySelector('#refit-makeprop-door').onclick = () => {
       const door = typeof FriendlyError !== 'undefined' && FriendlyError.actionButton && FriendlyError.actionButton({ action: 'store' });
       if (door && door.run) door.run();
@@ -1393,7 +1416,7 @@ const Build = (() => {
         const active = tile.dataset.prop === propType || (tile.dataset.coreAbility && tile.dataset.coreAbility === WorldModel.capForProp(propType));
         tile.classList.toggle('active', active); tile.setAttribute('aria-pressed', String(active));
       });
-      renderPropPreview(); renderEquipmentInfo(); setHint();
+      renderPropPreview(); renderEquipmentInfo(); setHint(); paintMakeStatus();   // MAKE SIDE VIEW follows the armed prop
       if (window.matchMedia('(max-width: 700px)').matches) fitCamera();
       sfx('click');
     };
@@ -4276,7 +4299,7 @@ const Build = (() => {
       // Configuration is a separate, explicit click on the placed object.
     }
     if (res && res.ok) renderEquipmentInfo(propType);
-    feedback(res, ev, grant ? ('PLACED · ' + grant + ' equipment') : ('placed ' + propType));
+    feedback(res, ev, grant ? ('PLACED · ' + grant + ' equipment') : ('placed ' + ((typeof PropSprites !== 'undefined' && PropSprites.isUserProp && PropSprites.isUserProp(propType)) ? String((PropSprites.spec(propType) || {}).label || 'made prop').toLowerCase() : propType)));   // a made prop's id is internal; say its name
   }
   function commitBeltRun(d, ev) {
     // CLICK-ON-MACHINE WINS: connectable machines were consumed by the connect flow in onDown; a
