@@ -22,6 +22,33 @@ straight run from a→b, direction = the drag axis). Validation: each tile must 
 `beltAt(x,y)` (→ dir|null). `projectGeometry()` emits `belts` in the LOCAL frame; belts serialize
 inside `doc`; `migrate()` is total (drops malformed keys/dirs).
 
+### Links — explicit connections (save v2, conveyor-links plan phase A, 2026-09-28)
+
+A **link** is one belt from one machine to the next, in WORLD tiles:
+
+```js
+doc.links = [{ id: 'l3', from: { prop: 'p10', port: 'out' }, to: { prop: 'p11', port: 'in' },
+               path: [{ x: 2, y: 4, d: 'E' }, { x: 3, y: 4, d: 'E' }] }, ...]
+```
+
+- `prop` is a belt machine's id (INBOX, BAY, OUTBOX, SPLITTER, JOINER, MERGER, FILTER, LOOP) or `null` for
+  an open end. `path` is the belt it rides, in flow order. Ports: `in` / `out`, plus the exits that mean
+  something — a FILTER out-link carries `tags` (task types routed down it) and `else: true` (EVERYTHING
+  ELSE); a LOOP out-link is `done`, `back` or `esc`. A `ring: true` link is one ring tile the old ring rule
+  hooked that no belt run explains (two machines sharing a ring tile) — written down so nothing moves.
+- **Compiler** (`Pipeline.compileRoutingPlan`): a geo WITH `links` hooks a machine only to the ring tiles of its
+  own links (a belt passing a ring hooks nothing), reads FILTER routes / LOOP exits from ports (compass
+  config on the prop is the fallback), warns `JUNCTION_TOUCH` for a belt beside a junction that is not one of
+  its links, and `lineComponents` joins machines by their own links. A geo without links keeps the ring rule.
+- **Derivation** (`Pipeline.deriveLinks(geo)`): today's ring rule written down as links, exact by
+  construction — a derived floor compiles to the identical plan and hash (test/conveyor-links.test.js: the
+  routing fixture corpus, every blueprint, a seeded fuzz).
+- **Model, phase A**: links FOLLOW the belts — re-derived whenever the belts, a belt machine's place/size or a
+  FILTER/LOOP's config change, never trusted from a save (an older build may have edited the belts), and
+  adopted only when they compile to the identical plan (else `null`, and the ring rule stands). Read with
+  `station.links()`; `projectGeometry()` emits them in the LOCAL frame. Belts stay in the save, so an older
+  build still routes a v2 save by tiles. The link tools (phase B) make links the thing you edit.
+
 ## Runtime (conveyor.js) — `Conveyor.create()`
 
 A self-contained transport sim + renderer. Frame-agnostic: it's handed a belt map in whatever
