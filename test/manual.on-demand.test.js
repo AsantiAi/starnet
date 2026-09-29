@@ -29,8 +29,11 @@ const reference = M.MANUAL_SECTIONS.filter(s => s.kind === 'reference');
 const inline = M.MANUAL_SECTIONS.filter(s => s.kind !== 'reference');
 
 // ---- A. nothing removed: the whole manual is the pre-split manual, byte for byte ----
-A.eq(full.length, 9269, 'the whole manual keeps its pre-split length');
-A.eq(crypto.createHash('sha256').update(full, 'utf8').digest('hex'), '876bf2e406da8f5cde4b70b3d6169e9e8392d683986dc9e675921c83bffc0edc',
+// Re-pinned 2026-09-28 (first-hour fixes) for ONE deliberate text change: the two "ABILITIES › KEYS" directions now
+// name tabs that exist (INSTALLED › SAVED API CONNECTIONS; CREATE / ADVANCED › Add a custom API key). Swapping those
+// two phrases back reproduces the pre-split pin exactly (9269 / 876bf2e4…), so nothing else moved.
+A.eq(full.length, 9334, 'the whole manual keeps its pre-split length');
+A.eq(crypto.createHash('sha256').update(full, 'utf8').digest('hex'), 'cd895c86195a85f8389257cffd1a236b3729ac78f3b7967f6f8ee5950e534e7c',
   'the whole manual is byte-identical to the literal that shipped before the split');
 
 // ---- B. the sections partition the manual ----
