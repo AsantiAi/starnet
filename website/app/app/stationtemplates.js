@@ -194,10 +194,13 @@ const StationTemplates = (() => {
       for (const rid of doc.order) { const room = doc.rooms[rid]; room.id = ids[rid]; remapped[room.id] = room; }
       doc.rooms = remapped; doc.order = doc.order.map(rid => ids[rid]);
       doc.meta.spawnRoomId = ids[doc.meta.spawnRoomId]; doc.meta.trunkRoomId = ids[doc.meta.trunkRoomId];
-      doc.props.forEach(p => { p.id = 'p' + nextId++; });
+      const pidMap = {};
+      doc.props.forEach(p => { const n = 'p' + nextId++; pidMap[p.id] = n; p.id = n; });
       doc._nid = nextId;
-      // the saved links name the OLD prop ids; the station re-derives links from the belts on load, never trusts them
-      doc.links = null;
+      // the links name their machines by id: carry every end through the renumbering (conveyor links phase B keeps the
+      // floor's links as built, so a preset's lines arrive linked exactly as stamped)
+      const end = e => (e && e.prop && pidMap[e.prop]) ? Object.assign({}, e, { prop: pidMap[e.prop] }) : e;
+      if (Array.isArray(doc.links)) doc.links = doc.links.map(l => Object.assign({}, l, { from: end(l.from), to: end(l.to) }));
     }
     return doc;
   }
