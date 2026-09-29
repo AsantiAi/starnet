@@ -9,6 +9,10 @@
 'use strict';
 const UserProps = (() => {
   const registered = new Set();
+  // sizes set on this page, stamped with a sequence number: a load() whose fetch began before a resize finished
+  // must not put the older size back (it would repaint the stale value and re-register stale boxes)
+  const localScale = new Map();   // id -> { scale, seq }
+  let seq = 0;
   const sided = new Set();
   let props = [];
   let loading = null;
@@ -81,11 +85,13 @@ const UserProps = (() => {
   function load() {
     if (loading) return loading;
     loading = (async () => {
+      const startedAt = seq;
       let j = null;
       try { const r = await apiFetch('/api/userprops'); j = r.ok ? await r.json() : null; } catch (_) { j = null; }
       if (j && Array.isArray(j.deleted) && PropSprites.markUserDeleted) PropSprites.markUserDeleted(j.deleted);
       if (j && Array.isArray(j.props)) {
         const before = props.map((p) => p.id).join(',');
+        for (const p of j.props) { const l = localScale.get(p.id); if (l && l.seq > startedAt) p.scale = l.scale; }
         props = j.props;
         let any = false;
         for (const p of props) { if (await register(p)) any = true; if (await registerSide(p)) any = true; }
@@ -115,6 +121,7 @@ const UserProps = (() => {
     } catch (_) { return { ok: false, code: 'unreachable', message: 'The station did not answer. Try again.' }; }
     if (!j || !j.ok) return j || { ok: false, code: 'failed', message: 'That size could not be saved.' };
     p.scale = j.scale;
+    localScale.set(id, { scale: j.scale, seq: ++seq });
     const g = geometry(p);
     PropSprites.resizeUserProp(id, g.front.footprint, g.side && (p.symmetric && !p.side ? null : g.side.footprint));
     let d = null;

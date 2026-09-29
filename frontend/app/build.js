@@ -248,6 +248,7 @@ const Build = (() => {
   function init(o) { opts = o; }
 
   function open() {
+    makeResumed = false;   // a fresh REFIT session picks up a made-prop job still running in the station
     if (running) return;
     station = opts.getStation();
     if (!station) return;
@@ -669,9 +670,11 @@ const Build = (() => {
     paintMakeStatus();
   }
   // REFIT reopened while the station still has a job in flight: pick it back up instead of forgetting it.
+  let makeResumed = false;   // once per REFIT open: a render must not refetch (and race) the made-prop list
   function resumeMakeJob() {
-    if (makeJob || makeWatching || typeof UserProps === 'undefined') return;
-    UserProps.load().then((r) => { const j = r && r.jobs && r.jobs[0]; if (j && !makeJob) watchMakeJob(j); });
+    if (makeResumed || makeJob || makeWatching || typeof UserProps === 'undefined') return;
+    makeResumed = true;
+    UserProps.load().then((r) => { const j = r && r.jobs && r.jobs[0]; if (j && !makeJob) watchMakeJob(j); paintMakeStatus(); });
   }
   // SIZE a made prop (library-wide, free): the art re-registers at the new size and this floor's copies are
   // re-laid at the new box as ONE undo. A copy that no longer fits aborts the whole resize and says so.
