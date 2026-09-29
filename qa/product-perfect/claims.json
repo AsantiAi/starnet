@@ -18,8 +18,8 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "383ef15b920ad408be1f04f30ff2785afe5a4af5",
-    "pathSetSha256": "724fccc3567e8ae1cacc99ecff6010bffab723bd87b2c1606e642fc9e1b02c5d",
+    "sourceCommit": "176e266a82370271827f58a911bb2fff4e9686a5",
+    "pathSetSha256": "36318b1f20ea602b5645d36cecbfde5a47a57ce977673a7519a82af1cc20aeb3",
     "files": [
       {
         "path": "INSTALL.md",
@@ -168,8 +168,8 @@
       },
       {
         "path": "frontend/app/apiticket.js",
-        "bytes": 9601,
-        "sha256": "c0d884be2c2d817ce2c5fdf12332a252c9edc51a82f3701fc0aca686c428e861"
+        "bytes": 10279,
+        "sha256": "e785d1585f10c43076f6a8762a3e76624b73bf4003993ae665944e0da63de623"
       },
       {
         "path": "frontend/app/app.js",
@@ -722,6 +722,11 @@
         "sha256": "22551dbd8b0afe5fff2c01f5912ecdf75322f883bebc16c1b24ca44dddefc075"
       },
       {
+        "path": "frontend/app/pluginhost.js",
+        "bytes": 13535,
+        "sha256": "f3679a3db8ca7487b22291ce5d3609837facef3727ccbe7bf639936a300f671d"
+      },
+      {
         "path": "frontend/app/pride.js",
         "bytes": 6414,
         "sha256": "8c099cc27f2259fde452bbec76734da67914a574624f64770dcf34b5c8fe9ef8"
@@ -1228,8 +1233,8 @@
       },
       {
         "path": "frontend/app/windows/connectors.js",
-        "bytes": 137746,
-        "sha256": "5cdfdd213d9d156a64b1f4ebf9d474964669bce22283532fc5994f77c6f194d9"
+        "bytes": 141020,
+        "sha256": "808b2a6eecee353d708b0b07e7e4ae28e9bb0ba23fff52893dfa98be7c1cc7a9"
       },
       {
         "path": "frontend/app/windows/logbook.js",
@@ -1482,6 +1487,11 @@
         "sha256": "eaf34a05e7c47a6a9e82beccf771db6f43f69794091e81edf93408c70f6de7ce"
       },
       {
+        "path": "frontend/css/plugins.css",
+        "bytes": 1452,
+        "sha256": "a9fafbd899602b6223213213ae6e5c384fa8a5f9af817e737f848125456dc637"
+      },
+      {
         "path": "frontend/css/project-home.css",
         "bytes": 8626,
         "sha256": "e0ae555d5bc6b7e83895fa15a5ba476a8bffe2cb390e22810f88d63abb9e44e5"
@@ -1623,8 +1633,8 @@
       },
       {
         "path": "frontend/index.html",
-        "bytes": 90861,
-        "sha256": "d31346024c5f4dad23c006c61dfb09930582f6435d740b985bafb3a7c49a68ec"
+        "bytes": 91203,
+        "sha256": "9098c33f0d087302ea8499221affff3b99962396603395c0d156f0d0a4a3449b"
       },
       {
         "path": "frontend/js/arcade.js",
@@ -1650,6 +1660,16 @@
         "path": "frontend/js/util.js",
         "bytes": 31676,
         "sha256": "aded27c358c42bffd6e1ee2db2ae44bd8b89ee01e8c71ec0d76e72a030d85424"
+      },
+      {
+        "path": "frontend/plugin-kit/kit.css",
+        "bytes": 13816,
+        "sha256": "b206136b2f86b5b9cbfb7f3e55f1efae6c07fd60d09b0ef3993278e19b97eebb"
+      },
+      {
+        "path": "frontend/plugin-kit/kit.js",
+        "bytes": 5720,
+        "sha256": "4699acec0375e0951ecb69dab6b567710c560573501d08e5b2be16f6a03aa34f"
       },
       {
         "path": "frontend/prop-atlas.html",
