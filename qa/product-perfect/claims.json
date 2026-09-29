@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "8dbf9395303c8337671fb2a8af2b0de109e7a699",
+    "sourceCommit": "f365604209f719fde9642455e567cd1e756d3395",
     "pathSetSha256": "d399b7dc9c6d8ef4e165d0c6560b5770636dbaf73b81f662e7c4b31d7cc55045",
     "files": [
       {
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 392783,
-        "sha256": "7b130b79a118eeface6360e0cd1d7525834639cbd24f5d5f171b852057e20405"
+        "bytes": 393844,
+        "sha256": "1c2bccedde1b462a1bb77c2c3f6269b1a4c5fb31c18e5b655a2607ec9fc85741"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
@@ -673,8 +673,8 @@
       },
       {
         "path": "frontend/app/onboarding.js",
-        "bytes": 58847,
-        "sha256": "2f48251b49e44c347a9d840138fcbbcbeba9511b4efd06f7c355a29d648887c2"
+        "bytes": 61988,
+        "sha256": "40bedde4c62ba061ba8c147ff8ef7a2e4eb2457ee4ddc031f98b11556755a869"
       },
       {
         "path": "frontend/app/overseer-setup.js",
@@ -1068,8 +1068,8 @@
       },
       {
         "path": "frontend/app/stationtemplates.js",
-        "bytes": 18275,
-        "sha256": "13396655d1f562663bf983c1d717bc2e91dc410f04ab423ec6614e1c234581c7"
+        "bytes": 20115,
+        "sha256": "99c674dcd7b827e122f21c613629941fa0de42eeae45f0e7a061dfafeae6ebd4"
       },
       {
         "path": "frontend/app/stationui.js",
