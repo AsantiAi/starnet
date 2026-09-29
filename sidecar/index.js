@@ -252,9 +252,10 @@ const Scout = require('./scout.js');                        // SCOUT lane 2: pur
 const Discovery = require('./discovery.js');                // ENVIRONMENT DISCOVERY: blessed-root scan findings with verbatim citations (pure half)
 const Outcomes = require('./outcomes.js');                  // OUTCOME LEARNING: the run history folded into a support-gated track record (pure)
 // THE STATION BUILDER (2026-09-29): the lead's line menu, read from the same pure catalog the page builds from, and the
-// plans it has made (planId -> { summary, steps, at }) so the approval card for station.build_line shows the PLAN's words
-let stationLineMenu = () => [];
+// plans it has made (planId -> { summary, steps, at }) so the approval card for station.build shows the PLAN's words
+let stationLineMenu = () => [], stationKitMenu = () => [], stationPresetMenu = () => [];
 try { const WMenu = require('../frontend/app/worldmodel.js'), SBuilder = require('../frontend/app/stationbuilder.js'); stationLineMenu = () => SBuilder.catalog(WMenu); } catch (_) { stationLineMenu = () => []; }
+try { const STpl = require('../frontend/app/stationtemplates.js'); stationKitMenu = () => STpl.kits().map(k => ({ name: k.name, about: k.about })); stationPresetMenu = () => STpl.catalog.filter(c => STpl.presetKits(c.id).length).map(c => c.name); } catch (_) { stationKitMenu = () => []; stationPresetMenu = () => []; }
 const stationPlanMemo = new Map();
 const ProspectGen = require('../frontend/app/prospect.js'); // SCOUT: the pure prospect generator — REUSED server-side (same directive + hard validation)
 const SharedSpecialties = require('../shared/specialties.js');           // SCOUT: builtin class catalog (prospect dedup + context)
@@ -16943,7 +16944,7 @@ async function runOnceCore(o) {
   // worker can never open or steal the Commander's sessions. Only visual actions require a live page.
   makeStationTools({ station: require('./overseer.js').isCoordinatorRun({ ...o, agentId, surface })
     ? overseerStation(o.streamId, runId) : stationBridge, scanText: t => cronGuard.scanRoutinePrompt(t), now: () => Date.now(),
-    planMemo: stationPlanMemo, lineMenu: stationLineMenu,
+    planMemo: stationPlanMemo, lineMenu: stationLineMenu, kitMenu: stationKitMenu, presetMenu: stationPresetMenu,
     // station.layout's HARNESS facts (audit 2026-09-28): the plan the router actually holds, each line's effective
     // budget (the runner's own effectiveLimits), and today's numbers since local midnight (the line plate's window)
     layoutFacts: {
@@ -18396,7 +18397,7 @@ async function runOnceCore(o) {
       + 'A notebook entry does not update another agent\'s Purpose or standing orders. Report a change only after the tool confirms it was saved. '
       + 'Dossier Purpose and standing orders describe the ongoing role; Bay briefs add the workflow-stage job. '
       + 'Bay assignment, briefs, and assembly-line layout are configured in the station UI; do not claim to change them with a Dossier or notebook edit. '
-      + 'The one floor change you can make is ADDING a ready-made line when the Commander asks for one: call station.plan_line, tell them its summary, then station.build_line with its planId. Never describe positions or claim any other layout change. '
+      + 'The floor changes you can make are ADDING a ready-made line (station.plan_line), ADDING a furnished room or a preset\'s rooms (station.plan_room), or restyling a room\'s floor or name (station.plan_restyle), each only when the Commander asks: plan it, tell them its summary, then station.build with its planId. Never describe positions or claim any other layout change. '
       + 'To explain or troubleshoot Bays and assembly lines (what runs, in what order, what starts a line, why a step is not running), read station.layout first and quote its status; never answer from memory.';
     /* SESSIONS (2026-07-30): the lead can also RUN the station's sessions — and the peek rule exists because
        of a live failure: asked "what did the researcher do?", a lead with no way to read the other session
@@ -21421,7 +21422,7 @@ function consentSummary(call) {
     try { return JSON.stringify(redact(a), null, 2); } catch (_) { return '[mutation payload unavailable]'; }
   }
   // the station builder: the card shows what the dry run found (the plan's summary + every step's instructions), never the model's words
-  if (/^station[._]build_line$/.test(String(call && call.name || ''))) return stationPlanSummary(stationPlanMemo, a.planId) || 'an unknown or expired plan: it will be refused, and nothing will be built';
+  if (/^station[._]build$/.test(String(call && call.name || ''))) return stationPlanSummary(stationPlanMemo, a.planId) || 'an unknown or expired plan: it will be refused, and nothing will be built';
   if (typeof a.path === 'string' && a.path) return a.path;
   try { const s = JSON.stringify(a); return s.length > 80 ? s.slice(0, 77) + '…' : s; } catch (_) { return ''; }
 }

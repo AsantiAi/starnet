@@ -282,7 +282,9 @@
       // the station builder (2026-09-29): plan a ready-made line on a copy (changes nothing), then build exactly that
       // plan behind the approval card (one undo, add-only)
       { capId: 'orchestrator', tool: 'station.plan_line', scope: 'read', requiresConsent: false, network: false },
-      { capId: 'orchestrator', tool: 'station.build_line', scope: 'write', requiresConsent: true, network: false },
+      { capId: 'orchestrator', tool: 'station.plan_room', scope: 'read', requiresConsent: false, network: false },
+      { capId: 'orchestrator', tool: 'station.plan_restyle', scope: 'read', requiresConsent: false, network: false },
+      { capId: 'orchestrator', tool: 'station.build', scope: 'write', requiresConsent: true, network: false },
       // LOOPS: standing objective iteration through loops.json. Both mutations require consent because they
       // create or alter future autonomous work. Model tools never accept the host-run check command.
       { capId: 'orchestrator', tool: 'loop.list', scope: 'read', requiresConsent: false, network: false },

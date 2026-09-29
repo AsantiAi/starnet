@@ -207,17 +207,136 @@ for (const bp of M.BLUEPRINTS) {
   A.ok(built > 40 && refused > 100, 'the gauntlet exercised both paths (built ' + built + ', refused ' + refused + ')');
 }
 
+/* ---- 10. ROOMS & DECOR: every kit in a new room, furnished exactly, doorways clear, one undo ---- */
+const renv = Object.assign({}, env, { StationTemplates: T, PropSprites: Sprites });
+function doorsClear(st, roomId) {
+  const g = st.projectGeometry(), ox = g.origin.tx, oy = g.origin.ty, land = new Set();
+  for (const d of g.doorDefs || []) {
+    const a = { x: d[0] + ox, y: d[1] + oy }, b = { x: d[2] + ox, y: d[3] + oy }, inA = st.roomAt(a.x, a.y) === roomId, inB = st.roomAt(b.x, b.y) === roomId;
+    if (inA === inB) continue;
+    const door = inA ? a : b, other = inA ? b : a;
+    land.add(door.x + ',' + door.y); land.add((2 * door.x - other.x) + ',' + (2 * door.y - other.y));
+  }
+  return st.props().filter(p => p.block !== false && st.roomAt(p.x, p.y) === roomId).every(p => { for (let y = p.y; y < p.y + p.h; y++) for (let x = p.x; x < p.x + p.w; x++) if (land.has(x + ',' + y)) return false; return true; });
+}
+for (const kit of T.kits()) {
+  const st = fresh(), before = snap(st), rooms0 = st.rooms().length;
+  const r = SB.planRoom(st.serialize(), { kit: kit.name }, renv);
+  A.ok(r.ok, kit.id + ': plans by name (' + (r.error || '') + ')');
+  if (!r.ok) continue;
+  A.eq(snap(st), before, kit.id + ': planning changes nothing');
+  A.ok(r.plan.summary.indexOf(kit.name + ' (' + kit.about + ') in a new room beside HOME') === 0, kit.id + ': the summary names the kit and where it goes');
+  const caps = kit.props.filter(([t]) => M.capForProp(t)).length;
+  A.eq(/It brings equipment: /.test(r.plan.summary), caps > 0, kit.id + ': equipment is named exactly when the kit brings some (object = capability)');
+  const a = SB.apply(st, r.plan, renv);
+  A.ok(a.ok, kit.id + ': builds (' + (a.error || '') + ')');
+  const nr = st.rooms().find(x => x.name === kit.name);
+  A.ok(nr && st.rooms().length > rooms0, kit.id + ': a new room of that name');
+  const inside = st.props().filter(p => st.roomAt(p.x, p.y) === nr.id && p.t !== 'intake' && p.t !== 'bay' && p.t !== 'outbox' && p.t !== 'loop' && p.t !== 'filter' && p.t !== 'merger');
+  A.eq(inside.length, kit.props.length, kit.id + ': every piece of the kit, and nothing else, is in it');
+  A.ok(doorsClear(st, nr.id), kit.id + ': no piece of furniture on a doorway');
+  if (kit.line) { A.ok(a.lines.length === 1 && st.props().some(p => p.t === 'intake' && p.label === kit.line.label), kit.id + ': the kit\'s own line is built with its name'); A.ok(st.props().filter(p => p.t === 'bay' && st.roomAt(p.x, p.y) === nr.id).every(p => p.brief && !p.agentId), kit.id + ': its steps carry the kit\'s instructions and nobody is hired'); }
+  A.eq(routed(st).errs.length, 0, kit.id + ': no routing error');
+  A.ok(st.undo().ok); A.eq(snap(st), before, kit.id + ': ONE undo removes the room and all its furniture');
+}
+/* presets as rooms beside the station: add-only, one undo */
+for (const c of T.catalog.filter(c => T.presetKits(c.id).length)) {
+  const st = busy(), before = snap(st), was = routed(st), oldProps = st.props().map(p => JSON.stringify(p));
+  const r = SB.planRoom(st.serialize(), { preset: c.name }, renv);
+  A.ok(r.ok, c.id + ': a preset\'s rooms plan beside a busy station (' + (r.error || '') + ')');
+  if (!r.ok) continue;
+  A.eq(r.plan.rooms.length, T.presetKits(c.id).length, c.id + ': one room per preset room');
+  A.ok(SB.apply(st, r.plan, renv).ok, c.id + ': builds');
+  const keep = new Set(st.props().map(p => JSON.stringify(p)));
+  A.ok(oldProps.every(p => keep.has(p)), c.id + ': nothing already there moved or changed');
+  const now = routed(st);
+  A.ok(Object.keys(was.chains).every(d => JSON.stringify(now.chains[d]) === JSON.stringify(was.chains[d])), c.id + ': the existing line routes as before');
+  A.ok(st.undo().ok); A.eq(snap(st), before, c.id + ': one undo removes every added room');
+}
+/* furnishing an existing room: only on clear floor, only a plain 18 × 11 or bigger */
+{
+  const st = fresh(), z = st.rooms()[0].rects[0];
+  A.ok(st.addRoom({ kind: 'hab', name: 'SPARE', rect: { x1: z.x2 + 1, y1: z.y1, x2: z.x2 + 20, y2: z.y1 + 12 } }).ok, 'fixture: an empty spare room');
+  const before = snap(st), rooms = st.rooms().length;
+  const r = SB.planRoom(st.serialize(), { kit: 'library', where: 'spare' }, renv);
+  A.ok(r.ok && /furnishing the SPARE room/.test(r.plan.summary), 'a kit furnishes an existing room: ' + (r.error || r.plan.summary));
+  A.ok(SB.apply(st, r.plan, renv).ok && st.rooms().length === rooms, 'no new room');
+  const spare = st.rooms().find(x => x.name === 'SPARE');
+  A.ok(doorsClear(st, spare.id), 'its doorway stays clear');
+  st.undo(); A.eq(snap(st), before, 'undo');
+  const home = SB.planRoom(st.serialize(), { kit: 'lounge', where: 'HOME' }, renv);
+  A.ok(!home.ok && /does not fit in HOME/.test(home.error), 'a furnished room with no clear floor is refused: ' + home.error);
+}
+/* refusals */
+{
+  const st = fresh(), before = snap(st);
+  for (const [req, re] of [
+    [{ kit: 'castle' }, /There is no room kit called "castle"\. Kits: WORKROOM/],
+    [{}, /Choose one: kit \(one room\) or preset/],
+    [{ kit: 'LIBRARY', preset: 'research station' }, /Choose one/],
+    [{ preset: 'moon base' }, /There is no preset called "moon base"\. Presets: SOFTWARE STUDIO/],
+    [{ kit: 'LIBRARY', floorStyle: 'lava' }, /floorStyle must be one of: hull, /],
+    [{ kit: 'LIBRARY', floorMat: 'gold' }, /floorMat must be one of: /],
+    [{ kit: 'LIBRARY', x: 3, props: [] }, /these fields are not accepted: x, props/],
+    [{ preset: 'research', name: 'X' }, /Leave name out/],
+    [{ preset: 'research', where: 'HOME' }, /always added as new rooms/],
+    [{ kit: 'LIBRARY', where: 'Mars' }, /There is no room called "Mars"/],
+  ]) { const r = SB.planRoom(st.serialize(), req, renv); A.ok(!r.ok && re.test(r.error), 'room refused: ' + JSON.stringify(req) + ' -> ' + (r.error || 'NOT REFUSED')); }
+  A.eq(snap(st), before, 'no refusal changed anything');
+}
+/* restyle: the one cosmetic change, one undo, refusals */
+{
+  const st = fresh(), before = snap(st);
+  const r = SB.planRestyle(st.serialize(), { room: 'home', floorStyle: 'Walnut', floorMat: 'plank', name: 'quarters' }, renv);
+  A.ok(r.ok && /^Restyle HOME: floor .* → walnut, material .* → plank, renamed to QUARTERS\. Nothing is added, moved or removed\.$/.test(r.plan.summary), 'a restyle plans plainly: ' + (r.error || r.plan.summary));
+  const a = SB.apply(st, r.plan, renv);
+  A.ok(a.ok, 'and applies');
+  const h = st.rooms()[0];
+  A.eq([h.name, h.floorStyle, h.floorMat], ['QUARTERS', 'walnut', 'plank'], 'the room is restyled');
+  A.eq(st.props().length, M.create(JSON.parse(before)).props().length, 'nothing is added or removed');
+  A.ok(st.undo().ok); A.eq(snap(st), before, 'one undo restores the style and the name');
+  for (const [req, re] of [[{ room: 'HOME' }, /Nothing would change/], [{ room: 'Mars', name: 'X' }, /There is no room called "Mars"/], [{ room: 'HOME', floorStyle: 'lava' }, /floorStyle must be one of/], [{ room: 'HOME', props: 1 }, /only changes a room's floor, material or name/]])
+    { const x = SB.planRestyle(st.serialize(), req, renv); A.ok(!x.ok && re.test(x.error), 'restyle refused: ' + JSON.stringify(req) + ' -> ' + (x.error || 'NOT REFUSED')); }
+}
+/* the rooms gauntlet: wrong and hostile room and restyle requests */
+{
+  let seed = 7;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  const pick = xs => xs[Math.floor(rnd() * xs.length)];
+  const kitNames = T.kits().map(k => k.name).concat(T.kits().map(k => k.id)), junk = ['', 'castle', 'x'.repeat(3000), null, 3, {}, [], '<b>', 'HOME', 'new room', 'lava', 'walnut', 'plank'];
+  let built = 0;
+  for (let i = 0; i < 120; i++) {
+    const st = i % 2 ? busy() : fresh(), before = snap(st), oldProps = new Set(st.props().map(p => JSON.stringify(p)));
+    const restyle = rnd() < 0.25, req = {};
+    if (restyle) { req.room = pick(['HOME', 'REVIEW', 'LIBRARY', 'Mars', pick(junk)]); if (rnd() < 0.6) req.floorStyle = pick(['walnut', 'teal', 'lava', pick(junk)]); if (rnd() < 0.5) req.floorMat = pick(['plank', 'resin', 'gold', pick(junk)]); if (rnd() < 0.4) req.name = pick(['Quarters', 'REVIEW', pick(junk)]); }
+    else { if (rnd() < 0.7) req.kit = pick(kitNames.concat(junk)); if (rnd() < 0.3) req.preset = pick(['research', 'software studio', 'moon', pick(junk)]); if (rnd() < 0.4) req.where = pick(['new room', 'HOME', 'LIBRARY', 'Mars', pick(junk)]); if (rnd() < 0.3) req.name = pick(['Den', pick(junk)]); if (rnd() < 0.3) req.floorStyle = pick(['oak', 'lava', pick(junk)]); if (rnd() < 0.1) req[pick(['x', 'props', 'belts'])] = 1; }
+    let r;
+    try { r = restyle ? SB.planRestyle(st.serialize(), req, renv) : SB.planRoom(st.serialize(), req, renv); } catch (e) { A.ok(false, 'rooms gauntlet ' + i + ': threw ' + e.message); continue; }
+    A.eq(snap(st), before, 'rooms gauntlet ' + i + ': planning never changes the station');
+    if (!r.ok) { A.ok(typeof r.error === 'string' && r.error.length > 10, 'rooms gauntlet ' + i + ': a refusal says why'); continue; }
+    const a = SB.apply(st, r.plan, renv);
+    A.ok(a.ok, 'rooms gauntlet ' + i + ': an accepted plan builds (' + (a.error || '') + ')');
+    if (!a.ok) continue;
+    built++;
+    const keep = new Set(st.props().map(p => JSON.stringify(p)));
+    A.ok([...oldProps].every(p => keep.has(p)), 'rooms gauntlet ' + i + ': nothing already there moved or changed');
+    A.ok(st.undo().ok); A.eq(snap(st), before, 'rooms gauntlet ' + i + ': one undo restores the station exactly');
+  }
+  A.ok(built > 15, 'the rooms gauntlet built some (' + built + ')');
+}
+
 /* ---- 9. the sidecar tools: the memo the approval card reads, the lock, honest refusals ---- */
 (async () => {
   const calls = [], used = new Set();   // the page uses a plan once (builderPlans.delete)
   const bridge = { request: async (verb, args) => { calls.push([verb, args]);
     if (verb === 'station.plan_line') return args.request.line === 'nope' ? { ok: false, error: 'There is no line called "nope". The lines are: …' }
       : { ok: true, result: { planId: 'plan-t-1', summary: 'Build + test ("SHIP IT") in a new room beside HOME: Engineer (NOVA) → Tester (nobody yet) → Outbox.', line: { name: 'Build + test' }, steps: [{ step: 1, role: 'Engineer', agent: 'NOVA', instructions: 'Build what the incoming request asks for.' }, { step: 2, role: 'Tester', agent: null, instructions: 'Test the incoming change.' }], ready: false, blocking: ['BAY 2 (TESTER) needs an agent'] } };
-    if (verb === 'station.build_line') return args.planId === 'plan-t-1' && !used.has(args.planId) && used.add(args.planId) ? { ok: true, result: { built: true, line: { name: 'Build + test' }, ready: false, blocking: ['BAY 2 (TESTER) needs an agent'] } } : { ok: false, error: 'There is no plan "' + args.planId + '"' };
+    if (verb === 'station.plan_room') return { ok: true, result: { planId: 'plan-r-1', summary: 'LIBRARY (a quiet reading room) in a new room beside HOME.', rooms: [{ name: 'LIBRARY' }], steps: [] } };
+    if (verb === 'station.build') return args.planId === 'plan-t-1' && !used.has(args.planId) && used.add(args.planId) ? { ok: true, result: { built: true, line: { name: 'Build + test' }, ready: false, blocking: ['BAY 2 (TESTER) needs an agent'] } } : { ok: false, error: 'There is no plan "' + args.planId + '"' };
     return { ok: false, error: 'unknown verb' }; } };
   const memo = new Map();
   const tools = makeStationTools({ station: bridge, now: () => 1000, planMemo: memo, lineMenu: () => SB.catalog(M) });
-  const planT = tools.planLineTool, buildT = tools.buildLineTool;
+  const planT = tools.planLineTool, buildT = tools.buildTool;
   A.eq([planT.scope, planT.requiresConsent, buildT.scope, buildT.requiresConsent, buildT.taintLocked], ['read', false, 'write', true, true], 'plan changes nothing; build needs approval and is taint-locked (briefs persist into later runs)');
   A.ok(/never place anything yourself/.test(planT.description) && /build_test \(Build \+ test: ENGINEER → TESTER\)/.test(planT.description), 'the plan tool lists the menu from the catalog');
   const p = await planT.run({ line: 'build_test', name: 'SHIP IT' }, {});
@@ -234,7 +353,14 @@ for (const bp of M.BLUEPRINTS) {
   A.ok(/^REFUSED: There is no plan/.test(b2.content), 'the same plan cannot build again');
   // the sidecar's approval card reads the memo, never the model's words
   const idx = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
-  A.ok(/if \(\/\^station\[\._\]build_line\$\/\.test\(String\(call && call\.name \|\| ''\)\)\) return stationPlanSummary\(stationPlanMemo, a\.planId\)/.test(idx), 'consentSummary reads the build_line card from the plan memo');
-  A.ok(/The one floor change you can make is ADDING a ready-made line/.test(idx), 'the lead\'s team note names the one floor change it may make');
+  A.ok(/if \(\/\^station\[\._\]build\$\/\.test\(String\(call && call\.name \|\| ''\)\)\) return stationPlanSummary\(stationPlanMemo, a\.planId\)/.test(idx), 'consentSummary reads the station.build card from the plan memo');
+  A.ok(/The floor changes you can make are ADDING a ready-made line \(station\.plan_line\), ADDING a furnished room/.test(idx), 'the lead\'s team note names the floor changes it may make');
+  A.eq([tools.planRoomTool.scope, tools.planRoomTool.requiresConsent, tools.planRestyleTool.scope, tools.planRestyleTool.requiresConsent], ['read', false, 'read', false], 'the room and restyle plans change nothing');
+  A.ok(/Build exactly what a station\.plan_line, station\.plan_room or station\.plan_restyle call planned/.test(buildT.description), 'one build tool builds any plan');
+  const rp = await tools.planRoomTool.run({ kit: 'LIBRARY' }, {});
+  A.eq(calls[calls.length - 1], ['station.plan_room', { request: { kit: 'LIBRARY' } }], 'a room request rides to the page untouched');
+  A.ok(/^\{"planId":"plan-r-1"/.test(rp.content) && /^LIBRARY \(a quiet reading room\)/.test(planSummaryFrom(memo, 'plan-r-1')), 'a room plan is remembered for the card too');
+  const menuTools = makeStationTools({ station: bridge, kitMenu: () => T.kits().map(k => ({ name: k.name, about: k.about })), presetMenu: () => ['RESEARCH STATION'] });
+  A.ok(/KITS: WORKROOM \(/.test(menuTools.planRoomTool.description) && /PRESETS: RESEARCH STATION\./.test(menuTools.planRoomTool.description), 'the room tool lists the kits and presets');
   A.report('station-builder');
 })();

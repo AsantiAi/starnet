@@ -22,7 +22,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  /* the approval card's words for a station.build_line call: the plan's own summary and each step's instructions, as
+  /* the approval card's words for a station.build call: the plan's own summary and each step's instructions, as
      station.plan_line returned them (memo: planId -> { summary, steps }) — never text the model supplied. */
   function planSummaryFrom(memo, planId) {
     const e = memo && memo.get ? memo.get(String(planId || '')) : null;
@@ -327,7 +327,7 @@
 
     /* THE STATION BUILDER (2026-09-29): the lead ADDS a ready-made line from a fixed menu — it never sends a position, a
        belt or furniture; the page's StationBuilder does all the placing on a copy first. plan_line changes nothing (no
-       approval); build_line applies exactly one plan, behind the approval card. The card's text is the PLAN's own summary
+       approval); station.build applies exactly one plan, behind the approval card. The card's text is the PLAN's own summary
        (planSummaryFor), recorded here when plan_line answered — never words the model supplied. */
     const planMemo = deps.planMemo instanceof Map ? deps.planMemo : new Map();
     const menu = typeof deps.lineMenu === 'function' ? deps.lineMenu : () => [];
@@ -341,7 +341,7 @@
           + 'Fields: line (an id or plain name from the menu), where ("new room" or an existing room\'s name), name (what to call the line), '
           + 'steps (a list of { step: 1, instructions, agent } by step number or { role, instructions, agent }; agent is a crew member\'s name, or "lead"), '
           + 'dailyCap (dollars per day, or null for no cap), tries (1-5 review passes, for lines with a review loop). '
-          + 'Nothing is built yet: it returns a planId, a plain summary, and what would still be missing. Tell the Commander the summary, then call station.build_line with the planId. '
+          + 'Nothing is built yet: it returns a planId, a plain summary, and what would still be missing. Tell the Commander the summary, then call station.build with the planId. '
           + 'If it refuses, it says why and lists the valid choices; fix the request and plan again. Requires an open station page with Build mode closed. '
           + 'LINES: ' + menuText();
       },
@@ -353,34 +353,72 @@
         const out = await ask('station.plan_line', { request: args || {} });
         if (!out.ok) return refuse(out.error);
         const p = out.result || {};
-        if (p.planId) {
-          for (const [id, e] of planMemo) if (clock && clock() - e.at > 10 * 60 * 1000) planMemo.delete(id);
-          planMemo.set(p.planId, { summary: String(p.summary || ''), steps: p.steps || [], at: clock ? clock() : 0 });
-        }
+        remember(p);
         return { content: JSON.stringify(p), summary: 'planned ' + ((p.line && p.line.name) || 'a line') + (p.ready ? ' (ready once built)' : ' (' + ((p.blocking || []).length) + ' to do)') };
       }
     };
-    const buildLineTool = {
-      name: 'station.build_line', capability: 'orchestrator', scope: 'write', requiresConsent: true,
+    // every plan tool parks its plan in the memo the approval card reads (planSummaryFrom)
+    function remember(p) {
+      if (!p || !p.planId) return;
+      for (const [id, e] of planMemo) if (clock && clock() - e.at > 10 * 60 * 1000) planMemo.delete(id);
+      planMemo.set(p.planId, { summary: String(p.summary || ''), steps: p.steps || [], at: clock ? clock() : 0 });
+    }
+    const kitMenu = typeof deps.kitMenu === 'function' ? deps.kitMenu : () => [];
+    const presetMenu = typeof deps.presetMenu === 'function' ? deps.presetMenu : () => [];
+    const kitText = () => { try { return (kitMenu() || []).map(k => k.name + ' (' + k.about + ')').join('; '); } catch (_) { return ''; } };
+    const presetText = () => { try { return (presetMenu() || []).join(', '); } catch (_) { return ''; } };
+    const planRoomTool = {
+      name: 'station.plan_room', capability: 'orchestrator', scope: 'read', requiresConsent: false,
+      get description() {
+        return 'Plan adding a furnished room to the station when the Commander asks (a lounge, a library, a build room, "build me a research station"). '
+          + 'You never place anything yourself: pick a hand-designed room kit, or a preset whose rooms are all added beside the station, and StarNet places every piece, checks it on a copy of the station, and keeps doorways clear. '
+          + 'Fields: kit (one room) OR preset (every room of that preset), where ("new room", or an existing room\'s name to furnish it when it has clear floor), name (for a single new room), floorStyle, floorMat. '
+          + 'Nothing is built yet: it returns a planId and a plain summary, including any equipment the room brings (a desk is a computer). Tell the Commander the summary, then call station.build with the planId. '
+          + 'If it refuses, it says why and lists the valid choices. Requires an open station page with Build mode closed. KITS: ' + kitText() + '. PRESETS: ' + presetText() + '.';
+      },
+      schema: { type: 'object', properties: { kit: { type: 'string' }, preset: { type: 'string' }, where: { type: 'string' }, name: { type: 'string' }, floorStyle: { type: 'string' }, floorMat: { type: 'string' } } },
+      run: async (args) => {
+        const out = await ask('station.plan_room', { request: args || {} });
+        if (!out.ok) return refuse(out.error);
+        remember(out.result);
+        const p = out.result || {};
+        return { content: JSON.stringify(p), summary: 'planned ' + ((p.rooms || []).map(r => r.name).join(', ') || 'a room') };
+      }
+    };
+    const planRestyleTool = {
+      name: 'station.plan_restyle', capability: 'orchestrator', scope: 'read', requiresConsent: false,
+      description: 'Plan restyling one existing room when the Commander asks: its floorStyle, its floorMat (deck material), or its name, from fixed lists. It adds, moves and removes nothing. '
+        + 'Fields: room (its current name), floorStyle, floorMat, name. Nothing changes yet: it returns a planId and a summary; tell the Commander, then call station.build with the planId. If a value is not allowed it lists the allowed ones.',
+      schema: { type: 'object', properties: { room: { type: 'string' }, floorStyle: { type: 'string' }, floorMat: { type: 'string' }, name: { type: 'string' } }, required: ['room'] },
+      run: async (args) => {
+        const out = await ask('station.plan_restyle', { request: args || {} });
+        if (!out.ok) return refuse(out.error);
+        remember(out.result);
+        return { content: JSON.stringify(out.result || {}), summary: 'planned a restyle' };
+      }
+    };
+    const buildTool = {
+      name: 'station.build', capability: 'orchestrator', scope: 'write', requiresConsent: true,
       // briefs persist and every later run of those Bays obeys them: a run that read untrusted content may not write them
       taintLocked: true,
-      description: 'Build exactly the line a station.plan_line call planned, by its planId, after the Commander approves. It is added as one step that the Commander can remove with one UNDO in Build mode; nothing already on the station is moved or changed. '
-        + 'It refuses if the plan expired (ten minutes), was already used, or the station changed since the plan: then plan again. Afterwards, report what it says is still missing, exactly.',
+      description: 'Build exactly what a station.plan_line, station.plan_room or station.plan_restyle call planned, by its planId, after the Commander approves. It lands as one step the Commander can remove with one UNDO in Build mode; '
+        + 'nothing already on the station is moved or removed. It refuses if the plan expired (ten minutes), was already used, or the station changed since the plan: then plan again. Afterwards, report what it says is still missing, exactly.',
       schema: { type: 'object', properties: { planId: { type: 'string' } }, required: ['planId'] },
       run: async (args) => {
         const planId = String((args && args.planId) || '').trim().slice(0, 60);
-        const out = await ask('station.build_line', { planId });
+        const out = await ask('station.build', { planId });
         if (!out.ok) return refuse(out.error);
         planMemo.delete(planId);
         const r = out.result || {};
-        return { content: JSON.stringify(r), summary: 'built ' + ((r.line && r.line.name) || 'the line') + (r.ready ? ' · ready to run' : ' · ' + ((r.blocking || []).length) + ' to do') };
+        const what = (r.line && r.line.name) || (r.rooms || []).map(x => x.name).join(', ') || 'the plan';
+        return { content: JSON.stringify(r), summary: 'built ' + what + (r.line ? (r.ready ? ' · ready to run' : ' · ' + ((r.blocking || []).length) + ' to do') : '') };
       }
     };
 
     return {
-      agentConfigTool, agentConfigureTool, layoutTool, planLineTool, buildLineTool, planSummaryFor,
+      agentConfigTool, agentConfigureTool, layoutTool, planLineTool, planRoomTool, planRestyleTool, buildTool, planSummaryFor,
       listTool, createTool, peekTool, focusTool, taskListTool, taskCreateTool, taskManageTool,
-      register(reg) { [listTool, createTool, peekTool, focusTool, taskListTool, taskCreateTool, taskManageTool, agentConfigTool, agentConfigureTool, layoutTool, planLineTool, buildLineTool].forEach(t => reg.register(t)); return reg; }
+      register(reg) { [listTool, createTool, peekTool, focusTool, taskListTool, taskCreateTool, taskManageTool, agentConfigTool, agentConfigureTool, layoutTool, planLineTool, planRoomTool, planRestyleTool, buildTool].forEach(t => reg.register(t)); return reg; }
     };
   }
 

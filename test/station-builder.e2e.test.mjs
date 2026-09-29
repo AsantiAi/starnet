@@ -2,9 +2,10 @@
 
    A MOCK lead model calls station_plan_line (a line from the fixed menu) → the REAL sidecar tool → the REAL station bridge →
    the REAL page (StationBuilder.plan on a copy of the live WorldModel) → the plan comes back; the model then calls
-   station_build_line with that planId → StationBuilder.apply in ONE transact. It holds the build to its promises: the
+   station_build with that planId → StationBuilder.apply in ONE transact. It holds the build to its promises: the
    floor has exactly the planned room + line, the Workflow panel reads it the way the tool did, Build mode open refuses,
-   and one UNDO removes all of it. Isolated like station-layout.e2e (APPDATA / LOCALAPPDATA / USERPROFILE / HOME /
+   and one UNDO removes all of it. Then the same for a furnished room kit (station_plan_room) and a restyle
+   (station_plan_restyle): the room holds exactly the kit's furniture, the restyle changes only the floor, one UNDO each. Isolated like station-layout.e2e (APPDATA / LOCALAPPDATA / USERPROFILE / HOME /
    HERMES_HOME to scratch, a fresh Chrome profile, OS-picked ports, a local mock model). Skips LOUDLY with no Chromium. */
 import { spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
@@ -44,10 +45,10 @@ const stopChild = (child, graceful = false) => new Promise(resolve => {
   if (graceful) killTimer = setTimeout(kill, 3000); else kill();
 });
 
-// the mock model: a lead that PLANS a line (mock.planArgs), then BUILDS the planId it was given, then answers.
+// the mock model: a lead that PLANS (mock.planTool with mock.planArgs), then BUILDS the planId it was given, then answers.
 // A refusal (no planId in the tool result) ends the run in words — the way a real model reads REFUSED.
 function startMock() {
-  const mock = { requests: [], results: [], planArgs: {} };
+  const mock = { requests: [], results: [], planTool: 'station_plan_line', planArgs: {} };
   const server = http.createServer((req, res) => {
     if (req.url.indexOf('/models') >= 0) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -69,11 +70,11 @@ function startMock() {
         send({ choices: [{ delta: { content: text } }] });
         send({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 12, completion_tokens: 6, total_tokens: 18 } });
       };
-      if (offered && !answered.length) call('station_plan_line', mock.planArgs);
+      if (offered && !answered.length) call(mock.planTool, mock.planArgs);
       else if (offered && answered.length === 1) {
         mock.results.push(answered[0]);
         let planId = null; try { planId = JSON.parse(answered[0]).planId; } catch (_) { planId = null; }
-        if (planId) call('station_build_line', { planId }); else say('I could not plan that line.');
+        if (planId) call('station_build', { planId }); else say('I could not plan that.');
       } else { for (const t of answered.slice(1)) mock.results.push(t); say('Done.'); }
       res.write('data: [DONE]\n\n'); res.end();
     });
@@ -114,6 +115,10 @@ try {
 
 
   const before = await evalJS(cdp, `(() => { const st = App.station(); return { rooms: st.rooms().filter(r => r.kind !== 'corridor').map(r => r.name), hero: App.heroId() }; })()`);
+  // the page must be LISTENING on the bridge before a tool asks it anything (the SSE opens after the floor paints)
+  let link = null;
+  for (let i = 0; i < 60; i++) { link = await evalJS(cdp, "World._dbgLinkState()"); if (link && link.readyState === 1 && link.lastEventMsAgo != null) break; await sleep(500); }
+  check("the page is listening on the station bridge", !!link && link.readyState === 1 && link.lastEventMsAgo != null, JSON.stringify(link));
   let sync = null;
   for (let i = 0; i < 40; i++) { sync = await evalJS(cdp, 'World.planStatus()'); if (sync && !sync.pending && !sync.inflight && !sync.stale) break; await sleep(500); }
 
@@ -124,7 +129,7 @@ try {
   check('the lead run completes', run1.status === 200 && !!end1 && end1.payload.reason === 'done', JSON.stringify(end1 && end1.payload && end1.payload.reason));
   const leadReq = mock.requests.find(r => JSON.stringify(r.messages || []).indexOf('builds features and tests them') >= 0) || {};
   const offeredNames = JSON.stringify(leadReq.tools || []);
-  check('the lead is offered station_plan_line and station_build_line', offeredNames.indexOf('station_plan_line') >= 0 && offeredNames.indexOf('station_build_line') >= 0);
+  check('the lead is offered the planners and station_build', ['station_plan_line', 'station_plan_room', 'station_plan_restyle', 'station_build'].every(n => offeredNames.indexOf('"' + n + '"') >= 0));
   let PL = null; try { PL = JSON.parse(mock.results[0] || ''); } catch (_) { PL = null; }
   check('the plan came back from a copy of the station: nothing built yet', !!PL && /^plan-/.test(PL.planId) && /Nothing has been built yet/.test(PL.next), (mock.results[0] || '').slice(0, 200));
   check('the plan speaks plainly and says it will be ready', !!PL && /^Build \+ test \("SHIP IT"\) in a new room beside HOME: Engineer \(.+\) → Tester \(.+\) → Outbox · daily cap \$5 · up to 3 review tries\. It will be ready to run\.$/.test(PL.summary) && PL.ready === true, PL && PL.summary);
@@ -162,7 +167,35 @@ try {
   check('one UNDO removes all of it', undone.ok && JSON.stringify(undone.rooms) === JSON.stringify(before.rooms) && !undone.line, JSON.stringify(undone));
   await evalJS(cdp, `(() => { if (WorkflowPanel.isOpen()) WorkflowPanel.close(); Build.close(); return true; })()`);
 
-  check('the mock carried every model call (no real provider)', mock.requests.length >= 5, String(mock.requests.length));
+  // 6. a furnished room kit: the lead picks LOUNGE from the menu, StarNet places every piece
+  const kit = await evalJS(cdp, `(() => { const k = StationTemplates.kits().find(x => x.id === 'cozyLounge'); return { name: k.name, n: k.props.length, types: k.props.map(p => p[0]).sort() }; })()`);
+  mock.planTool = 'station_plan_room'; mock.planArgs = { kit: kit.name };
+  let at = mock.results.length;
+  const run3 = await leadRun(base, token, 'add a lounge');
+  check('the room run completes', run3.status === 200);
+  let RP = null, RB = null; try { RP = JSON.parse(mock.results[at] || ''); RB = JSON.parse(mock.results[at + 1] || ''); } catch (_) {}
+  check('the room plan speaks plainly', !!RP && RP.summary.indexOf(kit.name + ' (') === 0 && / in a new room beside HOME/.test(RP.summary) && /Nothing has been built yet/.test(RP.next), (mock.results[at] || '').slice(0, 240));
+  check('the room build answered with the room and how to undo it', !!RB && RB.ok !== false && (RB.rooms || []).some(r => r.name === kit.name) && /one UNDO/.test(RB.undo || ''), (mock.results[at + 1] || '').slice(0, 240));
+  const lib = await evalJS(cdp, `(() => { const st = App.station(), r = st.rooms().find(x => x.name === ${JSON.stringify(kit.name)}); if (!r) return null;
+    return { types: st.props().filter(p => st.roomAt(p.x, p.y) === r.id).map(p => p.t).sort(), style: r.floorStyle }; })()`);
+  check('the new room holds exactly the kit\'s furniture', !!lib && JSON.stringify(lib.types) === JSON.stringify(kit.types), JSON.stringify(lib));
+
+  // 7. a restyle: only the floor changes
+  mock.planTool = 'station_plan_restyle'; mock.planArgs = { room: kit.name, floorStyle: 'teal', floorMat: 'tile' };
+  at = mock.results.length;
+  const propsBefore = await evalJS(cdp, 'JSON.stringify(App.station().serialize().props)');
+  const run4 = await leadRun(base, token, 'make the lounge floor teal tile');
+  check('the restyle run completes', run4.status === 200);
+  let SP = null; try { SP = JSON.parse(mock.results[at] || ''); } catch (_) {}
+  check('the restyle plan says nothing is added, moved or removed', !!SP && /Nothing is added, moved or removed\.$/.test(SP.summary), (mock.results[at] || '').slice(0, 200));
+  const styled = await evalJS(cdp, `(() => { const st = App.station(), r = st.rooms().find(x => x.name === ${JSON.stringify(kit.name)}); return { style: r && r.floorStyle, mat: r && r.floorMat, same: JSON.stringify(st.serialize().props) === ${JSON.stringify(propsBefore)} }; })()`);
+  check('the room is restyled and no prop changed', styled.style === 'teal' && styled.mat === 'tile' && styled.same, JSON.stringify(styled));
+
+  // 8. two UNDOs: the restyle, then the whole room
+  const undone2 = await evalJS(cdp, `(() => { const st = App.station(); const a = st.undo(), b = st.undo(); return { ok: a.ok && b.ok, rooms: st.rooms().filter(r => r.kind !== 'corridor').map(r => r.name) }; })()`);
+  check('one UNDO each removes the restyle and the furnished room', undone2.ok && JSON.stringify(undone2.rooms) === JSON.stringify(before.rooms), JSON.stringify(undone2));
+
+  check('the mock carried every model call (no real provider)', mock.requests.length >= 11, String(mock.requests.length));
   check('no page exceptions', diagnostics.exceptions.length === 0, JSON.stringify(diagnostics.exceptions.slice(0, 3)));
 } catch (error) {
   console.log('FAIL harness :: ' + (error && error.stack || error));
