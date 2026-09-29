@@ -88,7 +88,11 @@ function sane(name, geo, L, floor) {
     const a = l.path[i - 1], b = l.path[i], v = { E: [1, 0], W: [-1, 0], S: [0, 1], N: [0, -1] }[a.d];
     if (!v || a.x + v[0] !== b.x || a.y + v[1] !== b.y) errs.push('path breaks in ' + l.id);
   }
-  A.eq(errs.slice(0, 4), [], name + ': a real floor (no overlaps, belts on clear deck, every arrow to the next tile)');
+  // the box it answers holds the whole line — every machine tile and every belt (what MAKE ROOM and the camera read)
+  const inBox = (x, y) => x > L.box.x1 && x < L.box.x2 && y > L.box.y1 && y < L.box.y2;
+  for (const b of L.belts) if (!inBox(b.x, b.y)) errs.push('belt outside the box ' + key(b.x, b.y));
+  for (const k in foot) { const q = k.split(','); if (!inBox(+q[0], +q[1])) errs.push('machine outside the box ' + k); }
+  A.eq(errs.slice(0, 4), [], name + ': a real floor (no overlaps, belts on clear deck, every arrow to the next tile, all inside its box)');
 }
 
 /* ---------- ROUTES THE SAME: every blueprint, laid out fresh ---------- */
