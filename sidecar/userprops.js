@@ -143,7 +143,7 @@ function makeUserProps(deps) {
       const id = 'user_' + slugOf(noun) + '_' + jobId.slice(-6).toLowerCase().replace(/[^a-z0-9]/g, '0');
       ensureDir();
       writeDurable({ fs, path }, path.join(dir, id + '.png'), png);
-      const entry = { id, jobId, noun, label: String(result.label).slice(0, 24), like: String(result.like || '').slice(0, 80),
+      const entry = { id, jobId, noun, label: String(result.label).slice(0, 24), like: String(result.like || '').slice(0, 80), symmetric: result.symmetric === true,
         footprint: { w: result.footprint.w, h: result.footprint.h }, bounds: { x: result.bounds.x, y: result.bounds.y, width: result.bounds.width, height: result.bounds.height },
         sourceWidth: result.sourceWidth, sourceHeight: result.sourceHeight, costUsd: Number(costUsd) || 0, createdAt: now() };
       const props = list().concat([entry]);
@@ -158,6 +158,7 @@ function makeUserProps(deps) {
     const entry = list().find((p) => p.id === propId);
     if (!entry) return { ok: false, code: 'not_found', message: 'No such made prop.' };
     if (entry.side) return { ok: false, code: 'exists', message: 'This prop already has a side view.' };
+    if (entry.symmetric) return { ok: false, code: 'symmetric', message: 'This prop looks the same from every side, so it already turns for free.' };
     if (pending().some((j) => j.kind === 'side' && j.propId === propId)) return { ok: false, code: 'busy', message: 'A side view for this prop is already being made.' };
     const c = cloudCfg();
     if (!c) return { ok: false, code: 'not_linked', message: 'Making props uses StarNet credits. Link this station under SETTINGS \u2192 PROVIDERS first.' };

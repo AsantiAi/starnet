@@ -32,8 +32,18 @@ const UserProps = (() => {
     let d = null;
     try {
       d = await decode(p.id);
-      return await PropRemaster.registerRuntime(p.id, { image: p.id + '.png', sourceWidth: p.sourceWidth, sourceHeight: p.sourceHeight,
+      const ok = await PropRemaster.registerRuntime(p.id, { image: p.id + '.png', sourceWidth: p.sourceWidth, sourceHeight: p.sourceHeight,
         footprint: { w: p.footprint.w, h: p.footprint.h }, bounds: p.bounds, mode: 'approved', exposure: 1, effects: false }, d.im);
+      // A round object looks the same turned: its own front art IS its side view (box turned, same height), free.
+      if (ok && p.symmetric && !p.side && PropSprites.registerUserSide) {
+        const fp = { w: p.footprint.h, h: p.footprint.w }, H = p.bounds.height;
+        if (PropSprites.registerUserSide(p.id, { footprint: fp })) {
+          sided.add(p.id);
+          await PropRemaster.registerRuntime(p.id, { image: p.id + '.png', sourceWidth: p.sourceWidth, sourceHeight: p.sourceHeight, footprint: fp,
+            bounds: { x: -2, y: fp.h * 12 - H, width: fp.w * 12 + 4, height: H }, mode: 'approved', exposure: 1, effects: false }, d.im, 'w');
+        }
+      }
+      return ok;
     } catch (_) { return false; }   // the row stays; the prop keeps its placeholder rather than vanishing
     finally { if (d) URL.revokeObjectURL(d.url); }
   }

@@ -613,7 +613,7 @@ const Build = (() => {
     const side = root.querySelector('#refit-makeprop-side');
     if (side) {
       const made = typeof UserProps !== 'undefined' && UserProps.get ? UserProps.get(propType) : null;
-      side.hidden = !(made && !made.side);
+      side.hidden = !(made && !made.side && !made.symmetric);   // a round prop already turns with its own art
       side.disabled = busy;
       side.textContent = made ? '\u21bb MAKE SIDE VIEW \u00b7 ' + (made.label || 'this prop') : '\u21bb MAKE SIDE VIEW';
     }

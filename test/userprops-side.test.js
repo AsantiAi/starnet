@@ -99,6 +99,17 @@ const SIDE = (over = {}) => ({ view: 'w', noun: 'a jukebox', footprint: { w: 2, 
     Object.assign(cloud.state.jobs.get(busyStart.job.id), { status: 'done', result: SIDE() });
     await up2.pollOnce();
     A.ok(up2.deleted().includes(prop.id), 'a later landing keeps the tombstones');
+
+    // ---- a symmetric prop records the flag and never sells a side view (it turns with its own art)
+    const barrelJob = await up2.start('a wooden barrel');
+    Object.assign(cloud.state.jobs.get(barrelJob.job.id), { status: 'done', costUsd: 0.3, result: { ...FRONT, label: 'WOODEN BARREL', noun: 'a wooden barrel', symmetric: true } });
+    await up2.pollOnce();
+    const barrel = up2.list().find((p) => p.label === 'WOODEN BARREL');
+    A.eq(barrel.symmetric, true, 'the symmetric flag lands on the entry');
+    const beforeCalls = cloud.state.calls.length;
+    A.eq((await up2.startSide(barrel.id)).code, 'symmetric', 'no paid side view for a prop that looks the same turned');
+    A.eq(cloud.state.calls.length, beforeCalls, 'and no cloud call is made');
+    A.eq(up2.list().find((p) => p.id === lamp.id).symmetric, false, 'a prop without the flag is not symmetric');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
   A.report();
 })();
