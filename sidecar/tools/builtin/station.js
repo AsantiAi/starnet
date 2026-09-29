@@ -402,8 +402,8 @@
       name: 'station.build', capability: 'orchestrator', scope: 'write', requiresConsent: true,
       // briefs persist and every later run of those Bays obeys them: a run that read untrusted content may not write them
       taintLocked: true,
-      description: 'Build exactly what a station.plan_line, station.plan_room or station.plan_restyle call planned, by its planId, after the Commander approves. It lands as one step the Commander can remove with one UNDO in Build mode; '
-        + 'nothing already on the station is moved or removed. It refuses if the plan expired (ten minutes), was already used, or the station changed since the plan: then plan again. Afterwards, report what it says is still missing, exactly.',
+      description: 'Build exactly what a station.plan_line, station.plan_room or station.plan_restyle call planned, by its planId, after the Commander approves. It lands as one step the Commander can take back with one UNDO in Build mode; '
+        + 'nothing already on the station is moved or removed, except by a preset swap (replace: true), which replaces the layout and backs the old one up for RESTORE PREVIOUS. It refuses if the plan expired (ten minutes), was already used, or the station changed since the plan: then plan again. Afterwards, report what it says is still missing, exactly.',
       schema: { type: 'object', properties: { planId: { type: 'string' } }, required: ['planId'] },
       run: async (args) => {
         const planId = String((args && args.planId) || '').trim().slice(0, 60);
