@@ -662,7 +662,8 @@
     try {
       const s = S.els.section, list = S.els.list;
       const lastBottom = Math.max(list.getBoundingClientRect().bottom, S.els.empty.hidden ? 0 : S.els.empty.getBoundingClientRect().bottom);
-      return Math.ceil(lastBottom + s.scrollTop + 18);
+      // + the feed's bottom padding, the panel's border and the frame's padding, with room so no scrollbar appears for a fit
+      return Math.ceil(lastBottom + s.scrollTop + 30);
     } catch (_) { return 0; }
   }
 
