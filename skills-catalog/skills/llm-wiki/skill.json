@@ -1,0 +1,15 @@
+{
+  "slug": "llm-wiki",
+  "version": "1.0.0",
+  "shelf": "community",
+  "category": "Research",
+  "tags": ["wiki", "knowledge-base", "research", "markdown", "notes"],
+  "requires": ["cabinet", "dish"],
+  "license": "MIT",
+  "authors": ["Nous Research"],
+  "upstream": {
+    "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/research/llm-wiki",
+    "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
+    "license": "MIT"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "slug": "notes-vault",
+  "version": "1.0.0",
+  "shelf": "community",
+  "category": "Productivity",
+  "tags": ["notes", "markdown", "vault", "wikilinks"],
+  "requires": ["cabinet"],
+  "license": "MIT",
+  "authors": ["Teknium", "Nous Research"],
+  "upstream": {
+    "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/note-taking/obsidian",
+    "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
+    "license": "MIT"
+  }
+}

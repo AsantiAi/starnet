@@ -3273,13 +3273,29 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
        offering choices that would do nothing, and the note about WHEN a change takes effect is shown
        because a live session cannot switch voice mid-call. */
 
+    // SKILL MARKET (2026-09-29): the curated StarNet catalog, browsed as the same glass card grid the connectors
+    // CATALOG uses. The catalog is fetched when this section loads, never in the background.
+    const secMarket =
+      '<p class="set-about"><b>Add skills to your whole crew.</b> StarNet Originals are written and tested by StarNet; community picks are credited to their authors. Installing adds the skill to your SKILL LIBRARY and switches it on.</p>' +
+      '<div class="cc-filters" id="skm-filters" role="group" aria-label="Filter the skill market">' +
+        '<button type="button" class="cc-filter active" data-skm-filter="all" aria-pressed="true">ALL</button>' +
+        '<button type="button" class="cc-filter" data-skm-filter="originals" aria-pressed="false">STARNET ORIGINALS</button>' +
+        '<button type="button" class="cc-filter" data-skm-filter="community" aria-pressed="false">COMMUNITY</button>' +
+        '<button type="button" class="cc-filter cc-f-on" data-skm-filter="installed" aria-pressed="false">INSTALLED</button>' +
+        '<button type="button" class="cc-filter" data-skm-filter="update" aria-pressed="false">UPDATES</button>' +
+      '</div>' +
+      '<div id="skm-list" class="cc-list"><span class="loading pulse">loading the skill market…</span></div>' +
+      '<div id="skm-msg" class="msg" role="status" aria-live="polite"></div>';
+
     const frag = html => (el => { el.innerHTML = html; });
     const sections = [
+      { id: 'market', label: 'SKILL MARKET', glyph: '▦', desc: 'Browse StarNet Originals and credited community skills, and install one for the whole crew in one click.', build: frag(secMarket) },
       { id: 'library', label: 'SKILL LIBRARY', glyph: '▤', desc: 'Pre-installed procedures your agents follow when a task matches, grouped by kind.', build: frag(secLibrary) },
       { id: 'agent', label: 'AGENT SKILLS', glyph: '✎', desc: 'Procedures this agent created or learned itself.', build: frag(secAgent) },
       { id: 'exchange', label: 'SKILL EXCHANGE', glyph: '⇩', desc: 'Inspect and install open SKILL.md procedures with provenance and guard review.', build: frag(secExchange) }
     ];
     function wire() {
+      loadSkillMarket(agentId);
       loadSkillLibrary(agentId);
       loadAgentSkills(agentId);
       wireSkillExchange(agentId);
@@ -3289,6 +3305,124 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   }
   window.AbilityLanes = window.AbilityLanes || [];
   window.AbilityLanes.push(abilitySkillsLane);
+
+  /* SKILL MARKET — the curated StarNet catalog as a card grid (the connectors CATALOG's cc-card glass cards, reused
+     so the two catalogs look and behave the same, search included). Every status a card shows comes from the
+     sidecar's /api/skill-market listing: available, installed, built in (our bundled copy IS the published
+     version), update, or tampered (its files changed on disk, so agents are not given it). */
+  const SKM_GEAR = { cabinet: 'FILE CABINET', dish: 'DISH', workbench: 'WORKBENCH', notebook: 'NOTEBOOK', studio: 'STUDIO', orchestrator: 'LEAD CONSOLE', computer: 'COMPUTER' };
+  let skmFilter = 'all';
+  // the gear a skill can use for this agent — the SAME reading loadSkillLibrary makes (room objects, shared station
+  // gear, profile / Full Access grants from /api/toolsets), so a market card never calls gear "missing" that the
+  // library would count as present
+  async function skillPlacedTypes(agentId) {
+    let placed = [];
+    try { placed = (typeof World !== 'undefined' && World.heroCaps) ? World.heroCaps(agentId).map(c => c.objectType) : []; } catch (e) {}
+    const shared = (() => { try { return typeof World !== 'undefined' && World.stationCaps ? World.stationCaps().map(c => c.objectType) : []; } catch (_) { return []; } })();
+    let granted = [];
+    try {
+      const view = await Harness.api.get('/api/toolsets?agent=' + encodeURIComponent(agentId) + '&placed=' + encodeURIComponent(placed.join(',')));
+      if (view && view.authority && Array.isArray(view.toolsets)) granted = view.toolsets.filter(r => r.object && (r.placed || r.profileGranted || view.authority.unrestricted)).map(r => r.object);
+    } catch (_) {}
+    return [...new Set(placed.concat(shared, granted))];
+  }
+  function skmCard(e, i) {
+    const on = e.status === 'installed';
+    const gear = (e.missingGear || []).map(g => SKM_GEAR[g] || g.toUpperCase());
+    const origin = e.shelf === 'originals'
+      ? '<span class="cc-badge cc-official">STARNET ORIGINAL</span>'
+      : '<span class="cc-badge cc-community">community · ' + esc(e.author || 'credited') + '</span>';
+    let action, hint;
+    if (e.status === 'installed') { action = '<button class="bb xs" data-skm-act="uninstall" data-slug="' + esc(e.slug) + '">REMOVE</button>'; hint = 'Installed · v' + esc(e.version) + (gear.length ? ' · needs ' + esc(gear.join(', ')) + ' placed to be used' : ''); }
+    else if (e.status === 'bundled') { action = '<button class="bb xs" disabled>BUILT IN</button>'; hint = 'Built into StarNet and up to date (v' + esc(e.version) + '). Switch it on or off in SKILL LIBRARY.'; }
+    else if (e.status === 'update') { action = '<button class="bb xs" data-skm-act="install" data-slug="' + esc(e.slug) + '">UPDATE</button>'; hint = (e.installedVersion ? 'v' + esc(e.installedVersion) + ' → ' : 'A newer version than your built-in copy: ') + 'v' + esc(e.version); }
+    else if (e.status === 'tampered') { action = '<button class="bb xs" data-skm-act="install" data-slug="' + esc(e.slug) + '">REINSTALL</button>'; hint = 'Its files changed on disk after install, so agents are not given it. Reinstall to restore it.'; }
+    else { action = '<button class="bb sm" data-skm-act="install" data-slug="' + esc(e.slug) + '">+ INSTALL</button>'; hint = gear.length ? 'Needs ' + esc(gear.join(', ')) + ' placed to be used.' : 'Ready to use as soon as it is installed.'; }
+    const files = (e.files || []).map(f => '<li><code>' + esc(f.path) + '</code> <span class="dim">' + esc(String(f.bytes)) + ' B</span></li>').join('');
+    const upstream = e.upstream && /^https:\/\//.test(String(e.upstream.url || ''))
+      ? '<div class="mc-hint">Adapted from <a class="dim" href="' + esc(e.upstream.url) + '" target="_blank" rel="noopener">the original ↗</a> (' + esc(e.upstream.license || e.license) + ')</div>' : '';
+    const search = [e.category, e.author, e.shelf === 'originals' ? 'starnet original' : 'community'].concat(e.tags || []).join(' ');
+    return '<div class="cc-card' + (on ? ' cc-on' : '') + '" data-skm="' + esc(e.slug) + '" data-shelf="' + esc(e.shelf) + '" data-status="' + esc(e.status) + '" data-search="' + esc(search) + '" style="--ci:' + (i || 0) + '">' +
+      '<div class="cc-head"><span class="cc-brand" aria-hidden="true">' + esc(String(e.name || e.slug).slice(0, 2).toUpperCase()) + '</span>' +
+        '<div class="cc-identity"><b>' + esc(e.name) + '</b><span class="cc-chip">' + esc(e.category) + '</span></div></div>' +
+      '<div class="cc-blurb dim">' + esc(e.description) + '</div>' +
+      '<details class="cc-details"><summary>Skill details</summary><div class="cc-details-body">' + origin +
+        '<div class="mc-hint">v' + esc(e.version) + ' · ' + esc(e.license || 'no license') + (e.requires && e.requires.length ? ' · uses ' + esc(e.requires.map(g => SKM_GEAR[g] || g).join(', ')) : '') + '</div>' +
+        upstream + (files ? '<ul class="skm-files">' + files + '</ul>' : '') + '</div></details>' +
+      '<div class="mc-hint cc-setup-hint"' + (e.status === 'tampered' ? ' style="color:var(--gold)"' : '') + '>' + hint + '</div>' +
+      '<div class="cc-acts">' + action + '</div></div>';
+  }
+  function skmApplyFilter(list) {
+    if (!list) return;
+    list.querySelectorAll('.cc-group').forEach(g => {
+      let vis = 0;
+      g.querySelectorAll('.cc-card').forEach(c => {
+        const hit = skmFilter === 'all' ? true
+          : skmFilter === 'installed' ? (c.dataset.status === 'installed' || c.dataset.status === 'bundled')
+          : skmFilter === 'update' ? (c.dataset.status === 'update' || c.dataset.status === 'tampered')
+          : c.dataset.shelf === skmFilter;
+        c.hidden = !hit; if (hit) vis++;
+      });
+      g.hidden = vis === 0;
+      const tag = g.querySelector('.sec-tag'); if (tag) tag.textContent = String(vis);
+    });
+    let none = list.querySelector('.cc-nores');
+    const shown = list.querySelectorAll('.cc-card:not([hidden])').length;
+    if (!shown) {
+      if (!none) { none = document.createElement('p'); none.className = 'mc-hint cc-nores'; list.appendChild(none); }
+      none.textContent = skmFilter === 'update' ? 'Everything you have is up to date.' : skmFilter === 'installed' ? 'No market skills installed yet.' : 'Nothing on this shelf yet.';
+    } else if (none) none.remove();
+  }
+  function renderSkillMarket(host, d, agentId) {
+    if (!d || !d.ok) {
+      host.innerHTML = '<p class="mc-hint">Couldn\'t reach the skill market: ' + esc((d && d.error) || 'no answer') + '. Skills you already installed keep working.</p>' +
+        '<button class="bb xs" type="button" data-skm-act="retry">TRY AGAIN</button>';
+      return;
+    }
+    const shelves = [['originals', 'StarNet Originals', 'Written and tested by StarNet for your station\'s gear and tools.'], ['community', 'Community picks', 'Open skills by other authors, adapted for StarNet and credited.']];
+    const html = shelves.map(([id, label, note]) => {
+      const rows = d.entries.filter(e => e.shelf === id);
+      if (!rows.length) return '';
+      return '<div class="cc-group"><div class="sec"><span class="sec-l">' + esc(label) + '</span><span class="sec-tag">' + rows.length + '</span><span class="sec-r"></span><span class="sec-nd"></span></div>' +
+        '<p class="mc-hint">' + esc(note) + '</p><div class="cc-grid">' + rows.map(skmCard).join('') + '</div></div>';
+    }).join('');
+    host.innerHTML = html || '<p class="mc-hint">The skill market is empty right now.</p>';
+    skmApplyFilter(host);
+  }
+  function loadSkillMarket(agentId, refresh) {
+    const host = $('#skm-list'); if (!host) return;
+    skillPlacedTypes(agentId)
+      .then(placed => Harness.api.get('/api/skill-market?placed=' + encodeURIComponent(placed.join(',')) + (refresh ? '&refresh=1' : '')))
+      .then(d => { if ($('#skm-list') === host) { renderSkillMarket(host, d, agentId); const search = host.closest('.term-body')?.querySelector('.con-search-in'); if (search && search.value.trim()) search.dispatchEvent(new Event('input', { bubbles: true })); } })
+      .catch(e => { if ($('#skm-list') === host) renderSkillMarket(host, { ok: false, error: e && e.message }, agentId); });
+    if (host.dataset.wired) return;
+    host.dataset.wired = '1';
+    const filters = $('#skm-filters');
+    if (filters) filters.addEventListener('click', ev => {
+      const b = ev.target.closest('[data-skm-filter]'); if (!b) return;
+      skmFilter = b.dataset.skmFilter;
+      filters.querySelectorAll('[data-skm-filter]').forEach(x => { const on = x === b; x.classList.toggle('active', on); x.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+      skmApplyFilter($('#skm-list'));
+    });
+    host.addEventListener('click', async ev => {
+      const b = ev.target.closest('[data-skm-act]'); if (!b || b.disabled) return;
+      const act = b.dataset.skmAct;
+      if (act === 'retry') { loadSkillMarket(agentId, true); return; }
+      const msg = $('#skm-msg');
+      const card = b.closest('[data-skm]');
+      const name = card ? (card.querySelector('.cc-identity b') || {}).textContent : b.dataset.slug;
+      b.disabled = true; const label = b.textContent; b.textContent = act === 'install' ? 'INSTALLING…' : 'REMOVING…';
+      try {
+        const r = await Harness.api.post('/api/skill-market/' + (act === 'install' ? 'install' : 'uninstall'), { slug: b.dataset.slug });
+        if (!r.ok || !r.j || r.j.ok === false) throw new Error((r.j && r.j.error) || 'the station refused');
+        if (msg) { msg.className = 'msg ok'; msg.textContent = act === 'install' ? (r.j.action === 'update' ? 'Updated ' : 'Installed ') + name + ' for the whole crew.' : 'Removed ' + name + '.'; }
+        loadSkillMarket(agentId); loadSkillLibrary(agentId);
+      } catch (e) {
+        b.disabled = false; b.textContent = label;
+        if (msg) { msg.className = 'msg'; msg.textContent = (e && e.message) || 'That did not work.'; }
+      }
+    });
+  }
 
   // async: fetch the bundled recipe catalog (with THIS agent's placed objects, so the active/locked readout is
   // truthful) and render it into #sk-lib. Mirrors loadMemoryCore — re-query the host after the await so a panel
