@@ -32,8 +32,18 @@ const UserProps = (() => {
     let d = null;
     try {
       d = await decode(p.id);
-      return await PropRemaster.registerRuntime(p.id, { image: p.id + '.png', sourceWidth: p.sourceWidth, sourceHeight: p.sourceHeight,
+      const ok = await PropRemaster.registerRuntime(p.id, { image: p.id + '.png', sourceWidth: p.sourceWidth, sourceHeight: p.sourceHeight,
         footprint: { w: p.footprint.w, h: p.footprint.h }, bounds: p.bounds, mode: 'approved', exposure: 1, effects: false }, d.im);
+      // A round object looks the same turned: its own front art IS its side view (box turned, same height), free.
+      if (ok && p.symmetric && !p.side && PropSprites.registerUserSide) {
+        const fp = { w: p.footprint.h, h: p.footprint.w }, H = p.bounds.height;
+        if (PropSprites.registerUserSide(p.id, { footprint: fp })) {
+          sided.add(p.id);
+          await PropRemaster.registerRuntime(p.id, { image: p.id + '.png', sourceWidth: p.sourceWidth, sourceHeight: p.sourceHeight, footprint: fp,
+            bounds: { x: -2, y: fp.h * 12 - H, width: fp.w * 12 + 4, height: H }, mode: 'approved', exposure: 1, effects: false }, d.im, 'w');
+        }
+      }
+      return ok;
     } catch (_) { return false; }   // the row stays; the prop keeps its placeholder rather than vanishing
     finally { if (d) URL.revokeObjectURL(d.url); }
   }
@@ -56,6 +66,7 @@ const UserProps = (() => {
     loading = (async () => {
       let j = null;
       try { const r = await apiFetch('/api/userprops'); j = r.ok ? await r.json() : null; } catch (_) { j = null; }
+      if (j && Array.isArray(j.deleted) && PropSprites.markUserDeleted) PropSprites.markUserDeleted(j.deleted);
       if (j && Array.isArray(j.props)) {
         const before = props.map((p) => p.id).join(',');
         props = j.props;
@@ -82,6 +93,15 @@ const UserProps = (() => {
       return await r.json();
     } catch (_) { return { ok: false, code: 'unreachable', message: 'The station did not answer. Try again.' }; }
   }
+  // delete a made prop from the station's library; the caller removes placed copies and the catalog row
+  async function remove(id) {
+    try {
+      const r = await apiFetch('/api/userprops/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+      const j = await r.json();
+      if (j && j.ok) { props = props.filter((p) => p.id !== id); registered.delete(id); sided.delete(id); }
+      return j;
+    } catch (_) { return { ok: false, code: 'unreachable', message: 'The station did not answer. Try again.' }; }
+  }
   async function job(id) {
     try { const r = await apiFetch('/api/userprops/job?id=' + encodeURIComponent(id)); return await r.json(); }
     catch (_) { return { ok: false, code: 'unreachable' }; }
@@ -106,6 +126,6 @@ const UserProps = (() => {
   const list = () => props.slice();
   if (typeof window !== 'undefined') setTimeout(() => { load(); }, 0);
   const get = (id) => props.find((p) => p.id === id) || null;
-  return { load, list, get, generate, makeSide, job, watch };
+  return { load, list, get, generate, makeSide, remove, job, watch };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = UserProps;

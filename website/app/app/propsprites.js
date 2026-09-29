@@ -11877,7 +11877,20 @@ const PropSprites = (() => {
   // Placement/save rules for a prop type. A player-made id is KEPT even before its row is registered (the
   // boot fetch can lose the race, or the PNG can be missing): pruning it would silently delete paid work from
   // the save. Built-in unknown types still return null so retired types are dropped as before.
+  const USER_DELETED = new Set();
+  // the player deleted these made props: saves drop them like a retired type (they are not paid work anymore)
+  function markUserDeleted(ids) { for (const id of ids || []) if (USER_ID.test(String(id || ''))) USER_DELETED.add(String(id)); }
+  function unregisterUserProp(id) {
+    if (!USER_ID.test(String(id || '')) || !BY_ID[id]) return false;
+    delete BY_ID[id]; delete F[id]; delete F[viewKey(id, 'w')];
+    const i = CATALOG.findIndex((c) => c.id === id); if (i >= 0) CATALOG.splice(i, 1);
+    const y = CATS.yours || []; const j = y.findIndex((c) => c.id === id); if (j >= 0) y.splice(j, 1);
+    if (CATS.yours && !CATS.yours.length) delete CATS.yours;
+    USER_DELETED.add(id);
+    return true;
+  }
   function ruleFor(t) {
+    if (USER_DELETED.has(String(t || ''))) return null;
     const s = spec(t);
     if (s) return { mount: s.mount || null, stack: !!s.stack, surface: !!s.surface, flat: !!s.flat, footprintMigration: s.footprintMigration };
     return USER_ID.test(String(t || '')) ? { mount: null, stack: false, surface: false, flat: false } : null;
@@ -11923,7 +11936,7 @@ const PropSprites = (() => {
     // value is DIALLED on a real deck and copied back into the constant, never guessed.
     setChroma(k) { CHROMA = (k == null ? 1 : +k) || 1; _cboost.clear(); },
     getChroma: () => CHROMA,
-    registerUserProp, registerUserSide, ruleFor, isUserProp: (t) => USER_ID.test(String(t || '')),
+    registerUserProp, registerUserSide, unregisterUserProp, markUserDeleted, ruleFor, isUserProp: (t) => USER_ID.test(String(t || '')),
     // After player-made art decodes: drop the caches that were built while those props were placeholders.
     userArtChanged() { shadowMasks.clear(); invalidateLightResponse(); _ink.clear(); if (typeof World !== 'undefined' && typeof World.rebake === 'function') World.rebake(); },
     draw, drawBayNames, drawOver, hasOver, drawSeatFront, get CATALOG(){return projectionCatalog()?CATALOG.map(c=>spec(c.id)):CATALOG;}, CATS, spec, has, TILE,

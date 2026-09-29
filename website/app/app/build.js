@@ -585,7 +585,7 @@ const Build = (() => {
   const MAKE_STEP = { queued: 'Queued', waiting: 'Working', sizing: 'Sizing it against the catalog', drawing: 'Drawing', retrying: 'Redrawing', checking: 'Checking it matches the station' };
   function makeStatusText() {
     if (makeMsg) return makeMsg;
-    if (!makeJob) return { text: 'Uses StarNet credits \u00b7 usually about $0.35 a prop', tone: '' };
+    if (!makeJob) return { text: 'Uses StarNet credits \u00b7 about $0.35 a prop, $0.30 a side view (a retry adds about that again)', tone: '' };
     const j = makeJob, spent = j.costUsd > 0 ? ' \u00b7 $' + j.costUsd.toFixed(2) + ' so far' : '';
     if (j.status === 'done' && j.kind === 'side') return { text: 'Side view made \u00b7 cost $' + (Number(j.costUsd) || 0).toFixed(2) + (j.costPending ? ' (final cost settling)' : '') + ' \u00b7 press R to turn it', tone: 'ok' };
     if (j.status === 'done') return { text: 'Made ' + (j.label || j.noun) + ' \u00b7 cost $' + (Number(j.costUsd) || 0).toFixed(2) + (j.costPending ? ' (final cost settling)' : '') + ' \u00b7 in MADE BY YOU', tone: 'ok' };
@@ -605,10 +605,15 @@ const Build = (() => {
     const go = root.querySelector('#refit-makeprop-go');
     if (go) go.disabled = busy;
     // MAKE SIDE VIEW: offered only for a selected made prop that has no side view yet
+    const del = root.querySelector('#refit-makeprop-del');
+    if (del) {
+      const mine = typeof UserProps !== 'undefined' && UserProps.get ? UserProps.get(propType) : null;
+      del.hidden = !mine; del.disabled = busy;
+    }
     const side = root.querySelector('#refit-makeprop-side');
     if (side) {
       const made = typeof UserProps !== 'undefined' && UserProps.get ? UserProps.get(propType) : null;
-      side.hidden = !(made && !made.side);
+      side.hidden = !(made && !made.side && !made.symmetric);   // a round prop already turns with its own art
       side.disabled = busy;
       side.textContent = made ? '\u21bb MAKE SIDE VIEW \u00b7 ' + (made.label || 'this prop') : '\u21bb MAKE SIDE VIEW';
     }
@@ -657,6 +662,22 @@ const Build = (() => {
     if (makeJob || makeWatching || typeof UserProps === 'undefined') return;
     UserProps.load().then((r) => { const j = r && r.jobs && r.jobs[0]; if (j && !makeJob) watchMakeJob(j); });
   }
+  // DELETE a made prop: the station deletes it first (files, index, tombstone); only then are its placed copies on
+  // this floor removed, as one undo. Credits spent are not refunded, and the armed label says so before it happens.
+  async function deleteMadeProp() {
+    const made = typeof UserProps !== 'undefined' && UserProps.get ? UserProps.get(propType) : null;
+    if (!made) return;
+    const r = await UserProps.remove(made.id);
+    if (!r || !r.ok) { makeJob = null; makeMsg = { text: (r && r.message) || 'That prop could not be deleted.', tone: 'bad' }; paintMakeStatus(); return; }
+    const copies = station ? station.props().filter((p) => p.t === made.id).map((p) => p.id) : [];
+    if (copies.length && station.transact) station.transact(() => { for (const id of copies) { const x = station.removeProp(id); if (!x.ok) return x; } return { ok: true }; });
+    if (typeof PropSprites !== 'undefined' && PropSprites.unregisterUserProp) PropSprites.unregisterUserProp(made.id);
+    propType = 'plant'; propCat = 'all'; selectedPropId = null;
+    makeJob = null;
+    makeMsg = { text: 'Deleted ' + (made.label || 'that prop') + (copies.length ? ' \u00b7 removed ' + copies.length + ' placed ' + (copies.length === 1 ? 'copy' : 'copies') : ''), tone: 'ok' };
+    if (root) { renderPalette(); setLibraryPlacement(false); }
+    paintMakeStatus();
+  }
   function makePropPanel() {
     const box = document.createElement('section'); box.className = 'refit-makeprop'; box.setAttribute('aria-label', 'Make a prop');
     box.innerHTML = '<div class="refit-makeprop-head"><b>MAKE A PROP</b><small>Type any object. StarNet draws it in the station\u2019s style.</small></div>' +
@@ -664,7 +685,8 @@ const Build = (() => {
       '<button type="button" class="bb sm" id="refit-makeprop-go">MAKE</button></div>' +
       '<div class="refit-makeprop-foot"><span class="refit-makeprop-status" id="refit-makeprop-status" role="status" aria-live="polite"></span>' +
       '<button type="button" class="bb sm" id="refit-makeprop-door" hidden>\u25b8 OPEN PROVIDERS</button></div>' +
-      '<button type="button" class="bb sm refit-makeprop-sidebtn" id="refit-makeprop-side" hidden>\u21bb MAKE SIDE VIEW</button>';
+      '<div class="refit-makeprop-actions"><button type="button" class="bb sm refit-makeprop-sidebtn" id="refit-makeprop-side" hidden>\u21bb MAKE SIDE VIEW</button>' +
+      '<button type="button" class="bb sm" id="refit-makeprop-del" hidden>\u2715 DELETE</button></div>';
     const inp = box.querySelector('#refit-makeprop-input'), go = box.querySelector('#refit-makeprop-go');
     go.onclick = () => { startMakeProp(inp.value); sfx('click'); };
     inp.onkeydown = (ev) => {
@@ -674,6 +696,8 @@ const Build = (() => {
       inp.blur();
     };
     box.querySelector('#refit-makeprop-side').onclick = () => { startMakeSide(); sfx('click'); };
+    const delBtn = box.querySelector('#refit-makeprop-del');
+    if (typeof ArmConfirm !== 'undefined' && ArmConfirm.wire) ArmConfirm.wire(delBtn, { armedLabel: '\u2715 DELETE FOR GOOD? \u00b7 credits are not refunded', onArm: () => sfx('bad'), onConfirm: () => deleteMadeProp() });
     box.querySelector('#refit-makeprop-door').onclick = () => {
       const door = typeof FriendlyError !== 'undefined' && FriendlyError.actionButton && FriendlyError.actionButton({ action: 'store' });
       if (door && door.run) door.run();

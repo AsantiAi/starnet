@@ -4019,6 +4019,7 @@ body.crew-rail-off #screen-game.active {
 .refit-makeprop-status.bad { color: var(--bad); text-shadow: none; }
 /* the PROVIDERS door appears only after a not-linked / out-of-credit refusal; .bb sets display, so [hidden] needs the win */
 .refit-makeprop [hidden] { display: none !important; }
+.refit-makeprop-actions { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 3px; }
 /* the result readout: a real count, or an honest miss — never an empty grid with no explanation */
 .refit-searchnote {
   width: 100%; margin: 2px 0 1px; font-size: 11px; letter-spacing: 1.5px;
