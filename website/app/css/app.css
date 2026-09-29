@@ -4020,6 +4020,8 @@ body.crew-rail-off #screen-game.active {
 /* the PROVIDERS door appears only after a not-linked / out-of-credit refusal; .bb sets display, so [hidden] needs the win */
 .refit-makeprop [hidden] { display: none !important; }
 .refit-makeprop-actions { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 3px; }
+.refit-makeprop-size { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-family: 'VT323', monospace; letter-spacing: 1.5px; color: var(--ph-dim); }
+.refit-makeprop-size .refit-makeprop-sizeval { font-weight: normal; min-width: 4ch; text-align: center; color: var(--ph); text-shadow: 0 0 5px var(--ph-glow2); font-variant-numeric: tabular-nums; }
 /* the result readout: a real count, or an honest miss — never an empty grid with no explanation */
 .refit-searchnote {
   width: 100%; margin: 2px 0 1px; font-size: 11px; letter-spacing: 1.5px;

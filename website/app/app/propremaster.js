@@ -413,10 +413,14 @@ const PropRemaster = (() => {
   }
   let runtimeViews=0;
   // Register one player-made view after boot. Resolves true when the art is prepared and drawable.
-  async function registerRuntime(id,v,im,view='s'){
+  async function registerRuntime(id,v,im,view='s',replace=false){
     if(view!=='s'&&view!=='w')return false;
     const key=String(id)+':'+view;
-    if(entries.has(key))return true;
+    if(entries.has(key)&&!replace)return true;
+    if(entries.has(key)){   // a resized made prop: drop the old plane and its share of the pixel budget
+      const old=entries.get(key);pixelBudget=Math.max(0,pixelBudget-(old.body?old.body.width*old.body.height:0));
+      entries.delete(key);runtimeViews=Math.max(0,runtimeViews-1);
+    }
     if(runtimeViews>=400){failures.push({view:key,reason:'too many player-made props'});return false;}
     runtimeViews++;
     await prepare(key,v,im);
