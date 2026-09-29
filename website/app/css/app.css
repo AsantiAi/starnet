@@ -1228,6 +1228,8 @@ body.no-curve #stage-wrap::before { background: none; box-shadow: none; }
 /* the typed-answer escape hatch: quieter than the suggestion (it is an affordance note, not content), but
    present — the chip row alone reads as "pick exactly one" when free text has always been accepted. */
 .tq-hint { font-size: 12px; color: var(--ph-dim); letter-spacing: 0.3px; margin-top: 4px; opacity: .75; }
+/* the connect door a task question carries when its run needed an unconnected service (one card, one slot) */
+.tq-door { display: block; margin-top: 8px; }
 
 /* TASTE EXTRACTION "my read" card (chat.js briefReadCard) — the mid-run announce-and-act read.
    REGISTER (2026-07-24): this is a CARD, not a work-log micro-line. It states what the run believes it was
@@ -4199,6 +4201,17 @@ body.crew-rail-off #screen-game.active {
 .refit-linetile-cv { display: block; max-width: 100%; image-rendering: pixelated; pointer-events: none; }
 .refit-linetile-hd { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; }
 .refit-linetile .refit-matname { font-size: 12px; letter-spacing: 1.1px; text-align: left; }
+/* PLAIN NAMES (2026-09-28): the card leads with what the line does; the catalog name is a small tag beside it */
+.refit-linetile .refit-matname { flex: 1 1 auto; min-width: 0; }
+.refit-linetile-tag { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9.5px; letter-spacing: 1px; color: var(--ph-dim); opacity: .8; }
+/* SET UP BEFORE YOU PLACE: the armed card's cap + review tries, stacked right under it */
+.refit-lineprefs { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--ph-faint); border-radius: 4px; background: rgba(0,0,0,.25); }
+.refit-lineprefs-hd { font-size: 10.5px; letter-spacing: 1.2px; color: var(--ph); }
+.refit-lineprefs-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.refit-lineprefs-k { flex: 0 0 96px; font-size: 10.5px; letter-spacing: 1px; color: var(--ph-dim); }
+.refit-lineprefs .bb.sm { min-width: 30px; padding: 2px 7px; }
+.refit-lineprefs .bb.sm[aria-pressed="true"] { border-color: var(--ph); color: var(--ph-bright); background: rgba(var(--ph-rgb),.14); }
+.refit-lineprefs-note { font-size: 11px; line-height: 1.3; color: var(--ph-dim); }
 /* the stat chip mixes VT323 with fallback-font glyphs ('×' '·') — BOX-centred, never padded by
    font metrics (the symbol-glyph law) */
 .refit-linetile-stat {

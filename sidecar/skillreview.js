@@ -120,6 +120,35 @@
   const WRITE_ACTIONS = new Set(['create', 'edit', 'patch', 'archive', 'restore', 'write_file', 'remove_file', 'saved', 'edited', 'manage']);
   function isWriteAction(action) { return WRITE_ACTIONS.has(String(action || '').toLowerCase()); }
 
+  /* THE SKILL NUDGE (2026-09-28). The size gate above made review a candidate on nearly every run (the chars bar
+     counts the system prompt), and it then lost its run-end slot to the higher beats almost every time, so agents
+     rarely learned. The nudge counts the model turns an agent spends WITH skill tools on the wire since its
+     skillbase last changed, carried across runs. When the count reaches `every`, a review is DUE: it spends
+     outside the aux ceiling (the governor's reserved lane) and the count starts over. An agent that saved or
+     edited a skill itself this run did the job already, so its count starts over too. Pure: no clock, no I/O.
+     `every` 0 turns the nudge off. */
+  const NUDGE_EVERY = 10;
+  function parseNudgeEvery(raw) {
+    if (raw == null) return NUDGE_EVERY;
+    const s = String(raw).trim();
+    if (!/^\d+$/.test(s)) return NUDGE_EVERY;   // junk falls back to the default, never to "off"
+    return parseInt(s, 10);
+  }
+  // nudgeAfterRun(count, { turns, managed, every }) -> { count, due }
+  //   count   : turns carried in from earlier runs
+  //   turns   : model turns THIS run took with skill tools on the wire
+  //   managed : the agent itself changed a skill this run (any isWriteAction)
+  function nudgeAfterRun(count, o) {
+    o = o || {};
+    const every = Number.isInteger(o.every) && o.every >= 0 ? o.every : NUDGE_EVERY;
+    const carried = Math.max(0, Math.floor(Number(count) || 0));
+    const turns = Math.max(0, Math.floor(Number(o.turns) || 0));
+    // clamped at the bar: once due it stays exactly due (a failed run can't review), so the stored count stops
+    // changing and stops being rewritten
+    const next = o.managed ? 0 : (every > 0 ? Math.min(every, carried + turns) : carried + turns);
+    return { count: next, due: every > 0 && next >= every };
+  }
+
   /* makeReviewObserver({ emit, log, now, source }) -> { onManage(skill, action) }
      The ONE testable seam that un-silences a background pass. When the quiet review/curator loop mutates a
      skill, onManage fires:
@@ -149,5 +178,5 @@
     };
   }
 
-  return { stats, shouldReviewRun, buildPrompt, isWriteAction, makeReviewObserver };
+  return { stats, shouldReviewRun, buildPrompt, isWriteAction, makeReviewObserver, NUDGE_EVERY, parseNudgeEvery, nudgeAfterRun };
 });

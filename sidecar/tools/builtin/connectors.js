@@ -10,7 +10,7 @@
 
    This tool closes (3) ONLY. It is a READER: pure local state, no network, no consent, and it can neither
    install nor authenticate anything. Adding a connector spends the Commander's credentials and is their
-   click, in ABILITIES › CONNECTORS (or the KEYS tab) — the agent's job is to know the offer exists and say so.
+   click, in ABILITIES › DISCOVER › CATALOG (a card per service) — the agent's job is to know the offer exists and say so.
 
    NEVER ECHOES A SECRET. Connector summaries carry `hasToken`, never the token (mcp/manager.js summary());
    service keys are reported as NAME + ENV VAR only, exactly like the prompt block. There is no code path
@@ -20,11 +20,13 @@
    actually SPENDS a service key through. A station with no dish can neither call an API nor drive a
    connector, so advertising the catalog there would teach a reach the run does not have.
 
-   makeConnectorTools({ connectors?, serviceKeys?, connectorCatalog?, keysCatalog? }) -> { listTool, register(reg), _internals }
+   makeConnectorTools({ connectors?, serviceKeys?, connectorCatalog?, keysCatalog?, signInUnavailable? }) -> { listTool, register(reg), _internals }
      connectors        : the live manager — { list() -> summary[] }        (omit → "none connected")
      serviceKeys       : () -> record[] (the raw KEYS list; only name/envVar/enabled/autonomous/docsUrl are read)
      connectorCatalog  : mcp/catalog.js      — { browse(installed) -> { connectors:[{id,name,category,authType,installed,blurb,via}] } }
      keysCatalog       : servicekeys-catalog — { PLATFORMS:[{id,name,category,envVar,docsUrl}] }
+     signInUnavailable : (catalogEntry) -> '' | reason — the SAME availability the ABILITIES card shows (index.js
+                         annotateConnectorAvailability). A card whose sign-in button is disabled is never offered as a door.
    Every dep is optional: a missing one degrades that SECTION to silence, never to a fake empty answer. */
 'use strict';
 (function (root, factory) {
@@ -98,6 +100,7 @@
     const keysOf = typeof deps.serviceKeys === 'function' ? deps.serviceKeys : null;
     const mcpCatalog = deps.connectorCatalog || null;
     const keyCatalog = deps.keysCatalog || null;
+    const unavailableOf = e => { if (typeof deps.signInUnavailable !== 'function') return ''; try { return str(deps.signInUnavailable(e)); } catch (_) { return ''; } };
 
     // ---- the three sections, each independently fail-open (a thrown dep degrades to a silent section) ----
 
@@ -152,8 +155,9 @@
           if (!e || e.installed) continue;
           if (!matches(q, e.id, e.name, e.category, e.blurb)) continue;
           const auth = e.authType === 'none' ? 'no credentials' : e.authType === 'oauth' ? 'sign-in' : 'api key';
+          const off = unavailableOf(e);
           out.push('- ' + str(e.name) + ' [' + str(e.category) + '] — connector, ' + auth
-            + (e.via ? ' via ' + str(e.via) : '') + (e.blurb ? '. ' + str(e.blurb).slice(0, 140) : ''));
+            + (e.via ? ' via ' + str(e.via) : '') + (off ? ' — SIGN-IN NOT AVAILABLE in this build: ' + off.slice(0, 160) : (e.blurb ? '. ' + str(e.blurb).slice(0, 140) : '')));
         }
       }
 
@@ -171,13 +175,14 @@
       // The count is the REAL total, not the shown slice — a truncated list that reports its own length as the
       // total would understate the offer, which is the failure this tool exists to fix.
       const head = 'AVAILABLE (' + out.length + ')' + (shown.length < out.length ? ', showing ' + shown.length : '')
-        + ' — NOT installed. The Commander adds a connector in ABILITIES › CONNECTORS, and a platform key in the KEYS tab. You cannot add these yourself; offer, never assume.';
+        + ' — NOT installed. The Commander adds either kind in ABILITIES › DISCOVER › CATALOG: search the service and follow its card (sign-in, or SET UP API KEY). You cannot add these yourself; offer, never assume.';
       return { label: 'available', count: out.length, head: head, body: shown };
     }
 
-    /* suggestFor(goal) -> [{ id, reason }] (<=3): catalog entries that fit the goal AND are NOT connected per the
-       host's own read-back (the manager's list — a configured-but-dead connector is still "not connected", and
-       one that is up is never suggested). [] when no catalog, no topic, or everything needed is wired. */
+    /* suggestFor(goal) -> [{ id, reason, unavailable }] (<=3 connectable, then <=3 unavailable): catalog entries that fit the goal AND are NOT connected
+       per the host's own read-back (the manager's list — a configured-but-dead connector is still "not connected",
+       and one that is up is never suggested). [] when no catalog, no topic, or everything needed is wired.
+       `unavailable` is the card's own reason its sign-in is disabled in this build ('' when it can be connected). */
     function suggestFor(goal) {
       const topics = goalTopics(goal);
       if (!topics.length || !mcpCatalog || typeof mcpCatalog.browse !== 'function') return [];
@@ -194,10 +199,13 @@
       for (const e of entries) {
         if (!e || !e.id || up.has(str(e.id))) continue;
         const score = entryScore(e, topics);
-        if (score > 0) scored.push({ id: str(e.id), score: score });
+        if (score > 0) scored.push({ id: str(e.id), score: score, unavailable: unavailableOf(e) });
       }
       scored.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
-      return scored.slice(0, 3).map(x => ({ id: x.id, reason: 'needed for: ' + str(goal).slice(0, 120) }));
+      // fill the 3 slots with CONNECTABLE fits first: a card whose sign-in is off must not push a working door out;
+      // the blocked ones still ride along (up to 3) so the model can say plainly they are not available yet.
+      const pick = scored.filter(x => !x.unavailable).slice(0, 3).concat(scored.filter(x => x.unavailable).slice(0, 3));
+      return pick.map(x => ({ id: x.id, reason: 'needed for: ' + str(goal).slice(0, 120), unavailable: x.unavailable }));
     }
 
     const listTool = {
@@ -206,7 +214,7 @@
         + 'connected, and — the part you cannot otherwise know — the vetted connectors and platform keys the '
         + 'Commander could add but has not (GitHub, Notion, Stripe, Google Workspace, Printify, Etsy and more). '
         + 'Check this BEFORE telling the Commander that StarNet cannot reach a service: it usually can, and the '
-        + 'honest answer is "that service has a setup path in ABILITIES › CATALOG — I can walk you through '
+        + 'honest answer is "that service has a setup path in ABILITIES › DISCOVER › CATALOG — I can walk you through '
         + 'it?". Read-only: you cannot install or authenticate anything, and you never see a key\'s value. '
         + 'Optional `query` filters by service or category; `scope` narrows to connected or available. '
         + 'Pass `goal` (the Commander\'s task in their words, e.g. "email my notes to myself") to get SUGGESTED: '
@@ -229,7 +237,11 @@
         // SUGGESTED rides first: it is the answer to the question the goal asked. Each suggestion is ALSO the
         // same connector_required event the MCP manager emits on a dead tool call, so the ONE post-run chip
         // path ("⇄ CONNECT GMAIL") renders it — no second mechanism. An emit failure is reported, not swallowed.
-        const suggested = goal ? suggestFor(goal) : [];
+        const all = goal ? suggestFor(goal) : [];
+        // A card whose sign-in is disabled in this build is not a door: no chip, and the model is told so (the
+        // first-hour walk 2026-09-28 had the agent promise "sign in with Google, no setup" beside a disabled button).
+        const suggested = all.filter(x => !x.unavailable);
+        const blocked = all.filter(x => x.unavailable);
         const lost = [];
         if (suggested.length && ctx && typeof ctx.emit === 'function') {
           for (const sgg of suggested) {
@@ -239,8 +251,9 @@
         }
         if (goal) {
           parts.push(suggested.length
-            ? { label: 'suggested', count: suggested.length, head: 'SUGGESTED for "' + goal + '" — NOT connected yet. The Commander now has a ⇄ CONNECT chip for it under your reply: tell them to tap it (ABILITIES › CATALOG). Setup varies by provider and may require an API key or developer app setup before sign-in. You cannot connect it yourself.', body: suggested.map(x => '- ' + x.id + ' — ' + x.reason) }
-            : { label: 'suggested', count: 0, head: 'SUGGESTED (0) for "' + goal + '" — nothing unconnected in the catalog matches this goal (or what it needs is already connected).', body: [] });
+            ? { label: 'suggested', count: suggested.length, head: 'SUGGESTED for "' + goal + '" — NOT connected yet. The Commander now has a ⇄ CONNECT chip for it on your reply (or on your question card, if you ask one): tell them to tap it — it opens that service in ABILITIES › DISCOVER › CATALOG. Setup varies by provider and may require an API key or developer app setup before sign-in. You cannot connect it yourself.', body: suggested.map(x => '- ' + x.id + ' — ' + x.reason) }
+            : { label: 'suggested', count: 0, head: 'SUGGESTED (0) for "' + goal + '" — nothing connectable in the catalog matches this goal (or what it needs is already connected).', body: [] });
+          if (blocked.length) parts.push({ label: 'suggested-unavailable', count: blocked.length, head: 'CANNOT BE CONNECTED IN THIS BUILD — sign-in is switched off for these, so there is NO connect chip. Tell the Commander plainly that it is not available yet; never tell them to sign in or tap a chip for it.', body: blocked.map(x => '- ' + x.id + ' — ' + x.unavailable.slice(0, 200)) });
           if (lost.length) parts.push({ label: 'suggested-emit-lost', count: lost.length, head: 'NOTE: the connect chip could not be raised for: ' + lost.join('; '), body: [] });
         }
         if (scope === 'all' || scope === 'connected') { parts.push(sectionConnected(q), sectionKeys(q)); }

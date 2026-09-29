@@ -223,8 +223,8 @@ const googleClientConfig = require('./mcp/google-client.js');
 const { makeStdioTransport } = require('./mcp/transport.stdio.js');
 const mcpSchemaCache = require('./mcp/schema-cache.js');
 const connectorCatalog = require('./mcp/catalog.js');       // curated one-click MCP connector catalog (pure data + selectors)
-const serviceKeysMod = require('./servicekeys.js');         // KEYS tab: custom service API keys (pure core — env injection + masked list)
-const serviceKeysCatalog = require('./servicekeys-catalog.js');   // KEYS tab: the curated PLATFORM directory (pure data)
+const serviceKeysMod = require('./servicekeys.js');         // ABILITIES › SAVED API CONNECTIONS: custom service API keys (pure core — env injection + masked list)
+const serviceKeysCatalog = require('./servicekeys-catalog.js');   // SAVED API CONNECTIONS: the curated PLATFORM directory (pure data)
 const mcpOauth = require('./mcp/oauth.js');                 // generic OAuth 2.1 client for MCP connectors (discover/DCR/PKCE/refresh)
 const { sameEndpoint, resolveConnectorOauthTarget } = require('./mcp/oauth-target.js');
 const connectorStateMod = require('./connectorstate.js');   // one transactional envelope for connector config + OAuth secrets
@@ -2513,6 +2513,7 @@ const lastReflectAt = new Map();       // agentId -> ts of the last reflection w
 const reflectingNow = new Set();       // agentIds with a reflection in flight — closes the gap before lastReflectAt is armed
 const lastFailReviewAt = new Map();    // agentId -> ts of the last failure review we fired (its own cooldown gate)
 const failReviewingNow = new Set();    // agentIds with a failure review in flight — same gap-closer as reflectingNow
+const skillReviewingNow = new Set();   // agentIds with a nudge-due skill review in flight: two run-ends close together must not both rewrite one skillbase
 function stashProposals(agentId, runId, proposals) {
   proposalsByRun.set(runId, { agentId, runId, createdAt: Date.now(), proposals });
   latestProposalRun.set(agentId, runId);
@@ -3030,6 +3031,22 @@ async function runThreadMine(o) {
 
 const SKILL_REVIEW_TIMEOUT_MS = num(process.env.SKYNET_SKILL_REVIEW_TIMEOUT_MS, 45000);
 const SKILL_REVIEW_MAX_COST_USD = num(process.env.SKYNET_SKILL_REVIEW_MAX_USD, 0.08);
+// THE SKILL NUDGE (skillreview.nudgeAfterRun): per agent, the model turns taken with skill tools on the wire since
+// its skillbase last changed. Carried across runs AND restarts: a desktop station restarts most days, and a count
+// that reset with the process would rarely reach the bar. SKYNET_SKILL_REVIEW_EVERY sets the bar (default 10, 0 = off).
+const SKILL_REVIEW_EVERY = skillReview.parseNudgeEvery(process.env.SKYNET_SKILL_REVIEW_EVERY);
+const SKILL_NUDGE_FILE = path.join(WORKSPACES, 'skill.nudge.json');
+const skillNudge = (() => {
+  try {
+    const o = loadResilient(SKILL_NUDGE_FILE, 'skill-nudge');
+    const counts = o && o.counts && typeof o.counts === 'object' ? o.counts : {};
+    return new Map(Object.keys(counts).map(k => [k, Math.max(0, Math.floor(Number(counts[k]) || 0))]));
+  } catch (_) { return new Map(); }
+})();
+function persistSkillNudge() {
+  try { saveResilient(SKILL_NUDGE_FILE, { v: 1, counts: Object.fromEntries(skillNudge) }); }
+  catch (e) { failNote('skill.nudge.persist', e); }
+}
 const verdictReview = makeVerdictReview({ cap: num(process.env.SKYNET_VERDICT_REVIEW_CAP, 40), ttlMs: num(process.env.SKYNET_VERDICT_REVIEW_TTL_MS, 6 * 60 * 60 * 1000), graceMs: num(process.env.SKYNET_VERDICT_REVIEW_GRACE_MS, 90 * 1000), now: () => Date.now() });
 const SKILL_CURATOR_INTERVAL_MS = num(process.env.SKYNET_SKILL_CURATOR_INTERVAL_MS, 24 * 60 * 60 * 1000);
 const SKILL_CURATOR_MAX_COST_USD = num(process.env.SKYNET_SKILL_CURATOR_MAX_USD, 0.12);
@@ -3051,7 +3068,7 @@ async function runBackgroundSkillReview(o) {
     // rewrite or archive it — the ledger lives in this per-pass tool instance. gate: the fork is a
     // model too; a withheld skill is withheld from IT as well, or the review pass becomes the way
     // an unreviewed body reaches a prompt.
-    makeSkillTools({ store: skillStore, gate: skillGate, readBeforeWrite: true, onManage: (skill, ctx, action) => reviewObserver.onManage(skill, action) }).register(registry);
+    makeSkillTools({ store: skillStore, gate: skillGate, readBeforeWrite: true, countViews: false, onManage: (skill, ctx, action) => reviewObserver.onManage(skill, action) }).register(registry);
     const allowed = ['skill.write', 'skill.manage', 'skill.list', 'skill.view'];
     const resolved = {
       agentId, room: 'skill-review', hasCompute: true, tools: allowed.slice(),
@@ -3137,7 +3154,7 @@ async function runSkillCurator(o) {
     const registry = makeRegistry();
     // A2: same un-silencing for the curator — merges/archives now surface a deliverable + audit line once each.
     const curatorObserver = skillReview.makeReviewObserver({ emit: chanEmit, log: (s) => console.log(s), now: () => Date.now(), source: 'skill-curator' });
-    makeSkillTools({ store: skillStore, gate: skillGate, readBeforeWrite: true, onManage: (skill, ctx, action) => curatorObserver.onManage(skill, action) }).register(registry);   // same two guards as the review fork: read before you rewrite, and the guard's verdict binds here too
+    makeSkillTools({ store: skillStore, gate: skillGate, readBeforeWrite: true, countViews: false, onManage: (skill, ctx, action) => curatorObserver.onManage(skill, action) }).register(registry);   // same two guards as the review fork: read before you rewrite, and the guard's verdict binds here too
     const allowed = ['skill.write', 'skill.manage', 'skill.list', 'skill.view'];
     const resolved = { agentId, room: 'skill-curator', hasCompute: true, tools: allowed.slice(), approvalRules: {}, networkCaps: {} };
     const toolDefs = registry.wireFormat(registry.list(new Set(allowed)));
@@ -7162,7 +7179,7 @@ function loopPrecheck(loop) {
     }
     const provider = cronProviderFor(loop);
     if (!cronHasCredential(provider, cronKeyFor(provider))) {
-      return { ok: false, reason: 'no credential for ' + (provider || 'the selected provider') + ' — add a key in the KEYS tab' };
+      return { ok: false, reason: 'no credential for ' + (provider || 'the selected provider') + ' — connect it in SETTINGS › PROVIDERS' };
     }
     return { ok: true };
   } catch (e) { return { ok: false, reason: 'precheck error: ' + ((e && e.message) || e) }; }
@@ -11993,6 +12010,34 @@ async function handleServiceKeyRemove(req, res) {
   applyServiceKeysEnv();   // scrubs the owned env var so the very next run no longer sees it
   return json(200, { ok: true, saved: true, removed: String(body.id || '') });
 }
+/* Only availability crosses the wire, never publisher registration values. Missing configuration is StarNet's
+   responsibility, so the customer UI never exposes an application-credential form. Module-level (was local to the
+   catalog route) so connectors.list reads the SAME verdict the ABILITIES card draws — the first-hour walk
+   (2026-09-28) had the agent promise "sign in with Google, no setup" beside a disabled GOOGLE SIGN-IN button.
+   IDEMPOTENT: browse() lists one entry object under both `connectors` and its group, so a second pass must not
+   prefix the early-access sentence again (the card printed it twice). */
+const EARLY_ACCESS_BLURB = 'Early access — Google has not finished verifying StarNet yet. When Google says the app isn’t verified, choose Advanced, then Go to StarNet. ';
+function annotateConnectorAvailability(e) {
+  if (!e) return e;
+  if (e.staticOauth) e.needsClient = !connectorOauthClient(e.staticOauth.authorizationServer).clientId;
+  if (e.googleApi) {
+    e.releaseDeferred = googleConnectorDeferred(e);
+    if (!e.releaseDeferred && googleClientConfig.EARLY_ACCESS === true && !googleClientConfig.isSelectedFiles(e)) {
+      e.earlyAccess = true;
+      if (String(e.blurb || '').indexOf(EARLY_ACCESS_BLURB) !== 0) e.blurb = EARLY_ACCESS_BLURB + (e.blurb || '');   // catalog entries are fresh clones per request
+    }
+    if (e.releaseDeferred) e.blurb = 'Planned for a later update. ' + e.blurb.replace(/^Planned for a later update\. /, '').replace(' Sign in with Google to connect your account.', '');
+    e.signInAvailable = !connectorStorageError && !e.releaseDeferred && !e.needsClient && (!googleClientConfig.isSelectedFiles(e) || connectorVault.protected);
+    if (!e.signInAvailable) e.signInMessage = connectorStorageError || (e.releaseDeferred ? googleDeferredMessage(e) : googleClientConfig.UNAVAILABLE);
+  }
+  return e;
+}
+// '' when the card's sign-in works in this build, else the card's own reason (read on a shallow copy — never mutates).
+function connectorSignInUnavailable(entry) {
+  if (!entry || !entry.googleApi) return '';
+  const e = annotateConnectorAvailability(Object.assign({}, entry));
+  return e.signInAvailable === false ? String(e.signInMessage || googleClientConfig.UNAVAILABLE || 'sign-in is not available in this build') : '';
+}
 /* GET /api/connectors/catalog — the curated one-click catalog (pure data). Annotated with `installed`
    by cross-referencing the live connector configs (by id), so the browse panel can show what's already
    added. No secrets involved — the catalog carries only public endpoints + metadata, never a token. */
@@ -12001,23 +12046,8 @@ function handleConnectorCatalog(req, res) {
   // pass {id,url} so `installed` is a TRUTHFUL match: a manually-added connector that merely reuses a catalog id
   // (e.g. id 'notion' pointing at a different / self-hosted URL) must NOT flip the vetted vendor card to ADDED.
   const payload = connectorCatalog.browse((connectorConfigs || []).map(c => c && { id: c.id, url: c.url || '' }));
-  // Only availability crosses the wire, never publisher registration values. Missing configuration
-  // is StarNet's responsibility, so the customer UI never exposes an application-credential form.
-  const markNeedsClient = (e) => {
-    if (e.staticOauth) e.needsClient = !connectorOauthClient(e.staticOauth.authorizationServer).clientId;
-    if (e.googleApi) {
-      e.releaseDeferred = googleConnectorDeferred(e);
-      if (!e.releaseDeferred && googleClientConfig.EARLY_ACCESS === true && !googleClientConfig.isSelectedFiles(e)) {
-        e.earlyAccess = true;
-        e.blurb = 'Early access — Google has not finished verifying StarNet yet. When Google says the app isn’t verified, choose Advanced, then Go to StarNet. ' + e.blurb;   // catalog entries are fresh clones per request
-      }
-      if (e.releaseDeferred) e.blurb = 'Planned for a later update. ' + e.blurb.replace(/^Planned for a later update\. /, '').replace(' Sign in with Google to connect your account.', '');
-      e.signInAvailable = !connectorStorageError && !e.releaseDeferred && !e.needsClient && (!googleClientConfig.isSelectedFiles(e) || connectorVault.protected);
-      if (!e.signInAvailable) e.signInMessage = connectorStorageError || (e.releaseDeferred ? googleDeferredMessage(e) : googleClientConfig.UNAVAILABLE);
-    }
-  };
-  payload.connectors.forEach(markNeedsClient);
-  payload.groups.forEach(g => g.connectors.forEach(markNeedsClient));
+  payload.connectors.forEach(annotateConnectorAvailability);
+  payload.groups.forEach(g => g.connectors.forEach(annotateConnectorAvailability));
   res.end(JSON.stringify(payload));
 }
 /* POST /api/connectors/oauth/client {id, clientId, clientSecret} — store the ONE-TIME pre-registered OAuth
@@ -15205,7 +15235,7 @@ async function handleAgentDelete(req, res) {
   try {
     for (const [rid, b] of proposalsByRun) { if (b && b.agentId === agentId) proposalsByRun.delete(rid); }
     latestProposalRun.delete(agentId); lastReflectAt.delete(agentId); reflectingNow.delete(agentId);
-    lastFailReviewAt.delete(agentId); failReviewingNow.delete(agentId);
+    lastFailReviewAt.delete(agentId); failReviewingNow.delete(agentId); skillReviewingNow.delete(agentId); if (skillNudge.delete(agentId)) persistSkillNudge();
     for (const [rid, b] of studyByRun) { if (b && b.agentId === agentId) studyByRun.delete(rid); }
     latestStudyRun.delete(agentId); lastStudyAt.delete(agentId); studyingNow.delete(agentId); studyDeclinedByAgent.delete(agentId);
     persistStudyState();
@@ -16632,7 +16662,8 @@ async function runOnceCore(o) {
     connectors: { list: connectedConnectorSnapshot },
     serviceKeys: () => serviceKeys,
     connectorCatalog: connectorCatalog,
-    keysCatalog: serviceKeysCatalog
+    keysCatalog: serviceKeysCatalog,
+    signInUnavailable: connectorSignInUnavailable
   }).register(registry);
   // HARNESS SELF-KNOWLEDGE: always-present COMPUTER grant, local/read-only and secret-free. The reader
   // closes over this run's identity while every mutable section is collected fresh at call time from the
@@ -18367,10 +18398,14 @@ async function runOnceCore(o) {
   try {
     // CHAT DIET: the index exists so the model can CALL skill.view; on a non-task turn no tool is on the wire.
     if (isTask && resolved.tools.indexOf('skill.view') >= 0) {
-      const rs = runtimeSkills.composeIndex(skillStore.list(agentId), {
+      // WITH archived rows: composeIndex drops them from the index, but counts them so an all-archived skillbase is
+      // never told "you have no saved skills yet"
+      const rs = runtimeSkills.composeIndex(skillStore.list(agentId, { includeArchived: true }), {
         budget: 6000,
         platform: process.platform,
         canManage: resolved.tools.indexOf('skill.manage') >= 0,
+        // an agent with no saved skills still gets one constant line asking it to save its first (skills/runtime.js)
+        emptyGuide: true,
         // Relevance-first ordering under the budget: the skill this ask needs must never be the row the
         // 6000-char cap skips. Same widened query as memory recall; no query -> store order, as before.
         query: recentUserText(messages),
@@ -18379,7 +18414,7 @@ async function runOnceCore(o) {
         gate: (s) => skillGate.decide(s)
       });
       runtimeSkillBlock = rs.text || '';
-      if (rs.ids && rs.ids.length && typeof skillStore.markUsed === 'function') skillStore.markUsed(agentId, rs.ids);
+      // No markUsed here: being LISTED is not being used. The run end counts the skills this run actually loaded.
     }
   } catch (_) { /* runtime skill indexing must never break a run */ }
   try {
@@ -19019,6 +19054,13 @@ async function runOnceCore(o) {
         } catch (_) { /* a non-path or escaping key simply never completes — truthful telemetry */ }
       }
     })().catch(swallow('quest.artifactsweep'));
+    // SKILL USE, counted where it happened: once per run for each saved skill this run actually LOADED (skill.view, or
+    // a /skill preload that passed the guard), never for a skill that was only listed in the index. In the finally so a
+    // run that throws still counts what it loaded; markUsed persists, so the count and the aging clock survive a restart
+    // (a view alone bumps RAM only).
+    if (loadedSkills.length) {
+      try { skillStore.markUsed(agentId, loadedSkills.map(s => s.id)); } catch (e) { failNote('skill.markUsed', e); }
+    }
     budget.clearLive(runId);
   }
 
@@ -19030,7 +19072,8 @@ async function runOnceCore(o) {
   // governor caps how many may SPEND this run-end (SKYNET_AUX_BUDGET, default 2; a literal 0 = unlimited/off), in
   // the LOCKED beat priority (reflection > study > threadmine > scout > skill-review > skill-curator). DEFERRED ≠
   // SUPPRESSED: a deferred pass fires NOTHING and arms NO cooldown here, so its own gate re-qualifies and it retries
-  // on the next run. STARNET_AUX_MODEL (legacy REFLECT_MODEL) optionally points the aux passes at a cheaper
+  // on the next run. One exception: a DUE skill review (the skill nudge, below) is reserved and spends outside the
+  // ceiling. STARNET_AUX_MODEL (legacy REFLECT_MODEL) optionally points the aux passes at a cheaper
   // model — resolveAuxModel is the single resolution; it defaults to the run's own model.
   const reflectModel = resolveAuxModel() || '';
   // finishReason gate (Lane A plumbs result.finishReason from loop.js): a run TRUNCATED by the provider ('length'
@@ -19081,7 +19124,17 @@ async function runOnceCore(o) {
       && !studyingNow.has(agentId) && (Date.now() - (lastStudyAt.get(agentId) || 0) >= memoryConfig.studyCooldownMs));
   const _gateThreadmine = !!(process.env.SKYNET_THREAD_MINE !== '0' && o.reflect && isTask && _auxDone && threadmine.mineSalient(result.messages)
       && !threadMiningNow.has(agentId) && (Date.now() - (lastThreadMineAt.get(agentId) || 0) >= THREAD_MINE_COOLDOWN_MS));
-  const _gateSkillReview = !!(process.env.SKYNET_SKILL_REVIEW !== '0' && _auxDone && skillReview.shouldReviewRun(result));
+  // skill review rides THE SKILL NUDGE (skillreview.nudgeAfterRun), not run size: this run's turns with skill tools on
+  // the wire join the agent's carried count, and the review is a candidate only once the count reaches the bar. A
+  // due review is RESERVED below: it spends outside the ceiling, so it can no longer lose every run-end to the beats.
+  // Counted only while a review could ever fire (review on, bar > 0), and never for a team.spawn clone: its 'sub-'
+  // id is thrown away after the run, so a count (and any skill a review wrote) would be kept for an agent no one runs.
+  const _skillToolsOn = resolved.tools.indexOf('skill.manage') >= 0 || resolved.tools.indexOf('skill.write') >= 0;
+  const _throwawayAgent = /^sub-/.test(agentId) && !agentRoster.has(agentId);
+  const _nudge = (process.env.SKYNET_SKILL_REVIEW !== '0' && SKILL_REVIEW_EVERY > 0 && isTask && !internal && _skillToolsOn && !_throwawayAgent)
+    ? skillReview.nudgeAfterRun(skillNudge.get(agentId) || 0, { turns: (result && result.turns) || 0, managed: managedSkills.some(m => skillReview.isWriteAction(m.action)), every: SKILL_REVIEW_EVERY })
+    : null;
+  const _gateSkillReview = !!(_auxDone && _nudge && _nudge.due && !skillReviewingNow.has(agentId));
   // curator: candidate only when its 24h interval is DUE (else runSkillCurator early-returns anyway — no spend, no slot).
   const _gateCurator = !!(process.env.SKYNET_SKILL_CURATOR !== '0' && _auxDone && auxCuratorDue(agentId, _auxNow));
   // scout: the CADENCE COUNTERS fold ALWAYS (below, synchronous bookkeeping — never a model call); the CYCLE is the
@@ -19099,8 +19152,14 @@ async function runOnceCore(o) {
   if (_gateSkillReview) _auxCandidates.push('skill-review');
   if (_gateCurator) _auxCandidates.push('skill-curator');
   const _auxBudget = AuxGovernor.parseBudget(process.env.SKYNET_AUX_BUDGET);
-  const _auxPlan = AuxGovernor.decide({ candidates: _auxCandidates, budget: _auxBudget });
+  const _auxPlan = AuxGovernor.decide({ candidates: _auxCandidates, budget: _auxBudget, reserved: ['skill-review'] });
   const _auxSpend = new Set(_auxPlan.spend);
+  // the nudge count starts over when its review fires; otherwise it carries (a due count on a run that could not
+  // review, e.g. a failed run, stays due for the next finished one). Written only when it changes.
+  if (_nudge) {
+    const _nudgeNext = _auxSpend.has('skill-review') ? 0 : _nudge.count;
+    if (_nudgeNext !== (skillNudge.get(agentId) || 0)) { skillNudge.set(agentId, _nudgeNext); persistSkillNudge(); }
+  }
 
   // SCOUT cadence counters ALWAYS fold when the run qualifies — synchronous bookkeeping, NOT a model call, and a
   // concurrent (or deferred) cycle must never eat the count. This is deliberately OUTSIDE the budget.
@@ -19143,14 +19202,14 @@ async function runOnceCore(o) {
     runScoutCycle({ runId, agentId, provider, model: _auxModel, reasoningEffort: _auxEffort, cost, unmetered: providerUnmetered }).catch(swallow('aux.scout.envelope')).finally(() => { scoutingNow = false; });
   }
   if (_auxSpend.has('skill-review')) {
-    runBackgroundSkillReview({ agentId, runId, messages: result.messages.slice(), provider, model: _auxSkillModel, cost, loadedSkills, managedSkills, unmetered: providerUnmetered }).catch(swallow('aux.skillreview.envelope'));
+    skillReviewingNow.add(agentId);
+    runBackgroundSkillReview({ agentId, runId, messages: result.messages.slice(), provider, model: _auxSkillModel, cost, loadedSkills, managedSkills, unmetered: providerUnmetered }).catch(swallow('aux.skillreview.envelope')).finally(() => { skillReviewingNow.delete(agentId); });
   }
   if (process.env.SKYNET_SKILL_REVIEW !== '0' && _auxDone && isTask && !internal) {
     // CONSISTENCY LOOP (2026-08-22): park this real task run's review packet so that if the Commander rates it
     // `ok`/`miss` (POST /api/growth/ratings) the SAME quiet review runs again WITH THE VERDICT in the prompt.
-    // Parked even when the size-review above already fired: that pass ran before the verdict existed and is
-    // blind to it (live-proved 2026-08-22 — the chars gate counts the system prompt, so it fires on nearly every
-    // run). The verdict pass is the one that knows the work fell short. Bounded LRU + TTL in verdictreview.js;
+    // Parked even when the nudge review above already fired: that pass ran before the verdict existed and is
+    // blind to it. The verdict pass is the one that knows the work fell short. Bounded LRU + TTL in verdictreview.js;
     // `great` never spends it; taken once; one extra aux pass per rated-short run, a Commander-initiated signal.
     verdictReview.stash(runId, { agentId, messages: result.messages.slice(), provider, model: _auxSkillModel, cost, loadedSkills, managedSkills, unmetered: providerUnmetered });
   }
@@ -19165,6 +19224,7 @@ async function runOnceCore(o) {
   if (_auxCandidates.length && (_auxPlan.deferred.length || DEBUG_CHANNEL_LOGS)) {
     console.log('[aux-governor] run=' + runId + ' agent=' + agentId + ' budget=' + (_auxPlan.unlimited ? 'off' : _auxBudget)
       + ' spent=' + _auxPlan.spend.length + '[' + _auxPlan.spend.join(',') + ']'
+      + (_auxPlan.reserved.length ? ' RESERVED[' + _auxPlan.reserved.join(',') + ']' : '')
       + (_auxPlan.deferred.length ? ' DEFERRED[' + _auxPlan.deferred.join(',') + ']' : ''));
   }
   // WORK VISIBILITY: hand the caller this run's PROVEN outputs (the same ledger runStore just recorded).
@@ -22553,7 +22613,7 @@ async function handleMemoryReset(req, res) {
   // also drop any in-memory pending proposals for this agent so a stale turn-in can't land on the new hero
   for (const [rid, b] of proposalsByRun) { if (b && b.agentId === agentId) proposalsByRun.delete(rid); }
   latestProposalRun.delete(agentId); lastReflectAt.delete(agentId); reflectingNow.delete(agentId);
-  lastFailReviewAt.delete(agentId); failReviewingNow.delete(agentId);
+  lastFailReviewAt.delete(agentId); failReviewingNow.delete(agentId); skillReviewingNow.delete(agentId); if (skillNudge.delete(agentId)) persistSkillNudge();
   // GROWTH Tier 1: also drop any pending STUDY proposals so a fresh Commander never inherits a stranger's belief-update queue.
   for (const [rid, b] of studyByRun) { if (b && b.agentId === agentId) studyByRun.delete(rid); }
   latestStudyRun.delete(agentId); lastStudyAt.delete(agentId); studyingNow.delete(agentId); studyDeclinedByAgent.delete(agentId);

@@ -112,5 +112,19 @@ const G = require('../sidecar/auxgovernor.js');
     A.eq(G.PRIORITY, ['reflection', 'failure-review', 'study', 'threadmine', 'scout', 'skill-review', 'skill-curator'], 'PRIORITY export is a copy — decide never mutates it');
   }
 
+  // ---- RESERVED LANE (skill nudge, 2026-09-28): a due pass spends OUTSIDE the ceiling, never deferred ----
+  {
+    const all = ['reflection', 'study', 'scout', 'skill-review', 'skill-curator'];
+    const r = G.decide({ candidates: all, budget: 2, reserved: ['skill-review'] });
+    A.eq(r.spend, ['reflection', 'study', 'skill-review'], 'a reserved skill-review spends even with two higher beats holding the budget');
+    A.eq(r.deferred, ['scout', 'skill-curator'], 'the governed passes defer exactly as before (the reserved one takes no slot)');
+    A.eq(r.reserved, ['skill-review'], 'the plan reports which passes rode the reserved lane (truthful telemetry)');
+    const without = G.decide({ candidates: all, budget: 2 });
+    A.eq(without.spend, ['reflection', 'study'], 'CONTROL: without the reserve the same skill-review is deferred (the bug this lane fixes)');
+    A.eq(G.decide({ candidates: ['scout'], budget: 1, reserved: ['skill-review'] }).spend, ['scout'], 'a reserved name that is not a candidate spends nothing');
+    A.eq(G.decide({ candidates: ['skill-review'], budget: 0, reserved: ['skill-review'] }).spend, ['skill-review'], 'unlimited still spends it once');
+    A.eq(G.decide({ candidates: ['skill-review', 'skill-review', 'reflection'], budget: 1, reserved: ['skill-review'] }).spend, ['reflection', 'skill-review'], 'dups collapse; order stays the locked priority');
+  }
+
   A.report('auxgovernor.test');
 })().catch(e => { console.log('FAIL: auxgovernor.test threw - ' + (e && e.stack || e)); process.exit(1); });

@@ -39,8 +39,13 @@
       ['Fact-check + verdict', 'Check every claim in the draft against the notes. End with VERDICT: approved, or VERDICT: revise and exactly what to fix.', 'the approved draft'],
       ['Tone & clarity', 'Check the draft reads clearly for a non-expert. End with VERDICT: approved, or VERDICT: revise with the fixes.', 'the approved draft']] },
     ENGINEER: { verb: 'builds it', starters: [
+      ['Build to the criteria', 'Build what the incoming request asks for. Restate the acceptance criteria, make the smallest complete change that meets them, and note how you checked it. If the tester sent it back, fix exactly what failed.', 'the change, your checks and the original request'],
       ['Implement it', 'Make the change the task asks for. Keep it small, run the tests, and list the files you touched.', 'a summary of the change and files touched'],
       ['Review code', 'Read the change for bugs and risky edge cases. List each problem with its file and line.', 'a list of issues']] },
+    // TESTER (BUILD & TEST, from PR #47 by @mvanhorn): checks the change and calls the verdict the LOOP gate reads
+    TESTER: { verb: 'tests it', starters: [
+      ['Test + verdict', 'Test the incoming change against the original request. Check each acceptance criterion and edge case, and say which checks you actually ran. If everything passes, deliver the final change with a short test note and end with VERDICT: pass. If anything fails, say exactly what failed and end with VERDICT: revise.', 'the verified change'],
+      ['Quick check', 'Run the quickest checks that prove the change works. End with VERDICT: pass, or VERDICT: revise and what failed.', 'a pass, or what failed']] },
     GENERALIST: { verb: 'handles it', starters: [
       ['Do the task', 'Do what the task asks, then summarize what you did in plain words.', 'the finished result'],
       ['Plan it', 'Break the task into 3 to 5 concrete steps and say what each one needs.', 'a short plan']] },
@@ -675,13 +680,15 @@
     review: /\b(review(er|ers|s|ed|ing)?|proof ?read(s|ing)?|edit(or|ors|s|ed|ing)?|approv(e|es|al|ed)|fact.?check(s|ed|ing)?|sign.?off|before (i|we) (publish|post|send|ship))\b/i,
     code: /\b(code|coding|bugs?|pull requests?|refactor|repo|commits?)\b/i,
     compare: /\b(second opinion|two takes|compare|pressure.?test)\b/i,
+    test: /(?<!pressure.?)\b(tests?|testing|tested)\b|\b(qa|quality assurance)\b/i,   // "pressure-test" is a second opinion, not QA
     schedule: /\b(every|each|daily|weekly|hourly|morning|evening|nightly|mondays?|weekdays?)\b/i
   };
   function suggestLineFor(text) {
     const t = String(text == null ? '' : text); if (!t.trim()) return null;
     const has = k => INTENT[k].test(t);
     let s = null;
-    if (has('code') && has('review')) s = { id: 'code_foundry', why: 'an engineer builds it and a reviewer sends it back until it passes' };
+    if (has('code') && has('test')) s = { id: 'build_test', why: 'a builder makes the change and a tester sends it back until it passes' };
+    else if (has('code') && has('review')) s = { id: 'code_foundry', why: 'an engineer builds it and a reviewer sends it back until it passes' };
     else if (has('write') && has('review')) s = { id: 'revision_loop', why: 'a writer drafts it and a reviewer sends it back until it is approved' + (has('research') ? ' (add a RESEARCHER in front with + in its Workflow panel)' : '') };
     else if (has('research') && has('write')) s = { id: 'research_line', why: 'one agent digs, the next writes it up' };
     else if (has('compare')) s = { id: 'second_opinion', why: 'two agents take the same job on their own, and you get both answers' };
