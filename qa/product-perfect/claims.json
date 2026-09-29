@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "e9c096c8203f57386bbaa13ffa00ec6c82206b8a",
+    "sourceCommit": "192ddfd11b64ad279fe437c9560ad081aa34a0b0",
     "pathSetSha256": "7ae81c6513a7583a28af97695a8d4e857b2244726ab7ec4cfab1fa9225842937",
     "files": [
       {
@@ -318,8 +318,8 @@
       },
       {
         "path": "frontend/app/build.js",
-        "bytes": 470383,
-        "sha256": "75f99c6defda65d8ddea655359b81a33d7316f3a678ee039fe7e45ae53edcc09"
+        "bytes": 473401,
+        "sha256": "a0983f04dce96649e71f95bb30a1fd54caf9f77a6cb27941109ec9561296b513"
       },
       {
         "path": "frontend/app/channels.js",
@@ -603,8 +603,8 @@
       },
       {
         "path": "frontend/app/lineedit.js",
-        "bytes": 23887,
-        "sha256": "c753983ffbe1963242d0c9f30ae8dfd6c7d39821230dc8fcadd3c84bc2687a46"
+        "bytes": 35668,
+        "sha256": "85032fa9ea4f97ef8f45bc779e5ed2f9b7b7e158bb2d70c3919fcebfa244b883"
       },
       {
         "path": "frontend/app/linelayout.js",
@@ -1278,8 +1278,8 @@
       },
       {
         "path": "frontend/app/workflowpanel.js",
-        "bytes": 137928,
-        "sha256": "acc13a79f065e57043fd5d7cc6376b6c346f0924b3a53ad12674dd3bdb59836b"
+        "bytes": 141921,
+        "sha256": "0bb4a584040ef1728d7015574ae3aec9ba1b266ee7a7b405a1ed55819d6782c6"
       },
       {
         "path": "frontend/app/workflowtakeoverstore.js",
@@ -1343,8 +1343,8 @@
       },
       {
         "path": "frontend/app/worldmodel.js",
-        "bytes": 225858,
-        "sha256": "e08f7d63aa76d499eb7a2b8f645e0a4bfce53e821a978aa81eb8171e8f40ac0a"
+        "bytes": 226007,
+        "sha256": "00ed59b36a6051c71ad36290b1168bbf4c3080ab693e02d2c6a6c80d57ae8175"
       },
       {
         "path": "frontend/app/worldrenderer.js",
@@ -1568,8 +1568,8 @@
       },
       {
         "path": "frontend/css/workflow-panel.css",
-        "bytes": 31433,
-        "sha256": "5a5574a5c2fa51f23f82c6abf7b4c8a07210a2163b180b25da4a77569b489704"
+        "bytes": 31741,
+        "sha256": "f22dcf04161cddfef595c9d5c96fa4751bb87d9c0184ef4d99cb3e1465ee456b"
       },
       {
         "path": "frontend/css/workhub.css",
