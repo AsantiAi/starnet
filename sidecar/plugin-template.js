@@ -24,20 +24,21 @@ function templateFiles(spec) {
   const index = [
     '/* ' + name.replace(/\*\//g, '* /') + ' — a StarNet plugin.',
     ' *',
-    ' * TWO SOCKETS, both live the moment you approve it in ABILITIES → EXTENSIONS:',
+    ' * THIS FILE runs in the station, in its own process, once you approve the plugin in ABILITIES → EXTENSIONS.',
+    ' * It has your computer\'s permissions. register(api) runs once; everything is registered inside it:',
     ' *',
-    ' * 1. THIS FILE runs inside the station. register(api) runs once at boot; api.on(event, handler) hooks the run:',
-    ' *      pre_tool_call    before a tool runs — return {decision:"block", reason:"…"} to stop it',
-    ' *      post_tool_call   after it ran (observe only)',
-    ' *      pre_llm_call     before a model call — return {context:"…"} to add a standing note',
-    ' *      post_llm_call / on_session_start / on_session_end / on_pre_compress / on_memory_write',
-    ' *    It runs with your computer\'s permissions. Delete this file (and "main" in plugin.json) for a window-only plugin.',
+    ' *   api.on(event, fn)      hook every run: pre_tool_call (return {decision:"block", reason} to stop a tool),',
+    ' *                          post_tool_call, pre_llm_call (return {context:"…"} to add a note), on_session_end, …',
+    ' *   api.tool({...})        a tool your crew can call. It reaches an agent when this plugin\'s TERMINAL stands in',
+    ' *                          that agent\'s room, and every call shows you an approval card.',
+    ' *   api.handle(name, fn)   answer this plugin\'s own window: starnet.backend.call(name, args) in ui/index.html',
+    ' *   api.every(ms, fn)      a background job (10 s minimum)',
+    ' *   api.store              the SAME storage the window uses (get / set / delete / keys)',
     ' *',
-    ' * 2. ui/index.html is the plugin\'s WINDOW (plugin.json "screens"). It is any HTML/JS you like, opened inside a',
-    ' *    real StarNet window, sandboxed, with the station kit already loaded: glass classes (sn-*) and `starnet`.',
-    ' *    See docs/PLUGINS.md in the StarNet repo for every class and call.',
-    ' *',
-    ' * Any edit to any file here turns the plugin off until you approve the new code.',
+    ' * ui/index.html is the plugin\'s WINDOW: any HTML/JS you like, opened in a real StarNet window with the station',
+    ' * kit loaded (glass sn-* classes + `starnet`). docs/PLUGINS.md in the StarNet repo lists every class and call.',
+    ' * Delete this file (and "main" in plugin.json) for a window-only plugin. Any edit turns the plugin off until',
+    ' * you approve the new code.',
     ' */',
     "'use strict';",
     '',
@@ -45,15 +46,32 @@ function templateFiles(spec) {
     '  register(api) {',
     '    let toolCalls = 0;',
     '',
-    '    api.on(\'post_tool_call\', (p) => {',
-    '      toolCalls++;',
-    '      console.log(\'[\' + ' + jsString(id) + ' + \'] \' + p.tool_name + \' (\' + toolCalls + \' this run)\');',
+    '    // 1. HOOKS — watch the crew work',
+    '    api.on(\'post_tool_call\', () => { toolCalls++; });',
+    '    api.on(\'on_session_end\', () => { console.log(\'run finished after \' + toolCalls + \' tool calls\'); });',
+    '',
+    '    // 2. TOOLS — the crew can read and add to the notes you keep in this plugin\'s window',
+    '    api.tool({',
+    '      name: \'read_notes\',',
+    '      description: \'Read the notes the Commander keeps in the \' + ' + jsString(name) + ' + \' window, newest first.\',',
+    '      readOnly: true,',
+    '      parameters: { type: \'object\', properties: {} },',
+    '      run: async () => (await api.store.get(\'notes\')) || []',
+    '    });',
+    '    api.tool({',
+    '      name: \'add_note\',',
+    '      description: \'Add a note to the \' + ' + jsString(name) + ' + \' window.\',',
+    '      parameters: { type: \'object\', properties: { text: { type: \'string\', description: \'the note\' } }, required: [\'text\'] },',
+    '      run: async ({ text }) => {',
+    '        const notes = (await api.store.get(\'notes\')) || [];',
+    '        notes.unshift({ text: String(text).slice(0, 200), at: Date.now(), by: \'crew\' });',
+    '        await api.store.set(\'notes\', notes);',
+    '        return \'Added. The window now shows \' + notes.length + \' notes.\';',
+    '      }',
     '    });',
     '',
-    '    api.on(\'on_session_end\', () => {',
-    '      console.log(\'[\' + ' + jsString(id) + ' + \'] run finished after \' + toolCalls + \' tool calls\');',
-    '      toolCalls = 0;',
-    '    });',
+    '    // 3. WINDOW CALLS — ui/index.html asks: starnet.backend.call(\'stats\')',
+    '    api.handle(\'stats\', () => ({ toolCalls }));',
     '  }',
     '};',
     ''
@@ -77,6 +95,7 @@ function templateFiles(spec) {
   <div class="sn-stats">
     <div class="sn-stat"><b id="stat-notes">0</b><span>Notes</span></div>
     <div class="sn-stat ok"><b id="stat-saved">—</b><span>Last saved</span></div>
+    <div class="sn-stat"><b id="stat-calls">—</b><span>Crew tool calls</span></div>
     <div class="sn-stat"><b id="stat-theme">—</b><span>Phosphor</span></div>
   </div>
 
@@ -142,7 +161,8 @@ function templateFiles(spec) {
     notes.forEach((n, i) => {
       const li = document.createElement('li');
       li.className = 'sn-item';
-      li.innerHTML = '<span class="dot ok"></span><span class="t"></span><span class="note-time"></span><button class="sn-btn xs danger">DELETE</button>';
+      // a note the crew added (the add_note tool in index.js) gets the gold lamp
+      li.innerHTML = '<span class="dot ' + (n.by === 'crew' ? 'warn' : 'ok') + '"></span><span class="t"></span><span class="note-time"></span><button class="sn-btn xs danger">DELETE</button>';
       li.querySelector('.t').textContent = n.text;
       li.querySelector('.note-time').textContent = new Date(n.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       li.querySelector('button').onclick = async () => { notes.splice(i, 1); await save(); };
@@ -177,6 +197,18 @@ function templateFiles(spec) {
   showTheme(starnet.theme.vars);
   notes = (await starnet.store.get('notes')) || [];
   render();
+
+  // Stay live: notes the crew adds (add_note) and the backend's own count (api.handle('stats') in index.js).
+  async function poll() {
+    try {
+      const fresh = (await starnet.store.get('notes')) || [];
+      if (JSON.stringify(fresh) !== JSON.stringify(notes)) { notes = fresh; render(); }
+      const s = await starnet.backend.call('stats');
+      document.getElementById('stat-calls').textContent = s.toolCalls;
+    } catch (_) { /* a window-only copy of this starter has no backend: the stat stays — */ }
+  }
+  poll();
+  setInterval(poll, 4000);
 })();
 </script>
 </body>

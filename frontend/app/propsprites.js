@@ -7688,7 +7688,12 @@ const PropSprites = (() => {
     px(x+2,y+18,5,2,r.ao);px(x+2,y+18,5,1,r.face);
     captiveBolt(x+1,base-3,r);captiveBolt(x+8,base-3,r);
     if(online&&fired){px(x+2,y-4,4,1,'#dcfaff');bloom(x+2,y-4,4,1,ACC.data,0.16);}
-  };  F.workbench = (x, y, w, h, f) => {
+  };
+  /* PLUGIN TERMINAL (plugin extensions, 2026-09-29): a standing display that IS a plugin in the world — its tools for
+     the room's agent, its window on a click. It wears the DISPATCH PYLON's finished art (catalog artId) rather than
+     inventing new art; the catalog row, the capability and the binding are what make it a terminal. */
+  F.plugin_terminal = (x, y, w, h, f) => F.bridge_dispatch_pylon(x, y, w, h, f);
+  F.workbench = (x, y, w, h, f) => {
     /* v45 WORKBENCH (2x1) — TERMINAL: shell.exec + verify.run. It is the one COMPUTE-adjacent prop
        with NO chair and NO screen-on-a-stand, because you STAND at it and work with your hands.
        ⛔ NO CHAIR IS THE SILHOUETTE. Six workstations in the catalog all have a seat behind them;
@@ -10765,6 +10770,7 @@ const PropSprites = (() => {
     // laid with the BELT tool and compile into the RoutingPlan. F.beltH stays so stations that placed one
     // still render; it just can't be placed anew.
     // CAPABILITY — object = capability. Place one in a BAY's room to grant that agent a power.
+    { id: "plugin_terminal", artId: "bridge_dispatch_pylon", label: "PLUGIN TERMINAL", cat: "capability", tier: "functional", w: 1, h: 2, animated: true, blocks: true, desc: "PLUGIN TERMINAL — one of your plugins, standing in the station. Gives the room's agent that plugin's tools (each call asks you first) and opens its window when clicked. Installing a plugin with tools places one for you." },
     { id: "connector_portal", label: "CONNECTOR", cat: "capability", tier: "functional", w: 1, h: 2, animated: true, blocks: true, desc: "CONNECTOR — bind an MCP server here to grant the room's agent that server's live tools. Click it to bind one." },
     { id: "comms_dish", label: "DISH", cat: "capability", tier: "functional", w: 2, h: 2, animated: true, blocks: true, desc: D_WEB },
     { id: "comms_uplink", label: "UPLINK", cat: "capability", tier: "functional", w: 2, h: 2, animated: true, blocks: true, desc: D_WEB },

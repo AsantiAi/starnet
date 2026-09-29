@@ -56,6 +56,8 @@ const { makeHooks } = require('./hooks.js');                 // the hook spine: 
 const { makeShellHooks } = require('./shellhooks.js');       // the Commander's shell scripts, on that spine
 const { makePluginLoader } = require('./plugins.js');        // packaged JS extensions, on that same spine
 const { makePluginUiServer, makePluginStore } = require('./plugin-surface.js');   // a plugin's windows + its private store
+const { makePluginRuntime } = require('./plugin-runtime.js');   // each plugin's code in its own process (plugin-worker.js)
+const { makePluginToolDefs } = require('./plugin-tools.js');      // a plugin's api.tool()s as crew tools (connector trust)
 const { makeFsTools } = require('./tools/builtin/fs.js');
 // fs.read extracts .docx / .xlsx / .ipynb to readable text. inflateRawSync is injected so the extractor stays
 // pure + headless-testable, and so the OOXML path needs no dependency beyond what Node already ships.
@@ -3511,6 +3513,26 @@ const shellHooks = makeShellHooks({
    of the code itself so a silent edit re-asks. */
 const PLUGINS_DIR = path.join(WORKSPACES, 'plugins');
 const PLUGINS_ALLOW_FILE = path.join(WORKSPACES, 'plugins-allowed.json');
+/* PLUGIN WINDOWS (plugin extensions phase 1) — sidecar/plugin-surface.js. The files route re-proves the approval
+   on every request; the store is one durable JSON object per plugin, OUTSIDE every agent's fs jail. */
+const PLUGIN_DATA_DIR = path.join(WORKSPACES, 'plugin-data');
+const pluginDataStore = makeDurableJsonStore({
+  fs: fs, path: path,
+  fileFor: (id) => path.join(PLUGIN_DATA_DIR, String(id) + '.json'),
+  writeDurable: writeFileDurable,
+  onRecover: (key, file) => console.warn('[plugins] recovered ' + file + ' from .bak last-known-good.'),
+  onCorrupt: (key, file) => quarantineCorrupt(file, 'plugin-data')
+});
+const pluginStore = makePluginStore({ store: pluginDataStore });
+/* PLUGIN PROCESSES (plugin extensions phase 2) — every approved plugin with code runs in its OWN child process
+   (station-secret-free env, like every helper process). Not a security boundary — approved plugin code has the
+   Commander's full permissions — but a FAILURE boundary: a plugin that throws, hangs or exits costs itself, never
+   the station. The loader starts/stops these as approvals change. */
+const pluginRuntime = makePluginRuntime({
+  fork: stationChildProcess.fork, workerPath: path.join(__dirname, 'plugin-worker.js'), store: pluginStore,
+  now: () => Date.now(),
+  onLog: (id, line) => { for (const l of String(line || '').split(/\r?\n/)) if (l) console.log('[plugin:' + id + '] ' + l); }
+});
 /* A RE-APPROVAL MUST RUN THE NEW CODE. Node caches every require()d module forever, so after an edit + re-approve
    the plugin used to keep running its OLD module (and old helpers) until the next restart — the approval said one
    thing, the process ran another. Every load drops the cached modules under the plugins folder first. */
@@ -3524,21 +3546,11 @@ const pluginLoader = makePluginLoader({
   requireModule: requirePluginFresh, hash: (s) => crypto.createHash('sha256').update(String(s)).digest('hex'),
   guard: skillGuard, clock: { now: () => Date.now() },
   template: require('./plugin-template.js').templateFiles,   // "Create a plugin" writes a hook AND a kit-built window
+  runtime: pluginRuntime,                                     // plugin code runs in its own process, never in the sidecar
   onError: (e) => console.warn('[plugins] ' + (e && e.plugin) + ': ' + (e && e.error))
 });
 let pluginsLoaded = { loaded: [], pending: [], errors: [] };
 let hooksInstalled = { installed: [], pending: [], errors: [] };
-/* PLUGIN WINDOWS (plugin extensions phase 1) — sidecar/plugin-surface.js. The files route re-proves the approval
-   on every request; the store is one durable JSON object per plugin, OUTSIDE every agent's fs jail. */
-const PLUGIN_DATA_DIR = path.join(WORKSPACES, 'plugin-data');
-const pluginDataStore = makeDurableJsonStore({
-  fs: fs, path: path,
-  fileFor: (id) => path.join(PLUGIN_DATA_DIR, String(id) + '.json'),
-  writeDurable: writeFileDurable,
-  onRecover: (key, file) => console.warn('[plugins] recovered ' + file + ' from .bak last-known-good.'),
-  onCorrupt: (key, file) => quarantineCorrupt(file, 'plugin-data')
-});
-const pluginStore = makePluginStore({ store: pluginDataStore });
 const servePluginUi = makePluginUiServer({
   fs, fsp, path, frontendDir: FRONTEND, loader: pluginLoader, apitickets, apiKey: API_TOKEN, mime: MIME,
   tokenOk: (req) => apiauth.apiTokenOk(req, API_TOKEN), now: () => Date.now(),
@@ -10019,6 +10031,7 @@ const ROUTES = [
   { m: 'POST', exact: '/api/plugins/create', h: handlePluginsCreate },
   { m: 'POST', exact: '/api/plugins/delete', h: handlePluginsDelete },
   { m: 'POST', exact: '/api/plugins/store', h: handlePluginsStore },
+  { m: 'POST', exact: '/api/plugins/call', h: handlePluginsCall },
   { m: 'POST', exact: '/api/checkpoint/restore', h: handleCheckpointRestore },
   { m: 'GET', prefix: '/api/checkpoint', h: handleCheckpointList },
   // /api/health is the topbar LINK / Diag liveness probe. After an uncaught exception it answers 503 with the fault
@@ -15031,7 +15044,10 @@ async function handlePluginsList(req, res) {
       // ACTIVE means running THIS code: a plugin edited since approval was loaded, but its handlers now refuse
       // (plugins.js stillApproved) and its windows are refused (approvedRecord) — calling it "on" would be a lie.
       active: live.has(p.id) && !pend.has(p.id), pending: pend.has(p.id), digest: p.digest, findings: p.findings || null,
-      hasCode: !!p.main, screens: p.screens || []
+      hasCode: !!p.main, screens: p.screens || [],
+      // what its process actually registered (never what the manifest claims) + that process's real state
+      tools: ((pluginsLoaded.loaded.find(x => x.id === p.id) || {}).tools) || [],
+      process: p.main && live.has(p.id) ? pluginRuntime.status(p.id) : null
     })),
     errors: (found.errors || []).concat(pluginsLoaded.errors || [])
   });
@@ -15052,6 +15068,24 @@ async function handlePluginsStore(req, res) {
   try { r = await pluginStore.op(id, String((body && body.op) || ''), body && body.key, body && body.value); }
   catch (e) { return json(500, { ok: false, error: 'the plugin store could not be written: ' + ((e && e.message) || e) }); }
   return json(r.ok ? 200 : 400, r);
+}
+
+/* POST /api/plugins/call { id, fn, args } — a plugin WINDOW calling its own backend (api.handle(fn)). Only the page
+   host calls this, naming the plugin from its own registry; refused unless the approval covers the bytes on disk
+   right now. The handler runs in the plugin's process with a deadline — a hung plugin costs this call, nothing else. */
+async function handlePluginsCall(req, res) {
+  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  let body;
+  try { body = JSON.parse(await readBody(req, 512 << 10, res)); }
+  catch (e) { if (res.headersSent) return; res.writeHead(400); return res.end('bad json'); }
+  const id = String((body && body.id) || '').trim();
+  const fn = String((body && body.fn) || '').trim();
+  let rec = null;
+  try { rec = await pluginLoader.approvedRecord(id); } catch (_) { rec = null; }
+  if (!rec) return json(409, { ok: false, error: 'that plugin is not approved as it is on disk right now' });
+  if (!rec.main) return json(400, { ok: false, error: 'this plugin has no backend code' });
+  try { return json(200, { ok: true, value: await pluginRuntime.callHandler(id, fn, body && body.args) }); }
+  catch (e) { return json(400, { ok: false, error: String((e && e.message) || e).slice(0, 2000) }); }
 }
 
 /* POST /api/plugins/allow { id, digest } — approve THIS EXACT CODE and load it without a restart.
@@ -15979,6 +16013,9 @@ async function handleRun(req, res) {
         const ot = String(typeof e === 'string' ? e : e.objectType);
         const ob = { instanceId: 'placed_' + i + '_' + ot, objectType: ot };
         if (e && typeof e === 'object' && e.connectorId) ob.connectorId = e.connectorId;
+        // a PLUGIN TERMINAL's binding — which plugin's tools it grants (projected below only while that plugin's
+        // approval covers its code on disk, so naming a plugin here grants nothing by itself)
+        if (e && typeof e === 'object' && e.pluginId && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(String(e.pluginId))) ob.pluginId = String(e.pluginId);
         return ob;
       });
   } else {
@@ -17341,6 +17378,29 @@ async function runOnceCore(o) {
       resolved.approvalRules[def.name] = { requiresConsent: !!def.requiresConsent, scope: def.scope, network: true };
     }
   } catch (e) { console.warn('[mcp] connector tool projection failed:', (e && e.message) || e); }
+  // PLUGIN TERMINALS (per-agent, object = capability): a plugin terminal placed in THIS agent's room grants that
+  // plugin's api.tool()s — with the connector trust contract (plugin-tools.js: external-unknown, consent, fenced).
+  // Only a plugin whose approval covers its bytes on disk right now projects anything.
+  try {
+    const room = station.rooms && station.agents && station.agents[agentId] && station.rooms[station.agents[agentId].room];
+    const seenPlugins = new Set();
+    for (const ob of ((room && room.objects) || [])) {
+      if (!ob || ob.objectType !== 'plugin') continue;
+      const pid = String(ob.pluginId || (ob.binding && ob.binding.pluginId) || '');
+      if (!pid || seenPlugins.has(pid)) continue;
+      seenPlugins.add(pid);
+      const live = (pluginsLoaded.loaded || []).find(p => p.id === pid && p.process);
+      if (!live || !(await pluginLoader.approvedRecord(pid))) continue;
+      const defs = makePluginToolDefs({ pluginId: pid, pluginName: live.name, tools: pluginRuntime.tools(pid),
+        call: (name, args, ctx) => pluginRuntime.callTool(pid, name, args, ctx) });
+      for (const def of defs) {
+        registry.register(def, { provenance: 'connector' });   // not host-authored: the connector trust class
+        if (resolved.tools.indexOf(def.name) < 0) resolved.tools.push(def.name);
+        resolved.networkCaps[def.name] = true;
+        resolved.approvalRules[def.name] = { requiresConsent: true, scope: def.scope, network: true };
+      }
+    }
+  } catch (e) { console.warn('[plugins] plugin tool projection failed:', (e && e.message) || e); }
   // Connector projection happens after the base office is resolved. Re-apply the host floor so
   // no dynamic server or future registration order can restore a real-screen tool by name.
   resolved = enforceSyntheticOnly(resolved, realDesktopAuthority);

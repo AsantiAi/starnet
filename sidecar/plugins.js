@@ -332,6 +332,14 @@
       const { plugins, errors } = await discover();
       const allowed = await allowedMap();
       const loaded = [], pending = [];
+      const runtime = deps.runtime || null;
+      // PROCESS MODE (phase 2): every approved plugin with code runs in its own process. A reload keeps a
+      // running process whose code is unchanged (its in-memory state survives an unrelated hook edit); anything
+      // no longer approved as it is on disk — revoked, deleted, edited — is stopped here, before it can run again.
+      if (runtime) {
+        const keep = new Set(plugins.filter(p => p.main && allowed[p.id] && allowed[p.id].digest === p.digest).map(p => p.id));
+        for (const id of runtime.list()) if (!keep.has(id) || runtime.digestOf(id) !== (plugins.find(p => p.id === id) || {}).digest) runtime.stop(id);
+      }
       for (const p of plugins) {
         const ok = allowed[p.id] && allowed[p.id].digest === p.digest;
         if (!ok) {
@@ -353,11 +361,28 @@
           const cur = await treeDigest(p.dir);
           if (cur.digest === p.digest) return true;
           disabled = true;
+          if (runtime) runtime.stop(p.id);   // edited code must not keep running in its process either
           onError({ plugin: p.id, error: 'its files changed since approval (' + (cur.error || 'digest mismatch') + ') — disabled until re-approved' });
           return false;
         };
         // UI-only plugin: approved and live (its screens may open), with no code for the station to load.
         if (!p.main) { loaded.push(Object.assign({}, p, { subscribed: 0 })); continue; }
+        if (runtime) {
+          let s = runtime.digestOf(p.id) === p.digest ? runtime.surface(p.id) : null;
+          if (!s) {
+            const r = await runtime.start(p);
+            if (!r || !r.ok) { errors.push(p.id + ': ' + ((r && r.error) || 'failed to start')); continue; }
+            s = r;
+          }
+          for (const event of s.subs || []) {
+            hookSpine.register(event, async (payload) => ((await stillApproved()) ? runtime.hook(p.id, event, payload) : null), { name: p.id });
+          }
+          loaded.push(Object.assign({}, p, {
+            subscribed: (s.subs || []).length, process: true,
+            tools: (s.tools || []).map(t => t.name), handlers: (s.handlers || []).slice(), jobs: s.jobs || 0
+          }));
+          continue;
+        }
         let mod;
         try { mod = requireModule(p.main); }
         catch (e) { errors.push(p.id + ': failed to load — ' + ((e && e.message) || e)); continue; }

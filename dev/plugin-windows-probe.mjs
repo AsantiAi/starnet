@@ -24,7 +24,40 @@ materializeSeedWorkspace(ws, 'test/model');
 const report = { checks: [], facts: {}, exceptions: [] };
 let side, chrome, cdp;
 
-const mock = http.createServer((req, res) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ data: [{ id: 'test/model', context_length: 32000, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['tools'] }] })); });
+// The mock model: serves the catalog, and on a chat turn calls the plugin's add_note tool IF the run offers it
+// (that offer is the proof the placed terminal projected the plugin's tools), then answers after the tool result.
+const modelLog = { turns: 0, offered: [], toolResult: '' };
+const mock = http.createServer((req, res) => {
+  let raw = '';
+  req.on('data', (c) => { raw += c; });
+  req.on('end', () => {
+    if (!/chat\/completions/.test(req.url || '')) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ data: [{ id: 'test/model', context_length: 32000, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['tools'] }] }));
+    }
+    let body = {}; try { body = JSON.parse(raw); } catch {}
+    modelLog.turns++;
+    const names = (body.tools || []).map((t) => (t.function && t.function.name) || t.name || '');
+    modelLog.lastNames = names.filter((n) => !/^tool[._]search$/.test(n)).slice(0, 80);
+    const pluginTool = names.find((n) => /plugin__pr-radar__add_note/.test(n));
+    if (pluginTool) modelLog.offered.push(pluginTool);
+    const msgs = body.messages || [];
+    const last = msgs[msgs.length - 1] || {};
+    let delta, finish;
+    const call = (id, name, args) => ({ tool_calls: [{ index: 0, id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] });
+    const lastText = String(last.content || '');
+    // like a real model: settle the Task Brief (the harness requires it before consequential work), then use the
+    // plugin's tool, then answer from its result
+    if (!pluginTool && last.role !== 'tool') { delta = { content: 'NO PLUGIN TOOL OFFERED' }; finish = 'stop'; }
+    else if (last.role !== 'tool') { delta = call('brief_1', 'brief_proceed', { objective: 'Add a note to PR Radar' }); finish = 'tool_calls'; }
+    else if (/Task Brief settled/.test(lastText)) { delta = call('call_plugin_1', pluginTool || 'plugin__pr-radar__add_note', { text: 'Crew note from the probe' }); finish = 'tool_calls'; }
+    else { modelLog.toolResult = lastText; delta = { content: 'Added the note to PR Radar.' }; finish = 'stop'; }
+    res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+    res.write('data: ' + JSON.stringify({ choices: [{ delta }] }) + '\n\n');
+    res.write('data: ' + JSON.stringify({ choices: [{ delta: {}, finish_reason: finish }], usage: { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 } }) + '\n\n');
+    res.end('data: [DONE]\n\n');
+  });
+});
 await new Promise((r) => mock.listen(0, '127.0.0.1', r));
 const base = 'http://127.0.0.1:' + mock.address().port + '/api/v1';
 const iso = {
@@ -79,6 +112,12 @@ try {
   await until(`document.querySelector('.term.plugin-win iframe.plugin-frame')`);
   await until(`/Plugin created and its window opened/.test(document.querySelector('#ext-msg').textContent)`, 50);
   await check('"Create a plugin" makes the starter AND opens its window straight away', true);
+  report.facts.createMsg = await run(`document.querySelector('#ext-msg').textContent`);
+  await check('its tools came up in its own process and its TERMINAL was placed in the lead\'s room', /terminal now stands in the lead/.test(report.facts.createMsg));
+  report.facts.terminal = await run(`JSON.stringify(PluginHost.terminalOf('pr-radar'))`);
+  await check('the terminal is a real placed prop bound to the plugin', /"id":"p\d+"/.test(report.facts.terminal));
+  report.facts.leadCaps = await run(`(()=>{ const st=App.station(); const d=st.serialize(); const t=d.props.find(p=>p.t==='plugin_terminal'); return JSON.stringify({ caps: st.bayObjects('agent'), capRoom: st.agentRoomId('agent'), termRoom: t && st.roomAt ? st.roomAt(t.x,t.y) : null, agentProps: d.props.filter(p=>p.agentId==='agent').map(p=>p.t+'@'+p.x+','+p.y), term: t }); })()`);
+  await check('the terminal projects the plugin capability into the lead\'s run reach', await run(`World.heroCaps('agent').some(o => o && o.objectType === 'plugin' && o.pluginId === 'pr-radar')`));
   await check('the EXTENSIONS row offers OPEN PR RADAR', await run(`[...document.querySelectorAll('[data-ext="plugin-open"]')].some(b=>b.textContent==='OPEN PR RADAR')`));
   await check('it opens again through the ordinary registry', await run(`PluginHost.open('pr-radar','main')`) === true);
   await until(`document.querySelector('.term.plugin-win').classList.contains('gd-sheet')`);
@@ -126,8 +165,29 @@ try {
   await check('the note is saved by the station on disk', existsSync(onDisk) && /Ship plugin windows/.test(readFileSync(onDisk, 'utf8')));
   await until(`StationUI.h.store.notifs.some(n => /^PR Radar: Note saved/.test(n.txt))`, 40);
   await check('a plugin toast reaches the station log, prefixed with the plugin name', true);
+  await frameUntil(`/^\\d+$/.test(document.getElementById('stat-calls').textContent)`, 60);
+  await check('the window reaches its own backend (starnet.backend.call → api.handle, in the plugin process)', true);
   await sleep(300);
   report.facts.shot2 = await capture(cdp, out, '02-note-saved');
+
+  // ---- 3b. the CREW uses the plugin: a real chat run, the plugin tool offered, a real approval card, the effect ----
+  await run(`App.persist(), true`);
+  await sleep(2500);   // the station save reaches the sidecar (the run resolves tools from the saved floor)
+  await run(`(()=>{ const i=document.getElementById('chat-input'); i.value='Add a note to PR Radar saying the probe was here'; i.dispatchEvent(new Event('input',{bubbles:true})); document.getElementById('chat-send').click(); return true; })()`);
+  await until(`[...document.querySelectorAll('#chat-panel button')].some(b => b.textContent.trim() === 'Approve once' && !b.disabled)`, 150);
+  report.facts.approvalCard = await run(`(()=>{ const b=[...document.querySelectorAll('#chat-panel button')].find(b => b.textContent.trim()==='Approve once'); const card=b.closest('.perm,.permission,.beat,.msg,div'); return (card && card.textContent || '').replace(/\\s+/g,' ').slice(0,300); })()`);
+  await check('the plugin tool reached the lead\'s run (the placed terminal projected it)', modelLog.offered.length > 0);
+  await sleep(300);
+  report.facts.shot2b = await capture(cdp, out, '02b-approval-card');
+  await run(`[...document.querySelectorAll('#chat-panel button')].find(b => b.textContent.trim()==='Approve once').click(), true`);
+  await frameUntil(`[...document.querySelectorAll('#list .sn-item .t')].some(e => e.textContent === 'Crew note from the probe')`, 80);
+  await check('after "Approve once" the plugin\'s tool ran and its window shows the crew\'s note (gold lamp)', await frameEval(`[...document.querySelectorAll('#list .sn-item')].some(li => li.querySelector('.t').textContent === 'Crew note from the probe' && li.querySelector('.dot.warn'))`));
+  await check('the crew\'s note is on disk in the plugin\'s store', /Crew note from the probe/.test(readFileSync(onDisk, 'utf8')) && /"by": ?"crew"/.test(readFileSync(onDisk, 'utf8')));
+  for (let i = 0; i < 50 && !modelLog.toolResult; i++) await sleep(100);
+  report.facts.toolResultToModel = modelLog.toolResult.slice(0, 240);
+  await check('the tool result reached the model FENCED as external content', /EXTERNAL/.test(modelLog.toolResult) && /Added\. The window now shows/.test(modelLog.toolResult));
+  await sleep(500);
+  report.facts.shot2c = await capture(cdp, out, '02c-crew-note');
 
   // ---- 4. the page CANNOT reach the station ----
   await check('no API token in the frame', await frameEval(`typeof window.__STARNET_API_TOKEN__ === 'undefined'`));
@@ -182,7 +242,7 @@ try {
   console.log(JSON.stringify(report, null, 2));
 } catch (e) {
   if (cdp) await capture(cdp, out, 'failure').catch(() => {});
-  writeFileSync(join(out, 'report.json'), JSON.stringify(Object.assign(report, { error: String(e && e.stack || e) }), null, 2));
+  writeFileSync(join(out, 'report.json'), JSON.stringify(Object.assign(report, { error: String(e && e.stack || e), modelLog }), null, 2));
   console.error(e); process.exitCode = 1;
 } finally {
   try { cdp?.ws.close(); } catch {}

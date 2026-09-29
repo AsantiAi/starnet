@@ -15,7 +15,7 @@
    frame says hello and whenever <body>'s theme class or inline theme vars change — a custom hue repaints every
    plugin window in the same frame as the station.
 
-   Exposes window.PluginHost = { refresh, open, list, _test } */
+   Exposes window.PluginHost = { refresh, open, placeTerminal, terminalOf, list, _test } */
 (function (root) {
   'use strict';
   if (typeof document === 'undefined') return;
@@ -102,6 +102,16 @@
     'store.set': (entry, a) => storeOp(entry, 'set', a),
     'store.delete': (entry, a) => storeOp(entry, 'delete', a),
     'store.keys': (entry) => storeOp(entry, 'keys', {}),
+    // the plugin's OWN backend (api.handle in its main), run in its own process by the sidecar
+    'backend.call': async (entry, a) => {
+      const r = await fetch('/api/plugins/call', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: entry.plugin.id, fn: String((a && a.fn) || ''), args: a && a.args })
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error((j && j.error) || ('the station refused (' + r.status + ')'));
+      return j.value;
+    },
     'ui.toast': (entry, a) => { toastFor(entry, a && a.text, a && a.kind); return null; },
     'ui.height': (entry, a) => { fitHeight(entry, a && a.px); return null; },
     'ui.title': (entry, a) => {
@@ -244,6 +254,24 @@
     return true;
   }
 
+  /* A plugin with TOOLS needs a body in the station (object = capability): its PLUGIN TERMINAL. Installing places one
+     in the lead's room (Andrew 2026-09-29) — a real prop through the world model's ordinary placement rules, saved
+     like any REFIT edit, idempotent (an existing terminal for the plugin is reused, never duplicated). */
+  function station() { try { return (typeof App !== 'undefined' && App.station) ? App.station() : null; } catch (_) { return null; } }
+  function terminalOf(pluginId) {
+    const st = station();
+    const doc = st && st.serialize ? st.serialize() : null;
+    const p = doc && Array.isArray(doc.props) ? doc.props.find((x) => x && x.t === 'plugin_terminal' && x.pluginId === pluginId) : null;
+    return p ? { id: p.id, x: p.x, y: p.y } : null;
+  }
+  function placeTerminal(pluginId) {
+    const st = station();
+    if (!st || typeof st.placePluginTerminal !== 'function') return { ok: false, error: 'NO_STATION', msg: 'the station floor is not loaded' };
+    const r = st.placePluginTerminal(pluginId, 'agent');
+    if (r && r.ok && !r.existing) { try { if (typeof App !== 'undefined' && App.persist) App.persist(); } catch (_) {} }
+    return r;
+  }
+
   function init() {
     root.addEventListener('message', onMessage);
     try { reaper.observe(document.getElementById('terms') || document.body, { childList: true, subtree: true }); } catch (_) {}
@@ -257,7 +285,7 @@
   }
 
   const api = {
-    refresh, open,
+    refresh, open, placeTerminal, terminalOf,
     list: () => plugins.slice(),
     _test: { frames, screens, themeVars, METHODS, get lastError() { return lastError; } }
   };

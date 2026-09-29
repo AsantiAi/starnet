@@ -2872,6 +2872,14 @@ const Chat = (() => {
   // session) / deny. Answering resumes the stream automatically.
   function actionPhrase(ev) {
     const t = ev.tool || 'act';
+    // a PLUGIN tool (plugin__<id>__<tool>): say whose code it is before what it does — checked first, so a plugin
+    // tool that happens to be named like a built-in (edit_*, *notebook*) can never borrow a built-in's phrasing
+    const pm = /^plugin__(.+?)__(.+)$/.exec(t);
+    if (pm) {
+      const host = typeof PluginHost !== 'undefined' ? PluginHost : null;
+      const p = host && host.list ? host.list().find(x => x.id === pm[1]) : null;
+      return 'use the ' + ((p && p.name) || pm[1]) + ' plugin tool “' + pm[2] + '”' + (ev.argsSummary ? ' ' + ev.argsSummary : '');
+    }
     if (/notebook/.test(t)) return 'save a note to its memory';
     if (/summon/.test(t)) return 'summon a new agent onto the crew' + (ev.argsSummary ? ' (' + ev.argsSummary + ')' : '');
     // NS-5 conversational path trust: a file was referenced OUTSIDE the agent's workspace — "Always" blesses

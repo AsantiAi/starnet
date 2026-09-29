@@ -197,6 +197,10 @@
     // instance's binding ({ connectorId }) selects WHICH server. This empty marker just declares 'connector' a
     // known, placeable capability object so the builder/world can treat it like any other room object.
     connector: [],
+    // PLUGINS: a 'plugin' object (a PLUGIN TERMINAL bound to { pluginId }) is dynamic in exactly the same way — its
+    // grants are the tools that plugin registered (api.tool) in its own process, projected per run by index.js
+    // with the connector trust contract (sidecar/plugin-tools.js). This marker makes it a known room object.
+    plugin: [],
     // WORKBENCH: real code execution (shell.exec). Opt-in per agent by PLACING this object — no object, no shell,
     // exactly like cabinet=files. scope 'execute' so the consent broker's exec-lockout binds it: an autonomous
     // run can NEVER execute off a cached grant (only an interactive human, or frozen FULL_ACCESS, may approve).

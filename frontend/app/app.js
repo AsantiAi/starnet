@@ -3216,6 +3216,15 @@ const App = (() => {
     if (World.setOnOutbox) World.setOnOutbox(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('outbox'); });
     if (World.setOnMissionBoard) World.setOnMissionBoard(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('quests'); });   // G1b: click the MISSION BOARD → the QUEST LOG (the board is a projection, never a gate)
     if (World.setOnTrophyCase) World.setOnTrophyCase(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('trophies'); });   // G3b: click the TROPHY CASE → the TROPHY surface (a projection of real completions, never a gate)
+    // a PLUGIN TERMINAL is the plugin's body: a click opens its window. An unbound or turned-off one says so and opens
+    // EXTENSIONS, where plugins are approved — never a dead click.
+    if (World.setOnPluginTerminal) World.setOnPluginTerminal((p) => {
+      const pid = p && p.pluginId;
+      if (pid && typeof PluginHost !== 'undefined' && PluginHost.open(pid)) return;
+      if (typeof StationUI === 'undefined') return;
+      if (StationUI.notify) StationUI.notify(pid ? 'That plugin is off or has no window. Turn it on in ABILITIES → EXTENSIONS.' : 'This terminal is not bound to a plugin yet. Bind it in REFIT, or create a plugin in ABILITIES → EXTENSIONS.', 'warn');
+      if (StationUI.openTerm) StationUI.openTerm('connectors', 'extensions');
+    });
     if (World.setOnBayAssign) World.setOnBayAssign(pid => { if (typeof Build !== 'undefined' && Build.openAssign) Build.openAssign(pid); });   // belt legibility: click an unbound BAY's "NO AGENT" nag → REFIT opens straight into its agent picker
     if (World.setOnIntakeFeed) World.setOnIntakeFeed(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('messaging'); });   // belt legibility: click a starved INTAKE's "NO FEED" nag → the CHANNELS panel (wire a real feed)
     if (World.setOnIntakeSample) World.setOnIntakeSample(o => { if (typeof Chat !== 'undefined' && Chat.sampleCard) Chat.sampleCard(o); });   // guided workflow Phase 4: click the INBOX on a COMPLETE line → the RUN-A-SAMPLE-JOB card (POST /api/routing/sample)

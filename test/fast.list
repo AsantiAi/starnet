@@ -129,6 +129,7 @@ test/shellhooks.test.js
 test/hooks.wiring.test.js
 test/plugins.test.js
 test/plugin-windows.test.js
+test/plugin-runtime.test.js
 test/loop.replay.test.js
 test/loop.steer.test.js
 test/loop.verify-on-stop.test.js

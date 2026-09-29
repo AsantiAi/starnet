@@ -277,7 +277,10 @@ function enforceEnabledToolsets(resolved, registry, enabledToolsets) {
   for (const name of ((resolved && resolved.tools) || [])) {
     const tool = registry && typeof registry.get === 'function' ? registry.get(name) : null;
     const cap = String((tool && tool.capability) || '');
-    const family = cap.indexOf('mcp:') === 0 ? 'connectors' : cap;
+    // Plugin tools (capability 'plugin:<id>', sidecar/plugin-tools.js) are installed third-party tools with the
+    // connector trust contract, so the CONNECTORS toolset switch governs them too — otherwise their unknown family
+    // name could never be enabled and a placed plugin terminal would silently grant nothing.
+    const family = (cap.indexOf('mcp:') === 0 || cap.indexOf('plugin:') === 0) ? 'connectors' : cap;
     if (free.has(family) || enabled.has(family)) allowed.add(name);
   }
   const approvalRules = {}, networkCaps = {};

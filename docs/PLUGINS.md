@@ -1,7 +1,8 @@
 # StarNet plugins
 
 A plugin is one folder with a single approval. It can add **windows** (your own HTML/JS, opened as real StarNet
-windows), **code that runs inside the station** (hooks today; tools, routes and jobs are phase 2), or both.
+windows), **code that runs in the station in its own process** (tools for your crew, hooks on every run, background
+jobs, a backend for its windows), and a **terminal** that stands in the station as its body, or any mix of those.
 
 - **Where plugins live:** `<workspaces>/plugins/<id>/`. ABILITIES → CREATE / ADVANCED → EXTENSIONS → **COPY FOLDER PATH** shows the exact folder.
 - **Fastest start:** EXTENSIONS → **Create a plugin**. It writes a working starter (a window with notes saved by the
@@ -92,6 +93,8 @@ await starnet.store.get('notes');                  // → value, or null
 await starnet.store.delete('notes');
 await starnet.store.keys();                        // → ['notes', …]
 
+await starnet.backend.call('summary', { days: 7 }); // your main file's api.handle('summary', fn), in its process
+
 starnet.ui.toast('Saved', 'ok' | 'warn' | 'bad');  // a station notification, shown as "<Plugin>: Saved"
 starnet.ui.setTitle('3 open');                     // title bar becomes "PR RADAR · 3 open"
 starnet.ui.open('settings');                       // open another screen of THIS plugin
@@ -107,10 +110,52 @@ The store lives in `<workspaces>/plugin-data/<id>.json` (durable, survives resta
 
 ## Code that runs in the station (`main`)
 
-`register(api)` runs once at boot. Today `api.on(event, handler)` hooks the run: `pre_tool_call` (can block),
-`post_tool_call`, `pre_llm_call` (can add a note or block), `post_llm_call`, `on_session_start`, `on_session_end`,
-`on_pre_compress`, `on_memory_write`, `subagent_stop`. It is ordinary in-process Node with **your computer's
-permissions**, which is why it needs your approval, and why every edit turns it off until you approve it again.
+Your `main` file runs in **its own process** once approved: a crash, a hang or an `exit()` costs the plugin, never
+the station. It has **your computer's permissions** (it is ordinary Node), which is why it needs your approval and
+why every edit turns it off until you approve it again. A crashed plugin restarts on its next use, at most 3 times
+in 5 minutes. `register(api)` runs once, and everything is registered inside it (sync or async):
 
-Phase 2 adds `api.tool`, `api.route`, `api.job`, `api.store`, `api.secrets` and window ↔ backend messaging, with
-each plugin backend in its own process.
+```js
+module.exports = {
+  register(api) {
+    // hook every run
+    api.on('pre_tool_call', (p) => p.tool_name === 'shell.exec' ? { decision: 'block', reason: 'not today' } : null);
+
+    // a tool the crew can call (see "Terminals" below)
+    api.tool({
+      name: 'list_prs',                        // letters, numbers, _ or -; max 48
+      description: 'List my open pull requests',
+      readOnly: true,                           // a read-only tool (still asks before each call)
+      parameters: { type: 'object', properties: { repo: { type: 'string' } } },
+      run: async (args, ctx) => fetchPrs(args.repo)   // return a string or any JSON; ctx = { agentId, runId }
+    });
+
+    // answer this plugin's own windows: await starnet.backend.call('summary', { days: 7 })
+    api.handle('summary', async ({ days }) => ({ open: 12, days }));
+
+    // a background job (10 s minimum)
+    api.every(60000, async () => api.store.set('lastSync', Date.now()));
+
+    // the SAME store the windows use
+    api.store.get('notes'); api.store.set('notes', []); api.store.delete('x'); api.store.keys();
+    api.log('shown in the station log as [plugin:<id>]');
+  }
+};
+```
+
+Hook events: `pre_tool_call` (can block), `post_tool_call`, `pre_llm_call` (can add `{ context }` or block),
+`post_llm_call`, `on_session_start`, `on_session_end`, `on_pre_compress`, `on_memory_write`, `subagent_stop`.
+A hook has 5 s by default and a failing hook never blocks a run. A tool call has 120 s and a window call 30 s.
+
+## Terminals (how tools reach your crew)
+
+StarNet runs on **object = capability**: an agent can use what stands in its room. A plugin's tools reach agents
+through its **PLUGIN TERMINAL**, a prop in the REFIT catalog under CAPABILITY. When you approve or create a plugin
+with tools, StarNet **places its terminal in the lead's room for you**. You can move it, place more in other
+rooms, or bind a terminal to a different plugin by clicking it in REFIT. Clicking a terminal in the station opens
+the plugin's window.
+
+Plugin tools use the same trust rules as connector tools. A watched run shows you an approval card for each call
+("use the PR Radar plugin tool “list_prs” …"; *Always* is allowed). An unattended run doesn't get them. Content
+from outside the station revokes them for the rest of the run. Their results reach the model fenced as external
+data. The TOOLSETS **connectors** switch turns them all off.
