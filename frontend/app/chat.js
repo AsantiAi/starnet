@@ -2890,7 +2890,7 @@ const Chat = (() => {
     if (t === 'brief.ask') return 'ask you a quick question about the task';   // clarify card renders its own body
     // THE STATION BUILDER (2026-09-29): the card IS the plan — what gets built, where, who works each step. The sidecar
     // sends the plan's own summary (its dry run on a copy of the station), never the model's words.
-    if (/^station[._]build$/.test(t)) return 'build this on your station: ' + (String(ev.argsSummary || '').split('\n')[0] || 'a planned change') + ' One UNDO in Build mode removes it.';
+    if (/^station[._]build$/.test(t)) return 'build this on your station: ' + (String(ev.argsSummary || '').split('\n')[0] || 'a planned change') + ' One UNDO in Build mode takes it back.';
     return t.replace(/_/g, '.') + (ev.argsSummary ? ' ' + ev.argsSummary : '');
   }
 

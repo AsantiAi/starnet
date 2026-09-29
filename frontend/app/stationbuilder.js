@@ -20,9 +20,11 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const MENU = ['line', 'where', 'name', 'steps', 'dailyCap', 'tries'];
+  const MENU = ['line', 'purpose', 'where', 'name', 'steps', 'dailyCap', 'tries'];
   const STEP_KEYS = ['step', 'role', 'instructions', 'agent'];
   const LEAD_WORDS = { lead: 1, me: 1, you: 1, yourself: 1, overseer: 1, hero: 1 };
+  // "recruit someone for this step": the build summons that role's specialist (Build's own summonForRole) and seats it
+  const NEW_WORDS = { new: 1, recruit: 1, 'new agent': 1, 'a new one': 1, 'new recruit': 1, 'someone new': 1, 'a new agent': 1 };
   const MIN_W = 12, MIN_H = 7, MAX_TRIES_IN_ROOM = 600;
   const norm = s => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const clone = o => JSON.parse(JSON.stringify(o));
@@ -65,10 +67,11 @@
     const n = norm(raw), crew = (env.crew || []).filter(a => a && a.id);
     if (!n) return { ok: true, id: '' };
     if (LEAD_WORDS[n] && env.heroId) return { ok: true, id: env.heroId };
+    if (NEW_WORDS[n]) return env.canRecruit ? { ok: true, id: '', recruit: true } : refuse('Recruiting is not available on this page. Staff the step with a crew member, or leave agent empty.');
     const hit = crew.filter(a => norm(a.id) === n || norm(a.name) === n);
     if (hit.length === 1) return { ok: true, id: hit[0].id };
     return refuse((hit.length ? 'More than one crew member matches "' : 'Nobody on the crew is called "') + String(raw).slice(0, 40) + '".'
-      + ' Leave agent empty to staff it later, or use one of: ' + (crew.map(a => a.name || a.id).join(', ') || 'no crew yet') + '.');
+      + ' Leave agent empty to staff it later, say "new" to recruit a specialist for it, or use one of: ' + (crew.map(a => a.name || a.id).join(', ') || 'no crew yet') + '.');
   }
   const nameOf = (env, id) => { const a = (env.crew || []).find(x => x && x.id === id); return a ? (a.name || a.id) : id; };
 
@@ -118,6 +121,7 @@
      room's floor, material or name). Every setter's answer is checked; one failure fails the whole edit. */
   function buildInto(st, spec, WM) {
     if (spec && spec.kind === 'restyle') return restyleInto(st, spec);
+    if (spec && spec.kind === 'swap') { const r = st.replaceLayout(spec.layout); return r && r.ok ? { ok: true, ids: [] } : refuse('the preset could not be applied' + (r && r.msg ? ' (' + r.msg + ')' : '')); }
     if (spec && spec.kind === 'rooms') {
       const ids = [], parts = [];
       for (const part of spec.parts || []) { const r = buildKit(st, part, WM); if (!r.ok) return r; ids.push(...r.ids); parts.push(r); }
@@ -206,9 +210,20 @@
     const extra = Object.keys(req).filter(k => MENU.indexOf(k) < 0);
     if (extra.length) return refuse('StarNet chooses every position, belt and piece of furniture itself, so these fields are not accepted: '
       + extra.slice(0, 8).join(', ') + '. Use only: ' + MENU.join(', ') + '.');
-    const bp = resolveLine(WM, req.line);
-    if (!bp) return refuse((req.line ? 'There is no line called "' + String(req.line).slice(0, 60) + '".' : 'Choose a line.') + ' The lines are: ' + lineList(WM) + '.',
-      { lines: catalog(WM).map(l => ({ id: l.id, name: l.name, roles: l.roles })) });
+    // purpose: the Commander's own words. With no line named, StarNet picks one with the reader behind FOR YOUR GOAL
+    // (WorkflowLine.suggestLineFor: the SHAPE of the work), and every step's standard instructions carry those words
+    if (req.purpose != null && typeof req.purpose !== 'string') return refuse('purpose is the Commander\'s own words for what the line is for, as text.');
+    const purpose = typeof req.purpose === 'string' ? req.purpose.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
+    let bp = resolveLine(WM, req.line), picked = null;
+    const lines = { lines: catalog(WM).map(l => ({ id: l.id, name: l.name, roles: l.roles })) };
+    if (!bp && req.line == null && purpose) {
+      const s = W.suggestLineFor ? W.suggestLineFor(purpose) : null;
+      bp = s ? resolveLine(WM, s.id) : null;
+      if (!bp) return refuse('StarNet picks a line from the shape of the work (research then writing, a draft and a reviewer, code with tests or a review, two takes to compare), and "'
+        + purpose.slice(0, 80) + '" names no such shape. Choose a line: ' + lineList(WM) + '.', lines);
+      picked = s.why;
+    }
+    if (!bp) return refuse((req.line ? 'There is no line called "' + String(req.line).slice(0, 60) + '".' : 'Choose a line, or give its purpose in the Commander\'s words.') + ' The lines are: ' + lineList(WM) + '.', lines);
     const plain = bp.plain || bp.label;
     const label = (typeof req.name === 'string' ? req.name : '').replace(/\s+/g, ' ').trim().slice(0, 48) || plain.toUpperCase();
     const notes = [];
@@ -316,35 +331,49 @@
       if (used[hit.step]) return refuse('Step ' + hit.step + ' was given twice.');
       used[hit.step] = 1;
       if (s.instructions != null) hit.brief = String(s.instructions).trim().slice(0, 2000);
-      if (s.agent != null) { const a = agentOf(env, s.agent); if (!a.ok) return a; hit.agentId = a.id; }
+      if (s.agent != null) { const a = agentOf(env, s.agent); if (!a.ok) return a; hit.agentId = a.id; hit.recruit = !!a.recruit; }
     }
-    // a step with no instructions gets its role's standard ones (the Workflow panel's first starter chip)
-    for (const x of stepsOut) if (!x.brief) { const st = env.WorkflowLine.starters ? env.WorkflowLine.starters(x.role) : []; x.brief = (st[0] && st[0].does) || ''; }
-    spec = Object.assign({}, spec, { steps: stepsOut.map(x => ({ propIndex: x.propIndex, brief: x.brief, agentId: x.agentId })) });
+    // a step with no instructions gets its role's standard ones (the Workflow panel's first starter chip), with the purpose
+    for (const x of stepsOut) if (!x.brief) {
+      const st = env.WorkflowLine.starters ? env.WorkflowLine.starters(x.role) : [];
+      x.brief = ((st[0] && st[0].does) || '') + (purpose ? ' This line is for: "' + purpose + '".' : '');
+    }
+    const recruits = stepsOut.filter(x => x.recruit).map(x => ({ propIndex: x.propIndex, role: x.role }));
+    spec = Object.assign({}, spec, { steps: stepsOut.map(x => ({ propIndex: x.propIndex, brief: x.brief, agentId: x.agentId })), recruits });
 
     // the whole build on one more probe: its fingerprint is what apply() must reproduce exactly
     const finalProbe = WM.create(clone(doc));
     const fb = buildInto(finalProbe, spec, WM);
     if (!fb.ok) return fb;
     const crewIds = (env.crew || []).map(a => a && a.id).filter(Boolean);
-    const rd = readLine(finalProbe, fb.ids, env, crewIds);
+    // readiness counts the recruits: on a copy, each gets the desk its summon seeds (ensureWorkstation) and its step
+    const rp = WM.create(clone(finalProbe.serialize())), deskRooms = [];
+    recruits.forEach((rc, i) => {
+      const id = '__sb_recruit_' + i, d = rp.ensureWorkstation(id);
+      if (d && d.ok && d.roomId) { const rm = rp.roomById ? rp.roomById(d.roomId) : null; if (rm && deskRooms.indexOf(rm.name) < 0) deskRooms.push(rm.name); }
+      rp.assignPropAgent(fb.ids[rc.propIndex], id); crewIds.push(id);
+    });
+    const rd = readLine(rp, fb.ids, env, crewIds);
     const neighbour = spec.room ? (() => {
       const R = spec.room.rect, adj = rooms.find(rm => rm.rects.some(q => q.x1 <= R.x2 + 1 && q.x2 >= R.x1 - 1 && q.y1 <= R.y2 + 1 && q.y2 >= R.y1 - 1));
       return adj ? adj.name : null;
     })() : null;
     const whereText = spec.room ? 'a new room' + (neighbour ? ' beside ' + neighbour : '') : 'the ' + target.name + ' room';
-    const stepsView = stepsOut.map(x => ({ step: x.step, role: titleCase(x.role), agent: x.agentId ? nameOf(env, x.agentId) : null, instructions: x.brief }));
+    const stepsView = stepsOut.map(x => ({ step: x.step, role: titleCase(x.role), agent: x.recruit ? 'a new recruit' : x.agentId ? nameOf(env, x.agentId) : null, instructions: x.brief }));
     const capNow = (() => { const ip = fb.ids.map(id => finalProbe.propById(id)).find(p => p && p.t === 'intake'); return ip && ip.limits ? ip.limits.maxUsdPerDay : null; })();
     const summary = plain + (hasIntake ? ' ("' + label + '")' : '') + ' in ' + whereText + ': '
       + flowText(shape.cols, runOrder, stepsView)
       + (bp.props.some(p => p.t === 'outbox') ? ' → Outbox' : '')
       + (hasIntake ? (capNow != null ? ' · daily cap $' + capNow : ' · no daily cap') : '')
       + (hasLoop ? ' · up to ' + (opts.maxIter || (bp.props.find(p => p.t === 'loop') || {}).maxIter || 3) + ' review tries' : '')
-      + '. ' + (rd.ready ? 'It will be ready to run.' : 'Still to do after building: ' + rd.blocking.join('; ') + '.');
+      + '. ' + (rd.ready ? 'It will be ready to run.' : 'Still to do after building: ' + rd.blocking.join('; ') + '.')
+      + (recruits.length ? ' It adds ' + recruits.length + ' crew member' + (recruits.length > 1 ? 's' : '') + ': ' + recruits.map(r => r.role).join(', ')
+        + (deskRooms.length ? ', with a desk in ' + deskRooms.join(' and ') : '') + '. UNDO does not remove agents; DELETE AGENT in a Dossier does.' : '')
+      + (picked ? ' Picked for "' + purpose.slice(0, 80) + '": ' + picked + '.' : '');
     return { ok: true, plan: {
       floorSig: sigOf(doc), resultSig: sigOf(finalProbe.serialize()), spec,
       line: { id: bp.id, name: plain, label: hasIntake ? label : null }, where: whereText,
-      steps: stepsView, ready: rd.ready, blocking: rd.blocking, notes, summary
+      steps: stepsView, ready: rd.ready, blocking: rd.blocking, notes, summary, recruits: recruits.map(r => r.role), picked
     } };
   }
 
@@ -356,8 +385,8 @@
      as designed and mirrored (never a kit with a line: mirroring would reverse its belts) until every piece can be
      walked up to and no piece blocks a doorway. planRestyle is the one cosmetic change: a room's floor, material or
      name, from fixed lists. The card says what equipment a kit brings (a desk is a computer: object = capability). */
-  const ROOM_MENU = ['kit', 'preset', 'where', 'name', 'floorStyle', 'floorMat'];
-  const STYLE_MENU = ['room', 'name', 'floorStyle', 'floorMat'];
+  const ROOM_MENU = ['kit', 'preset', 'replace', 'where', 'name', 'type', 'floorStyle', 'floorMat'];
+  const STYLE_MENU = ['room', 'name', 'type', 'floorStyle', 'floorMat'];
   const KIT_W = 18, KIT_H = 11;
   const kitsOf = env => (env.StationTemplates && env.StationTemplates.kits) ? env.StationTemplates.kits() : [];
   const kitMenu = env => kitsOf(env).map(k => k.name + ' (' + k.about + ')').join('; ');
@@ -373,7 +402,15 @@
     };
     const fs = pick(req.floorStyle, styles, 'floorStyle'); if (!fs.ok) return fs;
     const fm = pick(req.floorMat, mats, 'floorMat'); if (!fm.ok) return fm;
-    return { ok: true, floorStyle: fs.value, floorMat: fm.value };
+    // a room TYPE is a deck, as in Build mode's TYPE palette: its floor and material (a floorStyle or floorMat given too wins)
+    let type = null;
+    if (req.type != null) {
+      const K = WM.ROOM_KINDS || {}, order = (WM.KIND_ORDER || Object.keys(K)).filter(k => k !== 'corridor' && K[k]), v = norm(req.type);
+      const k = order.find(id => norm(id) === v || norm(K[id].label) === v);
+      if (!k) return refuse('type must be one of: ' + order.map(id => K[id].label).join(', ') + '.');
+      type = { id: k, label: K[k].label, floor: K[k].floor, mat: K[k].mat };
+    }
+    return { ok: true, floorStyle: fs.value || (type && type.floor) || null, floorMat: fm.value || (type && type.mat) || null, type };
   }
   // a kit's furniture at (x0, y0), as designed or mirrored left-to-right (a chair facing east then faces west)
   function kitProps(env, kit, x0, y0, mirror) {
@@ -440,15 +477,69 @@
       const cap = WM.capForProp ? WM.capForProp(p.t) : null; if (!cap) continue;
       const k = cap + ':' + p.t; if (seen[k]) continue; seen[k] = 1;
       const spec = S && S.spec ? S.spec(p.t) : null, label = String((spec && spec.label) || p.t).toLowerCase().replace(/_/g, ' ').replace(/ [a-z]$/, '');   // "CONSOLE L" (its shape) reads as a console
-      out.push('a ' + label + ' (' + ((WM.CAP_LABEL || {})[cap] || cap) + ')');
+      out.push((/^[aeiou]/.test(label) ? 'an ' : 'a ') + label + ' (' + ((WM.CAP_LABEL || {})[cap] || cap) + ')');
     }
     return out;
   };
+  // what agents gain in the room, in EquipmentHelp's own words (the one plain-English source for each ability)
+  const gainsOf = (env, props) => {
+    const WM = env.WorldModel, H = env.EquipmentHelp, out = [];
+    if (!H || !H.PURPOSE) return out;
+    for (const p of props) {
+      const cap = WM.capForProp ? WM.capForProp(p.t) : null, said = cap && H.PURPOSE[cap]; if (!said) continue;
+      const g = cap === 'computer' ? 'a place to work' : said.replace(/\.$/, '').replace(/^./, c => c.toLowerCase());
+      if (out.indexOf(g) < 0) out.push(g);
+    }
+    return out;
+  };
+
+  /* THE WHOLE-STATION SWAP ("build me a research station", replace: true): exactly Build mode's Presets apply
+     (StationTemplates.build → replaceLayout, which keeps every agent's workstation). The page backs the current layout up
+     to Build mode's own slot first, so RESTORE PREVIOUS in Build → Presets brings it back; one UNDO does too. */
+  function planSwap(doc, req, env) {
+    const WM = env.WorldModel, P = env.Pipeline, T = env.StationTemplates;
+    if (req.kit) return refuse('replace swaps the whole station for a preset; a kit is one room. Use preset, or leave replace out to add the kit as a room.');
+    const extra = Object.keys(req).filter(k => k !== 'preset' && k !== 'replace');
+    if (extra.length) return refuse('A swap puts in a preset exactly as designed, so leave out: ' + extra.slice(0, 8).join(', ') + '.');
+    const all = T.catalog || [], n = norm(req.preset), pr = n ? all.find(c => norm(c.id) === n || norm(c.name) === n) : null;
+    if (!pr) return refuse('There is no preset called "' + String(req.preset || '').slice(0, 40) + '". Presets: ' + all.map(c => c.name).join(', ') + '.');
+    const layout = T.build(pr.id, WM, env.PropSprites, (doc._nid || 0) + 100);
+    const probe = WM.create(clone(doc)), r = probe.replaceLayout(layout);
+    if (!r || !r.ok) return refuse(pr.name + ' could not replace this station (' + ((r && (r.msg || r.error)) || 'it did not fit') + '), so nothing was changed.');
+    if (floorFacts(probe, P).errs.size) return refuse(pr.name + ' would not route cleanly on this station, so nothing was changed.');
+    const crewIds = (env.crew || []).map(a => a && a.id).filter(Boolean), geo = probe.projectGeometry();
+    const steps = [], lines = [];
+    const comps = P.lineComponents(geo).filter(c => (c.bays || []).length);
+    for (const c of comps) {
+      const line = readLine(probe, c.bays.map(b => b.propId), env, crewIds);
+      const intake = probe.props().find(p => p.t === 'intake' && (c.props || []).indexOf(p.id) >= 0);
+      const label = (intake && intake.label) || 'the line';
+      lines.push({ label, ready: line.ready, blocking: line.blocking });
+      let k = 0;
+      for (const pid of line.order) {
+        const b = probe.props().find(q => q.id === pid);
+        if (b && b.t === 'bay') steps.push({ step: ++k, role: titleCase(b.role) + (comps.length > 1 ? ' on ' + label : ''), agent: b.agentId ? nameOf(env, b.agentId) : null, instructions: b.brief || '' });
+      }
+    }
+    const was = WM.create(clone(doc)), wasRooms = was.rooms().filter(x => x.kind !== 'corridor').length, wasProps = was.props().length;
+    const rooms = probe.rooms().filter(x => x.kind !== 'corridor').map(x => x.name);
+    const equip = equipmentOf(env, probe.props()), gains = gainsOf(env, probe.props());
+    const summary = 'Swap your whole station for ' + pr.name + ' (' + rooms.join(', ') + '). Your ' + wasRooms + (wasRooms === 1 ? ' room' : ' rooms') + ' and ' + wasProps + ' props are replaced; agents and conversations stay, and every agent keeps a desk. '
+      + 'Your current layout is backed up: RESTORE PREVIOUS in Build → Presets brings it back.'
+      + (equip.length ? ' It brings equipment: ' + equip.join(', ') + (gains.length ? '. What agents gain there: ' + gains.join('; ') : '') + '.' : '')
+      + lines.map(l => ' Its line "' + l.label + '" ' + (l.ready ? 'will be ready to run' : 'still needs: ' + l.blocking.join('; ')) + '.').join('');
+    return { ok: true, plan: { floorSig: sigOf(doc), resultSig: sigOf(probe.serialize()), spec: { kind: 'swap', preset: pr.id, layout }, summary, notes: [], steps, line: null,
+      where: 'the whole station', rooms: rooms.map(name => ({ name })), preset: { id: pr.id, name: pr.name }, lines } };
+  }
 
   function planRoom(doc, req, env) {
     const WM = env && env.WorldModel, P = env && env.Pipeline, W = env && env.WorkflowLine;
     if (!WM || !P || !W || !doc || !env.StationTemplates || !env.PropSprites) return refuse('the station builder is not loaded on this page');
     if (!req || typeof req !== 'object' || Array.isArray(req)) return refuse('Send the request as an object with: ' + ROOM_MENU.join(', ') + '.');
+    if (req.replace != null && req.replace !== false && !/^(false|no)$/i.test(String(req.replace))) {
+      if (req.replace !== true && !/^(true|yes)$/i.test(String(req.replace))) return refuse('replace is true (swap the whole station for the preset) or left out (add rooms).');
+      return planSwap(doc, req, env);
+    }
     const extra = Object.keys(req).filter(k => ROOM_MENU.indexOf(k) < 0);
     if (extra.length) return refuse('StarNet chooses every position and piece of furniture itself, so these fields are not accepted: ' + extra.slice(0, 8).join(', ') + '. Use only: ' + ROOM_MENU.join(', ') + '.');
     const presetNames = presetsOf(env).map(c => c.name).join(', ');
@@ -510,7 +601,7 @@
     const view = parts.map((part, i) => {
       const built = fb.parts[i], pr = finalProbe.rooms().find(r => r.id === built.roomId);
       const neighbour = part.room ? (() => { const R = part.room.rect; const adj = finalProbe.rooms().find(rm => rm.id !== built.roomId && rm.kind !== 'corridor' && rm.rects.some(q => q.x1 <= R.x2 + 1 && q.x2 >= R.x1 - 1 && q.y1 <= R.y2 + 1 && q.y2 >= R.y1 - 1)); return adj ? adj.name : null; })() : null;
-      const equip = equipmentOf(env, part.props);
+      const equip = equipmentOf(env, part.props), gains = gainsOf(env, part.props);
       const line = built.lineIds.length ? readLine(finalProbe, built.lineIds, env, crewIds) : null;
       const roomName = pr ? pr.name : part.meta.name;
       let n = 0;
@@ -519,10 +610,10 @@
         if (b && b.t === 'bay') steps.push({ step: ++n, role: titleCase(b.role) + (manyLines ? ' in ' + roomName : ''), agent: null, instructions: b.brief || '' });
       }
       return { name: roomName, kit: part.meta.kit, about: part.meta.about, where: part.room ? 'a new room' + (neighbour ? ' beside ' + neighbour : '') : 'the ' + part.meta.name + ' room',
-        equipment: equip, line: line ? { label: part.line.label, ready: line.ready, blocking: line.blocking } : null };
+        equipment: equip, gains, line: line ? { label: part.line.label, ready: line.ready, blocking: line.blocking } : null };
     });
     const summary = view.map(v => (v.where.indexOf('a new room') === 0 ? v.name + ' (' + v.about + ') in ' + v.where : v.about.charAt(0).toUpperCase() + v.about.slice(1) + ', furnishing ' + v.where)
-      + (v.equipment.length ? '. It brings equipment: ' + v.equipment.join(', ') : '')
+      + (v.equipment.length ? '. It brings equipment: ' + v.equipment.join(', ') + (v.gains.length ? '. What agents gain there: ' + v.gains.join('; ') : '') : '')
       + (v.line ? '. Its line "' + v.line.label + '" ' + (v.line.ready ? 'will be ready to run' : 'still needs: ' + v.line.blocking.join('; ')) : '') + '.').join(' ');
     return { ok: true, plan: { floorSig: sigOf(doc), resultSig: sigOf(finalProbe.serialize()), spec, rooms: view, summary, notes: [], steps, line: null, where: view.map(v => v.where).join('; ') } };
   }
@@ -547,7 +638,7 @@
     const spec = { kind: 'restyle', roomId: room.id, floorStyle: style.floorStyle, floorMat: style.floorMat, name: name || null };
     const probe = WM.create(clone(doc)), r = buildInto(probe, spec, WM);
     if (!r.ok) return r;
-    return { ok: true, plan: { floorSig: sigOf(doc), resultSig: sigOf(probe.serialize()), spec, summary: 'Restyle ' + room.name + ': ' + changes.join(', ') + '. Nothing is added, moved or removed.',
+    return { ok: true, plan: { floorSig: sigOf(doc), resultSig: sigOf(probe.serialize()), spec, summary: 'Restyle ' + room.name + (style.type ? ' with the ' + style.type.label + ' floor' : '') + ': ' + changes.join(', ') + '. Nothing is added, moved or removed.',
       notes: name ? ['requests that name this room by its old name will need the new one'] : [], steps: [], line: null, where: 'the ' + room.name + ' room', rooms: [] } };
   }
 
@@ -558,22 +649,40 @@
     if (!st || !st.transact) return refuse('the station is not ready');
     if (sigOf(st.serialize()) !== pl.floorSig) return refuse('Your station changed since this plan was made, so nothing was built. Plan it again.');
     let built = null;
+    const recruited = [], recruits = pl.spec.recruits || [];
+    if (recruits.length && typeof env.recruit !== 'function') return refuse('Recruiting is not available on this page, so nothing was built. Plan it again without "new".');
     const r = st.transact(() => {
       const b = buildInto(st, pl.spec, WM);
       if (!b.ok) return b;
       if (sigOf(st.serialize()) !== pl.resultSig) return refuse('The build did not match its plan, so nothing was changed. Plan it again.');
+      // recruits come AFTER the exact-match check (their ids are minted now), inside the same undo step: each one's desk
+      // and its seat on the step are floor edits UNDO takes back; the agent itself is not (DELETE AGENT in its Dossier)
+      for (const rc of recruits) {
+        let a = null;
+        try { a = env.recruit(rc.role); } catch (_) { a = null; }
+        if (!a || !a.id) return refuse('StarNet could not recruit a ' + rc.role + ', so nothing was built.');
+        recruited.push({ id: a.id, name: a.name || a.id, role: rc.role });
+        const s = st.assignPropAgent(b.ids[rc.propIndex], a.id);
+        if (!s || !s.ok) return refuse('The new ' + rc.role + ' could not be seated at its step, so nothing was built.');
+      }
       built = b;
       return { ok: true };
     });
-    if (!r || !r.ok || !built) return refuse((r && r.error) || 'The build failed, so nothing was changed.');
+    if (!r || !r.ok || !built) {
+      const kept = recruited.length ? ' ' + recruited.map(x => x.name).join(', ') + (recruited.length > 1 ? ' were' : ' was') + ' recruited and stays on the crew (DELETE AGENT in a Dossier removes an agent).' : '';
+      return refuse(((r && r.error) || 'The build failed, so nothing was changed.') + kept, { recruited });
+    }
     const crewIds = (env.crew || []).map(a => a && a.id).filter(Boolean);
+    if (pl.spec.kind === 'swap') return { ok: true, kind: 'swap', summary: pl.summary, rooms: pl.rooms || [], where: pl.where, lines: pl.lines || [], preset: pl.preset, roomIds: [] };
     if (pl.spec.kind === 'rooms' || pl.spec.kind === 'restyle') {
       const lines = (built.parts || []).filter(p => p.lineIds && p.lineIds.length).map(p => { const rl = readLine(st, p.lineIds, env, crewIds); return { lineId: rl.comp ? rl.comp.key : null, ready: rl.ready, blocking: rl.blocking }; });
-      return { ok: true, kind: pl.spec.kind, summary: pl.summary, rooms: pl.rooms || [], where: pl.where, lines };
+      return { ok: true, kind: pl.spec.kind, summary: pl.summary, rooms: pl.rooms || [], where: pl.where, lines,
+        roomIds: pl.spec.kind === 'restyle' ? [pl.spec.roomId] : (built.parts || []).map(p => p.roomId) };
     }
-    const rd = readLine(st, built.ids, env, crewIds);
-    return { ok: true, summary: pl.summary, line: pl.line, where: pl.where, steps: pl.steps, intakeId: built.intakeId,
-      lineKey: rd.comp ? rd.comp.key : null, ready: rd.ready, blocking: rd.blocking };
+    for (const x of recruited) crewIds.push(x.id);
+    const rd = readLine(st, built.ids, env, crewIds), first = st.props().find(p => p.id === built.ids[0]);
+    return { ok: true, summary: pl.summary, line: pl.line, where: pl.where, steps: pl.steps, intakeId: built.intakeId, roomIds: first ? [st.roomAt(first.x, first.y)].filter(Boolean) : [],
+      lineKey: rd.comp ? rd.comp.key : null, ready: rd.ready, blocking: rd.blocking, recruited };
   }
 
   return { MENU, STEP_KEYS, ROOM_MENU, STYLE_MENU, catalog, resolveLine, plan, planRoom, planRestyle, apply, sigOf };

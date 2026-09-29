@@ -121,7 +121,7 @@ for (const bp of M.BLUEPRINTS) {
   const st = fresh(), before = snap(st);
   const cases = [
     [{ line: 'teleporter' }, /There is no line called "teleporter"\. The lines are: front_desk \(One agent\)/],
-    [{}, /Choose a line\. The lines are:/],
+    [{}, /Choose a line, or give its purpose in the Commander's words\. The lines are:/],
     [{ line: 'build_test', x: 3, y: 4, rotate: 90 }, /StarNet chooses every position, belt and piece of furniture itself, so these fields are not accepted: x, y, rotate/],
     [{ line: 'build_test', where: 'Mars' }, /There is no room called "Mars"\. Use "new room", or one of: HOME/],
     [{ line: 'build_test', steps: [{ step: 9 }] }, /This line has steps 1 to 2: 1 Engineer, 2 Tester/],
@@ -129,7 +129,7 @@ for (const bp of M.BLUEPRINTS) {
     [{ line: 'swarm_synthesis', steps: [{ role: 'RESEARCHER' }] }, /more than one Researcher step: use "step" instead/],
     [{ line: 'build_test', steps: [{ step: 1 }, { step: 1 }] }, /Step 1 was given twice/],
     [{ line: 'build_test', steps: [{ instructions: 'hi' }] }, /Each step needs "step" \(a number\) or "role"/],
-    [{ line: 'build_test', steps: [{ step: 1, agent: 'ghost' }] }, /Nobody on the crew is called "ghost"\. Leave agent empty to staff it later, or use one of: NOVA, REX/],
+    [{ line: 'build_test', steps: [{ step: 1, agent: 'ghost' }] }, /Nobody on the crew is called "ghost"\. Leave agent empty to staff it later, say "new" to recruit a specialist for it, or use one of: NOVA, REX/],
     [{ line: 'build_test', steps: [{ step: 1, x: 5 }] }, /A step only takes: step, role, instructions, agent\. Not accepted: x/],
     [{ line: 'build_test', steps: 'all of them' }, /steps must be a list/],
     [{ line: 'build_test', tries: 0 }, /tries must be a whole number from 1 to 5/],
@@ -188,11 +188,16 @@ for (const bp of M.BLUEPRINTS) {
     if (rnd() < 0.3) req.dailyCap = pick([null, 0, 5, '$5', 'none', -3, 'lots', 20000, pick(junkText)]);
     if (rnd() < 0.3) req.tries = pick([1, 3, 5, 0, 6, 2.5, '3', pick(junkText)]);
     if (rnd() < 0.15) req[pick(['x', 'y', 'coords', 'belts', 'props', 'remove', 'move'])] = pick(junkText);
+    // phase 3: the Commander's words instead of (or beside) a line, and "new" recruits on half the pages
+    if (rnd() < 0.3) { req.purpose = pick(['write a newsletter and have it reviewed', 'fix bugs and test them', 'research the news and write it up', 'get a second opinion', 'help me', pick(junkText)]); if (rnd() < 0.5) delete req.line; }
+    if (rnd() < 0.25 && Array.isArray(req.steps) && req.steps[0] && typeof req.steps[0] === 'object') req.steps[0].agent = pick(['new', 'recruit', 'someone new']);
+    let n = 0;
+    const genv = i % 2 ? env : Object.assign({}, env, { canRecruit: true, recruit: role => { const id = 'rec' + (++n); return st.ensureWorkstation(id).ok ? { id, name: role + ' ' + n } : null; } });
     let r;
-    try { r = SB.plan(st.serialize(), req, env); } catch (e) { A.ok(false, 'gauntlet ' + i + ': plan threw ' + e.message); continue; }
+    try { r = SB.plan(st.serialize(), req, genv); } catch (e) { A.ok(false, 'gauntlet ' + i + ': plan threw ' + e.message); continue; }
     A.eq(snap(st), before, 'gauntlet ' + i + ': planning never changes the station');
     if (!r.ok) { refused++; A.ok(typeof r.error === 'string' && r.error.length > 10, 'gauntlet ' + i + ': a refusal says why'); continue; }
-    const a = SB.apply(st, r.plan, env);
+    const a = SB.apply(st, r.plan, genv);
     A.ok(a.ok, 'gauntlet ' + i + ': a plan that was accepted builds (' + (a.error || '') + ')');
     if (!a.ok) { A.eq(snap(st), before, 'gauntlet ' + i + ': a failed build changes nothing'); continue; }
     built++;
@@ -208,7 +213,7 @@ for (const bp of M.BLUEPRINTS) {
 }
 
 /* ---- 10. ROOMS & DECOR: every kit in a new room, furnished exactly, doorways clear, one undo ---- */
-const renv = Object.assign({}, env, { StationTemplates: T, PropSprites: Sprites });
+const renv = Object.assign({}, env, { StationTemplates: T, PropSprites: Sprites, EquipmentHelp: require('../frontend/app/equipmenthelp.js') });
 function doorsClear(st, roomId) {
   const g = st.projectGeometry(), ox = g.origin.tx, oy = g.origin.ty, land = new Set();
   for (const d of g.doorDefs || []) {
@@ -228,6 +233,7 @@ for (const kit of T.kits()) {
   A.ok(r.plan.summary.indexOf(kit.name + ' (' + kit.about + ') in a new room beside HOME') === 0, kit.id + ': the summary names the kit and where it goes');
   const caps = kit.props.filter(([t]) => M.capForProp(t)).length;
   A.eq(/It brings equipment: /.test(r.plan.summary), caps > 0, kit.id + ': equipment is named exactly when the kit brings some (object = capability)');
+  A.eq(/\. What agents gain there: /.test(r.plan.summary), caps > 0, kit.id + ': and what agents gain there, in EquipmentHelp\'s words');
   const bays = kit.line ? M.BLUEPRINTS.find(b => b.id === kit.line.bp).props.filter(p => p.t === 'bay') : [];
   A.eq(r.plan.steps.length, bays.length, kit.id + ': the card lists one step per step of the kit\'s line (none without one)');
   A.ok(r.plan.steps.every((s, i) => s.step === i + 1 && s.agent === null && s.instructions.length > 10 && !/ in /.test(s.role)), kit.id + ': each step says what it will be told, and that nobody is hired');
@@ -304,6 +310,66 @@ for (const c of T.catalog.filter(c => T.presetKits(c.id).length)) {
   for (const [req, re] of [[{ room: 'HOME' }, /Nothing would change/], [{ room: 'Mars', name: 'X' }, /There is no room called "Mars"/], [{ room: 'HOME', floorStyle: 'lava' }, /floorStyle must be one of/], [{ room: 'HOME', props: 1 }, /only changes a room's floor, material or name/]])
     { const x = SB.planRestyle(st.serialize(), req, renv); A.ok(!x.ok && re.test(x.error), 'restyle refused: ' + JSON.stringify(req) + ' -> ' + (x.error || 'NOT REFUSED')); }
 }
+/* a room TYPE is a deck (Build mode's TYPE palette): its floor and material, said plainly */
+{
+  const st = fresh(), before = snap(st);
+  const r = SB.planRestyle(st.serialize(), { room: 'HOME', type: 'Foundry' }, renv);
+  A.ok(r.ok && /^Restyle HOME with the FOUNDRY floor: floor \w+ → rust, material \w+ → tread\. Nothing is added, moved or removed\.$/.test(r.plan.summary), 'a room type restyles the floor and material: ' + (r.error || r.plan.summary));
+  A.ok(SB.apply(st, r.plan, renv).ok && st.rooms()[0].floorStyle === 'rust' && st.rooms()[0].floorMat === 'tread', 'and applies them');
+  st.undo(); A.eq(snap(st), before, 'one undo');
+  const both = SB.planRestyle(st.serialize(), { room: 'HOME', type: 'lab', floorStyle: 'teal' }, renv);
+  A.ok(both.ok && /floor \w+ → teal, material \w+ → tile/.test(both.plan.summary), 'a floorStyle given with a type wins over the type\'s own');
+  const bad = SB.planRestyle(st.serialize(), { room: 'HOME', type: 'castle' }, renv);
+  A.ok(!bad.ok && /^type must be one of: HAB, BRIDGE, LAB, FOUNDRY, QUARTERS, STORAGE\.$/.test(bad.error), 'an unknown type lists the types: ' + bad.error);
+  const kit = SB.planRoom(st.serialize(), { kit: 'LIBRARY', type: 'lab' }, renv);
+  A.ok(kit.ok && SB.apply(st, kit.plan, renv).ok && st.rooms().find(x => x.name === 'LIBRARY').floorMat === 'tile', 'a new room takes a type too');
+}
+/* the camera is told which room to show */
+{
+  const st = fresh();
+  const r = SB.planRoom(st.serialize(), { kit: 'LOUNGE' }, renv), a = SB.apply(st, r.plan, renv);
+  A.eq(a.roomIds, [st.rooms().find(x => x.name === 'LOUNGE').id], 'a room build names its room for the camera');
+  const l = SB.plan(st.serialize(), { line: 'build_test' }, renv), b = SB.apply(st, l.plan, renv);
+  const ip = st.props().find(p => p.id === b.intakeId);
+  A.eq(b.roomIds, [st.roomAt(ip.x, ip.y)], 'a line build names the room it stands in');
+  const s = SB.planRestyle(st.serialize(), { room: 'HOME', floorStyle: 'teal' }, renv), c = SB.apply(st, s.plan, renv);
+  A.eq(c.roomIds, [st.rooms()[0].id], 'a restyle names its room');
+}
+/* THE WHOLE-STATION SWAP: exactly Build mode's Presets apply, every agent keeps a desk, one undo restores it all */
+for (const c of T.catalog) {
+  const st = busy(), before = snap(st), owners = [...new Set(st.props().filter(p => p.agentId).map(p => p.agentId))];
+  const r = SB.planRoom(st.serialize(), { preset: c.name, replace: true }, renv);
+  A.ok(r.ok, c.id + ': a swap plans (' + (r.error || '') + ')');
+  if (!r.ok) continue;
+  A.eq(snap(st), before, c.id + ': planning a swap changes nothing');
+  A.ok(r.plan.summary.indexOf('Swap your whole station for ' + c.name + ' (') === 0 && /agents and conversations stay, and every agent keeps a desk\. Your current layout is backed up: RESTORE PREVIOUS in Build → Presets brings it back\./.test(r.plan.summary), c.id + ': the card says what is replaced, what stays and how to get it back');
+  const want = M.create(T.build(c.id, M, Sprites)).rooms().filter(x => x.kind !== 'corridor').map(x => x.name);
+  const a = SB.apply(st, r.plan, renv);
+  A.ok(a.ok && a.kind === 'swap', c.id + ': swaps (' + (a.error || '') + ')');
+  A.eq(st.rooms().filter(x => x.kind !== 'corridor').map(x => x.name), want, c.id + ': the station is the preset\'s rooms, as Build mode\'s Presets would lay them');
+  A.ok(owners.every(aid => st.props().some(p => p.agentId === aid && M.capForProp(p.t) === 'computer') || st.props().some(p => p.agentId === aid)), c.id + ': every agent that had a place keeps one');
+  A.eq(routed(st).errs.length, 0, c.id + ': no routing error');
+  const bays = st.props().filter(p => p.t === 'bay');
+  A.eq(r.plan.steps.length, bays.length, c.id + ': the card lists every step the preset\'s line will be told');
+  A.ok(st.undo().ok); A.eq(snap(st), before, c.id + ': ONE undo restores the old station exactly');
+}
+{
+  const st = fresh(), before = snap(st);
+  for (const [req, re] of [
+    [{ preset: 'research', replace: true, where: 'HOME' }, /A swap puts in a preset exactly as designed, so leave out: where\./],
+    [{ kit: 'LIBRARY', replace: true }, /a kit is one room/],
+    [{ preset: 'research', replace: 'maybe' }, /replace is true/],
+    [{ preset: 'moon', replace: true }, /There is no preset called "moon"\. Presets: SOFTWARE STUDIO, .*QUIET RETREAT\./],
+  ]) { const r = SB.planRoom(st.serialize(), req, renv); A.ok(!r.ok && re.test(r.error), 'swap refused: ' + JSON.stringify(req) + ' -> ' + (r.error || 'NOT REFUSED')); }
+  const off = SB.planRoom(st.serialize(), { preset: 'research', replace: false }, renv);
+  A.ok(off.ok && off.plan.spec.kind === 'rooms', 'replace: false adds the rooms, as without it');
+  A.eq(snap(st), before, 'no swap refusal changed anything');
+  const r = SB.planRoom(st.serialize(), { preset: 'research', replace: true }, renv);
+  A.ok(st.renameRoom(st.rooms()[0].id, 'BASE').ok, 'fixture: the Commander renames a room after the plan');
+  const late = SB.apply(st, r.plan, renv);
+  A.ok(!late.ok && /changed since this plan/.test(late.error), 'a swap planned on an older floor is refused');
+}
+
 /* the rooms gauntlet: wrong and hostile room and restyle requests */
 {
   let seed = 7;
@@ -315,7 +381,7 @@ for (const c of T.catalog.filter(c => T.presetKits(c.id).length)) {
     const st = i % 2 ? busy() : fresh(), before = snap(st), oldProps = new Set(st.props().map(p => JSON.stringify(p)));
     const restyle = rnd() < 0.25, req = {};
     if (restyle) { req.room = pick(['HOME', 'REVIEW', 'LIBRARY', 'Mars', pick(junk)]); if (rnd() < 0.6) req.floorStyle = pick(['walnut', 'teal', 'lava', pick(junk)]); if (rnd() < 0.5) req.floorMat = pick(['plank', 'resin', 'gold', pick(junk)]); if (rnd() < 0.4) req.name = pick(['Quarters', 'REVIEW', pick(junk)]); }
-    else { if (rnd() < 0.7) req.kit = pick(kitNames.concat(junk)); if (rnd() < 0.3) req.preset = pick(['research', 'software studio', 'moon', pick(junk)]); if (rnd() < 0.4) req.where = pick(['new room', 'HOME', 'LIBRARY', 'Mars', pick(junk)]); if (rnd() < 0.3) req.name = pick(['Den', pick(junk)]); if (rnd() < 0.3) req.floorStyle = pick(['oak', 'lava', pick(junk)]); if (rnd() < 0.1) req[pick(['x', 'props', 'belts'])] = 1; }
+    else { if (rnd() < 0.7) req.kit = pick(kitNames.concat(junk)); if (rnd() < 0.3) req.preset = pick(['research', 'software studio', 'moon', pick(junk)]); if (rnd() < 0.4) req.where = pick(['new room', 'HOME', 'LIBRARY', 'Mars', pick(junk)]); if (rnd() < 0.3) req.name = pick(['Den', pick(junk)]); if (rnd() < 0.3) req.floorStyle = pick(['oak', 'lava', pick(junk)]); if (rnd() < 0.1) req[pick(['x', 'props', 'belts'])] = 1; if (rnd() < 0.12) req.replace = pick([true, 'yes', 'maybe', false, pick(junk)]); if (rnd() < 0.1) req.type = pick(['lab', 'FOUNDRY', 'castle', pick(junk)]); }
     let r;
     try { r = restyle ? SB.planRestyle(st.serialize(), req, renv) : SB.planRoom(st.serialize(), req, renv); } catch (e) { A.ok(false, 'rooms gauntlet ' + i + ': threw ' + e.message); continue; }
     A.eq(snap(st), before, 'rooms gauntlet ' + i + ': planning never changes the station');
@@ -329,6 +395,58 @@ for (const c of T.catalog.filter(c => T.presetKits(c.id).length)) {
     A.ok(st.undo().ok); A.eq(snap(st), before, 'rooms gauntlet ' + i + ': one undo restores the station exactly');
   }
   A.ok(built > 15, 'the rooms gauntlet built some (' + built + ')');
+}
+
+/* ---- 11. UNDERSTANDING THE ASK (phase 3): the Commander's words pick the line; "new" recruits, one undo ---- */
+{
+  const st = fresh(), before = snap(st);
+  for (const [purpose, id] of [
+    ['write my weekly newsletter and have someone review it before I send it', 'revision_loop'],
+    ['fix bugs in my repo and test them', 'build_test'],
+    ['review my pull requests and the code in them', 'code_foundry'],
+    ['research the news every morning and write it up', 'research_line'],
+    ['I want a second opinion on big decisions', 'second_opinion'],
+  ]) {
+    const r = SB.plan(st.serialize(), { purpose }, env), bp = M.BLUEPRINTS.find(b => b.id === id);
+    A.ok(r.ok && r.plan.line.id === id, '"' + purpose + '" picks ' + id + ' (' + (r.error || (r.plan && r.plan.line.id)) + ')');
+    if (!r.ok) continue;
+    A.ok(r.plan.summary.indexOf('Picked for "' + purpose.slice(0, 80) + '": ' + W.suggestLineFor(purpose).why + '.') > 0, id + ': the card says why it was picked, in FOR YOUR GOAL\'s words');
+    A.ok(r.plan.steps.every(s => s.instructions.endsWith(' This line is for: "' + purpose + '".')), id + ': every step\'s standard instructions carry the Commander\'s words');
+    A.ok(bp && r.plan.steps.length === bp.props.filter(p => p.t === 'bay').length, id + ': one step per step');
+  }
+  const vague = SB.plan(st.serialize(), { purpose: 'help me with stuff' }, env);
+  A.ok(!vague.ok && /names no such shape\. Choose a line: front_desk \(/.test(vague.error) && vague.lines.length === M.BLUEPRINTS.length, 'a purpose with no shape of work is refused with the menu: ' + vague.error.slice(0, 120));
+  const both = SB.plan(st.serialize(), { line: 'research_line', purpose: 'fix bugs and test them', steps: [{ step: 1, instructions: 'Dig into the incoming question.' }] }, env);
+  A.ok(both.ok && both.plan.line.id === 'research_line' && !/Picked for/.test(both.plan.summary), 'a named line wins over the purpose, and nothing claims it was picked');
+  A.eq(both.plan.steps.map(s => s.instructions.endsWith('This line is for: "fix bugs and test them".')), [false, true], 'instructions the model wrote are kept exactly; standard ones carry the purpose');
+  const bad = SB.plan(st.serialize(), { purpose: 42 }, env);
+  A.ok(!bad.ok && /purpose is the Commander's own words/.test(bad.error), 'a purpose that is not text is refused');
+  A.eq(snap(st), before, 'no purpose plan changed the station');
+}
+{
+  const st = fresh(), before = snap(st), made = [];
+  const renv2 = Object.assign({}, env, { canRecruit: true, recruit: role => { const id = 'recruit' + (made.length + 1), d = st.ensureWorkstation(id); if (!d.ok) return null; made.push(id); return { id, name: role }; } });
+  const no = SB.plan(st.serialize(), { line: 'build_test', steps: [{ step: 2, agent: 'new' }] }, env);
+  A.ok(!no.ok && /Recruiting is not available on this page/.test(no.error), 'without a recruit seam, "new" is refused');
+  const r = SB.plan(st.serialize(), { line: 'build_test', steps: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'new' }] }, renv2);
+  A.ok(r.ok && /Engineer \(NOVA\) → Tester \(a new recruit\) → Outbox/.test(r.plan.summary) && / It will be ready to run\. It adds 1 crew member: TESTER, with a desk in HOME\. UNDO does not remove agents; DELETE AGENT in a Dossier does\./.test(r.plan.summary), 'the card lists the recruit, where its desk goes, and that UNDO keeps agents: ' + (r.error || r.plan.summary));
+  A.eq(snap(st), before, 'planning a recruit recruits nobody');
+  A.eq(made.length, 0, '…and summons nobody');
+  const a = SB.apply(st, r.plan, renv2);
+  A.ok(a.ok && a.ready && a.recruited.length === 1 && a.recruited[0].role === 'TESTER', 'the build recruits the Tester, seats it, and the line is ready');
+  const tb = st.props().find(p => p.t === 'bay' && p.role === 'TESTER');
+  A.eq(tb.agentId, made[0], 'the recruit sits at its step');
+  A.ok(st.undo().ok); A.eq(snap(st), before, 'ONE undo takes back the line, the recruit\'s desk and its seat');
+  // a recruit that fails: nothing is built, and a recruit already made is named
+  let calls = 0;
+  const flaky = Object.assign({}, env, { canRecruit: true, recruit: role => (++calls === 1 ? { id: 'first', name: 'FIRST' } : null) });
+  const two = SB.plan(st.serialize(), { line: 'build_test', steps: [{ step: 1, agent: 'new' }, { step: 2, agent: 'new' }] }, flaky);
+  A.ok(two.ok && /It adds 2 crew members: ENGINEER, TESTER/.test(two.plan.summary), 'two recruits are listed');
+  const f = SB.apply(st, two.plan, flaky);
+  A.ok(!f.ok && /could not recruit a TESTER, so nothing was built\. FIRST was recruited and stays on the crew/.test(f.error), 'a failed recruit builds nothing and names the one already made: ' + f.error);
+  A.eq(snap(st), before, 'a failed recruit changes nothing on the floor');
+  const gone = Object.assign({}, env);
+  A.ok(!SB.apply(st, r.plan, gone).ok, 'a plan with recruits refuses on a page that cannot recruit');
 }
 
 /* ---- 9. the sidecar tools: the memo the approval card reads, the lock, honest refusals ---- */

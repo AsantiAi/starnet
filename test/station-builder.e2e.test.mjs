@@ -5,7 +5,9 @@
    station_build with that planId → StationBuilder.apply in ONE transact. It holds the build to its promises: the
    floor has exactly the planned room + line, the Workflow panel reads it the way the tool did, Build mode open refuses,
    and one UNDO removes all of it. Then the same for a furnished room kit (station_plan_room) and a restyle
-   (station_plan_restyle): the room holds exactly the kit's furniture, the restyle changes only the floor, one UNDO each. Isolated like station-layout.e2e (APPDATA / LOCALAPPDATA / USERPROFILE / HOME /
+   (station_plan_restyle): the room holds exactly the kit's furniture, the restyle changes only the floor, one UNDO each.
+   Last, a whole-station swap (replace: true) is backed up to Build mode's own slot, and its RESTORE PREVIOUS brings the old station back.
+   And the ask understood: the Commander's words pick the line, and "new" recruits a Tester through the page's own summon. Isolated like station-layout.e2e (APPDATA / LOCALAPPDATA / USERPROFILE / HOME /
    HERMES_HOME to scratch, a fresh Chrome profile, OS-picked ports, a local mock model). Skips LOUDLY with no Chromium. */
 import { spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
@@ -195,7 +197,45 @@ try {
   const undone2 = await evalJS(cdp, `(() => { const st = App.station(); const a = st.undo(), b = st.undo(); return { ok: a.ok && b.ok, rooms: st.rooms().filter(r => r.kind !== 'corridor').map(r => r.name) }; })()`);
   check('one UNDO each removes the restyle and the furnished room', undone2.ok && JSON.stringify(undone2.rooms) === JSON.stringify(before.rooms), JSON.stringify(undone2));
 
-  check('the mock carried every model call (no real provider)', mock.requests.length >= 11, String(mock.requests.length));
+  // 9. the whole-station swap: backed up to Build mode's own slot, so its RESTORE PREVIOUS brings the old station back
+  const preSwap = await evalJS(cdp, `(() => { const st = App.station(); return { rooms: st.rooms().filter(r => r.kind !== 'corridor').map(r => r.name), props: st.props().length, key: 'starnet.layoutBackup.' + st.doc().meta.createdAt }; })()`);
+  await evalJS(cdp, `(() => { try { localStorage.removeItem(${JSON.stringify(preSwap.key)}); } catch (e) {} return true; })()`);
+  mock.planTool = 'station_plan_room'; mock.planArgs = { preset: 'Research Station', replace: true };
+  at = mock.results.length;
+  const run5 = await leadRun(base, token, 'replace my station with the research station');
+  check('the swap run completes', run5.status === 200);
+  let WP = null, WB = null; try { WP = JSON.parse(mock.results[at] || ''); WB = JSON.parse(mock.results[at + 1] || ''); } catch (_) {}
+  check('the swap plan says what is replaced and how to get it back', !!WP && /^Swap your whole station for RESEARCH STATION \(/.test(WP.summary) && /RESTORE PREVIOUS in Build → Presets brings it back/.test(WP.summary), (mock.results[at] || '').slice(0, 300));
+  check('the swap answered built', !!WB && WB.built === true, (mock.results[at + 1] || '').slice(0, 200));
+  const swapped = await evalJS(cdp, `(() => { const st = App.station(); let saved = null; try { saved = JSON.parse(localStorage.getItem(${JSON.stringify(preSwap.key)}) || 'null'); } catch (e) {}
+    return { rooms: st.rooms().filter(r => r.kind !== 'corridor').map(r => r.name), backupProps: saved && saved.props ? saved.props.length : -1 }; })()`);
+  check('the station is now the preset', JSON.stringify(swapped.rooms) === JSON.stringify(['HOME', 'ANALYSIS', 'ARCHIVE']), JSON.stringify(swapped.rooms));
+  check('the old layout is backed up in Build mode\'s slot', swapped.backupProps === preSwap.props, JSON.stringify(swapped) + ' vs ' + preSwap.props);
+  // the Commander restores it the way Build mode offers: Build → Presets → RESTORE PREVIOUS
+  const restored = await evalJS(cdp, `(async () => { Build.open(); await new Promise(r => setTimeout(r, 700)); document.querySelector('#refit-stations').click(); await new Promise(r => setTimeout(r, 500));
+    const b = document.querySelector('[data-restore-build]'); const enabled = !!b && !b.disabled; if (enabled) b.click(); await new Promise(r => setTimeout(r, 500)); Build.close();
+    const st = App.station(); return { enabled, rooms: st.rooms().filter(r => r.kind !== 'corridor').map(r => r.name), props: st.props().length }; })()`);
+  check('RESTORE PREVIOUS brings the old station back', restored.enabled && JSON.stringify(restored.rooms) === JSON.stringify(preSwap.rooms) && restored.props === preSwap.props, JSON.stringify(restored) + ' vs ' + JSON.stringify(preSwap));
+
+  // 10. understanding the ask: the Commander's words pick the line, and "new" recruits the Tester through the page's own summon
+  const crew0 = await evalJS(cdp, `App.agents().map(a => a.id)`);
+  mock.planTool = 'station_plan_line'; mock.planArgs = { purpose: 'fix bugs in my repo and test them', steps: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'new' }] };
+  at = mock.results.length;
+  const run6 = await leadRun(base, token, 'fix bugs in my repo and test them, and hire someone to test');
+  check('the purpose run completes', run6.status === 200);
+  let IP = null, IB = null; try { IP = JSON.parse(mock.results[at] || ''); IB = JSON.parse(mock.results[at + 1] || ''); } catch (_) {}
+  check('the purpose picked Build + test and the card lists the recruit', !!IP && IP.line && IP.line.id === 'build_test' && /Picked for "fix bugs in my repo and test them"/.test(IP.summary) && /It adds 1 crew member: TESTER/.test(IP.summary), (mock.results[at] || '').slice(0, 400));
+  const rec = IB && IB.recruited && IB.recruited[0];
+  check('the build recruited a Tester and the line is ready', !!rec && rec.role === 'TESTER' && IB.ready === true, (mock.results[at + 1] || '').slice(0, 300));
+  const seated = await evalJS(cdp, `(() => { const st = App.station(), id = ${JSON.stringify(rec ? rec.id : '')}; const bay = st.props().find(p => p.t === 'bay' && p.role === 'TESTER' && p.agentId === id);
+    return { onCrew: App.agents().some(a => a.id === id), seated: !!bay, desk: st.props().some(p => p.agentId === id && p.t !== 'bay'), brief: bay ? bay.brief : '' }; })()`);
+  check('the recruit is on the crew, seated at its step, with a desk', seated.onCrew && seated.seated && seated.desk, JSON.stringify(seated));
+  check('the step carries the Commander\'s words', /This line is for: "fix bugs in my repo and test them"\.$/.test(seated.brief), seated.brief.slice(-120));
+  const after6 = await evalJS(cdp, `(() => { const st = App.station(), id = ${JSON.stringify(rec ? rec.id : '')}; const u = st.undo();
+    return { ok: u && u.ok, line: st.props().some(p => p.t === 'bay' && p.role === 'TESTER'), onCrew: App.agents().some(a => a.id === id), crew: App.agents().length }; })()`);
+  check('one UNDO takes back the line and the seat; the recruit stays on the crew, as the card said', after6.ok && !after6.line && after6.onCrew && after6.crew === crew0.length + 1, JSON.stringify(after6));
+
+  check('the mock carried every model call (no real provider)', mock.requests.length >= 15, String(mock.requests.length));
   check('no page exceptions', diagnostics.exceptions.length === 0, JSON.stringify(diagnostics.exceptions.slice(0, 3)));
 } catch (error) {
   console.log('FAIL harness :: ' + (error && error.stack || error));

@@ -338,17 +338,18 @@
       get description() {
         return 'Plan a new ready-made assembly line (and, by default, a new room for it) on the station, when the Commander asks for one. '
           + 'You never place anything yourself: pick a line from this menu and StarNet chooses every position, belt and piece of furniture, builds it on a copy of the station, and checks it. '
-          + 'Fields: line (an id or plain name from the menu), where ("new room" or an existing room\'s name), name (what to call the line), '
-          + 'steps (a list of { step: 1, instructions, agent } by step number or { role, instructions, agent }; agent is a crew member\'s name, or "lead"), '
+          + 'Fields: line (an id or plain name from the menu), purpose (the Commander\'s own words for what the line is for: with no line, StarNet picks one from the shape of the work, and every step\'s standard instructions carry those words), '
+          + 'where ("new room" or an existing room\'s name), name (what to call the line), '
+          + 'steps (a list of { step: 1, instructions, agent } by step number or { role, instructions, agent }; agent is a crew member\'s name, "lead", or "new" to recruit a specialist for that step, only when the Commander wants one), '
           + 'dailyCap (dollars per day, or null for no cap), tries (1-5 review passes, for lines with a review loop). '
           + 'Nothing is built yet: it returns a planId, a plain summary, and what would still be missing. Tell the Commander the summary, then call station.build with the planId. '
           + 'If it refuses, it says why and lists the valid choices; fix the request and plan again. Requires an open station page with Build mode closed. '
           + 'LINES: ' + menuText();
       },
       schema: { type: 'object', properties: {
-        line: { type: 'string' }, where: { type: 'string' }, name: { type: 'string' },
+        line: { type: 'string' }, purpose: { type: 'string' }, where: { type: 'string' }, name: { type: 'string' },
         steps: { type: 'array', items: { type: 'object', properties: { step: { type: 'integer' }, role: { type: 'string' }, instructions: { type: 'string' }, agent: { type: 'string' } } } },
-        dailyCap: {}, tries: { type: 'integer' } }, required: ['line'] },
+        dailyCap: {}, tries: { type: 'integer' } } },
       run: async (args) => {
         const out = await ask('station.plan_line', { request: args || {} });
         if (!out.ok) return refuse(out.error);
@@ -372,11 +373,11 @@
       get description() {
         return 'Plan adding a furnished room to the station when the Commander asks (a lounge, a library, a build room, "build me a research station"). '
           + 'You never place anything yourself: pick a hand-designed room kit, or a preset whose rooms are all added beside the station, and StarNet places every piece, checks it on a copy of the station, and keeps doorways clear. '
-          + 'Fields: kit (one room) OR preset (every room of that preset), where ("new room", or an existing room\'s name to furnish it when it has clear floor), name (for a single new room), floorStyle, floorMat. '
+          + 'Fields: kit (one room) OR preset (every room of that preset, added beside the station), replace (true only when the Commander asks to REPLACE or switch their whole station for a preset: it swaps every room, prop and conveyor, backs the old layout up for RESTORE PREVIOUS, and keeps agents and conversations), where ("new room", or an existing room\'s name to furnish it when it has clear floor), name (for a single new room), type (a room type\'s floor: HAB, BRIDGE, LAB, FOUNDRY, QUARTERS, STORAGE), floorStyle, floorMat. '
           + 'Nothing is built yet: it returns a planId and a plain summary, including any equipment the room brings (a desk is a computer). Tell the Commander the summary, then call station.build with the planId. '
           + 'If it refuses, it says why and lists the valid choices. Requires an open station page with Build mode closed. KITS: ' + kitText() + '. PRESETS: ' + presetText() + '.';
       },
-      schema: { type: 'object', properties: { kit: { type: 'string' }, preset: { type: 'string' }, where: { type: 'string' }, name: { type: 'string' }, floorStyle: { type: 'string' }, floorMat: { type: 'string' } } },
+      schema: { type: 'object', properties: { kit: { type: 'string' }, preset: { type: 'string' }, replace: { type: 'boolean' }, where: { type: 'string' }, name: { type: 'string' }, type: { type: 'string' }, floorStyle: { type: 'string' }, floorMat: { type: 'string' } } },
       run: async (args) => {
         const out = await ask('station.plan_room', { request: args || {} });
         if (!out.ok) return refuse(out.error);
@@ -387,9 +388,9 @@
     };
     const planRestyleTool = {
       name: 'station.plan_restyle', capability: 'orchestrator', scope: 'read', requiresConsent: false,
-      description: 'Plan restyling one existing room when the Commander asks: its floorStyle, its floorMat (deck material), or its name, from fixed lists. It adds, moves and removes nothing. '
-        + 'Fields: room (its current name), floorStyle, floorMat, name. Nothing changes yet: it returns a planId and a summary; tell the Commander, then call station.build with the planId. If a value is not allowed it lists the allowed ones.',
-      schema: { type: 'object', properties: { room: { type: 'string' }, floorStyle: { type: 'string' }, floorMat: { type: 'string' }, name: { type: 'string' } }, required: ['room'] },
+      description: 'Plan restyling one existing room when the Commander asks: its floorStyle, its floorMat (deck material), a room type\'s floor (HAB, BRIDGE, LAB, FOUNDRY, QUARTERS, STORAGE), or its name, from fixed lists. It adds, moves and removes nothing. '
+        + 'Fields: room (its current name), type, floorStyle, floorMat, name. Nothing changes yet: it returns a planId and a summary; tell the Commander, then call station.build with the planId. If a value is not allowed it lists the allowed ones.',
+      schema: { type: 'object', properties: { room: { type: 'string' }, type: { type: 'string' }, floorStyle: { type: 'string' }, floorMat: { type: 'string' }, name: { type: 'string' } }, required: ['room'] },
       run: async (args) => {
         const out = await ask('station.plan_restyle', { request: args || {} });
         if (!out.ok) return refuse(out.error);
