@@ -36,6 +36,10 @@ function stubFetch(handler) {
 
 function jsonResp(obj, status) { return { status: status || 200, json: async () => obj, arrayBuffer: async () => Buffer.alloc(0), headers: { get: () => 'application/json' } }; }
 
+// real PNG fixtures (every scanline filter, 8/16-bit, RGB/RGBA/grey+alpha/palette) for the transparency verdicts
+const { encodePng, logoPng } = require('./helpers/png-fixture.js');
+const imageReply = png => jsonResp({ choices: [{ message: { images: [{ image_url: { url: 'data:image/png;base64,' + png.toString('base64') } }] } }] });
+
 (async () => {
   try { await fsp.rm(ROOT, { recursive: true, force: true }); } catch (_) {}
 
@@ -306,6 +310,119 @@ function jsonResp(obj, status) { return { status: status || 200, json: async () 
     A.ok(/cleanup-proof.png/.test(result.content), 'cleanup diagnostic preserves a successfully published result');
     A.eq(delivered.length, 1, 'cleanup diagnostic does not duplicate the deliverable');
     A.eq(failopen.counts()['image.staging-cleanup'], before + 1, 'unexpected staging cleanup error is counted');
+  }
+
+  // ---- J. TRANSPARENCY (2026-09-28 user report: "a design with a transparent background"). Every Gemini image model
+  //      paints a checkerboard into an opaque PNG; the agent then went hunting for raw API access nobody can grant. ----
+  {
+    const I = T0._internals;
+    // J1. the verdict is read from the BYTES
+    const logo = logoPng();
+    A.eq(I.alphaCoverage(logo), { state: 'transparent', why: 'the alpha channel was checked', clearPct: 83.3 }, 'a clear background is transparent, and a subject at alpha 253 (the gpt-image-2 quirk) is not counted as clear');
+    A.eq(I.alphaCoverage(encodePng({ w: 8, h: 8, ctype: 6, pixel: () => [9, 9, 9, 255] })), { state: 'opaque', why: 'the PNG has an alpha channel but every pixel is opaque' }, 'an alpha channel with no see-through pixel is opaque');
+    A.eq(I.alphaCoverage(encodePng({ w: 40, h: 30, ctype: 6, pixel: (x, y) => (x || y) ? [9, 9, 9, 255] : [0, 0, 0, 0] })), { state: 'opaque', why: 'only 1 of 1200 pixels are see-through' }, 'a lone clear pixel is not a transparent background');
+    const checker = encodePng({ w: 16, h: 16, ctype: 2, pixel: (x, y) => ((x >> 2) + (y >> 2)) % 2 ? [204, 204, 204] : [255, 255, 255] });
+    A.eq(I.alphaCoverage(checker), { state: 'opaque', why: 'the PNG is RGB with no alpha channel' }, 'a PAINTED checkerboard (RGB) is opaque: the Gemini failure mode');
+    A.eq(I.alphaCoverage(encodePng({ w: 10, h: 4, ctype: 4, pixel: x => x < 5 ? [0, 0] : [128, 255] })).clearPct, 50, 'greyscale+alpha is decoded');
+    A.eq(I.alphaCoverage(encodePng({ w: 10, h: 4, ctype: 6, depth: 16, pixel: x => x < 5 ? [0, 0, 0, 0] : [65535, 0, 0, 65535] })).clearPct, 50, '16-bit RGBA is decoded (big-endian alpha)');
+    A.eq(I.alphaCoverage(encodePng({ w: 10, h: 4, ctype: 3, plte: [0, 0, 0, 255, 0, 0], trns: [0], pixel: x => [x < 5 ? 0 : 1] })).clearPct, 50, 'a palette PNG is decoded through its tRNS entries');
+    A.eq(I.alphaCoverage(encodePng({ w: 10, h: 4, ctype: 3, plte: [0, 0, 0, 255, 0, 0], pixel: x => [x < 5 ? 0 : 1] })).state, 'opaque', 'a palette PNG without tRNS is opaque');
+    A.eq(I.alphaCoverage(encodePng({ w: 8, h: 8, ctype: 6, interlace: 1, pixel: () => [0, 0, 0, 0] })).state, 'unverified', 'an interlaced PNG is unverified, never guessed');
+    A.eq(I.alphaCoverage(encodePng({ w: 8, h: 8, ctype: 6, rawIdat: Buffer.from('definitely not deflate'), pixel: () => [0, 0, 0, 0] })), { state: 'unverified', why: 'the PNG data could not be decoded' }, 'undecodable PNG data is unverified, never a claim');
+    A.eq(I.alphaCoverage(Buffer.from([0xFF, 0xD8, 0xFF, 0xE0, 0, 16, 74, 70, 73, 70, 0])).state, 'opaque', 'a JPEG is opaque');
+    const webp = (tag, flags) => { const b = Buffer.alloc(30); b.write('RIFF', 0, 'latin1'); b.write('WEBP', 8, 'latin1'); b.write(tag, 12, 'latin1'); b[20] = flags || 0; return b; };
+    A.eq(I.alphaCoverage(webp('VP8 ')).state, 'opaque', 'a lossy WEBP is opaque');
+    A.eq(I.alphaCoverage(webp('VP8X', 0x10)).state, 'unverified', 'a WEBP with an alpha flag is unverified, not claimed');
+    A.eq(I.alphaCoverage(webp('VP8X', 0)).state, 'opaque', 'a WEBP without an alpha flag is opaque');
+    A.eq(I.alphaCoverage(Buffer.from('not an image at all')).state, 'unverified', 'unknown bytes are unverified');
+    for (const p of ['a fox logo on a transparent background', 'transparent-background sticker', 'transparent PNG icon', 'PNG with an alpha channel', 'a mascot with no background', 'a badge without a background', 'background-free emblem', 'backgroundless crest'])
+      A.ok(I.TRANSPARENT_ASK.test(p), 'a transparency ask is recognized: ' + p);
+    for (const p of ['a transparent glass vase on a wooden table', 'a jellyfish with transparent tentacles', 'a red cube on a white background'])
+      A.ok(!I.TRANSPARENT_ASK.test(p), 'not a transparency ask: ' + p);
+
+    // J2. transparent:true on the OpenRouter wire: off the Gemini default, an explicit alpha instruction, a verified file
+    const logoFetch = stubFetch(() => imageReply(logo));
+    const TT = makeImageTools({ openrouter: { apiKey: 'k' }, fsp, pathMod: path, root: ROOT, fetchImpl: logoFetch });
+    const tEmits = [];
+    const tr = await TT.generateTool.run({ prompt: 'a fox logo', transparent: true, path: 'art/fox' }, { agentId: 'hero', emit: (n, p) => tEmits.push({ n, p }) });
+    const sent = logoFetch.calls[0].body;
+    A.eq(sent.model, I.TRANSPARENT_IMAGE_MODEL, 'transparent:true leaves the Gemini default for an alpha-capable model');
+    A.eq(I.TRANSPARENT_IMAGE_MODEL, 'openai/gpt-5-image-mini', 'the alpha model is the one proven live on the OpenRouter wire');
+    A.ok(sent.messages[0].content.indexOf('a fox logo ') === 0 && /fully transparent background \(PNG with an alpha channel\)/.test(sent.messages[0].content), 'the prompt gains an explicit transparency instruction');
+    A.ok(/\nModel: google\/gemini-3\.1-flash-image cannot output transparency, so openai\/gpt-5-image-mini rendered this\./.test(tr.content), 'the result names the switch: ' + JSON.stringify(tr.content));
+    A.ok(/\nTransparent background verified in the saved file: 83\.3% of pixels are see-through\./.test(tr.content), 'the result carries the verified coverage');
+    A.eq(tr.summary, 'image → art/fox.png', 'a verified transparent render keeps the plain summary');
+    A.ok(fssync.readFileSync(path.join(ROOT, 'hero', 'art', 'fox.png')).equals(logo), 'the saved bytes are the RGBA render');
+    A.ok(tEmits.some(e => e.n === 'deliverable' && e.p.kind === 'image'), 'the transparent render is delivered');
+    A.ok(/TRANSPARENT background/.test(TT.generateTool.description) && TT.generateTool.description.indexOf('openai/gpt-5-image-mini') >= 0, 'the tool teaches transparent:true and the model it uses');
+    A.eq(TT.generateTool.schema.properties.transparent.type, 'boolean', 'the schema exposes transparent');
+
+    // J3. a prompt that plainly asks counts as asking; an explicit false wins; a transparent SUBJECT is not a background
+    await TT.generateTool.run({ prompt: 'a sticker of a cat on a transparent background' }, ctx);
+    const askBody = logoFetch.calls[logoFetch.calls.length - 1].body;
+    A.eq(askBody.model, 'openai/gpt-5-image-mini', 'a transparency prompt routes to the alpha model without the flag');
+    A.eq(askBody.messages[0].content, 'a sticker of a cat on a transparent background', 'a prompt that already asks is sent unchanged');
+    await TT.generateTool.run({ prompt: 'a logo on a transparent background', transparent: false }, ctx);
+    A.eq(logoFetch.calls[logoFetch.calls.length - 1].body.model, 'google/gemini-3.1-flash-image', 'transparent:false keeps the default model');
+    const glass = await TT.generateTool.run({ prompt: 'a transparent glass vase on a table' }, ctx);
+    A.eq(logoFetch.calls[logoFetch.calls.length - 1].body.model, 'google/gemini-3.1-flash-image', 'a transparent subject does not switch models');
+    A.ok(!/transparen/i.test(glass.content) && !/\nModel: /.test(glass.content), 'an ordinary render carries no transparency verdict');
+
+    // J4. explicit models: Gemini is switched (and named), an alpha model is kept, an unknown one is kept and judged by its bytes
+    await TT.generateTool.run({ prompt: 'hero logo', model: 'google/gemini-3-pro-image', transparent: true }, ctx);
+    A.eq(logoFetch.calls[logoFetch.calls.length - 1].body.model, 'openai/gpt-5-image-mini', 'an explicit Gemini model cannot make alpha, so it is switched');
+    const kept = await TT.generateTool.run({ prompt: 'hero logo', model: 'openai/gpt-5-image', transparent: true }, ctx);
+    A.eq(logoFetch.calls[logoFetch.calls.length - 1].body.model, 'openai/gpt-5-image', 'an explicit alpha-capable model is kept');
+    A.ok(!/\nModel: /.test(kept.content) && /Transparent background verified/.test(kept.content), 'no switch note when nothing was switched');
+    const checkerFetch = stubFetch(() => imageReply(checker));
+    const cEmits = [];
+    const opaque = await makeImageTools({ openrouter: { apiKey: 'k' }, fsp, pathMod: path, root: ROOT, fetchImpl: checkerFetch })
+      .generateTool.run({ prompt: 'badge', model: 'black-forest-labs/flux.2-pro', transparent: true, path: 'art/badge' }, { agentId: 'hero', emit: (n, p) => cEmits.push({ n, p }) });
+    A.eq(checkerFetch.calls[0].body.model, 'black-forest-labs/flux.2-pro', 'an explicit model of unknown ability is kept');
+    A.ok(/\nNOT TRANSPARENT: the PNG is RGB with no alpha channel\./.test(opaque.content) && /painted, not transparency/.test(opaque.content), 'an opaque result is reported as NOT transparent: ' + JSON.stringify(opaque.content));
+    A.ok(/Retry with transparent:true and no model override/.test(opaque.content), 'the retry that would work is named');
+    A.eq(opaque.summary, 'image → art/badge.png (NOT transparent)', 'the summary the UI shows is truthful');
+    A.ok(cEmits.some(e => e.n === 'deliverable'), 'the paid-for opaque image is still delivered');
+    const flatFetch = stubFetch(() => imageReply(encodePng({ w: 8, h: 8, ctype: 6, pixel: () => [1, 2, 3, 255] })));
+    const flat = await makeImageTools({ openrouter: { apiKey: 'k' }, fsp, pathMod: path, root: ROOT, fetchImpl: flatFetch }).generateTool.run({ prompt: 'logo', transparent: true }, ctx);
+    A.ok(/every pixel is opaque/.test(flat.content) && /The model ignored the request/.test(flat.content), 'an alpha model that ignored the request is reported as such, with no model hint');
+
+    // J5. slug drift on a transparent render falls back to another ALPHA model, never onto the opaque legacy slug
+    const driftFetch = stubFetch((url, body) => body && body.model === 'openai/gpt-5-image-mini'
+      ? jsonResp({ error: { message: 'openai/gpt-5-image-mini is not a valid model ID' } }, 400)
+      : imageReply(logo));
+    const drift = await makeImageTools({ openrouter: { apiKey: 'k' }, fsp, pathMod: path, root: ROOT, fetchImpl: driftFetch }).generateTool.run({ prompt: 'logo', transparent: true }, ctx);
+    A.eq(driftFetch.calls.map(c => c.body.model), ['openai/gpt-5-image-mini', 'openai/gpt-5-image'], 'a transparent render retries on the alpha fallback');
+    A.ok(/model openai\/gpt-5-image\)/.test(drift.content), 'the result names the model that actually rendered');
+
+    // J6. the OpenAI Images API takes transparency as a parameter; DALL-E has none, so it is switched
+    const oaFetch = stubFetch(() => jsonResp({ data: [{ b64_json: logo.toString('base64') }] }));
+    const TOA = makeImageTools({ openrouter: { apiKey: 'openai-key', provider: 'openai', protocol: 'openai-images' }, fsp, pathMod: path, root: ROOT, fetchImpl: oaFetch });
+    const oa = await TOA.generateTool.run({ prompt: 'a fox logo', transparent: true }, ctx);
+    const ob = oaFetch.calls[0].body;
+    A.eq([ob.model, ob.size, ob.background, ob.output_format], ['gpt-image-2', '1024x1024', 'transparent', 'png'], 'the Images API gets background:transparent with a PNG output');
+    A.ok(/Transparent background verified/.test(oa.content), 'an Images API render is verified the same way');
+    A.ok(/real alpha channel/.test(TOA.generateTool.description) && !/gpt-5-image-mini/.test(TOA.generateTool.description), 'the OpenAI route teaches its own transparency path');
+    const dalle = stubFetch(() => jsonResp({ data: [{ b64_json: logo.toString('base64') }] }));
+    await makeImageTools({ openrouter: { apiKey: 'openai-key', provider: 'openai', protocol: 'openai-images' }, imageModel: 'dall-e-3', fsp, pathMod: path, root: ROOT, fetchImpl: dalle })
+      .generateTool.run({ prompt: 'logo', transparent: true }, ctx);
+    A.eq(dalle.calls[0].body.model, 'gpt-image-2', 'a transparent render leaves DALL-E, which has no background parameter');
+
+    // J7. bytes the decoder cannot count are reported unverified, never claimed
+    const interFetch = stubFetch(() => imageReply(encodePng({ w: 8, h: 8, ctype: 6, interlace: 1, pixel: () => [0, 0, 0, 0] })));
+    const inter = await makeImageTools({ openrouter: { apiKey: 'k' }, fsp, pathMod: path, root: ROOT, fetchImpl: interFetch }).generateTool.run({ prompt: 'logo', transparent: true, path: 'art/inter' }, ctx);
+    A.ok(/\nTransparency NOT verified: this PNG layout/.test(inter.content) && /Do not claim the background is transparent/.test(inter.content), 'unverifiable alpha is said plainly');
+    A.eq(inter.summary, 'image → art/inter.png (transparency unverified)', 'and the summary says so');
+
+    // J8. an exact-size fit keeps the alpha channel, and the verdict reads the FITTED bytes (sharp-encoded, adaptive filters)
+    let sharp = null; try { sharp = require('sharp'); } catch (_) {}
+    if (sharp) {
+      const wide = await sharp({ create: { width: 160, height: 90, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+        .composite([{ input: { create: { width: 40, height: 40, channels: 4, background: { r: 200, g: 40, b: 20, alpha: 1 } } }, left: 60, top: 25 }]).png().toBuffer();
+      const fitFetch = stubFetch(() => imageReply(wide));
+      const fit = await makeImageTools({ openrouter: { apiKey: 'k' }, fsp, pathMod: path, root: ROOT, fetchImpl: fitFetch }).generateTool.run({ prompt: 'logo', transparent: true, width: 64, height: 36, path: 'art/fit' }, ctx);
+      A.ok(/fitted to 64x36/.test(fit.content) && /Transparent background verified/.test(fit.content), 'an exact-size transparent render keeps its alpha: ' + JSON.stringify(fit.content));
+    }
   }
   try { await fsp.rm(ROOT, { recursive: true, force: true }); } catch (_) {}
   A.report('image.test');

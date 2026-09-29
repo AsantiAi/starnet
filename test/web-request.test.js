@@ -364,5 +364,27 @@ const OK = [{ status: 200, headers: { 'content-type': 'application/json' }, body
     A.eq(rec.sent.length, 0, 'and nothing was sent');
   }
 
+  // ---- MODEL-PROVIDER KEYS (2026-09-28 user report). An agent reached for ${OPENROUTER_API_KEY} to chase a transparent
+  //      background, was told "add it in KEYS", and kept asking the Commander for access nobody can grant: KEYS refuses
+  //      provider keys. The refusal must name the real situation and point at the built-in tool instead. ----
+  {
+    const reserved = { reservedEnv: new Set(['OPENROUTER_API_KEY', 'OPENAI_API_KEY']) };
+    const legacy = K.upsert(keys, { name: 'OpenRouter', key: 'sk-or-legacy' }, 9).list;   // saved before the reservation
+    const reservedTools = fetchImpl => makeWebTools({ fetchImpl, lookup: null, surface: 'interactive', redact: s => s,
+      resolveServiceKey: (name, sfc) => K.resolveForRequest(legacy, name, sfc, reserved) }).requestTool;
+    for (const [label, args] of [
+      ['header placeholder', { url: 'https://openrouter.ai/api/v1/chat/completions', method: 'POST', body: '{}', headers: { Authorization: 'Bearer ${OPENROUTER_API_KEY}' } }],
+      ['auth descriptor', { url: 'https://api.openai.com/v1/images/generations', method: 'POST', body: '{}', auth: { key: 'OPENAI_API_KEY', in: 'header', name: 'Authorization', prefix: 'Bearer ' } }]
+    ]) {
+      const rec = recorder(OK);
+      let msg = '';
+      try { await reservedTools(rec.impl).run(args, ctx()); } catch (e) { msg = e.message; }
+      A.ok(/is a model-provider key/.test(msg) && /do not ask the Commander for it/.test(msg), label + ': a provider key is refused as one: ' + JSON.stringify(msg));
+      A.ok(/image_generate/.test(msg) && /transparent:true/.test(msg), label + ': the refusal points at the built-in tool that does the job');
+      A.ok(!/add it in/.test(msg), label + ': it never sends the Commander to KEYS, which refuses provider keys');
+      A.eq(rec.sent.length, 0, label + ': nothing was sent, and the legacy key was never spent');
+    }
+  }
+
   A.report('web-request.test.js');
 })().catch(e => { console.log('FAIL: web-request.test.js threw — ' + (e && e.stack || e)); process.exit(1); });

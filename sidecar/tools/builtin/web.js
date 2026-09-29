@@ -822,14 +822,22 @@
     const SAFE_METHODS = new Set(['GET', 'HEAD']);
     const ALL_METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE']);
 
+    // One refusal per resolver verdict, shared by ${KEY} headers and the auth descriptor.
+    function keyRefusal(r, name) {
+      if (r.reason === 'unattended') return 'this run is unattended and "' + r.name + '" is not approved for unattended use — approve it in TOOLSETS & CONNECTORS → KEYS, or run this while watching';
+      // A MODEL-PROVIDER key is never handed to a tool and KEYS refuses to store one, so pointing at KEYS here sent
+      // agents to ask the Commander for "access" nobody can grant (2026-09-28: OpenRouter was already connected;
+      // the agent wanted the raw key to chase a transparent background image_generate could not make yet).
+      if (r.reason === 'reserved') return name + ' is a model-provider key: StarNet never hands provider keys to tools and KEYS cannot store one, so do not ask the Commander for it. Use the built-in tools that already ride the station\'s connection instead: image_generate for images (transparent:true for a transparent background) and image_analyze to look at one.';
+      return 'no enabled service key provides ' + name + ' — add it in TOOLSETS & CONNECTORS → KEYS';
+    }
+
     function resolveSecretRefs(value, surface, used) {
       let failure = null;
       const out = String(value).replace(SECRET_REF_RE, (whole, name) => {
         const r = serviceKeys.resolve(name, surface);
         if (r.ok) { used.push(name); return r.value; }
-        failure = failure || (r.reason === 'unattended'
-          ? 'this run is unattended and "' + r.name + '" is not approved for unattended use — approve it in TOOLSETS & CONNECTORS → KEYS, or run this while watching'
-          : 'no enabled service key provides ' + name + ' — add it in TOOLSETS & CONNECTORS → KEYS');
+        failure = failure || keyRefusal(r, name);
         return whole;
       });
       return { out, failure };
@@ -934,11 +942,7 @@
           if (!/^[A-Z][A-Z0-9_]*$/.test(keyName)) throw new Error('auth.key must be a stored key NAME like PRINTIFY_API_KEY, never a key value');
           if (where !== 'query' && where !== 'header') throw new Error('auth.in must be "query" or "header"');
           const r = serviceKeys.resolve(keyName, surface);
-          if (!r.ok) {
-            throw new Error(r.reason === 'unattended'
-              ? 'this run is unattended and "' + r.name + '" is not approved for unattended use — approve it in TOOLSETS & CONNECTORS → KEYS, or run this while watching'
-              : 'no enabled service key provides ' + keyName + ' — add it in TOOLSETS & CONNECTORS → KEYS');
-          }
+          if (!r.ok) throw new Error(keyRefusal(r, keyName));
           used.push(keyName);
           if (where === 'query') u.searchParams.set(slot, r.value);
           else { headers[slot] = String(auth.prefix || '') + r.value; secretHeaders.add(slot.toLowerCase()); }
