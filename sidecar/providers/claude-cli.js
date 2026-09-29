@@ -59,7 +59,7 @@
       if (typeof p === 'string') parts.push(p);
       else if (p && typeof p.text === 'string') parts.push(p.text);
       // The CLI's text input has no image channel: say so rather than silently dropping the attachment.
-      else if (p && (p.type === 'image_url' || p.type === 'image')) parts.push('[image attachment omitted — the Claude CLI brain cannot see images]');
+      else if (p && (p.type === 'image_url' || p.type === 'image')) parts.push('[image attachment omitted — the Claude Code brain cannot see images]');
     }
     return parts.join('\n');
   }
@@ -218,12 +218,12 @@
       return { file: bin, pre: [] };
     }
     function notInstalled() {
-      const e = new Error('Claude Code is not installed on this computer — install it, then pick CLAUDE CLI and sign in with Claude');
+      const e = new Error('Claude Code is not installed on this computer — install it, then pick CLAUDE CODE and sign in with Claude');
       e.code = 'provider_not_configured';
       return e;
     }
     function notSignedIn() {
-      const e = new Error('Claude Code is installed but not signed in — pick CLAUDE CLI and press SIGN IN WITH CLAUDE, then retry');
+      const e = new Error('Claude Code is installed but not signed in — press SIGN IN on the CLAUDE CODE card (Settings → PROVIDERS), then retry');
       e.code = 'provider_not_configured';
       return e;
     }
@@ -411,17 +411,17 @@
         if (signal && signal.aborted) return;
         if (!result) {
           const tail = stderr.trim().split(/\r?\n/).slice(-3).join(' ').slice(0, 400);
-          throw new Error('Claude CLI exited with code ' + exitCode + ' before answering' + (tail ? ': ' + tail : ''));
+          throw new Error('Claude Code exited with code ' + exitCode + ' before answering' + (tail ? ': ' + tail : ''));
         }
         if (result.is_error || (result.subtype && result.subtype !== 'success')) {
           // The CLI tags a lost sign-in on its assistant line ("error":"authentication_failed"). Carry it as a 401 so
           // errorClass files it as `auth` (fail now, say why) instead of `unknown`, which the loop retries for ~105s.
           if (apiError === 'authentication_failed') {
-            const e = new Error('Claude CLI is not signed in (' + String(result.result || 'authentication failed').slice(0, 200) + ') — run `claude` in a terminal and log in, then retry');
+            const e = new Error('Claude Code is not signed in (' + String(result.result || 'authentication failed').slice(0, 200) + ') — press SIGN IN on the CLAUDE CODE card (Settings → PROVIDERS), then retry');
             e.status = 401; e.code = 'provider_not_configured';
             throw e;
           }
-          throw new Error('Claude CLI error: ' + String(result.result || result.subtype || 'unknown error').slice(0, 400));
+          throw new Error('Claude Code error: ' + String(result.result || result.subtype || 'unknown error').slice(0, 400));
         }
         if (!sawText && callIndex === 0 && typeof result.result === 'string') yield* emitSplit(splitter.push(result.result));
         yield* emitSplit(splitter.end());
