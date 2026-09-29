@@ -11138,6 +11138,8 @@ const PropSprites = (() => {
     const s = spec(id); if (!s) return null;
     // the swap is gated on an HONEST view at that facing: a prop that falls back to its south art
     // must keep its south box too, or the ghost would reserve tiles the picture never fills.
+    // a player-made side view carries its OWN box (same height, width from the side art), not a plain swap
+    if ((r & 1) && s.user && s.side && viewAt(id, r)) return { w: s.side.w, h: s.side.h };
     return ((r & 1) && reTiles(id) && viewAt(id, r)) ? { w: s.h, h: s.w } : { w: s.w, h: s.h };
   }
 
@@ -11859,6 +11861,19 @@ const PropSprites = (() => {
     };
     return row;
   }
+  // The left-facing side view of a made prop: F['id:w'] (viewAt then offers WEST, and EAST as its mirror, so
+  // R turns it like a shipped side view). Its footprint rides on the row for footprintAt.
+  function registerUserSide(id, side) {
+    const row = USER_ID.test(String(id || '')) && BY_ID[id];
+    if (!row || !side || !side.footprint) return false;
+    row.side = { w: Math.max(1, Math.min(16, Math.floor(+side.footprint.w || 1))), h: Math.max(1, Math.min(16, Math.floor(+side.footprint.h || 1))) };
+    F[viewKey(id, 'w')] = (x, y, w2, h2, o = {}) => {
+      const drawn = typeof PropRemaster !== 'undefined' && typeof PropRemaster.draw === 'function' &&
+        PropRemaster.draw(ctx, id, 'w', x, y, w2, h2, { ...o, now, still: !!o.still }, null);
+      if (!drawn) drawUserPlaceholder(x, y, w2, h2);
+    };
+    return true;
+  }
   // Placement/save rules for a prop type. A player-made id is KEPT even before its row is registered (the
   // boot fetch can lose the race, or the PNG can be missing): pruning it would silently delete paid work from
   // the save. Built-in unknown types still return null so retired types are dropped as before.
@@ -11908,7 +11923,7 @@ const PropSprites = (() => {
     // value is DIALLED on a real deck and copied back into the constant, never guessed.
     setChroma(k) { CHROMA = (k == null ? 1 : +k) || 1; _cboost.clear(); },
     getChroma: () => CHROMA,
-    registerUserProp, ruleFor, isUserProp: (t) => USER_ID.test(String(t || '')),
+    registerUserProp, registerUserSide, ruleFor, isUserProp: (t) => USER_ID.test(String(t || '')),
     // After player-made art decodes: drop the caches that were built while those props were placeholders.
     userArtChanged() { shadowMasks.clear(); invalidateLightResponse(); _ink.clear(); if (typeof World !== 'undefined' && typeof World.rebake === 'function') World.rebake(); },
     draw, drawBayNames, drawOver, hasOver, drawSeatFront, get CATALOG(){return projectionCatalog()?CATALOG.map(c=>spec(c.id)):CATALOG;}, CATS, spec, has, TILE,

@@ -9,13 +9,14 @@
 'use strict';
 const UserProps = (() => {
   const registered = new Set();
+  const sided = new Set();
   let props = [];
   let loading = null;
   const apiFetch = (url, init) => (typeof Harness !== 'undefined' && Harness.apiFetch) ? Harness.apiFetch(url, init) : fetch(url, init);
   const changed = () => { try { window.dispatchEvent(new CustomEvent('starnet:userprops-changed', { detail: { count: props.length } })); } catch (_) {} };
 
-  async function decode(id) {
-    const r = await apiFetch('/api/userprops/image?id=' + encodeURIComponent(id));
+  async function decode(id, view) {
+    const r = await apiFetch('/api/userprops/image?id=' + encodeURIComponent(id) + (view === 'w' ? '&view=w' : ''));
     if (!r.ok) throw new Error('image ' + r.status);
     const url = URL.createObjectURL(await r.blob());
     const im = new Image();
@@ -36,6 +37,20 @@ const UserProps = (() => {
     } catch (_) { return false; }   // the row stays; the prop keeps its placeholder rather than vanishing
     finally { if (d) URL.revokeObjectURL(d.url); }
   }
+  // the left-facing side view, once the station has one (made later, from REFIT)
+  async function registerSide(p) {
+    if (!p || !p.side || sided.has(p.id) || !registered.has(p.id) || !PropSprites.registerUserSide) return false;
+    if (!PropSprites.registerUserSide(p.id, p.side)) return false;
+    sided.add(p.id);
+    if (typeof PropRemaster === 'undefined' || !PropRemaster.registerRuntime) return false;
+    let d = null;
+    try {
+      d = await decode(p.id, 'w');
+      return await PropRemaster.registerRuntime(p.id, { image: p.id + '-w.png', sourceWidth: p.side.sourceWidth, sourceHeight: p.side.sourceHeight,
+        footprint: { w: p.side.footprint.w, h: p.side.footprint.h }, bounds: p.side.bounds, mode: 'approved', exposure: 1, effects: false }, d.im, 'w');
+    } catch (_) { return false; }
+    finally { if (d) URL.revokeObjectURL(d.url); }
+  }
   function load() {
     if (loading) return loading;
     loading = (async () => {
@@ -45,7 +60,7 @@ const UserProps = (() => {
         const before = props.map((p) => p.id).join(',');
         props = j.props;
         let any = false;
-        for (const p of props) if (await register(p)) any = true;
+        for (const p of props) { if (await register(p)) any = true; if (await registerSide(p)) any = true; }
         if (any && PropSprites.userArtChanged) PropSprites.userArtChanged();
         // announce ONLY a real catalog change: build.js re-renders on this, and a panel render itself calls
         // load() to resume a running job — an unconditional event would loop (and wipe what the player typed).
@@ -58,6 +73,12 @@ const UserProps = (() => {
   async function generate(noun) {
     try {
       const r = await apiFetch('/api/userprops/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ noun }) });
+      return await r.json();
+    } catch (_) { return { ok: false, code: 'unreachable', message: 'The station did not answer. Try again.' }; }
+  }
+  async function makeSide(id) {
+    try {
+      const r = await apiFetch('/api/userprops/side', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
       return await r.json();
     } catch (_) { return { ok: false, code: 'unreachable', message: 'The station did not answer. Try again.' }; }
   }
@@ -84,6 +105,7 @@ const UserProps = (() => {
   }
   const list = () => props.slice();
   if (typeof window !== 'undefined') setTimeout(() => { load(); }, 0);
-  return { load, list, generate, job, watch };
+  const get = (id) => props.find((p) => p.id === id) || null;
+  return { load, list, get, generate, makeSide, job, watch };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = UserProps;

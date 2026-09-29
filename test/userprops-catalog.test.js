@@ -62,4 +62,17 @@ ops.length = 0;
 PropSprites.draw({ t: 'long_retired_prop_type', x: 2, y: 2, w: 1, h: 1 }, false, {});
 A.eq(ops.length, 0, 'unknown built-in types still draw nothing (unchanged behavior)');
 
+// ---- side views: R turns a made prop only once it has a real side picture
+A.eq(PropSprites.canRotate(row.id), false, 'no side view yet: R offers nothing');
+A.eq(PropSprites.registerUserSide('user_not_registered_000000', { footprint: { w: 2, h: 1 } }), false, 'a side for an unregistered prop is refused');
+A.eq(PropSprites.registerUserSide(row.id, { footprint: { w: 2, h: 1 } }), true, 'registers the side view');
+A.eq(PropSprites.canRotate(row.id), true, 'now R turns it');
+A.eq(PropSprites.facings(row.id), [0, 1, 3], 'south, west (the made side) and east (its mirror) — never a back view it does not have');
+A.eq(PropSprites.footprintAt(row.id, 1), { w: 2, h: 1 }, 'the west facing uses the side view footprint');
+A.eq(PropSprites.footprintAt(row.id, 3), { w: 2, h: 1 }, 'and so does the mirrored east facing');
+A.eq(PropSprites.footprintAt(row.id, 0), { w: 1, h: 1 }, 'south keeps the front footprint');
+ops.length = 0;
+PropSprites.draw({ t: row.id, x: 2, y: 2, w: 2, h: 1, r: 1 }, false, {});
+A.ok(ops.includes('fillRect'), 'a turned made prop without decoded side art draws the placeholder, not nothing');
+
 A.report();
