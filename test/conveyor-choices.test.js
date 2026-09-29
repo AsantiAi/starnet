@@ -109,12 +109,12 @@ const splitOf = plan => Object.keys(plan.junctions).find(k => plan.junctions[k].
 
 /* ---------- 2026-09-28: the shelf by kind of work, plain names, and SET UP BEFORE YOU PLACE ---------- */
 {
-  const map = name => { const m = build.match(new RegExp('const ' + name + ' = \\{([\\s\\S]*?)\\n  \\};')); return m ? m[1] : ''; };
-  const plain = map('LINE_PLAIN'), work = map('LINE_WORK');
+  // the names and kinds live ON the catalog (WorldModel.BLUEPRINTS .plain / .work, 2026-09-29): one source for the shelf and the agent's builder
   for (const bp of WM.BLUEPRINTS) {
-    A.ok(new RegExp('\\b' + bp.id + ': \'[^\']{3,20}\'').test(plain), bp.id + ': a plain name of 20 characters or fewer');
-    A.ok(new RegExp('\\b' + bp.id + ': \'(any|write|code|research|volume|decide)\'').test(work), bp.id + ': a kind of work on the shelf');
+    A.ok(typeof bp.plain === 'string' && bp.plain.length >= 3 && bp.plain.length <= 20, bp.id + ': a plain name of 20 characters or fewer');
+    A.ok(['any', 'write', 'code', 'research', 'volume', 'decide'].indexOf(bp.work) >= 0, bp.id + ': a kind of work on the shelf');
   }
+  A.ok(/for \(const bp of \(\(typeof WorldModel !== 'undefined' && WorldModel\.BLUEPRINTS\) \|\| \[\]\)\) \{ if \(bp\.plain\) LINE_PLAIN\[bp\.id\] = bp\.plain; if \(bp\.work\) LINE_WORK\[bp\.id\] = bp\.work; \}/.test(build), 'the shelf reads the names and kinds from the catalog');
   A.ok(/LINE_WORK_GROUPS\.some\(g => g\.id === LINE_WORK\[bp\.id\]\)/.test(build), 'the shelf groups by kind of work (an unknown line falls into the last section)');
   A.ok(/station\.stampBlueprint\(bp\.id, o\.x, o\.y, lineStampOpts\(bp\)\)/.test(build), 'placing a line carries the card\'s cap and tries INTO the one stamp');
   A.ok(/if \(tool === 'line' && bp\.id === lineType\) grid\.appendChild\(linePrefsEl\(bp\)\)/.test(build), 'the armed card shows its settings right under it');

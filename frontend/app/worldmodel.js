@@ -889,6 +889,26 @@ const WorldModel = (() => {
         { x: 17, y: 0, d: 'S' }, { x: 17, y: 1, d: 'S' }, { x: 17, y: 2, d: 'S' }, { x: 17, y: 3, d: 'S' },
       ] },
   ];
+  /* PLAIN NAMES + KIND OF WORK (2026-09-28, moved here 2026-09-29): what each line does in everyday words (the shelf card's
+     name; the station name stays as its tag), and the kind of work it is for (the shelf's sections, the same kinds the
+     station presets are for). One source for the Lines shelf, the agent's station builder and the tests. */
+  const LINE_PLAIN = {
+    front_desk: 'One agent', allowance_desk: 'One agent, capped', ship_out: 'Straight to outbox', two_doors: 'Two doors, one agent',
+    revision_loop: 'Draft + review', crucible: 'Two review rounds', fire_escape: 'Review + a fixer',
+    build_test: 'Build + test', code_foundry: 'Build + review',
+    research_line: 'Research + write', swarm_synthesis: 'Three researchers', deep_dive: 'Deep dive + review', assembly_line: 'Four-step chain',
+    sorting_office: 'Sort by type', triage_desk: 'Three specialists', parallel_crew: 'Split across three', load_balancer: 'Take turns', mission_control: 'Full triage',
+    second_opinion: 'Second opinion', gauntlet: 'Two takes, reviewed',
+  };
+  const LINE_WORK = {
+    front_desk: 'any', allowance_desk: 'any', ship_out: 'any', two_doors: 'any',
+    revision_loop: 'write', crucible: 'write', fire_escape: 'write',
+    build_test: 'code', code_foundry: 'code',
+    research_line: 'research', swarm_synthesis: 'research', deep_dive: 'research', assembly_line: 'research',
+    sorting_office: 'volume', triage_desk: 'volume', parallel_crew: 'volume', load_balancer: 'volume', mission_control: 'volume',
+    second_opinion: 'decide', gauntlet: 'decide',
+  };
+  for (const bp of BLUEPRINTS) { if (LINE_PLAIN[bp.id]) bp.plain = LINE_PLAIN[bp.id]; if (LINE_WORK[bp.id]) bp.work = LINE_WORK[bp.id]; }
 
   /* ============================================================= */
   function makeStation(doc) {
@@ -1084,6 +1104,34 @@ const WorldModel = (() => {
       checkRects((rects || []).map(normRect), kind || 'hab', ignoreId);
     const canPlaceHallway = (rects, ignoreId) =>
       checkRects((rects || []).map(normRect), 'corridor', ignoreId);
+    /* ROOM SPOTS (2026-09-29; moved here from Build mode's MAKE ROOM so the agent's station builder uses the same finder):
+       every W×H room rect that touches the station orthogonally (so the auto-doors can join it) and passes the same
+       room check a drawn room does — right of the station, then below, left, above, each slid along its edge, the one
+       nearest that edge's middle first. Pure: it only looks. `limit` caps how many it returns (default all). */
+    function roomSpots(W, H, kind, limit) {
+      W |= 0; H |= 0;
+      if (W < MIN_ROOM || H < MIN_ROOM) return [];
+      const b = bounds(), cands = [];
+      const midY = (b.minTy + b.maxTy) >> 1, midX = (b.minTx + b.maxTx) >> 1;
+      for (let y = b.minTy - H + 1; y <= b.maxTy; y++) cands.push({ x: b.maxTx + 1, y, d: Math.abs(y + (H >> 1) - midY) });
+      for (let x = b.minTx - W + 1; x <= b.maxTx; x++) cands.push({ x, y: b.maxTy + 1, d: 1000 + Math.abs(x + (W >> 1) - midX) });
+      for (let y = b.minTy - H + 1; y <= b.maxTy; y++) cands.push({ x: b.minTx - W, y, d: 2000 + Math.abs(y + (H >> 1) - midY) });
+      for (let x = b.minTx - W + 1; x <= b.maxTx; x++) cands.push({ x, y: b.minTy - H, d: 3000 + Math.abs(x + (W >> 1) - midX) });
+      cands.sort((p, q) => p.d - q.d || p.y - q.y || p.x - q.x);
+      const touches = (x, y) => {
+        for (let yy = y; yy < y + H; yy++) if (roomAt(x - 1, yy) || roomAt(x + W, yy)) return true;
+        for (let xx = x; xx < x + W; xx++) if (roomAt(xx, y - 1) || roomAt(xx, y + H)) return true;
+        return false;
+      };
+      const out = [], max = limit > 0 ? limit : Infinity;
+      for (const c of cands) {
+        if (out.length >= max) break;
+        if (!touches(c.x, c.y)) continue;
+        const rect = { x1: c.x, y1: c.y, x2: c.x + W - 1, y2: c.y + H - 1 };
+        if (canPlaceRoom([rect], kind || 'hab').ok) out.push(rect);
+      }
+      return out;
+    }
 
     /* ---------- history (snapshot-based — small docs, correct by construction) ---------- */
     // links ride the snapshot exactly as the doc holds them (absent / null / a derivation) so an UNDO restores the doc exactly;
@@ -3031,7 +3079,7 @@ const WorldModel = (() => {
       hullMatOfRoom: id => hullMatOfRoom(doc.rooms[id]),
       hullStyleOfRoom: id => hullStyleOfRoom(doc.rooms[id]),
       // validation (no mutation — for ghost previews)
-      canPlaceRoom, canPlaceHallway, canPlaceProp, canPlaceBeltRun, canPlaceBlueprint,
+      canPlaceRoom, canPlaceHallway, canPlaceProp, canPlaceBeltRun, canPlaceBlueprint, roomSpots,
       // mount rules: injected so the model never imports the prop catalog (see MOUNT RULES).
       // surfaceHostOf is the read surface the world layer uses to decide whether a placed prop is
       // ACTUALLY standing on a table right now — a prop whose table was reclaimed renders back on the

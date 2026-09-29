@@ -22,6 +22,15 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  /* the approval card's words for a station.build_line call: the plan's own summary and each step's instructions, as
+     station.plan_line returned them (memo: planId -> { summary, steps }) — never text the model supplied. */
+  function planSummaryFrom(memo, planId) {
+    const e = memo && memo.get ? memo.get(String(planId || '')) : null;
+    if (!e) return null;
+    const steps = (e.steps || []).map(s => 'Step ' + s.step + ' ' + s.role + ' (' + (s.agent || 'nobody yet') + '): ' + String(s.instructions || '').slice(0, 160)).join('\n');
+    return e.summary + (steps ? '\n' + steps : '');
+  }
+
   function makeStationTools(deps) {
     deps = deps || {};
     const station = (deps.station && typeof deps.station.request === 'function') ? deps.station : null;
@@ -316,12 +325,64 @@
       }
     };
 
+    /* THE STATION BUILDER (2026-09-29): the lead ADDS a ready-made line from a fixed menu — it never sends a position, a
+       belt or furniture; the page's StationBuilder does all the placing on a copy first. plan_line changes nothing (no
+       approval); build_line applies exactly one plan, behind the approval card. The card's text is the PLAN's own summary
+       (planSummaryFor), recorded here when plan_line answered — never words the model supplied. */
+    const planMemo = deps.planMemo instanceof Map ? deps.planMemo : new Map();
+    const menu = typeof deps.lineMenu === 'function' ? deps.lineMenu : () => [];
+    const menuText = () => { try { return (menu() || []).map(l => l.id + ' (' + l.name + ': ' + (l.roles || []).join(' → ') + ')').join('; '); } catch (_) { return ''; } };
+    const planSummaryFor = planId => planSummaryFrom(planMemo, planId);
+    const planLineTool = {
+      name: 'station.plan_line', capability: 'orchestrator', scope: 'read', requiresConsent: false,
+      get description() {
+        return 'Plan a new ready-made assembly line (and, by default, a new room for it) on the station, when the Commander asks for one. '
+          + 'You never place anything yourself: pick a line from this menu and StarNet chooses every position, belt and piece of furniture, builds it on a copy of the station, and checks it. '
+          + 'Fields: line (an id or plain name from the menu), where ("new room" or an existing room\'s name), name (what to call the line), '
+          + 'steps (a list of { step: 1, instructions, agent } by step number or { role, instructions, agent }; agent is a crew member\'s name, or "lead"), '
+          + 'dailyCap (dollars per day, or null for no cap), tries (1-5 review passes, for lines with a review loop). '
+          + 'Nothing is built yet: it returns a planId, a plain summary, and what would still be missing. Tell the Commander the summary, then call station.build_line with the planId. '
+          + 'If it refuses, it says why and lists the valid choices; fix the request and plan again. Requires an open station page with Build mode closed. '
+          + 'LINES: ' + menuText();
+      },
+      schema: { type: 'object', properties: {
+        line: { type: 'string' }, where: { type: 'string' }, name: { type: 'string' },
+        steps: { type: 'array', items: { type: 'object', properties: { step: { type: 'integer' }, role: { type: 'string' }, instructions: { type: 'string' }, agent: { type: 'string' } } } },
+        dailyCap: {}, tries: { type: 'integer' } }, required: ['line'] },
+      run: async (args) => {
+        const out = await ask('station.plan_line', { request: args || {} });
+        if (!out.ok) return refuse(out.error);
+        const p = out.result || {};
+        if (p.planId) {
+          for (const [id, e] of planMemo) if (clock && clock() - e.at > 10 * 60 * 1000) planMemo.delete(id);
+          planMemo.set(p.planId, { summary: String(p.summary || ''), steps: p.steps || [], at: clock ? clock() : 0 });
+        }
+        return { content: JSON.stringify(p), summary: 'planned ' + ((p.line && p.line.name) || 'a line') + (p.ready ? ' (ready once built)' : ' (' + ((p.blocking || []).length) + ' to do)') };
+      }
+    };
+    const buildLineTool = {
+      name: 'station.build_line', capability: 'orchestrator', scope: 'write', requiresConsent: true,
+      // briefs persist and every later run of those Bays obeys them: a run that read untrusted content may not write them
+      taintLocked: true,
+      description: 'Build exactly the line a station.plan_line call planned, by its planId, after the Commander approves. It is added as one step that the Commander can remove with one UNDO in Build mode; nothing already on the station is moved or changed. '
+        + 'It refuses if the plan expired (ten minutes), was already used, or the station changed since the plan: then plan again. Afterwards, report what it says is still missing, exactly.',
+      schema: { type: 'object', properties: { planId: { type: 'string' } }, required: ['planId'] },
+      run: async (args) => {
+        const planId = String((args && args.planId) || '').trim().slice(0, 60);
+        const out = await ask('station.build_line', { planId });
+        if (!out.ok) return refuse(out.error);
+        planMemo.delete(planId);
+        const r = out.result || {};
+        return { content: JSON.stringify(r), summary: 'built ' + ((r.line && r.line.name) || 'the line') + (r.ready ? ' · ready to run' : ' · ' + ((r.blocking || []).length) + ' to do') };
+      }
+    };
+
     return {
-      agentConfigTool, agentConfigureTool, layoutTool,
+      agentConfigTool, agentConfigureTool, layoutTool, planLineTool, buildLineTool, planSummaryFor,
       listTool, createTool, peekTool, focusTool, taskListTool, taskCreateTool, taskManageTool,
-      register(reg) { [listTool, createTool, peekTool, focusTool, taskListTool, taskCreateTool, taskManageTool, agentConfigTool, agentConfigureTool, layoutTool].forEach(t => reg.register(t)); return reg; }
+      register(reg) { [listTool, createTool, peekTool, focusTool, taskListTool, taskCreateTool, taskManageTool, agentConfigTool, agentConfigureTool, layoutTool, planLineTool, buildLineTool].forEach(t => reg.register(t)); return reg; }
     };
   }
 
-  return { makeStationTools };
+  return { makeStationTools, planSummaryFrom };
 });

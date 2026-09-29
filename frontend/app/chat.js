@@ -2888,6 +2888,9 @@ const Chat = (() => {
     }
     if (/write|append|edit/.test(t)) return 'write ' + (ev.argsSummary || 'a file');
     if (t === 'brief.ask') return 'ask you a quick question about the task';   // clarify card renders its own body
+    // THE STATION BUILDER (2026-09-29): the card IS the plan — what gets built, where, who works each step. The sidecar
+    // sends the plan's own summary (its dry run on a copy of the station), never the model's words.
+    if (/^station[._]build[._]line$/.test(t)) return 'build this on your station: ' + (String(ev.argsSummary || '').split('\n')[0] || 'a planned line') + ' One UNDO in Build mode removes it.';
     return t.replace(/_/g, '.') + (ev.argsSummary ? ' ' + ev.argsSummary : '');
   }
 
@@ -3028,6 +3031,13 @@ const Chat = (() => {
       const detail = document.createElement('details'); detail.className = 'consent-payload';
       const label = document.createElement('summary'); label.textContent = 'Inspect proposed change (secret patterns redacted)';
       const payload = document.createElement('pre'); payload.textContent = p.argsSummary || '(payload unavailable)';
+      detail.appendChild(label); detail.appendChild(payload); r.body.appendChild(detail);
+    }
+    // the station builder's card: every step's instructions, one click away (the summary line is in the phrase above)
+    if (/^station[._]build[._]line$/.test(String(p.tool || '')) && String(p.argsSummary || '').indexOf('\n') > 0) {
+      const detail = document.createElement('details'); detail.className = 'consent-payload';
+      const label = document.createElement('summary'); label.textContent = 'What each step will be told';
+      const payload = document.createElement('pre'); payload.textContent = String(p.argsSummary).split('\n').slice(1).join('\n');
       detail.appendChild(label); detail.appendChild(payload); r.body.appendChild(detail);
     }
     const btns = document.createElement('span'); btns.className = 'consent-btns';

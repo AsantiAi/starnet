@@ -805,6 +805,7 @@ test/station-tools.test.js
 test/team-configure-guard.test.js
 test/agent-config.test.js
 test/station-layout.test.js
+test/station-builder.test.js
 test/code-mode.test.js
 test/output-artifacts.test.js
 test/station-recovery.test.js
