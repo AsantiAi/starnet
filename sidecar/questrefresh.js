@@ -123,7 +123,12 @@
     const openCount = Math.max(0, Number(inp && inp.openCount) || 0);
     if (inp && inp.contextKey && inp.contextKey !== s.contextKey && now - s.lastCycleAt >= MATERIAL_CHANGE_GAP_MS) return { fire: true, why: 'progress-changed', binding: null };
     if (now - s.lastCycleAt >= REFRESH_EVERY_MS) return { fire: true, why: 'daily', binding: null };
-    if (openCount === 0 && now - s.lastCycleAt >= CAUGHT_UP_GAP_MS) return { fire: true, why: 'caught-up', binding: null };
+    // CAUGHT-UP rewards PROGRESS, never idleness (sweep 2026-09-29): an empty slate whose context has not moved since
+    // the last cycle (the planner said NONE, or every proposal failed validation, and nothing happened since) must not
+    // re-buy the same answer every hour — with PROPOSE as the new-station default that was a paid call per hour on
+    // every idle open station. Finishing quests changes the context, so real catching-up still earns a cycle here.
+    const contextMoved = !(inp && inp.contextKey) || inp.contextKey !== s.contextKey;
+    if (openCount === 0 && contextMoved && now - s.lastCycleAt >= CAUGHT_UP_GAP_MS) return { fire: true, why: 'caught-up', binding: null };
     return { fire: false, why: null, binding: openCount === 0 ? 'gap' : 'cooldown' };
   }
 
@@ -174,6 +179,12 @@
     if (str(ctx.goalNote).trim()) {
       lines.push('ACTIVE GOAL (set by the Commander — this IS the north star; never override it):');
       lines.push(str(ctx.goalNote).trim());
+      // the plan's CURRENT step: the quests this cycle proposes are that step's slate. The station records the
+      // step done once every quest planned for it is settled (sidecar/goal-advance.js), then plans the next one.
+      if (str(ctx.nextStep).trim()) {
+        lines.push('THE STEP YOU ARE PLANNING NOW: ' + str(ctx.nextStep).trim());
+        lines.push('Propose the quests that, completed together, finish this step. The station marks the step done once every quest planned for it is settled, then plans the step after it — so never propose work for later steps yet.');
+      }
     } else if (ctx.northStar && str(ctx.northStar.text).trim()) {
       lines.push('CURRENT NORTH STAR (inferred previously — keep it unless the evidence below clearly shifted):');
       lines.push(str(ctx.northStar.text).trim());

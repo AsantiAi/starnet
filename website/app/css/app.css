@@ -3636,7 +3636,7 @@ body.rows-inbox #workstreams .ws-kebab { grid-area: meta; }
 .q-refresh-due { margin:0; }
 .q-refresh-last { margin-top:4px; opacity:.85; }
 .q-outcome { display:inline-block; font-size:9px; letter-spacing:.06em; text-transform:uppercase; padding:0 5px; border-radius:2px; border:1px solid var(--ph-glow2); color:var(--ph-dim); }
-.q-oc-minted { color:var(--gold); border-color:var(--gold); }
+.q-oc-minted, .q-oc-advanced { color:var(--gold); border-color:var(--gold); }
 .q-oc-none   { color:var(--ph); border-color:var(--ph-glow2); }
 .q-oc-skipped, .q-oc-rejected { color:var(--ph-dim); }
 .q-oc-error  { color:#e88; border-color:#e88; }
