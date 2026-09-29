@@ -8597,6 +8597,10 @@ const World = (() => {
     return null;
   }
   function intakeTile() {
+    // the compiled plan's first feed mouth — on a linked floor an INBOX feeds only down its own links, so a loose belt
+    // beside it is never a spawn point (conveyor-links phase B); a floor with no compiled source keeps the old reading
+    const src = routingPlan && routingPlan.sources && routingPlan.sources[0];
+    if (src && src.tile) return { x: src.tile.x, y: src.tile.y };
     const intake = geo && geo.props && geo.props.find(p => p.t === 'intake');
     return intake ? beltTileNear(intake.x, intake.y, intake.w || 1, intake.h || 1) : null;
   }
