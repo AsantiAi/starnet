@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "a36b7bee4ef3b2359d434d7c04e4c9ea93d86b40",
+    "sourceCommit": "1d2d83b55bab5b37f7ea750ea3e8ed4f58e1d9be",
     "pathSetSha256": "d399b7dc9c6d8ef4e165d0c6560b5770636dbaf73b81f662e7c4b31d7cc55045",
     "files": [
       {
@@ -358,8 +358,8 @@
       },
       {
         "path": "frontend/app/codexsignin.js",
-        "bytes": 6741,
-        "sha256": "be98d47e7937a6b706428be3fa2585f55544aab84b6e0bbfaa5e741e8736ff48"
+        "bytes": 10352,
+        "sha256": "9a30b8801c585d7370319b4ee850523df2c24204b0c2325da614b70bc7fe2050"
       },
       {
         "path": "frontend/app/confbeats.js",
@@ -1073,8 +1073,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 738046,
-        "sha256": "f1821275bd64e2cf5665be05c3169d513017c65d37c8852af44669067ce6faf9"
+        "bytes": 744242,
+        "sha256": "22e0207a690d31a8c854508fc2439c3fdd0fa70a28906574391a20f63b0b6b8d"
       },
       {
         "path": "frontend/app/study.js",
