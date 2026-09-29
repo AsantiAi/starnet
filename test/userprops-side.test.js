@@ -1,0 +1,88 @@
+/* test/userprops-side.test.js — side views for made props, station side: the accepted front PNG is what gets sent,
+   the side view lands as <id>-w.png with its own footprint on the index entry, landing is idempotent, a second
+   side view is refused, a bad cloud result touches nothing, and the paid side job survives a restart. */
+'use strict';
+const A = require('./_assert.js');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const zlib = require('node:zlib');
+const { makeUserProps } = require('../sidecar/userprops.js');
+
+function crc32(buf) { let c, crc = 0xffffffff; for (let n = 0; n < buf.length; n++) { c = (crc ^ buf[n]) & 0xff; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; crc = (crc >>> 8) ^ c; } return (crc ^ 0xffffffff) >>> 0; }
+function chunk(type, data) { const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type), data]); const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(td)); return Buffer.concat([len, td, crc]); }
+function makePng(w, h) { const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 6; return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(Buffer.alloc((w * 4 + 1) * h))), chunk('IEND', Buffer.alloc(0))]); }
+
+let SEQ = 0;
+function fakeCloud() {
+  const state = { jobs: new Map(), calls: [] };
+  const fetch = async (url, init) => {
+    const body = init.body ? JSON.parse(init.body) : null;
+    state.calls.push({ url, method: init.method, body });
+    if (init.method === 'POST' && /\/v1\/props\/(generate|side)$/.test(url)) {
+      const id = 'pj_side' + String(++SEQ).padStart(8, '0');
+      state.jobs.set(id, { id, kind: /side$/.test(url) ? 'side' : 'front', noun: body.noun, status: 'running', step: 'drawing', tries: 1, costUsd: 0 });
+      return { status: 202, ok: true, json: async () => ({ job: state.jobs.get(id) }) };
+    }
+    const m = /\/v1\/props\/jobs\/(.+)$/.exec(url);
+    if (m) { const j = state.jobs.get(decodeURIComponent(m[1])); return j ? { status: 200, ok: true, json: async () => ({ job: j }) } : { status: 404, ok: false, json: async () => ({}) }; }
+    return { status: 500, ok: false, json: async () => ({}) };
+  };
+  return { state, fetch };
+}
+const make = (dir, cloud) => makeUserProps({ fs, path, dir, cloud: () => ({ url: 'https://cloud.test', token: 'snd_t' }), fetch: (...a) => cloud.fetch(...a), now: () => 1000, setTimer: () => 0, clearTimer: () => {} });
+const FRONT = { noun: 'a jukebox', label: 'JUKEBOX', like: 'jukebox', footprint: { w: 1, h: 2 }, bounds: { x: -2, y: -3, width: 16, height: 27 }, sourceWidth: 20, sourceHeight: 30, png: makePng(20, 30).toString('base64') };
+const SIDE = (over = {}) => ({ view: 'w', noun: 'a jukebox', footprint: { w: 2, h: 1 }, bounds: { x: -2, y: -15, width: 28, height: 27 }, sourceWidth: 40, sourceHeight: 30, png: makePng(40, 30).toString('base64'), ...over });
+
+(async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'userprops-side-'));
+  const dir = path.join(root, '.userprops');
+  try {
+    const cloud = fakeCloud();
+    const up = make(dir, cloud);
+    const made = await up.start('a jukebox');
+    Object.assign(cloud.state.jobs.get(made.job.id), { status: 'done', costUsd: 0.35, result: FRONT });
+    await up.pollOnce();
+    const prop = up.list()[0];
+    A.ok(prop && !prop.side, 'a fresh made prop has no side view');
+
+    A.eq((await up.startSide('user_nope_000000')).code, 'not_found', 'an unknown prop is refused');
+    const r = await up.startSide(prop.id);
+    A.ok(r.ok && r.job.kind === 'side' && r.job.propId === prop.id, 'side view job started for the prop');
+    const sent = cloud.state.calls.find((c) => /\/v1\/props\/side$/.test(c.url)).body;
+    A.eq(sent.front.png, fs.readFileSync(path.join(dir, prop.id + '.png')).toString('base64'), 'the accepted front PNG on disk is what gets turned');
+    A.eq([sent.noun, sent.front.footprint, sent.front.bounds], ['a jukebox', { w: 1, h: 2 }, { height: 27 }], 'with its noun, footprint and height');
+    A.eq((await up.startSide(prop.id)).code, 'busy', 'a second side request while one runs is refused');
+
+    // restart mid-job: a fresh instance still owns the paid side job
+    const up2 = make(dir, cloud);
+    A.ok(up2.activeJobs().some((j) => j.id === r.job.id && j.kind === 'side'), 'the side job survives a restart');
+    Object.assign(cloud.state.jobs.get(r.job.id), { status: 'done', costUsd: 0.3, result: SIDE() });
+    await up2.pollOnce();
+    const after = up2.list().find((p) => p.id === prop.id);
+    A.ok(after.side, 'the side view lands on the prop');
+    A.eq([after.side.footprint, after.side.bounds.height, after.side.costUsd], [{ w: 2, h: 1 }, 27, 0.3], 'with its own footprint, the same height, and the real cost');
+    A.ok(fs.existsSync(path.join(dir, prop.id + '-w.png')), '<id>-w.png written');
+    A.eq(up2.imageFile(prop.id, 'w'), path.join(dir, prop.id + '-w.png'), 'imageFile serves the w view');
+    A.eq(up2.imageFile(prop.id, 'n'), null, 'no other view name is accepted');
+    A.eq(up2.job(r.job.id).status, 'done', 'the side job reports done');
+    A.eq(up2.activeJobs().length, 0, 'nothing pending');
+    fs.writeFileSync(path.join(dir, 'pending.json'), JSON.stringify({ jobs: [{ id: r.job.id, noun: 'a jukebox', kind: 'side', propId: prop.id }] }));
+    await up2.pollOnce();
+    A.eq(up2.list().filter((p) => p.id === prop.id).length, 1, 'a re-polled side job does not duplicate the prop');
+    A.eq((await up2.startSide(prop.id)).code, 'exists', 'a prop with a side view is not re-made');
+
+    // a bad side result touches nothing
+    const made2 = await up2.start('a lamp');
+    Object.assign(cloud.state.jobs.get(made2.job.id), { status: 'done', costUsd: 0.3, result: { ...FRONT, label: 'LAMP', noun: 'a lamp' } });
+    await up2.pollOnce();
+    const lamp = up2.list().find((p) => p.label === 'LAMP');
+    const s2 = await up2.startSide(lamp.id);
+    Object.assign(cloud.state.jobs.get(s2.job.id), { status: 'done', result: SIDE({ view: 's' }) });
+    await up2.pollOnce();
+    A.ok(!up2.list().find((p) => p.id === lamp.id).side, 'a side result that is not the w view is refused');
+    A.eq(up2.job(s2.job.id).error && up2.job(s2.job.id).error.code, 'bad_result', 'and reported honestly');
+    A.ok(!fs.existsSync(path.join(dir, lamp.id + '-w.png')), 'no side file written for it');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  A.report();
+})();

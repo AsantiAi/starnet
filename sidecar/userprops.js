@@ -76,9 +76,11 @@ function makeUserProps(deps) {
     const idx = readJson(indexFile, { props: [] });
     return (Array.isArray(idx.props) ? idx.props : []).filter((p) => p && isPropId(p.id));
   }
-  function imageFile(id) {
+  // view 's' (front, <id>.png) or 'w' (the left-facing side view, <id>-w.png). Anything else is refused.
+  function imageFile(id, view) {
     if (!isPropId(id)) return null;
-    const f = path.join(dir, id + '.png');
+    if (view != null && view !== 's' && view !== 'w') return null;
+    const f = path.join(dir, id + (view === 'w' ? '-w' : '') + '.png');
     return f.startsWith(dir) ? f : null;
   }
   function pending() { const p = readJson(pendingFile, { jobs: [] }); return Array.isArray(p.jobs) ? p.jobs : []; }
@@ -144,6 +146,51 @@ function makeUserProps(deps) {
     });
   }
 
+  // ---- SIDE VIEW: turn a made prop's accepted front view into its left-facing side view (the cloud keeps the
+  // height; the station stores <id>-w.png and the side footprint on the index entry). Same pending ledger.
+  async function startSide(propId) {
+    const entry = list().find((p) => p.id === propId);
+    if (!entry) return { ok: false, code: 'not_found', message: 'No such made prop.' };
+    if (entry.side) return { ok: false, code: 'exists', message: 'This prop already has a side view.' };
+    if (pending().some((j) => j.kind === 'side' && j.propId === propId)) return { ok: false, code: 'busy', message: 'A side view for this prop is already being made.' };
+    const c = cloudCfg();
+    if (!c) return { ok: false, code: 'not_linked', message: 'Making props uses StarNet credits. Link this station under SETTINGS \u2192 PROVIDERS first.' };
+    let png;
+    try { png = fs.readFileSync(imageFile(propId)); } catch (_) { return { ok: false, code: 'missing_art', message: 'This prop\u2019s front view is missing on disk.' }; }
+    let r;
+    try { r = await request('POST', c.url + '/v1/props/side', c.token, { noun: entry.noun, front: { png: png.toString('base64'), footprint: entry.footprint, bounds: { height: entry.bounds.height } } }, START_TIMEOUT_MS); }
+    catch (_) { return { ok: false, code: 'unreachable', message: 'StarNet could not be reached. Check your connection and try again.' }; }
+    const cloudMsg = r.j && r.j.error && r.j.error.message ? String(r.j.error.message).slice(0, 200) : '';
+    if (r.status === 402) return { ok: false, code: 'insufficient_credits', message: 'Out of StarNet credits. Top up under SETTINGS \u2192 PROVIDERS.' };
+    if (r.status === 401 || r.status === 403) return { ok: false, code: 'not_linked', message: 'This station\u2019s StarNet link is no longer valid. Relink it under SETTINGS \u2192 PROVIDERS.' };
+    if (r.status === 429) return { ok: false, code: 'busy', message: cloudMsg || 'Too many props right now. Try again shortly.' };
+    if (r.status === 404) return { ok: false, code: 'unsupported', message: 'Your StarNet account server does not offer side views yet.' };
+    const job = r.j && r.j.job;
+    if (!r.ok || !job || typeof job.id !== 'string' || !/^pj_[A-Za-z0-9]{8,64}$/.test(job.id)) return { ok: false, code: 'cloud_error', message: cloudMsg || 'StarNet could not start that side view.' };
+    await serial(() => { const jobs = pending().filter((j) => j.id !== job.id); jobs.push({ id: job.id, noun: entry.noun, kind: 'side', propId, startedAt: now() }); writeJson(pendingFile, { jobs }); });
+    live.set(job.id, { ...publicJob(job), noun: entry.noun, kind: 'side', propId });
+    schedule(0);
+    return { ok: true, job: live.get(job.id) };
+  }
+  function validSide(r) {
+    return !!r && r.view === 'w' && validResult({ ...r, label: 'side' });
+  }
+  async function landSide(propId, jobId, result, costUsd) {
+    return serial(() => {
+      const props = list();
+      const entry = props.find((p) => p.id === propId);
+      if (!entry) throw new Error('prop gone');
+      if (entry.side) return entry;   // idempotent
+      const png = Buffer.from(result.png, 'base64');
+      if (!isPng(png) || png.length > MAX_PNG_BYTES || png.readUInt32BE(16) !== result.sourceWidth || png.readUInt32BE(20) !== result.sourceHeight) throw new Error('bad side image');
+      writeDurable({ fs, path }, imageFile(propId, 'w'), png);
+      entry.side = { jobId, footprint: { w: result.footprint.w, h: result.footprint.h }, bounds: { x: result.bounds.x, y: result.bounds.y, width: result.bounds.width, height: result.bounds.height },
+        sourceWidth: result.sourceWidth, sourceHeight: result.sourceHeight, costUsd: Number(costUsd) || 0, createdAt: now() };
+      writeJson(indexFile, { version: 1, props });
+      return entry;
+    });
+  }
+
   async function pollOnce() {
     const c = cloudCfg();
     const jobs = pending();
@@ -161,7 +208,14 @@ function makeUserProps(deps) {
       const job = r.j && r.j.job;
       if (!r.ok || !job) continue;
       const pub = { ...publicJob(job), noun: pj.noun };
-      if (job.status === 'done') {
+      if (pj.kind === 'side') { pub.kind = 'side'; pub.propId = pj.propId; }
+      if (job.status === 'done' && pj.kind === 'side') {
+        if (!validSide(job.result)) { pub.status = 'failed'; pub.error = { code: 'bad_result', message: 'StarNet returned a side view this station could not use.' }; }
+        else {
+          try { await landSide(pj.propId, pj.id, job.result, job.costUsd); }
+          catch (_) { pub.status = 'failed'; pub.error = { code: 'bad_result', message: 'StarNet returned a side view this station could not use.' }; }
+        }
+      } else if (job.status === 'done') {
         if (!validResult(job.result)) { pub.status = 'failed'; pub.error = { code: 'bad_result', message: 'StarNet returned a prop this station could not use.' }; }
         else {
           try { const entry = await land(pj.id, pj.noun, job.result, job.costUsd); pub.propId = entry.id; }
@@ -193,7 +247,9 @@ function makeUserProps(deps) {
   function job(id) {
     if (live.has(id)) return live.get(id);
     const pj = pending().find((j) => j.id === id);
-    if (pj) return { id, noun: pj.noun, status: 'running', step: 'waiting', tries: 0, maxTries: 3, costUsd: 0, costPending: false, error: null, propId: null };
+    if (pj) return { id, noun: pj.noun, kind: pj.kind || 'front', status: 'running', step: 'waiting', tries: 0, maxTries: 3, costUsd: 0, costPending: false, error: null, propId: pj.propId || null };
+    const sided = list().find((p) => p.side && p.side.jobId === id);
+    if (sided) return { id, noun: sided.noun, kind: 'side', status: 'done', step: 'done', tries: 0, maxTries: 3, costUsd: sided.side.costUsd, costPending: false, error: null, propId: sided.id };
     const landed = list().find((p) => p.jobId === id);
     return landed ? { id, noun: landed.noun, status: 'done', step: 'done', tries: 0, maxTries: 3, costUsd: landed.costUsd, costPending: false, error: null, propId: landed.id } : null;
   }
@@ -202,7 +258,7 @@ function makeUserProps(deps) {
   function stop() { stopped = true; if (timer) { clearTimer(timer); timer = null; } }
   function activeJobs() { return pending().map((pj) => job(pj.id)).filter(Boolean); }
 
-  return { list, imageFile, start, job, activeJobs, resume, stop, pollOnce, _internals: { slugOf, validResult, isPropId } };
+  return { list, imageFile, start, startSide, job, activeJobs, resume, stop, pollOnce, _internals: { slugOf, validResult, isPropId } };
 }
 
 module.exports = { makeUserProps, isPropId };
