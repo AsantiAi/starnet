@@ -354,6 +354,19 @@ const StationCommands = (() => {
     };
   }
 
+  // the station builder's parked plans: planId -> { plan, at }, ten minutes, used once
+  const builderPlans = new Map(), PLAN_TTL_MS = 10 * 60 * 1000;
+  let planSeq = 0;
+  function builderReady() {
+    const st = typeof App !== 'undefined' && App.station ? App.station() : null;
+    if (!st || !st.serialize || !st.transact || !st.roomSpots) throw new Error('the station is not ready yet');
+    if (typeof StationBuilder === 'undefined' || typeof WorldModel === 'undefined' || typeof Pipeline === 'undefined' || typeof WorkflowLine === 'undefined')
+      throw new Error('the station builder is not loaded on this page');
+    if (typeof Build !== 'undefined' && Build.isOpen && Build.isOpen()) throw new Error('Build mode is open, so the Commander is editing the floor. Ask them to close Build mode, then plan again.');
+    const crew = (App.agents ? App.agents() : []).map(x => ({ id: x.id, name: x.name }));
+    return { st, env: { WorldModel, Pipeline, WorkflowLine, crew, heroId: App.heroId ? App.heroId() : null } };
+  }
+
   const VERBS = {
     /* The floor, read-only, for the lead: routing state, every assembly line as the Workflow panel reads it, rooms,
        and workstation holders. Refuses honestly when the station, routing, or the line reader is not loaded. */
@@ -367,6 +380,35 @@ const StationCommands = (() => {
       try { sync = (typeof World !== 'undefined' && World && World.planStatus) ? World.planStatus() : null; } catch (_) { sync = null; }   // unreadable = unknown, never live
       const facts = await layoutFacts();
       return describeLayout(st, typeof App !== 'undefined' && App.agents ? App.agents() : [], facts, sync, want);
+    },
+
+    /* THE STATION BUILDER (2026-09-29, the Agent Station Builder plan): the lead ADDS a ready-made line and never places
+       anything itself. plan_line builds the request on a copy (StationBuilder.plan — every check runs there) and parks the
+       plan here for ten minutes; build_line applies exactly that plan in one undo step (StationBuilder.apply). Both
+       refuse while Build mode is open: the Commander's own edits own the floor then. */
+    'station.plan_line': (a) => {
+      const { st, env } = builderReady();
+      const r = StationBuilder.plan(st.serialize(), (a && a.request) || {}, env);
+      if (!r.ok) throw new Error(r.error);
+      const now = Date.now();
+      for (const [id, e] of builderPlans) if (now - e.at > PLAN_TTL_MS) builderPlans.delete(id);
+      const planId = 'plan-' + now.toString(36).slice(-5) + '-' + (++planSeq);
+      builderPlans.set(planId, { plan: r.plan, at: now });
+      const p = r.plan;
+      return { planId, summary: p.summary, line: p.line, where: p.where, steps: p.steps, ready: p.ready, blocking: p.blocking, notes: p.notes,
+        expiresInMinutes: PLAN_TTL_MS / 60000, next: 'Tell the Commander the summary in plain words, then call station.build_line with this planId. Nothing has been built yet.' };
+    },
+    'station.build_line': (a) => {
+      const { st, env } = builderReady();
+      const planId = String((a && a.planId) || '').trim();
+      const e = builderPlans.get(planId);
+      if (!e || Date.now() - e.at > PLAN_TTL_MS) { builderPlans.delete(planId); throw new Error('There is no plan "' + planId.slice(0, 40) + '" (plans last ten minutes and are used once). Plan the line again.'); }
+      const r = StationBuilder.apply(st, e.plan, env);
+      if (!r.ok) throw new Error(r.error);
+      builderPlans.delete(planId);
+      try { if (typeof StationUI !== 'undefined' && StationUI.notify) StationUI.notify('Built ' + r.line.name + ' in ' + r.where + ' · open BUILD and press UNDO to remove it', 'good'); } catch (_) {}
+      return { built: true, summary: r.summary, line: r.line, where: r.where, steps: r.steps, lineId: r.lineKey, ready: r.ready, blocking: r.blocking,
+        undo: 'The Commander can remove all of it with one UNDO in Build mode.' };
     },
 
     'station.agent_config': (args) => {
