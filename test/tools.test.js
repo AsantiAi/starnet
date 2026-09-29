@@ -43,6 +43,32 @@ const call = (name, args, id) => ({ id: id || 'c1', name, args, argsRaw: JSON.st
     const p = await reg.dispatch({ id: 'c', name: 'echo', args: {}, argsRaw: '{bad', parseError: 'invalid tool arguments JSON' });
     A.eq(p.isError, true, 'parseError -> isError'); A.eq(runs, 1, 'parseError did not run');
 
+    // BROKEN-ARGUMENTS FEEDBACK: the exact call from the 2026-09-28 first-hour walk. The model must learn WHERE the
+    // JSON broke, WHICH field, and WHAT that field must be — "invalid tool arguments JSON" alone looped it 4x then `{}`.
+    let proceeds = 0;
+    reg.register({ name: 'brief.proceed', schema: { type: 'object', required: ['objective'], properties: {
+      objective: { type: 'string' }, deliverable: { type: 'string' }, audience: { type: 'string' }, success: { type: 'string' },
+      assumptions: { type: 'array', items: { type: 'string' } }, sources: { type: 'array', items: { type: 'string' } } } },
+      run: async () => { proceeds++; return 'settled'; } });
+    const walkRaw = '{"objective": "Write two ready-to-paste Etsy listings", "deliverable": "Two listings", '
+      + '"assumptions": Voice: warm, first-person maker — not polished ad copy}';
+    const w = await reg.dispatch({ id: 'w', name: 'brief.proceed', args: {}, argsRaw: walkRaw, parseError: 'invalid tool arguments JSON' });
+    A.eq(w.isError, true, 'broken args still refused'); A.eq(proceeds, 0, 'broken args did not run');
+    A.ok(w.content.indexOf('at character ' + walkRaw.indexOf('Voice')) >= 0, 'names the exact character where the JSON broke');
+    A.ok(w.content.indexOf('(inside "assumptions")') >= 0, 'names the field the break is inside');
+    A.ok(w.content.indexOf('"assumptions" must be an array of strings') >= 0, 'says what the field must be, from the tool schema');
+    A.ok(w.content.indexOf('<<HERE>> Voice') >= 0, 'quotes the text at the break');
+    A.ok(/Nothing ran/.test(w.content) && /Do not drop or empty the arguments/.test(w.content), 'says it did not run and not to send {}');
+    // unquoted key, missing comma, and a nested array element each point at the right place
+    const { jsonBreakAt } = require('../sidecar/tools/registry.js');
+    A.eq(JSON.stringify(jsonBreakAt('{objective: "x"}')), JSON.stringify({ at: 1, path: [] }), 'unquoted key breaks at the key');
+    A.eq(JSON.stringify(jsonBreakAt('{"a": "x" "b": 1}')), JSON.stringify({ at: 10, path: ['a'] }), 'missing comma breaks after the value of "a"');
+    A.eq(JSON.stringify(jsonBreakAt('{"s": ["ok", nope]}')), JSON.stringify({ at: 13, path: ['s', 1] }), 'bad array element names its index');
+    A.eq(jsonBreakAt('{"a": [1, 2.5e3, true, null, {"b": "c\\n\\u00e9"}]}'), null, 'valid JSON has no break');
+    // a specific verdict (cut-off value) is passed through untouched
+    const cut = await reg.dispatch({ id: 'x', name: 'brief.proceed', args: {}, argsRaw: '{"objective": "abc', parseError: 'the arguments were cut off mid-value' });
+    A.ok(cut.content.indexOf('the arguments were cut off mid-value') >= 0 && cut.content.indexOf('<<HERE>>') < 0, 'specific parse verdicts are not rewritten');
+
     // bad schema args -> isError, run not called
     const b = await reg.dispatch(call('echo', { text: 123 }));
     A.eq(b.isError, true, 'bad args -> isError'); A.eq(runs, 1, 'bad args did not run');

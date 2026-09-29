@@ -150,6 +150,106 @@
     return result;
   };
 
+  /* BROKEN-ARGUMENTS FEEDBACK (first-hour walk 2026-09-28). A model wrote `"assumptions": Voice: warm, …}` for
+     brief.proceed and was told only "invalid tool arguments JSON". It could not see WHAT was wrong, so it sent the
+     same mistake four times, then gave up and sent `{}`, and the loop guard killed a plain drafting task. The fix is
+     the feedback, not a looser parser: say where the JSON broke, which field it was in, and what that field must
+     be (from the tool's own schema), and that nothing ran. The scanner is our own — V8's JSON.parse message format
+     differs between Node versions, and the desktop bundle ships its own node. */
+  function jsonBreakAt(text) {
+    const s = String(text == null ? '' : text);
+    let i = 0;
+    const path = [];
+    const stop = () => { const e = new Error('json-break'); e.at = i; e.path = path.slice(); throw e; };
+    const ws = () => { while (i < s.length && ' \t\n\r'.indexOf(s[i]) >= 0) i++; };
+    function str() {
+      if (s[i] !== '"') stop();
+      const start = i++;
+      while (i < s.length && s[i] !== '"') {
+        if (s.charCodeAt(i) < 0x20) stop();
+        if (s[i] === '\\') { i++; if (s[i] === 'u') { if (!/^[0-9a-fA-F]{4}$/.test(s.slice(i + 1, i + 5))) stop(); i += 4; } else if ('"\\/bfnrt'.indexOf(s[i]) < 0) stop(); }
+        i++;
+      }
+      if (i >= s.length) stop();
+      i++;
+      try { return JSON.parse(s.slice(start, i)); } catch (_) { return s.slice(start + 1, i - 1); }
+    }
+    function val() {
+      ws();
+      const c = s[i];
+      if (c === '{') {
+        i++; ws();
+        if (s[i] === '}') { i++; return; }
+        for (;;) {
+          ws(); const key = str(); ws();
+          if (s[i] !== ':') stop();
+          i++; path.push(key); val(); ws();
+          if (s[i] === ',') { i++; path.pop(); continue; }
+          if (s[i] === '}') { i++; path.pop(); return; }
+          stop();
+        }
+      }
+      if (c === '[') {
+        i++; ws();
+        if (s[i] === ']') { i++; return; }
+        for (let n = 0; ; n++) {
+          path.push(n); val(); ws();
+          if (s[i] === ',') { i++; path.pop(); continue; }
+          if (s[i] === ']') { i++; path.pop(); return; }
+          stop();
+        }
+      }
+      if (c === '"') { str(); return; }
+      const num = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/y; num.lastIndex = i;
+      const m = num.exec(s);
+      if (m && m[0] && m[0] !== '-') { i += m[0].length; return; }
+      for (const lit of ['true', 'false', 'null']) if (s.startsWith(lit, i)) { i += lit.length; return; }
+      stop();
+    }
+    try { val(); ws(); if (i < s.length) stop(); return null; }
+    catch (e) { return (e && typeof e.at === 'number') ? { at: e.at, path: e.path } : null; }
+  }
+  function schemaAt(schemaNode, path) {
+    let node = schemaNode;
+    for (const seg of path) {
+      if (!node || typeof node !== 'object') return null;
+      node = typeof seg === 'number' ? node.items : (node.properties && node.properties[seg]);
+    }
+    return node && typeof node === 'object' ? node : null;
+  }
+  function expectedShape(node) {
+    if (!node) return '';
+    if (Array.isArray(node.enum) && node.enum.length) return 'one of ' + node.enum.map(v => JSON.stringify(v)).join(', ');
+    if (node.type === 'string') return 'a string in double quotes, like "text"';
+    if (node.type === 'array') return node.items && node.items.type === 'string'
+      ? 'an array of strings in double quotes, like ["first", "second"]'
+      : 'a JSON array, like [ ... ]';
+    if (node.type === 'object') return 'a JSON object, like { ... }';
+    if (node.type === 'number' || node.type === 'integer') return 'a number';
+    if (node.type === 'boolean') return 'true or false';
+    return '';
+  }
+  const GENERIC_ARGS_ERROR = 'invalid tool arguments JSON';
+  function explainArgsParseError(call, tool) {
+    const reason = String(call && call.parseError || '');
+    // Only the generic parse failure is rewritten; a specific verdict (e.g. the cut-off-value refusal) already says what to do.
+    if (reason !== GENERIC_ARGS_ERROR || typeof (call && call.argsRaw) !== 'string') return reason;
+    const raw = call.argsRaw;
+    const hit = jsonBreakAt(raw);
+    if (!hit) return reason;
+    const at = hit.at;
+    const from = Math.max(0, at - 40), to = Math.min(raw.length, at + 24);
+    const near = ((from > 0 ? '…' : '') + raw.slice(from, at) + ' <<HERE>> ' + raw.slice(at, to) + (to < raw.length ? '…' : '')).replace(/\r?\n/g, '\\n');
+    const where = hit.path.length
+      ? hit.path.map((seg, k) => typeof seg === 'number' ? '[' + seg + ']' : (k ? '.' + seg : seg)).join('')
+      : '';
+    const shape = where ? expectedShape(schemaAt(tool && tool.schema, hit.path)) : '';
+    return 'not valid JSON at character ' + at + (where ? ' (inside "' + where + '")' : '') + ': ' + near + '\n'
+      + (shape ? '"' + where + '" must be ' + shape + '.\n' : '')
+      + 'Nothing ran. Resend this same call with the same content as valid JSON: every string in double quotes. '
+      + 'Do not drop or empty the arguments.';
+  }
+
   // Ask the host to keep the full output. Never throws and never blocks a result: a parker that fails just
   // means we fall back to the plain clamp — losing the tail must never also lose the answer.
   // PROVENANCE rides the park request (capability + any relayed taint) so the HOST can name a park made from
@@ -346,7 +446,7 @@
 
     async function dispatch(call, ctx) {
       ctx = ctx || {};
-      if (call.parseError) return errResult('invalid tool arguments: ' + call.parseError);
+      if (call.parseError) return errResult('invalid tool arguments: ' + explainArgsParseError(call, tools[call.name]));
       const tool = tools[call.name];
       if (!tool) return errResult(unknownToolMessage(call.name, Array.isArray(ctx.toolNames) ? ctx.toolNames : Object.keys(tools)), 'unknown-tool');
       // STOP MEANS STOP: an already-aborted run signal is refused at the door. childAbort below only THREADS an
@@ -530,5 +630,5 @@
     return { register, get, list, wireFormat, dispatch };
   }
 
-  return { makeRegistry, closestToolNames, unknownToolMessage, outputBudgetFor, outputWindowFor, OUTPUT_MAX };
+  return { makeRegistry, closestToolNames, unknownToolMessage, outputBudgetFor, outputWindowFor, OUTPUT_MAX, jsonBreakAt, explainArgsParseError };
 });
