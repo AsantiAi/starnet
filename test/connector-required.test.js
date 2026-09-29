@@ -145,6 +145,46 @@ function ctxFor(runId) {
       const r = await t.listTool.run({ goal: 'email my notes to myself', scope: 'available' }, bad);
       A.ok(/could not be raised for: gmail: bus dead/.test(r.content), 'a lost emit is named in the result (catch fires, says so)');
     }
+    // a card whose sign-in is DISABLED in this build is not a door: no chip event, and the model is told not to
+    // send the Commander to sign in (first-hour walk 2026-09-28: "sign in with Google, no setup" beside a disabled button)
+    {
+      const reason = 'Google sign-in is not available in this build.';
+      const t = makeConnectorTools({ connectors: { list: () => [] }, connectorCatalog: catalog, keysCatalog: null,
+        signInUnavailable: e => (e && e.googleApi ? reason : '') });
+      const sg = t.suggestFor('send my newsletter to subscribers');
+      A.eq(sg.find(x => x.id === 'gmail').unavailable, reason, 'the suggestion carries the card\'s own unavailable reason');
+      const ctx = ctxFor('run-9');
+      const r = await t.listTool.run({ goal: 'send my newsletter to subscribers', scope: 'available' }, ctx);
+      A.ok(!ctx.emitted.some(e => e.name === 'connector_required' && e.payload.connectorId === 'gmail'), 'no CONNECT chip for a disabled sign-in');
+      A.ok(/CANNOT BE CONNECTED IN THIS BUILD/.test(r.content) && /- gmail — Google sign-in is not available in this build\./.test(r.content), 'the model is told gmail cannot be connected, with the reason');
+      A.ok(/never tell them to sign in/.test(r.content), 'the model is told not to send the Commander to sign in');
+      const listed = await t.listTool.run({ query: 'gmail', scope: 'available' }, ctxFor('run-10'));
+      A.ok(/Gmail \[[^\]]*\] — connector, sign-in — SIGN-IN NOT AVAILABLE in this build/.test(listed.content), 'the AVAILABLE list marks the disabled card too');
+      A.ok(ctx.emitted.some(e => e.name === 'connector_required' && e.payload.connectorId !== 'gmail') || !/SUGGESTED for/.test(r.content) || /SUGGESTED \(0\)/.test(r.content), 'connectable suggestions still raise their chip');
+      const thrower = makeConnectorTools({ connectors: { list: () => [] }, connectorCatalog: catalog, signInUnavailable: () => { throw new Error('boom'); } });
+      A.eq(thrower.suggestFor('send my newsletter to subscribers')[0].unavailable, '', 'a throwing availability probe fails open to the old behavior');
+    }
+    // every ABILITIES path the agent quotes names a tab or section the window actually draws (the walk found "KEYS tab",
+    // "ABILITIES › CONNECTORS" and "ABILITIES › KEYS" — doors renamed away long ago, still quoted to users)
+    {
+      const win = fs.readFileSync(path.join(__dirname, '../frontend/app/windows/connectors.js'), 'utf8');
+      const labels = new Set((win.match(/label: '([^']+)'/g) || []).map(m => m.slice(8, -1)));
+      (win.match(/data-ab-to="[a-z]+">([^<]+)</g) || []).forEach(m => labels.add(m.replace(/^.*">/, '').replace(/<$/, '')));
+      const files = ['manual.js', 'harness-import.js', 'index.js', 'tools/builtin/connectors.js'];
+      const bad = [];
+      for (const f of files) {
+        const text = fs.readFileSync(path.join(__dirname, '../sidecar', f), 'utf8');
+        for (const m of text.match(/ABILITIES(?: › [A-Z][A-Za-z /]*[A-Za-z])+/g) || []) {
+          m.split(' › ').slice(1).forEach(seg => { if (!labels.has(seg.trim())) bad.push(f + ': ' + m + ' (' + seg + ')'); });
+        }
+        text.split('\n').forEach((line, i) => {
+          const code = line.trim();
+          if (/^(\/\/|\/\*|\*)/.test(code)) return;   // internal comments may keep the old nickname
+          if (/['"`][^'"`]*KEYS tab/.test(line)) bad.push(f + ':' + (i + 1) + ' quotes the retired "KEYS tab"');
+        });
+      }
+      A.eq(bad, [], 'every quoted ABILITIES door exists in the ABILITIES window');
+    }
     // the lead is TOLD to call it before declining (system-prompt guidance)
     const manual = fs.readFileSync(path.join(__dirname, '../sidecar/manual.js'), 'utf8');
     A.ok(/BEFORE DECLINING a task for lack of email, website, calendar, docs/.test(manual) && /connectors\.list/.test(manual), 'manual tells the lead to call connectors.list {goal} before declining');
@@ -203,6 +243,39 @@ function ctxFor(runId) {
     const callAt = src.indexOf('offerConnectorDoor(thisRunId, ws)');
     const stopAt = src.indexOf("if (endReason === 'budget') offerBudgetDoor(); else offerTryAgain();");
     A.ok(stopAt > 0 && callAt > stopAt, 'the connect offer sits AFTER the stop-reason branch in the same run-end block');
+    // A run that ends on a TASK_QUESTION owns the slot, but connectors.list already told the model the chip exists
+    // (first-hour walk 2026-09-28: the agent said "tap the ⇄ CONNECT chip" three times and none was drawn).
+    A.ok(/if \(taskQuestion\) holdConnectorDoor\(thisRunId, ws\);/.test(src), 'a question-ending run still records the connector handoff');
+    const tqFn = A.fnBody(src, 'function offerTaskQuestion(');
+    A.eq((tqFn.match(/taskQuestionDoor\((?:r|q)\.body\)/g) || []).length, 2, 'both task-question cards (chips and conversation) carry the door');
+    // behavior: hold records the handoff once; the door renders inside the given card and opens the connect screen
+    const vm = require('node:vm');
+    const hold = A.fnBody(src, 'function holdConnectorDoor(');
+    const door = A.fnBody(src, 'function taskQuestionDoor(');
+    const handoffs = {}, opened = [];
+    const made = [];
+    const ctx = {
+      CONNECTOR_NEEDED: new Map([['run-1', { runId: 'run-1', connectorId: 'gmail', kind: 'mcp' }]]),
+      activeWs: { id: 'ws-1', agentId: 'agent' }, persisted: 0,
+      App: { persist() { ctx.persisted++; } },
+      Workstreams: { setConnectorHandoff(id, h) { handoffs[id] = h; }, connectorHandoff(id) { return handoffs[id] || null; } },
+      Friendly: { connectorDoor(h) { return { label: '⇄ CONNECT ' + h.connectorId.toUpperCase(), run() { opened.push(h.connectorId); return true; } }; } },
+      document: { createElement() { const el = { children: [] }; made.push(el); return el; } }
+    };
+    vm.createContext(ctx);
+    vm.runInContext(hold + '\n' + door + '\nthis.held = holdConnectorDoor("run-1", activeWs); this.again = holdConnectorDoor("run-1", activeWs);', ctx);
+    A.eq(ctx.held, true, 'hold records the pending connector'); A.eq(ctx.again, false, 'the pending event is consumed once');
+    A.eq(handoffs['ws-1'] && handoffs['ws-1'].connectorId, 'gmail', 'the handoff lands on the originating stream'); A.eq(ctx.persisted, 1, 'the handoff is persisted');
+    const card = { kids: [], appendChild(el) { this.kids.push(el); } };
+    ctx.card = card;
+    vm.runInContext('this.btn = taskQuestionDoor(card);', ctx);
+    A.ok(ctx.btn && card.kids[0] === ctx.btn, 'the door is appended inside the question card, not as a second row');
+    A.eq(ctx.btn.textContent, '⇄ CONNECT GMAIL', 'the door names the connector');
+    ctx.btn.onclick();
+    A.eq(opened.join(), 'gmail', 'tapping the door opens the connect screen for that connector');
+    delete handoffs['ws-1'];
+    vm.runInContext('this.none = taskQuestionDoor(card);', ctx);
+    A.eq(ctx.none, null, 'no handoff, no door');
   }
   A.report('connector-required.test');
 })().catch(e => { console.error(e); process.exit(1); });
