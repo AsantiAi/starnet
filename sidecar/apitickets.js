@@ -44,6 +44,9 @@ function b64url(buf) { return Buffer.from(buf).toString('base64').replace(/\+/g,
 function scopeFile(agent, relPath) { return 'file\n' + String(agent || 'agent') + '\n' + String(relPath || ''); }
 function scopeRun(agent, runId) { return 'run\n' + String(agent || '') + '\n' + String(runId || ''); }
 function scopePlugin(id, digest) { return 'plugin\n' + String(id || '') + '\n' + String(digest || ''); }
+// a plugin DRAFT's preview window (/plugin-draft/): same kind, a different scope, so a draft ticket can never open an
+// installed plugin's files or the other way round
+function scopeDraft(id, digest) { return 'draft\n' + String(id || '') + '\n' + String(digest || ''); }
 const SCOPE_SSE = 'sse\n/api/channels/events';
 const SCOPE_SAVE = 'save\n/api/save';
 
@@ -150,16 +153,17 @@ function splitRunTicket(rawPath) {
    plugin page's relative assets inherit it, and the verifier derives (id, digest) from the path, never the ticket.
    Returns { ticket, rest } where rest = '<pluginId>/<digest>/<path...>' (raw), or null. */
 const PLUGIN_PREFIX = '/plugin-ui/';
-function splitPluginTicket(rawPath) {
+function splitPrefixTicket(prefix, rawPath) {
   const p = String(rawPath || '');
-  if (p.indexOf(PLUGIN_PREFIX + '~t/') !== 0) return null;
-  const tail = p.slice(PLUGIN_PREFIX.length + 3);
+  if (p.indexOf(prefix + '~t/') !== 0) return null;
+  const tail = p.slice(prefix.length + 3);
   const slash = tail.indexOf('/');
   if (slash <= 0) return null;
   return { ticket: tail.slice(0, slash), rest: tail.slice(slash + 1) };
 }
+function splitPluginTicket(rawPath) { return splitPrefixTicket(PLUGIN_PREFIX, rawPath); }
 
 module.exports = {
-  KINDS, SKEW_MS, mint, verify, parse, replayGuard, apiTicketClaim, splitRunTicket, splitPluginTicket,
-  scopeFile, scopeRun, scopePlugin, SCOPE_SSE, SCOPE_SAVE, message
+  KINDS, SKEW_MS, mint, verify, parse, replayGuard, apiTicketClaim, splitRunTicket, splitPluginTicket, splitPrefixTicket,
+  scopeFile, scopeRun, scopePlugin, scopeDraft, SCOPE_SSE, SCOPE_SAVE, message
 };

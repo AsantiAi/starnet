@@ -17,3 +17,5 @@
   pointer-events: auto;
 }
 .term.plugin-win .plugin-gone { padding: var(--s-4) var(--s-4); color: var(--ph-bright); letter-spacing: .5px; }
+/* A crew-written DRAFT: gold plate, so an unapproved preview can never be mistaken for an installed plugin. */
+.term.plugin-win .plugin-plate.draft { color: var(--gold); border-color: rgba(var(--gold-rgb), .45); }

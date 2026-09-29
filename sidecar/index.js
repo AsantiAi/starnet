@@ -58,6 +58,7 @@ const { makePluginLoader } = require('./plugins.js');        // packaged JS exte
 const { makePluginUiServer, makePluginStore } = require('./plugin-surface.js');   // a plugin's windows + its private store
 const { makePluginRuntime } = require('./plugin-runtime.js');   // each plugin's code in its own process (plugin-worker.js)
 const { makePluginToolDefs } = require('./plugin-tools.js');      // a plugin's api.tool()s as crew tools (connector trust)
+const { makePluginAuthorTools } = require('./tools/builtin/plugin-author.js');   // the crew drafts plugins; inert until approved
 const { makeFsTools } = require('./tools/builtin/fs.js');
 // fs.read extracts .docx / .xlsx / .ipynb to readable text. inflateRawSync is injected so the extractor stays
 // pure + headless-testable, and so the OOXML path needs no dependency beyond what Node already ships.
@@ -3556,6 +3557,58 @@ const servePluginUi = makePluginUiServer({
   tokenOk: (req) => apiauth.apiTokenOk(req, API_TOKEN), now: () => Date.now(),
   // who may FRAME a plugin page: the station itself (browser mode) and the desktop shell's app origins
   frameAncestors: () => Array.from(apiauth.TAURI_ORIGINS).concat(['http://127.0.0.1:' + PORT, 'http://localhost:' + PORT]).join(' ')
+});
+/* PLUGIN DRAFTS (plugin extensions phase 4) — the crew writes plugins into <workspaces>/plugin-drafts/<id>. A draft
+   never runs: its window previews through /plugin-draft/ (the same sandboxed server, a draft-scoped ticket, the live
+   folder digest as the record), and plugin.submit installs it OFF behind a consent card. */
+const PLUGIN_DRAFTS_DIR = path.join(WORKSPACES, 'plugin-drafts');
+const draftDigestCache = new Map();
+async function draftRecord(id) {
+  const pid = String(id || '');
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(pid)) return null;
+  const c = draftDigestCache.get(pid);
+  if (c && Date.now() - c.at < 1500) return c.rec;
+  const dir = path.join(PLUGIN_DRAFTS_DIR, pid);
+  const tree = await pluginLoader._internals.treeDigest(dir);
+  const rec = tree.error ? null : { id: pid, dir, digest: tree.digest };
+  draftDigestCache.set(pid, { rec, at: Date.now() });
+  return rec;
+}
+const servePluginDraft = makePluginUiServer({
+  fs, fsp, path, frontendDir: FRONTEND, loader: pluginLoader, apitickets, apiKey: API_TOKEN, mime: MIME,
+  tokenOk: (req) => apiauth.apiTokenOk(req, API_TOKEN), now: () => Date.now(),
+  frameAncestors: () => Array.from(apiauth.TAURI_ORIGINS).concat(['http://127.0.0.1:' + PORT, 'http://localhost:' + PORT]).join(' '),
+  prefix: '/plugin-draft/', scopeFor: (id, digest) => apitickets.scopeDraft(id, digest), resolve: draftRecord,
+  goneMessage: 'this draft changed since this preview opened — preview it again'
+});
+const pluginAuthor = makePluginAuthorTools({
+  fsp, path, draftsDir: PLUGIN_DRAFTS_DIR, pluginsDir: PLUGINS_DIR,
+  template: require('./plugin-template.js').templateFiles,
+  parseScreens: require('./plugins.js').parseScreens,
+  relPathOk: require('./plugin-surface.js').relPathOk,
+  // COMPILE ONLY, never run: the CommonJS wrapper Node itself uses, so `return`/`require` parse like in a real module.
+  // An ES module file (import/export) is left to the browser — it is window code, not station code.
+  compile: (source, file) => {
+    if (/^\s*(?:import|export)\s/m.test(source)) return '';
+    try { new (require('node:vm').Script)('(function (exports, require, module, __filename, __dirname) {' + source + '\n})', { filename: file }); return ''; }
+    catch (e) { return String((e && e.message) || e); }
+  },
+  preview: async (id, screen) => {
+    draftDigestCache.delete(id);
+    const rec = await draftRecord(id);
+    if (!rec) return { ok: false, error: 'the draft folder could not be read' };
+    let manifest = {};
+    try { manifest = JSON.parse(await fsp.readFile(path.join(rec.dir, 'plugin.json'), 'utf8')); } catch (_) {}
+    const files = new Set(((await pluginLoader._internals.treeDigest(rec.dir)).files || []).map(x => x.rel));
+    const screens = require('./plugins.js').parseScreens(manifest, files).screens;
+    const r = await stationBridge.request('plugin.preview', { id, digest: rec.digest, screen, name: String(manifest.name || id).slice(0, 60), screens });
+    return r && r.ok ? { ok: true, title: r.result && r.result.title } : { ok: false, error: (r && r.error) || 'the station page did not answer' };
+  },
+  // an installed draft is OFF until approved: re-list so EXTENSIONS shows it as needing approval right away
+  afterInstall: async () => {
+    try { hookSpine.clear(); pluginsLoaded = await pluginLoader.load(hookSpine); hooksInstalled = await shellHooks.install(hookSpine); }
+    catch (e) { console.warn('[plugins] reload after install failed: ' + ((e && e.message) || e)); }
+  }
 });
 async function installShellHooks() {
   /* ORDER IS LOAD-BEARING: plugins register BEFORE shell hooks, mirroring the reference harness. The spine
@@ -9514,7 +9567,7 @@ function rejectProcessFaultRequest(req, res) {
   const diagnosticRead = method === 'GET' && (pathname === '/api/health' || pathname === '/api/diagnostics');
   const staticRead = (method === 'GET' || method === 'HEAD') &&
     pathname.indexOf('/api') !== 0 && pathname.indexOf('/v1') !== 0 && pathname !== '/health' &&
-    pathname.indexOf('/workshop-run/') !== 0 && pathname.indexOf('/plugin-ui/') !== 0;
+    pathname.indexOf('/workshop-run/') !== 0 && pathname.indexOf('/plugin-ui/') !== 0 && pathname.indexOf('/plugin-draft/') !== 0;
   if (diagnosticRead || staticRead) return false;
   if (pathname.indexOf('/api') === 0) {
     try { applyApiCors(req, res); } catch (e) { failNote('process-fault.reply-cors', e); }
@@ -10016,6 +10069,8 @@ const ROUTES = [
   //   GET/HEAD /plugin-ui/~t/<ticket>/<pluginId>/<digest>/<path...> — an APPROVED plugin's window files, sandboxed to
   //   an opaque origin, the kit injected into every page (sidecar/plugin-surface.js).
   { m: ['GET', 'HEAD'], qprefix: '/plugin-ui/', h: servePluginUi },
+  //   GET/HEAD /plugin-draft/~t/<ticket>/<pluginId>/<digest>/<path...> — a plugin DRAFT's preview window (never runs code)
+  { m: ['GET', 'HEAD'], qprefix: '/plugin-draft/', h: servePluginDraft },
   // ADDITIVE (Lane B / ux-run-truth): read-only stat of a user-chosen KEEP destination folder, so the return
   // card can validate the typed path inline instead of failing silently on Keep. Strictly less powerful than
   // the existing keep copy (which already writes to an arbitrary destPath) — this only reports exists/isDir.
@@ -16818,6 +16873,7 @@ async function runOnceCore(o) {
     inspect: () => harnessSnapshotForRun({ provider: providerId, model, agentId, runId, surface, trigger })
   }).register(registry);
   makeManualReadTool().register(registry);   // same always-present COMPUTER grant: the manual's reference sections, verbatim
+  pluginAuthor.register(registry);   // PLUGIN AUTHORING (computer grant, deferred): drafts + preview + submit — inert until the Commander approves
   // STUDIO media tools, built up-front so browser.vision can borrow its multimodal analyze path
   // (one provider seam, no duplication). Registered below; here we only need its vision callback.
   // STARNET_IMAGE_MODEL overrides the studio's default text->image model (image.js picks the current-gen

@@ -68,6 +68,12 @@ function makePluginUiServer(deps) {
   const tokenOk = typeof deps.tokenOk === 'function' ? deps.tokenOk : () => false;
   const now = typeof deps.now === 'function' ? deps.now : () => Date.now();
   const ancestors = typeof deps.frameAncestors === 'function' ? deps.frameAncestors : () => deps.frameAncestors || "'self'";
+  // The same server serves a plugin DRAFT's preview (/plugin-draft/, phase 4): a different prefix, ticket scope and
+  // record resolver (the draft folder's live digest), the same sandbox, kit and jail.
+  const prefix = deps.prefix || PREFIX;
+  const scopeFor = typeof deps.scopeFor === 'function' ? deps.scopeFor : (id, digest) => apitickets.scopePlugin(id, digest);
+  const resolve = typeof deps.resolve === 'function' ? deps.resolve : (id) => loader.approvedRecord(id);
+  const goneMsg = deps.goneMessage || 'this plugin was changed or turned off — approve it again in ABILITIES → EXTENSIONS';
 
   function fail(res, code, msg) {
     res.writeHead(code, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
@@ -76,9 +82,9 @@ function makePluginUiServer(deps) {
 
   return async function servePluginUi(req, res) {
     const reqPath = String(req.url || '').split('?')[0];
-    const ticketed = apitickets.splitPluginTicket(reqPath);
+    const ticketed = apitickets.splitPrefixTicket(prefix, reqPath);
     if (!ticketed && !tokenOk(req)) return fail(res, 403, 'forbidden token');
-    const tail = ticketed ? ticketed.rest : reqPath.slice(PREFIX.length);
+    const tail = ticketed ? ticketed.rest : reqPath.slice(prefix.length);
     const parts = tail.split('/');
     if (parts.length < 3) return fail(res, 404, 'not found');
     let id, digest, rel;
@@ -89,14 +95,14 @@ function makePluginUiServer(deps) {
     } catch (_) { return fail(res, 400, 'bad path'); }
     if (!DIGEST_RX.test(digest)) return fail(res, 404, 'not found');
     if (ticketed) {
-      const v = apitickets.verify(apiKey, ticketed.ticket, 'plugin', apitickets.scopePlugin(id, digest), { now: now() });
+      const v = apitickets.verify(apiKey, ticketed.ticket, 'plugin', scopeFor(id, digest), { now: now() });
       if (!v.ok) return fail(res, 403, 'forbidden ticket');
     }
     // THE APPROVAL IS RE-PROVEN HERE, per request (rate-limited in the loader). A plugin that was turned off,
     // deleted, or edited since approval is gone — 410 tells the window to say so instead of showing stale code.
     let rec = null;
-    try { rec = await loader.approvedRecord(id); } catch (_) { rec = null; }
-    if (!rec || rec.digest !== digest) return fail(res, 410, 'this plugin was changed or turned off — approve it again in ABILITIES → EXTENSIONS');
+    try { rec = await resolve(id); } catch (_) { rec = null; }
+    if (!rec || rec.digest !== digest) return fail(res, 410, goneMsg);
 
     let abs;
     const kit = KIT_FILES[rel];

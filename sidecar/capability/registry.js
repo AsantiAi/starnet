@@ -72,7 +72,18 @@
       // TOOLSETS_META row (never a toggleable family), no capsummary CAPS row (never advertised or nagged).
       // The plan itself still persists through the notebook STORE — this grant is about tool AVAILABILITY,
       // not where the bytes live. (see tools/builtin/todo.js)
-      { capId: 'taskplan', tool: 'todo', scope: 'write', requiresConsent: false, network: false }
+      { capId: 'taskplan', tool: 'todo', scope: 'write', requiresConsent: false, network: false },
+      // PLUGIN AUTHORING (plugin extensions phase 4): the crew writes the Commander's plugins. Rides `computer`
+      // because the whole flow is INERT until the Commander approves it — drafts live in their own folder and never
+      // run, preview is a sandboxed page with no backend, and submit installs the plugin OFF (it switches on only
+      // through the hash-locked approval in EXTENSIONS). submit alone asks first. Deferred: niche, found through
+      // tool.search (the plugin-author skill says how).
+      { capId: 'pluginauthor', tool: 'plugin.draft_start', scope: 'write', requiresConsent: false, network: false, deferred: true },
+      { capId: 'pluginauthor', tool: 'plugin.draft_read', scope: 'read', requiresConsent: false, network: false, deferred: true },
+      { capId: 'pluginauthor', tool: 'plugin.draft_write', scope: 'write', requiresConsent: false, network: false, deferred: true },
+      { capId: 'pluginauthor', tool: 'plugin.check', scope: 'read', requiresConsent: false, network: false, deferred: true },
+      { capId: 'pluginauthor', tool: 'plugin.preview', scope: 'read', requiresConsent: false, network: false, deferred: true },
+      { capId: 'pluginauthor', tool: 'plugin.submit', scope: 'write', requiresConsent: true, network: false, deferred: true }
     ],
     notebook: [
       { capId: 'memory', tool: 'notebook.write', scope: 'write', requiresConsent: false, network: false },   // private sandboxed memory — no consent gate (see notebook.js)

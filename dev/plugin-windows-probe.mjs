@@ -24,6 +24,13 @@ materializeSeedWorkspace(ws, 'test/model');
 const report = { checks: [], facts: {}, exceptions: [] };
 let side, chrome, cdp;
 
+// The Weather Deck the "crew" writes in conversation B: a window-only plugin built from kit classes.
+const WEATHER_HTML = '<!doctype html><html><head><meta charset="utf-8"><title>Weather Deck</title></head><body><div class="sn-stack">'
+  + '<div class="sn-stats"><div class="sn-stat"><b id="t">18°</b><span>Tomorrow</span></div><div class="sn-stat ok"><b>12%</b><span>Rain</span></div><div class="sn-stat"><b>NW 9</b><span>Wind</span></div></div>'
+  + '<div><h4 class="sn-sect">▮ Next hours</h4><ul class="sn-list"><li class="sn-item"><span class="dot ok"></span><span class="t">09:00 · clear</span><span>16°</span></li>'
+  + '<li class="sn-item"><span class="dot warn"></span><span class="t">15:00 · clouds</span><span>18°</span></li></ul></div>'
+  + '<div class="sn-row-flex"><button class="sn-btn primary" id="r">REFRESH</button></div></div>'
+  + '<script>document.getElementById("r").onclick=()=>starnet.ui.toast("Refreshed");</script></body></html>';
 // The mock model: serves the catalog, and on a chat turn calls the plugin's add_note tool IF the run offers it
 // (that offer is the proof the placed terminal projected the plugin's tools), then answers after the tool result.
 const modelLog = { turns: 0, offered: [], toolResult: '' };
@@ -46,6 +53,27 @@ const mock = http.createServer((req, res) => {
     let delta, finish;
     const call = (id, name, args) => ({ tool_calls: [{ index: 0, id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] });
     const lastText = String(last.content || '');
+    const lastUser = String(([...msgs].reverse().find((m) => m.role === 'user') || {}).content || '');
+    // CONVERSATION B — "build me a plugin": the crew authors one with the real plugin.* tools (found via tool.search)
+    if (/build me a weather plugin/i.test(lastUser)) {
+      const wire = (re) => names.find((n) => re.test(n));
+      const say = (d, f) => { res.writeHead(200, { 'Content-Type': 'text/event-stream' }); res.write('data: ' + JSON.stringify({ choices: [{ delta: d }] }) + '\n\n'); res.write('data: ' + JSON.stringify({ choices: [{ delta: {}, finish_reason: f }], usage: { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 } }) + '\n\n'); res.end('data: [DONE]\n\n'); };
+      modelLog.authorSteps = (modelLog.authorSteps || []).concat([last.role === 'tool' ? lastText.slice(0, 60) : 'user']);
+      const tn = (re, fallback) => wire(re) || fallback;   // deferred tools may not be in this turn's list: call by wire name
+      const after = last.role === 'tool' ? String(last.tool_call_id || '') : '';   // route on WHICH call answered, never on its text
+      const stuck = () => { modelLog.authorStuck = after + ': ' + lastText.slice(0, 400); return say({ content: 'STUCK after ' + after + ': ' + lastText.slice(0, 200) }, 'stop'); };
+      const search = tn(/^tool[._]search$/, 'tool_search');
+      if (!after) return say(call('s1', search, { query: 'plugin draft preview submit' }), 'tool_calls');
+      if (after === 's1') return say(call('b1', 'brief_proceed', { objective: 'Build a weather plugin for the Commander' }), 'tool_calls');
+      if (after === 'b1') return /Task Brief settled/.test(lastText) ? say(call('d1', tn(/plugin[._]draft_start/, 'plugin_draft_start'), { id: 'weather-deck', name: 'Weather Deck', description: 'Tomorrow at a glance' }), 'tool_calls') : stuck();
+      if (after === 'd1') return /ready with/.test(lastText) ? say(call('d2', tn(/plugin[._]draft_write/, 'plugin_draft_write'), { id: 'weather-deck', path: 'plugin.json', content: JSON.stringify({ name: 'Weather Deck', version: '1.0.0', description: 'Tomorrow at a glance', screens: [{ id: 'main', title: 'WEATHER DECK', entry: 'ui/index.html', size: 'panel' }] }) }), 'tool_calls') : stuck();
+      if (after === 'd2') return /plugin\.json/.test(lastText) && !/ERROR/.test(lastText) ? say(call('d3', tn(/plugin[._]draft_write/, 'plugin_draft_write'), { id: 'weather-deck', path: 'ui/index.html', content: WEATHER_HTML }), 'tool_calls') : stuck();
+      if (after === 'd3') return /ui\/index\.html/.test(lastText) && !/ERROR/.test(lastText) ? say(call('d4', tn(/plugin[._]check/, 'plugin_check'), { id: 'weather-deck' }), 'tool_calls') : stuck();
+      if (after === 'd4') { modelLog.authorCheck = lastText.slice(0, 600); return /OK — no problems/.test(lastText) ? say(call('d5', tn(/plugin[._]preview/, 'plugin_preview'), { id: 'weather-deck' }), 'tool_calls') : stuck(); }
+      if (after === 'd5') return /DRAFT window/.test(lastText) ? say(call('d6', tn(/plugin[._]submit/, 'plugin_submit'), { id: 'weather-deck' }), 'tool_calls') : stuck();
+      if (after === 'd6') { modelLog.authorFinal = lastText.slice(0, 400); return say({ content: 'Weather Deck is installed and waiting for your approval in EXTENSIONS.' }, 'stop'); }
+      return stuck();
+    }
     // like a real model: settle the Task Brief (the harness requires it before consequential work), then use the
     // plugin's tool, then answer from its result
     if (!pluginTool && last.role !== 'tool') { delta = { content: 'NO PLUGIN TOOL OFFERED' }; finish = 'stop'; }
@@ -73,10 +101,10 @@ async function check(name, cond) { assert.ok(cond, name); report.checks.push(nam
 // ---- the plugin frame's own execution context (kept in-process for the probe; see the chrome flags) ----
 const contexts = new Map();   // frameId -> contextId
 let mainFrameId = null;
-async function frameEval(expression) {
+async function frameEval(expression, urlRe) {
   const tree = await cdp.send('Page.getFrameTree');
   mainFrameId = tree.frameTree.frame.id;
-  const kids = (tree.frameTree.childFrames || []).map((c) => c.frame).filter((f) => /\/plugin-ui\//.test(f.url));
+  const kids = (tree.frameTree.childFrames || []).map((c) => c.frame).filter((f) => (urlRe || /\/plugin-ui\/.*\/pr-radar\//).test(f.url));
   if (!kids.length) throw Error('no plugin frame');
   const ctx = contexts.get(kids[kids.length - 1].id);
   if (!ctx) throw Error('no context for the plugin frame yet');
@@ -84,7 +112,7 @@ async function frameEval(expression) {
   if (r.exceptionDetails) throw Error('frame eval failed: ' + (r.exceptionDetails.exception?.description || r.exceptionDetails.text));
   return r.result?.value;
 }
-async function frameUntil(s, tries = 100) { for (let i = 0; i < tries; i++) { try { if (await frameEval(s)) return; } catch {} await sleep(200); } throw Error('Timed out in frame: ' + s); }
+async function frameUntil(s, tries = 100, urlRe) { for (let i = 0; i < tries; i++) { try { if (await frameEval(s, urlRe)) return; } catch {} await sleep(200); } throw Error('Timed out in frame: ' + s); }
 
 try {
   side = bootSeededSidecar({ port: PORT, model: 'test/model', scratchDir: ws, key: 'sk-or-ui-fixture', fullAccess: false, env: iso });
@@ -189,6 +217,38 @@ try {
   await sleep(500);
   report.facts.shot2c = await capture(cdp, out, '02c-crew-note');
 
+  // ---- 3c. the CREW BUILDS a plugin: draft → check → DRAFT preview → submit (approval) → Commander approves → live ----
+  await run(`(()=>{ const i=document.getElementById('chat-input'); i.value='Build me a weather plugin with tomorrow at a glance'; i.dispatchEvent(new Event('input',{bubbles:true})); document.getElementById('chat-send').click(); return true; })()`);
+  await until(`!!document.querySelector('.term.plugin-draft-win iframe.plugin-frame')`, 150);
+  await check('the crew\'s draft opened as a DRAFT window (plugin.draft_start → draft_write → check → preview)', true);
+  await check('the draft window wears the gold DRAFT plate, not PLUGIN', await run(`document.querySelector('.term.plugin-draft-win .plugin-plate').textContent === 'DRAFT'`));
+  await check('the draft is served from /plugin-draft/ (a draft ticket, never the installed route)', await run(`/\\/plugin-draft\\/~t\\//.test(document.querySelector('.term.plugin-draft-win iframe.plugin-frame').src)`));
+  await frameUntil(`document.querySelectorAll('.sn-stat').length === 3 && typeof starnet === 'object'`, 80, /\/plugin-draft\/.*weather-deck/);
+  await check('the draft page runs with the kit, drawn in station glass', await frameEval(`getComputedStyle(document.body).fontFamily.indexOf('VT323') >= 0`, /\/plugin-draft\/.*weather-deck/));
+  const draftBackend = await frameEval(`starnet.backend.call('x').then(()=>'ran', e=>e.message)`, /\/plugin-draft\/.*weather-deck/);
+  await check('a draft has no backend (its code never runs before approval)', /no backend/.test(draftBackend));
+  await sleep(400);
+  report.facts.shot7 = await capture(cdp, out, '07-draft-preview');
+  await until(`[...document.querySelectorAll('#chat-panel button')].some(b => b.textContent.trim() === 'Approve once' && !b.disabled)`, 150);
+  report.facts.submitCard = await run(`((document.querySelector('#chat-panel').innerText || '').match(/wants to install the plugin it built[^\\n]*/g) || []).pop() || ''`);
+  await check('installing the draft asks first, and the card says it stays OFF until approved', /install the plugin it built “weather-deck” — it stays OFF until you approve/.test(report.facts.submitCard));
+  await run(`(()=>{ const bs=[...document.querySelectorAll('#chat-panel button')].filter(b => b.textContent.trim()==='Approve once' && !b.disabled); bs[bs.length-1].click(); return true; })()`);
+  for (let i = 0; i < 80 && !modelLog.authorFinal; i++) await sleep(200);
+  await check('submit installed it OFF and said so', /it is OFF until the Commander approves it/.test(modelLog.authorFinal || ''));
+  const wlist = await run(`fetch('/api/plugins').then(r=>r.json()).then(j=>j.plugins.filter(p=>p.id==='weather-deck').map(p=>({active:p.active,pending:p.pending,hasCode:p.hasCode})))`);
+  await check('the installed plugin is listed OFF and pending the Commander\'s approval (the agent cannot switch it on)', wlist.length === 1 && !wlist[0].active && wlist[0].pending && wlist[0].hasCode === false);
+  await run(`StationUI.openTerm('connectors','extensions')`);
+  await until(`!!document.querySelector('[data-ext="plugin-allow"][data-id="weather-deck"]')`, 60);
+  await run(`document.querySelector('[data-ext="plugin-allow"][data-id="weather-deck"]').click(), true`);
+  await until(`!!document.querySelector('[data-ext="plugin-open"][data-id="weather-deck"]')`, 60);
+  await check('the Commander\'s APPROVE & ENABLE turns it on', true);
+  await run(`document.querySelector('[data-ext="plugin-open"][data-id="weather-deck"]').click(), true`);
+  await until(`[...document.querySelectorAll('.term.plugin-win:not(.plugin-draft-win) .term-title')].some(t => t.textContent === 'WEATHER DECK')`, 60);
+  await frameUntil(`document.querySelectorAll('.sn-stat').length === 3`, 80, /\/plugin-ui\/.*weather-deck/);
+  await check('the crew-built plugin now opens as a real PLUGIN window', await run(`[...document.querySelectorAll('.term.plugin-win:not(.plugin-draft-win)')].some(w => w.querySelector('.term-title').textContent === 'WEATHER DECK' && w.querySelector('.plugin-plate').textContent === 'PLUGIN')`));
+  await sleep(500);
+  report.facts.shot8 = await capture(cdp, out, '08-crew-built-plugin-live');
+
   // ---- 4. the page CANNOT reach the station ----
   await check('no API token in the frame', await frameEval(`typeof window.__STARNET_API_TOKEN__ === 'undefined'`));
   await check('the frame cannot read the station page', await frameEval(`(()=>{ try { return !window.parent.document; } catch (e) { return true; } })()`));
@@ -219,11 +279,11 @@ try {
 
   // ---- 6. text size: how the frame scales with the station's body zoom ----
   const before = await frameEval(`innerWidth`);
-  const rectBefore = await run(`document.querySelector('iframe.plugin-frame').getBoundingClientRect().width`);
+  const rectBefore = await run(`document.querySelector('iframe.plugin-frame[data-plugin="pr-radar"]').getBoundingClientRect().width`);
   await run(`document.body.style.zoom='1.3'`);
   await sleep(500);
   const after = await frameEval(`innerWidth`);
-  const rectAfter = await run(`document.querySelector('iframe.plugin-frame').getBoundingClientRect().width`);
+  const rectAfter = await run(`document.querySelector('iframe.plugin-frame[data-plugin="pr-radar"]').getBoundingClientRect().width`);
   report.facts.zoom = { frameInnerWidthBefore: before, frameInnerWidthAfter: after, frameRectBefore: rectBefore, frameRectAfter: rectAfter };
   report.facts.shot5 = await capture(cdp, out, '05-text-size-130');
   await run(`document.body.style.removeProperty('zoom')`);
@@ -231,8 +291,8 @@ try {
   // ---- 7. an edit on disk turns the plugin off: the open window says so ----
   appendFileSync(join(ws, 'plugins', 'pr-radar', 'ui', 'index.html'), '\n<!-- edited -->\n');
   await run(`PluginHost.refresh()`);
-  await until(`!!document.querySelector('.term.plugin-win .plugin-gone')`);
-  await check('after an edit the open window stops showing the old code and says it changed since approval', await run(`!document.querySelector('.term.plugin-win iframe.plugin-frame') && /changed since you approved it/.test(document.querySelector('.term.plugin-win .plugin-gone').textContent)`));
+  await until(`!!([...document.querySelectorAll('.term.plugin-win')].find(w => w.querySelector('.term-title').textContent === 'PR RADAR')).querySelector('.plugin-gone')`);
+  await check('after an edit the open window stops showing the old code and says it changed since approval', await run(`(()=>{ const w=[...document.querySelectorAll('.term.plugin-win')].find(w => w.querySelector('.term-title').textContent === 'PR RADAR'); return !w.querySelector('iframe.plugin-frame') && /changed since you approved it/.test(w.querySelector('.plugin-gone').textContent); })()`));
   const list = await run(`fetch('/api/plugins').then(r=>r.json()).then(j=>j.plugins.map(p=>({id:p.id,active:p.active,pending:p.pending})))`);
   await check('and the plugin is listed as needing approval again', list.some((p) => p.id === 'pr-radar' && !p.active && p.pending));
   report.facts.shot6 = await capture(cdp, out, '06-edited-turned-off');

@@ -159,3 +159,18 @@ Plugin tools use the same trust rules as connector tools. A watched run shows yo
 ("use the PR Radar plugin tool “list_prs” …"; *Always* is allowed). An unattended run doesn't get them. Content
 from outside the station revokes them for the rest of the run. Their results reach the model fenced as external
 data. The TOOLSETS **connectors** switch turns them all off.
+
+## Your crew can build plugins
+
+Ask in COMMS: "build me a plugin that shows my open PRs". The agent uses the plugin authoring tools (`plugin.draft_start`,
+`plugin.draft_read`, `plugin.draft_write`, `plugin.check`, `plugin.preview`, `plugin.submit`; the opt-in
+**Build a StarNet Plugin** library skill has the full recipe):
+
+- It writes a **draft** in `<workspaces>/plugin-drafts/<id>`, never in `plugins/` and never in its own files.
+- `plugin.check` parses and compiles the draft **without running it**, and warns about looks that don't match the station.
+- `plugin.preview` opens the draft as a **DRAFT** window (gold plate) on your screen. It's sandboxed, gets a throwaway
+  store, and has no backend. Its code never runs.
+- `plugin.submit` asks you first, then installs the plugin **OFF**. It switches on only when you press APPROVE & ENABLE in
+  EXTENSIONS, the same hash-locked approval every plugin gets. An agent can never switch its own plugin on.
+- To change an installed plugin, the agent starts a draft `from_installed`. Submitting the new version turns the plugin
+  off until you approve the new code.
