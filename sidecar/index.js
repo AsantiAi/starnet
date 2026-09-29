@@ -2287,13 +2287,18 @@ function providerRuntimeBaseUrl(provider, explicitBaseUrl) {
 }
 function providerHasCredential(provider, key, baseUrl) {
   const id = normalizeProvider(provider);
-  if (registryProviderUsesCodex(id)) return !!(codexTokens && codexTokens.access_token);
-  if (registryProviderUsesDeviceOAuth(id)) { const e = oauthProviders[id]; return !!(e && e.tokens && e.tokens.access_token); }
+  if (registryProviderUsesCodex(id)) return !!(codexTokens && codexTokens.access_token) || anyExtraAccountLive(id);
+  if (registryProviderUsesDeviceOAuth(id)) { const e = oauthProviders[id]; return !!(e && e.tokens && e.tokens.access_token) || anyExtraAccountLive(id); }
   if (providerRequiresBaseUrl(id) && !String(baseUrl || '').trim()) return false;
   if (providerRequiresKey(id) && !String(key || '').trim()) return false;
   return true;
 }
 
+// subscription stacking: an extra connected sign-in also makes an OAuth subscription runnable (before the account
+// keeper has initialised at boot, nothing is stacked yet — the TDZ throw reads as "none").
+function anyExtraAccountLive(id) {
+  try { return providerAccounts.list(id).some(a => accountLive(id, a.id)); } catch (_) { return false; }
+}
 /* ONE BEARER RESOLVER FOR EVERY PROVIDER. Whatever the Commander connected IS the credential — an API key,
    a ChatGPT subscription, or a device-OAuth subscription (Grok, Kimi). Nothing here names a provider: the
    registry says how each one authenticates, so a new provider is a registry row, not a branch. Async because
@@ -4060,6 +4065,87 @@ async function refreshOAuthTokensOnce(id, entry) {
   saveOAuthTokens(id, entry.tokens);
   return entry.tokens.access_token;
 }
+/* ---- SUBSCRIPTION STACKING for the OAuth subscriptions (ChatGPT/Codex, Grok, Kimi): EXTRA sign-in accounts ----
+   The primary sign-in keeps its own hardened store above (codexTokens / oauthProviders[id]) untouched. Each extra
+   account is one folder from provider-accounts.js holding ITS tokens.json, with the same guarantees the primary
+   has: verified persist (write, read back, retry once), a single-flight refresh (the issuer rotates the refresh
+   token — two racing refreshes false-expire a live sign-in), and a durable dead marker on a relogin-class refresh
+   failure. Tokens never leave this file's entries: routes answer booleans/labels, and credPool keys an account by
+   an opaque 'account:<provider>:<id>' handle.
+   An ADD does not create a folder until its device sign-in completes (accountLogins maps the device login to the
+   provider, and to the account for a re-sign-in), so an abandoned add leaves nothing behind. */
+const oauthAccountEntries = new Map();   // '<pid>:<account id>' -> entry
+const accountLogins = new Map();         // device_auth_id / login_id -> { pid, account ('' = a new one), device_code?, interval, at }
+function oauthAccountEntry(pid, acctId) {
+  const key = pid + ':' + acctId;
+  if (oauthAccountEntries.has(key)) return oauthAccountEntries.get(key);
+  const acct = providerAccounts.list(pid).find(a => a.id === String(acctId || ''));
+  if (!acct) return null;
+  const file = path.join(acct.dir, 'tokens.json');
+  let tokens = null;
+  try { tokens = oauthTokenStore.loadTokens({ file, load: (f, t) => loadResilient(f, t), tag: pid + '-account' }); } catch (_) { tokens = null; }
+  const entry = { pid, id: acct.id, file, tokens: (tokens && typeof tokens === 'object') ? tokens : null,
+    authDead: codexAuthState.deadFromTokens(tokens), persistError: '', refreshInFlight: null };
+  if (pid !== 'codex') {
+    entry.deviceId = (tokens && typeof tokens.device_id === 'string' && tokens.device_id) ? tokens.device_id : crypto.randomUUID();
+    entry.auth = oauthDevice.makeDeviceOAuth(oauthDeviceConfig(pid, entry.deviceId));
+  }
+  oauthAccountEntries.set(key, entry);
+  return entry;
+}
+function saveAccountTokens(entry, obj) {
+  if (entry.deviceId && obj && typeof obj === 'object' && !obj.device_id) obj.device_id = entry.deviceId;
+  const r = oauthTokenStore.persistTokensVerified({ tokens: obj, save: (o) => saveResilient(entry.file, o), load: () => loadResilient(entry.file, entry.pid + '-account') });
+  entry.persistError = r.ok ? '' : (r.error || 'token could not be persisted to disk');
+  if (!r.ok) console.error('[' + entry.pid + ' account] token persist UNVERIFIED after retry (' + entry.persistError + ') — kept in memory for this session.');
+  return r.ok;
+}
+// A fresh access token for one extra account (force = the server said the token is dead: refresh regardless).
+async function ensureAccountAccessToken(entry, force, staleToken) {
+  if (!entry.tokens || !entry.tokens.access_token) {
+    const e = new Error('This ' + oauthLabel(entry.pid) + ' account is not signed in — sign it in again in Settings → PROVIDERS.');
+    e.code = entry.pid + '_not_connected'; e.reloginRequired = true; throw e;
+  }
+  if (staleToken && entry.tokens.access_token !== staleToken) return entry.tokens.access_token;
+  const expiring = entry.pid === 'codex'
+    ? codexAuth.accessTokenIsExpiring(entry.tokens.access_token, codexAuth.REFRESH_SKEW_SECONDS, Date.now())
+    : entry.auth.accessTokenIsExpiring(entry.tokens, Date.now());
+  if (!force && !expiring) return entry.tokens.access_token;
+  if (entry.refreshInFlight) return entry.refreshInFlight;
+  entry.refreshInFlight = (async () => {
+    let next;
+    try {
+      next = entry.pid === 'codex'
+        ? await codexAuth.refreshTokens({ fetch: globalThis.fetch, refresh_token: entry.tokens.refresh_token, now: Date.now() })
+        : await entry.auth.refreshTokens({ fetch: globalThis.fetch, refresh_token: entry.tokens.refresh_token, now: Date.now() });
+    } catch (e) {
+      const marker = codexAuthState.deadMarkerFromError(e, new Date().toISOString());
+      if (marker) { entry.authDead = marker; entry.tokens = codexAuthState.withDeadMarker(entry.tokens, marker); saveAccountTokens(entry, entry.tokens); }
+      throw e;
+    }
+    entry.tokens = codexAuthState.withoutDeadMarker(Object.assign({}, entry.tokens, next));
+    entry.authDead = null;
+    saveAccountTokens(entry, entry.tokens);
+    return entry.tokens.access_token;
+  })().finally(() => { entry.refreshInFlight = null; });
+  return entry.refreshInFlight;
+}
+// The account's email when its token names one (ChatGPT puts it in the profile claim) — shown in Settings only,
+// so the Commander can tell accounts apart and spot the same account signed in twice. Never on the bus.
+function accountEmailOf(tokens) {
+  try {
+    const c = codexAuth.decodeJwtClaims(String((tokens && (tokens.id_token || tokens.access_token)) || '')) || {};
+    const p = c['https://api.openai.com/profile'] || {};
+    const email = typeof c.email === 'string' ? c.email : (typeof p.email === 'string' ? p.email : '');
+    return email.slice(0, 200);
+  } catch (_) { return ''; }
+}
+function oauthPrimaryStatus(pid) {
+  if (pid === 'codex') return { tokens: codexTokens, dead: codexAuthDead, persistError: codexPersistError };
+  const e = oauthProviders[pid] || {};
+  return { tokens: e.tokens, dead: e.authDead, persistError: e.persistError };
+}
+
 // channel.* / workitem.* / queue.* telemetry: validated + redacted, logged to the sidecar console AND
 // forwarded to open browser EventSources (the station HUD). The bot token / OR key are NEVER placed on a
 // payload — nothing to leak here — and redact() runs before validate() as a second backstop.
@@ -9869,6 +9955,22 @@ const ROUTES = [
   { m: 'GET', exact: '/api/auth/kimi/status', h: (req, res) => handleOAuthStatus(req, res, 'kimi') },
   { m: 'GET', exact: '/api/auth/kimi/models', h: (req, res) => handleOAuthModels(req, res, 'kimi') },
   { m: 'POST', exact: '/api/auth/kimi/logout', h: (req, res) => handleOAuthLogout(req, res, 'kimi') },
+  // subscription stacking: extra sign-in accounts beside each OAuth subscription (handleOAuthAccounts)
+  { m: 'GET', exact: '/api/auth/codex/accounts', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'accounts') },
+  { m: 'POST', exact: '/api/auth/codex/add', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'add') },
+  { m: 'POST', exact: '/api/auth/codex/account-start', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'account-start') },
+  { m: 'POST', exact: '/api/auth/codex/account-poll', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'account-poll') },
+  { m: 'POST', exact: '/api/auth/codex/remove', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'remove') },
+  { m: 'GET', exact: '/api/auth/grok/accounts', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'accounts') },
+  { m: 'POST', exact: '/api/auth/grok/add', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'add') },
+  { m: 'POST', exact: '/api/auth/grok/account-start', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'account-start') },
+  { m: 'POST', exact: '/api/auth/grok/account-poll', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'account-poll') },
+  { m: 'POST', exact: '/api/auth/grok/remove', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'remove') },
+  { m: 'GET', exact: '/api/auth/kimi/accounts', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'accounts') },
+  { m: 'POST', exact: '/api/auth/kimi/add', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'add') },
+  { m: 'POST', exact: '/api/auth/kimi/account-start', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'account-start') },
+  { m: 'POST', exact: '/api/auth/kimi/account-poll', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'account-poll') },
+  { m: 'POST', exact: '/api/auth/kimi/remove', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'remove') },
   { m: 'GET', exact: '/api/auth/claude-cli/status', h: (req, res) => handleClaudeCliAuth(req, res, 'status') },
   { m: 'POST', exact: '/api/auth/claude-cli/start', h: (req, res) => handleClaudeCliAuth(req, res, 'start') },
   { m: 'POST', exact: '/api/auth/claude-cli/poll', h: (req, res) => handleClaudeCliAuth(req, res, 'poll') },
@@ -17567,7 +17669,13 @@ async function runOnceCore(o) {
   // an API key. A dead/missing token surfaces as a clean run.error so the UI can prompt a re-sign-in; everything
   // downstream of the provider seam (loop, cost, gauge) is identical to the OpenRouter path.
   let provider;
-  if (usingCodex) {
+  // SUBSCRIPTION STACKING (ChatGPT / Grok / Kimi): the run opens on the first connected sign-in credPool is not
+  // cooling. On the primary, the path below is unchanged; on an extra account, that account's own token keeper.
+  const oauthAccounts = (usingCodex || usingDeviceOAuth) ? orderedAccountChain(providerId) : null;
+  const openOnExtra = !!(oauthAccounts && oauthAccounts[0].id);
+  if (openOnExtra) {
+    provider = oauthAccountProvider(providerId, oauthAccounts[0], baseUrl, reasoningEffort);
+  } else if (usingCodex) {
     let codexToken;
     try { codexToken = await ensureCodexAccessToken(); }
     catch (e) {
@@ -17675,6 +17783,10 @@ async function runOnceCore(o) {
     if (first.id) { provider = onAccount(first); auxVisionProvider = provider; }
     rotationFallbacks = ordered.slice(1).map(k => { const a = byKey.get(k); return { provider: onAccount(a), providerId, model, credKey: k, account: a.label }; });
   }
+  if (oauthAccounts && oauthAccounts.length > 1) {
+    activePrimaryKey = oauthAccounts[0].credKey;
+    rotationFallbacks = oauthAccounts.slice(1).map(a => ({ provider: oauthAccountProvider(providerId, a, baseUrl, reasoningEffort), providerId, model, credKey: a.credKey, account: a.label }));
+  } else if (oauthAccounts) activePrimaryKey = oauthAccounts[0].credKey;
   const providerFallbacks = [];
   const rawProviderFallbacks = savedProviderFallbacks.concat(Array.isArray(o.fallbackProviders) ? o.fallbackProviders : []);
   for (const fb of rawProviderFallbacks) {
@@ -18909,7 +19021,7 @@ async function runOnceCore(o) {
       // so a rate-limit/auth/billing key gets a cooldown (credPool) and isn't tried first next run.
       // activePrimaryKey, NOT runKey: when the run's own key was still cooling we STARTED on a warm pool key,
       // and penalizing the key we never called would cool the wrong credential.
-      credKey: providerUnmetered ? null : activePrimaryKey,
+      credKey: (providerUnmetered && !oauthAccounts) ? null : activePrimaryKey,
       onFallback: ({ reason, rotate, credKey, retryAfterMs, resetAtMs, next }) => {
         if (next) {
           provider = next.provider;
@@ -21402,6 +21514,104 @@ function handleOAuthLogout(req, res, id) {
   json(200, { connected: false });
 }
 
+/* -------------------- SUBSCRIPTION STACKING — extra OAuth sign-ins (codex / grok / kimi) --------------------
+   The primary sign-in keeps its own routes above. These add accounts beside it, in the SAME browser vocabulary the
+   one shared device-code engine (codexsignin.js makeOAuthSignIn) already speaks:
+     GET  /api/auth/<pid>/accounts                    -> { accounts: [{ account, label, primary, connected, expired, email?, coolingUntil }], max }
+     POST /api/auth/<pid>/add                         -> a device code for a NEW account (its folder is created only when it connects)
+     POST /api/auth/<pid>/account-start { account }   -> a device code to sign an existing extra account in again
+     POST /api/auth/<pid>/account-poll { device_auth_id|login_id } -> { status:'pending'|'connected'|'error' }
+     POST /api/auth/<pid>/remove { account }          -> forgets that account's tokens and deletes its folder
+   Device handles (codex's user_code/PKCE exchange, RFC 8628's device_code) stay server-side in accountLogins — only a
+   login id reaches the browser. No payload ever carries a token. */
+async function handleOAuthAccounts(req, res, pid, verb) {
+  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  const label = oauthLabel(pid);
+  try {
+    if (verb === 'accounts') {
+      const prim = oauthPrimaryStatus(pid);
+      const rows = [Object.assign({ account: '', primary: true, email: accountEmailOf(prim.tokens) }, codexAuthState.statusPayload(prim))];
+      for (const a of providerAccounts.list(pid)) {
+        const e = oauthAccountEntry(pid, a.id);
+        if (!e) continue;
+        rows.push(Object.assign({ account: a.id, primary: false, email: accountEmailOf(e.tokens) },
+          codexAuthState.statusPayload({ tokens: e.tokens, dead: e.authDead, persistError: e.persistError })));
+      }
+      const accounts = rows.map((r, i) => {
+        noteAccountAuth(pid, r.account, { installed: true, loggedIn: !!r.connected });
+        return Object.assign(r, { label: 'account ' + (i + 1), coolingUntil: credPool.coolingUntil('account:' + pid + ':' + (r.account || 'primary')) || 0 });
+      });
+      return json(200, { accounts, max: 1 + providerAccounts.MAX });
+    }
+    let body; try { body = JSON.parse((await readBody(req, 1 << 16)) || '{}') || {}; } catch (e) { return json(400, { status: 'error', error: 'bad json' }); }
+    const now = Date.now();
+    for (const [k, v] of accountLogins) { if (!v || now - (v.at || 0) > OAUTH_PENDING_TTL_MS) accountLogins.delete(k); }
+
+    if (verb === 'add' || verb === 'account-start') {
+      // the shared browser engine POSTs its start with no body, so an account may also ride the query string
+      const account = verb === 'add' ? '' : String(body.account || new URL(req.url, 'http://local').searchParams.get('account') || '');
+      if (account && !oauthAccountEntry(pid, account)) return json(404, { error: 'no such ' + label + ' account', code: 'account_not_found' });
+      if (!account && providerAccounts.list(pid).length >= providerAccounts.MAX) return json(400, { error: 'at most ' + (1 + providerAccounts.MAX) + ' ' + label + ' sign-ins', code: 'account_limit' });
+      if (pid === 'codex') {
+        const d = await codexAuth.startDeviceLogin({ fetch: globalThis.fetch });
+        accountLogins.set(d.device_auth_id, { pid, account, user_code: d.user_code, at: now });
+        return json(200, { account, user_code: d.user_code, verification_uri: d.verification_uri, device_auth_id: d.device_auth_id, interval: d.interval, expires_in: d.expires_in });
+      }
+      // grok / kimi: a new account gets its own stable device id from the first request (kimi signs every call with it)
+      const existing = account ? oauthAccountEntry(pid, account) : null;
+      const deviceId = existing ? existing.deviceId : crypto.randomUUID();
+      const auth = existing ? existing.auth : oauthDevice.makeDeviceOAuth(oauthDeviceConfig(pid, deviceId));
+      const d = await auth.startDeviceLogin({ fetch: globalThis.fetch });
+      const login_id = crypto.randomUUID();
+      accountLogins.set(login_id, { pid, account, device_code: d.device_code, interval: d.interval, deviceId, auth, at: now });
+      return json(200, { account, login_id, device_auth_id: login_id, user_code: d.user_code, verification_uri: d.verification_uri, verification_uri_complete: d.verification_uri_complete, interval: d.interval, expires_in: d.expires_in });
+    }
+
+    if (verb === 'account-poll') {
+      const id = String(body.login_id || body.device_auth_id || '');
+      const p = id && accountLogins.get(id);
+      if (!p || p.pid !== pid) return json(400, { status: 'error', error: 'unknown or expired sign-in — start again', code: 'login_not_found' });
+      let tokens;
+      try {
+        if (pid === 'codex') {
+          const poll = await codexAuth.pollDeviceLogin({ fetch: globalThis.fetch, device_auth_id: id, user_code: p.user_code });
+          if (poll.pending) return json(200, { status: 'pending' });
+          const creds = await codexAuth.exchangeCode({ fetch: globalThis.fetch, authorization_code: poll.authorization_code, code_verifier: poll.code_verifier, now: Date.now() });
+          tokens = { access_token: creds.access_token, refresh_token: creds.refresh_token, last_refresh: creds.last_refresh, auth_mode: creds.auth_mode };
+        } else {
+          const poll = await p.auth.pollDeviceLogin({ fetch: globalThis.fetch, device_code: p.device_code, interval: p.interval, now: Date.now() });
+          if (poll && poll.pending) { if (poll.interval) p.interval = poll.interval; return json(200, { status: 'pending', interval: p.interval }); }
+          tokens = Object.assign({}, poll, { device_id: p.deviceId });
+        }
+      } catch (e) {
+        accountLogins.delete(id);
+        return json(502, { status: 'error', error: (e && e.message) || (label + ' sign-in failed'), code: (e && e.code) || 'device_code_poll_error' });
+      }
+      accountLogins.delete(id);
+      // only NOW does a new account get its folder: a sign-in that never finished leaves nothing behind
+      const acctId = p.account || providerAccounts.add(pid).id;
+      const entry = oauthAccountEntry(pid, acctId);
+      if (p.deviceId && pid !== 'codex') { entry.deviceId = p.deviceId; entry.auth = p.auth; }
+      entry.tokens = tokens; entry.authDead = null;
+      saveAccountTokens(entry, entry.tokens);
+      noteAccountAuth(pid, acctId, { installed: true, loggedIn: true });
+      console.log('  · another ' + label + ' subscription account connected — runs continue on it when an account hits its limit');
+      return json(200, { status: 'connected', account: acctId });
+    }
+
+    if (verb === 'remove') {
+      const id = String(body.account || '');
+      if (!id || !oauthAccountEntry(pid, id)) return json(404, { ok: false, error: 'no such ' + label + ' account', code: 'account_not_found' });
+      oauthAccountEntries.delete(pid + ':' + id);
+      accountAuthSeen.delete(pid + ':' + id);
+      return json(200, { ok: providerAccounts.remove(pid, id) });
+    }
+    json(404, { error: 'unknown verb' });
+  } catch (e) {
+    json(502, { status: 'error', error: (e && e.message) || (label + ' sign-in failed'), code: (e && e.code) || 'account_auth_error' });
+  }
+}
+
 /* -------------------- Claude CLI — SIGN IN WITH CLAUDE --------------------
    Not an OAuth client: the sidecar runs the user's own `claude auth login`, which owns the browser handshake and
    the token (claude-cli-login.js). These routes only start/watch/cancel that child and relay a pasted one-time
@@ -21448,8 +21658,41 @@ function noteAccountAuth(providerId, accountId, st) {
 function accountChain(providerId) {
   const all = [{ id: '', credKey: 'account:' + providerId + ':primary', label: 'account 1', dir: '' }]
     .concat(providerAccounts.list(providerId).map((a, i) => ({ id: a.id, credKey: 'account:' + providerId + ':' + a.id, label: 'account ' + (i + 2), dir: a.dir })));
-  const live = all.filter(a => { const s = accountAuthSeen.get(providerId + ':' + (a.id || 'primary')); return !(s && s.loggedIn === false); });
+  const live = all.filter(a => accountLive(providerId, a.id));
   return live.length ? live : all.slice(0, 1);
+}
+// OAuth subscriptions: proven from the stored tokens (present and not recorded dead). Claude Code: the last real
+// `claude auth status` verdict — an account never probed counts as live, one proven signed out does not.
+function accountLive(providerId, id) {
+  if (providerId === 'codex' || OAUTH_PROVIDER_IDS.indexOf(providerId) >= 0) {
+    if (!id) {
+      const p = oauthPrimaryStatus(providerId);
+      return !!(p.tokens && p.tokens.access_token && !p.dead);
+    }
+    const e = oauthAccountEntry(providerId, id);
+    return !!(e && e.tokens && e.tokens.access_token && !e.authDead);
+  }
+  const s = accountAuthSeen.get(providerId + ':' + (id || 'primary'));
+  return !(s && s.loggedIn === false);
+}
+// accountChain in credPool order: available accounts first, a cooling (spent) one sinks to the back.
+function orderedAccountChain(providerId) {
+  const chain = accountChain(providerId);
+  const byKey = new Map(chain.map(a => [a.credKey, a]));
+  return credPool.order(chain.map(a => a.credKey)).map(k => byKey.get(k));
+}
+// An adapter bound to one OAuth sign-in: the primary through its own hardened keeper, an extra through its entry.
+function oauthAccountProvider(providerId, acct, baseUrl, reasoningEffort) {
+  const codex = providerUsesCodex(providerId);
+  if (!acct.id) {
+    return codex
+      ? selectProvider({ provider: providerId, fetch: globalThis.fetch, tokenProvider: ensureCodexAccessToken, renewToken: forceRefreshCodexAccessToken, baseUrl, reasoningEffort })
+      : selectProvider({ provider: providerId, fetch: globalThis.fetch, tokenProvider: () => ensureOAuthAccessToken(providerId), headersProvider: () => oauthInferenceHeaders(providerId), baseUrl, reasoningEffort });
+  }
+  const e = oauthAccountEntry(providerId, acct.id);
+  return selectProvider({ provider: providerId, fetch: globalThis.fetch, tokenProvider: () => ensureAccountAccessToken(e),
+    renewToken: codex ? (stale) => ensureAccountAccessToken(e, true, stale) : undefined,
+    headersProvider: providerId === 'kimi' ? () => kimiMshHeaders(e.deviceId) : undefined, baseUrl, reasoningEffort });
 }
 async function handleClaudeCliAuth(req, res, verb) {
   const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
