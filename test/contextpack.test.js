@@ -132,4 +132,23 @@ A.eq(CP.dayTag(ago(1), T), 'yesterday', '1 day → yesterday');
 A.eq(CP.dayTag(ago(3), T), '3d ago', '3 days → Nd ago');
 A.eq(CP.dayTag(0, T), '', 'undated → empty tag');
 
+// USER-STUDY LOOP — the station's own reason-only calls are not the Commander's activity: the internal run is
+// excluded AND its directive row (which the transcript files as a 'user' line on the Commander's stream) drops too.
+{
+  const selfTalk = 'INTERNAL — GOAL DECOMPOSITION. Do not run any tools. Reason only, then reply in the exact format below.';
+  const p = CP.assemble({
+    runs: [{ title: selfTalk.slice(0, 120), ts: ago(0), streamId: 'ws-main', internal: true }, { title: 'Draft the launch post', ts: ago(0), streamId: 'ws-main' }],
+    chats: [{ role: 'user', content: selfTalk + '\nYour Commander has this goal: …', ts: ago(0), streamId: 'ws-main' },
+            { role: 'user', content: 'Can you draft the launch post for Friday?', ts: ago(0), streamId: 'ws-main' }]
+  }, { now: T });
+  A.ok(!p.activityLines.some(l => /GOAL DECOMPOSITION/.test(l)), 'an internal call never reads as the Commander\'s recent work or asks');
+  A.ok(p.activityLines.some(l => /Draft the launch post/.test(l)) && p.activityLines.some(l => /launch post for Friday/.test(l)), 'the Commander\'s own runs and asks on the same stream are kept');
+}
+// the WIRING: the pure filter is only as good as the host passing the flag (the map used to drop it).
+{
+  const src = require('fs').readFileSync(require('path').join(__dirname, '../sidecar/index.js'), 'utf8');
+  const fn = src.slice(src.indexOf('function nightshiftContextPack()'), src.indexOf('function nightshiftContextPack()') + 1500);
+  A.ok(/runStore\.list\(null, \{ limit: 60 \}\)[^\n]*internal: !!r\.internal/.test(fn), 'nightshiftContextPack passes the run `internal` flag to the pure core');
+}
+
 setTimeout(() => A.report('contextpack.test'), 30);

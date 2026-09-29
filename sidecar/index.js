@@ -6605,7 +6605,9 @@ function nightshiftContextPack() {
   // recent RUNS (newest-first already from runStore.list). We pass the whole recent window; the pure core windows
   // to ~7d + excludes internal streamIds (nightshift-/cron-/workshop-) + de-dupes. limit generous; core caps to 8.
   let runs = [];
-  try { runs = (runStore.list(null, { limit: 60 }) || []).map(r => ({ title: r.title, ts: r.ts, streamId: r.streamId, reason: r.reason })); } catch (_) { runs = []; }
+  // `internal` rides through: the pure core's `!r.internal` filter was dead because this map dropped the flag, so the
+  // station's own reason-only calls read as the Commander's recent work (USER-STUDY LOOP, 2026-09-28).
+  try { runs = (runStore.list(null, { limit: 60 }) || []).map(r => ({ title: r.title, ts: r.ts, streamId: r.streamId, reason: r.reason, internal: !!r.internal })); } catch (_) { runs = []; }
   // recent CHATS: all transcript rows (the store already redacted content on write); the core filters role:'user',
   // excludes internal streams, takes first-lines, re-redacts as a backstop. Bound the tail we hand over (RAM-safe).
   let chats = [];
