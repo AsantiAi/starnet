@@ -11251,7 +11251,7 @@ function handleCreditsLinkable(req, res) {
 // ---- player-made props (200-always media contract: failures are {ok:false, code, message}) ----
 function handleUserPropsList(req, res) {
   let props = [], jobs = [];
-  try { props = userProps.list(); jobs = userProps.activeJobs(); } catch (_) {}
+  try { props = userProps.list(); jobs = userProps.activeJobs(); } catch (e) { failNote('userprops.list', e); }
   return respondJson(res, 200, { props, jobs });
 }
 function handleUserPropImage(req, res) {

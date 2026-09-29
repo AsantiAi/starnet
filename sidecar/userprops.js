@@ -20,6 +20,7 @@
      { list(), imageFile(id), start(noun), job(id), resume(), stop() } */
 'use strict';
 const { readJsonResilient, writeJsonResilient } = require('./durable-store.js');
+const { swallow, note } = require('./failopen.js');   // a swallowed error stays visible (tagged warn + counter)
 
 const ID_RE = /^user_[a-z0-9_]{3,60}$/;
 const POLL_MS = 4000;
@@ -55,7 +56,8 @@ function makeUserProps(deps) {
   const live = new Map();       // jobId -> last public job state (for the UI)
   let timer = null, polling = false, stopped = false, chain = Promise.resolve();
 
-  function ensureDir() { try { fs.mkdirSync(dir, { recursive: true }); } catch (_) {} }
+  // mkdir failing here is not fatal by itself: the durable write right after it fails loudly if the folder is truly unusable
+  function ensureDir() { try { fs.mkdirSync(dir, { recursive: true }); } catch (e) { note('userprops.mkdir', e); } }
   // absent -> fallback; recovered from .bak -> that value; unreadable/corrupt -> fallback for READS only
   // (writeJsonResilient itself refuses to replace unreadable state, so a read fallback can never clobber it).
   function readJson(file, fallback) {
@@ -67,7 +69,8 @@ function makeUserProps(deps) {
     writeJsonResilient({ fs, path, writeDurable }, file, value);
   }
   // serialize every index/pending mutation (single sidecar per WORKSPACES; in-process order is enough)
-  function serial(fn) { const p = chain.then(fn, fn); chain = p.catch(() => {}); return p; }
+  // the CALLER gets p's rejection; the chain itself must keep going after a failed step
+  function serial(fn) { const p = chain.then(fn, fn); chain = p.catch(swallow('userprops.serial')); return p; }
 
   function list() {
     const idx = readJson(indexFile, { props: [] });
@@ -168,7 +171,7 @@ function makeUserProps(deps) {
       live.set(pj.id, pub);
       if (pub.status === 'done' || pub.status === 'failed') {
         await serial(() => writeJson(pendingFile, { jobs: pending().filter((j) => j.id !== pj.id) }));
-        if (deps.onSettled) { try { deps.onSettled(pub); } catch (_) {} }
+        if (deps.onSettled) { try { deps.onSettled(pub); } catch (e) { note('userprops.onSettled', e); } }
       }
     }
     return pending().length;
