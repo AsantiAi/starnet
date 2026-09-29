@@ -29,6 +29,9 @@ const HUD_MARGIN: f64 = 16.0;
 /// The HUD's own floor: narrow enough for a corner, tall enough for the folded deck.
 const HUD_MIN_W: f64 = 300.0;
 const HUD_MIN_H: f64 = 72.0;
+/// The smallest the HUD folds to: the widget (one agent at its desk, its clock). Only a fold with an
+/// explicit width goes below HUD_MIN_W; a remembered or default rect never does.
+const HUD_WIDGET_MIN_W: f64 = 160.0;
 /// A folded HUD never grows past this (logical px) whatever height the page asks for.
 const HUD_FOLD_MAX_H: f64 = 480.0;
 /// The station's normal floor — mirrors `.min_inner_size(960.0, 600.0)` in build_main_window
@@ -73,6 +76,7 @@ struct Inner {
     folded: bool,
     restore: Option<Restore>,
     unfolded_h: Option<u32>,
+    unfolded_w: Option<u32>,
 }
 
 /// Managed state: the HUD's lifecycle for the one `main` window.
@@ -132,6 +136,16 @@ pub fn fit_rect(rect: HudRect, area: WorkArea) -> HudRect {
 }
 
 /// The physical height a folded HUD should take for a page-measured deck height (logical px).
+/// A folded width: the page's measured logical width (the widget), never wider than the HUD it folds
+/// from; no width asked = that full width.
+pub fn folded_width(logical: Option<f64>, scale: f64, full: u32) -> u32 {
+    let s = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
+    match logical.filter(|v| v.is_finite() && *v > 0.0) {
+        Some(w) => ((w.clamp(HUD_WIDGET_MIN_W, HUD_SANE_MAX_W) * s).round() as u32).min(full),
+        None => full,
+    }
+}
+
 pub fn folded_height(deck_logical: Option<f64>, scale: f64) -> u32 {
     let s = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
     let h = deck_logical.filter(|v| v.is_finite() && *v > 0.0).unwrap_or(140.0);
@@ -209,7 +223,10 @@ fn view(win: Option<&tauri::WebviewWindow>, g: &Inner) -> HudView {
     let mut rect = win.and_then(current_rect);
     if let (Some(r), Some(h)) = (rect.as_mut(), g.unfolded_h) {
         if g.folded {
-            r.h = h; // a folded HUD remembers the height it will unfold to
+            r.h = h; // a folded HUD remembers the size it will unfold to
+            if let Some(w) = g.unfolded_w {
+                r.w = w;
+            }
         }
     }
     HudView { active: g.active, pinned, folded: g.folded, rect }
@@ -255,12 +272,13 @@ pub fn starnet_hud_set(
             });
             g.folded = false;
             g.unfolded_h = None;
+            g.unfolded_w = None;
             g.pinned = pinned.unwrap_or(true);
             g.active = true;
         } else if let Some(p) = pinned {
             g.pinned = p;
         }
-        let _ = win.set_min_size(Some(LogicalSize::new(HUD_MIN_W, HUD_MIN_H)));
+        let _ = win.set_min_size(Some(LogicalSize::new(HUD_WIDGET_MIN_W, HUD_MIN_H)));
         let _ = win.set_always_on_top(g.pinned);
         let oversized = win
             .inner_size()
@@ -289,6 +307,7 @@ pub fn starnet_hud_set(
     g.active = false;
     g.folded = false;
     g.unfolded_h = None;
+    g.unfolded_w = None;
     let _ = win.set_always_on_top(false);
     let _ = win.set_min_size(Some(LogicalSize::new(MAIN_MIN_W, MAIN_MIN_H)));
     if let Some(r) = g.restore.take() {
@@ -335,6 +354,7 @@ pub fn starnet_hud_fold(
     state: State<'_, HudState>,
     folded: bool,
     height: Option<f64>,
+    width: Option<f64>,
 ) -> Result<HudView, String> {
     let win = main_window(&app)?;
     let mut g = lock(&state);
@@ -343,20 +363,34 @@ pub fn starnet_hud_fold(
     }
     let size = win.inner_size().map_err(|e| e.to_string())?;
     let scale = win.scale_factor().unwrap_or(1.0);
-    if folded && !g.folded {
-        g.unfolded_h = Some(size.height);
-        g.folded = true;
-        let _ = win.set_size(PhysicalSize::new(size.width, folded_height(height, scale)));
-    } else if folded && g.folded {
-        // Re-fit: the deck grew or shrank (a run started or finished) while folded.
-        let _ = win.set_size(PhysicalSize::new(size.width, folded_height(height, scale)));
-    } else if !folded && g.folded {
-        let back = g
+    let pos = win.outer_position().ok();
+    // The HUD lives in a corner: a width change keeps the RIGHT edge where it is.
+    let keep_right = |new_w: u32| {
+        if new_w != size.width {
+            if let Some(p) = pos {
+                let _ = win.set_position(PhysicalPosition::new(p.x + size.width as i32 - new_w as i32, p.y));
+            }
+        }
+    };
+    if folded {
+        if !g.folded {
+            g.unfolded_h = Some(size.height);
+            g.unfolded_w = Some(size.width);
+            g.folded = true;
+        }
+        // (re-)fit: the widget or the feed grew or shrank while folded
+        let w = folded_width(width, scale, g.unfolded_w.unwrap_or(size.width));
+        let _ = win.set_size(PhysicalSize::new(w, folded_height(height, scale)));
+        keep_right(w);
+    } else if g.folded {
+        let back_h = g
             .unfolded_h
             .take()
             .unwrap_or_else(|| (HUD_DEFAULT_H * scale).round() as u32);
+        let back_w = g.unfolded_w.take().unwrap_or(size.width);
         g.folded = false;
-        let _ = win.set_size(PhysicalSize::new(size.width, back));
+        let _ = win.set_size(PhysicalSize::new(back_w, back_h));
+        keep_right(back_w);
     }
     Ok(view(Some(&win), &g))
 }
@@ -427,6 +461,16 @@ mod tests {
         assert_eq!(corner_x(r, 416, 400), 1496); // 8px border each side: visible edge lands 16px in
         assert_eq!(corner_x(r, 400, 400), 1504); // no border (macOS / decorated): unchanged
         assert_eq!(corner_x(r, 390, 400), 1504); // a smaller outer never pushes it right
+    }
+
+    #[test]
+    fn folded_width_fits_the_widget_but_never_widens() {
+        assert_eq!(folded_width(Some(250.0), 1.0, 400), 250);
+        assert_eq!(folded_width(Some(250.0), 1.5, 600), 375);
+        assert_eq!(folded_width(Some(40.0), 1.0, 400), 160);
+        assert_eq!(folded_width(Some(900.0), 1.0, 400), 400);
+        assert_eq!(folded_width(None, 1.0, 400), 400);
+        assert_eq!(folded_width(Some(f64::NAN), 2.0, 800), 800);
     }
 
     #[test]

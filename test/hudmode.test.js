@@ -155,6 +155,21 @@ const T0 = 1_800_000_000_000;
   A.eq(H.oneLine('a  b\n c', 40), 'a b c', 'one line');
 }
 
+// ---- WIDGET: one tile per agent at work, the clock ----
+{
+  const it = (agentId, state, sortAt, status) => ({ agentId, name: agentId.toUpperCase(), color: '', state, sortAt, status });
+  const agents = [{ id: 'agent', name: 'Nova', color: '#4af' }, { id: 'researcher', name: 'Orion' }];
+  let p = H.widgetTiles([it('agent', 'live', T0 - 5000, 'Working'), it('agent', 'live', T0 - 9000, 'Using WEB.SEARCH'), it('researcher', 'ask', T0 - 1000, 'Needs your OK'), it('coder', 'done', T0, 'Completed')], 'agent', agents);
+  A.eq(p.tiles.map(x => [x.agentId, x.state, x.startedAt, x.step, x.working]), [['researcher', 'ask', T0 - 1000, 'Needs your OK', true], ['agent', 'live', T0 - 9000, 'Using WEB.SEARCH', true]],
+    'one tile per agent with work under way: needs-you first, each agent\'s longest-running work, finished work never a tile');
+  p = H.widgetTiles(['a', 'b', 'c', 'd', 'e'].map((a, i) => it(a, 'live', T0 - i * 1000, 'Working')), 'a', agents);
+  A.eq([p.tiles.length, p.more], [3, 2], 'at most three tiles, the rest counted');
+  p = H.widgetTiles([it('agent', 'done', T0 - 60_000, 'Completed')].map(x => Object.assign(x, { time: '1m ago' })), 'agent', agents);
+  A.eq(p.tiles.map(x => [x.name, x.working, x.state, x.step]), [['NOVA', false, 'idle', 'Completed · 1m ago']], 'nothing under way: the agent on the line, idle, with its last finish');
+  A.eq(H.widgetTiles([], 'nobody', []).tiles, [], 'no roster, no tile');
+  A.eq([H.fmtClock(42_000), H.fmtClock(725_000), H.fmtClock(3_723_000), H.fmtClock(-1)], ['0:42', '12:05', '1:02:03', ''], 'run clock');
+}
+
 // ---- small formatters + prefs ----
 A.eq(H.toolLabel('web_search'), 'WEB.SEARCH', 'tool label');
 A.eq(H.toolLabel(''), '', 'no tool, no label');
@@ -196,7 +211,9 @@ A.eq([H.fmtAgo(10_000), H.fmtAgo(5 * 60_000), H.fmtAgo(2 * 3_600_000)], ['just n
   A.ok(has(js, "'/api/subagents/steer'", "'/api/subagents/interrupt'", "'/api/run/steer'", "'/api/cancel'"),
     'every card can be steered and stopped through the routes the station already has');
   A.ok(has(js, 'App.openWorkstream(mine[0].id)', 'Workstreams.get(sid)'), 'OPEN CONVERSATION goes to the conversation that owns the work, else the agent\'s own (never rebinds the blank thread on screen)');
-  A.ok(has(js, "S.view = 'activity';", "classList.toggle('hud-view-activity', act)"), 'the HUD opens on ACTIVITY, the work, not a conversation');
+  A.ok(has(js, "S.view = 'widget';", "classList.toggle('hud-view-widget', small)", "setView('activity')"), 'the HUD opens SMALL on the widget, and a click opens ACTIVITY');
+  A.ok(has(js, 'SPRITES.drawBody(g, body', "t: 'desk'", 'seated: true', 'working: !!working'), 'the widget draws the agent seated at its desk with the station\'s own renderers');
+  A.ok(has(read('src-tauri/src/hud_mode.rs'), 'width: Option<f64>', 'fn folded_width', 'keep_right'), 'the desktop window hugs the widget in width too, keeping its corner');
   A.ok(has(js, "el('section', 'project-home hud-activity')", "el('details', 'ph-card')"), 'ACTIVITY is the project activity feed markup (so it wears the project feed\'s glass)');
   A.ok(!css.includes('#chat-panel > h3 { display: none') && !css.includes('#chat-input {'), 'COMMS keeps its designed header and composer inside the HUD');
   A.ok(!/background: var\(--ph\)\s*;/.test(css) && !css.includes('0 0 0 2px var(--ph-dim)'), 'no retired CRT chrome: no solid phosphor bar, no phosphor ring');

@@ -422,7 +422,8 @@
   const S = {
     active: false, view: 'activity', pinned: true, desktop: false, busy: false, worldStopped: false,
     pollT: 0, histT: 0, tickT: 0, histSoon: 0, feed: createFeed(), workers: [], finished: [], histOk: null,
-    els: null, cards: new Map(), bound: false, fetching: false, fetchingHist: false, titleWas: null, foldedH: 0
+    els: null, cards: new Map(), bound: false, fetching: false, fetchingHist: false, titleWas: null, foldedH: 0,
+    widget: null, frameT: 0, widgetFit: null
   };
 
   const now = () => Date.now();
@@ -534,6 +535,162 @@
     card.node.setAttribute('aria-label', it.name + ' · ' + it.status + (it.time ? ' ' + it.time : '') + ': ' + it.task);
   }
 
+  /* ---------------- WIDGET: the HUD at its smallest ----------------
+     One tile per agent with work under way: that agent drawn at its desk by the station's own renderers
+     (IndustrialTextures floor, the desk + chair props, SPRITES.drawBody seated and working, the same clock
+     the floor animates on), its name, how long the run has been going, and the step it is on. Nothing
+     under way: the agent on the line at its desk, idle, and ALL QUIET. A click opens ACTIVITY. */
+
+  const TILE_MAX = 3;
+  const SCENE_W = 4, SCENE_H = 3, TILE_PX = 12, SCENE_SCALE = 3;   // world tiles, world px per tile, css px per world px
+  const FRAME_MS = 150;                                             // ~7 fps while anyone works: alive, never a GPU cost
+
+  /** The widget's tiles from the feed's items: one per agent with live or asking work (needs your OK
+      first, then the longest-running), at most TILE_MAX with the rest counted. */
+  function widgetTiles(items, onLine, agents) {
+    const busy = new Map();
+    for (const it of arr(items)) {
+      if (it.state !== 'live' && it.state !== 'ask') continue;
+      const had = busy.get(it.agentId);
+      if (!had || (it.state === 'ask' && had.state !== 'ask') || (it.state === had.state && it.sortAt < had.sortAt)) busy.set(it.agentId, it);
+    }
+    const list = Array.from(busy.values()).sort((a, b) => (a.state === b.state ? a.sortAt - b.sortAt : a.state === 'ask' ? -1 : 1));
+    if (list.length) {
+      return { tiles: list.slice(0, TILE_MAX).map(it => ({ agentId: it.agentId, name: it.name, color: it.color, working: true, state: it.state, startedAt: it.sortAt, step: it.status })), more: Math.max(0, list.length - TILE_MAX) };
+    }
+    const a = arr(agents).find(x => x && x.id === onLine) || arr(agents)[0];
+    if (!a) return { tiles: [], more: 0 };
+    const last = arr(items).find(it => it.agentId === a.id);
+    return { tiles: [{ agentId: a.id, name: String(a.name || a.id).toUpperCase(), color: a.color || '', working: false, state: 'idle', startedAt: 0,
+      step: last ? last.status + (last.time ? ' · ' + last.time : '') : 'Nothing running' }], more: 0 };
+  }
+
+  /** 42s → "0:42", 12m 5s → "12:05", 1h 2m 3s → "1:02:03". */
+  function fmtClock(ms) {
+    if (!isFinite(ms) || ms < 0) return '';
+    const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+    return h ? h + ':' + String(m).padStart(2, '0') + ':' + String(r).padStart(2, '0') : m + ':' + String(r).padStart(2, '0');
+  }
+
+  // The agent at its desk, drawn the way the floor draws a seated worker: floor plates, the desk, the seat
+  // chair on the tile in front of it, the body on the chair facing the screen. Returns false when the
+  // station's renderers are not ready (the tile then shows its words only).
+  function drawScene(cv, agent, working, t) {
+    if (typeof SPRITES === 'undefined' || !SPRITES.ready || typeof PropSprites === 'undefined') return false;
+    const g = cv.getContext('2d'); if (!g) return false;
+    const T = TILE_PX, k = cv.width / (SCENE_W * T);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, cv.width, cv.height);
+    g.imageSmoothingEnabled = false;
+    g.save();
+    g.scale(k, k);
+    try {
+      if (typeof IndustrialTextures !== 'undefined' && IndustrialTextures.floor) {
+        for (let y = 0; y < SCENE_H; y++) for (let x = 0; x < SCENE_W; x++) IndustrialTextures.floor(g, x * T, y * T, T, x, y, 'plate');
+      }
+      PropSprites.setCtx(g); PropSprites.setNow(t);
+      // row 0 is headroom: a desk's art stands taller than its one-tile footprint
+      const desk = { id: 'hud-desk-' + agent.id, t: 'desk', x: 1, y: 1, w: 2, h: 1, r: 0 };
+      PropSprites.draw(desk, working, { heat: 0, prog: null, occupied: true, still: !working });
+      const seatT = PropSprites.has && PropSprites.has('seatchair') ? 'seatchair' : (PropSprites.has && PropSprites.has('chair') ? 'chair' : null);
+      const remaster = typeof IndustrialTextures !== 'undefined' && IndustrialTextures.isRemaster && IndustrialTextures.isRemaster();
+      if (seatT) PropSprites.draw(Object.assign({ id: 'hud-seat-' + agent.id, t: seatT, x: 1.5, y: 2, w: 1, h: 1 }, remaster ? { r: 2 } : {}), false, { still: true });
+      const body = { id: agent.id, skin: agent.skin, color: agent.color, px: 2 * T, py: 3 * T - 1, dir: 'north', state: 'idle',
+        seated: true, sitting: true, seatPx: 2 * T, seatPy: 3 * T - 1, working: !!working, phase: 0, noShadow: true };
+      SPRITES.drawBody(g, body, t, { skipGroundShadow: true, reducedMotion: !working });
+    } catch (_) { g.restore(); return false; }
+    g.restore();
+    return true;
+  }
+
+  function buildWidget() {
+    if (S.widget) return S.widget;
+    const g = gameScreen(); if (!g) return null;
+    const box = el('section', 'hud-widget');
+    box.id = 'hud-widget';
+    box.setAttribute('aria-label', 'StarNet HUD: your agents at work');
+    box.setAttribute('data-tauri-drag-region', '');
+    const tiles = el('div', 'hud-wtiles'); tiles.setAttribute('data-tauri-drag-region', '');
+    const more = el('button', 'hud-wmore'); more.type = 'button'; more.hidden = true;
+    box.append(tiles, more);
+    g.insertBefore(box, g.firstChild);
+    const open = e => {
+      const tile = e.target && e.target.closest && e.target.closest('[data-agent],.hud-wmore');
+      if (!tile) return;
+      const id = tile.getAttribute('data-agent');
+      setView('activity').then(() => {
+        // open that agent's newest live card so the Commander lands on the work they clicked
+        if (!id) return;
+        for (const c of S.cards.values()) if (c.item && c.item.agentId === id && (c.item.state === 'live' || c.item.state === 'ask')) { c.node.open = true; break; }
+      });
+    };
+    tiles.addEventListener('click', open);
+    more.addEventListener('click', open);
+    S.widget = { box, tiles, more, map: new Map() };
+    return S.widget;
+  }
+
+  function renderWidget() {
+    const w = S.widget; if (!w || S.view !== 'widget') return;
+    const t = now();
+    const agents = roster();
+    const plan = widgetTiles(S.lastItems || [], onLineId(), agents);
+    const keep = new Set();
+    let prev = null;
+    for (const tile of plan.tiles) {
+      keep.add(tile.agentId);
+      let v = w.map.get(tile.agentId);
+      if (!v) {
+        const node = el('button', 'hud-wtile'); node.type = 'button';
+        const cv = el('canvas', 'hud-wscene');
+        const name = el('span', 'hud-wname'), clock = el('span', 'hud-wclock'), step = el('span', 'hud-wstep');
+        node.append(cv, name, clock, step);
+        v = { node, cv, name, clock, step };
+        w.map.set(tile.agentId, v);
+      }
+      // the canvas backing store is the tile in DEVICE px, so the sprite is never resampled by the browser
+      const dpr = Math.max(1, Math.round((root.devicePixelRatio || 1) * 2) / 2);
+      const bw = Math.round(SCENE_W * TILE_PX * SCENE_SCALE * dpr), bh = Math.round(SCENE_H * TILE_PX * SCENE_SCALE * dpr);
+      if (v.cv.width !== bw || v.cv.height !== bh) { v.cv.width = bw; v.cv.height = bh; }
+      v.node.setAttribute('data-agent', tile.agentId);
+      v.node.dataset.state = tile.state;
+      setText(v.name, tile.name);
+      if (tile.color) v.name.style.color = tile.color; else v.name.style.removeProperty('color');
+      setText(v.clock, tile.working ? fmtClock(t - tile.startedAt) : 'ALL QUIET');
+      setText(v.step, tile.step);
+      const words = tile.name + (tile.working ? ' · ' + tile.step + ' · running ' + fmtClock(t - tile.startedAt) : ' · all quiet');
+      v.node.setAttribute('aria-label', words + '. Open activity');
+      v.node.title = 'Open activity';
+      const a = agents.find(x => x && x.id === tile.agentId) || { id: tile.agentId, color: tile.color };
+      v.node.classList.toggle('hud-noscene', !drawScene(v.cv, a, tile.working, t));
+      const want = prev ? prev.nextSibling : w.tiles.firstChild;
+      if (want !== v.node) w.tiles.insertBefore(v.node, want);
+      prev = v.node;
+    }
+    for (const [id, v] of w.map) if (!keep.has(id)) { v.node.remove(); w.map.delete(id); }
+    w.more.hidden = !plan.more;
+    if (plan.more) { setText(w.more, '+' + plan.more); w.more.setAttribute('aria-label', plan.more + ' more agents working. Open activity'); w.more.title = plan.more + ' more working'; }
+    // the frame loop runs only while someone is working and the widget is on screen
+    const animate = plan.tiles.some(x => x.working);
+    if (animate && !S.frameT) S.frameT = root.setInterval(renderWidget, FRAME_MS);
+    else if (!animate && S.frameT) { root.clearInterval(S.frameT); S.frameT = 0; }
+    fitWidget();
+  }
+
+  function stopWidgetFrames() { if (S.frameT) { root.clearInterval(S.frameT); S.frameT = 0; } }
+
+  // the window hugs the widget, width and height
+  function widgetSize() {
+    try { const r = S.widget.box.getBoundingClientRect(); return { w: Math.ceil(r.right + 4), h: Math.ceil(r.bottom + 4) }; } catch (_) { return null; }
+  }
+  function fitWidget() {
+    if (!S.active || S.view !== 'widget' || !S.desktop) return;
+    const z = widgetSize(); if (!z) return;
+    if (S.widgetFit && Math.abs(z.w - S.widgetFit.w) < 3 && Math.abs(z.h - S.widgetFit.h) < 3) return;
+    S.widgetFit = z;
+    invoke('starnet_hud_fold', { folded: true, height: z.h, width: z.w });
+  }
+
   function buildUi() {
     if (S.els) return S.els;
     const panel = $('chat-panel'), log = $('chat-log'), h3 = panel && panel.querySelector(':scope > h3');
@@ -550,13 +707,16 @@
     // the HUD's hands live in the COMMS header, where the project feed keeps its CREW / ACTIVITY switch
     const ctl = el('span', 'ph-actions hud-ctl');
     const view = el('button', 'btn'); view.type = 'button'; view.id = 'hud-view';
+    const small = el('button', 'btn', 'SMALL'); small.type = 'button'; small.id = 'hud-small';
+    small.title = 'Shrink the HUD to the widget';
     const pin = el('button', 'btn', 'PIN'); pin.type = 'button'; pin.id = 'hud-pin'; pin.hidden = true;
     const exitBtn = el('button', 'btn', 'STATION'); exitBtn.type = 'button'; exitBtn.id = 'hud-exit';
     exitBtn.title = 'Back to the full station';
-    ctl.append(view, pin, exitBtn);
+    ctl.append(view, small, pin, exitBtn);
     const right = h3.querySelector('.h3-right') || h3;
     right.appendChild(ctl);
     view.addEventListener('click', () => setView(S.view === 'activity' ? 'chat' : 'activity'));
+    small.addEventListener('click', () => setView('widget'));
     pin.addEventListener('click', () => setPinned(!S.pinned));
     exitBtn.addEventListener('click', () => exit());
     S.els = { panel, h3, section, notice, empty, list, ctl, view, pin, exit: exitBtn, title: $('comms-title') };
@@ -584,7 +744,7 @@
     S.lastItems = items;
     const sum = feedSummary(items, S.feed, S.histOk);
     doc.body.classList.toggle('hud-asking', sum.tone === 'ask');
-    if (S.view === 'activity' && S.els.title) setText(S.els.title, '▮ ACTIVITY · ' + sum.text);
+    if (S.view === 'activity' && S.els.title) setText(S.els.title, '▮ ACTIVITY');
     setText(S.els.notice, sum.text === 'NO LINK' ? 'The station is not answering. What is shown may be out of date.' : '');
     S.els.empty.hidden = items.length > 0 || S.feed.snapOk == null;
     const have = new Map(S.cards);
@@ -600,7 +760,7 @@
     }
     for (const [key, card] of have) { card.node.remove(); S.cards.delete(key); }
     syncButtons();
-    refit();
+    if (S.view === 'widget') renderWidget(); else refit();
   }
 
   /* ---------------- polling ---------------- */
@@ -678,9 +838,11 @@
   }
 
   function applyView() {
-    const act = S.view === 'activity';
+    const act = S.view === 'activity', small = S.view === 'widget';
     doc.body.classList.toggle('hud-view-activity', act);
-    doc.body.classList.toggle('hud-folded', act);
+    doc.body.classList.toggle('hud-view-widget', small);
+    doc.body.classList.toggle('hud-folded', act || small);
+    if (!small) stopWidgetFrames();
     if (S.els && S.els.title) {
       if (act) { if (S.titleWas == null) S.titleWas = S.els.title.textContent; }
       else if (S.titleWas != null) { S.els.title.textContent = S.titleWas; S.titleWas = null; }
@@ -689,7 +851,8 @@
 
   function setView(next) {
     if (!S.active) return Promise.resolve(false);
-    S.view = next === 'chat' ? 'chat' : 'activity';
+    S.view = next === 'chat' ? 'chat' : next === 'widget' ? 'widget' : 'activity';
+    if (S.view === 'widget') S.widgetFit = null;
     applyView();
     render();
     announceLayout();
@@ -698,17 +861,18 @@
       S.foldedH = 0;
       return invoke('starnet_hud_fold', { folded: false, height: null }).then(() => true);
     }
+    if (S.view === 'widget') { const z = widgetSize(); S.widgetFit = z; return invoke('starnet_hud_fold', { folded: true, height: z && z.h, width: z && z.w }).then(() => true); }
     S.foldedH = activityHeight();
-    return invoke('starnet_hud_fold', { folded: true, height: S.foldedH }).then(() => true);
+    return invoke('starnet_hud_fold', { folded: true, height: S.foldedH, width: null }).then(() => true);
   }
 
   function enter() {
     if (S.active || S.busy || !doc || !inGame()) return Promise.resolve(false);
-    if (!buildUi()) return Promise.resolve(false);
+    if (!buildUi() || !buildWidget()) return Promise.resolve(false);
     S.busy = true;
     const prefs = readPrefs(root.localStorage);
     S.pinned = prefs.pinned;
-    S.view = 'activity';                     // the HUD opens on the work, not on a conversation
+    S.view = 'widget';                       // the HUD opens SMALL: the agents at work, a click from everything else
     S.desktop = !!tauriCore(root);
     S.active = true;
     bindBus();
@@ -730,8 +894,8 @@
       // a remembered rect the shell cannot take must never strand the HUD layout in a full-size window
       .then(v => v || (prefs.rect && S.desktop ? invoke('starnet_hud_set', { active: true, pinned: S.pinned }) : v))
       .then(v => { if (v) { S.pinned = !!v.pinned; syncButtons(); } return true; })
-      // the shell opened the HUD at its full rect: now hug the feed
-      .then(ok => { S.foldedH = activityHeight(); return invoke('starnet_hud_fold', { folded: true, height: S.foldedH }).then(() => ok); })
+      // the shell opened the HUD at its full rect: now hug the widget
+      .then(ok => { const z = widgetSize(); S.widgetFit = z; return invoke('starnet_hud_fold', { folded: true, height: z && z.h, width: z && z.w }).then(() => ok); })
       .finally(() => { S.busy = false; });
   }
 
@@ -747,7 +911,8 @@
         root.clearInterval(S.pollT); root.clearInterval(S.histT); root.clearInterval(S.tickT); root.clearTimeout(S.histSoon);
         S.pollT = S.histT = S.tickT = S.histSoon = 0;
         S.view = 'chat'; applyView();
-        doc.body.classList.remove('hud-mode', 'hud-folded', 'hud-view-activity', 'hud-asking');
+        stopWidgetFrames();
+        doc.body.classList.remove('hud-mode', 'hud-folded', 'hud-view-activity', 'hud-view-widget', 'hud-asking');
         if (S.els) {
           S.els.h3.removeAttribute('data-tauri-drag-region');
           if (S.els.title) S.els.title.removeAttribute('data-tauri-drag-region');
@@ -816,7 +981,7 @@
     active: () => S.active, currentView: () => S.view, pinned: () => S.pinned,
     // pure model — exported for tests
     createFeed, onRunStart, onToolCall, onToolResult, onToken, onRunEnd, onRunError, applySnapshot, snapshotFailed,
-    view: view, workItems, feedSummary, taskOfRun, replyOfRun, oneLine, toolLabel, fmtElapsed, fmtAgo, readPrefs, writePrefs,
+    view: view, workItems, feedSummary, taskOfRun, replyOfRun, widgetTiles, fmtClock, oneLine, toolLabel, fmtElapsed, fmtAgo, readPrefs, writePrefs,
     _feed: () => S.feed, _render: render, _poll: poll, _pollHistory: pollHistory
   };
 });
