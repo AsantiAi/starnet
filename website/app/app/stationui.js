@@ -4330,6 +4330,15 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
      yet, null = the station couldn't answer. The card never says SIGNED IN from anything else. */
   let claudeCliSt;
   let claudeCliStPending = false;
+  // The card's in-flight sign-in (ClaudeCliSignIn owns the flow): its last message, the fallback page, and whether
+  // the last attempt failed. Painted from here on every render, so a repaint never strands a running sign-in.
+  const claudeCard = { msg: '', url: '', failed: false };
+  function paintClaudeCard() {
+    const st = document.getElementById('prov-claude-status');
+    if (st) st.textContent = claudeCard.msg;
+    const open = document.getElementById('prov-claude-open');
+    if (open) open.style.display = claudeCard.url ? '' : 'none';   // .bb sets display, which beats [hidden]
+  }
   function refreshClaudeCliCard(force) {
     if (typeof ClaudeCliSignIn === 'undefined' || claudeCliStPending || (!force && claudeCliSt !== undefined)) return;
     claudeCliStPending = true;
@@ -4461,6 +4470,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       const wantsOAuthSignin = p.live && isOAuthProvider(p.id) && !credentialSaved && !codexDead;
       const wantsClaudeSignin = p.id === 'claude-cli' && !!(claudeCliSt && claudeCliSt.installed && !claudeCliSt.loggedIn);
       const wantsClaudeInstall = p.id === 'claude-cli' && !!(claudeCliSt && !claudeCliSt.installed);
+      const claudeFlowing = wantsClaudeSignin && typeof ClaudeCliSignIn !== 'undefined' && ClaudeCliSignIn.active();
+      const claudeBox = wantsClaudeSignin && (claudeFlowing || (claudeCard.failed && !!claudeCard.msg));
       return '<div class="prov-card ' + cls + '" data-provider="' + esc(p.id) + '" role="group" aria-label="' + esc(p.name) + ' provider" style="--ci:' + pi + '">' +
         '<button class="prov-select" data-act="prov-select" aria-label="Select ' + esc(p.name) + ' provider">' +
           providerLogoHtml(p.id) +
@@ -4471,7 +4482,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         '</button>' +
           '<span class="prov-stat"><span class="prov-stat-t">' + stat + (credentialSaved && !isOAuthProvider(p.id) ? '<i>' + n + (n === 1 ? ' key' : ' keys') + '</i>' : '') + '</span></span>' +
         (wantsInline ? '<button class="bb sm prov-addkey" data-act="prov-add-toggle" data-provider="' + esc(p.id) + '" aria-label="Add a ' + esc(p.name) + ' key" title="paste a ' + esc(p.name) + ' key without leaving this card">＋ ADD KEY</button>' : '') +
-        (wantsClaudeSignin ? '<button class="bb sm prov-addkey" data-act="prov-claude-signin" aria-label="Sign in with Claude" title="opens Claude in your browser — Claude Code keeps the sign-in, StarNet never sees it">⏼ SIGN IN</button>' : '') +
+        (wantsClaudeSignin && !claudeFlowing ? '<button class="bb sm prov-addkey" data-act="prov-claude-signin" aria-label="Sign in with Claude" title="opens Claude in your browser — Claude Code keeps the sign-in, StarNet never sees it">' + (claudeCard.failed ? '⏼ TRY AGAIN' : '⏼ SIGN IN') + '</button>' : '') +
         (wantsClaudeInstall ? '<button class="bb sm prov-addkey" data-act="prov-claude-install" aria-label="Get Claude Code" title="Claude Code needs a Pro, Max, Team or Enterprise plan">↗ GET CLAUDE CODE</button>' : '') +
         (wantsOAuthSignin ? '<button class="bb sm prov-addkey" data-act="prov-oauth-signin" data-provider="' + esc(p.id) + '" aria-label="Sign in to ' + esc(p.name) + '" title="device-code sign-in — no API key needed">⏼ SIGN IN</button>' : '') +
         (wantsInline
@@ -4481,12 +4492,14 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
             '</div>'
           : '') +
         (wantsClaudeSignin
-          ? '<div class="key-edit codex-inline prov-oauth-inline prov-claude-inline" id="prov-claude-inline" hidden>' +
-            '<span class="dim" id="prov-claude-status"></span>' +
-            '<button class="bb sm" id="prov-claude-open" hidden>↗ OPEN SIGN-IN PAGE</button>' +
-            '<button class="bb sm" id="prov-claude-cancel">✕ CANCEL</button>' +
-            '<input type="text" class="key-input" id="prov-claude-code" placeholder="page showed a code? paste it here" autocomplete="off" spellcheck="false">' +
-            '<button class="bb sm" id="prov-claude-code-go">SUBMIT</button>' +
+          ? '<div class="key-edit codex-inline prov-oauth-inline prov-claude-inline" id="prov-claude-inline"' + (claudeBox ? '' : ' hidden') + '>' +
+            '<span class="dim" id="prov-claude-status">' + esc(claudeCard.msg) + '</span>' +
+            (claudeFlowing
+              ? '<button class="bb sm" id="prov-claude-open"' + (claudeCard.url ? '' : ' style="display:none"') + '>↗ OPEN SIGN-IN PAGE</button>' +
+                '<button class="bb sm" id="prov-claude-cancel">✕ CANCEL</button>' +
+                '<input type="text" class="key-input" id="prov-claude-code" placeholder="page showed a code? paste it here" autocomplete="off" spellcheck="false">' +
+                '<button class="bb sm" id="prov-claude-code-go">SUBMIT</button>'
+              : '') +
             '</div>'
           : '') +
         (wantsOAuthSignin
@@ -4955,45 +4968,54 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // CLAUDE CODE: SIGN IN WITH CLAUDE right on the card (the ClaudeCliSignIn engine — the CLI's own login, the
       // browser does the rest) and a way to get Claude Code when it isn't installed. stopPropagation: a card click selects.
       const claudeSignin = card.querySelector('[data-act="prov-claude-signin"]');
+      const claudeBoxEl = card.querySelector('#prov-claude-inline');
+      if (claudeBoxEl) claudeBoxEl.addEventListener('click', e2 => e2.stopPropagation());
+      const claudeCodeIn = card.querySelector('#prov-claude-code');
+      const claudeSubmit = async () => {
+        const code = claudeCodeIn ? claudeCodeIn.value.trim() : '';
+        if (!code) return;
+        sfx('click');
+        const r = await ClaudeCliSignIn.submitCode(code);
+        if (r.ok && claudeCodeIn) claudeCodeIn.value = '';
+        claudeCard.msg = r.ok ? 'checking the code with Claude…' : r.error;
+        paintClaudeCard();
+      };
+      const claudeCancel = card.querySelector('#prov-claude-cancel');
+      if (claudeCancel) claudeCancel.onclick = async e2 => {
+        e2.stopPropagation(); sfx('click');
+        await ClaudeCliSignIn.cancel();
+        claudeCard.msg = ''; claudeCard.url = ''; claudeCard.failed = false;
+        claudeCliSt = undefined; refreshClaudeCliCard(true); rerender('settings');
+      };
+      const claudeGo = card.querySelector('#prov-claude-code-go');
+      if (claudeGo) claudeGo.onclick = e2 => { e2.stopPropagation(); claudeSubmit(); };
+      if (claudeCodeIn) claudeCodeIn.onkeydown = e2 => { if (e2.key === 'Enter' && !e2.isComposing) { e2.preventDefault(); claudeSubmit(); } };
+      const claudeOpen = card.querySelector('#prov-claude-open');
+      if (claudeOpen) claudeOpen.onclick = e2 => { e2.stopPropagation(); sfx('click'); if (claudeCard.url) openExternal(claudeCard.url); };
       if (claudeSignin && typeof ClaudeCliSignIn !== 'undefined') claudeSignin.addEventListener('click', ev => {
         ev.stopPropagation();
         sfx('click');
-        const box = card.querySelector('#prov-claude-inline');
-        const st = card.querySelector('#prov-claude-status');
-        const open = card.querySelector('#prov-claude-open');
-        const cancel = card.querySelector('#prov-claude-cancel');
-        const codeIn = card.querySelector('#prov-claude-code');
-        const codeGo = card.querySelector('#prov-claude-code-go');
-        if (box) { box.hidden = false; box.addEventListener('click', e2 => e2.stopPropagation()); }
-        claudeSignin.style.display = 'none';   // .prov-addkey sets display, which beats [hidden]
-        const done = ok => { if (!ok) claudeCliSt = undefined; refreshClaudeCliCard(true); invalidateProviderHealth('claude-cli'); if (!ok) rerender('settings'); };
-        const submit = async () => {
-          const code = codeIn ? codeIn.value.trim() : '';
-          if (!code) return;
-          sfx('click');
-          const r = await ClaudeCliSignIn.submitCode(code);
-          if (r.ok) { if (codeIn) codeIn.value = ''; if (st) st.textContent = 'checking the code with Claude…'; }
-          else if (st) st.textContent = r.error;
-        };
-        if (cancel) cancel.onclick = async e2 => { e2.stopPropagation(); sfx('click'); await ClaudeCliSignIn.cancel(); done(false); };
-        if (codeGo) codeGo.onclick = e2 => { e2.stopPropagation(); submit(); };
-        if (codeIn) codeIn.onkeydown = e2 => { if (e2.key === 'Enter' && !e2.isComposing) { e2.preventDefault(); submit(); } };
-        ClaudeCliSignIn.start({
-          onStarting: () => { if (st) st.textContent = 'starting Claude sign-in…'; },
+        claudeCard.msg = 'starting Claude sign-in…'; claudeCard.url = ''; claudeCard.failed = false;
+        const started = ClaudeCliSignIn.start({
           onPending: pend => {
-            if (st) st.textContent = 'finish signing in in the browser window Claude Code just opened…';
-            if (open && pend.url) { open.hidden = false; open.onclick = e2 => { e2.stopPropagation(); sfx('click'); openExternal(pend.url); }; }
+            claudeCard.msg = 'finish signing in in the browser window Claude Code just opened…';
+            claudeCard.url = pend.url || '';
+            rerender('settings');   // the box (CANCEL, paste-a-code) renders from the now-active flow
           },
-          onError: msg => { if (st) st.textContent = msg; sfx('bad'); },
+          onError: msg => { claudeCard.msg = msg; claudeCard.url = ''; claudeCard.failed = true; sfx('bad'); rerender('settings'); },
           onConnected: res => {
+            claudeCard.msg = ''; claudeCard.url = ''; claudeCard.failed = false;
             claudeCliSt = Object.assign({ installed: true, loggedIn: true }, res);
             notify(activeProv() === 'claude-cli'
               ? '✓ signed in to Claude — your agents can run on your subscription'
               : '✓ signed in to Claude — click the CLAUDE CODE card to make it your active brain', 'good');
             if (typeof ModelDock !== 'undefined' && ModelDock.reflect) ModelDock.reflect();
-            done(true);
+            refreshClaudeCliCard(true); invalidateProviderHealth('claude-cli'); rerender('settings');
           }
         });
+        // until the sidecar answers, the button itself says what is happening (a double press would restart the flow)
+        claudeSignin.disabled = true; claudeSignin.textContent = '◐ STARTING…';
+        Promise.resolve(started).catch(() => {});
       });
       const claudeInstall = card.querySelector('[data-act="prov-claude-install"]');
       if (claudeInstall) claudeInstall.addEventListener('click', ev => { ev.stopPropagation(); sfx('click'); openExternal('https://code.claude.com/docs/en/setup'); });

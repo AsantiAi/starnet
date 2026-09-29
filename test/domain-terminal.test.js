@@ -25,6 +25,20 @@ A.eq(DomainTask.classify('Inspect widget.test before release.'), null, 'a dotted
 A.eq(DomainTask.classify('Review src/docs.rs before release.'), null, 'a path remains local even when its filename ends in a public suffix');
 A.eq(DomainTask.classify('Find the correct official site for starnessos.com'), null, 'a requested alternative search stays open-ended');
 A.eq(DomainTask.classify('Compare starnessos.com and example.com'), null, 'multiple hosts are not collapsed to one target');
+// ISSUE #58: the policy withholds web_request, so an API CALL to one host must never be classified as a page read —
+// the routine that POSTed with a saved key and then "checked the response" was left without its only tool.
+for (const [text, why] of [
+  ['Send a POST to https://api.example.com/v1/items with header Authorization: Bearer ${MY_API_KEY}, then check the response status', 'the reported routine (POST + ${KEY} + check)'],
+  ['POST {"ok":true} to https://example.com/hooks/ingest and check it returns 200', 'an uppercase HTTP method'],
+  ['Check the status endpoint at https://status.example.com and report it', 'an endpoint'],
+  ['Use web_request to read my orders from shop.example.com', 'web_request named outright'],
+  ['Call the Acme API at acme.io and review the result', 'calling an API'],
+  ['Check https://example.com/api/health with my api key', 'an /api/ path + api key'],
+  ['Read https://example.com/v2/orders and summarize them', 'a versioned API path'],
+  ['Open https://api.example.com and read the JSON', 'an api. host']
+]) A.eq(DomainTask.classify(text), null, 'an API call is not a direct-domain page read: ' + why);
+A.ok(DomainTask.classify('Read the latest post on example.com')?.host === 'example.com', 'a lowercase "post" (a blog post) is still a page read');
+A.ok(DomainTask.classify('Read the Stripe API docs at stripe.com')?.host === 'stripe.com', 'reading API DOCS is still a bounded page read');
 A.ok(DomainTask.isTargetFetch({ name: 'web_fetch', args: { url: 'https://www.starnessos.com/docs' } }, p), 'exact-host web_fetch is recognized');
 A.ok(!DomainTask.isTargetFetch({ name: 'web_fetch', args: { url: 'https://starnesos.com' } }, p), 'spelling variants are not silently substituted');
 A.ok(DomainTask.isDomainMissing({ summary: 'domain not found', content: 'Domain starnessos.com does not resolve (ENOTFOUND).' }), 'ENOTFOUND/NXDOMAIN result is terminal evidence');

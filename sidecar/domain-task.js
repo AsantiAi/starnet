@@ -30,6 +30,12 @@
   const PUBLIC_SUFFIXES = new Set(COUNTRY_SUFFIXES.concat(GENERIC_SUFFIXES, ['invalid']));
   const DIRECT_RE = /\b(check|check out|visit|open|read|inspect|browse|look at|review)\b|\b(docs?|documentation|website|site)\b/i;
   const EXPANSIVE_RE = /\b(find|locate|discover)\s+(?:the\s+)?(?:correct|right|official|new|current)\b|\b(alternatives?|similar sites?|where (?:it|the site) moved|domain history|archives?|wayback|compare|across the web)\b|\bsearch\s+(?:the\s+)?web\s+for\b/i;
+  /* AN API CALL IS NOT A PAGE READ (issue #58). The policy withholds web_request, so a task that calls one host's
+     API ("POST to https://api.x.com/v1/items with ${MY_KEY}, then check the response") lost the only tool that
+     can do it — "check"/"read" matched DIRECT_RE — and the agent reported web_request missing. Routines were hit
+     hardest: their whole spec is one message, where an interactive chat's follow-up rarely repeats the URL. */
+  const API_CALL_RE = /\$\{[A-Za-z_][A-Za-z0-9_]*\}|\bweb_request\b|\b(?:endpoints?|webhooks?|bearer|graphql|api[\s_-]?(?:keys?|tokens?|calls?|requests?)|(?:get|post|put|patch|delete|http|rest)\s+requests?)\b|\b(?:call|calls|calling|hit|query|using|via|through)\s+(?:the\s+|their\s+|its\s+|an?\s+)?(?:[\w-]+\s+)?apis?\b|https?:\/\/api\.|https?:\/\/[^\s\/]+\/(?:[^\s]*\/)?(?:api|v\d+)(?:[\/?#\s]|$)/i;
+  const HTTP_METHOD_RE = /\b(?:GET|POST|PUT|PATCH|DELETE)\b/;   // case-sensitive: "read the latest post" stays a page read
   const WORKER_MAX_ITERS = 3;
   const WORKER_MAX_TOOLS = 3;
   const WORKER_MAX_MS = 45000;
@@ -64,6 +70,7 @@
     const src = String(text || '').trim();
     const hosts = hostsOf(src);
     if (hosts.length !== 1 || !DIRECT_RE.test(src) || EXPANSIVE_RE.test(src)) return null;
+    if (API_CALL_RE.test(src) || HTTP_METHOD_RE.test(src)) return null;
     return {
       kind: 'direct-domain', host: hosts[0],
       workerMaxIters: WORKER_MAX_ITERS, workerMaxTools: WORKER_MAX_TOOLS, workerMaxMs: WORKER_MAX_MS
