@@ -27,6 +27,9 @@
     const onManage = deps && deps.onManage;
     const gate = (deps && deps.gate) || null;                          // skills/gate.js instance: may the MODEL read this skill?
     const readBeforeWrite = !!(deps && deps.readBeforeWrite);           // set for the autonomous review/curator passes
+    // countViews:false for the review/curator passes: a maintenance read is not a use, so it must not refresh a
+    // skill's lastUsedAt (the 30/90-day aging clock) or its view count.
+    const countViews = !(deps && deps.countViews === false);
     /* BUNDLED RECIPES ON DEMAND (2026-09-23). The run prompt indexes the Commander's enabled library recipes
        instead of inlining their bodies; this is where a body is fetched. `bundled(name, ctx)` resolves a name
        against the recipes THIS run is offered and returns { name, content } or null. It is consulted ONLY after
@@ -191,7 +194,7 @@
       schema: { type: 'object', required: ['name'], properties: { name: { type: 'string' } } },
       run: (args, ctx) => {
         if (!store) return { content: 'The skill library is unavailable.', summary: 'unavailable' };
-        const v = store.view((ctx && ctx.agentId) || 'agent', args && args.name);
+        const v = store.view((ctx && ctx.agentId) || 'agent', args && args.name, countViews ? undefined : { bump: false });
         if (!v) {
           const recipe = bundled ? bundled(args && args.name, ctx) : null;
           if (recipe && recipe.content) return { content: recipe.content, summary: 'loaded ' + recipe.name };
