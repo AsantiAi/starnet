@@ -49,6 +49,25 @@ doc.links = [{ id: 'l3', from: { prop: 'p10', port: 'out' }, to: { prop: 'p11', 
   `station.links()`; `projectGeometry()` emits them in the LOCAL frame. Belts stay in the save, so an older
   build still routes a v2 save by tiles. The link tools (phase B) make links the thing you edit.
 
+### Layout engine — `LineLayout.layout(graph, floor)` (linelayout.js, conveyor-links phase C)
+
+Pure, deterministic. Takes one line as a graph (`nodes: [{ id, t, w, h, pin? }]`, `links: [{ from: { node, port, tags?, else? }, to: { node } }]`)
+and the floor (`rects` deck, `blocked` props, `belts` already laid, optional `junctions`) and answers `{ nodes: { id: { x, y } }, links, belts }`
+— or `{ ok: false, error: 'NO_ROOM', needs: { w, h } }` (MAKE ROOM adds a tile of walking room round that).
+
+- **Columns** = longest forward path from the start; a LOOP's way back (any link closing a cycle) never pushes a step right.
+- **Lanes**: a SPLITTER/FILTER spreads its outputs round its own lane — in the compiler's E, S, W, N lane order, so a
+  split's turn order and a filter's fallback lane survive the layout; a LOOP keeps done on its lane, escape below; a
+  JOINER/MERGER sits on the middle of the lanes feeding it. Lane spacing tries 2, 3, then 4 rows (tightest that routes).
+- **Belts**: lowest-cost grid route per link (a bend costs 2, a tile beside a third machine 1); the BELT tool's rules
+  hold (arrival tile a BAY's alone, never beside a junction it does not serve, junction lanes by where the other end
+  sits: above = N, below = S, same lane = E out / W in, a way back climbs N). Main run first, ways back last.
+- **Placement**: pinned nodes never move (the line forms round the first pin); unpinned, the line is routed on an empty
+  floor of its own and the resulting shape goes to the first clear spot (rows top first) where no old belt runs into
+  it and none of its belts sits beside another line's junction.
+- Locked by test/line-layout.test.js: every blueprint, laid out fresh, routes EXACTLY as the stamped original; 11 of 19
+  fit a fresh starter room as-is (the rest in a room grown for them).
+
 ## Runtime (conveyor.js) — `Conveyor.create()`
 
 A self-contained transport sim + renderer. Frame-agnostic: it's handed a belt map in whatever
