@@ -4367,9 +4367,10 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   }
   // The sign-in box (open page · cancel · paste a code). ONE flow runs at a time, so ONE box is ever on the page:
   // under the card for the default sign-in, inside the accounts block for an extra account.
-  function claudeFlowBoxHtml(flowing, show) {
+  function claudeFlowBoxHtml(flowing, show, dismissable) {
     return '<div class="key-edit codex-inline prov-oauth-inline prov-claude-inline" id="prov-claude-inline"' + (show ? '' : ' hidden') + '>' +
       '<span class="dim" id="prov-claude-status">' + esc(claudeCard.msg) + '</span>' +
+      (!flowing && dismissable ? '<button class="bb sm" id="prov-claude-dismiss">✕ DISMISS</button>' : '') +
       (flowing
         ? '<button class="bb sm" id="prov-claude-open"' + (claudeCard.url ? '' : ' style="display:none"') + '>↗ OPEN SIGN-IN PAGE</button>' +
           '<button class="bb sm" id="prov-claude-cancel">✕ CANCEL</button>' +
@@ -4434,7 +4435,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         '<span class="dim">' + esc(b.msg) + '</span>' +
         (b.code ? '<code class="key-mask">' + esc(b.code) + '</code>' : '') +
         (b.openUri && flowing ? '<button class="bb sm" data-act="prov-oauth-acct-open">↗ OPEN PAGE</button>' : '') +
-        (flowing ? '<button class="bb sm" data-act="prov-oauth-acct-cancel">✕ CANCEL</button>' : '') +
+        '<button class="bb sm" data-act="prov-oauth-acct-cancel">' + (flowing ? '✕ CANCEL' : '✕ DISMISS') + '</button>' +
       '</div>' : '';
     const canAdd = !flowing && all.length < (j.max || 8);
     return '<div class="prov-accounts">' + rows + box +
@@ -4456,7 +4457,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const row = (a, i) => stackRowHtml(a, i, all, { signedIn: isIn(a), isIn, plan: isIn(a) ? claudeCliPlan(a).replace(/^ · /, '') : '',
       signInAct: 'prov-claude-acct-signin', removeAct: 'prov-claude-acct-remove' });
     const flowing = !!claudeCard.account && typeof ClaudeCliSignIn !== 'undefined' && ClaudeCliSignIn.active();
-    const box = claudeCard.account ? claudeFlowBoxHtml(flowing, flowing || !!claudeCard.msg) : '';
+    const box = claudeCard.account ? claudeFlowBoxHtml(flowing, flowing || !!claudeCard.msg, true) : '';
     const canAdd = !flowing && 1 + extras.length < claudeAccountsMax;
     return '<div class="prov-accounts">' +
       (extras.length ? all.map(row).join('') : '') +
@@ -5099,6 +5100,12 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         claudeCard.msg = ''; claudeCard.url = ''; claudeCard.failed = false; claudeCard.account = '';
         claudeCliSt = undefined; refreshClaudeCliCard(true); rerender('settings');
       };
+      const claudeDismiss = card.querySelector('#prov-claude-dismiss');
+      if (claudeDismiss) claudeDismiss.onclick = e2 => {
+        e2.stopPropagation(); sfx('click');
+        claudeCard.msg = ''; claudeCard.url = ''; claudeCard.failed = false; claudeCard.account = '';
+        rerender('settings');
+      };
       const claudeGo = card.querySelector('#prov-claude-code-go');
       if (claudeGo) claudeGo.onclick = e2 => { e2.stopPropagation(); claudeSubmit(); };
       if (claudeCodeIn) claudeCodeIn.onkeydown = e2 => { if (e2.key === 'Enter' && !e2.isComposing) { e2.preventDefault(); claudeSubmit(); } };
@@ -5121,7 +5128,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
           },
           onError: msg => {
             claudeCard.msg = msg; claudeCard.url = ''; claudeCard.failed = true;
-            if (claudeCard.account === '+') claudeCard.account = '';
+            if (claudeCard.account === '+') claudeCard.account = '-';   // an ADD that failed: its message stays in the accounts block
             sfx('bad'); refreshClaudeCliCard(true); rerender('settings');
           },
           onConnected: res => {
