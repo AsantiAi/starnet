@@ -1228,6 +1228,8 @@ body.no-curve #stage-wrap::before { background: none; box-shadow: none; }
 /* the typed-answer escape hatch: quieter than the suggestion (it is an affordance note, not content), but
    present — the chip row alone reads as "pick exactly one" when free text has always been accepted. */
 .tq-hint { font-size: 12px; color: var(--ph-dim); letter-spacing: 0.3px; margin-top: 4px; opacity: .75; }
+/* the connect door a task question carries when its run needed an unconnected service (one card, one slot) */
+.tq-door { display: block; margin-top: 8px; }
 
 /* TASTE EXTRACTION "my read" card (chat.js briefReadCard) — the mid-run announce-and-act read.
    REGISTER (2026-07-24): this is a CARD, not a work-log micro-line. It states what the run believes it was

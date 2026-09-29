@@ -359,14 +359,16 @@
         const c = connectors.find(x => x.id === h.connectorId);
         const ready = c && c.enabled && c.state === 'up' && !c.authRequired;
         const dormant = c && c.enabled && c.state === 'cached' && !c.authRequired;
-        const supported = dormant || (ready && (!h.toolName || (c.tools || []).includes(h.toolName)));
+        // a handoff held while the task's question is open only ever RETURNS to it — continuing would answer it
+        const supported = !h.awaitingAnswer && (dormant || (ready && (!h.toolName || (c.tools || []).includes(h.toolName))));
         const line = document.createElement('div');
         const caption = document.createElement('span');
         caption.textContent = (ws.title || 'Task') + ' · ' + h.connectorId + ' — '
-          + (dormant ? 'saved connection will be checked. ' : supported ? 'connection ready. ' : ready ? 'requested operation is unavailable. ' : 'waiting for connection. ');
+          + (h.awaitingAnswer ? (ready || dormant ? 'connected — answer the task\'s open question to continue. ' : 'waiting for connection; the task has an open question. ')
+            : dormant ? 'saved connection will be checked. ' : supported ? 'connection ready. ' : ready ? 'requested operation is unavailable. ' : 'waiting for connection. ');
         line.appendChild(caption);
         const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'bb xs';
-        btn.textContent = dormant ? 'CHECK & CONTINUE TASK' : supported ? 'CONTINUE TASK' : 'RETURN TO TASK';
+        btn.textContent = h.awaitingAnswer ? 'RETURN TO TASK' : dormant ? 'CHECK & CONTINUE TASK' : supported ? 'CONTINUE TASK' : 'RETURN TO TASK';
         btn.onclick = async () => {
           if (!supported) { App.openWorkstream(ws.id); return; }
           btn.disabled = true;

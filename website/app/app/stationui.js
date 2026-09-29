@@ -4326,8 +4326,24 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         scheduleSettingsRepaint();
       });
   }
+  /* CLAUDE CODE card truth: /api/auth/claude-cli/status (the user's own `claude auth status`). undefined = not asked
+     yet, null = the station couldn't answer. The card never says SIGNED IN from anything else. */
+  let claudeCliSt;
+  let claudeCliStPending = false;
+  function refreshClaudeCliCard(force) {
+    if (typeof ClaudeCliSignIn === 'undefined' || claudeCliStPending || (!force && claudeCliSt !== undefined)) return;
+    claudeCliStPending = true;
+    ClaudeCliSignIn.status().then(st => { claudeCliSt = st; }).catch(() => { claudeCliSt = null; })
+      .finally(() => { claudeCliStPending = false; scheduleSettingsRepaint(); });
+  }
+  function claudeCliPlan(st) {
+    if (!st) return '';
+    if (st.authMethod === 'api_key' || st.authMethod === 'apiKey') return ' · API KEY';
+    return st.subscription ? ' · ' + String(st.subscription).toUpperCase() : '';
+  }
   function queueProviderHealthRefresh() {
     const h = H(); if (!h) return;
+    refreshClaudeCliCard(false);
     for (const p of PROVIDERS) {
       const credentialSaved = !!(h.hasStoredCredential && h.hasStoredCredential(p.id));
       const endpointConfigured = p.id === 'ollama' || p.id === 'claude-cli' || (p.id === 'custom' && !!(h.getBaseUrl && h.getBaseUrl(p.id)));
@@ -4413,8 +4429,10 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       const health = providerHealth[p.id];
       // ACTIVE is reserved for a selected model whose endpoint and credential (when applicable) were proven by
       // the no-generation probe. Selection plus a model id is not evidence that a run can leave the station.
-      const runnable = !!(health && health.reachable && health.credentialVerified && p.id === active && h && h.getModel && h.getModel());
-      const cls = codexDead ? 'avail expired' : (configured ? 'conn' : (p.live ? 'avail' : 'soon'));
+      // CLAUDE CODE has no key to verify: its sign-in is proven by the CLI (claudeCliSt) and its catalog by the probe
+      const runnable = !!(health && health.reachable && (health.credentialVerified || (p.id === 'claude-cli' && claudeCliSt && claudeCliSt.loggedIn)) && p.id === active && h && h.getModel && h.getModel());
+      const claudeIn = p.id === 'claude-cli' && !!(claudeCliSt && claudeCliSt.loggedIn);
+      const cls = codexDead ? 'avail expired' : ((p.id === 'claude-cli' ? claudeIn : configured) ? 'conn' : (p.live ? 'avail' : 'soon'));
       // E5: `connected` is KEY PRESENCE, not a verified live connection — a saved key can be revoked,
       // rate-limited, or wrong, and we haven't round-tripped it. Label it "KEY SAVED" (or SIGNED IN for
       // the codex OAuth path, which IS real auth) rather than the over-claiming "CONNECTED". The
@@ -4425,8 +4443,12 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         : health && health.reachable ? '● LOCAL ENDPOINT CONFIGURED · REACHABLE' : '○ LOCAL ENDPOINT CONFIGURED · OFFLINE';
       const keyStat = health === undefined ? connLabel + ' · CHECKING…'
         : health && health.credentialVerified ? connLabel + ' · VERIFIED' : health && health.reachable ? connLabel + ' · NOT VERIFIED' : connLabel + ' · CHECK FAILED';
+      const isClaude = p.id === 'claude-cli';
+      const claudeStat = claudeCliSt === undefined ? '◐ CHECKING CLAUDE CODE…' : claudeCliSt === null ? '○ COULDN’T CHECK CLAUDE CODE'
+        : !claudeCliSt.installed ? '○ CLAUDE CODE NOT INSTALLED' : !claudeCliSt.loggedIn ? '○ NOT SIGNED IN'
+        : '● SIGNED IN' + claudeCliPlan(claudeCliSt);
       const stat = !p.live ? '○ COMING SOON' : codexDead ? '⚠ SIGN-IN EXPIRED — RECONNECT'
-        : keyless ? localStat : credentialSaved ? keyStat : (isOAuthProvider(p.id) ? '○ NOT SIGNED IN' : (p.id === 'custom' ? '○ NO ENDPOINT' : '○ NO KEY'));
+        : isClaude ? claudeStat : keyless ? localStat : credentialSaved ? keyStat : (isOAuthProvider(p.id) ? '○ NOT SIGNED IN' : (p.id === 'custom' ? '○ NO ENDPOINT' : '○ NO KEY'));
       const n = ks.length;
       // NO-KEY cards that accept a key get an inline, collapsible paste-and-save row so the user never has to hunt
       // for where keys live. It reuses the SAME save path (Harness.setKey) as the key list below — no duplicate logic.
@@ -4437,6 +4459,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // without it the row reads NOT SIGNED IN with zero recovery (the 2026-07-21 user-reported escape).
       // The ⏼ RE-SIGN-IN row below can't cover it: that row only exists once a live/known-dead sign-in exists.
       const wantsOAuthSignin = p.live && isOAuthProvider(p.id) && !credentialSaved && !codexDead;
+      const wantsClaudeSignin = p.id === 'claude-cli' && !!(claudeCliSt && claudeCliSt.installed && !claudeCliSt.loggedIn);
+      const wantsClaudeInstall = p.id === 'claude-cli' && !!(claudeCliSt && !claudeCliSt.installed);
       return '<div class="prov-card ' + cls + '" data-provider="' + esc(p.id) + '" role="group" aria-label="' + esc(p.name) + ' provider" style="--ci:' + pi + '">' +
         '<button class="prov-select" data-act="prov-select" aria-label="Select ' + esc(p.name) + ' provider">' +
           providerLogoHtml(p.id) +
@@ -4447,11 +4471,22 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         '</button>' +
           '<span class="prov-stat"><span class="prov-stat-t">' + stat + (credentialSaved && !isOAuthProvider(p.id) ? '<i>' + n + (n === 1 ? ' key' : ' keys') + '</i>' : '') + '</span></span>' +
         (wantsInline ? '<button class="bb sm prov-addkey" data-act="prov-add-toggle" data-provider="' + esc(p.id) + '" aria-label="Add a ' + esc(p.name) + ' key" title="paste a ' + esc(p.name) + ' key without leaving this card">＋ ADD KEY</button>' : '') +
+        (wantsClaudeSignin ? '<button class="bb sm prov-addkey" data-act="prov-claude-signin" aria-label="Sign in with Claude" title="opens Claude in your browser — Claude Code keeps the sign-in, StarNet never sees it">⏼ SIGN IN</button>' : '') +
+        (wantsClaudeInstall ? '<button class="bb sm prov-addkey" data-act="prov-claude-install" aria-label="Get Claude Code" title="Claude Code needs a Pro, Max, Team or Enterprise plan">↗ GET CLAUDE CODE</button>' : '') +
         (wantsOAuthSignin ? '<button class="bb sm prov-addkey" data-act="prov-oauth-signin" data-provider="' + esc(p.id) + '" aria-label="Sign in to ' + esc(p.name) + '" title="device-code sign-in — no API key needed">⏼ SIGN IN</button>' : '') +
         (wantsInline
           ? '<div class="key-edit prov-key-edit" id="prov-key-edit-' + esc(p.id) + '" hidden>' +
             '<input type="password" class="key-input" id="prov-key-in-' + esc(p.id) + '" placeholder="paste ' + esc(p.name) + ' key…" autocomplete="off" spellcheck="false">' +
             '<button class="bb sm" data-act="prov-add-save" data-provider="' + esc(p.id) + '">SAVE</button>' +
+            '</div>'
+          : '') +
+        (wantsClaudeSignin
+          ? '<div class="key-edit codex-inline prov-oauth-inline prov-claude-inline" id="prov-claude-inline" hidden>' +
+            '<span class="dim" id="prov-claude-status"></span>' +
+            '<button class="bb sm" id="prov-claude-open" hidden>↗ OPEN SIGN-IN PAGE</button>' +
+            '<button class="bb sm" id="prov-claude-cancel">✕ CANCEL</button>' +
+            '<input type="text" class="key-input" id="prov-claude-code" placeholder="page showed a code? paste it here" autocomplete="off" spellcheck="false">' +
+            '<button class="bb sm" id="prov-claude-code-go">SUBMIT</button>' +
             '</div>'
           : '') +
         (wantsOAuthSignin
@@ -4917,6 +4952,51 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         sfx('click');
         rerender('settings');
       };
+      // CLAUDE CODE: SIGN IN WITH CLAUDE right on the card (the ClaudeCliSignIn engine — the CLI's own login, the
+      // browser does the rest) and a way to get Claude Code when it isn't installed. stopPropagation: a card click selects.
+      const claudeSignin = card.querySelector('[data-act="prov-claude-signin"]');
+      if (claudeSignin && typeof ClaudeCliSignIn !== 'undefined') claudeSignin.addEventListener('click', ev => {
+        ev.stopPropagation();
+        sfx('click');
+        const box = card.querySelector('#prov-claude-inline');
+        const st = card.querySelector('#prov-claude-status');
+        const open = card.querySelector('#prov-claude-open');
+        const cancel = card.querySelector('#prov-claude-cancel');
+        const codeIn = card.querySelector('#prov-claude-code');
+        const codeGo = card.querySelector('#prov-claude-code-go');
+        if (box) { box.hidden = false; box.addEventListener('click', e2 => e2.stopPropagation()); }
+        claudeSignin.style.display = 'none';   // .prov-addkey sets display, which beats [hidden]
+        const done = ok => { if (!ok) claudeCliSt = undefined; refreshClaudeCliCard(true); invalidateProviderHealth('claude-cli'); if (!ok) rerender('settings'); };
+        const submit = async () => {
+          const code = codeIn ? codeIn.value.trim() : '';
+          if (!code) return;
+          sfx('click');
+          const r = await ClaudeCliSignIn.submitCode(code);
+          if (r.ok) { if (codeIn) codeIn.value = ''; if (st) st.textContent = 'checking the code with Claude…'; }
+          else if (st) st.textContent = r.error;
+        };
+        if (cancel) cancel.onclick = async e2 => { e2.stopPropagation(); sfx('click'); await ClaudeCliSignIn.cancel(); done(false); };
+        if (codeGo) codeGo.onclick = e2 => { e2.stopPropagation(); submit(); };
+        if (codeIn) codeIn.onkeydown = e2 => { if (e2.key === 'Enter' && !e2.isComposing) { e2.preventDefault(); submit(); } };
+        ClaudeCliSignIn.start({
+          onStarting: () => { if (st) st.textContent = 'starting Claude sign-in…'; },
+          onPending: pend => {
+            if (st) st.textContent = 'finish signing in in the browser window Claude Code just opened…';
+            if (open && pend.url) { open.hidden = false; open.onclick = e2 => { e2.stopPropagation(); sfx('click'); openExternal(pend.url); }; }
+          },
+          onError: msg => { if (st) st.textContent = msg; sfx('bad'); },
+          onConnected: res => {
+            claudeCliSt = Object.assign({ installed: true, loggedIn: true }, res);
+            notify(activeProv() === 'claude-cli'
+              ? '✓ signed in to Claude — your agents can run on your subscription'
+              : '✓ signed in to Claude — click the CLAUDE CODE card to make it your active brain', 'good');
+            if (typeof ModelDock !== 'undefined' && ModelDock.reflect) ModelDock.reflect();
+            done(true);
+          }
+        });
+      });
+      const claudeInstall = card.querySelector('[data-act="prov-claude-install"]');
+      if (claudeInstall) claudeInstall.addEventListener('click', ev => { ev.stopPropagation(); sfx('click'); openExternal('https://code.claude.com/docs/en/setup'); });
       // FIRST sign-in for a keyless device-code provider (grok/kimi) — the card-local twin of the key-row's
       // ⏼ RE-SIGN-IN, driving the SAME shared engine (OAuthSignIn.for). stopPropagation: the card click selects.
       const oauthSignin = card.querySelector('[data-act="prov-oauth-signin"]');
