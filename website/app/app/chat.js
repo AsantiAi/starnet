@@ -1734,6 +1734,16 @@ const Chat = (() => {
   function historyWindow(ws) {
     return ws ? modelFitHistory(ws.history, ws) : [];
   }
+  /* A retry re-runs the LAST user turn, so nothing after it may ride the wire. retryLast() trims the local rows,
+     but load() then re-syncs the thread from the server transcript, which puts the replaced attempt's replies back
+     before send() builds the request — and current Claude models refuse a conversation that ends on an assistant
+     message ("This model does not support assistant message prefill"): every Try again / retry failed in ~1.5s
+     with "Provider returned error" (first-hour walk 2026-09-28, re-proven live on the fix branch). */
+  function endOnUserTurn(messages) {
+    const list = Array.isArray(messages) ? messages : [];
+    const at = list.map(m => m && m.role).lastIndexOf('user');
+    return at >= 0 ? list.slice(0, at + 1) : list;
+  }
   function contextIssueFor(messages, limit, projectedUsed) {
     limit = Math.max(0, Number(limit) || 0);
     if (!limit) return null;   // unknown catalog => never invent a ceiling
@@ -4427,12 +4437,13 @@ const Chat = (() => {
   // context, about a real decision, immediately acted on; + the R4 receipt proves it stuck) AND continues
   // the conversation as the Commander's next message so the task proceeds with it. "you decide" banks
   // nothing and hands the choice back. One fork per reply by construction (parse reads the first marker).
-  function offerFork(fk) {
+  function offerFork(fk, runId) {
     clearNudge();   // same law as offerTaskQuestion: the fork claims the moment; a live nudge leaves WITH its chips
     const items = fk.options.map(o => ({ label: o, value: o }));
     items.push({ label: 'you decide', value: '', skip: true });
     const q = row('agent'); q.d.classList.add('nudge');
     q.body.textContent = '⌖ ' + fk.question;
+    taskQuestionDoor(q.body, runId);   // the fork's chips replace this run's connect chip in the one slot — the card carries the door
     autoscroll();
     choices(items, item => {
       vanish(q.d);
@@ -4476,6 +4487,7 @@ const Chat = (() => {
         // send() routes this whole answer back into the same durable brief.
         send(text);vanish(r.d);return true;
       });
+      taskQuestionDoor(r.body, tq.runId);
       autoscroll();return;
     }
     // TWO KINDS of suggestion, and they must never be confused. GROUNDED comes from the Commander's own
@@ -4526,6 +4538,7 @@ const Chat = (() => {
       ? 'these aren\'t exclusive — tap all that apply, then confirm; or type your own answer'
       : 'or ignore these and type your own answer — more than one is fine';
     q.body.appendChild(hint);
+    taskQuestionDoor(q.body, tq.runId);
     autoscroll();
     choices(items, item => {
       vanish(q.d);
@@ -6860,7 +6873,13 @@ const Chat = (() => {
     if (!activeWs) return localLine('No active workstream to retry in.');
     if (isBusy()) return localLine('This stream is still running — stop it first, then /retry.');
     const h = activeWs.history;
-    if (h.length && h[h.length - 1].role === 'assistant' && (h[h.length - 1].error || h[h.length - 1].stopped)) h.pop();   // drop the failed/stopped partial reply
+    /* A retry re-runs the LAST user turn, so every row after it is the attempt being replaced — drop all of them,
+       not just the ⚠ row. A failed run that streamed several replies ("The tool needs the required objective
+       field." …) used to leave them after the user turn, the retry request then ENDED ON AN ASSISTANT MESSAGE, and
+       current Claude models refuse that outright ("This model does not support assistant message prefill") — every
+       Try again failed in ~1.5s with "Provider returned error" (first-hour walk 2026-09-28). */
+    const lastUser = h.map(m => m && m.role).lastIndexOf('user');
+    if (lastUser >= 0) h.length = lastUser + 1;
     let text = null;
     for (let i = h.length - 1; i >= 0; i--) { if (h[i].role === 'user') { text = h[i].content; break; } }
     if (text == null) return localLine('Nothing to retry yet — send a message first.');
@@ -6902,6 +6921,34 @@ const Chat = (() => {
     if (!door) return false;
     choices([{ label: door.label, value: 'connect' }], () => door.run());
     return true;
+  }
+  /* A run that ends on a TASK_QUESTION owns the one post-run slot, so the connect chip cannot take a row of its own —
+     but connectors.list has already told the model "the Commander now has a ⇄ CONNECT chip", and the model tells
+     the Commander to tap it (first-hour walk 2026-09-28: said three times, no chip anywhere). Record the handoff
+     exactly as offerConnectorDoor would; offerTaskQuestion then draws the door INSIDE the question card. */
+  function holdConnectorDoor(runId, originWs) {
+    const ev = runId ? CONNECTOR_NEEDED.get(runId) : null;
+    if (!ev) return false;
+    CONNECTOR_NEEDED.delete(runId);
+    const ws = originWs || activeWs;
+    if (!ws || typeof Workstreams === 'undefined') return false;
+    Workstreams.setConnectorHandoff(ws.id, Object.assign({}, ev, { agentId: ws.agentId || 'agent' }));
+    App.persist();
+    return true;
+  }
+  // The door for the displayed stream's durable connector handoff, drawn inside a question card — a task question
+  // or a FORK, fresh or restored after a reload. Opening the connect screen does NOT answer the question. A fresh
+  // card passes its runId so an older run's handoff never rides along on every later question in the stream.
+  function taskQuestionDoor(body, runId) {
+    const h = (activeWs && typeof Workstreams !== 'undefined') ? Workstreams.connectorHandoff(activeWs.id) : null;
+    if (h && runId && h.runId && h.runId !== runId) return null;
+    const door = (h && typeof Friendly !== 'undefined' && Friendly.connectorDoor) ? Friendly.connectorDoor(h) : null;
+    if (!door || !body) return null;
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'choice tq-door'; b.textContent = door.label;
+    b.onclick = () => door.run();
+    body.appendChild(b);
+    return b;
   }
   // An explicit continuation carries existing history, unlike retryLast(), which repeats the user turn.
   // The connector is re-read on click; no OAuth callback can start work or change the originating agent.
@@ -8674,7 +8721,7 @@ const Chat = (() => {
         activeLiveRow = streamingAgent(); historyRead.repaint = false;
       }
       const { text: reply, error, endReason, finishReason, completionVerdict, effectVerdict, budgetScope, budgetCapUsd } = await Harness.chat({
-        system: sys, messages: historyWindow(ws), agentId: ws.agentId || 'agent', isTask, recurring, signal: ac.signal, streamId: ws.id,
+        system: sys, messages: retry ? endOnUserTurn(historyWindow(ws)) : historyWindow(ws), agentId: ws.agentId || 'agent', isTask, recurring, signal: ac.signal, streamId: ws.id,
         taskAction: taskAction || undefined,
         postconditions: opts && opts.postconditions != null ? opts.postconditions : undefined,
         recovery: recoveryResume ? opts.recovery : undefined,
@@ -8835,6 +8882,7 @@ const Chat = (() => {
         // a CLEAN end that hit an unwired connector mid-run: the reply already says "not connected" — the chip is
         // the door. Only on a clean end: a stopped run owns the slot with its retry/budget chip above.
         if (!taskQuestion && (!endReason || endReason === 'done')) offerConnectorDoor(thisRunId, ws);
+        if (taskQuestion) holdConnectorDoor(thisRunId, ws);   // the question owns the slot; its card carries the door
         // GOLDEN-RUN DRIFT (2026-08-22): a recipe-launched run is compared by the sidecar against that recipe's own
         // good history; a drifted run is a failure class, so it earns the bell ONCE (keyed by the run). The durable
         // row lands a beat after run end, so the read waits; it is advisory and never blocks the turn.
@@ -8857,7 +8905,7 @@ const Chat = (() => {
           }, 1500);
         }
         if (isActiveWs(ws) && activeLiveRow) activeLiveRow.done();
-        if (isActiveWs(ws) && taskQuestion) presentTaskQuestion(ws, taskQuestion);   // enriches with the stored recommendation, then renders
+        if (isActiveWs(ws) && taskQuestion) presentTaskQuestion(ws, Object.assign({ runId: thisRunId }, taskQuestion));   // enriches with the stored recommendation, then renders
         // Belt-and-braces (live-caught 2026-07-16): a run can end 'clarifying' with the marker unparseable
         // client-side (e.g. a malformed/glued reply line) while the DURABLE brief holds the real validated
         // question — re-present from the store so the Commander is never left with a question-less pause.
@@ -8867,7 +8915,7 @@ const Chat = (() => {
         // one-tap chips at the run boundary; a malformed marker parses null and stays plain text.
         if (isActiveWs(ws) && replyText && typeof Fork !== 'undefined' && Fork.parse) {
           const fk = Fork.parse(replyText);
-          if (fk) { offerFork(fk); if (!voiceQuestion && fk.question) voiceQuestion = fk.question; }
+          if (fk) { offerFork(fk, thisRunId); if (!voiceQuestion && fk.question) voiceQuestion = fk.question; }
         }
         /* THE WORK LINE. This dock has answered; if the Commander drew stages past it, run them now — still
            INSIDE the run's try, so the stream stays busy and Stop/E-STOP reach the whole line rather than a
