@@ -9851,7 +9851,7 @@ const ROUTES = [
   { m: 'GET', prefix: '/api/slash/catalog', h: serveSlashCatalog },
   { m: 'POST', exact: '/api/slash/dispatch', h: handleSlashDispatch },
   { m: 'POST', exact: '/api/skills/toggle', h: handleSkillToggle },
-  { m: 'GET', exact: '/api/skill-market', h: serveSkillMarket },                // the Skill Market: catalog + this station's install state
+  { m: 'GET', qsplit: '/api/skill-market', h: serveSkillMarket },                // the Skill Market: catalog + this station's install state
   { m: 'POST', exact: '/api/skill-market/install', h: handleSkillMarketInstall },
   { m: 'POST', exact: '/api/skill-market/uninstall', h: handleSkillMarketUninstall },
   { m: 'POST', exact: '/api/skill-exchange/inspect', h: handleSkillExchangeInspect },

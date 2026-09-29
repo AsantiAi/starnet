@@ -136,7 +136,8 @@ function readCatalog(doc) {
       tags: list(row.tags).slice(0, 8), requires: list(row.requires).filter(g => GEAR.indexOf(g) >= 0),
       librarySlug: SLUG_RE.test(str(row.librarySlug)) ? str(row.librarySlug) : '',
       digest: str(row.digest), bytes: Number(row.bytes) || 0,
-      files: files.map(f => ({ path: str(f.path), sha256: str(f.sha256), bytes: Number(f.bytes) || 0 }))
+      files: files.map(f => ({ path: str(f.path), sha256: str(f.sha256), bytes: Number(f.bytes) || 0 })),
+      upstream: row.upstream && /^https:\/\//.test(str(row.upstream.url)) ? { url: str(row.upstream.url).slice(0, 400), license: str(row.upstream.license).slice(0, 80) } : null
     });
   }
   return { name: str(doc.name) || MARKET_NAME, entries, rejected };
