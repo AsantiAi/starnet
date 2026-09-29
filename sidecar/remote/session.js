@@ -19,6 +19,8 @@
      · Idle sessions expire (default 10 min without a frame). The phone simply says hello again. */
 'use strict';
 
+const { note } = require('../failopen.js');
+
 function makeSessions(deps) {
   const devices = deps.devices;
   const C = deps.crypto;
@@ -74,7 +76,7 @@ function makeSessions(deps) {
     try { msg = C.open(s.keys.p2s, 'p2s', frame); } catch (_) { return { ok: false, error: 'bad frame' }; }
     s.inSeq = frame.seq;
     s.lastAt = now();
-    if (!s.verified) { s.verified = true; try { devices.touch(s.deviceId); } catch (_) {} }
+    if (!s.verified) { s.verified = true; try { devices.touch(s.deviceId); } catch (e) { note('remote.session.devices.touch', e); } }
     return { ok: true, session: s, msg };
   }
 
@@ -87,7 +89,7 @@ function makeSessions(deps) {
     return C.seal(s.keys.s2p, 's2p', s.outSeq, obj);
   }
 
-  function end(sid) { const s = live.get(String(sid || '')); live.delete(String(sid || '')); if (s && typeof s.onEnd === 'function') { try { s.onEnd(); } catch (_) {} } }
+  function end(sid) { const s = live.get(String(sid || '')); live.delete(String(sid || '')); if (s && typeof s.onEnd === 'function') { try { s.onEnd(); } catch (e) { note('remote.session.s.onEnd', e); } } }
   function endDevice(deviceId) { for (const s of Array.from(live.values())) if (s.deviceId === deviceId) end(s.id); }
   function sweep() { const t = now(); for (const s of Array.from(live.values())) if (t - s.lastAt > ttlMs) end(s.id); }
   function list() { sweep(); return Array.from(live.values()); }

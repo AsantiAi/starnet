@@ -18,6 +18,8 @@
      (station push)                                  -> { t:'ev', frame } */
 'use strict';
 
+const { note, swallow } = require('../failopen.js');
+
 const nodeCrypto = require('crypto');
 
 const LABEL = 'starnet-relay/1';
@@ -36,7 +38,7 @@ function makeRelayClient(d) {
   const conns = new Map();   // conn -> { paired, sid, deviceId, detach }
 
   function set(s, err) { state = s; since = now(); if (err !== undefined) lastError = err; }
-  function send(obj) { try { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); } catch (_) {} }
+  function send(obj) { try { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); } catch (e) { note('remote.relay-client.send', e); } }
   function toPhone(conn, msg) { send({ t: 'to', conn, msg }); }
 
   function syncTokens() { if (state === 'online') send({ t: 'tokens', hashes: devices.relayTokenHashes() }); }
@@ -48,7 +50,7 @@ function makeRelayClient(d) {
     const c = conns.get(conn);
     if (!c) return;
     conns.delete(conn);
-    if (c.detach) { try { c.detach(); } catch (_) {} }
+    if (c.detach) { try { c.detach(); } catch (e) { note('remote.relay-client.c.detach', e); } }
     if (c.sid) sessions.end(c.sid);
   }
 
@@ -60,7 +62,7 @@ function makeRelayClient(d) {
       if (!r.ok) return toPhone(conn, { t: 'error', error: r.error });
       const tok = devices.issueRelayToken(r.device.id);
       if (!tok.ok) return toPhone(conn, { t: 'error', error: 'paired, but the relay pass could not be saved — pair again from the desk' });
-      let st = null; try { st = devices.stationKeys(); } catch (_) {}
+      let st = null; try { st = devices.stationKeys(); } catch (e) { note('remote.relay-client.stationKeys', e); }
       log('paired ' + r.device.name + ' (' + r.device.id + ') over the relay');
       toPhone(conn, { t: 'paired', deviceId: r.device.id, relayToken: tok.token, stationId: st && st.id, fingerprint: r.device.fingerprint });
       syncTokens();
@@ -70,7 +72,7 @@ function makeRelayClient(d) {
     if (msg.t === 'hello') {
       const r = sessions.hello(msg);
       if (!r.ok) return toPhone(conn, { t: 'error', error: r.error });
-      if (c.detach) { try { c.detach(); } catch (_) {} }
+      if (c.detach) { try { c.detach(); } catch (e) { note('remote.relay-client.c.detach', e); } }
       if (c.sid) sessions.end(c.sid);
       c.sid = r.sessionId;
       c.deviceId = String(msg.deviceId || '');
@@ -102,7 +104,7 @@ function makeRelayClient(d) {
     if (m.t === 'pong') { if (pongTimer) { clearTimeout(pongTimer); pongTimer = null; } return; }
     if (m.t === 'open') { conns.set(Number(m.conn), { paired: !!m.paired, sid: null, deviceId: '', detach: null }); return; }
     if (m.t === 'gone') { drop(Number(m.conn)); return; }
-    if (m.t === 'from') { onPhone(Number(m.conn), m.msg).catch(() => {}); return; }
+    if (m.t === 'from') { onPhone(Number(m.conn), m.msg).catch(swallow('remote.relay.onPhone')); return; }
   }
 
   function clearTimers() {
@@ -123,7 +125,7 @@ function makeRelayClient(d) {
       clearTimers();
       pingTimer = setInterval(() => {
         send({ t: 'ping' });
-        if (!pongTimer) pongTimer = setTimeout(() => { pongTimer = null; try { sock.close(); } catch (_) {} fail('the relay stopped answering'); }, PONG_WAIT_MS);
+        if (!pongTimer) pongTimer = setTimeout(() => { pongTimer = null; try { sock.close(); } catch (e) { note('remote.relay-client.sock.close', e); } fail('the relay stopped answering'); }, PONG_WAIT_MS);
       }, PING_MS);
     };
     sock.onerror = () => {};
@@ -152,7 +154,7 @@ function makeRelayClient(d) {
     clearTimers();
     for (const conn of Array.from(conns.keys())) drop(conn);
     const s = ws; ws = null;
-    if (s) { try { s.close(1000, 'station stopped'); } catch (_) {} }
+    if (s) { try { s.close(1000, 'station stopped'); } catch (e) { note('remote.relay-client.s.close', e); } }
     set('off', null);
   }
   function info() { return { state, url: url || null, rid, since, lastError, phones: conns.size, retryInMs: state === 'offline' && retryTimer ? retryMs / 2 : null }; }

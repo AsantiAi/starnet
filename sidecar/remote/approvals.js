@@ -18,6 +18,8 @@
    or deny. It can never grant ALWAYS or FULL ACCESS; standing grants are made at the desk. */
 'use strict';
 
+const { note } = require('../failopen.js');
+
 const REMOTE_DECISIONS = new Set(['once', 'session', 'deny']);
 
 function makeApprovals(deps) {
@@ -29,7 +31,7 @@ function makeApprovals(deps) {
   const keyOf = (runId, promptId) => String(runId || '') + '\u0000' + String(promptId || '');
   const clip = (s, n) => String(s == null ? '' : s).slice(0, n);
 
-  function fire(kind, row) { try { onChange(kind, row); } catch (_) {} }
+  function fire(kind, row) { try { onChange(kind, row); } catch (e) { note('remote.approvals.onChange', e); } }
 
   function add(o) {
     if (!o || typeof o.finish !== 'function') return () => {};
@@ -74,7 +76,7 @@ function makeApprovals(deps) {
     if (!e) return { ok: false, error: 'that request was already answered or has expired' };
     if (e.tool === 'brief.ask' && d !== 'deny') return { ok: false, error: 'this is a question — answer it with text' };
     take(runId, promptId);
-    try { e.finish(d); } catch (_) {}
+    try { e.finish(d); } catch (err) { note('remote.approvals.finishDecision', err); }
     return { ok: true };
   }
 
@@ -85,7 +87,7 @@ function makeApprovals(deps) {
     if (!e) return { ok: false, error: 'that question was already answered or has expired' };
     if (e.tool !== 'brief.ask') return { ok: false, error: 'this is an approval — approve or deny it' };
     take(runId, promptId);
-    try { e.finish({ __clarify: true, text: t }); } catch (_) {}
+    try { e.finish({ __clarify: true, text: t }); } catch (err) { note('remote.approvals.finishReply', err); }
     return { ok: true };
   }
 

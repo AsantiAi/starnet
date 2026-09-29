@@ -3418,7 +3418,7 @@ const channelPendingByRun = new Map();     // runId -> Map(promptId -> finish(de
    stay separate for the reason given above; the registry is what lets a phone reach both. */
 const remoteApprovals = require('./remote/approvals.js').makeApprovals({
   now: () => Date.now(),
-  onChange: (kind, row) => { try { if (typeof remoteBroadcast === 'function') remoteBroadcast(kind === 'opened' ? { type: 'approval.opened', approval: row } : { type: 'approval.closed', runId: row.runId, promptId: row.promptId }); } catch (_) {} }
+  onChange: (kind, row) => { try { if (typeof remoteBroadcast === 'function') remoteBroadcast(kind === 'opened' ? { type: 'approval.opened', approval: row } : { type: 'approval.closed', runId: row.runId, promptId: row.promptId }); } catch (e) { failNote('remote.index.approvalBroadcast', e); } }
 });
 function channelAskConsent(o) {
   const runId = String((o && o.runId) || '');
@@ -3438,8 +3438,8 @@ function channelAskConsent(o) {
     // already armed, so a throw from the renderer must never escape into the waiter (it would leave the run
     // paused with no timer owner) — hence the guard.
     emitPrompt: (promptId) => {
-      try { untrack = remoteApprovals.add(Object.assign({ runId, promptId, agentId: o.agentId, surface: o.surface === 'remote' ? 'remote' : 'channel', finish: pend.get(promptId) }, fields)); } catch (_) {}
-      try { if (typeof o.onPrompt === 'function') o.onPrompt(promptId, fields); } catch (_) {}
+      try { untrack = remoteApprovals.add(Object.assign({ runId, promptId, agentId: o.agentId, surface: o.surface === 'remote' ? 'remote' : 'channel', finish: pend.get(promptId) }, fields)); } catch (e) { failNote('remote.index.trackChannelPrompt', e); }
+      try { if (typeof o.onPrompt === 'function') o.onPrompt(promptId, fields); } catch (e) { failNote('channels.consent.onPrompt', e); }
     }
   }).ask().then((decision) => {
     if (untrack) untrack();
@@ -9708,7 +9708,7 @@ const remoteCrypto = require('./remote/crypto.js');
 const remoteDevices = require('./remote/devices.js').makeDevices({
   fs, path, crypto: remoteCrypto, file: path.join(WORKSPACES, '.secrets', 'remote.json'),
   now: () => Date.now(), newId: () => crypto.randomUUID(),
-  tighten: () => { if (process.platform !== 'win32') { try { fs.chmodSync(path.join(WORKSPACES, '.secrets', 'remote.json'), 0o600); } catch (_) {} } }
+  tighten: () => { if (process.platform !== 'win32') { try { fs.chmodSync(path.join(WORKSPACES, '.secrets', 'remote.json'), 0o600); } catch (e) { failNote('remote.index.fs.chmodSync', e); } } }
 });
 const remoteSessions = require('./remote/session.js').makeSessions({ devices: remoteDevices, crypto: remoteCrypto, now: () => Date.now(), newId: () => crypto.randomUUID() });
 // hoisted on purpose: the approvals registry (defined far above) announces changes through this
@@ -9740,7 +9740,7 @@ const remoteHost = require('./remote/host.js').makeRemoteHost({
   },
   runOnce: (o) => runOnce(o),
   askConsent: (o) => channelAskConsent(o),
-  stopRun: (runId) => { const ac = runs.get(runId); if (!ac) return false; try { ac.abort(); } catch (_) {} return true; },
+  stopRun: (runId) => { const ac = runs.get(runId); if (!ac) return false; try { ac.abort(); } catch (e) { failNote('remote.index.ac.abort', e); } return true; },
   deliverables: () => deliverableRows(),
   readFile: async (agentId, rel, offset, length) => {
     let abs;
@@ -9765,7 +9765,7 @@ const remoteHost = require('./remote/host.js').makeRemoteHost({
         : cronStore.pauseJob(jobs, jobId));
     } catch (e) { return { ok: false, error: 'could not save: ' + ((e && e.message) || e) }; }
     // pause means stop unattended work now (the same rule as the ROUTINES panel's pause)
-    if (!enabled) { const lease = cronDriver.leases.get(jobId); if (lease && lease.ac) { try { lease.ac.abort(); } catch (_) {} } }
+    if (!enabled) { const lease = cronDriver.leases.get(jobId); if (lease && lease.ac) { try { lease.ac.abort(); } catch (e) { failNote('remote.index.lease.ac.abort', e); } } }
     return { ok: true, enabled: !!enabled };
   }
 });
@@ -9806,7 +9806,7 @@ function remoteLanUrls() {
   const info = remoteLan.info();
   if (!info.listening) return [];
   const out = [];
-  let ifs = {}; try { ifs = os.networkInterfaces() || {}; } catch (_) {}
+  let ifs = {}; try { ifs = os.networkInterfaces() || {}; } catch (e) { failNote('remote.index.networkInterfaces', e); }
   for (const name of Object.keys(ifs)) for (const a of ifs[name] || []) {
     if (a && a.family === 'IPv4' && !a.internal) out.push('http://' + a.address + ':' + info.port);
   }
@@ -9833,7 +9833,7 @@ async function remoteStartLan() {
 }
 function remoteSnapshot() {
   let station = null;
-  try { const s = remoteDevices.stationKeys(); station = { id: s.id, fingerprint: remoteCrypto.fingerprint(s.publicRaw) }; } catch (_) {}
+  try { const s = remoteDevices.stationKeys(); station = { id: s.id, fingerprint: remoteCrypto.fingerprint(s.publicRaw) }; } catch (e) { failNote('remote.index.stationKeys', e); }
   const info = remoteLan.info();
   return { ok: true, enabled: remoteDevices.enabled(), listening: !!info.listening, port: info.port || null, urls: remoteLanUrls(),
     relay: remoteRelay ? remoteRelay.info() : null,
@@ -16224,9 +16224,9 @@ async function handleRun(req, res) {
         // waiting on a question somebody already answered elsewhere.
         const orig = pending.get(promptId);
         if (orig) {
-          const viaRemote = (d) => { orig(d); if (typeof d === 'string') { try { emit('permission.response', { promptId, decision: d === 'once' || d === 'session' ? d : 'deny' }); } catch (_) {} } };
+          const viaRemote = (d) => { orig(d); if (typeof d === 'string') { try { emit('permission.response', { promptId, decision: d === 'once' || d === 'session' ? d : 'deny' }); } catch (e) { failNote('remote.index.deskPermissionResponse', e); } } };
           viaRemote.extend = orig.extend;
-          try { untrack = remoteApprovals.add(Object.assign({ runId, surface: 'desk', finish: viaRemote }, row)); } catch (_) {}
+          try { untrack = remoteApprovals.add(Object.assign({ runId, surface: 'desk', finish: viaRemote }, row)); } catch (e) { failNote('remote.index.trackDeskPrompt', e); }
         }
       }
     }).ask().then((v) => { if (untrack) untrack(); return v; });

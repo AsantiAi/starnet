@@ -19,6 +19,8 @@
      station      { name, payload }               the station floor's own redacted feed (SSE tee) */
 'use strict';
 
+const { note } = require('../failopen.js');
+
 const TEXT_FLUSH_MS = 250;
 
 function makeRemoteHost(d) {
@@ -26,7 +28,7 @@ function makeRemoteHost(d) {
   if (typeof now !== 'function') throw new Error('makeRemoteHost needs an injected clock (deps.now)');
   const remoteRuns = new Map();   // runId -> { ac, agentId, streamId, deviceId, startedAt }
   const clip = (s, n) => String(s == null ? '' : s).slice(0, n);
-  const broadcast = (evt) => { try { d.broadcast(evt); } catch (_) {} };
+  const broadcast = (evt) => { try { d.broadcast(evt); } catch (e) { note('remote.host.d.broadcast', e); } };
 
   function agentsList() {
     return d.roster().map(a => ({ agentId: a.agentId, name: a.name || a.agentId, model: a.model || null, provider: a.provider || null }));
@@ -49,7 +51,7 @@ function makeRemoteHost(d) {
     const out = [];
     for (const r of rows) {
       let agentId = r.agentId || '';
-      if (!agentId) { try { const h = d.transcript.history(r.streamId, { limit: 1 }); agentId = (h[0] && h[0].agentId) || ''; } catch (_) {} }
+      if (!agentId) { try { const h = d.transcript.history(r.streamId, { limit: 1 }); agentId = (h[0] && h[0].agentId) || ''; } catch (e) { note('remote.host.threadAgent', e); } }
       if (o.agentId && agentId !== o.agentId) continue;
       out.push({ streamId: r.streamId, agentId, turns: r.turns, lastAt: r.lastAt, preview: r.preview || '' });
       if (out.length >= o.limit) break;
@@ -108,7 +110,7 @@ function makeRemoteHost(d) {
 
   async function stop(o) {
     const r = remoteRuns.get(o.runId);
-    if (r) { try { r.ac.abort(); } catch (_) {} return { ok: true }; }
+    if (r) { try { r.ac.abort(); } catch (e) { note('remote.host.r.ac.abort', e); } return { ok: true }; }
     return d.stopRun(o.runId) ? { ok: true } : { ok: false, error: 'that run is not running' };
   }
 

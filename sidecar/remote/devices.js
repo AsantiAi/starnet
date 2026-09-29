@@ -24,6 +24,8 @@
      · Revoke deletes the row. A revoked-but-present row is one forgotten check away from working again. */
 'use strict';
 
+const { note } = require('../failopen.js');
+
 const { readJsonResilient, writeJsonResilient, saveJsonVerified } = require('../durable-store.js');
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // no 0/O/1/I/L: it may be typed from a screen
@@ -69,7 +71,7 @@ function makeDevices(deps) {
         && ((rb.station && rb.station.publicKey) || null) === ((next.station && next.station.publicKey) || null)
         && (rb.enabled === true) === (next.enabled === true)
     });
-    if (res.ok) { state = next; try { tighten(); } catch (_) {} }
+    if (res.ok) { state = next; try { tighten(); } catch (e) { note('remote.devices.tighten', e); } }
     return res;
   }
 
