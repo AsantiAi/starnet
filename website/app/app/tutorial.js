@@ -279,7 +279,7 @@ const Tutorial = (() => {
     const caps = equipmentInScope();
     if (Dialogue.setStage) Dialogue.setStage('QUICK TOUR · 2 OF 2', 'Start with a task');
     Dialogue.node({
-      lines: [seg('Ask for work in COMMS. Review the reply and files.\nBUILD › REFIT STATION: pick a prop, click a clear tile. Press Esc to cancel. Select a placed prop to move it.\nPresets furnish rooms. To chain agents step by step, open WORK › WORKFLOWS: belts carry the job from one agent to the next.', 64, 0)],
+      lines: [seg('Ask for work in COMMS. Review the reply and files.\nBUILD › REFIT STATION: pick a prop, click a clear tile. Press Esc to cancel. Select a placed prop to move it.\nPresets build a whole station, and the work ones come with a line ready to staff. To chain agents step by step, open WORK › WORKFLOWS: belts carry the job from one agent to the next.', 64, 0)],
       options: [
         ...(resumeFirstTask ? [{ label: '▸ CONTINUE MY FIRST TASK', value: 'handoff', yield: true }]   // the tour's way out when a first task is waiting (Dialogue.yieldTour)
           : typeof FirstValue !== 'undefined' ? [{ label: '▸ CHOOSE MY FIRST TASK', value: 'value' }] : []),

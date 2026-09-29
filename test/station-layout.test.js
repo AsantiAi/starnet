@@ -61,10 +61,23 @@ async function layout(o, args, ctx) {
   return { out, calls: b.calls, r: /^REFUSED/.test(out.content) ? null : JSON.parse(out.content) };
 }
 // the Creative Studio preset: INBOX -> Draft Bay -> Review Bay -> OUTBOX. crew[i] crews bay i; desks = a workstation each.
+/* the fixture is a PLAIN two-step line (no roles, no loop), laid the way the Creative Studio preset laid it before the
+   2026-09-28 preset reimagining gave that preset a shelf loop line — so these checks never follow preset copy */
 function creative(crew, desks) {
-  const st = WorldModel.create(Templates.build('creative', WorldModel, Sprites));
+  const st = WorldModel.create(Templates.build('default', WorldModel, Sprites));
+  const room = (name, kind, x, y, hall) => {
+    A.ok(st.addRoom({ kind, name, rect: { x1: x, y1: y, x2: x + 17, y2: y + 10 } }).ok, 'fixture: room ' + name);
+    A.ok(st.placeHallway({ rect: hall }).ok, 'fixture: a hallway to ' + name);
+  };
+  room('DESIGN STUDIO', 'lab', 0, -14, { x1: 7, y1: -3, x2: 10, y2: -1 });
+  room('DRAFT & REVIEW', 'hab', 21, 0, { x1: 18, y1: 4, x2: 20, y2: 6 });
+  const put = (t, x) => st.addProp({ t, x: 21 + x, y: 1, w: 2, h: 2 }).id;
+  const inbox = put('intake', 1), bays = [put('bay', 5), put('bay', 10)]; put('outbox', 15);
+  for (const x of [3, 4, 7, 8, 9, 12, 13, 14]) st.setBelt(21 + x, 2, 'E');
+  st.setPropLabel(inbox, 'CREATIVE · DRAFT & REVIEW');
+  st.setPropBrief(bays[0], 'Draft a response to the incoming creative brief. Follow its audience, format, tone, and constraints.');
+  st.setPropBrief(bays[1], 'Review the incoming draft against the original creative brief. Return the finished version.');
   if (desks) for (const a of new Set(crew.filter(Boolean))) A.ok(st.ensureWorkstation(a).ok, 'fixture: a desk for ' + a);
-  const bays = Templates.example(st.serialize(), WorldModel, Pipeline).roles.map(r => r.propId);
   // assign in REVERSE prop order: the answer must follow the compiled hand-offs, never the saved array
   for (let i = crew.length - 1; i >= 0; i--) if (crew[i]) A.ok(st.assignPropAgent(bays[i], crew[i]).ok, 'fixture: ' + crew[i] + ' crews bay ' + (i + 1));
   return { st, bays };

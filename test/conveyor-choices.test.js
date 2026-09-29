@@ -86,11 +86,14 @@ const splitOf = plan => Object.keys(plan.junctions).find(k => plan.junctions[k].
   A.ok(/on your schedule/.test(W.suggestLineFor('write my weekly newsletter and have an editor check it').why), '…a cadence in the words points at the INBOX schedule');
   A.eq(s('research competitors and write up a report'), 'research_line', 'research written up: RESEARCH LINE');
   A.eq(s('fix bugs in my repo and have them reviewed'), 'code_foundry', 'code that gets reviewed: CODE FOUNDRY');
+  A.eq(s('ship features in my repo and test each change'), 'build_test', 'code that gets tested: BUILD & TEST');
+  A.eq(s('fix bugs and write tests for my app'), 'build_test', '…tests named: BUILD & TEST, not the review loop');
+  A.eq(s('pressure-test the code I write'), 'second_opinion', '"pressure-test" is a second opinion, never QA');
   A.eq(s('I want a second opinion on big decisions'), 'second_opinion', 'two takes: SECOND OPINION');
   A.eq(s('help me with emails'), null, 'one kind of work: no suggestion (never a guess)');
   A.eq(s('newsletter'), null, '"news" inside "newsletter" is not research (word boundaries)');
   A.eq(s(''), null, 'no words, no card');
-  for (const id of ['revision_loop', 'research_line', 'code_foundry', 'second_opinion']) A.ok(WM.BLUEPRINTS.some(b => b.id === id), 'the suggested line exists in the catalog: ' + id);
+  for (const id of ['revision_loop', 'research_line', 'code_foundry', 'build_test', 'second_opinion']) A.ok(WM.BLUEPRINTS.some(b => b.id === id), 'the suggested line exists in the catalog: ' + id);
   A.ok(/for \(const k of \['goals', 'ambition', 'pain'\]\)/.test(build) && /WorkflowLine\.suggestLineFor\(t\)/.test(build), 'the goal is the Commander\'s own dossier words');
   A.ok(/FOR YOUR GOAL/.test(build) && /'“' \+ goal\.quote \+ '” — ' \+ goal\.why/.test(build) && /const gb = makeLineTile\(goal\.bp\); gg\.appendChild\(gb\); setLineTileFit\(gb, goal\.bp\);/.test(build), 'the card quotes them and is the same line card (fit + MAKE ROOM included)');
 }
@@ -102,6 +105,19 @@ const splitOf = plan => Object.keys(plan.junctions).find(k => plan.junctions[k].
   A.ok(/if \(arm && !armedNow && !cur\.halted && saved\.enabled\) \{/.test(panel) && /api\('\/api\/cron\/arm', 'POST', \{ enabled: true \}\)/.test(panel), 'it arms on the same route the switch uses, never lifting an E-STOP');
   A.ok(/'✓ schedule saved and scheduling is on — fires at '/.test(panel) && /could not be turned on: press TURN SCHEDULING ON above/.test(panel), 'the result is said as it happened');
   A.ok(/\$\('#trg-create'\)\.onclick = \(\) => create\(!!\$\('#trg-create'\)\.dataset\.arm\);/.test(panel) && /createOnly\.onclick = \(\) => create\(false\)/.test(panel), 'both buttons share one save path');
+}
+
+/* ---------- 2026-09-28: the shelf by kind of work, plain names, and SET UP BEFORE YOU PLACE ---------- */
+{
+  const map = name => { const m = build.match(new RegExp('const ' + name + ' = \\{([\\s\\S]*?)\\n  \\};')); return m ? m[1] : ''; };
+  const plain = map('LINE_PLAIN'), work = map('LINE_WORK');
+  for (const bp of WM.BLUEPRINTS) {
+    A.ok(new RegExp('\\b' + bp.id + ': \'[^\']{3,20}\'').test(plain), bp.id + ': a plain name of 20 characters or fewer');
+    A.ok(new RegExp('\\b' + bp.id + ': \'(any|write|code|research|volume|decide)\'').test(work), bp.id + ': a kind of work on the shelf');
+  }
+  A.ok(/LINE_WORK_GROUPS\.some\(g => g\.id === LINE_WORK\[bp\.id\]\)/.test(build), 'the shelf groups by kind of work (an unknown line falls into the last section)');
+  A.ok(/station\.stampBlueprint\(bp\.id, o\.x, o\.y, lineStampOpts\(bp\)\)/.test(build), 'placing a line carries the card\'s cap and tries INTO the one stamp');
+  A.ok(/if \(tool === 'line' && bp\.id === lineType\) grid\.appendChild\(linePrefsEl\(bp\)\)/.test(build), 'the armed card shows its settings right under it');
 }
 
 A.report('conveyor-choices.test');
