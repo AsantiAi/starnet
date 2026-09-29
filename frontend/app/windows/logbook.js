@@ -24,7 +24,7 @@
     // #lb-insights) so a mid-fetch agent switch can't write into a sibling's list.
     const secLogbook =
       '<div class="sec"><span class="sec-l">RUNS</span><span class="sec-r"></span><span class="sec-nd"></span></div>' +
-      '<p class="sk-note">Real work by <b>' + esc(nm) + '</b>, newest first — runs that used tools, produced files, or failed. Chat-only replies are folded at the bottom.</p>' +
+      '<p class="sk-note">Real work by <b>' + esc(nm) + '</b>, newest first — runs that used tools, produced files, were delegated by another agent, or failed. Chat-only replies are folded at the bottom.</p>' +
       '<div id="lb-list" class="mc-list"><span class="loading pulse">loading…</span></div>' +
       '<div class="sec"><span class="sec-l">RUN ISSUES</span><span class="sec-r"></span><span class="sec-nd"></span></div>' +
       '<p class="sk-note">Review why a run ended without a result and what to try next.</p>' +
@@ -49,8 +49,10 @@
       // explicit ▸ toggle button for the transcript (keyboard-reachable), plus the whole row stays clickable —
       // but the row handler ignores clicks made while selecting text (so you can copy a title without collapsing).
       const txBtn = sid ? ' <button type="button" class="lb-tx-btn" aria-expanded="false" title="show / hide this run\'s transcript">▸ transcript</button>' : '';
+      // a delegated run names its lead and runId, so it can be matched to the runId the lead's team.dispatch reported.
+      const delegated = r.delegatedBy ? ' · ↳ delegated by ' + esc(r.delegatedBy) + ' · run ' + esc(String(r.runId || '').slice(0, 8)) : '';
       return '<div class="' + cls + '"' + attr + '><div class="mc-top"><b>' + title + '</b> <span class="dim">' + when + '</span>' + txBtn + '</div>' +
-        '<div class="mc-url dim">' + rl + ' · ' + model + ' · ' + (r.turns || 0) + ' turn' + (r.turns === 1 ? '' : 's') + '</div>' +
+        '<div class="mc-url dim">' + rl + ' · ' + model + ' · ' + (r.turns || 0) + ' turn' + (r.turns === 1 ? '' : 's') + delegated + '</div>' +
         (sid ? '<div class="lb-tx" hidden></div>' : '') + '</div>';
     }
     function insightsHtml(j) {
@@ -90,7 +92,9 @@
         // rows that bury the record that matters (away/cron runs, failures, real work). A row is CHATTER when the
         // run ended fine with ZERO successful tool calls and ZERO artifacts — provable from the row's own recorded
         // fields (toolsOk / artifacts), never a guess. Chatter folds behind an honest count; work renders up front.
-        const isChat = r => r.reason === 'done' && !(r.toolsOk > 0) && !(r.artifacts && r.artifacts.length);
+        // A DELEGATED run (delegatedBy: another agent's team.dispatch started it) is never chatter, even with no tools:
+        // it is assigned work, and folding it made a real dispatch look like it never reached this agent (#57).
+        const isChat = r => r.reason === 'done' && !r.delegatedBy && !(r.toolsOk > 0) && !(r.artifacts && r.artifacts.length);
         const work = runs.filter(r => !isChat(r));
         const chatter = runs.filter(isChat);
         const foldLabel = open => (open ? '▾ ' : '▸ ') + chatter.length + ' CHAT-ONLY ' + (chatter.length === 1 ? 'REPLY' : 'REPLIES') + ' — no tools, no files';

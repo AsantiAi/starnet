@@ -214,6 +214,7 @@ await run('targeted',
     A.ok(workerRun, label + ": the worker's run is in the run ledger");
     A.eq(workerRun.streamId, 'ws_r1', label + ': and the ledger files it under the named session — not the lead\'s');
     A.eq(workerRun.runId, delivered[0].args.runId, label + ': the delivered runId is the SAME run the ledger recorded');
+    A.eq(workerRun.delegatedBy, 'agent', label + ': the ledger names the lead that delegated it (the Dossier RECORD keeps it out of the chat fold, #57)');
     A.eq(workerRun.sessionTitle, 'research', label + ': the stable target title is durable for cross-page recovery');
     A.eq(workerRun.deliveryPrompt, 'summarise the moons of Mars', label + ': the delegated instruction is durable');
     A.eq(workerRun.deliveryText, WORKER_TEXT, label + ': the finished answer is durable when no page can receive it');

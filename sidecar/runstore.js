@@ -286,6 +286,10 @@
         // other row stays byte-identical.
         ...(ID_RE.test(str(e.lineId)) ? { lineId: str(e.lineId) } : {}),
         ...(ID_RE.test(str(e.dockId)) ? { dockId: str(e.dockId) } : {}),
+        // DELEGATION (additive, #57): the LEAD agentId whose team.dispatch/spawn/resume started this worker run. Set only by
+        // orchestration — parentRunId alone also links overseer reviews and connector continuations, which are not
+        // delegated work. Present only when set, so every other row stays byte-identical.
+        ...(ID_RE.test(str(e.delegatedBy)) ? { delegatedBy: str(e.delegatedBy) } : {}),
         toolTrace: toolTraceList(e.toolTrace),
         failureStage: str(e.failureStage).trim().slice(0, FAILURE_FIELD_MAX),
         failureCode: str(e.failureCode).trim().slice(0, FAILURE_FIELD_MAX),
