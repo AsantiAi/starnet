@@ -60,7 +60,7 @@
         S.linkState = code === 4401 ? 'removed' : (code === 4404 ? 'offline' : (S.lastOkAt ? 'offline' : 'connecting'));
         S.latency = null;
         if (S.linkState !== 'removed') scheduleReconnect();
-      } else S.linkState = 'connecting';
+      } else if (S.linkState !== 'offline' && S.linkState !== 'removed') S.linkState = 'connecting';   // a retry never un-says "offline"
       paintLamp(); render();
     });
     c.open().then(() => { S.lastOkAt = Date.now(); refreshAll(); }).catch(() => {});
@@ -198,6 +198,7 @@
       box.appendChild(row);
       box.appendChild(el('div', 'note', 'Arrived ' + clock(Date.now() - arrived) + ' ago. "Always" and full access are set at the desk.'));
     }
+    if (S.linkState !== 'open') { for (const b of box.querySelectorAll('button')) b.disabled = true; box.appendChild(el('div', 'note', 'Reconnect to answer. If the station stays unreachable, it denies this on its own after a short wait.')); }
     // it is on a screen a person is looking at: earn the one bounded extension, once
     if (document.visibilityState === 'visible' && !S.seen.has(a.promptId)) { S.seen.add(a.promptId); call('seen', { runId: a.runId, promptId: a.promptId }).catch(() => {}); }
     return box;
@@ -223,7 +224,14 @@
     render();
   }
 
+  // When the link is down, everything below is what the station LAST said. Say so, never pass it off as live.
+  function staleNote(v) {
+    if (S.linkState === 'open' || !S.lastOkAt) return;
+    v.appendChild(el('div', 'empty', 'Station offline. Showing what it last reported, ' + ago(Date.now() - S.lastOkAt) + ' ago.'));
+  }
+
   function renderCrew(v) {
+    staleNote(v);
     if (S.approvals.length) {
       const { s, p } = section('Needs you · ' + S.approvals.length, true);
       for (const a of S.approvals) p.appendChild(askCard(a));
@@ -235,11 +243,11 @@
     for (const a of agents) {
       const row = el('button', 'row' + (S.target === a.agentId ? ' sel' : '')); row.type = 'button';
       const well = el('span', 'well', (a.name || a.agentId).slice(0, 1).toUpperCase());
-      well.appendChild(el('i', 'dot' + (a.state === 'working' ? ' work' : '')));
+      well.appendChild(el('i', 'dot' + (a.state === 'working' && S.linkState === 'open' ? ' work' : '')));
       row.appendChild(well);
       const t = el('span', 't');
       t.appendChild(el('b', null, (a.name || a.agentId).toUpperCase()));
-      t.appendChild(el('span', null, a.state === 'working' ? 'working' + (a.source === 'interactive' ? ' at the desk' : a.source === 'remote' ? ' on your task' : '') : 'idle' + (a.model ? ' · ' + a.model : '')));
+      t.appendChild(el('span', null, S.linkState !== 'open' ? 'last seen ' + (a.state || 'idle') : a.state === 'working' ? 'working' + (a.source === 'interactive' ? ' at the desk' : a.source === 'remote' ? ' on your task' : '') : 'idle' + (a.model ? ' · ' + a.model : '')));
       row.appendChild(t);
       if (a.state === 'working' && a.since) row.appendChild(el('span', 'd', ago(Date.now() - a.since)));
       row.onclick = () => { S.target = a.agentId; const th = S.threads.find(x => x.agentId === a.agentId); if (th) openThread(th.streamId, a.agentId); else render(); };
@@ -269,6 +277,7 @@
   }
 
   function renderThreads(v) {
+    staleNote(v);
     const { s, p } = section('Conversations');
     if (!S.threads.length) p.appendChild(el('div', 'empty', 'No conversations yet. Send a task from CREW.'));
     for (const t of S.threads) {
