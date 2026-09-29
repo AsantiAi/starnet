@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "380d0e79c3b165fc9c0d441eef6c2a2c24e91245",
+    "sourceCommit": "8f257fc57a60d2f4b164bdb84a3aa5a59ed68e9c",
     "pathSetSha256": "7157d65c300766fc720079fb7bfa6aa8474a85cd78e9b7fb9c84315df3a784d0",
     "files": [
       {
@@ -318,8 +318,8 @@
       },
       {
         "path": "frontend/app/build.js",
-        "bytes": 457611,
-        "sha256": "08337fd5485ad8813fb91a192f8d9c80a4adc1bac9b25c72695ca85b552a261c"
+        "bytes": 459530,
+        "sha256": "73408b932bed92bbeffe078c2cc3790bed4cbe5f70fd193e3a6d3a40d18e36b3"
       },
       {
         "path": "frontend/app/channels.js",
@@ -788,8 +788,8 @@
       },
       {
         "path": "frontend/app/propremaster.js",
-        "bytes": 32887,
-        "sha256": "dd5928c66957fdcb489ecfc3075e19c254b92698a2760e66f1bd39a845c83a51"
+        "bytes": 33011,
+        "sha256": "156581ef93ffb5dc3fc9c1150d6b4d29cfb6bbe6b15053f0db9f4b2725a752f8"
       },
       {
         "path": "frontend/app/propsearch.js",
@@ -798,8 +798,8 @@
       },
       {
         "path": "frontend/app/propsprites.js",
-        "bytes": 805089,
-        "sha256": "51096e256993943259452d0902ef99082bf17b06244ff66ed41aab748348cddc"
+        "bytes": 806146,
+        "sha256": "a939531c5d1bf246a9e498f02f265bbe62b278e786c3e0194484219d07dd68bb"
       },
       {
         "path": "frontend/app/prospect.js",
@@ -1178,8 +1178,8 @@
       },
       {
         "path": "frontend/app/userprops.js",
-        "bytes": 4869,
-        "sha256": "ebb45e70b19a51fcea4376eead57d908fbe61872b2f59e1ec61f8d727847b154"
+        "bytes": 6263,
+        "sha256": "2794f362a59fe159d64b46759ada9e59c21a1439b4e14c1050da50e22fa4aa34"
       },
       {
         "path": "frontend/app/verdictfollowup.js",
