@@ -1,0 +1,10 @@
+{
+  "slug": "channel-updates",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Communication",
+  "tags": ["telegram", "notifications", "messaging", "updates"],
+  "requires": ["dish"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}

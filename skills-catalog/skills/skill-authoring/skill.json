@@ -1,0 +1,10 @@
+{
+  "slug": "skill-authoring",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Station",
+  "tags": ["skills", "procedures", "learning", "documentation"],
+  "requires": ["notebook"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}

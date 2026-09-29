@@ -106,6 +106,8 @@ test/skills.gate.http.test.js
 test/skill-exchange.http.test.js
 test/skills.gate.prompt.e2e.test.js
 test/skills.learning.e2e.test.js
+test/skill-market.e2e.test.js
+test/skills.trust-origin.e2e.test.js
 test/roster-track.e2e.test.js
 test/chat-prompt-diet.e2e.test.js
 test/casual-response-safety.e2e.test.js

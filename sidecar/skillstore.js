@@ -243,9 +243,13 @@
               return { path: f.path, content: Buffer.from(text, 'utf8').equals(bytes) ? text : '[binary asset: ' + bytes.length + ' bytes]' };
             });
           }
-          const scan = guard.scanSkillRecord(scanInput, { source: trustSource(entry.createdBy) });
+          const origin = typeof guard.originTier === 'function' ? guard.originTier(entry) : trustSource(entry.createdBy);
+          const scan = guard.scanSkillRecord(scanInput, { source: origin });
           entry.scan = scan;
-          if (guard && typeof guard.shouldAllow === 'function') {
+          if (typeof guard.actionFor === 'function') {
+            // the stricter of where the skill came from and who wrote this version (skills/guard.js actionFor)
+            entry.guardAction = guard.actionFor(entry, scan.verdict);
+          } else if (typeof guard.shouldAllow === 'function') {
             const policy = guard.shouldAllow(scan, { allowAsk: true });
             entry.guardAction = policy.action || '';
           }
@@ -319,7 +323,9 @@
         platforms: e.platforms != null ? arr(e.platforms) : (existing ? (existing.platforms || []).slice() : []),
         state: stateOf(e.state || (existing && existing.state) || 'active'),
         pinned: e.pinned != null ? !!e.pinned : !!(existing && existing.pinned),
-        createdBy: str(e.createdBy || (existing && existing.createdBy) || 'agent'),
+        // createdBy is the skill's ORIGIN and is never rewritten by an edit: the trust tier is read from it, and
+        // an edit that relabeled it was how a withheld community skill got un-withheld (skills/guard.js actionFor)
+        createdBy: str((existing && existing.createdBy) || e.createdBy || 'agent'),
         writtenBy: str(e.createdBy || 'agent'),   // the actor of THIS write, never inherited (a review edit of a user skill is a review write)
         sourceRunId: e.sourceRunId ? str(e.sourceRunId) : ((existing && existing.sourceRunId) || null),
         sourceUrl: e.sourceUrl != null ? str(e.sourceUrl) : ((existing && existing.sourceUrl) || ''),
@@ -597,7 +603,7 @@
         // or chose to install can go stale, never auto-archive: it is theirs to retire (Hermes parity: its curator
         // only ages curator-managed skills). This matters since 2026-09-28, when lastUsedAt stopped being refreshed
         // for every skill merely listed in the index, so the aging clock now measures real loads.
-        const autoArchive = trustSource(s.createdBy) === 'agent-created';
+        const autoArchive = (guard && typeof guard.originTier === 'function' ? guard.originTier(s) : trustSource(s.createdBy)) === 'agent-created';
         if (age >= archiveMs && autoArchive) { entry.state = 'archived'; archived++; }
         else if (age >= staleMs) { entry.state = 'stale'; stale++; }
         else continue;
