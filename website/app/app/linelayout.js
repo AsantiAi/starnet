@@ -431,7 +431,10 @@
         const d = first ? dirTo(p, first.path[0]) : inl ? inl.path[inl.path.length - 1].d : 'E';
         belts.push({ x: p.x, y: p.y, d });
       }
-      return { ok: true, nodes, links, belts, box: boxOf(a, at, { l: 1, r: 1, t: 1, b: 1 }) };
+      // the box round the whole line — machines and every belt (a way back runs over the top), a tile of margin
+      const box = boxOf(a, at, { l: 0, r: 0, t: 0, b: 0 });
+      for (const b of belts) { box.x1 = Math.min(box.x1, b.x); box.y1 = Math.min(box.y1, b.y); box.x2 = Math.max(box.x2, b.x); box.y2 = Math.max(box.y2, b.y); }
+      return { ok: true, nodes, links, belts, box: { x1: box.x1 - 1, y1: box.y1 - 1, x2: box.x2 + 1, y2: box.y2 + 1 } };
     };
     /* PINNED: the first pin anchors the line and pinned machines stay put; every other machine keeps its place relative
        to the machine feeding it (where that one stands, pinned or stepped, the next follows — a branch moves as one),
