@@ -150,6 +150,12 @@ async function skillRow(fixture, agentId, name) {
     A.ok(spent.filter(n => n !== 'skill-review').length === 2, 'NON-VACUOUS: two higher beats held both budget slots on that run-end (' + spent.join(',') + '), and the review fired anyway');
     A.eq(nudgeCount(fixture, 'learner'), 0, 'the count starts over once its review fires');
 
+    // ---- 2d. a team.spawn clone ('sub-' id, never on the roster) keeps no count and buys no review ----
+    r = await run(fixture, mock, 'sub-probe01', 'Rebuild the staging rollback path and write up the steps', { toolTurns: 6 });
+    A.ok(r.mains.length >= 6, 'the throwaway agent really worked past the bar of 5 turns, got ' + r.mains.length);
+    A.eq(r.reviews.length, 0, 'a throwaway sub- agent never fires a skill review');
+    A.eq(nudgeCount(fixture, 'sub-probe01'), undefined, 'and leaves no key in skill.nudge.json');
+
     // ---- 3. use = loaded, not listed ----
     const before = await skillRow(fixture, 'user-three', 'Deploy Site');
     A.ok(before && before.useCount === 0, 'seed precondition: the saved skill starts at useCount 0');

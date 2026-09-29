@@ -37,7 +37,8 @@
   // run can produce. The two never actually compete — reflection gates on reason 'done' and failure-review on
   // a failure reason, so per run-end at most ONE of them is a candidate (asserted in test/failreview.test.js).
   const PRIORITY = ['reflection', 'failure-review', 'study', 'threadmine', 'scout', 'skill-review', 'skill-curator'];
-  // Default JOINT ceiling: at most this many aux passes may SPEND per run-end. 0 means "no ceiling"
+  // Default JOINT ceiling: at most this many GOVERNED aux passes may SPEND per run-end; a pass the caller marks
+  // `reserved` (decide below: the nudge-due skill review, at most one per agent in flight) spends on top. 0 means "no ceiling"
   // (governor OFF / unlimited) — an explicit opt-out only; 0 is NEVER the default (see parseBudget).
   const DEFAULT_BUDGET = 2;
 

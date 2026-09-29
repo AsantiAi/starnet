@@ -2513,6 +2513,7 @@ const lastReflectAt = new Map();       // agentId -> ts of the last reflection w
 const reflectingNow = new Set();       // agentIds with a reflection in flight — closes the gap before lastReflectAt is armed
 const lastFailReviewAt = new Map();    // agentId -> ts of the last failure review we fired (its own cooldown gate)
 const failReviewingNow = new Set();    // agentIds with a failure review in flight — same gap-closer as reflectingNow
+const skillReviewingNow = new Set();   // agentIds with a nudge-due skill review in flight: two run-ends close together must not both rewrite one skillbase
 function stashProposals(agentId, runId, proposals) {
   proposalsByRun.set(runId, { agentId, runId, createdAt: Date.now(), proposals });
   latestProposalRun.set(agentId, runId);
@@ -15215,7 +15216,7 @@ async function handleAgentDelete(req, res) {
   try {
     for (const [rid, b] of proposalsByRun) { if (b && b.agentId === agentId) proposalsByRun.delete(rid); }
     latestProposalRun.delete(agentId); lastReflectAt.delete(agentId); reflectingNow.delete(agentId);
-    lastFailReviewAt.delete(agentId); failReviewingNow.delete(agentId);
+    lastFailReviewAt.delete(agentId); failReviewingNow.delete(agentId); skillReviewingNow.delete(agentId); if (skillNudge.delete(agentId)) persistSkillNudge();
     for (const [rid, b] of studyByRun) { if (b && b.agentId === agentId) studyByRun.delete(rid); }
     latestStudyRun.delete(agentId); lastStudyAt.delete(agentId); studyingNow.delete(agentId); studyDeclinedByAgent.delete(agentId);
     persistStudyState();
@@ -18375,7 +18376,9 @@ async function runOnceCore(o) {
   try {
     // CHAT DIET: the index exists so the model can CALL skill.view; on a non-task turn no tool is on the wire.
     if (isTask && resolved.tools.indexOf('skill.view') >= 0) {
-      const rs = runtimeSkills.composeIndex(skillStore.list(agentId), {
+      // WITH archived rows: composeIndex drops them from the index, but counts them so an all-archived skillbase is
+      // never told "you have no saved skills yet"
+      const rs = runtimeSkills.composeIndex(skillStore.list(agentId, { includeArchived: true }), {
         budget: 6000,
         platform: process.platform,
         canManage: resolved.tools.indexOf('skill.manage') >= 0,
@@ -19029,14 +19032,14 @@ async function runOnceCore(o) {
         } catch (_) { /* a non-path or escaping key simply never completes — truthful telemetry */ }
       }
     })().catch(swallow('quest.artifactsweep'));
+    // SKILL USE, counted where it happened: once per run for each saved skill this run actually LOADED (skill.view, or
+    // a /skill preload that passed the guard), never for a skill that was only listed in the index. In the finally so a
+    // run that throws still counts what it loaded; markUsed persists, so the count and the aging clock survive a restart
+    // (a view alone bumps RAM only).
+    if (loadedSkills.length) {
+      try { skillStore.markUsed(agentId, loadedSkills.map(s => s.id)); } catch (e) { failNote('skill.markUsed', e); }
+    }
     budget.clearLive(runId);
-  }
-
-  // SKILL USE, counted where it happened: once per run for each saved skill this run actually LOADED (skill.view, or a
-  // /skill preload that passed the guard), never for a skill that was only listed in the index. markUsed persists, so
-  // the count and the 30/90-day aging clock survive a restart (a view alone bumps RAM only).
-  if (loadedSkills.length) {
-    try { skillStore.markUsed(agentId, loadedSkills.map(s => s.id)); } catch (e) { failNote('skill.markUsed', e); }
   }
 
   // ---- AUX GOVERNOR: bound the AGGREGATE post-run model spend (aux-budget lane) ----------------------------------
@@ -19102,11 +19105,14 @@ async function runOnceCore(o) {
   // skill review rides THE SKILL NUDGE (skillreview.nudgeAfterRun), not run size: this run's turns with skill tools on
   // the wire join the agent's carried count, and the review is a candidate only once the count reaches the bar. A
   // due review is RESERVED below: it spends outside the ceiling, so it can no longer lose every run-end to the beats.
+  // Counted only while a review could ever fire (review on, bar > 0), and never for a team.spawn clone: its 'sub-'
+  // id is thrown away after the run, so a count (and any skill a review wrote) would be kept for an agent no one runs.
   const _skillToolsOn = resolved.tools.indexOf('skill.manage') >= 0 || resolved.tools.indexOf('skill.write') >= 0;
-  const _nudge = (isTask && !internal && _skillToolsOn)
+  const _throwawayAgent = /^sub-/.test(agentId) && !agentRoster.has(agentId);
+  const _nudge = (process.env.SKYNET_SKILL_REVIEW !== '0' && SKILL_REVIEW_EVERY > 0 && isTask && !internal && _skillToolsOn && !_throwawayAgent)
     ? skillReview.nudgeAfterRun(skillNudge.get(agentId) || 0, { turns: (result && result.turns) || 0, managed: managedSkills.some(m => skillReview.isWriteAction(m.action)), every: SKILL_REVIEW_EVERY })
     : null;
-  const _gateSkillReview = !!(process.env.SKYNET_SKILL_REVIEW !== '0' && _auxDone && _nudge && _nudge.due);
+  const _gateSkillReview = !!(_auxDone && _nudge && _nudge.due && !skillReviewingNow.has(agentId));
   // curator: candidate only when its 24h interval is DUE (else runSkillCurator early-returns anyway — no spend, no slot).
   const _gateCurator = !!(process.env.SKYNET_SKILL_CURATOR !== '0' && _auxDone && auxCuratorDue(agentId, _auxNow));
   // scout: the CADENCE COUNTERS fold ALWAYS (below, synchronous bookkeeping — never a model call); the CYCLE is the
@@ -19174,14 +19180,14 @@ async function runOnceCore(o) {
     runScoutCycle({ runId, agentId, provider, model: _auxModel, reasoningEffort: _auxEffort, cost, unmetered: providerUnmetered }).catch(swallow('aux.scout.envelope')).finally(() => { scoutingNow = false; });
   }
   if (_auxSpend.has('skill-review')) {
-    runBackgroundSkillReview({ agentId, runId, messages: result.messages.slice(), provider, model: _auxSkillModel, cost, loadedSkills, managedSkills, unmetered: providerUnmetered }).catch(swallow('aux.skillreview.envelope'));
+    skillReviewingNow.add(agentId);
+    runBackgroundSkillReview({ agentId, runId, messages: result.messages.slice(), provider, model: _auxSkillModel, cost, loadedSkills, managedSkills, unmetered: providerUnmetered }).catch(swallow('aux.skillreview.envelope')).finally(() => { skillReviewingNow.delete(agentId); });
   }
   if (process.env.SKYNET_SKILL_REVIEW !== '0' && _auxDone && isTask && !internal) {
     // CONSISTENCY LOOP (2026-08-22): park this real task run's review packet so that if the Commander rates it
     // `ok`/`miss` (POST /api/growth/ratings) the SAME quiet review runs again WITH THE VERDICT in the prompt.
-    // Parked even when the size-review above already fired: that pass ran before the verdict existed and is
-    // blind to it (live-proved 2026-08-22 — the chars gate counts the system prompt, so it fires on nearly every
-    // run). The verdict pass is the one that knows the work fell short. Bounded LRU + TTL in verdictreview.js;
+    // Parked even when the nudge review above already fired: that pass ran before the verdict existed and is
+    // blind to it. The verdict pass is the one that knows the work fell short. Bounded LRU + TTL in verdictreview.js;
     // `great` never spends it; taken once; one extra aux pass per rated-short run, a Commander-initiated signal.
     verdictReview.stash(runId, { agentId, messages: result.messages.slice(), provider, model: _auxSkillModel, cost, loadedSkills, managedSkills, unmetered: providerUnmetered });
   }
@@ -22555,7 +22561,7 @@ async function handleMemoryReset(req, res) {
   // also drop any in-memory pending proposals for this agent so a stale turn-in can't land on the new hero
   for (const [rid, b] of proposalsByRun) { if (b && b.agentId === agentId) proposalsByRun.delete(rid); }
   latestProposalRun.delete(agentId); lastReflectAt.delete(agentId); reflectingNow.delete(agentId);
-  lastFailReviewAt.delete(agentId); failReviewingNow.delete(agentId);
+  lastFailReviewAt.delete(agentId); failReviewingNow.delete(agentId); skillReviewingNow.delete(agentId); if (skillNudge.delete(agentId)) persistSkillNudge();
   // GROWTH Tier 1: also drop any pending STUDY proposals so a fresh Commander never inherits a stranger's belief-update queue.
   for (const [rid, b] of studyByRun) { if (b && b.agentId === agentId) studyByRun.delete(rid); }
   latestStudyRun.delete(agentId); lastStudyAt.delete(agentId); studyingNow.delete(agentId); studyDeclinedByAgent.delete(agentId);

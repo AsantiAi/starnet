@@ -143,7 +143,9 @@
     const every = Number.isInteger(o.every) && o.every >= 0 ? o.every : NUDGE_EVERY;
     const carried = Math.max(0, Math.floor(Number(count) || 0));
     const turns = Math.max(0, Math.floor(Number(o.turns) || 0));
-    const next = o.managed ? 0 : carried + turns;
+    // clamped at the bar: once due it stays exactly due (a failed run can't review), so the stored count stops
+    // changing and stops being rewritten
+    const next = o.managed ? 0 : (every > 0 ? Math.min(every, carried + turns) : carried + turns);
     return { count: next, due: every > 0 && next >= every };
   }
 

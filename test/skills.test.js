@@ -398,7 +398,8 @@ const redact = (t) => String(t).replace(/sk-[A-Za-z0-9]{8,}/g, '[redacted]');
   n = skillReview.nudgeAfterRun(n.count, { turns: 4, every: 10 });
   A.eq(n, { count: 8, due: false }, 'the count CARRIES across runs');
   n = skillReview.nudgeAfterRun(n.count, { turns: 3, every: 10 });
-  A.eq(n, { count: 11, due: true }, 'the third run crosses the bar -> due');
+  A.eq(n, { count: 10, due: true }, 'the third run crosses the bar -> due, and the count is CLAMPED at the bar');
+  A.eq(skillReview.nudgeAfterRun(10, { turns: 7, every: 10 }), { count: 10, due: true }, 'a due count that could not review stays exactly due (no growth, no rewrite)');
   A.eq(skillReview.nudgeAfterRun(9, { turns: 5, managed: true, every: 10 }), { count: 0, due: false }, 'an agent that changed a skill itself this run starts over (no review owed)');
   A.eq(skillReview.nudgeAfterRun(50, { turns: 5, every: 0 }).due, false, 'every 0 = the nudge never fires');
   A.eq(skillReview.nudgeAfterRun(-4, { turns: 'x' }), { count: 0, due: false }, 'garbage in -> a clean zero, never NaN');
@@ -410,7 +411,24 @@ const redact = (t) => String(t).replace(/sk-[A-Za-z0-9]{8,}/g, '[redacted]');
   A.ok(g.indexOf('skill.manage (action create)') >= 0, 'the line names the create call the agent actually has');
   A.ok(/skill.write/.test(runtimeSkills.composeIndex([], { emptyGuide: true, canManage: false }).text), 'without skill.manage the line names skill.write');
   A.eq(runtimeSkills.composeIndex([], { emptyGuide: true, canManage: true }).text, g, 'the line is a constant (rides the cached prefix)');
-  A.eq(runtimeSkills.composeIndex([{ name: 'Old', body: 'x', state: 'archived' }], { emptyGuide: true }).text, g, 'only archived skills = still no live skills -> the first-skill line');
+  const allArchived = runtimeSkills.composeIndex([{ name: 'Old', body: 'x', state: 'archived' }, { name: 'Older', body: 'y', state: 'archived' }], { emptyGuide: true, canManage: true }).text;
+  A.ok(allArchived.indexOf('no saved skills yet') < 0, 'an all-archived skillbase is NEVER told it has no saved skills (that steers it to recreate)');
+  A.ok(allArchived.indexOf('no active saved skills (2 archived') >= 0 && allArchived.indexOf('action restore') >= 0, 'it is told how many are archived and how to restore one');
+  A.ok(allArchived.indexOf('Old') < 0, 'archived rows still never enter the index');
+
+  // aging after use = loaded: only a MODEL-authored skill auto-archives; the Commander's own and installed ones only go stale
+  {
+    let ct = 1000;
+    const cs = makeSkillStore({ io: memIo(), clock: { now: () => ct }, redact });
+    cs.write({ agentId: 'a', name: 'Agent Made', body: '1. a', createdBy: 'agent' });
+    cs.write({ agentId: 'a', name: 'Review Made', body: '1. r', createdBy: 'background-review' });
+    cs.write({ agentId: 'a', name: 'Mine', body: '1. m', createdBy: 'user' });
+    cs.write({ agentId: 'a', name: 'Installed', body: '1. i', createdBy: 'community' });
+    const r = cs.curate('a', { now: 1000 + 100, staleMs: 10, archiveMs: 50 });
+    const st = (nm) => cs.view('a', nm, { bump: false, includeArchived: true }).state;
+    A.eq([st('Agent Made'), st('Review Made'), st('Mine'), st('Installed')], ['archived', 'archived', 'stale', 'stale'], 'past the archive age: agent/review skills archive, user + installed skills only go stale');
+    A.eq([r.archived, r.stale], [2, 2], 'curate reports exactly that');
+  }
 
   // use = loaded: a maintenance read (countViews:false) moves no counter and no aging clock
   let t = 1000;
