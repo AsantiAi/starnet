@@ -93,7 +93,7 @@ const T0 = 1_800_000_000_000;
   for (let i = 0; i < 9; i++) H.onRunStart(f, { agentId: 'agent', runId: 'm' + i, trigger: 'directive', model: 'm' }, T0 + i);
   v = H.view(f, who, T0 + 100);
   A.eq([v.live.length, v.more], [5, 5], 'live rows cap at five and fold the rest into +N MORE');
-  A.ok(f.recent.length <= 3, 'recent list is bounded');
+  A.ok(f.recent.length <= 12, 'recent list is bounded');
 }
 
 // ---- crew strip: every agent, one lamp, unread finishes ----
@@ -114,7 +114,27 @@ const T0 = 1_800_000_000_000;
   H.onRunError(f, { agentId: 'coder', runId: 'r6', message: 'x', transient: false }, T0 + 50);
   A.eq(H.crew(f, agents, 'agent')[2].unread, 'bad', 'a fault is unread until looked at');
   A.ok(H.clearUnread(f, 'researcher') && H.crew(f, agents, 'agent')[1].unread === null, 'going to that agent clears it');
-  A.eq(H.crew(f, null, 'agent'), [], 'no roster, no chips');
+  const ghost = H.crew(f, null, 'agent', T0 + 60);
+  A.eq(ghost.map(x => [x.name, x.status]), [['CODER', 'NEEDS YOUR OK']], 'a running agent missing from the roster keeps a row under its id, never a made-up name');
+  A.eq(H.crew(H.createFeed(), null, 'agent', T0), [], 'no roster and nothing running: no rows');
+}
+
+// ---- crew rows: the status line is the run's provable step, else its latest finish ----
+{
+  const f = H.createFeed();
+  const agents = [{ id: 'agent', name: 'Nova' }, { id: 'researcher', name: 'Orion' }];
+  H.onRunStart(f, { agentId: 'researcher', runId: 'a', trigger: 'schedule', model: 'm' }, T0);
+  H.onToolCall(f, { agentId: 'researcher', runId: 'a', callId: 'c', name: 'web_search' }, T0 + 1000);
+  let r = H.crew(f, agents, 'agent', T0 + 5000)[1];
+  A.eq([r.lamp, r.status, r.time, r.tone], ['live', 'WEB.SEARCH · ROUTINE', '5s', 'live'], 'a working row names its tool, its trigger and its clock');
+  H.onRunStart(f, { agentId: 'researcher', runId: 'b', trigger: 'directive', model: 'm' }, T0 + 2000);
+  A.eq(H.crew(f, agents, 'agent', T0 + 5000)[1].status, 'WEB.SEARCH · ROUTINE · +1 MORE', 'a second run is counted, not hidden');
+  H.onRunEnd(f, { agentId: 'researcher', runId: 'a', reason: 'done', turns: 1, usd: 0 }, T0 + 6000);
+  H.onRunEnd(f, { agentId: 'researcher', runId: 'b', reason: 'done', turns: 1, usd: 0 }, T0 + 7000);
+  r = H.crew(f, agents, 'agent', T0 + 8000)[1];
+  A.eq([r.lamp, r.status, r.time, r.unread], ['idle', 'DONE', 'just now', 'ok'], 'a finished row keeps its finish and is unread');
+  A.eq(H.crew(f, agents, 'agent', T0 + 8000)[0].status, 'IDLE', 'an agent with nothing recent is IDLE');
+  A.eq(H.crew(f, agents, 'agent', T0 + 20 * 60 * 1000)[1].status, 'IDLE', 'a finish older than the recent window reads IDLE again');
 }
 
 // ---- folded reply line: the newest real reply, flattened ----
@@ -163,7 +183,14 @@ A.eq([H.fmtAgo(10_000), H.fmtAgo(5 * 60_000), H.fmtAgo(2 * 3_600_000)], ['just n
   A.ok(/fetch\('\/api\/state\/snapshot'/.test(js), 'the deck polls the authoritative run snapshot');
   A.ok(/Workstreams\.list\(\)\.filter\(w => \(w\.agentId \|\| 'agent'\) === id\)/.test(js) && /App\.openWorkstream\(mine\[0\]\.id\)/.test(js),
     'a crew chip returns to that agent\'s own conversation (never rebinds the blank thread on screen)');
-  A.ok(/html body\.hud-mode #comms-idbar:not\(\.gc-group\)/.test(css), 'a group conversation keeps its participants bar inside the HUD');
+  A.ok(!/#chat-panel > h3 \{ display: none/.test(css) && !/#comms-idbar[^{]*\{ display: none/.test(css) && !/#chat-input\b/.test(css),
+    'COMMS is untouched inside the HUD: its header, agent line and composer are the designed ones');
+  const deckRule = /html body\.hud-mode #hud-deck \{([^}]*)\}/.exec(css);
+  A.ok(!!deckRule && /background: var\(--gd-face/.test(deckRule[1]) && /border: 1px solid var\(--gd-edge/.test(deckRule[1]),
+    'the deck is the station glass panel (--gd-face fill, --gd-edge hairline)');
+  const barRule = /#hud-deck \.hud-bar \{([^}]*)\}/.exec(css);
+  A.ok(!!barRule && /linear-gradient\(180deg, rgba\(var\(--ph-rgb\), \.14\), rgba\(var\(--ph-rgb\), \.025\)\)/.test(barRule[1]) && !/background: var\(--ph\)/.test(barRule[1]),
+    'the header is the CREW/COMMS glass strip, never the retired solid phosphor bar');
 }
 
 // ---- desktop wiring ----

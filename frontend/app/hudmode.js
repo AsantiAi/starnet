@@ -31,7 +31,7 @@
   const PREF_KEY = 'starnet.hud';          // { pinned, rect } — per machine, a convenience only
   const POLL_MS = 4000;                    // snapshot cadence while the HUD is up (local sidecar, tiny JSON)
   const START_GRACE_MS = 8000;             // an event-only run the snapshot has not caught up with yet
-  const RECENT_MAX = 3;                    // finished rows kept under the live ones
+  const RECENT_MAX = 12;                   // finishes kept (one per run): enough for every agent's latest
   const RECENT_TTL_MS = 15 * 60 * 1000;    // a finish older than this is history, not "recent"
   const LIVE_MAX = 5;                      // live rows shown; the rest fold into "+N MORE"
   const TAURI_EVENT = 'starnet-hud';       // hud_mode.rs emits { active } from the tray menu
@@ -246,24 +246,46 @@
     };
   }
 
-  /** The crew strip: every roster agent, in roster order, with the one lamp a glance needs.
-      `agents` = [{ id, name, color }], `onLine` = the agent COMMS is talking to.
+  /** The HUD's crew: one row per agent, in roster order, carrying the one line a glance needs.
+      `agents` = [{ id, name, color, skin }], `onLine` = the agent COMMS is talking to.
       lamp: 'ask' (a permission prompt is pending on one of its runs) · 'live' (a run the snapshot or a
-      watched run.start proves) · 'idle'. unread: the tone of a finish it has not been looked at since. */
-  function crew(feed, agents, onLine) {
-    const live = new Set(), asking = new Set();
-    for (const r of feed.runs.values()) {
-      live.add(r.agentId);
-      if (feed.prompts.has(r.runId)) asking.add(r.agentId);
+      watched run.start proves) · 'idle'. status/tone: what that run is doing, else its latest finish this
+      page received (within the recent window), else IDLE. unread: the tone of a finish not yet looked at.
+      A running agent missing from the roster still gets a row, under its id, never a made-up name. */
+  function crew(feed, agents, onLine, now) {
+    const t = isFinite(now) ? now : Date.now();
+    const runsOf = new Map();
+    for (const r of Array.from(feed.runs.values()).sort((x, y) => (x.startedAt || t) - (y.startedAt || t))) {
+      if (!runsOf.has(r.agentId)) runsOf.set(r.agentId, []);
+      runsOf.get(r.agentId).push(r);
     }
-    return (Array.isArray(agents) ? agents : []).filter(a => a && a.id).map(a => {
-      const id = String(a.id);
-      return {
-        id, name: String(a.name || id).toUpperCase(), color: a.color || '',
-        lamp: asking.has(id) ? 'ask' : live.has(id) ? 'live' : 'idle',
-        unread: id === onLine ? null : (feed.unread.get(id) || null),
-        online: id === onLine
-      };
+    const list = (Array.isArray(agents) ? agents : []).filter(a => a && a.id).map(a => ({ id: String(a.id), name: String(a.name || a.id).toUpperCase(), color: a.color || '', skin: a.skin || '' }));
+    for (const id of runsOf.keys()) if (id && !list.some(a => a.id === id)) list.push({ id, name: String(id).slice(0, 10).toUpperCase(), color: '', skin: '' });
+    return list.map(a => {
+      const runs = runsOf.get(a.id) || [];
+      const asking = runs.find(r => feed.prompts.has(r.runId));
+      const unread = a.id === onLine ? null : (feed.unread.get(a.id) || null);
+      const row = { id: a.id, name: a.name, color: a.color, skin: a.skin, online: a.id === onLine, unread, lamp: 'idle', status: 'IDLE', tone: 'dim', time: '' };
+      if (runs.length) {
+        const r = asking || runs[0];
+        row.lamp = asking ? 'ask' : 'live';
+        row.tone = asking ? 'ask' : 'live';
+        const bits = [asking ? 'NEEDS YOUR OK' : r.tool ? toolLabel(r.tool) : r.writing ? 'WRITING REPLY' : 'WORKING'];
+        const trig = r.trigger === 'schedule' ? 'ROUTINE' : r.trigger === 'nightshift' ? 'NIGHT SHIFT' : r.trigger === 'loop' ? 'LOOP' : '';
+        if (trig) bits.push(trig);
+        if (runs.length > 1) bits.push('+' + (runs.length - 1) + ' MORE');
+        const q = feed.queues.get(a.id) || 0;
+        if (q) bits.push('+' + q + ' QUEUED');
+        row.status = bits.join(' · ');
+        row.time = r.startedAt ? fmtElapsed(t - r.startedAt) : '';
+        return row;
+      }
+      const end = feed.recent.find(x => x.agentId === a.id && t - x.at <= RECENT_TTL_MS);
+      if (end) {
+        const w = END_WORDS[end.reason] || { text: String(end.reason || '').toUpperCase(), tone: 'dim' };
+        row.status = w.text; row.tone = w.tone === 'ok' && !unread ? 'dim' : w.tone; row.time = fmtAgo(t - end.at);
+      }
+      return row;
     });
   }
 
@@ -365,82 +387,92 @@
     const deck = doc.createElement('section');
     deck.id = 'hud-deck';
     deck.setAttribute('aria-label', 'StarNet HUD');
+    // The deck is a station glass panel: the same ▮ header strip as CREW / COMMS, then the crew as the
+    // CREW rail draws it (portrait · lamp · name · status · work bar). The header is the window's drag strip.
     deck.innerHTML =
-      '<div class="hud-bar" data-tauri-drag-region>' +
-        '<span class="hud-mark" data-tauri-drag-region>◆ HUD</span>' +
+      '<h3 class="hud-bar" data-tauri-drag-region>' +
+        '<span class="hud-mark" data-tauri-drag-region>▮ HUD</span>' +
         '<span class="hud-sum" id="hud-sum" data-tauri-drag-region role="status" aria-live="polite"></span>' +
         '<span class="hud-ctl">' +
           '<button type="button" class="hud-btn" id="hud-pin" aria-pressed="true" title="Keep the HUD above other windows" hidden>PIN</button>' +
-          '<button type="button" class="hud-btn" id="hud-fold" aria-pressed="false" aria-controls="chat-panel" title="Fold the conversation away and keep only the station feed">FOLD</button>' +
+          '<button type="button" class="hud-btn" id="hud-fold" aria-pressed="false" aria-controls="chat-panel" title="Fold the conversation away and keep only your crew">FOLD</button>' +
           '<button type="button" class="hud-btn" id="hud-min" title="Minimize the HUD" hidden>MIN</button>' +
-          '<button type="button" class="hud-btn hud-exit" id="hud-exit" title="Back to the full station">STATION</button>' +
+          '<button type="button" class="hud-btn" id="hud-exit" title="Back to the full station">STATION</button>' +
         '</span>' +
-      '</div>' +
-      '<div class="hud-crew" id="hud-crew" role="group" aria-label="Your agents: pick who is on the line"></div>' +
-      '<ol class="hud-feed" id="hud-feed" aria-label="What your agents are doing right now"></ol>' +
+      '</h3>' +
+      '<div class="hud-crew" id="hud-crew" role="group" aria-label="Your crew: pick who is on the line"></div>' +
       '<p class="hud-reply" id="hud-reply" hidden></p>';
     g.insertBefore(deck, g.firstChild);
     S.deck = deck;
     S.els = {
-      sum: deck.querySelector('#hud-sum'), feed: deck.querySelector('#hud-feed'),
-      crew: deck.querySelector('#hud-crew'), reply: deck.querySelector('#hud-reply'),
+      sum: deck.querySelector('#hud-sum'), crew: deck.querySelector('#hud-crew'), reply: deck.querySelector('#hud-reply'),
       pin: deck.querySelector('#hud-pin'), fold: deck.querySelector('#hud-fold'),
       min: deck.querySelector('#hud-min'), exit: deck.querySelector('#hud-exit')
     };
-    // A crew chip puts that agent ON THE LINE; the + chip is the conversation's own ADD AGENTS door.
-    S.els.crew.addEventListener('click', e => {
-      const chip = e.target && e.target.closest && e.target.closest('button');
-      if (!chip) return;
-      if (chip.hasAttribute('data-add')) {
-        if (S.folded) setFolded(false);
-        const add = doc.getElementById('gc-add-agents');
-        if (add) add.click();
-        return;
-      }
-      switchTo(chip.getAttribute('data-agent'));
-    });
-    // The folded reply line opens the conversation it quotes.
-    S.els.reply.addEventListener('click', () => { if (S.folded) setFolded(false); });
     S.els.exit.addEventListener('click', () => exit());
     S.els.fold.addEventListener('click', () => setFolded(!S.folded));
     S.els.pin.addEventListener('click', () => setPinned(!S.pinned));
     S.els.min.addEventListener('click', () => {
       try { const w = root.__TAURI__.window.getCurrentWindow(); Promise.resolve(w.minimize()).catch(() => {}); } catch (_) {}
     });
-    // A row names an agent: clicking it puts that agent ON THE LINE (the same switch the COMMS picker makes).
-    S.els.feed.addEventListener('click', e => {
+    // A crew row puts that agent ON THE LINE.
+    S.els.crew.addEventListener('click', e => {
       const row = e.target && e.target.closest && e.target.closest('[data-agent]');
-      if (!row) return;
-      switchTo(row.getAttribute('data-agent'));
+      if (row) switchTo(row.getAttribute('data-agent'));
     });
+    // The folded reply line opens the conversation it quotes.
+    S.els.reply.addEventListener('click', () => { if (S.folded) setFolded(false); });
     return deck;
   }
 
-  const LAMP_WORDS = { ask: 'needs your OK', live: 'working', idle: 'idle' };
-  const UNREAD_WORDS = { ok: 'finished', ask: 'asked you something', bad: 'hit a fault' };
+  const UNREAD_WORDS = { ok: 'new reply', ask: 'asked you something', bad: 'hit a fault' };
+
+  function rowHTML(c) {
+    const words = c.name + ' · ' + c.status.toLowerCase() + (c.time ? ' ' + c.time : '') + (c.unread ? ' · ' + UNREAD_WORDS[c.unread] : '') + (c.online ? ' · on the line' : '');
+    return '<button type="button" class="hud-row hud-lamp-' + c.lamp + (c.online ? ' on' : '') + (c.unread ? ' hud-unread hud-unread-' + c.unread : '') + '"' +
+        ' data-agent="' + esc(c.id) + '" aria-pressed="' + c.online + '" aria-label="' + esc(words) + '"' + (c.online ? '' : ' title="Talk to ' + esc(c.name) + '"') + '>' +
+      '<span class="hud-portrait" aria-hidden="true"><img alt="" draggable="false" hidden></span>' +
+      '<span class="dot' + (c.lamp === 'ask' ? ' alert' : '') + '" aria-hidden="true"></span>' +
+      '<span class="hud-main">' +
+        '<span class="hud-name"' + (c.color ? ' style="color:' + esc(c.color) + '"' : '') + '>' + esc(c.name) + '</span>' +
+        '<span class="hud-status hud-tone-' + c.tone + '"><span class="hud-step">' + esc(c.status) + '</span><span class="hud-time">' + esc(c.time) + '</span></span>' +
+        '<span class="hud-prog bar-active" aria-hidden="true"><span></span></span>' +
+      '</span>' +
+      (c.unread ? '<span class="hud-pip" aria-hidden="true"></span>' : '') +
+    '</button>';
+  }
 
   function renderCrew() {
     const line = onLineId();
     clearUnread(S.feed, line);   // the conversation on screen is the one being read
-    const chips = crew(S.feed, roster(), line);
-    // Rebuilt only when a lamp, a name or the line actually moves: the 1s clock tick must not replace the
-    // chip under the pointer (its hover card would drop) or steal keyboard focus from it.
-    const sig = JSON.stringify(chips);
-    if (sig === S.crewSig) return;
-    S.crewSig = sig;
-    const focused = doc.activeElement && S.els.crew.contains(doc.activeElement) ? doc.activeElement.getAttribute('data-agent') : null;
-    S.els.crew.innerHTML = chips.map(c => {
-      const words = c.name + ' · ' + LAMP_WORDS[c.lamp] + (c.unread ? ' · ' + UNREAD_WORDS[c.unread] : '') + (c.online ? ' · on the line' : '');
-      return '<button type="button" class="hud-chip hud-lamp-' + c.lamp + (c.online ? ' on' : '') + (c.unread ? ' hud-unread hud-unread-' + c.unread : '') + '"' +
-        ' data-agent="' + esc(c.id) + '" aria-pressed="' + c.online + '" aria-label="' + esc(words) + '" title="' + esc(c.online ? words : 'Talk to ' + c.name + ' (' + LAMP_WORDS[c.lamp] + ')') + '">' +
-        '<span class="hud-lamp"' + (c.color ? ' style="--hud-suit:' + esc(c.color) + '"' : '') + ' aria-hidden="true"></span>' +
-        '<span class="hud-chip-name">' + esc(c.name) + '</span>' +
-        (c.unread ? '<span class="hud-pip" aria-hidden="true"></span>' : '') +
-      '</button>';
-    }).join('') + (doc.getElementById('gc-add-agents')
-      ? '<button type="button" class="hud-chip hud-add" data-add aria-label="Add agents to this conversation" title="Add agents to this conversation">+</button>'
-      : '');
-    if (focused) { const again = S.els.crew.querySelector('[data-agent="' + focused.replace(/"/g, '') + '"]'); if (again) again.focus(); }
+    const agents = roster();
+    const rows = crew(S.feed, agents, line, now());
+    // Keyed patch: a row is rewritten only when its own content moved, so the 1s clock tick never
+    // replaces the row under the pointer (its hover card would drop) or the one holding keyboard focus,
+    // and its portrait is painted once, not re-cropped every second.
+    const list = S.els.crew;
+    const have = new Map();
+    for (const el of Array.from(list.children)) have.set(el.getAttribute('data-agent'), el);
+    let prev = null;
+    for (const c of rows) {
+      const html = rowHTML(c);
+      let el = have.get(c.id);
+      if (el) have.delete(c.id);
+      if (!el || el.__hudHtml !== html) {
+        const tmp = doc.createElement('div'); tmp.innerHTML = html;
+        const fresh = tmp.firstChild;
+        const hadFocus = el && doc.activeElement === el;
+        if (el) el.replaceWith(fresh);
+        el = fresh; el.__hudHtml = html;
+        const a = agents.find(x => x && x.id === c.id);
+        try { if (a && typeof AgentPortraits !== 'undefined') AgentPortraits.paint(el.querySelector('.hud-portrait img'), a); } catch (_) {}
+        if (hadFocus) el.focus();
+      }
+      const want = prev ? prev.nextSibling : list.firstChild;
+      if (want !== el) list.insertBefore(el, want);
+      prev = el;
+    }
+    for (const el of have.values()) el.remove();
   }
 
   // Folded, the deck quotes the newest reply of the conversation on the line, so a Commander mid-game
@@ -449,7 +481,7 @@
     let text = '';
     if (S.folded) { try { text = typeof Chat !== 'undefined' && Chat.getHistory ? lastReply(Chat.getHistory()) : ''; } catch (_) { text = ''; } }
     const w = text ? who(onLineId()) : null;
-    const html = text ? '<b>' + esc((w && w.name) || 'AGENT') + '</b> ' + esc(text) : '';
+    const html = text ? '<b' + (w && w.color ? ' style="color:' + esc(w.color) + '"' : '') + '>' + esc((w && w.name) || 'AGENT') + '</b>' + esc(text) : '';
     if (S.els.reply.innerHTML !== html) S.els.reply.innerHTML = html;
     S.els.reply.hidden = !text;
     if (text) S.els.reply.title = 'Open the conversation'; else S.els.reply.removeAttribute('title');
@@ -460,47 +492,11 @@
     const v = view(S.feed, who, now());
     S.els.sum.textContent = v.summary.text;
     S.els.sum.className = 'hud-sum hud-tone-' + v.summary.tone;
-    // Anything waiting on the Commander turns the whole deck's frame gold: the one state a glance from
-    // across the room must catch. A border change, never a glow (matte chrome).
+    // Anything waiting on the Commander turns the deck's edge gold: the one state a glance from across
+    // the room must catch. An edge change, never a glow (matte glass).
     S.deck.classList.toggle('hud-asking', v.summary.tone === 'ask');
     renderCrew();
     renderReply();
-    const rows = [];
-    const cells = (r, step, time) =>
-      '<span class="hud-dot"' + (r.color ? ' style="--hud-suit:' + esc(r.color) + '"' : '') + ' aria-hidden="true"></span>' +
-      '<b class="hud-name">' + esc(r.name) + '</b>' +
-      '<span class="hud-step">' + step + '</span>' +
-      '<span class="hud-time">' + esc(time) + '</span>';
-    for (const r of v.live) {
-      const step = esc(r.step) + (r.trigger ? ' <i>· ' + esc(r.trigger) + '</i>' : '') + (r.queued ? ' <i>· +' + r.queued + ' queued</i>' : '');
-      rows.push({ key: 'live:' + r.runId, cls: 'hud-row hud-live' + (r.waiting ? ' hud-waiting' : ''), agent: r.agentId, tip: 'Talk to ' + r.name, html: cells(r, step, r.elapsed) });
-    }
-    if (v.more) rows.push({ key: 'more', cls: 'hud-row hud-more', html: '+' + v.more + ' MORE RUNNING' });
-    for (const r of v.recent) {
-      rows.push({ key: 'end:' + r.runId, cls: 'hud-row hud-recent hud-tone-' + r.tone, agent: r.agentId, tip: 'Talk to ' + r.name, html: cells(r, esc(r.text), r.ago) });
-    }
-    if (!rows.length && S.feed.snapOk) rows.push({ key: 'empty', cls: 'hud-row hud-empty', html: 'No agent is running. Ask one below.' });
-    // Keyed patch, not a wholesale innerHTML swap: the clocks tick every second, and replacing the row
-    // under the pointer would drop its hover card (tooltip.js adopts [title] on hover) every tick.
-    const list = S.els.feed;
-    const have = new Map();
-    for (const li of Array.from(list.children)) have.set(li.getAttribute('data-key'), li);
-    let prev = null;
-    for (const row of rows) {
-      let li = have.get(row.key);
-      if (li) have.delete(row.key);
-      else {
-        li = doc.createElement('li');
-        li.setAttribute('data-key', row.key);
-        if (row.agent) { li.setAttribute('data-agent', row.agent); li.setAttribute('title', row.tip); }
-      }
-      if (li.className !== row.cls) li.className = row.cls;
-      if (li.innerHTML !== row.html) li.innerHTML = row.html;
-      const want = prev ? prev.nextSibling : list.firstChild;
-      if (want !== li) list.insertBefore(li, want);
-      prev = li;
-    }
-    for (const li of have.values()) li.remove();
     refitFolded();
   }
 
