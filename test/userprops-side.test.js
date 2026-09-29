@@ -83,6 +83,22 @@ const SIDE = (over = {}) => ({ view: 'w', noun: 'a jukebox', footprint: { w: 2, 
     A.ok(!up2.list().find((p) => p.id === lamp.id).side, 'a side result that is not the w view is refused');
     A.eq(up2.job(s2.job.id).error && up2.job(s2.job.id).error.code, 'bad_result', 'and reported honestly');
     A.ok(!fs.existsSync(path.join(dir, lamp.id + '-w.png')), 'no side file written for it');
+
+    // ---- delete: refused while a job for the prop runs; then files + entry go and the id is tombstoned
+    const busyStart = await up2.startSide((await (async () => { const m = await up2.start('a chair'); Object.assign(cloud.state.jobs.get(m.job.id), { status: 'done', costUsd: 0.3, result: { ...FRONT, label: 'CHAIR', noun: 'a chair' } }); await up2.pollOnce(); return up2.list().find((p) => p.label === 'CHAIR').id; })()));
+    const chairId = up2.list().find((p) => p.label === 'CHAIR').id;
+    A.eq((await up2.remove(chairId)).code, 'busy', 'a prop with a running side job cannot be deleted yet');
+    A.eq((await up2.remove('user_missing_zzzzzz')).code, 'not_found', 'deleting an unknown prop is refused');
+    A.eq((await up2.remove('../x')).code, 'bad_id', 'a bad id is refused');
+    const gone = await up2.remove(prop.id);
+    A.ok(gone.ok, 'a made prop is deleted');
+    A.ok(!up2.list().some((p) => p.id === prop.id), 'it leaves the index');
+    A.ok(!fs.existsSync(path.join(dir, prop.id + '.png')) && !fs.existsSync(path.join(dir, prop.id + '-w.png')), 'both its files are removed');
+    A.ok(up2.deleted().includes(prop.id), 'its id is tombstoned so saves drop placed copies');
+    A.ok(up2.list().some((p) => p.id === lamp.id), 'other made props are untouched');
+    Object.assign(cloud.state.jobs.get(busyStart.job.id), { status: 'done', result: SIDE() });
+    await up2.pollOnce();
+    A.ok(up2.deleted().includes(prop.id), 'a later landing keeps the tombstones');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
   A.report();
 })();

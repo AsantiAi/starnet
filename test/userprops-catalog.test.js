@@ -75,4 +75,15 @@ ops.length = 0;
 PropSprites.draw({ t: row.id, x: 2, y: 2, w: 2, h: 1, r: 1 }, false, {});
 A.ok(ops.includes('fillRect'), 'a turned made prop without decoded side art draws the placeholder, not nothing');
 
+// ---- delete: the row leaves the catalog and saves drop the deleted id like a retired type
+A.eq(PropSprites.unregisterUserProp('chair'), false, 'a built-in prop can never be unregistered');
+const n0 = PropSprites.CATALOG.length;
+A.eq(PropSprites.unregisterUserProp(row.id), true, 'a made prop is unregistered');
+A.eq(PropSprites.CATALOG.length, n0 - 1, 'the catalog shrinks by one');
+A.eq(PropSprites.spec(row.id), null, 'spec no longer knows it');
+A.eq(PropSprites.ruleFor(row.id), null, 'a deleted made prop is pruned from saves');
+PropSprites.markUserDeleted(['user_old_deleted_aaaaaa']);
+A.eq(PropSprites.ruleFor('user_old_deleted_aaaaaa'), null, 'a tombstoned id from the station is pruned too');
+A.eq(PropSprites.ruleFor('user_still_protected_bbbbbb'), { mount: null, stack: false, surface: false, flat: false }, 'other unregistered made props stay protected');
+
 A.report();

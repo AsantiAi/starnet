@@ -56,6 +56,7 @@ const UserProps = (() => {
     loading = (async () => {
       let j = null;
       try { const r = await apiFetch('/api/userprops'); j = r.ok ? await r.json() : null; } catch (_) { j = null; }
+      if (j && Array.isArray(j.deleted) && PropSprites.markUserDeleted) PropSprites.markUserDeleted(j.deleted);
       if (j && Array.isArray(j.props)) {
         const before = props.map((p) => p.id).join(',');
         props = j.props;
@@ -82,6 +83,15 @@ const UserProps = (() => {
       return await r.json();
     } catch (_) { return { ok: false, code: 'unreachable', message: 'The station did not answer. Try again.' }; }
   }
+  // delete a made prop from the station's library; the caller removes placed copies and the catalog row
+  async function remove(id) {
+    try {
+      const r = await apiFetch('/api/userprops/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+      const j = await r.json();
+      if (j && j.ok) { props = props.filter((p) => p.id !== id); registered.delete(id); sided.delete(id); }
+      return j;
+    } catch (_) { return { ok: false, code: 'unreachable', message: 'The station did not answer. Try again.' }; }
+  }
   async function job(id) {
     try { const r = await apiFetch('/api/userprops/job?id=' + encodeURIComponent(id)); return await r.json(); }
     catch (_) { return { ok: false, code: 'unreachable' }; }
@@ -106,6 +116,6 @@ const UserProps = (() => {
   const list = () => props.slice();
   if (typeof window !== 'undefined') setTimeout(() => { load(); }, 0);
   const get = (id) => props.find((p) => p.id === id) || null;
-  return { load, list, get, generate, makeSide, job, watch };
+  return { load, list, get, generate, makeSide, remove, job, watch };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = UserProps;

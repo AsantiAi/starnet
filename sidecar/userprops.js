@@ -83,6 +83,12 @@ function makeUserProps(deps) {
     const f = path.join(dir, id + (view === 'w' ? '-w' : '') + '.png');
     return f.startsWith(dir) ? f : null;
   }
+  // ids the player deliberately deleted. The page must NOT keep these in a save (made props are otherwise protected
+  // from pruning), or a copy in another crew member's station would linger as a placeholder forever.
+  function deleted() {
+    const idx = readJson(indexFile, { props: [] });
+    return (Array.isArray(idx.deleted) ? idx.deleted : []).filter(isPropId);
+  }
   function pending() { const p = readJson(pendingFile, { jobs: [] }); return Array.isArray(p.jobs) ? p.jobs : []; }
 
   function cloudCfg() {
@@ -141,7 +147,7 @@ function makeUserProps(deps) {
         footprint: { w: result.footprint.w, h: result.footprint.h }, bounds: { x: result.bounds.x, y: result.bounds.y, width: result.bounds.width, height: result.bounds.height },
         sourceWidth: result.sourceWidth, sourceHeight: result.sourceHeight, costUsd: Number(costUsd) || 0, createdAt: now() };
       const props = list().concat([entry]);
-      writeJson(indexFile, { version: 1, props });
+      writeJson(indexFile, { version: 1, props, deleted: deleted() });
       return entry;
     });
   }
@@ -186,8 +192,21 @@ function makeUserProps(deps) {
       writeDurable({ fs, path }, imageFile(propId, 'w'), png);
       entry.side = { jobId, footprint: { w: result.footprint.w, h: result.footprint.h }, bounds: { x: result.bounds.x, y: result.bounds.y, width: result.bounds.width, height: result.bounds.height },
         sourceWidth: result.sourceWidth, sourceHeight: result.sourceHeight, costUsd: Number(costUsd) || 0, createdAt: now() };
-      writeJson(indexFile, { version: 1, props });
+      writeJson(indexFile, { version: 1, props, deleted: deleted() });
       return entry;
+    });
+  }
+  // Delete a made prop: its files and index entry go, its id is tombstoned. Refused while a job for it runs.
+  // Credits already spent are not refunded (the cloud billed real upstream work) — the page says so.
+  async function remove(propId) {
+    if (!isPropId(propId)) return { ok: false, code: 'bad_id', message: 'No such made prop.' };
+    if (pending().some((j) => j.propId === propId)) return { ok: false, code: 'busy', message: 'A side view for this prop is still being made. Delete it once that finishes.' };
+    return serial(() => {
+      const props = list();
+      if (!props.some((p) => p.id === propId)) return { ok: false, code: 'not_found', message: 'No such made prop.' };
+      writeJson(indexFile, { version: 1, props: props.filter((p) => p.id !== propId), deleted: deleted().concat([propId]).slice(-500) });
+      for (const v of ['s', 'w']) { try { fs.rmSync(imageFile(propId, v), { force: true }); } catch (e) { note('userprops.remove.file', e); } }
+      return { ok: true, id: propId };
     });
   }
 
@@ -258,7 +277,7 @@ function makeUserProps(deps) {
   function stop() { stopped = true; if (timer) { clearTimer(timer); timer = null; } }
   function activeJobs() { return pending().map((pj) => job(pj.id)).filter(Boolean); }
 
-  return { list, imageFile, start, startSide, job, activeJobs, resume, stop, pollOnce, _internals: { slugOf, validResult, isPropId } };
+  return { list, deleted, remove, imageFile, start, startSide, job, activeJobs, resume, stop, pollOnce, _internals: { slugOf, validResult, isPropId } };
 }
 
 module.exports = { makeUserProps, isPropId };
