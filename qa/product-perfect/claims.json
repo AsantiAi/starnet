@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "d2da0e1867b7b00f0108d00149f046e4e864d83e",
+    "sourceCommit": "f4aade3e3704b572d32c87c100d22093b011936a",
     "pathSetSha256": "7157d65c300766fc720079fb7bfa6aa8474a85cd78e9b7fb9c84315df3a784d0",
     "files": [
       {
@@ -318,8 +318,8 @@
       },
       {
         "path": "frontend/app/build.js",
-        "bytes": 461656,
-        "sha256": "a13cd1e893e61528d556ec46ce02eb718df4d197a549664175d3cb1388e44397"
+        "bytes": 465390,
+        "sha256": "e35de604b5d59ea59910c13311b3614523fd809822af2bd18ecc940ac3338ff3"
       },
       {
         "path": "frontend/app/channels.js",
@@ -788,8 +788,8 @@
       },
       {
         "path": "frontend/app/propremaster.js",
-        "bytes": 33011,
-        "sha256": "156581ef93ffb5dc3fc9c1150d6b4d29cfb6bbe6b15053f0db9f4b2725a752f8"
+        "bytes": 33327,
+        "sha256": "a8fcf9f350885c1c6b7fc034e5744700f6a7955b60b4b9dc8e48bf1ef46f9c87"
       },
       {
         "path": "frontend/app/propsearch.js",
@@ -798,8 +798,8 @@
       },
       {
         "path": "frontend/app/propsprites.js",
-        "bytes": 806981,
-        "sha256": "3ec5da173b3c8c202928f170223a0271dabe9180bbbdd095a165a1c9799c6f02"
+        "bytes": 807946,
+        "sha256": "a9888ebb4b04cd4de2fe43b8024871180fbf44b4583beb038ac8a5f568af8137"
       },
       {
         "path": "frontend/app/prospect.js",
@@ -1178,8 +1178,8 @@
       },
       {
         "path": "frontend/app/userprops.js",
-        "bytes": 7653,
-        "sha256": "868f6ce20e4d80502a5a377a0c91736b215dccb1b097409110953f92f8b4634a"
+        "bytes": 11642,
+        "sha256": "98d640ad91b1619203a01a6c626e19d8b90c3477b779744781e4b33794f6ab5c"
       },
       {
         "path": "frontend/app/verdictfollowup.js",
@@ -1398,8 +1398,8 @@
       },
       {
         "path": "frontend/css/app.css",
-        "bytes": 406210,
-        "sha256": "f61beb1a59bef08c3e366422ab53d216fe6e2d51ab78041bebc11e4455fbc014"
+        "bytes": 406574,
+        "sha256": "0b09f7b119e7e8966a008d742c7eb5489b0869f9b9bcc3654c65e68b921cd9e3"
       },
       {
         "path": "frontend/css/asciifx.css",
