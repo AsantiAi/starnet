@@ -205,3 +205,18 @@ A.ok(!/ink\('identity', 'Chose to be figured out/.test(src) && /never inked/.tes
   'seed-weight mechanical notes are never inked (nothing was learned)');
 
 A.report('onboarding.test');
+
+/* ---------- CHOOSE YOUR STATION (2026-09-28): the lead's last question, only over the untouched starter ---------- */
+{
+  const sq = src.slice(src.indexOf('async function startQuestions'), src.indexOf('function finish()'));
+  A.ok(/await pickStation\(\);[\s\S]*finish\(\);/.test(sq), 'startQuestions asks the station question before the dawn (finish)');
+  A.ok(/!specialty && role === 'orchestrator'/.test(sq), 'only the lead asks it, never a specialist wake');
+  const ps = src.slice(src.indexOf('async function pickStation'), src.indexOf('async function pickStation') + 2400);
+  A.ok(/!S\.fresh\(\)/.test(ps), 'it is offered only while the station is the untouched starter');
+  A.ok(/S\.recommend\(purposeSaid\)/.test(ps), 'the recommendation reads the purpose they gave');
+  A.ok(/Start with one room/.test(ps), 'one room is always an option');
+  const od = src.slice(src.indexOf('function offerDeferred'), src.indexOf('function offerDeferred') + 1500);
+  A.ok(!/pickStation/.test(od), 'a deferred interview never reaches the station pick');
+  const app = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'frontend', 'app', 'app.js'), 'utf8');
+  A.ok(/stations: [\s\S]{0,900}fresh: \(\) =>[\s\S]{0,400}station\.replaceLayout\(StationTemplates\.build\(id/.test(app), 'the app seam builds the preset through replaceLayout, guarded by fresh()');
+}

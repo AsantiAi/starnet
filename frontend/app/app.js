@@ -3602,6 +3602,18 @@ const App = (() => {
         persona: (typeof Personas !== 'undefined') ? Personas.get(agent.personaId) : null,   // the voice was chosen on the create screen — the awakening acknowledges it instead of re-asking
         specialty: opts.specialty || null,                   // (reserved) a pre-specced wake skips re-asking the mission; the orchestrator authors it live
         commit: applyAgentConfig,                            // each answer folds a real doc into the live prompt + persists
+        /* CHOOSE YOUR STATION (2026-09-28): the awakening's last question builds a work preset over the UNTOUCHED
+           starter room, through the same StationTemplates.build + replaceLayout path Build mode's Presets use
+           (one undo slot; the lead keeps its desk). fresh() = still the one-room starter no preset has built. */
+        stations: (typeof StationTemplates !== 'undefined' && typeof WorldModel !== 'undefined' && typeof PropSprites !== 'undefined') ? {
+          catalog: () => StationTemplates.catalog,
+          recommend: text => (StationTemplates.recommend ? StationTemplates.recommend(text) : null),
+          fresh: () => { const d = station && station.doc(); return !!d && !(d.meta && d.meta.templateId) && station.rooms().filter(r => r.kind !== 'corridor').length === 1; },
+          apply: id => {
+            try { return station.replaceLayout(StationTemplates.build(id, WorldModel, PropSprites, station.doc()._nid + 100)); }
+            catch (e) { return { ok: false, msg: e && e.message }; }
+          }
+        } : null,
         getSystem: () => agent ? agent.systemPrompt : '',    // Interview 2.0: the generated beats (wakemind.js) reason on the LIVE prompt (persona + dossier already folded in)
         done: () => { if (agent) agent.onboarded = true; persist(); if (typeof KeyCTA !== 'undefined' && KeyCTA.arm) KeyCTA.arm(); },   // the awakening landed — mark onboarded so a later refresh resumes into the game, not back into the ceremony; arm the keyless-brain CTA (shows only if no key is truly stored)
         notify: (typeof StationUI !== 'undefined') ? StationUI.notify : null,

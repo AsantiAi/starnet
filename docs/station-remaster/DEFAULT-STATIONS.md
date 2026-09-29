@@ -45,6 +45,15 @@ Software Studio replaced Engineering Station. All five essentials stay in the ce
 agents: every Bay stamps unbound, carrying its shelf role, and the setup guide (it opens right after a work preset
 is applied) is where the Commander picks agents or recruits a specialist per step. One agent may work every step.
 The guide's readiness is `WorkflowLine.readiness`, the Workflow panel's own blocking list.
+
+**Onboarding pick (2026-09-28).** The lead's awakening ends with one added question, asked while the room is
+still dark: "which station should i build for you?" `StationTemplates.recommend` reads the purpose they gave (the
+typed answer; the five purpose suggestions map to the five work presets) and puts that preset first, marked
+recommended; nothing clear recommends no preset. "Start with one room" keeps the starter. It is offered only over the
+untouched one-room starter, never in a deferred interview, and it builds through the same
+`StationTemplates.build` + `replaceLayout` path as Build mode. Live check: a fresh profile typed "I want help
+shipping my app and testing each change", got Software Studio recommended, picked it, and the dawn revealed the
+five-room station with both Bays unstaffed and the lead's desk kept.
 Every added room is also 18 × 11, with four or five furnishings and clear door
 approaches. Added desks follow the active catalog (three tiles wide with the
 remastered art); the approved existing home desk retains its saved footprint.

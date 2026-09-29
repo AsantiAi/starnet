@@ -135,4 +135,8 @@ for(const P of [legacySprites,remasterContext.module.exports])for(const item of 
   const invalid=structuredClone(doc);invalid.props[0].x=999;
   const snapshot=current.serialize();assert.equal(current.replaceLayout(invalid).ok,false);assert.deepEqual(current.serialize(),snapshot);
 }
-console.log('station-templates: seven layouts (five work presets with a ready line each, two looks), classic/remastered catalogs, approved home, one-agent and per-agent staffing, belt-order steps, loop gates, clear entrances, prop access, ownership, undo/redo and persistence PASS');
+// the onboarding station pick: the five purpose chips map one to one onto the five work presets; nothing clear → no guess
+for(const [said,id] of [['Help me write, debug, and ship software.','software'],['Research hard questions and brief me clearly.','research'],['Run tasks, ops, and the day-to-day work.','operations'],['Write and edit sharp content.','creative'],['Be my general-purpose lead across whatever comes up.','cozy'],['I want to write code for my app','software'],['plan my garden',null],['',null],[null,null]])
+  assert.equal(T.recommend(said),id,'recommend('+JSON.stringify(said)+')');
+for(const c of T.catalog.filter(c=>c.group==='work')) assert.ok(c.pitch&&c.pitch.length>20,c.id+': a one-line pitch for the onboarding pick');
+console.log('station-templates: seven layouts (five work presets with a ready line each, two looks), classic/remastered catalogs, approved home, one-agent and per-agent staffing, purpose-chip recommendations, belt-order steps, loop gates, clear entrances, prop access, ownership, undo/redo and persistence PASS');
