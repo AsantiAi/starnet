@@ -455,11 +455,21 @@
         checkCancelled(signal);
         if (buffer.length > MAX_IMAGE_BYTES) throw new Error('generated image too large (' + buffer.length + ' bytes)');
         // exact pixel request: fit the nearest-ratio render to the asked-for size (cover-crop, centred)
-        let sizeNote = '';
+        let sizeNote = '', fittedExact = false;
         if (shape.exact) {
           const fitted = await fitToSize(buffer, shape.width, shape.height);
-          if (fitted) { buffer = fitted.buffer; mime = fitted.mime; sizeNote = ' fitted to ' + shape.width + 'x' + shape.height; }
+          if (fitted) { buffer = fitted.buffer; mime = fitted.mime; sizeNote = ' fitted to ' + shape.width + 'x' + shape.height; fittedExact = true; }
           else sizeNote = ' NOT resized to ' + shape.width + 'x' + shape.height + " (image resizer unavailable; shipped at the provider's " + aspect + ' size)';
+        }
+        // Name the shape that was RENDERED, not the one asked for. A model can ignore image_config (OpenAI image slugs
+        // on OpenRouter return 1024x1024 for any ratio: live probe 2026-09-28), and the Images API snaps to 3 sizes.
+        let shapeNote = aspect ? ', ' + aspect : '';
+        if (aspect && !fittedExact) {
+          const dims = require('./imagewire.js').sniff('', buffer);
+          const want = aspect.split(':');
+          if (dims && dims.width && dims.height && Math.abs(Math.log((dims.width / dims.height) / (want[0] / want[1]))) > Math.log(1.1)) {
+            shapeNote = ', ' + dims.width + 'x' + dims.height + ', not the requested ' + aspect;
+          }
         }
         // The transparency verdict comes from the exact bytes about to be saved (an exact-size fit keeps alpha).
         // An opaque result is still saved and delivered (it was paid for), but it is never reported as transparent.
@@ -511,7 +521,7 @@
         const caption = textFromResponse(data);
         const kb = (buffer.length / 1024).toFixed(0) + ' KB';
         return {
-          content: 'Generated and saved ' + rel + ' (' + kb + ', ' + mime + ', model ' + model + (aspect ? ', ' + aspect : '') + sizeNote + ').' +
+          content: 'Generated and saved ' + rel + ' (' + kb + ', ' + mime + ', model ' + model + shapeNote + sizeNote + ').' +
             (switchNote ? '\nModel: ' + switchNote + '.' : '') + alphaNote +
             '\nView: ' + viewer + (caption ? '\nModel note: ' + caption : ''),
           summary: 'image → ' + rel + alphaTag

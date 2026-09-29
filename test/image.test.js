@@ -414,6 +414,17 @@ const imageReply = png => jsonResp({ choices: [{ message: { images: [{ image_url
     A.ok(/\nTransparency NOT verified: this PNG layout/.test(inter.content) && /Do not claim the background is transparent/.test(inter.content), 'unverifiable alpha is said plainly');
     A.eq(inter.summary, 'image → art/inter.png (transparency unverified)', 'and the summary says so');
 
+    // J7b. the result names the shape RENDERED, not the one asked for: OpenAI image slugs on OpenRouter return a square
+    //      whatever image_config says (live probe 2026-09-28: 16:9 asked, 1024x1024 returned)
+    const square = encodePng({ w: 32, h: 32, ctype: 6, pixel: (x, y) => (x > 8 && x < 24 && y > 8 && y < 24) ? [200, 40, 20, 255] : [0, 0, 0, 0] });
+    const sqFetch = stubFetch(() => imageReply(square));
+    const sq = await makeImageTools({ openrouter: { apiKey: 'k' }, fsp, pathMod: path, root: ROOT, fetchImpl: sqFetch }).generateTool.run({ prompt: 'logo', transparent: true, aspect_ratio: '16:9' }, ctx);
+    A.eq(sqFetch.calls[0].body.image_config, { aspect_ratio: '16:9' }, 'the ratio is still asked for');
+    A.ok(/model openai\/gpt-5-image-mini, 32x32, not the requested 16:9\)/.test(sq.content), 'an ignored ratio is reported as the real pixel size: ' + JSON.stringify(sq.content));
+    const wideFetch = stubFetch(() => imageReply(encodePng({ w: 32, h: 18, ctype: 2, pixel: () => [1, 2, 3] })));
+    const wideOk = await makeImageTools({ openrouter: { apiKey: 'k' }, fsp, pathMod: path, root: ROOT, fetchImpl: wideFetch }).generateTool.run({ prompt: 'vista', aspect_ratio: '16:9' }, ctx);
+    A.ok(/model google\/gemini-3\.1-flash-image, 16:9\)/.test(wideOk.content) && !/not the requested/.test(wideOk.content), 'an honoured ratio is named as before');
+
     // J8. an exact-size fit keeps the alpha channel, and the verdict reads the FITTED bytes (sharp-encoded, adaptive filters)
     let sharp = null; try { sharp = require('sharp'); } catch (_) {}
     if (sharp) {
@@ -422,6 +433,10 @@ const imageReply = png => jsonResp({ choices: [{ message: { images: [{ image_url
       const fitFetch = stubFetch(() => imageReply(wide));
       const fit = await makeImageTools({ openrouter: { apiKey: 'k' }, fsp, pathMod: path, root: ROOT, fetchImpl: fitFetch }).generateTool.run({ prompt: 'logo', transparent: true, width: 64, height: 36, path: 'art/fit' }, ctx);
       A.ok(/fitted to 64x36/.test(fit.content) && /Transparent background verified/.test(fit.content), 'an exact-size transparent render keeps its alpha: ' + JSON.stringify(fit.content));
+      A.ok(!/not the requested/.test(fit.content), 'an exact fit IS the requested shape, so no mismatch is reported');
+      // 100x30 renders at the nearest provider ratio (21:9) and is then fitted: the fit, not 21:9, is what was asked
+      const odd = await makeImageTools({ openrouter: { apiKey: 'k' }, fsp, pathMod: path, root: ROOT, fetchImpl: fitFetch }).generateTool.run({ prompt: 'banner', width: 100, height: 30, path: 'art/odd' }, ctx);
+      A.ok(/fitted to 100x30/.test(odd.content) && !/not the requested/.test(odd.content), 'an exact size far from any provider ratio is not misreported: ' + JSON.stringify(odd.content));
     }
   }
   try { await fsp.rm(ROOT, { recursive: true, force: true }); } catch (_) {}
