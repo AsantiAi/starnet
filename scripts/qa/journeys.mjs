@@ -827,14 +827,28 @@ async function journeyBayIdleLife(cdp, A) {
   await evalJS(cdp, closeOnly).catch(() => {});
   const bodyOf = `(() => { try { const b=(window.__SKYNET_TEST__.bodies()||[]).find(x=>x.id===${J(PROBE)}); return b||null; } catch(e){ return null; } })()`;
 
-  // 1) inject a belt + a bay bound to the probe agent → rederive → syncCrewFromPlan spawns a NON-summoned body.
+  /* 1) inject a bay bound to the probe agent and CONNECT an INBOX to it → rederive → syncCrewFromPlan spawns a
+     NON-summoned body. Since conveyor links phase B a bay joins a line only through a LINK — a loose belt beside it
+     joins nothing (the plan's decision 1; the old single setBelt tile no longer hooked the bay, and J6 went red) —
+     so the belt is laid the way the BELT tool lays it: connectBelt, which makes the link. The INBOX takes the first
+     clear spot west, north, south or east of the bay. */
   const inj = await evalJS(cdp, `(() => { try {
     if (typeof Build==='undefined' || !Build.__test__ || !Build.__test__.station) return 'NO_BUILD_TEST';
     const st = Build.__test__.station();
-    const okBelt = st.setBelt(6,5,'E'); const okBay = st.addProp({ t:'bay', x:7, y:5, w:1, h:1, agentId:${J(PROBE)} });
-    return JSON.stringify({ belt: !!(okBelt&&okBelt.ok), bay: !!(okBay&&okBay.ok!==false) });
+    const bay = st.addProp({ t:'bay', x:7, y:5, w:1, h:1, agentId:${J(PROBE)} });
+    if (!bay || bay.ok === false) return JSON.stringify({ bay: false, why: bay && bay.error });
+    let link = null;
+    for (const [x, y] of [[4,5],[7,2],[7,8],[10,5]]) {
+      if (!st.canPlaceProp('intake', x, y, 1, 1).ok) continue;
+      const inbox = st.addProp({ t:'intake', x, y, w:1, h:1 });
+      if (!inbox || inbox.ok === false) continue;
+      link = st.connectBelt(inbox.id, bay.id);
+      if (link && link.ok) break;
+      st.removeProp(inbox.id);
+    }
+    return JSON.stringify({ bay: true, link: !!(link && link.ok), why: link && !link.ok ? link.error : undefined });
   } catch(e){ return 'ERR:'+e.message; } })()`).catch(e => 'ERR:' + e.message);
-  A.ok('J6/bay-injected', typeof inj === 'string' && inj.indexOf('ERR') < 0 && inj.indexOf('NO_BUILD') < 0, 'inject → ' + inj);
+  A.ok('J6/bay-injected', typeof inj === 'string' && /"bay":true/.test(inj) && /"link":true/.test(inj), 'inject → ' + inj);
 
   // 2) the plan body appears (proves it's a real bay-bound, non-summoned body — the exact class that froze).
   let born = false;
@@ -880,8 +894,14 @@ async function journeyBayIdleLife(cdp, A) {
   const caged = await evalJS(cdp, bodyOf).catch(() => null);
   A.ok('J6/stays-in-own-zone', !caged || caged.inOwnZone !== false, caged ? ('inOwnZone=' + caged.inOwnZone + ' tile=' + caged.tile.x + ',' + caged.tile.y) : 'no body');
 
-  // cleanup: remove the injected bay + belt so a shared-app follow-on sees the original floor.
-  await evalJS(cdp, `(() => { try { const st=Build.__test__.station(); const p=(st.propsByAgent?st.propsByAgent(${J(PROBE)}):[]).find(pp=>pp.t==='bay'); if (p) st.removeProp(p.id); if (st.setBelt) st.setBelt(6,5,''); return 'cleaned'; } catch(e){ return 'ERR:'+e.message; } })()`).catch(() => {});
+  // cleanup: remove the injected INBOX, bay and the belt that joined them so a shared-app follow-on sees the original floor.
+  await evalJS(cdp, `(() => { try { const st=Build.__test__.station();
+    const bay=(st.propsByAgent?st.propsByAgent(${J(PROBE)}):[]).find(pp=>pp.t==='bay'); if (!bay) return 'no bay';
+    const mine=(st.links()||[]).filter(l=>l.to.prop===bay.id||l.from.prop===bay.id);
+    const tiles=[]; for (const l of mine) for (const t of (l.path||[])) tiles.push([t.x,t.y]);
+    if (tiles.length && st.removeBelts) st.removeBelts(tiles);
+    for (const l of mine) st.removeProp(l.from.prop===bay.id ? l.to.prop : l.from.prop);
+    st.removeProp(bay.id); return 'cleaned'; } catch(e){ return 'ERR:'+e.message; } })()`).catch(() => {});
 }
 
 /* ═══════════════════════════ J7 — slash INPUT-path truth (the 2026-07-05 ARGS-bug seam) ═══════════════════════════
