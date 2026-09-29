@@ -39,8 +39,20 @@
   /* ---------------- pure feed model (unit-tested in test/hudmode.test.js) ---------------- */
 
   function createFeed() {
-    return { runs: new Map(), recent: [], prompts: new Set(), queues: new Map(), snapAt: 0, snapOk: null };
+    return { runs: new Map(), recent: [], prompts: new Set(), queues: new Map(), unread: new Map(), snapAt: 0, snapOk: null };
   }
+
+  /* UNREAD: an agent whose run finished while the Commander was on someone else's line. It is the
+     run.end this page received, nothing inferred; putting that agent on the line clears it. A run the
+     Commander stopped themselves is not news. Tone ranks what a glance must catch: a question over a
+     fault over a plain finish, so a later DONE never hides an earlier ASKED YOU. */
+  const UNREAD_RANK = { ok: 1, bad: 2, ask: 3 };
+  function markUnread(feed, agentId, tone) {
+    if (!agentId || !UNREAD_RANK[tone]) return;
+    const had = feed.unread.get(agentId);
+    if (!had || UNREAD_RANK[tone] >= UNREAD_RANK[had]) feed.unread.set(agentId, tone);
+  }
+  function clearUnread(feed, agentId) { return feed.unread.delete(String(agentId || '')); }
 
   function touchRun(feed, p, now) {
     const id = String(p.runId);
@@ -104,7 +116,9 @@
     if (!agentId) return;
     // One row per run: a run.error already recorded for it is superseded by the run's own end.
     feed.recent = feed.recent.filter(x => x.runId !== String(p.runId));
-    pushRecent(feed, { runId: String(p.runId), agentId, reason: String(p.reason || 'done'), at: now });
+    const reason = String(p.reason || 'done');
+    pushRecent(feed, { runId: String(p.runId), agentId, reason, at: now });
+    markUnread(feed, agentId, (END_WORDS[reason] || { tone: 'dim' }).tone);
   }
 
   function onRunError(feed, p, now) {
@@ -116,6 +130,7 @@
     // run.error is usually followed by run.end{error} for the same run: keep ONE row for it.
     feed.recent = feed.recent.filter(x => x.runId !== String(p.runId));
     pushRecent(feed, { runId: String(p.runId), agentId, reason: 'error', at: now });
+    markUnread(feed, agentId, 'bad');
   }
 
   /* The snapshot is the authority on WHAT is running. Event-only runs survive a short grace (the
@@ -231,6 +246,46 @@
     };
   }
 
+  /** The crew strip: every roster agent, in roster order, with the one lamp a glance needs.
+      `agents` = [{ id, name, color }], `onLine` = the agent COMMS is talking to.
+      lamp: 'ask' (a permission prompt is pending on one of its runs) · 'live' (a run the snapshot or a
+      watched run.start proves) · 'idle'. unread: the tone of a finish it has not been looked at since. */
+  function crew(feed, agents, onLine) {
+    const live = new Set(), asking = new Set();
+    for (const r of feed.runs.values()) {
+      live.add(r.agentId);
+      if (feed.prompts.has(r.runId)) asking.add(r.agentId);
+    }
+    return (Array.isArray(agents) ? agents : []).filter(a => a && a.id).map(a => {
+      const id = String(a.id);
+      return {
+        id, name: String(a.name || id).toUpperCase(), color: a.color || '',
+        lamp: asking.has(id) ? 'ask' : live.has(id) ? 'live' : 'idle',
+        unread: id === onLine ? null : (feed.unread.get(id) || null),
+        online: id === onLine
+      };
+    });
+  }
+
+  /** The newest reply in a COMMS history (the rows COMMS itself renders), flattened to one line for
+      the folded glance. Error / stopped rows are the transcript's markers, not what the agent said. */
+  function lastReply(history, max) {
+    const cap = max || 160;
+    const rows = Array.isArray(history) ? history : [];
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const r = rows[i];
+      if (!r || r.role !== 'assistant' || r.error || r.stopped) continue;
+      const text = String(typeof r.content === 'string' ? r.content : '')
+        .replace(/```[\s\S]*?```/g, ' [code] ')
+        .replace(/[#>*_`~|]+/g, ' ')
+        .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+        .replace(/\s+/g, ' ').trim();
+      if (!text) continue;
+      return text.length > cap ? text.slice(0, cap - 1).replace(/\s+\S*$/, '') + '…' : text;
+    }
+    return '';
+  }
+
   /* ---------------- preferences (localStorage is a convenience; failures read as defaults) ---------------- */
 
   function readPrefs(store) {
@@ -266,12 +321,38 @@
   const now = () => Date.now();
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+  function roster() {
+    try { return (typeof App !== 'undefined' && App.agents) ? (App.agents() || []) : []; } catch (_) { return []; }
+  }
+
   function who(id) {
+    const a = roster().find(x => x && x.id === id);
+    return a ? { name: String(a.name || a.id).toUpperCase(), color: a.color || '' } : null;
+  }
+
+  // The agent COMMS is talking to right now: the conversation's own binding, else the focused hero.
+  function onLineId() {
+    try { const ref = typeof Chat !== 'undefined' && Chat.contextRef ? Chat.contextRef() : null; if (ref && ref.agentId) return String(ref.agentId); } catch (_) {}
+    try { if (typeof App !== 'undefined' && App.heroId) return String(App.heroId()); } catch (_) {}
+    return '';
+  }
+
+  function switchTo(id) {
+    if (!id) return;
+    clearUnread(S.feed, id);
+    if (S.folded) setFolded(false);
+    // A chip means "back to MY conversation with that agent": open the agent's own most recent stream.
+    // App.selectAgent alone would, from a blank thread (a just-summoned specialist's), rebind that thread
+    // to the picked agent instead, stranding the conversation the Commander came back for.
     try {
-      if (typeof App === 'undefined' || !App.agents) return null;
-      const a = App.agents().find(x => x && x.id === id);
-      return a ? { name: String(a.name || a.id).toUpperCase(), color: a.color || '' } : null;
-    } catch (_) { return null; }
+      if (id !== onLineId() && typeof App !== 'undefined') {
+        const mine = typeof Workstreams !== 'undefined' && Workstreams.list ? Workstreams.list().filter(w => (w.agentId || 'agent') === id) : [];
+        if (mine.length && App.openWorkstream) App.openWorkstream(mine[0].id);
+        else if (App.selectAgent) App.selectAgent(id);
+      }
+    } catch (_) {}
+    try { const input = doc.getElementById('chat-input'); if (input) input.focus(); } catch (_) {}
+    render();
   }
 
   function gameScreen() { return doc && doc.getElementById('screen-game'); }
@@ -295,14 +376,31 @@
           '<button type="button" class="hud-btn hud-exit" id="hud-exit" title="Back to the full station">STATION</button>' +
         '</span>' +
       '</div>' +
-      '<ol class="hud-feed" id="hud-feed" aria-label="What your agents are doing right now"></ol>';
+      '<div class="hud-crew" id="hud-crew" role="group" aria-label="Your agents: pick who is on the line"></div>' +
+      '<ol class="hud-feed" id="hud-feed" aria-label="What your agents are doing right now"></ol>' +
+      '<p class="hud-reply" id="hud-reply" hidden></p>';
     g.insertBefore(deck, g.firstChild);
     S.deck = deck;
     S.els = {
       sum: deck.querySelector('#hud-sum'), feed: deck.querySelector('#hud-feed'),
+      crew: deck.querySelector('#hud-crew'), reply: deck.querySelector('#hud-reply'),
       pin: deck.querySelector('#hud-pin'), fold: deck.querySelector('#hud-fold'),
       min: deck.querySelector('#hud-min'), exit: deck.querySelector('#hud-exit')
     };
+    // A crew chip puts that agent ON THE LINE; the + chip is the conversation's own ADD AGENTS door.
+    S.els.crew.addEventListener('click', e => {
+      const chip = e.target && e.target.closest && e.target.closest('button');
+      if (!chip) return;
+      if (chip.hasAttribute('data-add')) {
+        if (S.folded) setFolded(false);
+        const add = doc.getElementById('gc-add-agents');
+        if (add) add.click();
+        return;
+      }
+      switchTo(chip.getAttribute('data-agent'));
+    });
+    // The folded reply line opens the conversation it quotes.
+    S.els.reply.addEventListener('click', () => { if (S.folded) setFolded(false); });
     S.els.exit.addEventListener('click', () => exit());
     S.els.fold.addEventListener('click', () => setFolded(!S.folded));
     S.els.pin.addEventListener('click', () => setPinned(!S.pinned));
@@ -313,12 +411,48 @@
     S.els.feed.addEventListener('click', e => {
       const row = e.target && e.target.closest && e.target.closest('[data-agent]');
       if (!row) return;
-      const id = row.getAttribute('data-agent');
-      if (S.folded) setFolded(false);
-      try { if (typeof App !== 'undefined' && App.selectAgent) App.selectAgent(id); } catch (_) {}
-      try { const input = doc.getElementById('chat-input'); if (input) input.focus(); } catch (_) {}
+      switchTo(row.getAttribute('data-agent'));
     });
     return deck;
+  }
+
+  const LAMP_WORDS = { ask: 'needs your OK', live: 'working', idle: 'idle' };
+  const UNREAD_WORDS = { ok: 'finished', ask: 'asked you something', bad: 'hit a fault' };
+
+  function renderCrew() {
+    const line = onLineId();
+    clearUnread(S.feed, line);   // the conversation on screen is the one being read
+    const chips = crew(S.feed, roster(), line);
+    // Rebuilt only when a lamp, a name or the line actually moves: the 1s clock tick must not replace the
+    // chip under the pointer (its hover card would drop) or steal keyboard focus from it.
+    const sig = JSON.stringify(chips);
+    if (sig === S.crewSig) return;
+    S.crewSig = sig;
+    const focused = doc.activeElement && S.els.crew.contains(doc.activeElement) ? doc.activeElement.getAttribute('data-agent') : null;
+    S.els.crew.innerHTML = chips.map(c => {
+      const words = c.name + ' · ' + LAMP_WORDS[c.lamp] + (c.unread ? ' · ' + UNREAD_WORDS[c.unread] : '') + (c.online ? ' · on the line' : '');
+      return '<button type="button" class="hud-chip hud-lamp-' + c.lamp + (c.online ? ' on' : '') + (c.unread ? ' hud-unread hud-unread-' + c.unread : '') + '"' +
+        ' data-agent="' + esc(c.id) + '" aria-pressed="' + c.online + '" aria-label="' + esc(words) + '" title="' + esc(c.online ? words : 'Talk to ' + c.name + ' (' + LAMP_WORDS[c.lamp] + ')') + '">' +
+        '<span class="hud-lamp"' + (c.color ? ' style="--hud-suit:' + esc(c.color) + '"' : '') + ' aria-hidden="true"></span>' +
+        '<span class="hud-chip-name">' + esc(c.name) + '</span>' +
+        (c.unread ? '<span class="hud-pip" aria-hidden="true"></span>' : '') +
+      '</button>';
+    }).join('') + (doc.getElementById('gc-add-agents')
+      ? '<button type="button" class="hud-chip hud-add" data-add aria-label="Add agents to this conversation" title="Add agents to this conversation">+</button>'
+      : '');
+    if (focused) { const again = S.els.crew.querySelector('[data-agent="' + focused.replace(/"/g, '') + '"]'); if (again) again.focus(); }
+  }
+
+  // Folded, the deck quotes the newest reply of the conversation on the line, so a Commander mid-game
+  // reads the answer without opening anything. It is the COMMS history row, verbatim, flattened.
+  function renderReply() {
+    let text = '';
+    if (S.folded) { try { text = typeof Chat !== 'undefined' && Chat.getHistory ? lastReply(Chat.getHistory()) : ''; } catch (_) { text = ''; } }
+    const w = text ? who(onLineId()) : null;
+    const html = text ? '<b>' + esc((w && w.name) || 'AGENT') + '</b> ' + esc(text) : '';
+    if (S.els.reply.innerHTML !== html) S.els.reply.innerHTML = html;
+    S.els.reply.hidden = !text;
+    if (text) S.els.reply.title = 'Open the conversation'; else S.els.reply.removeAttribute('title');
   }
 
   function render() {
@@ -326,6 +460,11 @@
     const v = view(S.feed, who, now());
     S.els.sum.textContent = v.summary.text;
     S.els.sum.className = 'hud-sum hud-tone-' + v.summary.tone;
+    // Anything waiting on the Commander turns the whole deck's frame gold: the one state a glance from
+    // across the room must catch. A border change, never a glow (matte chrome).
+    S.deck.classList.toggle('hud-asking', v.summary.tone === 'ask');
+    renderCrew();
+    renderReply();
     const rows = [];
     const cells = (r, step, time) =>
       '<span class="hud-dot"' + (r.color ? ' style="--hud-suit:' + esc(r.color) + '"' : '') + ' aria-hidden="true"></span>' +
@@ -435,8 +574,6 @@
     S.desktop = !!tauriCore(root);
     S.active = true;
     bindBus();
-    const expandBtn = doc.getElementById('comms-expand');
-    if (expandBtn && gameScreen().classList.contains('comms-expanded')) expandBtn.click();   // HUD owns the frame now
     doc.body.classList.add('hud-mode');
     doc.body.classList.remove('hud-folded');
     // The station is not on screen: stop the world renderer so a game in the foreground gets the GPU.
@@ -484,6 +621,7 @@
     S.folded = !!folded;
     doc.body.classList.toggle('hud-folded', S.folded);
     syncButtons();
+    render();   // the folded deck carries the reply line: lay it out before the window hugs it
     announceLayout();
     // Folded, the window hugs the deck; unfolded, it returns to the height it had.
     S.foldedH = S.folded ? deckHeight() : 0;
@@ -507,7 +645,9 @@
     bindBus();
     const btn = doc.getElementById('comms-hud');
     if (btn) {
-      btn.hidden = false;
+      // The HUD's point is a panel that stays above a game: only the desktop shell can do that, so a
+      // browser tab gets no header button (Ctrl+Shift+H still folds the page for anyone who wants it).
+      btn.hidden = !tauriCore(root);
       btn.addEventListener('click', () => { enter(); });
     }
     // Ctrl+Shift+H toggles the HUD from anywhere in the app (Alt+H stays the help overlay's).
@@ -542,7 +682,7 @@
     enter, exit, toggle, setFolded, setPinned,
     active: () => S.active, folded: () => S.folded, pinned: () => S.pinned,
     // pure model — exported for tests
-    createFeed, onRunStart, onToolCall, onToolResult, onToken, onRunEnd, onRunError, applySnapshot, snapshotFailed, view, toolLabel, fmtElapsed, fmtAgo, readPrefs, writePrefs,
+    createFeed, markUnread, clearUnread, crew, lastReply, onRunStart, onToolCall, onToolResult, onToken, onRunEnd, onRunError, applySnapshot, snapshotFailed, view, toolLabel, fmtElapsed, fmtAgo, readPrefs, writePrefs,
     _feed: () => S.feed, _render: render, _poll: poll
   };
 });
