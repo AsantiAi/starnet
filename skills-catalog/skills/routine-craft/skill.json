@@ -1,0 +1,10 @@
+{
+  "slug": "routine-craft",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Station",
+  "tags": ["routines", "scheduling", "automation", "unattended"],
+  "requires": ["orchestrator"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}
