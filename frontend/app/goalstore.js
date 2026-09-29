@@ -198,13 +198,23 @@ const GoalStore = (() => {
   // SPEND-ONCE: a usable path is CACHED by the belief fingerprint — if the caller lost the beat moment after this
   // (paid) aux call (memory/study claimed it mid-round-trip), the next offer for the SAME belief state reuses the
   // cached path instead of re-calling the model. The cache clears the moment the belief is decided (markOffered).
-  async function proposeDecomposition() {
+  // `target` (optional, USER-STUDY LOOP): plan THIS goals belief — the onboarding meeting names the mission it
+  // just confirmed rather than taking whichever goals belief is first. It passes the same gates the proactive
+  // path does: a live goals belief, no tree yet, not already offered/declined in this exact state.
+  function eligible(target) {
+    if (!target || !target.id) return null;
+    const live = goalsBeliefs().find(b => b && String(b.id) === String(target.id) && b.text);
+    if (!live) return null;
+    if (state.goals.some(g => g.sourceBeliefId === String(live.id) && (g.status === 'active' || g.status === 'done'))) return null;
+    return state.offered[beliefFingerprint(live)] ? null : live;
+  }
+  async function proposeDecomposition(target) {
     // NOTE: no `firing` guard here — the offer flow (chat.js offerArc) sets firing BEFORE this call, so
     // gating on it deadlocked the arc into always returning null (re-entry is already blocked by
     // willOfferDecomposition + offerArc's isFiring() entry check).
     if (!ready()) return null;
     if (typeof Harness === 'undefined' || !Harness.chat) return null;
-    const belief = pendingDecomposition();
+    const belief = target ? eligible(target) : pendingDecomposition();
     if (!belief) return null;
     const fp = beliefFingerprint(belief);
     if (cachedProposal && cachedProposal.fp === fp) return { belief, texts: cachedProposal.texts.slice() };   // reuse the already-paid-for path

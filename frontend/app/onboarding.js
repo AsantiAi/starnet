@@ -425,6 +425,43 @@ const Onboarding = (() => {
     if (!done && running) await capped;                  // the last stretch, bounded by the ceiling
     return done ? out : null;
   }
+  const PATH_PATTER = [
+    'one more moment — i’m laying that out as steps.',
+    'almost. i want the first step to be something we can actually start.'
+  ];
+  // THE FIRST PATH (USER-STUDY LOOP): the mission drafted as ordered steps (GoalStore.proposeDecomposition,
+  // started while the cadence beat was asked) is offered here — confirm, edit, or not now — through the same pure
+  // resolver the post-run arc confirm uses (Goals.resolveConfirmChoice), so both doors persist identically. A
+  // slow/failed/unusable draft simply skips the beat; the post-run arc offer still covers it later.
+  async function offerFirstPath(pending) {
+    const res = await awaitPatiently(pending, PATH_PATTER, SYNTHESIS_MS);
+    if (!running || !res || !res.belief || !Array.isArray(res.texts) || res.texts.length < 3) return;
+    if (typeof GoalStore === 'undefined' || typeof Goals === 'undefined' || !Goals.resolveConfirmChoice) return;
+    stage('YOUR FIRST PATH', 'Steps toward what you told me');
+    await Dialogue.say([seg('one last thing. here’s how i’d break that into steps — the first one is where we start. does this look right?', 44, 320)]);
+    if (!running) return;
+    const path = res.texts.slice();
+    const choice = await Dialogue.node({
+      lines: path.map((t, i) => seg((i ? '  ' : '') + (i + 1) + '. ' + t, 46, 200)),
+      options: [{ label: 'Confirm the path', value: 'confirm' }, { label: 'Not now', value: 'other', skip: true }],
+      allowCustom: true, customLabel: '✎ edit the steps', customPlaceholder: 'your steps, separated by ; …'
+    });
+    if (!running) return;
+    const decision = Goals.resolveConfirmChoice(choice, path);
+    const goal = decision.action === 'confirm' ? GoalStore.confirm(res.belief, decision.path) : null;
+    if (!goal) {
+      GoalStore.declineDecomposition(res.belief);   // re-offers only if the mission itself changes (never a nag)
+      await Dialogue.say([seg('fine — the mission stays in your dossier. you can plan it any time from QUESTS.', 44, 340)]);
+      return;
+    }
+    bumpTruth();
+    // say only what the dial will actually do: at 'propose' or above quest refresh plans the first step on its
+    // own; at 'wait' nothing starts until the Commander does.
+    const plans = typeof AutonomyStore !== 'undefined' && AutonomyStore.summary && (AutonomyStore.summary() || {}).enabled;
+    await Dialogue.say([seg(plans
+      ? 'then that’s the path. i’ll line up quests for the first step — they’ll be waiting in QUESTS.'
+      : 'then that’s the path. it’s in QUESTS — start the first step whenever you’re ready.', 44, 340)]);
+  }
   async function mindWait(pending, parse, patter, capMs) {
     if (!pending) return null;
     const res = await awaitPatiently(pending, patter, capMs);
@@ -753,6 +790,7 @@ const Onboarding = (() => {
     //    time, the year, the grabbed offer), and on a thin/loose run the directive makes the read OWN the
     //    thinness — "i barely know you yet" is the honest read, never faked familiarity.
     let purposeDone = false;
+    let pathPending = null;   // USER-STUDY LOOP: the confirmed mission's step plan, drafted while the cadence beat is asked
     const gaveAnything = !!(tuesdayT || digT || grabbedMove);
     const synPending = brainReady()
       ? llmCall(WakeMind.buildSynthesis({ tuesday: tuesdayT, dig: digT, grabbed: grabbedMove, thin: !gaveAnything, name: NAME })) : null;
@@ -783,6 +821,15 @@ const Onboarding = (() => {
         // A THIN run's confirmed synthesis is grounded in NOTHING the Commander said — it lands as 'seed'
         // (purpose.md still exists; the readiness gate stays honestly shut until real words arrive).
         if (typeof DossierStore !== 'undefined' && DossierStore.upsert) { DossierStore.upsert('goals', { text: purposeT, source: 'onboarding', weight: (purposeT !== syn.purpose ? 'stated' : (gaveAnything ? 'synth' : 'seed')) }); if (purposeT !== syn.purpose || gaveAnything) ink('goals', purposeT); }   // a seed-weight thin purpose is never inked — nothing was learned
+        // THE MISSION BECOMES A PLAN (USER-STUDY LOOP). A mission grounded in something the Commander actually
+        // said (never a thin seed) is drafted into ordered steps NOW, in parallel with the cadence question, so
+        // the path can be confirmed before the meeting ends — quests then have a real step to aim at on day one
+        // instead of waiting for a first clean task run. The draft is the existing decomposition (one reason-only
+        // call); nothing is saved until the Commander confirms it below.
+        if ((purposeT !== syn.purpose || gaveAnything) && typeof GoalStore !== 'undefined' && GoalStore.proposeDecomposition && typeof DossierStore !== 'undefined' && DossierStore.beliefs) {
+          const missionBelief = (DossierStore.beliefs('goals') || []).find(b => b && b.text === purposeT);
+          if (missionBelief) pathPending = Promise.resolve(GoalStore.proposeDecomposition(missionBelief)).catch(() => null);
+        }
         if (commit) commit({ purpose: purposeT });
         // the one durable belief only this conversation could surface: the stack/domain they live in.
         if (syn.stack && typeof DossierStore !== 'undefined' && DossierStore.upsert) DossierStore.upsert('stack', { text: syn.stack, source: 'onboarding', weight: 'synth' });
@@ -801,6 +848,12 @@ const Onboarding = (() => {
     // B9. THE CADENCE — unchanged scripted beat.
     if (postureStep) {
       await askStep(postureStep);
+      if (!running) return;
+    }
+
+    // B10. THE FIRST PATH — the mission drafted above, offered as ordered steps to confirm or edit.
+    if (pathPending) {
+      await offerFirstPath(pathPending);
       if (!running) return;
     }
 

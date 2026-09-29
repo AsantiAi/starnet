@@ -475,5 +475,16 @@ const { GoalStore } = require('../frontend/app/goalstore.js');
   GoalStore.sync();
   A.eq(GoalStore.listGoals().find(g => g.id === made.goalId).milestones.filter(m => m.status === 'done').length, 1, 'the fold is idempotent');
   delete global.JourneyStore.status;
+
+  /* ============ USER-STUDY LOOP: onboarding plans the mission it just confirmed ============ */
+  GoalStore.reset();
+  global.Harness.chat = async () => ({ text: '1. Shortlist three features\n2. Prototype the best one\n3. Ship it to five users', error: false });
+  goalsBeliefs = [{ id: 'cd_first', text: 'Wants the station to: tidy my inbox' }, { id: 'cd_mission', text: 'Help choose and build useful features' }];
+  const target = goalsBeliefs[1];
+  const targeted = await GoalStore.proposeDecomposition(target);
+  A.eq(targeted && targeted.belief.id, 'cd_mission', 'a targeted draft plans exactly the named belief, not the first goals belief');
+  A.eq(await GoalStore.proposeDecomposition({ id: 'not-a-live-belief', text: 'x' }), null, 'a belief the dossier does not hold is never planned');
+  GoalStore.declineDecomposition(target);
+  A.eq(await GoalStore.proposeDecomposition(target), null, 'a declined belief is not re-drafted until it changes');
   A.report('goalstore.test');
 })();
