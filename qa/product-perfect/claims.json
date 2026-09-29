@@ -18,8 +18,8 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "c2ab23e722deaaa63a63d17b13566a5e6e0c6698",
-    "pathSetSha256": "d399b7dc9c6d8ef4e165d0c6560b5770636dbaf73b81f662e7c4b31d7cc55045",
+    "sourceCommit": "fa748e507ddbcb4f7ab2da327add6420a8211bc8",
+    "pathSetSha256": "724fccc3567e8ae1cacc99ecff6010bffab723bd87b2c1606e642fc9e1b02c5d",
     "files": [
       {
         "path": "INSTALL.md",
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 404601,
-        "sha256": "2d8680a96a07949fe5d8f0300a26a6d8e1e9eeea6e26821ef562a8fc86f473dd"
+        "bytes": 404499,
+        "sha256": "d87487283ed0aaac50e3d2a6812db19ffecaa407f11fa633c576bb4b8c57dc14"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
@@ -600,6 +600,11 @@
         "path": "frontend/app/lifecycle.js",
         "bytes": 4133,
         "sha256": "071eed9f31af8d5493feed678ee21ee5b9996b6ea2560077d46a6ce297d715ce"
+      },
+      {
+        "path": "frontend/app/linelayout.js",
+        "bytes": 35334,
+        "sha256": "b9de8997dc5fff16e99386d4aab289f9f5a68cdfcb6dd7c197572636c25c2574"
       },
       {
         "path": "frontend/app/linewatch.js",
