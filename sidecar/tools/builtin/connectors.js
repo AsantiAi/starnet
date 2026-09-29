@@ -179,7 +179,7 @@
       return { label: 'available', count: out.length, head: head, body: shown };
     }
 
-    /* suggestFor(goal) -> [{ id, reason, unavailable }] (<=3): catalog entries that fit the goal AND are NOT connected
+    /* suggestFor(goal) -> [{ id, reason, unavailable }] (<=3 connectable, then <=3 unavailable): catalog entries that fit the goal AND are NOT connected
        per the host's own read-back (the manager's list — a configured-but-dead connector is still "not connected",
        and one that is up is never suggested). [] when no catalog, no topic, or everything needed is wired.
        `unavailable` is the card's own reason its sign-in is disabled in this build ('' when it can be connected). */
@@ -202,7 +202,10 @@
         if (score > 0) scored.push({ id: str(e.id), score: score, unavailable: unavailableOf(e) });
       }
       scored.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
-      return scored.slice(0, 3).map(x => ({ id: x.id, reason: 'needed for: ' + str(goal).slice(0, 120), unavailable: x.unavailable }));
+      // fill the 3 slots with CONNECTABLE fits first: a card whose sign-in is off must not push a working door out;
+      // the blocked ones still ride along (up to 3) so the model can say plainly they are not available yet.
+      const pick = scored.filter(x => !x.unavailable).slice(0, 3).concat(scored.filter(x => x.unavailable).slice(0, 3));
+      return pick.map(x => ({ id: x.id, reason: 'needed for: ' + str(goal).slice(0, 120), unavailable: x.unavailable }));
     }
 
     const listTool = {

@@ -6932,7 +6932,9 @@ const Chat = (() => {
     CONNECTOR_NEEDED.delete(runId);
     const ws = originWs || activeWs;
     if (!ws || typeof Workstreams === 'undefined') return false;
-    Workstreams.setConnectorHandoff(ws.id, Object.assign({}, ev, { agentId: ws.agentId || 'agent' }));
+    // awaitingAnswer: the question is still open, so ABILITIES offers RETURN TO TASK, never CONTINUE TASK — that
+    // sends a continuation prompt, which send() would route in as the question's ANSWER (review 2026-09-28).
+    Workstreams.setConnectorHandoff(ws.id, Object.assign({}, ev, { agentId: ws.agentId || 'agent', awaitingAnswer: true }));
     App.persist();
     return true;
   }
@@ -6956,6 +6958,13 @@ const Chat = (() => {
   async function continueConnectorTask(streamId) {
     const ws = Workstreams.get(streamId), h = Workstreams.connectorHandoff(streamId);
     if (!ws || !h || connectorContinuing.has(streamId) || Channels.isBusy(streamId)) return false;
+    // The run that raised this door ended on a question that is still open: a continuation prompt would be taken
+    // as its answer. Take the Commander back to the question instead; answering it continues with the connection.
+    if (h.awaitingAnswer) {
+      App.openWorkstream(streamId);
+      if (typeof StationUI !== 'undefined') StationUI.notify('Answer the open question in this task to continue with ' + h.connectorId + '.', 'info');
+      return false;
+    }
     const continuationFocusVersion = focusVersion;
     connectorContinuing.add(streamId);
     try {
@@ -8882,7 +8891,7 @@ const Chat = (() => {
         // a CLEAN end that hit an unwired connector mid-run: the reply already says "not connected" — the chip is
         // the door. Only on a clean end: a stopped run owns the slot with its retry/budget chip above.
         if (!taskQuestion && (!endReason || endReason === 'done')) offerConnectorDoor(thisRunId, ws);
-        if (taskQuestion) holdConnectorDoor(thisRunId, ws);   // the question owns the slot; its card carries the door
+        if (taskQuestion || endReason === 'clarifying') holdConnectorDoor(thisRunId, ws);   // the question owns the slot (parsed here, or restored from the store below); its card carries the door
         // GOLDEN-RUN DRIFT (2026-08-22): a recipe-launched run is compared by the sidecar against that recipe's own
         // good history; a drifted run is a failure class, so it earns the bell ONCE (keyed by the run). The durable
         // row lands a beat after run end, so the read waits; it is advisory and never blocks the turn.
