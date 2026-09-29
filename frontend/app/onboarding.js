@@ -102,7 +102,7 @@ const Onboarding = (() => {
         build: () => null,
         ack: t => t
           ? 'set — and you can retune that any time from my station panel.'
-          : 'no rush — i’ll wait for you, and you can dial it up whenever.' }
+          : 'no rush — until you decide, i’ll only line up suggestions for you to approve. nothing runs on its own.' }
     ];
     // Recruited specialists inherit the station posture and keep only their context beat.
     return specialty ? all.filter(s => s.field !== 'purpose' && s.field !== 'manual' && !s.dossierDim && !s.posturePreset) : all.filter(s => !s.specialtyOnly);
@@ -503,7 +503,8 @@ const Onboarding = (() => {
       // dossier — same authoring path the COMMANDER panel uses (recomposes the live prompt + persists at the edge).
       if (!isSkip && s.dossierDim && typeof DossierStore !== 'undefined' && DossierStore.upsert) { DossierStore.upsert(s.dossierDim, { text, source: 'onboarding', weight: 'stated' }); ink(s.dossierDim, text); }   // V3: always the Commander's own words now (steer chips can't write); the ink stamp shows the write landing
       // the autonomy cadence beat writes the chosen OPENING posture straight to AutonomyStore (the option value is a
-      // cadence-preset id). Skipping ('Decide later') leaves the safe floor — fully wait-for-me.
+      // cadence-preset id). Skipping ('Decide later') leaves the new-station default — PROPOSE: suggestions to
+      // approve, never an unattended act (Autonomy.fresh).
       if (!isSkip && s.posturePreset && typeof AutonomyStore !== 'undefined' && AutonomyStore.applyPreset) {
         const saved = await AutonomyStore.applyPreset(text);
         if (!saved.ok) { await Dialogue.say([seg(saved.error || 'That setting could not be saved. Please try again.', 44, 360)]); continue; }
