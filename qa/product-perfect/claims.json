@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "30a1a516812e5dbe48b7f72f2492bb484db39db8",
+    "sourceCommit": "8dbf9395303c8337671fb2a8af2b0de109e7a699",
     "pathSetSha256": "d399b7dc9c6d8ef4e165d0c6560b5770636dbaf73b81f662e7c4b31d7cc55045",
     "files": [
       {
@@ -318,8 +318,8 @@
       },
       {
         "path": "frontend/app/build.js",
-        "bytes": 446455,
-        "sha256": "e860dd00a96241f1291e81b1c58f98b34d6b3885b3da7f43880da7a104a90ce6"
+        "bytes": 451665,
+        "sha256": "fd754ec51745ada40832cf5eb071568669acdad8cb005c31526643f39ec2dfb9"
       },
       {
         "path": "frontend/app/channels.js",
@@ -1068,8 +1068,8 @@
       },
       {
         "path": "frontend/app/stationtemplates.js",
-        "bytes": 10700,
-        "sha256": "bf712ae1d0cd5af522ae2d4f6a5434497f6fa867c13e6f19861e3753dccb378a"
+        "bytes": 18275,
+        "sha256": "13396655d1f562663bf983c1d717bc2e91dc410f04ab423ec6614e1c234581c7"
       },
       {
         "path": "frontend/app/stationui.js",
@@ -1153,8 +1153,8 @@
       },
       {
         "path": "frontend/app/tutorial.js",
-        "bytes": 99858,
-        "sha256": "47e1d07d6e6469d4ee75637b11360be1e9402cdff240e58a41a8b03840793410"
+        "bytes": 99917,
+        "sha256": "fe10b078c806b28304d8861940e44a03c2b77c665a6ed3f659c07c4f64a4eed7"
       },
       {
         "path": "frontend/app/understanding.js",
@@ -1263,8 +1263,8 @@
       },
       {
         "path": "frontend/app/workflowline.js",
-        "bytes": 50348,
-        "sha256": "d6240f56d35e5d788f6f76e794b89967a6bfba83d7ba855a5860831136fc64ec"
+        "bytes": 51336,
+        "sha256": "e99629899df5cb68491dee616fab6225f55ffbbc101782000ccd7b9b28b7e97f"
       },
       {
         "path": "frontend/app/workflowpanel.js",
@@ -1333,8 +1333,8 @@
       },
       {
         "path": "frontend/app/worldmodel.js",
-        "bytes": 197402,
-        "sha256": "621431f11726b9812db01570c90a1f262711dbf3dadb138384f087f05c7932c0"
+        "bytes": 199188,
+        "sha256": "8f40271d74c1da2865241d8b36cfcd71c13179f41ae8cbff1bbcebbee2def3ae"
       },
       {
         "path": "frontend/app/worldrenderer.js",
@@ -1498,8 +1498,8 @@
       },
       {
         "path": "frontend/css/refit-polish.css",
-        "bytes": 28560,
-        "sha256": "dd3ddee4e0cc3799a966aa05a2fbc1430bd7e39370f27b660fd223828c81749f"
+        "bytes": 30281,
+        "sha256": "65483cbdb7d4a3114f3f8d61cba61a3d8e9459f9ba34da3ec944d0d97444c00d"
       },
       {
         "path": "frontend/css/refit.css",
