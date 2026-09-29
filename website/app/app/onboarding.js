@@ -827,7 +827,13 @@ const Onboarding = (() => {
         // instead of waiting for a first clean task run. The draft is the existing decomposition (one reason-only
         // call); nothing is saved until the Commander confirms it below.
         if ((purposeT !== syn.purpose || gaveAnything) && typeof GoalStore !== 'undefined' && GoalStore.proposeDecomposition && typeof DossierStore !== 'undefined' && DossierStore.beliefs) {
-          const missionBelief = (DossierStore.beliefs('goals') || []).find(b => b && b.text === purposeT);
+          // the belief THIS beat just wrote = the NEWEST goals belief (upsert without an id always appends). Never an
+          // exact-text find: the dossier trims + caps a belief at 280 chars, so a long mission in the Commander's own
+          // words never matched (the offer silently vanished), and an identical older belief would win the find.
+          const goalsNow = DossierStore.beliefs('goals') || [];
+          const newest = goalsNow[goalsNow.length - 1];
+          const head = s => String(s || '').trim().slice(0, 40);
+          const missionBelief = (newest && newest.text && head(newest.text) === head(purposeT)) ? newest : null;
           if (missionBelief) pathPending = Promise.resolve(GoalStore.proposeDecomposition(missionBelief)).catch(() => null);
         }
         if (commit) commit({ purpose: purposeT });
