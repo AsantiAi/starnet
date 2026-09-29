@@ -294,14 +294,16 @@ function makeJourneyStore(deps) {
     return { ok: true, duplicate: !result.changed && !result.skipped, skipped: !!result.skipped, outcome: result.outcome, receipt: result.receipt };
   }
 
-  // opts.harness (sidecar-internal ONLY — the POST /api/journey route never passes a third argument, so a client
-  // can never claim it): the step was settled by the harness itself (every quest planned for it completed by
-  // contract, sidecar/goal-advance.js), so the outcome carries 'harness-contract' authority.
+  // opts.authority (sidecar-internal ONLY — the POST /api/journey route never passes a third argument, so a client
+  // can never claim it): the step was settled by the harness from its quest slate (sidecar/goal-advance.js), which
+  // names the honest authority — 'harness-contract' when a mechanical contract completed work, 'commander-confirmed'
+  // when every completed quest was the Commander's own report.
   async function recordMilestone(d, now, opts) {
     d = d || {}; let result = null;
     const sourceId = 'milestone:' + clip(d.goalId, 64) + ':' + clip(d.milestoneId, 80);
     if (!clip(d.goalId, 64) || !clip(d.milestoneId, 80) || clip(d.evidence, 1000).length < 4) return { ok: false, error: 'goal, milestone, and evidence are required' };
-    const verifiedBy = (opts && opts.harness === true) ? 'harness-contract' : d.source === 'commander' ? 'commander-confirmed' : 'commander-client';
+    const internal = opts && ['harness-contract', 'commander-confirmed'].indexOf(opts.authority) >= 0 ? opts.authority : null;
+    const verifiedBy = internal || (d.source === 'commander' ? 'commander-confirmed' : 'commander-client');
     await durable.update(STORE_KEY, cur => {
       const rec = normalize(cur);
       result = foldOutcome(rec, {

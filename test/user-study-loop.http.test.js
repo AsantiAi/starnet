@@ -42,7 +42,7 @@ const plan = status => ({
     const journey = (await host.json('GET', '/api/journey')).body.journey;
     const settled = journey.milestones.find(m => m.milestoneId === 'g_news:m1');
     assert.ok(settled, 'the settled step is recorded in the journey');
-    assert.equal(settled.verifiedBy, 'harness-contract', 'with harness authority');
+    assert.equal(settled.verifiedBy, 'commander-confirmed', 'a slate finished only by the Commander own reports is recorded as THEIR confirmation, never a harness proof');
     assert.match(settled.evidence, /Shortlist three niches/, 'citing the quest completed by its contract');
     assert.doesNotMatch(settled.evidence, /Ask five readers/, 'never citing the dismissed quest');
     assert.equal(journey.activeGoal.next, 'Write issue one', 'the mirror moved to the next step');
@@ -76,6 +76,6 @@ const plan = status => ({
     const after = await active();
     assert.equal(after.next, 'Write issue one', 'the advanced plan survives a restart');
     assert.equal(after.done, 1);
-    console.log('user-study-loop.http: PASS (slate settles step, harness authority, stale push held, restart, away study listed)');
+    console.log('user-study-loop.http: PASS (slate settles step, stale push held, restart, away study listed, honest authority)');
   } finally { await host.dispose(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

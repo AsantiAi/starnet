@@ -32,6 +32,9 @@ const q = (id, status, milestoneId) => ({ id, title: 'quest ' + id, status, goal
   A.eq(fin && fin.questIds, ['a'], 'only the current step\'s completed quests are its evidence');
   A.ok(fin && /quest a/.test(fin.evidence) && !/quest c/.test(fin.evidence), 'the evidence names the completed quests of this step only');
   A.eq(GA.slateFinished(Object.assign(goal(), { milestones: null }), [q('a', 'done')]), null, 'a summary-only mirror (older webview) never advances blind');
+  const attest = (id, st) => Object.assign(q(id, st), { contract: { type: 'attest' } }), artifact = (id, st) => Object.assign(q(id, st), { contract: { type: 'artifact', key: 'x.md' } });
+  A.eq(GA.slateFinished(goal(), [attest('a', 'done'), attest('b', 'dismissed')]).authority, 'commander-confirmed', 'a step settled only by the Commander own reports is THEIR word ("You confirmed"), never a harness proof');
+  A.eq(GA.slateFinished(goal(), [artifact('a', 'done'), attest('b', 'done')]).authority, 'harness-contract', 'a step with mechanically-proven work is a harness record ("StarNet recorded")');
   A.eq(GA.slateFinished(Object.assign(goal(), { id: 'other' }), [q('a', 'done')]), null, 'quests bound to another goal never settle this one');
 
   // ---- overlay: journey completions fold on, next step recomputes, the Commander's chosen step is honored
@@ -49,15 +52,17 @@ const q = (id, status, milestoneId) => ({ id, title: 'quest ' + id, status, goal
   // ---- journey: the harness authority is sidecar-only, and the done-key set is lifetime
   const s = makeJourneyStore({ fs: memFs(), path, workspaces: '/ws', writeDurable });
   await s.registerGoal({ id: 'g_1', text: 'Launch the newsletter', successCondition: 'Ten real subscribers' }, 1);
-  const h = await s.recordMilestone({ goalId: 'g_1', milestoneId: 'g_1:m1', milestoneText: 'Pick a niche', evidence: fin.evidence }, 10, { harness: true });
+  const h = await s.recordMilestone({ goalId: 'g_1', milestoneId: 'g_1:m1', milestoneText: 'Pick a niche', evidence: fin.evidence }, 10, { authority: 'harness-contract' });
   A.ok(h.ok && h.outcome.verifiedBy === 'harness-contract', 'a sidecar-settled step carries harness-contract authority');
   const c = await s.recordMilestone({ goalId: 'g_1', milestoneId: 'g_1:m2', milestoneText: 'Write issue one', evidence: 'wrote it', source: 'harness-contract' }, 11);
   A.ok(c.ok && c.outcome.verifiedBy === 'commander-client', 'a client-supplied source can never claim harness authority (the route passes no opts)');
+  const bogus = await s.recordMilestone({ goalId: 'g_1', milestoneId: 'g_1:m9', evidence: 'nine things' }, 13, { authority: 'root' });
+  A.eq(bogus.outcome.verifiedBy, 'commander-client', 'an unknown internal authority falls back, never passes through');
   A.ok(s.milestoneDoneKeys().has(GA.milestoneKey('g_1', 'g_1:m1')), 'the done-key set uses the same key the overlay reads');
-  const dup = await s.recordMilestone({ goalId: 'g_1', milestoneId: 'g_1:m1', evidence: fin.evidence }, 12, { harness: true });
+  const dup = await s.recordMilestone({ goalId: 'g_1', milestoneId: 'g_1:m1', evidence: fin.evidence }, 12, { authority: 'harness-contract' });
   A.ok(dup.ok && dup.duplicate, 'settling the same step twice is idempotent');
   const snap = s.snapshot(null);
-  A.eq(snap.milestones.map(m => [m.milestoneId, m.verifiedBy]), [['g_1:m1', 'harness-contract'], ['g_1:m2', 'commander-client']], 'the snapshot carries every recorded step completion for the webview fold');
+  A.eq(snap.milestones.map(m => [m.milestoneId, m.verifiedBy]), [['g_1:m1', 'harness-contract'], ['g_1:m2', 'commander-client'], ['g_1:m9', 'commander-client']], 'the snapshot carries every recorded step completion for the webview fold');
   A.eq(GA.overlay(goal(), s.milestoneDoneKeys()).milestoneId, 'g_1:m3', 'the mirror folds the journey truth end to end');
 
   A.report('goal-advance.test');

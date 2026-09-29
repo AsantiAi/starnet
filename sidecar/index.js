@@ -8256,7 +8256,7 @@ function advanceGoalFromQuests() {
       const fin = GoalAdvance.slateFinished(goal, questStore.list());
       if (!fin) break;
       const r = await journeyStore.recordMilestone({ goalId: fin.goalId, goalText: goal.text, milestoneId: fin.milestoneId,
-        milestoneText: fin.milestoneText, evidence: fin.evidence, agentId: null }, Date.now(), { harness: true });
+        milestoneText: fin.milestoneText, evidence: fin.evidence, agentId: null }, Date.now(), { authority: fin.authority });
       if (!r || !r.ok) break;
       commanderGoals.set(goal);   // re-fold: the step now reads done and the mirror names the next one
       questRefreshNote({ outcome: 'advanced', reason: 'every quest planned for this step is settled — the plan moved to the next step', title: fin.milestoneText });
