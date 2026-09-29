@@ -9,7 +9,11 @@
        share the load (TURNS) / remove; a lone BAY: MAKE IT A LINE; a LOOP gate: REMOVE THE REVIEW;
      · the + on a belt: a step by role, a BRANCH (copy / turns) and — only in front of a step or the OUTBOX — a SORTER;
      · a line that ends on a step shows + OUTBOX where its OUTBOX would be; the footer has TIDY LINE;
-     · a button whose edit would fail is OFF with the reason as its tip (never a click that ends in an error). */
+     · a button whose edit would fail is OFF with the reason as its tip (never a click that ends in an error);
+     · a SPLITTER's card: ADD A BRANCH and a ✕ for each branch; a FILTER's card: + A STEP FOR a type it has no route for, and
+       REMOVE THE SORTER;
+     · an edit with no room where the line stands ARMS in place — a second click lays the line out afresh round it, one undo;
+     · the floor shows what an edit moved (an outline glides from where the machine stood) and what it took out (red). */
 'use strict';
 const A = require('./_assert.js');
 const fs = require('fs');
@@ -24,10 +28,12 @@ const iW = html.indexOf('app/worldmodel.js'), iL = html.indexOf('app/linelayout.
 A.ok(iW > 0 && iL > iW && iE > iL, 'index.html loads linelayout.js and lineedit.js after worldmodel.js');
 
 // the Build host: one runner for every edit
-const run = at(build, '  function lineEditRun(op, propId, args) {', '  /* pan the floor so a part');
-A.ok(/LineEdit\.run\(station, propId, op, args, \{ near: viewCenterTile\(\), sizes: lineSizes\(\) \}\)/.test(run), 'every edit runs through LineEdit with the catalog sizes, a new line laid near the middle of the view');
+const run = at(build, '  function lineEditRun(op, propId, args, how) {', '  /* pan the floor so a part');
+A.ok(/LineEdit\.run\(station, propId, op, args, \{ near: viewCenterTile\(\), sizes: lineSizes\(\), tidy: !!\(how && how\.tidy\) \}\)/.test(run), 'every edit runs through LineEdit with the catalog sizes, a new line laid near the middle of the view (and the armed second click\'s TIDY)');
+A.ok(/station\.lineGraph\(propId\)/.test(run) && /pushMoves\(moves\)/.test(run) && /pushFlash\(gone, true\)/.test(run), 'what an edit moved glides on the floor, what it took out flashes red');
+A.ok(/if \(fl\.moves\) \{ drawMoves\(fl, k, t\); continue; \}/.test(build) && /function drawMoves\(fl, k, t\)/.test(build), '…drawn with the placement flashes');
 A.ok(/pushFlash\(/.test(run) && /Tutorial\.onPropPlaced/.test(run) && /rebake\(\)/.test(run), '…what it placed flashes, the tutorial hears it, and the plan recompiles at once');
-A.ok(/lineEdit: \(op, propId, args\) => lineEditRun\(op, propId, args\)/.test(build) && /canLineEdit: \(op, propId, args\) =>[^\n]*LineEdit\.check\(/.test(build), 'the panel host offers lineEdit and canLineEdit (the dry answer that greys a button out)');
+A.ok(/lineEdit: \(op, propId, args, how\) => lineEditRun\(op, propId, args, how\)/.test(build) && /canLineEdit: \(op, propId, args\) =>[^\n]*LineEdit\.check\(/.test(build), 'the panel host offers lineEdit and canLineEdit (the dry answer that greys a button out)');
 const own = at(build, '      /* BUILD YOUR OWN (conveyor-links phase D)', '      /* START FROM INTENT');
 A.ok(/BUILD YOUR OWN LINE/.test(own) && /lineEditRun\('newLine', null, \{\}\)/.test(own) && /openWorkflowPanel\(r\.focus\)/.test(own), 'the Conveyors tab has BUILD YOUR OWN LINE: a new line, its Workflow panel open on it');
 
@@ -47,7 +53,16 @@ const btn = at(panel, '  function editBtn(op, id, args, label, tip, cls) {', '  
 A.ok(/aria-disabled="true"/.test(btn) && /c\.msg \|\| tip/.test(btn) && /' off'/.test(btn), 'a button whose edit would fail is OFF, its reason in the tip');
 const wire = at(panel, '  function wireEdits(scope) {', '  // a BAY\'s line edits');
 A.ok(/classList\.contains\('off'\)/.test(wire) && /H\.flashTip\(b\.dataset\.tip, false\)/.test(wire), '…and clicking it says the reason instead of trying');
-A.ok(/saveOpenFields\(\)/.test(at(panel, '  function lineEdit(op, id, args, okMsg) {', '  // one edit as a button')), 'a half-typed brief is saved before an edit changes the floor under it');
+A.ok(/saveOpenFields\(\)/.test(at(panel, '  function lineEdit(op, id, args, okMsg, how) {', '  // one edit as a button')), 'a half-typed brief is saved before an edit changes the floor under it');
+// the SPLITTER's and the FILTER's shape edits
+A.ok(/editBtn\('addArm', p\.id, \{ split: p\.id \}, '⑂ ADD A BRANCH'/.test(panel) && /editBtn\('removeArm', p\.id, \{ split: p\.id, head: l\.dock \}/.test(panel), 'a SPLITTER\'s card offers ADD A BRANCH and a ✕ for each branch');
+A.ok(/editBtn\('addRoute', p\.id, \{ id: p\.id, tag \}, '\+ A STEP FOR ' \+ lbl/.test(panel) && /\.error !== 'HAS_ROUTE'/.test(panel), 'a FILTER\'s card offers a step for a type it has no route for (never one it has)');
+A.ok(/editBtn\('removeSorter', p\.id, \{ id: p\.id \}, '✕ REMOVE THE SORTER'/.test(panel), '…and REMOVE THE SORTER');
+const le = at(panel, '  function lineEdit(op, id, args, okMsg, how) {', '  // one edit as a button');
+A.ok(/res\.canTidy && op !== 'tidy' && !\(how && how\.tidy\)/.test(le) && /S\.armTidy = \{ key, t: Date\.now\(\) \}/.test(le) && /click it again to TIDY the line round it/.test(le), 'no room where the line stands: the button ARMS in place and says a second click tidies round it');
+A.ok(/'⌗ TIDY LINE TO FIT IT\?'/.test(btn) && /data-tidy-armed="1"/.test(btn), '…the armed button says what the second click does');
+A.ok(/tidy \? \{ tidy: true \} : null/.test(wire), '…and the second click asks the editor to lay the line out afresh round the change');
+A.ok(/res\.tidied \? ' · the whole line laid out afresh round it' : res\.relaid \? ' · the belts round it re-routed'/.test(le), 'the confirmation says when belts were re-routed or the line laid afresh');
 
 // ROLE chips: a step's name, one undo, only real roles
 A.ok(/data-role="' \+ r \+ '" aria-pressed=/.test(panel) && /setPropRole\(p\.id, b\.getAttribute\('aria-pressed'\) === 'true' \? '' : b\.dataset\.role\)/.test(panel), 'a BAY\'s ROLE chips set its role (clicking the pressed one clears it)');

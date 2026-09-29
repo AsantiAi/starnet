@@ -1992,13 +1992,14 @@ const WorldModel = (() => {
           const v = beltPlaceable(b.x, b.y); if (!v.ok) return v;
           doc.belts[beltKey(b.x, b.y)] = b.d; dirty.push(cell(b.x, b.y));
         }
-        // 5. its links: an old link keeps its id, a new one is numbered after the highest on the floor
+        // 5. its links: an old link keeps its id, a new one is numbered after the highest the floor held — the line's own
+        //    lifted links included, so a new link never takes an old one's number (and pushes that link to another)
         const links = doc.links.slice(), placed = [];
         for (const l of (L.links || [])) {
           const from = { prop: idOf[l.from.prop], port: l.from.port || 'out' };
           if (Array.isArray(l.from.tags) && l.from.tags.length) from.tags = l.from.tags.slice();
           if (l.from.else) from.else = true;
-          const id = (oldLinkIds.has(l.id) && !links.some(q => q.id === l.id)) ? l.id : nextLinkId(links);
+          const id = (oldLinkIds.has(l.id) && !links.some(q => q.id === l.id)) ? l.id : nextLinkId(links.concat(L0));
           const link = { id, from, to: { prop: idOf[l.to.prop], port: 'in' }, path: (l.path || []).map(t => ({ x: t.x, y: t.y, d: t.d })) };
           links.push(link); placed.push(link);
         }

@@ -206,6 +206,8 @@
 .wf-chip[aria-pressed="true"] { background: var(--wf-on); border-color: var(--ph); color: var(--ph-bright); box-shadow: var(--wf-light), inset 0 -2px 0 rgba(var(--ph-rgb),.65); }
 /* a line edit that cannot be made here (conveyor-links phase D): shown OFF, its reason in the tip — the same language as an OFF + */
 .wf-chip.off, .wf-foot .bb.off { opacity: .45; border-style: dashed; cursor: not-allowed; }
+/* an edit with no room where the line stands, ARMED: a second click tidies the line round it (the warn face ArmConfirm chips wear) */
+.wf-chip.armed, .wf-foot .bb.armed { color: var(--warn); border-color: var(--warn); box-shadow: var(--wf-light), 0 0 9px color-mix(in srgb, var(--warn) 40%, transparent); }
 .wf-chip.off:hover { border-color: var(--wf-edge); color: inherit; background: var(--refit-glass, var(--wf-plate)); opacity: .7; }
 .wf-shape .wf-chips { margin: 0 0 6px; }
 /* a line that ends on a step: its OUTBOX place on the strip is the button that adds one */

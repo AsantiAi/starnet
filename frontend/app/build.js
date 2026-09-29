@@ -2712,7 +2712,7 @@ const Build = (() => {
          loop, a sorter, a removal, a move, TIDY LINE — is LineEdit: the line's graph edited, laid out by the engine and
          written back in ONE undo slot (lineEditRun). canLineEdit answers without laying anything, so a button that could
          only fail is shown off with its reason. */
-      lineEdit: (op, propId, args) => lineEditRun(op, propId, args),
+      lineEdit: (op, propId, args, how) => lineEditRun(op, propId, args, how),
       canLineEdit: (op, propId, args) => (typeof LineEdit === 'undefined' || !station) ? { ok: false, msg: 'the line editor is not loaded' } : LineEdit.check(station, propId, op, args, { sizes: lineSizes() }),
     };
     return wfHostMemo;
@@ -2727,12 +2727,28 @@ const Build = (() => {
     const vw = Math.max(1, cv.width - ins.l - (ins.r || 0)), vh = Math.max(1, cv.height - ins.t - ins.b);
     return { x: Math.floor((ins.l + vw / 2 - panX) / zoom / t), y: Math.floor((ins.t + vh / 2 - panY) / zoom / t) };
   }
-  function lineEditRun(op, propId, args) {
+  function lineEditRun(op, propId, args, how) {
     if (typeof LineEdit === 'undefined' || !station) return { ok: false, msg: 'the line editor is not loaded' };
-    const res = LineEdit.run(station, propId, op, args, { near: viewCenterTile(), sizes: lineSizes() });
+    // where the line's machines stood before the edit (so the floor can show what moved and what went)
+    const before = {};
+    try {
+      const g0 = propId != null ? station.lineGraph(propId) : null;
+      if (g0 && g0.ok) for (const n of g0.graph.nodes) before[n.id] = { x1: n.pin.x, y1: n.pin.y, x2: n.pin.x + (n.w || 1) - 1, y2: n.pin.y + (n.h || 1) - 1 };
+    } catch (e) { /* (only the courtesy flash depends on it) */ }
+    const res = LineEdit.run(station, propId, op, args, { near: viewCenterTile(), sizes: lineSizes(), tidy: !!(how && how.tidy) });
     if (res && res.ok) {
       const placed = Object.keys(res.ids || {}).filter(k => k.charAt(0) === '+').map(k => station.propById(res.ids[k])).filter(Boolean);
       if (placed.length) pushFlash(placed.map(p => ({ x1: p.x, y1: p.y, x2: p.x + (p.w || 1) - 1, y2: p.y + (p.h || 1) - 1 })), false);
+      // WHAT MOVED, WHAT WENT: a machine the edit moved glides an outline from where it stood to where it stands (the floor
+      // re-bakes at once — the glide is that jump made visible); one it took out flashes red where it was
+      const moves = [];
+      for (const id in before) {
+        const p = station.propById(id), b = before[id];
+        if (p && (p.x !== b.x1 || p.y !== b.y1)) moves.push({ from: b, to: { x1: p.x, y1: p.y, x2: p.x + (p.w || 1) - 1, y2: p.y + (p.h || 1) - 1 } });
+      }
+      if (moves.length) pushMoves(moves);
+      const gone = (res.removed || []).map(id => before[id]).filter(Boolean);
+      if (gone.length) pushFlash(gone, true);
       if (typeof Tutorial !== 'undefined' && Tutorial.onPropPlaced) for (const p of placed) Tutorial.onPropPlaced(p.t);
       try { rebake(); } catch (e) { /* the frame loop compiles on its next tick; the panel repaints when it does */ }
     }
@@ -4555,6 +4571,7 @@ const Build = (() => {
     else { sfx('bad'); flashTip(ev, (res && res.msg) || 'blocked'); }
   }
   function pushFlash(rects, bad) { flashes.push({ rects: rects.map(r => Object.assign({}, r)), t0: performance.now(), bad: !!bad }); }
+  function pushMoves(moves) { flashes.push({ moves: moves.map(m => ({ from: Object.assign({}, m.from), to: Object.assign({}, m.to) })), t0: performance.now() }); }
   function flashUndo() { if (undoBtn) { undoBtn.classList.add('pulse'); setTimeout(() => undoBtn && undoBtn.classList.remove('pulse'), 900); } }
 
   function onWheel(ev) {
@@ -5340,11 +5357,12 @@ const Build = (() => {
      structure materializes, right→left as it is stripped), a RING pushes out past the edge and
      fades, and the body glow decays under both. Eerie, not cute — it is the same construction
      vocabulary the bake and the CRT already speak, no particles and no confetti. */
-  const FLASH_MS = 620;
+  const FLASH_MS = 620, MOVE_MS = 760;
   function drawFlashes(now, t) {
     for (let i = flashes.length - 1; i >= 0; i--) {
-      const fl = flashes[i], k = (now - fl.t0) / FLASH_MS;
+      const fl = flashes[i], k = (now - fl.t0) / (fl.moves ? MOVE_MS : FLASH_MS);
       if (k >= 1) { flashes.splice(i, 1); continue; }
+      if (fl.moves) { drawMoves(fl, k, t); continue; }
       const ease = 1 - (1 - k) * (1 - k);         // fast out — the sweep leads, the glow trails
       const body = (1 - k) * (fl.bad ? 0.34 : 0.30);
       const hue = fl.bad ? '255,110,90' : '170,255,210';
@@ -5372,6 +5390,29 @@ const Build = (() => {
           ctx.strokeRect(X - grow, Y - grow, W + grow * 2, H + grow * 2);
         }
       }
+    }
+  }
+
+  /* A MACHINE A LINE EDIT MOVED (TIDY LINE, a swap, a line laid afresh round a change): its outline GLIDES from the footprint it
+     left to the one it now stands on — eased in and out, the old footprint fading, a dashed wake from where it was. The same
+     phosphor construction marks as the placement flash: the station shows the move, it does not animate the machine. */
+  function drawMoves(fl, k, t) {
+    const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2, a = 1 - k * 0.6, hue = '170,255,210';
+    ctx.lineWidth = 2 / zoom;
+    for (const m of fl.moves) {
+      const fw = (m.from.x2 - m.from.x1 + 1) * t, fh = (m.from.y2 - m.from.y1 + 1) * t;
+      const W = (m.to.x2 - m.to.x1 + 1) * t, H = (m.to.y2 - m.to.y1 + 1) * t;
+      const X = (m.from.x1 + (m.to.x1 - m.from.x1) * e) * t, Y = (m.from.y1 + (m.to.y1 - m.from.y1) * e) * t;
+      ctx.strokeStyle = 'rgba(' + hue + ',' + (0.3 * (1 - k)).toFixed(3) + ')';   // the footprint it left
+      ctx.strokeRect(m.from.x1 * t, m.from.y1 * t, fw, fh);
+      ctx.setLineDash([3 / zoom, 3 / zoom]);                                       // the wake
+      ctx.strokeStyle = 'rgba(' + hue + ',' + (0.4 * a).toFixed(3) + ')';
+      ctx.beginPath(); ctx.moveTo(m.from.x1 * t + fw / 2, m.from.y1 * t + fh / 2); ctx.lineTo(X + W / 2, Y + H / 2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(' + hue + ',' + (0.16 * a).toFixed(3) + ')';           // the outline, gliding over
+      ctx.fillRect(X, Y, W, H);
+      ctx.strokeStyle = 'rgba(' + hue + ',' + (0.85 * a).toFixed(3) + ')';
+      ctx.strokeRect(X, Y, W, H);
     }
   }
 

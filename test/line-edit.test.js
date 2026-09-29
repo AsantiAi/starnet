@@ -10,7 +10,12 @@
      ONLY WHAT CHANGED    — every belt an edit does not touch stays exactly where it was; no machine that was there moves
                            (TIDY LINE is the one edit that re-lays the line).
      ONE UNDO             — each edit is one undo slot that puts the station back byte for byte; a refused edit changes
-                           nothing and says why in plain words. */
+                           nothing and says why in plain words.
+     A BRANCH MORE / LESS — another branch on a split (the JOINER then waits for three), a whole branch out as one piece
+     SORTER ROUTES        — a step for a type of work the sorter has no route for, a route step out (that type then goes with
+                           everything else), the sorter out as one piece. With no room where the line stands, the edit's own
+                           lanes spread first (its machines never move); when only a fresh layout fits, the first click
+                           changes nothing and the second (opts.tidy) lays the line out afresh round it. */
 'use strict';
 const A = require('./_assert.js');
 const P = require('../frontend/app/pipeline.js');
@@ -187,6 +192,160 @@ const run = (st, id, op, args, opts) => LE.run(st, id, op, args, Object.assign({
   for (let y = rm.y1; y <= rm.y2; y++) for (let x = rm.x1; x <= rm.x2; x++) if (full.canPlaceProp('crate', x, y, 1, 1).ok) full.addProp({ t: 'crate', x, y, w: 1, h: 1 });
   const f0 = snapOf(full), nl = run(full, null, 'newLine', {});
   A.ok(!nl.ok && nl.error === 'NO_ROOM' && snapOf(full) === f0, 'a full deck refuses a new line in plain words and changes nothing — ' + (nl.msg || ''));
+}
+
+/* ---------- ANOTHER BRANCH ON A SPLIT, A WHOLE BRANCH OUT ---------- */
+{
+  const st = fresh();
+  run(st, null, 'newLine', { role: 'WRITER' });
+  const [W] = byRole(st, 'WRITER'), [I] = one(st, 'intake'), [O] = one(st, 'outbox');
+  run(st, W, 'addBranch', { around: W, mode: 'copy' });
+  const [S] = one(st, 'splitter'), [J] = one(st, 'joiner');
+  run(st, S, 'tidy', {});
+  const links0 = st.links(), pos0 = JSON.stringify(st.props().map(p => [p.id, p.x, p.y])), doc0 = snapOf(st);
+  const inS = links0.find(l => l.to.prop === S), outJ = links0.find(l => l.from.prop === J);
+  const r = run(st, S, 'addArm', { split: S });
+  A.ok(r.ok, 'ADD A BRANCH puts a third branch on the SPLITTER' + (r.ok ? '' : ' — ' + JSON.stringify(r)));
+  const N = r.focus, bays = st.props().filter(p => p.t === 'bay').map(p => p.id);
+  A.ok(bays.length === 3 && st.propById(N).role === 'WRITER', '…a new step, named like the branches beside it');
+  A.eq(JSON.stringify(st.props().filter(p => p.id !== N).map(p => [p.id, p.x, p.y])), pos0, '…no machine that was there moves');
+  const same = k => { const n = st.links().find(l => l.id === k.id); return !!n && n.from.prop === k.from.prop && n.to.prop === k.to.prop && JSON.stringify(n.path) === JSON.stringify(k.path); };
+  A.ok(same(inS) && same(outJ), '…the belts into the split and out of the join keep their ids and their tiles (only the branches\' own lanes spread)');
+  A.ok(links0.every(k => st.links().some(l => l.id === k.id && l.from.prop === k.from.prop && l.to.prop === k.to.prop)), '…and every link that was there keeps its id');
+  const crewed = crewAll(st), plan = planOf(st);
+  A.eq(blocking(plan), [], '…it compiles clean');
+  const js = Object.values(plan.junctions);
+  A.ok(js.some(j => j.kind === 'split' && j.fanout === true) && js.some(j => j.kind === 'join' && j.expect === 3), 'the SPLITTER copies each job to all three, the JOINER waits for three — ' + JSON.stringify(plan.junctions));
+  A.ok(bays.every(b => plan.dockChains[b] && plan.dockChains[b].outbox), '…and every branch hands on through the JOINER to the OUTBOX');
+  const s3 = snapOf(st), four = run(st, S, 'addArm', { split: S });
+  A.ok(!four.ok && /three/.test(four.msg || '') && snapOf(st) === s3, 'a fourth branch is refused in plain words — a splitter has one belt in and three out — and nothing changes: ' + (four.msg || ''));
+  for (let i = 0; i < crewed; i++) st.undo();
+  st.undo();
+  A.ok(snapOf(st) === doc0, 'one undo takes the third branch back, byte for byte');
+
+  // a branch of two steps comes out whole; the split keeps its other two
+  run(st, S, 'addArm', { split: S });
+  const arm3 = st.props().filter(p => p.t === 'bay').map(p => p.id).find(b => !JSON.parse(doc0).props.some(p => p.id === b));
+  const ins = run(st, arm3, 'insertStep', { from: arm3, to: J, role: 'TESTER' });
+  A.ok(ins.ok, 'fixture: a second step on the new branch' + (ins.ok ? '' : ' — ' + JSON.stringify(ins)));
+  const [T] = byRole(st, 'TESTER');
+  const ra = run(st, S, 'removeArm', { split: S, head: arm3 });
+  A.ok(ra.ok && !st.propById(arm3) && !st.propById(T) && one(st, 'splitter').length === 1 && one(st, 'joiner').length === 1, 'REMOVE A BRANCH takes both its steps out as one piece; the split keeps its other two' + (ra.ok ? '' : ' — ' + JSON.stringify(ra)));
+  crewAll(st);
+  A.ok(Object.values(planOf(st).junctions).some(j => j.kind === 'join' && j.expect === 2), '…and the JOINER waits for two again');
+
+  // the other branch out: the split folds away, the line runs INBOX → WRITER → OUTBOX
+  const other = st.props().find(p => p.t === 'bay' && p.id !== W);
+  const rf = run(st, S, 'removeArm', { split: S, head: other.id });
+  A.ok(rf.ok && !one(st, 'splitter').length && !one(st, 'joiner').length && st.links().some(l => l.from.prop === I && l.to.prop === W) && st.links().some(l => l.from.prop === W && l.to.prop === O),
+    'a split left with one branch folds away: INBOX → WRITER → OUTBOX' + (rf.ok ? '' : ' — ' + JSON.stringify(rf)));
+}
+// the split folds round a branch of several steps too, and TAKE TURNS gets its third hand
+{
+  const st = fresh();
+  run(st, null, 'newLine', { role: 'WRITER' });
+  const [W] = byRole(st, 'WRITER'), [I] = one(st, 'intake'), [O] = one(st, 'outbox');
+  run(st, W, 'addBranch', { around: W, mode: 'turns' });
+  const [S] = one(st, 'splitter'), [M] = one(st, 'merger');
+  run(st, S, 'tidy', {});
+  const t = run(st, S, 'addArm', { split: S });
+  A.ok(t.ok && one(st, 'merger').length === 1 && st.links().filter(l => l.from.prop === S).length === 3, 'TAKE TURNS gets a third hand: three belts out of the SPLITTER, a MERGER where they meet' + (t.ok ? '' : ' — ' + JSON.stringify(t)));
+  crewAll(st);
+  const sp = Object.values(planOf(st).junctions).find(j => j.kind === 'split');
+  A.ok(!!sp && !sp.fanout, '…and the split still takes turns');
+  // one new branch grows a second step; the other two branches come out: the split folds round the two-step branch left
+  const nb = st.props().filter(p => p.t === 'bay' && p.id !== W).map(p => p.id);
+  run(st, nb[0], 'insertStep', { from: nb[0], to: M, role: 'TESTER' });
+  const [T] = byRole(st, 'TESTER');
+  run(st, S, 'removeArm', { split: S, head: nb[1] });
+  const rw = run(st, S, 'removeArm', { split: S, head: W });
+  A.ok(rw.ok && !one(st, 'splitter').length && !one(st, 'merger').length && !st.propById(W), 'the last-but-one branch out folds the split round the branch of two steps that is left' + (rw.ok ? '' : ' — ' + JSON.stringify(rw)));
+  crewAll(st);
+  const pl = planOf(st);
+  A.eq(blocking(pl), [], '…it compiles clean');
+  A.eq([(P.resolveDock(pl, { tag: 'general' }) || {}).dockId, (next(pl, nb[0]) || {}).dockId], [nb[0], T], '…INBOX → the branch\'s first step → its second step');
+  A.ok(!!pl.dockChains[T] && pl.dockChains[T].outbox === true && st.links().some(l => l.from.prop === I) && st.links().some(l => l.to.prop === O), '…→ the OUTBOX');
+}
+// a split in a cramped corner: the first click changes nothing and says TIDY; the second lays the line out afresh round it
+{
+  const st = fresh();
+  run(st, null, 'newLine', { role: 'WRITER' });
+  const [W] = byRole(st, 'WRITER'), [I] = one(st, 'intake');
+  run(st, W, 'addBranch', { around: W, mode: 'copy' });
+  const [S] = one(st, 'splitter');
+  const s0 = snapOf(st), at0 = [st.propById(I).x, st.propById(I).y];
+  const r1 = run(st, S, 'addArm', { split: S });
+  if (r1.ok) A.ok(true, '(the as-built split had room for a third branch here)');
+  else {
+    A.ok(r1.error === 'NEEDS_TIDY' && r1.canTidy === true && snapOf(st) === s0, 'no room where the line stands: the first click changes nothing and says a TIDY would fit it — ' + r1.msg);
+    const r2 = run(st, S, 'addArm', { split: S }, { tidy: true });
+    A.ok(r2.ok && r2.tidied === true && st.links().filter(l => l.from.prop === S).length === 3, 'the second click (tidy) lays the line out afresh with the third branch' + (r2.ok ? '' : ' — ' + JSON.stringify(r2)));
+    A.eq([st.propById(I).x, st.propById(I).y], at0, '…its INBOX stays where it stood');
+    crewAll(st);
+    A.eq(blocking(planOf(st)), [], '…and it compiles clean');
+  }
+}
+
+/* ---------- A SORTER'S ROUTES IN AND OUT, THE SORTER OUT AS ONE PIECE ---------- */
+{
+  const st = fresh();
+  run(st, null, 'newLine', { role: 'WRITER' });
+  const [W] = byRole(st, 'WRITER'), [O] = one(st, 'outbox');
+  run(st, W, 'addSorter', { from: W, to: O, routes: [{ tag: 'code', role: 'ENGINEER' }] });
+  const [F] = one(st, 'filter'), [E] = byRole(st, 'ENGINEER');
+  const r = run(st, F, 'addRoute', { id: F, tag: 'research' });
+  A.ok(r.ok && st.propById(r.focus).role === 'RESEARCHER', 'a sorter with no route for RESEARCH gets one: a RESEARCHER step' + (r.ok ? '' : ' — ' + JSON.stringify(r)));
+  const [R] = byRole(st, 'RESEARCHER');
+  A.ok(st.links().some(l => l.from.prop === R && l.to.prop === O), '…that hands on to where everything else goes');
+  const s1 = snapOf(st), again = run(st, F, 'addRoute', { id: F, tag: 'code' });
+  A.ok(!again.ok && again.error === 'HAS_ROUTE' && snapOf(st) === s1, 'a type that already has its own way out is refused, nothing changes — ' + (again.msg || ''));
+  let n = crewAll(st), pl = planOf(st);
+  const to = tag => { const s = next(pl, W, tag) || {}; return s.dockId || null; };
+  A.eq(blocking(pl), [], '…it compiles clean');
+  A.eq([to('code'), to('research')], [E, R], 'CODE work goes to the ENGINEER, RESEARCH to the new RESEARCHER');
+  for (let i = 0; i < n; i++) st.undo();
+
+  // a route step out: that type of work then goes with everything else — never a second belt beside EVERYTHING ELSE
+  const d = run(st, E, 'removeStep', { id: E });
+  A.ok(d.ok && !st.propById(E), 'the ENGINEER route step comes out' + (d.ok ? '' : ' — ' + JSON.stringify(d)));
+  const outs = st.links().filter(l => l.from.prop === F);
+  A.ok(outs.length === 2 && outs.some(l => l.from.else && l.to.prop === O) && outs.some(l => (l.from.tags || []).join() === 'research' && l.to.prop === R), '…the FILTER keeps its RESEARCH route and EVERYTHING ELSE, and no CODE belt — ' + JSON.stringify(outs.map(l => [l.from.tags, !!l.from.else, l.to.prop])));
+  A.ok(!(st.propById(F).routes || {}).code, '…and its routes no longer name CODE');
+  n = crewAll(st); pl = planOf(st);
+  A.ok(!byRole(st, 'ENGINEER').length && to('code') !== E && to('research') === R, 'CODE work now goes with everything else; RESEARCH still to the RESEARCHER');
+  for (let i = 0; i < n; i++) st.undo();
+
+  // the last route step out: a sorter sorting nothing folds away
+  const f = run(st, R, 'removeStep', { id: R });
+  A.ok(f.ok && !one(st, 'filter').length && st.links().some(l => l.from.prop === W && l.to.prop === O), 'a sorter left sorting nothing folds away: the WRITER hands straight to the OUTBOX' + (f.ok ? '' : ' — ' + JSON.stringify(f)));
+}
+{
+  // REMOVE THE SORTER: the FILTER and both its route steps go as one piece, one undo brings them all back
+  const st = fresh();
+  run(st, null, 'newLine', { role: 'WRITER' });
+  const [W] = byRole(st, 'WRITER'), [O] = one(st, 'outbox');
+  run(st, W, 'addSorter', { from: W, to: O });
+  const [F] = one(st, 'filter'), s0 = snapOf(st);
+  const r = run(st, F, 'removeSorter', { id: F });
+  A.ok(r.ok && !one(st, 'filter').length && !byRole(st, 'ENGINEER').length && !byRole(st, 'RESEARCHER').length && st.links().some(l => l.from.prop === W && l.to.prop === O),
+    'REMOVE THE SORTER takes the FILTER and its ENGINEER and RESEARCHER steps; the WRITER hands straight to the OUTBOX' + (r.ok ? '' : ' — ' + JSON.stringify(r)));
+  st.undo();
+  A.ok(snapOf(st) === s0, '…and one undo brings the whole sorter back');
+}
+{
+  // refusals, on the graph alone: a route that does not rejoin, a branch that is not one, the wrong machine
+  const g = { nodes: [{ id: 'A', t: 'bay' }, { id: 'F', t: 'filter' }, { id: 'E', t: 'bay' }, { id: 'B', t: 'bay' }, { id: 'O', t: 'outbox' }, { id: 'O2', t: 'outbox' }],
+    links: [{ id: 'l1', from: { node: 'A', port: 'out' }, to: { node: 'F' } }, { id: 'l2', from: { node: 'F', port: 'out', tags: ['code'] }, to: { node: 'E' } },
+      { id: 'l3', from: { node: 'E', port: 'out' }, to: { node: 'O2' } }, { id: 'l4', from: { node: 'F', port: 'out', else: true }, to: { node: 'B' } }, { id: 'l5', from: { node: 'B', port: 'out' }, to: { node: 'O' } }] };
+  const x = LE.OPS.removeSorter(JSON.parse(JSON.stringify(g)), { id: 'F' });
+  A.ok(!x.ok && /rejoin/.test(x.msg), 'a sorter whose route runs elsewhere is not removed as one piece — ' + x.msg);
+  const y = LE.OPS.removeArm(JSON.parse(JSON.stringify(g)), { split: 'F', head: 'E' });
+  const z = LE.OPS.addArm(JSON.parse(JSON.stringify(g)), { split: 'A' });
+  const w = LE.OPS.addRoute(JSON.parse(JSON.stringify(g)), { id: 'F', tag: 'general' });
+  A.ok(!y.ok && !z.ok && !w.ok && [y, z, w].every(q => typeof q.msg === 'string' && q.msg.length > 10), 'the wrong machine, or a type the sorter does not know, is refused in plain words — ' + [y, z, w].map(q => q.error).join(', '));
+  // a new lane may read in any place among its junction's lanes: the alternatives move only that link
+  const alts = LE._internals.laneAlts({ nodes: g.nodes, links: g.links.concat([{ id: 'n', from: { node: 'F', port: 'out', tags: ['research'] }, to: { node: 'B' } }]) }, 'F', 'n');
+  A.eq(alts.map(h => h.links.filter(l => l.from.node === 'F').map(l => l.id).join()), ['l2,n,l4', 'n,l2,l4'], 'another lane is tried in every place among its junction\'s lanes');
 }
 
 A.report('line-edit.test');
