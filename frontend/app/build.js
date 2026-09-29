@@ -646,8 +646,10 @@ const Build = (() => {
     const inp = box.querySelector('#refit-makeprop-input'), go = box.querySelector('#refit-makeprop-go');
     go.onclick = () => { startMakeProp(inp.value); sfx('click'); };
     inp.onkeydown = (ev) => {
-      if (ev.key === 'Enter') { ev.preventDefault(); startMakeProp(inp.value); }
-      if (ev.key === 'Escape') { ev.stopPropagation(); inp.blur(); }
+      if (ev.key === 'Enter') { ev.preventDefault(); startMakeProp(inp.value); return; }
+      if (ev.key !== 'Escape') return;
+      ev.stopPropagation();   // like the search field: Escape leaves the field, never closes REFIT behind it
+      inp.blur();
     };
     box.querySelector('#refit-makeprop-door').onclick = () => {
       const door = typeof FriendlyError !== 'undefined' && FriendlyError.actionButton && FriendlyError.actionButton({ action: 'store' });
