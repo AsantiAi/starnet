@@ -443,7 +443,10 @@ const StationCommands = (() => {
       // the camera shows what was built: the one room, or the whole station when a preset added several
       const ids = r.roomIds || [];
       setTimeout(() => { try { if (typeof World !== 'undefined' && World.frameReviewRoom) World.frameReviewRoom(ids.length === 1 ? ids[0] : ''); } catch (_) {} }, 700);
-      return Object.assign({ built: true, undo: 'The Commander can remove all of it with one UNDO in Build mode.' }, r.line
+      const undo = 'The Commander can take all of it back with one UNDO in Build mode'
+        + (r.kind === 'swap' ? ', or bring the old station back with RESTORE PREVIOUS in Build → Presets' : '')
+        + ((r.recruited || []).length ? '; the recruited agents stay on the crew (DELETE AGENT in a Dossier removes one)' : '') + '.';
+      return Object.assign({ built: true, undo }, r.line
         ? { summary: r.summary, line: r.line, where: r.where, steps: r.steps, lineId: r.lineKey, ready: r.ready, blocking: r.blocking, recruited: r.recruited }
         : { summary: r.summary, rooms: r.rooms, lines: r.lines });
     },
