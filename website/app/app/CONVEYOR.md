@@ -43,11 +43,26 @@ doc.links = [{ id: 'l3', from: { prop: 'p10', port: 'out' }, to: { prop: 'p11', 
 - **Derivation** (`Pipeline.deriveLinks(geo)`): today's ring rule written down as links, exact by
   construction — a derived floor compiles to the identical plan and hash (test/conveyor-links.test.js: the
   routing fixture corpus, every blueprint, a seeded fuzz).
-- **Model, phase A**: links FOLLOW the belts — re-derived whenever the belts, a belt machine's place/size or a
-  FILTER/LOOP's config change, never trusted from a save (an older build may have edited the belts), and
-  adopted only when they compile to the identical plan (else `null`, and the ring rule stands). Read with
-  `station.links()`; `projectGeometry()` emits them in the LOCAL frame. Belts stay in the save, so an older
-  build still routes a v2 save by tiles. The link tools (phase B) make links the thing you edit.
+- **Adoption**: a floor that never had links (a v1 save) derives them exactly on load and adopts them only when
+  they compile to the identical plan (else `null`, and the ring rule stands — every old behaviour, TOO CLOSE
+  included). Read with `station.links()` / `station.isLinked()`; `projectGeometry()` emits them in the LOCAL
+  frame. Belts stay in the save, so an older build still routes a v2 save by tiles.
+- **The floor keeps its links (phase B)**: after every edit `Pipeline.reconcileLinks` keeps each link the floor
+  still stands behind (its belt laid tile for tile, its machines where it meets them), drops the rest (a cut or
+  turned belt, a moved or removed machine — the belt stays, loose), and links every loose run that joins two
+  machines: out of one (the footprint behind its first arrow, a junction's lane, its ring) and INTO another (a
+  footprint, a junction's tile, the side or corner it stops at, or a linked belt that carries it on). A run that
+  joins no two machines stays loose: on the floor, in no plan (`plan.belts` = link paths + junction tiles), so
+  no crate rides it and no junction reads it as a lane. Derived links reconcile to themselves; reconcile is
+  idempotent; a new link starting where a dropped one did inherits its id and ports.
+- **Tools (phase B)**: BELT click-click (`connectBelt` = `planBelt` + `layBelt`) lays ONE link between the two
+  machines clicked — its last tile is the destination's alone (not in the start machine's ring), and no tile but
+  its own ends touches another junction. `moveProp` lifts and re-lays a machine's links (ids and ports kept;
+  `syncJunctionCfg` rewrites a FILTER/LOOP's compass config from the new lanes) and reports `relaid` / `lost`;
+  `removeProp` drops its links and leaves the belts loose (a machine put back at their end picks them up);
+  `configureJunction` writes the new routes onto the junction's out-links. REFIT previews the lane before the
+  click (`previewBelt`), names a belt's link or says it is loose, and dry-runs a placement on a probe copy
+  (`connectionPreview` → `linkedPreview`) to say what it would connect.
 
 ## Runtime (conveyor.js) — `Conveyor.create()`
 
