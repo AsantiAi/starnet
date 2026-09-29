@@ -21,7 +21,8 @@
 const REMOTE_DECISIONS = new Set(['once', 'session', 'deny']);
 
 function makeApprovals(deps) {
-  const now = (deps && deps.now) || (() => Date.now());
+  const now = deps && deps.now;
+  if (typeof now !== 'function') throw new Error('makeApprovals needs an injected clock (deps.now)');
   const onChange = (deps && typeof deps.onChange === 'function') ? deps.onChange : () => {};
   const open = new Map();   // runId + '\u0000' + promptId -> entry
 

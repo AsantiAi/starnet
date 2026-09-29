@@ -1,4 +1,4 @@
-/* sidecar/remote/phone-client.js — the PHONE side of the sealed channel, written against WebCrypto only.
+/* relay/app/phone-client.js — the PHONE side of the sealed channel, written against WebCrypto only.
 
    This exact file is what the phone app will load (phase 2) and what the tests drive under Node, whose
    globalThis.crypto.subtle is the same WebCrypto API a phone browser has. So every test that passes here
@@ -9,8 +9,11 @@
 
      const kp = await PhoneClient.makeDeviceKey()                 // { privateKey:CryptoKey, publicRaw }
      const p  = await PhoneClient.pair({ base, pairingId, code, name, key: kp })
-     const c  = PhoneClient.connect({ base, deviceId, stationPub, key: kp })
-     await c.open();  await c.call('status');  c.onEvent(fn);  await c.listen();  c.close() */
+     const c  = PhoneClient.connect({ base, deviceId, stationPub, key: kp })          LAN door (HTTP; tests, local tools)
+     await c.open();  await c.call('status');  c.onEvent(fn);  await c.listen();  c.close()
+     const p2 = await PhoneClient.pairRelay({ relay, stationPub, pairingId, code, name, key: kp })
+     const r  = PhoneClient.connectRelay({ relay, stationPub, deviceId, relayToken, key: kp })   the product path
+     await r.open(); await r.call('status'); r.onEvent(fn); r.onStatus(fn); r.close() */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.PhoneClient = factory();
@@ -72,6 +75,16 @@
   async function open(key, dir, frame) {
     const pt = await subtle().decrypt({ name: 'AES-GCM', iv: unb64u(frame.iv), additionalData: enc.encode(dir + ':' + frame.seq) }, key, unb64u(frame.ct));
     return JSON.parse(dec.decode(pt));
+  }
+
+  const open_ = open;   // the relay transport below has its own open(); keep a name for the decrypt
+
+  // "A1B2-C3D4-E5F6": the same short code the desk shows for its station key, so a person can compare them
+  async function fingerprint(publicRaw) {
+    const h = new Uint8Array(await subtle().digest('SHA-256', unb64u(publicRaw)));
+    let hex = ''; for (let i = 0; i < 6; i++) hex += h[i].toString(16).padStart(2, '0');
+    hex = hex.toUpperCase();
+    return hex.slice(0, 4) + '-' + hex.slice(4, 8) + '-' + hex.slice(8, 12);
   }
 
   async function pairingProof(code, devicePub, name) {
@@ -164,5 +177,149 @@
     return { open: openSession, call, onEvent, listen, close, _state: state };
   }
 
-  return { VERSION, LABEL, makeDeviceKey, pair, connect, pairingProof, _b64u: b64u, _unb64u: unb64u, _seal: seal, _open: open, _deriveKeys: deriveKeys, _makeKeyPair: makeKeyPair };
+
+  /* ---- RELAY transport (the product path): one WebSocket to the relay, which switches sealed frames to the
+     station. Works from anywhere; the page must be HTTPS (or localhost) because WebCrypto needs a secure
+     context. The relay never sees inside a frame. */
+  function wsUrlOf(relay) {
+    const u = String(relay || '').replace(/\/+$/, '');
+    return u.replace(/^https:/i, 'wss:').replace(/^http:/i, 'ws:');
+  }
+  async function ridOf(stationPub) {
+    const h = new Uint8Array(await subtle().digest('SHA-256', unb64u(stationPub)));
+    return b64u(h).slice(0, 22);
+  }
+
+  // Pair over the relay: no relay token yet, so the relay lets exactly this one kind of message through.
+  async function pairRelay(o) {
+    const WS = o.WebSocket || globalThis.WebSocket;
+    const name = String(o.name || 'Phone');
+    const proof = await pairingProof(o.code, o.key.publicRaw, name);
+    const rid = await ridOf(o.stationPub);
+    return new Promise((resolve, reject) => {
+      const ws = new WS(wsUrlOf(o.relay) + '/v1/phone?rid=' + encodeURIComponent(rid));
+      let done = false;
+      const finish = (err, val) => { if (done) return; done = true; try { ws.close(); } catch (_) {} if (err) reject(err); else resolve(val); };
+      const timer = setTimeout(() => finish(new Error('the station did not answer the pairing request')), 20000);
+      ws.onopen = () => ws.send(JSON.stringify({ t: 'pair', pairingId: o.pairingId, publicKey: o.key.publicRaw, name, proof }));
+      ws.onmessage = (ev) => {
+        let m; try { m = JSON.parse(ev.data); } catch (_) { return; }
+        clearTimeout(timer);
+        if (m && m.t === 'paired') finish(null, m);
+        else finish(new Error((m && m.error) || 'pairing failed'));
+      };
+      ws.onclose = (ev) => { clearTimeout(timer); finish(new Error(closeReason(ev))); };
+    });
+  }
+
+  function closeReason(ev) {
+    const c = ev && ev.code;
+    if (c === 4404) return 'station offline';
+    if (c === 4401) return 'this phone is not paired with that station (or was removed)';
+    if (c === 4429) return 'too many requests — wait a moment';
+    if (c === 4410) return 'the station reconnected';
+    return 'connection closed' + (c ? ' (' + c + ')' : '');
+  }
+
+  function connectRelay(o) {
+    const WS = o.WebSocket || globalThis.WebSocket;
+    const st = { ws: null, sid: null, keys: null, seq: 0, lastRes: 0, lastEv: 0, nextId: 1, pending: new Map(), bySeq: new Map(),
+      handlers: [], statusHandlers: [], opening: null, openState: 'closed' };
+    const status = (s, detail) => { st.openState = s; for (const h of st.statusHandlers) { try { h(s, detail); } catch (_) {} } };
+
+    function failAll(err) {
+      for (const p of st.pending.values()) { clearTimeout(p.timer); p.reject(err); }
+      st.pending.clear(); st.bySeq.clear();
+    }
+
+    function open() {
+      if (st.opening) return st.opening;
+      st.opening = (async () => {
+        const rid = await ridOf(o.stationPub);
+        const eph = await makeKeyPair(false);
+        const nonce = randomB64u(16);
+        status('connecting');
+        const ws = new WS(wsUrlOf(o.relay) + '/v1/phone?rid=' + encodeURIComponent(rid) + '&tok=' + encodeURIComponent(o.relayToken || ''));
+        st.ws = ws;
+        await new Promise((resolve, reject) => {
+          let welcomed = false;
+          const timer = setTimeout(() => reject(new Error('the station did not answer')), 20000);
+          ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', v: VERSION, deviceId: o.deviceId, eph: eph.publicRaw, nonce }));
+          ws.onmessage = async (ev) => {
+            let m; try { m = JSON.parse(ev.data); } catch (_) { return; }
+            if (!welcomed) {
+              if (m && m.t === 'welcome') {
+                const w = m.welcome;
+                try {
+                  st.keys = await deriveKeys({ ephPrivate: eph.privateKey, devicePrivate: o.key.privateKey, stationPub: o.stationPub, devicePub: o.key.publicRaw,
+                    stationEph: w.eph, phoneEph: eph.publicRaw, phoneNonce: nonce, stationNonce: w.nonce });
+                } catch (e) { clearTimeout(timer); return reject(e); }
+                st.sid = w.sessionId; st.seq = 0; st.lastRes = 0; st.lastEv = 0; welcomed = true;
+                clearTimeout(timer); resolve();
+              } else { clearTimeout(timer); reject(new Error((m && m.error) || 'hello refused')); }
+              return;
+            }
+            onFrame(m);
+          };
+          ws.onclose = (ev) => {
+            clearTimeout(timer);
+            const why = closeReason(ev);
+            st.ws = null; st.sid = null; st.keys = null; st.opening = null;
+            failAll(new Error(why));
+            status('closed', { code: ev && ev.code, reason: why });
+            if (!welcomed) reject(new Error(why));
+          };
+        });
+        status('open');
+      })();
+      st.opening.catch(() => { st.opening = null; });
+      return st.opening;
+    }
+
+    async function onFrame(m) {
+      if (!m) return;
+      if (m.t === 'res' && m.frame) {
+        const f = m.frame;
+        if (f.seq <= st.lastRes) return;                                   // replay: refuse
+        let reply; try { reply = await open_(st.keys.s2p, 's2p', f); } catch (_) { return; }   // tampered: drop
+        st.lastRes = f.seq;
+        const p = st.pending.get(reply.id);
+        if (p) { st.pending.delete(reply.id); st.bySeq.delete(p.seq); clearTimeout(p.timer); p.resolve(reply); }
+        return;
+      }
+      if (m.t === 'ev' && m.frame) {
+        const f = m.frame;
+        if (f.seq <= st.lastEv) return;
+        let ev; try { ev = await open_(st.keys.s2p, 's2e', f); } catch (_) { return; }
+        st.lastEv = f.seq;
+        for (const h of st.handlers) { try { h(ev); } catch (_) {} }
+        return;
+      }
+      if (m.t === 'error') {
+        const id = st.bySeq.get(m.seq);
+        const p = id != null ? st.pending.get(id) : null;
+        if (p) { st.pending.delete(id); st.bySeq.delete(m.seq); clearTimeout(p.timer); p.reject(new Error(m.error || 'request refused')); }
+      }
+    }
+
+    async function call(verb, args, timeoutMs) {
+      await open();
+      const id = st.nextId++;
+      st.seq += 1;
+      const seq = st.seq;
+      const frame = await seal(st.keys.p2s, 'p2s', seq, { id, verb, args: args || {} });
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => { st.pending.delete(id); st.bySeq.delete(seq); reject(new Error('the station took too long to answer')); }, timeoutMs || 30000);
+        st.pending.set(id, { resolve, reject, timer, seq });
+        st.bySeq.set(seq, id);
+        try { st.ws.send(JSON.stringify({ t: 'call', frame })); } catch (e) { clearTimeout(timer); st.pending.delete(id); st.bySeq.delete(seq); reject(e); }
+      });
+    }
+
+    function close() { const ws = st.ws; if (ws) { try { ws.close(); } catch (_) {} } }
+
+    return { open, call, close, onEvent: (fn) => st.handlers.push(fn), onStatus: (fn) => st.statusHandlers.push(fn), state: () => st.openState, _state: st };
+  }
+
+  return { VERSION, LABEL, makeDeviceKey, pair, connect, pairRelay, connectRelay, ridOf, fingerprint, pairingProof, _b64u: b64u, _unb64u: unb64u, _seal: seal, _open: open, _deriveKeys: deriveKeys, _makeKeyPair: makeKeyPair };
 }));

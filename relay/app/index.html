@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#030201">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="referrer" content="no-referrer">
+<title>StarNet Remote</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preload" href="vt323.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="deck">
+  <!-- SETUP: shown until this phone is paired with a station -->
+  <section id="setup" class="setup" hidden>
+    <h1>STARNET<br>REMOTE</h1>
+    <div id="setup-pairing" class="card" hidden>
+      <p>Pairing with your station…</p>
+      <p class="hint">Check that this code matches the one on your desktop:</p>
+      <div class="fp" id="setup-fp">—</div>
+      <div class="err-line" id="setup-err" hidden></div>
+      <div class="btns"><button class="btn" id="setup-retry" type="button" hidden>Try again</button></div>
+    </div>
+    <div id="setup-howto" class="card">
+      <p>Your station runs on your computer. This phone controls it from anywhere.</p>
+      <p>On your desktop open <b>SETTINGS → DEVICES</b>, switch Remote on, and press <b>PAIR A PHONE</b>. Scan the code it shows with this phone's camera.</p>
+      <p class="hint">Or paste the pairing link here:</p>
+      <input type="text" id="setup-link" placeholder="https://…#pair=…" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <div class="btns"><button class="btn" id="setup-go" type="button">Pair</button></div>
+    </div>
+  </section>
+
+  <!-- THE DECK -->
+  <header class="strip" id="bar" hidden>
+    <button class="btn quiet back" id="back" type="button" hidden aria-label="Back">‹</button>
+    <span class="title" id="bar-title">STATION</span>
+    <span class="lamp" id="lamp" role="status"><i></i><span>CONNECTING</span></span>
+  </header>
+  <main id="view" hidden></main>
+  <div class="compose" id="compose" hidden>
+    <span class="to" id="compose-to"></span>
+    <textarea id="compose-text" rows="1" placeholder="Give your crew a task…" enterkeyhint="send"></textarea>
+    <button class="btn" id="compose-send" type="button">Send</button>
+  </div>
+  <nav class="tabs" id="tabs" role="tablist" hidden>
+    <button class="tab" role="tab" type="button" data-tab="crew" aria-selected="true">Crew <span class="n" id="n-needs"></span></button>
+    <button class="tab" role="tab" type="button" data-tab="threads" aria-selected="false">Threads</button>
+    <button class="tab" role="tab" type="button" data-tab="files" aria-selected="false">Files</button>
+    <button class="tab" role="tab" type="button" data-tab="more" aria-selected="false">More</button>
+  </nav>
+</div>
+<div id="toast" role="status" hidden></div>
+<script src="phone-client.js"></script>
+<script src="store.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

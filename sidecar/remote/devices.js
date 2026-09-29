@@ -12,6 +12,8 @@
      d.startPairing({ name? })                -> { pairingId, code, stationId, stationPub, fingerprint, expiresAt }
      d.completePairing({ pairingId, publicKey, name, proof }) -> { ok, device } | { ok:false, error }
      d.revoke(id) -> bool     d.touch(id)     d.setEnabled(bool) / d.enabled()
+     d.issueRelayToken(id)                    -> { ok, token }   the phone's pass to knock at the relay (only its hash is kept)
+     d.relayTokenHashes()                     -> [hash]          what the station tells the relay to admit
 
    Laws:
      · A pairing code is single use, expires in 10 minutes, and burns after 5 wrong proofs.
@@ -35,7 +37,8 @@ function cleanName(s) { return String(s == null ? '' : s).replace(/[\u0000-\u001
 
 function makeDevices(deps) {
   const fs = deps.fs, pathMod = deps.path, file = deps.file, C = deps.crypto;
-  const now = deps.now || (() => Date.now());
+  const now = deps.now;
+  if (typeof now !== 'function') throw new Error('makeDevices needs an injected clock (deps.now)');
   const newId = deps.newId;
   const randomBytes = deps.randomBytes || require('crypto').randomBytes;
   const tighten = typeof deps.tighten === 'function' ? deps.tighten : () => {};
@@ -144,10 +147,23 @@ function makeDevices(deps) {
     persist(Object.assign({}, s, { devices }));
   }
 
+  // A relay pass is not a key: it only lets a phone reach the relay's switchboard for this station. The sealed
+  // channel still needs the phone's private key. The station keeps a SHA-256 of it, the relay a copy of that hash.
+  function tokenHash(token) { return C.b64u(require('crypto').createHash('sha256').update(String(token)).digest()); }
+  function issueRelayToken(id) {
+    const s = load();
+    if (!s.devices.some(d => d.id === id)) return { ok: false, error: 'no such device' };
+    const token = C.b64u(randomBytes(32));
+    const devices = s.devices.map(d => d.id === id ? Object.assign({}, d, { relayTokenHash: tokenHash(token) }) : d);
+    const res = persist(Object.assign({}, s, { devices }));
+    return res.ok ? { ok: true, token } : { ok: false, error: res.error };
+  }
+  function relayTokenHashes() { return load().devices.map(d => d.relayTokenHash).filter(Boolean); }
+
   function enabled() { return load().enabled === true; }
   function setEnabled(on) { const s = load(); const res = persist(Object.assign({}, s, { enabled: on === true })); return res.ok ? { ok: true } : { ok: false, error: res.error }; }
 
-  return { stationKeys, list, get, startPairing, completePairing, revoke, touch, enabled, setEnabled, _pairings: pairings };
+  return { stationKeys, list, get, startPairing, completePairing, revoke, touch, enabled, setEnabled, issueRelayToken, relayTokenHashes, _pairings: pairings };
 }
 
 module.exports = { makeDevices, CODE_ALPHABET, PAIR_TTL_MS, PAIR_MAX_TRIES };

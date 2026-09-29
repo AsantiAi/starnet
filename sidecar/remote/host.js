@@ -22,7 +22,8 @@
 const TEXT_FLUSH_MS = 250;
 
 function makeRemoteHost(d) {
-  const now = d.now || (() => Date.now());
+  const now = d.now;
+  if (typeof now !== 'function') throw new Error('makeRemoteHost needs an injected clock (deps.now)');
   const remoteRuns = new Map();   // runId -> { ac, agentId, streamId, deviceId, startedAt }
   const clip = (s, n) => String(s == null ? '' : s).slice(0, n);
   const broadcast = (evt) => { try { d.broadcast(evt); } catch (_) {} };

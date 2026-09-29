@@ -22,7 +22,8 @@
 function makeSessions(deps) {
   const devices = deps.devices;
   const C = deps.crypto;
-  const now = deps.now || (() => Date.now());
+  const now = deps.now;
+  if (typeof now !== 'function') throw new Error('makeSessions needs an injected clock (deps.now)');
   const newId = deps.newId;
   const ttlMs = deps.ttlMs || 10 * 60 * 1000;
   const maxSessions = deps.maxSessions || 64;

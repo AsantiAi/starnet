@@ -9771,7 +9771,8 @@ const remoteHost = require('./remote/host.js').makeRemoteHost({
 });
 const remoteGateway = require('./remote/gateway.js').makeGateway({ host: remoteHost, approvals: remoteApprovals, now: () => Date.now() });
 const remoteLan = require('./remote/lan.js').makeLanListener({
-  sessions: remoteSessions, devices: remoteDevices, gateway: remoteGateway, crypto: remoteCrypto,
+  sessions: remoteSessions, devices: remoteDevices, gateway: remoteGateway, crypto: remoteCrypto, now: () => Date.now(),
+  onPaired: () => { if (remoteRelay) remoteRelay.syncTokens(); },
   log: (m) => console.log('  · remote: ' + m)
 });
 // The station floor's own redacted feed, teed to phones. Only parsed when a phone is actually listening.
@@ -9786,6 +9787,20 @@ sse.add({
     return true;
   }
 });
+/* THE RELAY (the product path). The station dials OUT to it (sidecar/remote/relay-client.js, Node's built-in
+   WebSocket), so a phone reaches this station from anywhere with no port forwarding. REMOTE_RELAY_LIVE flips on
+   when the public relay is deployed; until then only an explicit STARNET_REMOTE_RELAY address is used (tests,
+   self-hosted relays). With no relay the desk says so plainly instead of pretending phones can connect. */
+const REMOTE_RELAY_LIVE = false;
+const REMOTE_RELAY_DEFAULT = 'https://remote.starnetos.com';
+const REMOTE_RELAY_URL = String(ENV('REMOTE_RELAY') || (REMOTE_RELAY_LIVE ? REMOTE_RELAY_DEFAULT : '')).trim().replace(/\/+$/, '');
+const remoteRelay = REMOTE_RELAY_URL ? require('./remote/relay-client.js').makeRelayClient({
+  url: REMOTE_RELAY_URL, devices: remoteDevices, sessions: remoteSessions, gateway: remoteGateway, crypto: remoteCrypto, now: () => Date.now(),
+  log: (m) => console.log('  · remote relay: ' + m)
+}) : null;
+// The LAN door is a developer/test transport: a phone browser can't use WebCrypto on a plain-http LAN page,
+// so real phones go through the relay. It opens only when asked for (STARNET_REMOTE_LAN=1).
+const REMOTE_LAN_ON = /^(1|true|yes|on)$/i.test(String(ENV('REMOTE_LAN') || '').trim());
 const REMOTE_PORT = Number(ENV('REMOTE_PORT')) || 8797;
 function remoteLanUrls() {
   const info = remoteLan.info();
@@ -9796,6 +9811,17 @@ function remoteLanUrls() {
     if (a && a.family === 'IPv4' && !a.internal) out.push('http://' + a.address + ':' + info.port);
   }
   return out;
+}
+// Opens whatever doors this build has: the relay link (product) and, only when asked for, the LAN test door.
+async function remoteStartDoors() {
+  if (remoteRelay) remoteRelay.start();
+  if (REMOTE_LAN_ON) return remoteStartLan();
+  return remoteLan.info();
+}
+async function remoteStopDoors() {
+  for (const s of remoteSessions.list()) remoteSessions.end(s.id);
+  if (remoteRelay) remoteRelay.stop();
+  await remoteLan.stop();
 }
 async function remoteStartLan() {
   if (remoteLan.info().listening) return remoteLan.info();
@@ -9810,6 +9836,7 @@ function remoteSnapshot() {
   try { const s = remoteDevices.stationKeys(); station = { id: s.id, fingerprint: remoteCrypto.fingerprint(s.publicRaw) }; } catch (_) {}
   const info = remoteLan.info();
   return { ok: true, enabled: remoteDevices.enabled(), listening: !!info.listening, port: info.port || null, urls: remoteLanUrls(),
+    relay: remoteRelay ? remoteRelay.info() : null,
     station, devices: remoteDevices.list(), connected: remoteSessions.list().map(s => ({ deviceId: s.deviceId, since: s.createdAt, lastAt: s.lastAt, live: !!s.sink })),
     approvals: remoteApprovals.size() };
 }
@@ -9822,21 +9849,25 @@ async function handleRemoteEnable(req, res) {
   const saved = remoteDevices.setEnabled(on);
   if (!saved.ok) return respondJson(res, 500, { ok: false, error: 'could not save the Remote switch (' + saved.error + ')' });
   try {
-    if (on) await remoteStartLan();
-    else { for (const s of remoteSessions.list()) remoteSessions.end(s.id); await remoteLan.stop(); }
+    if (on) await remoteStartDoors();
+    else await remoteStopDoors();
   } catch (e) { return respondJson(res, 500, Object.assign(remoteSnapshot(), { ok: false, error: 'Remote is on but the network door could not open: ' + ((e && e.message) || e) })); }
   respondJson(res, 200, remoteSnapshot());
 }
 // POST /api/remote/pair { name? } — a one-time code for ONE phone, valid 10 minutes
 async function handleRemotePair(req, res) {
   let b; try { b = JSON.parse(await readBody(req, 1024)) || {}; } catch (_) { b = {}; }
-  if (!remoteDevices.enabled() || !remoteLan.info().listening) return respondJson(res, 409, { ok: false, error: 'switch Remote on first' });
+  if (!remoteDevices.enabled()) return respondJson(res, 409, { ok: false, error: 'switch Remote on first' });
+  if (!remoteRelay && !remoteLan.info().listening) return respondJson(res, 409, { ok: false, error: 'this build has no relay set up yet, so a phone has no way to reach this station' });
   let p; try { p = remoteDevices.startPairing({ name: b.name }); } catch (e) { return respondJson(res, 500, { ok: false, error: (e && e.message) || String(e) }); }
   const urls = remoteLanUrls();
-  // what the phone needs, in one blob; carried in a URL FRAGMENT so it never reaches a server log
-  const blob = remoteCrypto.b64u(Buffer.from(JSON.stringify({ v: remoteCrypto.VERSION, i: p.stationId, s: p.stationPub, p: p.pairingId, c: p.code, u: urls })));
+  // what the phone needs, in one blob; carried in a URL FRAGMENT so it never reaches a server log. The relay URL
+  // rides along only when it isn't the page's own origin (a self-hosted or test relay).
+  const blob = remoteCrypto.b64u(Buffer.from(JSON.stringify(Object.assign({ v: remoteCrypto.VERSION, i: p.stationId, s: p.stationPub, p: p.pairingId, c: p.code },
+    remoteRelay ? { r: REMOTE_RELAY_URL } : { u: urls }))));
+  const pairUrl = remoteRelay ? REMOTE_RELAY_URL + '/#pair=' + blob : (urls.length ? urls[0] + '/remote/app/#pair=' + blob : null);
   respondJson(res, 200, { ok: true, pairingId: p.pairingId, code: p.code, stationId: p.stationId, stationPub: p.stationPub, fingerprint: p.fingerprint,
-    expiresAt: p.expiresAt, urls, pairBlob: blob, pairUrl: urls.length ? urls[0] + '/remote/app/#pair=' + blob : null });
+    expiresAt: p.expiresAt, urls, relay: remoteRelay ? REMOTE_RELAY_URL : null, pairBlob: blob, pairUrl });
 }
 // POST /api/remote/revoke { deviceId } — forget a phone; its live sessions end at once
 async function handleRemoteRevoke(req, res) {
@@ -9844,6 +9875,7 @@ async function handleRemoteRevoke(req, res) {
   const id = String(b.deviceId || '');
   const r = remoteDevices.revoke(id);
   remoteSessions.endDevice(id);
+  if (remoteRelay) remoteRelay.kickDevice(id);
   if (!r.ok) return respondJson(res, r.error === 'no such device' ? 404 : 500, { ok: false, error: r.error });
   respondJson(res, 200, remoteSnapshot());
 }
@@ -10370,8 +10402,8 @@ server.listen(PORT, '127.0.0.1', () => {
   try { openaiCompat.announce(); } catch (_) {}   // one honest boot line: is the /v1 external-harness API live?
   // STARNET REMOTE: reopen the phone door only if the Commander left Remote switched on
   try {
-    if (remoteDevices.enabled()) remoteStartLan().then(
-      (i) => console.log('  · remote: phones can reach this station on the home network (port ' + i.port + ', ' + remoteDevices.list().length + ' paired)'),
+    if (remoteDevices.enabled()) remoteStartDoors().then(
+      (i) => console.log('  · remote: on (' + remoteDevices.list().length + ' paired' + (remoteRelay ? ', relay ' + REMOTE_RELAY_URL : ', no relay in this build') + (i && i.listening ? ', LAN test door on port ' + i.port : '') + ')'),
       (e) => console.warn('[remote] could not open the network door: ' + ((e && e.message) || e)));
   } catch (e) { console.warn('[remote] ' + ((e && e.message) || e)); }
   // Interrupted runs -> run history (background, chunked; see scanInterruptedRuns). The list was captured at

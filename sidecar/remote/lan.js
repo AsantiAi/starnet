@@ -32,7 +32,8 @@ function makeRateLimit(limit, windowMs, now) {
 
 function makeLanListener(deps) {
   const sessions = deps.sessions, devices = deps.devices, gateway = deps.gateway, C = deps.crypto;
-  const now = deps.now || (() => Date.now());
+  const now = deps.now;
+  if (typeof now !== 'function') throw new Error('makeLanListener needs an injected clock (deps.now)');
   const log = deps.log || (() => {});
   const extraRoute = typeof deps.extraRoute === 'function' ? deps.extraRoute : null;   // phase 2: the phone app's static files
   const allowPair = makeRateLimit(10, 10 * 60 * 1000, now);
@@ -68,8 +69,10 @@ function makeLanListener(deps) {
       const r = devices.completePairing(b.value);
       if (!r.ok) return send(res, 400, { ok: false, error: r.error });
       let st = null; try { st = devices.stationKeys(); } catch (_) {}
+      const tok = typeof devices.issueRelayToken === 'function' ? devices.issueRelayToken(r.device.id) : { ok: false };
+      if (typeof deps.onPaired === 'function') { try { deps.onPaired(r.device); } catch (_) {} }
       log('paired ' + r.device.name + ' (' + r.device.id + ')');
-      return send(res, 200, { ok: true, deviceId: r.device.id, stationId: st && st.id, fingerprint: r.device.fingerprint });
+      return send(res, 200, { ok: true, deviceId: r.device.id, stationId: st && st.id, fingerprint: r.device.fingerprint, relayToken: tok.ok ? tok.token : null });
     }
     if (req.method === 'POST' && p === '/remote/v1/hello') {
       if (!allowHello(addrOf(req))) return send(res, 429, { ok: false, error: 'slow down' });

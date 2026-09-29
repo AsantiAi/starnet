@@ -36,7 +36,8 @@ const STREAM_RE = /^[A-Za-z0-9_-]{1,64}$/;
 function makeGateway(deps) {
   const host = deps.host;
   const approvals = deps.approvals;
-  const now = deps.now || (() => Date.now());
+  const now = deps.now;
+  if (typeof now !== 'function') throw new Error('makeGateway needs an injected clock (deps.now)');
 
   const bad = (error) => ({ ok: false, error });
   const good = (data) => ({ ok: true, data: data === undefined ? null : data });

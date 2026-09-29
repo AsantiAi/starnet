@@ -1,6 +1,6 @@
 /* node test/remote.e2e.test.js — StarNet Remote phase 1 against a REAL booted sidecar.
 
-   A mock provider plays the model (zero spend). The phone is sidecar/remote/phone-client.js, the WebCrypto-only
+   A mock provider plays the model (zero spend). The phone is relay/app/phone-client.js, the WebCrypto-only
    client a phone browser runs. What this proves, in order:
      1. Remote is OFF by default: no LAN door, pairing refused, and /api/remote is behind the desk token.
      2. The desk switches it on; a phone pairs with a one-time code over the LAN door and opens a sealed session.
@@ -18,7 +18,7 @@ const net = require('net');
 const fs = require('fs');
 const path = require('path');
 const { SidecarFixture } = require('./helpers/sidecar-fixture.js');
-const Phone = require('../sidecar/remote/phone-client.js');
+const Phone = require('../relay/app/phone-client.js');
 
 const HOST = '127.0.0.1';
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -85,7 +85,7 @@ function startMockModel() {
     SKYNET_OPENROUTER_BASE: llm.base, STARNET_OPENROUTER_BASE: llm.base,
     SKYNET_OPENROUTER_KEY: 'sk-or-v1-remote-fake', STARNET_OPENROUTER_KEY: 'sk-or-v1-remote-fake',
     SKYNET_DEFAULT_MODEL: 'test/model', STARNET_DEFAULT_MODEL: 'test/model',
-    STARNET_REMOTE_PORT: String(lanPort)
+    STARNET_REMOTE_PORT: String(lanPort), STARNET_REMOTE_LAN: '1'
   } });
   const lan = 'http://' + HOST + ':' + lanPort;
   let client = null;

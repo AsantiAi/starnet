@@ -1,6 +1,6 @@
 /* node test/remote.core.test.js — StarNet Remote phase 1: the sealed channel, pairing, sessions, the shared
    approvals registry, the verb gateway and the LAN listener, driven end to end with the REAL phone client
-   (sidecar/remote/phone-client.js, WebCrypto only) against the REAL station modules. No sidecar boot, no
+   (relay/app/phone-client.js, WebCrypto only) against the REAL station modules. No sidecar boot, no
    model, no network beyond 127.0.0.1. */
 'use strict';
 const A = require('./_assert.js');
@@ -15,7 +15,7 @@ const { makeDevices, PAIR_MAX_TRIES } = require('../sidecar/remote/devices.js');
 const { makeApprovals } = require('../sidecar/remote/approvals.js');
 const { makeGateway } = require('../sidecar/remote/gateway.js');
 const { makeLanListener } = require('../sidecar/remote/lan.js');
-const Phone = require('../sidecar/remote/phone-client.js');
+const Phone = require('../relay/app/phone-client.js');
 
 const newId = () => nodeCrypto.randomUUID();
 
@@ -152,14 +152,14 @@ async function rejects(p, re, msg) {
     files: async () => [], fetchFile: async () => ({ ok: false, error: 'unknown file' }),
     routines: async () => [], setRoutine: async () => ({ ok: true })
   };
-  const gateway = makeGateway({ host, approvals });
+  const gateway = makeGateway({ host, approvals, now: () => Date.now() });
   A.eq((await gateway.call({ verb: 'forward', args: { url: '/api/key' } }, {})).ok, false, 'there is no forwarding verb');
   A.eq((await gateway.call({ verb: 'send', args: { agentId: 'forge', text: '' } }, {})).ok, false, 'empty task refused');
   A.eq((await gateway.call({ verb: 'send', args: { agentId: '../x', text: 'hi' } }, {})).ok, false, 'a bad agent id is refused before the host');
   A.eq((await gateway.call({ verb: 'thread', args: { streamId: '../../etc' } }, {})).ok, false, 'a bad stream id is refused');
 
   const sessions = makeSessions({ devices, crypto: C, now: () => Date.now(), newId });
-  const lan = makeLanListener({ sessions, devices, gateway, crypto: C });
+  const lan = makeLanListener({ sessions, devices, gateway, crypto: C, now: () => Date.now() });
   const bound = await lan.start({ host: '127.0.0.1', port: 0 });
   const base = 'http://127.0.0.1:' + bound.port;
   try {
