@@ -123,7 +123,12 @@
     const openCount = Math.max(0, Number(inp && inp.openCount) || 0);
     if (inp && inp.contextKey && inp.contextKey !== s.contextKey && now - s.lastCycleAt >= MATERIAL_CHANGE_GAP_MS) return { fire: true, why: 'progress-changed', binding: null };
     if (now - s.lastCycleAt >= REFRESH_EVERY_MS) return { fire: true, why: 'daily', binding: null };
-    if (openCount === 0 && now - s.lastCycleAt >= CAUGHT_UP_GAP_MS) return { fire: true, why: 'caught-up', binding: null };
+    // CAUGHT-UP rewards PROGRESS, never idleness (sweep 2026-09-29): an empty slate whose context has not moved since
+    // the last cycle (the planner said NONE, or every proposal failed validation, and nothing happened since) must not
+    // re-buy the same answer every hour — with PROPOSE as the new-station default that was a paid call per hour on
+    // every idle open station. Finishing quests changes the context, so real catching-up still earns a cycle here.
+    const contextMoved = !(inp && inp.contextKey) || inp.contextKey !== s.contextKey;
+    if (openCount === 0 && contextMoved && now - s.lastCycleAt >= CAUGHT_UP_GAP_MS) return { fire: true, why: 'caught-up', binding: null };
     return { fire: false, why: null, binding: openCount === 0 ? 'gap' : 'cooldown' };
   }
 
