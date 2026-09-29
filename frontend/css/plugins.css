@@ -1,0 +1,19 @@
+/* PLUGIN WINDOWS (frontend/app/pluginhost.js) — the station's chrome around a plugin's own page.
+   The window itself is an ordinary .term (glass-demo.js turns it into the glass sheet); only the body changes:
+   no padding (the page has its own), and a transparent sandboxed frame so the window's glass shows through. */
+.term.plugin-win .term-body.plugin-body { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.term.plugin-win iframe.plugin-frame {
+  display: block; width: 100%; border: 0; background: transparent;
+  /* must match the kit's own color-scheme, or the browser paints an opaque canvas behind the frame */
+  color-scheme: dark;
+  /* The frame's inline height (the page's own content height, reported by the kit) is only its BASIS: a glass
+     sheet with a set height (docked, dragged, expanded) grows or shrinks the frame to fill exactly its body. */
+  flex: 1 1 auto; min-height: 80px;
+}
+/* TRUTHFUL CHROME: every plugin window says, in the station's own title bar, that its content is a plugin's. */
+.term.plugin-win .plugin-plate {
+  flex: none; font-size: 13px; letter-spacing: 1.5px; line-height: 1.4; padding: 0 6px; margin-left: 8px;
+  color: var(--ph); background: rgba(0, 0, 0, .3); border: 1px solid var(--gd-edge, rgba(var(--ph-rgb), .24)); border-radius: 3px;
+  pointer-events: auto;
+}
+.term.plugin-win .plugin-gone { padding: var(--s-4) var(--s-4); color: var(--ph-bright); letter-spacing: .5px; }

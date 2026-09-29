@@ -33,12 +33,17 @@ const KINDS = Object.freeze({
   file: Object.freeze({ method: 'GET', maxTtlMs: 5 * 60 * 1000, once: false }),    // link/tab open of ONE workspace file
   run: Object.freeze({ method: 'GET', maxTtlMs: 10 * 60 * 1000, once: false }),    // ONE workshop run dir (page + its relative assets)
   sse: Object.freeze({ method: 'GET', maxTtlMs: 2 * 60 * 1000, once: true }),      // one EventSource CONNECT (a live stream outlives it)
-  save: Object.freeze({ method: 'POST', maxTtlMs: 2 * 60 * 1000, once: true })     // one unload beacon
+  save: Object.freeze({ method: 'POST', maxTtlMs: 2 * 60 * 1000, once: true }),    // one unload beacon
+  // ONE approved plugin's UI files at ONE exact code digest (a plugin window's iframe + its relative assets). Long
+  // enough to outlive a working session with the window open (lazy assets load late); an edit to the plugin
+  // changes its digest, so every ticket for the old code dies with it.
+  plugin: Object.freeze({ method: 'GET', maxTtlMs: 12 * 60 * 60 * 1000, once: false })
 });
 
 function b64url(buf) { return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
 function scopeFile(agent, relPath) { return 'file\n' + String(agent || 'agent') + '\n' + String(relPath || ''); }
 function scopeRun(agent, runId) { return 'run\n' + String(agent || '') + '\n' + String(runId || ''); }
+function scopePlugin(id, digest) { return 'plugin\n' + String(id || '') + '\n' + String(digest || ''); }
 const SCOPE_SSE = 'sse\n/api/channels/events';
 const SCOPE_SAVE = 'save\n/api/save';
 
@@ -141,7 +146,20 @@ function splitRunTicket(rawPath) {
   return { ticket: tail.slice(0, slash), rest: tail.slice(slash + 1) };
 }
 
+/* /plugin-ui/~t/<ticket>/<pluginId>/<digest>/<path...> — the run ticket's idea again: the ticket rides the PATH so a
+   plugin page's relative assets inherit it, and the verifier derives (id, digest) from the path, never the ticket.
+   Returns { ticket, rest } where rest = '<pluginId>/<digest>/<path...>' (raw), or null. */
+const PLUGIN_PREFIX = '/plugin-ui/';
+function splitPluginTicket(rawPath) {
+  const p = String(rawPath || '');
+  if (p.indexOf(PLUGIN_PREFIX + '~t/') !== 0) return null;
+  const tail = p.slice(PLUGIN_PREFIX.length + 3);
+  const slash = tail.indexOf('/');
+  if (slash <= 0) return null;
+  return { ticket: tail.slice(0, slash), rest: tail.slice(slash + 1) };
+}
+
 module.exports = {
-  KINDS, SKEW_MS, mint, verify, parse, replayGuard, apiTicketClaim, splitRunTicket,
-  scopeFile, scopeRun, SCOPE_SSE, SCOPE_SAVE, message
+  KINDS, SKEW_MS, mint, verify, parse, replayGuard, apiTicketClaim, splitRunTicket, splitPluginTicket,
+  scopeFile, scopeRun, scopePlugin, SCOPE_SSE, SCOPE_SAVE, message
 };

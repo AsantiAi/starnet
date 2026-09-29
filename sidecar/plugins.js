@@ -43,6 +43,42 @@
 
   const idOk = (s) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(String(s || ''));
 
+  /* SCREENS — a plugin's own windows (2026-09-29, plugin extensions phase 1). Each one is an HTML entry inside the
+     plugin folder that the station opens in a real StarNet window: a sandboxed frame under the station's own glass
+     chrome (sidecar /plugin-ui/ route + frontend/app/pluginhost.js). The manifest only NAMES them; nothing here
+     runs them. Validated hard because every field ends up in the page: the id keys a window, the title is
+     rendered, the entry becomes a URL path.
+       "screens": [{ "id": "main", "title": "PR RADAR", "entry": "ui/index.html", "size": "panel" | "wide" }] */
+  const MAX_SCREENS = 8;
+  const SCREEN_ID = /^[a-z0-9][a-z0-9_-]{0,31}$/i;
+  function relPathOk(rel) {
+    const r = String(rel || '');
+    if (!r || r.length > 240 || r.indexOf('\\') >= 0 || r.charAt(0) === '/' || /^[A-Za-z]:/.test(r)) return false;
+    return r.split('/').every(seg => seg && seg !== '.' && seg !== '..' && seg.charAt(0) !== '.' && !/[\u0000-\u001f]/.test(seg));
+  }
+  function parseScreens(manifest, fileSet) {
+    const out = [], errors = [];
+    const raw = manifest && manifest.screens;
+    if (raw == null) return { screens: out, errors };
+    if (!Array.isArray(raw)) return { screens: out, errors: ['`screens` must be a list'] };
+    const seen = new Set();
+    for (const s of raw.slice(0, MAX_SCREENS)) {
+      const id = String((s && s.id) || '').trim();
+      if (!SCREEN_ID.test(id)) { errors.push('screen id "' + id + '" must be letters, numbers, dash or underscore (max 32)'); continue; }
+      if (seen.has(id)) { errors.push('screen id "' + id + '" is listed twice'); continue; }
+      const entry = String((s && s.entry) || '').trim();
+      if (!relPathOk(entry) || !/\.html?$/i.test(entry)) { errors.push('screen "' + id + '": `entry` must be an .html file inside the plugin folder'); continue; }
+      if (fileSet && !fileSet.has(entry)) { errors.push('screen "' + id + '": ' + entry + ' does not exist in the plugin folder'); continue; }
+      // plain text only: control characters stripped, capped to what a window title bar can hold
+      const title = String((s && s.title) || id).replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40) || id;
+      const size = s && s.size === 'wide' ? 'wide' : 'panel';
+      seen.add(id);
+      out.push({ id, title, entry, size });
+    }
+    if (raw.length > MAX_SCREENS) errors.push('only the first ' + MAX_SCREENS + ' screens are used');
+    return { screens: out, errors };
+  }
+
   function makePluginLoader(deps) {
     deps = deps || {};
     const fsp = deps.fsp, P = deps.pathMod, dir = deps.dir;
@@ -106,43 +142,83 @@
       for (const e of dirs) {
         const id = e.name;
         if (!idOk(id)) { errors.push('skipped plugin folder with an unusable name: ' + id); continue; }
-        const base = P.join(dir, id);
-        const manifest = await readJson(P.join(base, 'plugin.json'), null);
-        if (!manifest) { errors.push(id + ': no readable plugin.json'); continue; }
-        const main = String(manifest.main || 'index.js');
-        if (main.indexOf('..') >= 0 || P.isAbsolute(main)) { errors.push(id + ': `main` must be a path inside the plugin folder'); continue; }
-        const mainPath = P.join(base, main);
-        let source = '';
-        try { source = await fsp.readFile(mainPath, 'utf8'); }
-        catch (_) { errors.push(id + ': cannot read ' + main); continue; }
-        if (source.length > MAX_SOURCE_BYTES) { errors.push(id + ': ' + main + ' is too large to gate safely'); continue; }
-        // The DIGEST IS OF THE CODE, not of the folder name: approval must not survive an edit to anything that
-        // can run. It covers EVERY file in the folder (main, the helpers it requires, the manifest), so changing
-        // one character anywhere re-asks, exactly like a shell hook.
-        const tree = await treeDigest(base);
-        if (tree.error) { errors.push(id + ': ' + tree.error); continue; }
-        const mainRel = P.relative(base, mainPath).split(P.sep).join('/');
-        if (!tree.files.some(f => f.rel === mainRel)) { errors.push(id + ': ' + main + ' is not a real file inside the plugin folder'); continue; }
-        const digest = tree.digest;
-        let findings = guard ? (guard.scanText(main, source) || null) : null;
-        // helpers are code too: the approval prompt discloses what THEY appear to do as well
-        if (guard && Array.isArray(findings)) {
-          for (const f of tree.files) {
-            if (f.rel === mainRel || f.text == null) continue;
-            const more = guard.scanText(f.rel, f.text);
-            if (Array.isArray(more) && more.length) findings = findings.concat(more);
-          }
-        }
-        plugins.push({
-          id, dir: base, main: mainPath, digest,
-          name: String(manifest.name || id),
-          version: String(manifest.version || '0'),
-          description: String(manifest.description || ''),
-          findings
-        });
+        const r = await inspect(id);
+        if (r.error) { errors.push(id + ': ' + r.error); continue; }
+        for (const w of r.warnings) errors.push(id + ': ' + w);
+        plugins.push(r.plugin);
       }
       if (entries.length > MAX_PLUGINS) errors.push('only the first ' + MAX_PLUGINS + ' plugin folders are considered');
       return { plugins, errors };
+    }
+
+    /* inspect(id) -> { plugin, warnings } | { error } — ONE plugin folder, read and hashed. discover() is this over
+       every folder; the /plugin-ui/ file route uses it (through approvedRecord) to re-prove a single plugin. */
+    async function inspect(id) {
+      const base = P.join(dir, id);
+      const manifest = await readJson(P.join(base, 'plugin.json'), null);
+      if (!manifest || typeof manifest !== 'object') return { error: 'no readable plugin.json' };
+      // A plugin may be UI-only: screens and no code for the station to load. `main` defaults to index.js only
+      // when the manifest names no screens (the original, hook-only shape keeps working untouched).
+      const uiOnly = manifest.main == null && Array.isArray(manifest.screens) && manifest.screens.length > 0;
+      const main = uiOnly ? '' : String(manifest.main || 'index.js');
+      if (main && (main.indexOf('..') >= 0 || P.isAbsolute(main))) return { error: '`main` must be a path inside the plugin folder' };
+      const mainPath = main ? P.join(base, main) : null;
+      let source = '';
+      if (mainPath) {
+        try { source = await fsp.readFile(mainPath, 'utf8'); }
+        catch (_) { return { error: 'cannot read ' + main }; }
+        if (source.length > MAX_SOURCE_BYTES) return { error: main + ' is too large to gate safely' };
+      }
+      // The DIGEST IS OF THE CODE, not of the folder name: approval must not survive an edit to anything that
+      // can run. It covers EVERY file in the folder (main, the helpers it requires, the manifest, the UI pages),
+      // so changing one character anywhere re-asks, exactly like a shell hook.
+      const tree = await treeDigest(base);
+      if (tree.error) return { error: tree.error };
+      const mainRel = mainPath ? P.relative(base, mainPath).split(P.sep).join('/') : '';
+      if (mainPath && !tree.files.some(f => f.rel === mainRel)) return { error: main + ' is not a real file inside the plugin folder' };
+      const sc = parseScreens(manifest, new Set(tree.files.map(f => f.rel)));
+      let findings = guard ? (mainPath ? (guard.scanText(main, source) || null) : []) : null;
+      // helpers are code too: the approval prompt discloses what THEY appear to do as well (UI scripts included —
+      // they run in a sandboxed frame, but the Commander is still saying yes to them)
+      if (guard && Array.isArray(findings)) {
+        for (const f of tree.files) {
+          if (f.rel === mainRel || f.text == null) continue;
+          const more = guard.scanText(f.rel, f.text);
+          if (Array.isArray(more) && more.length) findings = findings.concat(more);
+        }
+      }
+      return {
+        warnings: sc.errors,
+        plugin: {
+          id, dir: base, main: mainPath, digest: tree.digest,
+          name: String(manifest.name || id),
+          version: String(manifest.version || '0'),
+          description: String(manifest.description || ''),
+          screens: sc.screens,
+          findings
+        }
+      };
+    }
+
+    /* approvedRecord(id) -> plugin | null — the SERVING gate. A plugin's files are only ever served while the
+       Commander's approval covers the exact bytes on disk: the allowlist digest must equal a fresh hash of the
+       folder. Re-hashed at most every RECHECK_MS per plugin (a window's page pulls many assets at once); without
+       an injected clock every call re-hashes — the check never fails open for want of a clock. */
+    const serveCache = new Map();
+    async function approvedRecord(id) {
+      const pid = String(id || '');
+      if (!idOk(pid)) return null;
+      const a = (await allowedMap())[pid];
+      if (!a || !a.digest) { serveCache.delete(pid); return null; }
+      const c = serveCache.get(pid);
+      if (c && now && c.rec.digest === a.digest) {
+        const t = now();
+        if (t - c.at < RECHECK_MS && t >= c.at) return c.rec;
+      }
+      const r = await inspect(pid);
+      if (r.error || r.plugin.digest !== a.digest) { serveCache.delete(pid); return null; }
+      serveCache.set(pid, { rec: r.plugin, at: now ? now() : 0 });
+      return r.plugin;
     }
 
     /* SCAFFOLD. "Create a plugin" cannot mean "go make two files by hand in a folder you have to find" — that
@@ -191,10 +267,20 @@
         ''
       ].join('\n');
       const manifest = JSON.stringify({ name, version: '1.0.0', description, main: 'index.js' }, null, 2) + '\n';
+      // With a template (sidecar/plugin-template.js) the starter also carries a WINDOW built from the station kit;
+      // without one (tests, older hosts) it is the hook-only starter above.
+      let files = { 'plugin.json': manifest, 'index.js': source };
+      if (typeof deps.template === 'function') {
+        try { files = deps.template({ id, name, description }) || files; } catch (_) { /* keep the hook-only starter */ }
+      }
       try {
         await fsp.mkdir(base, { recursive: true });
-        await fsp.writeFile(P.join(base, 'plugin.json'), manifest, 'utf8');
-        await fsp.writeFile(P.join(base, 'index.js'), source, 'utf8');
+        for (const rel of Object.keys(files)) {
+          if (!relPathOk(rel)) continue;
+          const abs = P.join(base, ...rel.split('/'));
+          await fsp.mkdir(P.dirname(abs), { recursive: true });
+          await fsp.writeFile(abs, files[rel], 'utf8');
+        }
       } catch (e) { return { ok: false, error: 'could not create the plugin folder: ' + ((e && e.message) || e) }; }
       const tree = await treeDigest(base);
       if (tree.error) return { ok: false, error: 'created the plugin, but could not hash it: ' + tree.error };
@@ -270,6 +356,8 @@
           onError({ plugin: p.id, error: 'its files changed since approval (' + (cur.error || 'digest mismatch') + ') — disabled until re-approved' });
           return false;
         };
+        // UI-only plugin: approved and live (its screens may open), with no code for the station to load.
+        if (!p.main) { loaded.push(Object.assign({}, p, { subscribed: 0 })); continue; }
         let mod;
         try { mod = requireModule(p.main); }
         catch (e) { errors.push(p.id + ': failed to load — ' + ((e && e.message) || e)); continue; }
@@ -297,8 +385,8 @@
       return { loaded, pending, errors };
     }
 
-    return { discover, load, allow, revoke, scaffold, destroy, listPending, _internals: { idOk, treeDigest } };
+    return { discover, inspect, approvedRecord, load, allow, revoke, scaffold, destroy, listPending, _internals: { idOk, treeDigest } };
   }
 
-  return { makePluginLoader, _internals: { idOk } };
+  return { makePluginLoader, parseScreens, _internals: { idOk, relPathOk } };
 });

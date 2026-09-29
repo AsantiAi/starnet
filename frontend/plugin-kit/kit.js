@@ -1,0 +1,118 @@
+/* starnet-kit.js — the `starnet` bridge for plugin windows (plugin extensions phase 1, 2026-09-29).
+
+   Injected first thing in every plugin page's <head> by the sidecar, so `window.starnet` exists before any of the
+   plugin's own scripts run. The page is a sandboxed frame with an OPAQUE origin: it cannot read the station, its
+   token, or its API. Everything it may ask of the station goes through postMessage to the page host
+   (frontend/app/pluginhost.js), which knows WHICH plugin this frame belongs to and answers only for that plugin.
+
+     await starnet.ready                    → { plugin: {id, name, version}, screen: {id, title} }
+     starnet.store.get(key) / set(key, v) / delete(key) / keys()      the plugin's own durable data (JSON values)
+     starnet.ui.toast(text, 'ok'|'warn'|'bad')                          a station notification
+     starnet.ui.setTitle(text)                                          this window's title (plain text)
+     starnet.ui.open(screenId)                                          open another of THIS plugin's screens
+     starnet.ui.close()                                                 close this window
+     starnet.ui.openLink(url)                                           an https:// link in the real browser
+     starnet.ui.setHeight(px) / starnet.ui.autoHeight(true|false)       the window follows content by default
+     starnet.theme.vars / starnet.theme.onChange(fn)                   the station's live look (already applied)
+
+   Every call returns a Promise; a refused call rejects with an Error whose message says why. */
+(function () {
+  'use strict';
+  if (window.starnet && window.starnet.__kit) return;
+  const parentWin = window.parent;
+  const pending = new Map();
+  let seq = 0;
+  let resolveReady;
+  const ready = new Promise((r) => { resolveReady = r; });
+  const themeListeners = [];
+  const theme = { vars: {} };
+
+  function call(method, args) {
+    if (!parentWin || parentWin === window) return Promise.reject(new Error('this page is not open in a StarNet window'));
+    const id = ++seq;
+    return new Promise((resolve, reject) => {
+      pending.set(id, { resolve, reject });
+      // The frame is an opaque origin, so its messages carry origin "null" and the host checks the SOURCE window
+      // instead. '*' is the only target an opaque origin can name; nothing sent here is secret.
+      parentWin.postMessage({ __sn: 1, id, m: String(method), a: args === undefined ? null : args }, '*');
+      setTimeout(() => {
+        if (pending.has(id)) { pending.delete(id); reject(new Error('the station did not answer ' + method)); }
+      }, 15000);
+    });
+  }
+
+  function applyTheme(vars) {
+    if (!vars || typeof vars !== 'object') return;
+    const root = document.documentElement;
+    for (const k of Object.keys(vars)) {
+      if (!/^--[a-z0-9-]{1,40}$/i.test(k)) continue;
+      const v = String(vars[k] == null ? '' : vars[k]);
+      if (v) root.style.setProperty(k, v);
+    }
+    theme.vars = Object.assign({}, theme.vars, vars);
+    for (const fn of themeListeners.slice()) { try { fn(theme.vars); } catch (_) {} }
+  }
+
+  window.addEventListener('message', (ev) => {
+    if (ev.source !== parentWin) return;
+    const d = ev.data;
+    if (!d || d.__sn !== 1) return;
+    if (d.ev === 'theme') { applyTheme(d.vars); return; }
+    if (d.re != null && pending.has(d.re)) {
+      const p = pending.get(d.re); pending.delete(d.re);
+      if (d.ok) p.resolve(d.v); else p.reject(new Error(String(d.err || 'refused')));
+    }
+  });
+
+  // ---- auto height: the window hugs the page (like every native StarNet window) until the page opts out ----
+  let auto = true, lastH = 0, raf = 0;
+  function measure() {
+    raf = 0;
+    if (!auto || !document.body) return;
+    const cs = getComputedStyle(document.body);
+    const h = Math.ceil(document.body.getBoundingClientRect().height + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0));
+    if (Math.abs(h - lastH) < 2) return;
+    lastH = h;
+    call('ui.height', { px: h }).catch(() => {});
+  }
+  function schedule() { if (!raf) raf = requestAnimationFrame(measure); }
+  function watch() {
+    if (!document.body) return;
+    try { new ResizeObserver(schedule).observe(document.body); } catch (_) {}
+    schedule();
+  }
+
+  const starnet = {
+    __kit: 1,
+    ready,
+    call,
+    theme: {
+      get vars() { return theme.vars; },
+      onChange(fn) { if (typeof fn === 'function') themeListeners.push(fn); return () => { const i = themeListeners.indexOf(fn); if (i >= 0) themeListeners.splice(i, 1); }; }
+    },
+    store: {
+      get: (key) => call('store.get', { key }),
+      set: (key, value) => call('store.set', { key, value }),
+      delete: (key) => call('store.delete', { key }),
+      keys: () => call('store.keys', {})
+    },
+    ui: {
+      toast: (text, kind) => call('ui.toast', { text: String(text || ''), kind: kind || 'ok' }),
+      setTitle: (text) => call('ui.title', { text: String(text || '') }),
+      open: (screen) => call('ui.open', { screen: String(screen || '') }),
+      close: () => call('ui.close', {}),
+      openLink: (url) => call('ui.link', { url: String(url || '') }),
+      setHeight: (px) => { auto = false; return call('ui.height', { px: Number(px) || 0 }); },
+      autoHeight: (on) => { auto = on !== false; lastH = 0; schedule(); }
+    }
+  };
+  window.starnet = starnet;
+
+  call('hello', {}).then((info) => {
+    if (info && info.theme) applyTheme(info.theme);
+    resolveReady({ plugin: info && info.plugin, screen: info && info.screen });
+  }).catch(() => resolveReady({ plugin: null, screen: null }));
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watch);
+  else watch();
+})();

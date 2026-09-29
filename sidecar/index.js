@@ -55,6 +55,7 @@ const { makeDesktopTools } = require('./tools/builtin/desktop.js');
 const { makeHooks } = require('./hooks.js');                 // the hook spine: pre/post tool + llm, session, compress
 const { makeShellHooks } = require('./shellhooks.js');       // the Commander's shell scripts, on that spine
 const { makePluginLoader } = require('./plugins.js');        // packaged JS extensions, on that same spine
+const { makePluginUiServer, makePluginStore } = require('./plugin-surface.js');   // a plugin's windows + its private store
 const { makeFsTools } = require('./tools/builtin/fs.js');
 // fs.read extracts .docx / .xlsx / .ipynb to readable text. inflateRawSync is injected so the extractor stays
 // pure + headless-testable, and so the OOXML path needs no dependency beyond what Node already ships.
@@ -3510,14 +3511,40 @@ const shellHooks = makeShellHooks({
    of the code itself so a silent edit re-asks. */
 const PLUGINS_DIR = path.join(WORKSPACES, 'plugins');
 const PLUGINS_ALLOW_FILE = path.join(WORKSPACES, 'plugins-allowed.json');
+/* A RE-APPROVAL MUST RUN THE NEW CODE. Node caches every require()d module forever, so after an edit + re-approve
+   the plugin used to keep running its OLD module (and old helpers) until the next restart — the approval said one
+   thing, the process ran another. Every load drops the cached modules under the plugins folder first. */
+function requirePluginFresh(p) {
+  const root = PLUGINS_DIR + path.sep;
+  for (const k of Object.keys(require.cache)) { if (k.indexOf(root) === 0) delete require.cache[k]; }
+  return require(p);
+}
 const pluginLoader = makePluginLoader({
   fsp, pathMod: path, dir: PLUGINS_DIR, allowFile: PLUGINS_ALLOW_FILE,
-  requireModule: (p) => require(p), hash: (s) => crypto.createHash('sha256').update(String(s)).digest('hex'),
+  requireModule: requirePluginFresh, hash: (s) => crypto.createHash('sha256').update(String(s)).digest('hex'),
   guard: skillGuard, clock: { now: () => Date.now() },
+  template: require('./plugin-template.js').templateFiles,   // "Create a plugin" writes a hook AND a kit-built window
   onError: (e) => console.warn('[plugins] ' + (e && e.plugin) + ': ' + (e && e.error))
 });
 let pluginsLoaded = { loaded: [], pending: [], errors: [] };
 let hooksInstalled = { installed: [], pending: [], errors: [] };
+/* PLUGIN WINDOWS (plugin extensions phase 1) — sidecar/plugin-surface.js. The files route re-proves the approval
+   on every request; the store is one durable JSON object per plugin, OUTSIDE every agent's fs jail. */
+const PLUGIN_DATA_DIR = path.join(WORKSPACES, 'plugin-data');
+const pluginDataStore = makeDurableJsonStore({
+  fs: fs, path: path,
+  fileFor: (id) => path.join(PLUGIN_DATA_DIR, String(id) + '.json'),
+  writeDurable: writeFileDurable,
+  onRecover: (key, file) => console.warn('[plugins] recovered ' + file + ' from .bak last-known-good.'),
+  onCorrupt: (key, file) => quarantineCorrupt(file, 'plugin-data')
+});
+const pluginStore = makePluginStore({ store: pluginDataStore });
+const servePluginUi = makePluginUiServer({
+  fs, fsp, path, frontendDir: FRONTEND, loader: pluginLoader, apitickets, apiKey: API_TOKEN, mime: MIME,
+  tokenOk: (req) => apiauth.apiTokenOk(req, API_TOKEN), now: () => Date.now(),
+  // who may FRAME a plugin page: the station itself (browser mode) and the desktop shell's app origins
+  frameAncestors: () => Array.from(apiauth.TAURI_ORIGINS).concat(['http://127.0.0.1:' + PORT, 'http://localhost:' + PORT]).join(' ')
+});
 async function installShellHooks() {
   /* ORDER IS LOAD-BEARING: plugins register BEFORE shell hooks, mirroring the reference harness. The spine
      reports the FIRST block's reason, so on a blocking event this decides who gets to explain the refusal —
@@ -9475,7 +9502,7 @@ function rejectProcessFaultRequest(req, res) {
   const diagnosticRead = method === 'GET' && (pathname === '/api/health' || pathname === '/api/diagnostics');
   const staticRead = (method === 'GET' || method === 'HEAD') &&
     pathname.indexOf('/api') !== 0 && pathname.indexOf('/v1') !== 0 && pathname !== '/health' &&
-    pathname.indexOf('/workshop-run/') !== 0;
+    pathname.indexOf('/workshop-run/') !== 0 && pathname.indexOf('/plugin-ui/') !== 0;
   if (diagnosticRead || staticRead) return false;
   if (pathname.indexOf('/api') === 0) {
     try { applyApiCors(req, res); } catch (e) { failNote('process-fault.reply-cors', e); }
@@ -9974,6 +10001,9 @@ const ROUTES = [
   //   form /workshop-run/~t/<ticket>/<agentId>/<runId>/<path...> (a run-scoped capability, never the master token).
   //   This is NOT under /api/ so it never touches the /api CORS/token gate above — the handler enforces its own auth.
   { m: ['GET', 'HEAD'], qprefix: '/workshop-run/', h: serveWorkshopRun },
+  //   GET/HEAD /plugin-ui/~t/<ticket>/<pluginId>/<digest>/<path...> — an APPROVED plugin's window files, sandboxed to
+  //   an opaque origin, the kit injected into every page (sidecar/plugin-surface.js).
+  { m: ['GET', 'HEAD'], qprefix: '/plugin-ui/', h: servePluginUi },
   // ADDITIVE (Lane B / ux-run-truth): read-only stat of a user-chosen KEEP destination folder, so the return
   // card can validate the typed path inline instead of failing silently on Keep. Strictly less powerful than
   // the existing keep copy (which already writes to an arbitrary destPath) — this only reports exists/isDir.
@@ -9988,6 +10018,7 @@ const ROUTES = [
   { m: 'POST', exact: '/api/plugins/revoke', h: handlePluginsRevoke },
   { m: 'POST', exact: '/api/plugins/create', h: handlePluginsCreate },
   { m: 'POST', exact: '/api/plugins/delete', h: handlePluginsDelete },
+  { m: 'POST', exact: '/api/plugins/store', h: handlePluginsStore },
   { m: 'POST', exact: '/api/checkpoint/restore', h: handleCheckpointRestore },
   { m: 'GET', prefix: '/api/checkpoint', h: handleCheckpointList },
   // /api/health is the topbar LINK / Diag liveness probe. After an uncaught exception it answers 503 with the fault
@@ -14997,11 +15028,32 @@ async function handlePluginsList(req, res) {
     dir: PLUGINS_DIR,
     plugins: found.plugins.map(p => ({
       id: p.id, name: p.name, version: p.version, description: p.description,
-      active: live.has(p.id), pending: pend.has(p.id), digest: p.digest, findings: p.findings || null
+      // ACTIVE means running THIS code: a plugin edited since approval was loaded, but its handlers now refuse
+      // (plugins.js stillApproved) and its windows are refused (approvedRecord) — calling it "on" would be a lie.
+      active: live.has(p.id) && !pend.has(p.id), pending: pend.has(p.id), digest: p.digest, findings: p.findings || null,
+      hasCode: !!p.main, screens: p.screens || []
     })),
     errors: (found.errors || []).concat(pluginsLoaded.errors || [])
   });
 }
+/* POST /api/plugins/store { id, op: get|set|delete|keys, key?, value? } — a plugin window's private store. Only the
+   page host calls this (the plugin's frame is an opaque origin with no token); the host names the plugin from its
+   own registry, never from the frame. Refused for any plugin whose approval does not cover its bytes right now. */
+async function handlePluginsStore(req, res) {
+  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  let body;
+  try { body = JSON.parse(await readBody(req, 512 << 10, res)); }
+  catch (e) { if (res.headersSent) return; res.writeHead(400); return res.end('bad json'); }
+  const id = String((body && body.id) || '').trim();
+  let rec = null;
+  try { rec = await pluginLoader.approvedRecord(id); } catch (_) { rec = null; }
+  if (!rec) return json(409, { ok: false, error: 'that plugin is not approved as it is on disk right now' });
+  let r;
+  try { r = await pluginStore.op(id, String((body && body.op) || ''), body && body.key, body && body.value); }
+  catch (e) { return json(500, { ok: false, error: 'the plugin store could not be written: ' + ((e && e.message) || e) }); }
+  return json(r.ok ? 200 : 400, r);
+}
+
 /* POST /api/plugins/allow { id, digest } — approve THIS EXACT CODE and load it without a restart.
    The digest is REQUIRED and must match what is on disk right now: approving by id alone would let a plugin
    that changed between the moment the Commander read it and the moment they clicked be approved sight-unseen,
