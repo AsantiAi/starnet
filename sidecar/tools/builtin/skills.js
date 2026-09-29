@@ -21,6 +21,19 @@
     }
   }
 
+  /* A MODEL SETS ONLY WHAT ITS SCHEMA OFFERS. skill.manage used to hand the model's arguments to the store
+     wholesale, so a model could write provenance the store trusts: sourceUrl/sourceDigest (the trust tier),
+     packageFiles/packageDigest (what hydrate serves and export seals), createdBy, force. Everything outside the
+     advertised schema is dropped here; the host adds agentId/createdBy/sourceRunId itself. */
+  const MODEL_FIELDS = ['action', 'target', 'id', 'name', 'summary', 'description', 'body', 'category', 'setup',
+    'platforms', 'requires', 'find', 'replace', 'path', 'content', 'absorbedInto', 'pinned'];
+  function modelArgs(args) {
+    const out = {};
+    if (!args || typeof args !== 'object') return out;
+    for (const k of MODEL_FIELDS) if (Object.prototype.hasOwnProperty.call(args, k)) out[k] = args[k];
+    return out;
+  }
+
   function makeSkillTools(deps) {
     const store = deps && deps.store;
     const onView = deps && deps.onView;
@@ -153,7 +166,7 @@
           const unread = unreadRefusal(prior, action);
           if (unread) return unread;
         }
-        const r = store.manage(Object.assign({}, args || {}, { agentId: aid, createdBy: (ctx && ctx.createdBy) || (ctx && ctx.skillReview ? 'background-review' : 'agent'), sourceRunId: ctx && ctx.runId }));
+        const r = store.manage(Object.assign(modelArgs(args), { agentId: aid, createdBy: (ctx && ctx.createdBy) || (ctx && ctx.skillReview ? 'background-review' : 'agent'), sourceRunId: ctx && ctx.runId }));
         if (!r.ok) return { content: 'Could not manage the skill: ' + r.error, summary: 'not saved' };
         emitSkill(ctx, r.skill);
         if (typeof onManage === 'function') { try { onManage(r.skill, ctx, r.action || (args && args.action) || 'manage'); } catch (_) {} }
