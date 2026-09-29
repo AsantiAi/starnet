@@ -42,12 +42,15 @@ const UserProps = (() => {
       let j = null;
       try { const r = await apiFetch('/api/userprops'); j = r.ok ? await r.json() : null; } catch (_) { j = null; }
       if (j && Array.isArray(j.props)) {
+        const before = props.map((p) => p.id).join(',');
         props = j.props;
         let any = false;
         for (const p of props) if (await register(p)) any = true;
         if (any && PropSprites.userArtChanged) PropSprites.userArtChanged();
+        // announce ONLY a real catalog change: build.js re-renders on this, and a panel render itself calls
+        // load() to resume a running job — an unconditional event would loop (and wipe what the player typed).
+        if (any || props.map((p) => p.id).join(',') !== before) changed();
       }
-      changed();
       return { props: props.slice(), jobs: (j && j.jobs) || [] };
     })().finally(() => { loading = null; });
     return loading;
