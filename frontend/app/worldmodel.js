@@ -1839,6 +1839,135 @@ const WorldModel = (() => {
       });
     }
 
+    /* ---------- LINE EDITS (conveyor-links phase D, 2026-09-29) ----------
+       A LINE is the machines its links join. lineGraph(id) hands the layout engine (linelayout.js) the line holding that
+       machine as a graph — every machine PINNED where it stands, every link with the belt it rides — plus the floor WITHOUT
+       the line (everything a new layout must go round). applyLineLayout(graph, layout) writes the engine's answer back in
+       ONE undo slot, all-or-nothing: the line's old belts are lifted, a machine gone from the graph is removed, a new one is
+       placed and a moved one moved, every belt is laid and every link written, and each junction takes its compass config
+       from its lanes. A machine that cannot stand where it lands, or a belt off the deck, fails the whole edit. */
+    function lineOf(propId) {
+      const L = currentLinks();
+      const start = propById(propId);
+      if (!Array.isArray(L) || !start || !LINK_MACHINES[start.t]) return null;
+      const seen = new Set([start.id]), queue = [start.id];
+      while (queue.length) {
+        const id = queue.shift();
+        for (const l of L) {
+          if (!l || !l.from || !l.to) continue;
+          const other = l.from.prop === id ? l.to.prop : l.to.prop === id ? l.from.prop : null;
+          if (other != null && !seen.has(other) && propById(other)) { seen.add(other); queue.push(other); }
+        }
+      }
+      return { ids: Array.from(seen), links: L.filter(l => l && l.from && l.to && seen.has(l.from.prop) && seen.has(l.to.prop)) };
+    }
+    function lineGraph(propId) {
+      // no machine named: an empty line on the whole floor (where a NEW line is laid)
+      const line = propId == null ? (Array.isArray(currentLinks()) ? { ids: [], links: [] } : null) : lineOf(propId);
+      if (!line) return fail('NOT_LINKED', 'this machine is not on a floor that builds by links');
+      const nodes = line.ids.map(id => {
+        const p = propById(id), n = { id, t: p.t, w: p.w || 1, h: p.h || 1, pin: { x: p.x, y: p.y } };
+        if (p.role) n.role = p.role;
+        if (p.agentId) n.agentId = p.agentId;
+        return n;
+      });
+      const links = line.links.map(l => {
+        const from = { node: l.from.prop, port: l.from.port || 'out' };
+        if (Array.isArray(l.from.tags) && l.from.tags.length) from.tags = l.from.tags.slice();
+        if (l.from.else) from.else = true;
+        return { id: l.id, from, to: { node: l.to.prop }, path: (l.path || []).map(t => ({ x: t.x, y: t.y, d: t.d })) };
+      });
+      // the floor round the line: every room, whatever else stands there, every belt this line's links do not ride alone
+      const mine = new Set(line.ids), ownTiles = new Set();
+      for (const l of line.links) for (const t of (l.path || [])) ownTiles.add(beltKey(t.x, t.y));
+      for (const id of line.ids) { const p = propById(id); if (isJunction(p)) ownTiles.add(beltKey(p.x, p.y)); }
+      for (const l of currentLinks()) if (!(mine.has(l.from.prop) && mine.has(l.to.prop))) for (const t of (l.path || [])) ownTiles.delete(beltKey(t.x, t.y));
+      const rects = [], blocked = [], junctions = [], belts = {};
+      for (const id of doc.order) for (const r of doc.rooms[id].rects) rects.push({ x1: r.x1, y1: r.y1, x2: r.x2, y2: r.y2 });
+      for (const p of doc.props) {
+        if (mine.has(p.id) || ruleOf(p.t).flat) continue;   // a rug is deck paint: a machine may stand on it
+        blocked.push({ x: p.x, y: p.y, w: p.w || 1, h: p.h || 1 });
+        if (isJunction(p)) junctions.push({ x: p.x, y: p.y });
+      }
+      for (const k in doc.belts) if (!ownTiles.has(k)) belts[k] = doc.belts[k];
+      return { ok: true, graph: { nodes, links }, floor: { rects, blocked, belts, junctions } };
+    }
+    function applyLineLayout(graph, L) {
+      if (!graph || !Array.isArray(graph.nodes) || !L || !L.ok) return fail('NO_LAYOUT', 'there is no layout to lay');
+      const first = graph.nodes.find(n => propById(n.id));
+      const line = first ? lineOf(first.id) : { ids: [], links: [] };
+      if (!line) return fail('NOT_LINKED', 'this line is not on a floor that builds by links');
+      const oldLinkIds = new Set(line.links.map(l => l.id));
+      return transact(() => {
+        const dirty = [], cell = (x, y) => ({ x1: x, y1: y, x2: x, y2: y });
+        const mine = new Set(line.ids), inLine = l => mine.has(l.from.prop) && mine.has(l.to.prop);
+        const L0 = Array.isArray(doc.links) ? doc.links : [];
+        // 1. lift the line: its belts (the tiles no other line's link rides), its junction tiles, its links
+        const keepTile = new Set();
+        for (const l of L0) if (!inLine(l)) for (const t of (l.path || [])) keepTile.add(beltKey(t.x, t.y));
+        const lift = (x, y) => { const k = beltKey(x, y); if (!keepTile.has(k) && doc.belts[k]) { delete doc.belts[k]; dirty.push(cell(x, y)); } };
+        for (const l of L0) if (inLine(l)) for (const t of (l.path || [])) lift(t.x, t.y);
+        for (const id of line.ids) { const p = propById(id); if (p && isJunction(p)) lift(p.x, p.y); }
+        doc.links = L0.filter(l => !inLine(l));
+        // 2. a machine the graph no longer holds is removed
+        const inGraph = new Set(graph.nodes.map(n => n.id));
+        const gone = line.ids.filter(id => !inGraph.has(id));
+        if (gone.length) {
+          for (const id of gone) { const p = propById(id); if (p) dirty.push(propFootprint(p)); }
+          doc.props = doc.props.filter(p => gone.indexOf(p.id) < 0);
+          dropRoomIdx();
+        }
+        // 3. new machines placed, existing ones moved where the layout put them
+        const idOf = {};
+        for (const n of graph.nodes) {
+          const at = L.nodes[n.id];
+          if (!at) return fail('NO_LAYOUT', 'the layout has no place for a machine of this line');
+          let p = propById(n.id);
+          if (!p) {
+            if (!LINK_MACHINES[n.t]) return fail('NOT_CONNECTABLE', 'a line is made of workflow machines');
+            p = { id: 'p' + (doc._nid++), t: n.t, x: at.x | 0, y: at.y | 0, w: Math.max(1, n.w | 0 || 1), h: Math.max(1, n.h | 0 || 1) };
+            if (n.block === false) p.block = false;
+            if (n.role && BAY_ROLES[n.role]) p.role = n.role;
+            if (typeof n.agentId === 'string' && n.agentId) p.agentId = n.agentId;
+            if (n.t === 'intake' && typeof n.label === 'string' && n.label.trim()) p.label = n.label.trim().slice(0, 48);
+            applyJunctionCfg(p, n.cfg || {});
+            doc.props.push(p);
+          } else if (p.x !== at.x || p.y !== at.y) {
+            dirty.push(propFootprint(p));
+            p.x = at.x | 0; p.y = at.y | 0;
+          }
+          idOf[n.id] = p.id;
+          dirty.push(propFootprint(p));
+        }
+        dropRoomIdx();
+        for (const n of graph.nodes) {   // every machine of the line stands where it may (checked after all of them moved)
+          const p = propById(idOf[n.id]), v = checkProp(propFootprint(p), p.id, p.t);
+          if (!v.ok) return v;
+        }
+        // 4. every belt the layout lays (a junction's own tile included)
+        for (const b of (L.belts || [])) {
+          if (!DIRS[b.d]) return fail('BAD_DIR', 'bad belt direction');
+          const v = beltPlaceable(b.x, b.y); if (!v.ok) return v;
+          doc.belts[beltKey(b.x, b.y)] = b.d; dirty.push(cell(b.x, b.y));
+        }
+        // 5. its links: an old link keeps its id, a new one is numbered after the highest on the floor
+        const links = doc.links.slice(), placed = [];
+        for (const l of (L.links || [])) {
+          const from = { prop: idOf[l.from.prop], port: l.from.port || 'out' };
+          if (Array.isArray(l.from.tags) && l.from.tags.length) from.tags = l.from.tags.slice();
+          if (l.from.else) from.else = true;
+          const id = (oldLinkIds.has(l.id) && !links.some(q => q.id === l.id)) ? l.id : nextLinkId(links);
+          const link = { id, from, to: { prop: idOf[l.to.prop], port: 'in' }, path: (l.path || []).map(t => ({ x: t.x, y: t.y, d: t.d })) };
+          links.push(link); placed.push(link);
+        }
+        doc.links = links;
+        // 6. a junction's compass config follows its lanes (a FILTER's routes, a LOOP's done / escape)
+        for (const n of graph.nodes) { const p = propById(idOf[n.id]); if (p && isJunction(p)) syncJunctionCfg(p); }
+        emit(dirty, { staticBakeUnchanged: true });
+        return { ok: true, ids: idOf, links: placed.map(l => l.id), removed: gone };
+      });
+    }
+
     /* ---------- CONNECT MODE (2026-07-05 UX reshape): connect MACHINES, not tiles ----------
        connectBelt(fromId, toId) lays a correctly-oriented belt path between two workflow props
        automatically: BFS over deck tiles (never through blocking props, never under ANY prop, never
@@ -3060,7 +3189,7 @@ const WorldModel = (() => {
       // mutations
       addRoom, placeHallway, removeRoom, moveRoom, setFloor, setMaterial, setDeck, setWalls, setHull, paintTiles, renameRoom,
       addProp, removeProp, moveProp, rotateProp, faceProp, mirrorProp, assignPropAgent, ensureWorkstation, configureJunction, swapJoinerMerger, bindConnector, setDoorState, setPropProject, setPropBrief, setPropHands, setPropLabel, setPropLimits,
-      setBelt, removeBelt, removeBelts, placeBeltRun, connectBelt, connectionPreview, hookedBelts, stampBlueprint, insertBayBetween, canInsertBayBetween, transact,
+      setBelt, removeBelt, removeBelts, placeBeltRun, connectBelt, connectionPreview, hookedBelts, stampBlueprint, insertBayBetween, canInsertBayBetween, transact, lineGraph, applyLineLayout,
       // agent-bay binding queries
       propsByType, propsByAgent, pipelineEdges, setPipelineEdges, addPipelineEdge, removePipelineEdge, agentRoomId, bayObjects,
       capForProp: t => CAP_PROP_MAP[t] || null,   // a prop type's capability objectType (single source for the UI)

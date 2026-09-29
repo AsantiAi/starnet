@@ -3,7 +3,7 @@
    Pure, zero-dep, UMD (node tests + the browser). Takes ONE line as a graph — its machines and the links between
    them — plus the floor it has to fit on, and answers where every machine stands and which belt every link rides:
 
-     LineLayout.layout(graph, floor)
+     LineLayout.layout(graph, floor, opts)          (opts.near = { x, y }: an unpinned line goes to the clear spot nearest it)
        -> { ok: true, nodes: { id: { x, y } }, links: [{ id, from, to, path: [{ x, y, d }] }], belts: [{ x, y, d }], box }
        -> { ok: false, error, needs?: { w, h }, link?, why? }
           (needs: the room a line this size would take — MAKE ROOM's input; link: the link that found no way; why:
@@ -56,6 +56,7 @@
   const PITCHES = [2, 3, 4];  // rows from one lane's belt row to the next — tightest first (2: branches stacked edge to edge,
                               // the way the hand-drawn lines pack them); a looser one only when the tight one cannot route
   const BEND = 2, NEAR = 1; // routing costs on top of 1 per step
+  const SPOTS = 3, MAX_TRIES = 24;   // a pinned line's loose machines: clear spots tried each, and layouts routed at most in all
   const key = (x, y) => x + ',' + y;
   const dirTo = (a, b) => (b.x > a.x ? 'E' : b.x < a.x ? 'W' : b.y > a.y ? 'S' : 'N');
   const sizeOf = n => (n.w && n.h) ? [n.w | 0, n.h | 0] : (JUNCTION[n.t] ? [1, 1] : [2, 2]);
@@ -444,7 +445,8 @@
   }
   const shift = (rel, dx, dy) => { const o = {}; for (const id in rel) o[id] = { x: rel[id].x + dx, y: rel[id].y + dy }; return o; };
 
-  function layout(graph, floor) {
+  function layout(graph, floor, opts) {
+    const near = opts && opts.near && isFinite(opts.near.x) && isFinite(opts.near.y) ? opts.near : null;
     const a = analyze(graph);
     if (!a.order.length) return { ok: false, error: 'EMPTY' };
     const fl = floorOf(floor);
@@ -478,59 +480,79 @@
     /* PINNED: the first pin anchors the line and pinned machines stay put; every other machine keeps its place relative
        to the machine feeding it (where that one stands, pinned or stepped, the next follows — a branch moves as one),
        stepping to the nearest clear lane if its spot is taken, or failing that the nearest clear spot at all. The belts
-       are found on the real floor round what already stands there. Tightest lanes first, as below. */
+       are found on the real floor round what already stands there. When they cannot be, the loose machines try their next
+       few clear spots (a short search, first spots first, so a line that fits the first time is laid exactly as before).
+       Tightest lanes first, as below. */
     const pinned = a.order.filter(id => a.nodes[id].pin);
     if (pinned.length) {
-      let last = { ok: false, error: 'NO_SPACE' };
+      let last = { ok: false, error: 'NO_SPACE' }, tries = 0;
       for (const pitch of PITCHES) {
         const rel = arrange(a, pitch); if (!rel) continue;
         const p0 = pinned[0], at = shift(rel, a.nodes[p0].pin.x - rel[p0].x, a.nodes[p0].pin.y - rel[p0].y);
+        const base = shift(at, 0, 0);   // each machine's place in the arrangement, anchored on the first pin
         for (const id of pinned) at[id] = { x: a.nodes[id].pin.x, y: a.nodes[id].pin.y };
-        const occ = new Set();
-        const mark = (id, p) => { const n = a.nodes[id]; for (let y = p.y - 1; y <= p.y + n.h; y++) for (let x = p.x - 1; x <= p.x + n.w; x++) occ.add(key(x, y)); };
-        for (const id of pinned) mark(id, at[id]);
+        // what is taken: machines' footprints and rings, counted per tile (a machine lifted while searching gives its tiles back)
+        const occ = new Map();
+        const taken = k => (occ.get(k) || 0) > 0;
+        const occupy = (k, s) => occ.set(k, (occ.get(k) || 0) + s);
+        const mark = (id, p, s) => { const n = a.nodes[id]; for (let y = p.y - 1; y <= p.y + n.h; y++) for (let x = p.x - 1; x <= p.x + n.w; x++) occupy(key(x, y), s); };
+        for (const id of pinned) mark(id, at[id], 1);
         // the belts that stay (a link between two pinned machines that still joins them): no machine lands on one, and no
         // new junction stands beside one (it would sit beside a lane it does not serve)
         const kept = keptOf(a, at), keptTile = new Set();
-        for (const l of kept) for (const t of l.path) { keptTile.add(key(t.x, t.y)); occ.add(key(t.x, t.y)); }
+        for (const l of kept) for (const t of l.path) { keptTile.add(key(t.x, t.y)); occupy(key(t.x, t.y), 1); }
         // a spot is clear when its tiles are, and — for a junction — when the sides its links want are free and there is
         // a free side for every link it carries
         const clear = (id, p) => {
           const n = a.nodes[id];
-          for (let y = p.y; y < p.y + n.h; y++) for (let x = p.x; x < p.x + n.w; x++) if (!fl.free(x, y) || occ.has(key(x, y)) || fl.inflow(x, y)) return false;
+          for (let y = p.y; y < p.y + n.h; y++) for (let x = p.x; x < p.x + n.w; x++) if (!fl.free(x, y) || taken(key(x, y)) || fl.inflow(x, y)) return false;
           if (!JUNCTION[n.t]) return true;
           for (const d of ORDER) if (keptTile.has(key(p.x + DIRV[d][0], p.y + DIRV[d][1]))) return false;
           const want = new Set(a.out[id].map(l => sideOf(a, l, id, l.b, true)).concat(a.inn[id].map(l => sideOf(a, l, id, l.a, false))));
           let sides = 0;
           for (const d of ORDER) {
             const x = p.x + DIRV[d][0], y = p.y + DIRV[d][1];
-            if (fl.free(x, y) && !fl.inflow(x, y) && !fl.nearJunction(x, y) && !occ.has(key(x, y))) sides++;
+            if (fl.free(x, y) && !fl.inflow(x, y) && !fl.nearJunction(x, y) && !taken(key(x, y))) sides++;
             else if (want.has(d)) return false;
           }
           return sides >= a.inn[id].length + a.out[id].length;
         };
-        let placed = true;
+        // a machine's clear spots, best first: its own place (as its feeder stands), the nearest clear lane in its column,
+        // then the nearest clear spot at all
+        const spotsFor = (id, p) => {
+          const out = [], seen = new Set();
+          const add = q => { const k = key(q.x, q.y); if (!seen.has(k) && clear(id, q)) { seen.add(k); out.push(q); } return out.length >= SPOTS; };
+          if (add(p)) return out;
+          for (let d = 1; d <= 12; d++) for (const sgn of [d, -d]) if (add({ x: p.x, y: p.y + sgn * pitch })) return out;
+          for (let r = 1; r <= 40; r++) for (let dy = -r; dy <= r; dy++) for (const dx of [r - Math.abs(dy), Math.abs(dy) - r]) if (add({ x: p.x + dx, y: p.y + dy })) return out;
+          return out;
+        };
         const off = {};   // how far each machine stands from its place in the arrangement
-        for (const id of pinned) off[id] = { x: at[id].x - (rel[id].x + a.nodes[p0].pin.x - rel[p0].x), y: at[id].y - (rel[id].y + a.nodes[p0].pin.y - rel[p0].y) };
-        for (const id of a.topo) {
-          if (a.nodes[id].pin) continue;
-          const par = a.inn[id].filter(a.fwd).map(l => l.a).find(q => off[q]), o = par != null ? off[par] : { x: 0, y: 0 };
-          let p = { x: at[id].x + o.x, y: at[id].y + o.y };
-          if (!clear(id, p)) {
-            let found = null;
-            for (let d = 1; d <= 12 && !found; d++) for (const sgn of [d, -d]) { const q = { x: p.x, y: p.y + sgn * pitch }; if (clear(id, q)) { found = q; break; } }
-            // no clear lane in its column (it would stand off the deck, or the column is full): the nearest clear spot at all
-            for (let r = 1; r <= 40 && !found; r++) for (let dy = -r; dy <= r && !found; dy++) for (const dx of [r - Math.abs(dy), Math.abs(dy) - r]) { const q = { x: p.x + dx, y: p.y + dy }; if (clear(id, q)) { found = q; break; } }
-            if (!found) { placed = false; last = { ok: false, error: 'NO_SPACE', node: id }; break; }
-            p = found;
+        for (const id of pinned) off[id] = { x: at[id].x - base[id].x, y: at[id].y - base[id].y };
+        const loose = a.topo.filter(id => !a.nodes[id].pin);
+        const place = i => {
+          if (i === loose.length) {
+            tries++;
+            const routed = routeAll(a, at, fl, kept);
+            if (routed.ok) return finish(at, routed.paths, kept);
+            last = { ok: false, error: routed.error, link: routed.link, why: routed.why };
+            return null;
           }
-          off[id] = { x: p.x - at[id].x, y: p.y - at[id].y };
-          at[id] = p; mark(id, p);
-        }
-        if (!placed) continue;
-        const routed = routeAll(a, at, fl, kept);
-        if (routed.ok) return finish(at, routed.paths, kept);
-        last = { ok: false, error: routed.error, link: routed.link, why: routed.why };
+          const id = loose[i];
+          const par = a.inn[id].filter(a.fwd).map(l => l.a).find(q => off[q]), o = par != null ? off[par] : { x: 0, y: 0 };
+          const spots = spotsFor(id, { x: base[id].x + o.x, y: base[id].y + o.y });
+          if (!spots.length) { if (last.error === 'NO_SPACE') last = { ok: false, error: 'NO_SPACE', node: id }; return null; }
+          for (const p of spots) {
+            if (tries >= MAX_TRIES) return null;
+            at[id] = p; off[id] = { x: p.x - base[id].x, y: p.y - base[id].y }; mark(id, p, 1);
+            const r = place(i + 1);
+            if (r) return r;
+            mark(id, p, -1); delete off[id]; at[id] = base[id];
+          }
+          return null;
+        };
+        const laid = place(0);
+        if (laid) return laid;
       }
       return last;
     }
@@ -564,7 +586,12 @@
       for (const t of mach.concat(belt)) { sx1 = Math.min(sx1, t.x); sy1 = Math.min(sy1, t.y); sx2 = Math.max(sx2, t.x); sy2 = Math.max(sy2, t.y); }
       const W = sx2 - sx1 + 1, H = sy2 - sy1 + 1;
       if (!needs) needs = { w: W, h: H };
-      for (let y = Y1; y + H - 1 <= Y2; y++) for (let x = X1; x + W - 1 <= X2; x++) {
+      // where to look first: given opts.near, the spots whose middle is closest to it (a new line lands where the
+      // Commander is looking), else rows top first, then columns
+      const spots = [];
+      for (let y = Y1; y + H - 1 <= Y2; y++) for (let x = X1; x + W - 1 <= X2; x++) spots.push([x, y, near ? Math.abs(x + W / 2 - near.x) + Math.abs(y + H / 2 - near.y) : 0]);
+      if (near) spots.sort((p, q) => p[2] - q[2] || p[1] - q[1] || p[0] - q[0]);
+      for (const [x, y] of spots) {
         const dx = x - sx1, dy = y - sy1;
         if (!emptyWindow(x, y, W, H)) {
           let ok = true;
