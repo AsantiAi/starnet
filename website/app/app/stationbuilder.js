@@ -112,9 +112,48 @@
     return { ok: true, probe, ids: b.ids };
   }
 
-  /* the ONE edit list, run on a probe by plan() and on the live station by apply(): the new room (optional), the stamped
-     line (with its cap + tries), the Inbox's name, each step's instructions and agent. Every setter's answer is checked. */
+  /* the ONE edit list, run on a probe by plan() and on the live station by apply(). Three plan kinds:
+     a LINE (spec.bpId: the new room if any, the stamped line, its name, each step's instructions and agent), ROOMS
+     (spec.parts: each a room kit — a new room or an existing one, its furniture, its own line), and a RESTYLE (one
+     room's floor, material or name). Every setter's answer is checked; one failure fails the whole edit. */
   function buildInto(st, spec, WM) {
+    if (spec && spec.kind === 'restyle') return restyleInto(st, spec);
+    if (spec && spec.kind === 'rooms') {
+      const ids = [], parts = [];
+      for (const part of spec.parts || []) { const r = buildKit(st, part, WM); if (!r.ok) return r; ids.push(...r.ids); parts.push(r); }
+      return { ok: true, ids, parts };
+    }
+    return buildLine(st, spec, WM);
+  }
+  function buildKit(st, part, WM) {
+    const ids = [];
+    let roomId = part.roomId || null;
+    if (part.room) {
+      const before = new Set(st.rooms().map(r => r.id));
+      const r = st.addRoom({ kind: part.room.kind, name: part.room.name, floorStyle: part.room.floorStyle, floorMat: part.room.floorMat, rect: part.room.rect });
+      if (!r || !r.ok) return refuse('the room could not be added there' + (r && r.msg ? ' (' + r.msg + ')' : ''));
+      roomId = (st.rooms().find(x => !before.has(x.id)) || {}).id || null;
+    }
+    for (const p of part.props || []) {
+      const r = st.addProp({ t: p.t, x: p.x, y: p.y, w: p.w, h: p.h, r: p.r || 0, block: p.block });
+      if (!r || !r.ok) return refuse('a piece of furniture could not be placed there' + (r && r.msg ? ' (' + r.msg + ')' : ''));
+      ids.push(r.id);
+    }
+    let line = null;
+    if (part.line) {
+      line = buildLine(st, Object.assign({}, part.line, { room: null }), WM);
+      if (!line.ok) return line;
+      ids.push(...line.ids);
+    }
+    return { ok: true, ids, roomId, lineIds: line ? line.ids : [], intakeId: line ? line.intakeId : null };
+  }
+  function restyleInto(st, spec) {
+    if (spec.floorStyle) { const r = st.setFloor(spec.roomId, spec.floorStyle); if (!r || !r.ok) return refuse('the floor could not be changed'); }
+    if (spec.floorMat) { const r = st.setMaterial(spec.roomId, spec.floorMat); if (!r || !r.ok) return refuse('the floor material could not be changed'); }
+    if (spec.name) { const r = st.renameRoom(spec.roomId, spec.name); if (!r || !r.ok) return refuse('the room could not be renamed'); }
+    return { ok: true, ids: [] };
+  }
+  function buildLine(st, spec, WM) {
     const bp = (WM.BLUEPRINTS || []).find(x => x.id === spec.bpId);
     if (!bp) return refuse('unknown line');
     if (spec.room) {
@@ -309,6 +348,201 @@
     } };
   }
 
+  /* ================= ROOMS & DECOR (phase 2, 2026-09-29) =================
+     The same rule as lines: the agent picks from curated options and never places furniture. A ROOM KIT is one of the
+     hand-designed rooms the presets are made of (StationTemplates.kits) — its furniture, and for some a ready line with
+     written steps. planRoom places a kit in a NEW room (the shared room finder), FURNISHES an existing room that has
+     clear floor for the whole kit, or adds every room of a PRESET beside the station — always add-only. A kit is tried
+     as designed and mirrored (never a kit with a line: mirroring would reverse its belts) until every piece can be
+     walked up to and no piece blocks a doorway. planRestyle is the one cosmetic change: a room's floor, material or
+     name, from fixed lists. The card says what equipment a kit brings (a desk is a computer: object = capability). */
+  const ROOM_MENU = ['kit', 'preset', 'where', 'name', 'floorStyle', 'floorMat'];
+  const STYLE_MENU = ['room', 'name', 'floorStyle', 'floorMat'];
+  const KIT_W = 18, KIT_H = 11;
+  const kitsOf = env => (env.StationTemplates && env.StationTemplates.kits) ? env.StationTemplates.kits() : [];
+  const kitMenu = env => kitsOf(env).map(k => k.name + ' (' + k.about + ')').join('; ');
+  const presetsOf = env => ((env.StationTemplates && env.StationTemplates.catalog) || []).filter(c => env.StationTemplates.presetKits(c.id).length);
+  function resolveKit(env, raw) { const n = norm(raw); return n ? kitsOf(env).find(k => norm(k.id) === n || norm(k.name) === n) || null : null; }
+  function resolvePreset(env, raw) { const n = norm(raw); return n ? presetsOf(env).find(c => norm(c.id) === n || norm(c.name) === n) || null : null; }
+  function styleOf(WM, req) {
+    const styles = Object.keys(WM.FLOOR_STYLES || {}).filter(s => s !== 'corridor'), mats = Object.keys(WM.FLOOR_MATERIALS || {});
+    const pick = (raw, list, field) => {
+      if (raw == null) return { ok: true, value: null };
+      const v = String(raw).toLowerCase().replace(/[^a-z]/g, '');
+      return list.indexOf(v) >= 0 ? { ok: true, value: v } : refuse(field + ' must be one of: ' + list.join(', ') + '.');
+    };
+    const fs = pick(req.floorStyle, styles, 'floorStyle'); if (!fs.ok) return fs;
+    const fm = pick(req.floorMat, mats, 'floorMat'); if (!fm.ok) return fm;
+    return { ok: true, floorStyle: fs.value, floorMat: fm.value };
+  }
+  // a kit's furniture at (x0, y0), as designed or mirrored left-to-right (a chair facing east then faces west)
+  function kitProps(env, kit, x0, y0, mirror) {
+    const S = env.PropSprites, out = [];
+    for (const [t, x, y, facing = 0] of kit.props) {
+      const spec = S && S.spec ? S.spec(t) : null;
+      if (!spec) return null;
+      const r = mirror ? (facing === 1 ? 3 : facing === 3 ? 1 : facing) : facing;
+      out.push({ t, x: x0 + (mirror ? KIT_W - x - spec.w : x), y: y0 + y, w: spec.w, h: spec.h, r, block: spec.blocks !== false });
+    }
+    return out;
+  }
+  // a kit's own line, with the kit's written steps (its briefs, by role) and nobody assigned yet
+  function kitLine(env, kit, x0, y0) {
+    if (!kit.line) return null;
+    const bp = (env.WorldModel.BLUEPRINTS || []).find(b => b.id === kit.line.bp);
+    if (!bp) return null;
+    const steps = [];
+    bp.props.forEach((p, i) => {
+      if (p.t !== 'bay') return;
+      const st = env.WorkflowLine.starters ? env.WorkflowLine.starters(p.role) : [];
+      steps.push({ propIndex: i, brief: (kit.line.briefs && kit.line.briefs[p.role]) || (st[0] && st[0].does) || '', agentId: '' });
+    });
+    return { bpId: bp.id, ox: x0 + kit.line.x, oy: y0 + kit.line.y, opts: {}, label: kit.line.label || '', steps };
+  }
+  // the tiles a room's doorways need clear: each door tile inside the room and the one tile past it
+  function landingTiles(st, g, roomId) {
+    const out = new Set(), ox = g.origin.tx, oy = g.origin.ty;
+    for (const d of g.doorDefs || []) {
+      const a = { x: d[0] + ox, y: d[1] + oy }, b = { x: d[2] + ox, y: d[3] + oy };
+      const inA = st.roomAt(a.x, a.y) === roomId, inB = st.roomAt(b.x, b.y) === roomId;
+      if (inA === inB) continue;
+      const door = inA ? a : b, other = inA ? b : a;
+      out.add(door.x + ',' + door.y); out.add((2 * door.x - other.x) + ',' + (2 * door.y - other.y));
+    }
+    return out;
+  }
+  // the same checks as a line's placement, plus: no piece of furniture on a doorway's landing
+  function tryKit(doc, spec, env, before) {
+    const WM = env.WorldModel, P = env.Pipeline;
+    const probe = WM.create(clone(doc));
+    const b = buildInto(probe, spec, WM);
+    if (!b.ok) return b;
+    const after = floorFacts(probe, P), g = after.geo;
+    for (const e of after.errs) if (!before.errs.has(e)) return refuse('that spot would add a routing problem (' + e.split(':')[0] + ')');
+    for (const dock in before.chains) if (JSON.stringify(before.chains[dock]) !== JSON.stringify(after.chains[dock])) return refuse('that spot would change how an existing line routes');
+    for (const dock in before.reach) if (!!before.reach[dock] !== !!after.reach[dock]) return refuse('that spot would change which existing steps the Inbox reaches');
+    const o = spawnTile(probe.serialize(), g);
+    for (const part of b.parts) {
+      const land = landingTiles(probe, g, part.roomId);
+      for (const pid of part.ids) {
+        const p = probe.propById(pid);
+        if (!p || p.block === false) continue;
+        for (let yy = p.y; yy < p.y + p.h; yy++) for (let xx = p.x; xx < p.x + p.w; xx++) if (land.has(xx + ',' + yy)) return refuse('a piece of furniture would block a doorway');
+        if (o && !g.path(o.x - g.origin.tx, o.y - g.origin.ty, p.x - g.origin.tx, p.y + p.h - g.origin.ty)) return refuse('a piece of furniture could not be walked up to');
+      }
+    }
+    return { ok: true, probe, parts: b.parts };
+  }
+  // the kit's furniture that is EQUIPMENT (object = capability): "a desk (COMPUTE)", by the prop's own label
+  const equipmentOf = (env, props) => {
+    const WM = env.WorldModel, S = env.PropSprites, seen = {}, out = [];
+    for (const p of props) {
+      const cap = WM.capForProp ? WM.capForProp(p.t) : null; if (!cap) continue;
+      const k = cap + ':' + p.t; if (seen[k]) continue; seen[k] = 1;
+      const spec = S && S.spec ? S.spec(p.t) : null, label = String((spec && spec.label) || p.t).toLowerCase().replace(/_/g, ' ').replace(/ [a-z]$/, '');   // "CONSOLE L" (its shape) reads as a console
+      out.push('a ' + label + ' (' + ((WM.CAP_LABEL || {})[cap] || cap) + ')');
+    }
+    return out;
+  };
+
+  function planRoom(doc, req, env) {
+    const WM = env && env.WorldModel, P = env && env.Pipeline, W = env && env.WorkflowLine;
+    if (!WM || !P || !W || !doc || !env.StationTemplates || !env.PropSprites) return refuse('the station builder is not loaded on this page');
+    if (!req || typeof req !== 'object' || Array.isArray(req)) return refuse('Send the request as an object with: ' + ROOM_MENU.join(', ') + '.');
+    const extra = Object.keys(req).filter(k => ROOM_MENU.indexOf(k) < 0);
+    if (extra.length) return refuse('StarNet chooses every position and piece of furniture itself, so these fields are not accepted: ' + extra.slice(0, 8).join(', ') + '. Use only: ' + ROOM_MENU.join(', ') + '.');
+    const presetNames = presetsOf(env).map(c => c.name).join(', ');
+    if (!!req.kit === !!req.preset) return refuse('Choose one: kit (one room) or preset (every room of a preset, added beside your station). Kits: ' + kitMenu(env) + '. Presets: ' + presetNames + '.');
+    const style = styleOf(WM, req); if (!style.ok) return style;
+    let list;
+    if (req.kit) { const k = resolveKit(env, req.kit); if (!k) return refuse('There is no room kit called "' + String(req.kit).slice(0, 40) + '". Kits: ' + kitMenu(env) + '.'); list = [k]; }
+    else {
+      const pr = resolvePreset(env, req.preset);
+      if (!pr) return refuse('There is no preset called "' + String(req.preset).slice(0, 40) + '". Presets: ' + presetNames + '.');
+      list = env.StationTemplates.presetKits(pr.id).map(id => kitsOf(env).find(k => k.id === id)).filter(Boolean);
+    }
+    const name = typeof req.name === 'string' ? req.name.replace(/\s+/g, ' ').trim().toUpperCase().slice(0, 24) : '';
+    if (name && list.length > 1) return refuse('name names one room; a preset adds several rooms under their own names. Leave name out.');
+    const live = WM.create(clone(doc));
+    const rooms = live.rooms().filter(r => r.kind !== 'corridor');
+    const whereRaw = req.where == null ? '' : String(req.where).trim();
+    let target = null;
+    if (whereRaw && !/^(a )?new( room)?$/i.test(whereRaw)) {
+      if (list.length > 1) return refuse('A preset\'s rooms are always added as new rooms. Leave where out.');
+      const m = rooms.filter(r => norm(r.name) === norm(whereRaw));
+      if (m.length !== 1) return refuse((m.length ? 'More than one room is called "' + whereRaw.slice(0, 40) + '".' : 'There is no room called "' + whereRaw.slice(0, 40) + '".') + ' Use "new room", or one of: ' + rooms.map(r => r.name).join(', ') + '.');
+      target = m[0];
+    }
+    const before = floorFacts(live, P), parts = [];
+    for (const kit of list) {
+      let found = null;
+      const mirrors = kit.line ? [false] : [false, true];
+      if (target) {
+        const R = target.rects[0], Wd = R.x2 - R.x1 + 1, Hd = R.y2 - R.y1 + 1;
+        if (target.rects.length > 1 || Wd < KIT_W || Hd < KIT_H) return refuse(target.name + ' is ' + Wd + ' × ' + Hd + '; a ' + kit.name + ' needs a plain 18 × 11 room. Use "new room".');
+        const x0 = R.x1 + ((Wd - KIT_W) >> 1), y0 = R.y1 + ((Hd - KIT_H) >> 1);
+        for (const mirror of mirrors) {
+          const props = kitProps(env, kit, x0, y0, mirror); if (!props) return refuse('this page is missing the furniture for ' + kit.name);
+          const part = { room: null, roomId: target.id, props, line: kitLine(env, kit, x0, y0), meta: { kit: kit.id, name: target.name, about: kit.about, existing: true } };
+          if (tryKit(doc, { kind: 'rooms', parts: parts.concat([part]) }, env, before).ok) { found = part; break; }
+        }
+        if (!found) return refuse(kit.name + ' does not fit in ' + target.name + ': every piece needs clear floor, a way to walk up to it, and its doorways open. Use "new room".');
+      } else {
+        const sofar = WM.create(clone(doc));
+        if (parts.length) { const b = buildInto(sofar, { kind: 'rooms', parts }, WM); if (!b.ok) return b; }
+        const roomName = name || kit.name;
+        outer: for (const rect of sofar.roomSpots(KIT_W, KIT_H, kit.kind, 24)) for (const mirror of mirrors) {
+          const props = kitProps(env, kit, rect.x1, rect.y1, mirror); if (!props) return refuse('this page is missing the furniture for ' + kit.name);
+          const part = { room: { kind: kit.kind, name: roomName, floorStyle: style.floorStyle || kit.floorStyle, floorMat: style.floorMat || kit.floorMat, rect },
+            props, line: kitLine(env, kit, rect.x1, rect.y1), meta: { kit: kit.id, name: roomName, about: kit.about, existing: false } };
+          if (tryKit(doc, { kind: 'rooms', parts: parts.concat([part]) }, env, before).ok) { found = part; break outer; }
+        }
+        if (!found) return refuse('There is no clear space beside the station for an 18 × 11 ' + kit.name + '. Remove something, or try a smaller build.');
+      }
+      parts.push(found);
+    }
+    const spec = { kind: 'rooms', parts };
+    const finalProbe = WM.create(clone(doc)), fb = buildInto(finalProbe, spec, WM);
+    if (!fb.ok) return fb;
+    const crewIds = (env.crew || []).map(a => a && a.id).filter(Boolean);
+    const view = parts.map((part, i) => {
+      const built = fb.parts[i], pr = finalProbe.rooms().find(r => r.id === built.roomId);
+      const neighbour = part.room ? (() => { const R = part.room.rect; const adj = finalProbe.rooms().find(rm => rm.id !== built.roomId && rm.kind !== 'corridor' && rm.rects.some(q => q.x1 <= R.x2 + 1 && q.x2 >= R.x1 - 1 && q.y1 <= R.y2 + 1 && q.y2 >= R.y1 - 1)); return adj ? adj.name : null; })() : null;
+      const equip = equipmentOf(env, part.props);
+      const line = built.lineIds.length ? readLine(finalProbe, built.lineIds, env, crewIds) : null;
+      return { name: pr ? pr.name : part.meta.name, kit: part.meta.kit, about: part.meta.about, where: part.room ? 'a new room' + (neighbour ? ' beside ' + neighbour : '') : 'the ' + part.meta.name + ' room',
+        equipment: equip, line: line ? { label: part.line.label, ready: line.ready, blocking: line.blocking } : null };
+    });
+    const summary = view.map(v => (v.where.indexOf('a new room') === 0 ? v.name + ' (' + v.about + ') in ' + v.where : v.about.charAt(0).toUpperCase() + v.about.slice(1) + ', furnishing ' + v.where)
+      + (v.equipment.length ? '. It brings equipment: ' + v.equipment.join(', ') : '')
+      + (v.line ? '. Its line "' + v.line.label + '" ' + (v.line.ready ? 'will be ready to run' : 'still needs: ' + v.line.blocking.join('; ')) : '') + '.').join(' ');
+    return { ok: true, plan: { floorSig: sigOf(doc), resultSig: sigOf(finalProbe.serialize()), spec, rooms: view, summary, notes: [], steps: [], line: null, where: view.map(v => v.where).join('; ') } };
+  }
+
+  function planRestyle(doc, req, env) {
+    const WM = env && env.WorldModel;
+    if (!WM || !doc) return refuse('the station builder is not loaded on this page');
+    if (!req || typeof req !== 'object' || Array.isArray(req)) return refuse('Send the request as an object with: ' + STYLE_MENU.join(', ') + '.');
+    const extra = Object.keys(req).filter(k => STYLE_MENU.indexOf(k) < 0);
+    if (extra.length) return refuse('A restyle only changes a room\'s floor, material or name, so these fields are not accepted: ' + extra.slice(0, 8).join(', ') + '. Use only: ' + STYLE_MENU.join(', ') + '.');
+    const live = WM.create(clone(doc)), rooms = live.rooms().filter(r => r.kind !== 'corridor');
+    const m = rooms.filter(r => norm(r.name) === norm(req.room));
+    if (m.length !== 1) return refuse((req.room ? (m.length ? 'More than one room is called "' + String(req.room).slice(0, 40) + '".' : 'There is no room called "' + String(req.room).slice(0, 40) + '".') : 'Say which room.') + ' Rooms: ' + rooms.map(r => r.name).join(', ') + '.');
+    const room = m[0], style = styleOf(WM, req); if (!style.ok) return style;
+    const name = typeof req.name === 'string' ? req.name.replace(/\s+/g, ' ').trim().toUpperCase().slice(0, 24) : '';
+    if (name && rooms.some(r => r.id !== room.id && norm(r.name) === norm(name))) return refuse('Another room is already called ' + name + '.');
+    const changes = [];
+    if (style.floorStyle && style.floorStyle !== room.floorStyle) changes.push('floor ' + (room.floorStyle || 'default') + ' → ' + style.floorStyle);
+    if (style.floorMat && style.floorMat !== room.floorMat) changes.push('material ' + (room.floorMat || 'default') + ' → ' + style.floorMat);
+    if (name && name !== room.name) changes.push('renamed to ' + name);
+    if (!changes.length) return refuse('Nothing would change. Give a new floorStyle, floorMat or name for ' + room.name + '.');
+    const spec = { kind: 'restyle', roomId: room.id, floorStyle: style.floorStyle, floorMat: style.floorMat, name: name || null };
+    const probe = WM.create(clone(doc)), r = buildInto(probe, spec, WM);
+    if (!r.ok) return r;
+    return { ok: true, plan: { floorSig: sigOf(doc), resultSig: sigOf(probe.serialize()), spec, summary: 'Restyle ' + room.name + ': ' + changes.join(', ') + '. Nothing is added, moved or removed.',
+      notes: name ? ['requests that name this room by its old name will need the new one'] : [], steps: [], line: null, where: 'the ' + room.name + ' room', rooms: [] } };
+  }
+
   function apply(st, pl, env) {
     const WM = env && env.WorldModel;
     if (!WM || !env.Pipeline || !env.WorkflowLine) return refuse('the station builder is not loaded on this page');
@@ -325,10 +559,14 @@
     });
     if (!r || !r.ok || !built) return refuse((r && r.error) || 'The build failed, so nothing was changed.');
     const crewIds = (env.crew || []).map(a => a && a.id).filter(Boolean);
+    if (pl.spec.kind === 'rooms' || pl.spec.kind === 'restyle') {
+      const lines = (built.parts || []).filter(p => p.lineIds && p.lineIds.length).map(p => { const rl = readLine(st, p.lineIds, env, crewIds); return { lineId: rl.comp ? rl.comp.key : null, ready: rl.ready, blocking: rl.blocking }; });
+      return { ok: true, kind: pl.spec.kind, summary: pl.summary, rooms: pl.rooms || [], where: pl.where, lines };
+    }
     const rd = readLine(st, built.ids, env, crewIds);
     return { ok: true, summary: pl.summary, line: pl.line, where: pl.where, steps: pl.steps, intakeId: built.intakeId,
       lineKey: rd.comp ? rd.comp.key : null, ready: rd.ready, blocking: rd.blocking };
   }
 
-  return { MENU, STEP_KEYS, catalog, resolveLine, plan, apply, sigOf };
+  return { MENU, STEP_KEYS, ROOM_MENU, STYLE_MENU, catalog, resolveLine, plan, planRoom, planRestyle, apply, sigOf };
 });

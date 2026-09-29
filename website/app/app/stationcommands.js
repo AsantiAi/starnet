@@ -357,6 +357,15 @@ const StationCommands = (() => {
   // the station builder's parked plans: planId -> { plan, at }, ten minutes, used once
   const builderPlans = new Map(), PLAN_TTL_MS = 10 * 60 * 1000;
   let planSeq = 0;
+  const NEXT_STEP = 'Tell the Commander the summary in plain words, then call station.build with this planId. Nothing has been built yet.';
+  function park(r) {
+    if (!r || !r.ok) throw new Error((r && r.error) || 'the plan failed');
+    const now = Date.now();
+    for (const [id, e] of builderPlans) if (now - e.at > PLAN_TTL_MS) builderPlans.delete(id);
+    const planId = 'plan-' + now.toString(36).slice(-5) + '-' + (++planSeq);
+    builderPlans.set(planId, { plan: r.plan, at: now });
+    return { planId, plan: r.plan };
+  }
   function builderReady() {
     const st = typeof App !== 'undefined' && App.station ? App.station() : null;
     if (!st || !st.serialize || !st.transact || !st.roomSpots) throw new Error('the station is not ready yet');
@@ -364,7 +373,8 @@ const StationCommands = (() => {
       throw new Error('the station builder is not loaded on this page');
     if (typeof Build !== 'undefined' && Build.isOpen && Build.isOpen()) throw new Error('Build mode is open, so the Commander is editing the floor. Ask them to close Build mode, then plan again.');
     const crew = (App.agents ? App.agents() : []).map(x => ({ id: x.id, name: x.name }));
-    return { st, env: { WorldModel, Pipeline, WorkflowLine, crew, heroId: App.heroId ? App.heroId() : null } };
+    return { st, env: { WorldModel, Pipeline, WorkflowLine, crew, heroId: App.heroId ? App.heroId() : null,
+      StationTemplates: typeof StationTemplates !== 'undefined' ? StationTemplates : null, PropSprites: typeof PropSprites !== 'undefined' ? PropSprites : null } };
   }
 
   const VERBS = {
@@ -384,31 +394,40 @@ const StationCommands = (() => {
 
     /* THE STATION BUILDER (2026-09-29, the Agent Station Builder plan): the lead ADDS a ready-made line and never places
        anything itself. plan_line builds the request on a copy (StationBuilder.plan — every check runs there) and parks the
-       plan here for ten minutes; build_line applies exactly that plan in one undo step (StationBuilder.apply). Both
+       plan here for ten minutes; station.build applies exactly that plan in one undo step (StationBuilder.apply). They
        refuse while Build mode is open: the Commander's own edits own the floor then. */
     'station.plan_line': (a) => {
       const { st, env } = builderReady();
-      const r = StationBuilder.plan(st.serialize(), (a && a.request) || {}, env);
-      if (!r.ok) throw new Error(r.error);
-      const now = Date.now();
-      for (const [id, e] of builderPlans) if (now - e.at > PLAN_TTL_MS) builderPlans.delete(id);
-      const planId = 'plan-' + now.toString(36).slice(-5) + '-' + (++planSeq);
-      builderPlans.set(planId, { plan: r.plan, at: now });
-      const p = r.plan;
-      return { planId, summary: p.summary, line: p.line, where: p.where, steps: p.steps, ready: p.ready, blocking: p.blocking, notes: p.notes,
-        expiresInMinutes: PLAN_TTL_MS / 60000, next: 'Tell the Commander the summary in plain words, then call station.build_line with this planId. Nothing has been built yet.' };
+      const p = park(StationBuilder.plan(st.serialize(), (a && a.request) || {}, env));
+      return { planId: p.planId, summary: p.plan.summary, line: p.plan.line, where: p.plan.where, steps: p.plan.steps, ready: p.plan.ready, blocking: p.plan.blocking,
+        notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
     },
-    'station.build_line': (a) => {
+    // ROOMS & DECOR (phase 2): a hand-designed room kit (a new room, or furnishing one with clear floor), or every room of a preset
+    'station.plan_room': (a) => {
+      const { st, env } = builderReady();
+      const p = park(StationBuilder.planRoom(st.serialize(), (a && a.request) || {}, env));
+      return { planId: p.planId, summary: p.plan.summary, rooms: p.plan.rooms, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
+    },
+    // the one cosmetic change: a room's floor, material or name
+    'station.plan_restyle': (a) => {
+      const { st, env } = builderReady();
+      const p = park(StationBuilder.planRestyle(st.serialize(), (a && a.request) || {}, env));
+      return { planId: p.planId, summary: p.plan.summary, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
+    },
+    // builds ANY parked plan, exactly, in one undo step
+    'station.build': (a) => {
       const { st, env } = builderReady();
       const planId = String((a && a.planId) || '').trim();
       const e = builderPlans.get(planId);
-      if (!e || Date.now() - e.at > PLAN_TTL_MS) { builderPlans.delete(planId); throw new Error('There is no plan "' + planId.slice(0, 40) + '" (plans last ten minutes and are used once). Plan the line again.'); }
+      if (!e || Date.now() - e.at > PLAN_TTL_MS) { builderPlans.delete(planId); throw new Error('There is no plan "' + planId.slice(0, 40) + '" (plans last ten minutes and are used once). Plan it again.'); }
       const r = StationBuilder.apply(st, e.plan, env);
       if (!r.ok) throw new Error(r.error);
       builderPlans.delete(planId);
-      try { if (typeof StationUI !== 'undefined' && StationUI.notify) StationUI.notify('Built ' + r.line.name + ' in ' + r.where + ' · open BUILD and press UNDO to remove it', 'good'); } catch (_) {}
-      return { built: true, summary: r.summary, line: r.line, where: r.where, steps: r.steps, lineId: r.lineKey, ready: r.ready, blocking: r.blocking,
-        undo: 'The Commander can remove all of it with one UNDO in Build mode.' };
+      const what = r.line ? r.line.name + ' in ' + r.where : r.kind === 'restyle' ? 'the restyle of ' + r.where : (r.rooms || []).map(x => x.name).join(', ');
+      try { if (typeof StationUI !== 'undefined' && StationUI.notify) StationUI.notify('Built ' + what + ' · open BUILD and press UNDO to remove it', 'good'); } catch (_) {}
+      return Object.assign({ built: true, undo: 'The Commander can remove all of it with one UNDO in Build mode.' }, r.line
+        ? { summary: r.summary, line: r.line, where: r.where, steps: r.steps, lineId: r.lineKey, ready: r.ready, blocking: r.blocking }
+        : { summary: r.summary, rooms: r.rooms, lines: r.lines });
     },
 
     'station.agent_config': (args) => {
