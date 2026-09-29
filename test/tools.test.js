@@ -65,6 +65,16 @@ const call = (name, args, id) => ({ id: id || 'c1', name, args, argsRaw: JSON.st
     A.eq(JSON.stringify(jsonBreakAt('{"a": "x" "b": 1}')), JSON.stringify({ at: 10, path: ['a'] }), 'missing comma breaks after the value of "a"');
     A.eq(JSON.stringify(jsonBreakAt('{"s": ["ok", nope]}')), JSON.stringify({ at: 13, path: ['s', 1] }), 'bad array element names its index');
     A.eq(jsonBreakAt('{"a": [1, 2.5e3, true, null, {"b": "c\\n\\u00e9"}]}'), null, 'valid JSON has no break');
+    // a window that starts INSIDE a key would cut its vendor prefix and slip past redact() — never quote around a credential
+    for (const key of ['sk-proj-' + 'A'.repeat(40), 'ghp_' + 'b'.repeat(36), 'AIza' + 'C'.repeat(35)]) {
+      const leakRaw = '{"objective": "x", "headers": {"Authorization": "Bearer ' + key + '"}, oops}';
+      const lk = await reg.dispatch({ id: 'k', name: 'brief.proceed', args: {}, argsRaw: leakRaw, parseError: 'invalid tool arguments JSON' });
+      A.ok(lk.content.indexOf(key.slice(-20)) < 0 && lk.content.indexOf(key.slice(4, 24)) < 0, 'no fragment of a ' + key.slice(0, 4) + ' key is quoted');
+      A.ok(/text not quoted — the arguments contain a credential/.test(lk.content) && /at character \d+/.test(lk.content), 'the position is still named without quoting');
+    }
+    // the field path is capped (a 200KB key name must not become a 200KB message)
+    const deep = await reg.dispatch({ id: 'd', name: 'brief.proceed', args: {}, argsRaw: '{"' + 'k'.repeat(5000) + '": nope}', parseError: 'invalid tool arguments JSON' });
+    A.ok(deep.content.length < 700, 'the explanation stays short for a huge field name');
     // a specific verdict (cut-off value) is passed through untouched
     const cut = await reg.dispatch({ id: 'x', name: 'brief.proceed', args: {}, argsRaw: '{"objective": "abc', parseError: 'the arguments were cut off mid-value' });
     A.ok(cut.content.indexOf('the arguments were cut off mid-value') >= 0 && cut.content.indexOf('<<HERE>>') < 0, 'specific parse verdicts are not rewritten');

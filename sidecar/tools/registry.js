@@ -238,11 +238,18 @@
     const hit = jsonBreakAt(raw);
     if (!hit) return reason;
     const at = hit.at;
+    // Never quote raw arguments that hold a credential-shaped value: a 64-char window can start INSIDE a key, cut
+    // off its vendor prefix, and so slip past redact() into the persisted tool result (review 2026-09-28 reproduced
+    // sk-proj-/sk-or-v1-/xoxb-/AIza/ghp_ fragments). The position, field and expected shape still go out.
+    const redactFn = contextMod && typeof contextMod.redact === 'function' ? contextMod.redact : null;
+    const holdsSecret = !redactFn || redactFn(raw) !== raw;
     const from = Math.max(0, at - 40), to = Math.min(raw.length, at + 24);
-    const near = ((from > 0 ? '…' : '') + raw.slice(from, at) + ' <<HERE>> ' + raw.slice(at, to) + (to < raw.length ? '…' : '')).replace(/\r?\n/g, '\\n');
-    const where = hit.path.length
+    const near = holdsSecret ? '(text not quoted — the arguments contain a credential)'
+      : ((from > 0 ? '…' : '') + raw.slice(from, at) + ' <<HERE>> ' + raw.slice(at, to) + (to < raw.length ? '…' : '')).replace(/\r?\n/g, '\\n');
+    const fullPath = hit.path.length
       ? hit.path.map((seg, k) => typeof seg === 'number' ? '[' + seg + ']' : (k ? '.' + seg : seg)).join('')
       : '';
+    const where = fullPath.length > 120 ? fullPath.slice(0, 117) + '…' : fullPath;
     const shape = where ? expectedShape(schemaAt(tool && tool.schema, hit.path)) : '';
     return 'not valid JSON at character ' + at + (where ? ' (inside "' + where + '")' : '') + ': ' + near + '\n'
       + (shape ? '"' + where + '" must be ' + shape + '.\n' : '')
