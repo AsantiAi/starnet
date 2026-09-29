@@ -12801,7 +12801,7 @@ function handleLifecycleArmed(req, res) {
    SHAPE (every field is backed by REAL in-memory server state — nothing is fabricated; truthful-telemetry law):
      {
        ts: <ms>,                                  // when this snapshot was taken (server clock)
-       runs: [ { runId, agentId, startedAt, source } ],   // live runs (runsMeta + the channel hubs' inflight maps)
+       runs: [ { runId, agentId, startedAt, source, streamId?, internal? } ],   // live runs (runsMeta + the channel hubs' inflight maps); streamId/internal only when known
                                                           //   source ∈ 'interactive' | 'cron' | 'workshop' | 'telegram' | 'discord' | 'slack' | 'matrix' | 'signal' | 'host' (line work runOnce drives: trigger/sample hubs, chain hops, step tests)
                                                           //   Channel runs are driven by the messaging hub, which keeps its OWN inflight
                                                           //   map (keyed by chatId) rather than runsMeta — so they are read from the SAME maps E-STOP kills
@@ -12820,7 +12820,12 @@ function handleStateSnapshot(req, res) {
   try {
     for (const [runId, meta] of runsMeta) {
       seenRunIds.add(runId);
-      out.runs.push({ runId: runId, agentId: (meta && meta.agentId) || null, startedAt: (meta && meta.startedAt) || null, source: (meta && meta.source) || null });
+      const row = { runId: runId, agentId: (meta && meta.agentId) || null, startedAt: (meta && meta.startedAt) || null, source: (meta && meta.source) || null };
+      // ADDITIVE (HUD activity feed): the run's own conversation, and whether it is the harness's self-talk (the same
+      // body.internal the run history later records) — so a live view never shows self-talk as the Commander's work.
+      if (meta && meta.streamId) row.streamId = String(meta.streamId);
+      if (meta && meta.internal) row.internal = true;
+      out.runs.push(row);
     }
   } catch (_) {}
   // every run runOnce is driving (hub entry runs, chain hops, step tests, routine hops) — see runOnceTracked
@@ -15917,7 +15922,7 @@ async function handleRun(req, res) {
 
   const ac = new AbortController();
   runs.set(runId, ac);
-  runsMeta.set(runId, { agentId: agentId, startedAt: Date.now(), source: 'interactive', streamId: streamId || '' });
+  runsMeta.set(runId, { agentId: agentId, startedAt: Date.now(), source: 'interactive', streamId: streamId || '', internal: internal });
   // NS-1 AWAY DETECTION: a browser /api/run is genuinely user-triggered work — stamp the away clock so the
   // night-shift driver treats the Commander as PRESENT. Cron/workshop/night-shift runs go through runOnce with
   // surface:'autonomous' and NEVER reach this route, so they can't reset the away clock (which would make the

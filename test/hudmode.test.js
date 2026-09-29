@@ -96,73 +96,64 @@ const T0 = 1_800_000_000_000;
   A.ok(f.recent.length <= 12, 'recent list is bounded');
 }
 
-// ---- crew strip: every agent, one lamp, unread finishes ----
+// ---- ACTIVITY: every piece of work on the station, each once, in the order a glance needs ----
 {
-  const f = H.createFeed();
   const agents = [{ id: 'agent', name: 'Nova', color: '#4af' }, { id: 'researcher', name: 'Orion' }, { id: 'coder', name: 'Vex' }];
-  H.applySnapshot(f, { runs: [{ runId: 'r1', agentId: 'researcher', startedAt: T0 }, { runId: 'r2', agentId: 'coder', startedAt: T0 }], prompts: [{ runId: 'r2', agentId: 'coder' }], queues: [] }, T0);
-  A.eq(H.crew(f, agents, 'agent').map(x => [x.id, x.name, x.lamp, x.online]), [['agent', 'NOVA', 'idle', true], ['researcher', 'ORION', 'live', false], ['coder', 'VEX', 'ask', false]],
-    'roster order; a pending prompt outranks working; the line is marked');
-  A.eq(H.crew(f, agents, 'agent').map(x => x.unread), [null, null, null], 'nothing unread before a finish the page received');
-  H.onRunEnd(f, { agentId: 'researcher', runId: 'r1', reason: 'clarifying', turns: 1, usd: 0 }, T0 + 10);
-  H.onRunEnd(f, { agentId: 'researcher', runId: 'r3', reason: 'done', turns: 1, usd: 0 }, T0 + 20);
-  A.eq(H.crew(f, agents, 'agent')[1].unread, 'ask', 'a later DONE never hides an earlier ASKED YOU');
-  H.onRunEnd(f, { agentId: 'agent', runId: 'r4', reason: 'done', turns: 1, usd: 0 }, T0 + 30);
-  A.eq(H.crew(f, agents, 'agent')[0].unread, null, 'the conversation on the line is being read: no pip on it');
-  H.onRunEnd(f, { agentId: 'coder', runId: 'r5', reason: 'cancelled', turns: 1, usd: 0 }, T0 + 40);
-  A.eq(H.crew(f, agents, 'agent')[2].unread, null, 'a run the Commander stopped is not news');
-  H.onRunError(f, { agentId: 'coder', runId: 'r6', message: 'x', transient: false }, T0 + 50);
-  A.eq(H.crew(f, agents, 'agent')[2].unread, 'bad', 'a fault is unread until looked at');
-  A.ok(H.clearUnread(f, 'researcher') && H.crew(f, agents, 'agent')[1].unread === null, 'going to that agent clears it');
-  const ghost = H.crew(f, null, 'agent', T0 + 60);
-  A.eq(ghost.map(x => [x.name, x.status]), [['CODER', 'NEEDS YOUR OK']], 'a running agent missing from the roster keeps a row under its id, never a made-up name');
-  A.eq(H.crew(H.createFeed(), null, 'agent', T0), [], 'no roster and nothing running: no rows');
-}
-
-// ---- crew rows: the status line is the run's provable step, else its latest finish ----
-{
+  const streams = [
+    { id: 'ws1', agentId: 'agent', title: 'General', runIds: ['live1'], history: [{ role: 'user', content: 'Summarise   today\'s   inbox' }] },
+    { id: 'ws2', agentId: 'researcher', title: 'ORION', runIds: ['old1'], history: [
+      { role: 'user', content: 'Find three papers' },
+      { role: 'assistant', content: 'Found them.', sourceRunId: 'old1' },
+      { role: 'assistant', content: 'Links below.', sourceRunId: 'old1' },
+      { role: 'assistant', content: 'boom', sourceRunId: 'old1', error: true }
+    ] }
+  ];
   const f = H.createFeed();
-  const agents = [{ id: 'agent', name: 'Nova' }, { id: 'researcher', name: 'Orion' }];
-  H.onRunStart(f, { agentId: 'researcher', runId: 'a', trigger: 'schedule', model: 'm' }, T0);
-  H.onToolCall(f, { agentId: 'researcher', runId: 'a', callId: 'c', name: 'web_search' }, T0 + 1000);
-  let r = H.crew(f, agents, 'agent', T0 + 5000)[1];
-  A.eq([r.lamp, r.status, r.time, r.tone], ['live', 'WEB.SEARCH · ROUTINE', '5s', 'live'], 'a working row names its tool, its trigger and its clock');
-  H.onRunStart(f, { agentId: 'researcher', runId: 'b', trigger: 'directive', model: 'm' }, T0 + 2000);
-  A.eq(H.crew(f, agents, 'agent', T0 + 5000)[1].status, 'WEB.SEARCH · ROUTINE · +1 MORE', 'a second run is counted, not hidden');
-  H.onRunEnd(f, { agentId: 'researcher', runId: 'a', reason: 'done', turns: 1, usd: 0 }, T0 + 6000);
-  H.onRunEnd(f, { agentId: 'researcher', runId: 'b', reason: 'done', turns: 1, usd: 0 }, T0 + 7000);
-  r = H.crew(f, agents, 'agent', T0 + 8000)[1];
-  A.eq([r.lamp, r.status, r.time, r.unread], ['idle', 'DONE', 'just now', 'ok'], 'a finished row keeps its finish and is unread');
-  A.eq(H.crew(f, agents, 'agent', T0 + 8000)[0].status, 'IDLE', 'an agent with nothing recent is IDLE');
-  A.eq(H.crew(f, agents, 'agent', T0 + 20 * 60 * 1000)[1].status, 'IDLE', 'a finish older than the recent window reads IDLE again');
+  H.applySnapshot(f, { runs: [
+    { runId: 'live1', agentId: 'agent', startedAt: T0 - 30_000, source: 'interactive', streamId: 'ws1' },
+    { runId: 'cron1', agentId: 'researcher', startedAt: T0 - 90_000, source: 'cron' },
+    { runId: 'self1', agentId: 'agent', startedAt: T0 - 1000, source: 'interactive', internal: true },
+    { runId: 'wrun1', agentId: 'coder', startedAt: T0 - 5000, source: 'subagent' }
+  ], prompts: [{ runId: 'cron1', agentId: 'researcher', promptId: 'p1' }], queues: [] }, T0);
+  H.onToolCall(f, { agentId: 'agent', runId: 'live1', callId: 'c1', name: 'web_search' }, T0);
+  const workers = [
+    { id: 'w1', runId: 'wrun1', agentId: 'coder', status: 'running', working: true, canInterrupt: true, generation: 2, prompt: 'Fix the flaky test', startedAt: T0 - 5000, steerHistory: [{ status: 'applied', text: 'use the fixture' }] },
+    { id: 'w0', runId: 'wrun0', agentId: 'coder', status: 'interrupted', prompt: 'Old job', completedAt: T0 - 60_000, artifacts: [{ path: 'C:/x/notes.md' }] },
+    { id: 'wOld', runId: 'wrunOld', agentId: 'coder', status: 'done', prompt: 'Ancient', completedAt: T0 - 13 * 3_600_000 }
+  ];
+  const finished = [
+    { runId: 'old1', agentId: 'researcher', reason: 'done', title: 'Find three papers', streamId: 'ws2', endedAt: T0 - 120_000, toolTrace: [{ callId: 'a', name: 'web_search' }, { callId: 'b', name: 'web_search' }, { callId: 'c', name: 'mcp__github__get_issue' }] },
+    { runId: 'self0', agentId: 'agent', reason: 'done', title: 'Assistant reply (context only)', internal: true, endedAt: T0 - 10_000 },
+    { runId: 'wrun0', agentId: 'coder', reason: 'cancelled', title: 'dup of the worker', endedAt: T0 - 60_000 },
+    { runId: 'live1', agentId: 'agent', reason: 'done', title: 'stale row of a live run', endedAt: T0 - 1 },
+    { runId: 'ask1', agentId: 'agent', reason: 'done', clarifying: true, deliveryText: 'Which account?', title: 'Pay the bill', endedAt: T0 - 30_000 },
+    { runId: 'test1', agentId: 'agent', reason: 'done', stepTest: true, endedAt: T0 - 5 }
+  ];
+  const items = H.workItems({ feed: f, workers, finished, agents, streams, now: T0 });
+  A.eq(items.map(x => x.key), ['run:cron1', 'done:ask1', 'run:live1', 'worker:w1', 'worker:w0', 'done:old1'],
+    'needs-you first (a prompt, a question left for you), then working oldest-first, then finished newest-first; self-talk, step tests, stale and old work left out; every run once');
+  const [cron, ask, live, worker, stopped, old] = items;
+  A.eq([cron.state, cron.status, cron.task, cron.name, cron.time], ['ask', 'Needs your OK', 'Scheduled routine', 'ORION', '1m 30s'], 'a routine waiting on a permission prompt');
+  A.eq([live.state, live.status, live.task, live.streamId, live.canSteer, live.canStop], ['live', 'Using WEB.SEARCH', 'Summarise today\'s inbox', 'ws1', true, true],
+    'a live run names its tool and the Commander\'s own words from the conversation that owns it; it can be steered and stopped');
+  A.eq([worker.kind, worker.status, worker.task, worker.canSteer, worker.generation, worker.directions], ['worker', 'Working', 'Fix the flaky test', true, 2, ['Direction applied: use the fixture']],
+    'a delegated worker is its ledger record, with its steer history');
+  A.eq([old.state, old.status, old.time, old.result, old.tools], ['done', 'Completed', '2m ago', 'Found them.\n\nLinks below.', ['WEB.SEARCH', 'GITHUB::GET.ISSUE']],
+    'a finished run shows what it said (its own transcript rows, error markers left out) and each tool once');
+  A.eq([ask.state, ask.status, ask.result], ['ask', 'Asked you a question', 'Which account?'], 'a run that ended on a question reads as one');
+  A.eq([stopped.state, stopped.status, stopped.outputs, stopped.canStop], ['stopped', 'Stopped', ['notes.md'], false], 'a stopped worker keeps its outputs and loses its hands');
+  A.eq(H.workItems({ feed: H.createFeed(), now: T0 }), [], 'nothing on the station: no cards');
+  const lone = H.createFeed();
+  H.applySnapshot(lone, { runs: [{ runId: 'tg', agentId: 'ghost', startedAt: T0, source: 'telegram' }], prompts: [], queues: [] }, T0);
+  A.eq(H.workItems({ feed: lone, now: T0 }).map(x => [x.name, x.task]), [['GHOST', 'Message from Telegram']], 'no conversation on this page: the run says where it came from, under the agent\'s id');
+  // the summary line
+  A.eq(H.feedSummary(items, f, true), { text: '2 NEED YOU · 2 WORKING', tone: 'ask' }, 'summary counts what needs you and what is working');
+  A.eq(H.feedSummary([], H.createFeed(), null), { text: '…', tone: 'dim' }, 'before the first answer: nothing claimed');
+  A.eq(H.feedSummary([], f, false), { text: 'NO LINK', tone: 'bad' }, 'a failing history poll is said');
+  const quiet = H.createFeed(); H.applySnapshot(quiet, { runs: [], prompts: [], queues: [] }, T0);
+  A.eq(H.feedSummary([old], quiet, true), { text: 'ALL QUIET', tone: 'dim' }, 'finished work only: all quiet');
+  A.eq(H.oneLine('a  b\n c', 40), 'a b c', 'one line');
 }
-
-// ---- the strip's line: the agent a glance most needs ----
-{
-  const row = (id, lamp, extra) => Object.assign({ id, name: id.toUpperCase(), color: '', lamp, status: lamp === 'idle' ? 'IDLE' : 'WORKING', tone: lamp === 'idle' ? 'dim' : 'live', time: '', unread: null, online: false }, extra);
-  const said = { a: 'All clear.', b: '', c: 'Draft is ready.' };
-  const replyOf = id => said[id] || '';
-  A.eq(H.glance([], replyOf), null, 'no crew, no line');
-  let g = H.glance([row('a', 'idle', { online: true }), row('b', 'live', { time: '4s' }), row('c', 'ask', { status: 'NEEDS YOUR OK', tone: 'ask' })], replyOf);
-  A.eq([g.id, g.text, g.tone, g.busy], ['c', 'NEEDS YOUR OK', 'ask', 2], 'a pending OK outranks everything; busy counts every lit lamp');
-  g = H.glance([row('a', 'idle', { online: true }), row('b', 'live', { time: '4s' })], replyOf);
-  A.eq([g.id, g.text, g.time], ['b', 'WORKING', '4s'], 'then whoever is working');
-  g = H.glance([row('a', 'idle', { online: true }), row('c', 'idle', { unread: 'ok', status: 'DONE' })], replyOf);
-  A.eq([g.id, g.text, g.tone], ['c', 'Draft is ready.', 'live'], 'then an unread finish, quoting what that agent said');
-  g = H.glance([row('b', 'idle'), row('a', 'idle', { online: true })], replyOf);
-  A.eq([g.id, g.text], ['a', 'All clear.'], 'then the agent on the line');
-  g = H.glance([row('b', 'idle')], replyOf);
-  A.eq([g.id, g.text], ['b', 'IDLE'], 'an agent that has said nothing reads its status, never an invented line');
-  A.eq(H.glance([row('a', 'idle')], () => { throw new Error('x'); }).text, 'IDLE', 'a failing history read degrades to the status');
-}
-
-// ---- reply flattening: the newest real reply, one line ----
-A.eq(H.lastReply([{ role: 'user', content: 'hi' }, { role: 'assistant', content: '## Done\n\nThree **files** changed. See [the log](http://x).' }, { role: 'assistant', content: 'boom', error: true }]),
-  'Done Three files changed. See the log.', 'skips error markers, strips markdown to one line');
-A.eq(H.lastReply([{ role: 'assistant', content: 'ok ```js\nlet a=1\n``` then' }]), 'ok [code] then', 'code blocks fold to a marker');
-A.eq(H.lastReply([{ role: 'user', content: 'x' }]), '', 'no reply yet, no line');
-A.ok(H.lastReply([{ role: 'assistant', content: 'word '.repeat(80) }], 40).length <= 40, 'long replies are cut at a word');
-A.eq(H.lastReply(null), '', 'no history, no line');
 
 // ---- small formatters + prefs ----
 A.eq(H.toolLabel('web_search'), 'WEB.SEARCH', 'tool label');
@@ -199,21 +190,19 @@ A.eq([H.fmtAgo(10_000), H.fmtAgo(5 * 60_000), H.fmtAgo(2 * 3_600_000)], ['just n
     'docked sheets ignore a hidden bar instead of seating at a negative top');
   const js = read('frontend/app/hudmode.js');
   A.ok(/World\.stop\(\)/.test(js) && /World\.start\(\)/.test(js), 'the world renderer stops in the HUD and resumes on exit');
-  A.ok(/fetch\('\/api\/state\/snapshot'/.test(js), 'the deck polls the authoritative run snapshot');
-  A.ok(/Workstreams\.list\(\)\.filter\(w => \(w\.agentId \|\| 'agent'\) === id\)/.test(js) && /App\.openWorkstream\(mine\[0\]\.id\)/.test(js),
-    'a crew chip returns to that agent\'s own conversation (never rebinds the blank thread on screen)');
-  A.ok(!/#chat-panel > h3 \{ display: none/.test(css) && !/#comms-idbar[^{]*\{ display: none/.test(css) && !/#chat-input\b/.test(css),
-    'COMMS is untouched inside the HUD: its header, agent line and composer are the designed ones');
-  const deckRule = /html body\.hud-mode #hud-deck \{([^}]*)\}/.exec(css);
-  A.ok(!!deckRule && /background: var\(--gd-face/.test(deckRule[1]) && /border: 1px solid var\(--gd-edge/.test(deckRule[1]),
-    'the deck is the station glass panel (--gd-face fill, --gd-edge hairline)');
-  A.ok(!/background: var\(--ph\)\s*;/.test(css) && !/0 0 0 2px var\(--ph-dim\)/.test(css),
-    'no retired CRT chrome: no solid phosphor bar, no phosphor ring');
-  // The HUD opens SMALL: the strip alone, and a click on an agent opens the conversation under it.
-  A.ok(/S\.folded = true;/.test(js) && /doc\.body\.classList\.add\('hud-mode', 'hud-folded'\)/.test(js), 'the HUD opens as the small strip');
-  A.ok(/html body\.hud-mode\.hud-folded #chat-panel \{ display: none !important; \}/.test(css), 'the small strip carries no conversation');
-  A.ok(/if \(S\.folded\) setFolded\(false\);/.test(js), 'picking an agent opens its conversation');
-  A.ok(/\.hud-tiles \{[^}]*flex: 0 0 auto/.test(css), 'portraits are never squeezed by a long line');
+  const has = (src, ...parts) => parts.every(p => src.includes(p));
+  A.ok(has(js, "fetch('/api/state/snapshot'"), 'live work is the authoritative run snapshot');
+  A.ok(has(js, "get('/api/subagents')", "get('/api/runs?agent=*&limit=40')"), 'delegated and finished work are the worker ledger and the run history');
+  A.ok(has(js, "'/api/subagents/steer'", "'/api/subagents/interrupt'", "'/api/run/steer'", "'/api/cancel'"),
+    'every card can be steered and stopped through the routes the station already has');
+  A.ok(has(js, 'App.openWorkstream(mine[0].id)', 'Workstreams.get(sid)'), 'OPEN CONVERSATION goes to the conversation that owns the work, else the agent\'s own (never rebinds the blank thread on screen)');
+  A.ok(has(js, "S.view = 'activity';", "classList.toggle('hud-view-activity', act)"), 'the HUD opens on ACTIVITY, the work, not a conversation');
+  A.ok(has(js, "el('section', 'project-home hud-activity')", "el('details', 'ph-card')"), 'ACTIVITY is the project activity feed markup (so it wears the project feed\'s glass)');
+  A.ok(!css.includes('#chat-panel > h3 { display: none') && !css.includes('#chat-input {'), 'COMMS keeps its designed header and composer inside the HUD');
+  A.ok(!/background: var\(--ph\)\s*;/.test(css) && !css.includes('0 0 0 2px var(--ph-dim)'), 'no retired CRT chrome: no solid phosphor bar, no phosphor ring');
+  const side = read('sidecar/index.js');
+  A.ok(has(side, "source: 'interactive', streamId: streamId || '', internal: internal }", 'if (meta && meta.internal) row.internal = true;') && has(js, 'r.internal || workerRuns.has'),
+    'live self-talk is marked by the sidecar and never shown as the Commander\'s work');
 }
 
 // ---- desktop wiring ----

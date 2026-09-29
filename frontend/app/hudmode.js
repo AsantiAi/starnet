@@ -1,23 +1,23 @@
 /* STARNET hudmode.js — HUD MODE: StarNet as a small always-on-top panel.
-   For the Commander who is gaming or watching something and wants their agents one glance away
-   without the whole station on screen.
+   For the Commander who is gaming or doing something else on the PC and wants every piece of work the
+   station is doing one glance away, with a hand on each of them, without the whole station on screen.
 
    The HUD is NOT a second app. It is this same page with the station hidden, the world renderer
-   stopped, and the REAL COMMS panel (ON THE LINE agent picker, group chat + ADD AGENTS, the
-   transcript, the composer, STOP) filling a compact frame, so every send, stream and history row
-   is the one COMMS already owns. On the desktop the Rust shell (src-tauri/src/hud_mode.rs) turns
-   the window itself into a corner panel: small, pinned above other windows, and restored to the
-   exact size/position/maximized/fullscreen state it had when the HUD closes.
+   stopped, and the REAL COMMS panel filling a compact frame. On the desktop the Rust shell
+   (src-tauri/src/hud_mode.rs) turns the window itself into a corner panel: small, pinned above other
+   windows, and restored to the exact size/position/maximized/fullscreen state it had when the HUD closes.
 
-   The deck above COMMS is the station at a glance, and it states only what the harness can prove:
-     · LIVE rows are the runs the sidecar's GET /api/state/snapshot lists as running (the same
-       authoritative ledger the world reconciles against), polled while the HUD is up and enriched by
-       the real agent.run.* / agent.tool_call events on U.bus (the step a run is on). A run the
-       snapshot stops listing is gone, whatever the last event said.
-     · NEEDS YOU is the snapshot showing a permission prompt pending on that run.
-     · the recent rows are agent.run.end / agent.run.error events this page actually received.
-     · NO LINK is the snapshot poll itself failing. Before the first snapshot lands the deck says
-       nothing rather than claiming IDLE.
+   ACTIVITY (where the HUD opens) is the project ACTIVITY feed (project-home.js) for the whole station:
+   one .ph-card per piece of work, in the same markup and glass, each opening onto what it produced and
+   the same hands the project feed gives (a direction, STOP WORK) plus OPEN CONVERSATION. CHAT is the
+   COMMS conversation itself. Every card states only what the harness can prove:
+     · WORKING cards are the runs GET /api/state/snapshot lists as live (the authority the world
+       reconciles against), enriched by the real agent.run.* / agent.tool_call events on U.bus (the step
+       a run is on). A run the snapshot stops listing is gone, whatever the last event said.
+     · NEEDS YOUR OK is the snapshot showing a permission prompt pending on that run.
+     · delegated work is GET /api/subagents (the worker ledger the project feed reads); finished work is
+       GET /api/runs (the run history), with the harness's own self-talk (internal) left out.
+     · a failing poll says so; before the first answer lands the feed claims nothing.
    Everything is event/interval driven; the HUD adds no animation loop of its own. */
 'use strict';
 
@@ -29,30 +29,21 @@
   'use strict';
 
   const PREF_KEY = 'starnet.hud';          // { pinned, rect } — per machine, a convenience only
-  const POLL_MS = 4000;                    // snapshot cadence while the HUD is up (local sidecar, tiny JSON)
+  const POLL_MS = 4000;                    // live cadence while the HUD is up (local sidecar, tiny JSON)
+  const HISTORY_MS = 12000;                // finished-work cadence (run history + worker ledger)
   const START_GRACE_MS = 8000;             // an event-only run the snapshot has not caught up with yet
-  const RECENT_MAX = 12;                   // finishes kept (one per run): enough for every agent's latest
+  const RECENT_MAX = 12;                   // finishes this page saw (one per run)
   const RECENT_TTL_MS = 15 * 60 * 1000;    // a finish older than this is history, not "recent"
-  const LIVE_MAX = 5;                      // live rows shown; the rest fold into "+N MORE"
+  const LIVE_MAX = 5;                      // (summary model) live rows before "+N MORE"
+  const FINISHED_WINDOW_MS = 12 * 60 * 60 * 1000;   // finished work shown: the last 12 hours…
+  const FINISHED_MAX = 10;                 // …at most this many cards
   const TAURI_EVENT = 'starnet-hud';       // hud_mode.rs emits { active } from the tray menu
 
   /* ---------------- pure feed model (unit-tested in test/hudmode.test.js) ---------------- */
 
   function createFeed() {
-    return { runs: new Map(), recent: [], prompts: new Set(), queues: new Map(), unread: new Map(), snapAt: 0, snapOk: null };
+    return { runs: new Map(), recent: [], prompts: new Set(), queues: new Map(), snapAt: 0, snapOk: null };
   }
-
-  /* UNREAD: an agent whose run finished while the Commander was on someone else's line. It is the
-     run.end this page received, nothing inferred; putting that agent on the line clears it. A run the
-     Commander stopped themselves is not news. Tone ranks what a glance must catch: a question over a
-     fault over a plain finish, so a later DONE never hides an earlier ASKED YOU. */
-  const UNREAD_RANK = { ok: 1, bad: 2, ask: 3 };
-  function markUnread(feed, agentId, tone) {
-    if (!agentId || !UNREAD_RANK[tone]) return;
-    const had = feed.unread.get(agentId);
-    if (!had || UNREAD_RANK[tone] >= UNREAD_RANK[had]) feed.unread.set(agentId, tone);
-  }
-  function clearUnread(feed, agentId) { return feed.unread.delete(String(agentId || '')); }
 
   function touchRun(feed, p, now) {
     const id = String(p.runId);
@@ -118,7 +109,6 @@
     feed.recent = feed.recent.filter(x => x.runId !== String(p.runId));
     const reason = String(p.reason || 'done');
     pushRecent(feed, { runId: String(p.runId), agentId, reason, at: now });
-    markUnread(feed, agentId, (END_WORDS[reason] || { tone: 'dim' }).tone);
   }
 
   function onRunError(feed, p, now) {
@@ -130,7 +120,6 @@
     // run.error is usually followed by run.end{error} for the same run: keep ONE row for it.
     feed.recent = feed.recent.filter(x => x.runId !== String(p.runId));
     pushRecent(feed, { runId: String(p.runId), agentId, reason: 'error', at: now });
-    markUnread(feed, agentId, 'bad');
   }
 
   /* The snapshot is the authority on WHAT is running. Event-only runs survive a short grace (the
@@ -149,6 +138,8 @@
       else if (!r.startedAt) r.startedAt = now;
       r.confirmed = true;
       if (s.source) r.source = String(s.source);
+      if (s.streamId) r.streamId = String(s.streamId);
+      r.internal = s.internal === true;
     }
     for (const [id, r] of feed.runs) {
       if (live.has(id)) continue;
@@ -246,86 +237,159 @@
     };
   }
 
-  /** The HUD's crew: one row per agent, in roster order, carrying the one line a glance needs.
-      `agents` = [{ id, name, color, skin }], `onLine` = the agent COMMS is talking to.
-      lamp: 'ask' (a permission prompt is pending on one of its runs) · 'live' (a run the snapshot or a
-      watched run.start proves) · 'idle'. status/tone: what that run is doing, else its latest finish this
-      page received (within the recent window), else IDLE. unread: the tone of a finish not yet looked at.
-      A running agent missing from the roster still gets a row, under its id, never a made-up name. */
-  function crew(feed, agents, onLine, now, seen) {
-    const read = seen === undefined ? onLine : seen;   // whose finish is on screen, so not news
-    const t = isFinite(now) ? now : Date.now();
-    const runsOf = new Map();
-    for (const r of Array.from(feed.runs.values()).sort((x, y) => (x.startedAt || t) - (y.startedAt || t))) {
-      if (!runsOf.has(r.agentId)) runsOf.set(r.agentId, []);
-      runsOf.get(r.agentId).push(r);
+  /* ---------------- the ACTIVITY feed: every piece of work on the station ---------------- */
+
+  const arr = v => (Array.isArray(v) ? v : []);
+  const SOURCE_WORDS = {
+    cron: 'Scheduled routine', workshop: 'Workshop build', host: 'Work line step',
+    telegram: 'Message from Telegram', discord: 'Message from Discord', slack: 'Message from Slack',
+    matrix: 'Message from Matrix', signal: 'Message from Signal'
+  };
+  const TRIGGER_WORDS = { schedule: 'Scheduled routine', nightshift: 'Night shift', loop: 'Loop' };
+  // a finished run's reason, in the project feed's words: [state, status]
+  const FINISH = {
+    done: ['done', 'Completed'], clarifying: ['ask', 'Asked you a question'], cancelled: ['stopped', 'Stopped'],
+    error: ['fault', 'Needs attention'], budget: ['fault', 'Stopped at the spend cap'], max_iters: ['fault', 'Stopped at the turn limit'],
+    refusal: ['fault', 'Refused'], empty: ['fault', 'Ended without a reply']
+  };
+  const WORKER_END = { done: ['done', 'Completed'], interrupted: ['stopped', 'Stopped'], error: ['fault', 'Needs attention'] };
+
+  function oneLine(v, max) {
+    const t = String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+    const cap = max || 160;
+    return t.length > cap ? t.slice(0, cap - 1).replace(/\s+\S*$/, '') + '…' : t;
+  }
+  const textOf = c => (typeof c === 'string' ? c : Array.isArray(c) ? c.map(p => (p && typeof p.text === 'string' ? p.text : '')).join(' ') : '');
+  const artifactNames = list => arr(list)
+    .map(a => (typeof a === 'string' ? a : (a && (a.path || a.name || a.title)) || ''))
+    .filter(Boolean).map(p => String(p).split(/[\\/]/).pop());
+  const uniq = list => Array.from(new Set(list));
+
+  /** What a live run is about: the Commander's words in the conversation that owns it (its stream lists
+      the run), else that conversation's title. '' when no conversation on this page owns the run. */
+  function taskOfRun(runId, streams, streamId) {
+    for (const s of arr(streams)) {
+      if (!s || !(arr(s.runIds).includes(runId) || (streamId && s.id === streamId))) continue;
+      const h = arr(s.history);
+      for (let i = h.length - 1; i >= 0; i--) {
+        if (h[i] && h[i].role === 'user') { const t = oneLine(textOf(h[i].content), 200); if (t) return { task: t, streamId: s.id || '' }; }
+      }
+      return { task: oneLine(s.title || '', 200), streamId: s.id || '' };
     }
-    const list = (Array.isArray(agents) ? agents : []).filter(a => a && a.id).map(a => ({ id: String(a.id), name: String(a.name || a.id).toUpperCase(), color: a.color || '', skin: a.skin || '' }));
-    for (const id of runsOf.keys()) if (id && !list.some(a => a.id === id)) list.push({ id, name: String(id).slice(0, 10).toUpperCase(), color: '', skin: '' });
-    return list.map(a => {
-      const runs = runsOf.get(a.id) || [];
-      const asking = runs.find(r => feed.prompts.has(r.runId));
-      const unread = a.id === read ? null : (feed.unread.get(a.id) || null);
-      const row = { id: a.id, name: a.name, color: a.color, skin: a.skin, online: a.id === onLine, unread, lamp: 'idle', status: 'IDLE', tone: 'dim', time: '' };
-      if (runs.length) {
-        const r = asking || runs[0];
-        row.lamp = asking ? 'ask' : 'live';
-        row.tone = asking ? 'ask' : 'live';
-        const bits = [asking ? 'NEEDS YOUR OK' : r.tool ? toolLabel(r.tool) : r.writing ? 'WRITING REPLY' : 'WORKING'];
-        const trig = r.trigger === 'schedule' ? 'ROUTINE' : r.trigger === 'nightshift' ? 'NIGHT SHIFT' : r.trigger === 'loop' ? 'LOOP' : '';
-        if (trig) bits.push(trig);
-        if (runs.length > 1) bits.push('+' + (runs.length - 1) + ' MORE');
-        const q = feed.queues.get(a.id) || 0;
-        if (q) bits.push('+' + q + ' QUEUED');
-        row.status = bits.join(' · ');
-        row.time = r.startedAt ? fmtElapsed(t - r.startedAt) : '';
-        return row;
-      }
-      const end = feed.recent.find(x => x.agentId === a.id && t - x.at <= RECENT_TTL_MS);
-      if (end) {
-        const w = END_WORDS[end.reason] || { text: String(end.reason || '').toUpperCase(), tone: 'dim' };
-        row.status = w.text; row.tone = w.tone === 'ok' && !unread ? 'dim' : w.tone; row.time = fmtAgo(t - end.at);
-      }
-      return row;
+    return { task: '', streamId: '' };
+  }
+
+  /** What a run said: the assistant rows its own conversation tagged with that run (the transcript COMMS
+      renders), joined. '' when this page holds no such rows. */
+  function replyOfRun(runId, streamId, streams) {
+    for (const s of arr(streams)) {
+      if (!s || !(s.id === streamId || arr(s.runIds).includes(runId))) continue;
+      const said = arr(s.history).filter(h => h && h.role === 'assistant' && h.sourceRunId === runId && !h.error).map(h => textOf(h.content)).join('\n\n').trim();
+      if (said) return said.length > 2000 ? said.slice(0, 1999) + '…' : said;
+    }
+    return '';
+  }
+
+  /** The feed. input = { feed, workers (GET /api/subagents records), finished (GET /api/runs rows),
+      agents (roster), streams (Workstreams), now }. Returns cards in the order a glance needs them:
+      needs your OK, then working (oldest first), then finished (newest first). A run appears once:
+      a delegated worker's run is its worker card, a live run is never also a finished one. */
+  function workItems(input) {
+    const i = input || {};
+    const t = isFinite(i.now) ? i.now : Date.now();
+    const feed = i.feed || createFeed();
+    const agents = arr(i.agents), streams = arr(i.streams), workers = arr(i.workers), finished = arr(i.finished);
+    const who = id => {
+      const a = agents.find(x => x && x.id === id);
+      return { name: String((a && (a.name || a.id)) || (id ? String(id).slice(0, 10) : 'AGENT')).toUpperCase(), color: (a && a.color) || '' };
+    };
+    const workerRuns = new Set(workers.map(w => w && w.runId).filter(Boolean));
+    const seen = new Set();
+    const out = [];
+
+    for (const r of feed.runs.values()) {
+      // the harness's own self-talk (a post-reply pass, a reflection) is real but it is not the Commander's work
+      if (!r || r.internal || workerRuns.has(r.runId) || r.source === 'subagent') continue;
+      const asking = feed.prompts.has(r.runId);
+      const found = taskOfRun(r.runId, streams, r.streamId);
+      const w = who(r.agentId);
+      out.push({
+        key: 'run:' + r.runId, kind: 'run', runId: r.runId, agentId: r.agentId, name: w.name, color: w.color,
+        state: asking ? 'ask' : 'live',
+        status: asking ? 'Needs your OK' : r.tool ? 'Using ' + toolLabel(r.tool) : r.writing ? 'Writing reply' : 'Working',
+        time: r.startedAt ? fmtElapsed(t - r.startedAt) : '', sortAt: r.startedAt || t,
+        task: found.task || TRIGGER_WORDS[r.trigger] || SOURCE_WORDS[r.source] || 'Working on a task',
+        result: '', tools: [], outputs: [], directions: [],
+        canSteer: !asking, canStop: true, streamId: found.streamId
+      });
+      seen.add(r.runId);
+    }
+
+    for (const wk of workers) {
+      if (!wk || !wk.id) continue;
+      const running = wk.status === 'running';
+      const endAt = wk.completedAt || wk.updatedAt || 0;
+      if (!running && !(endAt && t - endAt <= FINISHED_WINDOW_MS)) continue;
+      const asking = running && !!wk.runId && feed.prompts.has(wk.runId);
+      const end = WORKER_END[wk.status] || ['done', String(wk.status || 'Finished')];
+      const w = who(wk.agentId);
+      out.push({
+        key: 'worker:' + wk.id, kind: 'worker', workerId: wk.id, generation: wk.generation, runId: wk.runId || '',
+        agentId: wk.agentId, name: w.name, color: w.color,
+        state: running ? (asking ? 'ask' : 'live') : end[0],
+        status: running ? (asking ? 'Needs your OK' : wk.working ? 'Working' : 'Starting') : end[1],
+        time: running ? (wk.startedAt ? fmtElapsed(t - wk.startedAt) : '') : (endAt ? fmtAgo(t - endAt) : ''),
+        sortAt: running ? (wk.startedAt || t) : endAt,
+        task: oneLine(wk.prompt, 200) || 'Delegated work',
+        result: String(wk.result || ''), tools: [], outputs: artifactNames(wk.artifacts),
+        directions: arr(wk.steerHistory).map(s => (s && s.status === 'applied' ? 'Direction applied: ' : 'Direction queued: ') + ((s && s.text) || '')),
+        canSteer: running && !!wk.canInterrupt, canStop: running && !!wk.canInterrupt,
+        streamId: wk.streamId || wk.parentStreamId || ''
+      });
+      if (wk.runId) seen.add(wk.runId);
+    }
+
+    let shown = 0;
+    const rows = finished.slice().sort((a, b) => ((b && (b.endedAt || b.ts)) || 0) - ((a && (a.endedAt || a.ts)) || 0));
+    for (const row of rows) {
+      if (shown >= FINISHED_MAX) break;
+      if (!row || !row.runId || row.internal || row.stepTest || seen.has(row.runId) || workerRuns.has(row.runId)) continue;
+      const endAt = row.endedAt || row.ts || 0;
+      if (!endAt || t - endAt > FINISHED_WINDOW_MS) continue;
+      const f = row.clarifying ? FINISH.clarifying : (FINISH[row.reason] || FINISH.done);
+      const w = who(row.agentId);
+      out.push({
+        key: 'done:' + row.runId, kind: 'done', runId: row.runId, agentId: row.agentId, name: w.name, color: w.color,
+        state: f[0], status: f[1], time: fmtAgo(t - endAt), sortAt: endAt,
+        task: oneLine(row.title || row.deliveryPrompt || row.sessionTitle, 200) || 'Task',
+        result: String(row.deliveryText || '') || replyOfRun(row.runId, row.streamId, streams),
+        tools: uniq(arr(row.toolTrace).map(x => x && x.name && toolLabel(x.name)).filter(Boolean)),
+        outputs: artifactNames(row.artifacts), directions: [],
+        canSteer: false, canStop: false, streamId: row.streamId || ''
+      });
+      seen.add(row.runId);
+      shown++;
+    }
+
+    const rank = s => (s === 'ask' ? 0 : s === 'live' ? 1 : 2);
+    return out.sort((a, b) => {
+      const d = rank(a.state) - rank(b.state);
+      if (d) return d;
+      return rank(a.state) < 2 ? a.sortAt - b.sortAt : b.sortAt - a.sortAt;
     });
   }
 
-  /** The compact strip's one line: the agent a glance most needs, from the crew rows.
-      Priority: needs your OK > working > an unread finish > the agent on the line > the first agent.
-      An idle pick shows what it last SAID (`replyOf(id)` = the newest reply in its own conversation,
-      '' when it has none), else its status word. `busy` counts agents with a live or asking lamp. */
-  function glance(rows, replyOf) {
-    const list = Array.isArray(rows) ? rows : [];
-    if (!list.length) return null;
-    const pick = list.find(r => r.lamp === 'ask') || list.find(r => r.lamp === 'live') ||
-      list.find(r => r.unread) || list.find(r => r.online) || list[0];
-    const out = { id: pick.id, name: pick.name, color: pick.color, lamp: pick.lamp, text: pick.status, tone: pick.tone, time: pick.time,
-      busy: list.filter(r => r.lamp !== 'idle').length };
-    if (pick.lamp === 'idle') {
-      let said = '';
-      try { said = replyOf ? String(replyOf(pick.id) || '') : ''; } catch (_) { said = ''; }
-      if (said) { out.text = said; out.tone = pick.unread === 'ok' ? 'live' : pick.tone; }
-    }
-    return out;
-  }
-
-  /** The newest reply in a COMMS history (the rows COMMS itself renders), flattened to one line for
-      the folded glance. Error / stopped rows are the transcript's markers, not what the agent said. */
-  function lastReply(history, max) {
-    const cap = max || 160;
-    const rows = Array.isArray(history) ? history : [];
-    for (let i = rows.length - 1; i >= 0; i--) {
-      const r = rows[i];
-      if (!r || r.role !== 'assistant' || r.error || r.stopped) continue;
-      const text = String(typeof r.content === 'string' ? r.content : '')
-        .replace(/```[\s\S]*?```/g, ' [code] ')
-        .replace(/[#>*_`~|]+/g, ' ')
-        .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-        .replace(/\s+/g, ' ').trim();
-      if (!text) continue;
-      return text.length > cap ? text.slice(0, cap - 1).replace(/\s+\S*$/, '') + '…' : text;
-    }
-    return '';
+  /** The header's one line over the feed. `linkOk` false = a poll is failing (said, never hidden). */
+  function feedSummary(items, feed, linkOk) {
+    if ((feed && feed.snapOk === false) || linkOk === false) return { text: 'NO LINK', tone: 'bad' };
+    if (feed && feed.snapOk == null && !arr(items).length) return { text: '…', tone: 'dim' };
+    const ask = arr(items).filter(x => x.state === 'ask').length;
+    const live = arr(items).filter(x => x.state === 'live').length;
+    const parts = [];
+    if (ask) parts.push(ask + ' NEED' + (ask === 1 ? 'S' : '') + ' YOU');
+    if (live) parts.push(live + ' WORKING');
+    if (!parts.length) return { text: 'ALL QUIET', tone: 'dim' };
+    return { text: parts.join(' · '), tone: ask ? 'ask' : 'live' };
   }
 
   /* ---------------- preferences (localStorage is a convenience; failures read as defaults) ---------------- */
@@ -356,188 +420,190 @@
 
   const doc = root && root.document;
   const S = {
-    active: false, folded: false, pinned: true, desktop: false, busy: false,
-    worldStopped: false, pollT: 0, tickT: 0, feed: createFeed(), deck: null, els: null, bound: false, fetching: false
+    active: false, view: 'activity', pinned: true, desktop: false, busy: false, worldStopped: false,
+    pollT: 0, histT: 0, tickT: 0, histSoon: 0, feed: createFeed(), workers: [], finished: [], histOk: null,
+    els: null, cards: new Map(), bound: false, fetching: false, fetchingHist: false, titleWas: null, foldedH: 0
   };
 
   const now = () => Date.now();
-  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const $ = id => (doc ? doc.getElementById(id) : null);
+  const el = (tag, cls, text) => { const n = doc.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+  const setText = (n, v) => { const t = String(v == null ? '' : v); if (n.textContent !== t) n.textContent = t; };
 
   function roster() {
     try { return (typeof App !== 'undefined' && App.agents) ? (App.agents() || []) : []; } catch (_) { return []; }
   }
-
-  function who(id) {
-    const a = roster().find(x => x && x.id === id);
-    return a ? { name: String(a.name || a.id).toUpperCase(), color: a.color || '' } : null;
+  function streams() {
+    try { return (typeof Workstreams !== 'undefined' && Workstreams.list) ? (Workstreams.list() || []) : []; } catch (_) { return []; }
   }
-
-  // The agent COMMS is talking to right now: the conversation's own binding, else the focused hero.
   function onLineId() {
     try { const ref = typeof Chat !== 'undefined' && Chat.contextRef ? Chat.contextRef() : null; if (ref && ref.agentId) return String(ref.agentId); } catch (_) {}
     try { if (typeof App !== 'undefined' && App.heroId) return String(App.heroId()); } catch (_) {}
     return '';
   }
-
-  function switchTo(id) {
-    if (!id) return;
-    clearUnread(S.feed, id);
-    if (S.folded) setFolded(false);
-    // A chip means "back to MY conversation with that agent": open the agent's own most recent stream.
-    // App.selectAgent alone would, from a blank thread (a just-summoned specialist's), rebind that thread
-    // to the picked agent instead, stranding the conversation the Commander came back for.
-    try {
-      if (id !== onLineId() && typeof App !== 'undefined') {
-        const mine = typeof Workstreams !== 'undefined' && Workstreams.list ? Workstreams.list().filter(w => (w.agentId || 'agent') === id) : [];
-        if (mine.length && App.openWorkstream) App.openWorkstream(mine[0].id);
-        else if (App.selectAgent) App.selectAgent(id);
-      }
-    } catch (_) {}
-    try { const input = doc.getElementById('chat-input'); if (input) input.focus(); } catch (_) {}
-    render();
-  }
-
-  function gameScreen() { return doc && doc.getElementById('screen-game'); }
+  function gameScreen() { return $('screen-game'); }
   function inGame() { const g = gameScreen(); return !!(g && g.classList.contains('active')); }
 
-  const ICON = {
-    grow: 'M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9',
-    shrink: 'M13.5 6.5h-4v-4M2.5 9.5h4v4M9.5 6.5l4-4M6.5 9.5l-4 4',
-    pin: 'M6 2.5h4M7 2.5v4l-2.5 2.5h7L9 6.5v-4M8 9v4.5',
-    station: 'M2 3.5h12v9H2zM2 6.5h12'
-  };
-  const icon = k => '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.4"><path d="' + ICON[k] + '"/></svg>';
-  const TILE_MAX = 5;   // more agents than this: the rest fold into a +N tile (which opens the HUD)
-
-  function buildDeck() {
-    if (S.deck) return S.deck;
-    const g = gameScreen();
-    if (!g) return null;
-    const deck = doc.createElement('section');
-    deck.id = 'hud-deck';
-    deck.setAttribute('aria-label', 'StarNet HUD');
-    // The HUD is ONE glass strip: the crew as portraits with their lamps, one line on the agent a glance most
-    // needs, and three icons. It opens SMALL (the strip alone). Clicking an agent (or grow) opens that
-    // agent's conversation under the strip; shrink puts it away again. The strip is the window's drag handle.
-    deck.innerHTML =
-      '<div class="hud-mini" data-tauri-drag-region>' +
-        '<div class="hud-tiles" id="hud-tiles" role="group" aria-label="Your crew: open a conversation"></div>' +
-        '<button type="button" class="hud-line" id="hud-line" hidden></button>' +
-        '<span class="hud-mini-ctl">' +
-          '<button type="button" class="hud-icon" id="hud-fold" aria-controls="chat-panel"></button>' +
-          '<button type="button" class="hud-icon" id="hud-pin" aria-pressed="true" hidden>' + icon('pin') + '</button>' +
-          '<button type="button" class="hud-icon" id="hud-exit" aria-label="Back to the full station" title="Back to the full station">' + icon('station') + '</button>' +
-        '</span>' +
-      '</div>';
-    g.insertBefore(deck, g.firstChild);
-    S.deck = deck;
-    S.els = {
-      tiles: deck.querySelector('#hud-tiles'), line: deck.querySelector('#hud-line'),
-      fold: deck.querySelector('#hud-fold'), pin: deck.querySelector('#hud-pin'), exit: deck.querySelector('#hud-exit')
-    };
-    S.els.exit.addEventListener('click', () => exit());
-    S.els.fold.addEventListener('click', () => setFolded(!S.folded));
-    S.els.pin.addEventListener('click', () => setPinned(!S.pinned));
-    // Any agent opens that agent's conversation; the +N tile just opens the HUD.
-    const pickAgent = e => {
-      const el = e.target && e.target.closest && e.target.closest('[data-agent],[data-more]');
-      if (!el) return;
-      if (el.hasAttribute('data-more')) { if (S.folded) setFolded(false); return; }
-      switchTo(el.getAttribute('data-agent'));
-    };
-    S.els.tiles.addEventListener('click', pickAgent);
-    S.els.line.addEventListener('click', pickAgent);
-    return deck;
-  }
-
-  const UNREAD_WORDS = { ok: 'new reply', ask: 'asked you something', bad: 'hit a fault' };
-  const tileWords = c => c.name + ' · ' + c.status.toLowerCase() + (c.time ? ' ' + c.time : '') + (c.unread ? ' · ' + UNREAD_WORDS[c.unread] : '') + (c.online ? ' · on the line' : '');
-
-  // A tile: the crew rail's portrait well + the station .dot lamp + the unread mark, nothing else.
-  function tileHTML(c) {
-    if (c.more) return '<button type="button" class="hud-tile hud-more" data-more aria-label="' + c.more + ' more agents: open the HUD" title="' + c.more + ' more agents">+' + c.more + '</button>';
-    return '<button type="button" class="hud-tile hud-lamp-' + c.lamp + (c.online ? ' on' : '') + (c.unread ? ' hud-unread hud-unread-' + c.unread : '') + '"' +
-        ' data-agent="' + esc(c.id) + '" aria-pressed="' + c.online + '" aria-label="' + esc(tileWords(c)) + '" title="' + esc(c.name + ' · ' + c.status + (c.time ? ' ' + c.time : '')) + '">' +
-      '<span class="hud-portrait" aria-hidden="true"><img alt="" draggable="false" hidden></span>' +
-      '<span class="dot' + (c.lamp === 'ask' ? ' alert' : '') + '" aria-hidden="true"></span>' +
-      (c.unread ? '<span class="hud-pip" aria-hidden="true"></span>' : '') +
-    '</button>';
-  }
-
-  // Keyed patch: a tile is rewritten only when its own content moved, so the 1s clock tick never replaces
-  // the tile under the pointer (its hover card would drop) or the one holding keyboard focus, and its
-  // portrait is painted once, not re-cropped every second.
-  function patchTiles(list, rows, agents) {
-    const key = c => c.more ? '+more' : c.id;
-    const have = new Map();
-    for (const el of Array.from(list.children)) have.set(el.__hudKey, el);
-    let prev = null;
-    for (const c of rows) {
-      const h = tileHTML(c);
-      let el = have.get(key(c));
-      if (el) have.delete(key(c));
-      if (!el || el.__hudHtml !== h) {
-        const tmp = doc.createElement('div'); tmp.innerHTML = h;
-        const fresh = tmp.firstChild;
-        const hadFocus = el && doc.activeElement === el;
-        if (el) el.replaceWith(fresh);
-        el = fresh; el.__hudHtml = h; el.__hudKey = key(c);
-        const a = !c.more && agents.find(x => x && x.id === c.id);
-        try { if (a && typeof AgentPortraits !== 'undefined') AgentPortraits.paint(el.querySelector('.hud-portrait img'), a); } catch (_) {}
-        if (hadFocus) el.focus();
-      }
-      const want = prev ? prev.nextSibling : list.firstChild;
-      if (want !== el) list.insertBefore(el, want);
-      prev = el;
-    }
-    for (const el of have.values()) el.remove();
-  }
-
-  // What an agent last said: the newest reply in its own conversation (the one on screen for the agent on
-  // the line, else its most recent stream), flattened to one line. '' when it has said nothing yet.
-  function replyOf(id) {
+  /* OPEN CONVERSATION: the conversation that owns this work when this page has it, else the agent's own
+     most recent conversation. Never App.selectAgent from a blank thread: that rebinds the thread on screen
+     to the picked agent and strands the one the Commander came back for. */
+  function openConversation(item) {
     try {
-      if (id === onLineId() && typeof Chat !== 'undefined' && Chat.getHistory) return lastReply(Chat.getHistory(), 140);
-      if (typeof Workstreams === 'undefined' || !Workstreams.list) return '';
-      for (const w of Workstreams.list()) {
-        if ((w.agentId || 'agent') !== id) continue;
-        const said = lastReply(w.history, 140);
-        if (said) return said;
+      if (typeof App === 'undefined') return;
+      const sid = item && item.streamId;
+      const has = sid && typeof Workstreams !== 'undefined' && Workstreams.get && Workstreams.get(sid);
+      if (has && App.openWorkstream) App.openWorkstream(sid);
+      else if (item && item.agentId && item.agentId !== onLineId()) {
+        const mine = streams().filter(w => (w.agentId || 'agent') === item.agentId);
+        if (mine.length && App.openWorkstream) App.openWorkstream(mine[0].id);
+        else if (App.selectAgent) App.selectAgent(item.agentId);
       }
     } catch (_) {}
-    return '';
+    setView('chat');
+  }
+
+  async function post(url, body) {
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    let j = null; try { j = await r.json(); } catch (_) {}
+    if (!r.ok || (j && j.ok === false)) throw new Error((j && (j.error || j.reason)) || ('HTTP ' + r.status));
+    return j;
+  }
+
+  // One card, built once and patched in place, so an open card keeps its place and a half-typed direction
+  // survives every poll. The markup is the project ACTIVITY card (project-home.js createCard).
+  function createCard(key) {
+    const node = el('details', 'ph-card'), summary = el('summary');
+    const agent = el('span', 'ph-agent'), status = el('span', 'ph-status'), task = el('span', 'ph-task');
+    const body = el('div', 'ph-card-body');
+    const result = el('pre', 'ph-result'), tools = el('p', 'ph-tools'), outputs = el('p', 'ph-tools'), directions = el('pre', 'ph-directions');
+    const controls = el('div', 'ph-controls');
+    const input = el('textarea'); input.rows = 2; input.placeholder = 'Give this agent a direction…'; input.setAttribute('aria-label', 'Direction for this work');
+    const send = el('button', 'btn', 'SEND DIRECTION'), stop = el('button', 'btn', 'STOP WORK');
+    const nav = el('div', 'ph-controls hud-card-nav'), open = el('button', 'btn', 'OPEN CONVERSATION');
+    const receipt = el('p', 'ph-receipt'); receipt.setAttribute('role', 'status');
+    send.type = stop.type = open.type = 'button';
+    summary.append(agent, status, task); controls.append(input, send, stop); nav.append(open);
+    body.append(result, tools, outputs, directions, controls, nav, receipt); node.append(summary, body);
+    node.dataset.key = key;
+    const card = { node, agent, status, task, result, tools, outputs, directions, controls, input, send, stop, open, receipt, item: null, pending: false };
+    node.addEventListener('toggle', () => refit());
+    open.addEventListener('click', () => openConversation(card.item));
+    async function command(kind) {
+      const it = card.item; if (!it) return;
+      const text = input.value.trim();
+      if (kind === 'steer' && !text) { input.focus(); return; }
+      card.pending = true; send.disabled = stop.disabled = true;
+      try {
+        if (it.kind === 'worker') {
+          await post(kind === 'steer' ? '/api/subagents/steer' : '/api/subagents/interrupt',
+            kind === 'steer' ? { id: it.workerId, generation: it.generation, text } : { id: it.workerId });
+        } else {
+          await post(kind === 'steer' ? '/api/run/steer' : '/api/cancel', kind === 'steer' ? { runId: it.runId, text } : { runId: it.runId });
+        }
+        receipt.textContent = kind === 'steer' ? 'Direction sent. The agent takes it before its next step.' : 'Stop requested.';
+        if (kind === 'steer') input.value = '';
+      } catch (e) {
+        receipt.textContent = (kind === 'steer' ? 'Direction not sent: ' : 'Stop not sent: ') + ((e && e.message) || 'the station did not answer') + '.';
+      } finally {
+        card.pending = false;
+        poll();
+        render();
+      }
+    }
+    send.addEventListener('click', () => command('steer'));
+    stop.addEventListener('click', () => command('stop'));
+    input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); command('steer'); } });
+    return card;
+  }
+
+  function patchCard(card, it) {
+    card.item = it;
+    card.node.dataset.state = it.state;
+    setText(card.agent, it.name);
+    if (it.color) card.agent.style.color = it.color; else card.agent.style.removeProperty('color');
+    setText(card.status, it.status + (it.time ? ' · ' + it.time : ''));
+    setText(card.task, it.task);
+    setText(card.result, it.result || (it.state === 'live' || it.state === 'ask' ? 'Waiting for the agent’s result.' : 'No result was recorded.'));
+    setText(card.tools, it.tools.length ? 'Tools used: ' + it.tools.join(', ') : '');
+    setText(card.outputs, it.outputs.map(o => 'Output: ' + o).join('\n'));
+    setText(card.directions, it.directions.join('\n'));
+    card.controls.hidden = !(it.canSteer || it.canStop);
+    card.input.hidden = card.send.hidden = !it.canSteer;
+    card.stop.hidden = !it.canStop;
+    card.send.disabled = card.stop.disabled = card.pending;
+    card.node.setAttribute('aria-label', it.name + ' · ' + it.status + (it.time ? ' ' + it.time : '') + ': ' + it.task);
+  }
+
+  function buildUi() {
+    if (S.els) return S.els;
+    const panel = $('chat-panel'), log = $('chat-log'), h3 = panel && panel.querySelector(':scope > h3');
+    if (!panel || !log || !h3) return null;
+    // ACTIVITY: the project activity view, for the whole station
+    const section = el('section', 'project-home hud-activity');
+    section.id = 'hud-activity';
+    section.setAttribute('aria-label', 'All work on the station');
+    const notice = el('p', 'ph-notice'); notice.setAttribute('role', 'status');
+    const empty = el('p', 'ph-empty', 'No work yet. Ask an agent something and it shows up here.');
+    const list = el('div', 'ph-activity');
+    section.append(notice, empty, list);
+    panel.insertBefore(section, log);
+    // the HUD's hands live in the COMMS header, where the project feed keeps its CREW / ACTIVITY switch
+    const ctl = el('span', 'ph-actions hud-ctl');
+    const view = el('button', 'btn'); view.type = 'button'; view.id = 'hud-view';
+    const pin = el('button', 'btn', 'PIN'); pin.type = 'button'; pin.id = 'hud-pin'; pin.hidden = true;
+    const exitBtn = el('button', 'btn', 'STATION'); exitBtn.type = 'button'; exitBtn.id = 'hud-exit';
+    exitBtn.title = 'Back to the full station';
+    ctl.append(view, pin, exitBtn);
+    const right = h3.querySelector('.h3-right') || h3;
+    right.appendChild(ctl);
+    view.addEventListener('click', () => setView(S.view === 'activity' ? 'chat' : 'activity'));
+    pin.addEventListener('click', () => setPinned(!S.pinned));
+    exitBtn.addEventListener('click', () => exit());
+    S.els = { panel, h3, section, notice, empty, list, ctl, view, pin, exit: exitBtn, title: $('comms-title') };
+    return S.els;
+  }
+
+  function syncButtons() {
+    if (!S.els) return;
+    const act = S.view === 'activity';
+    const items = S.lastItems || [];
+    const busy = items.filter(x => x.state === 'live' || x.state === 'ask').length;
+    setText(S.els.view, act ? 'CHAT' : ('ACTIVITY' + (busy ? ' · ' + busy : '')));
+    S.els.view.title = act ? 'Open the conversation' : 'See all the work on the station';
+    S.els.view.setAttribute('aria-pressed', 'false');
+    S.els.pin.hidden = !S.desktop;
+    setText(S.els.pin, S.pinned ? 'PINNED' : 'PIN');
+    S.els.pin.setAttribute('aria-pressed', String(S.pinned));
+    S.els.pin.title = S.pinned ? 'Pinned above other windows' : 'Keep the HUD above other windows';
   }
 
   function render() {
-    if (!S.els) return;
-    const v = view(S.feed, who, now());
-    // Anything waiting on the Commander turns the strip's edge gold: the one state a glance from across
-    // the room must catch. An edge change, never a glow (matte glass).
-    S.deck.classList.toggle('hud-asking', v.summary.tone === 'ask');
-    S.deck.classList.toggle('hud-nolink', v.summary.tone === 'bad' && v.summary.text === 'NO LINK');
-    const line = onLineId();
-    // The conversation on the line is being read only while it IS on screen (the HUD is open).
-    if (!S.folded) clearUnread(S.feed, line);
-    const agents = roster();
-    const rows = crew(S.feed, agents, line, now(), S.folded ? null : line);
-    const shown = rows.length > TILE_MAX ? rows.slice(0, TILE_MAX - 1).concat([{ more: rows.length - (TILE_MAX - 1) }]) : rows;
-    patchTiles(S.els.tiles, shown, agents);
-    const g = glance(rows, replyOf);
-    const el = S.els.line;
-    if (!g) { el.hidden = true; el.removeAttribute('data-agent'); }
-    else {
-      const top = v.summary.text === 'NO LINK' ? '<i class="hud-tone-bad">NO LINK</i>' : g.busy > 1 ? '<i>' + g.busy + ' WORKING</i>' : '';
-      const html =
-        '<span class="hud-line-top"><b' + (g.color ? ' style="color:' + esc(g.color) + '"' : '') + '>' + esc(g.name) + '</b>' + top +
-          '<span class="hud-time">' + esc(g.time) + '</span></span>' +
-        '<span class="hud-line-text hud-tone-' + g.tone + '">' + esc(g.text) + '</span>';
-      if (el.__hudHtml !== html) { el.innerHTML = html; el.__hudHtml = html; }
-      el.hidden = false;
-      el.setAttribute('data-agent', g.id);
-      el.setAttribute('aria-label', 'Open ' + g.name + ': ' + g.text);
+    if (!S.els || !S.active) return;
+    const t = now();
+    const items = workItems({ feed: S.feed, workers: S.workers, finished: S.finished, agents: roster(), streams: streams(), now: t });
+    S.lastItems = items;
+    const sum = feedSummary(items, S.feed, S.histOk);
+    doc.body.classList.toggle('hud-asking', sum.tone === 'ask');
+    if (S.view === 'activity' && S.els.title) setText(S.els.title, '▮ ACTIVITY · ' + sum.text);
+    setText(S.els.notice, sum.text === 'NO LINK' ? 'The station is not answering. What is shown may be out of date.' : '');
+    S.els.empty.hidden = items.length > 0 || S.feed.snapOk == null;
+    const have = new Map(S.cards);
+    let prev = null;
+    for (const it of items) {
+      let card = S.cards.get(it.key);
+      if (!card) { card = createCard(it.key); S.cards.set(it.key, card); }
+      have.delete(it.key);
+      patchCard(card, it);
+      const want = prev ? prev.nextSibling : S.els.list.firstChild;
+      if (want !== card.node) S.els.list.insertBefore(card.node, want);
+      prev = card.node;
     }
-    refitFolded();
+    for (const [key, card] of have) { card.node.remove(); S.cards.delete(key); }
+    syncButtons();
+    refit();
   }
+
+  /* ---------------- polling ---------------- */
 
   function poll() {
     if (!S.active || S.fetching || typeof fetch !== 'function') return;
@@ -549,17 +615,36 @@
       .then(() => { S.fetching = false; render(); });
   }
 
+  function pollHistory() {
+    if (!S.active || S.fetchingHist || typeof fetch !== 'function') return;
+    S.fetchingHist = true;
+    const get = url => fetch(url, { cache: 'no-store' }).then(r => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))));
+    Promise.all([get('/api/subagents'), get('/api/runs?agent=*&limit=40')])
+      .then(([w, h]) => { S.workers = arr(w && w.records); S.finished = arr(h && h.runs); S.histOk = true; })
+      .catch(() => { S.histOk = false; })
+      .then(() => { S.fetchingHist = false; render(); });
+  }
+
+  // a run just ended: its history row lands a moment later, so look again soon rather than in 12s
+  function historySoon() {
+    if (!S.active) return;
+    root.clearTimeout(S.histSoon);
+    S.histSoon = root.setTimeout(pollHistory, 900);
+  }
+
   function bindBus() {
     if (S.bound || typeof U === 'undefined' || !U.bus) return;
     S.bound = true;
-    // Always listening (cheap), so the recent rows are real even when the HUD opens mid-run.
+    // Always listening (cheap), so a run already under way when the HUD opens still shows its step.
     U.bus.on('agent.run.start', p => { onRunStart(S.feed, p, now()); if (S.active) render(); });
     U.bus.on('agent.tool_call', p => { onToolCall(S.feed, p, now()); if (S.active) render(); });
     U.bus.on('agent.tool_result', p => { if (onToolResult(S.feed, p, now()) && S.active) render(); });
     U.bus.on('agent.token', p => { if (onToken(S.feed, p, now()) && S.active) render(); });
-    U.bus.on('agent.run.end', p => { onRunEnd(S.feed, p, now()); if (S.active) render(); });
-    U.bus.on('agent.run.error', p => { onRunError(S.feed, p, now()); if (S.active) render(); });
+    U.bus.on('agent.run.end', p => { onRunEnd(S.feed, p, now()); if (S.active) { render(); historySoon(); } });
+    U.bus.on('agent.run.error', p => { onRunError(S.feed, p, now()); if (S.active) { render(); historySoon(); } });
   }
+
+  /* ---------------- desktop window ---------------- */
 
   function invoke(cmd, args) {
     const core = tauriCore(root);
@@ -570,65 +655,82 @@
     });
   }
 
-  function syncButtons() {
-    if (!S.els) return;
-    const f = S.els.fold, grow = S.folded;
-    f.innerHTML = icon(grow ? 'grow' : 'shrink');
-    f.setAttribute('aria-label', grow ? 'Open the conversation' : 'Shrink the HUD to the strip');
-    f.setAttribute('title', grow ? 'Open the conversation' : 'Shrink the HUD to the strip');
-    f.setAttribute('aria-expanded', String(!grow));
-    S.els.pin.hidden = !S.desktop;
-    S.els.pin.setAttribute('aria-pressed', String(S.pinned));
-    S.els.pin.setAttribute('aria-label', S.pinned ? 'Pinned above other windows: unpin' : 'Keep the HUD above other windows');
-    S.els.pin.setAttribute('title', S.pinned ? 'Pinned above other windows' : 'Keep the HUD above other windows');
-    S.els.pin.classList.toggle('on', S.pinned);
-  }
-
   function announceLayout() { try { root.dispatchEvent(new root.Event('resize')); } catch (_) {} }
 
-  // The window height a folded HUD needs: the deck's bottom edge plus the frame's bottom padding,
-  // in viewport px (= the window's logical px).
-  function deckHeight() {
-    try { return Math.ceil(S.deck.getBoundingClientRect().bottom + 6); } catch (_) { return 0; }
+  // ACTIVITY hugs its cards: the window height the feed needs, in viewport px (= the window's logical px).
+  function activityHeight() {
+    try {
+      const s = S.els.section, list = S.els.list;
+      const lastBottom = Math.max(list.getBoundingClientRect().bottom, S.els.empty.hidden ? 0 : S.els.empty.getBoundingClientRect().bottom);
+      return Math.ceil(lastBottom + s.scrollTop + 18);
+    } catch (_) { return 0; }
   }
 
-  // Folded, the window hugs the deck, so a new row (another agent starts) must grow it, and a row
-  // leaving must shrink it back. Only asks the shell when the needed height actually moved.
-  function refitFolded() {
-    if (!S.active || !S.folded || !S.desktop) return;
-    const h = deckHeight();
+  // The window follows the feed while it is on screen: a card arriving or opening grows it, one leaving
+  // shrinks it back. Only asks the shell when the needed height actually moved.
+  function refit() {
+    if (!S.active || S.view !== 'activity' || !S.desktop) return;
+    const h = activityHeight();
     if (!h || Math.abs(h - (S.foldedH || 0)) < 3) return;
     S.foldedH = h;
     invoke('starnet_hud_fold', { folded: true, height: h });
   }
 
+  function applyView() {
+    const act = S.view === 'activity';
+    doc.body.classList.toggle('hud-view-activity', act);
+    doc.body.classList.toggle('hud-folded', act);
+    if (S.els && S.els.title) {
+      if (act) { if (S.titleWas == null) S.titleWas = S.els.title.textContent; }
+      else if (S.titleWas != null) { S.els.title.textContent = S.titleWas; S.titleWas = null; }
+    }
+  }
+
+  function setView(next) {
+    if (!S.active) return Promise.resolve(false);
+    S.view = next === 'chat' ? 'chat' : 'activity';
+    applyView();
+    render();
+    announceLayout();
+    if (S.view === 'chat') {
+      try { const input = $('chat-input'); if (input) input.focus(); } catch (_) {}
+      S.foldedH = 0;
+      return invoke('starnet_hud_fold', { folded: false, height: null }).then(() => true);
+    }
+    S.foldedH = activityHeight();
+    return invoke('starnet_hud_fold', { folded: true, height: S.foldedH }).then(() => true);
+  }
+
   function enter() {
     if (S.active || S.busy || !doc || !inGame()) return Promise.resolve(false);
-    if (!buildDeck()) return Promise.resolve(false);
+    if (!buildUi()) return Promise.resolve(false);
     S.busy = true;
     const prefs = readPrefs(root.localStorage);
     S.pinned = prefs.pinned;
-    // The HUD opens SMALL: the crew strip only. Clicking an agent (or the grow icon) opens the conversation.
-    S.folded = true;
+    S.view = 'activity';                     // the HUD opens on the work, not on a conversation
     S.desktop = !!tauriCore(root);
     S.active = true;
     bindBus();
-    doc.body.classList.add('hud-mode', 'hud-folded');
+    doc.body.classList.add('hud-mode');
+    applyView();
+    // the COMMS header is the HUD's drag handle
+    S.els.h3.setAttribute('data-tauri-drag-region', '');
+    if (S.els.title) S.els.title.setAttribute('data-tauri-drag-region', '');
     // The station is not on screen: stop the world renderer so a game in the foreground gets the GPU.
     // (World.start() on exit resumes the same floor; nothing about the station's state lives in frames.)
     try { if (typeof World !== 'undefined' && World.stop) { World.stop(); S.worldStopped = true; } } catch (_) {}
-    syncButtons();
     render();
-    poll();
+    poll(); pollHistory();
     S.pollT = root.setInterval(poll, POLL_MS);
-    S.tickT = root.setInterval(render, 1000);   // elapsed clocks + "ago" words only; no data invented between polls
+    S.histT = root.setInterval(pollHistory, HISTORY_MS);
+    S.tickT = root.setInterval(render, 1000);   // clocks + "ago" words only; no data invented between polls
     announceLayout();
     return invoke('starnet_hud_set', { active: true, pinned: S.pinned, rect: prefs.rect })
       // a remembered rect the shell cannot take must never strand the HUD layout in a full-size window
       .then(v => v || (prefs.rect && S.desktop ? invoke('starnet_hud_set', { active: true, pinned: S.pinned }) : v))
       .then(v => { if (v) { S.pinned = !!v.pinned; syncButtons(); } return true; })
-      // the shell opened the HUD at its full rect: now hug the strip
-      .then(ok => { S.foldedH = deckHeight(); return invoke('starnet_hud_fold', { folded: true, height: S.foldedH }).then(() => ok); })
+      // the shell opened the HUD at its full rect: now hug the feed
+      .then(ok => { S.foldedH = activityHeight(); return invoke('starnet_hud_fold', { folded: true, height: S.foldedH }).then(() => ok); })
       .finally(() => { S.busy = false; });
   }
 
@@ -641,9 +743,14 @@
       })
       .finally(() => {
         S.active = false;
-        S.folded = false;
-        root.clearInterval(S.pollT); root.clearInterval(S.tickT); S.pollT = S.tickT = 0;
-        doc.body.classList.remove('hud-mode', 'hud-folded');
+        root.clearInterval(S.pollT); root.clearInterval(S.histT); root.clearInterval(S.tickT); root.clearTimeout(S.histSoon);
+        S.pollT = S.histT = S.tickT = S.histSoon = 0;
+        S.view = 'chat'; applyView();
+        doc.body.classList.remove('hud-mode', 'hud-folded', 'hud-view-activity', 'hud-asking');
+        if (S.els) {
+          S.els.h3.removeAttribute('data-tauri-drag-region');
+          if (S.els.title) S.els.title.removeAttribute('data-tauri-drag-region');
+        }
         if (S.worldStopped) {
           S.worldStopped = false;
           try { if (inGame() && typeof World !== 'undefined' && World.start) World.start(); } catch (_) {}
@@ -651,19 +758,6 @@
         announceLayout();
         S.busy = false;
       });
-  }
-
-  function setFolded(folded) {
-    if (!S.active) return Promise.resolve(false);
-    S.folded = !!folded;
-    doc.body.classList.toggle('hud-folded', S.folded);
-    syncButtons();
-    render();   // lay the strip (or the open deck) out before the window hugs it
-    announceLayout();
-    // Small, the window hugs the strip; open, it returns to the height it had.
-    S.foldedH = S.folded ? deckHeight() : 0;
-    if (!S.folded) { try { const input = doc.getElementById('chat-input'); if (input) input.focus(); } catch (_) {} }
-    return invoke('starnet_hud_fold', { folded: S.folded, height: S.folded ? S.foldedH : null }).then(() => true);
   }
 
   function setPinned(pinned) {
@@ -681,7 +775,7 @@
   function wire() {
     if (!doc) return;
     bindBus();
-    const btn = doc.getElementById('comms-hud');
+    const btn = $('comms-hud');
     if (btn) {
       // The HUD's point is a panel that stays above a game: only the desktop shell can do that, so a
       // browser tab gets no header button (Ctrl+Shift+H still folds the page for anyone who wants it).
@@ -717,10 +811,11 @@
   }
 
   return {
-    enter, exit, toggle, setFolded, setPinned,
-    active: () => S.active, folded: () => S.folded, pinned: () => S.pinned,
+    enter, exit, toggle, setView, setPinned,
+    active: () => S.active, currentView: () => S.view, pinned: () => S.pinned,
     // pure model — exported for tests
-    createFeed, markUnread, clearUnread, crew, glance, lastReply, onRunStart, onToolCall, onToolResult, onToken, onRunEnd, onRunError, applySnapshot, snapshotFailed, view, toolLabel, fmtElapsed, fmtAgo, readPrefs, writePrefs,
-    _feed: () => S.feed, _render: render, _poll: poll
+    createFeed, onRunStart, onToolCall, onToolResult, onToken, onRunEnd, onRunError, applySnapshot, snapshotFailed,
+    view: view, workItems, feedSummary, taskOfRun, replyOfRun, oneLine, toolLabel, fmtElapsed, fmtAgo, readPrefs, writePrefs,
+    _feed: () => S.feed, _render: render, _poll: poll, _pollHistory: pollHistory
   };
 });
