@@ -10033,6 +10033,7 @@ const ROUTES = [
   { m: 'GET', prefix: '/api/memory/pending', h: servePending },   // un-answered high-stakes decks (durable, cross-run)
   { m: 'POST', exact: '/api/memory/turnin', h: handleMemoryTurnin },
   { m: 'GET', prefix: '/api/study/proposals', h: serveStudyProposals },   // GROWTH Tier 1: dossier belief-update proposals for a run
+  { m: 'GET', exact: '/api/study/pending', h: serveStudyPending },   // USER-STUDY LOOP: every undecided study batch (incl. runs that finished while the window was closed)
   { m: 'POST', exact: '/api/study/resolve', h: handleStudyResolve },   // GROWTH Tier 1: consume one decided study proposal + mirror the denylist
   { m: 'GET', prefix: '/api/threads/proposals', h: serveThreadProposals },   // NS-6: pending mined thread candidates for a run (turn-in)
   { m: 'POST', exact: '/api/threads/turnin', h: handleThreadTurnin },   // NS-6: keep/edit → commit an open thread; discard → permanently deny the fingerprint
@@ -22266,6 +22267,24 @@ function serveStudyProposals(req, res) {
     if (!batch || batch.agentId !== agent) return json(200, { runId: runId || null, agentId: agent, proposals: [] });
     json(200, { runId: batch.runId, agentId: agent, proposals: batch.proposals });
   } catch (e) { json(200, { proposals: [] }); }
+}
+
+// GET /api/study/pending — USER-STUDY LOOP: the index of EVERY undecided study batch, oldest first. Study runs
+// after cron, channel, and night-shift runs too, but the browser only ever asked about the run it had just
+// watched end — so what the station learned about the Commander while the window was closed sat unasked and
+// was eventually evicted. The browser reads this on open/return and queues those batches through the SAME
+// consent card (nothing is written to the dossier without a Keep). Index only — the proposals themselves are
+// still fetched per run through /api/study/proposals. Read-only; empty (never a 500) on any failure.
+function serveStudyPending(req, res) {
+  try {
+    const batches = [];
+    for (const b of studyByRun.values()) {
+      if (!b || !isAgentId(b.agentId) || !Array.isArray(b.proposals) || !b.proposals.length) continue;
+      batches.push({ agentId: b.agentId, runId: b.runId, createdAt: Number(b.createdAt) || 0, count: b.proposals.length });
+    }
+    batches.sort((a, b) => a.createdAt - b.createdAt);
+    respondJson(res, 200, { batches: batches.slice(-STUDY_CAP) });
+  } catch (e) { respondJson(res, 200, { batches: [] }); }
 }
 
 // POST /api/study/resolve { agentId, runId, id, declined:[] } — GROWTH Tier 1: CONSUME one decided study proposal

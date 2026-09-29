@@ -55,10 +55,27 @@ const plan = status => ({
     const stale = await host.json('POST', '/api/goals', { goal: plan('open') });
     assert.equal(stale.body.goal.milestoneId, 'g_news:m2', 'a stale webview push can never walk the plan backwards');
 
-    await host.restart();
+    // What the station learned while the window was closed: study batches from runs the browser never watched
+    // (a cron run on a crew agent, a channel run on the hero) are listed for the consent card, oldest first.
+    await host.stop();
+    const studyFile = require('node:path').join(host.workspace, 'study.state.json');
+    const prop = (id, text) => ({ id, dim: 'goals', kind: 'add', text, evidence: 'said it in the run', source: 'study' });
+    require('node:fs').writeFileSync(studyFile, JSON.stringify({ v: 1, byRun: {
+      run_cron_7: { agentId: 'scout', runId: 'run_cron_7', createdAt: 2000, proposals: [prop('s1', 'Publishes every Friday')] },
+      run_tg_3: { agentId: 'agent', runId: 'run_tg_3', createdAt: 1000, proposals: [prop('s2', 'Wants readers in indie games'), prop('s3', 'Writes in the mornings')] },
+      run_empty: { agentId: 'agent', runId: 'run_empty', createdAt: 3000, proposals: [] }
+    }, latest: {}, lastAt: {}, declined: {} }));
+    await host.start();
+    const pending = (await host.json('GET', '/api/study/pending')).body.batches;
+    assert.deepEqual(pending.map(b => [b.runId, b.agentId, b.count]), [['run_tg_3', 'agent', 2], ['run_cron_7', 'scout', 1]], 'every undecided away batch is listed, oldest first; empty batches are not');
+    const perRun = (await host.json('GET', '/api/study/proposals?agent=scout&run=run_cron_7')).body.proposals;
+    assert.equal(perRun[0].text, 'Publishes every Friday', 'each listed batch is fetchable for the consent card');
+    await host.json('POST', '/api/study/resolve', { agentId: 'scout', runId: 'run_cron_7', id: 's1', declined: [] });
+    assert.deepEqual((await host.json('GET', '/api/study/pending')).body.batches.map(b => b.runId), ['run_tg_3'], 'a decided batch leaves the list');
+
     const after = await active();
     assert.equal(after.next, 'Write issue one', 'the advanced plan survives a restart');
     assert.equal(after.done, 1);
-    console.log('goal-advance.http: PASS (slate settles step, harness authority, stale push held, restart)');
+    console.log('user-study-loop.http: PASS (slate settles step, harness authority, stale push held, restart, away study listed)');
   } finally { await host.dispose(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });
