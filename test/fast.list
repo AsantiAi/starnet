@@ -649,6 +649,7 @@ test/conveyor-results.test.js
 test/conveyor-retest.test.js
 test/conveyor-choices.test.js
 test/conveyor-links.test.js
+test/conveyor-link-tools.test.js
 test/refit-flow-polish.test.js
 test/refit-junction-cards.test.js
 test/refit-footprint.test.js

@@ -216,6 +216,11 @@ const Build = (() => {
      cannot change without an onChange, and every consumer (conveyor.tick, conveyor.drawBelts, the
      ghost engine) treats it strictly read-only, so hand them all the SAME array for the edit. */
   const beltsMemoed = () => (beltsVer === geoVer && beltsMemo) ? beltsMemo : (beltsVer = geoVer, beltsMemo = station.belts());
+  /* does this floor build by LINKS (conveyor-links phase B — every floor this build adopted)? Once per edit. On a linked
+     floor a belt joins exactly the two machines it runs between, so the ring-rule advice (the spacing tip, "its belts
+     stay behind") has nothing to say; it still speaks on a floor whose links were never adopted. */
+  let linkedVer = 0, linkedMemo = false;
+  const linkedFloor = () => (linkedVer === geoVer) ? linkedMemo : (linkedVer = geoVer, linkedMemo = !!(station && typeof station.isLinked === 'function' && station.isLinked()));
   /* bayObjects, per (agentId, geometry). Also DEFENSIVE: world.js has always wrapped this call in a
      try/catch and REFIT called it bare, so one throw took out the whole validation layer (and with
      it every routing callout on the floor) instead of one bay's NO-COMPUTE check. */
@@ -2772,7 +2777,19 @@ const Build = (() => {
       ? Pipeline.routeFrom(valPlan, tx - o.tx, ty - o.ty) : null;
     const DIRWORD = { E: 'EAST ▸', W: '◂ WEST', N: '▴ NORTH', S: '▾ SOUTH' };
     const li = [];
-    if (r) {
+    // A LINKED FLOOR says which connection this belt is — or that it is LOOSE: it joins no two machines, so it is in
+    // no plan and nothing rides it (conveyor-links phase B; the plan's belts are its links' paths)
+    const loose = linkedFloor() && !!valPlan && !!valPlan.belts && !valPlan.belts[(tx - o.tx) + ',' + (ty - o.ty)];
+    if (linkedFloor() && !loose) {
+      const seen = new Set();
+      for (const l of (station.links() || [])) {
+        if (l.from.prop == null || l.to.prop == null || !l.path.some(q => q.x === tx && q.y === ty)) continue;
+        const k = l.from.prop + '>' + l.to.prop; if (seen.has(k)) continue; seen.add(k);
+        li.push('This belt runs from <b>' + esc(machineName(l.from.prop)) + '</b> to <b>' + esc(machineName(l.to.prop)) + '</b>.');
+      }
+    }
+    if (loose) li.push('This belt is <b>loose</b> — it joins no two machines, so nothing rides it. Run it from one machine into another, or use BELT: click a machine, then the next.');
+    else if (r) {
       if (r.agents.length) li.push('Work riding this lane reaches <b>' + r.agents.map(a => esc(agentLabelFor(a))).join(' + ') + '</b>.');
       if (r.unbound) li.push('It passes <b>' + r.unbound + ' uncrewed dock' + (r.unbound === 1 ? '' : 's') + '</b> — crew them or crates ride past.');
       if (r.outbox) li.push('It <b>ships out at the OUTBOX</b>.');
@@ -2792,6 +2809,16 @@ const Build = (() => {
     g.querySelector('[data-workflow-close]').onclick = closeP;
     g.querySelector('#belt-ok').onclick = () => { sfx('click'); closeP(); };
     g.addEventListener('click', e => { if (e.target === g) closeP(); });
+  }
+
+  // a machine as the floor names it: the agent crewing a BAY, a named line's INBOX, else the machine
+  function machineName(id) {
+    const p = station.propById(id);
+    if (!p) return 'a removed machine';
+    if (p.t === 'bay') return p.agentId ? String(agentLabelFor(p.agentId)).toUpperCase() : 'AN EMPTY BAY';
+    if (p.t === 'intake') return p.label ? 'LINE ' + String(p.label).toUpperCase() : 'THE INBOX';
+    if (p.t === 'outbox') return 'THE OUTBOX';
+    return 'THE ' + String(propLabel(p.t)).toUpperCase();
   }
 
   function openJunctionEditor(propId, ev) {
@@ -3872,7 +3899,7 @@ const Build = (() => {
         if(!p){movingPropId=null;return;}
         const left=beltsLeftBehind(p,w.tx,w.ty);
         const res=station.moveProp(p.id,w.tx-p.x,w.ty-p.y);
-        feedback(res,ev,left?'moved — its belts stayed behind · reconnect with BELT (Undo puts it back)':'moved · Undo restores the previous position');
+        feedback(res,ev,moveMsg(res,left,'moved · Undo restores the previous position'));
         if(res&&res.ok){const id=p.id;selectTool('select');selectedPropId=id;renderSelection();}
         return;
       }
@@ -4086,14 +4113,14 @@ const Build = (() => {
     if(canFlip(p.t))add('FLIP',()=>{feedback(station.mirrorProp(p.id),orientEv(),'flipped');renderSelection();});
     add('COPY',()=>{selectTool('dupe');pickupDupe({tx:p.x,ty:p.y},orientEv(),p.id);});
     if(isEditableProp(p.t))add('CONFIGURE',()=>configureProp(p,orientEv()));
-    add('DELETE',()=>{feedback(station.removeProp(p.id),orientEv(),'removed · Undo restores it');selectedPropId=null;movingPropId=null;renderSelection();setHint();});
+    add('DELETE',()=>{const had=linkedFloor()&&isWorkflowType(p.t)&&(station.links()||[]).some(l=>l.from.prop===p.id||l.to.prop===p.id);feedback(station.removeProp(p.id),orientEv(),had?'removed · its belts stay, loose — nothing rides them until a machine stands where they end · Undo restores it':'removed · Undo restores it');selectedPropId=null;movingPropId=null;renderSelection();setHint();});
     add('DESELECT',()=>{selectedPropId=null;renderSelection();setHint();});
     const position=document.createElement('details');position.className='refit-position';
     position.innerHTML='<summary>Position on grid</summary><label>X <input aria-label="Object grid X" type="number" step="1" value="'+p.x+'"></label><label>Y <input aria-label="Object grid Y" type="number" step="1" value="'+p.y+'"></label><button class="bb sm" type="button">APPLY POSITION</button>';
     position.querySelector('button').onclick=()=>{
       const inputs=position.querySelectorAll('input'),x=Number(inputs[0].value),y=Number(inputs[1].value);
       if(!Number.isInteger(x)||!Number.isInteger(y)){feedback({ok:false,msg:'Use whole tile coordinates'},orientEv());return;}
-      feedback(station.moveProp(p.id,x-p.x,y-p.y),orientEv(),'position updated');renderSelection();
+      const res=station.moveProp(p.id,x-p.x,y-p.y);feedback(res,orientEv(),moveMsg(res,0,'position updated'));renderSelection();
     };host.append(position);
   }
   function configureProp(p, ev) {
@@ -4200,9 +4227,8 @@ const Build = (() => {
     }
     // belts never ride along with a machine: say so at the drop (the ghost already warned amber)
     const left = mp ? beltsLeftBehind(mp, mp.x + dx, mp.y + dy) : 0;
-    if (left) okMsg = 'moved — its belts stayed behind · reconnect with BELT (Undo puts it back)';
     const moved = station.moveProp(d.propId, dx, dy);
-    feedback(moved, ev, okMsg);
+    feedback(moved, ev, moveMsg(moved, left, okMsg));
     if(moved && moved.ok){selectedPropId=d.propId;renderSelection();}
   }
   function commitPaint(d, ev) {
@@ -4637,11 +4663,20 @@ const Build = (() => {
     }
     return names.length > 3 ? names.slice(0, 3).join(' + ') + ' +' + (names.length - 3) : names.join(' + ');
   }
-  // a MOVE of a workflow machine: which of its belt hookups would it leave behind at the new spot?
+  // a MOVE of a workflow machine: which of its belt hookups would it leave behind at the new spot? (a ring-rule floor
+  // only — on a linked floor its belts come with it)
   function beltsLeftBehind(p, nx, ny) {
-    if (!p || !isWorkflowType(p.t) || typeof station.hookedBelts !== 'function') return 0;
+    if (!p || !isWorkflowType(p.t) || typeof station.hookedBelts !== 'function' || linkedFloor()) return 0;
     const w = p.w || 1, h = p.h || 1;
     return station.hookedBelts(p.id).filter(b => !(b.x >= nx - 1 && b.x <= nx + w && b.y >= ny - 1 && b.y <= ny + h)).length;
+  }
+  // what a MOVE did, said as it happened: on a linked floor its belts came with it — or one found no route and stayed off
+  function moveMsg(res, left, okMsg) {
+    if (!res || !res.ok) return okMsg;
+    const lost = Array.isArray(res.lost) ? res.lost.length : 0, relaid = Array.isArray(res.relaid) ? res.relaid.length : 0;
+    if (lost) return 'moved — ' + lost + ' of its belts found no clear route and ' + (lost === 1 ? 'was' : 'were') + ' taken up · reconnect with BELT (Undo puts it back)';
+    if (relaid) return okMsg.replace(/ · Undo restores the previous position$/, '') + ' · its belt' + (relaid === 1 ? '' : 's') + ' came with it';
+    return left ? 'moved — its belts stayed behind · reconnect with BELT (Undo puts it back)' : okMsg;
   }
   function ghostInfo() {
     if (!drag) {
@@ -5600,8 +5635,43 @@ const Build = (() => {
      INTAKE pulses green "FROM", bound BAYs and OUTBOX pulse cyan "TO" — so "what do I connect to what"
      is answered by the floor itself before the first tile is laid. Desks never glow: belts don't run to
      workstations (the agent carries work the last leg). */
+  /* THE LANE BEFORE THE CLICK (conveyor-links phase B — the plan's "port marks"): mid-connect, the hovered destination
+     shows the very belt the click would lay (station.previewBelt runs the connect planner without laying), tile by tile
+     with its flow — or, when it cannot, why. Once per (edit, pair). */
+  let beltPvKey = '', beltPvMemo = null;
+  function beltPreview(from, to) {
+    if (!station || typeof station.previewBelt !== 'function') return null;
+    const k = geoVer + '|' + from + '|' + to;
+    if (k === beltPvKey) return beltPvMemo;
+    let r = null;
+    try { r = station.previewBelt(from, to); } catch (_) { r = null; }
+    beltPvKey = k; beltPvMemo = r;
+    return r;
+  }
+  const NO_ROUTE = { FROM_BLOCKED: 'NO FREE SIDE TO LEAVE FROM', TO_BLOCKED: 'NO FREE SIDE TO RUN INTO', TOO_CLOSE: 'TOO CLOSE — MOVE IT A TILE AWAY', JUNCTION_NO_IN: 'THE BELT CANNOT RUN INTO IT', JUNCTION_NO_OUT: 'THE BELT CANNOT RUN OUT OF IT' };
+  function drawBeltPreview(t, pv, col) {
+    const V = { E: [1, 0], W: [-1, 0], S: [0, 1], N: [0, -1] };
+    ctx.save();
+    ctx.globalAlpha = 0.85; ctx.strokeStyle = col; ctx.lineWidth = 1.5 / zoom;
+    ctx.setLineDash([3 / zoom, 2 / zoom]);
+    for (const q of pv.path) ctx.strokeRect(q.x * t + 2 / zoom, q.y * t + 2 / zoom, t - 4 / zoom, t - 4 / zoom);
+    ctx.setLineDash([]);
+    for (const q of pv.path) {   // a chevron the way the belt will flow
+      const v = V[q.d] || V.E, cx = q.x * t + t / 2, cy = q.y * t + t / 2, r = t * 0.22;
+      ctx.beginPath();
+      ctx.moveTo(cx - v[0] * r - v[1] * r, cy - v[1] * r + v[0] * r);
+      ctx.lineTo(cx + v[0] * r, cy + v[1] * r);
+      ctx.lineTo(cx - v[0] * r + v[1] * r, cy - v[1] * r - v[0] * r);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
   function drawBeltEndpointGlow(t, now) {
     if (tool !== 'belt' || !station) return;
+    if (connectFrom && hoverPropId && hoverPropId !== connectFrom) {
+      const hp = station.propById(hoverPropId), pv = hp && CONNECT_TYPES[hp.t] ? beltPreview(connectFrom, hoverPropId) : null;
+      if (pv && pv.ok) drawBeltPreview(t, pv, '#7ee2a8');
+    }
     const pulse = 0.45 + 0.3 * Math.sin(now / 260);
     const placed = [];
     ctx.save();
@@ -5624,7 +5694,8 @@ const Build = (() => {
          every target at once, a wall of the same words). The other targets keep their pulsing glow — that
          alone says "these are the endpoints"; the caption answers "this one?" where the pointer is. */
       if (!isFrom && hoverPropId !== p.id) continue;
-      const role = isFrom ? 'FROM ▸ NOW CLICK A DESTINATION' : 'CLICK TO CONNECT';
+      const pv = isFrom ? null : beltPreview(connectFrom, p.id);
+      const role = isFrom ? 'FROM ▸ NOW CLICK A DESTINATION' : (pv && !pv.ok) ? 'NO ROUTE — ' + (NO_ROUTE[pv.error] || 'NO CLEAR PATH') : 'CLICK TO CONNECT';
       const tw = ctx.measureText(role).width;
       // baseline-top label below the prop: colliders step DOWN (dir +1), away from the machinery
       const lh = Math.max(9, 11 / zoom) + 2 / zoom;
@@ -6064,7 +6135,7 @@ const Build = (() => {
     /* SPACING (2026-09-27 audit B4): a dock hooks every belt in the 1-tile ring around it, so two docks with one empty tile
        between them share that tile — a belt there hooks BOTH, and the job goes nowhere. Said while the ghost is in hand,
        never refused (sandbox law): the Commander may still want them tight. */
-    if (ok && g.kind === 'prop' && tool === 'prop' && RING_DOCK_T[propType]) {
+    if (ok && g.kind === 'prop' && tool === 'prop' && RING_DOCK_T[propType] && !linkedFloor()) {
       const near = station.props().find(p => RING_DOCK_T[p.t] && p.x - 1 <= r0.x2 + 1 && r0.x1 - 1 <= p.x + (p.w || 1) && p.y - 1 <= r0.y2 + 1 && r0.y1 - 1 <= p.y + (p.h || 1));
       if (near) lines.push('CLOSE TO THE ' + String(propLabel(near.t)).toUpperCase() + ' — LEAVE 2 TILES OR THEIR BELTS TOUCH');
     }

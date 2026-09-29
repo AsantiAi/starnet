@@ -6,9 +6,10 @@
      PARITY    — every floor the routing tests compile (test/fixtures/multibay-parity.json) and every blueprint, crewed and
                  uncrewed, compiles through its DERIVED links to the very same plan, hash and executor answers as through
                  the ring rule; a seeded fuzz of messy floors (shared rings, loops, stubs, junction clusters) holds it too.
-     THE MODEL — a v1 save loads, routes identically and saves as v2 with its links; links are re-derived from the belts
-                 (never trusted from a save), follow every belt edit until the link tools land, and are adopted only
-                 when they compile to the identical plan. The sidecar's station store reads a v1 save the same way.
+     THE MODEL — a v1 save loads, routes identically and saves as v2 with its links, adopted only when they compile to
+                 the identical plan. From then on the floor KEEPS its links (phase B): a save's garbage links drop and
+                 the belts are linked by what they join; a cut belt drops its link and its stubs route nothing.
+                 The sidecar's station store reads a v1 save the same way.
      SEMANTICS — what a linked floor MEANS, locked now for the link tools (phase B): a belt that passes a machine's ring
                  hooks nothing; FILTER routes and LOOP exits follow their links' ports, not compass points; a belt beside
                  a junction that is not one of its links is JUNCTION_TOUCH; a passing belt is not a line. */
@@ -104,7 +105,7 @@ for (const bp of WM.BLUEPRINTS) for (const crewed of [false, true]) {
   A.ok(back && back.path.length > 10, 'the back belt is the gate\'s own link; an unconfigured exit is left for the compiler to infer (port \'out\'), never guessed into a port');
 }
 
-/* ---------- THE MODEL: v1 -> v2, re-derived, following the belts ---------- */
+/* ---------- THE MODEL: v1 -> v2, then the floor keeps its links ---------- */
 {
   const v1 = stamp(['revision_loop', 'second_opinion'], true).serialize();
   v1.version = 1; delete v1.links;
@@ -117,15 +118,16 @@ for (const bp of WM.BLUEPRINTS) for (const crewed of [false, true]) {
   A.eq(P.compileRoutingPlan(g), tilePlan, '…same plan, field for field');
   A.eq(WM.defaultDoc().version, 2, 'a new station starts at v2');
 
-  // a save's links are never trusted: stale or garbage links re-derive from the belts
+  // a save's links are KEPT — only those the floor no longer stands behind drop, and every loose belt that joins two
+  // machines is linked afresh, so a save an older build edited still routes by what is drawn
   const tampered = JSON.parse(JSON.stringify(out));
   tampered.links = [{ id: 'l1', from: { prop: null, port: 'out' }, to: { prop: null, port: 'in' }, path: [] }];
   const st2 = WM.deserialize(tampered);
-  A.eq(st2.links(), st.links(), 'stale links in a save (an older build edited the belts) are re-derived on load');
-  A.eq(P.compileRoutingPlan(st2.projectGeometry()), tilePlan, '…so the floor still routes by what is drawn');
-  A.eq(WM.deserialize(Object.assign({}, out, { links: 'garbage' })).links(), st.links(), 'a malformed links field loads too');
+  A.ok(st2.links().length >= 10 && st2.links().every(l => l.from.prop != null && l.to.prop != null), 'garbage links in a save are dropped; its belts are linked by the machines they join');
+  A.eq(P.compileRoutingPlan(st2.projectGeometry()), tilePlan, '…so the floor still routes exactly by what is drawn');
+  A.eq(WM.deserialize(Object.assign({}, out, { links: 'garbage' })).links(), st.links(), 'a malformed links field loads as a floor that never had links (derived exactly)');
 
-  // the links follow every belt edit until the link tools land
+  // the floor keeps its links: a cut belt drops its link, and the stubs it leaves route nothing
   const before = st.links();
   const w = st.props().find(p => p.role === 'WRITER'), rv = st.props().find(p => p.role === 'REVIEWER');
   const hand = before.find(l => l.from.prop === w.id && l.to.prop === rv.id);
@@ -133,21 +135,21 @@ for (const bp of WM.BLUEPRINTS) for (const crewed of [false, true]) {
   const mid = hand.path[1];
   st.removeBelt(mid.x, mid.y);
   A.ok(!st.links().some(l => l.from.prop === w.id && l.to.prop === rv.id), 'cut the belt: the WRITER -> REVIEWER link is gone');
-  const gCut = st.projectGeometry();
-  A.eq(P.compileRoutingPlan(gCut), P.compileRoutingPlan(plain(gCut)), '…and the cut floor still compiles exactly as the ring rule reads it');
+  const cutPlan = P.compileRoutingPlan(st.projectGeometry()), wc = cutPlan.chains[w.agentId];
+  A.ok(!(wc && wc.next.indexOf(rv.agentId) >= 0), '…the WRITER no longer hands to the REVIEWER');
+  A.ok(!cutPlan.belts[hand.path[0].x + ',' + hand.path[0].y] && !cutPlan.belts[hand.path[2].x + ',' + hand.path[2].y], '…and the two stubs it leaves are in no plan (loose belts route nothing)');
   st.undo();
   A.eq(st.links(), before, 'UNDO: the link is back, the same');
 
-  // adopted only when exact: a derivation that would move a line is refused and the ring rule stands
+  // a floor that never had links adopts them only when exact: a derivation that would move a line is refused
   const real = P.deriveLinks;
   P.deriveLinks = () => [];
   try {
-    st.setBelt(mid.x, mid.y, st.serialize().belts[mid.x + ',' + mid.y] === 'E' ? 'S' : 'E');
-    A.eq(st.links(), null, 'links that would not reproduce the floor are not adopted');
-    A.ok(!('links' in st.projectGeometry()), '…the geometry carries none, so the compiler keeps the ring rule');
+    const legacy = WM.deserialize(v1);
+    A.eq(legacy.links(), null, 'a v1 floor whose derived links would not reproduce it adopts none');
+    A.ok(!('links' in legacy.projectGeometry()), '…the geometry carries none, so the compiler keeps the ring rule');
   } finally { P.deriveLinks = real; }
-  st.undo();
-  A.eq(st.links(), before, '…and a floor they do reproduce adopts them again');
+  A.eq(WM.deserialize(v1).links(), st.links(), '…and one they do reproduce adopts them');
 
   // the sidecar reads a v1 save the same way (station-store loads the same model and compiler)
   const store = makeStationStore(), r = store.setStation(v1);
@@ -215,8 +217,12 @@ const beltsOf = pts => pts.map(p => ({ x: p[0], y: p[1], dir: p[2] }));
   const links = [{ id: 'l1', from: { prop: 'i', port: 'out' }, to: { prop: 's', port: 'in' }, path: path([[1, 0, 'E']]) },
     { id: 'l2', from: { prop: 's', port: 'out' }, to: { prop: null, port: 'in' }, path: path([[3, 0, 'E']]) },
     { id: 'l3', from: { prop: 's', port: 'out' }, to: { prop: null, port: 'in' }, path: path([[2, 1, 'S']]) }];
-  const touch = P.compileRoutingPlan({ props, belts: beltsOf(bl), links }).errors.filter(e => e.code === 'JUNCTION_TOUCH');
-  A.eq(touch, [{ code: 'JUNCTION_TOUCH', propId: 's', tile: { x: 2, y: -1 }, warn: true }], 'linked: a stray belt against the SPLITTER is named where it touches (it would still be read as a lane)');
+  const loosePlan = P.compileRoutingPlan({ props, belts: beltsOf(bl), links });
+  A.ok(!loosePlan.belts['2,-1'] && !loosePlan.errors.some(e => e.code === 'JUNCTION_TOUCH'), 'linked: a LOOSE stray belt against the SPLITTER is in no plan — no lane, nothing to warn about (loose belts route nothing)');
+  A.ok(!loosePlan.errors.some(e => e.code === 'SPLIT_ONE_LANE') && Object.keys(loosePlan.belts).length === 4, '…the splitter keeps exactly its two linked lanes');
+  const passing = links.concat([{ id: 'l4', from: { prop: null, port: 'out' }, to: { prop: null, port: 'in' }, path: path([[2, -1, 'E']]) }]);
+  const touch = P.compileRoutingPlan({ props, belts: beltsOf(bl), links: passing }).errors.filter(e => e.code === 'JUNCTION_TOUCH');
+  A.eq(touch, [{ code: 'JUNCTION_TOUCH', propId: 's', tile: { x: 2, y: -1 }, warn: true }], 'a LINKED belt that brushes the SPLITTER is named where it touches (the junction would still read it as a lane)');
   A.ok(!P.compileRoutingPlan({ props, belts: beltsOf(bl) }).errors.some(e => e.code === 'JUNCTION_TOUCH'), 'the ring rule never says it (it cannot tell)');
   const d = P.deriveLinks({ props, belts: beltsOf(bl) });
   A.ok(!P.compileRoutingPlan({ props, belts: beltsOf(bl), links: d }).errors.some(e => e.code === 'JUNCTION_TOUCH'), '…and a derived floor never has one: every belt round a junction is one of its links');
