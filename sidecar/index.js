@@ -2305,6 +2305,11 @@ function anyExtraAccountLive(id) {
    an OAuth access token may need a refresh round-trip first. */
 async function resolveProviderCredential(provider) {
   const id = normalizeProvider(provider);
+  // subscription stacking: when the chain does not open on the primary, the bearer is the first live extra account's
+  if (registryProviderUsesCodex(id) || registryProviderUsesDeviceOAuth(id)) {
+    const first = orderedAccountChain(id)[0];
+    if (first && first.id) return await ensureAccountAccessToken(oauthAccountEntry(id, first.id));
+  }
   if (registryProviderUsesCodex(id)) return await ensureCodexAccessToken();
   if (registryProviderUsesDeviceOAuth(id)) {
     const entry = oauthProviders[id];
@@ -2408,8 +2413,9 @@ async function probeChannelRunConfig(config, timeoutMs) {
   const timer = setTimeout(() => ctrl.abort(), Number.isFinite(timeoutMs) ? Math.max(1000, timeoutMs) : 30000);
   if (timer && timer.unref) timer.unref();
   try {
-    let provider;
-    if (providerUsesCodex(providerId)) {
+    let provider = extraAccountProviderFor(providerId, c.baseUrl, reasoningEffort);   // subscription stacking
+    if (provider) { /* an extra sign-in carries the probe */ }
+    else if (providerUsesCodex(providerId)) {
       provider = selectProvider({ provider: providerId, fetch: globalThis.fetch, token: await ensureCodexAccessToken(), renewToken: forceRefreshCodexAccessToken, baseUrl: c.baseUrl, reasoningEffort });
     } else if (providerUsesDeviceOAuth(providerId)) {
       provider = selectProvider({ provider: providerId, fetch: globalThis.fetch, token: await ensureOAuthAccessToken(providerId), headers: oauthInferenceHeaders(providerId), baseUrl: c.baseUrl, reasoningEffort });
@@ -8473,8 +8479,9 @@ async function runQuestRefreshCycle(why) {
       return;
     }
     // evidence exists → NOW pay for the provider (codex token fetch is a network hop; never spend it on a cold save).
-    let provider;
-    if (usingCodex) { const token = await ensureCodexAccessToken(); provider = selectProvider({ provider: providerId, fetch: globalThis.fetch, token, renewToken: forceRefreshCodexAccessToken, baseUrl }); }
+    let provider = extraAccountProviderFor(providerId, baseUrl);   // subscription stacking: first live sign-in
+    if (provider) { /* an extra sign-in carries the refresh */ }
+    else if (usingCodex) { const token = await ensureCodexAccessToken(); provider = selectProvider({ provider: providerId, fetch: globalThis.fetch, token, renewToken: forceRefreshCodexAccessToken, baseUrl }); }
     else if (usingDeviceOAuth) { const token = await ensureOAuthAccessToken(providerId); provider = selectProvider({ provider: providerId, fetch: globalThis.fetch, token, headers: oauthInferenceHeaders(providerId), baseUrl }); }
     else provider = selectProvider({ provider: providerId, fetch: globalThis.fetch, key, baseUrl });
     const cost = makeCostEngine({ priceOf: provider.priceOf });
@@ -20388,8 +20395,9 @@ async function handleLiveDoctor(req, res) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 30000); if (timer && timer.unref) timer.unref();
     try {
-      let provider;
-      if (providerUsesCodex(providerId)) {
+      let provider = extraAccountProviderFor(providerId, baseUrl, reasoningEffort);   // subscription stacking
+      if (provider) { /* an extra sign-in carries the check */ }
+      else if (providerUsesCodex(providerId)) {
         provider = selectProvider({ provider: providerId, fetch: globalThis.fetch, token: await ensureCodexAccessToken(), renewToken: forceRefreshCodexAccessToken, baseUrl, reasoningEffort });
       } else if (providerUsesDeviceOAuth(providerId)) {
         provider = selectProvider({ provider: providerId, fetch: globalThis.fetch, token: await ensureOAuthAccessToken(providerId), headers: oauthInferenceHeaders(providerId), baseUrl, reasoningEffort });
@@ -21357,8 +21365,9 @@ async function listModelsForProvider(providerId, opts) {
     err.code = 'provider_not_configured';
     throw err;
   }
-  let provider;
-  if (providerUsesCodex(id)) {
+  let provider = extraAccountProviderFor(id, baseUrl);   // subscription stacking: list through the first live sign-in
+  if (provider) { /* an extra sign-in lists the catalog */ }
+  else if (providerUsesCodex(id)) {
     const token = await ensureCodexAccessToken();
     provider = selectProvider({ provider: id, fetch: globalThis.fetch, token, renewToken: forceRefreshCodexAccessToken, baseUrl });
   } else if (providerUsesDeviceOAuth(id)) {
@@ -21394,8 +21403,8 @@ async function handleProviderModels(req, res) {
 async function handleCodexModels(req, res) {
   const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
   try {
-    const token = await ensureCodexAccessToken();
-    const provider = selectProvider({ provider: 'codex', fetch: globalThis.fetch, token, renewToken: forceRefreshCodexAccessToken });
+    const provider = extraAccountProviderFor('codex', '') ||   // subscription stacking: the first live sign-in
+      selectProvider({ provider: 'codex', fetch: globalThis.fetch, token: await ensureCodexAccessToken(), renewToken: forceRefreshCodexAccessToken });
     const models = await provider.listModels();
     // Rich objects now (id + display/reasoning metadata) so the model dock can render per-model chips.
     // The bare `id` is still present on every entry, so older consumers that read m.id keep working.
@@ -21591,6 +21600,7 @@ async function handleOAuthAccounts(req, res, pid, verb) {
       // only NOW does a new account get its folder: a sign-in that never finished leaves nothing behind
       const acctId = p.account || providerAccounts.add(pid).id;
       const entry = oauthAccountEntry(pid, acctId);
+      if (!entry) return json(404, { status: 'error', error: 'that ' + label + ' account was removed while it was signing in', code: 'account_not_found' });
       if (p.deviceId && pid !== 'codex') { entry.deviceId = p.deviceId; entry.auth = p.auth; }
       entry.tokens = tokens; entry.authDead = null;
       saveAccountTokens(entry, entry.tokens);
@@ -21675,6 +21685,13 @@ function accountLive(providerId, id) {
   const s = accountAuthSeen.get(providerId + ':' + (id || 'primary'));
   return !(s && s.loggedIn === false);
 }
+// Outside a run (model lists, probes, the live doctor, aux passes): an adapter on an EXTRA sign-in when the chain
+// does not open on the primary (it is signed out, dead or cooling). null = keep the primary's own path.
+function extraAccountProviderFor(providerId, baseUrl, reasoningEffort) {
+  if (!providerUsesCodex(providerId) && !providerUsesDeviceOAuth(providerId)) return null;
+  const first = orderedAccountChain(providerId)[0];
+  return (first && first.id) ? oauthAccountProvider(providerId, first, baseUrl, reasoningEffort) : null;
+}
 // accountChain in credPool order: available accounts first, a cooling (spent) one sinks to the back.
 function orderedAccountChain(providerId) {
   const chain = accountChain(providerId);
@@ -21723,6 +21740,11 @@ async function handleClaudeCliAuth(req, res, verb) {
       let acct;
       try { acct = providerAccounts.add('claude-cli'); } catch (e) { return json(200, { status: 'error', error: (e && e.message) || 'could not add an account', code: 'account_add_failed' }); }
       const r = await claudeCliLogin(acct.id).start();
+      if (r && r.status === 'error' && r.code === 'not_installed') {   // nothing could ever sign it in: leave nothing behind
+        _claudeCliAccountLogins.delete(acct.id);
+        providerAccounts.remove('claude-cli', acct.id);
+        return json(200, r);
+      }
       if (r && r.status === 'connected') noteAccountAuth('claude-cli', acct.id, Object.assign({ installed: true }, r));
       return json(200, Object.assign({ account: acct.id }, r));
     }
