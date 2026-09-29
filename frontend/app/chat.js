@@ -2242,10 +2242,9 @@ const Chat = (() => {
     // first good answer). A trophy that joins a block whose last line is already a trophy line folds into it —
     // "◆ 3 trophies — FIRST LIGHT · PACK RAT · NIGHT SHIFT (see GROWTH)". Every name still shows; one row, not three.
     const TROPHY = 'TROPHY EARNED · ';
-    // the moment's trophy line: the block's last line, or the one rendered in the last 10s even if a card (a
-    // REMEMBERED fact landed between them in the walk) started a new block since
-    const recentTrophy = (lastTrophyLine && lastTrophyLine.isConnected && Date.now() - lastTrophyAt < 10000) ? lastTrophyLine : null;
-    const prevLine = (stack.lastElementChild && stack.lastElementChild.dataset && stack.lastElementChild.dataset.trophies) ? stack.lastElementChild : recentTrophy;
+    // the moment's trophy line: the last trophy line, if it landed in the last 10s — even when a card (a REMEMBERED
+    // fact landed between them in the walk) started a new block since. An older trophy line is a different moment.
+    const prevLine = (lastTrophyLine && lastTrophyLine.isConnected && Date.now() - lastTrophyAt < 10000) ? lastTrophyLine : null;
     if (raw.indexOf(TROPHY) === 0 && prevLine && prevLine.dataset && prevLine.dataset.trophies) {
       let names = [];
       try { names = JSON.parse(prevLine.dataset.trophies) || []; } catch (_) { names = []; }
@@ -2848,7 +2847,7 @@ const Chat = (() => {
       const label = String(sum.textContent || '').split(' · ')[0];
       const bits = [];
       if (Number(entry.durationMs) > 0) bits.push(fmtMs(Number(entry.durationMs)));
-      bits.push(leadCalls + ' model ' + (leadCalls === 1 ? 'call' : 'calls'));
+      bits.push(leadCalls + ' tool ' + (leadCalls === 1 ? 'call' : 'calls'));   // the LEAD's tool calls (runCallCount = toolTrace) — not model calls
       if (children.length) bits.push(workerCalls + ' worker ' + (workerCalls === 1 ? 'call' : 'calls'));
       const identity = [entry.model && entry.model !== '(unknown)' ? entry.model : '', (entry.reasoningEffort && entry.reasoningEffort !== 'none') ? entry.reasoningEffort : ''].filter(Boolean).join(' ');
       if (identity) bits.push(identity);
