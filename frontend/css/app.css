@@ -4229,6 +4229,8 @@ body.crew-rail-off #screen-game.active {
    (never gate the sandbox) — it just stops pretending. Dimmed schematic + the reason in the
    warn amber the rest of REFIT uses for "this won't work yet", matte: no glow, no fill. */
 .refit-linetile.nofit { border-style: dashed; opacity: .82; }
+/* LAID OUT TO FIT (conveyor-links phase E): the drawn shape fits nowhere but the line does — the note reads as an offer, not a refusal */
+.refit-linetile.laidfit .refit-linetile-nofit { color: var(--ph); border-color: rgba(var(--ph-rgb),.35); }
 .refit-linetile.nofit .refit-linetile-view { opacity: .5; }
 .refit-linetile-nofit {
   width: 100%; margin-top: 1px; font-family: 'VT323', monospace;

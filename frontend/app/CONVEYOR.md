@@ -114,6 +114,23 @@ the whole line re-laid from its INBOX) · `newLine` (BUILD YOUR OWN LINE: INBOX 
   LINE in the footer. The Conveyors tab has BUILD YOUR OWN LINE. Locked by test/line-edit.test.js (every op on a real
   station, the audit's newsletter line built from edits alone, one undo each) and test/line-edit-panel.test.js.
 
+### Ready-made lines, laid out to fit (conveyor-links phase E)
+
+A shelf line is also a GRAPH: `station.blueprintGraph(id, { limits, maxIter })` — its machines with everything a stamp gives
+them (roles, an INBOX's name and budget, junction routes / passes / verdict, the card's SET UP BEFORE YOU PLACE cap and tries)
+and the links its drawn belts make. Where the DRAWN tile map fits at the click, Build mode stamps it as drawn
+(`stampBlueprint` — presets keep using this, at their fixed spots). Where it does not, `LineEdit.placeBlueprint(station, id,
+near, { stamp })` lays the same line out near the click: its tidy engine shape where a clear rectangle holds it, else anchored
+on its INBOX (aimed half the line's length west of the click, so it lands centred) with every other machine stepping round
+what stands there — one undo, routing exactly as the drawn line.
+
+- A card whose drawn shape fits nowhere asks `LineEdit.canPlaceBlueprint` in the background (one line at a time, forgotten on
+  every floor change) and says CHECKING WHERE IT FITS… then FITS LAID OUT — CLICK THE FLOOR WHERE YOU WANT IT, or NO ROOM with
+  the size the engine needs; MAKE ROOM FOR IT builds the smaller of the drawn and the laid-out size. The red ghost of a line
+  that fits laid out invites CLICK TO LAY IT OUT HERE.
+- Every one of the 20 ready-made lines lands in a fresh starter room this way (the drawn tile maps: 12). Locked by
+  test/line-place.test.js (each one routes exactly as the stamped original with the card's settings, one undo).
+
 ## Runtime (conveyor.js) — `Conveyor.create()`
 
 A self-contained transport sim + renderer. Frame-agnostic: it's handed a belt map in whatever

@@ -276,6 +276,59 @@
     if (!r || !r.ok) return r || fail('NOT_APPLIED', 'the edit could not be laid');
     return { ok: true, focus: (r.ids && r.ids[e.focus]) || e.focus, ids: r.ids, removed: r.removed || [] };
   }
+  /* ---------- A READY-MADE LINE, LAID OUT TO FIT (conveyor-links phase E) ----------
+     A shelf line is a graph (worldmodel blueprintGraph). Where its drawn tile map will not go, the engine lays the same
+     line out on the floor near the spot: its own tidy shape first (nearest the spot), then — when no clear rectangle
+     holds that shape — anchored on its INBOX at the clear spots nearest the spot, every other machine stepping round
+     what stands there. Every line so laid routes exactly as the drawn one (the engine keeps each junction's lane order). */
+  function layoutNear(LL, graph, floor, near, maxTries) {
+    const U = LL.layout(graph, floor, { near });
+    if (U.ok) return Object.assign(U, { via: 'shape' });
+    const A = graph.nodes.find(n => n.t === 'intake') || graph.nodes[0];
+    if (!A) return U;
+    const fl = LL._internals.floorOf(floor), spots = [];
+    // the INBOX opens a line that runs east: aim it half the line's length WEST of the spot, so the line lands centred on it
+    const half = U.needs && U.needs.w ? U.needs.w >> 1 : 0;
+    const cx = near && isFinite(near.x) ? near.x - half : null, cy = near && isFinite(near.y) ? near.y : null;
+    for (const r of fl.rects) for (let y = r.y1; y <= r.y2; y++) for (let x = r.x1; x <= r.x2; x++) {
+      let clear = true;
+      for (let yy = y; yy < y + (A.h || 2) && clear; yy++) for (let xx = x; xx < x + (A.w || 2) && clear; xx++) if (!fl.free(xx, yy) || fl.inflow(xx, yy)) clear = false;
+      if (clear) spots.push({ x, y, d: cx == null ? 0 : Math.abs(x - cx) + Math.abs(y - cy) });
+    }
+    spots.sort((p, q) => p.d - q.d || p.y - q.y || p.x - q.x);
+    let last = U;
+    for (let i = 0; i < spots.length && i < (maxTries || 12); i++) {
+      const s = spots[i];
+      const r = LL.layout({ nodes: graph.nodes.map(n => n === A ? Object.assign({}, n, { pin: { x: s.x, y: s.y } }) : n), links: graph.links }, floor);
+      if (r.ok) return Object.assign(r, { via: 'anchored' });
+      last = r;
+    }
+    return U.error === 'NO_ROOM' ? U : last;   // (NO_ROOM carries the room the line needs — MAKE ROOM's size)
+  }
+  function placeBlueprint(station, bpId, near, opts) {
+    const LL = layoutModule();
+    if (!LL) return fail('NO_ENGINE', 'the layout engine is not loaded');
+    if (!station || typeof station.blueprintGraph !== 'function') return fail('NO_STATION', 'this station cannot lay out lines');
+    const b = station.blueprintGraph(bpId, opts && opts.stamp);
+    if (!b || !b.ok) return b || fail('NOT_FOUND', 'no such line');
+    const g = station.lineGraph(null);
+    if (!g || !g.ok) return g || fail('NOT_LINKED', 'this floor does not build by links');
+    const L = layoutNear(LL, b.graph, g.floor, near, 12);
+    if (!L.ok) return Object.assign(fail(L.error === 'NO_ROOM' ? 'NO_ROOM' : 'NO_FIT', 'there is no clear floor here this line can be laid out on — MAKE ROOM FOR IT, or clear some space'), L.needs ? { needs: L.needs } : {});
+    const r = station.applyLineLayout(b.graph, L);
+    if (!r || !r.ok) return r || fail('NOT_APPLIED', 'the line could not be laid');
+    return { ok: true, ids: b.graph.nodes.map(n => r.ids[n.id]).filter(Boolean), via: L.via };
+  }
+  // does it fit ANYWHERE, laid out? (the shelf card's answer when the drawn shape fits nowhere) — { ok, via, needs }
+  function canPlaceBlueprint(station, bpId, near) {
+    const LL = layoutModule();
+    if (!LL || !station || typeof station.blueprintGraph !== 'function') return fail('NO_ENGINE', 'the layout engine is not loaded');
+    const b = station.blueprintGraph(bpId), g = station.lineGraph(null);
+    if (!b || !b.ok || !g || !g.ok) return fail('NOT_LINKED', 'this floor does not build by links');
+    const L = layoutNear(LL, b.graph, g.floor, near, 6);
+    return L.ok ? { ok: true, via: L.via } : Object.assign(fail(L.error, 'no clear floor for it'), L.needs ? { needs: L.needs } : {});
+  }
+
   // the same edit, answered without laying anything (the panel greys out what would only fail)
   function check(station, propId, op, args, opts) {
     const g = station && typeof station.lineGraph === 'function' ? station.lineGraph(op === 'newLine' ? null : propId) : null;
@@ -283,5 +336,5 @@
     return OPS[op] ? OPS[op](clone(g.graph), args || {}, opts || {}) : fail('BAD_OP', 'no such edit');
   }
 
-  return { run, check, OPS, _internals: { why, isBack, outsOf, insOf } };
+  return { run, check, placeBlueprint, canPlaceBlueprint, OPS, _internals: { why, isBack, outsOf, insOf, layoutNear } };
 });

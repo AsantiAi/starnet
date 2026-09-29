@@ -1892,6 +1892,44 @@ const WorldModel = (() => {
       for (const k in doc.belts) if (!ownTiles.has(k)) belts[k] = doc.belts[k];
       return { ok: true, graph: { nodes, links }, floor: { rects, blocked, belts, junctions } };
     }
+    /* A READY-MADE LINE AS A GRAPH (conveyor-links phase E): its machines — each with everything a stamp gives it (a BAY's
+       role, an INBOX's name and budget, a junction's routes / passes / verdict, the card's SET UP BEFORE YOU PLACE cap and
+       tries) — and the links its drawn belts make (the same derivation a stamped floor adopts). The layout engine lays it
+       out wherever the drawn tile map will not go (LineEdit.placeBlueprint); applyLineLayout writes it, one undo. */
+    function blueprintGraph(id, opts) {
+      const bp = blueprintById(id);
+      if (!bp) return fail('NOT_FOUND', 'no such blueprint');
+      const P = pipelineModule();
+      if (!P || typeof P.deriveLinks !== 'function') return fail('NO_COMPILER', 'the line compiler is not loaded');
+      const ov = (opts && typeof opts === 'object') ? opts : {};
+      const CFG = ['routes', 'def', 'bufferSize', 'timeoutMin', 'maxIter', 'done', 'esc', 'when'];
+      const nodes = bp.props.map((sp, i) => {
+        const n = { id: 'b' + i, t: sp.t, w: sp.w || 1, h: sp.h || 1 };
+        if (sp.block === false) n.block = false;
+        if (sp.role && BAY_ROLES[sp.role]) n.role = sp.role;
+        if (sp.t === 'intake' && typeof sp.label === 'string' && sp.label.trim()) n.label = sp.label.trim().slice(0, 48);
+        if (sp.t === 'intake' && (sp.limits || (ov.limits && typeof ov.limits === 'object'))) n.limits = Object.assign({}, sp.limits || {}, ov.limits || {});
+        const cfg = {};
+        for (const k of CFG) if (sp[k] != null) cfg[k] = sp[k];
+        if (sp.t === 'loop' && ov.maxIter != null) cfg.maxIter = ov.maxIter;
+        if (Object.keys(cfg).length) n.cfg = cfg;
+        return n;
+      });
+      const drawn = bp.props.map((sp, i) => {
+        const o = { id: 'b' + i, t: sp.t, x: sp.x, y: sp.y, w: sp.w || 1, h: sp.h || 1 };
+        if (sp.routes) o.routes = sp.routes; if (sp.def) o.def = sp.def; if (sp.done) o.done = sp.done;
+        return o;
+      });
+      const links = P.deriveLinks({ props: drawn, belts: bp.belts.map(b => ({ x: b.x, y: b.y, dir: b.d })) })
+        .filter(l => l && !l.ring && l.from && l.to && l.from.prop != null && l.to.prop != null)
+        .map(l => {
+          const from = { node: l.from.prop, port: l.from.port || 'out' };
+          if (Array.isArray(l.from.tags) && l.from.tags.length) from.tags = l.from.tags.slice();
+          if (l.from.else) from.else = true;
+          return { id: l.id, from, to: { node: l.to.prop } };
+        });
+      return { ok: true, graph: { nodes, links }, label: bp.label };
+    }
     function applyLineLayout(graph, L) {
       if (!graph || !Array.isArray(graph.nodes) || !L || !L.ok) return fail('NO_LAYOUT', 'there is no layout to lay');
       const first = graph.nodes.find(n => propById(n.id));
@@ -1930,6 +1968,10 @@ const WorldModel = (() => {
             if (n.role && BAY_ROLES[n.role]) p.role = n.role;
             if (typeof n.agentId === 'string' && n.agentId) p.agentId = n.agentId;
             if (n.t === 'intake' && typeof n.label === 'string' && n.label.trim()) p.label = n.label.trim().slice(0, 48);
+            if (n.t === 'intake' && n.limits && typeof n.limits === 'object') {   // through the one normalizer, as a stamp does
+              const nl = normalizeLimits(n.limits);
+              if (nl) p.limits = { maxHops: nl.maxHops, maxUsdPerMessage: nl.maxUsdPerMessage, maxUsdPerDay: nl.maxUsdPerDay };
+            }
             applyJunctionCfg(p, n.cfg || {});
             doc.props.push(p);
           } else if (p.x !== at.x || p.y !== at.y) {
@@ -3202,7 +3244,7 @@ const WorldModel = (() => {
       // mutations
       addRoom, placeHallway, removeRoom, moveRoom, setFloor, setMaterial, setDeck, setWalls, setHull, paintTiles, renameRoom,
       addProp, removeProp, moveProp, rotateProp, faceProp, mirrorProp, assignPropAgent, ensureWorkstation, configureJunction, swapJoinerMerger, bindConnector, setDoorState, setPropProject, setPropBrief, setPropRole, setPropHands, setPropLabel, setPropLimits,
-      setBelt, removeBelt, removeBelts, placeBeltRun, connectBelt, connectionPreview, hookedBelts, stampBlueprint, insertBayBetween, canInsertBayBetween, transact, lineGraph, applyLineLayout,
+      setBelt, removeBelt, removeBelts, placeBeltRun, connectBelt, connectionPreview, hookedBelts, stampBlueprint, insertBayBetween, canInsertBayBetween, transact, lineGraph, applyLineLayout, blueprintGraph,
       // agent-bay binding queries
       propsByType, propsByAgent, pipelineEdges, setPipelineEdges, addPipelineEdge, removePipelineEdge, agentRoomId, bayObjects,
       capForProp: t => CAP_PROP_MAP[t] || null,   // a prop type's capability objectType (single source for the UI)
