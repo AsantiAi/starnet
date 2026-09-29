@@ -449,6 +449,18 @@ for (const c of T.catalog) {
   A.ok(!SB.apply(st, r.plan, gone).ok, 'a plan with recruits refuses on a page that cannot recruit');
 }
 
+/* a link-only edit is a floor change: the Commander re-linking a line after the plan makes the plan stale */
+{
+  const st = busy(), r = SB.plan(st.serialize(), { line: 'build_test' }, env);
+  A.ok(r.ok, 'fixture: a plan on a station with linked lines');
+  const d = st.serialize();
+  A.ok(Array.isArray(d.links) && d.links.length > 1, 'fixture: the station has authored links');
+  const edited = JSON.parse(JSON.stringify(d)); edited.links = edited.links.slice(1);
+  A.ok(SB.sigOf(edited) !== SB.sigOf(d), 'the floor fingerprint covers the authored links');
+  const moved = M.create(edited), late = SB.apply(moved, r.plan, env);
+  A.ok(!late.ok && /changed since this plan/.test(late.error), 'a plan made before a link was removed is refused');
+}
+
 /* ---- 9. the sidecar tools: the memo the approval card reads, the lock, honest refusals ---- */
 (async () => {
   const calls = [], used = new Set();   // the page uses a plan once (builderPlans.delete)
