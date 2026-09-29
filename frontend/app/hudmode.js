@@ -210,7 +210,7 @@
           kind: 'live', runId: r.runId, agentId: r.agentId, name: name(r.agentId), color: color(r.agentId),
           waiting,
           step: waiting ? 'NEEDS YOUR OK' : r.tool ? toolLabel(r.tool) : r.writing ? 'WRITING REPLY' : 'RUNNING',
-          trigger: r.trigger === 'schedule' ? 'ROUTINE' : r.trigger === 'nightshift' ? 'NIGHT SHIFT' : r.trigger === 'loop' ? 'LOOP' : '',
+          trigger: r.trigger === 'schedule' ? 'ROUTINE' : r.trigger === 'nightshift' ? 'AUTONOMY' : r.trigger === 'loop' ? 'LOOP' : '',
           elapsed: r.startedAt ? fmtElapsed(now - r.startedAt) : '',
           queued: feed.queues.get(r.agentId) || 0
         };
@@ -241,11 +241,11 @@
 
   const arr = v => (Array.isArray(v) ? v : []);
   const SOURCE_WORDS = {
-    cron: 'Scheduled routine', workshop: 'Workshop build', host: 'Work line step',
+    cron: 'Scheduled routine', nightshift: 'Autonomy', workshop: 'Workshop build', host: 'Work line step',
     telegram: 'Message from Telegram', discord: 'Message from Discord', slack: 'Message from Slack',
     matrix: 'Message from Matrix', signal: 'Message from Signal'
   };
-  const TRIGGER_WORDS = { schedule: 'Scheduled routine', nightshift: 'Night shift', loop: 'Loop' };
+  const TRIGGER_WORDS = { schedule: 'Scheduled routine', nightshift: 'Autonomy', loop: 'Loop' };
   // a finished run's reason, in the project feed's words: [state, status]
   const FINISH = {
     done: ['done', 'Completed'], clarifying: ['ask', 'Asked you a question'], cancelled: ['stopped', 'Stopped'],
