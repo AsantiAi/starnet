@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "b1a0af345ada062962d412c2399f9a6cdb99ccc6",
+    "sourceCommit": "0c69ac4d16f360432646376642832eefae2f86ea",
     "pathSetSha256": "d399b7dc9c6d8ef4e165d0c6560b5770636dbaf73b81f662e7c4b31d7cc55045",
     "files": [
       {
@@ -318,8 +318,8 @@
       },
       {
         "path": "frontend/app/build.js",
-        "bytes": 456062,
-        "sha256": "74b04ece5dfc041fb28094c2d2749027261f31f0c87caea3caf83267e4ed1f4a"
+        "bytes": 457769,
+        "sha256": "73a0d3ae9b3cb945834812c5f4777a60bc5fe6d3d5800371fef5231bc0076996"
       },
       {
         "path": "frontend/app/channels.js",
@@ -673,8 +673,8 @@
       },
       {
         "path": "frontend/app/onboarding.js",
-        "bytes": 61988,
-        "sha256": "40bedde4c62ba061ba8c147ff8ef7a2e4eb2457ee4ddc031f98b11556755a869"
+        "bytes": 62156,
+        "sha256": "6feb9d0fa894c52c8c70d9c2e046906c6deab0c4c9fe711f9bee314886d2c577"
       },
       {
         "path": "frontend/app/overseer-setup.js",
@@ -1068,8 +1068,8 @@
       },
       {
         "path": "frontend/app/stationtemplates.js",
-        "bytes": 20115,
-        "sha256": "99c674dcd7b827e122f21c613629941fa0de42eeae45f0e7a061dfafeae6ebd4"
+        "bytes": 20411,
+        "sha256": "187e2d57a9587ecddc01a505fa5eaddf154b82435c428acf32584c5a5dda6cb4"
       },
       {
         "path": "frontend/app/stationui.js",
@@ -1333,8 +1333,8 @@
       },
       {
         "path": "frontend/app/worldmodel.js",
-        "bytes": 199994,
-        "sha256": "227bc344a32ed0f409523558d25c2cdc2ce1ce9d59d1d037ae964cc7dd988f5f"
+        "bytes": 200070,
+        "sha256": "5edbb350db5c4d32f87f1605a515189bea4a82df26d2a86262521e420ad34b57"
       },
       {
         "path": "frontend/app/worldrenderer.js",
@@ -1498,8 +1498,8 @@
       },
       {
         "path": "frontend/css/refit-polish.css",
-        "bytes": 30281,
-        "sha256": "65483cbdb7d4a3114f3f8d61cba61a3d8e9459f9ba34da3ec944d0d97444c00d"
+        "bytes": 30433,
+        "sha256": "bb3aa118eead08906d8362096960f153aab6fd4f724e59529ca8e86dd3e0f471"
       },
       {
         "path": "frontend/css/refit.css",
