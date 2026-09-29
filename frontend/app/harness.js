@@ -996,6 +996,16 @@ const Harness = (() => {
       return Array.isArray(j.proposals) ? j.proposals : [];
     } catch (e) { return []; }
   }
+  // USER-STUDY LOOP: the index of every undecided study batch (runs that ended while this window was closed
+  // included) — [{ agentId, runId, createdAt, count }], oldest first. [] on any failure.
+  async function studyPending() {
+    try {
+      const r = await fetch('/api/study/pending', { cache: 'no-store' });
+      if (!r.ok) return [];
+      const j = await r.json();
+      return Array.isArray(j.batches) ? j.batches : [];
+    } catch (e) { return []; }
+  }
   // NS-6: after a salient task run the sidecar MINES threads (ideas the Commander floated but never acted on) into
   // a stash. Fetch the pending candidates for the thread turn-in card. Returns { runId, proposals } — the BATCH
   // runId matters: the turn-in verdict must reference the stash batch (which may be the agent's latest pending
@@ -1302,7 +1312,7 @@ const Harness = (() => {
     listModels, probeProvider, validateAndSetKey, priceOf, contextLimitOf, contextState, chat, cancel, haltAll, consent, consentAck, consentAnswer, summonAck, notebook,
     runRecoveries, prepareAutomaticRecovery, resolveRunRecovery, prepareReviewedRecovery,
     memoryProposals, memoryTurnin, memoryVeto, memoryReset, memoryRecords, memoryDeclined, memoryRestore, memoryPending, memoryPin, memoryEdit, memoryForget,
-    studyProposals,
+    studyProposals, studyPending,
     threadProposals, threadTurnin,
     agentSkills, agentSkillsRead, agentSkillManage, agentSkillAllow,
     skillExchangeInspect, skillExchangeRegistry, skillExchangeDiscover, skillExchangeRegistries, skillExchangeImport, skillExchangeInstall, skillExchangeCheck,

@@ -95,7 +95,8 @@
          counts: { runs, chats, landed, beliefs }  // small telemetry for the status route / honesty
        }
      inputs (each optional; a missing one degrades to an empty section — an honest thin pack, never a throw):
-       inputs.runs     : [{ title, ts, streamId, reason }]   (runStore.list order-agnostic; we sort + filter)
+       inputs.runs     : [{ title, ts, streamId, reason, internal }]   (runStore.list order-agnostic; we sort + filter;
+                                                             internal runs are excluded AND their directive rows drop from chats)
        inputs.chats    : [{ role, content, ts, streamId }]   (transcriptStore.all(); we filter role:'user' + internal)
        inputs.goal     : { text, done, total, next } | null  (commanderGoals.get())
        inputs.landed   : [{ title, verdict, ts }]            (verdict ∈ 'kept'|'discarded'; recent decided deliverables)
@@ -111,6 +112,15 @@
     const maxChars = num(opts.maxChars) || DEFAULT_MAX_CHARS;
     const redact = (typeof inputs.redact === 'function') ? inputs.redact : (s) => s;
     const withinWindow = (ts) => { const t = num(ts); return !now || !t || (now - t) <= windowMs; };
+    /* THE STATION'S OWN SELF-TALK IS NOT THE COMMANDER'S ACTIVITY (USER-STUDY LOOP, 2026-09-28). A reason-only
+       internal call (goal decomposition, the first-meeting prompts, session recommendations…) is recorded as a run
+       flagged `internal`, AND its directive lands in the transcript as a 'user' row on the Commander's own stream —
+       so it read as "what they asked recently" and the planners studied the station instead of the person. The run
+       flag is the authority: its directive head identifies the matching transcript row. */
+    const headOf = s => oneLine(s, 400).replace(/…$/, '').slice(0, 48).toLowerCase();
+    const internalHeads = (Array.isArray(inputs.runs) ? inputs.runs : [])
+      .filter(r => r && r.internal).map(r => headOf(r.title)).filter(h => h.length >= 12);
+    const isSelfTalk = text => { const h = headOf(text); return h.length >= 12 && internalHeads.some(x => h.indexOf(x) === 0 || x.indexOf(h) === 0); };
 
     const sections = [];
     const activityLines = [];
@@ -162,7 +172,8 @@
     const chatLines = [];
     {
       const rows = (Array.isArray(inputs.chats) ? inputs.chats : [])
-        .filter(m => m && m.role === 'user' && str(m.content).trim() && !isInternalStream(m.streamId) && withinWindow(m.ts))
+        .filter(m => m && m.role === 'user' && str(m.content).trim() && !isInternalStream(m.streamId) && withinWindow(m.ts)
+          && !isSelfTalk(str(m.content).split(/\r?\n/)[0] || ''))
         .slice()
         .sort((a, b) => num(b.ts) - num(a.ts));
       const seen = {};

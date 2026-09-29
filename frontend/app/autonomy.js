@@ -12,7 +12,8 @@
    "how autonomous do you want me to be?" — see the awakening-question-design rule); a station dial retunes it later.
    Range is honored at BOTH ends: full wait-for-me (off) and full free-range (on).
 
-   SAFE BY DEFAULT: fresh() is fully wait-for-me with a Sandbox ceiling, and even FREE-RANGE initiative keeps Reach
+   SAFE BY DEFAULT: fresh() PROPOSES (studies the Commander, lines up suggestions to approve, never acts unattended)
+   with a Sandbox ceiling; a corrupt save degrades to fully wait-for-me; and even FREE-RANGE initiative keeps Reach
    capped at 'sandbox' — running free toward goals must never silently send/publish/spend; the Commander raises Reach
    to 'reach' deliberately. That default IS the "productive all day, asks before anything irreversible" guarantee.
 
@@ -48,10 +49,15 @@
 
   const rankOf = (axis, v) => axis.indexOf(v);
 
-  // the persisted shape. DEFAULT = the safe floor: fully wait-for-me, Sandbox ceiling. Reach is stored (at
-  // 'sandbox') even while initiative is 'wait', so later RAISING initiative inherits a ceiling the Commander
-  // actually set — never a surprise reach.
-  function fresh() { return { v: 1, initiative: 'wait', reach: 'sandbox', leashPerDay: DEFAULT_LEASH }; }
+  // the persisted shape. DEFAULT (USER-STUDY LOOP, 2026-09-28, Andrew's call) = PROPOSE with a Sandbox ceiling:
+  // a new station studies the Commander and lines up goal-grounded suggestions and quests for them to approve,
+  // but never ACTS unattended (actsUnattended stays false below 'leash'). 'wait' remains one tap away and is
+  // honored exactly. Reach is stored (at 'sandbox') even below 'leash', so later RAISING initiative inherits a
+  // ceiling the Commander actually set — never a surprise reach.
+  function fresh() { return { v: 1, initiative: 'propose', reach: 'sandbox', leashPerDay: DEFAULT_LEASH }; }
+  // the conservative floor a CORRUPT or partial save degrades to, per field: fully wait-for-me. A save the
+  // Commander wrote and the disk mangled must never come back MORE active than the safest reading of it.
+  function floor() { return { v: 1, initiative: 'wait', reach: 'sandbox', leashPerDay: DEFAULT_LEASH }; }
 
   function clampLeash(n) {
     n = Math.round(Number(n));
@@ -62,12 +68,11 @@
   // tolerant hydrate: clamp every field to a known value. A corrupt / old / partial save degrades to the safe floor
   // per field — never throws, never yields an out-of-enum posture that the runtime gates could misread.
   function normalize(raw) {
-    const s = fresh();
-    if (raw && typeof raw === 'object') {
-      if (INITIATIVE.indexOf(raw.initiative) >= 0) s.initiative = raw.initiative;
-      if (REACH.indexOf(raw.reach) >= 0) s.reach = raw.reach;
-      if (raw.leashPerDay != null) s.leashPerDay = clampLeash(raw.leashPerDay);
-    }
+    if (!raw || typeof raw !== 'object') return fresh();   // nothing saved yet → the new-station default
+    const s = floor();
+    if (INITIATIVE.indexOf(raw.initiative) >= 0) s.initiative = raw.initiative;
+    if (REACH.indexOf(raw.reach) >= 0) s.reach = raw.reach;
+    if (raw.leashPerDay != null) s.leashPerDay = clampLeash(raw.leashPerDay);
     return s;
   }
 

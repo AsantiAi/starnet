@@ -285,6 +285,7 @@ const { makeJourneyStore } = require('./journey-store.js'); // Commander journey
 const { makeQuestTools } = require('./tools/builtin/quests.js'); // QUEST V2 §B: quest.update — the agent's read/write reach into the ledger
 const { questBlock, withQuests } = require('./questinject.js'); // QUEST V2 §B: fold an agent's OPEN quests into its system prompt (pure, dossierinject idiom)
 const QuestSweeps = require('./questsweeps.js');
+const GoalAdvance = require('./goal-advance.js'); // USER-STUDY LOOP: pure — a finished quest slate settles its plan step; journey completions fold onto the goal mirror
 const QuestRefresh = require('./questrefresh.js'); // QUEST V3: the standing 24h + caught-up quest-refresh engine (pure gates/directive/parse) // QUEST V2 §A: pure seam-matchers for the mechanical contract sweeps (run-bind / prop-live / fact-learned / artifact-exists)
 const { makeThreadsStore } = require('./threads-store.js');   // NS-6: durable THREAD LEDGER (ideas raised but never acted on)
 const Recommendation = require('./recommendation-ledger.js');
@@ -2061,24 +2062,36 @@ commanderDossier.load();
 // composed autonomous personas (cron) so an unattended run knows the current direction (goal + progress + next
 // step). A sibling of the dossier block (outside every agent's fs jail); survives a restart. A null goal clears it
 // (no active arc). Contract-free: plain HTTP, no bus event — mirrors commanderDossier exactly.
+// USER-STUDY LOOP (2026-09-28): the push now carries the whole ordered milestone list, so the SIDECAR can move the
+// plan forward on its own (sidecar/goal-advance.js): a step whose planned quests are all settled is recorded in the
+// journey and the mirror advances to the next step, with the window closed. Every set/load re-folds the journey's
+// recorded completions, so a stale push from a webview that hasn't seen a completion yet never walks the plan back.
 const GOALS_FILE = path.join(WORKSPACES, '_commander.goals.json');
 const commanderGoals = {
   _goal: null,
   get() { return this._goal; },
+  _fold(goal) {
+    if (!goal || !Array.isArray(goal.milestones) || !goal.milestones.length) return goal;
+    let keys = null;
+    try { keys = journeyStore.milestoneDoneKeys(); } catch (_) { keys = null; }   // an unreadable journey folds nothing (the push stands)
+    return keys ? GoalAdvance.overlay(goal, keys) : goal;
+  },
   set(goal) {
-    this._goal = (goal && typeof goal === 'object') ? {
+    const milestones = goal && typeof goal === 'object' ? GoalAdvance.normMilestones(goal.milestones) : [];
+    this._goal = this._fold((goal && typeof goal === 'object') ? {
       id: goal.id == null ? null : String(goal.id).slice(0, 64),
       text: String(goal.text || '').slice(0, 280),
       done: Number(goal.done) | 0, total: Number(goal.total) | 0, pct: Number(goal.pct) | 0,
       next: goal.next == null ? null : String(goal.next).slice(0, 200),
-      milestoneId: goal.milestoneId == null ? null : String(goal.milestoneId).slice(0, 80)
-    } : null;
+      milestoneId: goal.milestoneId == null ? null : String(goal.milestoneId).slice(0, 80),
+      milestones: milestones.length ? milestones : null
+    } : null);
     try {
       fs.mkdirSync(WORKSPACES, { recursive: true });
       saveResilient(GOALS_FILE, { goal: this._goal });
     } catch (e) { console.warn('[goals] persist failed:', (e && e.message) || e); }
   },
-  load() { const o = loadResilient(GOALS_FILE, 'goals'); if (o && o.goal && typeof o.goal === 'object') this._goal = o.goal; },
+  load() { const o = loadResilient(GOALS_FILE, 'goals'); if (o && o.goal && typeof o.goal === 'object') this._goal = this._fold(o.goal); },
   // the one-line note folded into a cron persona: "Current goal: X (2/5 milestones done). Next: Y." '' when none.
   note() {
     const g = this._goal;
@@ -6609,7 +6622,9 @@ function nightshiftContextPack() {
   // recent RUNS (newest-first already from runStore.list). We pass the whole recent window; the pure core windows
   // to ~7d + excludes internal streamIds (nightshift-/cron-/workshop-) + de-dupes. limit generous; core caps to 8.
   let runs = [];
-  try { runs = (runStore.list(null, { limit: 60 }) || []).map(r => ({ title: r.title, ts: r.ts, streamId: r.streamId, reason: r.reason })); } catch (_) { runs = []; }
+  // `internal` rides through: the pure core's `!r.internal` filter was dead because this map dropped the flag, so the
+  // station's own reason-only calls read as the Commander's recent work (USER-STUDY LOOP, 2026-09-28).
+  try { runs = (runStore.list(null, { limit: 60 }) || []).map(r => ({ title: r.title, ts: r.ts, streamId: r.streamId, reason: r.reason, internal: !!r.internal })); } catch (_) { runs = []; }
   // recent CHATS: all transcript rows (the store already redacted content on write); the core filters role:'user',
   // excludes internal streams, takes first-lines, re-redacts as a backstop. Bound the tail we hand over (RAM-safe).
   let chats = [];
@@ -8236,7 +8251,45 @@ async function completeQuestRecommendationIds(ids) {
     // into the journey ledger; duplicate sweeps are idempotent by quest id.
     try { const q = questStore.get(id); if (q && q.status === 'done') await journeyStore.recordQuest(q, commanderGoals.get(), q.completedAt || Date.now()); } catch (e) { console.warn('[journey] quest fold failed:', (e && e.message) || e); }
   }
+  await advanceGoalFromQuests();
   return ids;
+}
+
+/* USER-STUDY LOOP — THE PLAN MOVES WITHOUT THE WINDOW. Quest refresh plans the current step as a slate of
+   contract-verified quests (bound goalId + milestoneId). When that slate is settled — none open, at least one
+   completed by its contract — the step is recorded in the journey with 'harness-contract' authority and the goal
+   mirror advances to the next step, so the next refresh plans forward instead of re-planning a finished step.
+   The webview folds the same journey record onto its tree when it next syncs. Idempotent (the journey's
+   source-key ledger), fail-open, and never a claim about the life goal itself. */
+let goalAdvancing = null, goalAdvanceAgain = false;
+function advanceGoalFromQuests() {
+  // single-flight, but never a lost look: a completion that lands mid-pass re-runs the pass once it finishes.
+  if (goalAdvancing) { goalAdvanceAgain = true; return goalAdvancing; }
+  const task = (async () => {
+    let advanced = 0;
+    // a slate can finish more than one step in a row only if later steps already have settled quests; bounded.
+    for (let guard = 0; guard < GoalAdvance.MILESTONE_CAP; guard++) {
+      const goal = commanderGoals.get();
+      const fin = GoalAdvance.slateFinished(goal, questStore.list());
+      if (!fin) break;
+      const r = await journeyStore.recordMilestone({ goalId: fin.goalId, goalText: goal.text, milestoneId: fin.milestoneId,
+        milestoneText: fin.milestoneText, evidence: fin.evidence, agentId: null }, Date.now(), { authority: fin.authority });
+      if (!r || !r.ok) break;
+      commanderGoals.set(goal);   // re-fold: the step now reads done and the mirror names the next one
+      questRefreshNote({ outcome: 'advanced', reason: 'every quest planned for this step is settled — the plan moved to the next step', title: fin.milestoneText });
+      advanced++;
+      const after = commanderGoals.get();
+      if (!after || after.milestoneId === fin.milestoneId) break;   // defensive: the fold did not move it
+    }
+    if (advanced) { try { questRefreshTick(); } catch (e) { failNote('goals.advance.refreshTick', e); } }   // caught up on a new step: the refresh gate decides whether to plan it now
+    return advanced;
+  })().catch(e => { console.warn('[goals] advance failed:', (e && e.message) || e); return 0; });
+  goalAdvancing = task;
+  task.finally(() => {
+    if (goalAdvancing === task) goalAdvancing = null;
+    if (goalAdvanceAgain) { goalAdvanceAgain = false; advanceGoalFromQuests(); }
+  });
+  return task;
 }
 
 // A quest completion is durable before its journey fold. Recover a crash/write failure by replaying every done
@@ -8255,7 +8308,7 @@ function reconcileCompletedJourneyQuests() {
   task.finally(() => { if (journeyQuestReconcile === task) journeyQuestReconcile = null; }).catch(() => {});
   return task;
 }
-setImmediate(() => reconcileCompletedJourneyQuests().catch(e => console.warn('[journey] boot reconciliation failed:', (e && e.message) || e)));
+setImmediate(() => reconcileCompletedJourneyQuests().then(() => advanceGoalFromQuests()).catch(e => console.warn('[journey] boot reconciliation failed:', (e && e.message) || e)));
 
 let questRefreshingNow = false;   // one cycle in flight, ever (the scout's in-flight-guard discipline)
 async function runQuestRefreshCycle(why) {
@@ -8306,6 +8359,7 @@ async function runQuestRefreshCycle(why) {
     const dossierBlock = dossierNotReady ? '' : commanderDossier.get();
     const evidenceCtx = {
       goalNote: goalNote,
+      nextStep: (capturedGoal && capturedGoal.milestoneId && capturedGoal.next) ? capturedGoal.next : '',
       progress: questProgressContext(),
       // ground on the EFFECTIVE star: a pending (unconfirmed) inference still steers the directive so the cycle
       // isn't rudderless while awaiting the Commander's verdict — the UI is what labels it unconfirmed, not here.
@@ -10003,6 +10057,7 @@ const ROUTES = [
   { m: 'GET', prefix: '/api/memory/pending', h: servePending },   // un-answered high-stakes decks (durable, cross-run)
   { m: 'POST', exact: '/api/memory/turnin', h: handleMemoryTurnin },
   { m: 'GET', prefix: '/api/study/proposals', h: serveStudyProposals },   // GROWTH Tier 1: dossier belief-update proposals for a run
+  { m: 'GET', exact: '/api/study/pending', h: serveStudyPending },   // USER-STUDY LOOP: every undecided study batch (incl. runs that finished while the window was closed)
   { m: 'POST', exact: '/api/study/resolve', h: handleStudyResolve },   // GROWTH Tier 1: consume one decided study proposal + mirror the denylist
   { m: 'GET', prefix: '/api/threads/proposals', h: serveThreadProposals },   // NS-6: pending mined thread candidates for a run (turn-in)
   { m: 'POST', exact: '/api/threads/turnin', h: handleThreadTurnin },   // NS-6: keep/edit → commit an open thread; discard → permanently deny the fingerprint
@@ -14029,6 +14084,8 @@ async function handleQuestsDismiss(req, res) {
   if (!id) return json(400, { ok: false, error: 'which quest?' });
   let did; try { did = await questStore.dismiss(id, Date.now()); } catch (e) { return json(500, { ok: false, error: 'could not dismiss that quest' }); }
   if (did) await recommendationLedger.verdict('quest:' + id, 'declined', String(body.reason || 'wrong_thing'), Date.now()).catch(swallow('recledger.verdict', null));
+  // dismissing the last open quest of a step whose other quests were completed settles that step.
+  if (did) await advanceGoalFromQuests();
   if (did) { try { questRefreshTick(); } catch (_) {} }   // caught-up nudge (QUEST V3) — same early look as confirm
   json(200, { ok: !!did });
 }
@@ -22310,6 +22367,24 @@ function serveStudyProposals(req, res) {
     if (!batch || batch.agentId !== agent) return json(200, { runId: runId || null, agentId: agent, proposals: [] });
     json(200, { runId: batch.runId, agentId: agent, proposals: batch.proposals });
   } catch (e) { json(200, { proposals: [] }); }
+}
+
+// GET /api/study/pending — USER-STUDY LOOP: the index of EVERY undecided study batch, oldest first. Study runs
+// after cron, channel, and night-shift runs too, but the browser only ever asked about the run it had just
+// watched end — so what the station learned about the Commander while the window was closed sat unasked and
+// was eventually evicted. The browser reads this on open/return and queues those batches through the SAME
+// consent card (nothing is written to the dossier without a Keep). Index only — the proposals themselves are
+// still fetched per run through /api/study/proposals. Read-only; empty (never a 500) on any failure.
+function serveStudyPending(req, res) {
+  try {
+    const batches = [];
+    for (const b of studyByRun.values()) {
+      if (!b || !isAgentId(b.agentId) || !Array.isArray(b.proposals) || !b.proposals.length) continue;
+      batches.push({ agentId: b.agentId, runId: b.runId, createdAt: Number(b.createdAt) || 0, count: b.proposals.length });
+    }
+    batches.sort((a, b) => a.createdAt - b.createdAt);
+    respondJson(res, 200, { batches: batches.slice(-STUDY_CAP) });
+  } catch (e) { respondJson(res, 200, { batches: [] }); }
 }
 
 // POST /api/study/resolve { agentId, runId, id, declined:[] } — GROWTH Tier 1: CONSUME one decided study proposal
