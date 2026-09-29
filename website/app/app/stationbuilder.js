@@ -505,18 +505,26 @@
     const finalProbe = WM.create(clone(doc)), fb = buildInto(finalProbe, spec, WM);
     if (!fb.ok) return fb;
     const crewIds = (env.crew || []).map(a => a && a.id).filter(Boolean);
+    // a kit's line writes instructions every later run obeys: the card lists them, step by step in run order
+    const steps = [], manyLines = fb.parts.filter(b => b.lineIds.length).length > 1;
     const view = parts.map((part, i) => {
       const built = fb.parts[i], pr = finalProbe.rooms().find(r => r.id === built.roomId);
       const neighbour = part.room ? (() => { const R = part.room.rect; const adj = finalProbe.rooms().find(rm => rm.id !== built.roomId && rm.kind !== 'corridor' && rm.rects.some(q => q.x1 <= R.x2 + 1 && q.x2 >= R.x1 - 1 && q.y1 <= R.y2 + 1 && q.y2 >= R.y1 - 1)); return adj ? adj.name : null; })() : null;
       const equip = equipmentOf(env, part.props);
       const line = built.lineIds.length ? readLine(finalProbe, built.lineIds, env, crewIds) : null;
-      return { name: pr ? pr.name : part.meta.name, kit: part.meta.kit, about: part.meta.about, where: part.room ? 'a new room' + (neighbour ? ' beside ' + neighbour : '') : 'the ' + part.meta.name + ' room',
+      const roomName = pr ? pr.name : part.meta.name;
+      let n = 0;
+      if (line) for (const pid of line.order) {
+        const b = finalProbe.props().find(q => q.id === pid);
+        if (b && b.t === 'bay') steps.push({ step: ++n, role: titleCase(b.role) + (manyLines ? ' in ' + roomName : ''), agent: null, instructions: b.brief || '' });
+      }
+      return { name: roomName, kit: part.meta.kit, about: part.meta.about, where: part.room ? 'a new room' + (neighbour ? ' beside ' + neighbour : '') : 'the ' + part.meta.name + ' room',
         equipment: equip, line: line ? { label: part.line.label, ready: line.ready, blocking: line.blocking } : null };
     });
     const summary = view.map(v => (v.where.indexOf('a new room') === 0 ? v.name + ' (' + v.about + ') in ' + v.where : v.about.charAt(0).toUpperCase() + v.about.slice(1) + ', furnishing ' + v.where)
       + (v.equipment.length ? '. It brings equipment: ' + v.equipment.join(', ') : '')
       + (v.line ? '. Its line "' + v.line.label + '" ' + (v.line.ready ? 'will be ready to run' : 'still needs: ' + v.line.blocking.join('; ')) : '') + '.').join(' ');
-    return { ok: true, plan: { floorSig: sigOf(doc), resultSig: sigOf(finalProbe.serialize()), spec, rooms: view, summary, notes: [], steps: [], line: null, where: view.map(v => v.where).join('; ') } };
+    return { ok: true, plan: { floorSig: sigOf(doc), resultSig: sigOf(finalProbe.serialize()), spec, rooms: view, summary, notes: [], steps, line: null, where: view.map(v => v.where).join('; ') } };
   }
 
   function planRestyle(doc, req, env) {

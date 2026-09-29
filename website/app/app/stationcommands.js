@@ -406,7 +406,7 @@ const StationCommands = (() => {
     'station.plan_room': (a) => {
       const { st, env } = builderReady();
       const p = park(StationBuilder.planRoom(st.serialize(), (a && a.request) || {}, env));
-      return { planId: p.planId, summary: p.plan.summary, rooms: p.plan.rooms, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
+      return { planId: p.planId, summary: p.plan.summary, rooms: p.plan.rooms, steps: p.plan.steps, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
     },
     // the one cosmetic change: a room's floor, material or name
     'station.plan_restyle': (a) => {
