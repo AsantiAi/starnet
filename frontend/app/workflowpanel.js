@@ -1266,6 +1266,11 @@ const WorkflowPanel = (() => {
      The FILTER's routes are edited here too (they used to open a full-screen modal): pick the belt each task type takes. */
   /* a junction's belt, named by where it lands: a BAY on this line by the panel's own name for it ("BAY 2 · NOVA", or "BAY 2
      (no agent yet)" — 2026-09-28 retest: a fresh split listed both branches as "nowhere yet"); anything else keeps the floor's label */
+  // a branch on its ✕ chip, named the way the strip names it — BAY n · ROLE (two WRITER branches must never read alike)
+  function branchLabel(f, pid) {
+    const i = f && f.order ? f.order.indexOf(pid) : -1, d = f && f.docks ? f.docks[pid] : null;
+    return i < 0 ? dockLabel(f, pid) : 'BAY ' + (i + 1) + (d && d.role ? ' · ' + d.role : '');
+  }
   function laneName(f, l, arrow) {
     const d = l && l.dock && f && f.docks ? f.docks[l.dock] : null;
     if (!d) return l.label;
@@ -1301,7 +1306,7 @@ const WorkflowPanel = (() => {
         + '<p class="wf-help" id="split-note">Switching swaps the JOINER or MERGER where the branches meet. Same belts, one UNDO.</p></section>'
         + (H.lineEdit ? '<section class="wf-sec wf-shape"><h3>Shape the line</h3><div class="wf-chips">'
           + editBtn('addArm', p.id, { split: p.id }, '⑂ ADD A BRANCH', copies ? 'one more step gets a copy of every job — the JOINER waits for it too' : 'one more step takes its turn with the others')
-          + lanes.filter(l => l.dock).map(l => editBtn('removeArm', p.id, { split: p.id, head: l.dock }, '✕ ' + dockLabel(f, l.dock), 'take this branch out, every step on it; a split left with one branch folds away')).join('')
+          + lanes.filter(l => l.dock).map(l => editBtn('removeArm', p.id, { split: p.id, head: l.dock }, '✕ ' + branchLabel(f, l.dock), 'take this branch out, every step on it; a split left with one branch folds away')).join('')
           + '</div><p class="wf-help dim">A branch comes out whole — the steps on it and their belts. One UNDO takes it back.</p></section>' : '');
       wireEdits(body);
       body.querySelectorAll('[data-smode]').forEach(b => { b.onclick = () => {
