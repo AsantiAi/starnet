@@ -8,11 +8,11 @@ const StationTemplates = (() => {
   /* `purpose` is the kind of work a WORK preset is for: the onboarding purpose chips name the same five kinds
      (Code & build / Research & brief / Write & edit / Run tasks & ops / A bit of everything). */
   const catalog = [
-    { id: 'software', group: 'work', purpose: 'code', name: 'SOFTWARE STUDIO', rooms: 5, description: 'A workshop, a Build & Test room, a review room and a library. A Builder makes each change and a Tester sends it back until it passes.', wings: [['engineering','west'],['buildTest','north'],['review','east'],['reading','south']] },
-    { id: 'research', group: 'work', purpose: 'research', name: 'RESEARCH STATION', rooms: 3, description: 'An analysis lab with a Research → Write line, and a reference archive. One agent digs up sources, the next writes the brief.', wings: [['researchLab','north'],['archive','east']] },
-    { id: 'creative', group: 'work', purpose: 'write', name: 'CREATIVE STUDIO', rooms: 3, description: 'A design studio and a Draft & Review room. A Drafter writes it, and a Reviewer sends it back until it meets your brief.', wings: [['creative','north'],['creativeReview','east']] },
-    { id: 'operations', group: 'work', purpose: 'ops', name: 'OPERATIONS STATION', rooms: 5, description: 'Dispatch, comms, archive and review rooms. Each incoming request is sorted to a code, research or general specialist.', wings: [['archive','west'],['comms','east'],['dispatch','north'],['review','south']] },
-    { id: 'cozy', group: 'work', purpose: 'general', name: 'COZY WORKSHOP', rooms: 3, description: 'Warm wood floors, a furnished lounge, and a front desk where one agent handles any job within a $5-a-day cap.', wings: [['cozyWorkshop','north'],['cozyLounge','south']] },
+    { id: 'software', group: 'work', purpose: 'code', name: 'SOFTWARE STUDIO', rooms: 5, pitch: 'a builder makes each change and a tester checks it', description: 'A workshop, a Build & Test room, a review room and a library. A Builder makes each change and a Tester sends it back until it passes.', wings: [['engineering','west'],['buildTest','north'],['review','east'],['reading','south']] },
+    { id: 'research', group: 'work', purpose: 'research', name: 'RESEARCH STATION', rooms: 3, pitch: 'one agent digs up sources and the next writes the brief', description: 'An analysis lab with a Research → Write line, and a reference archive. One agent digs up sources, the next writes the brief.', wings: [['researchLab','north'],['archive','east']] },
+    { id: 'creative', group: 'work', purpose: 'write', name: 'CREATIVE STUDIO', rooms: 3, pitch: 'a drafter writes it and a reviewer sends it back until it is right', description: 'A design studio and a Draft & Review room. A Drafter writes it, and a Reviewer sends it back until it meets your brief.', wings: [['creative','north'],['creativeReview','east']] },
+    { id: 'operations', group: 'work', purpose: 'ops', name: 'OPERATIONS STATION', rooms: 5, pitch: 'each request goes to a code, research or general specialist', description: 'Dispatch, comms, archive and review rooms. Each incoming request is sorted to a code, research or general specialist.', wings: [['archive','west'],['comms','east'],['dispatch','north'],['review','south']] },
+    { id: 'cozy', group: 'work', purpose: 'general', name: 'COZY WORKSHOP', rooms: 3, pitch: 'one agent handles any job, with a $5-a-day spending cap', description: 'Warm wood floors, a furnished lounge, and a front desk where one agent handles any job within a $5-a-day cap.', wings: [['cozyWorkshop','north'],['cozyLounge','south']] },
     { id: 'default', group: 'look', name: 'DEFAULT', rooms: 1, description: 'One open room. All five essentials, your workstation, and space to grow.', wings: [] },
     { id: 'retreat', group: 'look', name: 'QUIET RETREAT', rooms: 2, description: 'Your home station with a quiet library and lounge to the south.', wings: [['reading','south']] }
   ];
@@ -137,6 +137,24 @@ const StationTemplates = (() => {
     const issue = r.ready ? '' : unstaffed.length ? 'Choose an agent for ' + unstaffed.map(x=>x.name).join(', ') + '.' : r.blocking[0].what;
     return {...g,roles,key:comp.key,ready:r.ready,blocking:r.blocking.map(b=>b.what),issue};
   }
+  /* recommend(text) -> a WORK preset id, or null: the station for what the Commander said they want help with. The five
+     onboarding purpose chips map one to one (Code & build → software, Research & brief → research, Write & edit →
+     creative, Run tasks & ops → operations, A bit of everything → cozy); typed words are read for the same five kinds of
+     work, first clear match wins (code before writing, so "write code" is code). Nothing clear → null, and the caller
+     recommends starting simple: never a guess. */
+  const PURPOSE_WORDS = [
+    ['general', /\b(general[- ]purpose|a bit of everything|whatever comes up|all[- ]rounder)\b/i],
+    ['code', /\b(code|coding|coder|software|debug\w*|program(s|ming|mer)?|developers?|apps?|websites?|bugs?|repos?|pull requests?|ship(ping)? (it|features?|software|code))\b/i],
+    ['research', /\b(research\w*|brief(ing|s)?|sources?|investigat\w*|analy[sz]\w*|stud(y|ies))\b/i],
+    ['write', /\b(writ(e|es|ing)|edit(s|ing)?|content|drafts?|blog\w*|newsletters?|copywriting|posts?|articles?|stories)\b/i],
+    ['ops', /\b(ops|operations|day[- ]to[- ]day|tasks?|inbox|customers?|support|schedul\w*|admin|emails?|errands?)\b/i],
+  ];
+  function recommend(text) {
+    const t = String(text == null ? '' : text);
+    if (!t.trim()) return null;
+    for (const [purpose, re] of PURPOSE_WORDS) if (re.test(t)) { const c = catalog.find(x => x.group === 'work' && x.purpose === purpose); if (c) return c.id; }
+    return null;
+  }
   function build(id, model, sprites, nextId) {
     const entry = catalog.find(c => c.id === id);
     if (!entry) throw new Error('Unknown station build');
@@ -182,6 +200,6 @@ const StationTemplates = (() => {
     }
     return doc;
   }
-  return { catalog: catalog.map(({wings,...entry}) => Object.freeze(entry)), guides, build, example };
+  return { catalog: catalog.map(({wings,...entry}) => Object.freeze(entry)), guides, build, example, recommend };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = StationTemplates;
