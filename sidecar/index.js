@@ -223,8 +223,8 @@ const googleClientConfig = require('./mcp/google-client.js');
 const { makeStdioTransport } = require('./mcp/transport.stdio.js');
 const mcpSchemaCache = require('./mcp/schema-cache.js');
 const connectorCatalog = require('./mcp/catalog.js');       // curated one-click MCP connector catalog (pure data + selectors)
-const serviceKeysMod = require('./servicekeys.js');         // KEYS tab: custom service API keys (pure core — env injection + masked list)
-const serviceKeysCatalog = require('./servicekeys-catalog.js');   // KEYS tab: the curated PLATFORM directory (pure data)
+const serviceKeysMod = require('./servicekeys.js');         // ABILITIES › SAVED API CONNECTIONS: custom service API keys (pure core — env injection + masked list)
+const serviceKeysCatalog = require('./servicekeys-catalog.js');   // SAVED API CONNECTIONS: the curated PLATFORM directory (pure data)
 const mcpOauth = require('./mcp/oauth.js');                 // generic OAuth 2.1 client for MCP connectors (discover/DCR/PKCE/refresh)
 const { sameEndpoint, resolveConnectorOauthTarget } = require('./mcp/oauth-target.js');
 const connectorStateMod = require('./connectorstate.js');   // one transactional envelope for connector config + OAuth secrets
@@ -7179,7 +7179,7 @@ function loopPrecheck(loop) {
     }
     const provider = cronProviderFor(loop);
     if (!cronHasCredential(provider, cronKeyFor(provider))) {
-      return { ok: false, reason: 'no credential for ' + (provider || 'the selected provider') + ' — add a key in the KEYS tab' };
+      return { ok: false, reason: 'no credential for ' + (provider || 'the selected provider') + ' — connect it in SETTINGS › PROVIDERS' };
     }
     return { ok: true };
   } catch (e) { return { ok: false, reason: 'precheck error: ' + ((e && e.message) || e) }; }
@@ -12010,6 +12010,34 @@ async function handleServiceKeyRemove(req, res) {
   applyServiceKeysEnv();   // scrubs the owned env var so the very next run no longer sees it
   return json(200, { ok: true, saved: true, removed: String(body.id || '') });
 }
+/* Only availability crosses the wire, never publisher registration values. Missing configuration is StarNet's
+   responsibility, so the customer UI never exposes an application-credential form. Module-level (was local to the
+   catalog route) so connectors.list reads the SAME verdict the ABILITIES card draws — the first-hour walk
+   (2026-09-28) had the agent promise "sign in with Google, no setup" beside a disabled GOOGLE SIGN-IN button.
+   IDEMPOTENT: browse() lists one entry object under both `connectors` and its group, so a second pass must not
+   prefix the early-access sentence again (the card printed it twice). */
+const EARLY_ACCESS_BLURB = 'Early access — Google has not finished verifying StarNet yet. When Google says the app isn’t verified, choose Advanced, then Go to StarNet. ';
+function annotateConnectorAvailability(e) {
+  if (!e) return e;
+  if (e.staticOauth) e.needsClient = !connectorOauthClient(e.staticOauth.authorizationServer).clientId;
+  if (e.googleApi) {
+    e.releaseDeferred = googleConnectorDeferred(e);
+    if (!e.releaseDeferred && googleClientConfig.EARLY_ACCESS === true && !googleClientConfig.isSelectedFiles(e)) {
+      e.earlyAccess = true;
+      if (String(e.blurb || '').indexOf(EARLY_ACCESS_BLURB) !== 0) e.blurb = EARLY_ACCESS_BLURB + (e.blurb || '');   // catalog entries are fresh clones per request
+    }
+    if (e.releaseDeferred) e.blurb = 'Planned for a later update. ' + e.blurb.replace(/^Planned for a later update\. /, '').replace(' Sign in with Google to connect your account.', '');
+    e.signInAvailable = !connectorStorageError && !e.releaseDeferred && !e.needsClient && (!googleClientConfig.isSelectedFiles(e) || connectorVault.protected);
+    if (!e.signInAvailable) e.signInMessage = connectorStorageError || (e.releaseDeferred ? googleDeferredMessage(e) : googleClientConfig.UNAVAILABLE);
+  }
+  return e;
+}
+// '' when the card's sign-in works in this build, else the card's own reason (read on a shallow copy — never mutates).
+function connectorSignInUnavailable(entry) {
+  if (!entry || !entry.googleApi) return '';
+  const e = annotateConnectorAvailability(Object.assign({}, entry));
+  return e.signInAvailable === false ? String(e.signInMessage || googleClientConfig.UNAVAILABLE || 'sign-in is not available in this build') : '';
+}
 /* GET /api/connectors/catalog — the curated one-click catalog (pure data). Annotated with `installed`
    by cross-referencing the live connector configs (by id), so the browse panel can show what's already
    added. No secrets involved — the catalog carries only public endpoints + metadata, never a token. */
@@ -12018,23 +12046,8 @@ function handleConnectorCatalog(req, res) {
   // pass {id,url} so `installed` is a TRUTHFUL match: a manually-added connector that merely reuses a catalog id
   // (e.g. id 'notion' pointing at a different / self-hosted URL) must NOT flip the vetted vendor card to ADDED.
   const payload = connectorCatalog.browse((connectorConfigs || []).map(c => c && { id: c.id, url: c.url || '' }));
-  // Only availability crosses the wire, never publisher registration values. Missing configuration
-  // is StarNet's responsibility, so the customer UI never exposes an application-credential form.
-  const markNeedsClient = (e) => {
-    if (e.staticOauth) e.needsClient = !connectorOauthClient(e.staticOauth.authorizationServer).clientId;
-    if (e.googleApi) {
-      e.releaseDeferred = googleConnectorDeferred(e);
-      if (!e.releaseDeferred && googleClientConfig.EARLY_ACCESS === true && !googleClientConfig.isSelectedFiles(e)) {
-        e.earlyAccess = true;
-        e.blurb = 'Early access — Google has not finished verifying StarNet yet. When Google says the app isn’t verified, choose Advanced, then Go to StarNet. ' + e.blurb;   // catalog entries are fresh clones per request
-      }
-      if (e.releaseDeferred) e.blurb = 'Planned for a later update. ' + e.blurb.replace(/^Planned for a later update\. /, '').replace(' Sign in with Google to connect your account.', '');
-      e.signInAvailable = !connectorStorageError && !e.releaseDeferred && !e.needsClient && (!googleClientConfig.isSelectedFiles(e) || connectorVault.protected);
-      if (!e.signInAvailable) e.signInMessage = connectorStorageError || (e.releaseDeferred ? googleDeferredMessage(e) : googleClientConfig.UNAVAILABLE);
-    }
-  };
-  payload.connectors.forEach(markNeedsClient);
-  payload.groups.forEach(g => g.connectors.forEach(markNeedsClient));
+  payload.connectors.forEach(annotateConnectorAvailability);
+  payload.groups.forEach(g => g.connectors.forEach(annotateConnectorAvailability));
   res.end(JSON.stringify(payload));
 }
 /* POST /api/connectors/oauth/client {id, clientId, clientSecret} — store the ONE-TIME pre-registered OAuth
@@ -16649,7 +16662,8 @@ async function runOnceCore(o) {
     connectors: { list: connectedConnectorSnapshot },
     serviceKeys: () => serviceKeys,
     connectorCatalog: connectorCatalog,
-    keysCatalog: serviceKeysCatalog
+    keysCatalog: serviceKeysCatalog,
+    signInUnavailable: connectorSignInUnavailable
   }).register(registry);
   // HARNESS SELF-KNOWLEDGE: always-present COMPUTER grant, local/read-only and secret-free. The reader
   // closes over this run's identity while every mutable section is collected fresh at call time from the

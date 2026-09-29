@@ -120,8 +120,11 @@
 
   function normalizeConnectorHandoff(value) {
     if (!value || !/^[a-zA-Z0-9_-]{1,80}$/.test(value.connectorId || '') || !value.runId || !value.agentId) return null;
-    return { connectorId: clamp(value.connectorId, 80), runId: clamp(value.runId, 120),
+    const out = { connectorId: clamp(value.connectorId, 80), runId: clamp(value.runId, 120),
       agentId: clamp(value.agentId, 80), toolName: value.toolName === 'connectors.list' ? '' : clamp(value.toolName || '', 160) };
+    // held while the run's question is still open: CONTINUE TASK would ANSWER that question with boilerplate
+    if (value.awaitingAnswer === true) out.awaitingAnswer = true;
+    return out;
   }
   function setConnectorHandoff(id, value) {
     const w = find(id); if (!w) return null;

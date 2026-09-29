@@ -426,7 +426,8 @@ A.eq(Policy.canMutate({ status: 'executing' }, { scope: 'execute' }).ok, true, '
 
   // TASK BRIEF v2 — the stored recommendation reaches every surface, and only when it is real.
   const cssSrc = fs.readFileSync(path.join(__dirname, '../frontend/css/app.css'), 'utf8');
-  A.ok(/function presentTaskQuestion/.test(chatSrc) && /presentTaskQuestion\(ws, taskQuestion\)/.test(chatSrc), 'run-end questions render through the brief-enriched presenter');
+  // (the run-end call scopes the question to its run so the card carries that run's connect door — first-hour fixes 2026-09-28)
+  A.ok(/function presentTaskQuestion/.test(chatSrc) && /presentTaskQuestion\(ws, Object\.assign\(\{ runId: thisRunId \}, taskQuestion\)\)/.test(chatSrc), 'run-end questions render through the brief-enriched presenter');
   A.ok(/it\.suggested \? ' suggested'/.test(chatSrc) && /tq-reason/.test(chatSrc), 'COMMS marks the recommended chip and renders the one-line why');
   A.ok(/recommended: q\.recommended \|\| ''/.test(chatSrc), 'restore-on-reload passes the stored recommendation through');
   A.ok(/\.choice\.suggested/.test(cssSrc) && /--gold-rgb/.test(cssSrc.slice(cssSrc.indexOf('.choice.suggested'), cssSrc.indexOf('.choice.suggested') + 700)), 'the suggested chip uses the theme gold vocabulary, never a literal amber');
