@@ -108,7 +108,7 @@ const fixture = {
   makeStationInspectTool({ inspect: () => ({ schemaVersion: 1 }) }).register(registry);
   makeManualReadTool().register(registry);   // manual.read rides COMPUTER beside station.inspect
   // plugin.* authoring rides COMPUTER too (deferred; inert until the Commander approves) — registered like index.js does
-  require('../sidecar/tools/builtin/plugin-author.js').makePluginAuthorTools({ fsp: require('fs/promises'), path, draftsDir: path.join(ROOT, 'plugin-drafts'), pluginsDir: path.join(ROOT, 'plugins'), template: require('../sidecar/plugin-template.js').templateFiles, parseScreens: require('../sidecar/plugins.js').parseScreens, relPathOk: require('../sidecar/plugin-surface.js').relPathOk }).register(registry);
+  require('../sidecar/tools/builtin/plugin-author.js').makePluginAuthorTools({ fsp: require('fs/promises'), path, draftsDir: path.join(ROOT, 'plugin-drafts'), pluginsDir: path.join(ROOT, 'plugins'), template: require('../sidecar/plugin-template.js').templateFiles, parseScreens: require('../sidecar/plugins.js').parseScreens, relPathOk: require('../sidecar/plugin-surface.js').relPathOk, now: () => 0 }).register(registry);
   makeRecallTool({ transcriptStore: makeTranscriptStore({ io: { readAll() { return []; }, append() {} }, clock: { now: () => 0 } }) }).register(registry);
   makeSkillTools({ store: makeSkillStore({ io: { readAll() { return []; }, append() {} }, clock: { now: () => 0 } }) }).register(registry);
   // QUEST V2 §B: quest.update rides the COMPUTER (the 'quest' freebie), present in this office. In-memory questStore

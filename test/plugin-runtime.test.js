@@ -126,7 +126,7 @@ async function plugin(id, source) {
       } };`);
       const handlers = [];
       const spine = { register: (event, fn, meta) => { handlers.push({ event, fn, meta }); return () => {}; }, events: () => [] };
-      const rt2 = makePluginRuntime({ fork: cp.fork, workerPath: WORKER, store, onLog: () => {} });
+      const rt2 = makePluginRuntime({ fork: cp.fork, workerPath: WORKER, store, now: () => clock, onLog: () => {} });
       let requires = 0;
       const loader = makePluginLoader({ fsp, pathMod: path, dir: PDIR, allowFile: path.join(DIR, 'allowed.json'),
         requireModule: () => { requires++; return {}; }, hash: (s) => crypto.createHash('sha256').update(String(s)).digest('hex'),

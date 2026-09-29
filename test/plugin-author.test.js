@@ -22,7 +22,7 @@ const DIR = path.join(os.tmpdir(), 'starnet-plugin-author-' + process.pid);
 const DRAFTS = path.join(DIR, 'plugin-drafts'), PLUGINS = path.join(DIR, 'plugins');
 const previews = [], installs = [];
 const author = makePluginAuthorTools({
-  fsp, path, draftsDir: DRAFTS, pluginsDir: PLUGINS, template: templateFiles, parseScreens, relPathOk,
+  fsp, path, draftsDir: DRAFTS, pluginsDir: PLUGINS, template: templateFiles, parseScreens, relPathOk, now: () => 1000,
   compile: (src, file) => { if (/^\s*(?:import|export)\s/m.test(src)) return ''; try { new vm.Script('(function (exports, require, module, __filename, __dirname) {' + src + '\n})', { filename: file }); return ''; } catch (e) { return e.message; } },
   preview: async (id, screen) => { previews.push({ id, screen }); return { ok: true, title: 'PR RADAR' }; },
   afterInstall: async (id) => { installs.push(id); }

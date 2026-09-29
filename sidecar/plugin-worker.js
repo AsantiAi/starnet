@@ -14,6 +14,7 @@
      api.log(...)                      a line in the station log, prefixed with the plugin id
    Everything registered must be registered during register() (sync, or the promise it returns). */
 'use strict';
+const { note } = require('./failopen.js');   // the worker's own IPC failures are noted, never silently dropped
 
 const MIN_EVERY_MS = 10000;
 const MAX_TOOLS = 32, MAX_HANDLERS = 64, MAX_JOBS = 8;
@@ -26,7 +27,12 @@ let info = { id: '', name: '' };
 let seq = 0;
 const pending = new Map();
 
-function send(m) { try { if (process.connected) process.send(m); } catch (_) {} }
+// note() logs through console, which this worker routes back over IPC: a failing send must not re-enter itself
+let noting = false;
+function send(m) {
+  try { if (process.connected) process.send(m); }
+  catch (e) { if (!noting) { noting = true; try { note('plugins.worker.send', e); } finally { noting = false; } } }
+}
 function errText(e) { return String((e && e.message) || e || 'error').slice(0, 2000); }
 function log() {
   const line = Array.prototype.slice.call(arguments).map((a) => (typeof a === 'string' ? a : (() => { try { return JSON.stringify(a); } catch (_) { return String(a); } })())).join(' ');
@@ -160,10 +166,10 @@ process.on('message', (m) => {
     if (!fn) return send({ t: 'res', id: m.id, ok: false, err: 'this plugin has no handler named "' + m.name + '"' });
     return void answer(m, () => fn(m.args == null ? null : m.args));
   }
-  if (m.t === 'stop') { try { process.exit(0); } catch (_) {} }
+  if (m.t === 'stop') { try { process.exit(0); } catch (e) { note('plugins.worker.stop-exit', e); } }
 });
 
-process.on('disconnect', () => { try { process.exit(0); } catch (_) {} });
+process.on('disconnect', () => { try { process.exit(0); } catch (e) { note('plugins.worker.disconnect-exit', e); } });
 // An uncaught throw leaves the plugin's state unknowable: say why, then die. The runtime marks it crashed and
 // restarts it on its next use (bounded), so the station never keeps talking to a half-broken plugin.
 process.on('uncaughtException', (e) => { log('[uncaught] ' + errText(e)); setTimeout(() => process.exit(1), 50); });

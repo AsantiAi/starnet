@@ -3582,7 +3582,7 @@ const servePluginDraft = makePluginUiServer({
   goneMessage: 'this draft changed since this preview opened — preview it again'
 });
 const pluginAuthor = makePluginAuthorTools({
-  fsp, path, draftsDir: PLUGIN_DRAFTS_DIR, pluginsDir: PLUGINS_DIR,
+  fsp, path, draftsDir: PLUGIN_DRAFTS_DIR, pluginsDir: PLUGINS_DIR, now: () => Date.now(),
   template: require('./plugin-template.js').templateFiles,
   parseScreens: require('./plugins.js').parseScreens,
   relPathOk: require('./plugin-surface.js').relPathOk,
@@ -3598,7 +3598,7 @@ const pluginAuthor = makePluginAuthorTools({
     const rec = await draftRecord(id);
     if (!rec) return { ok: false, error: 'the draft folder could not be read' };
     let manifest = {};
-    try { manifest = JSON.parse(await fsp.readFile(path.join(rec.dir, 'plugin.json'), 'utf8')); } catch (_) {}
+    try { manifest = JSON.parse(await fsp.readFile(path.join(rec.dir, 'plugin.json'), 'utf8')); } catch (e) { failNote('plugins.draft-preview-manifest', e); }
     const files = new Set(((await pluginLoader._internals.treeDigest(rec.dir)).files || []).map(x => x.rel));
     const screens = require('./plugins.js').parseScreens(manifest, files).screens;
     const r = await stationBridge.request('plugin.preview', { id, digest: rec.digest, screen, name: String(manifest.name || id).slice(0, 60), screens });

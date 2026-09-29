@@ -14,6 +14,7 @@
      callHandler(id, name, args) -> value             (throws likewise)
      stop(id), stopAll(), status(id), tools(id), list() } */
 'use strict';
+const { note } = require('./failopen.js');   // a failed IPC/kill is noted, never silently dropped
 
 const DEFAULTS = { startMs: 8000, hookMs: 5000, toolMs: 120000, callMs: 30000 };
 const MAX_RESTARTS = 3;
@@ -24,7 +25,8 @@ function makePluginRuntime(deps) {
   const workerPath = deps.workerPath;
   if (typeof fork !== 'function' || !workerPath) throw new Error('plugin-runtime requires { fork, workerPath }');
   const store = deps.store || null;
-  const now = typeof deps.now === 'function' ? deps.now : () => Date.now();
+  if (typeof deps.now !== 'function') throw new Error('plugin-runtime requires an injected clock { now }');
+  const now = deps.now;
   const onLog = typeof deps.onLog === 'function' ? deps.onLog : () => {};
   const T = Object.assign({}, DEFAULTS, deps.timeouts || {});
   const procs = new Map();   // id -> record
@@ -70,17 +72,17 @@ function makePluginRuntime(deps) {
         if (!rec.readyResolve) return;
         rec.readyResolve = null;
         rec.state = 'crashed'; rec.error = 'register() did not finish within ' + Math.round(T.startMs / 1000) + ' s';
-        try { child.kill(); } catch (_) {}
+        try { child.kill(); } catch (e) { note('plugins.runtime.kill-hung-start', e); }
         resolve({ ok: false, error: rec.error });
       }, T.startMs);
       if (timer && typeof timer.unref === 'function') timer.unref();
     });
-    try { child.send({ t: 'init', id: plugin.id, name: plugin.name, main: plugin.main }); } catch (_) {}
+    try { child.send({ t: 'init', id: plugin.id, name: plugin.name, main: plugin.main }); } catch (e) { note('plugins.runtime.init-send', e); }
     return rec;
   }
 
   async function answerRequest(rec, m) {
-    const reply = (ok, v, err) => { try { rec.child && rec.child.send({ t: 'ans', id: m.id, ok, v, err }); } catch (_) {} };
+    const reply = (ok, v, err) => { try { rec.child && rec.child.send({ t: 'ans', id: m.id, ok, v, err }); } catch (e) { note('plugins.runtime.answer-send', e); } };
     if (m.op === 'store') {
       if (!store) return reply(false, null, 'this station has no plugin store');
       const a = m.args || {};
@@ -100,7 +102,7 @@ function makePluginRuntime(deps) {
       const resolve = rec.readyResolve; rec.readyResolve = null;
       if (!m.ok) {
         rec.state = 'crashed'; rec.error = String(m.error || 'failed to start');
-        try { rec.child && rec.child.kill(); } catch (_) {}
+        try { rec.child && rec.child.kill(); } catch (e) { note('plugins.runtime.kill-failed-start', e); }
         return resolve({ ok: false, error: rec.error });
       }
       rec.state = 'running';
@@ -183,8 +185,8 @@ function makePluginRuntime(deps) {
     rejectAll(rec, 'the plugin was stopped');
     const child = rec.child;
     if (child) {
-      try { child.send({ t: 'stop' }); } catch (_) {}
-      const killer = setTimeout(() => { try { child.kill(); } catch (_) {} }, 1500);
+      try { child.send({ t: 'stop' }); } catch (e) { note('plugins.runtime.stop-send', e); }
+      const killer = setTimeout(() => { try { child.kill(); } catch (e) { note('plugins.runtime.stop-kill', e); } }, 1500);
       if (killer && typeof killer.unref === 'function') killer.unref();
     }
     procs.delete(id);

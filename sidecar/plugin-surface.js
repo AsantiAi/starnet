@@ -21,6 +21,7 @@
 
    Pure: fs/path/clock/apitickets/loader are injected; no ambient state beyond what a factory call creates. */
 'use strict';
+const { note } = require('./failopen.js');   // a failed stream teardown is noted, never silently dropped
 
 const PREFIX = '/plugin-ui/';
 const KIT_FILES = Object.freeze({
@@ -66,7 +67,8 @@ function makePluginUiServer(deps) {
   const { fs, fsp, path: P, frontendDir, loader, apitickets, mime } = deps;
   const apiKey = deps.apiKey;
   const tokenOk = typeof deps.tokenOk === 'function' ? deps.tokenOk : () => false;
-  const now = typeof deps.now === 'function' ? deps.now : () => Date.now();
+  if (typeof deps.now !== 'function') throw new Error('plugin ui server requires an injected clock { now }');
+  const now = deps.now;
   const ancestors = typeof deps.frameAncestors === 'function' ? deps.frameAncestors : () => deps.frameAncestors || "'self'";
   // The same server serves a plugin DRAFT's preview (/plugin-draft/, phase 4): a different prefix, ticket scope and
   // record resolver (the draft folder's live digest), the same sandbox, kit and jail.
@@ -138,8 +140,8 @@ function makePluginUiServer(deps) {
     if (req.method === 'HEAD') { headers['Content-Length'] = st.size; res.writeHead(200, headers); return res.end(); }
     res.writeHead(200, headers);
     const stream = fs.createReadStream(abs);
-    stream.on('error', () => { try { res.destroy(); } catch (_) {} });
-    req.on('close', () => { try { stream.destroy(); } catch (_) {} });
+    stream.on('error', () => { try { res.destroy(); } catch (e) { note('plugins.ui.stream-destroy', e); } });
+    req.on('close', () => { try { stream.destroy(); } catch (e) { note('plugins.ui.req-close', e); } });
     stream.pipe(res);
   };
 }

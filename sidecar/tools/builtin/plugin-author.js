@@ -37,6 +37,8 @@ function makePluginAuthorTools(deps) {
   const compile = typeof deps.compile === 'function' ? deps.compile : null;   // (source, filename) -> error text | ''
   const preview = typeof deps.preview === 'function' ? deps.preview : null;   // (id, screenId) -> { ok, error? }
   const afterInstall = typeof deps.afterInstall === 'function' ? deps.afterInstall : async () => {};
+  if (typeof deps.now !== 'function') throw new Error('plugin author tools require an injected clock { now }');
+  const now = deps.now;
 
   const idOf = (a) => { const id = String((a && a.id) || '').trim(); if (!ID_RX.test(id)) throw new Error('`id` is the plugin folder name: letters, numbers, dot, dash or underscore (max 64), starting with a letter or number'); return id; };
   const draftDir = (id) => P.join(draftsDir, id);
@@ -230,7 +232,7 @@ function makePluginAuthorTools(deps) {
         const dst = P.join(pluginsDir, id);
         const replacing = await exists(dst);
         // Stage beside, then swap: a half-copied plugin folder must never be what discovery sees.
-        const staging = P.join(draftsDir, '.staging-' + id + '-' + Date.now());
+        const staging = P.join(draftsDir, '.staging-' + id + '-' + now());
         await copyTree(draftDir(id), staging);
         await fsp.mkdir(pluginsDir, { recursive: true });
         if (replacing) await fsp.rm(dst, { recursive: true, force: true });

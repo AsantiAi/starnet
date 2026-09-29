@@ -271,7 +271,8 @@
       // without one (tests, older hosts) it is the hook-only starter above.
       let files = { 'plugin.json': manifest, 'index.js': source };
       if (typeof deps.template === 'function') {
-        try { files = deps.template({ id, name, description }) || files; } catch (_) { /* keep the hook-only starter */ }
+        try { files = deps.template({ id, name, description }) || files; }
+        catch (e) { onError({ plugin: id, error: 'the starter template failed, writing the hook-only starter: ' + ((e && e.message) || e) }); }
       }
       try {
         await fsp.mkdir(base, { recursive: true });
