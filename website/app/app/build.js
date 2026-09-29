@@ -1084,6 +1084,19 @@ const Build = (() => {
       intro.className = 'refit-lineintro';
       intro.textContent = LINE_SENTENCE + ' Place single machines, or a whole line, then make it yours.';
       pal.appendChild(intro);
+      /* BUILD YOUR OWN (conveyor-links phase D): an INBOX, one step and an OUTBOX laid on clear floor in view, with its Workflow
+         panel open — where steps, branches, review loops and sorters are added, every change one UNDO */
+      if (typeof LineEdit !== 'undefined') {
+        const own = document.createElement('button'); own.type = 'button'; own.className = 'bb sm refit-ownline';
+        own.textContent = '▸ BUILD YOUR OWN LINE';
+        own.dataset.tip = 'an INBOX, one step and an OUTBOX, placed in view — then add steps, branches and review loops from its Workflow panel';
+        own.onclick = () => {
+          const r = lineEditRun('newLine', null, {});
+          if (r && r.ok) { sfx('chime'); flashTip(null, 'a new line: INBOX → a step → OUTBOX · UNDO removes it', true); openWorkflowPanel(r.focus); }
+          else { sfx('bad'); flashTip(null, (r && r.msg) || 'there is no clear floor for a new line here', false); }
+        };
+        pal.appendChild(own);
+      }
       /* START FROM INTENT (2026-09-28): the ready-made line with the SHAPE of the Commander's own goal leads the tab — their
          words quoted, so it is clear why — one click arms it (MAKE ROOM FOR IT when the deck is too small). */
       const goal = goalLine();
@@ -2643,8 +2656,35 @@ const Build = (() => {
         if (res && res.ok) { pushFlash([{ x1: res.x, y1: res.y, x2: res.x + (sp.w || 2) - 1, y2: res.y + (sp.h || 2) - 1 }], false); if (typeof Tutorial !== 'undefined' && Tutorial.onPropPlaced) Tutorial.onPropPlaced('bay'); }
         return res;
       },
+      /* LINE EDITS (conveyor-links phase D): every change the panel makes to the line's SHAPE — a step, a branch, a review
+         loop, a sorter, a removal, a move, TIDY LINE — is LineEdit: the line's graph edited, laid out by the engine and
+         written back in ONE undo slot (lineEditRun). canLineEdit answers without laying anything, so a button that could
+         only fail is shown off with its reason. */
+      lineEdit: (op, propId, args) => lineEditRun(op, propId, args),
+      canLineEdit: (op, propId, args) => (typeof LineEdit === 'undefined' || !station) ? { ok: false, msg: 'the line editor is not loaded' } : LineEdit.check(station, propId, op, args, { sizes: lineSizes() }),
     };
     return wfHostMemo;
+  }
+  /* LINE EDITS — the catalog's machine sizes, the tile in the middle of the visible glass (where a NEW line is laid), and the
+     one runner every edit goes through: the machines it placed flash, the tutorial hears them, and the plan is recompiled at
+     once so the panel repaints on the edited line (not on the next frame's) */
+  const lineSizes = () => { const s = t => { const sp = propSpec(t); return [sp.w || 2, sp.h || 2]; }; return { bay: s('bay'), intake: s('intake'), outbox: s('outbox') }; };
+  function viewCenterTile() {
+    if (!cv) return null;
+    const t = T(), ins = viewInsets();
+    const vw = Math.max(1, cv.width - ins.l - (ins.r || 0)), vh = Math.max(1, cv.height - ins.t - ins.b);
+    return { x: Math.floor((ins.l + vw / 2 - panX) / zoom / t), y: Math.floor((ins.t + vh / 2 - panY) / zoom / t) };
+  }
+  function lineEditRun(op, propId, args) {
+    if (typeof LineEdit === 'undefined' || !station) return { ok: false, msg: 'the line editor is not loaded' };
+    const res = LineEdit.run(station, propId, op, args, { near: viewCenterTile(), sizes: lineSizes() });
+    if (res && res.ok) {
+      const placed = Object.keys(res.ids || {}).filter(k => k.charAt(0) === '+').map(k => station.propById(res.ids[k])).filter(Boolean);
+      if (placed.length) pushFlash(placed.map(p => ({ x1: p.x, y1: p.y, x2: p.x + (p.w || 1) - 1, y2: p.y + (p.h || 1) - 1 })), false);
+      if (typeof Tutorial !== 'undefined' && Tutorial.onPropPlaced) for (const p of placed) Tutorial.onPropPlaced(p.t);
+      try { rebake(); } catch (e) { /* the frame loop compiles on its next tick; the panel repaints when it does */ }
+    }
+    return res;
   }
   /* pan the floor so a part sits in the middle of the VISIBLE glass (clear of the kit dock and the panel) */
   function focusPropOnFloor(id, onlyIfHidden) {

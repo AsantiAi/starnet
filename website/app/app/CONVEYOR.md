@@ -93,6 +93,27 @@ and the floor (`rects` deck, `blocked` props, `belts` already laid, optional `ju
 - Speed (measured 09-29): ~2 ms on average for a line on a cluttered 60×36 deck (worst seen 45 ms); 9–21 ms on a
   cluttered 160×100 one, pins far apart included. It runs on an edit, never per frame.
 
+### Line edits — the Workflow panel builds the line (lineedit.js, conveyor-links phase D)
+
+Every change to a line's SHAPE is one edit of its graph: `LineEdit.run(station, propId, op, args, { near, sizes })` reads the line
+(`station.lineGraph(id)` — every machine pinned where it stands, every link with its belt, and the floor without the line),
+applies the op, lays it out with the engine and writes it back in ONE undo slot (`station.applyLineLayout`). Ops: `insertStep`
+(the + on a belt, by role) · `appendStep` · `addBranch` (around a step or on a belt; COPY TO EACH = SPLITTER + JOINER, TAKE
+TURNS = SPLITTER + MERGER) · `addLoop` (a REVIEWER + a LOOP gate: back until approved, 3 passes) · `addSorter` (a FILTER: CODE →
+ENGINEER, RESEARCH → RESEARCHER, everything else on) · `removeStep` (a split left with one way folds away) · `removeLoop` ·
+`moveStep` (swap along a plain run) · `addOutbox` · `wrapLine` (a lone BAY becomes INBOX → it → OUTBOX) · `tidy` (TIDY LINE:
+the whole line re-laid from its INBOX) · `newLine` (BUILD YOUR OWN LINE: INBOX → a step → OUTBOX near the middle of the view).
+
+- ONLY WHAT CHANGED MOVES (the plan's decision 2): a belt the edit does not touch keeps its exact path (the engine's KEPT links);
+  a new machine keeps its place relative to the machine feeding it and, when that spot is taken, tries a few clear spots.
+- A refusal changes nothing and says what would help: TIDY LINE only when the same edit fits with the line re-laid, else a
+  bigger room. `LineEdit.check` answers without laying anything, so the panel shows an impossible edit OFF with its reason.
+- In the panel: the + on a belt (a step by role, a BRANCH either way, a SORTER in front of a step or the OUTBOX), a BAY's
+  ROLE chips (`station.setPropRole`) and SHAPE THE LINE (earlier / later / a review / second opinion / share the load / remove),
+  REMOVE THE REVIEW on a LOOP gate, MAKE IT A LINE on a lone BAY, + OUTBOX where a line that ends on a step has none, TIDY
+  LINE in the footer. The Conveyors tab has BUILD YOUR OWN LINE. Locked by test/line-edit.test.js (every op on a real
+  station, the audit's newsletter line built from edits alone, one undo each) and test/line-edit-panel.test.js.
+
 ## Runtime (conveyor.js) — `Conveyor.create()`
 
 A self-contained transport sim + renderer. Frame-agnostic: it's handed a belt map in whatever
