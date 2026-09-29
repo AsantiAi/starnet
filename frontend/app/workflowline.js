@@ -39,8 +39,13 @@
       ['Fact-check + verdict', 'Check every claim in the draft against the notes. End with VERDICT: approved, or VERDICT: revise and exactly what to fix.', 'the approved draft'],
       ['Tone & clarity', 'Check the draft reads clearly for a non-expert. End with VERDICT: approved, or VERDICT: revise with the fixes.', 'the approved draft']] },
     ENGINEER: { verb: 'builds it', starters: [
+      ['Build to the criteria', 'Build what the incoming request asks for. Restate the acceptance criteria, make the smallest complete change that meets them, and note how you checked it. If the tester sent it back, fix exactly what failed.', 'the change, your checks and the original request'],
       ['Implement it', 'Make the change the task asks for. Keep it small, run the tests, and list the files you touched.', 'a summary of the change and files touched'],
       ['Review code', 'Read the change for bugs and risky edge cases. List each problem with its file and line.', 'a list of issues']] },
+    // TESTER (BUILD & TEST, from PR #47 by @mvanhorn): checks the change and calls the verdict the LOOP gate reads
+    TESTER: { verb: 'tests it', starters: [
+      ['Test + verdict', 'Test the incoming change against the original request. Check each acceptance criterion and edge case, and say which checks you actually ran. If everything passes, deliver the final change with a short test note and end with VERDICT: pass. If anything fails, say exactly what failed and end with VERDICT: revise.', 'the verified change'],
+      ['Quick check', 'Run the quickest checks that prove the change works. End with VERDICT: pass, or VERDICT: revise and what failed.', 'a pass, or what failed']] },
     GENERALIST: { verb: 'handles it', starters: [
       ['Do the task', 'Do what the task asks, then summarize what you did in plain words.', 'the finished result'],
       ['Plan it', 'Break the task into 3 to 5 concrete steps and say what each one needs.', 'a short plan']] },

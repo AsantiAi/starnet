@@ -28,18 +28,23 @@ remaster at `2133aeb0a`. This is an isolated source preview, not an installed re
 - The optional tutorial explains the actual equipment and offers a real file task.
   It never opens the placement loop or creates duplicate props. Tool execution
   still depends on the existing access settings and configured services.
-- REFIT → STATION BUILDS contains the default plus five alternatives:
+- REFIT → STATION PRESETS (reimagined 2026-09-28) has two groups. **Built for your work**: five stations,
+  each with a ready line from the Lines shelf, written instructions on every step, a sample job and a setup
+  guide. **Just the look**: Default and Quiet Retreat, rooms and furniture only.
 
-| Build | Rooms (excluding corridors) | Intended use |
-| --- | ---: | --- |
-| Quiet Retreat | 2 | Home + library/lounge to the south |
-| Creative Studio | 3 | Home between a writing/design studio and review room |
-| Research Station | 3 | Home + northern analysis lab and eastern archive |
-| Engineering Station | 5 | Home + workshop, review, analysis, and lounge |
-| Operations Station | 5 | Home + archive, communications, planning, and review |
+| Build | Rooms (excluding corridors) | Ready line (shelf blueprint) | Onboarding purpose |
+| --- | ---: | --- | --- |
+| Software Studio | 5 | Build & Test: Builder → Tester, failing work goes back (`build_test`, from PR #47 by @mvanhorn) | Code & build |
+| Research Station | 3 | Research → Write (`research_line`) | Research & brief |
+| Creative Studio | 3 | Draft → Review, the reviewer can send it back (`revision_loop`) | Write & edit |
+| Operations Station | 5 | Triage: a sorter hands each request to a code, research or general specialist (`triage_desk`) | Run tasks & ops |
+| Cozy Workshop | 3 | Front desk: one agent, $5-a-day cap (`allowance_desk`) | A bit of everything |
+| Quiet Retreat | 2 | none | — |
 
-All five essentials stay in the central room. Room names and furnishings suggest
-uses; templates do not hire agents, configure workflows, or imply running work.
+Software Studio replaced Engineering Station. All five essentials stay in the central room. A preset never hires
+agents: every Bay stamps unbound, carrying its shelf role, and the setup guide (it opens right after a work preset
+is applied) is where the Commander picks agents or recruits a specialist per step. One agent may work every step.
+The guide's readiness is `WorkflowLine.readiness`, the Workflow panel's own blocking list.
 Every added room is also 18 × 11, with four or five furnishings and clear door
 approaches. Added desks follow the active catalog (three tiles wide with the
 remastered art); the approved existing home desk retains its saved footprint.

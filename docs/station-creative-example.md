@@ -1,51 +1,30 @@
-# Creative Studio working example
+# Preset setup guide (was: Creative Studio working example)
 
-Creative Studio loads as a furnished station. Workflow setup is optional, available
-from Build Mode → Presets → Set up current studio, or from the conveyor line's
-setup card after choosing to configure its equipment. Applying a preset does not
-open configuration automatically.
+Updated 2026-09-28: the guide now serves every **work preset** (Software Studio, Research Station, Creative
+Studio, Operations Station, Cozy Workshop), not only Creative Studio. See
+[DEFAULT-STATIONS.md](station-remaster/DEFAULT-STATIONS.md) for the catalog.
 
-The card explains the brief → draft → review → outbox flow, saves both role
-assignments through the normal station model, and offers a small fictional
-community-garden announcement as a sample. The saved Bay instructions remain
-editable through the existing prop controls. Room geometry and furniture are
-unchanged.
+- **When it opens:** right after a work preset is applied, and from Build Mode → Presets → SET UP <PRESET> or the
+  conveyor line's setup card.
+- **What it shows:** the line's purpose and flow, one card per step in the line's run order
+  (`WorkflowLine.lineFlow` on a probe copy, so it follows the belts), and the preset's sample job.
+- **Staffing:** each step offers the crew, a one-click RECRUIT of that step's specialist (the Workflow panel's
+  `summonForRole` seam), and ADD A WORKSTATION when the step's agent has no computer of its own there
+  (`requisitionPcFor`). One agent may work every step (multi-bay routing); the old "two different agents" rule is
+  gone. A USE <AGENT> FOR EVERY STEP button appears once the first step is staffed.
+- **Readiness:** `StationTemplates.example(doc, WorldModel, Pipeline, WorkflowLine)` returns
+  `WorkflowLine.readiness` for the guided line: the same blocking list as the Workflow panel's pill.
+- **Sample:** RUN SAMPLE TASK posts the plan and runs the sample job through `/api/routing/sample`. It never runs
+  on its own, and the completion label requires the endpoint's successful delivery result.
 
-Readiness comes from the actual directed routing graph, distinct roster agents,
-and `WorldModel.bayObjects` computer access. The sample uses the existing
-`/api/routing/sample` endpoint after `World.syncPlan` confirms the current plan.
-It never runs automatically. The completion label requires the endpoint's
-successful delivery result; changing the station invalidates that displayed
-proof. The finished response can be expanded inline.
+The guided line is found by its Inbox label (for example `SOFTWARE · BUILD & TEST`). Renaming that Inbox or cutting
+its belts ends the guide; the line still works and stays editable in the Workflow panel.
 
-## Verification — 2026-09-15
+Tests: `test/station-templates.test.js` (every work preset: staffing, one-agent readiness, belt-order steps, loop
+gates, cut belts) and `test/station-template-example.e2e.test.js` (Creative ships after one approval; Software goes
+Builder → Tester → Builder → Tester and ships on a pass, through a real sidecar).
 
-- Live preview `http://127.0.0.1:18845`: opened through Conveyors and Presets;
-  assigned NOVA to Drafter, rejected NOVA as the second role, and observed the
-  assignment after a saved reload. Restored the original blank assignments.
-- A save-conflict notice appeared on two immediate save/reload checks. Loading
-  the current station recovered the saved assignment. No save-layer changes
-  were made in this work; the notice remains a separate follow-up.
-- Visually checked the glass card at the normal desktop size and 390×844.
-  Scrolled to the sample button and status on the narrow viewport, then reset
-  the viewport and left the card open for review.
-- `station-templates.test.js`: passes for classic and remastered catalogs,
-  including read-only inspection, route-derived role order, duplicate agents,
-  missing computer access, and reversed belts.
-- `station-template-example.e2e.test.js`: passes against a real sidecar with a
-  local deterministic provider. Two durable runs, saved drafting/review briefs,
-  actual draft handoff, and final reviewer delivery are asserted. Capabilities
-  come from real workstation furniture through the same enrichment as World.
-  Registered in `test/http.list`.
-- Existing run-gate and junction-card regressions: 23 + 117 assertions pass.
-- No paid-provider sample was run in the user's preview. It contains one agent;
-  the guide correctly leaves the sample disabled until a second is assigned.
-
-Full gate: **not green**. After several minutes,
-`qa-product-perfect-claims.test.js` reported the same planning-authority failures
-as the preceding library pass (expected PASS, received BLOCKED; missing wave
-verdict explanation). It also reported a candidate-HEAD mismatch because this
-change was committed while that audit was running. Stopped that owned test;
-the runner exited 1. No full-green claim or merge. Logs:
-`.dogfood/build-interactions/creative-test-fast.log` and `library-test-fast.log`
-in the same directory.
+Live check 2026-09-28 (isolated seeded sidecar, headless Chromium, mock model): the picker shows both groups;
+applying Software Studio rebuilt five rooms and opened the guide; the lead on every step read ready; RECRUIT added
+a real specialist with its own desk; the sample ran NOVA ▸ REVIEWER ▸ NOVA ▸ REVIEWER and delivered; no OS-painted
+controls; undo returned to the one-room station; no page exceptions.
