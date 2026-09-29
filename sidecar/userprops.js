@@ -106,14 +106,65 @@ function makeUserProps(deps) {
     } finally { clearTimer(t); }
   }
 
-  async function start(rawNoun) {
+  // ---- PREVIEW before paying: the cloud sizes the object and draws a quick concept sketch. Kept in memory only
+  // (a preview is a few cents and is never a prop); making it hands the cloud the approved sizing + sketch.
+  const previews = new Map();   // cloud job id -> { noun, job, result }
+  async function startPreview(rawNoun) {
+    const noun = String(rawNoun == null ? '' : rawNoun).replace(/\s+/g, ' ').trim();
+    if (!noun) return { ok: false, code: 'empty', message: 'Describe an object.' };
+    if (noun.length > 60) return { ok: false, code: 'too_long', message: 'Keep it under 60 characters.' };
+    const c = cloudCfg();
+    if (!c) return { ok: false, code: 'not_linked', message: 'Making props uses StarNet credits. Link this station under SETTINGS \u2192 PROVIDERS first.' };
+    let r;
+    try { r = await request('POST', c.url + '/v1/props/preview', c.token, { noun }, START_TIMEOUT_MS); }
+    catch (_) { return { ok: false, code: 'unreachable', message: 'StarNet could not be reached. Check your connection and try again.' }; }
+    const cloudMsg = r.j && r.j.error && r.j.error.message ? String(r.j.error.message).slice(0, 200) : '';
+    if (r.status === 402) return { ok: false, code: 'insufficient_credits', message: 'Out of StarNet credits. Top up under SETTINGS \u2192 PROVIDERS.' };
+    if (r.status === 401 || r.status === 403) return { ok: false, code: 'not_linked', message: 'This station\u2019s StarNet link is no longer valid. Relink it under SETTINGS \u2192 PROVIDERS.' };
+    if (r.status === 429) return { ok: false, code: 'busy', message: cloudMsg || 'Too many props right now. Try again shortly.' };
+    if (r.status === 400) return { ok: false, code: (r.j && r.j.error && r.j.error.code) || 'invalid', message: cloudMsg || 'That description was not accepted.' };
+    if (r.status === 404) return { ok: false, code: 'unsupported', message: 'Your StarNet account server does not offer previews yet.' };
+    const job = r.j && r.j.job;
+    if (!r.ok || !job || typeof job.id !== 'string' || !/^pj_[A-Za-z0-9]{8,64}$/.test(job.id)) return { ok: false, code: 'cloud_error', message: cloudMsg || 'StarNet could not start that preview.' };
+    if (previews.size > 40) previews.delete(previews.keys().next().value);
+    previews.set(job.id, { noun, job: publicJob(job), result: null });
+    return { ok: true, job: { ...publicJob(job), noun, kind: 'preview' } };
+  }
+  // Poll one preview (on demand: previews are short). The page gets the sketch as a data URL.
+  async function preview(id) {
+    const pv = previews.get(String(id || ''));
+    if (!pv) return { ok: false, code: 'not_found', message: 'No such preview.' };
+    if (!pv.result && pv.job.status !== 'failed') {
+      const c = cloudCfg();
+      if (c) {
+        try {
+          const r = await request('GET', c.url + '/v1/props/jobs/' + encodeURIComponent(id), c.token, null, POLL_TIMEOUT_MS);
+          const job = r.j && r.j.job;
+          if (r.status === 404) pv.job = { ...pv.job, status: 'failed', error: { code: 'lost', message: 'StarNet lost track of this preview. Make a new one.' } };
+          else if (r.ok && job) {
+            pv.job = publicJob(job);
+            const res = job.result;
+            if (job.status === 'done' && res && res.size && typeof res.sketch === 'string') {
+              const png = Buffer.from(res.sketch, 'base64');
+              if (isPng(png) && png.length < MAX_PNG_BYTES) pv.result = { label: String(res.label || '').slice(0, 24), size: { fp: String(res.size.fp || ''), height: Number(res.size.height) || 0, like: String(res.size.like || '').slice(0, 80), symmetric: res.size.symmetric === true }, sketch: res.sketch };
+              else pv.job = { ...pv.job, status: 'failed', error: { code: 'bad_result', message: 'StarNet returned a preview this station could not use.' } };
+            }
+          }
+        } catch (e) { note('userprops.preview.poll', e); }   // offline: the page asks again
+      }
+    }
+    return { ok: true, job: { ...pv.job, noun: pv.noun }, preview: pv.result ? { label: pv.result.label, footprint: pv.result.size.fp, height: pv.result.size.height, like: pv.result.size.like, symmetric: pv.result.size.symmetric, sketch: 'data:image/png;base64,' + pv.result.sketch } : null };
+  }
+  async function start(rawNoun, previewId) {
     const noun = String(rawNoun == null ? '' : rawNoun).replace(/\s+/g, ' ').trim();
     if (!noun) return { ok: false, code: 'empty', message: 'Describe an object.' };
     if (noun.length > 60) return { ok: false, code: 'too_long', message: 'Keep it under 60 characters.' };
     const c = cloudCfg();
     if (!c) return { ok: false, code: 'not_linked', message: 'Making props uses StarNet credits. Link this station under SETTINGS → PROVIDERS first.' };
     let r;
-    try { r = await request('POST', c.url + '/v1/props/generate', c.token, { noun }, START_TIMEOUT_MS); }
+    const pv = previewId ? previews.get(String(previewId)) : null;
+    const body = pv && pv.result && pv.noun === noun ? { noun, preview: { size: pv.result.size, sketch: pv.result.sketch } } : { noun };
+    try { r = await request('POST', c.url + '/v1/props/generate', c.token, body, START_TIMEOUT_MS); }
     catch (_) { return { ok: false, code: 'unreachable', message: 'StarNet could not be reached. Check your connection and try again.' }; }
     const cloudMsg = r.j && r.j.error && r.j.error.message ? String(r.j.error.message).slice(0, 200) : '';
     if (r.status === 402) return { ok: false, code: 'insufficient_credits', message: 'Out of StarNet credits. Top up under SETTINGS → PROVIDERS.' };
@@ -293,7 +344,7 @@ function makeUserProps(deps) {
   function stop() { stopped = true; if (timer) { clearTimer(timer); timer = null; } }
   function activeJobs() { return pending().map((pj) => job(pj.id)).filter(Boolean); }
 
-  return { list, deleted, remove, setScale, imageFile, start, startSide, job, activeJobs, resume, stop, pollOnce, _internals: { slugOf, validResult, isPropId } };
+  return { list, deleted, remove, setScale, imageFile, start, startPreview, preview, startSide, job, activeJobs, resume, stop, pollOnce, _internals: { slugOf, validResult, isPropId } };
 }
 
 module.exports = { makeUserProps, isPropId };

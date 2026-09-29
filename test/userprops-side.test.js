@@ -19,9 +19,9 @@ function fakeCloud() {
   const fetch = async (url, init) => {
     const body = init.body ? JSON.parse(init.body) : null;
     state.calls.push({ url, method: init.method, body });
-    if (init.method === 'POST' && /\/v1\/props\/(generate|side)$/.test(url)) {
+    if (init.method === 'POST' && /\/v1\/props\/(generate|side|preview)$/.test(url)) {
       const id = 'pj_side' + String(++SEQ).padStart(8, '0');
-      state.jobs.set(id, { id, kind: /side$/.test(url) ? 'side' : 'front', noun: body.noun, status: 'running', step: 'drawing', tries: 1, costUsd: 0 });
+      state.jobs.set(id, { id, kind: /side$/.test(url) ? 'side' : /preview$/.test(url) ? 'preview' : 'front', noun: body.noun, status: 'running', step: 'drawing', tries: 1, costUsd: 0 });
       return { status: 202, ok: true, json: async () => ({ job: state.jobs.get(id) }) };
     }
     const m = /\/v1\/props\/jobs\/(.+)$/.exec(url);
@@ -118,6 +118,26 @@ const SIDE = (over = {}) => ({ view: 'w', noun: 'a jukebox', footprint: { w: 2, 
     A.eq((await up2.setScale(lamp.id, 10)).code, 'bad_scale', 'an oversized value is refused');
     A.eq((await up2.setScale('user_missing_zzzzzz', 2)).code, 'not_found', 'an unknown prop is refused');
     A.eq(up2.list().find((p) => p.id === lamp.id).scale, 1.5, 'a refused size leaves the stored one alone');
+
+    // ---- PREVIEW before paying: sketch + size come back to the page; making it forwards them to the cloud
+    const pvStart = await up2.startPreview('a crane');
+    A.ok(pvStart.ok && pvStart.job && pvStart.job.kind === 'preview', 'a preview job starts');
+    A.eq(cloud.state.calls.filter((c) => /\/v1\/props\/preview$/.test(c.url)).length, 1, 'posted to the cloud preview route');
+    const pending1 = await up2.preview(pvStart.job.id);
+    A.eq([pending1.ok, pending1.preview], [true, null], 'a running preview has no sketch yet');
+    const sketch = makePng(16, 16).toString('base64');
+    Object.assign(cloud.state.jobs.get(pvStart.job.id), { status: 'done', costUsd: 0.045, result: { noun: 'a crane', label: 'CRANE', size: { fp: '3x2', height: 40, like: 'bunk', symmetric: false }, sketch } });
+    const done1 = await up2.preview(pvStart.job.id);
+    A.eq([done1.preview.label, done1.preview.footprint, done1.preview.height, done1.job.costUsd], ['CRANE', '3x2', 40, 0.045], 'the preview carries label, size and its real cost');
+    A.eq(done1.preview.sketch, 'data:image/png;base64,' + sketch, 'the sketch reaches the page as a data URL');
+    A.eq((await up2.preview('pj_nope00000000')).code, 'not_found', 'an unknown preview is refused');
+    const madeP = await up2.start('a crane', pvStart.job.id);
+    const sentBody = cloud.state.calls.filter((c) => /\/v1\/props\/generate$/.test(c.url)).pop().body;
+    A.ok(madeP.ok, 'making the previewed prop starts');
+    A.eq(sentBody.preview && sentBody.preview.size, { fp: '3x2', height: 40, like: 'bunk', symmetric: false }, 'the approved sizing is forwarded');
+    A.eq(sentBody.preview && sentBody.preview.sketch, sketch, 'and the approved sketch');
+    await up2.start('a different thing', pvStart.job.id);
+    A.eq(cloud.state.calls.filter((c) => /\/v1\/props\/generate$/.test(c.url)).pop().body.preview, undefined, 'a preview is never attached to a different noun');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
   A.report();
 })();

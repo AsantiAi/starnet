@@ -9778,6 +9778,8 @@ const ROUTES = [
   { m: 'GET', qsplit: '/api/userprops/image', h: handleUserPropImage },         // ?id=user_… → the prop PNG (token header; the page makes a blob URL)
   { m: 'POST', exact: '/api/userprops/generate', h: handleUserPropGenerate },   // {noun} → cloud job on StarNet credits (200-always)
   { m: 'GET', qsplit: '/api/userprops/job', h: handleUserPropJob },             // ?id=pj_… → job state
+  { m: 'POST', exact: '/api/userprops/preview', h: handleUserPropPreviewStart },   // {noun} → a few-cent sizing + sketch preview (200-always)
+  { m: 'GET', qsplit: '/api/userprops/preview', h: handleUserPropPreview },          // ?id=pj_… → preview state + the sketch as a data URL
   { m: 'POST', exact: '/api/userprops/scale', h: handleUserPropScale },         // {id, scale} → the player's size for a made prop (0.5..3, free: no regeneration)
   { m: 'POST', exact: '/api/userprops/delete', h: handleUserPropDelete },       // {id} → delete a made prop (files + index; id tombstoned so saves drop it)
   { m: 'POST', exact: '/api/userprops/side', h: handleUserPropSide },           // {id} → turn a made prop into its left-facing side view (credits, 200-always)
@@ -11270,7 +11272,7 @@ async function handleUserPropGenerate(req, res) {
   const body = await readJsonBody(req, readBody, 4096, res);
   if (body == null) return respondJson(res, 200, { ok: false, code: 'bad_request', message: 'Could not read that request.' });
   let r;
-  try { r = await userProps.start(body.noun); }
+  try { r = await userProps.start(body.noun, body.previewId); }
   catch (e) { r = { ok: false, code: 'internal', message: 'The station could not start that prop.' }; }
   return respondJson(res, 200, r);
 }
@@ -11280,6 +11282,21 @@ async function handleUserPropSide(req, res) {
   let r;
   try { r = await userProps.startSide(String(body.id || '')); }
   catch (e) { failNote('userprops.side', e); r = { ok: false, code: 'internal', message: 'The station could not start that side view.' }; }
+  return respondJson(res, 200, r);
+}
+async function handleUserPropPreviewStart(req, res) {
+  const body = await readJsonBody(req, readBody, 4096, res);
+  if (body == null) return respondJson(res, 200, { ok: false, code: 'bad_request', message: 'Could not read that request.' });
+  let r;
+  try { r = await userProps.startPreview(body.noun); }
+  catch (e) { failNote('userprops.preview.start', e); r = { ok: false, code: 'internal', message: 'The station could not start that preview.' }; }
+  return respondJson(res, 200, r);
+}
+async function handleUserPropPreview(req, res) {
+  const id = new URL(req.url, 'http://x').searchParams.get('id') || '';
+  let r;
+  try { r = await userProps.preview(id); }
+  catch (e) { failNote('userprops.preview', e); r = { ok: false, code: 'internal', message: 'The station could not read that preview.' }; }
   return respondJson(res, 200, r);
 }
 async function handleUserPropScale(req, res) {

@@ -4020,6 +4020,14 @@ body.crew-rail-off #screen-game.active {
 /* the PROVIDERS door appears only after a not-linked / out-of-credit refusal; .bb sets display, so [hidden] needs the win */
 .refit-makeprop [hidden] { display: none !important; }
 .refit-makeprop-actions { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 3px; }
+.refit-makeprop-preview { display: flex; gap: 8px; align-items: flex-start; margin-top: 5px; padding: 5px; border: 1px dashed var(--ph-dim); }
+.refit-makeprop-preview img { width: 96px; height: 96px; object-fit: contain; flex: 0 0 auto; image-rendering: auto; filter: saturate(.85); }
+.refit-makeprop-previewtxt { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-family: 'VT323', monospace; letter-spacing: 1px; line-height: 1.25; }
+.refit-makeprop-previewtxt b { font-weight: normal; font-size: 14px; color: var(--ph); text-shadow: 0 0 5px var(--ph-glow2); }
+.refit-makeprop-previewtxt span { font-size: 12px; color: var(--ph); }
+.refit-makeprop-previewtxt small { font-size: 11px; color: var(--ph-dim); }
+.refit-makeprop-previewbtns { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 3px; }
+.refit-makeprop-door { width: 100%; justify-content: center; margin: 4px 0 2px; letter-spacing: 1.2px; }
 .refit-makeprop-size { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-family: 'VT323', monospace; letter-spacing: 1.5px; color: var(--ph-dim); }
 .refit-makeprop-size .refit-makeprop-sizeval { font-weight: normal; min-width: 4ch; text-align: center; color: var(--ph); text-shadow: 0 0 5px var(--ph-glow2); font-variant-numeric: tabular-nums; }
 /* the result readout: a real count, or an honest miss — never an empty grid with no explanation */
