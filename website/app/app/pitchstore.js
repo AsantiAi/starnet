@@ -107,7 +107,27 @@ const PitchStore = (() => {
     return { ready: false, why: 'no-readiness-read' };
   }
 
-  function onRunEnd(p) { if (decide(p).go) fire(p); }
+  /* THE FIRST PITCH WAITS FOR THE ANSWER TO BE READ (first-hour walk 2026-09-28): it fired seconds after the first
+     good answer and its dialogue replaced the whole COMMS column, hiding the listings the Commander had just asked
+     for. It now waits until the answer has been on screen for a minute; if the Commander is typing or a new run is
+     in flight by then, it steps aside (still un-pitched) and a later run end offers it again. Same dialogue, same
+     words — later. */
+  const PITCH_SETTLE_MS = 60000;
+  let pitchTimer = null, pendingPitch = null;
+  function onRunEnd(p) {
+    if (!decide(p).go) return;
+    pendingPitch = p;
+    if (pitchTimer) clearTimeout(pitchTimer);
+    pitchTimer = setTimeout(settlePitch, Number.isFinite(deps.settleMs) ? deps.settleMs : PITCH_SETTLE_MS);
+  }
+  function settlePitch() {
+    pitchTimer = null;
+    const p = pendingPitch; pendingPitch = null;
+    if (!p) return;
+    const movedOn = typeof Chat !== 'undefined' && ((Chat.isBusy && Chat.isBusy()) || (Chat.isComposerEngaged && Chat.isComposerEngaged()));
+    if (movedOn) return;
+    if (decide(p).go) fire(p);
+  }
 
   // run the directive → parse → present the beat → route the choice. Awaitable so the test can drive it. `p` is the
   // triggering agent.run.end payload; its runId lets getRecentTask name the run that ACTUALLY just finished (not
@@ -311,13 +331,13 @@ const PitchStore = (() => {
 
   // S2: a brand-new hero re-earns its First Pitch. Drop the self-persisted flag (Save.clear() only wipes the
   // main save envelope; this store owns its own key, like curiositystore).
-  function reset() { state = (typeof Pitch !== 'undefined') ? Pitch.fresh() : { v: 1, pitched: false }; firing = false; try { localStorage.removeItem(KEY); } catch (_) {} }
+  function reset() { state = (typeof Pitch !== 'undefined') ? Pitch.fresh() : { v: 1, pitched: false }; firing = false; if (pitchTimer) { clearTimeout(pitchTimer); pitchTimer = null; } pendingPitch = null; try { localStorage.removeItem(KEY); } catch (_) {} }
 
   // has the one-time First Pitch already fired? (read by the ongoing-suggestion engine — graduation gates it).
   function done() { return !!(state && state.pitched); }
 
   // _-prefixed handles are exposed for the deterministic node test (harmless in the browser).
-  return { init, reset, onRunEnd, done, offerAtHandoff, offerStarter, armFirstMove, offerHandoff, startHandoff, handoffPending, _decide: decide, _fire: fire, _state: () => state };
+  return { init, reset, onRunEnd, done, offerAtHandoff, offerStarter, armFirstMove, offerHandoff, startHandoff, handoffPending, _decide: decide, _fire: fire, _settle: settlePitch, _pending: () => pendingPitch, _state: () => state };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { PitchStore };

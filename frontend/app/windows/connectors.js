@@ -307,6 +307,11 @@
         '</div>' +
       '</details>';
 
+    // FIRST OPEN LANDS ON THE CATALOG (first-hour walk 2026-09-28): a newcomer who came here to connect Gmail met
+    // "capability grants", "ASK mode" and REFRESH AUTHORITY first. With no remembered section yet, land on
+    // DISCOVER › CATALOG ("find a service by name"); every later open returns to the section last used. Tabs and
+    // sections are unchanged — only the first one shown.
+    if (H.consoleSection && !H.consoleSection.connectors) H.consoleSection.connectors = 'catalog';
     const host = mountConsole(body, 'connectors', [
       { id: 'toolsets', label: 'BUILT-IN ABILITIES', glyph: '▤', desc: 'Inspect an agent’s capability grants. Switches apply in ASK mode; Full Access overrides them. Connected services still need working credentials.', build: frag(secToolsets) },
       { id: 'computer', label: 'COMPUTER CONTROL', glyph: '▣', desc: 'Choose how agents interact with native desktop apps. Full Power or a paired remote-owner lease is required.', build: frag(

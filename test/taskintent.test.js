@@ -343,6 +343,54 @@ A.eq(Policy.canMutate({ status: 'executing' }, { scope: 'execute' }).ok, true, '
   A.ok(loopResult.messages.some(m => m.role === 'assistant' && /^TASK_QUESTION:/.test(m.content)), 'loop appends the compatible question marker after paired tool results');
   A.eq(emitted.some(e => e.name === 'agent.tool_call'), false, 'internal brief controls stay out of user-facing tool telemetry');
 
+  // TURN BREAK (first-hour walk 2026-09-28): a hidden brief tool emits no agent.tool_call, so the page never reset its
+  // reply and the next turn's prose glued onto the previous line — straight into a TASK_QUESTION option chip.
+  {
+    const scripted = turns => { let i = 0; return { async *stream() {
+      const t = turns[Math.min(i++, turns.length - 1)];
+      if (t.text) for (const piece of t.text) yield { type: 'text', delta: piece };
+      if (t.tool) { yield { type: 'tool_start', index: 0, id: t.tool + i, name: t.tool }; yield { type: 'tool_args', index: 0, chunk: '{}' }; }
+      yield { type: 'usage', usage: {} }; yield { type: 'done', finishReason: t.finish || (t.tool ? 'tool_calls' : 'stop') };
+    } }; };
+    const runWith = async (turns, extra) => {
+      const ev = [];
+      const res = await LoopModule.runAgentLoop(Object.assign({
+        messages: [{ role: 'user', content: 'Draft it' }], provider: scripted(turns),
+        emit: (name, payload) => ev.push({ name, payload }),
+        dispatch: async () => ({ ok: true, isError: false, content: 'noted', summary: 'ok' }),
+        hiddenTools: ['brief_update'], limits: { maxIters: 4 }, signal: { aborted: false }, clock: { now: () => 1 },
+        cost: { estimate: () => ({ usd: 0 }), reconcile: () => ({ usd: 0, tokensIn: 0, tokensOut: 0 }) },
+        capCtx: { canRun: () => true }, agentId: 'agent', runId: 'turn-break', model: 'replay/model'
+      }, extra || {}));
+      return { res, stream: ev.filter(e => e.name === 'agent.token').map(e => e.payload.delta).join(''), calls: ev.filter(e => e.name === 'agent.tool_call').length };
+    };
+    const hidden = await runWith([{ text: ['Here is my read.'], tool: 'brief_update' }, { text: ['I have done ', 'what I can.'] }]);
+    A.eq(hidden.stream, 'Here is my read.\n\nI have done what I can.', 'a turn after a HIDDEN tool starts a new paragraph in the live stream');
+    A.eq(hidden.calls, 0, 'the hidden tool still emits no tool telemetry');
+    A.ok(hidden.res.messages.filter(m => m.role === 'assistant').every(m => !/^\n/.test(String(m.content || ''))), 'durable turn text never carries the break');
+    const visible = await runWith([{ text: ['Checking.'], tool: 'fs_read' }, { text: ['Found it.'] }]);
+    A.eq(visible.stream, 'Checking.Found it.', 'a VISIBLE tool call resets the page itself — no extra break is streamed');
+    A.eq(visible.calls, 1, 'the visible tool call is announced');
+    const cut = await runWith([{ text: ['Half a sen'], finish: 'length' }, { text: ['tence.'] }]);
+    A.ok(!/\n\n/.test(cut.stream), 'a length-continuation joins mid-sentence with no break: ' + JSON.stringify(cut.stream));
+  }
+  // every choice marker leaves displayed text, in any number and any mix; prose that merely says FORK: stays
+  {
+    const Fork = require('../frontend/app/fork.js');
+    const two = 'Here is the plan.\nTASK_QUESTION: whose voice? || yours | neutral\nMore prose.\nTASK_QUESTION: when? || now | later';
+    const t2 = Fork.TaskIntent.strip(two);
+    A.ok(!/TASK_QUESTION/.test(t2) && /Here is the plan\./.test(t2) && /More prose\./.test(t2), 'TaskIntent.strip removes EVERY task question line, not just the first: ' + JSON.stringify(t2));
+    const mixed = 'Draft ready.\n\nFORK: casual or formal? || casual | formal\nTASK_QUESTION: send now? || yes | no';
+    A.eq(Fork.stripMarkers(mixed), 'Draft ready.', 'stripMarkers removes FORK and TASK_QUESTION lines together');
+    A.eq(Fork.stripMarkers('FORK: a or b? || a | b'), '', 'a marker-only reply leaves nothing to show');
+    const plain = 'The FORK: in the road is where we choose.\n  Keep this spacing.  ';
+    A.eq(Fork.stripMarkers(plain), plain, 'prose without a marker is returned byte-identical');
+    A.eq(Fork.strip('x\nFORK: q? || a | b\nFORK: r? || c | d'), 'x', 'Fork.strip removes every FORK line');
+    const chatSrcT = fs.readFileSync(path.join(__dirname, '../frontend/app/chat.js'), 'utf8');
+    A.ok(/const forkAsked = [^\n]*Fork\.parse\(replyText\)/.test(chatSrcT) && chatSrcT.indexOf('const forkAsked') < chatSrcT.indexOf('replyText = shown;'), 'the FORK is parsed from the raw reply before the markers are stripped');
+    A.ok(/renderProse\(r\.body, shownText\)/.test(chatSrcT) && /const shownText = [^\n]*Fork\.stripMarkers\(m\.content\)/.test(chatSrcT), 'history re-renders strip markers from server-synced rows');
+  }
+
   const cx = CommanderContext.compose({ brief: resumed, dossier: 'COMMANDER DOSSIER\n- Goals: ship', existingSystem: '', patterns: s2.patterns(5) });
   A.ok(/ORIGINAL REQUEST: Build me a dashboard/.test(cx) && /=> operators/.test(cx), 'composer carries original task + answered decision');
   A.ok(/strength="weak; never override current instructions"/.test(cx), 'relationship evidence is truthfully labelled weak');

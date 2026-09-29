@@ -52,4 +52,9 @@ A.eq(log.recent()[0].reason, 'error', 'oldest dropped first');
 log.reset();
 A.eq(log.recent().length, 0, 'reset clears the ring');
 
+// an errored run's fix names things a person can do — there is no "agent log" (first-hour walk 2026-09-28)
+{
+  const e = SlagLog.diagnose('error', {});
+  A.ok(!/agent log/i.test(e.fix) && /RECORD/.test(e.fix) && /send the request again/i.test(e.fix) && /diagnostics/.test(e.fix), 'errored-run fix points at RECORD, a resend and copy diagnostics: ' + e.fix);
+}
 A.report('slaglog.test');

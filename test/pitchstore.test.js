@@ -211,8 +211,10 @@ A.eq(PitchStore._decide({ reason: 'done', agentId: 'agent' }), { go: true, reaso
     hn.next = { text: 'PITCH: y\nBUILD: workflow' };
     dlg.nextChoice = { value: 'other' };
     recentTaskArg = '__unset__';
+    deps.settleMs = 5;   // the pitch now waits for the answer to be read (60s in the app); keep the wiring test fast
     bus.emit('agent.run.end', { reason: 'done', agentId: 'agent', runId: 'R-42' });
-    await tick(10);
+    await tick(40);
+    delete deps.settleMs;
     A.eq(hn.calls.length, 1, 'emitting agent.run.end actually runs the pitch (onRunEnd → fire)');
     A.eq(recentTaskArg, 'R-42', 'fire() threads the ENDED run\'s runId into getRecentTask (#18 — names the right run, not the displayed stream)');
 
@@ -338,6 +340,25 @@ A.eq(PitchStore._decide({ reason: 'done', agentId: 'agent' }), { go: true, reaso
       A.eq(await pending, null, 'reset cancels a stale handoff result');
       A.eq(PitchStore._state().handoffDraft, undefined, 'stale result cannot overwrite a new agent');
       dlg.node = realNode; delete global.Chat;
+    }
+
+    /* ---------- THE FIRST PITCH WAITS (first-hour walk 2026-09-28): it covered the answer seconds after it landed ---------- */
+    {
+      PitchStore.reset(); PitchStore.init(Object.assign({}, deps, { settleMs: 20 })); clearFakes();
+      global.Chat = { isBusy: () => false, isComposerEngaged: () => false };
+      PitchStore.onRunEnd({ reason: 'done', agentId: 'agent', runId: 'r-first' });
+      A.eq(dlg.opened, 0, 'the pitch does NOT open the moment the run ends');
+      A.ok(PitchStore._pending(), 'the pitch is held until the answer has been on screen');
+      hn.next = { text: '' };   // an unparseable pitch is fine here: we only prove WHEN fire() runs
+      await tick(60);
+      A.eq(dlg.opened, 1, 'after the wait, the pitch opens');
+      PitchStore.reset(); PitchStore.init(Object.assign({}, deps, { settleMs: 20 })); clearFakes();
+      global.Chat = { isBusy: () => false, isComposerEngaged: () => true };
+      PitchStore.onRunEnd({ reason: 'done', agentId: 'agent', runId: 'r-typing' });
+      await tick(60);
+      A.eq(dlg.opened, 0, 'a Commander who is typing is never interrupted — the pitch steps aside');
+      A.eq(PitchStore._state().pitched, false, 'stepping aside leaves it un-pitched, so a later run end can offer it');
+      delete global.Chat; PitchStore.reset(); PitchStore.init(deps); clearFakes();
     }
 
     /* ---------- source-locks: tutorial.js wires the handoff honestly (browser IIFE — lock the source) ---------- */

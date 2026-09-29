@@ -2176,6 +2176,7 @@ const Chat = (() => {
   const BROADCAST_COALESCE_MS = 3000;
   const BROADCAST_QUEUE_CAP = 8;   // bounded FIFO: a celebration flood drops the OLDEST queued line, never grows unbounded
   let lastBroadcastAt = 0;
+  let lastTrophyLine = null, lastTrophyAt = 0;   // the moment's trophy line (see ONE MOMENT, ONE TROPHY LINE)
   const broadcastQueue = [];       // {text, opts} coalesced inside the window — drained in order, one per window slot
   let broadcastDrainTimer = null;
   function broadcastBlocked() {
@@ -2237,6 +2238,31 @@ const Chat = (() => {
     const line = document.createElement('span');
     line.className = 'bc-line' + (opts.tone === 'gold' ? ' bc-gold' : '');   // tone rides the LINE (a shared block can mix tones)
     const raw = String(text == null ? '' : text);
+    // ONE MOMENT, ONE TROPHY LINE (first-hour walk 2026-09-28: three TROPHY EARNED rows landed back to back after the
+    // first good answer). A trophy that joins a block whose last line is already a trophy line folds into it —
+    // "◆ 3 trophies — FIRST LIGHT · PACK RAT · NIGHT SHIFT (see GROWTH)". Every name still shows; one row, not three.
+    const TROPHY = 'TROPHY EARNED · ';
+    // the moment's trophy line: the last trophy line, if it landed in the last 10s — even when a card (a REMEMBERED
+    // fact landed between them in the walk) started a new block since. An older trophy line is a different moment.
+    const prevLine = (lastTrophyLine && lastTrophyLine.isConnected && Date.now() - lastTrophyAt < 10000) ? lastTrophyLine : null;
+    if (raw.indexOf(TROPHY) === 0 && prevLine && prevLine.dataset && prevLine.dataset.trophies) {
+      let names = [];
+      try { names = JSON.parse(prevLine.dataset.trophies) || []; } catch (_) { names = []; }
+      const nm = raw.slice(TROPHY.length).trim();
+      if (nm && names.indexOf(nm) < 0) names.push(nm);
+      prevLine.dataset.trophies = JSON.stringify(names);
+      prevLine.textContent = '';
+      const g = document.createElement('span'); g.className = 'bc-glyph'; g.textContent = '▸ ';
+      const em = document.createElement('span'); em.className = 'bc-name'; em.textContent = names.join(' · ');
+      prevLine.appendChild(g);
+      prevLine.appendChild(document.createTextNode('◆ ' + names.length + ' trophies — '));
+      prevLine.appendChild(em);
+      prevLine.appendChild(document.createTextNode(' (see GROWTH)'));
+      lastTrophyAt = Date.now();
+      autoscroll();
+      return true;
+    }
+    if (raw.indexOf(TROPHY) === 0) { line.dataset.trophies = JSON.stringify([raw.slice(TROPHY.length).trim()]); lastTrophyLine = line; lastTrophyAt = Date.now(); }
     const hi = opts.highlight ? String(opts.highlight) : '';
     const ix = hi ? raw.indexOf(hi) : -1;
     // prefix glyph
@@ -2821,7 +2847,7 @@ const Chat = (() => {
       const label = String(sum.textContent || '').split(' · ')[0];
       const bits = [];
       if (Number(entry.durationMs) > 0) bits.push(fmtMs(Number(entry.durationMs)));
-      bits.push(leadCalls + ' lead ' + (leadCalls === 1 ? 'call' : 'calls'));
+      bits.push(leadCalls + ' tool ' + (leadCalls === 1 ? 'call' : 'calls'));   // the LEAD's tool calls (runCallCount = toolTrace) — not model calls
       if (children.length) bits.push(workerCalls + ' worker ' + (workerCalls === 1 ? 'call' : 'calls'));
       const identity = [entry.model && entry.model !== '(unknown)' ? entry.model : '', (entry.reasoningEffort && entry.reasoningEffort !== 'none') ? entry.reasoningEffort : ''].filter(Boolean).join(' ');
       if (identity) bits.push(identity);
@@ -6621,13 +6647,17 @@ const Chat = (() => {
       if (m && m.sys) { if ((m.content || '').trim()) toolLine(m.content, !!m.error); continue; }
       if (m.role !== 'assistant') continue;   // only dialogue turns render (a stray system marker never shows as an agent reply)
       if (!(m.content || '').trim()) { if (m.stopped) lastReal = m; continue; }   // zero-token stop: durable recovery truth, never a blank speech row
+      // rows re-synced from the server transcript still carry their FORK:/TASK_QUESTION: machine lines — they are
+      // chip data, never speech (a reload used to print them raw, first-hour walk 2026-09-28)
+      const shownText = (typeof Fork !== 'undefined' && Fork.stripMarkers) ? Fork.stripMarkers(m.content) : m.content;
+      if (!shownText.trim()) { lastReal = m; continue; }   // a reply that was ONLY a marker has no prose to show
       // a turn produced by a WORK LINE stage carries its own agentId — replay names that agent, not the focused
       // one, or a reload would silently re-attribute two other agents' work to whoever owns the stream now.
       const spoke = (m && m.agentId && typeof App !== 'undefined' && App.agentName) ? App.agentName(m.agentId) : null;
       if (stamp !== false) flushDeliverablesBefore(stamp);   // the files this reply's run produced were shown BEFORE the reply landed
       const r = row('agent', { stamp: stamp, who: spoke });   // past turns render as plain GROUPED messages; only the LIVE reply is the lit headline
       if (m.error) r.d.classList.add('err');
-      renderProse(r.body, m.content);   // same linkify path as live tokens, so replayed history matches
+      renderProse(r.body, shownText);   // same linkify path as live tokens, so replayed history matches
       lastReal = m;
     }
     flushDeliverablesBefore(null);   // files newer than the last stored turn (or from turns without a stamp)
@@ -6733,7 +6763,11 @@ const Chat = (() => {
         }
       },
       breakSeg() { closeSeg(); },   // an inline action is about to render below — end this paragraph
-      cleanTaskIntent() { if (seg && typeof TaskIntent !== 'undefined' && TaskIntent.strip) { raw = TaskIntent.strip(raw); flushProse(); } },
+      cleanTaskIntent() {   // every choice marker (FORK + TASK_QUESTION) leaves the live row once the chips take over
+        if (!seg) return;
+        if (typeof Fork !== 'undefined' && Fork.stripMarkers) { raw = Fork.stripMarkers(raw); flushProse(); }
+        else if (typeof TaskIntent !== 'undefined' && TaskIntent.strip) { raw = TaskIntent.strip(raw); flushProse(); }
+      },
       done() { closeSeg(); },
       // m = the plain-language headline to LEAD with; rawDetail (optional) = the original technical text, kept
       // accessible as a dim sub-line + a title tooltip so debugging info isn't lost, just de-emphasized.
@@ -8879,6 +8913,16 @@ const Chat = (() => {
           if (taskQuestion.question) voiceQuestion = taskQuestion.question;   // spoken (question only, no options) at reply end
           if (isActiveWs(ws) && activeLiveRow && activeLiveRow.cleanTaskIntent) activeLiveRow.cleanTaskIntent();
         }
+        // FORK is parsed from the RAW reply, then every choice marker (FORK and any leftover TASK_QUESTION) leaves the
+        // displayed + saved text: nothing used to strip a FORK line, so it always printed raw under its own chips.
+        const forkAsked = (replyText && typeof Fork !== 'undefined' && Fork.parse) ? Fork.parse(replyText) : null;
+        if (typeof Fork !== 'undefined' && Fork.stripMarkers) {
+          const shown = Fork.stripMarkers(replyText);
+          if (shown !== replyText) {
+            replyText = shown;
+            if (isActiveWs(ws) && activeLiveRow && activeLiveRow.cleanTaskIntent) activeLiveRow.cleanTaskIntent();
+          }
+        }
         finalReply = replyText;
         titleOk = !!replyText.trim();   // a real, non-empty reply landed → this stream is eligible for a summary title
         if (replyText.trim()) ws.history.push({ role: 'assistant', content: replyText, ts: Date.now(), sourceRunId: thisRunId || undefined });   // never persist an empty turn
@@ -8952,9 +8996,9 @@ const Chat = (() => {
         // R1 MID-TASK FORK: the agent may have ended this reply with one FORK marker (earned only while the
         // style model's confidence is low — the directive isn't even in the prompt otherwise). Render the
         // one-tap chips at the run boundary; a malformed marker parses null and stays plain text.
-        if (isActiveWs(ws) && replyText && typeof Fork !== 'undefined' && Fork.parse) {
-          const fk = Fork.parse(replyText);
-          if (fk) { offerFork(fk, thisRunId); if (!voiceQuestion && fk.question) voiceQuestion = fk.question; }
+        if (isActiveWs(ws) && forkAsked) {
+          const fk = forkAsked;   // parsed before the marker left the displayed text (above)
+          offerFork(fk, thisRunId); if (!voiceQuestion && fk.question) voiceQuestion = fk.question;
         }
         /* THE WORK LINE. This dock has answered; if the Commander drew stages past it, run them now — still
            INSIDE the run's try, so the stream stays busy and Stop/E-STOP reach the whole line rather than a
