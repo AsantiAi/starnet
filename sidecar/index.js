@@ -8264,7 +8264,7 @@ function advanceGoalFromQuests() {
       const after = commanderGoals.get();
       if (!after || after.milestoneId === fin.milestoneId) break;   // defensive: the fold did not move it
     }
-    if (advanced) { try { questRefreshTick(); } catch (_) {} }   // caught up on a new step: the refresh gate decides whether to plan it now
+    if (advanced) { try { questRefreshTick(); } catch (e) { failNote('goals.advance.refreshTick', e); } }   // caught up on a new step: the refresh gate decides whether to plan it now
     return advanced;
   })().catch(e => { console.warn('[goals] advance failed:', (e && e.message) || e); return 0; });
   goalAdvancing = task;
