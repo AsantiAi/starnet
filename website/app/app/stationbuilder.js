@@ -40,7 +40,8 @@
     return JSON.stringify(v === undefined ? null : v);
   }
   function sigOf(doc) {
-    const s = canon([doc._nid, doc.order, doc.rooms, doc.props, doc.belts, doc.edges || []]);
+    // doc.links: the authored links (conveyor links phase B) — a link-only edit is a floor change too
+    const s = canon([doc._nid, doc.order, doc.rooms, doc.props, doc.belts, doc.edges || [], doc.links == null ? null : doc.links]);
     let h = 0x811c9dc5;
     for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
     return h.toString(16) + ':' + s.length;
