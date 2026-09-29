@@ -106,8 +106,18 @@
 
     /* decide — the metadata-only decision, safe to call from the index composer where bodies are
        not loaded. `action` is the guard verdict already stamped on the record by persist(). */
+    /* The action the trust rule gives this record TODAY, from metadata alone: the stored scan verdict judged at
+       the stricter of its origin tier and its writer tier (guard.actionFor). A stamp written under the old
+       relabel can be MORE permissive than that; it never wins. '' when there is no guard or no stored verdict. */
+    function ruleAction(skill) {
+      const verdict = str(skill && skill.scan && skill.scan.verdict);
+      if (!verdict || !guard || typeof guard.actionFor !== 'function') return '';
+      try { return str(guard.actionFor(skill, verdict)); } catch (_) { return ''; }
+    }
     function decide(skill) {
-      const action = str(skill && skill.guardAction).trim().toLowerCase();
+      const stamped = str(skill && skill.guardAction).trim().toLowerCase();
+      const rule = ruleAction(skill);
+      const action = rule ? worseAction(stamped, rule) : stamped;
       if (action === 'block') {
         return { action: 'block', visible: false, approvable: false, categories: categoriesOf(skill),
           reason: 'blocked by the skill guard' };
@@ -128,7 +138,8 @@
     function liveScan(skill) {
       try {
         if (!guard || typeof guard.scanSkillRecord !== 'function' || typeof guard.shouldAllow !== 'function') return null;
-        const scan = guard.scanSkillRecord(skill, { source: trustSource(skill.createdBy) });
+        const scan = guard.scanSkillRecord(skill, { source: typeof guard.originTier === 'function' ? guard.originTier(skill) : trustSource(skill.createdBy) });
+        if (typeof guard.actionFor === 'function') return { action: guard.actionFor(skill, scan.verdict), scan };
         const policy = guard.shouldAllow(scan, { allowAsk: true });
         return { action: (policy && policy.action) || 'allow', scan };
       } catch (_) { return null; }

@@ -10,6 +10,7 @@
 */
 'use strict';
 const packageFormat = require('./package-format.js');
+const catalog = require('./catalog.js');
 (function (root, factory) {
   const api = factory();
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -109,22 +110,14 @@ const packageFormat = require('./package-format.js');
     }
     return { setup, body: body.trim() };
   }
+  /* ONE frontmatter reader for every SKILL.md (skills/catalog.js). The copy that lived here was flat: an installed
+     standard skill's `description: >-` hydrated as the text '>-', and our own JSON-quoted values came back with
+     their escapes still in them. */
   function parseFrontmatter(text) {
-    const t = str(text);
-    const m = t.match(/^---\s*\r?\n([\s\S]*?)\r?\n---\s*\r?\n?([\s\S]*)$/);
-    if (!m) return { meta: {}, body: t };
-    const meta = {};
-    for (const line of m[1].split(/\r?\n/)) {
-      const mm = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/);
-      if (!mm) continue;
-      let v = mm[2].trim();
-      if (v === 'true') v = true;
-      else if (v === 'false') v = false;
-      else if (v[0] === '[' && v[v.length - 1] === ']') v = v.slice(1, -1).split(',').map(x => x.trim().replace(/^"|"$/g, '')).filter(Boolean);
-      else v = v.replace(/^"|"$/g, '');
-      meta[mm[1]] = v;
-    }
-    return { meta, body: m[2].trim() };
+    const parsed = catalog.parseFrontmatter(str(text));
+    const meta = parsed.meta && typeof parsed.meta === 'object' ? parsed.meta : {};
+    if (typeof meta.description === 'string') meta.description = meta.description.replace(/\s+/g, ' ').trim();
+    return { meta, body: parsed.body };
   }
 
   function makePackageStore(opts) {

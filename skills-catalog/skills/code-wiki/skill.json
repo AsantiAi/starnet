@@ -1,0 +1,15 @@
+{
+  "slug": "code-wiki",
+  "version": "1.0.0",
+  "shelf": "community",
+  "category": "Engineering",
+  "tags": ["documentation", "mermaid", "architecture", "diagrams", "wiki"],
+  "requires": ["cabinet", "workbench"],
+  "license": "MIT",
+  "authors": ["Teknium", "Nous Research"],
+  "upstream": {
+    "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/software-development/code-wiki",
+    "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
+    "license": "MIT"
+  }
+}

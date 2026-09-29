@@ -334,7 +334,7 @@
       search: true,
       groups: [
         { id: 'installed', label: 'INSTALLED', sections: ['toolsets', 'computer', 'mcp', 'keys', 'agent'] },
-        { id: 'discover', label: 'DISCOVER', sections: ['catalog', 'library'] },
+        { id: 'discover', label: 'DISCOVER', sections: ['catalog', 'market', 'library'] },
         { id: 'advanced', label: 'CREATE / ADVANCED', sections: ['custom', 'extensions', 'exchange'] }
       ],
       searchLabel: 'Search abilities',

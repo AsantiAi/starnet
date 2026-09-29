@@ -1,0 +1,15 @@
+{
+  "slug": "document-to-action-items",
+  "version": "1.0.0",
+  "shelf": "community",
+  "category": "Productivity",
+  "tags": ["documents", "extraction", "deadlines", "action-items", "ocr"],
+  "requires": ["cabinet"],
+  "license": "MIT",
+  "authors": ["Ben Barclay", "Nous Research"],
+  "upstream": {
+    "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/productivity/document-to-action-items",
+    "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
+    "license": "MIT"
+  }
+}
