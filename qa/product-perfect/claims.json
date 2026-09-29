@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "f365604209f719fde9642455e567cd1e756d3395",
+    "sourceCommit": "d5590add9e95d7802ad00c311d80acd355a0f528",
     "pathSetSha256": "d399b7dc9c6d8ef4e165d0c6560b5770636dbaf73b81f662e7c4b31d7cc55045",
     "files": [
       {
@@ -318,8 +318,8 @@
       },
       {
         "path": "frontend/app/build.js",
-        "bytes": 451665,
-        "sha256": "fd754ec51745ada40832cf5eb071568669acdad8cb005c31526643f39ec2dfb9"
+        "bytes": 456062,
+        "sha256": "74b04ece5dfc041fb28094c2d2749027261f31f0c87caea3caf83267e4ed1f4a"
       },
       {
         "path": "frontend/app/channels.js",
@@ -1263,8 +1263,8 @@
       },
       {
         "path": "frontend/app/workflowline.js",
-        "bytes": 51336,
-        "sha256": "e99629899df5cb68491dee616fab6225f55ffbbc101782000ccd7b9b28b7e97f"
+        "bytes": 51614,
+        "sha256": "2299cc673c16676da0878abeb9989b008167e15be14bdd9acca4c6509c3fd267"
       },
       {
         "path": "frontend/app/workflowpanel.js",
@@ -1333,8 +1333,8 @@
       },
       {
         "path": "frontend/app/worldmodel.js",
-        "bytes": 199188,
-        "sha256": "8f40271d74c1da2865241d8b36cfcd71c13179f41ae8cbff1bbcebbee2def3ae"
+        "bytes": 199994,
+        "sha256": "227bc344a32ed0f409523558d25c2cdc2ce1ce9d59d1d037ae964cc7dd988f5f"
       },
       {
         "path": "frontend/app/worldrenderer.js",
@@ -1393,8 +1393,8 @@
       },
       {
         "path": "frontend/css/app.css",
-        "bytes": 404396,
-        "sha256": "5cc95b130f6a580d667c58e0030a21ba54302f937180d2c225b91d8924e2d77e"
+        "bytes": 405586,
+        "sha256": "a90cb6c5fee20a969e052618929f1a318339c4e9f7aca0c566cd09482dfeefe8"
       },
       {
         "path": "frontend/css/asciifx.css",
