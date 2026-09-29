@@ -118,6 +118,8 @@
 .refit-overlay .example-note { font-size: 13px; color: var(--ph-dim); line-height: 1.4; }
 .example-sample { margin-top: 18px; padding-top: 1px; border-top: 1px solid var(--refit-edge); }
 .example-sample > p { font-size: 16px; }
+.example-next { margin-top: 18px; padding-top: 1px; border-top: 1px solid var(--refit-edge); }
+.example-next > p { font-size: 15px; line-height: 1.4; }
 .example-status { padding: 12px; border: 1px solid var(--refit-edge); border-radius: 8px; color: var(--ph-bright); }
 .example-result pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 16px; line-height: 1.4; color: var(--text); }
 .example-result summary { cursor: pointer; padding: 12px 0; color: var(--ph-bright); }

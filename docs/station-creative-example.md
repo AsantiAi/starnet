@@ -4,8 +4,14 @@ Updated 2026-09-28: the guide now serves every **work preset** (Software Studio,
 Studio, Operations Station, Cozy Workshop), not only Creative Studio. See
 [DEFAULT-STATIONS.md](station-remaster/DEFAULT-STATIONS.md) for the catalog.
 
-- **When it opens:** right after a work preset is applied, and from Build Mode → Presets → SET UP <PRESET> or the
-  conveyor line's setup card.
+- **When it opens:** right after a work preset is applied; from WORK › WORKFLOWS while any step of the guided line has
+  nobody working it (once staffed, WORKFLOWS opens the Workflow panel as before); and from Build Mode → Presets →
+  SET UP <PRESET> or the conveyor line's setup card. The onboarding station pick's closing line points at WORKFLOWS.
+- **Use it for real:** OPEN THE INBOX closes the guide and opens the line's Inbox in the Workflow panel, where it is set
+  to run on a schedule or from a chat app (and, for Software Studio, where the working folder is chosen).
+- **Words:** the run button reads RUN THE SAMPLE JOB and says it is one real job, the same vocabulary as the TEST
+  control's RUN ONE REAL JOB. A recruited Tester is named TESTER (the role's `name`), not after the reviewer class it
+  borrows. The first-ride coach waits until the guide or the presets dialog closes (one voice).
 - **What it shows:** the line's purpose and flow, one card per step in the line's run order
   (`WorkflowLine.lineFlow` on a probe copy, so it follows the belts), and the preset's sample job.
 - **Staffing:** each step offers the crew, a one-click RECRUIT of that step's specialist (the Workflow panel's

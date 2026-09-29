@@ -5,14 +5,15 @@
    carrying its shelf ROLE, and the setup guide (Build mode) is where the Commander picks or recruits who works it. */
 'use strict';
 const StationTemplates = (() => {
-  /* `purpose` is the kind of work a WORK preset is for: the onboarding purpose chips name the same five kinds
-     (Code & build / Research & brief / Write & edit / Run tasks & ops / A bit of everything). */
+  /* `purpose` is the kind of work a WORK preset is for, and `purposeLabel` names it in the onboarding purpose question's own
+     words (Code & build / Research & brief / Write & edit / Run tasks & ops / A bit of everything), so the station question
+     that follows speaks the same vocabulary. */
   const catalog = [
-    { id: 'software', group: 'work', purpose: 'code', name: 'SOFTWARE STUDIO', rooms: 5, pitch: 'a builder makes each change and a tester checks it', description: 'A workshop, a Build & Test room, a review room and a library. A Builder makes each change and a Tester sends it back until it passes.', wings: [['engineering','west'],['buildTest','north'],['review','east'],['reading','south']] },
-    { id: 'research', group: 'work', purpose: 'research', name: 'RESEARCH STATION', rooms: 3, pitch: 'one agent digs up sources and the next writes the brief', description: 'An analysis lab with a Research → Write line, and a reference archive. One agent digs up sources, the next writes the brief.', wings: [['researchLab','north'],['archive','east']] },
-    { id: 'creative', group: 'work', purpose: 'write', name: 'CREATIVE STUDIO', rooms: 3, pitch: 'a drafter writes it and a reviewer sends it back until it is right', description: 'A design studio and a Draft & Review room. A Drafter writes it, and a Reviewer sends it back until it meets your brief.', wings: [['creative','north'],['creativeReview','east']] },
-    { id: 'operations', group: 'work', purpose: 'ops', name: 'OPERATIONS STATION', rooms: 5, pitch: 'each request goes to a code, research or general specialist', description: 'Dispatch, comms, archive and review rooms. Each incoming request is sorted to a code, research or general specialist.', wings: [['archive','west'],['comms','east'],['dispatch','north'],['review','south']] },
-    { id: 'cozy', group: 'work', purpose: 'general', name: 'COZY WORKSHOP', rooms: 3, pitch: 'one agent handles any job, with a $5-a-day spending cap', description: 'Warm wood floors, a furnished lounge, and a front desk where one agent handles any job within a $5-a-day cap.', wings: [['cozyWorkshop','north'],['cozyLounge','south']] },
+    { id: 'software', group: 'work', purpose: 'code', purposeLabel: 'Code & build', name: 'SOFTWARE STUDIO', rooms: 5, pitch: 'a builder makes each change and a tester checks it', description: 'A workshop, a Build & Test room, a review room and a library. A Builder makes each change and a Tester sends it back until it passes.', wings: [['engineering','west'],['buildTest','north'],['review','east'],['reading','south']] },
+    { id: 'research', group: 'work', purpose: 'research', purposeLabel: 'Research & brief', name: 'RESEARCH STATION', rooms: 3, pitch: 'one agent digs up sources and the next writes the brief', description: 'An analysis lab with a Research → Write line, and a reference archive. One agent digs up sources, the next writes the brief.', wings: [['researchLab','north'],['archive','east']] },
+    { id: 'creative', group: 'work', purpose: 'write', purposeLabel: 'Write & edit', name: 'CREATIVE STUDIO', rooms: 3, pitch: 'a drafter writes it and a reviewer sends it back until it is right', description: 'A design studio and a Draft & Review room. A Drafter writes it, and a Reviewer sends it back until it meets your brief.', wings: [['creative','north'],['creativeReview','east']] },
+    { id: 'operations', group: 'work', purpose: 'ops', purposeLabel: 'Run tasks & ops', name: 'OPERATIONS STATION', rooms: 5, pitch: 'each request goes to a code, research or general specialist', description: 'Dispatch, comms, archive and review rooms. Each incoming request is sorted to a code, research or general specialist.', wings: [['archive','west'],['comms','east'],['dispatch','north'],['review','south']] },
+    { id: 'cozy', group: 'work', purpose: 'general', purposeLabel: 'A bit of everything', name: 'COZY WORKSHOP', rooms: 3, pitch: 'one agent handles any job, with a $5-a-day spending cap', description: 'Warm wood floors, a furnished lounge, and a front desk where one agent handles any job within a $5-a-day cap.', wings: [['cozyWorkshop','north'],['cozyLounge','south']] },
     { id: 'default', group: 'look', name: 'DEFAULT', rooms: 1, description: 'One open room. All five essentials, your workstation, and space to grow.', wings: [] },
     { id: 'retreat', group: 'look', name: 'QUIET RETREAT', rooms: 2, description: 'Your home station with a quiet library and lounge to the south.', wings: [['reading','south']] }
   ];
@@ -115,7 +116,7 @@ const StationTemplates = (() => {
     const live = model.create(structuredClone(doc)), geo = live.projectGeometry();
     const inbox = live.props().find(p=>p.t==='intake' && p.label===g.label);
     const comp = inbox && pipeline.lineComponents(geo).find(c=>c.intakes.includes(inbox.id));
-    const fail = issue => ({...g,issue,roles:[],blocking:[],ready:false,key:comp?.key});
+    const fail = issue => ({...g,issue,roles:[],blocking:[],ready:false,key:comp?.key,inboxId:inbox?.id||null});
     if (!comp || comp.intakes.length!==1 || !comp.outboxes.length || !comp.bays.length)
       return fail('Reconnect the original Inbox, its Bays and the Outbox to use this guide. You can still edit the workflow normally.');
     const W = workflowLine;
@@ -135,7 +136,7 @@ const StationTemplates = (() => {
     const r = W.readiness(flow, comp, { errors: plan.errors, hasCompute: (aid, pid) => live.bayObjects(aid, pid).includes('computer') });
     const unstaffed = roles.filter(x=>!x.agentId);
     const issue = r.ready ? '' : unstaffed.length ? 'Choose an agent for ' + unstaffed.map(x=>x.name).join(', ') + '.' : r.blocking[0].what;
-    return {...g,roles,key:comp.key,ready:r.ready,blocking:r.blocking.map(b=>b.what),issue};
+    return {...g,roles,key:comp.key,inboxId:inbox.id,ready:r.ready,blocking:r.blocking.map(b=>b.what),issue};
   }
   /* recommend(text) -> a WORK preset id, or null: the station for what the Commander said they want help with. The five
      onboarding purpose chips map one to one (Code & build → software, Research & brief → research, Write & edit →

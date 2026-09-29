@@ -139,4 +139,22 @@ for(const P of [legacySprites,remasterContext.module.exports])for(const item of 
 for(const [said,id] of [['Help me write, debug, and ship software.','software'],['Research hard questions and brief me clearly.','research'],['Run tasks, ops, and the day-to-day work.','operations'],['Write and edit sharp content.','creative'],['Be my general-purpose lead across whatever comes up.','cozy'],['I want to write code for my app','software'],['plan my garden',null],['',null],[null,null]])
   assert.equal(T.recommend(said),id,'recommend('+JSON.stringify(said)+')');
 for(const c of T.catalog.filter(c=>c.group==='work')) assert.ok(c.pitch&&c.pitch.length>20,c.id+': a one-line pitch for the onboarding pick');
-console.log('station-templates: seven layouts (five work presets with a ready line each, two looks), classic/remastered catalogs, approved home, one-agent and per-agent staffing, purpose-chip recommendations, belt-order steps, loop gates, clear entrances, prop access, ownership, undo/redo and persistence PASS');
+// THE SETUP PATH (sweep 2026-09-29): the guide knows its Inbox; each work preset names its purpose in onboarding's words;
+// WORKFLOWS opens the guide while a step is unstaffed; the Inbox button opens that Inbox in the Workflow panel; a recruit
+// for a borrowed-class step is named for the step; the onboarding pick speaks the same words and points at WORKFLOWS
+{
+  const P=legacySprites,pipeline=require('../frontend/app/pipeline.js'),WL=require('../frontend/app/workflowline.js'),fs=require('node:fs'),path=require('node:path');
+  const doc=T.build('software',M,P,1000),g=T.example(doc,M,pipeline,WL);
+  assert.equal(g.inboxId,doc.props.find(p=>p.t==='intake'&&p.label===T.guides.software.label).id,'the guide carries its line\'s Inbox');
+  assert.deepEqual(T.catalog.filter(c=>c.group==='work').map(c=>c.purposeLabel),['Code & build','Research & brief','Write & edit','Run tasks & ops','A bit of everything'],'work presets name their purpose in the onboarding question\'s words');
+  assert.equal(M.bayRoleInfo('TESTER').name,'TESTER','a Tester recruit is named for its step');
+  const build=fs.readFileSync(path.join(__dirname,'..','frontend','app','build.js'),'utf8'),onb=fs.readFileSync(path.join(__dirname,'..','frontend','app','onboarding.js'),'utf8'),ob=fs.readFileSync(path.join(__dirname,'..','frontend','app','onboarding.js'),'utf8');
+  const ow=build.slice(build.indexOf('function openWorkflows()'),build.indexOf('function openWorkflows()')+1400);
+  assert.match(ow,/ex\.roles\.some\(r => !r\.agentId\)\) \{ openPresetExample\(\); return; \}/,'WORKFLOWS opens the setup guide while a preset step is unstaffed');
+  assert.match(build,/if \(ri && ri\.name\) spec\.agentName = ri\.name;/,'summonForRole names a borrowed-class recruit for its step');
+  assert.match(build,/inboxBtn\.onclick = \(\) => \{ closeP\(\); try \{ rebake\(\); openFlowCard\(e\.inboxId\); \}/,'the guide\'s Inbox button opens that Inbox in the Workflow panel');
+  assert.match(onb,/c\.purposeLabel \? ' — ' \+ c\.purposeLabel/,'the station question labels each choice with its purpose');
+  assert.match(ob,/WORK › WORKFLOWS walks you through who works each step/,'the pick\'s closing line points at WORKFLOWS');
+  assert.match(build,/querySelector\('\.refit-firstrun, \.refit-preset-example, \.refit-station-builds'\)\)\) fireFirstRide\(\)/,'the first ride never narrates over the presets dialog or the setup guide (one voice)');
+}
+console.log('station-templates: seven layouts (five work presets with a ready line each, two looks), classic/remastered catalogs, approved home, one-agent and per-agent staffing, purpose-chip recommendations, belt-order steps, loop gates, the setup path, clear entrances, prop access, ownership, undo/redo and persistence PASS');

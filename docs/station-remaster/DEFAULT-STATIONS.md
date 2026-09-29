@@ -49,7 +49,7 @@ The guide's readiness is `WorkflowLine.readiness`, the Workflow panel's own bloc
 **Onboarding pick (2026-09-28).** The lead's awakening ends with one added question, asked while the room is
 still dark: "which station should i build for you?" `StationTemplates.recommend` reads the purpose they gave (the
 typed answer; the five purpose suggestions map to the five work presets) and puts that preset first, marked
-recommended; nothing clear recommends no preset. "Start with one room" keeps the starter. It is offered only over the
+recommended, and every choice names its purpose in the question's own words ("Software Studio — Code & build"); nothing clear recommends no preset. The closing line points at WORK › WORKFLOWS, which opens the setup guide while the line still needs a crew. "Start with one room" keeps the starter. It is offered only over the
 untouched one-room starter, never in a deferred interview, and it builds through the same
 `StationTemplates.build` + `replaceLayout` path as Build mode. Live check: a fresh profile typed "I want help
 shipping my app and testing each change", got Software Studio recommended, picked it, and the dawn revealed the
