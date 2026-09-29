@@ -3216,6 +3216,21 @@ const App = (() => {
     if (World.setOnOutbox) World.setOnOutbox(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('outbox'); });
     if (World.setOnMissionBoard) World.setOnMissionBoard(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('quests'); });   // G1b: click the MISSION BOARD → the QUEST LOG (the board is a projection, never a gate)
     if (World.setOnTrophyCase) World.setOnTrophyCase(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('trophies'); });   // G3b: click the TROPHY CASE → the TROPHY surface (a projection of real completions, never a gate)
+    // DESK SCREEN: click an agent's workstation → that agent's work (live steps + hands while it runs, its last job at
+    // rest). The fold starts here so a desk opened mid-run already holds every step this page has seen.
+    if (typeof DeskScreen !== 'undefined' && World.setOnDesk) {
+      DeskScreen.init();
+      World.setOnDesk(o => DeskScreen.open({
+        agentId: o.agentId, clientX: o.clientX, clientY: o.clientY,
+        bounds: () => { const s = document.getElementById('stage-wrap'); return s ? s.getBoundingClientRect() : null; },   // keep the card on the station view
+        agentOf: aid => agents.get(aid) || null,
+        nameOf: aid => { const a = agents.get(aid); return a ? (a.name || a.id) : null; },
+        // the run's own conversation when this page launched it, else the agent's (selectAgent never rebinds a thread with content)
+        openChat: (aid, wsId) => { if (wsId && Workstreams.get(wsId)) openWorkstream(wsId); else selectAgent(aid); },
+        openRecord: aid => { openWorldAgent(aid); if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('logbook'); },
+        openFiles: (runId, label) => { if (typeof StationUI !== 'undefined' && StationUI.openRunOutputs) StationUI.openRunOutputs(runId, label); }
+      }));
+    }
     if (World.setOnBayAssign) World.setOnBayAssign(pid => { if (typeof Build !== 'undefined' && Build.openAssign) Build.openAssign(pid); });   // belt legibility: click an unbound BAY's "NO AGENT" nag → REFIT opens straight into its agent picker
     if (World.setOnIntakeFeed) World.setOnIntakeFeed(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('messaging'); });   // belt legibility: click a starved INTAKE's "NO FEED" nag → the CHANNELS panel (wire a real feed)
     if (World.setOnIntakeSample) World.setOnIntakeSample(o => { if (typeof Chat !== 'undefined' && Chat.sampleCard) Chat.sampleCard(o); });   // guided workflow Phase 4: click the INBOX on a COMPLETE line → the RUN-A-SAMPLE-JOB card (POST /api/routing/sample)
