@@ -96,6 +96,35 @@ const T0 = 1_800_000_000_000;
   A.ok(f.recent.length <= 3, 'recent list is bounded');
 }
 
+// ---- crew strip: every agent, one lamp, unread finishes ----
+{
+  const f = H.createFeed();
+  const agents = [{ id: 'agent', name: 'Nova', color: '#4af' }, { id: 'researcher', name: 'Orion' }, { id: 'coder', name: 'Vex' }];
+  H.applySnapshot(f, { runs: [{ runId: 'r1', agentId: 'researcher', startedAt: T0 }, { runId: 'r2', agentId: 'coder', startedAt: T0 }], prompts: [{ runId: 'r2', agentId: 'coder' }], queues: [] }, T0);
+  A.eq(H.crew(f, agents, 'agent').map(x => [x.id, x.name, x.lamp, x.online]), [['agent', 'NOVA', 'idle', true], ['researcher', 'ORION', 'live', false], ['coder', 'VEX', 'ask', false]],
+    'roster order; a pending prompt outranks working; the line is marked');
+  A.eq(H.crew(f, agents, 'agent').map(x => x.unread), [null, null, null], 'nothing unread before a finish the page received');
+  H.onRunEnd(f, { agentId: 'researcher', runId: 'r1', reason: 'clarifying', turns: 1, usd: 0 }, T0 + 10);
+  H.onRunEnd(f, { agentId: 'researcher', runId: 'r3', reason: 'done', turns: 1, usd: 0 }, T0 + 20);
+  A.eq(H.crew(f, agents, 'agent')[1].unread, 'ask', 'a later DONE never hides an earlier ASKED YOU');
+  H.onRunEnd(f, { agentId: 'agent', runId: 'r4', reason: 'done', turns: 1, usd: 0 }, T0 + 30);
+  A.eq(H.crew(f, agents, 'agent')[0].unread, null, 'the conversation on the line is being read: no pip on it');
+  H.onRunEnd(f, { agentId: 'coder', runId: 'r5', reason: 'cancelled', turns: 1, usd: 0 }, T0 + 40);
+  A.eq(H.crew(f, agents, 'agent')[2].unread, null, 'a run the Commander stopped is not news');
+  H.onRunError(f, { agentId: 'coder', runId: 'r6', message: 'x', transient: false }, T0 + 50);
+  A.eq(H.crew(f, agents, 'agent')[2].unread, 'bad', 'a fault is unread until looked at');
+  A.ok(H.clearUnread(f, 'researcher') && H.crew(f, agents, 'agent')[1].unread === null, 'going to that agent clears it');
+  A.eq(H.crew(f, null, 'agent'), [], 'no roster, no chips');
+}
+
+// ---- folded reply line: the newest real reply, flattened ----
+A.eq(H.lastReply([{ role: 'user', content: 'hi' }, { role: 'assistant', content: '## Done\n\nThree **files** changed. See [the log](http://x).' }, { role: 'assistant', content: 'boom', error: true }]),
+  'Done Three files changed. See the log.', 'skips error markers, strips markdown to one line');
+A.eq(H.lastReply([{ role: 'assistant', content: 'ok ```js\nlet a=1\n``` then' }]), 'ok [code] then', 'code blocks fold to a marker');
+A.eq(H.lastReply([{ role: 'user', content: 'x' }]), '', 'no reply yet, no line');
+A.ok(H.lastReply([{ role: 'assistant', content: 'word '.repeat(80) }], 40).length <= 40, 'long replies are cut at a word');
+A.eq(H.lastReply(null), '', 'no history, no line');
+
 // ---- small formatters + prefs ----
 A.eq(H.toolLabel('web_search'), 'WEB.SEARCH', 'tool label');
 A.eq(H.toolLabel(''), '', 'no tool, no label');
@@ -115,7 +144,8 @@ A.eq([H.fmtAgo(10_000), H.fmtAgo(5 * 60_000), H.fmtAgo(2 * 3_600_000)], ['just n
 // ---- page wiring ----
 {
   const html = read('frontend/index.html');
-  A.ok(/<button id="comms-hud" type="button" hidden[^>]*>HUD<\/button><button id="comms-expand"/.test(html), 'COMMS header carries the HUD button (hidden until hudmode.js wires it)');
+  A.ok(/<button id="comms-hud" type="button" hidden[^>]*>HUD<\/button><\/span><\/h3>/.test(html), 'COMMS header carries the HUD button (hidden until hudmode.js wires it)');
+  A.ok(/btn\.hidden = !tauriCore\(root\);/.test(read('frontend/app/hudmode.js')), 'the header button is offered only where a window can stay on top (the desktop shell)');
   A.ok(html.indexOf('<link rel="stylesheet" href="css/hudmode.css">') > html.indexOf('css/comms-layout.css'), 'hudmode.css loads after comms-layout.css');
   A.ok(html.indexOf('<script src="app/hudmode.js"></script>') > html.indexOf('<script src="app/chatresize.js"></script>'), 'hudmode.js loads after chatresize.js');
   const css = read('frontend/css/hudmode.css');
@@ -131,6 +161,9 @@ A.eq([H.fmtAgo(10_000), H.fmtAgo(5 * 60_000), H.fmtAgo(2 * 3_600_000)], ['just n
   const js = read('frontend/app/hudmode.js');
   A.ok(/World\.stop\(\)/.test(js) && /World\.start\(\)/.test(js), 'the world renderer stops in the HUD and resumes on exit');
   A.ok(/fetch\('\/api\/state\/snapshot'/.test(js), 'the deck polls the authoritative run snapshot');
+  A.ok(/Workstreams\.list\(\)\.filter\(w => \(w\.agentId \|\| 'agent'\) === id\)/.test(js) && /App\.openWorkstream\(mine\[0\]\.id\)/.test(js),
+    'a crew chip returns to that agent\'s own conversation (never rebinds the blank thread on screen)');
+  A.ok(/html body\.hud-mode #comms-idbar:not\(\.gc-group\)/.test(css), 'a group conversation keeps its participants bar inside the HUD');
 }
 
 // ---- desktop wiring ----

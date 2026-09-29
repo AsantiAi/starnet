@@ -35,7 +35,12 @@ html body.hud-mode #logo { display: none !important; }
 html body.hud-mode.sn-chrome #sn-titlebar { display: none !important; }
 html body.hud-mode.sn-chrome .screen { top: 0; }
 html body.hud-mode #chat-panel { grid-area: chat; flex: 1 1 auto; min-height: 0; }
-html body.hud-mode :is(#comms-resizer, #comms-expand, #comms-hud) { display: none !important; }
+html body.hud-mode :is(#comms-resizer, #comms-hud) { display: none !important; }
+/* The deck's crew strip IS the agent line inside the HUD (who is here, who is on the line, the switch),
+   so COMMS drops its own title row and ON THE LINE bar and gives the transcript that room. A GROUP
+   conversation keeps its bar: that is where its participants and their door live. */
+html body.hud-mode #chat-panel > h3 { display: none !important; }
+html body.hud-mode #comms-idbar:not(.gc-group) { display: none !important; }
 
 html body.hud-mode.hud-folded #screen-game.active {
   grid-template-rows: auto;
@@ -85,6 +90,63 @@ html body.hud-mode #hud-deck {
 #hud-deck .hud-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
 #hud-deck .hud-btn.on { background: var(--ink); color: var(--ph); border-color: var(--ink); }
 
+/* something is waiting on the Commander: the deck's frame itself turns gold (a border, not a glow) */
+html body.hud-mode #hud-deck.hud-asking { box-shadow: 0 0 0 2px var(--gold, #e9c46a), 0 0 0 3.5px rgba(0, 0, 0, .9), inset 0 0 28px rgba(0, 0, 0, .75); }
+html body.hud-mode #hud-deck.hud-asking .hud-bar { background: var(--gold, #e9c46a); }
+
+/* ---- crew strip: one chip per agent · lamp · name · unread pip ---- */
+#hud-deck .hud-crew {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  padding: 5px 8px 4px;
+  max-height: 62px; overflow-y: auto;
+  border-bottom: 1px solid var(--ph-faint);
+  scrollbar-color: var(--ph-dim) transparent;
+}
+#hud-deck .hud-crew:empty { display: none; }
+#hud-deck .hud-chip {
+  position: relative;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 7px; min-height: 24px; max-width: 100%;
+  font: 15px/1 'VT323', monospace; letter-spacing: 1px;
+  color: var(--ph); background: var(--panel2, var(--panel));
+  border: 1px solid var(--ph-faint); border-radius: 3px;
+  cursor: pointer;
+}
+#hud-deck .hud-chip:is(:hover, :focus-visible) { border-color: var(--ph); background: var(--ph-faint); }
+#hud-deck .hud-chip:focus-visible { outline: 2px solid var(--ph-bright); outline-offset: 1px; }
+#hud-deck .hud-chip.on { color: var(--ph-bright); border-color: var(--ph-bright); }
+#hud-deck .hud-chip-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#hud-deck .hud-lamp {
+  flex: 0 0 auto; width: 7px; height: 7px; border-radius: 1px;
+  background: var(--hud-suit, var(--ph));
+  opacity: .4;
+}
+#hud-deck .hud-lamp-live .hud-lamp { opacity: 1; animation: hud-pulse 1.6s steps(2, end) infinite; }
+#hud-deck .hud-lamp-ask { border-color: var(--gold, #e9c46a); color: var(--gold, #e9c46a); }
+#hud-deck .hud-lamp-ask .hud-lamp { opacity: 1; background: var(--gold, #e9c46a); animation: hud-pulse .8s steps(2, end) infinite; }
+#hud-deck .hud-pip {
+  position: absolute; top: -3px; right: -3px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--ph-bright); box-shadow: 0 0 0 1.5px var(--panel);
+}
+#hud-deck .hud-unread-ask .hud-pip { background: var(--gold, #e9c46a); }
+#hud-deck .hud-unread-bad .hud-pip { background: var(--bad, #ff4a3d); }
+#hud-deck .hud-add { padding: 0 8px; font-size: 21px; color: var(--ph-dim); }
+#hud-deck .hud-add:is(:hover, :focus-visible) { color: var(--ph-bright); }
+
+/* ---- folded: the newest reply of the conversation on the line, one glance deep ---- */
+#hud-deck .hud-reply { display: none; }
+html body.hud-mode.hud-folded #hud-deck .hud-reply:not([hidden]) {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3;
+  overflow: hidden;
+  margin: 0; padding: 5px 10px 7px;
+  border-top: 1px solid var(--ph-faint);
+  font-size: 16px; line-height: 1.2; color: var(--ph);
+  cursor: pointer;
+}
+html body.hud-mode.hud-folded #hud-deck .hud-reply:hover { background: var(--ph-faint); }
+#hud-deck .hud-reply b { font-weight: normal; color: var(--ph-bright); letter-spacing: 1px; margin-right: 4px; }
+
 /* ---- live feed rows: dot · NAME · step · clock ---- */
 #hud-deck .hud-feed {
   list-style: none; margin: 0; padding: 4px 0;
@@ -119,7 +181,7 @@ html body.hud-mode #hud-deck {
 #hud-deck .hud-empty:hover { background: none; }
 
 @keyframes hud-pulse { 50% { opacity: .35; } }
-@media (prefers-reduced-motion: reduce) { #hud-deck .hud-live .hud-dot { animation: none; } }
+@media (prefers-reduced-motion: reduce) { #hud-deck :is(.hud-live .hud-dot, .hud-lamp) { animation: none; } }
 
 /* ---- COMMS inside the HUD: same panel, tighter frame ---- */
 html body.hud-mode #chat-panel {
@@ -127,3 +189,8 @@ html body.hud-mode #chat-panel {
   box-shadow: 0 0 0 2px var(--ph-dim), 0 0 0 3.5px rgba(0, 0, 0, .9), inset 0 0 28px rgba(0, 0, 0, .75);
 }
 html body.hud-mode #chat-panel > h3 { padding: 3px 10px; border-radius: 5px 5px 0 0; }
+/* a HUD composer is one line tall until you write more (chat.js auto-grows it); the tool row tightens */
+html body.hud-mode #chat-panel #chat-inputrow { margin: 6px; }
+html body.hud-mode #chat-panel #chat-input { min-height: 36px; padding-top: 7px; padding-bottom: 7px; }
+html body.hud-mode #chat-panel .chat-send { margin-top: 4px; margin-bottom: 4px; }
+html body.hud-mode #chat-panel .chat-tools { padding-top: 2px; padding-bottom: 2px; }
