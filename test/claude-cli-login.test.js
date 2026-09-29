@@ -107,7 +107,7 @@ function fakeHost(o) {
   // G. the credential lands while the CLI lingers on its paste prompt: a proven sign-in is connected, and the child is reaped.
   {
     const host = fakeHost();
-    const login = makeClaudeCliLogin({ host, urlWaitMs: 200, statusEveryMs: 0 });
+    const login = makeClaudeCliLogin({ host, urlWaitMs: 200, statusEveryPolls: 1 });
     const s = await login.start();
     A.eq((await login.poll(s.login_id)).status, 'pending', 'pending before the sign-in lands');
     host.loggedIn = true;   // browser callback wrote the credential; the child has NOT exited

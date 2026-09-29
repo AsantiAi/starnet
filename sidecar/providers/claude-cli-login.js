@@ -30,7 +30,8 @@ function makeClaudeCliLogin(opts) {
   const host = opts.host || makeCliHost(opts);
   const ttlMs = opts.ttlMs || 10 * 60 * 1000;           // an abandoned sign-in is killed, never left listening
   const urlWaitMs = opts.urlWaitMs || 8000;             // how long start() waits for the CLI to print its URL
-  const statusEveryMs = opts.statusEveryMs != null ? opts.statusEveryMs : 3000;   // poll re-asks auth status at most this often
+  // poll re-asks `claude auth status` every Nth poll (the tile polls every 1.5s, so 2 = ~3s) — a count, not a clock
+  const statusEveryPolls = Math.max(1, opts.statusEveryPolls || 2);
   let flow = null;   // { id, child, url, exit: null|{code}, stderr, timer }
 
   function end(f) {
@@ -108,9 +109,8 @@ function makeClaudeCliLogin(opts) {
     if (!f || f.id !== String(id || '')) return { status: 'error', error: 'this sign-in is no longer running — press SIGN IN WITH CLAUDE again', code: 'login_not_found' };
     if (!f.exit) {
       // the credential can land before the child exits (it may linger on its paste prompt): proven sign-in wins
-      const now = Date.now();
-      if (!f.checkedAt || now - f.checkedAt >= statusEveryMs) {
-        f.checkedAt = now;
+      f.polls = (f.polls || 0) + 1;
+      if (f.polls % statusEveryPolls === 0) {
         const st = await host.authStatus();
         if (st.loggedIn && flow === f) { end(f); return Object.assign({ status: 'connected' }, publicStatus(st)); }
       }
