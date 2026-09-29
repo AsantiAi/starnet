@@ -53,8 +53,8 @@
   const ALPHA_MODEL  = /^openai\/gpt-[\w.-]*image/i;              // OpenRouter slugs known to return an alpha channel
   const OPAQUE_MODEL = /^google\/gemini-/i;                       // known never to return one
   // A prompt that plainly wants transparency counts as asking for it. Deliberately narrow: "a transparent glass
-  // vase" is a subject, not a background.
-  const TRANSPARENT_ASK = /\btransparent[\s-]+(?:background|bg|backdrop|png)\b|\balpha[\s-]+channel\b|\b(?:no|without(?:\s+(?:a|any))?)\s+background\b|\bbackground[\s-]*(?:free|less)\b/i;
+  // vase" is a subject, and "no background blur" is a photo note, not a request for alpha.
+  const TRANSPARENT_ASK = /\btransparent[\s-]+(?:background|bg|backdrop|png)\b|\balpha[\s-]+channel\b|\b(?:no|without(?:\s+(?:a|any))?)\s+background(?:\s+at\s+all)?\b(?!\s+[a-z])|\bbackground[\s-]*(?:free|less)\b/i;
   const TRANSPARENT_PROMPT = ' Render the subject alone on a fully transparent background (PNG with an alpha channel): no backdrop, no scenery and no checkerboard pattern.';
   // OpenRouter image_config.aspect_ratio passthrough — the set the Gemini image endpoints accept.
   const ASPECT_RATIOS = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'];
@@ -270,7 +270,8 @@
       for (let i = (channels - 1) * (depth / 8); i < px.length; i += bpp) if (px[i] <= CLEAR_ALPHA) clear++;
     }
     const total = w * h;
-    if (!clear) return verdict('opaque', 'the PNG has an alpha channel but every pixel is opaque');
+    // "no pixel is see-through", not "every pixel is opaque": a background at alpha 60 is tinted, not clear
+    if (!clear) return verdict('opaque', 'the PNG has an alpha channel but no pixel is see-through');
     if (clear * 1000 < total) return verdict('opaque', 'only ' + clear + ' of ' + total + ' pixels are see-through');
     return verdict('transparent', 'the alpha channel was checked', Math.round((clear / total) * 1000) / 10);
   }

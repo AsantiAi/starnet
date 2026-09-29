@@ -319,7 +319,8 @@ const imageReply = png => jsonResp({ choices: [{ message: { images: [{ image_url
     // J1. the verdict is read from the BYTES
     const logo = logoPng();
     A.eq(I.alphaCoverage(logo), { state: 'transparent', why: 'the alpha channel was checked', clearPct: 83.3 }, 'a clear background is transparent, and a subject at alpha 253 (the gpt-image-2 quirk) is not counted as clear');
-    A.eq(I.alphaCoverage(encodePng({ w: 8, h: 8, ctype: 6, pixel: () => [9, 9, 9, 255] })), { state: 'opaque', why: 'the PNG has an alpha channel but every pixel is opaque' }, 'an alpha channel with no see-through pixel is opaque');
+    A.eq(I.alphaCoverage(encodePng({ w: 8, h: 8, ctype: 6, pixel: () => [9, 9, 9, 255] })), { state: 'opaque', why: 'the PNG has an alpha channel but no pixel is see-through' }, 'an alpha channel with no see-through pixel is opaque');
+    A.eq(I.alphaCoverage(encodePng({ w: 8, h: 8, ctype: 6, pixel: (x, y) => (x > 1 && x < 6 && y > 1 && y < 6) ? [200, 40, 20, 255] : [255, 255, 255, 60] })).state, 'opaque', 'a TINTED background (alpha 60) is not a transparent one, and is never called "every pixel opaque"');
     A.eq(I.alphaCoverage(encodePng({ w: 40, h: 30, ctype: 6, pixel: (x, y) => (x || y) ? [9, 9, 9, 255] : [0, 0, 0, 0] })), { state: 'opaque', why: 'only 1 of 1200 pixels are see-through' }, 'a lone clear pixel is not a transparent background');
     const checker = encodePng({ w: 16, h: 16, ctype: 2, pixel: (x, y) => ((x >> 2) + (y >> 2)) % 2 ? [204, 204, 204] : [255, 255, 255] });
     A.eq(I.alphaCoverage(checker), { state: 'opaque', why: 'the PNG is RGB with no alpha channel' }, 'a PAINTED checkerboard (RGB) is opaque: the Gemini failure mode');
@@ -335,9 +336,9 @@ const imageReply = png => jsonResp({ choices: [{ message: { images: [{ image_url
     A.eq(I.alphaCoverage(webp('VP8X', 0x10)).state, 'unverified', 'a WEBP with an alpha flag is unverified, not claimed');
     A.eq(I.alphaCoverage(webp('VP8X', 0)).state, 'opaque', 'a WEBP without an alpha flag is opaque');
     A.eq(I.alphaCoverage(Buffer.from('not an image at all')).state, 'unverified', 'unknown bytes are unverified');
-    for (const p of ['a fox logo on a transparent background', 'transparent-background sticker', 'transparent PNG icon', 'PNG with an alpha channel', 'a mascot with no background', 'a badge without a background', 'background-free emblem', 'backgroundless crest'])
+    for (const p of ['a fox logo on a transparent background', 'transparent-background sticker', 'transparent PNG icon', 'PNG with an alpha channel', 'a mascot with no background', 'a badge without a background, flat colours', 'fox logo, no background at all', 'background-free emblem', 'backgroundless crest'])
       A.ok(I.TRANSPARENT_ASK.test(p), 'a transparency ask is recognized: ' + p);
-    for (const p of ['a transparent glass vase on a wooden table', 'a jellyfish with transparent tentacles', 'a red cube on a white background'])
+    for (const p of ['a transparent glass vase on a wooden table', 'a jellyfish with transparent tentacles', 'a red cube on a white background', 'a landscape photo with no background blur', 'a street scene without background people'])
       A.ok(!I.TRANSPARENT_ASK.test(p), 'not a transparency ask: ' + p);
 
     // J2. transparent:true on the OpenRouter wire: off the Gemini default, an explicit alpha instruction, a verified file
@@ -385,7 +386,7 @@ const imageReply = png => jsonResp({ choices: [{ message: { images: [{ image_url
     A.ok(cEmits.some(e => e.n === 'deliverable'), 'the paid-for opaque image is still delivered');
     const flatFetch = stubFetch(() => imageReply(encodePng({ w: 8, h: 8, ctype: 6, pixel: () => [1, 2, 3, 255] })));
     const flat = await makeImageTools({ openrouter: { apiKey: 'k' }, fsp, pathMod: path, root: ROOT, fetchImpl: flatFetch }).generateTool.run({ prompt: 'logo', transparent: true }, ctx);
-    A.ok(/every pixel is opaque/.test(flat.content) && /The model ignored the request/.test(flat.content), 'an alpha model that ignored the request is reported as such, with no model hint');
+    A.ok(/no pixel is see-through/.test(flat.content) && /The model ignored the request/.test(flat.content), 'an alpha model that ignored the request is reported as such, with no model hint');
 
     // J5. slug drift on a transparent render falls back to another ALPHA model, never onto the opaque legacy slug
     const driftFetch = stubFetch((url, body) => body && body.model === 'openai/gpt-5-image-mini'
