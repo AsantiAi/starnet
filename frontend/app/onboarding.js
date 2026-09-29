@@ -102,7 +102,7 @@ const Onboarding = (() => {
         ],
         build: () => null,
         ack: t => t
-          ? 'set — and you can retune that any time from my station panel.'
+          ? 'set — and you can retune that any time in SETTINGS › AUTONOMY.'
           : 'no rush — until you decide, i’ll only line up suggestions for you to approve. nothing runs on its own.' }
     ];
     // Recruited specialists inherit the station posture and keep only their context beat.
@@ -126,7 +126,7 @@ const Onboarding = (() => {
       custom: true, placeholder: 'in your own words — what’s the purpose?',
       build: t => ({ purpose: t }),
       ack: lead
-        ? 'there it is — purpose.md, in ink. that’s what this station’s for.'
+        ? 'there it is — your station’s purpose, in ink. that’s what this station’s for.'
         : 'there it is. now the firepower has a target.' };
   }
 
@@ -632,7 +632,7 @@ const Onboarding = (() => {
     const pace = await Dialogue.node({
       lines: [seg(interviewOnly
         ? 'let’s fill in the picture. a few questions about your work, or a deeper conversation about your goals? you can review and change what we save in your dossier.'
-        : 'i’m awake. let’s give this station a direction. start with two setup questions, or take time to tell me about your work. you can edit what we save in your dossier.', 46, 0)],
+        : 'i’m awake. let’s give this station a direction. start with two setup questions, or take time to tell me about your work. you can edit what we save in your dossier — the COMMANDER file of what the station knows about you.', 46, 0)],
       options: [
         ...(!interviewOnly ? [{ label: 'Quick setup — two questions', value: 'quick' }] : []),
         { label: 'A short conversation', value: 'loose' },
@@ -845,7 +845,7 @@ const Onboarding = (() => {
         if (syn.stack && typeof DossierStore !== 'undefined' && DossierStore.upsert) DossierStore.upsert('stack', { text: syn.stack, source: 'onboarding', weight: 'synth' });
         if (typeof ProfileStore !== 'undefined' && typeof Classify !== 'undefined') ProfileStore.seed(Classify.getTag(purposeT));
         bumpTruth();
-        await Dialogue.say([seg('there it is — purpose.md, in ink. that’s what this station’s for.', 44, 360)]);
+        await Dialogue.say([seg('there it is — your station’s purpose, in ink. that’s what this station’s for.', 44, 360)]);
         if (!running) return;
         purposeDone = true;
       }

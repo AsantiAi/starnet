@@ -249,7 +249,7 @@
     if (!s || (s.buildMode !== 'build' && s.buildMode !== 'draft')) return '';
     if (s.buildMode === 'build') return 'beats BUILD real deliverables — each arrives as a new ⚒ session in your rail';
     if (s.draftReason === 'no-workshop-grant') return 'drafts only — the away-workshop grant is off, so beats can’t build for real';
-    return 'drafts only — raise REACH to sandbox to let beats build for real';
+    return 'drafts only — to build real things while you’re away, raise REACH (how far I may act on my own) to sandbox in SETTINGS › AUTONOMY';
   }
 
   // the cold-start explanation behind a 'readiness' stand-down: how far the station is from EITHER hot bar
