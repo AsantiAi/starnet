@@ -5,7 +5,8 @@
    docked panel read "WRITER works on it then RESEARCHER works on it" and the writer's contract said
    "HANDS OFF TO → BAY 2 · RESEARCHER" — lineFlow laid unplaced docks out one column each in bay order, and
    neighbours() read prev/next off column adjacency. Locked here, on that exact floor:
-     1. the plan's dock maps hold no hand-off, and neither does the flow (siblings, never a sequence);
+     1. the plan's dock maps hold no hand-off, and neither does the flow (siblings, never a sequence) — the INBOX now
+        detached by cutting its belt (a dragged INBOX keeps its belt since conveyor links phase B);
      2. docks no INBOX reaches are ONE 'apart' group, flagged detached, and the sentence names them without "then";
      3. with the INBOX wired back, the two bays are ONE column of siblings (TAKE TURNS), still no hand-off;
      4. across every starter line (crewed and uncrewed), every hand-off neighbours() claims for a crewed dock is a
@@ -51,8 +52,15 @@ function playtestFloor() {
     A.ok(/WRITER works on it or RESEARCHER works on it \(taking turns\)/.test(txt) && !/ then /.test(txt), 'wired sentence: ' + txt);
   }
 
-  // the playtest: drag the INBOX off the line (its belts stay behind — the splitter lane is still there)
-  A.ok(s.moveProp(I, 0, 6).ok, 'INBOX dragged away');
+  // the playtest dragged the INBOX off the line and its belts stayed behind. Since conveyor links phase B (2026-09-28) a
+  // dragged machine brings its belts: the INBOX stays on its line…
+  const mv = s.moveProp(I, 0, 6);
+  A.ok(mv.ok && mv.lost.length === 0, 'INBOX dragged away — its belt follows it');
+  { const g = read(s), c = g.comps.find(c => c.bays.some(b => b.propId === Wd)); A.ok(!!c && c.intakes.length === 1, '…so the line keeps its INBOX'); }
+  s.undo();
+  // …so the playtest's floor is now reached by CUTTING the INBOX's belt: the line has no INBOX
+  const cut = s.links().find(l => l.from.prop === I);
+  A.ok(!!cut && s.removeBelts(cut.path.map(t => [t.x, t.y])).ok, 'the INBOX’s belt is cut');
   const { plan, comps } = read(s), comp = comps.find(c => c.bays.some(b => b.propId === Wd));
   A.ok(!!comp && !comp.intakes.length, 'the line now has no INBOX');
   A.eq([plan.dockChains[Wd].next, plan.dockChains[Rd].next], [[], []], 'the compiled plan holds NO hand-off between the bays');
