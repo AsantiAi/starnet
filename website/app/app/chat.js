@@ -1818,7 +1818,7 @@ const Chat = (() => {
     if (!statusEl) return;
     statusEl.textContent = s;
     const low = String(s || '').toLowerCase();
-    statusEl.classList.remove('status-thinking', 'status-working', 'status-approval', 'status-stopping', 'status-connecting', 'status-online', 'status-down');
+    statusEl.classList.remove('status-thinking', 'status-working', 'status-approval', 'status-stopping', 'status-connecting', 'status-online', 'status-down', 'status-idle');
     statusEl.classList.add(low.indexOf('approval') >= 0 ? 'status-approval'
       : low.indexOf('stopping') >= 0 ? 'status-stopping'
       : low.indexOf('working') >= 0 ? 'status-working'
@@ -1826,6 +1826,8 @@ const Chat = (() => {
       : low.indexOf('connecting') >= 0 ? 'status-connecting'
       : low.indexOf('unreachable') >= 0 ? 'status-down'
       : 'status-online');
+    // a plain idle 'online' is hidden in the header (css); every run-state and fault still shows.
+    if (low.trim() === 'online') statusEl.classList.add('status-idle');
   }
   // derive the DISPLAYED stream's status from real state, so a low-priority write (a finishing turn) can't
   // clobber the high-priority 'awaiting your approval…' after a switch-back. One source of truth.
