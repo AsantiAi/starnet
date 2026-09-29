@@ -99,19 +99,35 @@ Every change to a line's SHAPE is one edit of its graph: `LineEdit.run(station, 
 (`station.lineGraph(id)` — every machine pinned where it stands, every link with its belt, and the floor without the line),
 applies the op, lays it out with the engine and writes it back in ONE undo slot (`station.applyLineLayout`). Ops: `insertStep`
 (the + on a belt, by role) · `appendStep` · `addBranch` (around a step or on a belt; COPY TO EACH = SPLITTER + JOINER, TAKE
-TURNS = SPLITTER + MERGER) · `addLoop` (a REVIEWER + a LOOP gate: back until approved, 3 passes) · `addSorter` (a FILTER: CODE →
-ENGINEER, RESEARCH → RESEARCHER, everything else on) · `removeStep` (a split left with one way folds away) · `removeLoop` ·
-`moveStep` (swap along a plain run) · `addOutbox` · `wrapLine` (a lone BAY becomes INBOX → it → OUTBOX) · `tidy` (TIDY LINE:
-the whole line re-laid from its INBOX) · `newLine` (BUILD YOUR OWN LINE: INBOX → a step → OUTBOX near the middle of the view).
+TURNS = SPLITTER + MERGER; a partner round a step is named like it) · `addLoop` (a REVIEWER + a LOOP gate: back until approved,
+3 passes) · `addSorter` (a FILTER: CODE → ENGINEER, RESEARCH → RESEARCHER, everything else on) · `removeStep` (a split left
+with one way folds away; a sorter's route step takes its route with it — that type then goes with everything else — and a
+sorter left sorting nothing folds away) · `removeLoop` · `moveStep` (swap along a plain run) · `addOutbox` · `wrapLine` (a
+lone BAY becomes INBOX → it → OUTBOX) · `tidy` (TIDY LINE: the whole line re-laid from its INBOX) · `newLine` (BUILD YOUR OWN
+LINE: INBOX → a step → OUTBOX near the middle of the view) · `addArm` (another branch on a SPLITTER, up to three; the JOINER then
+waits for it too) · `removeArm` (a whole branch out — every step on it; a split left with one way folds away, round a branch of
+several steps too) · `addRoute` (a FILTER's step for CODE or RESEARCH when that type has no route, handing on to where
+everything else goes) · `removeSorter` (the FILTER and every route step it sorts to, as one piece).
 
 - ONLY WHAT CHANGED MOVES (the plan's decision 2): a belt the edit does not touch keeps its exact path (the engine's KEPT links);
-  a new machine keeps its place relative to the machine feeding it and, when that spot is taken, tries a few clear spots.
+  a new machine keeps its place relative to the machine feeding it and, when that spot is taken, tries a few clear spots. When
+  that leaves the change no way through, the belts spread in rings — the lanes the edit names (a split's or a sorter's own,
+  `e.loose`), then every belt of a machine the edit touched, then every belt of the line — and the result says so (`relaid`).
+  Machines never move but by TIDY. A new branch / route lane may read in any place among its junction's lanes (`e.alts`: turns
+  go round every branch, routes are named by their links), each tried at each ring. A new link is numbered after every link
+  the floor held — an old link always keeps its id.
+- NO ROOM WHERE THE LINE STANDS, but the edit fits with the line laid out afresh: the first click changes nothing
+  (`NEEDS_TIDY`, `canTidy`) and the panel's button ARMS in place — ⌗ TIDY LINE TO FIT IT? — a second click within 4 s runs
+  the edit with `opts.tidy` (the line laid out afresh round it, its INBOX fixed, one undo). Never a silent whole-line move.
+- The floor shows the change: new machines flash, a machine an edit MOVED glides an outline from the footprint it left to the
+  one it stands on (`drawMoves`, 760 ms), one it took out flashes red where it was.
 - A refusal changes nothing and says what would help: TIDY LINE only when the same edit fits with the line re-laid, else a
   bigger room. `LineEdit.check` answers without laying anything, so the panel shows an impossible edit OFF with its reason.
 - In the panel: the + on a belt (a step by role, a BRANCH either way, a SORTER in front of a step or the OUTBOX), a BAY's
   ROLE chips (`station.setPropRole`) and SHAPE THE LINE (earlier / later / a review / second opinion / share the load / remove),
-  REMOVE THE REVIEW on a LOOP gate, MAKE IT A LINE on a lone BAY, + OUTBOX where a line that ends on a step has none, TIDY
-  LINE in the footer. The Conveyors tab has BUILD YOUR OWN LINE. Locked by test/line-edit.test.js (every op on a real
+  REMOVE THE REVIEW on a LOOP gate, a SPLITTER's ADD A BRANCH and ✕ per branch, a FILTER's + A STEP FOR CODE / RESEARCH (a
+  type it has no route for) and REMOVE THE SORTER, MAKE IT A LINE on a lone BAY, + OUTBOX where a line that ends on a step has
+  none, TIDY LINE in the footer. The Conveyors tab has BUILD YOUR OWN LINE. Locked by test/line-edit.test.js (every op on a real
   station, the audit's newsletter line built from edits alone, one undo each) and test/line-edit-panel.test.js.
 
 ### Ready-made lines, laid out to fit (conveyor-links phase E)

@@ -56,6 +56,66 @@
   const relink = (l, to) => ({ id: l.id, from: clone(l.from), to: { node: to } });
   const link = (id, from, to, port) => ({ id, from: { node: from, port: port || 'out' }, to: { node: to } });
   const bayRole = r => (typeof r === 'string' && r) ? r : undefined;
+  /* a BRANCH: from the lane `l` out of a SPLITTER / FILTER along a plain run of steps (one way in, one way out, no review loop
+     sending work back to them) — { steps, links, end }: the belts it rides (the lane in, the belts between its steps, the belt
+     out) and the machine it reaches (null when its last step sends nothing on) */
+  function armOf(g, l) {
+    const steps = [], links = [l];
+    let cur = l.to.node;
+    for (let guard = 0; guard < 64; guard++) {
+      const n = nodeOf(g, cur);
+      if (!n || n.t !== 'bay' || insOf(g, n.id).length !== 1 || backsAt(g, n.id).length) break;
+      const outs = outsOf(g, n.id);
+      if (outs.length > 1) break;
+      steps.push(n.id);
+      if (!outs.length) return { steps, links, end: null };
+      links.push(outs[0]); cur = outs[0].to.node;
+    }
+    return { steps, links, end: cur };
+  }
+  /* a SPLIT left with one way through folds away — the SPLITTER and the JOINER / MERGER go and the last branch joins the line;
+     one left with none closes up (what fed the split feeds what the join fed). A split with two ways or more is left as it is. */
+  function foldSplit(g, S, J) {
+    const sOut = outsOf(g, S.id), jIn = insOf(g, J.id), into = insOf(g, S.id)[0], onward = outsOf(g, J.id)[0];
+    const arm = sOut.length === 1 ? armOf(g, sOut[0]) : null;
+    const one = !!arm && jIn.length === 1 && arm.end === J.id;
+    if (!one && sOut.length) return { ok: true, graph: g, focus: S.id };
+    g.nodes = g.nodes.filter(n => n.id !== S.id && n.id !== J.id);
+    drop(g, [into, onward].concat(sOut, jIn).filter(Boolean));
+    const first = one && arm.steps.length ? arm.steps[0] : null, last = first ? arm.steps[arm.steps.length - 1] : null;
+    if (into && (first || onward)) g.links.push(relink(into, first || onward.to.node));
+    if (last && onward) g.links.push({ id: onward.id, from: { node: last, port: 'out' }, to: { node: onward.to.node } });
+    return { ok: true, graph: g, focus: first || (into && into.from.node) };
+  }
+  // a SPLITTER whose branches never meet again, left with one branch, folds away (the belt into it runs to that branch)
+  function foldSplitter(g, S) {
+    const outs = outsOf(g, S.id), into = insOf(g, S.id);
+    if (outs.length > 1) return { ok: true, graph: g, focus: S.id };
+    g.nodes = g.nodes.filter(n => n.id !== S.id);
+    drop(g, into.concat(outs));
+    if (into.length === 1 && outs.length === 1) g.links.push(relink(into[0], outs[0].to.node));
+    return { ok: true, graph: g, focus: outs.length ? outs[0].to.node : (into[0] && into[0].from.node) };
+  }
+  // a SORTER left sorting nothing (its EVERYTHING ELSE belt its only way out) folds away: the belt into it runs straight on
+  function foldSorter(g, F) {
+    const outs = outsOf(g, F.id), into = insOf(g, F.id);
+    if (outs.length !== 1 || !outs[0].from.else || into.length !== 1) return { ok: true, graph: g, focus: F.id };
+    g.nodes = g.nodes.filter(n => n.id !== F.id);
+    drop(g, [into[0], outs[0]]);
+    g.links.push(relink(into[0], outs[0].to.node));
+    return { ok: true, graph: g, focus: outs[0].to.node };
+  }
+  /* the same graph with a junction's NEW lane `lid` read in each other place among its lanes: a sorter's routes are named by
+     their links and a split's turns go round every branch, so any place routes the same work — the engine takes the first
+     place it can lay (the compiler reads a junction's lanes E, S, W, N, and the free side decides where the new one reads) */
+  function laneAlts(g, jId, lid) {
+    return outsOf(g, jId).filter(l => l.id !== lid).reverse().map(o => {
+      const h = clone(g), i = h.links.findIndex(l => l.id === lid), nl = h.links.splice(i, 1)[0];
+      h.links.splice(h.links.findIndex(l => l.id === o.id), 0, nl);
+      return h;
+    });
+  }
+  const TYPE_ROLE = { code: 'ENGINEER', research: 'RESEARCHER' };
 
   /* ---------- the edits ---------- */
   const OPS = {
@@ -87,13 +147,14 @@
     addBranch(g, a, o) {
       const n = Math.max(2, Math.min(3, (a.n | 0) || 2)), joinT = a.mode === 'turns' ? 'merger' : 'joiner';
       const id = fresh(g);
-      let head, tail, keep = [];
+      let head, tail, keep = [], role = bayRole(a.role);
       if (a.around) {
         const X = nodeOf(g, a.around);
         if (!X || X.t !== 'bay') return fail('NOT_A_STEP', 'pick a step (a BAY) to branch around');
         const ins = insOf(g, X.id), outs = outsOf(g, X.id);
         if (ins.length !== 1 || outs.length !== 1) return fail('NOT_SIMPLE', 'a branch goes round a step with one way in and one way out');
         head = ins[0]; tail = outs[0]; keep = [X.id];
+        role = role || bayRole(X.role);   // a second opinion / a second hand is named like the step it partners
       } else {
         const l = g.links.find(q => q.from.node === a.from && q.to.node === a.to);
         if (!l) return fail('NO_LINK', 'those two machines are not joined by a belt');
@@ -101,7 +162,7 @@
       }
       const S = box(g, id('s'), 'splitter', o), J = box(g, id('j'), joinT, o);
       const kids = keep.slice();
-      while (kids.length < n) kids.push(box(g, id('n'), 'bay', o, { role: bayRole(a.role) }).id);
+      while (kids.length < n) kids.push(box(g, id('n'), 'bay', o, { role }).id);
       drop(g, [head].concat(tail ? [tail] : []));
       g.links.push(relink(head, S.id));
       for (const k of kids) g.links.push(link(id('l'), S.id, k));
@@ -144,7 +205,8 @@
       g.links.push({ id: id('l'), from: { node: F.id, port: 'out', else: true }, to: { node: B.id } });
       return { ok: true, graph: g, focus: F.id };
     },
-    /* REMOVE A STEP: its way in joins its way out (A → X → B becomes A → B). A branch left with one way through folds away. */
+    /* REMOVE A STEP: its way in joins its way out (A → X → B becomes A → B). A branch left with one way through folds away; a
+       sorter's route step takes its route with it (that type of work then goes with everything else). */
     removeStep(g, a) {
       const X = nodeOf(g, a.id);
       if (!X || X.t !== 'bay') return fail('NOT_A_STEP', 'only a step (a BAY) is removed this way');
@@ -154,19 +216,11 @@
       const A = nodeOf(g, ins[0].from.node), B = outs[0] ? nodeOf(g, outs[0].to.node) : null;
       g.nodes = g.nodes.filter(n => n.id !== X.id);
       drop(g, ins.concat(outs));
-      // X was one branch of a split: that branch goes; a split left with one way through folds away (SPLITTER and JOINER
-      // go, the last branch joins the line), and one left with none closes up (what fed the split feeds what the join fed)
-      if (A && A.t === 'splitter' && B && (B.t === 'joiner' || B.t === 'merger')) {
-        const sOut = outsOf(g, A.id), jIn = insOf(g, B.id), into = insOf(g, A.id)[0], onward = outsOf(g, B.id)[0];
-        const one = sOut.length === 1 && jIn.length === 1 && sOut[0].to.node === jIn[0].from.node;
-        if (!one && sOut.length) return { ok: true, graph: g, focus: A.id };
-        g.nodes = g.nodes.filter(n => n.id !== A.id && n.id !== B.id);
-        drop(g, [into, onward].concat(sOut, jIn).filter(Boolean));
-        const keep = one ? sOut[0].to.node : null;
-        if (into && (keep || onward)) g.links.push(relink(into, keep || onward.to.node));
-        if (keep && onward) g.links.push({ id: onward.id, from: { node: keep, port: 'out' }, to: { node: onward.to.node } });
-        return { ok: true, graph: g, focus: keep || (into && into.from.node) };
-      }
+      // X was one branch of a split: that branch goes (a split left with one way through folds away — foldSplit)
+      if (A && A.t === 'splitter' && B && (B.t === 'joiner' || B.t === 'merger')) return foldSplit(g, A, B);
+      // X was a sorter's route to where everything else goes: the route goes too — never a second belt beside EVERYTHING ELSE
+      // (a sorter left sorting nothing folds away)
+      if (A && A.t === 'filter' && B && ins[0].from.tags && g.links.some(l => l.from.node === A.id && l.from.else && l.to.node === B.id)) return foldSorter(g, A);
       if (outs.length === 1) g.links.push(relink(ins[0], outs[0].to.node));
       return { ok: true, graph: g, focus: ins[0].from.node };
     },
@@ -187,6 +241,84 @@
       if (gone.length === 2) g.links.push(relink(rIns[0], done.to.node));
       else g.links.push(relink(into[0], done.to.node));
       return { ok: true, graph: g, focus: gone.length === 2 ? rIns[0].from.node : from };
+    },
+    /* ANOTHER BRANCH on a split: a new step where the branches split and meet again (S → new BAY → where they meet), named like
+       the branches beside it — a third opinion on a COPY split (the JOINER then waits for it too), a third hand on TURNS */
+    addArm(g, a, o) {
+      const S = nodeOf(g, a.split);
+      if (!S || S.t !== 'splitter') return fail('NOT_A_SPLIT', 'pick a SPLITTER');
+      const outs = outsOf(g, S.id);
+      if (!outs.length) return fail('NO_BRANCHES', 'this splitter sends nothing out yet: add a step on the belt into it instead');
+      if (outs.length >= 3) return fail('FULL', 'a splitter has four sides — one belt in and three branches out at most: this one is full');
+      const arms = outs.map(l => armOf(g, l)), end = arms[0].end;
+      if (end == null || arms.some(x => x.end !== end)) return fail('NOT_SIMPLE', 'this splitter\'s branches do not meet again — add a step on one of its belts instead');
+      const E = nodeOf(g, end);
+      if (E && JUNCTION[E.t] && insOf(g, E.id).length >= 3) return fail('FULL', 'the ' + E.t.toUpperCase() + ' where the branches meet takes three belts in at most: it is full');
+      const roles = arms.map(x => x.steps.length ? nodeOf(g, x.steps[0]).role : undefined);
+      const role = bayRole(a.role) || (roles[0] && roles.every(r => r === roles[0]) ? roles[0] : undefined);
+      const id = fresh(g), N = box(g, id('n'), 'bay', o, { role });
+      const lane = link(id('l'), S.id, N.id);
+      g.links.push(lane, link(id('l'), N.id, end));
+      // (the branches beside it may spread to make room: their lanes out of the SPLITTER and into where they meet)
+      const loose = [].concat.apply([], arms.map(x => [x.links[0].id, x.links[x.links.length - 1].id]));
+      return { ok: true, graph: g, focus: N.id, alts: laneAlts(g, S.id, lane.id), loose };
+    },
+    /* REMOVE A BRANCH as one piece: every step on it goes (the run of steps from the SPLITTER to where the branches meet); a
+       split left with one way through folds away */
+    removeArm(g, a) {
+      const S = nodeOf(g, a.split);
+      if (!S || S.t !== 'splitter') return fail('NOT_A_SPLIT', 'pick a SPLITTER');
+      const l = outsOf(g, S.id).find(q => q.to.node === a.head);
+      if (!l) return fail('NOT_A_BRANCH', 'that is not one of this splitter\'s branches');
+      const arm = armOf(g, l), E = arm.end != null ? nodeOf(g, arm.end) : null;
+      if (!arm.steps.length) return fail('NOT_SIMPLE', 'this branch is not a run of steps: take its machines out one by one');
+      g.nodes = g.nodes.filter(n => arm.steps.indexOf(n.id) < 0);
+      drop(g, arm.links);
+      if (E && (E.t === 'joiner' || E.t === 'merger')) return foldSplit(g, S, E);
+      // branches that never meet again: the branch's own OUTBOX goes with it (one another branch still fills stays)
+      if (E && E.t === 'outbox' && !insOf(g, E.id).length) g.nodes = g.nodes.filter(n => n.id !== E.id);
+      return foldSplitter(g, S);
+    },
+    /* A ROUTE FOR A TYPE on a sorter that has none: a new step (CODE → an ENGINEER, RESEARCH → a RESEARCHER) takes that type of
+       work and hands on to where everything else goes */
+    addRoute(g, a, o) {
+      const F = nodeOf(g, a.id);
+      if (!F || F.t !== 'filter') return fail('NOT_A_SORTER', 'pick a FILTER');
+      const tag = TYPE_ROLE[a.tag] ? a.tag : null;
+      if (!tag) return fail('BAD_TYPE', 'a sorter knows two types of work by name: CODE and RESEARCH');
+      const outs = outsOf(g, F.id);
+      if (outs.some(l => (l.from.tags || []).indexOf(tag) >= 0)) return fail('HAS_ROUTE', tag.toUpperCase() + ' work already has its own way out of this sorter');
+      if (outs.length >= 3) return fail('FULL', 'a FILTER has four sides — one belt in and three out at most: this one is full');
+      const els = outs.find(l => l.from.else), T = els ? nodeOf(g, els.to.node) : null;
+      if (!T) return fail('NO_ELSE', 'choose where EVERYTHING ELSE goes first — the new step hands on there');
+      if (JUNCTION[T.t] && T.t !== 'merger') return fail('NOT_SIMPLE', 'everything else goes into a ' + T.t.toUpperCase() + ' here, which cannot take another belt in — add the route by hand');
+      const id = fresh(g), N = box(g, id('n'), 'bay', o, { role: bayRole(a.role) || TYPE_ROLE[tag] });
+      const lane = { id: id('l'), from: { node: F.id, port: 'out', tags: [tag] }, to: { node: N.id } };
+      g.links.push(lane, link(id('l'), N.id, T.id));
+      // (the routes beside it may spread to make room: the sorter's lanes and the belts they hand on by)
+      const loose = [].concat.apply([], outs.map(l => { const x = armOf(g, l); return [x.links[0].id, x.links[x.links.length - 1].id]; }));
+      return { ok: true, graph: g, focus: N.id, alts: laneAlts(g, F.id, lane.id), loose };
+    },
+    /* REMOVE A SORTER as one piece: the FILTER goes with every route step it sorts work to (each a run of steps that rejoins
+       where everything else goes); the belt into it runs straight on to where everything else went */
+    removeSorter(g, a) {
+      const F = nodeOf(g, a.id);
+      if (!F || F.t !== 'filter') return fail('NOT_A_SORTER', 'pick a FILTER');
+      const ins = insOf(g, F.id), outs = outsOf(g, F.id), els = outs.find(l => l.from.else);
+      if (ins.length !== 1) return fail('NOT_SIMPLE', 'this sorter has several belts in: take it apart by hand');
+      if (!els) return fail('NO_ELSE', 'this sorter sends nothing on for everything else, so the line has no one way to run on — choose a belt for EVERYTHING ELSE first');
+      const T = els.to.node, gone = [F.id], drops = [ins[0]].concat(outs);
+      for (const l of outs) {
+        if (l === els) continue;
+        const arm = armOf(g, l);
+        if (arm.end !== T) return fail('NOT_SIMPLE', 'a route of this sorter does not rejoin the line where everything else goes — take its steps out first');
+        gone.push.apply(gone, arm.steps);
+        drops.push.apply(drops, arm.links);
+      }
+      g.nodes = g.nodes.filter(n => gone.indexOf(n.id) < 0);
+      drop(g, drops);
+      g.links.push(relink(ins[0], T));
+      return { ok: true, graph: g, focus: T };
     },
     /* MOVE A STEP one place earlier (dir -1) or later (+1) along a plain run of steps: A → P → X → B becomes A → X → P → B, and
        two steps the same size swap places on the floor */
@@ -253,6 +385,15 @@
   }
 
   /* ---------- run an edit on a station: graph → layout → one undo slot ---------- */
+  const hasPath = l => Array.isArray(l.path) && l.path.length > 0;
+  // the same graph with belts let go: the links named (ids), else every belt of a machine a changed link touches (the
+  // round-the-change set), or all of them
+  function loosen(gr, all, ids) {
+    const h = clone(gr), hot = new Set(), named = ids ? new Set(ids) : null;
+    if (!all && !named) for (const l of h.links) if (!hasPath(l)) { hot.add(l.from.node); hot.add(l.to.node); }
+    for (const l of h.links) if (hasPath(l) && (all || (named ? named.has(l.id) : (hot.has(l.from.node) || hot.has(l.to.node))))) delete l.path;
+    return h;
+  }
   function run(station, propId, op, args, opts) {
     const LL = layoutModule();
     if (!LL) return fail('NO_ENGINE', 'the layout engine is not loaded');
@@ -262,19 +403,36 @@
     if (!g || !g.ok) return g || fail('NOT_LINKED', 'this line cannot be edited here');
     const e = OPS[op](clone(g.graph), args || {}, opts || {});
     if (!e.ok) return e;
-    const L = LL.layout(e.graph, g.floor, { near: opts && opts.near });
-    if (!L.ok) {
+    /* WHERE THE LINE STANDS: first every belt the edit did not touch is kept exactly (only what changed moves); when that leaves
+       the change no way through, the belts it names may spread (e.loose — a split's or a sorter's own lanes), then every belt
+       of a machine the edit touched, then every belt of the line. Its machines never move — only TIDY LINE moves them. Another
+       branch / another route may read in any place among its junction's lanes (e.alts): each is tried at each level. */
+    const near = opts && opts.near, tries = [e.graph].concat(Array.isArray(e.alts) ? e.alts : []);
+    const levels = [gr => gr, Array.isArray(e.loose) && e.loose.length ? gr => loosen(gr, false, e.loose) : null, gr => loosen(gr, false), gr => loosen(gr, true)].filter(Boolean);
+    let graph = null, L = null, relaid = 0, tidied = false;
+    for (let level = 0; level < levels.length && !graph; level++) {
+      for (const gr of tries) {
+        if (level && !gr.links.some(hasPath)) continue;   // nothing kept to loosen (a new line, TIDY LINE)
+        const gg = levels[level](gr), T = LL.layout(gg, g.floor, { near });
+        if (T.ok) { graph = gg; L = T; relaid = level; break; }
+        if (!L) L = T;   // (the first answer is the one a refusal explains)
+      }
+    }
+    if (!graph) {
       /* say what would actually help: TIDY LINE only when the same edit fits with the line laid out afresh; when even that
          cannot fit, the floor is too small for this line — a bigger room is the answer, never "tidy it" in a circle */
       if (op === 'tidy' || op === 'newLine') return op === 'tidy' ? fail('NO_FIT', 'this whole line does not fit here laid out afresh — give it a bigger room (Rooms), or keep it as it is') : why(L);
       const t = OPS.tidy(clone(e.graph));
       const T = t.ok ? LL.layout(t.graph, g.floor, { near: opts && opts.near }) : null;
-      if (T && T.ok) return Object.assign(fail('NEEDS_TIDY', 'there is no room for that with the line where it stands — TIDY LINE first, then try again'), { canTidy: true });
-      return fail(L.error === 'NO_SPACE' || L.error === 'NO_ROOM' ? L.error : 'NO_FIT', 'there is not enough clear floor round this line for that — give it a bigger room (Rooms), or clear some space');
+      if (!(T && T.ok)) return fail(L.error === 'NO_SPACE' || L.error === 'NO_ROOM' ? L.error : 'NO_FIT', 'there is not enough clear floor round this line for that — give it a bigger room (Rooms), or clear some space');
+      // it fits with the line laid out afresh: that moves every machine of the line, so it is done only when asked (opts.tidy —
+      // the panel's armed second click), never on the first
+      if (!(opts && opts.tidy)) return Object.assign(fail('NEEDS_TIDY', 'there is no room for that with the line where it stands — TIDY LINE first, then try again'), { canTidy: true });
+      graph = t.graph; L = T; tidied = true;
     }
-    const r = station.applyLineLayout(e.graph, L);
+    const r = station.applyLineLayout(graph, L);
     if (!r || !r.ok) return r || fail('NOT_APPLIED', 'the edit could not be laid');
-    return { ok: true, focus: (r.ids && r.ids[e.focus]) || e.focus, ids: r.ids, removed: r.removed || [] };
+    return { ok: true, focus: (r.ids && r.ids[e.focus]) || e.focus, ids: r.ids, removed: r.removed || [], relaid, tidied };
   }
   /* ---------- A READY-MADE LINE, LAID OUT TO FIT (conveyor-links phase E) ----------
      A shelf line is a graph (worldmodel blueprintGraph). Where its drawn tile map will not go, the engine lays the same
@@ -336,5 +494,5 @@
     return OPS[op] ? OPS[op](clone(g.graph), args || {}, opts || {}) : fail('BAD_OP', 'no such edit');
   }
 
-  return { run, check, placeBlueprint, canPlaceBlueprint, OPS, _internals: { why, isBack, outsOf, insOf, layoutNear } };
+  return { run, check, placeBlueprint, canPlaceBlueprint, OPS, _internals: { why, isBack, outsOf, insOf, layoutNear, armOf, laneAlts, loosen } };
 });
