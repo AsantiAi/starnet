@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "a336518f0b8424b2c5694a244a56fab432edc5eb",
+    "sourceCommit": "223991ca96e8eda1636d8ad3acf422d8e10130e3",
     "pathSetSha256": "d399b7dc9c6d8ef4e165d0c6560b5770636dbaf73b81f662e7c4b31d7cc55045",
     "files": [
       {
@@ -328,8 +328,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 671295,
-        "sha256": "629ff3e1bde29daf5b9ed2b315ba21be3b388a4800c8ae3e1aae21d10fb57d6f"
+        "bytes": 671481,
+        "sha256": "7a918fb114f1b213651889bf760135dd07c4f70179e9fe8b4618ecafa2f3e80c"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -1393,8 +1393,8 @@
       },
       {
         "path": "frontend/css/app.css",
-        "bytes": 404396,
-        "sha256": "5cc95b130f6a580d667c58e0030a21ba54302f937180d2c225b91d8924e2d77e"
+        "bytes": 404557,
+        "sha256": "dbaf1107dfbf6b94f0a949455aef4a59bbc1b6ec049aa16e27a1fdc6090dc3ae"
       },
       {
         "path": "frontend/css/asciifx.css",
@@ -1433,8 +1433,8 @@
       },
       {
         "path": "frontend/css/glass-demo.css",
-        "bytes": 34758,
-        "sha256": "19b015391ca052709a179eba4b6c3e28b6611c84af067ac5871e355d77b96a35"
+        "bytes": 32515,
+        "sha256": "5210396774641896b8ac20e3d0eb7c08d0bb0e2c40333ea49cb64584a5f72fd7"
       },
       {
         "path": "frontend/css/interface.css",
@@ -1618,8 +1618,8 @@
       },
       {
         "path": "frontend/index.html",
-        "bytes": 87912,
-        "sha256": "f471a6ec56b1ac3a9ed448a3e2720f4d52d880565b74787de14b943f73f70282"
+        "bytes": 87776,
+        "sha256": "b03e1a2a1c3d72539b7c908c5370cc3011d44ab1b7e796ce04cf21c77d9d143b"
       },
       {
         "path": "frontend/js/arcade.js",
