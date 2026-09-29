@@ -4378,38 +4378,83 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         : '') +
       '</div>';
   }
+  /* SUBSCRIPTION STACKING on the ChatGPT / Grok / Kimi cards: the same accounts block as CLAUDE CODE, driven by the
+     device-code engine (OAuthAccounts.for). The list is backend truth (/api/auth/<pid>/accounts: stored tokens, a
+     recorded dead sign-in, the station's cooldown) and is re-read at most every 5s while Settings repaints, so a
+     DISCONNECT or RE-SIGN-IN of the primary elsewhere on this page shows up without its own wiring. */
+  const STACKABLE_OAUTH = ['codex', 'grok', 'kimi'];
+  const oauthAccts = {};   // pid -> { list: undefined|null|{accounts,max}, at, pending, box: null|{ account, msg, code, uri, openUri } }
+  function oauthAcctState(pid) { return (oauthAccts[pid] = oauthAccts[pid] || { list: undefined, at: 0, pending: false, box: null }); }
+  function refreshOAuthAccounts(pid, force) {
+    if (typeof OAuthAccounts === 'undefined' || STACKABLE_OAUTH.indexOf(pid) < 0) return;
+    const st = oauthAcctState(pid);
+    if (st.pending || (!force && st.list !== undefined && Date.now() - st.at < 5000)) return;
+    st.pending = true;
+    OAuthAccounts.for(pid).accounts().then(j => { st.list = j; }).catch(() => { st.list = null; })
+      .finally(() => { st.pending = false; st.at = Date.now(); scheduleSettingsRepaint(); });
+  }
+  if (typeof U !== 'undefined' && U.bus && U.bus.on) U.bus.on('provider.fallback', p => { if (p && p.toAccount) STACKABLE_OAUTH.forEach(pid => refreshOAuthAccounts(pid, true)); });
+  function stackClock(ms) { try { return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch (_) { return ''; } }
+  // ONE account row (both blocks): label + email, what the provider proved, the station's cooldown, a same-account
+  // warning (two rows with one email add no usage), and the extra account's own actions.
+  function stackRowHtml(a, i, all, o) {
+    const label = String((a && a.label) || ('account ' + (i + 1))).toUpperCase();
+    const dupAt = o.signedIn && a.email ? all.findIndex(x => x && x.email === a.email && o.isIn(x)) : -1;
+    const state = !o.signedIn ? '<span class="key-stat bad">' + (o.outLabel || '○ NOT SIGNED IN') + '</span>'
+      : a.coolingUntil > Date.now() ? '<span class="key-stat">◐ HIT A LIMIT · NEXT TRY AFTER ' + esc(stackClock(a.coolingUntil)) + '</span>'
+      : '<span class="key-stat on">● SIGNED IN</span>';
+    return '<div class="key-row prov-acct' + (o.signedIn ? '' : ' expired') + '" data-account="' + esc((a && a.account) || '') + '">' +
+      '<span class="conn-dot"></span>' +
+      '<div class="key-main">' +
+        '<div class="key-top"><span class="key-prov">' + esc(label) + (i === 0 ? ' · DEFAULT' : '') + '</span>' +
+        '<code class="key-mask">' + esc(o.signedIn ? (a.email || 'signed in') : (o.outMask || 'not signed in')) + '</code></div>' +
+        '<div class="key-meta">' + state + (o.plan ? '<span class="key-stat">' + esc(o.plan) + '</span>' : '') +
+          (dupAt >= 0 && dupAt < i ? '<span class="key-stat bad">⚠ SAME ACCOUNT AS ' + esc(String(all[dupAt].label || '').toUpperCase()) + ' — ADDS NO USAGE</span>' : '') +
+        '</div>' +
+      '</div>' +
+      (i === 0 ? '' : '<div class="key-acts">' +
+        (!o.signedIn ? '<button class="bb sm" data-act="' + o.signInAct + '" aria-label="Sign in ' + esc(label) + '">⏼ SIGN IN</button>' : '') +
+        '<button class="bb sm danger" data-act="' + o.removeAct + '" aria-label="Remove ' + esc(label) + '">✕ REMOVE</button>' +
+      '</div>') +
+    '</div>';
+  }
+  function oauthAccountsHtml(pid) {
+    const st = oauthAcctState(pid);
+    const j = st.list;
+    if (!j || !j.accounts.length) return '';
+    const all = j.accounts, extras = all.slice(1);
+    if (!all[0].connected && !extras.length && !st.box) return '';   // nothing signed in yet: the card's own ⏼ SIGN IN is the door
+    const isIn = x => !!x.connected;
+    const rows = extras.length ? all.map((a, i) => stackRowHtml(a, i, all, {
+      signedIn: isIn(a), isIn, outLabel: a.expired ? '⚠ SIGN-IN EXPIRED' : '○ NOT SIGNED IN', outMask: a.expired ? 'sign in again' : '',
+      signInAct: 'prov-oauth-acct-signin', removeAct: 'prov-oauth-acct-remove' })).join('') : '';
+    const flowing = OAuthAccounts.for(pid).active();
+    const b = st.box;
+    const box = b ? '<div class="key-edit codex-inline prov-oauth-inline" id="prov-oauth-acct-box-' + esc(pid) + '">' +
+        '<span class="dim">' + esc(b.msg) + '</span>' +
+        (b.code ? '<code class="key-mask">' + esc(b.code) + '</code>' : '') +
+        (b.openUri && flowing ? '<button class="bb sm" data-act="prov-oauth-acct-open">↗ OPEN PAGE</button>' : '') +
+        (flowing ? '<button class="bb sm" data-act="prov-oauth-acct-cancel">✕ CANCEL</button>' : '') +
+      '</div>' : '';
+    const canAdd = !flowing && all.length < (j.max || 8);
+    return '<div class="prov-accounts">' + rows + box +
+      '<div class="prov-accounts-add">' +
+        (canAdd ? '<button class="bb sm" data-act="prov-oauth-acct-add" title="sign in another ' + esc(provName(pid)) + ' account">＋ ADD ACCOUNT</button>' : '') +
+        '<span class="dim">' + (extras.length
+          ? 'runs start on the first ready account; when it hits its usage limit they continue on the next'
+          : 'connect more ' + esc(provName(pid)) + ' accounts — when one hits its usage limit, runs continue on the next') + '</span>' +
+      '</div>' +
+    '</div>';
+  }
   /* SUBSCRIPTION STACKING on the CLAUDE CODE card: every connected sign-in with what its own CLI proved (email, plan,
      signed in or not) and what the station is doing with it (a cooldown after a limit is REAL credPool state), plus
      ＋ ADD ACCOUNT. Two rows with one email are the same Claude account: it adds no usage, and the row says so. */
   function claudeAccountsHtml() {
     const extras = claudeAccounts || [];
     const all = [claudeCliSt].concat(extras);
-    const now = Date.now();
-    const clock = ms => { try { return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch (_) { return ''; } };
-    const firstWith = email => all.findIndex(x => x && x.loggedIn && x.email === email);
-    const row = (a, i) => {
-      const signedIn = !!(a && a.loggedIn);
-      const label = String((a && a.label) || ('account ' + (i + 1))).toUpperCase();
-      const dupAt = signedIn && a.email ? firstWith(a.email) : -1;
-      const state = !signedIn ? '<span class="key-stat bad">○ NOT SIGNED IN</span>'
-        : a.coolingUntil > now ? '<span class="key-stat">◐ HIT A LIMIT · NEXT TRY AFTER ' + esc(clock(a.coolingUntil)) + '</span>'
-        : '<span class="key-stat on">● SIGNED IN</span>';
-      const plan = signedIn ? claudeCliPlan(a).replace(/^ · /, '') : '';
-      return '<div class="key-row prov-acct' + (signedIn ? '' : ' expired') + '" data-account="' + esc((a && a.account) || '') + '">' +
-        '<span class="conn-dot"></span>' +
-        '<div class="key-main">' +
-          '<div class="key-top"><span class="key-prov">' + esc(label) + (i === 0 ? ' · DEFAULT' : '') + '</span>' +
-          '<code class="key-mask">' + esc(signedIn ? (a.email || 'signed in') : 'not signed in') + '</code></div>' +
-          '<div class="key-meta">' + state + (plan ? '<span class="key-stat">' + esc(plan) + '</span>' : '') +
-            (dupAt >= 0 && dupAt < i ? ' · <span class="key-stat bad">⚠ SAME ACCOUNT AS ' + esc(String(all[dupAt].label || '').toUpperCase()) + ' — ADDS NO USAGE</span>' : '') +
-          '</div>' +
-        '</div>' +
-        (i === 0 ? '' : '<div class="key-acts">' +
-          (!signedIn ? '<button class="bb sm" data-act="prov-claude-acct-signin" aria-label="Sign in ' + esc(label) + '">⏼ SIGN IN</button>' : '') +
-          '<button class="bb sm danger" data-act="prov-claude-acct-remove" aria-label="Remove ' + esc(label) + '">✕ REMOVE</button>' +
-        '</div>') +
-      '</div>';
-    };
+    const isIn = x => !!(x && x.loggedIn);
+    const row = (a, i) => stackRowHtml(a, i, all, { signedIn: isIn(a), isIn, plan: isIn(a) ? claudeCliPlan(a).replace(/^ · /, '') : '',
+      signInAct: 'prov-claude-acct-signin', removeAct: 'prov-claude-acct-remove' });
     const flowing = !!claudeCard.account && typeof ClaudeCliSignIn !== 'undefined' && ClaudeCliSignIn.active();
     const box = claudeCard.account ? claudeFlowBoxHtml(flowing, flowing || !!claudeCard.msg) : '';
     const canAdd = !flowing && 1 + extras.length < claudeAccountsMax;
@@ -4427,6 +4472,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   function queueProviderHealthRefresh() {
     const h = H(); if (!h) return;
     refreshClaudeCliCard(false);
+    STACKABLE_OAUTH.forEach(pid => refreshOAuthAccounts(pid, false));
     for (const p of PROVIDERS) {
       const credentialSaved = !!(h.hasStoredCredential && h.hasStoredCredential(p.id));
       const endpointConfigured = p.id === 'ollama' || p.id === 'claude-cli' || (p.id === 'custom' && !!(h.getBaseUrl && h.getBaseUrl(p.id)));
@@ -4567,6 +4613,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
           : '') +
         (wantsClaudeSignin && !claudeCard.account ? claudeFlowBoxHtml(claudeFlowing, claudeBox) : '') +
         (isClaude && claudeCliSt && claudeCliSt.installed ? claudeAccountsHtml() : '') +
+        (STACKABLE_OAUTH.indexOf(p.id) >= 0 ? oauthAccountsHtml(p.id) : '') +
         (wantsOAuthSignin
           ? '<div class="key-edit codex-inline prov-oauth-inline" id="prov-oauth-inline-' + esc(p.id) + '" hidden>' +
             '<span class="dim" id="prov-oauth-status-' + esc(p.id) + '"></span>' +
@@ -5119,6 +5166,61 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
                 const r = await ClaudeCliSignIn.remove(id);
                 notify(r.ok ? '✓ ' + label.toLowerCase() + ' signed out and removed' : 'couldn’t remove ' + label.toLowerCase() + ' — try again', r.ok ? 'good' : 'bad');
                 refreshClaudeCliCard(true); rerender('settings');
+              }
+            });
+          }
+        });
+      }
+      // SUBSCRIPTION STACKING on a ChatGPT / Grok / Kimi card: ＋ ADD ACCOUNT, an extra account's ⏼ SIGN IN and ✕ REMOVE,
+      // all through the device-code engine (OAuthAccounts.for). The box state lives in oauthAccts, so a repaint keeps it.
+      const acctPid = card.dataset.provider;
+      const oauthAcctsEl = STACKABLE_OAUTH.indexOf(acctPid) >= 0 ? card.querySelector('.prov-accounts') : null;
+      if (oauthAcctsEl && typeof OAuthAccounts !== 'undefined') {
+        oauthAcctsEl.addEventListener('click', e2 => e2.stopPropagation());   // a card click selects the provider
+        const eng = OAuthAccounts.for(acctPid);
+        const st = oauthAcctState(acctPid);
+        const flow = (btn, account) => {
+          st.box = { account: account || '+', msg: 'requesting a sign-in code…', code: '', openUri: '' };
+          if (btn) { btn.disabled = true; btn.textContent = '◐ STARTING…'; }
+          const cb = {
+            onError: msg => { st.box = { account: '', msg, code: '', openUri: '' }; sfx('bad'); rerender('settings'); },
+            onTimeout: () => { st.box = { account: '', msg: 'sign-in timed out — start it again', code: '', openUri: '' }; rerender('settings'); },
+            onCode: c => {
+              st.box = { account: account || '+', code: c.user_code, openUri: c.open_uri || c.verification_uri,
+                msg: 'enter this code at ' + c.verification_uri + ' — sign in with a DIFFERENT ' + provName(acctPid) + ' account' };
+              openExternal(c.open_uri || c.verification_uri);
+              rerender('settings');
+            },
+            onConnected: () => {
+              st.box = null;
+              notify('✓ another ' + provName(acctPid) + ' account connected — runs continue on it when an account hits its limit', 'good');
+              refreshOAuthAccounts(acctPid, true); rerender('settings');
+            }
+          };
+          Promise.resolve(account ? eng.signIn(account, cb) : eng.add(cb)).catch(() => {});
+        };
+        const addBtn = oauthAcctsEl.querySelector('[data-act="prov-oauth-acct-add"]');
+        if (addBtn) addBtn.onclick = () => { sfx('click'); flow(addBtn, ''); };
+        const openBtn = oauthAcctsEl.querySelector('[data-act="prov-oauth-acct-open"]');
+        if (openBtn) openBtn.onclick = () => { sfx('click'); if (st.box && st.box.openUri) openExternal(st.box.openUri); };
+        const cancelBtn = oauthAcctsEl.querySelector('[data-act="prov-oauth-acct-cancel"]');
+        if (cancelBtn) cancelBtn.onclick = () => { sfx('click'); eng.cancel(); st.box = null; rerender('settings'); };
+        oauthAcctsEl.querySelectorAll('.prov-acct').forEach(rowEl => {
+          const id = rowEl.dataset.account;
+          if (!id) return;
+          const label = (rowEl.querySelector('.key-prov') || {}).textContent || 'account';
+          const inBtn = rowEl.querySelector('[data-act="prov-oauth-acct-signin"]');
+          if (inBtn) inBtn.onclick = () => { sfx('click'); flow(inBtn, id); };
+          const rmBtn = rowEl.querySelector('[data-act="prov-oauth-acct-remove"]');
+          if (rmBtn && typeof ArmConfirm !== 'undefined' && ArmConfirm.wire) {
+            ArmConfirm.wire(rmBtn, {
+              armedLabel: '✕ REMOVE — sure?', timeoutMs: 4000,
+              onArm: () => sfx('bad'),
+              onConfirm: async () => {
+                rmBtn.disabled = true;
+                const r = await eng.remove(id);
+                notify(r.ok ? '✓ ' + label.toLowerCase() + ' removed' : 'couldn’t remove ' + label.toLowerCase() + ' — try again', r.ok ? 'good' : 'bad');
+                refreshOAuthAccounts(acctPid, true); rerender('settings');
               }
             });
           }

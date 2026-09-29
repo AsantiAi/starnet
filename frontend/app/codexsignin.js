@@ -110,6 +110,47 @@ const OAuthSignIn = {
   }
 };
 
+/* OAuthAccounts — SUBSCRIPTION STACKING for the device-code subscriptions (codex / grok / kimi): extra sign-ins
+   beside the primary. Every flow is the SAME makeOAuthSignIn engine pointed at the account routes — a new account
+   only exists once its device sign-in completes (the sidecar creates it then), so cancel() leaves nothing behind.
+     OAuthAccounts.for(pid).accounts()        -> { accounts: [{ account, label, primary, connected, expired, email?, coolingUntil }], max } or null
+     OAuthAccounts.for(pid).add(cb)           the engine's callbacks (onCode / onConnected / onError / onTimeout)
+     OAuthAccounts.for(pid).signIn(id, cb)    sign an existing extra account in again
+     OAuthAccounts.for(pid).cancel() · active() · remove(id) -> { ok } */
+function makeOAuthAccounts(pid) {
+  const base = '/api/auth/' + pid + '/';
+  let engine = null;
+  const run = (startPath, cb) => {
+    if (engine) engine.cancel();
+    engine = makeOAuthSignIn({ start: startPath, poll: base + 'account-poll', logout: base + 'accounts' });
+    return engine.start(cb);
+  };
+  return {
+    async accounts() {
+      try { const j = await (await fetch(base + 'accounts')).json(); return (j && Array.isArray(j.accounts)) ? j : null; } catch (_) { return null; }
+    },
+    add(cb) { return run(base + 'add', cb); },
+    signIn(account, cb) { return run(base + 'account-start?account=' + encodeURIComponent(account), cb); },
+    cancel() { if (engine) engine.cancel(); },
+    active() { return !!(engine && engine.active()); },
+    async remove(account) {
+      try {
+        const r = await fetch(base + 'remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ account: String(account || '') }) });
+        const j = await r.json();
+        return { ok: !!(j && j.ok) };
+      } catch (_) { return { ok: false }; }
+    }
+  };
+}
+const _oauthAccountEngines = {};
+const OAuthAccounts = {
+  for(pid) {
+    pid = String(pid || '').trim().toLowerCase();
+    if (!_oauthAccountEngines[pid]) _oauthAccountEngines[pid] = makeOAuthAccounts(pid);
+    return _oauthAccountEngines[pid];
+  }
+};
+
 /* ClaudeCliSignIn — SIGN IN WITH CLAUDE for surfaces outside the brain screen (Settings → PROVIDERS). Not a device
    code: the sidecar runs the user's own `claude auth login` (it opens the browser and keeps the token; StarNet
    never sees it) and /api/auth/claude-cli/* reports what the CLI proved. DOM-free like the engine above.
@@ -190,5 +231,5 @@ function makeClaudeCliSignIn() {
 }
 const ClaudeCliSignIn = makeClaudeCliSignIn();
 
-if (typeof module !== 'undefined' && module.exports) { module.exports = CodexSignIn; module.exports.OAuthSignIn = OAuthSignIn; module.exports.ClaudeCliSignIn = ClaudeCliSignIn; module.exports.makeClaudeCliSignIn = makeClaudeCliSignIn; }
-if (typeof window !== 'undefined') { window.CodexSignIn = CodexSignIn; window.OAuthSignIn = OAuthSignIn; window.ClaudeCliSignIn = ClaudeCliSignIn; }
+if (typeof module !== 'undefined' && module.exports) { module.exports = CodexSignIn; module.exports.OAuthSignIn = OAuthSignIn; module.exports.ClaudeCliSignIn = ClaudeCliSignIn; module.exports.makeClaudeCliSignIn = makeClaudeCliSignIn; module.exports.OAuthAccounts = OAuthAccounts; }
+if (typeof window !== 'undefined') { window.CodexSignIn = CodexSignIn; window.OAuthSignIn = OAuthSignIn; window.ClaudeCliSignIn = ClaudeCliSignIn; window.OAuthAccounts = OAuthAccounts; }
