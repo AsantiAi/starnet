@@ -9,8 +9,11 @@
      A. connectBelt no longer ends (or starts) a lane on a tile a THIRD machine touches when a clean tile
         exists — the stacked-bay floor compiles as two parallel branches, both fed by the INBOX;
      B. station.connectionPreview names the existing machines a placement WOULD hook (the ghost turns amber
-        and says so) — stamp under a line = its machines; one row lower = nothing; a nudge along a machine's
-        own lane is not a "new" connection; hookedBelts reports what a move would leave behind;
+        and says so). Since conveyor links phase B (2026-09-28) a floor connects by LINKS, so touching joins
+        nothing: a line stamped right under another stays its own line, a BAY dropped against a lane hooks
+        nothing — and the preview (a dry run of the real edit) says exactly that; what it does name is a
+        loose belt that a machine dropped at its end picks up. A nudge along a machine's own lane is not a
+        "new" connection;
      C. no false alarms: every starter blueprint on a clear deck previews zero connections;
      D. the REFIT wiring: the ghosts ask connectionPreview, go amber with WILL CONNECT TO, and brushed
         hookups on an existing floor are drawn (brushedHookups) and explained on the hover card. */
@@ -65,15 +68,13 @@ const add = (s, t, x, y, w, h) => { const q = s.addProp({ t, x, y, w, h, block: 
   const bp = WM.BLUEPRINTS.find(b => b.id === 'research_line');
   const cand = (ox, oy) => ({ props: bp.props.map(p => ({ t: p.t, x: ox + p.x, y: oy + p.y, w: p.w, h: p.h })), belts: bp.belts.map(b => ({ x: ox + b.x, y: oy + b.y, d: b.d })) });
   A.ok(s.canPlaceBlueprint('research_line', 30, 5).ok, 'the stamp right under the front desk IS legal (sandbox — the ghost never refuses it)');
-  const under = s.connectionPreview(cand(30, 5));
-  const types = under.map(l => l.t).sort();
-  A.eq(types, ['bay', 'intake', 'outbox'], 'stamping right under the front desk previews joining its INBOX + BAY + OUTBOX (the silent join, now named)');
-  A.eq(s.connectionPreview(cand(30, 6)), [], 'one row lower: nothing to join — the ghost stays green');
-  // stamp it anyway and prove the preview told the truth: the compiled line really merges
+  A.eq(s.connectionPreview(cand(30, 5)), [], 'stamping right under the front desk joins nothing (links, not touching) — the ghost stays green');
+  A.eq(s.connectionPreview(cand(30, 6)), [], 'one row lower: nothing to join either');
+  // stamp it anyway and prove the preview told the truth: two lines, side by side
   const st = s.stampBlueprint('research_line', 30, 5);
   A.ok(st && st.ok, 'stamped under');
   const comps = P.lineComponents(s.projectGeometry());
-  A.eq(comps.length, 1, 'the compiled floor is ONE line after that stamp — exactly what the amber ghost warned');
+  A.eq(comps.length, 2, 'the compiled floor is TWO lines after that stamp — exactly what the green ghost said');
   s.undo();
   A.eq(P.lineComponents(s.projectGeometry()).length, 1, 'undo: the front desk alone again');
   const st2 = s.stampBlueprint('research_line', 30, 6);
@@ -83,10 +84,18 @@ const add = (s, t, x, y, w, h) => { const q = s.addProp({ t, x, y, w, h, block: 
   // a single machine dropped against a lane previews that lane's machines
   const s2 = freshFloor();
   s2.stampBlueprint('front_desk', 32, 3);
-  const near = s2.connectionPreview({ props: [{ t: 'bay', x: 35, y: 5, w: 2, h: 2 }] });
-  A.ok(near.length >= 1 && near.some(l => l.t === 'bay' || l.t === 'intake'), 'a BAY dropped against the lane previews hooking it (' + JSON.stringify(near.map(l => l.t)) + ')');
+  A.eq(s2.connectionPreview({ props: [{ t: 'bay', x: 35, y: 5, w: 2, h: 2 }] }), [], 'a BAY dropped against the lane hooks nothing (it previews nothing)');
   A.eq(s2.connectionPreview({ props: [{ t: 'bay', x: 35, y: 7, w: 2, h: 2 }] }), [], 'a BAY two rows clear previews nothing');
   A.eq(s2.connectionPreview({ props: [{ t: 'plant', x: 35, y: 5, w: 1, h: 1 }] }), [], 'decor never hooks a lane');
+  // …what DOES connect is a loose belt a machine is dropped at the end of
+  const fdIn = s2.props().find(p => p.t === 'intake');
+  A.ok(s2.placeBeltRun({ tx: fdIn.x + 2, ty: fdIn.y + 6 }, { tx: fdIn.x + 5, ty: fdIn.y + 6 }).ok, 'fixture: a loose belt laid by hand');
+  A.eq(s2.connectionPreview({ props: [{ t: 'intake', x: fdIn.x, y: fdIn.y + 5, w: 2, h: 2 }] }).map(l => l.t), [], 'an INBOX dropped at its start joins no EXISTING machine (the belt leads to none)');
+  const pick = s2.connectionPreview({ props: [{ t: 'bay', x: fdIn.x + 6, y: fdIn.y + 5, w: 2, h: 2 }] });
+  A.eq(pick, [], 'a BAY at its end joins nothing existing either — only both ends make a link');
+  const fdBay = s2.props().find(p => p.t === 'bay');
+  A.ok(s2.placeBeltRun({ tx: fdBay.x, ty: fdBay.y + 2 }, { tx: fdBay.x, ty: fdBay.y + 4 }).ok, 'fixture: a belt run down out of the front desk BAY, to nowhere yet');
+  A.eq(s2.connectionPreview({ props: [{ t: 'bay', x: fdBay.x, y: fdBay.y + 5, w: 2, h: 2 }] }).map(l => l.propId), [fdBay.id], 'a BAY dropped where that belt ends previews joining the front desk BAY — the belt it picks up');
 
   // MOVE: a nudge along the machine's own lane is not a new connection; a move away leaves belts behind
   const intake = s2.props().find(p => p.t === 'intake');

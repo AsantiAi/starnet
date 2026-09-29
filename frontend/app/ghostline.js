@@ -120,9 +120,15 @@ const GhostLine = (() => {
           const owner = b.agentId || ('g#' + b.propId);
           dockMeta[owner] = { role: b.role || null, propId: b.propId, bound: !!b.agentId };
           const ring = [];
+          // an UNBOUND bay stops the ghost only where the plan hooks it (plan.unboundBayTile — on a linked floor, the ring
+          // tiles of its own links; a belt that merely passes it rides on, conveyor-links phase B)
+          const ubt = plan.unboundBayTile || null;
           for (let yy = b.y - 1; yy <= b.y + (b.h || 1); yy++)
-            for (let xx = b.x - 1; xx <= b.x + (b.w || 1); xx++)
-              if (map[key(xx, yy)]) { ring.push({ x: xx, y: yy }); if (!b.agentId && !stopsL[key(xx, yy)]) stopsL[key(xx, yy)] = owner; }
+            for (let xx = b.x - 1; xx <= b.x + (b.w || 1); xx++) {
+              const k = key(xx, yy);
+              if (!map[k] || (!b.agentId && ubt && ubt[k] !== b.propId)) continue;
+              ring.push({ x: xx, y: yy }); if (!b.agentId && !stopsL[k]) stopsL[k] = owner;
+            }
           ringOf[owner] = ring;
         }
         // OUTBOX mouths on this line (the ship-out caption + ship-tile preference)
