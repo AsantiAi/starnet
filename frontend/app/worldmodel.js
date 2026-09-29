@@ -2063,11 +2063,15 @@ const WorldModel = (() => {
       return { ok: true };
     }
     const canPlaceBlueprint = (id, tx, ty) => checkBlueprint(blueprintById(id), tx, ty);
-    function stampBlueprint(id, tx, ty) {
+    /* SET UP BEFORE YOU PLACE (2026-09-28): `opts` = { limits, maxIter } from the shelf card. They ride IN the stamp —
+       the INBOX's budget through the same normalizer setPropLimits uses, the LOOP's pass cap through the same clamp its
+       card uses — inside the ONE snapshot, so one UNDO still removes the whole line. */
+    function stampBlueprint(id, tx, ty, opts) {
       const bp = blueprintById(id);
       const v = checkBlueprint(bp, tx, ty);
       if (!v.ok) return v;
       tx |= 0; ty |= 0;
+      const ov = (opts && typeof opts === 'object') ? opts : {};
       snapshot();   // ONE undo slot for the whole line
       const ids = [], dirty = [];
       for (const s of bp.props) {
@@ -2083,6 +2087,11 @@ const WorldModel = (() => {
           if (nl) prop.limits = { maxHops: nl.maxHops, maxUsdPerMessage: nl.maxUsdPerMessage, maxUsdPerDay: nl.maxUsdPerDay };
         }
         applyJunctionCfg(prop, s);   // the FILTER's routes/def ride in pre-configured
+        if (s.t === 'intake' && ov.limits && typeof ov.limits === 'object') {
+          const nl = normalizeLimits(Object.assign({}, prop.limits || {}, ov.limits));
+          if (nl) prop.limits = { maxHops: nl.maxHops, maxUsdPerMessage: nl.maxUsdPerMessage, maxUsdPerDay: nl.maxUsdPerDay };
+        }
+        if (s.t === 'loop' && ov.maxIter != null) applyJunctionCfg(prop, { maxIter: ov.maxIter });
         doc.props.push(prop);
         ids.push(prop.id);
         dirty.push({ x1: prop.x, y1: prop.y, x2: prop.x + prop.w - 1, y2: prop.y + prop.h - 1 });

@@ -680,13 +680,15 @@
     review: /\b(review(er|ers|s|ed|ing)?|proof ?read(s|ing)?|edit(or|ors|s|ed|ing)?|approv(e|es|al|ed)|fact.?check(s|ed|ing)?|sign.?off|before (i|we) (publish|post|send|ship))\b/i,
     code: /\b(code|coding|bugs?|pull requests?|refactor|repo|commits?)\b/i,
     compare: /\b(second opinion|two takes|compare|pressure.?test)\b/i,
+    test: /(?<!pressure.?)\b(tests?|testing|tested)\b|\b(qa|quality assurance)\b/i,   // "pressure-test" is a second opinion, not QA
     schedule: /\b(every|each|daily|weekly|hourly|morning|evening|nightly|mondays?|weekdays?)\b/i
   };
   function suggestLineFor(text) {
     const t = String(text == null ? '' : text); if (!t.trim()) return null;
     const has = k => INTENT[k].test(t);
     let s = null;
-    if (has('code') && has('review')) s = { id: 'code_foundry', why: 'an engineer builds it and a reviewer sends it back until it passes' };
+    if (has('code') && has('test')) s = { id: 'build_test', why: 'a builder makes the change and a tester sends it back until it passes' };
+    else if (has('code') && has('review')) s = { id: 'code_foundry', why: 'an engineer builds it and a reviewer sends it back until it passes' };
     else if (has('write') && has('review')) s = { id: 'revision_loop', why: 'a writer drafts it and a reviewer sends it back until it is approved' + (has('research') ? ' (add a RESEARCHER in front with + in its Workflow panel)' : '') };
     else if (has('research') && has('write')) s = { id: 'research_line', why: 'one agent digs, the next writes it up' };
     else if (has('compare')) s = { id: 'second_opinion', why: 'two agents take the same job on their own, and you get both answers' };
