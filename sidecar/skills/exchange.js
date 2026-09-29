@@ -47,8 +47,11 @@ function parseDocument(text, sourceUrl) {
   if (!raw.trim()) throw new Error('the source returned an empty document');
   if (Buffer.byteLength(raw, 'utf8') > MAX_DOCUMENT_BYTES) throw new Error('SKILL.md is larger than 256 KB');
   const fm = catalog.parseFrontmatter(raw);
-  const name = str(fm.meta.name).trim();
-  const description = str(fm.meta.description).trim();
+  // a standard SKILL.md keeps author/version (and sometimes license) under `metadata:`; top-level wins when both exist
+  const md = fm.meta.metadata && typeof fm.meta.metadata === 'object' && !Array.isArray(fm.meta.metadata) ? fm.meta.metadata : {};
+  const scalarText = (v) => (v == null || typeof v === 'object') ? '' : str(v);
+  const name = scalarText(fm.meta.name).trim();
+  const description = scalarText(fm.meta.description).replace(/\s+/g, ' ').trim();
   const body = str(fm.body).trim();
   if (!name) throw new Error('SKILL.md frontmatter must include name');
   if (!description) throw new Error('SKILL.md frontmatter must include description');
@@ -59,12 +62,12 @@ function parseDocument(text, sourceUrl) {
     summary: description.slice(0, 280),
     description: description.slice(0, 280),
     body,
-    category: str(fm.meta.category || 'Imported').trim().slice(0, 80) || 'Imported',
+    category: scalarText(fm.meta.category || 'Imported').trim().slice(0, 80) || 'Imported',
     requires: list(fm.meta.requires),
     platforms: list(fm.meta.platforms),
-    sourceVersion: str(fm.meta.version).trim().slice(0, 80),
-    sourceAuthor: str(fm.meta.author).trim().slice(0, 160),
-    sourceLicense: str(fm.meta.license).trim().slice(0, 80),
+    sourceVersion: scalarText(fm.meta.version || md.version).trim().slice(0, 80),
+    sourceAuthor: scalarText(fm.meta.author || md.author).trim().slice(0, 160),
+    sourceLicense: scalarText(fm.meta.license || md.license).trim().slice(0, 80),
     sourceUrl
   };
 }
