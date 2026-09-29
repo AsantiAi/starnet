@@ -228,9 +228,13 @@ for (const kit of T.kits()) {
   A.ok(r.plan.summary.indexOf(kit.name + ' (' + kit.about + ') in a new room beside HOME') === 0, kit.id + ': the summary names the kit and where it goes');
   const caps = kit.props.filter(([t]) => M.capForProp(t)).length;
   A.eq(/It brings equipment: /.test(r.plan.summary), caps > 0, kit.id + ': equipment is named exactly when the kit brings some (object = capability)');
+  const bays = kit.line ? M.BLUEPRINTS.find(b => b.id === kit.line.bp).props.filter(p => p.t === 'bay') : [];
+  A.eq(r.plan.steps.length, bays.length, kit.id + ': the card lists one step per step of the kit\'s line (none without one)');
+  A.ok(r.plan.steps.every((s, i) => s.step === i + 1 && s.agent === null && s.instructions.length > 10 && !/ in /.test(s.role)), kit.id + ': each step says what it will be told, and that nobody is hired');
   const a = SB.apply(st, r.plan, renv);
   A.ok(a.ok, kit.id + ': builds (' + (a.error || '') + ')');
   const nr = st.rooms().find(x => x.name === kit.name);
+  if (kit.line) A.eq(r.plan.steps.map(s => s.instructions).sort(), st.props().filter(p => p.t === 'bay' && st.roomAt(p.x, p.y) === nr.id).map(p => p.brief).sort(), kit.id + ': the card\'s instructions are exactly the ones built');
   A.ok(nr && st.rooms().length > rooms0, kit.id + ': a new room of that name');
   const inside = st.props().filter(p => st.roomAt(p.x, p.y) === nr.id && p.t !== 'intake' && p.t !== 'bay' && p.t !== 'outbox' && p.t !== 'loop' && p.t !== 'filter' && p.t !== 'merger');
   A.eq(inside.length, kit.props.length, kit.id + ': every piece of the kit, and nothing else, is in it');
@@ -246,6 +250,8 @@ for (const c of T.catalog.filter(c => T.presetKits(c.id).length)) {
   A.ok(r.ok, c.id + ': a preset\'s rooms plan beside a busy station (' + (r.error || '') + ')');
   if (!r.ok) continue;
   A.eq(r.plan.rooms.length, T.presetKits(c.id).length, c.id + ': one room per preset room');
+  const lined = r.plan.rooms.filter(v => v.line);
+  A.ok(lined.length < 2 || r.plan.steps.every(s => lined.some(v => s.role.endsWith(' in ' + v.name))), c.id + ': with several lines, each step on the card names its room');
   A.ok(SB.apply(st, r.plan, renv).ok, c.id + ': builds');
   const keep = new Set(st.props().map(p => JSON.stringify(p)));
   A.ok(oldProps.every(p => keep.has(p)), c.id + ': nothing already there moved or changed');
