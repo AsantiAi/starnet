@@ -8413,6 +8413,11 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
      duplicate build). The composer is PREFILLED, never sent — the Commander's words stay theirs to edit, and
      no turn is fabricated on their behalf (the OUTBOX ⊕ NEW SESSION precedent). Returns false honestly when
      the workstream seam is unavailable, so the caller can say so instead of dead-clicking. */
+  /* USER-STUDY LOOP (2026-09-28, Andrew's call): START QUEST on a quest the AGENT executes now STARTS the work —
+     the Commander's click on START is the instruction, exactly like "Start this step" on a goal milestone
+     (GoalStore.acceptMilestone → launchDirective). It sends once, only into the quest's brand-new session and
+     only when COMMS is free; a return visit, a busy COMMS, or a quest the Commander performs (commander /
+     together → "HELP ME PREPARE") keeps the prefill-and-edit path, so nothing is ever sent twice or behind their back. */
   function questSessionTitle(q) { return ('quest: ' + String((q && q.title) || 'a quest')).slice(0, 80); }
   function questOpenSession(q) {
     const w = WS();
@@ -8431,13 +8436,20 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     if (!sid) return false;
     if (typeof App !== 'undefined' && App.openWorkstream) App.openWorkstream(sid);
     // The ask names the quest and the honest completion condition, so the agent starts on the real objective
-    // rather than a title fragment. Left in the composer for the Commander to edit or send.
-    if (typeof Chat !== 'undefined' && Chat.prefill) {
+    // rather than a title fragment.
+    if (typeof Chat !== 'undefined') {
       const cw = questCompletesWhen(q);
-      Chat.prefill('Help me with this quest: ' + String(q.title || '').trim()
+      const ask = 'Help me with this quest: ' + String(q.title || '').trim()
         + (q.desc ? ' — ' + String(q.desc).trim() : '')
-        + (cw ? '\n\nIt counts as done when: ' + cw : '') + '\n\n');
-      notify('Conversation prepared. Edit and send it when you are ready.', 'good');
+        + (cw ? '\n\nIt counts as done when: ' + cw : '');
+      const startsWork = !existing && q.executionMode === 'agent' && Chat.send && !(Chat.isBusy && Chat.isBusy());
+      if (startsWork) {
+        Chat.send(ask);
+        notify('Quest started — the work is running in its own session.', 'good');
+      } else if (Chat.prefill) {
+        Chat.prefill(ask + '\n\n');
+        notify('Conversation prepared. Edit and send it when you are ready.', 'good');
+      }
     }
     return true;
   }
@@ -8672,7 +8684,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     }
     // LAST OUTCOME — the most recent honest attempt (minted/none/rejected/skipped/error) the refresher recorded.
     const last = s && s.ledger && s.ledger.length ? s.ledger[s.ledger.length - 1] : null;
-    const OUTCOME_LABEL = { minted: 'added a quest', none: 'nothing new needed', rejected: 'nothing passed', skipped: 'skipped', error: 'error' };
+    const OUTCOME_LABEL = { minted: 'added a quest', advanced: 'step finished', none: 'nothing new needed', rejected: 'nothing passed', skipped: 'skipped', error: 'error' };
     // The engine's own reason is kept verbatim on the row; these say what it MEANS for the Commander. A
     // rejected cycle is the confusing one — it reads as a failure when it is the station refusing to invent
     // a quest it cannot ground, so it says that outright rather than leaving "rejected" to be guessed at.

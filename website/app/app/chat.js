@@ -4979,6 +4979,34 @@ const Chat = (() => {
       if (beatCards) beatCards.scheduleExpire('study', 900);
       setTimeout(flushStudyPending, 900);
     });
+    // USER-STUDY LOOP — WHAT THE STATION LEARNED WHILE YOU WERE AWAY. Study also runs after cron, channel and
+    // night-shift runs, but this lane only ever asked about the run it had just watched end, so those batches
+    // were never offered and aged out of the stash. On open and on return, queue every undecided batch through
+    // the SAME consent card (FIFO, deduped by run, one card per moment, the session cap still binds): nothing
+    // reaches the dossier without the Commander's Keep.
+    setTimeout(lookForAwayStudy, AWAY_STUDY_FIRST_LOOK_MS);
+    try {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible') return;
+        lookForAwayStudy();
+      });
+    } catch (_) {}
+  }
+  const AWAY_STUDY_FIRST_LOOK_MS = 8000;     // after boot settles (the return digest takes the first beat)
+  const AWAY_STUDY_LOOK_GAP_MS = 10 * 60000; // a tab flicker is not a return — at most one look per 10 minutes
+  let awayStudyLookAt = 0;
+  async function lookForAwayStudy() {
+    const t = Date.now();
+    if (awayStudyLookAt && t - awayStudyLookAt < AWAY_STUDY_LOOK_GAP_MS) return;
+    awayStudyLookAt = t;
+    if (typeof Harness === 'undefined' || !Harness.studyPending || !beatCards) return;
+    const batches = await Harness.studyPending();
+    let queued = 0;
+    for (const b of batches) {
+      if (!b || !b.runId || beatCards.hasSeen('study', b.runId)) continue;
+      queueStudy(b.runId, b.agentId || 'agent'); queued++;
+    }
+    if (queued) flushStudyPending();
   }
 
   /* GROWTH Tier 2 — THE GOAL-ARC CONFIRM BEAT (understanding → direction). When a goals-dim belief exists with no
