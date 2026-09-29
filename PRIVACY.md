@@ -110,6 +110,13 @@ integrity is cryptographically verified against a key baked into the app before 
 installed. You can stop automatic checks by turning off **AUTO-CHECK FOR UPDATES** in
 **SYSTEM > SETTINGS > UPDATES**; the Update Center still lets you check manually.
 
+### 7. The Skill Market — only when you open it
+
+When you open **ABILITIES › SKILL MARKET**, the app downloads the public skill catalog from
+`https://starnetos.com/.well-known/starnet-skills.json`, and when you install a skill it downloads
+that skill's files from `https://starnetos.com/skills/`. These are plain `GET`s for static files:
+**no user data, no identifier and no telemetry are sent.** Nothing is fetched in the background.
+
 ## What StarNet stores on your machine (and how)
 
 Everything below lives under your per-user app-data directory (see the paths in "The short

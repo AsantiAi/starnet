@@ -1,0 +1,15 @@
+{
+  "slug": "decision-questionnaire",
+  "version": "1.0.0",
+  "shelf": "community",
+  "category": "Communication",
+  "tags": ["questionnaire", "decision", "async", "stakeholder"],
+  "requires": ["cabinet"],
+  "license": "MIT",
+  "authors": ["Matt Pocock", "Nous Research"],
+  "upstream": {
+    "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/productivity/decision-questionnaire",
+    "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
+    "license": "MIT"
+  }
+}

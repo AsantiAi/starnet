@@ -314,7 +314,8 @@ const { makeSkillExchange } = require('./skills/exchange.js');
 const { makeSkillDocumentFetcher, makeSkillPackageFetcher } = require('./skills/exchange-fetch.js');
 const { makeSkillRegistry } = require('./skills/registry.js');
 const { makeSkillMetrics } = require('./skills/metrics.js');
-const skillReview = require('./skillreview.js');            // background skill maintenance trigger/prompt
+const skillReview = require('./skillreview.js');
+const { makeSkillMarket, DEFAULT_CATALOG_URL: SKILL_MARKET_DEFAULT_URL } = require('./skills/market.js');   // the Skill Market client (curated catalog → station library)            // background skill maintenance trigger/prompt
 const { makeVerdictReview } = require('./verdictreview.js');   // consistency loop: a rated ok/miss run earns a skill review
 const skillCurator = require('./skillcurator.js');          // skill lifecycle/consolidation maintenance
 const slash = require('./slash.js');                       // slash-command catalog + dispatch descriptors
@@ -1549,6 +1550,16 @@ try {
 // enable/disable choices persist append-only (same fsync discipline as skillStore). Injected into each run's
 // system prompt below, gated by requires ⊆ the agent's placed objects (object = capability — the moat).
 const SKILL_LIBRARY = skillsCatalog.loadDir(path.join(__dirname, 'skills', 'library'), fs, path);
+// SKILL MARKET (2026-09-29): curated skills from starnetos.com, installed into the station library. Fetched only when
+// the Commander opens the market. STARNET_SKILL_MARKET_URL overrides the catalog; 'off' (or empty) turns it off.
+const skillMarket = makeSkillMarket({
+  fetchDocument: fetchSkillDocument, fs, path, root: path.join(WORKSPACES, 'skill-market'), guard: skillGuard, now: () => Date.now(),
+  catalogUrl: () => { const v = process.env.STARNET_SKILL_MARKET_URL; return v == null ? SKILL_MARKET_DEFAULT_URL : (String(v).trim().toLowerCase() === 'off' ? '' : String(v).trim()); },
+  loadJson: (file) => loadResilient(file, 'skill market'), saveJson: (file, value) => saveResilient(file, value)
+});
+// the station library every reader uses: the bundled recipes, with market installs merged in (a market copy of a
+// bundled original replaces it for this station)
+function skillLibrary() { try { return skillMarket.mergeLibrary(SKILL_LIBRARY); } catch (_) { return SKILL_LIBRARY; } }
 const SKILL_PREFS_FILE = path.join(WORKSPACES, 'skillprefs.jsonl');
 const skillPrefsIo = {
   readAll() {
@@ -6122,7 +6133,7 @@ async function runScoutCycle(o) {
       }
       const existing = scoutExistingClasses();
       let skillSlugs = [];
-      try { skillSlugs = skillsCatalog.catalog(SKILL_LIBRARY, { overrides: skillPrefs.overrides(), placedTypes: SCOUT_CAP_KEYS }).map(s => s.slug).filter(Boolean); } catch (_) { skillSlugs = []; }
+      try { skillSlugs = skillsCatalog.catalog(skillLibrary(), { overrides: skillPrefs.overrides(), placedTypes: SCOUT_CAP_KEYS }).map(s => s.slug).filter(Boolean); } catch (_) { skillSlugs = []; }
       const cx = scoutState.context || {};
       const directive = ProspectGen.buildDirective({
         dossierBlock: commanderDossier.get(),
@@ -9894,6 +9905,9 @@ const ROUTES = [
   { m: 'GET', prefix: '/api/slash/catalog', h: serveSlashCatalog },
   { m: 'POST', exact: '/api/slash/dispatch', h: handleSlashDispatch },
   { m: 'POST', exact: '/api/skills/toggle', h: handleSkillToggle },
+  { m: 'GET', qsplit: '/api/skill-market', h: serveSkillMarket },                // the Skill Market: catalog + this station's install state
+  { m: 'POST', exact: '/api/skill-market/install', h: handleSkillMarketInstall },
+  { m: 'POST', exact: '/api/skill-market/uninstall', h: handleSkillMarketUninstall },
   { m: 'POST', exact: '/api/skill-exchange/inspect', h: handleSkillExchangeInspect },
   { m: 'POST', exact: '/api/skill-exchange/registry', h: handleSkillExchangeRegistry },
   { m: 'POST', exact: '/api/skill-exchange/discover', h: handleSkillExchangeDiscover },
@@ -15371,7 +15385,7 @@ function placedTypesFrom(v) {
 }
 
 function slashOptions(placedTypes) {
-  const skills = skillsCatalog.catalog(SKILL_LIBRARY, { overrides: skillPrefs.overrides(), placedTypes: placedTypes || [] });
+  const skills = skillsCatalog.catalog(skillLibrary(), { overrides: skillPrefs.overrides(), placedTypes: placedTypes || [] });
   const recipes = (Recipes && Recipes.builtins) ? Recipes.builtins() : [];
   return { skills, recipes, userCommands: userCommandEntries() };
 }
@@ -15662,8 +15676,40 @@ function serveSkills(req, res) {
   try {
     const u = new URL(req.url, 'http://127.0.0.1');
     const placedTypes = String(u.searchParams.get('placed') || '').split(',').map(s => s.trim()).filter(Boolean);
-    json(200, { skills: skillsCatalog.catalog(SKILL_LIBRARY, { overrides: skillPrefs.overrides(), placedTypes: placedTypes }) });
+    json(200, { skills: skillsCatalog.catalog(skillLibrary(), { overrides: skillPrefs.overrides(), placedTypes: placedTypes }) });
   } catch (e) { json(500, readRouteFailure('skills', e)); }   // broken ≠ empty (chat.js already prints "could not load", not "none")
+}
+// GET /api/skill-market?refresh=1&placed=cabinet,dish — the Skill Market catalog with each entry's state on this
+// station (available / installed / bundled / update / tampered) and the gear it still needs. The catalog is fetched
+// here, on demand, and cached for 5 minutes; nothing fetches it in the background.
+async function serveSkillMarket(req, res) {
+  const json = (code, obj) => respondJson(res, code, obj);
+  try {
+    const u = new URL(req.url, 'http://127.0.0.1');
+    const placedTypes = String(u.searchParams.get('placed') || '').split(',').map(s => s.trim()).filter(Boolean);
+    const out = await skillMarket.listing({ refresh: u.searchParams.get('refresh') === '1', bundled: SKILL_LIBRARY, placedTypes });
+    json(200, Object.assign({ ok: true }, out));
+  } catch (e) { json(200, { ok: false, error: (e && e.message) || 'could not reach the skill market' }); }   // offline is a state, not a crash
+}
+// POST /api/skill-market/install { slug } — install (or update) a market skill into the station library and switch
+// it on. The download must reproduce the catalog's pinned digest or nothing is written.
+async function handleSkillMarketInstall(req, res) {
+  const json = (code, obj) => respondJson(res, code, obj);
+  const body = await readJsonBody(req, readBody, 1 << 16, res);
+  if (body === null) return json(400, { ok: false, error: 'bad json' });
+  try {
+    const r = await skillMarket.install({ slug: body.slug });
+    const on = skillPrefs.set(r.slug, true);
+    json(200, Object.assign({}, r, { enabled: !!(on && on.ok && on.enabled) }));
+  } catch (e) { json(400, { ok: false, error: (e && e.message) || 'could not install that skill' }); }
+}
+// POST /api/skill-market/uninstall { slug } — remove a market install; a bundled original falls back to its bundled copy.
+async function handleSkillMarketUninstall(req, res) {
+  const json = (code, obj) => respondJson(res, code, obj);
+  const body = await readJsonBody(req, readBody, 1 << 16, res);
+  if (body === null) return json(400, { ok: false, error: 'bad json' });
+  try { json(200, skillMarket.uninstall({ slug: body.slug })); }
+  catch (e) { json(400, { ok: false, error: (e && e.message) || 'could not remove that skill' }); }
 }
 // POST /api/skills/toggle { slug, enabled } — persist a station-wide enable/disable choice for a library recipe.
 // Station-wide by design: per-AGENT reach stays the capability gate (the placed objects), not a per-agent toggle.
@@ -18426,7 +18472,7 @@ async function runOnceCore(o) {
     // prefs — ADD-only (see catalog.compose). Still gated by the station gear + the budget; package composes first.
     const agentSkills = (rosterIdent && Array.isArray(rosterIdent.skills)) ? rosterIdent.skills : [];
     const recipeOpts = { overrides: skillPrefs.overrides(), placedTypes: skillPlacedTypes, agentSkills: agentSkills };
-    if (isTask) runRecipes = skillsCatalog.live(SKILL_LIBRARY, recipeOpts);
+    if (isTask) runRecipes = skillsCatalog.live(skillLibrary(), recipeOpts);
     // CHAT DIET: recipes are for WORK. A greeting shipped ~12KB of skill bodies (5 library skills are default-on with
     // no gear requirement) to every provider, and a 3B local model spent minutes re-reading them before saying hi.
     // ON DEMAND (2026-09-23): the bodies were also the largest block of every TASK call (~12.4K of ~37K). When
@@ -18435,8 +18481,8 @@ async function runOnceCore(o) {
     // so the index can never point at a tool the model cannot call.
     skillBlock = isTask
       ? (coreNames.indexOf('skill.view') >= 0
-        ? skillsCatalog.composeIndex(SKILL_LIBRARY, recipeOpts)
-        : skillsCatalog.compose(SKILL_LIBRARY, recipeOpts))
+        ? skillsCatalog.composeIndex(skillLibrary(), recipeOpts)
+        : skillsCatalog.compose(skillLibrary(), recipeOpts))
       : '';
   } catch (_) { /* a skill-injection hiccup must never break a run */ }
   // STARNET OPERATOR MANUAL: how the station works, so the agent can guide a stuck Commander. Interactive
