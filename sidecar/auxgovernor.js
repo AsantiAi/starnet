@@ -62,16 +62,21 @@
     return i < 0 ? Infinity : i;
   }
 
-  // decide({ candidates, budget, priority }) -> { spend:[names], deferred:[names], budget, unlimited }
+  // decide({ candidates, budget, priority, reserved }) -> { spend:[names], deferred:[names], reserved:[names], budget, unlimited }
   //   candidates : pass-names whose OWN gates ALREADY cleared this run-end (input order irrelevant — we re-sort).
   //   budget     : integer (typically from parseBudget); 0 = unlimited (every candidate spends, nothing deferred).
   //   priority   : optional override of PRIORITY (tests); defaults to the locked order.
+  //   reserved   : candidates that spend OUTSIDE the ceiling. They never take a budget slot and are never deferred;
+  //                the priority order among the rest is untouched. For a pass that carries its own due-counter (the
+  //                skill nudge: skillreview.nudgeAfterRun), so it fires once per N turns instead of losing every
+  //                run-end to the higher beats. A reserved name that is not a candidate spends nothing.
   // Pure: same inputs -> same output, always. Dups are collapsed; unknown names sort last but stay eligible.
   function decide(o) {
     o = o || {};
     const priority = Array.isArray(o.priority) ? o.priority : PRIORITY;
     const budget = (Number.isInteger(o.budget) && o.budget >= 0) ? o.budget : DEFAULT_BUDGET;
     const src = Array.isArray(o.candidates) ? o.candidates : [];
+    const reservedSet = new Set((Array.isArray(o.reserved) ? o.reserved : []).map(String));
     const seen = new Set();
     const list = [];
     for (let i = 0; i < src.length; i++) {
@@ -83,8 +88,11 @@
     // sort by priority; stable tiebreak on first-seen index so the output is fully deterministic across engines.
     list.sort((a, b) => (rank(a.name, priority) - rank(b.name, priority)) || (a.i - b.i));
     const ordered = list.map(x => x.name);
-    if (budget === 0) return { spend: ordered.slice(), deferred: [], budget: 0, unlimited: true };
-    return { spend: ordered.slice(0, budget), deferred: ordered.slice(budget), budget: budget, unlimited: false };
+    const reserved = ordered.filter(n => reservedSet.has(n));
+    const governed = ordered.filter(n => !reservedSet.has(n));
+    if (budget === 0) return { spend: ordered.slice(), deferred: [], reserved, budget: 0, unlimited: true };
+    const spent = governed.slice(0, budget);
+    return { spend: ordered.filter(n => reservedSet.has(n) || spent.indexOf(n) >= 0), deferred: governed.slice(budget), reserved, budget: budget, unlimited: false };
   }
 
   return { PRIORITY: PRIORITY.slice(), DEFAULT_BUDGET, parseBudget, rank, decide };

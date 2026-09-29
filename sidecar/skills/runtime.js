@@ -55,14 +55,26 @@
     return pinned.concat(rest).map(x => x.s);
   }
 
+  /* THE FIRST-SKILL LINE (2026-09-28). The only sentence that asked an agent to write skills lived inside the
+     index below, and an agent with no saved skills got no index, so a new agent was never asked. With
+     `emptyGuide`, an empty skillbase still gets one short constant block (constant, so the cached prefix stays
+     stable) telling the agent what a skill is and when to save one. */
+  function emptyGuide(canManage) {
+    return '\n\n## SAVED AGENT SKILLS\n'
+      + 'You have no saved skills yet. A skill is a procedure you write down so your next runs start from it instead of working it out again. '
+      + 'When a task makes you work out a non-trivial procedure (a multi-step workflow, a fix for a tricky error, a format or approach the Commander wants), save it '
+      + (canManage ? 'with skill.manage (action create)' : 'with skill.write')
+      + ' before you finish: a short name, a one-line summary of when to use it, and the steps.';
+  }
+
   function composeIndex(skills, opts) {
     opts = opts || {};
     const budget = opts.budget > 0 ? opts.budget : 6000;
+    const canManage = opts.canManage !== false;
     const live = (Array.isArray(skills) ? skills : []).filter(s => isLive(s, opts.platform));
-    if (!live.length) return { text: '', ids: [], omitted: 0, withheld: 0 };
+    if (!live.length) return { text: opts.emptyGuide ? emptyGuide(canManage) : '', ids: [], omitted: 0, withheld: 0 };
     const ordered = orderByQuery(live, opts.query == null ? '' : String(opts.query), context);
 
-    const canManage = opts.canManage !== false;
     const parts = [];
     const ids = [];
     let used = 0, omitted = 0, withheld = 0;

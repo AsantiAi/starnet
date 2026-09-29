@@ -27,8 +27,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const RUN_MODEL = 'run/model';
 const AUX_MODEL = 'aux/cheap';
 
-// a ~6 KB plain-text assistant reply: clears reflect/study/threadmine salience (>=200 chars) AND
-// skillReview.shouldReviewRun (>=5000) so every aux pass qualifies on a fresh workspace.
+// a ~6 KB plain-text assistant reply: clears reflect/study/threadmine salience (>=200 chars) so every single-shot
+// aux pass qualifies on a fresh workspace (the skill review qualifies through ARM A's nudge bar of 1).
 const LONG_REPLY = ('I dug through the deploy pipeline and rebuilt the staging rollback path end to end. ' +
   'Here is the substantive write-up with the reasoning, the tradeoffs, and the follow-ups worth remembering. ')
   .repeat(40);
@@ -132,7 +132,9 @@ const COMMON = { SKYNET_QUEST_REFRESH: '0', SKYNET_FULL_ACCESS: '1' };
     const mock = await startMock({});
     const fixture = SidecarFixture.create({
       prefix: 'sk-auxmodel-a-',
-      env: Object.assign({ SKYNET_OPENROUTER_BASE: mock.base, STARNET_AUX_MODEL: AUX_MODEL, SKYNET_AUX_BUDGET: '0' }, COMMON)
+      // SKYNET_SKILL_REVIEW_EVERY 1: the skill review rides the skill nudge (turns since the skillbase last changed),
+      // so a bar of 1 makes this one-turn run DUE and the review fork fires for the routing assertions below.
+      env: Object.assign({ SKYNET_OPENROUTER_BASE: mock.base, STARNET_AUX_MODEL: AUX_MODEL, SKYNET_AUX_BUDGET: '0', SKYNET_SKILL_REVIEW_EVERY: '1' }, COMMON)
     });
     await fixture.start();
     try {
@@ -151,7 +153,7 @@ const COMMON = { SKYNET_QUEST_REFRESH: '0', SKYNET_FULL_ACCESS: '1' };
       A.ok(singleShots.length >= 2, 'more than one single-shot aux pass fired (governor off, salient run) — non-vacuous');
       A.ok(singleShots.every(c => c.model === AUX_MODEL), 'EVERY single-shot aux pass rode the aux model (got: ' + singleShots.map(c => c.model + '|' + c.sys.slice(0, 40)).join(', ') + ')');
       A.ok(singleShots.every(c => c.reasoning && c.reasoning.effort === 'low'), 'every single-shot aux pass carried effort low');
-      A.ok(review.length >= 1, 'the skill-review fork fired (salient 5KB+ run, governor off)');
+      A.ok(review.length >= 1, 'the skill-review fork fired (nudge bar 1 reached, governor off)');
       A.ok(review.every(c => c.model === RUN_MODEL), 'skill review FELL BACK to the run model — aux/cheap is verifiably tool-less and a tool loop must never ride it');
       A.ok(review.every(c => c.tools > 0), 'the skill-review call really was a tool loop (tools on the wire)');
     } finally { await fixture.dispose(); try { mock.server.close(); } catch (_) {} }

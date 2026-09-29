@@ -532,9 +532,11 @@
         } catch (_) {}
       }
       if (opts2.bump !== false) {
+        // A view counts views and freshness only. useCount means "runs that loaded this skill": the run host
+        // calls markUsed ONCE per run for the skills that run actually loaded (2026-09-28; it used to call it for
+        // every skill merely LISTED in the prompt index, so every indexed skill looked used on every run).
         const bumped = {
           viewCount: (s.viewCount || 0) + 1,
-          useCount: (s.useCount || 0) + 1,
           lastUsedAt: now(),
           state: s.state === 'stale' ? 'active' : s.state
         };

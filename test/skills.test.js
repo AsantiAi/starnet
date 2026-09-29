@@ -118,9 +118,9 @@ const redact = (t) => String(t).replace(/sk-[A-Za-z0-9]{8,}/g, '[redacted]');
   clk = 2001;
   const v1 = s.view('a', 'Ship App');
   A.eq(v1.viewCount, 1, 'skill.view increments viewCount');
-  A.eq(v1.useCount, 1, 'skill.view also counts as use');
+  A.eq(v1.useCount, 0, 'a view alone is NOT a use: useCount counts runs that loaded the skill (the run end calls markUsed)');
   s.markUsed('a', 'Ship App');
-  A.eq(s.view('a', 'Ship App', { bump: false }).useCount, 2, 'markUsed increments useCount without loading body');
+  A.eq(s.view('a', 'Ship App', { bump: false }).useCount, 1, 'markUsed (once per run that loaded it) increments useCount without loading body');
   A.ok(s.manage({ agentId: 'a', action: 'archive', target: 'Ship App' }).ok, 'archive succeeds');
   A.eq(s.list('a').length, 0, 'archived skills are hidden from default list/prompt index');
   A.eq(s.view('a', 'Ship App'), null, 'archived skills are hidden from default view');
@@ -330,7 +330,7 @@ const redact = (t) => String(t).replace(/sk-[A-Za-z0-9]{8,}/g, '[redacted]');
   for (let i = 0; i < 4; i++) {
     clk += 10;
     s.view('a', id);                 // the skill.view TOOL passes no opts — bump AND hydrate default ON
-    s.markUsed('a', [id]);           // every run does this for every indexed skill id
+    s.markUsed('a', [id]);           // the run end does this for every skill the run loaded
     const stored = s.view('a', id, { bump: false, hydrate: false });
     sizes.push(String(stored.body).length);
     digests.push(stored.contentDigest);
@@ -383,6 +383,49 @@ const redact = (t) => String(t).replace(/sk-[A-Za-z0-9]{8,}/g, '[redacted]');
   A.ok(fixedPoint({ name: 'X', setup: 'a\n\nb', body: 'B' }), 'render/split is a FIXED POINT with a multi-paragraph setup');
   A.ok(fixedPoint({ name: 'X', body: '## Setup\nthe author typed this themselves' }), 'render/split is a FIXED POINT when the BODY itself opens with a Setup heading');
   A.ok(fixedPoint({ name: 'X', setup: 'S', body: '' }), 'render/split is a FIXED POINT for a setup-only skill');
+}
+
+// ---- S. SKILL LEARNING FIRES (2026-09-28): the nudge, the first-skill line, and use = loaded ----
+{
+  // the nudge: turns carry across runs, reach the bar, and start over when the agent writes a skill itself
+  A.eq(skillReview.NUDGE_EVERY, 10, 'the default bar is 10 turns (Hermes parity)');
+  A.eq(skillReview.parseNudgeEvery(undefined), 10, 'no env -> default bar');
+  A.eq(skillReview.parseNudgeEvery('3'), 3, 'an explicit bar is honored');
+  A.eq(skillReview.parseNudgeEvery('0'), 0, 'a literal 0 turns the nudge off');
+  A.eq(skillReview.parseNudgeEvery('ten'), 10, 'junk falls back to the default, never to off');
+  let n = skillReview.nudgeAfterRun(0, { turns: 4, every: 10 });
+  A.eq(n, { count: 4, due: false }, 'one 4-turn run is not due yet');
+  n = skillReview.nudgeAfterRun(n.count, { turns: 4, every: 10 });
+  A.eq(n, { count: 8, due: false }, 'the count CARRIES across runs');
+  n = skillReview.nudgeAfterRun(n.count, { turns: 3, every: 10 });
+  A.eq(n, { count: 11, due: true }, 'the third run crosses the bar -> due');
+  A.eq(skillReview.nudgeAfterRun(9, { turns: 5, managed: true, every: 10 }), { count: 0, due: false }, 'an agent that changed a skill itself this run starts over (no review owed)');
+  A.eq(skillReview.nudgeAfterRun(50, { turns: 5, every: 0 }).due, false, 'every 0 = the nudge never fires');
+  A.eq(skillReview.nudgeAfterRun(-4, { turns: 'x' }), { count: 0, due: false }, 'garbage in -> a clean zero, never NaN');
+
+  // the first-skill line: an empty skillbase still asks the agent to save its first skill, when the host opts in
+  A.eq(runtimeSkills.composeIndex([], {}).text, '', 'no emptyGuide -> an empty skillbase still composes nothing (old callers unchanged)');
+  const g = runtimeSkills.composeIndex([], { emptyGuide: true, canManage: true }).text;
+  A.ok(/## SAVED AGENT SKILLS/.test(g) && /no saved skills yet/.test(g), 'emptyGuide -> a zero-skill agent is told it has none and what a skill is');
+  A.ok(g.indexOf('skill.manage (action create)') >= 0, 'the line names the create call the agent actually has');
+  A.ok(/skill.write/.test(runtimeSkills.composeIndex([], { emptyGuide: true, canManage: false }).text), 'without skill.manage the line names skill.write');
+  A.eq(runtimeSkills.composeIndex([], { emptyGuide: true, canManage: true }).text, g, 'the line is a constant (rides the cached prefix)');
+  A.eq(runtimeSkills.composeIndex([{ name: 'Old', body: 'x', state: 'archived' }], { emptyGuide: true }).text, g, 'only archived skills = still no live skills -> the first-skill line');
+
+  // use = loaded: a maintenance read (countViews:false) moves no counter and no aging clock
+  let t = 1000;
+  const store = makeSkillStore({ io: memIo(), clock: { now: () => t }, redact });
+  store.write({ agentId: 'a', name: 'Deploy', body: '1. npm ci' });
+  const { makeSkillTools } = require('../sidecar/tools/builtin/skills.js');
+  const quiet = makeSkillTools({ store, countViews: false });
+  t = 5000;
+  quiet.viewTool.run({ name: 'Deploy' }, { agentId: 'a' });
+  const after = store.view('a', 'Deploy', { bump: false });
+  A.eq([after.viewCount, after.useCount, after.lastUsedAt], [0, 0, null], 'a review/curator read (countViews:false) is not a view, not a use, and does not reset aging');
+  const live = makeSkillTools({ store });
+  live.viewTool.run({ name: 'Deploy' }, { agentId: 'a' });
+  const viewed = store.view('a', 'Deploy', { bump: false });
+  A.eq([viewed.viewCount, viewed.useCount, viewed.lastUsedAt], [1, 0, 5000], 'a skill.view in a run counts a view and freshness; the use lands at run end');
 }
 
 A.report('skills.test');

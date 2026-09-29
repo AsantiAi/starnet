@@ -3030,6 +3030,22 @@ async function runThreadMine(o) {
 
 const SKILL_REVIEW_TIMEOUT_MS = num(process.env.SKYNET_SKILL_REVIEW_TIMEOUT_MS, 45000);
 const SKILL_REVIEW_MAX_COST_USD = num(process.env.SKYNET_SKILL_REVIEW_MAX_USD, 0.08);
+// THE SKILL NUDGE (skillreview.nudgeAfterRun): per agent, the model turns taken with skill tools on the wire since
+// its skillbase last changed. Carried across runs AND restarts: a desktop station restarts most days, and a count
+// that reset with the process would rarely reach the bar. SKYNET_SKILL_REVIEW_EVERY sets the bar (default 10, 0 = off).
+const SKILL_REVIEW_EVERY = skillReview.parseNudgeEvery(process.env.SKYNET_SKILL_REVIEW_EVERY);
+const SKILL_NUDGE_FILE = path.join(WORKSPACES, 'skill.nudge.json');
+const skillNudge = (() => {
+  try {
+    const o = loadResilient(SKILL_NUDGE_FILE, 'skill-nudge');
+    const counts = o && o.counts && typeof o.counts === 'object' ? o.counts : {};
+    return new Map(Object.keys(counts).map(k => [k, Math.max(0, Math.floor(Number(counts[k]) || 0))]));
+  } catch (_) { return new Map(); }
+})();
+function persistSkillNudge() {
+  try { saveResilient(SKILL_NUDGE_FILE, { v: 1, counts: Object.fromEntries(skillNudge) }); }
+  catch (e) { failNote('skill.nudge.persist', e); }
+}
 const verdictReview = makeVerdictReview({ cap: num(process.env.SKYNET_VERDICT_REVIEW_CAP, 40), ttlMs: num(process.env.SKYNET_VERDICT_REVIEW_TTL_MS, 6 * 60 * 60 * 1000), graceMs: num(process.env.SKYNET_VERDICT_REVIEW_GRACE_MS, 90 * 1000), now: () => Date.now() });
 const SKILL_CURATOR_INTERVAL_MS = num(process.env.SKYNET_SKILL_CURATOR_INTERVAL_MS, 24 * 60 * 60 * 1000);
 const SKILL_CURATOR_MAX_COST_USD = num(process.env.SKYNET_SKILL_CURATOR_MAX_USD, 0.12);
@@ -3051,7 +3067,7 @@ async function runBackgroundSkillReview(o) {
     // rewrite or archive it — the ledger lives in this per-pass tool instance. gate: the fork is a
     // model too; a withheld skill is withheld from IT as well, or the review pass becomes the way
     // an unreviewed body reaches a prompt.
-    makeSkillTools({ store: skillStore, gate: skillGate, readBeforeWrite: true, onManage: (skill, ctx, action) => reviewObserver.onManage(skill, action) }).register(registry);
+    makeSkillTools({ store: skillStore, gate: skillGate, readBeforeWrite: true, countViews: false, onManage: (skill, ctx, action) => reviewObserver.onManage(skill, action) }).register(registry);
     const allowed = ['skill.write', 'skill.manage', 'skill.list', 'skill.view'];
     const resolved = {
       agentId, room: 'skill-review', hasCompute: true, tools: allowed.slice(),
@@ -3137,7 +3153,7 @@ async function runSkillCurator(o) {
     const registry = makeRegistry();
     // A2: same un-silencing for the curator — merges/archives now surface a deliverable + audit line once each.
     const curatorObserver = skillReview.makeReviewObserver({ emit: chanEmit, log: (s) => console.log(s), now: () => Date.now(), source: 'skill-curator' });
-    makeSkillTools({ store: skillStore, gate: skillGate, readBeforeWrite: true, onManage: (skill, ctx, action) => curatorObserver.onManage(skill, action) }).register(registry);   // same two guards as the review fork: read before you rewrite, and the guard's verdict binds here too
+    makeSkillTools({ store: skillStore, gate: skillGate, readBeforeWrite: true, countViews: false, onManage: (skill, ctx, action) => curatorObserver.onManage(skill, action) }).register(registry);   // same two guards as the review fork: read before you rewrite, and the guard's verdict binds here too
     const allowed = ['skill.write', 'skill.manage', 'skill.list', 'skill.view'];
     const resolved = { agentId, room: 'skill-curator', hasCompute: true, tools: allowed.slice(), approvalRules: {}, networkCaps: {} };
     const toolDefs = registry.wireFormat(registry.list(new Set(allowed)));
@@ -18363,6 +18379,8 @@ async function runOnceCore(o) {
         budget: 6000,
         platform: process.platform,
         canManage: resolved.tools.indexOf('skill.manage') >= 0,
+        // an agent with no saved skills still gets one constant line asking it to save its first (skills/runtime.js)
+        emptyGuide: true,
         // Relevance-first ordering under the budget: the skill this ask needs must never be the row the
         // 6000-char cap skips. Same widened query as memory recall; no query -> store order, as before.
         query: recentUserText(messages),
@@ -18371,7 +18389,7 @@ async function runOnceCore(o) {
         gate: (s) => skillGate.decide(s)
       });
       runtimeSkillBlock = rs.text || '';
-      if (rs.ids && rs.ids.length && typeof skillStore.markUsed === 'function') skillStore.markUsed(agentId, rs.ids);
+      // No markUsed here: being LISTED is not being used. The run end counts the skills this run actually loaded.
     }
   } catch (_) { /* runtime skill indexing must never break a run */ }
   try {
@@ -19014,6 +19032,13 @@ async function runOnceCore(o) {
     budget.clearLive(runId);
   }
 
+  // SKILL USE, counted where it happened: once per run for each saved skill this run actually LOADED (skill.view, or a
+  // /skill preload that passed the guard), never for a skill that was only listed in the index. markUsed persists, so
+  // the count and the 30/90-day aging clock survive a restart (a view alone bumps RAM only).
+  if (loadedSkills.length) {
+    try { skillStore.markUsed(agentId, loadedSkills.map(s => s.id)); } catch (e) { failNote('skill.markUsed', e); }
+  }
+
   // ---- AUX GOVERNOR: bound the AGGREGATE post-run model spend (aux-budget lane) ----------------------------------
   // Up to SIX aux passes can fire after one hot run — reflection · study · thread-mine · scout-cycle · skill-review
   // · skill-curator — plus failure-review on a FAILED run (failure reasons and 'done' are mutually exclusive, so it
@@ -19022,7 +19047,8 @@ async function runOnceCore(o) {
   // governor caps how many may SPEND this run-end (SKYNET_AUX_BUDGET, default 2; a literal 0 = unlimited/off), in
   // the LOCKED beat priority (reflection > study > threadmine > scout > skill-review > skill-curator). DEFERRED ≠
   // SUPPRESSED: a deferred pass fires NOTHING and arms NO cooldown here, so its own gate re-qualifies and it retries
-  // on the next run. STARNET_AUX_MODEL (legacy REFLECT_MODEL) optionally points the aux passes at a cheaper
+  // on the next run. One exception: a DUE skill review (the skill nudge, below) is reserved and spends outside the
+  // ceiling. STARNET_AUX_MODEL (legacy REFLECT_MODEL) optionally points the aux passes at a cheaper
   // model — resolveAuxModel is the single resolution; it defaults to the run's own model.
   const reflectModel = resolveAuxModel() || '';
   // finishReason gate (Lane A plumbs result.finishReason from loop.js): a run TRUNCATED by the provider ('length'
@@ -19073,7 +19099,14 @@ async function runOnceCore(o) {
       && !studyingNow.has(agentId) && (Date.now() - (lastStudyAt.get(agentId) || 0) >= memoryConfig.studyCooldownMs));
   const _gateThreadmine = !!(process.env.SKYNET_THREAD_MINE !== '0' && o.reflect && isTask && _auxDone && threadmine.mineSalient(result.messages)
       && !threadMiningNow.has(agentId) && (Date.now() - (lastThreadMineAt.get(agentId) || 0) >= THREAD_MINE_COOLDOWN_MS));
-  const _gateSkillReview = !!(process.env.SKYNET_SKILL_REVIEW !== '0' && _auxDone && skillReview.shouldReviewRun(result));
+  // skill review rides THE SKILL NUDGE (skillreview.nudgeAfterRun), not run size: this run's turns with skill tools on
+  // the wire join the agent's carried count, and the review is a candidate only once the count reaches the bar. A
+  // due review is RESERVED below: it spends outside the ceiling, so it can no longer lose every run-end to the beats.
+  const _skillToolsOn = resolved.tools.indexOf('skill.manage') >= 0 || resolved.tools.indexOf('skill.write') >= 0;
+  const _nudge = (isTask && !internal && _skillToolsOn)
+    ? skillReview.nudgeAfterRun(skillNudge.get(agentId) || 0, { turns: (result && result.turns) || 0, managed: managedSkills.some(m => skillReview.isWriteAction(m.action)), every: SKILL_REVIEW_EVERY })
+    : null;
+  const _gateSkillReview = !!(process.env.SKYNET_SKILL_REVIEW !== '0' && _auxDone && _nudge && _nudge.due);
   // curator: candidate only when its 24h interval is DUE (else runSkillCurator early-returns anyway — no spend, no slot).
   const _gateCurator = !!(process.env.SKYNET_SKILL_CURATOR !== '0' && _auxDone && auxCuratorDue(agentId, _auxNow));
   // scout: the CADENCE COUNTERS fold ALWAYS (below, synchronous bookkeeping — never a model call); the CYCLE is the
@@ -19091,8 +19124,14 @@ async function runOnceCore(o) {
   if (_gateSkillReview) _auxCandidates.push('skill-review');
   if (_gateCurator) _auxCandidates.push('skill-curator');
   const _auxBudget = AuxGovernor.parseBudget(process.env.SKYNET_AUX_BUDGET);
-  const _auxPlan = AuxGovernor.decide({ candidates: _auxCandidates, budget: _auxBudget });
+  const _auxPlan = AuxGovernor.decide({ candidates: _auxCandidates, budget: _auxBudget, reserved: ['skill-review'] });
   const _auxSpend = new Set(_auxPlan.spend);
+  // the nudge count starts over when its review fires; otherwise it carries (a due count on a run that could not
+  // review, e.g. a failed run, stays due for the next finished one). Written only when it changes.
+  if (_nudge) {
+    const _nudgeNext = _auxSpend.has('skill-review') ? 0 : _nudge.count;
+    if (_nudgeNext !== (skillNudge.get(agentId) || 0)) { skillNudge.set(agentId, _nudgeNext); persistSkillNudge(); }
+  }
 
   // SCOUT cadence counters ALWAYS fold when the run qualifies — synchronous bookkeeping, NOT a model call, and a
   // concurrent (or deferred) cycle must never eat the count. This is deliberately OUTSIDE the budget.
@@ -19157,6 +19196,7 @@ async function runOnceCore(o) {
   if (_auxCandidates.length && (_auxPlan.deferred.length || DEBUG_CHANNEL_LOGS)) {
     console.log('[aux-governor] run=' + runId + ' agent=' + agentId + ' budget=' + (_auxPlan.unlimited ? 'off' : _auxBudget)
       + ' spent=' + _auxPlan.spend.length + '[' + _auxPlan.spend.join(',') + ']'
+      + (_auxPlan.reserved.length ? ' RESERVED[' + _auxPlan.reserved.join(',') + ']' : '')
       + (_auxPlan.deferred.length ? ' DEFERRED[' + _auxPlan.deferred.join(',') + ']' : ''));
   }
   // WORK VISIBILITY: hand the caller this run's PROVEN outputs (the same ledger runStore just recorded).
