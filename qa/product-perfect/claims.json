@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "f0d36b00be0d0a970599b37ee34686678db94259",
+    "sourceCommit": "57166e780b899403c81175a3fbd1ddc84abbf48d",
     "pathSetSha256": "724fccc3567e8ae1cacc99ecff6010bffab723bd87b2c1606e642fc9e1b02c5d",
     "files": [
       {
@@ -1353,8 +1353,8 @@
       },
       {
         "path": "frontend/app/xp.js",
-        "bytes": 37402,
-        "sha256": "5ec0ff8b4629c613dad51a8a8238a6a2dc8714d350ebfc39beae2914ec716911"
+        "bytes": 37399,
+        "sha256": "33ae75ae8c3a1b87f108ca9cbdb3da4d03a62a5b697f369dd860a28460959527"
       },
       {
         "path": "frontend/app/xpstore.js",
