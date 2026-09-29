@@ -304,6 +304,7 @@ function makeStepTest(o) {
         i: s.hops.length, agentId: job.agentId, dockId: job.dockId || null, agentLabel: call(label, job.agentId) || null, pass,
         input: String(job.input), output, usd: round6(usd), ms: Math.max(0, (typeof r.ms === 'number' && isFinite(r.ms)) ? r.ms : now() - t0),
         tools: (typeof r.tools === 'number' && r.tools > 0) ? r.tools : 0, runId: r.runId || null, streamId: s.streamId,
+        denied: Array.isArray(r.denied) ? r.denied.filter(x => typeof x === 'string').slice(0, 6) : [],   // tools the consent gate refused in this step (additive)
         verdict: getVerdict(output), rerun: !!job.rerun, edited: false, sent: null, error: err,
         turn, _job: pend.job, _before: pend.before
       });

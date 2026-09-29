@@ -149,6 +149,8 @@ A.eq(card.actions.workflow, { lineId: 'L', dockId: 'bA', sessionId: 'st9' }, 'a 
 
 // ---- plate + stats row text ----
 A.eq(LW.plateLines(null), null, 'no server answer -> no plate (never fake zeros)');
+// 2026-09-27 audit R3: step tests are real runs — the plate counts them when there were some (it said 0 RUNS after two)
+A.eq(LW.plateLines({ runs: 0, tests: 2, shipped: 0, failed: 0, usdToday: 0.013, capUsdPerDay: null, medianMs: null })[0], '0 RUNS · 2 TESTS · 0 SHIPPED · 0 FAILED', 'tests are counted on the plate');
 A.eq(LW.plateLines({ runs: 3, shipped: 1, failed: 1, usdToday: 0.0125, capUsdPerDay: 5, medianMs: 2500 }), ['3 RUNS · 1 SHIPPED · 1 FAILED', '$0.013 / $5.00 TODAY · ~2.5s/RUN', 'TODAY · 3 RUNS · 1 SHIPPED · 1 FAILED · $0.013 / $5.00 · ~2.5s/RUN'], 'plate text: rest line, $ line, hover line');
 A.eq(LW.plateLines({ runs: 1, shipped: 0, failed: 0, usdToday: 0, capUsdPerDay: null, medianMs: null }), ['1 RUN · 0 SHIPPED · 0 FAILED', '$0.000 TODAY', 'TODAY · 1 RUN · 0 SHIPPED · 0 FAILED · $0.000 · NO DAILY CAP'], 'no cap, no timing — said, not hidden');
 A.eq(LW.statsRow({ runs: 2, shipped: 0, failed: 1, usdToday: 1.5, capUsdPerDay: null, medianMs: 61000 })[3], ['$ TODAY', '$1.50 · no cap'], 'panel row $ cell');

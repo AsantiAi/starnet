@@ -1994,11 +1994,8 @@ fn spawn_sidecar(state: &AppState) -> bool {
     for attempt in 0..=20 {
         match sidecar_startup::spawn(&mut sidecar_command(state, &entry, &node), &state.sidecar) {
             Ok(pid) => {
-                let (listening, exited) = wait_for_port_or_exit(
-                    state.port,
-                    SIDECAR_READY_TIMEOUT,
-                    Some(&state.sidecar),
-                );
+                let (listening, exited) =
+                    wait_for_port_or_exit(state.port, SIDECAR_READY_TIMEOUT, Some(&state.sidecar));
                 log_startup(
                     &state.startup_log,
                     match exited {
@@ -2849,7 +2846,10 @@ fn build_main_window(
                         }
                         let _ = window.show();
                         if startup {
-                            log_startup(&state.startup_log, "webview-startup: initial document loaded");
+                            log_startup(
+                                &state.startup_log,
+                                "webview-startup: initial document loaded",
+                            );
                         }
                     }
                 }
@@ -2928,7 +2928,10 @@ fn build_main_window(
                 let app2 = app_handle.clone();
                 std::thread::spawn(move || {
                     let Some(state) = app2.try_state::<AppState>() else {
-                        log_startup(&None, "close-request: managed app state unavailable; exiting");
+                        log_startup(
+                            &None,
+                            "close-request: managed app state unavailable; exiting",
+                        );
                         app2.exit(0);
                         return;
                     };
@@ -2944,11 +2947,8 @@ fn build_main_window(
                         stay_resident_or_quit(&app2, st, "close-to-tray preference");
                         return;
                     }
-                    let mut probe = probe_lifecycle_armed(
-                        st.port,
-                        &st.api_token,
-                        Duration::from_millis(1500),
-                    );
+                    let mut probe =
+                        probe_lifecycle_armed(st.port, &st.api_token, Duration::from_millis(1500));
                     if matches!(probe, LifecycleProbe::Ambiguous) {
                         // One retry before deciding — a single slow poll must not park the app in the
                         // tray forever when the sidecar is actually healthy and idle.
@@ -3030,7 +3030,9 @@ fn install_webview_crash_recovery(win: &tauri::WebviewWindow) {
     if let Err(e) = hooked {
         log_startup(
             &log_err,
-            format!("webview-recovery: could not reach the webview to hook ({e}); crash recovery OFF"),
+            format!(
+                "webview-recovery: could not reach the webview to hook ({e}); crash recovery OFF"
+            ),
         );
     }
 }
@@ -3060,7 +3062,9 @@ fn on_webview_process_failed(
     if action == RecoveryAction::LogOnly {
         log_startup(
             &log,
-            format!("webview-recovery: {name} (kind {kind}); WebView2 handles this itself, no action"),
+            format!(
+                "webview-recovery: {name} (kind {kind}); WebView2 handles this itself, no action"
+            ),
         );
         return;
     }
@@ -3127,8 +3131,16 @@ fn schedule_main_window_rebuild(app: AppHandle, why: &'static str) {
                 let restore = MainWindowRestore {
                     visible: win.is_visible().unwrap_or(true),
                     maximized,
-                    position: if maximized { None } else { win.outer_position().ok() },
-                    size: if maximized { None } else { win.inner_size().ok() },
+                    position: if maximized {
+                        None
+                    } else {
+                        win.outer_position().ok()
+                    },
+                    size: if maximized {
+                        None
+                    } else {
+                        win.inner_size().ok()
+                    },
                 };
                 let _ = win.destroy();
                 restore
@@ -3394,9 +3406,11 @@ fn harness_store_provider_key(
     let mut rollback: Option<(keyring::Entry, Option<String>)> = None;
     if let Some(ref key_value) = key_trimmed {
         // codex + the device-OAuth providers (grok/kimi) authenticate by OAuth token (sidecar-owned), not a
-        // keychain API key; ollama is keyless. None of them get a keychain entry.
+        // keychain API key; ollama and claude-cli (the local CLI's own sign-in) are keyless. None of them get a
+        // keychain entry.
         if provider_id != "codex"
             && provider_id != "ollama"
+            && provider_id != "claude-cli"
             && provider_id != "grok"
             && provider_id != "kimi"
         {

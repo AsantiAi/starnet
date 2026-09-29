@@ -11,14 +11,15 @@
       require('./openai-compatible.js'),
       require('./anthropic.js'),
       require('./gemini.js'),
-      require('./registry.js')
+      require('./registry.js'),
+      require('./claude-cli.js')
     );
   } else {
     root.SK = root.SK || {};
     root.SK.providers = root.SK.providers || {};
-    root.SK.providers.factory = factory(root.SK.providers.openrouter, root.SK.providers.codex, root.SK.providers.openaiCompatible, root.SK.providers.anthropic, root.SK.providers.gemini, root.SK.providers.registry);
+    root.SK.providers.factory = factory(root.SK.providers.openrouter, root.SK.providers.codex, root.SK.providers.openaiCompatible, root.SK.providers.anthropic, root.SK.providers.gemini, root.SK.providers.registry, root.SK.providers.claudeCli);
   }
-})(typeof globalThis !== 'undefined' ? globalThis : this, function (openrouter, codex, openaiCompatible, anthropic, gemini, registry) {
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (openrouter, codex, openaiCompatible, anthropic, gemini, registry, claudeCli) {
   'use strict';
 
   const PROVIDER_IDS = registry.providerIds();
@@ -150,6 +151,11 @@
         // profile wire hints: does this endpoint document `reasoning_effort`, and is tool support
         // asserted/denied at the provider level (fallback when the catalog carries no capability data)?
         sendReasoningEffort: profile.wireReasoningEffort === true,
+        // per-model levels the profile documents where the catalog publishes none (openai), the OFF value an
+        // endpoint documents outside its declared lists (deepseek 'none'), and DeepSeek's reasoning_content replay
+        reasoningModels: profile.reasoningModels,
+        reasoningOffEffort: profile.reasoningOffEffort,
+        replayReasoningContent: profile.replayReasoningContent === true,
         supportsTools: typeof profile.supportsTools === 'boolean' ? profile.supportsTools : null,
         // wireStreamOptions:false = endpoint rejects/lacks stream_options (usage streams by default there)
         includeUsage: profile.wireStreamOptions === false ? false : opts.includeUsage,
@@ -183,6 +189,10 @@
         baseUrl: opts.baseUrl || profile.baseUrl,
         reasoningEffort: opts.reasoningEffort
       });
+    }
+    if (profile.adapter === 'claude-cli') {
+      // A local child process, not HTTP: no fetch/key/baseUrl — the CLI's own sign-in is the credential.
+      return claudeCli.makeClaudeCliProvider({ clock: opts.clock });
     }
     throw new Error('provider adapter is not wired: ' + profile.adapter);
   }

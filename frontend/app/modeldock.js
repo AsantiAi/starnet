@@ -56,7 +56,7 @@ const ModelDock = (() => {
     qwen: 'QWEN',
     cohere: 'COHERE'
   };
-  const PROVIDER_RANK = { starnet: -1, codex: 0, grok: 1, kimi: 2, openrouter: 3, openai: 4, anthropic: 5, gemini: 6, xai: 7, groq: 8, mistral: 9, deepseek: 10, together: 11, fireworks: 12, perplexity: 13, cerebras: 14, ollama: 15, custom: 16 };
+  const PROVIDER_RANK = { starnet: -1, codex: 0, grok: 1, kimi: 2, openrouter: 3, openai: 4, anthropic: 5, gemini: 6, xai: 7, groq: 8, mistral: 9, deepseek: 10, together: 11, fireworks: 12, perplexity: 13, cerebras: 14, ollama: 15, 'claude-cli': 15.5, custom: 16 };
 
   let opts = {};
   let wired = false;
@@ -80,7 +80,7 @@ const ModelDock = (() => {
   }
   function providerLabel(p) {
     p = normalizeProvider(p);
-    const map = { starnet: 'STARNET', codex: 'GPT / CODEX', grok: 'GROK OAUTH', kimi: 'KIMI OAUTH', openrouter: 'OPENROUTER', openai: 'OPENAI API', anthropic: 'ANTHROPIC', gemini: 'GEMINI', xai: 'XAI', groq: 'GROQ', mistral: 'MISTRAL', deepseek: 'DEEPSEEK', together: 'TOGETHER', fireworks: 'FIREWORKS', perplexity: 'PERPLEXITY', cerebras: 'CEREBRAS', ollama: 'OLLAMA', custom: 'CUSTOM' };
+    const map = { starnet: 'STARNET', codex: 'GPT / CODEX', grok: 'GROK OAUTH', kimi: 'KIMI OAUTH', openrouter: 'OPENROUTER', openai: 'OPENAI API', anthropic: 'ANTHROPIC', gemini: 'GEMINI', xai: 'XAI', groq: 'GROQ', mistral: 'MISTRAL', deepseek: 'DEEPSEEK', together: 'TOGETHER', fireworks: 'FIREWORKS', perplexity: 'PERPLEXITY', cerebras: 'CEREBRAS', ollama: 'OLLAMA', 'claude-cli': 'CLAUDE CODE', custom: 'CUSTOM' };
     return map[p] || String(p || 'openrouter').toUpperCase();
   }
   function normalizeProvider(p) {
@@ -103,6 +103,7 @@ const ModelDock = (() => {
     // managed credits — bearer is the linked device token (mirrors app.js + registry.js aliases)
     if (p === 'starnet' || p === 'starnet-cloud' || p === 'managed') return 'starnet';
     if (p === 'ollama' || p === 'ollama-local') return 'ollama';
+    if (p === 'claude-cli' || p === 'claude-code' || p === 'claude-code-cli') return 'claude-cli';
     if (p === 'custom' || p === 'openai-compatible' || p === 'local' || p === 'vllm' || p === 'lmstudio') return 'custom';
     return 'openrouter';
   }
@@ -157,6 +158,22 @@ const ModelDock = (() => {
   };
   function effortMeaning(id) { return EFFORT_MEANING[normalizeEffort(id)] || EFFORT_MEANING.medium; }
 
+  /* A model with NO reasoning dial is not a model with reasoning OFF (2026-09-27 Grok user report: "none of my
+     grok models have reasoning on"). With no dial, 'none' sends nothing and the model runs its own default, which
+     for most modern models means it reasons anyway. Unless the catalog says the model does not reason
+     (supportsReasoning === false), the honest label for that state is AUTO, not OFF. Display only: the stored
+     and transported value stays 'none'. */
+  const MODEL_DEFAULT_EFFORT = { id: 'none', label: 'AUTO', title: 'Model default (no reasoning dial)' };
+  function dialLess(item) {
+    if (!item || item.supportsReasoning === false) return false;
+    const opts = effortOptionsFor(item);
+    return opts.length === 1 && opts[0] === 'none';
+  }
+  function effortShown(effort, item) {
+    const e = normalizeEffort(effort);
+    return (e === 'none' && dialLess(item)) ? MODEL_DEFAULT_EFFORT : effortDef(e);
+  }
+
   // a compact display name for the resting chip: last path segment, spaces, capped so the
   // composer never grows. Empty model → a dim placeholder.
   function shortModelName(id) {
@@ -178,9 +195,9 @@ const ModelDock = (() => {
     return raw.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
-  function selectorLabel(model, effort) {
+  function selectorLabel(model, effort, item) {
     const name = model ? modelLabel({ id: model }) : 'no model selected';
-    return 'Model selector: ' + name + ', ' + effortDef(effort).title;
+    return 'Model selector: ' + name + ', ' + (item ? effortShown(effort, item) : effortDef(effort)).title;
   }
 
   function groupOf(item) {
@@ -202,6 +219,7 @@ const ModelDock = (() => {
     if (dl) out.defaultReasoningLevel = normalizeEffort(dl);
     const desc = item && (item.reasoningLevelDescriptions || item.reasoning_level_descriptions);
     if (desc && typeof desc === 'object') out.reasoningLevelDescriptions = desc;
+    if (item && typeof item.reasoningNote === 'string' && item.reasoningNote) out.reasoningNote = item.reasoningNote;
     return out;
   }
 
@@ -259,7 +277,7 @@ const ModelDock = (() => {
       if (typeof Harness !== 'undefined' && Harness.getKey && Harness.getKey(p)) return true;
       if (typeof Harness !== 'undefined' && Harness.configured && Harness.configured(p)) return true;
     } catch (_) {}
-    if (p === 'ollama') return true;
+    if (p === 'ollama' || p === 'claude-cli') return true;   // keyless local brains: their catalog is the proof
     return false;
   }
 
@@ -448,8 +466,11 @@ const ModelDock = (() => {
       } else if (typeof Harness !== 'undefined' && Harness.listModels) {
         if (!providerEnabled(p)) return disconnected();
         try {
-          const q = (p === 'custom' && typeof Harness !== 'undefined' && Harness.getBaseUrl && Harness.getBaseUrl(p))
-            ? ('?baseUrl=' + encodeURIComponent(Harness.getBaseUrl(p))) : '';
+          // The catalog must describe the SAME endpoint this provider's runs hit: a per-provider base URL rides every
+          // run body (harness.js chat), so listing the default endpoint instead showed models — and reasoning dials —
+          // for a host the runs never reach. starnet's endpoint is its link, never a page override.
+          const override = (p !== 'starnet' && typeof Harness !== 'undefined' && Harness.getBaseUrl) ? Harness.getBaseUrl(p) : '';
+          const q = override ? ('?baseUrl=' + encodeURIComponent(override)) : '';
           const r = await apiFetch('/api/models/' + encodeURIComponent(p) + q, { cache: 'no-store' });
           if (!r.ok) throw new Error('HTTP ' + r.status);
           const j = await r.json();
@@ -495,7 +516,7 @@ const ModelDock = (() => {
     renderList();
     // 'starnet' first: a linked station's own credits are the most direct way to run, and its catalog is
     // the whole managed lineup. providerEnabled() keeps it out of the list when no credits are configured.
-    const ids = ['starnet', 'codex', 'grok', 'kimi', 'openrouter', 'openai', 'anthropic', 'gemini', 'xai', 'groq', 'mistral', 'deepseek', 'together', 'fireworks', 'perplexity', 'cerebras', 'ollama', 'custom'];
+    const ids = ['starnet', 'codex', 'grok', 'kimi', 'openrouter', 'openai', 'anthropic', 'gemini', 'xai', 'groq', 'mistral', 'deepseek', 'together', 'fireworks', 'perplexity', 'cerebras', 'ollama', 'claude-cli', 'custom'];
     const active = provider();
     if (ids.indexOf(active) < 0) ids.unshift(active);
     const pending = ids.map(p => fetchProviderModels(p, force));
@@ -566,7 +587,9 @@ const ModelDock = (() => {
     } else {
       const note = document.createElement('div');
       note.className = 'model-dock-reasoning-note';
-      note.textContent = 'This model has no adjustable reasoning.';
+      note.textContent = item.reasoningNote ? item.reasoningNote
+        : dialLess(item) ? 'No reasoning dial for this model — it runs at its own default.'
+        : 'This model has no adjustable reasoning.';
       wrap.appendChild(note);
     }
     // Off and provider-specific fine control stay available without crowding the main row.
@@ -664,7 +687,7 @@ const ModelDock = (() => {
       name.textContent = modelLabel(m);
       const eff = document.createElement('span');
       eff.className = 'model-dock-row-effort';
-      eff.textContent = effortLabel(effectiveEffort(m));
+      eff.textContent = effortShown(effectiveEffort(m), m).label;
       row.appendChild(name);
       row.appendChild(eff);
       row.addEventListener('click', () => applyModel(m));
@@ -731,14 +754,14 @@ const ModelDock = (() => {
     const current = getModel();
     const p = provider();
     const effort = currentEffort();
-    const def = effortDef(effort);
+    const def = effortShown(effort, currentModelItem());
     const model = current ? modelLabel({ id: current }) : 'no model selected';
     tip.innerHTML =
       '<div class="mdt-row mdt-model">' + esc(model) + '</div>' +
       '<div class="mdt-row mdt-prov">' + esc(providerLabel(p)) + '</div>' +
       '<div class="mdt-sep"></div>' +
       '<div class="mdt-row mdt-tier"><b>' + esc(def.label) + '</b> · reasoning effort</div>' +
-      '<div class="mdt-row mdt-mean">' + esc(effortMeaning(effort)) + '</div>' +
+      '<div class="mdt-row mdt-mean">' + esc(def === MODEL_DEFAULT_EFFORT ? 'no dial — the model uses its own reasoning default' : effortMeaning(effort)) + '</div>' +
       '<div class="mdt-hint">click to change model &amp; effort</div>';
   }
 
@@ -753,8 +776,9 @@ const ModelDock = (() => {
     if (providerEl) providerEl.textContent = providerLabel(p);
     if (currentEl) currentEl.textContent = current ? modelLabel({ id: current }) : 'NO MODEL';
     const effort = ensureCurrentEffort();
-    if (chip) chip.textContent = effortLabel(effort);
-    if (toggle) toggle.setAttribute('aria-label', selectorLabel(current, effort));
+    const item = currentModelItem();
+    if (chip) chip.textContent = effortShown(effort, item).label;
+    if (toggle) toggle.setAttribute('aria-label', selectorLabel(current, effort, item));
     if (chrome && chrome.nameEl) {
       const short = shortModelName(current);
       chrome.nameEl.textContent = short || 'CHOOSE MODEL';
@@ -892,7 +916,7 @@ const ModelDock = (() => {
   // `ensure: { id, provider }` guarantees a specific model (e.g. an agent's own pin) is present even if the
   // provider is unconfigured, so the picker can always show + preselect it. Returns [{ id, name, provider, … }].
   async function computeCatalog(force, ensure) {
-    const ids = ['codex', 'grok', 'kimi', 'openrouter', 'openai', 'anthropic', 'gemini', 'xai', 'groq', 'mistral', 'deepseek', 'together', 'fireworks', 'perplexity', 'cerebras', 'ollama', 'custom'];
+    const ids = ['codex', 'grok', 'kimi', 'openrouter', 'openai', 'anthropic', 'gemini', 'xai', 'groq', 'mistral', 'deepseek', 'together', 'fireworks', 'perplexity', 'cerebras', 'ollama', 'claude-cli', 'custom'];
     const active = provider();
     if (ids.indexOf(active) < 0) ids.unshift(active);
     const parts = await Promise.all(ids.map(p => fetchProviderModels(p, force).catch(() => [])));
@@ -926,7 +950,7 @@ const ModelDock = (() => {
     catalog: (o) => computeCatalog(!!(o && o.force), o && o.ensure),
     labels: { model: modelLabel, provider: providerLabel, group: groupOf, short: shortModelName, normProvider: normalizeProvider, orGroup: openRouterGroupName },
     efforts: { optionsFor: effortOptionsFor, label: effortLabel, clamp: clampEffortForModel, list: () => EFFORTS.slice(), presetsFor: reasoningPresetsFor, presetFor: reasoningPresetFor, forPreset: effortForPreset },
-    _internals: { reasoningPresetsFor, reasoningPresetFor, effortForPreset, effortOptionsFor, clampEffortForModel, modelFamily, supportsReasoning, selectorLabel, catalogEquivalent, isAgentModel }
+    _internals: { reasoningPresetsFor, reasoningPresetFor, effortForPreset, effortOptionsFor, clampEffortForModel, modelFamily, supportsReasoning, selectorLabel, catalogEquivalent, isAgentModel, asModel, dialLess, effortShown }
   };
 })();
 

@@ -84,7 +84,7 @@ function toolWith(over) {
   A.ok(availableBlock.indexOf('Notion') < 0, 'an INSTALLED connector is never offered again');
   A.ok(availableBlock.indexOf('Stripe') < 0, 'an installed-but-erroring connector is still installed — not re-offered');
   A.ok(availableBlock.indexOf('Printify') < 0, 'a CONNECTED key platform is never offered again');
-  A.ok(/ABILITIES . CONNECTORS/.test(text), 'the readout names where the Commander actually adds one');
+  A.ok(/ABILITIES . DISCOVER . CATALOG/.test(text), 'the readout names where the Commander actually adds one (the tab the window draws)');
   A.ok(/cannot add these yourself/.test(text), 'the agent is told to offer, not to assume it can install');
 
   /* ---- the floor summary counts ENTRIES, not rendered lines ---- */

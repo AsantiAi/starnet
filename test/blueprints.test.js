@@ -324,4 +324,26 @@ for (const bp of WM.BLUEPRINTS) {
   A.eq(cold.length, 0, bp.id + ': every belt tile energizes when crewed (cold: ' + cold.join(' ') + ')');
 }
 
+/* SET UP BEFORE YOU PLACE (2026-09-28): the shelf card's daily cap + review tries ride IN the stamp — through the same
+   normalizers as the INBOX and LOOP cards — and ONE undo still removes the whole line */
+{
+  const stampAt = (id, opts) => {
+    const s = WM.create(WM.starterDoc()); const before = JSON.stringify(s.serialize());
+    let r = null; for (let y = 0; y < 11 && !r; y++) for (let x = 0; x < 18 && !r; x++) if (s.canPlaceBlueprint(id, x, y).ok) r = s.stampBlueprint(id, x, y, opts);
+    return { s, before, r, props: r ? r.ids.map(i => s.propById(i)) : [] };
+  };
+  const a = stampAt('build_test', { maxIter: 5, limits: { maxUsdPerDay: 1 } });
+  A.ok(a.r && a.r.ok, 'build_test stamps with settings');
+  A.eq(a.props.find(p => p.t === 'loop').maxIter, 5, 'the card\'s review tries land on the LOOP');
+  A.eq(a.props.find(p => p.t === 'intake').limits.maxUsdPerDay, 1, 'the card\'s daily cap lands on the INBOX');
+  A.ok(a.s.undo().ok, 'undo');
+  A.eq(JSON.stringify(a.s.serialize()), a.before, 'ONE undo removes the line and its settings together');
+  const b = stampAt('allowance_desk', { limits: { maxUsdPerDay: null } });
+  A.eq([b.props.find(p => p.t === 'intake').limits.maxUsdPerDay, b.props.find(p => p.t === 'intake').limits.maxUsdPerMessage], [null, 1], 'No cap clears only the daily cap; the per-message cap stays');
+  const c = stampAt('build_test', { maxIter: 99 });
+  A.eq(c.props.find(p => p.t === 'loop').maxIter, 3, 'an out-of-range tries value is refused by the LOOP clamp');
+  const d = stampAt('front_desk');
+  A.ok(!('limits' in d.props.find(p => p.t === 'intake')), 'no settings: the stamp is exactly the catalog line');
+}
+
 A.report('blueprints');

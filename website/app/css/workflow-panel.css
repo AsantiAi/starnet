@@ -141,6 +141,9 @@
   transition: background-color var(--t-fast) var(--ease-soft), border-color var(--t-fast) var(--ease-soft), color var(--t-fast) var(--ease-soft); }
 .wf-plus:hover { border-color: var(--gold); color: var(--gold); background: linear-gradient(180deg, rgba(var(--gold-rgb),.14), rgba(var(--gold-rgb),.04)), var(--panel2); }
 .wf-plus.on { border-color: var(--gold); color: var(--gold); background: linear-gradient(180deg, rgba(var(--gold-rgb),.2), rgba(var(--gold-rgb),.08)), var(--panel2); box-shadow: inset 0 0 0 1px rgba(var(--gold-rgb),.4), 0 1px 3px rgba(0,0,0,.4); }
+/* a "+" that can only refuse (2026-09-27 audit B3): dimmed and dashed; hover shows WHY (data-tip) */
+.wf-plus.off { opacity: .45; border-style: dashed; cursor: not-allowed; }
+.wf-plus.off:hover { border-color: var(--wf-edge); color: inherit; background: var(--panel2); opacity: .7; }
 .wf-ins { flex: 0 0 auto; padding: 8px 14px; border-bottom: 1px solid var(--wf-edge); background: linear-gradient(180deg, rgba(var(--gold-rgb),.05), rgba(var(--gold-rgb),.015)); box-shadow: inset 0 1px 0 rgba(var(--gold-rgb),.12); }
 .wf-inserter { display: grid; gap: 6px; }
 .wf-inserter .h { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; letter-spacing: 1.3px; color: var(--gold); }
@@ -201,6 +204,14 @@
   transition: background-color var(--t-fast) var(--ease-soft), border-color var(--t-fast) var(--ease-soft), color var(--t-fast) var(--ease-soft); }
 .wf-chip:hover { border-color: rgba(var(--ph-rgb),.45); color: var(--ph-bright); background: var(--wf-hover); }
 .wf-chip[aria-pressed="true"] { background: var(--wf-on); border-color: var(--ph); color: var(--ph-bright); box-shadow: var(--wf-light), inset 0 -2px 0 rgba(var(--ph-rgb),.65); }
+/* the SPLITTER mode switch (2026-09-28): two chips that each say what the choice does — a pressed one is the mode the floor has */
+.wf-modepicks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0 0 8px; }
+.wf-modepick { display: grid; gap: 2px; text-align: left; padding: 6px 9px; }
+.wf-modepick b { font-weight: normal; letter-spacing: .8px; }
+.wf-modepick small { font-size: 13px; line-height: 1.2; color: var(--muted, var(--text)); }
+.wf-modepick.off { opacity: .5; border-style: dashed; cursor: not-allowed; }
+.wf-modepick.off:hover { border-color: var(--wf-edge); color: var(--ph); background: var(--refit-glass, var(--wf-plate)); }
+.wf-modepicks-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }   /* the TEST view: WATCH IT · STEP THROUGH · RUN ONE REAL JOB */
 .wf-contract { display: grid; border: 1px solid var(--wf-edge); border-radius: 8px; overflow: hidden; background: var(--wf-well); box-shadow: var(--wf-well-shadow);
   transition: border-color var(--t-fast) var(--ease-soft); }
 .wf-contract:focus-within { border-color: rgba(var(--ph-rgb),.55); }
@@ -270,6 +281,22 @@ textarea.wf-io:focus { outline: none; border-color: var(--ph); box-shadow: var(-
   background: linear-gradient(90deg, rgba(var(--gold-rgb),.08), rgba(var(--gold-rgb),.025)); box-shadow: inset 0 1px 0 rgba(var(--gold-rgb),.12); display: grid; gap: 4px; }
 .lt-reveal .lt-key { font-size: 16px; color: var(--gold); }
 .lt-form .lb-field { margin-top: 4px; }
+
+/* MACHINE SECTIONS (2026-09-27 audit P1/P3/P4): each junction explains itself — its wiring drawn beside one plain sentence,
+   the splitter's live MODE, the branches it feeds, and the FILTER's per-type belt picker (the old full-screen modal, docked) */
+.wf-mode { display: flex; align-items: flex-start; gap: 10px; padding: 7px 9px; border: 1px solid var(--wf-edge); border-radius: 8px; background: var(--wf-plate); box-shadow: var(--wf-light); }
+.wf-mode p { margin: 0; font-size: 15px; line-height: 1.3; color: var(--text); }
+.wf-mode p b { font-weight: normal; color: var(--ph-bright); }
+.wf-mode .refit-machinediagram { width: 52px; height: 31px; margin: 1px 0 0; color: var(--wf-cyan); fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+.wf-mode .refit-machinediagram .md-fill { fill: currentColor; stroke: none; }
+.wf-sub { margin: 2px 0 0 !important; }
+.wf-branches { margin: 0; padding: 0 0 0 1.1em; display: grid; gap: 2px; font-size: 15px; color: var(--ph-bright); }
+.wf-branches li::marker { color: var(--wf-cyan); }
+.wf-routes { display: grid; gap: 6px; }
+.wf-route { display: grid; grid-template-columns: minmax(118px, 34%) 1fr; gap: 6px 10px; align-items: start; padding: 5px 0; border-bottom: 1px dashed var(--wf-edge); }
+.wf-route:last-child { border-bottom: 0; }
+.wf-route-k { font-size: 14px; letter-spacing: 1px; color: var(--ph); display: grid; gap: 1px; }
+.wf-route-k small { font-size: 12.5px; letter-spacing: .2px; color: var(--ph-dim); }
 
 @media (prefers-reduced-motion: reduce) {
   .wf-belt .rail::after, .wf-arcs path.chev, .wf-spin { animation: none; }

@@ -257,6 +257,14 @@ async function readNdjson(res) {
       A.eq(mk.status, 200, 'a routine created WITHOUT the marker is accepted');
       const legacy = (await mk.json()).job;
       A.eq(legacy.runsLine, false, 'and it is terminal by default — the durable record says so');
+      /* SETTLE FIRST: the previous stage's fire-and-forget aux passes (reflection, then the profile update) can still be
+         in flight here, and one that lands after the window opens is counted against this routine. That race flaked on
+         trunk and turned steady once routine runs stopped paying for a skill review after every run (2026-09-28): the
+         reviews had been slowing the test enough to hide it. Wait until the provider has been quiet for 1.5 s. */
+      for (let last = -1, quiet = 0, n = 0; quiet < 6 && n < 60; n++) {
+        await new Promise(res => setTimeout(res, 250));
+        if (mock.requests.length === last) quiet++; else { last = mock.requests.length; quiet = 0; }
+      }
       const before = mock.requests.length;
       const r = await fetch(B + '/api/cron/run', { method: 'POST', headers, body: JSON.stringify({ id: legacy.id }) });
       A.eq(r.status, 200, 'Run Now streams');

@@ -96,6 +96,9 @@ test/media-service.test.js
 test/desktop-voice-bundle.test.js
 test/transcript.compaction.e2e.test.js
 test/provider.anthropic.test.js
+test/provider.claude-cli.test.js
+test/claude-cli-login.test.js
+test/claude-cli-signin-engine.test.js
 test/prices.live.test.js
 test/provider.gemini.test.js
 test/provider.toolschema.test.js
@@ -206,6 +209,7 @@ test/sidecar-fixture.test.js
 test/sidecar.security.test.js
 test/agent-color-escape.test.js
 test/tauri.hardening.test.js
+test/desktop-csp-inline-scan.test.js
 test/finish-line-doctrine.test.js
 test/manual.test.js
 test/permissions.test.js
@@ -496,7 +500,11 @@ test/modelpicker.test.js
 test/model-provider-reconcile.test.js
 test/model-catalog-truth.test.js
 test/agent-model-select.test.js
+test/station-default-wire.test.js
+test/reasoning-migration-0125.test.js
 test/model-reasoning-presets.test.js
+test/grok-reasoning-truth.test.js
+test/reasoning-dials.test.js
 test/provider-connections-ui.test.js
 test/newhero-reset.test.js
 test/harness-internal.test.js
@@ -638,6 +646,14 @@ test/cron.multibay.test.js
 test/refit-card-stack.test.js
 test/refit-playtest-fixes.test.js
 test/conveyor-visible-connections.test.js
+test/conveyor-connect-junctions.test.js
+test/conveyor-legibility.test.js
+test/conveyor-first-line.test.js
+test/conveyor-results.test.js
+test/conveyor-retest.test.js
+test/conveyor-choices.test.js
+test/conveyor-links.test.js
+test/conveyor-link-tools.test.js
 test/refit-flow-polish.test.js
 test/refit-junction-cards.test.js
 test/refit-footprint.test.js
@@ -787,6 +803,7 @@ test/station-commands.test.js
 test/station-tools.test.js
 test/team-configure-guard.test.js
 test/agent-config.test.js
+test/station-layout.test.js
 test/code-mode.test.js
 test/output-artifacts.test.js
 test/station-recovery.test.js

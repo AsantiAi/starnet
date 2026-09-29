@@ -279,9 +279,9 @@ const Tutorial = (() => {
     const caps = equipmentInScope();
     if (Dialogue.setStage) Dialogue.setStage('QUICK TOUR · 2 OF 2', 'Start with a task');
     Dialogue.node({
-      lines: [seg('Ask for work in COMMS. Review the reply and files.\nBUILD › REFIT STATION: pick a prop, click a clear tile. Press Esc to cancel. Select a placed prop to move it.\nPresets furnish rooms. Conveyors are optional for passing work between agents.', 64, 0)],
+      lines: [seg('Ask for work in COMMS. Review the reply and files.\nBUILD › REFIT STATION: pick a prop, click a clear tile. Press Esc to cancel. Select a placed prop to move it.\nPresets build a whole station, and the work ones come with a line ready to staff. To chain agents step by step, open WORK › WORKFLOWS: belts carry the job from one agent to the next.', 64, 0)],
       options: [
-        ...(resumeFirstTask ? [{ label: '▸ CONTINUE MY FIRST TASK', value: 'handoff' }]
+        ...(resumeFirstTask ? [{ label: '▸ CONTINUE MY FIRST TASK', value: 'handoff', yield: true }]   // the tour's way out when a first task is waiting (Dialogue.yieldTour)
           : typeof FirstValue !== 'undefined' ? [{ label: '▸ CHOOSE MY FIRST TASK', value: 'value' }] : []),
         ...(caps && caps.includes('cabinet') ? [{ label: 'TRY A SMALL FILE EXAMPLE', value: 'demo' }] : []),
         ...(!resumeFirstTask ? [{ label: 'Finish tour · I’ll type in COMMS', value: 'done', skip: true }] : [])
@@ -1093,13 +1093,13 @@ const Tutorial = (() => {
      (2026-09-23 playtest). The fallback is only for a context where build.js is not loaded (headless tests). */
   function refitNames() {
     try { if (typeof Build !== 'undefined' && Build.refitNames) { const r = Build.refitNames(); if (r && r.machines && r.machines.length) return r; } } catch (e) { /* fall back to the static names below */ }
-    return { tab: 'CONVEYORS', lines: 'CONVEYOR LINES', belt: 'BELT', lineKey: '9', beltKey: '7', preview: '▸ PREVIEW FLOW', lineCount: null, machinesShelf: 'MACHINES',
+    return { tab: 'CONVEYORS', lines: 'CONVEYOR LINES', belt: 'BELT', lineKey: '9', beltKey: '7', preview: '▶ TEST', lineCount: null, machinesShelf: 'MACHINES',
       machines: [
-        { label: 'SPLITTER', purpose: 'fans one lane into several branches', junction: true },
+        { label: 'SPLITTER', purpose: 'one belt into several: every branch gets a copy when a JOINER follows, otherwise jobs take turns', junction: true },
         { label: 'JOINER', purpose: 'waits for every branch, then sends one merged result on', junction: true },
-        { label: 'FILTER', purpose: 'sorts work by its content into different lanes', junction: true },
-        { label: 'MERGER', purpose: 'funnels several lanes into one', junction: true },
-        { label: 'LOOP', purpose: 'sends work back round until it passes', junction: true }] };
+        { label: 'FILTER', purpose: 'sorts by task type (code, research or everything else) onto its own belt', junction: true },
+        { label: 'MERGER', purpose: 'lets several belts share one; nothing waits, nothing is combined', junction: true },
+        { label: 'LOOP', purpose: 'sends work back for another pass until the reviewer approves it', junction: true }] };
   }
   function fmEntry(tag, title, body) {
     const t = tag ? '<span class="fm-tag">' + tag + '</span>' : '';
@@ -1216,7 +1216,7 @@ const Tutorial = (() => {
         + fmEntry('01', 'Place the stations', 'In REFIT, open <b>' + e(R.tab) + ' › ' + e(R.machinesShelf) + '</b> and place an INBOX, BAY, and OUTBOX. Click the BAY: the <b>Workflow panel</b> docks beside the floor — assign an agent and define its step. Its room needs a computer.')
         + fmEntry('02', 'Connect the route', 'Press <kbd>' + e(R.beltKey) + '</kbd> for ' + e(R.belt) + '. <b>Click one machine, then another</b> to lay a connection automatically; dragging lays tiles by hand. Connect INBOX → BAY, then BAY → OUTBOX. Inspect the route and fix any flagged breaks.')
         + fmEntry('03', 'Give the line a source', 'Click the INBOX: its Workflow panel answers <b>What starts this line?</b> — add a schedule there, or a message on a connected channel (<b>BUILD › CHANNELS</b> connects the platforms; <b>WORK › AUTOMATION</b> manages routines and loops). An inbox marked <b>NO FEED</b> has nothing feeding it yet.')
-        + fmEntry('TEST', 'Rehearse, then test for real', '<b>' + e(R.preview) + '</b> in the REFIT top bar animates sample crates along the route. It runs no agent: it checks the visible route only. To test for real, click a machine on the line and use <b>STEP TEST</b> in its Workflow panel: it runs the real agents one step at a time and pauses at every hand-off so you can read or edit what moves on. Inspect the session and output afterward.')
+        + fmEntry('TEST', 'Rehearse, then test for real', '<b>' + e(R.preview) + '</b> in the REFIT top bar (or in any line’s Workflow panel) opens one TEST with three modes. <b>WATCH IT</b> is free: a crate rides the route and no agent runs. <b>STEP THROUGH</b> runs the real agents one step at a time and pauses at every hand-off so you can read or edit what moves on; nothing is delivered. <b>RUN ONE REAL JOB</b> runs it end to end and the result lands in the OUTBOX.')
         + fmEntry('BRANCHES', 'Add steps when you need them', junctions.map(m => '<b>' + e(m.label) + '</b>: ' + e(m.purpose) + '.').join(' ') + ' Assign agents to bays, not to belt tiles.')
         + fmMission('Start with a layout', 'In REFIT, press <kbd>' + e(R.lineKey) + '</kbd> or open <b>' + e(R.tab) + ' › ' + e(R.lines) + '</b>: ' + (typeof R.lineCount === 'number' ? R.lineCount + ' ' : '') + 'ready-made layouts. Stamp one, then inspect its bays and feed before running your job.')
         + '<p class="fm-note"><b>Recipes = WHAT.</b> A job to launch. <b>Skills = HOW.</b> Reusable instructions. <b>Routines = WHEN.</b> Scheduled work. <b>Loops = UNTIL.</b> Repeated work with a stopping condition.</p>'

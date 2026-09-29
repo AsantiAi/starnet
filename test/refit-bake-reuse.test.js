@@ -70,7 +70,7 @@ console.log('refit-bake-reuse: same-save handoff, invalidation, entry/reopen and
 
 // Execute the actual edit listener, so coalesced invalidations cannot turn a
 // floor/airlock edit into a prop-only frame (including a pending pan bake).
-Object.assign(editor, { clearLineFields() {}, bumpGeo() {}, updateUndoRedo() {},
+Object.assign(editor, { clearLineFields() {}, scheduleLineFitSync() {}, bumpGeo() {}, updateUndoRedo() {},
   renderSelection() {}, renderEquipmentInfo() {}, tool: 'select' });
 const listenerStart = build.indexOf('    unsub = station.onChange(p => {');
 const listenerEnd = build.indexOf('    const worldBake =', listenerStart);

@@ -876,8 +876,15 @@ function boot(port, workspaces, attemptsLeft, extraEnv) {
     // ---- /api/run guard path (no key -> 400, zero spend) ----
     const noKey = await j('POST', '/api/run', { model: 'anthropic/claude-sonnet-4.6' });
     A.eq(noKey.status, 400, 'POST /api/run without a key -> 400');
+    // the refusal names the provider's own remedy (keeps the "missing key/model" prefix older pages classify on)
+    A.ok(/^missing key\/model — connect a \S+ API key/.test(String(noKey.body)), 'the no-key refusal names the provider key it needs (got: ' + noKey.body + ')');
     const noModel = await j('POST', '/api/run', { key: 'sk-or-v1-fake' });
     A.eq(noModel.status, 400, 'POST /api/run without a model -> 400');
+    A.ok(/^no model selected — pick a model for /.test(String(noModel.body)), 'the no-model refusal says a MODEL is missing, not a key (got: ' + noModel.body + ')');
+    // 2026-09-27 user report: a SuperGrok user signed out of GROK OAUTH was told to add a key or sign in with ChatGPT
+    const grokOut = await j('POST', '/api/run', { model: 'grok-4.7', provider: 'grok' });
+    A.eq(grokOut.status, 400, 'POST /api/run on a signed-out GROK OAUTH -> 400');
+    A.ok(/^missing key\/model — sign in to GROK OAUTH first/.test(String(grokOut.body)), 'the signed-out grok refusal names the grok sign-in (got: ' + grokOut.body + ')');
     const badJson = await fetch(B + '/api/run', { method: 'POST', headers: { 'X-StarNet-Token': apiToken }, body: '{not json' });
     A.eq(badJson.status, 400, 'POST /api/run with malformed JSON -> 400');
     const cancelBadJson = await fetch(B + '/api/cancel', { method: 'POST', headers: { 'X-StarNet-Token': apiToken }, body: '{not json' });

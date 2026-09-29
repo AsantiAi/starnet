@@ -243,8 +243,19 @@
     return !TRANSPORT_TEXT_RE.test(low);
   }
 
+  /* A rejected CREDENTIAL does not always arrive as 401. xAI answers a bad key with HTTP 400
+     {"code":"invalid-argument","error":"Incorrect API key provided…"} (live-probed 2026-09-27), which read as a
+     malformed request (format_error) and reached the user as "Something went wrong — try again". */
+  const REJECTED_KEY_RE = /incorrect api key|invalid api key|api key (?:is )?(?:invalid|not valid|incorrect)|invalid x-api-key/;
+  /* An account with NO MONEY is not a bad key. xAI refuses a team without prepaid credits with 403 ("Your newly
+     created team doesn't have any credits yet. You can purchase credits on https://console.x.ai/…") or
+     "…has either used all available credits or reached its monthly spending limit". The plain status read called
+     that `auth`, and the user was told no model was connected. */
+  const NO_CREDIT_RE = /(?:doesn'?t|does not) have any credits|purchase (?:more )?credits|used all (?:of )?(?:its |your )?available credits|(?:reached|exceeded|hit) (?:its |your |the |their )?(?:monthly )?spending limit|insufficient[_ ]?(?:credit|funds|balance)|out of credits?/;
+
   function classify400(low, code, ctx) {
     const c = String(code || '').toLowerCase();
+    if (REJECTED_KEY_RE.test(low)) return 'auth';
     if (/context_length|context_window|max.*token/.test(c)) return 'context_overflow';
     if (/content_policy|moderation/.test(c)) return 'content_policy_blocked';
     if (OVERFLOW_RE.test(low)) return 'context_overflow';
@@ -296,7 +307,7 @@
     if ((!status || status === 400 || status === 422) && parseOutputCap(low) > 0) return 'output_cap';
     // 2. HTTP status
     if (status) {
-      if (status === 401 || status === 403) return 'auth';
+      if (status === 401 || status === 403) return NO_CREDIT_RE.test(low) ? 'billing' : 'auth';
       if (status === 402) return /(resets? at|retry[- ]?after|rate limit)/.test(low) ? 'rate_limit' : 'billing';
       if (status === 404) return 'model_not_found';
       if (status === 408) return 'timeout';

@@ -24,7 +24,7 @@ A.eq(ModelDock._internals.selectorLabel('anthropic/claude-haiku-4.5', 'medium'),
 A.eq(ModelDock._internals.selectorLabel('', 'none'),
   'Model selector: no model selected, Reasoning off',
   'the model-chip accessible name stays honest when no model is selected');
-A.ok(/toggle\.setAttribute\('aria-label',\s*selectorLabel\(current,\s*effort\)\)/.test(dock),
+A.ok(/toggle\.setAttribute\('aria-label',\s*selectorLabel\(current,\s*effort(?:,\s*item)?\)\)/.test(dock),
   'every ModelDock reflect refreshes the toggle accessible name from live model state');
 
 // ---- the shared picker component loads before its consumers ----

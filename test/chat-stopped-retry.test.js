@@ -2,8 +2,8 @@
 
    chat.js is browser/DOM flow and is not directly require-able. As with chat-runmeta.test.js,
    this locks the exact behavioral seam in source: a deliberate stop must preserve truthful partial
-   output, expose the existing one-turn retry action immediately and after reload, and discard only
-   that stopped partial before re-running the already-present user turn. */
+   output, expose the existing one-turn retry action immediately and after reload, and discard the
+   whole replaced attempt before re-running the already-present user turn. */
 'use strict';
 const A = require('./_assert.js');
 const fs = require('fs');
@@ -38,8 +38,41 @@ A.ok(/offerTryAgain\s*\(\s*\)/.test(envelopeStop[1]),
 // and call send(..., {retry:true}) so there is exactly one new run and no duplicate user row.
 const retryFn = /function\s+retryLast\s*\(\s*\)\s*\{([\s\S]*?)\n\s*\}/.exec(src);
 A.ok(retryFn, 'retryLast exists');
-A.ok(/h\[h\.length\s*-\s*1\]\.error\s*\|\|\s*h\[h\.length\s*-\s*1\]\.stopped/.test(retryFn[1]),
-  'retryLast discards a stopped partial assistant tail before re-running');
+// The WHOLE failed attempt goes, not just its ⚠ row: a run that streamed several replies left them after the user
+// turn, the retry request ended on an assistant message, and current Claude models reject that as prefill (400).
+{
+  const vm = require('node:vm');
+  const body = /function\s+retryLast\s*\(\s*\)\s*\{([\s\S]*?)\n\s{2}\}/.exec(src)[0];
+  const sent = [];
+  const history = [
+    { role: 'user', content: 'earlier request', sourceRunId: 'r0' },
+    { role: 'assistant', content: 'earlier answer', sourceRunId: 'r0' },
+    { role: 'user', content: 'write Etsy listings', sourceRunId: 'r1' },
+    { role: 'assistant', content: 'Good pivot — pure drafting.', sourceRunId: 'r1' },
+    { role: 'assistant', content: 'The tool needs the required objective field.', sourceRunId: 'r1' },
+    { role: 'assistant', content: 'The gate needs brief_proceed to succeed first.', sourceRunId: 'r1' },
+    { role: 'assistant', content: '⚠ Something went wrong on that turn — try again.', error: true }
+  ];
+  const ctx = { activeWs: { runIds: ['r1'], history }, isBusy: () => false, localLine: () => {}, load: () => {}, send: (text, opts) => sent.push({ text, opts, tail: history[history.length - 1].role }) };
+  vm.createContext(ctx); vm.runInContext(body + '; retryLast();', ctx);
+  A.eq(sent.length, 1, 'retry sends exactly once');
+  A.eq(sent[0].text, 'write Etsy listings', 'retry re-runs the last user turn');
+  A.eq(sent[0].tail, 'user', 'the retried history ends on the user turn, never on an assistant message (prefill 400)');
+  A.eq(history.length, 3, 'every row of the failed attempt is dropped; the earlier exchange is kept');
+  A.eq(history[1].content, 'earlier answer', 'earlier assistant replies before the retried turn survive');
+  const stoppedCtx = { activeWs: { runIds: ['s'], history: [{ role: 'user', content: 'go', sourceRunId: 's' }, { role: 'assistant', content: 'partial', stopped: true }] }, isBusy: () => false, localLine: () => {}, load: () => {}, send: () => {} };
+  vm.createContext(stoppedCtx); vm.runInContext(body + '; retryLast();', stoppedCtx);
+  A.eq(stoppedCtx.activeWs.history.length, 1, 'retryLast discards a stopped partial assistant tail before re-running');
+  // …but load() re-syncs from the server transcript and can put the replaced replies back before send() builds the
+  // request (re-proven live 2026-09-28: /retry still sent [user, assistant] and got the prefill 400). The WIRE is cut too.
+  const cut = /function\s+endOnUserTurn\s*\([^)]*\)\s*\{[\s\S]*?\n\s{2}\}/.exec(src);
+  A.ok(cut, 'endOnUserTurn exists');
+  const wctx = {}; vm.createContext(wctx); vm.runInContext(cut[0] + '; this.f = endOnUserTurn;', wctx);
+  const wire = wctx.f([{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b' }, { role: 'user', content: 'c' }, { role: 'assistant', content: 'd' }, { role: 'assistant', content: 'e' }]);
+  A.eq(wire.map(m => m.content).join(''), 'abc', 'the retry wire ends on the last user turn');
+  A.eq(wctx.f([{ role: 'assistant', content: 'x' }]).length, 1, 'no user turn -> untouched');
+  A.ok(/messages:\s*retry\s*\?\s*endOnUserTurn\(historyWindow\(ws\)\)\s*:\s*historyWindow\(ws\)/.test(src), 'send() cuts the wire on a retry, after the history re-sync');
+}
 A.ok(/send\s*\(\s*text\s*,\s*\{\s*retry:\s*true\s*,\s*retryUserRunId:/.test(retryFn[1]),
   'Try again uses the existing no-duplicate retry send path');
 

@@ -84,7 +84,9 @@ const GhostLine = (() => {
     const log = [];                  // bounded event log for tests/CDP proofs
 
     const push = ev => { log.push(ev); if (log.length > MAX_LOG) log.splice(0, log.length - MAX_LOG); };
-    const note = (x, y, text) => { notes.push({ x, y, text, t0: tnow }); if (notes.length > 6) notes.shift(); };
+    // below: the caption hangs UNDER its tile — a dock's nameplate / nag owns the space above it (2026-09-28 retest:
+    // "◇ YOUR WRITER WOULD RUN IT" printed across the NOVA plate the moment a bay was crewed)
+    const note = (x, y, text, below) => { notes.push({ x, y, text, t0: tnow, below: !!below }); if (notes.length > 6) notes.shift(); };
     function ensureEngine() {
       if (!engine && typeof Conveyor !== 'undefined') engine = Conveyor.create({ onDeliver, onAdvance });
       return engine;
@@ -118,9 +120,15 @@ const GhostLine = (() => {
           const owner = b.agentId || ('g#' + b.propId);
           dockMeta[owner] = { role: b.role || null, propId: b.propId, bound: !!b.agentId };
           const ring = [];
+          // an UNBOUND bay stops the ghost only where the plan hooks it (plan.unboundBayTile — on a linked floor, the ring
+          // tiles of its own links; a belt that merely passes it rides on, conveyor-links phase B)
+          const ubt = plan.unboundBayTile || null;
           for (let yy = b.y - 1; yy <= b.y + (b.h || 1); yy++)
-            for (let xx = b.x - 1; xx <= b.x + (b.w || 1); xx++)
-              if (map[key(xx, yy)]) { ring.push({ x: xx, y: yy }); if (!b.agentId && !stopsL[key(xx, yy)]) stopsL[key(xx, yy)] = owner; }
+            for (let xx = b.x - 1; xx <= b.x + (b.w || 1); xx++) {
+              const k = key(xx, yy);
+              if (!map[k] || (!b.agentId && ubt && ubt[k] !== b.propId)) continue;
+              ring.push({ x: xx, y: yy }); if (!b.agentId && !stopsL[k]) stopsL[k] = owner;
+            }
           ringOf[owner] = ring;
         }
         // OUTBOX mouths on this line (the ship-out caption + ship-tile preference)
@@ -221,7 +229,7 @@ const GhostLine = (() => {
       if (owner && owner !== p.fromAgentId) {
         const meta = cur.dockMeta[owner] || null;
         const who = (meta && meta.role) ? 'YOUR ' + meta.role : 'THE AGENT HERE';
-        note(x, y, '◇ ' + who + ' WOULD RUN IT');
+        note(x, y, '◇ ' + who + ' WOULD RUN IT', true);
         push({ kind: 'dock', owner, tile: { x, y }, tag: p.tag || 'general' });
         // CHAIN: the dock's output becomes the next stage's input — a new ghost from its ship
         // hookup, producer stamped on it (a dock never eats its own output — engine physics).
@@ -240,7 +248,8 @@ const GhostLine = (() => {
         note(info.tile.x, info.tile.y, '◇ IT WOULD SORT HERE — ' + String(info.tag || 'general').toUpperCase() + ' ' + (ARROW[info.lane] || ''));
         push({ kind: 'sort', tile: info.tile, tag: info.tag, lane: info.lane });
       } else if (info.kind === 'split') {
-        note(info.tile.x, info.tile.y, '◇ IT WOULD BALANCE ACROSS LANES');
+        // a split with a JOINER downstream runs every branch (the compiled `fanout`); without one, jobs take turns
+        note(info.tile.x, info.tile.y, info.fanout ? '◇ EVERY BRANCH WOULD GET A COPY' : '◇ JOBS WOULD TAKE TURNS HERE');
         push({ kind: 'split', tile: info.tile, lane: info.lane });
       }
     }
@@ -256,13 +265,15 @@ const GhostLine = (() => {
       if (!notes.length) return;
       const fs = fontPx || 8;
       const font = fs + "px 'VT323','Courier New',monospace";
+      // the caption's BASELINE: above the tile (rising), or under it (a dock caption — its plate owns the space above)
+      const baseY = (n, rise) => (n.below ? (n.y + 1) * T + 3 + fs + rise : n.y * T - 3 - rise);
       const paintNote = (n, k) => {
         const rise = Math.min(1, k * 4) * 3 + k * 2;
         ctx.save();
         ctx.font = font; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
         ctx.globalAlpha = (k < 0.12 ? k / 0.12 : (1 - k) / 0.88) * 0.85;
         ctx.shadowBlur = 3; ctx.shadowColor = GHOST_COL; ctx.fillStyle = GHOST_COL;
-        ctx.fillText(n.text, (n.x + 0.5) * T, n.y * T - 3 - rise);
+        ctx.fillText(n.text, (n.x + 0.5) * T, baseY(n, n.below ? 0 : rise));
         ctx.restore();
       };
       for (let i = notes.length - 1; i >= 0; i--) {
@@ -272,7 +283,7 @@ const GhostLine = (() => {
           ctx.save(); ctx.font = font;
           const w = ctx.measureText(n.text).width;
           ctx.restore();
-          say({ x: (n.x + 0.5) * T - w / 2, y: n.y * T - 3 - fs, w, h: fs }, paintNote.bind(null, n, k));
+          say({ x: (n.x + 0.5) * T - w / 2, y: baseY(n, 0) - fs, w, h: fs }, paintNote.bind(null, n, k));
         } else paintNote(n, k);
       }
     }

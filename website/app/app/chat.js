@@ -1734,6 +1734,16 @@ const Chat = (() => {
   function historyWindow(ws) {
     return ws ? modelFitHistory(ws.history, ws) : [];
   }
+  /* A retry re-runs the LAST user turn, so nothing after it may ride the wire. retryLast() trims the local rows,
+     but load() then re-syncs the thread from the server transcript, which puts the replaced attempt's replies back
+     before send() builds the request — and current Claude models refuse a conversation that ends on an assistant
+     message ("This model does not support assistant message prefill"): every Try again / retry failed in ~1.5s
+     with "Provider returned error" (first-hour walk 2026-09-28, re-proven live on the fix branch). */
+  function endOnUserTurn(messages) {
+    const list = Array.isArray(messages) ? messages : [];
+    const at = list.map(m => m && m.role).lastIndexOf('user');
+    return at >= 0 ? list.slice(0, at + 1) : list;
+  }
   function contextIssueFor(messages, limit, projectedUsed) {
     limit = Math.max(0, Number(limit) || 0);
     if (!limit) return null;   // unknown catalog => never invent a ceiling
@@ -1818,7 +1828,7 @@ const Chat = (() => {
     if (!statusEl) return;
     statusEl.textContent = s;
     const low = String(s || '').toLowerCase();
-    statusEl.classList.remove('status-thinking', 'status-working', 'status-approval', 'status-stopping', 'status-connecting', 'status-online', 'status-down');
+    statusEl.classList.remove('status-thinking', 'status-working', 'status-approval', 'status-stopping', 'status-connecting', 'status-online', 'status-down', 'status-idle');
     statusEl.classList.add(low.indexOf('approval') >= 0 ? 'status-approval'
       : low.indexOf('stopping') >= 0 ? 'status-stopping'
       : low.indexOf('working') >= 0 ? 'status-working'
@@ -1826,6 +1836,8 @@ const Chat = (() => {
       : low.indexOf('connecting') >= 0 ? 'status-connecting'
       : low.indexOf('unreachable') >= 0 ? 'status-down'
       : 'status-online');
+    // a plain idle 'online' is hidden in the header (css); every run-state and fault still shows.
+    if (low.trim() === 'online') statusEl.classList.add('status-idle');
   }
   // derive the DISPLAYED stream's status from real state, so a low-priority write (a finishing turn) can't
   // clobber the high-priority 'awaiting your approval…' after a switch-back. One source of truth.
@@ -3549,7 +3561,14 @@ const Chat = (() => {
   function sampleCard(opts) {
     opts = opts || {};
     if (!log) return;
-    if (sampleCardEl && sampleCardEl.isConnected) { autoscroll(); return; }   // one live card at a time
+    // the Commander asked for this card by clicking the INBOX: a quick tour covering COMMS steps aside so it is not posted unseen
+    try { if (typeof Dialogue !== 'undefined' && Dialogue.yieldTour && Dialogue.isOpen && Dialogue.isOpen()) Dialogue.yieldTour(); } catch (_) {}
+    /* …any OTHER open conversation is the Commander's to answer — never answered for them (its "not now" is a real decline
+       the learning loop records). The card still posts below it, so SAY where it went: a silent click read as a dead INBOX
+       (2026-09-28 retest, the goal-path question covering COMMS). */
+    const covered = () => { try { return typeof Dialogue !== 'undefined' && Dialogue.isOpen && Dialogue.isOpen(); } catch (_) { return false; } };
+    const sayCovered = () => { if (covered() && typeof StationUI !== 'undefined' && StationUI.notify) StationUI.notify('The INBOX card is in COMMS, under the question your agent is asking. Answer it, and the card is right there.', 'info', undefined, { transient: true }); };
+    if (sampleCardEl && sampleCardEl.isConnected) { autoscroll(); sayCovered(); return; }   // one live card at a time
     const r = row('agent'); r.d.classList.add('tool'); r.d.classList.add('turnin'); r.d.classList.add('sample-card');
     sampleCardEl = r.d;
     const title = document.createElement('span'); title.className = 'turnin-title';
@@ -3557,17 +3576,35 @@ const Chat = (() => {
     r.body.appendChild(title);
     const item = document.createElement('div'); item.className = 'turnin-item';
     const text = document.createElement('span'); text.className = 'turnin-text';
-    text.textContent = 'a labeled test crate (“SAMPLE JOB…”) rides the real belts — the router picks the dock, the run spends real budget, and the reply lands on the OUTBOX.';
+    const job = (typeof Build !== 'undefined' && Build.testJobForProp) ? Build.testJobForProp(opts.propId) : null;
+    text.textContent = (job && job.text
+      ? 'your test job (“' + (job.text.length > 70 ? job.text.slice(0, 70) + '…' : job.text) + '”) rides the real belts'
+      : 'a labeled test crate (“SAMPLE JOB…”) rides the real belts — write your own test job in the INBOX’s Workflow panel —')
+      + ' — the router picks the dock, the run spends real budget, and the reply lands on the OUTBOX.';
     const btns = document.createElement('span'); btns.className = 'consent-btns';
     item.appendChild(text); item.appendChild(btns);
     r.body.appendChild(item);
     const note = document.createElement('div');   // refusal / result area (below the action row)
     r.body.appendChild(note);
-    const run = document.createElement('button'); run.className = 'consent-btn primary'; run.textContent = '▸ RUN A SAMPLE JOB';
+    const run = document.createElement('button'); run.className = 'consent-btn primary'; run.textContent = '▸ RUN ONE REAL JOB';
     const later = document.createElement('button'); later.className = 'consent-btn deny'; later.textContent = 'not now';
     later.onclick = () => vanish(r.d);
     btns.appendChild(run); btns.appendChild(later);
-    if (opts.fed === false && typeof StationUI !== 'undefined' && StationUI.openTerm) {
+    if (opts.schedOff) {
+      // a schedule IS saved; the station's scheduling is off — the fix is one click, right here (R3)
+      const arm = document.createElement('button'); arm.className = 'consent-btn'; arm.textContent = '▸ TURN SCHEDULING ON';
+      arm.onclick = () => {
+        arm.disabled = true; arm.textContent = '… turning on';
+        Harness.api.post('/api/cron/arm', { enabled: true }).then(res => {
+          const ok = !!(res && res.ok && res.j && res.j.ok);
+          arm.textContent = ok ? '✓ scheduling is on' : 'could not turn scheduling on';
+          if (!ok) arm.disabled = false;
+          if (ok && typeof World !== 'undefined' && World.pollFeed) { try { World.pollFeed(); } catch (_) {} }
+        }).catch(() => { arm.disabled = false; arm.textContent = '▸ TURN SCHEDULING ON'; });
+      };
+      btns.appendChild(arm);
+    }
+    if (opts.fed === false && !opts.schedOff && typeof StationUI !== 'undefined' && StationUI.openTerm) {
       // the floor PROVABLY has no feed wired (server-answered, never guessed) — keep the promised door here
       const feed = document.createElement('button'); feed.className = 'consent-btn'; feed.textContent = '▸ WIRE A REAL FEED — CHANNELS';
       feed.onclick = () => StationUI.openTerm('messaging');
@@ -3577,14 +3614,14 @@ const Chat = (() => {
       const err = document.createElement('span'); err.className = 'consent-result err';
       err.textContent = msg;
       note.textContent = ''; note.appendChild(err);
-      run.disabled = false; later.disabled = false; run.textContent = '▸ RUN A SAMPLE JOB';
+      run.disabled = false; later.disabled = false; run.textContent = '▸ RUN ONE REAL JOB';
       autoscroll();
     };
     run.onclick = () => {
       run.disabled = true; later.disabled = true;
-      run.textContent = '⌛ the sample is riding the line…';   // honest: the POST is genuinely open until the line delivers
+      run.textContent = '⌛ the job is riding the line…';   // honest: the POST is genuinely open until the line delivers
       note.textContent = '';
-      Harness.api.post('/api/routing/sample', {}).then(res => {
+      Harness.api.post('/api/routing/sample', job ? Object.assign({}, job.text ? { text: job.text } : {}, job.line ? { line: job.line } : {}) : {}).then(res => {
         if (!res.ok) return fail(String((res.j && res.j.error) || ('the station refused (http ' + res.status + ')')));   // the server's reason, VERBATIM
         const j = res.j || {};
         btns.remove();
@@ -3595,11 +3632,14 @@ const Chat = (() => {
         const clean = !!(j.delivered && j.delivered.reason === 'done');
         let folded = false;
         if (clean) { try { if (typeof ReturnStore !== 'undefined' && ReturnStore.foldRow) folded = ReturnStore.foldRow(j.delivered); } catch (_) {} }
-        const who = (j.delivered && j.delivered.agentId) || j.agentId || 'agent';
+        const whoId = (j.delivered && j.delivered.agentId) || j.agentId || 'agent';
+        // the agent's NAME, not its internal id (the seeded hero's id is literally "agent")
+        const whoRec = (typeof App !== 'undefined' && App.agents) ? (App.agents() || []).find(a => a && a.id === whoId) : null;
+        const who = String((whoRec && whoRec.name) || whoId).toUpperCase();
         const cost = (+j.totalUsd > 0 && typeof U !== 'undefined' && U.usd) ? (' · ' + U.usd(+j.totalUsd)) : '';
         text.textContent = clean
-          ? ('✔ sample delivered — ' + who + ' shipped it' + cost + '.' + (folded ? ' the crate is on the OUTBOX.' : ''))
-          : ('⚠ the sample rode the line, but the run did not finish clean — the reply below says why.');
+          ? ('✔ job delivered — ' + who + ' finished the last step' + cost + '.' + (folded ? ' the result is on the OUTBOX.' : ''))
+          : ('⚠ the job rode the line, but the run did not finish clean — the reply below says why.');
         const reply = (j.replies && j.replies.length) ? String(j.replies[j.replies.length - 1]).replace(/\s+/g, ' ').trim() : '';
         if (reply) {
           const out = document.createElement('div'); out.className = 'turnin-text';
@@ -3620,6 +3660,7 @@ const Chat = (() => {
       }).catch(() => fail('the station didn’t answer — is the sidecar running?'));
     };
     autoscroll();
+    sayCovered();
   }
 
   /* W3 — THE DELIVERY CARD (reshaped 2026-07-15). WorkshopStore adopts one SESSION per idle-work
@@ -4398,12 +4439,13 @@ const Chat = (() => {
   // context, about a real decision, immediately acted on; + the R4 receipt proves it stuck) AND continues
   // the conversation as the Commander's next message so the task proceeds with it. "you decide" banks
   // nothing and hands the choice back. One fork per reply by construction (parse reads the first marker).
-  function offerFork(fk) {
+  function offerFork(fk, runId) {
     clearNudge();   // same law as offerTaskQuestion: the fork claims the moment; a live nudge leaves WITH its chips
     const items = fk.options.map(o => ({ label: o, value: o }));
     items.push({ label: 'you decide', value: '', skip: true });
     const q = row('agent'); q.d.classList.add('nudge');
     q.body.textContent = '⌖ ' + fk.question;
+    taskQuestionDoor(q.body, runId);   // the fork's chips replace this run's connect chip in the one slot — the card carries the door
     autoscroll();
     choices(items, item => {
       vanish(q.d);
@@ -4447,6 +4489,7 @@ const Chat = (() => {
         // send() routes this whole answer back into the same durable brief.
         send(text);vanish(r.d);return true;
       });
+      taskQuestionDoor(r.body, tq.runId);
       autoscroll();return;
     }
     // TWO KINDS of suggestion, and they must never be confused. GROUNDED comes from the Commander's own
@@ -4497,6 +4540,7 @@ const Chat = (() => {
       ? 'these aren\'t exclusive — tap all that apply, then confirm; or type your own answer'
       : 'or ignore these and type your own answer — more than one is fine';
     q.body.appendChild(hint);
+    taskQuestionDoor(q.body, tq.runId);
     autoscroll();
     choices(items, item => {
       vanish(q.d);
@@ -6831,7 +6875,13 @@ const Chat = (() => {
     if (!activeWs) return localLine('No active workstream to retry in.');
     if (isBusy()) return localLine('This stream is still running — stop it first, then /retry.');
     const h = activeWs.history;
-    if (h.length && h[h.length - 1].role === 'assistant' && (h[h.length - 1].error || h[h.length - 1].stopped)) h.pop();   // drop the failed/stopped partial reply
+    /* A retry re-runs the LAST user turn, so every row after it is the attempt being replaced — drop all of them,
+       not just the ⚠ row. A failed run that streamed several replies ("The tool needs the required objective
+       field." …) used to leave them after the user turn, the retry request then ENDED ON AN ASSISTANT MESSAGE, and
+       current Claude models refuse that outright ("This model does not support assistant message prefill") — every
+       Try again failed in ~1.5s with "Provider returned error" (first-hour walk 2026-09-28). */
+    const lastUser = h.map(m => m && m.role).lastIndexOf('user');
+    if (lastUser >= 0) h.length = lastUser + 1;
     let text = null;
     for (let i = h.length - 1; i >= 0; i--) { if (h[i].role === 'user') { text = h[i].content; break; } }
     if (text == null) return localLine('Nothing to retry yet — send a message first.');
@@ -6874,12 +6924,49 @@ const Chat = (() => {
     choices([{ label: door.label, value: 'connect' }], () => door.run());
     return true;
   }
+  /* A run that ends on a TASK_QUESTION owns the one post-run slot, so the connect chip cannot take a row of its own —
+     but connectors.list has already told the model "the Commander now has a ⇄ CONNECT chip", and the model tells
+     the Commander to tap it (first-hour walk 2026-09-28: said three times, no chip anywhere). Record the handoff
+     exactly as offerConnectorDoor would; offerTaskQuestion then draws the door INSIDE the question card. */
+  function holdConnectorDoor(runId, originWs) {
+    const ev = runId ? CONNECTOR_NEEDED.get(runId) : null;
+    if (!ev) return false;
+    CONNECTOR_NEEDED.delete(runId);
+    const ws = originWs || activeWs;
+    if (!ws || typeof Workstreams === 'undefined') return false;
+    // awaitingAnswer: the question is still open, so ABILITIES offers RETURN TO TASK, never CONTINUE TASK — that
+    // sends a continuation prompt, which send() would route in as the question's ANSWER (review 2026-09-28).
+    Workstreams.setConnectorHandoff(ws.id, Object.assign({}, ev, { agentId: ws.agentId || 'agent', awaitingAnswer: true }));
+    App.persist();
+    return true;
+  }
+  // The door for the displayed stream's durable connector handoff, drawn inside a question card — a task question
+  // or a FORK, fresh or restored after a reload. Opening the connect screen does NOT answer the question. A fresh
+  // card passes its runId so an older run's handoff never rides along on every later question in the stream.
+  function taskQuestionDoor(body, runId) {
+    const h = (activeWs && typeof Workstreams !== 'undefined') ? Workstreams.connectorHandoff(activeWs.id) : null;
+    if (h && runId && h.runId && h.runId !== runId) return null;
+    const door = (h && typeof Friendly !== 'undefined' && Friendly.connectorDoor) ? Friendly.connectorDoor(h) : null;
+    if (!door || !body) return null;
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'choice tq-door'; b.textContent = door.label;
+    b.onclick = () => door.run();
+    body.appendChild(b);
+    return b;
+  }
   // An explicit continuation carries existing history, unlike retryLast(), which repeats the user turn.
   // The connector is re-read on click; no OAuth callback can start work or change the originating agent.
   const connectorContinuing = new Set();
   async function continueConnectorTask(streamId) {
     const ws = Workstreams.get(streamId), h = Workstreams.connectorHandoff(streamId);
     if (!ws || !h || connectorContinuing.has(streamId) || Channels.isBusy(streamId)) return false;
+    // The run that raised this door ended on a question that is still open: a continuation prompt would be taken
+    // as its answer. Take the Commander back to the question instead; answering it continues with the connection.
+    if (h.awaitingAnswer) {
+      App.openWorkstream(streamId);
+      if (typeof StationUI !== 'undefined') StationUI.notify('Answer the open question in this task to continue with ' + h.connectorId + '.', 'info');
+      return false;
+    }
     const continuationFocusVersion = focusVersion;
     connectorContinuing.add(streamId);
     try {
@@ -8645,7 +8732,7 @@ const Chat = (() => {
         activeLiveRow = streamingAgent(); historyRead.repaint = false;
       }
       const { text: reply, error, endReason, finishReason, completionVerdict, effectVerdict, budgetScope, budgetCapUsd } = await Harness.chat({
-        system: sys, messages: historyWindow(ws), agentId: ws.agentId || 'agent', isTask, recurring, signal: ac.signal, streamId: ws.id,
+        system: sys, messages: retry ? endOnUserTurn(historyWindow(ws)) : historyWindow(ws), agentId: ws.agentId || 'agent', isTask, recurring, signal: ac.signal, streamId: ws.id,
         taskAction: taskAction || undefined,
         postconditions: opts && opts.postconditions != null ? opts.postconditions : undefined,
         recovery: recoveryResume ? opts.recovery : undefined,
@@ -8806,6 +8893,7 @@ const Chat = (() => {
         // a CLEAN end that hit an unwired connector mid-run: the reply already says "not connected" — the chip is
         // the door. Only on a clean end: a stopped run owns the slot with its retry/budget chip above.
         if (!taskQuestion && (!endReason || endReason === 'done')) offerConnectorDoor(thisRunId, ws);
+        if (taskQuestion || endReason === 'clarifying') holdConnectorDoor(thisRunId, ws);   // the question owns the slot (parsed here, or restored from the store below); its card carries the door
         // GOLDEN-RUN DRIFT (2026-08-22): a recipe-launched run is compared by the sidecar against that recipe's own
         // good history; a drifted run is a failure class, so it earns the bell ONCE (keyed by the run). The durable
         // row lands a beat after run end, so the read waits; it is advisory and never blocks the turn.
@@ -8828,7 +8916,7 @@ const Chat = (() => {
           }, 1500);
         }
         if (isActiveWs(ws) && activeLiveRow) activeLiveRow.done();
-        if (isActiveWs(ws) && taskQuestion) presentTaskQuestion(ws, taskQuestion);   // enriches with the stored recommendation, then renders
+        if (isActiveWs(ws) && taskQuestion) presentTaskQuestion(ws, Object.assign({ runId: thisRunId }, taskQuestion));   // enriches with the stored recommendation, then renders
         // Belt-and-braces (live-caught 2026-07-16): a run can end 'clarifying' with the marker unparseable
         // client-side (e.g. a malformed/glued reply line) while the DURABLE brief holds the real validated
         // question — re-present from the store so the Commander is never left with a question-less pause.
@@ -8838,7 +8926,7 @@ const Chat = (() => {
         // one-tap chips at the run boundary; a malformed marker parses null and stays plain text.
         if (isActiveWs(ws) && replyText && typeof Fork !== 'undefined' && Fork.parse) {
           const fk = Fork.parse(replyText);
-          if (fk) { offerFork(fk); if (!voiceQuestion && fk.question) voiceQuestion = fk.question; }
+          if (fk) { offerFork(fk, thisRunId); if (!voiceQuestion && fk.question) voiceQuestion = fk.question; }
         }
         /* THE WORK LINE. This dock has answered; if the Commander drew stages past it, run them now — still
            INSIDE the run's try, so the stream stays busy and Stop/E-STOP reach the whole line rather than a

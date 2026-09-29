@@ -85,7 +85,7 @@ const tutorialSrc = read('tutorial.js');
   const live = renderLines({ refitNames: () => names });
   A.ok(live.length > 200, 'the LINES chapter rendered with REFIT\'s names');
   A.ok(/CONVEYORS › MACHINES/.test(live) && /CONVEYORS › CONVEYOR LINES/.test(live) && /19 ready-made layouts/.test(live), 'LINES names the real tab, shelf, tool and live line count');
-  A.ok(/▸ PREVIEW FLOW/.test(live) && /STEP TEST/.test(live) && /Workflow panel/.test(live), 'LINES explains PREVIEW FLOW vs the Workflow panel\'s STEP TEST');
+  A.ok(/▸ PREVIEW FLOW/.test(live) && /STEP THROUGH/.test(live) && /RUN ONE REAL JOB/.test(live) && /Workflow panel/.test(live), 'LINES explains the one TEST control and its modes (2026-09-28: WATCH IT · STEP THROUGH · RUN ONE REAL JOB)');
   A.ok(/<b>JOINER<\/b>/.test(live) && /<b>LOOP<\/b>/.test(live) && /<b>SPLITTER<\/b>/.test(live), 'BRANCHES lists every junction the shelf offers (JOINER and LOOP included)');
   A.ok(!/<b>INBOX<\/b>:/.test(live), '…and only junctions, not the docks');
   for (const stale of ['PROPS › WORKFLOW', 'for <b>LAYOUTS</b>', 'Use <b>TEST</b>']) A.ok(live.indexOf(stale) < 0, 'LINES no longer says "' + stale + '"');
@@ -119,7 +119,9 @@ const tutorialSrc = read('tutorial.js');
 
   // CLICK TO CONNECT: only the hovered target speaks mid-gesture
   const glow = build.slice(build.indexOf('function drawBeltEndpointGlow('), build.indexOf('function drawAgentTag('));
-  A.ok(/if \(!isFrom && hoverPropId !== p\.id\) continue;\s*const role = isFrom \? 'FROM ▸ NOW CLICK A DESTINATION' : 'CLICK TO CONNECT';/.test(glow), 'mid-connect, CLICK TO CONNECT prints on the HOVERED target only (the rest keep the glow)');
+  A.ok(/if \(!isFrom && hoverPropId !== p\.id\) continue;\s*const pv = isFrom \? null : beltPreview\(connectFrom, p\.id\);\s*const role = isFrom \? 'FROM ▸ NOW CLICK A DESTINATION' : \(pv && !pv\.ok\) \? 'NO ROUTE — ' \+ \(NO_ROUTE\[pv\.error\] \|\| 'NO CLEAR PATH'\) : 'CLICK TO CONNECT';/.test(glow), 'mid-connect, CLICK TO CONNECT (or why there is no route) prints on the HOVERED target only (the rest keep the glow)');
+  // conveyor links phase B: the hovered destination shows the very lane the click would lay
+  A.ok(/if \(pv && pv\.ok\) drawBeltPreview\(t, pv, '#7ee2a8'\);/.test(glow) && /station\.previewBelt\(from, to\)/.test(build), 'mid-connect, the hovered destination draws the lane the click would lay (station.previewBelt)');
 
   // floor nags are short; the full sentences ride the hover card
   const vl = build.slice(build.indexOf('const VAL_LABEL = {'), build.indexOf('const VAL_WHY = {'));
@@ -133,7 +135,9 @@ const tutorialSrc = read('tutorial.js');
 
   // a machine moved away from its belts: the ghost and the drop both say the belts stay
   const cm = build.slice(build.indexOf('function commitPropMove('), build.indexOf('function commitPaint('));
-  A.ok(/beltsLeftBehind\(mp, mp\.x \+ dx, mp\.y \+ dy\)/.test(cm) && /its belts stayed behind/.test(cm), 'dropping a moved machine away from its belts says they stayed behind');
+  const mm = build.slice(build.indexOf('  function moveMsg('), build.indexOf('  function ghostInfo('));
+  A.ok(/beltsLeftBehind\(mp, mp\.x \+ dx, mp\.y \+ dy\)/.test(cm) && /feedback\(moved, ev, moveMsg\(moved, left, okMsg\)\)/.test(cm) && /its belts stayed behind/.test(mm), 'dropping a moved machine away from its belts says they stayed behind (a ring-rule floor)');
+  A.ok(/came with it/.test(mm) && /found no clear route/.test(mm) && /linkedFloor\(\)\) return 0;/.test(build), '…and on a linked floor that its belts came with it, or which found no route (conveyor links phase B)');
 }
 
 A.report('refit-playtest-fixes.test');

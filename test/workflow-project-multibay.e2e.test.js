@@ -64,6 +64,12 @@ const Pipeline = require('../frontend/app/pipeline.js');
     const run = await fixture.json('POST', '/api/cron/run', { id: routine.body.job.id });
     assert.ok(!run.text.includes('The workflow changed'), 'the hop is not refused as a foreign line: ' + run.text.slice(0, 400));
     assert.ok(!run.text.includes('agent.run.error'), run.text.slice(0, 400));
+    // LINE WATCH: the entry run's OWN start (the loop's normal path, not an early exit) names the bay it fired at, so the
+    // floor lights b1 — never writer's other bay, which is what pairing by 'oldest crate' does to a multi-bay agent.
+    const starts = text => text.split(/\r?\n/).filter(Boolean).map(l => { try { return JSON.parse(l); } catch (_) { return null; } })
+      .filter(e => e && e.name === 'agent.run.start' && e.payload && e.payload.agentId === 'writer');
+    const bStarts = starts(run.text);
+    assert.ok(bStarts.length >= 1 && bStarts.every(e => e.payload.dockId === 'b1'), 'the entry run.start names bay b1: ' + JSON.stringify(bStarts.map(e => e.payload)));
     const rows = (await fixture.json('GET', '/api/runs?agent=*')).body.runs.filter(r => r.surface === 'autonomous');
     const rootB = fs.realpathSync(projB), rootA = fs.realpathSync(projA);
     assert.ok(rows.some(r => r.agentId === 'writer' && r.projectRoot === rootB), 'the entry stage ran in line B\'s project');
@@ -71,6 +77,16 @@ const Pipeline = require('../frontend/app/pipeline.js');
     assert.ok(!rows.some(r => r.projectRoot === rootA), 'nothing ran in line A\'s project');
     for (const id of ['writer', 'hop']) assert.equal(fs.readFileSync(path.join(projB, id + '.txt'), 'utf8'), 'multibay project proof', id + ' wrote into project B');
     assert.equal(fs.readdirSync(projA).length, 0, 'project A is untouched');
+    // Run Now of a routine with NO saved bay works at its crate's bay (the agent's entry bay), exactly like a scheduled
+    // fire. A duplicate dockId key in the Run Now call used to override the crate's bay with undefined.
+    const plain = await fixture.json('POST', '/api/cron', { name: 'No bay', prompt: 'Write a file and read it back.', schedule: 'every 1h', agentId: 'writer', model: 'writer-model', provider: 'openrouter' });
+    assert.ok(plain.body.job?.id, plain.text);
+    const plainRun = await fixture.json('POST', '/api/cron/run', { id: plain.body.job.id });
+    assert.ok(!plainRun.text.includes('agent.run.error'), plainRun.text.slice(0, 400));
+    const plainStarts = starts(plainRun.text);
+    assert.ok(plainStarts.length === 1 && ['a1', 'b1'].includes(plainStarts[0].payload.dockId), 'a no-bay Run Now names its crate\'s bay: ' + JSON.stringify(plainStarts.map(e => e.payload)));
+    const plainRow = (await fixture.json('GET', '/api/runs?agent=*')).body.runs.find(r => r.runId === plainStarts[0].payload.runId);
+    assert.equal(plainRow && plainRow.dockId, plainStarts[0].payload.dockId, 'its run row records the same bay');
     console.log('workflow-project-multibay: OK — a multi-bay agent\'s routine runs its own line\'s project through every stage');
   } finally { await fixture.dispose();
     for (const p of [projA, projB]) {

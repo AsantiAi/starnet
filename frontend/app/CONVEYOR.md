@@ -22,6 +22,48 @@ straight run from a→b, direction = the drag axis). Validation: each tile must 
 `beltAt(x,y)` (→ dir|null). `projectGeometry()` emits `belts` in the LOCAL frame; belts serialize
 inside `doc`; `migrate()` is total (drops malformed keys/dirs).
 
+### Links — explicit connections (save v2, conveyor-links plan phase A, 2026-09-28)
+
+A **link** is one belt from one machine to the next, in WORLD tiles:
+
+```js
+doc.links = [{ id: 'l3', from: { prop: 'p10', port: 'out' }, to: { prop: 'p11', port: 'in' },
+               path: [{ x: 2, y: 4, d: 'E' }, { x: 3, y: 4, d: 'E' }] }, ...]
+```
+
+- `prop` is a belt machine's id (INBOX, BAY, OUTBOX, SPLITTER, JOINER, MERGER, FILTER, LOOP) or `null` for
+  an open end. `path` is the belt it rides, in flow order. Ports: `in` / `out`, plus the exits that mean
+  something — a FILTER out-link carries `tags` (task types routed down it) and `else: true` (EVERYTHING
+  ELSE); a LOOP out-link is `done`, `back` or `esc`. A `ring: true` link is one ring tile the old ring rule
+  hooked that no belt run explains (two machines sharing a ring tile) — written down so nothing moves.
+- **Compiler** (`Pipeline.compileRoutingPlan`): a geo WITH `links` hooks a machine only to the ring tiles of its
+  own links (a belt passing a ring hooks nothing), reads FILTER routes / LOOP exits from ports (compass
+  config on the prop is the fallback), warns `JUNCTION_TOUCH` for a belt beside a junction that is not one of
+  its links, and `lineComponents` joins machines by their own links. A geo without links keeps the ring rule.
+- **Derivation** (`Pipeline.deriveLinks(geo)`): today's ring rule written down as links, exact by
+  construction — a derived floor compiles to the identical plan and hash (test/conveyor-links.test.js: the
+  routing fixture corpus, every blueprint, a seeded fuzz).
+- **Adoption**: a floor that never had links (a v1 save) derives them exactly on load and adopts them only when
+  they compile to the identical plan (else `null`, and the ring rule stands — every old behaviour, TOO CLOSE
+  included). Read with `station.links()` / `station.isLinked()`; `projectGeometry()` emits them in the LOCAL
+  frame. Belts stay in the save, so an older build still routes a v2 save by tiles.
+- **The floor keeps its links (phase B)**: after every edit `Pipeline.reconcileLinks` keeps each link the floor
+  still stands behind (its belt laid tile for tile, its machines where it meets them), drops the rest (a cut or
+  turned belt, a moved or removed machine — the belt stays, loose), and links every loose run that joins two
+  machines: out of one (the footprint behind its first arrow, a junction's lane, its ring) and INTO another (a
+  footprint, a junction's tile, the side or corner it stops at, or a linked belt that carries it on). A run that
+  joins no two machines stays loose: on the floor, in no plan (`plan.belts` = link paths + junction tiles), so
+  no crate rides it and no junction reads it as a lane. Derived links reconcile to themselves; reconcile is
+  idempotent; a new link starting where a dropped one did inherits its id and ports.
+- **Tools (phase B)**: BELT click-click (`connectBelt` = `planBelt` + `layBelt`) lays ONE link between the two
+  machines clicked — its last tile is the destination's alone (not in the start machine's ring), and no tile but
+  its own ends touches another junction. `moveProp` lifts and re-lays a machine's links (ids and ports kept;
+  `syncJunctionCfg` rewrites a FILTER/LOOP's compass config from the new lanes) and reports `relaid` / `lost`;
+  `removeProp` drops its links and leaves the belts loose (a machine put back at their end picks them up);
+  `configureJunction` writes the new routes onto the junction's out-links. REFIT previews the lane before the
+  click (`previewBelt`), names a belt's link or says it is loose, and dry-runs a placement on a probe copy
+  (`connectionPreview` → `linkedPreview`) to say what it would connect.
+
 ## Runtime (conveyor.js) — `Conveyor.create()`
 
 A self-contained transport sim + renderer. Frame-agnostic: it's handed a belt map in whatever

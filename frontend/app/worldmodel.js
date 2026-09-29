@@ -382,9 +382,14 @@ const WorldModel = (() => {
      on migrate for docs saved before this existed, and never touched again. Injectable so tests and
      any future importer stay deterministic. */
   function stationId() { return (typeof Date !== 'undefined' && Date.now) ? Date.now() : 1; }
+  /* SAVE VERSION. 2 (2026-09-28, the conveyor-links plan): the doc carries `links` — the explicit machine-to-machine
+     connections its belts make (Pipeline.deriveLinks). Belts stay in the save, so an older build that opens a v2 save
+     still routes by tiles; this build re-derives the links from the belts on load, so a save an older build edited
+     can never carry stale ones. */
+  const STATION_VERSION = 2;
   function freshDoc(createdAt) {
     const doc = {
-      schema: 'starnet.station', version: 1, _nid: 1,
+      schema: 'starnet.station', version: STATION_VERSION, _nid: 1,
       meta: { name: 'STARNET STATION', createdAt: createdAt || stationId(), tier: 0, spawnRoomId: null, trunkRoomId: null },
       rooms: {}, order: [], props: [], belts: {}, edges: []
     };
@@ -423,6 +428,7 @@ const WorldModel = (() => {
     CREW:       { desc: 'works its share of the stream',   cls: 'chief' },
     SHIPPER:    { desc: 'finishes the job & ships it',     cls: 'chief' },
     REVIEWER:   { desc: 'judges the draft & calls the verdict', cls: 'reviewer' },
+    TESTER:     { desc: 'checks the change & calls the verdict', cls: 'reviewer', name: 'TESTER' },   // `name`: a recruit is named for the step, not its class
     ANALYST:    { desc: 'turns the branches into one answer',   cls: 'analyst' },
     FIXER:      { desc: 'takes over when the loop gives up',    cls: 'chief' },
   };
@@ -695,6 +701,28 @@ const WorldModel = (() => {
         { x: 13, y: 5, d: 'S' }, { x: 13, y: 6, d: 'E' }, { x: 14, y: 6, d: 'E' },
         { x: 17, y: 6, d: 'E' }, { x: 18, y: 6, d: 'N' }, { x: 18, y: 5, d: 'N' },
       ] },
+    /* BUILD & TEST (2026-09-28, from PR #47 by @mvanhorn): the software loop without CODE FOUNDRY's sorter. The
+       TESTER's verdict decides — a failing change goes back up and over into the BUILDER's top edge (the CODE
+       FOUNDRY back-lane shape), a passing one ships; the pass count ends it either way. `when: 'approved'` is the
+       gate word verdict.js also reads from "VERDICT: pass". The SOFTWARE STUDIO preset stamps this same line. */
+    { id: 'build_test', grp: 'gate', label: 'BUILD & TEST', w: 16, h: 4,
+      desc: 'INBOX ▸ BUILDER ▸ TESTER ▸ LOOP GATE ▸ OUTBOX — the tester checks the change and sends it back to the builder until it passes (3 passes max), then it ships.',
+      props: [
+        { t: 'intake', x: 0, y: 2, w: 2, h: 2 },
+        { t: 'bay', x: 4, y: 2, w: 2, h: 2, role: 'ENGINEER' },
+        { t: 'bay', x: 8, y: 2, w: 2, h: 2, role: 'TESTER' },
+        { t: 'loop', x: 12, y: 3, w: 1, h: 1, block: false, done: 'E', when: 'approved', maxIter: 3 },
+        { t: 'outbox', x: 14, y: 2, w: 2, h: 2 },
+      ],
+      belts: [
+        { x: 2, y: 3, d: 'E' }, { x: 3, y: 3, d: 'E' },
+        { x: 6, y: 3, d: 'E' }, { x: 7, y: 3, d: 'E' },
+        { x: 10, y: 3, d: 'E' }, { x: 11, y: 3, d: 'E' }, { x: 12, y: 3, d: 'E' }, { x: 13, y: 3, d: 'E' },
+        // the back lane: up out of the gate, west over the tester, down into the builder's top edge
+        { x: 12, y: 2, d: 'N' }, { x: 12, y: 1, d: 'N' }, { x: 12, y: 0, d: 'W' },
+        { x: 11, y: 0, d: 'W' }, { x: 10, y: 0, d: 'W' }, { x: 9, y: 0, d: 'W' }, { x: 8, y: 0, d: 'W' },
+        { x: 7, y: 0, d: 'W' }, { x: 6, y: 0, d: 'W' }, { x: 5, y: 0, d: 'S' }, { x: 5, y: 1, d: 'S' },
+      ] },
     { id: 'code_foundry', grp: 'gate', label: 'CODE FOUNDRY', w: 19, h: 7,
       desc: 'INBOX ▸ FILTER ▸ ENGINEER ▸ REVIEWER ▸ LOOP GATE ▸ OUTBOX — code work is built, reviewed, and sent back round until the verdict is APPROVED; everything else takes the generalist lane.',
       props: [
@@ -870,6 +898,49 @@ const WorldModel = (() => {
     const subs = [];
     const undoStack = [], redoStack = [];
 
+    /* ---------- LINKS (the conveyor-links plan, phase A, 2026-09-28) ----------
+       doc.links = the floor's explicit machine-to-machine connections (Pipeline.deriveLinks), in world tiles. Until the
+       link tools land every belt edit is still a tile edit, so the links FOLLOW the belts: a cache re-derived whenever
+       what the derivation reads changes (the belts, a belt machine's place or size, a FILTER's routes, a LOOP's exit),
+       checked on its identity too (an undo or a load hands in other links — re-derived, never trusted). A derivation
+       is ADOPTED only when the plan its links compile to is identical to the ring rule's, so this phase can never move a
+       line; null = not adopted (no compiler loaded, or a floor they would not reproduce) and the compiler keeps the ring
+       rule, exactly as before links existed. The derivation reads the junction config projectGeometry hands the
+       compiler (routes / def / done — not esc, which the projection does not carry), so the two can never disagree. */
+    const LINK_MACHINES = { intake: 1, bay: 1, outbox: 1, splitter: 1, filter: 1, merger: 1, joiner: 1, loop: 1 };
+    const linkCache = { sig: null, links: undefined };
+    function currentLinks() {
+      const P = pipelineModule();
+      if (!P || typeof P.deriveLinks !== 'function') { doc.links = null; return null; }
+      const props = [], geoProps = [], belts = [];
+      for (const p of doc.props) {
+        if (!LINK_MACHINES[p.t]) continue;
+        const o = { id: p.id, t: p.t, x: p.x, y: p.y, w: p.w || 1, h: p.h || 1 };
+        if (p.routes) o.routes = p.routes; if (p.def) o.def = p.def; if (p.done) o.done = p.done;
+        props.push(o);
+        const g = Object.assign({}, o);
+        if (p.agentId) g.agentId = p.agentId; if (p.when) g.when = p.when; if (p.maxIter) g.maxIter = p.maxIter; if (p.timeoutMin) g.timeoutMin = p.timeoutMin;
+        geoProps.push(g);
+      }
+      for (const k in doc.belts) { const q = k.split(','); belts.push({ x: +q[0], y: +q[1], dir: doc.belts[k] }); }
+      const sig = JSON.stringify([props, belts]);
+      if (linkCache.sig === sig && linkCache.links === doc.links) return doc.links;
+      let links = null;
+      if (Array.isArray(doc.links) && typeof P.reconcileLinks === 'function') {
+        // PHASE B: the floor's links are what the Commander built — keep every one the floor still stands behind, drop
+        // what an edit broke (its belt stays, loose), and link each loose run that joins two machines
+        try { links = P.reconcileLinks({ props, belts, links: doc.links }).links; } catch (e) { links = doc.links; }
+      } else try {
+        // a floor that never had links (a v1 save, or one this build could not adopt): today's ring rule, written down
+        const derived = P.deriveLinks({ props, belts });
+        const geo = { props: geoProps, belts };
+        if (JSON.stringify(P.compileRoutingPlan(geo)) === JSON.stringify(P.compileRoutingPlan(Object.assign({}, geo, { links: derived })))) links = derived;
+      } catch (e) { links = null; }
+      doc.links = links;
+      linkCache.sig = sig; linkCache.links = links;
+      return links;
+    }
+
     const fail = (code, msg) => ({ ok: false, error: code, msg: msg || code });
 
     /* ---------- read accessors ---------- */
@@ -1015,7 +1086,9 @@ const WorldModel = (() => {
       checkRects((rects || []).map(normRect), 'corridor', ignoreId);
 
     /* ---------- history (snapshot-based — small docs, correct by construction) ---------- */
-    const snap = () => clone({ rooms: doc.rooms, order: doc.order, meta: doc.meta, _nid: doc._nid, props: doc.props, belts: doc.belts, edges: doc.edges });
+    // links ride the snapshot exactly as the doc holds them (absent / null / a derivation) so an UNDO restores the doc exactly;
+    // a restored derivation is a different array, so the link cache re-checks it against the restored belts on the next read
+    const snap = () => clone({ rooms: doc.rooms, order: doc.order, meta: doc.meta, _nid: doc._nid, props: doc.props, belts: doc.belts, edges: doc.edges, links: doc.links });
     // snapshot() runs immediately BEFORE every doc mutation, so dropping the roomAt index here is
     // what keeps a mid-mutation read honest (it rebuilds against the doc as it currently stands).
     function snapshot() { dropRoomIdx(); if (batchDepth) return; undoStack.push(snap()); if (undoStack.length > 120) undoStack.shift(); redoStack.length = 0; }
@@ -1032,7 +1105,7 @@ const WorldModel = (() => {
       if (!r || !r.ok) { restore(undoStack.pop()); emit([], { global: true }); }
       return r;
     }
-    function restore(s) { dropRoomIdx(); doc.rooms = s.rooms; doc.order = s.order; doc.meta = s.meta; doc._nid = s._nid; doc.props = s.props || []; doc.belts = s.belts || {}; doc.edges = s.edges || []; }
+    function restore(s) { dropRoomIdx(); doc.rooms = s.rooms; doc.order = s.order; doc.meta = s.meta; doc._nid = s._nid; doc.props = s.props || []; doc.belts = s.belts || {}; doc.edges = s.edges || []; if (s.links === undefined) delete doc.links; else doc.links = Array.isArray(s.links) ? s.links : null; }
     /* `global: true` means THIS EDIT CANNOT BE INVALIDATED BY A RECTANGLE — a listener holding a
        tile-cached render must throw the whole cache away, not just the chunks the rects touch.
        Additive: the field is simply absent on every other mutation, and a listener that ignores it
@@ -1462,11 +1535,77 @@ const WorldModel = (() => {
       const nx = p.x + dTx, ny = p.y + dTy;
       const v = checkProp({ x1: nx, y1: ny, x2: nx + p.w - 1, y2: ny + p.h - 1 }, id, p.t);
       if (!v.ok) return v;
+      const linked = CONNECTABLE[p.t] && Array.isArray(currentLinks());
       snapshot();
       const before = propFootprint(p);
-      p.x = nx; p.y = ny;
-      emit([before, propFootprint(p)], { staticBakeUnchanged: p.t !== 'airlock' });
-      return { ok: true };
+      if (!linked) {
+        p.x = nx; p.y = ny;
+        emit([before, propFootprint(p)], { staticBakeUnchanged: p.t !== 'airlock' });
+        return { ok: true };
+      }
+      // A LINKED MACHINE'S BELTS FOLLOW IT (conveyor-links phase B): each link to another machine is lifted and re-laid
+      // from its new spot, keeping its id and ports; one that finds no route is reported, never silently kept
+      const r = relayLinksOf(p, () => { p.x = nx; p.y = ny; });
+      emit([before, propFootprint(p)].concat(r.dirty), { staticBakeUnchanged: true });
+      return { ok: true, relaid: r.relaid, lost: r.lost };
+    }
+    /* lift every link between machine p and another machine (the belt tiles no other link rides), run `mutate` (the move),
+       then lay each one again with the connect planner — same two machines, same id, same ports. A junction's own tile
+       moves with it. Junctions at either end then take their compass config from the re-laid lanes (syncJunctionCfg), so
+       a FILTER's CODE lane is still its CODE lane whichever side it now leaves from. No snapshot, no emit. */
+    function relayLinksOf(p, mutate) {
+      const L = Array.isArray(doc.links) ? doc.links : [];
+      const touches = l => l && l.from && l.to && (l.from.prop === p.id || l.to.prop === p.id);
+      const mine = L.filter(l => touches(l) && l.from.prop != null && l.to.prop != null && l.from.prop !== l.to.prop);
+      const others = L.filter(l => mine.indexOf(l) < 0);
+      const keepTile = new Set();
+      for (const l of others) for (const t of (l.path || [])) keepTile.add(beltKey(t.x, t.y));
+      const dirty = [], cell = (x, y) => ({ x1: x, y1: y, x2: x, y2: y });
+      for (const l of mine) for (const t of l.path) { const k = beltKey(t.x, t.y); if (!keepTile.has(k) && doc.belts[k]) { delete doc.belts[k]; dirty.push(cell(t.x, t.y)); } }
+      if (isJunction(p) && mine.length) { const k = beltKey(p.x, p.y); if (!keepTile.has(k) && doc.belts[k]) { delete doc.belts[k]; dirty.push(cell(p.x, p.y)); } }
+      doc.links = others;
+      mutate();
+      const relaid = [], lost = [], ends = new Set();
+      for (const l of mine) {
+        const A = propById(l.from.prop), B = propById(l.to.prop);
+        const r = (A && B) ? planBelt(A, B, true) : fail('NOT_FOUND', 'no such prop');
+        if (!r.ok) { lost.push({ id: l.id, from: l.from.prop, to: l.to.prop, msg: r.msg }); continue; }
+        for (const d of layBelt(A, B, r, true, l)) dirty.push(d);
+        relaid.push(l.id); ends.add(A.id); ends.add(B.id);
+      }
+      for (const id of ends) { const J = propById(id); if (J && isJunction(J)) syncJunctionCfg(J); }
+      return { dirty, relaid, lost };
+    }
+    // the lane (compass dir) each of junction J's out-links leaves on — from its tile to the link's first belt (or, belt-less,
+    // to the next junction) — paired with the link
+    function junctionOutLanes(J) {
+      const out = [], dirTo = (a, b) => (b.x > a.x ? 'E' : b.x < a.x ? 'W' : b.y > a.y ? 'S' : 'N');
+      for (const l of (Array.isArray(doc.links) ? doc.links : [])) {
+        if (!l || !l.from || l.from.prop !== J.id) continue;
+        const nb = (l.path && l.path[0]) || (l.to && l.to.prop != null && propById(l.to.prop));
+        if (nb && Math.abs(nb.x - J.x) + Math.abs(nb.y - J.y) === 1) out.push({ link: l, dir: dirTo(J, nb) });
+      }
+      return out;
+    }
+    /* a junction's compass config FROM its links (after its lanes moved): a FILTER routes each tag down the lane of the link
+       carrying it and its default down the EVERYTHING ELSE link; a LOOP's done / esc are its done / esc links' lanes. Only
+       what a link names is rewritten — config no link speaks for is left as it was. Keeps an older build (which reads the
+       compass) and the panel reading the same routes the compiler does. */
+    function syncJunctionCfg(J) {
+      const lanes = junctionOutLanes(J);
+      if (J.t === 'filter') {
+        const named = lanes.filter(o => (Array.isArray(o.link.from.tags) && o.link.from.tags.length) || o.link.from.else);
+        if (!named.length) return;
+        const routes = {};
+        for (const o of named) for (const tag of (o.link.from.tags || [])) if (!(tag in routes)) routes[tag] = o.dir;
+        const def = (named.find(o => o.link.from.else) || {}).dir || null;
+        if (Object.keys(routes).length) J.routes = routes; else delete J.routes;
+        if (def) J.def = def; else if (named.some(o => o.link.from.else)) delete J.def;
+      } else if (J.t === 'loop') {
+        const done = lanes.find(o => o.link.from.port === 'done'), esc = lanes.find(o => o.link.from.port === 'esc');
+        if (done) J.done = done.dir;
+        if (esc) J.esc = esc.dir;
+      }
     }
 
     /* ---------- belt mutations ----------
@@ -1560,10 +1699,15 @@ const WorldModel = (() => {
       let why = null;
       for (const h0 of heads) {
         const tiles = [], seen = new Set();
-        let t = h0, reached = false, bad = null;
+        let t = h0, reached = false, bad = null, mergeAt = -1;
         while (t && doc.belts[beltKey(t.x, t.y)] && !seen.has(beltKey(t.x, t.y))) {
           const k = beltKey(t.x, t.y); seen.add(k);
-          if (tiles.length && feeders(t.x, t.y) > 1) { bad = 'MERGES'; break; }
+          /* ANOTHER BELT JOINS HERE (2026-09-27 audit B3). On a stamped REVISION LOOP the gate's return belt joins the
+             INBOX lane just before the writer, so every insert between INBOX and WRITER — the natural place for a
+             research step — was refused. The new BAY goes in BEFORE the join: only the lane's own segment up to the
+             join is lifted, the shared part stays (it still carries the other belt's work to B), and the new bay is
+             belted into B on a lane of its own. The walk carries on so PASSES and reaching B are still checked. */
+          if (tiles.length && mergeAt < 0 && feeders(t.x, t.y) > 1) mergeAt = tiles.length;
           if (!aRing.has(k) && !bRing.has(k) && touchesOther(t.x, t.y)) { bad = 'PASSES'; break; }
           tiles.push({ x: t.x, y: t.y });
           if (bRing.has(k)) reached = true;
@@ -1571,19 +1715,44 @@ const WorldModel = (() => {
           if (reached && !bRing.has(beltKey(nx, ny))) break;   // the lane's tail runs out along B's ring
           t = { x: nx, y: ny };
         }
-        if (reached && !bad) return { ok: true, tiles };
+        if (reached && !bad) return mergeAt > 0 ? { ok: true, tiles: tiles.slice(0, mergeAt), beforeJoin: true } : { ok: true, tiles };
         if (bad) why = bad;
       }
-      if (why === 'MERGES') return fail('LANE_SHARED', 'another belt joins this one — add the BAY by hand (PROPS, then BELT)');
-      if (why === 'PASSES') return fail('LANE_PASSES', 'this belt passes another machine — add the BAY by hand (PROPS, then BELT)');
-      return fail('NO_DIRECT_LANE', 'no single belt runs straight from the first machine to the next — add the BAY by hand (PROPS, then BELT)');
+      if (why === 'PASSES') return fail('LANE_PASSES', 'this belt passes another machine, so a step cannot be added here automatically. Add it by hand: Conveyors › MACHINES › BAY, then connect it with BELT');
+      return fail('NO_DIRECT_LANE', 'no single belt runs straight from the first machine to the next, so a step cannot be added here automatically. Add it by hand: Conveyors › MACHINES › BAY, then connect it with BELT');
     }
     /* the compiler's own verdict on a trial insert: with probe agents on any uncrewed endpoint, the compiled plan
        must hand A's work to the new bay and the new bay's to B (or ship it to B when B is an OUTBOX), with no
        new blocking error. The probe ids never persist — the props are restored before returning. */
-    function insertCompiles(A, newId, B) {
+    /* what the REST of the floor routes to, with probe agents on the named uncrewed bays: every loop gate's back target
+       and every dock's hand-off targets (dock-keyed — prop ids survive an origin shift). insertBayBetween compares this
+       before and after, so an insert can never quietly re-route a lane it was not asked to touch (2026-09-27: a new
+       research step parked beside a REVISION LOOP's return belt became the gate's back target). */
+    function routingSummary(probeIds) {
+      const P = pipelineModule();
+      if (!P || !P.compileRoutingPlan) return null;
+      const probes = [];
+      for (const id of probeIds) { const p = doc.props.find(q => q.id === id); if (p && p.t === 'bay' && !p.agentId) { p.agentId = '__insert_probe_' + probes.length; probes.push(p); } }
+      let out = null;
+      try {
+        const plan = P.compileRoutingPlan(projectGeometry());
+        const backs = [];
+        for (const k in (plan.gateDocks || {})) { const g = plan.gateDocks[k]; backs.push(String(g && g.backTo || '') + '>' + String(g && g.escTo || '')); }
+        const next = {};
+        for (const d in (plan.dockChains || {})) next[d] = (plan.dockChains[d].next || []).slice().sort().join(',') + (plan.dockChains[d].outbox ? '+out' : '');
+        out = { backs: backs.sort().join('|'), next };
+      } catch (e) { out = null; }
+      for (const p of probes) delete p.agentId;
+      return out;
+    }
+    function insertCompiles(A, newId, B, before) {
       const P = pipelineModule();
       if (!P || !P.compileRoutingPlan) return true;   // no compiler loaded: the geometric checks stand alone
+      if (before) {
+        const after = routingSummary([A.id, newId, B.id]);
+        if (!after || after.backs !== before.backs) return false;   // a loop gate would send work somewhere new
+        for (const d in before.next) if (d !== A.id && d !== newId && after.next[d] !== before.next[d]) return false;   // another dock re-routed
+      }
       const probes = [];
       const probe = id => { const p = doc.props.find(q => q.id === id); if (p && p.t === 'bay' && !p.agentId) { p.agentId = '__insert_probe_' + probes.length; probes.push(p); } return p; };
       const a = probe(A.id), n = probe(newId), b = probe(B.id);
@@ -1601,6 +1770,28 @@ const WorldModel = (() => {
       for (const p of probes) delete p.agentId;
       return ok;
     }
+    /* the + button's DRY RUN (2026-09-27 audit B3): would insertBayBetween succeed here? The Workflow panel greys out a "+"
+       that can only refuse and says why on hover, instead of offering a role picker that ends in an error. The lane rules
+       alone were not enough (2026-09-28 retest): the "+" between a REVISION LOOP's two bays in the starter room passed them,
+       and the insert then refused NO_ROOM. So the answer is the REAL insert, run on a throwaway copy of this floor (the
+       replaceLayout probe pattern) with the same bay size, cached per floor version so the panel's repaints stay free. */
+    const insertProbe = { seq: -1, memo: {} };
+    function canInsertBayBetween(fromId, toId, o) {
+      const A = propById(fromId), B = propById(toId);
+      if (!A || !B) return fail('NOT_FOUND', 'no such prop');
+      if (!CONNECTABLE[A.t] || !CONNECTABLE[B.t]) return fail('NOT_CONNECTABLE', 'insert between workflow machines');
+      const lane = directLane(A, B);
+      if (!lane.ok) return lane;
+      if (insertProbe.seq !== seq) { insertProbe.seq = seq; insertProbe.memo = {}; }
+      const size = { w: (o && o.w) | 0, h: (o && o.h) | 0, block: !(o && o.block === false) };
+      const k = fromId + '>' + toId + ':' + size.w + 'x' + size.h + (size.block ? '' : 'w');
+      if (!insertProbe.memo[k]) {
+        let r;
+        try { r = makeStation(clone(doc)).insertBayBetween(fromId, toId, size); } catch (e) { r = fail('THREW', String((e && e.message) || e)); }
+        insertProbe.memo[k] = (r && r.ok) ? { ok: true, beforeJoin: !!lane.beforeJoin } : (r || fail('NO_ROOM', 'no room for a new BAY here'));
+      }
+      return insertProbe.memo[k];
+    }
     function insertBayBetween(fromId, toId, o) {
       const A = propById(fromId), B = propById(toId);
       if (!A || !B) return fail('NOT_FOUND', 'no such prop');
@@ -1614,6 +1805,7 @@ const WorldModel = (() => {
       const cands = [];
       for (let dy = -6; dy <= 6; dy++) for (let dx = -6; dx <= 6; dx++) cands.push({ x: mid.x + dx - (W >> 1), y: mid.y + dy - (H >> 1), d: dx * dx + dy * dy });
       cands.sort((a, b) => a.d - b.d || a.y - b.y || a.x - b.x);
+      const before = routingSummary([A.id, B.id]);
       return transact(() => {
         for (const t of lane.tiles) delete doc.belts[beltKey(t.x, t.y)];
         emit(lane.tiles.map(t => ({ x1: t.x, y1: t.y, x2: t.x, y2: t.y })));
@@ -1626,6 +1818,12 @@ const WorldModel = (() => {
           // a dock's 1-tile ring is its hookup zone: a new bay whose ring touches another machine (or its ring)
           // would share hookup tiles with it and the compiler would read the wrong hand-offs — keep clear
           if (doc.props.some(p => CONNECTABLE[p.t] && p.x - 1 <= c.x + W && p.x + (p.w || 1) >= c.x - 1 && p.y - 1 <= c.y + H && p.y + (p.h || 1) >= c.y - 1)) continue;
+          // …and clear of every OTHER belt: a bay whose ring touches a passing lane HOOKS that lane (the lanes this insert
+          // lays for itself come after, and belong to it)
+          let brushes = false;
+          for (let y = c.y - 1; y <= c.y + H && !brushes; y++) for (let x = c.x - 1; x <= c.x + W && !brushes; x++)
+            if (!(x >= c.x && x < c.x + W && y >= c.y && y < c.y + H) && doc.belts[beltKey(x, y)]) brushes = true;
+          if (brushes) continue;
           tried++;
           const pre = snap();
           const add = addProp({ t: 'bay', x: c.x, y: c.y, w: W, h: H, block });
@@ -1634,10 +1832,10 @@ const WorldModel = (() => {
           const c1 = connectBelt(A.id, add.id);
           const c2 = c1.ok ? connectBelt(add.id, B.id) : c1;
           if (!c1.ok || !c2.ok) { restore(pre); continue; }
-          if (!insertCompiles(A, add.id, B)) { restore(pre); continue; }
+          if (!insertCompiles(A, add.id, B, before)) { restore(pre); continue; }
           return { ok: true, id: add.id, x: c.x, y: c.y, removed: lane.tiles.length, laid: (c1.count || 0) + (c2.count || 0) };
         }
-        return fail('NO_ROOM', 'no clear spot near this belt fits a new BAY with both belts — make floor space, or place one with PROPS and connect it with BELT');
+        return fail('NO_ROOM', 'no clear spot near this belt fits a new BAY with both belts. Make floor space, or place one yourself (Conveyors › MACHINES › BAY) and connect it with BELT');
       });
     }
 
@@ -1662,12 +1860,49 @@ const WorldModel = (() => {
        written — a lane the compiler would not count is refused (honest failure, no chime), never laid. */
     const JUNCTION = { filter: 1, splitter: 1, merger: 1, joiner: 1, loop: 1 };
     const isJunction = p => !!JUNCTION[p.t] && (p.w || 1) === 1 && (p.h || 1) === 1;
+    /* CONNECT ON A LINKED FLOOR (conveyor-links phase B, 2026-09-28): the lane is a LINK — from this machine, to that
+       one, along this belt — so it hooks exactly its two machines and nothing it passes. Three rules replace the old
+       ring workarounds:
+         · the belt's LAST tile sits in the destination's ring and NOT in a start machine's, so the tile the work arrives
+           on belongs to the destination alone — two machines side by side get a belt round the far side, never a
+           TOO CLOSE refusal or a spacing rule;
+         · no tile but the lane's own two ends touches a junction's tile, or that junction would read it as a lane;
+         · a third machine's ring is skirted on the first pass for tidiness only — passing it hooks nothing.
+       A floor whose links were never adopted keeps the ring-rule behaviour (TOO CLOSE included), unchanged. */
     function connectBelt(fromId, toId) {
       const A = doc.props.find(p => p.id === fromId), B = doc.props.find(p => p.id === toId);
       if (!A || !B) return fail('NOT_FOUND', 'no such prop');
       if (A.id === B.id) return fail('SAME_PROP', 'pick two different machines');
       if (!CONNECTABLE[A.t] || !CONNECTABLE[B.t]) return fail('NOT_CONNECTABLE', 'connect workflow machines (INBOX/BAY/OUTBOX/junctions)');
+      const linked = Array.isArray(currentLinks());
+      const r = planBelt(A, B, linked);
+      if (!r.ok) return r;
+      snapshot();   // one undo slot for the whole connection
+      emit(layBelt(A, B, r, linked, null));
+      return { ok: true, count: r.path.length, from: A.t, to: B.t };
+    }
+    // the next free link id (l1, l2, …) — ids are never reused while a link still holds one
+    function nextLinkId(links) {
+      let n = 0;
+      for (const l of (links || [])) { const m = l && /^l(\d+)$/.exec(String(l.id)); if (m) n = Math.max(n, +m[1]); }
+      return 'l' + (n + 1);
+    }
+    // what a junction's lane `d` carries, read off its compass config (a FILTER's routed tags / EVERYTHING ELSE, a LOOP's
+    // exit) — the same reading Pipeline.deriveLinks uses, so a drawn lane and a derived one mean the same thing
+    function junctionPort(J, d) {
+      const f = { prop: J.id, port: 'out' };
+      if (J.t === 'filter') {
+        const r = (J.routes && typeof J.routes === 'object') ? J.routes : {}, tags = [];
+        for (const tag in r) if (r[tag] === d) tags.push(tag);
+        if (tags.length) f.tags = tags;
+        if (J.def === d) f.else = true;
+      } else if (J.t === 'loop') { if (J.done === d) f.port = 'done'; else if (J.esc === d) f.port = 'esc'; }
+      return f;
+    }
+    // the route a lane A -> B would take (pure: reads the doc, writes nothing) — { ok, path, dirs, exitTile, … } or a fail
+    function planBelt(A, B, linked) {
       const inFoot = (p, x, y) => x >= p.x && x < p.x + (p.w || 1) && y >= p.y && y < p.y + (p.h || 1);
+      const inBox = (p, x, y) => x >= p.x - 1 && x <= p.x + (p.w || 1) && y >= p.y - 1 && y <= p.y + (p.h || 1);
       const aJ = isJunction(A), bJ = isJunction(B);
       const aOn = !!doc.belts[beltKey(A.x, A.y)], bOn = !!doc.belts[beltKey(B.x, B.y)];
       // a path tile: on deck, not an existing belt, not under ANY prop (docks hook via ring adjacency) —
@@ -1683,12 +1918,21 @@ const WorldModel = (() => {
       };
       const N4 = [[1, 0, 'E'], [-1, 0, 'W'], [0, 1, 'S'], [0, -1, 'N']];
       const dirTo = (a, b) => (b.x > a.x ? 'E' : b.x < a.x ? 'W' : b.y > a.y ? 'S' : 'N');
+      const adj = (x, y, p) => Math.abs(x - p.x) + Math.abs(y - p.y) === 1;
+      // LINKED: a tile beside any OTHER junction would be read as its lane — off limits. Beside an endpoint junction it is
+      // only the lane's own first (A) or last (B) tile.
+      const nearOther = new Set();
+      if (linked) for (const p of doc.props) {
+        if (!isJunction(p) || p.id === A.id || p.id === B.id) continue;
+        for (const [dx, dy] of N4) nearOther.add(beltKey(p.x + dx, p.y + dy));
+      }
       // START set: a beltless junction starts ON its own tile; a machine already ON a line branches from a
       // free 4-neighbor of its tile (an out-lane); anything else starts from a pathable ring tile.
-      const starts = [];
+      let starts = [];
       if (aJ && !aOn) { if (pathable(A.x, A.y)) starts.push({ x: A.x, y: A.y }); }
       else if (aOn) { for (const [dx, dy] of N4) { const x = A.x + dx, y = A.y + dy; if (pathable(x, y)) starts.push({ x, y }); } }
       else for (const t of ring(A)) if (pathable(t.x, t.y)) starts.push(t);
+      if (linked) starts = starts.filter(t => !nearOther.has(beltKey(t.x, t.y)));
       if (!starts.length) return fail('FROM_BLOCKED', aJ ? 'no free tile beside the ' + A.t.toUpperCase() + ' to leave from — clear one of its four sides' : 'no free tile beside the start machine');
       // GOAL set: a beltless junction is entered THROUGH its own tile; a junction already on a line only via a
       // free 4-neighbour (the last tile aims INTO it = an in-lane); for docks, pathable ring tiles — EDGE tiles
@@ -1706,23 +1950,44 @@ const WorldModel = (() => {
         const corner = (t.x < B.x || t.x >= B.x + (B.w || 1)) && (t.y < B.y || t.y >= B.y + (B.h || 1));
         (corner ? goalCorner : goalEdge).add(t.x + ',' + t.y);
       }
+      if (linked) {
+        // the tile work arrives on at a BAY is that bay's alone — never in the start machine's ring (a tile two docks share
+        // belongs to one of them only) — and no arrival tile sits beside another junction
+        const own = B.t === 'bay' && !aJ;
+        for (const set of [goalEdge, goalCorner]) for (const k of [...set]) {
+          const q = k.split(','), x = +q[0], y = +q[1];
+          if ((own && inBox(A, x, y)) || nearOther.has(k)) set.delete(k);
+        }
+      } else if (!aJ && !bJ && B.t === 'bay' && (A.t === 'intake' || A.t === 'bay')) {
+        /* TOO CLOSE (2026-09-27 audit B4, ring-rule floors only): when a job SOURCE sits within a tile of the BAY it
+           feeds, their rings overlap, and a belt tile inside BOTH is read as the source's own mouth AND the bay's
+           hookup at once — so the lane must START outside the destination's ring and END outside the source's; when no
+           such tiles exist the two machines are simply too close, and we say so instead of laying a belt that can never
+           carry work. (BAY→OUTBOX is exempt: a shared tile there is a valid ship-out mouth.) A linked floor has no such
+           rule: its links say which machine each end belongs to. */
+        const ringKeys = p => new Set(ring(p).map(t => t.x + ',' + t.y));
+        const aRing = ringKeys(A), bRing = ringKeys(B);
+        const tooClose = () => fail('TOO_CLOSE', 'these two machines are too close — a belt between them would touch both at once, so the job would never arrive. Move the ' + B.t.toUpperCase() + ' one tile further away, then connect again');
+        for (let i = starts.length - 1; i >= 0; i--) if (bRing.has(starts[i].x + ',' + starts[i].y)) starts.splice(i, 1);
+        if (!starts.length) return tooClose();
+        for (const k of [...goalEdge]) if (aRing.has(k)) goalEdge.delete(k);
+        for (const k of [...goalCorner]) if (aRing.has(k)) goalCorner.delete(k);
+        if (!goalEdge.size && !goalCorner.size) return tooClose();
+      }
       const goals = goalEdge.size ? goalEdge : goalCorner;
       if (!goals.size) return fail('TO_BLOCKED', bJ ? 'no free tile beside the ' + B.t.toUpperCase() + ' to enter it from — clear one of its four sides' : 'no free tile beside the destination');
-      /* A LANE THAT BRUSHES A THIRD MACHINE HOOKS IT (2026-08-22): the compiler treats EVERY belt tile in a
-         machine's 1-tile ring as a hookup, so a shortest path that hugged the reviewer's ring on its way back
-         to the writer made the reviewer its own next stage (CHAIN_CYCLE) — a lane the user never drew. The
-         ring tiles of every machine that is neither endpoint are avoided on the first pass; only when no
-         route exists without them are they allowed (the old behaviour, and still an honest belt). */
+      /* A LANE THAT BRUSHES A THIRD MACHINE HOOKS IT (2026-08-22, ring-rule floors): the compiler treats EVERY belt tile in
+         a machine's 1-tile ring as a hookup, so a shortest path that hugged the reviewer's ring on its way back to the
+         writer made the reviewer its own next stage (CHAIN_CYCLE) — a lane the user never drew. The ring tiles of every
+         machine that is neither endpoint are avoided on the first pass; only when no route exists without them are they
+         allowed. (On a linked floor passing hooks nothing — the skirt is kept for tidy floors.) */
       const foreignRing = new Set();
       for (const p of doc.props) {
         if (!CONNECTABLE[p.t] || p.id === A.id || p.id === B.id) continue;
         for (const t of ring(p)) foreignRing.add(t.x + ',' + t.y);
       }
-      /* …AND SO DOES A LANE THAT ENDS IN ONE (2026-09-23 playtest). The goal tiles used to be exempt from that
-         avoidance, so two BAYS stacked under a splitter got a lane whose last tile sat on the edge of one bay
-         and the CORNER of the other: the compiler hooked it to both and read the two parallel bays as a
-         hand-off chain nobody drew. The first pass now also prefers a goal tile no third machine touches —
-         edge first, then corner — and only when none exists does it fall back to the old goal set. */
+      /* …AND SO DOES A LANE THAT ENDS IN ONE (2026-09-23 playtest). The first pass also prefers a goal tile no third
+         machine touches — edge first, then corner — and only when none exists falls back to the whole goal set. */
       const cleanGoals = new Set([...goalEdge].filter(k => !foreignRing.has(k)));
       if (!cleanGoals.size) for (const k of goalCorner) if (!foreignRing.has(k)) cleanGoals.add(k);
       function bfs(avoid) {
@@ -1734,10 +1999,20 @@ const WorldModel = (() => {
           const t = q[head++];
           const tk = t.x + ',' + t.y;
           if (want.has(tk)) { hit = t; break; }
+          // LINKED: a tile beside a beltless destination junction may only step onto that junction's own tile
+          const preGoal = linked && bJ && !bOn && adj(t.x, t.y, B);
           for (const [dx, dy] of [[1, 0], [0, 1], [-1, 0], [0, -1]]) {
             const x = t.x + dx, y = t.y + dy, k = x + ',' + y;
             if (prev.has(k) || !pathable(x, y)) continue;
             if (avoid && foreignRing.has(k) && !want.has(k)) continue;
+            if (linked) {
+              if (preGoal && !(x === B.x && y === B.y)) continue;
+              if (nearOther.has(k)) continue;
+              // beside the start junction: only the first lane tile (a step straight off a beltless junction's own tile)
+              if (aJ && adj(x, y, A) && !(!aOn && t.x === A.x && t.y === A.y)) continue;
+              // beside the destination junction: only as the arrival (a goal), or the step onto a beltless one's tile
+              if (bJ && adj(x, y, B) && !want.has(k) && bOn) continue;
+            }
             prev.set(k, tk); q.push({ x, y });
           }
           if (q.length > 4096) return { err: fail('NO_PATH', 'no route found (path too long)') };
@@ -1773,7 +2048,12 @@ const WorldModel = (() => {
         for (const k in doc.belts) map[k] = doc.belts[k];
         for (let i = 0; i < path.length; i++) map[path[i].x + ',' + path[i].y] = dirs[i];
         if (bJ) {
-          const entry = path.length > 1 ? path[path.length - 2] : null;   // the tile that feeds the junction
+          // the tile that feeds the junction. A beltless junction is ENTERED through its own tile, so the path ends
+          // ON it and the feeder is the tile before; a junction already on a line is reached at a free 4-neighbour,
+          // so the path's LAST tile is the feeder. Reading path[len-2] there (2026-09-27 audit W1) picked a tile
+          // diagonal to the junction whenever the lane turned on its last step — a correct second in-lane into a
+          // JOINER/MERGER was refused and the split-then-join shape could not be wired with clicks.
+          const entry = bOn ? path[path.length - 1] : (path.length > 1 ? path[path.length - 2] : null);
           const sideIn = entry ? dirTo({ x: B.x, y: B.y }, entry) : null;
           const ins = P._internals.inLanes(map, B.x, B.y);
           if (!map[B.x + ',' + B.y] || (sideIn && ins.indexOf(sideIn) < 0))
@@ -1786,27 +2066,46 @@ const WorldModel = (() => {
             return fail('JUNCTION_NO_OUT', 'that lane would not leave the ' + A.t.toUpperCase() + ' — the belt must run OUT of its tile');
         }
       }
-      snapshot();   // one undo slot for the whole connection
+      return { ok: true, path, dirs, exitTile, aJ, bJ, aOn, bOn };
+    }
+    /* lay a planned lane (no snapshot, no emit — the caller owns both): the belt, a LOOP's done lane, the junction arrows,
+       and on a linked floor the LINK itself. `keep` (a re-laid link: its id and ports) survives a MOVE. Returns the dirty
+       rects. */
+    function layBelt(A, B, r, linked, keep) {
+      const { path, dirs, exitTile, aJ, bJ, aOn, bOn } = r;
+      const dirTo = (a, b) => (b.x > a.x ? 'E' : b.x < a.x ? 'W' : b.y > a.y ? 'S' : 'N');
       const dirty = [];
       for (let i = 0; i < path.length; i++) { doc.belts[beltKey(path[i].x, path[i].y)] = dirs[i]; dirty.push({ x1: path[i].x, y1: path[i].y, x2: path[i].x, y2: path[i].y }); }
       /* a LOOP gate's DONE lane: connecting the gate to an OUTBOX names that lane `done` (unless the
          Commander already chose one). The compiler otherwise defaults to the first exit in E,S,W,N order,
          which on a floor whose back lane happens to sit east would send every spent crate BACK round. */
-      if (A.t === 'loop' && B.t === 'outbox' && !A.done && exitTile) {
+      if (A.t === 'loop' && B.t === 'outbox' && !A.done && exitTile && !keep) {
         A.done = dirTo({ x: A.x, y: A.y }, exitTile);
         dirty.push({ x1: A.x, y1: A.y, x2: A.x, y2: A.y });
       }
       /* a junction tile's own arrow must point at an OUT-lane: a joiner entered from the south while its tile
          still aimed south (the heading of the first lane that reached it) drew an arrow INTO an in-lane. The
          compiler never reads that arrow, but the floor does — re-aim it at the first out-lane. */
+      const P = pipelineModule();
       if (P && P._internals) for (const J of [A, B]) {
         if (!isJunction(J)) continue;
         const jk = beltKey(J.x, J.y), cur = doc.belts[jk]; if (!cur) continue;
         const outs = P._internals.outLanes(doc.belts, J.x, J.y);
         if (outs.length && outs.indexOf(cur) < 0) { doc.belts[jk] = outs[0]; dirty.push({ x1: J.x, y1: J.y, x2: J.x, y2: J.y }); }
       }
-      emit(dirty);
-      return { ok: true, count: path.length, from: A.t, to: B.t };
+      if (linked) {
+        // the LINK: its path is the lane's belt, minus a beltless junction's own tile (that is now the tile it works on)
+        let lp = path.map(t => ({ x: t.x, y: t.y, d: doc.belts[beltKey(t.x, t.y)] }));
+        if (aJ && !aOn) lp = lp.slice(1);
+        if (bJ && !bOn) lp = lp.slice(0, -1);
+        const lane = aJ ? dirTo({ x: A.x, y: A.y }, exitTile || { x: B.x, y: B.y }) : null;
+        const from = (keep && keep.from) ? Object.assign({}, keep.from, { prop: A.id }) : aJ ? junctionPort(A, lane) : { prop: A.id, port: 'out' };
+        const links = Array.isArray(doc.links) ? doc.links.slice() : [];
+        const id = (keep && keep.id && !links.some(l => l.id === keep.id)) ? keep.id : nextLinkId(links);
+        links.push({ id, from, to: { prop: B.id, port: 'in' }, path: lp });
+        doc.links = links;
+      }
+      return dirty;
     }
 
     /* ---------- CONNECTION PREVIEW: what would this placement hook? (2026-09-23 playtest) ----------
@@ -1824,6 +2123,7 @@ const WorldModel = (() => {
        touching it. `ignoreId` is a machine being MOVED: it is left out, and so is every machine it is ALREADY
        lined up with (a nudge along its own lane is not a new connection). Pure: reads the doc, writes nothing. */
     function connectionPreview(cand) {
+      if (Array.isArray(currentLinks())) return linkedPreview(cand);
       const cp = (cand && cand.props) || [], cb = (cand && cand.belts) || [], ignoreId = cand && cand.ignoreId;
       const machines = doc.props.filter(p => CONNECTABLE[p.t] && p.id !== ignoreId);
       const inZone = (p, x, y) => x >= p.x - 1 && x <= p.x + (p.w || 1) && y >= p.y - 1 && y <= p.y + (p.h || 1);
@@ -1872,6 +2172,41 @@ const WorldModel = (() => {
       return doc.props.filter(p => hits.has(p.id)).sort((a, b) => (a.x - b.x) || (a.y - b.y))
         .map(p => ({ propId: p.id, t: p.t, agentId: p.agentId || null, label: p.label || null }));
     }
+    /* WILL IT CONNECT, ON A LINKED FLOOR (conveyor-links phase B): the dry run IS the real edit on a probe copy — place
+       (or move) the candidate there and read which EXISTING machines it ends up linked with. A machine dropped beside a
+       belt joins nothing; one dropped where a loose belt runs into it (or out of it) picks that belt up; a MOVE brings its
+       own links along, so only a loose belt at the new spot is a new connection. Same answer shape as the ring rule's. */
+    function linkedPreview(cand) {
+      const cp = (cand && cand.props) || [], cb = (cand && cand.belts) || [], ignoreId = cand && cand.ignoreId;
+      const probe = makeStation(clone(doc));
+      const pairs = ls => new Set((ls || []).map(l => l.from.prop + '>' + l.to.prop));
+      const before = pairs(probe.links()), mine = new Set();
+      if (ignoreId) {
+        const me = probe.propById(ignoreId), c = cp[0];
+        if (!me || !c || !probe.moveProp(ignoreId, c.x - me.x, c.y - me.y).ok) return [];
+        mine.add(ignoreId);
+      } else for (const c of cp) {
+        if (!CONNECTABLE[c.t]) continue;
+        const r = probe.addProp({ t: c.t, x: c.x, y: c.y, w: c.w, h: c.h, block: c.block });
+        if (r && r.ok) mine.add(r.id);
+      }
+      for (const b of cb) probe.setBelt(b.x, b.y, b.d);
+      const hits = new Set();
+      for (const l of (probe.links() || [])) {
+        if (before.has(l.from.prop + '>' + l.to.prop)) continue;
+        for (const id of [l.from.prop, l.to.prop]) if (id != null && !mine.has(id) && doc.props.some(p => p.id === id)) hits.add(id);
+      }
+      return doc.props.filter(p => hits.has(p.id)).sort((a, b) => (a.x - b.x) || (a.y - b.y))
+        .map(p => ({ propId: p.id, t: p.t, agentId: p.agentId || null, label: p.label || null }));
+    }
+    // the lane a click A -> B would lay, without laying it — { ok, path:[{x,y,d}] } or { ok:false, msg } (REFIT draws it
+    // under the cursor mid-connect, so the Commander sees where the belt will run before the click)
+    function previewBelt(fromId, toId) {
+      const A = doc.props.find(p => p.id === fromId), B = doc.props.find(p => p.id === toId);
+      if (!A || !B || A.id === B.id || !CONNECTABLE[A.t] || !CONNECTABLE[B.t]) return { ok: false, msg: 'pick two different machines' };
+      const r = planBelt(A, B, Array.isArray(currentLinks()));
+      return r.ok ? { ok: true, path: r.path.map((t, i) => ({ x: t.x, y: t.y, d: r.dirs[i] })) } : { ok: false, error: r.error, msg: r.msg };
+    }
     /* the belt tiles a machine is hooked to RIGHT NOW (its footprint + 1-tile ring) — REFIT's move ghost reads it
        to say "its belts stay here" when a drag would leave them behind (belts never ride along with a prop) */
     function hookedBelts(propId) {
@@ -1913,11 +2248,15 @@ const WorldModel = (() => {
       return { ok: true };
     }
     const canPlaceBlueprint = (id, tx, ty) => checkBlueprint(blueprintById(id), tx, ty);
-    function stampBlueprint(id, tx, ty) {
+    /* SET UP BEFORE YOU PLACE (2026-09-28): `opts` = { limits, maxIter } from the shelf card. They ride IN the stamp —
+       the INBOX's budget through the same normalizer setPropLimits uses, the LOOP's pass cap through the same clamp its
+       card uses — inside the ONE snapshot, so one UNDO still removes the whole line. */
+    function stampBlueprint(id, tx, ty, opts) {
       const bp = blueprintById(id);
       const v = checkBlueprint(bp, tx, ty);
       if (!v.ok) return v;
       tx |= 0; ty |= 0;
+      const ov = (opts && typeof opts === 'object') ? opts : {};
       snapshot();   // ONE undo slot for the whole line
       const ids = [], dirty = [];
       for (const s of bp.props) {
@@ -1933,6 +2272,11 @@ const WorldModel = (() => {
           if (nl) prop.limits = { maxHops: nl.maxHops, maxUsdPerMessage: nl.maxUsdPerMessage, maxUsdPerDay: nl.maxUsdPerDay };
         }
         applyJunctionCfg(prop, s);   // the FILTER's routes/def ride in pre-configured
+        if (s.t === 'intake' && ov.limits && typeof ov.limits === 'object') {
+          const nl = normalizeLimits(Object.assign({}, prop.limits || {}, ov.limits));
+          if (nl) prop.limits = { maxHops: nl.maxHops, maxUsdPerMessage: nl.maxUsdPerMessage, maxUsdPerDay: nl.maxUsdPerDay };
+        }
+        if (s.t === 'loop' && ov.maxIter != null) applyJunctionCfg(prop, { maxIter: ov.maxIter });
         doc.props.push(prop);
         ids.push(prop.id);
         dirty.push({ x1: prop.x, y1: prop.y, x2: prop.x + prop.w - 1, y2: prop.y + prop.h - 1 });
@@ -2155,6 +2499,10 @@ const WorldModel = (() => {
       // are never added to blockedTiles (floor machinery; boxes ride above, agents step across).
       const beltsLocal = [];
       for (const k in doc.belts) { const p = k.split(','); beltsLocal.push({ x: +p[0] - ox, y: +p[1] - oy, dir: doc.belts[k] }); }
+      // the floor's LINKS, shifted the same way — the compiler reads hookups and FILTER / LOOP ports from them (absent when
+      // the floor's links could not be adopted: the compiler then keeps the ring rule, exactly as before links existed)
+      const lk = currentLinks();
+      const linksLocal = lk ? lk.map(l => { const o = { id: l.id, from: l.from, to: l.to, path: l.path.map(t => ({ x: t.x - ox, y: t.y - oy, d: t.d })) }; if (l.ring) o.ring = true; return o; }) : null;
       const walkable = (lx, ly, extra) => {
         if (lx < 0 || ly < 0 || lx >= COLS || ly >= ROWS) return false;
         if (zoneGrid[idx(lx, ly)] == null) return false;
@@ -2328,7 +2676,7 @@ const WorldModel = (() => {
       return {
         TILE, COLS, ROWS, W: COLS * TILE, H: ROWS * TILE + HULL_PAD,
         origin: { tx: ox, ty: oy },
-        allRects, zones, ROOM_IDS, isCorridor, chamfers, windows: [], props: propsLocal, belts: beltsLocal,
+        allRects, zones, ROOM_IDS, isCorridor, chamfers, windows: [], props: propsLocal, belts: beltsLocal, ...(linksLocal ? { links: linksLocal } : {}),
         doorDefs, zoneGrid, idx, canStep, baseColorOf, walkable, path, clearFootSegment, footPoint, blockedTiles,
         nameOf: id => (doc.rooms[id] ? doc.rooms[id].name : ''),
         kindOf: id => (doc.rooms[id] ? doc.rooms[id].kind : null),
@@ -2371,12 +2719,36 @@ const WorldModel = (() => {
       return { ok: true, id: propId, door: p.door || 'open' };
     }
     // set/replace a FILTER's routes+def or a MERGER's bufferSize (cfg null/empty clears). Mirrors assignPropAgent.
+    /* JOINER <-> MERGER, in place (2026-09-28 — the splitter's COPY TO EACH / TAKE TURNS switch). On the floor they are the
+       SAME machine — a 1x1 junction on the belt that several lanes run into and one runs out of — and differ only in what
+       they do with a job's parts: a JOINER waits for every branch and sends ONE combined result on (it is what makes the
+       split upstream COPY), a MERGER lets each job go on alone (the split TAKES TURNS). Swapping the type keeps the tile,
+       every belt and the prop id; the JOINER-only wait limit goes with the JOINER. One undo step. */
+    const JOIN_SWAP = { joiner: 'merger', merger: 'joiner' };
+    function swapJoinerMerger(propId) {
+      const p = doc.props.find(q => q.id === propId);
+      if (!p) return fail('NOT_FOUND', 'no such prop');
+      const to = JOIN_SWAP[p.t];
+      if (!to) return fail('BAD_TYPE', 'only a JOINER and a MERGER swap');
+      snapshot();
+      p.t = to;
+      delete p.timeoutMin;
+      emit([propFootprint(p)], { staticBakeUnchanged: true });
+      return { ok: true, id: p.id, t: to };
+    }
     function configureJunction(propId, cfg) {
       const p = doc.props.find(q => q.id === propId);
       if (!p) return fail('NOT_FOUND', 'no such prop');
+      const linkedNow = Array.isArray(currentLinks());
       snapshot();
       delete p.routes; delete p.def; delete p.bufferSize; delete p.timeoutMin; delete p.maxIter; delete p.done; delete p.when;   // replace wholesale
       if (cfg) applyJunctionCfg(p, cfg);
+      // a linked floor: the junction's out-links carry what the new config routes down their lanes (links are what the
+      // compiler reads — a route set in the panel must land on the link it names)
+      if (linkedNow && isJunction(p)) {
+        const lanes = junctionOutLanes(p);
+        if (lanes.length) doc.links = doc.links.map(l => { const o = lanes.find(q => q.link === l); return o ? Object.assign({}, l, { from: junctionPort(p, o.dir) }) : l; });
+      }
       emit([{ x1: p.x, y1: p.y, x2: p.x + (p.w || 1) - 1, y2: p.y + (p.h || 1) - 1 }]);
       return { ok: true, id: propId, routes: p.routes || null, def: p.def || null, bufferSize: p.bufferSize || null, timeoutMin: p.timeoutMin || null, maxIter: p.maxIter || null, done: p.done || null, when: p.when || null };
     }
@@ -2645,7 +3017,7 @@ const WorldModel = (() => {
     }
 
     /* ---------- serialize / subscribe ---------- */
-    const serialize = () => clone(doc);
+    const serialize = () => { currentLinks(); return clone(doc); };
     function onChange(fn) { subs.push(fn); return () => { const i = subs.indexOf(fn); if (i >= 0) subs.splice(i, 1); }; }
 
     return {
@@ -2687,14 +3059,19 @@ const WorldModel = (() => {
       },
       // mutations
       addRoom, placeHallway, removeRoom, moveRoom, setFloor, setMaterial, setDeck, setWalls, setHull, paintTiles, renameRoom,
-      addProp, removeProp, moveProp, rotateProp, faceProp, mirrorProp, assignPropAgent, ensureWorkstation, configureJunction, bindConnector, setDoorState, setPropProject, setPropBrief, setPropHands, setPropLabel, setPropLimits,
-      setBelt, removeBelt, removeBelts, placeBeltRun, connectBelt, connectionPreview, hookedBelts, stampBlueprint, insertBayBetween, transact,
+      addProp, removeProp, moveProp, rotateProp, faceProp, mirrorProp, assignPropAgent, ensureWorkstation, configureJunction, swapJoinerMerger, bindConnector, setDoorState, setPropProject, setPropBrief, setPropHands, setPropLabel, setPropLimits,
+      setBelt, removeBelt, removeBelts, placeBeltRun, connectBelt, connectionPreview, hookedBelts, stampBlueprint, insertBayBetween, canInsertBayBetween, transact,
       // agent-bay binding queries
       propsByType, propsByAgent, pipelineEdges, setPipelineEdges, addPipelineEdge, removePipelineEdge, agentRoomId, bayObjects,
       capForProp: t => CAP_PROP_MAP[t] || null,   // a prop type's capability objectType (single source for the UI)
       undo, redo, canUndo, canRedo, replaceLayout,
       // projection + io
       projectGeometry, serialize, onChange,
+      // the floor's explicit connections (world tiles), or null when not adopted — see LINKS above
+      links: () => { const l = currentLinks(); return l ? clone(l) : null; },
+      // does this floor build by LINKS (every floor this build adopted)? — REFIT retires the ring-rule advice when it does
+      isLinked: () => Array.isArray(currentLinks()),
+      previewBelt,
     };
   }
 
@@ -2703,7 +3080,10 @@ const WorldModel = (() => {
     if (!doc || typeof doc !== 'object') return doc;
     if (!doc.schema) doc.schema = 'starnet.station';
     if (!doc.version) doc.version = 1;
-    // future: while (doc.version < CURRENT && migrations[doc.version]) ...
+    // v1 -> v2: links are added — derived from the belts on the first read after load (makeStation's link cache), which is
+    // the same compile that routes the floor now, and adopted only when they compile to the identical plan
+    if (doc.version < 2) doc.version = 2;
+    if (doc.links != null && !Array.isArray(doc.links)) doc.links = null;
     // make deserialize TOTAL over any partial/legacy/corrupted v1 blob (it's the persistence seam):
     if (!doc.rooms || typeof doc.rooms !== 'object') doc.rooms = {};
     if (!Array.isArray(doc.order)) doc.order = Object.keys(doc.rooms);

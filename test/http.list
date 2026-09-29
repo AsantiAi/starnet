@@ -42,6 +42,7 @@ test/e2e.workspace-lease.test.js
 test/e2e.attachments.test.js
 test/e2e.summon.test.js
 test/e2e.dispatch-session.test.js
+test/station-layout.e2e.test.mjs
 test/e2e.worker-access.test.js
 test/taint-lineage.e2e.test.js
 test/e2e.trigger-fullaccess-taint.test.js
@@ -104,6 +105,7 @@ test/servicekeys.shell.e2e.test.js
 test/skills.gate.http.test.js
 test/skill-exchange.http.test.js
 test/skills.gate.prompt.e2e.test.js
+test/skills.learning.e2e.test.js
 test/roster-track.e2e.test.js
 test/chat-prompt-diet.e2e.test.js
 test/casual-response-safety.e2e.test.js
@@ -127,6 +129,7 @@ test/task-conversation.http.test.js
 test/emergency-recovery.http.test.js
 test/growth-rating-upgrade.e2e.test.js
 test/managed-image.e2e.test.js
+test/transparent-image.e2e.test.js
 test/managed-endpoint.e2e.test.js
 test/tool-projection.e2e.test.js
 test/request-idempotency.e2e.test.js

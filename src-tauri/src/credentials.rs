@@ -109,6 +109,7 @@ pub(crate) fn normalize_provider(provider: &str) -> &'static str {
         "perplexity" | "pplx" | "sonar" => "perplexity",
         "cerebras" => "cerebras",
         "ollama" | "ollama-local" => "ollama",
+        "claude-cli" | "claude-code" | "claude-code-cli" => "claude-cli",
         "custom" | "openai-compatible" | "local" | "vllm" | "lmstudio" => "custom",
         _ => "openrouter",
     }
@@ -508,6 +509,7 @@ mod tests {
             ("moonshot", "kimi"),
             ("pplx", "perplexity"),
             ("ollama-local", "ollama"),
+            ("claude-code", "claude-cli"),
             ("lmstudio", "custom"),
             ("unknown-provider", "openrouter"),
         ];
@@ -650,13 +652,23 @@ mod tests {
             ("matrix", "syt_4"),
             ("telegram:555", "BOT:5"),
         ] {
-            assert_eq!(store.read(channel).as_deref(), Some(token), "{channel} adopted");
+            assert_eq!(
+                store.read(channel).as_deref(),
+                Some(token),
+                "{channel} adopted"
+            );
         }
-        assert!(store.read("signal").is_none(), "signal has no secret to adopt");
+        assert!(
+            store.read("signal").is_none(),
+            "signal has no secret to adopt"
+        );
 
         let after = ws.json();
         for channel in ["telegram", "discord", "slack", "matrix"] {
-            assert!(after[channel].get("token").is_none(), "{channel} plaintext stripped");
+            assert!(
+                after[channel].get("token").is_none(),
+                "{channel} plaintext stripped"
+            );
         }
         assert!(after["telegramBots"]["555"].get("token").is_none());
         // non-secret config survives exactly
@@ -671,16 +683,18 @@ mod tests {
     fn failed_keychain_writes_leave_the_plaintext_file_byte_identical() {
         let ws = TempWorkspace::new("all-fail", &every_channel_secrets());
         let before = ws.raw();
-        let store = FakeStore::failing(&[
-            "telegram",
-            "discord",
-            "slack",
-            "matrix",
-            "telegram:555",
-        ]);
+        let store = FakeStore::failing(&["telegram", "discord", "slack", "matrix", "telegram:555"]);
         migrate_channel_tokens_with(&store, &ws.0);
-        assert_eq!(store.writes.borrow().len(), 5, "every channel was attempted");
-        assert_eq!(ws.raw(), before, "no write proved -> the file is never rewritten");
+        assert_eq!(
+            store.writes.borrow().len(),
+            5,
+            "every channel was attempted"
+        );
+        assert_eq!(
+            ws.raw(),
+            before,
+            "no write proved -> the file is never rewritten"
+        );
     }
 
     #[test]
@@ -689,9 +703,15 @@ mod tests {
         let store = FakeStore::failing(&["slack"]);
         migrate_channel_tokens_with(&store, &ws.0);
         let after = ws.json();
-        assert_eq!(after["slack"]["token"], "xoxb-3 xapp-3", "the last copy of the Slack pair survives");
+        assert_eq!(
+            after["slack"]["token"], "xoxb-3 xapp-3",
+            "the last copy of the Slack pair survives"
+        );
         assert!(store.read("slack").is_none());
-        assert!(after["matrix"].get("token").is_none(), "matrix still migrates");
+        assert!(
+            after["matrix"].get("token").is_none(),
+            "matrix still migrates"
+        );
         assert_eq!(store.read("matrix").as_deref(), Some("syt_4"));
     }
 
@@ -702,7 +722,10 @@ mod tests {
         store.garble.insert("matrix".into());
         migrate_channel_tokens_with(&store, &ws.0);
         let after = ws.json();
-        assert_eq!(after["matrix"]["token"], "syt_4", "mismatched read-back keeps the plaintext");
+        assert_eq!(
+            after["matrix"]["token"], "syt_4",
+            "mismatched read-back keeps the plaintext"
+        );
         assert!(after["slack"].get("token").is_none());
     }
 
@@ -710,16 +733,32 @@ mod tests {
     fn an_existing_keychain_value_is_never_overwritten_by_the_file() {
         let ws = TempWorkspace::new("held", &every_channel_secrets());
         let store = FakeStore::default();
-        store.held.borrow_mut().insert("slack".into(), "xoxb-3 xapp-3".into());
-        store.held.borrow_mut().insert("matrix".into(), "syt_OTHER".into());
+        store
+            .held
+            .borrow_mut()
+            .insert("slack".into(), "xoxb-3 xapp-3".into());
+        store
+            .held
+            .borrow_mut()
+            .insert("matrix".into(), "syt_OTHER".into());
         migrate_channel_tokens_with(&store, &ws.0);
         assert!(
-            !store.writes.borrow().iter().any(|c| c == "slack" || c == "matrix"),
+            !store
+                .writes
+                .borrow()
+                .iter()
+                .any(|c| c == "slack" || c == "matrix"),
             "a held value is never rewritten"
         );
         let after = ws.json();
-        assert!(after["slack"].get("token").is_none(), "same value already held -> strip");
-        assert_eq!(after["matrix"]["token"], "syt_4", "different value held -> plaintext kept");
+        assert!(
+            after["slack"].get("token").is_none(),
+            "same value already held -> strip"
+        );
+        assert_eq!(
+            after["matrix"]["token"], "syt_4",
+            "different value held -> plaintext kept"
+        );
         assert_eq!(store.read("matrix").as_deref(), Some("syt_OTHER"));
     }
 

@@ -145,7 +145,11 @@ mod tests {
     fn busy_or_self_healing_processes_are_left_alone() {
         // Unresponsive may just be a long frame; GPU/utility restart inside WebView2 itself.
         for kind in [2, 3, 4, 5, 6, 7, 8, 9, 42] {
-            assert_eq!(action_for_kind(kind), RecoveryAction::LogOnly, "kind {kind}");
+            assert_eq!(
+                action_for_kind(kind),
+                RecoveryAction::LogOnly,
+                "kind {kind}"
+            );
         }
     }
 
@@ -156,16 +160,36 @@ mod tests {
         assert!(budget.try_spend(t0));
         assert!(budget.try_spend(t0 + Duration::from_secs(1)));
         assert!(budget.try_spend(t0 + Duration::from_secs(2)));
-        assert!(!budget.try_spend(t0 + Duration::from_secs(3)), "4th in window refused");
-        assert!(budget.try_spend(t0 + Duration::from_secs(601)), "oldest aged out");
+        assert!(
+            !budget.try_spend(t0 + Duration::from_secs(3)),
+            "4th in window refused"
+        );
+        assert!(
+            budget.try_spend(t0 + Duration::from_secs(601)),
+            "oldest aged out"
+        );
     }
 
     #[test]
     fn relaunch_during_boot_or_rebuild_never_kills_the_instance() {
-        assert_eq!(second_launch_action(false, false, false), SecondLaunch::Wait, "still booting");
-        assert_eq!(second_launch_action(false, true, true), SecondLaunch::Wait, "rebuilding");
-        assert_eq!(second_launch_action(true, true, false), SecondLaunch::Reveal);
-        assert_eq!(second_launch_action(false, true, false), SecondLaunch::ExitZombie);
+        assert_eq!(
+            second_launch_action(false, false, false),
+            SecondLaunch::Wait,
+            "still booting"
+        );
+        assert_eq!(
+            second_launch_action(false, true, true),
+            SecondLaunch::Wait,
+            "rebuilding"
+        );
+        assert_eq!(
+            second_launch_action(true, true, false),
+            SecondLaunch::Reveal
+        );
+        assert_eq!(
+            second_launch_action(false, true, false),
+            SecondLaunch::ExitZombie
+        );
     }
 
     #[test]

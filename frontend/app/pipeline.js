@@ -61,6 +61,319 @@
   // every feed mouth of an INTAKE source: `tiles` when compiled by this version, `tile` alone when the plan
   // was persisted by an older compile (the sidecar restores plans from disk — never assume the new shape).
   const srcTiles = s => (s.tiles && s.tiles.length) ? s.tiles : (s.tile ? [s.tile] : []);
+  /* ---------- LINKS — explicit connections (the conveyor-links plan, phase A, 2026-09-28) ----------
+     A LINK is one belt from one machine to the next:
+       { id, from: { prop, port }, to: { prop, port }, path: [{ x, y, d }] }
+     `prop` is a belt machine's id (INBOX, BAY, OUTBOX, SPLITTER, JOINER, MERGER, FILTER, LOOP), or null for an open end;
+     `path` is the belt it rides, in flow order. Ports say what a link carries: 'in' and 'out' everywhere, plus the exits
+     that MEAN something — a FILTER out-link carries `tags` (the task types routed down it) and `else: true` for
+     EVERYTHING ELSE, and a LOOP out-link is port 'done', 'back' or 'esc'.
+
+     A geo that carries `links` compiles BY them (compileRoutingPlan): a machine hooks the ring belt tiles of its OWN
+     links — a belt that merely runs past its ring hooks nothing — and a FILTER / LOOP reads its routes and exits from its
+     links' ports, the compass config on the prop standing in only where no port speaks. Junction lanes are still the
+     belts round the junction's tile; one that is not a link of that junction is a JUNCTION_TOUCH warning.
+
+     deriveLinks(geo) writes TODAY'S ring rule down as links, and is exact by construction: the flow walk turns the
+     belts into machine-to-machine links, and any ring belt tile it leaves without a link of that machine gets a one-tile
+     `ring: true` link (the ring rule's accidental hookups, made explicit) — so a floor compiled through its derived links
+     is the very same plan, hash and all (test/conveyor-links.test.js holds the whole routing corpus to it). */
+  const BOX_MACHINE = { intake: 1, bay: 1, outbox: 1 };
+  const JUNCTION_MACHINE = { splitter: 1, filter: 1, merger: 1, joiner: 1, loop: 1 };
+  // every belt tile on a machine's footprint + its 1-tile ring, in scan order (beltTileNear's first hit is [0])
+  function ringBelts(map, p) {
+    const out = [], w = p.w || 1, h = p.h || 1;
+    for (let yy = p.y - 1; yy <= p.y + h; yy++)
+      for (let xx = p.x - 1; xx <= p.x + w; xx++)
+        if (map[key(xx, yy)]) out.push({ x: xx, y: yy });
+    return out;
+  }
+  // the tile a junction works on: its own tile when a belt runs there, else the first ring belt (legacy placement)
+  function junctionAnchor(map, p) { return map[key(p.x, p.y)] ? { x: p.x, y: p.y } : beltTileNear(map, p.x, p.y, p.w || 1, p.h || 1); }
+  // the compass step from tile a to the 4-neighbour b, or null
+  function dirBetween(a, b) {
+    if (!a || !b) return null;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    for (const d of LANE_ORDER) if (DIRV[d][0] === dx && DIRV[d][1] === dy) return d;
+    return null;
+  }
+  // propId -> { tileKey: true } — the tiles each machine's OWN links run over (as either end)
+  function linkTilesByProp(links) {
+    const out = {};
+    for (const l of (links || [])) {
+      if (!l || !Array.isArray(l.path)) continue;
+      for (const pid of [l.from && l.from.prop, l.to && l.to.prop]) {
+        if (pid == null) continue;
+        const m = out[pid] || (out[pid] = {});
+        for (const t of l.path) if (t) m[key(t.x, t.y)] = true;
+      }
+    }
+    return out;
+  }
+  function deriveLinks(geo) {
+    const props = (geo && geo.props) || [];
+    const map = buildBeltMap(geo && geo.belts);
+    const boxAt = {}, isBox = {};                       // tileKey -> [box machine ids…] in props order
+    for (const p of props) {
+      if (!p || !BOX_MACHINE[p.t] || p.id == null) continue;
+      isBox[p.id] = true;
+      for (const t of ringBelts(map, p)) { const k = key(t.x, t.y); (boxAt[k] = boxAt[k] || []).push(p.id); }
+    }
+    const anchorAt = {};                                // tileKey -> the junction working there (the last claim wins, as in the compiler)
+    for (const p of props) {
+      if (!p || !JUNCTION_MACHINE[p.t] || p.id == null) continue;
+      const a = junctionAnchor(map, p); if (a) anchorAt[key(a.x, a.y)] = p;
+    }
+    const tileOf = k => { const s = k.split(','); return { x: +s[0], y: +s[1], d: map[k] }; };
+    const succ = k => { const s = k.split(','), v = DIRV[map[k]]; if (!v) return null; const nk = key(+s[0] + v[0], +s[1] + v[1]); return map[nk] ? nk : null; };
+    const links = [], covered = {}, queued = {}, queue = [];
+    const enqueue = (k, from, onward) => {
+      const q = k + '|' + (from.prop == null ? '' : from.prop) + '|' + from.port + '|' + (from.tags || []).join('+') + '|' + (from.else ? 1 : 0);
+      if (queued[q]) return; queued[q] = true; queue.push([k, from, !!onward]);
+    };
+    const emitLink = (from, to, path) => { for (const t of path) covered[key(t.x, t.y)] = true; links.push({ from, to, path }); };
+    // what a junction's lane `d` carries: a FILTER's routed tags / EVERYTHING ELSE, a LOOP's configured exit
+    const outPort = (jp, d) => {
+      const f = { prop: jp.id, port: 'out' };
+      if (jp.t === 'filter') {
+        const r = (jp.routes && typeof jp.routes === 'object') ? jp.routes : {}, tags = [];
+        for (const tag in r) if (r[tag] === d) tags.push(tag);
+        if (tags.length) f.tags = tags;
+        if (jp.def === d) f.else = true;
+      } else if (jp.t === 'loop') {
+        if (jp.done === d) f.port = 'done'; else if (jp.esc === d) f.port = 'esc';
+      }
+      return f;
+    };
+    /* one link from tile k0: ride the flow to the first machine it reaches. A junction ends it on the tile before the
+       junction's own; a machine's ring ends it at the FIRST ring tile (where the ring rule hands the work over) — unless
+       the belt then runs on inside that ring to a dead end (a belt laid along a bay into its side), which is still the
+       way in. When the flow carries on past, the machine's own output starts from that same tile (the ring rule ships
+       from it), so the belt's next stretch is that machine's link. */
+    function walk(k0, from, onward) {
+      // a belt starting in a machine's ring leaves THAT machine (another ring on the same tile is where it arrives); work
+      // carrying ON from a machine it was handed to leaves every ring of the tile it was handed over on; a junction's
+      // lane leaves no ring at all (it starts on the junction's neighbour, so a ring there is the next machine's)
+      const origin = {};
+      if (onward) { for (const id of (boxAt[k0] || [])) origin[id] = true; }
+      else if (from.prop != null && isBox[from.prop]) origin[from.prop] = true;
+      const path = [], seen = {};
+      let k = k0;
+      while (k && !seen[k]) {
+        if (anchorAt[k]) { emitLink(from, { prop: anchorAt[k].id, port: 'in' }, path); return; }
+        seen[k] = true; path.push(tileOf(k));
+        const entered = (boxAt[k] || []).filter(id => !origin[id]);
+        if (entered.length) {
+          const dest = entered[0], ext = [], seen2 = {};
+          let j = succ(k), sealed = true;
+          while (j) {
+            const bj = boxAt[j] || [];
+            if (anchorAt[j] || seen[j] || seen2[j] || bj.indexOf(dest) < 0 || bj.some(id => id !== dest && !origin[id])) { sealed = false; break; }
+            seen2[j] = true; ext.push(j); j = succ(j);
+          }
+          if (sealed) { for (const e of ext) path.push(tileOf(e)); emitLink(from, { prop: dest, port: 'in' }, path); return; }
+          emitLink(from, { prop: dest, port: 'in' }, path);
+          enqueue(k, { prop: dest, port: 'out' }, true);
+          return;
+        }
+        k = succ(k);
+      }
+      emitLink(from, { prop: null, port: 'in' }, path);   // an open end (or a belt loop closing on itself)
+    }
+    const drain = () => { while (queue.length) { const [k, from, onward] = queue.shift(); walk(k, from, onward); } };
+    // 1. every junction lane, in props order (a lane straight into the next junction is a link with no belt)
+    const hasPred = {};
+    for (const p of props) {
+      if (!p || !JUNCTION_MACHINE[p.t] || p.id == null) continue;
+      const a = junctionAnchor(map, p); if (!a || anchorAt[key(a.x, a.y)] !== p) continue;
+      for (const d of outLanes(map, a.x, a.y)) {
+        const v = DIRV[d], nk = key(a.x + v[0], a.y + v[1]);
+        hasPred[nk] = true;
+        if (anchorAt[nk]) { links.push({ from: outPort(p, d), to: { prop: anchorAt[nk].id, port: 'in' }, path: [] }); continue; }
+        enqueue(nk, outPort(p, d));
+      }
+    }
+    // 2. every belt that starts somewhere — out of the machine whose ring it starts in, or out of nowhere
+    for (const k in map) { if (anchorAt[k]) continue; const n = succ(k); if (n) hasPred[n] = true; }
+    for (const k in map) {
+      if (anchorAt[k] || hasPred[k]) continue;
+      const bx = boxAt[k];
+      enqueue(k, { prop: bx ? bx[0] : null, port: 'out' });
+    }
+    drain();
+    // 3. belt loops nothing feeds (the compiler calls them a CYCLE): walked from their first tile so no belt is left out
+    for (const k in map) { if (anchorAt[k] || covered[k]) continue; const bx = boxAt[k]; enqueue(k, { prop: bx ? bx[0] : null, port: 'out' }); drain(); }
+    // 4. EXACTNESS: every ring belt tile the ring rule would hook lies on a link of that machine. A junction standing IN a
+    //    machine's ring is wired straight to it (a SPLITTER on the belt tile beside an INBOX): a one-tile link, the way the
+    //    junction's own belt points. Anything else the walk left is a `ring` link — the ring rule's accidental hookup
+    //    (two machines sharing a ring tile, a belt stub off a bay's side), written down so a derived floor stays exact.
+    const own = linkTilesByProp(links);
+    for (const p of props) {
+      if (!p || p.id == null || !(BOX_MACHINE[p.t] || JUNCTION_MACHINE[p.t])) continue;
+      const a = JUNCTION_MACHINE[p.t] ? junctionAnchor(map, p) : null;
+      const m = own[p.id] || {};
+      for (const t of ringBelts(map, p)) {
+        const k = key(t.x, t.y);
+        if (m[k] || (a && a.x === t.x && a.y === t.y)) continue;
+        const jp = BOX_MACHINE[p.t] ? anchorAt[k] : null;
+        if (jp) {
+          const v = DIRV[map[k]], nx = v ? t.x + v[0] : NaN, ny = v ? t.y + v[1] : NaN;
+          const into = nx >= p.x && nx < p.x + (p.w || 1) && ny >= p.y && ny < p.y + (p.h || 1);
+          links.push(into ? { from: { prop: jp.id, port: 'out' }, to: { prop: p.id, port: 'in' }, path: [tileOf(k)] }
+                          : { from: { prop: p.id, port: 'out' }, to: { prop: jp.id, port: 'in' }, path: [tileOf(k)] });
+          continue;
+        }
+        links.push({ from: { prop: null, port: 'out' }, to: { prop: p.id, port: 'in' }, path: [tileOf(k)], ring: true });
+      }
+    }
+    links.forEach((l, i) => { l.id = 'l' + (i + 1); });
+    return links.map(l => { const o = { id: l.id, from: l.from, to: l.to, path: l.path }; if (l.ring) o.ring = true; return o; });
+  }
+
+  /* LOOSE BELTS ROUTE NOTHING (a linked floor, phase B): the belts a plan routes on are its links' paths plus the tile
+     each junction works on. A hand-laid belt that joins no two machines stays on the floor, but no crate rides it and no
+     junction reads it as a lane. A derived floor's links cover every belt, so its plan is exactly the ring rule's.
+     Key order follows the full map, so a covered floor keeps its plan.hash. */
+  function linkedBeltMap(full, props, links) {
+    const keep = {};
+    for (const l of (links || [])) if (l && Array.isArray(l.path)) for (const t of l.path) if (t) keep[key(t.x, t.y)] = true;
+    for (const p of (props || [])) if (p && JUNCTION_MACHINE[p.t]) { const a = junctionAnchor(full, p); if (a) keep[key(a.x, a.y)] = true; }
+    const out = {};
+    for (const k in full) if (keep[k]) out[k] = full[k];
+    return out;
+  }
+
+  /* reconcileLinks(geo) -> { links, dropped: [id…], added: [id…] } — a floor's links after an edit (phase B: links are
+     what the Commander builds; the belts are drawn from them).
+       KEEP every link the floor still stands behind — its belt is laid, tile for tile and arrow for arrow, and it meets
+         its machines: a machine's end in that machine's ring, a junction's end beside the tile the junction works on.
+       DROP the rest: a cut or turned belt, a moved or removed machine. Its belt stays on the floor, loose.
+       LINK every loose run that joins two machines: out of one (its footprint behind the first tile, a junction's lane,
+       or its ring) and INTO another (the next tile is its footprint or a junction's tile) — or onto a linked belt, which
+       carries it on to that link's machine (the run takes the rest of that belt as its own path). A run that joins no
+       two machines stays loose. Nothing is hooked by passing it.
+     Accepts every link deriveLinks writes (so a derived floor reconciles to itself), and every link it writes itself —
+     reconcile(reconcile(g)) is reconcile(g). Pure and deterministic; a kept link keeps its id, and a run starting where a
+     dropped link started, out of the same machine, inherits that link's id and ports. */
+  function reconcileLinks(geo) {
+    const props = (geo && geo.props) || [], prev = Array.isArray(geo && geo.links) ? geo.links : [];
+    const map = buildBeltMap(geo && geo.belts);
+    const byId = {};
+    for (const p of props) if (p && p.id != null && (BOX_MACHINE[p.t] || JUNCTION_MACHINE[p.t])) byId[p.id] = p;
+    const anchorAt = {}, anchorOf = {};
+    for (const p of props) { if (!p || !JUNCTION_MACHINE[p.t] || p.id == null) continue; const a = junctionAnchor(map, p); if (a) anchorAt[key(a.x, a.y)] = p; }
+    for (const k in anchorAt) { const s = k.split(','); anchorOf[anchorAt[k].id] = { x: +s[0], y: +s[1] }; }
+    const inBox = (p, t) => t.x >= p.x - 1 && t.x <= p.x + (p.w || 1) && t.y >= p.y - 1 && t.y <= p.y + (p.h || 1);
+    const inFoot = (p, x, y) => x >= p.x && x < p.x + (p.w || 1) && y >= p.y && y < p.y + (p.h || 1);
+    const same = (a, b) => a && b && a.x === b.x && a.y === b.y;
+    // does link end `pid` meet tile t (null = open end)? a junction end also accepts its own tile on a one-tile link to a
+    // machine whose ring holds that tile, and (a `ring` link) any tile of its 3x3
+    function meets(pid, t, other, l) {
+      if (pid == null) return true;
+      const p = byId[pid]; if (!p) return false;
+      if (BOX_MACHINE[p.t]) return !!t && inBox(p, t);
+      if (l.ring === true) return !!t && inBox(p, t);   // the ring rule's hookup, written down: any tile of its 3x3
+      const a = anchorOf[pid]; if (!a) return false;
+      if (!t) { const o = other != null && anchorOf[other]; return !!o && !!dirBetween(a, o); }
+      if (same(a, t)) return l.path.length === 1 && other != null && byId[other] && BOX_MACHINE[byId[other].t] && inBox(byId[other], t);
+      return !!dirBetween(a, t);
+    }
+    function valid(l) {
+      if (!l || typeof l !== 'object' || !Array.isArray(l.path) || !l.from || !l.to) return false;
+      const fp = l.from.prop == null ? null : l.from.prop, tp = l.to.prop == null ? null : l.to.prop;
+      if ((fp != null && !byId[fp]) || (tp != null && !byId[tp])) return false;
+      const path = l.path;
+      for (let i = 0; i < path.length; i++) {
+        const t = path[i];
+        if (!t || map[key(t.x, t.y)] !== t.d) return false;
+        if (anchorAt[key(t.x, t.y)] && l.ring !== true && !(path.length === 1 && (anchorAt[key(t.x, t.y)].id === fp || anchorAt[key(t.x, t.y)].id === tp))) return false;
+        if (i > 0) { const v = DIRV[path[i - 1].d]; if (!v || path[i - 1].x + v[0] !== t.x || path[i - 1].y + v[1] !== t.y) return false; }
+      }
+      if (!path.length && (fp == null || tp == null)) return false;
+      return meets(fp, path[0] || null, tp, l) && meets(tp, path[path.length - 1] || null, fp, l);
+    }
+    const kept = [], dropped = [];
+    for (const l of prev) (valid(l) ? kept : dropped).push(l);
+    // the loose belt: on no kept link, not a junction's own tile
+    const covered = {}, onLink = {};
+    for (const l of kept) for (const t of l.path) { const k = key(t.x, t.y); covered[k] = true; (onLink[k] = onLink[k] || []).push(l); }
+    const loose = k => !!map[k] && !covered[k] && !anchorAt[k];
+    const succ = k => { const s = k.split(','), v = DIRV[map[k]]; if (!v) return null; const nk = key(+s[0] + v[0], +s[1] + v[1]); return map[nk] ? nk : null; };
+    const tileOf = k => { const s = k.split(','); return { x: +s[0], y: +s[1], d: map[k] }; };
+    const hasLoosePred = {};
+    for (const k in map) if (loose(k)) { const n = succ(k); if (n && loose(n)) hasLoosePred[n] = true; }
+    const outPort = (jp, d) => {
+      const f = { prop: jp.id, port: 'out' };
+      if (jp.t === 'filter') {
+        const r = (jp.routes && typeof jp.routes === 'object') ? jp.routes : {}, tags = [];
+        for (const tag in r) if (r[tag] === d) tags.push(tag);
+        if (tags.length) f.tags = tags;
+        if (jp.def === d) f.else = true;
+      } else if (jp.t === 'loop') { if (jp.done === d) f.port = 'done'; else if (jp.esc === d) f.port = 'esc'; }
+      return f;
+    };
+    // where does a run starting at s come OUT of? the machine behind its first arrow, a junction it is a lane of, a ring it starts in
+    function fromOf(s) {
+      const t = tileOf(s), v = DIRV[t.d];
+      if (v) for (const p of props) if (p && byId[p.id] && BOX_MACHINE[p.t] && inFoot(p, t.x - v[0], t.y - v[1])) return { prop: p.id, port: 'out' };
+      for (const p of props) {
+        if (!p || !byId[p.id] || !JUNCTION_MACHINE[p.t] || !anchorOf[p.id]) continue;
+        const d = dirBetween(anchorOf[p.id], t);
+        if (d && t.d !== OPP[d]) return outPort(p, d);
+      }
+      let ring = null;
+      for (const p of props) {
+        if (!p || !byId[p.id] || !BOX_MACHINE[p.t] || !inBox(p, t) || inFoot(p, t.x, t.y)) continue;
+        const side = LANE_ORDER.some(d => inFoot(p, t.x + DIRV[d][0], t.y + DIRV[d][1]));
+        if (side) return { prop: p.id, port: 'out' };
+        if (!ring) ring = { prop: p.id, port: 'out' };
+      }
+      return ring;
+    }
+    const byStart = {};   // "tileKey|fromProp" -> a dropped link that started there (its id and ports carry over)
+    for (const l of dropped) if (l && Array.isArray(l.path) && l.path[0] && l.from) byStart[key(l.path[0].x, l.path[0].y) + '|' + l.from.prop] = l;
+    let maxId = 0;
+    for (const l of prev) { const m = l && /^l(\d+)$/.exec(String(l.id)); if (m) maxId = Math.max(maxId, +m[1]); }
+    const added = [], out = kept.slice();
+    for (const s in map) {
+      if (!loose(s) || hasLoosePred[s]) continue;
+      const from = fromOf(s); if (!from) continue;
+      const path = [], seen = {}; let k = s, to = null;
+      while (k && !seen[k]) {
+        seen[k] = true; path.push(tileOf(k));
+        const n = succ(k);
+        if (!n) {   // the arrow runs off the belt: INTO a machine's footprint — or, failing that, the belt ends in a ring
+          const t = tileOf(k), v = DIRV[t.d];
+          if (v) for (const p of props) if (p && byId[p.id] && BOX_MACHINE[p.t] && inFoot(p, t.x + v[0], t.y + v[1])) { to = p.id; break; }
+          if (to == null) {   // a belt laid up to a machine's side (or corner) and stopped there goes to that machine
+            let side = null, corner = null;
+            for (const p of props) {
+              if (!p || !byId[p.id] || !BOX_MACHINE[p.t] || p.id === from.prop || !inBox(p, t) || inFoot(p, t.x, t.y)) continue;
+              if (LANE_ORDER.some(d => inFoot(p, t.x + DIRV[d][0], t.y + DIRV[d][1]))) { if (!side) side = p.id; }
+              else if (!corner) corner = p.id;
+            }
+            to = side || corner;
+          }
+          break;
+        }
+        if (anchorAt[n]) { to = anchorAt[n].id; break; }
+        if (covered[n]) {   // onto a linked belt: that belt carries it on to its machine
+          const via = onLink[n][0], i = via.path.findIndex(q => key(q.x, q.y) === n);
+          if (via.to && via.to.prop != null) { to = via.to.prop; for (let j = i; j < via.path.length; j++) path.push(Object.assign({}, via.path[j])); }
+          break;
+        }
+        if (!loose(n)) break;
+        k = n;
+      }
+      if (to == null || to === from.prop) continue;
+      const was = byStart[s + '|' + from.prop];
+      const id = was && !out.some(l => l.id === was.id) ? was.id : 'l' + (++maxId);
+      const l = { id, from: was ? Object.assign({}, was.from) : from, to: { prop: to, port: 'in' }, path };
+      out.push(l); added.push(id);
+    }
+    return { links: out, dropped: dropped.filter(l => l && !added.includes(l.id)).map(l => l && l.id), added };
+  }
+
   // small deterministic FNV-1a hash of the plan topology (frontend<->sidecar agree they hold the same plan)
   function hashStr(s) { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h * 0x01000193) >>> 0; } return ('0000000' + h.toString(16)).slice(-8); }
   /* LINE BUDGET (per-line limits, 2026-08-21). A line's INBOX prop may carry `limits` — the Commander's
@@ -95,6 +408,40 @@
     return out;
   }
 
+
+  /* rejoinOf(plan, splitKey) -> { lanes: [{ dir, at: junctionKey|null, kind: 'join'|'merge'|null }] } — where each branch of
+     a SPLIT comes back together. Every lane out of the split is walked the way work goes (in at a dock's hookup, out at its
+     ship tile — the FAN-OUT walk in compileRoutingPlan) to the FIRST join or merge junction on it. The splitter's COPY TO
+     EACH / TAKE TURNS switch (2026-09-28) swaps exactly that junction: a JOINER there is what makes the split copy, a
+     MERGER lets each job go on alone. Pure; a plan whose docks are uncrewed walks no further than them (callers that
+     want the "once crewed" answer pass a stand-in-crew compile, as REFIT's WOULD-voices do). */
+  function rejoinOf(plan, splitKey) {
+    const jc = plan && plan.junctions && plan.junctions[splitKey];
+    if (!jc || jc.kind !== 'split' || !plan.belts) return { lanes: [] };
+    const map = plan.belts, junctions = plan.junctions, dockAt = plan.bayTileToDock || {}, chains = plan.dockChains || {};
+    const p0 = String(splitKey).split(','), sx = +p0[0], sy = +p0[1];
+    const lanes = [];
+    for (const d of outLanes(map, sx, sy)) {
+      const v = DIRV[d], start = { x: sx + v[0], y: sy + v[1] }, sk = key(start.x, start.y);
+      const seen = { [splitKey]: true, [sk]: true }, q = [start];
+      let at = null, kind = null;
+      const j0 = junctions[sk];
+      if (j0 && (j0.kind === 'join' || j0.kind === 'merge')) { at = sk; kind = j0.kind; }
+      while (q.length && !at) {
+        const t = q.shift(), owner = dockAt[key(t.x, t.y)];
+        const ship = owner && chains[owner] && chains[owner].tile;
+        const nts = (ship && !(ship.x === t.x && ship.y === t.y)) ? [ship] : nextTiles(map, junctions, t);
+        for (const nt of nts) {
+          const nk = key(nt.x, nt.y); if (seen[nk]) continue; seen[nk] = true;
+          const j = junctions[nk];
+          if (j && (j.kind === 'join' || j.kind === 'merge')) { at = nk; kind = j.kind; break; }
+          q.push(nt);
+        }
+      }
+      lanes.push({ dir: d, at, kind });
+    }
+    return { lanes };
+  }
 
   // the tile(s) a box flows to next from t (a junction fans out to ALL its out-lanes for reachability/cycle)
   function nextTiles(map, junctions, t) {
@@ -135,17 +482,40 @@
 
   function compileRoutingPlan(geo) {
     const props = (geo && geo.props) || [];
-    const map = buildBeltMap(geo && geo.belts);
+    const links = Array.isArray(geo && geo.links) ? geo.links : null;
+    const map = links ? linkedBeltMap(buildBeltMap(geo && geo.belts), props, links) : buildBeltMap(geo && geo.belts);
     const errors = [], sources = [], bays = [], junctions = {}, bayTileToAgent = {}, escExplicit = {};
     /* THE DOCK KEY (multi-bay agents, 2026-09-22 — Andrew's ruling: one bay has ONE agent, one agent may crew
        MANY bays). A dock is its bay PROP id: stable in the station doc, already on bays[]/dockBays[]. Every
        routing walk below keys on the dock that owns a tile (bayTileToDock), never on the agent crewing it —
        writer@A → editor@B → writer@C is three docks and two agents. The agent-keyed maps stay as VIEWS. */
     const bayTileToDock = {}, agentOfDock = {};
+    /* A LINKED floor (geo.links — see LINKS above): a machine hooks only the ring belts its OWN links run over, so a belt
+       that merely passes a ring hooks nothing; a FILTER / LOOP reads its routes and exits from its links' ports, the
+       compass config on the prop standing in where no port speaks. A geo without links keeps the ring rule. */
+    const own = links ? linkTilesByProp(links) : null;
+    const hooks = p => { const ts = ringBelts(map, p); if (!own) return ts; const m = own[p.id]; return m ? ts.filter(t => m[key(t.x, t.y)]) : []; };
+    const jAnchor = {}, jOut = {}, jIn = {}, junctionProp = {};
+    if (links) {
+      for (const p of props) if (p && JUNCTION_MACHINE[p.t] && p.id != null) { const a = junctionAnchor(map, p); if (a) jAnchor[p.id] = a; }
+      for (const l of links) {
+        if (!l) continue;
+        const fp = l.from && l.from.prop, tp = l.to && l.to.prop, path = Array.isArray(l.path) ? l.path : [];
+        // a junction's lane is the step from its tile to the link's first belt (or, belt-less, to the next junction)
+        if (fp != null && jAnchor[fp]) {
+          const d = dirBetween(jAnchor[fp], path.length ? path[0] : (tp != null ? jAnchor[tp] : null));
+          if (d) (jOut[fp] = jOut[fp] || []).push({ dir: d, port: l.from.port, tags: l.from.tags, else: l.from.else });
+        }
+        if (tp != null && jAnchor[tp]) {
+          const d = dirBetween(jAnchor[tp], path.length ? path[path.length - 1] : (fp != null ? jAnchor[fp] : null));
+          if (d) (jIn[tp] = jIn[tp] || {})[d] = true;
+        }
+      }
+    }
 
     for (const p of props) {
       if (p.t === 'intake') {
-        const t = beltTileNear(map, p.x, p.y, p.w || 1, p.h || 1);
+        const hooked = hooks(p), t = hooked.length ? { x: hooked[0].x, y: hooked[0].y } : null;
         // WARN, never a blocker (2026-07-26): an intake with no belt contributes no source, so it can neither
         // loop nor route work into a void — the two things `ok()` exists to prevent. Blocking on it meant ONE
         // decorative INTAKE anywhere on the floor made the whole plan non-deployable, which the sidecar
@@ -156,17 +526,17 @@
         // already follow): a single recorded tile left an intake's SECOND lane dark and unroutable whenever
         // the reaching lane started on a later-scanned ring tile. `tile` stays = first hit (back compat:
         // persisted plans and older callers read it); every walker fans out from `tiles`.
-        const iw = p.w || 1, ih = p.h || 1, tiles = [];
-        for (let yy = p.y - 1; yy <= p.y + ih; yy++)
-          for (let xx = p.x - 1; xx <= p.x + iw; xx++)
-            if (map[key(xx, yy)]) tiles.push({ x: xx, y: yy });
-        sources.push({ propId: p.id, tile: t, tiles });
+        sources.push({ propId: p.id, tile: t, tiles: hooked });
       } else if (p.t === 'splitter' || p.t === 'filter' || p.t === 'merger' || p.t === 'joiner' || p.t === 'loop') {
         const t = map[key(p.x, p.y)] ? { x: p.x, y: p.y } : beltTileNear(map, p.x, p.y, p.w || 1, p.h || 1);
         // a junction touching NO belt routes nothing — it silently compiled to nothing, which after a MOVE
         // one tile too far read as "my filter stopped working" with zero feedback. Warn (not a blocker: an
         // unattached junction can neither loop nor void work) so REFIT can nag it back onto the line.
         if (!t) { errors.push({ code: 'ORPHAN_JUNCTION', propId: p.id, warn: true }); continue; }
+        junctionProp[key(t.x, t.y)] = p.id;
+        // a linked floor names its FILTER routes / LOOP exits on the links themselves: lane(port) = the dir that port leaves on
+        const outs = links ? (jOut[p.id] || []) : [];
+        const lane = port => { const o = outs.find(q => q.port === port); return o ? o.dir : null; };
         const kind = p.t === 'splitter' ? 'split' : p.t === 'merger' ? 'merge' : p.t === 'joiner' ? 'join' : p.t === 'loop' ? 'loop' : 'filter';
         const cfg = { kind };
         /* JOINER (2026-08-21) — the real fan-in BARRIER the merger never was: it holds one crate per in-lane
@@ -184,22 +554,39 @@
         if (kind === 'loop') {
           const mx = +p.maxIter;
           cfg.max = (isFinite(mx) && mx >= 1) ? Math.min(LOOP_MAX_CEILING, Math.floor(mx)) : LOOP_MAX_DEFAULT;
-          const ll = loopLanes(map, t.x, t.y, { done: p.done || null, esc: p.esc || null });
+          // the exits the Commander named: a linked floor's 'done' / 'esc' / 'back' ports, else the prop's compass config
+          let cDone = lane('done') || p.done || null, cEsc = lane('esc') || p.esc || null;
+          const cBack = lane('back');
+          if (cBack && !lane('esc')) {   // a named BACK with no named escape: the escape is the one exit left (back is inferred as the first non-done lane)
+            const rest = outLanes(map, t.x, t.y).filter(d => d !== cDone && d !== cBack);
+            if (rest.length === 1) cEsc = rest[0];
+          }
+          const ll = loopLanes(map, t.x, t.y, { done: cDone, esc: cEsc });
           cfg.done = ll.done; cfg.back = ll.back;
           if (ll.esc) cfg.esc = ll.esc;   // the ESCALATION lane (2026-08-30): exhausted crates leave here
-          if (p.esc && ll.esc === p.esc) escExplicit[key(t.x, t.y)] = true;   // configured: never re-guessed
+          if (cEsc && ll.esc === cEsc) escExplicit[key(t.x, t.y)] = true;   // configured: never re-guessed
           // optional verdict tag: re-enter ONLY when the output's tag matches (else every pass loops until max)
           if (typeof p.when === 'string' && /^[A-Za-z0-9_.:-]{1,40}$/.test(p.when)) cfg.when = p.when;
           // LOOP_NO_DONE (rule fixed 2026-08-22): an UNSET `done` takes the compiler's own default — the first
           // exit in E,S,W,N order — and that is a working gate, not a finding (every user-drawn loop used to
           // nag). Warn only when NO exit qualifies, or when a configured `done` names a lane that is not an
           // exit (the config was silently overridden by the default).
-          if (!ll.done || (p.done && p.done !== ll.done)) errors.push({ code: 'LOOP_NO_DONE', propId: p.id, warn: true });
+          if (!ll.done || (cDone && cDone !== ll.done)) errors.push({ code: 'LOOP_NO_DONE', propId: p.id, warn: true });
           if (!ll.back) errors.push({ code: 'LOOP_NO_BACK', propId: p.id, warn: true });
         }
         if (kind === 'filter') {
           cfg.routes = (p.routes && typeof p.routes === 'object') ? p.routes : {};   // {tag -> out-lane dir}
           cfg.def = p.def || null;                                                    // default out-lane dir
+          // a linked floor: each out-link's tags route down it and its EVERYTHING ELSE is the default (first claim wins);
+          // a tag no link names keeps the prop's compass route
+          if (outs.some(o => (Array.isArray(o.tags) && o.tags.length) || o.else)) {
+            const routes = Object.assign({}, cfg.routes), claimed = {}; let defNamed = false;
+            for (const o of outs) {
+              for (const tag of (Array.isArray(o.tags) ? o.tags : [])) { const tk = String(tag); if (!claimed[tk]) { claimed[tk] = true; routes[tk] = o.dir; } }
+              if (o.else && !defNamed) { defNamed = true; cfg.def = o.dir; }
+            }
+            cfg.routes = routes;
+          }
           // WARN, never a blocker (2026-08-04 audit): a def-less filter never drops or loops work — the
           // engine and resolveTarget share the same fallback (routed lane -> def -> FIRST lane), so every
           // crate still lands somewhere deterministic. That fails the bar a blocking error must meet
@@ -216,6 +603,18 @@
         junctions[key(t.x, t.y)] = cfg;
       }
     }
+    /* JUNCTION_TOUCH (a linked floor): a junction works the belts round its tile, so a belt beside it that is NOT one of
+       its links would still be read as a lane — say so where it touches (advice, never a blocker; a derived floor never
+       has one, and the link tools keep a junction's neighbours to its own links). A neighbouring junction is its lane. */
+    if (links) for (const jk in junctionProp) {
+      const pid = junctionProp[jk], p0 = jk.split(','), jx = +p0[0], jy = +p0[1], mine = {};
+      for (const o of (jOut[pid] || [])) mine[o.dir] = true;
+      for (const d in (jIn[pid] || {})) mine[d] = true;
+      for (const d of LANE_ORDER) {
+        const v = DIRV[d], nk = key(jx + v[0], jy + v[1]);
+        if (map[nk] && !mine[d] && !junctions[nk]) errors.push({ code: 'JUNCTION_TOUCH', propId: pid, tile: { x: jx + v[0], y: jy + v[1] }, warn: true });
+      }
+    }
 
     // OUTBOX hookups: the legal END of an outbound lane (bay/desk -> outbox). Legibility-only — dispatch
     // never routes THROUGH an outbox — but recording them lets a bay->outbox line count as a VALID build
@@ -225,10 +624,7 @@
       if (p.t !== 'outbox') continue;
       // EVERY ring belt tile is a delivery mouth (same multi-hookup rule as bays — a single-tile hookup
       // left the final approach tile of a second lane dark)
-      const ow = p.w || 1, oh = p.h || 1;
-      for (let yy = p.y - 1; yy <= p.y + oh; yy++)
-        for (let xx = p.x - 1; xx <= p.x + ow; xx++)
-          if (map[key(xx, yy)]) outs.push({ propId: p.id, tile: { x: xx, y: yy } });
+      for (const t of hooks(p)) outs.push({ propId: p.id, tile: t });
     }
 
     /* A SOLID PROP BURIES THE LINE (2026-08-04 legibility audit): a blocking prop placed over a belt run
@@ -257,15 +653,12 @@
         errors.push({ code: 'UNBOUND_BAY', propId: p.id, warn: true });
         // an unbound bay is not a routing target, but the legibility layer (hover tags, nags) needs to know
         // a belt runs past it — record its connection tile additively (never enters bayTileToAgent/hash).
-        const ut = beltTileNear(map, p.x, p.y, p.w || 1, p.h || 1);
+        const uh = hooks(p), ut = uh.length ? { x: uh[0].x, y: uh[0].y } : null;
         if (ut) unboundBays.push({ propId: p.id, tile: ut });
         // …and EVERY ring tile of it, for the walkers that ask "does this lane reach a dock at all?"
         // (the LOOP gate's back lane). A wired lane that lands on an UNCREWED dock is not a wiring
         // fault — UNBOUND_BAY already names it — so LOOP_NO_BACK must not fire a second nag for it.
-        { const uw = p.w || 1, uh = p.h || 1;
-          for (let yy = p.y - 1; yy <= p.y + uh; yy++)
-            for (let xx = p.x - 1; xx <= p.x + uw; xx++)
-              if (map[key(xx, yy)]) unboundBayTile[key(xx, yy)] = p.id; }
+        for (const t of uh) unboundBayTile[key(t.x, t.y)] = p.id;
         continue;
       }
       // EVERY bound bay is a working dock (legibility list; NOT the dispatch `bays` — router semantics untouched).
@@ -285,7 +678,7 @@
       const dockRec = { propId: p.id, agentId: p.agentId, x: p.x, y: p.y, w: p.w || 1, h: p.h || 1 };
       if (brief) dockRec.brief = brief;
       dockBays.push(dockRec);
-      const t = beltTileNear(map, p.x, p.y, p.w || 1, p.h || 1);
+      const tiles = hooks(p), t = tiles.length ? { x: tiles[0].x, y: tiles[0].y } : null;
       if (!t) {
         // beltless bound bay: valid alone; merely "not on the line" (warn) when an intake line exists elsewhere
         if (hasLine) errors.push({ code: 'ORPHAN_BAY', propId: p.id, agentId: p.agentId, warn: true });
@@ -298,11 +691,7 @@
       // A DOCK TOUCHES THE LINE WHEREVER THE LINE TOUCHES IT: record EVERY ring belt tile as a hookup —
       // an inbound lane arrives at one, an outbound lane leaves from another, and both must count (a
       // single-tile hookup left a bay's out-lane dark and spawned its product crates on the in-lane).
-      const tiles = [];
-      const bw = p.w || 1, bh = p.h || 1;
-      for (let yy = p.y - 1; yy <= p.y + bh; yy++)
-        for (let xx = p.x - 1; xx <= p.x + bw; xx++)
-          if (map[key(xx, yy)]) tiles.push({ x: xx, y: yy });
+      // On a LINKED floor that is every ring tile its own links run over (hooks) — a passing belt is not its line.
       // NO BRIEF ON THE DISPATCH RECORD. `bays` is a HASH INPUT, and prompt text is not dispatch topology:
       // carrying the brief here made typing one word into a step editor move plan.hash, which re-posts the
       // plan, which resets the router's splitter round-robin balance — an edit to what an agent is TOLD
@@ -403,6 +792,8 @@
     }
     const plan = { sources, bays, junctions, belts: map, bayTileToAgent, unboundBays, dockBays, outs, reach, errors };
     plan.bayTileToDock = bayTileToDock;
+    plan.unboundBayTile = unboundBayTile;   // ring belt tile -> UNCREWED bay (legibility only, outside the hash): a lane that
+                                            // ends at a bay with no agent yet is named "BAY n (no agent yet)", never "nowhere"
     /* SPLIT_CREW (multi-bay, 2026-09-22): a DESK-LESS agent whose bays sit in more than one room gets a
        different toolbox at each bay (station isolation is per dock — never the union), which is surprising.
        Advice, never a blocker: "PLACE A DESK — TOOLS FOLLOW THE DOCK" — a desk pins every bay to one room.
@@ -455,7 +846,30 @@
     // valid outbound lanes; the chainFed clause is the same correction for valid stage-two docks, which are fed
     // by an agent rather than by a door and were being shamed for it. Per DOCK: a writer's second bay is judged
     // on its own belts, never excused by its first.
-    for (const b of bays) if (!reachDock[b.propId] && !chainFed[b.propId] && !flowsToOutbox(b.tile)) errors.push({ code: 'BAY_NOT_FED', propId: b.propId, agentId: b.agentId, warn: true });
+    /* …and when that bay's belt starts INSIDE the ring of the machine feeding it (an INBOX mouth, or another
+       dock's hookup), the two machines are TOO CLOSE (2026-09-27 audit B4): a job is never delivered on the tile
+       it was born on, and a tile two docks share belongs to one of them only — so the belt the Commander can SEE
+       running into the bay carries nothing. Saying "NOT FED — belt into it" there sends them to redo what they
+       already did; BAY_TOO_CLOSE names the real fix (move one a tile apart). Same warn standing as BAY_NOT_FED. */
+    const sharedRing = {};
+    for (const s of sources) for (const st of srcTiles(s)) sharedRing[key(st.x, st.y)] = 'src';
+    const ringOwners = {};
+    for (const b of bays) for (const t of bayTilesOf(b)) { const k = key(t.x, t.y); (ringOwners[k] = ringOwners[k] || []).push(b.propId); }
+    /* …but only when the SHARED tile is the bay's way IN — a belt aimed into the bay's footprint from a tile another ring
+       also owns (2026-09-28 retest). Two docks a tile apart whose lane goes round the shared tile are wired fine; if the
+       first one has no INBOX it is simply NOT FED, and "move it a tile away" would have sent the Commander the wrong way. */
+    const footOf = {}; for (const p of props) if (p && p.t === 'bay') footOf[p.id] = p;
+    const aimsInto = (t, pid) => {
+      const v = DIRV[map[key(t.x, t.y)]], f = footOf[pid]; if (!v || !f) return false;
+      const nx = t.x + v[0], ny = t.y + v[1];
+      return nx >= f.x && nx < f.x + (f.w || 1) && ny >= f.y && ny < f.y + (f.h || 1);
+    };
+    const tooClose = b => bayTilesOf(b).some(t => { const k = key(t.x, t.y); return (sharedRing[k] === 'src' || (ringOwners[k] || []).length > 1) && aimsInto(t, b.propId); });
+    // UNDER A BELT CYCLE reach is deliberately never computed (all false — a glowing lane must mean "a route runs
+    // here", and nothing routes while the loop stands), so "not fed" would be a GUESS: it sent the Commander to
+    // belt bays that were already fed while the real fault — the CYCLE, a blocking error — went unread (station.layout
+    // audit 2026-09-28). Only the CYCLE speaks until it is broken.
+    if (!cyc) for (const b of bays) if (!reachDock[b.propId] && !chainFed[b.propId] && !flowsToOutbox(b.tile)) errors.push({ code: tooClose(b) ? 'BAY_TOO_CLOSE' : 'BAY_NOT_FED', propId: b.propId, agentId: b.agentId, warn: true });
     // A CHAIN LOOP IS A BLOCKING ERROR — and it is INVISIBLE to detectCycle. A's ship tile feeding B's dock and
     // B's ship tile feeding A's dock are two separate physical lanes with no belt cycle anywhere; the loop only
     // exists across the docks (consume here, respawn there). Left unguarded that is an infinite chain of PAID
@@ -1271,6 +1685,33 @@
       + 'output — build on it. Answer with the work itself, not a description of what you would do.';
   }
 
+  /* parseHandoff(text) -> { stage, original, from } | null — the INVERSE of handoffPrompt, for surfaces that show a work line's
+     result to the Commander (2026-09-27 audit R2: the OUTBOX titled a line's result "PIPELINE HANDOFF — you are stage 2 of a work
+     line on this stati…" and showed the whole machine prompt under WHAT YOU ASKED FOR). Reads only the fixed frame handoffPrompt
+     writes; anything else is null. Pure. */
+  const HANDOFF_RE = /^PIPELINE HANDOFF — you are stage (\d+) of a work line on this station\.\n\nThe original request was:\n([\s\S]*?)\n\nThe upstream stage \(([^)]*)\) produced:\n/;
+  function parseHandoff(text) {
+    const m = HANDOFF_RE.exec(String(text == null ? '' : text));
+    return m ? { stage: +m[1], original: m[2], from: m[3] } : null;
+  }
+  /* stripVerdictLine(text) -> the text without a trailing reviewer VERDICT line (one of its last 3 non-empty lines), for showing
+     a work line's result: the line is the loop gate's control signal, not part of the work (R1; sidecar/routing/verdict.js holds
+     the gate's own reader). A text that is ONLY the verdict line is returned unchanged. Pure. */
+  function stripVerdictLine(text) {
+    const s = String(text == null ? '' : text), lines = s.split(/\r?\n/);
+    let seen = 0;
+    for (let i = lines.length - 1; i >= 0 && seen < 3; i--) {
+      if (!lines[i].trim()) continue;
+      seen++;
+      const l = lines[i].trim().replace(/^[\s>*\-_`#]+/, '').replace(/[\s*_`.!]+$/, '');
+      if (/^verdict\s*[:=\-–—]\s*(approved|approve|accepted|pass|lgtm|revise|revision|rejected|reject|needs[-_]work)$/i.test(l)) {
+        const out = lines.slice(0, i).concat(lines.slice(i + 1)).join('\n').replace(/\s+$/, '');
+        return out.trim() ? out : s;
+      }
+    }
+    return s;
+  }
+
   /* fanSiblings(plan, agentId) -> the OTHER first docks of the fan-out split that feeds this dock, sorted
      (2026-08-21). The entry dispatcher (resolveTarget) still names ONE dock for an inbound message — that is
      the one that ran. When that dock sits on a lane of a split that feeds a JOINER, the remaining lanes are
@@ -1364,7 +1805,7 @@
   }
   function lineComponents(geo) {
     const props = (geo && geo.props) || [];
-    const map = buildBeltMap(geo && geo.belts);
+    const map = Array.isArray(geo && geo.links) ? linkedBeltMap(buildBeltMap(geo && geo.belts), props, geo.links) : buildBeltMap(geo && geo.belts);
     const MACH = { intake: 1, bay: 1, outbox: 1, filter: 1, splitter: 1, merger: 1, joiner: 1, loop: 1 };
     // union-find over belt-tile keys
     const parent = {};
@@ -1375,14 +1816,17 @@
       const p = k.split(','), x = +p[0], y = +p[1];
       for (const d of LANE_ORDER) { const v = DIRV[d], nk = key(x + v[0], y + v[1]); if (map[nk]) union(k, nk); }
     }
-    // a machine joins (and can BRIDGE) every component its footprint+ring touches
+    // a machine joins (and can BRIDGE) every component its footprint+ring touches — on a LINKED floor, only the ring
+    // tiles its own links run over (a junction also stands on its own tile): a belt passing the ring is another line
+    const own = Array.isArray(geo && geo.links) ? linkTilesByProp(geo.links) : null;
     const propTiles = {};   // propId -> [belt keys]
     for (const pr of props) {
       if (!MACH[pr.t]) continue;
       const w = pr.w || 1, h = pr.h || 1, hits = [];
+      const mine = own ? (own[pr.id] || {}) : null, a = (own && JUNCTION_MACHINE[pr.t]) ? junctionAnchor(map, pr) : null;
       for (let yy = pr.y - 1; yy <= pr.y + h; yy++)
         for (let xx = pr.x - 1; xx <= pr.x + w; xx++)
-          if (map[key(xx, yy)]) hits.push(key(xx, yy));
+          if (map[key(xx, yy)] && (!mine || mine[key(xx, yy)] || (a && a.x === xx && a.y === yy))) hits.push(key(xx, yy));
       if (!hits.length) continue;   // a beltless machine is on no line
       for (let i = 1; i < hits.length; i++) union(hits[0], hits[i]);
       propTiles[pr.id] = hits;
@@ -1426,8 +1870,8 @@
     return rec && typeof rec === 'object' ? rec : null;
   }
 
-  return { compileRoutingPlan, composeStageBrief, HANDS_LEAD, resolveTarget, lineOf, lineOriginOf, lineLimitsOf, normalizeLineLimits, LINE_LIMIT_DEFAULTS, LINE_LIMIT_CEILINGS, sourceFor, ok, liveTiles, routeFrom, junctionLaneOwners, chainNext, chainStep, fanSiblings, handoffPrompt, joinPayload, lineComponents, LOOP_MAX_DEFAULT, LOOP_MAX_CEILING,
+  return { rejoinOf, deriveLinks, reconcileLinks, compileRoutingPlan, composeStageBrief, HANDS_LEAD, resolveTarget, lineOf, lineOriginOf, lineLimitsOf, normalizeLineLimits, LINE_LIMIT_DEFAULTS, LINE_LIMIT_CEILINGS, sourceFor, ok, liveTiles, routeFrom, junctionLaneOwners, chainNext, chainStep, fanSiblings, handoffPrompt, parseHandoff, stripVerdictLine, joinPayload, lineComponents, LOOP_MAX_DEFAULT, LOOP_MAX_CEILING,
     // THE DOCK LAYER (multi-bay agents, 2026-09-22) — the dock-keyed truth the agent readings above are views of
     resolveDock, chainNextDock, chainStepDock, fanSiblingsDock, junctionLaneDocks, lineOfDock, lineOriginOfDock, entryDockOf, docksOf, dockOf, agentOfDock: agentOfDockIn, deriveDockLayer, dockLayer, hasDockLayer, stepToAgents, propIdCmp,
-    _internals: { DIRV, OPP, LANE_ORDER, key, buildBeltMap, outLanes, inLanes, loopLanes, beltTileNear, nextTiles, detectCycle, hashStr, compileChains, compileDockChains, chainCycle, shipFrom, propIdCmp, entryDocksOf, agentChainsView } };
+    _internals: { DIRV, OPP, LANE_ORDER, key, buildBeltMap, outLanes, inLanes, loopLanes, beltTileNear, ringBelts, junctionAnchor, dirBetween, linkTilesByProp, linkedBeltMap, nextTiles, detectCycle, hashStr, compileChains, compileDockChains, chainCycle, shipFrom, propIdCmp, entryDocksOf, agentChainsView } };
 });
