@@ -2296,6 +2296,7 @@ const Build = (() => {
       const canSummon = typeof App !== 'undefined' && !!App.summonAgent;
       const firstAid = e.roles[0] && e.roles[0].agentId;
       const offerAll = e.roles.length > 1 && !!firstAid && e.roles.some(r=>r.agentId!==firstAid);
+      const software = station.doc().meta.templateId === 'software';
       const body = g.querySelector('[data-example-body]');
       body.innerHTML = '<p class="example-purpose">'+esc(e.purpose)+'</p><div class="example-flow" aria-label="How the line runs">'+e.flow.map(x=>'<span>'+esc(x)+'</span>').join('<b>→</b>')+'</div>'+
         '<h4>Choose who works each step</h4><div class="example-roles">'+e.roles.map((r,i)=>'<div class="example-role"><b>'+(i+1)+'. '+esc(r.name)+'</b><span>'+esc(r.description)+'</span>'+
@@ -2304,11 +2305,14 @@ const Build = (() => {
           (needsPc(r) ? '<div class="example-role-fix"><span>This agent has no workstation of its own here.</span><button type="button" class="bb sm" data-example-pc="'+esc(r.propId)+'"'+(pending?' disabled':'')+'>+ ADD A WORKSTATION</button></div>' : '')+'</div>').join('')+'</div>'+
         (offerAll ? '<button type="button" class="bb sm example-all" data-example-all'+(pending?' disabled':'')+'>USE '+esc(String(agentLabelFor(firstAid)).toUpperCase())+' FOR EVERY STEP</button>' : '')+
         '<p class="example-note">'+(agents.length ? 'One agent can work every step. ' : 'You have no agents yet. ')+(canSummon ? 'RECRUIT adds that step\'s specialist to your crew; it costs nothing until it works.' : '')+'</p>'+
-        '<p class="example-note">Assignments save when selected. Each step\'s instructions live on its Bay; click the Bay to edit them.'+(station.doc().meta.templateId==='software' ? ' Point the Inbox at your project folder (click it, then Working folder) so the Builder works on your code.' : '')+'</p>'+
-        '<section class="example-sample"><h4>Try the sample job</h4><p>'+esc(e.sample.replace(/^SAMPLE JOB: /,''))+'</p><p class="example-note">Runs the agents you chose, on their configured models. Normal model costs apply.</p><button class="bb refit-primary" data-example-run'+(!ready||pending?' disabled':'')+'>'+(pending?'SAMPLE IN PROGRESS…':sr?.view?.ok?'RUN SAMPLE AGAIN':'RUN SAMPLE TASK')+'</button></section>'+
+        '<p class="example-note">Assignments save when selected. Each step\'s instructions live on its Bay; click the Bay to edit them.</p>'+
+        '<section class="example-sample"><h4>Try the sample job</h4><p>'+esc(e.sample.replace(/^SAMPLE JOB: /,''))+'</p><p class="example-note">This is one real job: the agents you chose run it on their own models, and normal model costs apply.</p><button class="bb refit-primary" data-example-run'+(!ready||pending?' disabled':'')+'>'+(pending?'SAMPLE IN PROGRESS…':sr?.view?.ok?'RUN THE SAMPLE AGAIN':'RUN THE SAMPLE JOB')+'</button></section>'+
         '<p class="example-status" role="status">'+esc(status)+'</p>'+
         (sr?.view ? '<div class="example-result">'+finSampleHTML(sr.view)+(sr.output?'<details><summary>Read the finished result</summary><pre>'+esc(sr.output)+'</pre></details>':'')+'</div>' : '')+
-        '<p class="example-note">To use this line for real, open its Inbox to set a schedule or connect a chat app. The Outbox opens delivered work in the Logbook.</p>';
+        /* NEXT: USE IT FOR REAL — one click to the Inbox's own settings in the Workflow panel (what starts it; the working
+           folder a software line builds in), instead of a sentence about where to click */
+        '<section class="example-next"><h4>Use it for real</h4><p>'+(software ? 'Choose the project folder the Builder works in, and when the line runs: on a schedule or from a chat app.' : 'Choose when the line runs: on a schedule or from a chat app.')+' Finished work lands in the Outbox and opens in the Logbook.</p>'+
+        (e.inboxId ? '<button type="button" class="bb" data-example-inbox'+(pending?' disabled':'')+'>'+(software ? 'OPEN THE INBOX: FOLDER + START' : 'OPEN THE INBOX: HOW IT STARTS')+'</button>' : '')+'</section>';
       body.querySelectorAll('[data-example-agent]').forEach(select => { select.onchange = () => {
         const propId = select.dataset.exampleAgent;
         const result = station.assignPropAgent(propId,select.value);
@@ -2329,6 +2333,8 @@ const Build = (() => {
         if (res.ok) { bumpGeo(); sfx('chime'); refresh(); }
         else { b.disabled = false; sfx('bad'); say(res.reason === 'no-room-for-a-desk' ? 'There is no clear floor for a desk in this room. Make some space, then try again.' : 'A workstation could not be placed here.'); }
       }; });
+      const inboxBtn = body.querySelector('[data-example-inbox]');
+      if (inboxBtn) inboxBtn.onclick = () => { closeP(); try { rebake(); openFlowCard(e.inboxId); } catch (_) {} };
       const all = body.querySelector('[data-example-all]');
       if (all) all.onclick = () => { for (const r of e.roles) station.assignPropAgent(r.propId, firstAid); sfx('click'); refresh(); };
       body.querySelector('[data-example-run]').onclick = () => {
@@ -2428,6 +2434,9 @@ const Build = (() => {
     const duty = 'You crew this station line as its ' + role + ' — you ' + ((ri && ri.desc) || 'work this dock') + '.';
     const spec = Object.assign({}, cls || { name: role, model: 'balanced' });
     spec.purpose = duty + (cls && cls.purpose ? '\n\n' + cls.purpose : '');
+    // a role that borrows another class (TESTER rides the reviewer class) names its recruit for the STEP — the button said
+    // "a new tester" — through the creation-time name key, so the class still drives the specialty and the id
+    if (ri && ri.name) spec.agentName = ri.name;
     try { return App.summonAgent(spec, { activate: false, desk: true }); } catch (e) { return null; }
   }
   /* ---------- THE STEP CARD (workflow studio, 2026-08-05) ----------
@@ -4955,7 +4964,9 @@ const Build = (() => {
     }
     if (bakeDirty || !cache || planDirty) rebake();
     // an armed first ride waits out the tutorial + the first-run card (.refit-firstrun, never .refit-guide)
-    if (ridePending && !tutorialCoaching() && !(root && root.querySelector('.refit-firstrun'))) fireFirstRide();
+    // ONE VOICE: the first ride waits while the presets dialog or a preset's setup guide is open (staffing in the guide is
+    // what completes the line) — it narrates on the floor once that card closes, never over it
+    if (ridePending && !tutorialCoaching() && !(root && root.querySelector('.refit-firstrun, .refit-preset-example, .refit-station-builds'))) fireFirstRide();
     // finish-the-line card: slow re-derive (feed truth changes on the world's poll, not on edits) + per-frame pin
     if (finCardEl && now - finPollTs > 2000) { finPollTs = now; renderFinCard(); }
     const hT0 = perfAcc ? performance.now() : 0;
@@ -6538,6 +6549,11 @@ const Build = (() => {
     if (!running || !station) return;
     // the panel names the line from the compiled line groups (valComps): compile NOW, or it opens on a bare "single BAY"
     try { rebake(); } catch (e) { /* the frame loop compiles on its next tick; the panel repaints when it does */ }
+    /* ONE DOOR TO SET UP A PRESET (2026-09-28): while a work preset's line still has a step nobody works, WORKFLOWS opens its
+       setup guide (who works each step + the sample job) — the onboarding pick's closing line points here. Once every
+       step is staffed it opens the Workflow panel as always. */
+    const ex = currentPresetExample();
+    if (ex && ex.roles.length && ex.roles.some(r => !r.agentId)) { openPresetExample(); return; }
     const first = station.props().find(p => p.t === 'intake') || station.props().find(p => p.t === 'bay');
     if (first && typeof WorkflowPanel !== 'undefined') { try { openFlowCard(first.id); } catch (e) {} }
     else if (!first) { try { selectTool('line'); } catch (e) {} }

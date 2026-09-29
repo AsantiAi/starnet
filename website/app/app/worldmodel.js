@@ -428,7 +428,7 @@ const WorldModel = (() => {
     CREW:       { desc: 'works its share of the stream',   cls: 'chief' },
     SHIPPER:    { desc: 'finishes the job & ships it',     cls: 'chief' },
     REVIEWER:   { desc: 'judges the draft & calls the verdict', cls: 'reviewer' },
-    TESTER:     { desc: 'checks the change & calls the verdict', cls: 'reviewer' },
+    TESTER:     { desc: 'checks the change & calls the verdict', cls: 'reviewer', name: 'TESTER' },   // `name`: a recruit is named for the step, not its class
     ANALYST:    { desc: 'turns the branches into one answer',   cls: 'analyst' },
     FIXER:      { desc: 'takes over when the loop gives up',    cls: 'chief' },
   };

@@ -848,7 +848,8 @@ const Onboarding = (() => {
       + ' you can change it any time in BUILD › Presets.';
     const res = await Dialogue.node({
       lines: [seg(ask, 46, 0)],
-      options: ordered.map(c => ({ label: titleCase(c.name) + (c === rec ? ' — recommended' : ''), value: c.id }))
+      // each choice names its kind of work in the purpose question's own words ("Software Studio — Code & build")
+      options: ordered.map(c => ({ label: titleCase(c.name) + (c.purposeLabel ? ' — ' + c.purposeLabel : '') + (c === rec ? ' (recommended)' : ''), value: c.id }))
         .concat([{ label: 'Start with one room', value: 'default' }])
     });
     if (!running) return;
@@ -859,7 +860,7 @@ const Onboarding = (() => {
     try { r = S.apply(pick.id); } catch (_) { r = null; }
     if (!running) return;
     await Dialogue.say([seg(r && r.ok
-      ? 'done. the ' + pick.name.toLowerCase() + ' is built, and its line is waiting for a crew: BUILD › Presets › SET UP shows who works each step.'
+      ? 'done. the ' + pick.name.toLowerCase() + ' is built, and its line is waiting for a crew: WORK › WORKFLOWS walks you through who works each step.'
       : 'i couldn’t build that station here, so we’ll keep one room. you can try again in BUILD › Presets.', 44, 360)]);
   }
 
