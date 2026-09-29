@@ -1579,6 +1579,14 @@ try {
 // logged/persisted. Singleton so the cooldown survives across runs within a sidecar process.
 const credPool = makeCredPool({ clock: { now: () => Date.now() } });
 
+// SUBSCRIPTION STACKING: extra sign-in accounts per subscription provider (provider-accounts.js), one folder each
+// under WORKSPACES/.secrets/accounts/. A run on a stacked provider starts on the first account that is not cooling
+// and rotates to the next when one hits its usage limit (credPool cools the spent one; see accountChain). The
+// sign-in cache holds only the last PROVEN verdict per account ('<provider>:<id|primary>' -> { loggedIn, email?,
+// subscription? }) from a real status probe — a run skips an account proven signed out, never one merely unknown.
+const providerAccounts = require('./provider-accounts.js').makeProviderAccounts({ root: path.join(WORKSPACES, '.secrets', 'accounts') });
+const accountAuthSeen = new Map();
+
 const runs = new Map();          // runId -> AbortController (the kill path)
 // RECONCILIATION snapshot metadata: runId -> { agentId, startedAt, source }. Populated alongside every runs.set
 // (interactive/cron/workshop) and dropped in the same finally that deletes from `runs`, so it exactly tracks the
@@ -9866,6 +9874,10 @@ const ROUTES = [
   { m: 'POST', exact: '/api/auth/claude-cli/poll', h: (req, res) => handleClaudeCliAuth(req, res, 'poll') },
   { m: 'POST', exact: '/api/auth/claude-cli/code', h: (req, res) => handleClaudeCliAuth(req, res, 'code') },
   { m: 'POST', exact: '/api/auth/claude-cli/cancel', h: (req, res) => handleClaudeCliAuth(req, res, 'cancel') },
+  // subscription stacking: every connected Claude Code sign-in, add one (straight into its sign-in), remove one
+  { m: 'GET', exact: '/api/auth/claude-cli/accounts', h: (req, res) => handleClaudeCliAuth(req, res, 'accounts') },
+  { m: 'POST', exact: '/api/auth/claude-cli/add', h: (req, res) => handleClaudeCliAuth(req, res, 'add') },
+  { m: 'POST', exact: '/api/auth/claude-cli/remove', h: (req, res) => handleClaudeCliAuth(req, res, 'remove') },
   { m: 'GET', exact: '/api/providers', h: handleProviders },
   { m: 'POST', exact: '/api/providers/probe', h: handleProviderProbe },
   { m: 'POST', exact: '/api/providers/validate', h: handleProviderValidate },
@@ -10403,7 +10415,7 @@ function gracefulShutdown(signal) {
   try { if (typeof lspManager !== 'undefined' && lspManager && lspManager.closeAll) Promise.resolve(lspManager.closeAll()).catch(() => {}); } catch (_) {}   // reap detected language-server children
   try { if (typeof subagents !== 'undefined' && subagents && subagents.interruptAll) subagents.interruptAll(); } catch (_) {}   // stop watchable background workers
   try { if (typeof connectors !== 'undefined' && connectors && connectors.close) Promise.resolve(connectors.close()).catch(() => {}); } catch (_) {}   // close MCP connectors (stdio children get taskkill/SIGTERM)
-  try { if (_claudeCliLogin) _claudeCliLogin.shutdown(); } catch (e) { failNote('claudecli.login.shutdown', e); }   // a half-finished `claude auth login` never outlives the station
+  try { shutdownClaudeCliLogins(); } catch (e) { failNote('claudecli.login.shutdown', e); }   // a half-finished `claude auth login` never outlives the station
   try { stopTelegram(); } catch (_) {}   // disconnect the Telegram long-poll adapter
   try { stopAllTelegramBots(); } catch (_) {}   // …and every agent-bound bot's poller
   try { stopDiscord(); } catch (_) {}    // disconnect the Discord gateway socket
@@ -17650,6 +17662,19 @@ async function runOnceCore(o) {
       providerId, model, credKey: rk
     }));
   }
+  // SUBSCRIPTION STACKING (Claude Code): every connected sign-in is its own CLI identity (a CLAUDE_CONFIG_DIR). The
+  // run starts on the first account credPool does not have cooling and rotates through the rest when one hits its
+  // usage limit — the same rotation slot and cooldown the API-key pool uses, keyed by an opaque account handle.
+  if (primaryProfile && primaryProfile.adapter === 'claude-cli') {
+    const chain = accountChain(providerId);
+    const byKey = new Map(chain.map(a => [a.credKey, a]));
+    const ordered = credPool.order(chain.map(a => a.credKey));
+    const onAccount = a => a.id ? selectProvider({ provider: providerId, configDir: a.dir, reasoningEffort }) : selectProvider({ provider: providerId, reasoningEffort });
+    const first = byKey.get(ordered[0]);
+    activePrimaryKey = first.credKey;
+    if (first.id) { provider = onAccount(first); auxVisionProvider = provider; }
+    rotationFallbacks = ordered.slice(1).map(k => { const a = byKey.get(k); return { provider: onAccount(a), providerId, model, credKey: k, account: a.label }; });
+  }
   const providerFallbacks = [];
   const rawProviderFallbacks = savedProviderFallbacks.concat(Array.isArray(o.fallbackProviders) ? o.fallbackProviders : []);
   for (const fb of rawProviderFallbacks) {
@@ -18885,7 +18910,7 @@ async function runOnceCore(o) {
       // activePrimaryKey, NOT runKey: when the run's own key was still cooling we STARTED on a warm pool key,
       // and penalizing the key we never called would cool the wrong credential.
       credKey: providerUnmetered ? null : activePrimaryKey,
-      onFallback: ({ rotate, credKey, retryAfterMs, resetAtMs, next }) => {
+      onFallback: ({ reason, rotate, credKey, retryAfterMs, resetAtMs, next }) => {
         if (next) {
           provider = next.provider;
           activeProviderId = next.providerId || activeProviderId;
@@ -18901,6 +18926,9 @@ async function runOnceCore(o) {
         let ttlMs;
         if (typeof retryAfterMs === 'number' && retryAfterMs >= 0) ttlMs = retryAfterMs;
         else if (typeof resetAtMs === 'number') { const d = resetAtMs - Date.now(); if (d > 0) ttlMs = d; }
+        // A SPENT allowance with no stated reset (Claude Code's "resets 5pm" names no epoch) is hours away, not
+        // minutes: cool it for credPool's ceiling so the next runs open on a fresh account instead of re-hitting it.
+        if (ttlMs === undefined && reason === 'quota_exhausted') ttlMs = 60 * 60 * 1000;
         credPool.penalize(credKey, ttlMs);
       },
       todoNote: () => Todo.formatForInjection(notebookStore, agentId),   // re-inject the active task plan after a compaction
@@ -21384,18 +21412,97 @@ function handleOAuthLogout(req, res, id) {
      POST /code   { login_id, code }  -> { ok, error? }
      POST /cancel { login_id }        -> { ok } */
 let _claudeCliLogin = null;
-function claudeCliLogin() {
-  if (!_claudeCliLogin) _claudeCliLogin = require('./providers/claude-cli-login.js').makeClaudeCliLogin();
-  return _claudeCliLogin;
+const _claudeCliAccountLogins = new Map();   // extra account id -> a login driver bound to that account's CLI identity
+function claudeCliLogin(accountId) {
+  if (!accountId) {
+    if (!_claudeCliLogin) _claudeCliLogin = require('./providers/claude-cli-login.js').makeClaudeCliLogin();
+    return _claudeCliLogin;
+  }
+  const acct = providerAccounts.list('claude-cli').find(a => a.id === String(accountId));
+  if (!acct) return null;
+  let login = _claudeCliAccountLogins.get(acct.id);
+  if (!login) {
+    login = require('./providers/claude-cli-login.js').makeClaudeCliLogin({ configDir: acct.dir });
+    _claudeCliAccountLogins.set(acct.id, login);
+  }
+  return login;
+}
+function shutdownClaudeCliLogins() {
+  if (_claudeCliLogin) _claudeCliLogin.shutdown();
+  for (const l of _claudeCliAccountLogins.values()) { try { l.shutdown(); } catch (e) { failNote('claudecli.login.shutdown', e); } }
+}
+// Record a PROVEN sign-in verdict (an installed CLI answered) so a run skips an account that is signed out.
+function noteAccountAuth(providerId, accountId, st) {
+  if (!st || st.installed === false || typeof st.loggedIn !== 'boolean') return;
+  const seen = { loggedIn: st.loggedIn };
+  if (st.loggedIn && st.email) seen.email = st.email;
+  if (st.loggedIn && st.subscription) seen.subscription = st.subscription;
+  accountAuthSeen.set(providerId + ':' + (accountId || 'primary'), seen);
+}
+/* SUBSCRIPTION STACKING — the ordered sign-ins a run on `providerId` may use: the primary (the provider's own
+   store) first, then every extra account oldest-first, minus any a real probe PROVED signed out (unless that leaves
+   none — the run then fails on the primary with the honest not-signed-in error). Each entry is { id ('' = primary),
+   credKey (credPool's opaque handle, never a credential), label, dir }. The label is 'account N' on purpose: it
+   rides provider.fallback, and events can reach channels — the email stays in Settings. Settings numbers the
+   accounts the same way (primary = account 1, extras in list order). */
+function accountChain(providerId) {
+  const all = [{ id: '', credKey: 'account:' + providerId + ':primary', label: 'account 1', dir: '' }]
+    .concat(providerAccounts.list(providerId).map((a, i) => ({ id: a.id, credKey: 'account:' + providerId + ':' + a.id, label: 'account ' + (i + 2), dir: a.dir })));
+  const live = all.filter(a => { const s = accountAuthSeen.get(providerId + ':' + (a.id || 'primary')); return !(s && s.loggedIn === false); });
+  return live.length ? live : all.slice(0, 1);
 }
 async function handleClaudeCliAuth(req, res, verb) {
   const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
-  const login = claudeCliLogin();
   try {
-    if (verb === 'status') return json(200, await login.status());
+    if (verb === 'status' || verb === 'accounts') {
+      const q = new URL(req.url, 'http://local').searchParams;
+      if (verb === 'status') {
+        const account = String(q.get('account') || '');
+        const login = claudeCliLogin(account);
+        if (!login) return json(404, { error: 'no such Claude Code account', code: 'account_not_found' });
+        const st = await login.status();
+        noteAccountAuth('claude-cli', account, st);
+        return json(200, st);
+      }
+      // every connected sign-in, primary first — each one's own `claude auth status` (booleans/labels, no token)
+      const chain = [{ id: '' }].concat(providerAccounts.list('claude-cli'));
+      const accounts = await Promise.all(chain.map(async (a, i) => {
+        const st = await claudeCliLogin(a.id).status();
+        noteAccountAuth('claude-cli', a.id, st);
+        const cooling = credPool.coolingUntil('account:claude-cli:' + (a.id || 'primary'));
+        return Object.assign({ account: a.id, label: 'account ' + (i + 1), primary: !a.id, coolingUntil: cooling || 0 }, st);
+      }));
+      return json(200, { accounts, max: 1 + providerAccounts.MAX });
+    }
+    let body; try { body = JSON.parse((await readBody(req, 1 << 12)) || '{}') || {}; } catch (e) { return json(400, { status: 'error', error: 'bad json' }); }
+    if (verb === 'add') {
+      // a new, empty CLI identity, then straight into its sign-in (the card shows it signed out until that lands)
+      let acct;
+      try { acct = providerAccounts.add('claude-cli'); } catch (e) { return json(200, { status: 'error', error: (e && e.message) || 'could not add an account', code: 'account_add_failed' }); }
+      const r = await claudeCliLogin(acct.id).start();
+      if (r && r.status === 'connected') noteAccountAuth('claude-cli', acct.id, Object.assign({ installed: true }, r));
+      return json(200, Object.assign({ account: acct.id }, r));
+    }
+    if (verb === 'remove') {
+      const id = String(body.account || '');
+      const login = id ? claudeCliLogin(id) : null;
+      if (!login) return json(404, { ok: false, error: 'no such Claude Code account', code: 'account_not_found' });
+      login.cancel();
+      // sign that identity out through the CLI first (macOS keeps the credential in the keychain, outside the folder)
+      const out = await require('./providers/claude-cli.js').makeCliHost({ configDir: providerAccounts.dir('claude-cli', id) }).logout();
+      _claudeCliAccountLogins.delete(id);
+      accountAuthSeen.delete('claude-cli:' + id);
+      const removed = providerAccounts.remove('claude-cli', id);
+      return json(200, { ok: removed, signedOut: !!out.ok });
+    }
+    const login = claudeCliLogin(String(body.account || ''));
+    if (!login) return json(404, { status: 'error', error: 'no such Claude Code account', code: 'account_not_found' });
     if (verb === 'start') return json(200, await login.start());
-    let body; try { body = JSON.parse(await readBody(req, 1 << 12)) || {}; } catch (e) { return json(400, { status: 'error', error: 'bad json' }); }
-    if (verb === 'poll') return json(200, await login.poll(body.login_id));
+    if (verb === 'poll') {
+      const r = await login.poll(body.login_id);
+      if (r && r.status === 'connected') noteAccountAuth('claude-cli', String(body.account || ''), Object.assign({ installed: true }, r));
+      return json(200, r);
+    }
     if (verb === 'code') return json(200, login.submitCode(body.login_id, body.code));
     if (verb === 'cancel') return json(200, login.cancel(body.login_id));
     json(404, { error: 'unknown verb' });
