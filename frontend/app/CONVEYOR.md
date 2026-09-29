@@ -53,20 +53,30 @@ doc.links = [{ id: 'l3', from: { prop: 'p10', port: 'out' }, to: { prop: 'p11', 
 
 Pure, deterministic. Takes one line as a graph (`nodes: [{ id, t, w, h, pin? }]`, `links: [{ from: { node, port, tags?, else? }, to: { node } }]`)
 and the floor (`rects` deck, `blocked` props, `belts` already laid, optional `junctions`) and answers `{ nodes: { id: { x, y } }, links, belts }`
-— or `{ ok: false, error: 'NO_ROOM', needs: { w, h } }` (MAKE ROOM adds a tile of walking room round that).
+— or `{ ok: false, error: 'NO_ROOM', needs: { w, h } }` (MAKE ROOM adds a tile of walking room round that), or
+`{ ok: false, error: 'NO_ROUTE', link | why: 'SIDES' (a junction cannot seat its links), node }`.
 
 - **Columns** = longest forward path from the start; a LOOP's way back (any link closing a cycle) never pushes a step right.
 - **Lanes**: a SPLITTER/FILTER spreads its outputs round its own lane — in the compiler's E, S, W, N lane order, so a
   split's turn order and a filter's fallback lane survive the layout; a LOOP keeps done on its lane, escape below; a
   JOINER/MERGER sits on the middle of the lanes feeding it. Lane spacing tries 2, 3, then 4 rows (tightest that routes).
-- **Belts**: lowest-cost grid route per link (a bend costs 2, a tile beside a third machine 1); the BELT tool's rules
-  hold (arrival tile a BAY's alone, never beside a junction it does not serve, junction lanes by where the other end
-  sits: above = N, below = S, same lane = E out / W in, a way back climbs N). Main run first, ways back last.
-- **Placement**: pinned nodes never move (the line forms round the first pin); unpinned, the line is routed on an empty
-  floor of its own and the resulting shape goes to the first clear spot (rows top first) where no old belt runs into
-  it and none of its belts sits beside another line's junction.
+- **Junction sides** are settled before any belt: each link gets its own side — the one it wants (above = N, below = S,
+  same lane = E out / W in, a way back N) where that side is free — and the order the compiler reads (E, S, W, N) is
+  kept, so a machine or wall against a junction re-sides its lanes but never changes a split's turns or a filter's
+  fallback. A layout that would reorder them is refused (`orderKept`), never returned.
+- **Belts**: A* per link on flat arrays (a bend costs 2, a tile beside a third machine 1; of two equally cheap belts
+  the shorter wins); the BELT tool's rules hold (arrival tile a BAY's alone, never beside a junction it does not
+  serve). Main run first, ways back last; a link walled in by earlier belts is laid first on the next try.
+- **Placement**: pinned nodes never move — the line forms round the first pin, each other machine keeping its place
+  relative to the machine feeding it (a branch moves as one), stepping to the nearest clear lane or spot if taken;
+  unpinned, the line is routed on an empty floor of its own and that shape goes to the first clear spot (rows top
+  first) where no old belt runs into it and none of its belts sits beside another line's junction.
 - Locked by test/line-layout.test.js: every blueprint, laid out fresh, routes EXACTLY as the stamped original; 11 of 19
-  fit a fresh starter room as-is (the rest in a room grown for them).
+  fit a fresh starter room as-is (as many as the hand-drawn ones; the rest in a room grown for them) and every machine
+  and belt passes the station's own placement checks; on cluttered decks (free and pinned) every line it lays still
+  routes the same; a junction pinned against a wall keeps its lane order or answers NO_ROUTE.
+- Speed (measured 09-29): ~2 ms on average for a line on a cluttered 60×36 deck (worst seen 45 ms); 9–21 ms on a
+  cluttered 160×100 one, pins far apart included. It runs on an edit, never per frame.
 
 ## Runtime (conveyor.js) — `Conveyor.create()`
 

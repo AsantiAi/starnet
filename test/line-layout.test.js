@@ -154,6 +154,79 @@ for (const bp of WM.BLUEPRINTS) {
   A.ok(!tiny.ok && tiny.error === 'NO_ROOM' && tiny.needs && (tiny.needs.w > 8 || tiny.needs.h > 6), 'a deck too small says so — and how big a room the line needs (' + JSON.stringify(tiny.needs) + ')');
 }
 
+/* ---------- A CLUTTERED DECK: furniture and old belt runs everywhere, lines still form — and still route the same ---------- */
+{
+  // a fixed scatter (a plain LCG, so every run sees the same decks): crates on a loose grid, a few six-tile belt runs
+  const clutter = k => {
+    let seed = 1000 + k; const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    const blocked = [], belts = {};
+    for (let y = 1; y < 34; y += 4) for (let x = 1; x < 58; x += 4) if (rnd() < 0.35) blocked.push({ x: x + Math.floor(rnd() * 2), y: y + Math.floor(rnd() * 2), w: 1 + Math.floor(rnd() * 2), h: 1 + Math.floor(rnd() * 2) });
+    for (let i = 0; i < 6; i++) { let x = Math.floor(rnd() * 50), y = Math.floor(rnd() * 34); const d = rnd() < 0.5 ? 'E' : 'S'; for (let j = 0; j < 6; j++) { belts[key(x, y)] = d; if (d === 'E') x++; else y++; } }
+    return { rects: [{ x1: 0, y1: 0, x2: 59, y2: 35 }], blocked, belts, junctions: [] };
+  };
+  let tried = 0, laid = 0;
+  const wrong = [];
+  for (let k = 0; k < 4; k++) {
+    const floor = clutter(k), fl = LL._internals.floorOf(floor);
+    for (const bp of WM.BLUEPRINTS) {
+      const { geo, graph } = graphOf(bp), want = JSON.stringify(routing({ props: crew(geo.props), belts: geo.belts }));
+      // one machine pinned where the Commander might have put it: the clear spot nearest the middle of the deck
+      const i = k % graph.nodes.length, n = graph.nodes[i], w = n.w || (JUNC[n.t] ? 1 : 2), h = n.h || w;
+      let pin = null;
+      for (let r = 0; r < 20 && !pin; r++) for (let dy = -r; dy <= r && !pin; dy++) for (let dx = -r; dx <= r && !pin; dx++) {
+        let c = true; for (let yy = 16 + dy; yy < 16 + dy + h; yy++) for (let xx = 20 + dx; xx < 20 + dx + w; xx++) if (!fl.free(xx, yy) || fl.inflow(xx, yy)) c = false;
+        if (c) pin = { x: 20 + dx, y: 16 + dy };
+      }
+      for (const g of [graph, { nodes: graph.nodes.map((m, j) => j === i ? Object.assign({}, m, { pin }) : m), links: graph.links }]) {
+        tried++;
+        const L = LL.layout(g, floor);
+        if (!L.ok) continue;
+        laid++;
+        if (g !== graph && (L.nodes[n.id].x !== pin.x || L.nodes[n.id].y !== pin.y)) wrong.push(bp.id + ': the pin moved');
+        if (JSON.stringify(routing(laidGeo(geo, L))) !== want) wrong.push(bp.id + (g === graph ? '' : ' (pinned)') + ' deck ' + k + ': routes differently');
+        sane(bp.id + ' on cluttered deck ' + k + (g === graph ? '' : ' (pinned)'), geo, L, floor);
+      }
+    }
+  }
+  A.eq(wrong, [], 'on a cluttered deck every line it lays routes EXACTLY as the original, and pins stay put');
+  // (the misses: a BAY pinned just above an old belt run, the rest of the line anchored below it in a pocket that belt
+  // closes — two of its belts cannot both get out; the answer names the link, it never lays a line that routes wrong)
+  A.ok(laid >= Math.ceil(tried * 0.95), 'and it lays out ' + laid + ' of ' + tried + ' (every blueprint, free and with one machine pinned, on four cluttered decks)');
+}
+
+/* ---------- A JUNCTION AGAINST A WALL: its lanes keep their order, or it says no ---------- */
+{
+  // pin every junction on an open deck with ONE side blocked, each side in turn. A junction carrying three links still
+  // seats them (its lanes re-sided so a SPLITTER's turns and a FILTER's fallback keep their order); one carrying four
+  // cannot — and the answer is NO_ROUTE, never a line that quietly routes differently.
+  let three = 0, threeOk = 0, four = 0, fourRefused = 0;
+  const wrong = [];
+  for (const bp of WM.BLUEPRINTS) {
+    const { geo, graph } = graphOf(bp), want = JSON.stringify(routing({ props: crew(geo.props), belts: geo.belts }));
+    const an = LL._internals.analyze(graph);
+    graph.nodes.forEach((n, i) => {
+      if (!JUNC[n.t]) return;
+      const deg = an.inn[n.id].length + an.out[n.id].length;
+      for (const [dx, dy] of [[1, 0], [0, 1], [-1, 0], [0, -1]]) {
+        const pin = { x: 30, y: 18 }, floor = { rects: [{ x1: 0, y1: 0, x2: 79, y2: 39 }], blocked: [{ x: pin.x + dx, y: pin.y + dy, w: 1, h: 1 }], belts: {} };
+        const L = LL.layout({ nodes: graph.nodes.map((m, j) => j === i ? Object.assign({}, m, { pin }) : m), links: graph.links }, floor);
+        if (deg >= 4) { four++; if (!L.ok && L.error === 'NO_ROUTE') fourRefused++; continue; }
+        three++;
+        if (!L.ok) continue;
+        threeOk++;
+        if (JSON.stringify(routing(laidGeo(geo, L))) !== want) wrong.push(bp.id + ' ' + n.t + ' blocked ' + dx + ',' + dy);
+      }
+    });
+  }
+  A.eq(wrong, [], 'a junction against a wall never reorders its lanes: every line laid round one routes EXACTLY as the original');
+  A.ok(three > 0 && threeOk === three, 'a junction with three links and one side blocked always seats them (' + threeOk + '/' + three + ')');
+  A.ok(four > 0 && fourRefused === four, 'a junction with four links and one side blocked says NO_ROUTE (' + fourRefused + '/' + four + ')');
+  // …and one asked to carry five links (a junction has four sides) is named, with the reason
+  const five = LL.layout({ nodes: [{ id: 's', t: 'splitter' }, { id: 'i', t: 'intake' }].concat(['a', 'b', 'c', 'd'].map(id => ({ id, t: 'bay' }))),
+    links: [{ from: { node: 'i' }, to: { node: 's' } }].concat(['a', 'b', 'c', 'd'].map(id => ({ from: { node: 's' }, to: { node: id } }))) }, OPEN);
+  A.ok(!five.ok && five.error === 'NO_ROUTE' && five.why === 'SIDES' && five.node === 's', 'a SPLITTER with five links cannot seat them — the answer names it and why (' + JSON.stringify(five) + ')');
+}
+
 /* ---------- IT FITS: the starter room, or a room grown for it ---------- */
 {
   const grown = [];
