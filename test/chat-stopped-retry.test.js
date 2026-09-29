@@ -63,6 +63,15 @@ A.ok(retryFn, 'retryLast exists');
   const stoppedCtx = { activeWs: { runIds: ['s'], history: [{ role: 'user', content: 'go', sourceRunId: 's' }, { role: 'assistant', content: 'partial', stopped: true }] }, isBusy: () => false, localLine: () => {}, load: () => {}, send: () => {} };
   vm.createContext(stoppedCtx); vm.runInContext(body + '; retryLast();', stoppedCtx);
   A.eq(stoppedCtx.activeWs.history.length, 1, 'retryLast discards a stopped partial assistant tail before re-running');
+  // …but load() re-syncs from the server transcript and can put the replaced replies back before send() builds the
+  // request (re-proven live 2026-09-28: /retry still sent [user, assistant] and got the prefill 400). The WIRE is cut too.
+  const cut = /function\s+endOnUserTurn\s*\([^)]*\)\s*\{[\s\S]*?\n\s{2}\}/.exec(src);
+  A.ok(cut, 'endOnUserTurn exists');
+  const wctx = {}; vm.createContext(wctx); vm.runInContext(cut[0] + '; this.f = endOnUserTurn;', wctx);
+  const wire = wctx.f([{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b' }, { role: 'user', content: 'c' }, { role: 'assistant', content: 'd' }, { role: 'assistant', content: 'e' }]);
+  A.eq(wire.map(m => m.content).join(''), 'abc', 'the retry wire ends on the last user turn');
+  A.eq(wctx.f([{ role: 'assistant', content: 'x' }]).length, 1, 'no user turn -> untouched');
+  A.ok(/messages:\s*retry\s*\?\s*endOnUserTurn\(historyWindow\(ws\)\)\s*:\s*historyWindow\(ws\)/.test(src), 'send() cuts the wire on a retry, after the history re-sync');
 }
 A.ok(/send\s*\(\s*text\s*,\s*\{\s*retry:\s*true\s*,\s*retryUserRunId:/.test(retryFn[1]),
   'Try again uses the existing no-duplicate retry send path');
