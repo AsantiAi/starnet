@@ -96,6 +96,12 @@ function nudgeCount(fixture, agentId) {
   catch (_) { return undefined; }
 }
 
+// the boot/run log gained no error from this lane's new writes (a fail-open note is a console.warn '[failopen] <tag>')
+function cleanLog(fixture, label) {
+  const bad = (fixture.output().match(/\[failopen\] (skill\.nudge|skill\.markUsed)[^\n]*|\[skill-nudge\][^\n]*/g) || []);
+  A.eq(bad, [], 'clean sidecar log (' + label + '): no skill-nudge / markUsed failure lines');
+}
+
 async function skillRow(fixture, agentId, name) {
   const r = await fixture.json('GET', '/api/agent-skills?agent=' + agentId);
   A.eq(r.status, 200, 'GET /api/agent-skills answers for ' + agentId);
@@ -128,6 +134,7 @@ async function skillRow(fixture, agentId, name) {
     A.eq(nudgeCount(fixture, 'learner'), 3, 'the nudge count (3) is written to skill.nudge.json');
 
     // ---- 2b. the count survives a restart ----
+    cleanLog(fixture, 'first boot');
     await fixture.restart();
     A.eq(nudgeCount(fixture, 'learner'), 3, 'the nudge count is still 3 after a sidecar restart');
 
@@ -155,9 +162,11 @@ async function skillRow(fixture, agentId, name) {
     row = await skillRow(fixture, 'user-three', 'Deploy Site');
     A.eq(row && row.useCount, 1, 'a run that LOADED the skill with skill.view counts exactly one use');
     A.eq(row && row.viewCount, 1, 'and one view');
+    cleanLog(fixture, 'second boot');
     await fixture.restart();
     row = await skillRow(fixture, 'user-three', 'Deploy Site');
     A.eq(row && row.useCount, 1, 'the use survives a sidecar restart (markUsed persisted it)');
+    cleanLog(fixture, 'third boot');
   } finally {
     await fixture.dispose();
     try { mock.server.close(); } catch (_) {}
