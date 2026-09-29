@@ -25,7 +25,13 @@ A.ok(/const fits = lineFits\(bp\.id\)/.test(tiles) && /MAKE ROOM FOR IT/.test(ti
 A.ok(/b\.after\(mk\)/.test(tiles), '…as a sibling button (never a button inside the card button)');
 const mr = build.slice(build.indexOf('  function makeRoomFor(bpId, ev) {'), build.indexOf('  function stampLine(w, ev) {'));
 A.ok(/const W = bp\.w \+ 2, H = bp\.h \+ 2;/.test(mr), 'the room is the line plus a tile of walking room');
-A.ok(/touches\(c\.x, c\.y\)/.test(mr) && /station\.addRoom\(\{ kind: 'hab'/.test(mr), 'it only builds a room that touches the station (auto-doors join it)');
+// the room finder lives in worldmodel.roomSpots since 2026-09-29, shared with the agent's station builder
+A.ok(/station\.roomSpots\(W, H, 'hab'\)/.test(mr) && /station\.addRoom\(\{ kind: 'hab'/.test(mr), 'it builds a room from the station\'s own room finder');
+{
+  const st = WM.create(WM.starterDoc()), spots = st.roomSpots(12, 7, 'hab');
+  const touches = r => { for (let y = r.y1; y <= r.y2; y++) if (st.roomAt(r.x1 - 1, y) || st.roomAt(r.x2 + 1, y)) return true; for (let x = r.x1; x <= r.x2; x++) if (st.roomAt(x, r.y1 - 1) || st.roomAt(x, r.y2 + 1)) return true; return false; };
+  A.ok(spots.length > 0 && spots.every(touches), 'it only offers a room that touches the station (auto-doors join it)');
+}
 A.ok(/lineType = bp\.id; selectTool\('line'\)/.test(mr) && /UNDO removes the room/.test(mr), 'then arms the line over it and says how to take it back');
 A.ok(/\(ok \? ' — CLICK TO STAMP' : ''\)/.test(build), 'a red line ghost never says CLICK TO STAMP');
 // the real model agrees: a room that touches the starter room is accepted and the blueprint then fits
