@@ -474,19 +474,19 @@
         }
         // The transparency verdict comes from the exact bytes about to be saved (an exact-size fit keeps alpha).
         // An opaque result is still saved and delivered (it was paid for), but it is never reported as transparent.
-        let alphaNote = '', alphaTag = '';
+        // The verdict rides the CONTENT only: the summary stays exactly "image → <rel>", because artifacts.js reads
+        // the saved path out of it (a suffix there became part of the recorded path).
+        let alphaNote = '';
         if (transparent) {
           const cov = alphaCoverage(buffer);
           if (cov.state === 'transparent') {
             alphaNote = '\nTransparent background verified in the saved file: ' + cov.clearPct + '% of pixels are see-through.';
           } else if (cov.state === 'opaque') {
-            alphaTag = ' (NOT transparent)';
             alphaNote = '\nNOT TRANSPARENT: ' + cov.why + '. A checkerboard in the picture is painted, not transparency, so do not ' +
               'describe this image as transparent. ' + (protocol !== 'openai-images' && !ALPHA_MODEL.test(model)
                 ? 'Retry with transparent:true and no model override, which uses a model that outputs alpha.'
                 : 'The model ignored the request: retry once, and if it is still opaque tell the user plainly.');
           } else {
-            alphaTag = ' (transparency unverified)';
             alphaNote = '\nTransparency NOT verified: ' + cov.why + '. Do not claim the background is transparent.';
           }
         }
@@ -525,7 +525,7 @@
           content: 'Generated and saved ' + rel + ' (' + kb + ', ' + mime + ', model ' + model + shapeNote + sizeNote + ').' +
             (switchNote ? '\nModel: ' + switchNote + '.' : '') + alphaNote +
             '\nView: ' + viewer + (caption ? '\nModel note: ' + caption : ''),
-          summary: 'image → ' + rel + alphaTag
+          summary: 'image → ' + rel
         };
       }
     };

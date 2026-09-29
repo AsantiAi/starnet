@@ -382,8 +382,13 @@ const imageReply = png => jsonResp({ choices: [{ message: { images: [{ image_url
     A.eq(checkerFetch.calls[0].body.model, 'black-forest-labs/flux.2-pro', 'an explicit model of unknown ability is kept');
     A.ok(/\nNOT TRANSPARENT: the PNG is RGB with no alpha channel\./.test(opaque.content) && /painted, not transparency/.test(opaque.content), 'an opaque result is reported as NOT transparent: ' + JSON.stringify(opaque.content));
     A.ok(/Retry with transparent:true and no model override/.test(opaque.content), 'the retry that would work is named');
-    A.eq(opaque.summary, 'image → art/badge.png (NOT transparent)', 'the summary the UI shows is truthful');
     A.ok(cEmits.some(e => e.n === 'deliverable'), 'the paid-for opaque image is still delivered');
+    // The summary is a machine-read contract: artifacts.js takes the saved path from everything after "image → ".
+    // The verdict must never ride it, or the artifact ledger records a path that does not exist.
+    A.eq(opaque.summary, 'image → art/badge.png', 'the summary stays exactly "image → <saved path>"');
+    const ledger = require('../sidecar/artifacts.js').makeArtifactCollector();
+    ledger.observe({ toolName: 'image_generate', args: { prompt: 'badge', transparent: true }, result: Object.assign({ ok: true, isError: false }, opaque) });
+    A.eq(ledger.list(), [{ kind: 'image', path: 'art/badge.png' }], 'the artifact ledger records the real saved path for an opaque verdict');
     const flatFetch = stubFetch(() => imageReply(encodePng({ w: 8, h: 8, ctype: 6, pixel: () => [1, 2, 3, 255] })));
     const flat = await makeImageTools({ openrouter: { apiKey: 'k' }, fsp, pathMod: path, root: ROOT, fetchImpl: flatFetch }).generateTool.run({ prompt: 'logo', transparent: true }, ctx);
     A.ok(/no pixel is see-through/.test(flat.content) && /The model ignored the request/.test(flat.content), 'an alpha model that ignored the request is reported as such, with no model hint');
@@ -413,7 +418,7 @@ const imageReply = png => jsonResp({ choices: [{ message: { images: [{ image_url
     const interFetch = stubFetch(() => imageReply(encodePng({ w: 8, h: 8, ctype: 6, interlace: 1, pixel: () => [0, 0, 0, 0] })));
     const inter = await makeImageTools({ openrouter: { apiKey: 'k' }, fsp, pathMod: path, root: ROOT, fetchImpl: interFetch }).generateTool.run({ prompt: 'logo', transparent: true, path: 'art/inter' }, ctx);
     A.ok(/\nTransparency NOT verified: this PNG layout/.test(inter.content) && /Do not claim the background is transparent/.test(inter.content), 'unverifiable alpha is said plainly');
-    A.eq(inter.summary, 'image → art/inter.png (transparency unverified)', 'and the summary says so');
+    A.eq(inter.summary, 'image → art/inter.png', 'the summary keeps its machine-read shape');
 
     // J7b. the result names the shape RENDERED, not the one asked for: OpenAI image slugs on OpenRouter return a square
     //      whatever image_config says (live probe 2026-09-28: 16:9 asked, 1024x1024 returned)
