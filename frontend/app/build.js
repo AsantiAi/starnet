@@ -577,6 +577,86 @@ const Build = (() => {
     if (f) f.focus();
   }
 
+  /* MAKE A PROP (player-made props, userprops.js): type any object, StarNet draws it in the station's style on
+     StarNet credits, and it joins the catalog under MADE BY YOU as decoration. The status line reads ONLY the job
+     state the station reports (step, try n of 3, the cost the cloud actually billed); the job keeps running in
+     the station if REFIT closes, and this panel picks it back up on reopen. */
+  let makeJob = null, makeMsg = null, makeWatching = '';
+  const MAKE_STEP = { queued: 'Queued', waiting: 'Working', sizing: 'Sizing it against the catalog', drawing: 'Drawing', retrying: 'Redrawing', checking: 'Checking it matches the station' };
+  function makeStatusText() {
+    if (makeMsg) return makeMsg;
+    if (!makeJob) return { text: 'Uses StarNet credits \u00b7 usually about $0.35 a prop', tone: '' };
+    const j = makeJob, spent = j.costUsd > 0 ? ' \u00b7 $' + j.costUsd.toFixed(2) + ' so far' : '';
+    if (j.status === 'done') return { text: 'Made ' + (j.label || j.noun) + ' \u00b7 cost $' + (Number(j.costUsd) || 0).toFixed(2) + (j.costPending ? ' (final cost settling)' : '') + ' \u00b7 in MADE BY YOU', tone: 'ok' };
+    if (j.status === 'failed') return { text: ((j.error && j.error.message) || 'That prop could not be made.') + (j.costUsd > 0 ? ' Spent $' + j.costUsd.toFixed(2) + '.' : ''), tone: 'bad' };
+    const step = MAKE_STEP[j.step] || 'Working';
+    const tries = (j.step === 'drawing' || j.step === 'retrying' || j.step === 'checking') && j.tries ? ' (try ' + j.tries + ' of ' + (j.maxTries || 3) + ')' : '';
+    return { text: step + tries + '\u2026' + spent, tone: 'busy' };
+  }
+  function paintMakeStatus() {
+    const el = root && root.querySelector('#refit-makeprop-status');
+    if (!el) return;
+    const st = makeStatusText();
+    el.textContent = st.text; el.className = 'refit-makeprop-status' + (st.tone ? ' ' + st.tone : '');
+    const door = root.querySelector('#refit-makeprop-door');
+    if (door) door.hidden = !(makeMsg && makeMsg.door);
+    const go = root.querySelector('#refit-makeprop-go');
+    if (go) go.disabled = !!(makeJob && makeJob.status !== 'done' && makeJob.status !== 'failed');
+  }
+  function watchMakeJob(job) {
+    makeJob = job; makeMsg = null;
+    if (makeWatching === job.id || typeof UserProps === 'undefined') { paintMakeStatus(); return; }
+    makeWatching = job.id;
+    paintMakeStatus();
+    UserProps.watch(job.id, (j) => { makeJob = j; paintMakeStatus(); }).then((j) => {
+      makeWatching = '';
+      makeJob = j;
+      if (j.status === 'done' && j.propId && typeof PropSprites !== 'undefined' && PropSprites.spec(j.propId)) {
+        makeJob.label = PropSprites.spec(j.propId).label;
+        propType = j.propId; propCat = 'yours'; propQuery = '';
+        if (root) { renderPalette(); setLibraryPlacement(true); }
+      }
+      paintMakeStatus();
+      sfx(j.status === 'done' ? 'confirm' : 'click');
+    });
+  }
+  async function startMakeProp(noun) {
+    noun = String(noun || '').trim();
+    if (!noun || typeof UserProps === 'undefined') return;
+    makeMsg = { text: 'Starting\u2026', tone: 'busy' }; paintMakeStatus();
+    const r = await UserProps.generate(noun);
+    if (r && r.ok && r.job) { watchMakeJob(r.job); return; }
+    const code = r && r.code;
+    makeJob = null;
+    makeMsg = { text: (r && r.message) || 'That prop could not be started.', tone: 'bad', door: code === 'not_linked' || code === 'insufficient_credits' };
+    paintMakeStatus();
+  }
+  // REFIT reopened while the station still has a job in flight: pick it back up instead of forgetting it.
+  function resumeMakeJob() {
+    if (makeJob || makeWatching || typeof UserProps === 'undefined') return;
+    UserProps.load().then((r) => { const j = r && r.jobs && r.jobs[0]; if (j && !makeJob) watchMakeJob(j); });
+  }
+  function makePropPanel() {
+    const box = document.createElement('section'); box.className = 'refit-makeprop'; box.setAttribute('aria-label', 'Make a prop');
+    box.innerHTML = '<div class="refit-makeprop-head"><b>MAKE A PROP</b><small>Type any object. StarNet draws it in the station\u2019s style.</small></div>' +
+      '<div class="refit-makeprop-row"><input type="text" class="refit-input refit-searchfield" id="refit-makeprop-input" maxlength="60" spellcheck="false" autocomplete="off" aria-label="Object to make" placeholder="e.g. a grandfather clock">' +
+      '<button type="button" class="bb sm" id="refit-makeprop-go">MAKE</button></div>' +
+      '<div class="refit-makeprop-foot"><span class="refit-makeprop-status" id="refit-makeprop-status" role="status" aria-live="polite"></span>' +
+      '<button type="button" class="bb sm" id="refit-makeprop-door" hidden>\u25b8 OPEN PROVIDERS</button></div>';
+    const inp = box.querySelector('#refit-makeprop-input'), go = box.querySelector('#refit-makeprop-go');
+    go.onclick = () => { startMakeProp(inp.value); sfx('click'); };
+    inp.onkeydown = (ev) => {
+      if (ev.key === 'Enter') { ev.preventDefault(); startMakeProp(inp.value); }
+      if (ev.key === 'Escape') { ev.stopPropagation(); inp.blur(); }
+    };
+    box.querySelector('#refit-makeprop-door').onclick = () => {
+      const door = typeof FriendlyError !== 'undefined' && FriendlyError.actionButton && FriendlyError.actionButton({ action: 'store' });
+      if (door && door.run) door.run();
+    };
+    setTimeout(() => { paintMakeStatus(); resumeMakeJob(); }, 0);
+    return box;
+  }
+
   function propSearchRow() {
     const row = document.createElement('div'); row.className = 'refit-propsearch';
     const inp = document.createElement('input');
@@ -905,7 +985,9 @@ const Build = (() => {
         details.textContent = expanded ? 'LESS ▴' : 'DETAILS ▾';
         details.scrollIntoView({ block: 'nearest' });
       };
-      browser.append(search, sections, renderAbilityOverview());
+      browser.append(search, sections);
+      if (propSection === 'decoration' && typeof UserProps !== 'undefined') browser.append(makePropPanel());
+      browser.append(renderAbilityOverview());
       const shelves = document.createElement('div'); shelves.className = 'refit-shelves';
       const categoryMenu = document.createElement('details'); categoryMenu.className = 'refit-category-menu';
       const categoryTrigger = document.createElement('summary'); categoryTrigger.id = 'refit-category-trigger';
@@ -6482,6 +6564,11 @@ const Build = (() => {
   // Optional authored skins arrive after the UI scripts. Refresh only the art
   // preview and thumbnails; selection, orientation and station data stay intact.
   if (typeof window !== 'undefined' && window.addEventListener) {
+    // a made prop joined (or its art arrived): repaint the catalog so MADE BY YOU and its tile appear
+    window.addEventListener('starnet:userprops-changed', () => {
+      if (!root || !(tool === 'prop' || (tool === 'select' && buildGroup === 'props'))) return;
+      renderPalette();
+    });
     window.addEventListener('starnet:prop-art-ready', () => {
       mountOrder = null; // Loaded support geometry can change host-relative sorting without an edit.
       if (!root) return;

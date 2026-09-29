@@ -11001,6 +11001,7 @@ const PropSprites = (() => {
     workstation: 'WORKSTATIONS', workflow: 'WORKFLOW', capability: 'CAPABILITY', isolation: 'ISOLATION',
     command: 'COMMAND',   // G1b: mission surfaces — functional-but-not-capability (MISSION BOARD)
     screens: 'SCREENS', lab: 'LAB', storage: 'STORAGE', comms: 'COMMS', lounge: 'LOUNGE', decor: 'DECOR',
+    yours: 'MADE BY YOU',   // player-made props (userprops.js): decoration only, one south view each
   };
 
   const compactTactical = Object.assign({}, BY_ID.bridge_tacticaltable, { w:5, h:3,
@@ -11322,7 +11323,7 @@ const PropSprites = (() => {
   }
 
   function draw(f, work, live) {
-    const fn = F[f.t]; if (!fn) return;
+    const fn = F[f.t]; if (!fn) { if (USER_ID.test(String(f.t || ''))) drawUserPlaceholder(f.x * TILE, f.y * TILE, (f.w || 1) * TILE, (f.h || 1) * TILE); return; }
     // MOUNT LIFT. A surface-standing prop is the SAME art as a floor prop, drawn higher: every prop
     // function anchors its contact to its own footprint bottom, so lifting the origin lifts the whole
     // thing and keeps every internal offset valid. This is deliberately the only place the lift is
@@ -11828,6 +11829,44 @@ const PropSprites = (() => {
   }
   function surfaceLift(f){return f.mount==='surface'?(surfaceMounts?surfaceMounts.liftFor(f):SURFACE_RISE):0;}
   function surfacePlacement(f){return f.mount==='surface'&&surfaceMounts?surfaceMounts.placementFor(f):null;}
+  /* PLAYER-MADE PROPS (userprops.js + sidecar/userprops.js). A player types a noun, the StarNet cloud draws it in
+     the catalog's style, and the station keeps the PNG. Each one joins the catalog at RUNTIME as plain decoration:
+     cosmetic tier, category 'yours', one south view, no function (object = capability: a made prop never claims
+     a power it does not have). Its art is a PropRemaster runtime view; until that is decoded (or if it is gone
+     from disk) the prop draws as a dim placeholder box, so a saved station never has an invisible obstacle. */
+  const USER_ID = /^user_[a-z0-9_]{3,60}$/;
+  function drawUserPlaceholder(X, Y, W, H) {
+    if (!ctx) return;
+    ctx.save();
+    try {
+      ctx.fillStyle = 'rgba(20,26,30,0.55)'; ctx.fillRect(X + 1, Y + 1, W - 2, H - 2);
+      ctx.strokeStyle = 'rgba(160,150,120,0.55)'; ctx.lineWidth = 1; ctx.setLineDash && ctx.setLineDash([2, 2]);
+      ctx.strokeRect(X + 1.5, Y + 1.5, W - 3, H - 3);
+    } finally { ctx.restore(); }
+  }
+  function registerUserProp(p) {
+    const id = p && String(p.id || '');
+    if (!USER_ID.test(id)) return null;
+    if (BY_ID[id]) return BY_ID[id];
+    const w = Math.max(1, Math.min(16, Math.floor(+((p.footprint && p.footprint.w) || 1)))), h = Math.max(1, Math.min(16, Math.floor(+((p.footprint && p.footprint.h) || 1))));
+    const row = { id, label: String(p.label || 'MADE PROP').toUpperCase().slice(0, 24), cat: 'yours', tier: 'cosmetic', w, h, animated: false, blocks: true, user: true,
+      desc: 'Made by you' + (p.noun ? ': ' + String(p.noun).slice(0, 60) : '') + '. Decoration only.' };
+    CATALOG.push(row); BY_ID[id] = row; (CATS.yours = CATS.yours || []).push(row);
+    F[id] = (x, y, w2, h2, o = {}) => {
+      const drawn = typeof PropRemaster !== 'undefined' && typeof PropRemaster.draw === 'function' &&
+        PropRemaster.draw(ctx, id, 's', x, y, w2, h2, { ...o, now, still: !!o.still }, null);
+      if (!drawn) drawUserPlaceholder(x, y, w2, h2);
+    };
+    return row;
+  }
+  // Placement/save rules for a prop type. A player-made id is KEPT even before its row is registered (the
+  // boot fetch can lose the race, or the PNG can be missing): pruning it would silently delete paid work from
+  // the save. Built-in unknown types still return null so retired types are dropped as before.
+  function ruleFor(t) {
+    const s = spec(t);
+    if (s) return { mount: s.mount || null, stack: !!s.stack, surface: !!s.surface, flat: !!s.flat, footprintMigration: s.footprintMigration };
+    return USER_ID.test(String(t || '')) ? { mount: null, stack: false, surface: false, flat: false } : null;
+  }
   if (typeof PropRemaster !== 'undefined') {
     for (const c of [...CATALOG,{id:'seatchair',artId:'chair'}]) {
       for (const facing of ['s','n','e','w']) {
@@ -11869,6 +11908,9 @@ const PropSprites = (() => {
     // value is DIALLED on a real deck and copied back into the constant, never guessed.
     setChroma(k) { CHROMA = (k == null ? 1 : +k) || 1; _cboost.clear(); },
     getChroma: () => CHROMA,
+    registerUserProp, ruleFor, isUserProp: (t) => USER_ID.test(String(t || '')),
+    // After player-made art decodes: drop the caches that were built while those props were placeholders.
+    userArtChanged() { shadowMasks.clear(); invalidateLightResponse(); _ink.clear(); if (typeof World !== 'undefined' && typeof World.rebake === 'function') World.rebake(); },
     draw, drawBayNames, drawOver, hasOver, drawSeatFront, get CATALOG(){return projectionCatalog()?CATALOG.map(c=>spec(c.id)):CATALOG;}, CATS, spec, has, TILE,
     drawShadow, lightOf, EMIT, canLightResponse, drawLightResponse, lightResponseStats, invalidateLightResponse,
     // ORIENTATION: what each prop's art can honestly do, and the box it covers once turned. The

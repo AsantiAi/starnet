@@ -100,13 +100,13 @@ function makeUserProps(deps) {
     if (!noun) return { ok: false, code: 'empty', message: 'Describe an object.' };
     if (noun.length > 60) return { ok: false, code: 'too_long', message: 'Keep it under 60 characters.' };
     const c = cloudCfg();
-    if (!c) return { ok: false, code: 'not_linked', message: 'Making props uses StarNet credits. Link this station in the STORE first.' };
+    if (!c) return { ok: false, code: 'not_linked', message: 'Making props uses StarNet credits. Link this station under SETTINGS → PROVIDERS first.' };
     let r;
     try { r = await request('POST', c.url + '/v1/props/generate', c.token, { noun }, START_TIMEOUT_MS); }
     catch (_) { return { ok: false, code: 'unreachable', message: 'StarNet could not be reached. Check your connection and try again.' }; }
     const cloudMsg = r.j && r.j.error && r.j.error.message ? String(r.j.error.message).slice(0, 200) : '';
-    if (r.status === 402) return { ok: false, code: 'insufficient_credits', message: 'Out of StarNet credits. Add credits in the STORE.' };
-    if (r.status === 401 || r.status === 403) return { ok: false, code: 'not_linked', message: 'This station’s StarNet link is no longer valid. Relink it in the STORE.' };
+    if (r.status === 402) return { ok: false, code: 'insufficient_credits', message: 'Out of StarNet credits. Top up under SETTINGS → PROVIDERS.' };
+    if (r.status === 401 || r.status === 403) return { ok: false, code: 'not_linked', message: 'This station’s StarNet link is no longer valid. Relink it under SETTINGS → PROVIDERS.' };
     if (r.status === 429) return { ok: false, code: 'busy', message: cloudMsg || 'Too many props right now. Try again shortly.' };
     if (r.status === 400) return { ok: false, code: (r.j && r.j.error && r.j.error.code) || 'invalid', message: cloudMsg || 'That description was not accepted.' };
     if (r.status === 404) return { ok: false, code: 'unsupported', message: 'Your StarNet account server does not offer prop making yet.' };

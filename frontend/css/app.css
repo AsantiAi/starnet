@@ -4003,6 +4003,20 @@ body.crew-rail-off #screen-game.active {
 .refit-propsearch { display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0; }
 .refit-propsearch .refit-searchfield { flex: 1 1 auto; min-width: 0; margin: 4px 0; font-size: 13.5px; letter-spacing: 1px; }
 .refit-searchclear { flex: 0 0 auto; font-size: 12px; padding-inline: 8px; line-height: 1; }
+/* MAKE A PROP — player-made props (userprops.js). Same well, input and key vocabulary as the search row above;
+   the status line is VT323 phosphor like .refit-searchnote, tinted only by the job's real state. */
+.refit-makeprop { width: 100%; min-width: 0; margin: 4px 0 2px; padding: 6px 8px 5px; border: 1px solid var(--ph-dim); box-shadow: var(--ui-well); }
+.refit-makeprop-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-family: 'VT323', monospace; letter-spacing: 1.5px; }
+.refit-makeprop-head b { font-weight: normal; font-size: 14px; color: var(--ph); text-shadow: 0 0 6px var(--ph-glow2); }
+.refit-makeprop-head small { font-size: 11.5px; color: var(--ph-dim); }
+.refit-makeprop-row { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.refit-makeprop-row .refit-searchfield { flex: 1 1 auto; min-width: 0; }
+.refit-makeprop-row .bb { flex: 0 0 auto; }
+.refit-makeprop-foot { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.refit-makeprop-status { flex: 1 1 auto; min-width: 0; font-family: 'VT323', monospace; font-size: 11.5px; letter-spacing: 1px; line-height: 1.3; color: var(--ph-dim); text-shadow: 0 0 5px var(--ph-glow2); white-space: normal; }
+.refit-makeprop-status.busy { color: var(--ph); }
+.refit-makeprop-status.ok { color: var(--ph); }
+.refit-makeprop-status.bad { color: var(--bad); text-shadow: none; }
 /* the result readout: a real count, or an honest miss — never an empty grid with no explanation */
 .refit-searchnote {
   width: 100%; margin: 2px 0 1px; font-size: 11px; letter-spacing: 1.5px;

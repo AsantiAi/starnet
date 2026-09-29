@@ -963,3 +963,4 @@ test/estop-sample-hub.test.js
 test/trigger-sweep.test.js
 test/steptest-restart-spend.test.js
 test/userprops.test.js
+test/userprops-catalog.test.js
