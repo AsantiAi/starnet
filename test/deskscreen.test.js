@@ -106,4 +106,15 @@ A.eq([diff.app, diff.kind, diff.body, diff.note], ['EDITOR', 'diff', '- old\n+ n
 A.eq(D._parseScreens([{ role: 'tool', toolCallId: 'zz', content: 'orphan' }]).length, 0, 'a result with no call is never shown as a screen');
 A.eq(D._screenOf({ name: 'web_search', args: { query: 'otters' }, result: '1. Otters', done: true }).target, 'otters', 'web search → the query + its results');
 
+// ---- STEP-IN: a handoff is per agent and live only while waiting / taken ----
+D._fold('browser.handoff', { id: 'ho_1', agentId: 'mira', runId: 'm1', state: 'waiting', reason: 'login', note: 'sign in to the bank' }, 7000);
+A.eq(D._handoffOf('mira') && D._handoffOf('mira').state, 'waiting', 'a waiting handoff shows on that agent\'s screen');
+A.eq(D._handoffOf('nova'), null, '…and never on another agent\'s');
+D._fold('browser.handoff', { id: 'ho_1', agentId: 'mira', runId: 'm1', state: 'taken' }, 7100);
+A.eq(D._handoffOf('mira').state, 'taken', 'TAKE moves it to taken');
+D._fold('browser.handoff', { id: 'ho_old', agentId: 'mira', runId: 'm0', state: 'returned' }, 7200);
+A.eq(D._handoffOf('mira') && D._handoffOf('mira').id, 'ho_1', 'an older handoff ending never clears the live one');
+D._fold('browser.handoff', { id: 'ho_1', agentId: 'mira', runId: 'm1', state: 'returned' }, 7300);
+A.eq(D._handoffOf('mira'), null, 'HAND BACK clears it');
+
 A.report();

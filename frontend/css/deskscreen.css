@@ -22,6 +22,14 @@
 .ds-job { margin: 0; font-size: 14px; color: var(--ph-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ds-ask { margin: 0; padding: 4px 8px; font-size: 15px; color: var(--gold, #ffc24a); border: 1px solid rgba(var(--gold-rgb, 255,194,74), .35); border-radius: 4px; background: rgba(var(--gold-rgb, 255,194,74), .06); }
 
+/* STEP-IN: the agent asked for a human in its browser — the door to take it sits on its screen */
+.ds-handoff { display: flex; align-items: center; gap: 10px; flex: none; }
+.ds-handoff > span { flex: 1 1 auto; min-width: 0; }
+.ds-handoff small { display: block; font-size: 13px; color: var(--ph-dim); margin-top: 2px; overflow-wrap: anywhere; }
+.ds-handoff .bb { flex: none; }
+/* OPEN PAGE: a web page it wrote, shown for real in the BROWSER window */
+.ds-openpage { flex: none; }
+
 /* THE SCREEN: a recessed monitor well (dark glass, one hairline edge, inset shadow) holding one app */
 .ds-app { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--gd-edge, rgba(var(--ph-rgb),.24)); border-radius: 5px; background: rgba(0,0,0,.34); box-shadow: inset 0 1px 6px rgba(0,0,0,.45); overflow: hidden; }
 .ds-bar { display: flex; align-items: center; gap: 10px; padding: 4px 6px 4px 10px; border-bottom: 1px solid var(--gd-edge, rgba(var(--ph-rgb),.24)); background: linear-gradient(180deg, rgba(var(--ph-rgb),.10), rgba(var(--ph-rgb),.02)); }
