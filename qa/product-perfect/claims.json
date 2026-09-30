@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "fa7924e19df375dd45d853e7238700ad0233f70d",
+    "sourceCommit": "a9842a65af55cf1a946c5c9c620605a10fca6c1b",
     "pathSetSha256": "d208b530ebf640e2fa520c2d157593c6ee2e74b85483317e129967112d6ed60a",
     "files": [
       {
@@ -318,8 +318,8 @@
       },
       {
         "path": "frontend/app/build.js",
-        "bytes": 473401,
-        "sha256": "a0983f04dce96649e71f95bb30a1fd54caf9f77a6cb27941109ec9561296b513"
+        "bytes": 475513,
+        "sha256": "a77731e7a4fe42d5dd7033efba46c777b05977b59212c349ae3d650f78e9f516"
       },
       {
         "path": "frontend/app/channels.js",
@@ -1093,8 +1093,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 757143,
-        "sha256": "1d121df43df80ddde81c3c48003421d849d1962d21f2a27b31fbc1805249c184"
+        "bytes": 758669,
+        "sha256": "3770ad389d9da7e5edd96827c8dbc57cd3eb05e8c43d8159992c79d9c1ff51e0"
       },
       {
         "path": "frontend/app/study.js",
@@ -1288,8 +1288,8 @@
       },
       {
         "path": "frontend/app/workflowpanel.js",
-        "bytes": 141921,
-        "sha256": "0bb4a584040ef1728d7015574ae3aec9ba1b266ee7a7b405a1ed55819d6782c6"
+        "bytes": 142825,
+        "sha256": "ecf654c97079173c8d45e1e7613a79223d0036fcaddfbca3fd977fc9bf61ecd5"
       },
       {
         "path": "frontend/app/workflowtakeoverstore.js",
