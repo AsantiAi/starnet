@@ -2743,6 +2743,7 @@ async function runReflection(o) {
       { role: 'user', content: prompt }
     ] };
     if (auxEffort) req.reasoningEffort = auxEffort;
+    if (runId) req.runId = runId;   // run attribution (starnet proxy header; other providers ignore it)
     let out = '', usage = null;
     for await (const ev of provider.stream(req)) {
       if (ev && ev.type === 'text') out += ev.delta;
@@ -2839,6 +2840,7 @@ async function runFailureReview(o) {
       { role: 'user', content: prompt }
     ] };
     if (auxEffort) req.reasoningEffort = auxEffort;
+    if (runId) req.runId = runId;   // run attribution (starnet proxy header; other providers ignore it)
     let out = '', usage = null;
     for await (const ev of provider.stream(req)) {
       if (ev && ev.type === 'text') out += ev.delta;
@@ -2947,6 +2949,7 @@ async function runStudy(o) {
       { role: 'user', content: prompt }
     ] };
     if (auxEffort) req.reasoningEffort = auxEffort;
+    if (runId) req.runId = runId;   // run attribution (starnet proxy header; other providers ignore it)
     let out = '', usage = null;
     for await (const ev of provider.stream(req)) {
       if (ev && ev.type === 'text') out += ev.delta;
@@ -3015,6 +3018,7 @@ async function runThreadMine(o) {
       { role: 'user', content: prompt }
     ] };
     if (auxEffort) req.reasoningEffort = auxEffort;
+    if (runId) req.runId = runId;   // run attribution (starnet proxy header; other providers ignore it)
     let out = '', usage = null;
     for await (const ev of provider.stream(req)) {
       if (ev && ev.type === 'text') out += ev.delta;
@@ -6037,6 +6041,7 @@ async function runScoutCycle(o) {
   const propose = async (system, prompt) => {
     const req = { model, stream: true, signal: ac.signal, messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }] };
     if (auxEffort) req.reasoningEffort = auxEffort;
+    if (runId) req.runId = runId;   // run attribution (starnet proxy header; other providers ignore it)
     let out = '', usage = null;
     for await (const ev of provider.stream(req)) {
       if (ev && ev.type === 'text') out += ev.delta;
