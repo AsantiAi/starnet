@@ -138,12 +138,12 @@
   /* ---- controls: the element-level FLOOR first (no bare white control can exist), then the named skins ---- */
   button, input, select, textarea { font: inherit; color: var(--text); }
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="file"]):not([type="image"]), select, textarea {
-    background: rgba(var(--ph-rgb), .035); border: 1px solid var(--gd-edge); border-radius: var(--r-sm); color: var(--text);
-    box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb), .05);
-    padding: 4px 8px; font-size: 18px; outline: none;
+    background: rgba(0, 0, 0, .18); border: 1px solid rgba(var(--ph-rgb), .2); border-radius: 8px; color: var(--ph-bright);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, .15);
+    padding: 7px 12px; font-size: 17px; outline: none;
   }
   input::placeholder, textarea::placeholder { color: var(--text); opacity: .55; }
-  input:focus, select:focus, textarea:focus { border-color: rgba(var(--ph-rgb), .45); box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb), .05); }
+  input:focus, select:focus, textarea:focus { border-color: var(--ph); box-shadow: 0 0 0 2px rgba(var(--ph-rgb), .1); }
   select {
     appearance: none; -webkit-appearance: none; padding-right: 26px;
     background-image: linear-gradient(45deg, transparent 50%, var(--ph) 50%), linear-gradient(135deg, var(--ph) 50%, transparent 50%);
@@ -155,26 +155,32 @@
   /* button-like inputs and the file picker's button wear the same skin as a button (never OS paint) */
   input[type="color"] { background: rgba(0, 0, 0, .3); border: 1px solid var(--gd-edge); border-radius: var(--r-sm); padding: 2px; height: 28px; }
   input[type="file"] { color: var(--text); font-size: 16px; }
+  /* KEYS = the station's current glass key (Build Library / workflow panel): 8px glass, lit-glass primary */
   button, input:is([type="submit"], [type="button"], [type="reset"]) {
-    background: rgba(0, 0, 0, .22); border: 1px solid var(--gd-edge); border-radius: var(--r-sm); color: var(--ph); cursor: pointer;
+    background: linear-gradient(125deg, rgba(var(--ph-bright-rgb), .09), rgba(var(--ph-rgb), .045) 48%, rgba(var(--ph-rgb), .015));
+    border: 1px solid rgba(var(--ph-rgb), .2); border-radius: 8px; color: var(--ph); cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb), .07);
   }
   /* own rule: a pseudo-element an engine does not know would void a whole selector list */
   ::file-selector-button { font: inherit; background: rgba(0, 0, 0, .22); border: 1px solid var(--gd-edge); border-radius: var(--r-sm); color: var(--ph); cursor: pointer; margin-right: 8px; }
   ::file-selector-button:hover { color: var(--ph-bright); border-color: var(--ph); }
-  /* SMALL BUTTON (.gd-controls button recipe) */
+  /* THE KEY (the station's glass key: 36px, 8px radius, read at 16px) */
   .sn-btn {
-    display: inline-flex; align-items: center; gap: 6px; font: 16px var(--sn-font); letter-spacing: 1px; padding: 4px 11px;
-    color: var(--ph); background: rgba(0, 0, 0, .22); border: 1px solid var(--gd-edge); border-radius: var(--r-sm);
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box; min-height: 36px;
+    font: 16px/1.15 var(--sn-font); letter-spacing: .6px; padding: 7px 14px;
+    color: var(--ph); background: linear-gradient(125deg, rgba(var(--ph-bright-rgb), .09), rgba(var(--ph-rgb), .045) 48%, rgba(var(--ph-rgb), .015));
+    border: 1px solid rgba(var(--ph-rgb), .2); border-radius: 8px; box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb), .07);
     cursor: pointer; text-decoration: none; white-space: nowrap;
     transition: color var(--t-fast) var(--ease-soft), background var(--t-fast) var(--ease-soft), border-color var(--t-fast) var(--ease-soft);
   }
-  .sn-btn:hover:not(:disabled) { color: var(--ph-bright); background: var(--gd-hover); border-color: var(--ph); }
+  .sn-btn:hover:not(:disabled) { color: var(--ph-bright); background: rgba(var(--ph-rgb), .1); border-color: rgba(var(--ph-rgb), .45); }
   /* the bare-element hover has ZERO specificity, so a named skin (sn-tab, an author's own class) always wins */
-  :where(button, input[type="submit"], input[type="button"], input[type="reset"]):hover:where(:not(:disabled)) { color: var(--ph-bright); background: var(--gd-hover); border-color: var(--ph); }
-  .sn-btn.primary { color: var(--ph-bright); border-color: rgba(var(--ph-rgb), .55); background: var(--gd-hover); }
+  :where(button, input[type="submit"], input[type="button"], input[type="reset"]):hover:where(:not(:disabled)) { color: var(--ph-bright); background: rgba(var(--ph-rgb), .1); border-color: rgba(var(--ph-rgb), .45); }
+  .sn-btn.primary { color: var(--ph-bright); border-color: var(--ph); background: rgba(var(--ph-rgb), .16); }
+  .sn-btn.primary:hover:not(:disabled) { background: rgba(var(--ph-rgb), .24); border-color: var(--ph); }
   .sn-btn.danger { color: var(--bad); border-color: rgba(var(--bad-rgb), .35); }
   .sn-btn.danger:hover:not(:disabled) { color: var(--bad); border-color: var(--bad); background: rgba(var(--bad-rgb), .1); }
-  .sn-btn.xs { font-size: 13px; padding: 2px 8px; }
+  .sn-btn.xs { min-height: 30px; font-size: 15px; padding: 4px 10px; }
   .sn-btn:disabled, button:disabled { opacity: .45; cursor: default; }
   .sn-input, .sn-select, .sn-textarea { width: 100%; }
   .sn-textarea { min-height: 84px; resize: vertical; line-height: 1.3; }

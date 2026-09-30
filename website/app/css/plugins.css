@@ -22,15 +22,15 @@
 
 /* APPS — the bar under an app window (StarNet's chrome, not the app's): describe a change · refresh · honest status */
 .term.plugin-app-win .app-bar {
-  flex: none; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px 9px;
+  flex: none; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 11px;
   border-top: 1px solid var(--gd-edge, rgba(var(--ph-rgb), .24));
   background: linear-gradient(180deg, rgba(var(--ph-rgb), .06), rgba(var(--ph-rgb), .015));
 }
-.term.plugin-app-win .app-bar-row { display: flex; gap: 6px; align-items: center; }
+.term.plugin-app-win .app-bar-row { display: flex; gap: 8px; align-items: center; }
 /* .bb sets its own display, which beats the [hidden] attribute: a button the bar hides must really be gone */
 .term.plugin-app-win .app-bar [hidden], .term.apps-win [hidden] { display: none !important; }
 .term.plugin-app-win .app-change { flex: 1 1 auto; min-width: 0; }
-.term.plugin-app-win .app-bar-status { display: flex; gap: 8px; align-items: center; font-size: 13px; letter-spacing: .5px; color: var(--ph-dim); min-height: 18px; }
+.term.plugin-app-win .app-bar-status { display: flex; gap: 8px; align-items: center; font-size: 15px; letter-spacing: .3px; color: var(--ph-dim); min-height: 20px; }
 /* the status line WRAPS: its tail ("routines are OFF", "last refresh failed") is the part that must never be cut */
 .term.plugin-app-win .app-status { flex: 1 1 auto; min-width: 0; line-height: 1.35; overflow-wrap: anywhere; }
 .term.plugin-app-win .app-bar-status { align-items: flex-start; }
@@ -45,42 +45,75 @@
 /* the APPS dock: hidden until the first app exists (a dock group sets its own display, which beats [hidden]) */
 #bottombar .bb-group[data-group="apps"][hidden] { display: none !important; }
 #bottombar .bb-apps-items { display: contents; }
-#bottombar .bb-apps-items .bb small { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+/* The APPS dock reads like its siblings (glass-demo.css .bb-menu): no item ever shrinks into the next one, and an
+   app entry is exactly two lines — its name and one status line, each cut with an ellipsis, never wrapped. */
+body.glass-demo #screen-game #bottombar .bb-group[data-group="apps"] .bb-menu .bb { flex-shrink: 0; }
+body.glass-demo #screen-game #bottombar .bb-menu .bb.bb-app .bb-tx b,
+body.glass-demo #screen-game #bottombar .bb-menu .bb.bb-app .bb-tx small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.glass-demo #screen-game #bottombar .bb-menu .bb.bb-app { min-height: 50px; }
+#bottombar .bb-apps-sep { flex: none; height: 1px; margin: 4px 8px; background: var(--gd-edge, rgba(var(--ph-rgb),.24)); }
+#bottombar .bb-apps-more { flex: none; padding: 2px 10px 4px 43px; font: 13px/1.25 'VT323',monospace; color: var(--ph-dim); }
 .term.apps-win .app-ready { color: var(--ok); }
 .term.apps-win .app-unbuilt { color: var(--ph-dim); }
 .term.apps-win .app-rename-in { flex: 1 1 auto; min-width: 0; margin-right: 8px; }
 .term.apps-win .app-row-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
-/* APPS in the GLASS material — the widget studio's recipes (glass-demo.css .wg-library), never the old CRT
-   key-input (pitch-black gradient + glow). Fields: faint phosphor tint; buttons: glass face; rows: glass cards. */
-:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-field {
-  width: 100%; box-sizing: border-box; min-width: 0; padding: 6px 8px;
-  border: 1px solid var(--gd-edge, rgba(var(--ph-rgb),.24)); border-radius: 3px;
-  background: rgba(var(--ph-rgb),.035); color: var(--text); text-shadow: none;
-  box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb),.05);
-  font: 16px/1.35 'VT323',monospace; outline: none; transition: border-color var(--t-fast, .12s);
+/* APPS — the station's CURRENT keys and fields, copied from the Build Library / workflow panel (refit-polish.css,
+   workflow-panel.css): 8px glass keys 36px tall read at 16px, lit-glass primary, 8px fields at 17px, a 16-17px body.
+   Never the old CRT key-input (black gradient + glow) or the tiny .bb xs keycaps. */
+:is(.term.apps-win, .term.plugin-app-win .app-bar) {
+  --ap-glass: var(--refit-glass, linear-gradient(125deg, rgba(var(--ph-bright-rgb),.09), rgba(var(--ph-rgb),.045) 48%, rgba(var(--ph-rgb),.015)));
+  --ap-edge: var(--refit-edge, rgba(var(--ph-rgb),.2));
+  --ap-light: inset 0 1px 0 rgba(var(--ph-bright-rgb),.07);
+  --ap-hover: rgba(var(--ph-rgb),.1);
+  --ap-on: rgba(var(--ph-rgb),.13);
 }
-:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-field:focus { border-color: rgba(var(--ph-rgb),.45); box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb),.05); }
-:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-field::placeholder { color: var(--text); opacity: .55; }
-.term.apps-win textarea.apps-field { resize: vertical; min-height: 72px; }
+.term.apps-win .term-body { font-size: 17px; line-height: 1.45; }
+/* keys */
 :is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-btn {
-  min-height: 29px; padding: 5px 9px; border: 1px solid var(--gd-edge, rgba(var(--ph-rgb),.24)); border-radius: 3px;
-  background: var(--gd-face); box-shadow: inset 0 1px 0 var(--gd-light); color: var(--ph);
-  font: 15px/1.1 'VT323',monospace; letter-spacing: .5px; cursor: pointer; white-space: nowrap; text-shadow: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box;
+  min-height: 36px; padding: 7px 14px; font: 16px/1.15 'VT323',monospace; letter-spacing: .6px; white-space: nowrap;
+  color: var(--ph); border: 1px solid var(--ap-edge); border-radius: 8px;
+  background: var(--ap-glass); box-shadow: var(--ap-light); text-shadow: none; cursor: pointer;
+  transition: background-color var(--t-fast) var(--ease-soft), border-color var(--t-fast) var(--ease-soft), color var(--t-fast) var(--ease-soft);
 }
-:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-btn.primary { color: var(--ph-bright); background: var(--gd-hover); border-color: var(--ph-dim); }
-:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-btn:not(:disabled):hover { color: var(--ph-bright); border-color: var(--ph-dim); background: var(--gd-hover); }
-:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-btn.danger:not(:disabled):hover { color: var(--bad); border-color: var(--bad); background: rgba(255,75,65,.08); }
+:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-btn:hover:not(:disabled) { color: var(--ph-bright); border-color: rgba(var(--ph-rgb),.45); background: var(--ap-hover); }
+:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-btn:active:not(:disabled) { box-shadow: inset 0 2px 4px rgba(0,0,0,.35); }
+:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-btn.primary { color: var(--ph-bright); background: rgba(var(--ph-rgb),.16); border-color: var(--ph); }
+:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-btn.primary:hover:not(:disabled) { background: rgba(var(--ph-rgb),.24); }
+:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-btn.danger:hover:not(:disabled) { color: var(--bad); border-color: var(--bad); background: color-mix(in srgb, var(--bad) 8%, transparent); }
 :is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-btn:disabled { opacity: .4; cursor: default; }
-:is(.term.apps-win, .term.plugin-app-win .app-bar) :is(.apps-btn, .apps-field):focus-visible { outline: 1px solid var(--ph); outline-offset: 1px; }
-.term.apps-win .apps-chip { min-height: 26px; padding: 3px 8px; font-size: 14px; }
-.term.apps-win .apps-h { display: block; margin: 11px 1px 7px; padding: 0; font: 18px/1.2 'VT323',monospace; letter-spacing: .5px; color: var(--ph-bright); }
-.term.apps-win .apps-new label { font: 14px/1.2 'VT323',monospace; color: var(--text); margin-top: 4px; }
-.term.apps-win .app-row {
-  padding: 8px; margin: 0; border: 1px solid var(--gd-edge, rgba(var(--ph-rgb),.24)); border-radius: 4px;
-  background: var(--gd-face); box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb),.06);
+:is(.term.apps-win, .term.plugin-app-win .app-bar) :is(.apps-btn, .apps-field):focus-visible { outline: 2px solid var(--ph-bright); outline-offset: 2px; }
+/* the example chips: the workflow panel's .wf-chip */
+.term.apps-win .apps-chip { min-height: 34px; padding: 5px 12px; letter-spacing: .5px; }
+.term.apps-win .apps-chip[aria-pressed="true"] { background: var(--ap-on); border-color: var(--ph); color: var(--ph-bright); box-shadow: var(--ap-light), inset 0 -2px 0 rgba(var(--ph-rgb),.65); }
+/* fields: the Build Library field */
+:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-field {
+  width: 100%; box-sizing: border-box; min-width: 0; min-height: 36px; padding: 8px 12px;
+  font: 17px/1.35 'VT323',monospace; color: var(--ph-bright); text-shadow: none; outline: none;
+  border: 1px solid var(--ap-edge); border-radius: 8px; background: rgba(0,0,0,.18); box-shadow: inset 0 1px 3px rgba(0,0,0,.15);
+  transition: border-color var(--t-fast) var(--ease-soft), box-shadow var(--t-fast) var(--ease-soft);
 }
-.term.apps-win .app-row:is(:hover, :focus-within) { background: var(--gd-hover); border-color: var(--ph-dim); }
-.term.apps-win .app-row .mc-acts { gap: 6px; flex-wrap: wrap; }
-/* the bar under an app window: part of the window's glass, not a dark strip */
+:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-field:focus { border-color: var(--ph); box-shadow: 0 0 0 2px rgba(var(--ph-rgb),.1); }
+:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-field:focus-visible { outline: none; }
+:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-field::placeholder { color: var(--text); opacity: .6; }
+.term.apps-win textarea.apps-field { resize: vertical; min-height: 92px; }
+/* the form */
+.term.apps-win .apps-new { gap: 8px; margin-bottom: 18px; }
+.term.apps-win .apps-h { display: block; margin: 14px 0 10px; padding: 0; font: 20px/1.2 'VT323',monospace; letter-spacing: 1px; color: var(--ph-bright); }
+.term.apps-win .apps-new label { font: 16px/1.2 'VT323',monospace; color: var(--text); margin-top: 6px; }
+.term.apps-win :is(.mc-hint, .apps-msg) { font-size: 16px; line-height: 1.35; }
+.term.apps-win .apps-examples { gap: 8px; margin-top: 2px; }
+.term.apps-win .apps-new .mc-acts { gap: 12px; margin-top: 6px; align-items: center; }
+/* your apps: one glass card each */
+.term.apps-win .apps-list { gap: 10px; }
+.term.apps-win .app-row {
+  padding: 12px 14px; margin: 0; border: 1px solid var(--ap-edge); border-radius: 10px;
+  background: var(--ap-glass); box-shadow: var(--ap-light);
+}
+.term.apps-win .app-row:is(:hover, :focus-within) { border-color: rgba(var(--ph-rgb),.4); background: var(--ap-hover); }
+.term.apps-win .app-row .mc-top b { font: 19px/1.2 'VT323',monospace; letter-spacing: .5px; color: var(--ph-bright); }
+.term.apps-win .app-row .mc-state { font-size: 15px; }
+.term.apps-win .app-row .mc-acts { gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.term.apps-win .ext-empty { font-size: 16px; }
 .term.plugin-app-win .app-bar { background: transparent; border-top: 1px solid var(--gd-edge, rgba(var(--ph-rgb),.24)); }

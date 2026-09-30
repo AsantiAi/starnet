@@ -58,17 +58,20 @@
     if (!list.length) group.classList.remove('open');
     const box = document.getElementById('bb-apps-items');
     if (!box) return;
-    const sig = list.map((a) => a.id + '\u0000' + a.name + '\u0000' + (a.description || '')).join('\u0001');
+    // each entry reads like every other dock item: the instrument icon, the name, ONE short line (its live status —
+    // never the whole description, which is what the manage window is for)
+    const sig = list.map((a) => a.id + '\u0000' + a.name + '\u0000' + dockLine(a)).join('\u0001');
     if (box.dataset.sig === sig) return;
     box.dataset.sig = sig;
     box.textContent = '';
     for (const a of list.slice(0, 12)) {
       const b = document.createElement('button');
-      b.className = 'bb'; b.type = 'button'; b.setAttribute('role', 'menuitem'); b.dataset.hint = 'app';
-      const i = document.createElement('span'); i.className = 'bb-i'; i.textContent = '▦';
+      b.className = 'bb bb-app'; b.type = 'button'; b.setAttribute('role', 'menuitem'); b.dataset.hint = 'app';
+      const i = document.createElement('span'); i.className = 'bb-i'; i.setAttribute('aria-hidden', 'true');
+      i.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 3h12v10H2zM2 6h12M4.5 4.5h1M6.5 4.5h1"/></svg>';
       const tx = document.createElement('span'); tx.className = 'bb-tx';
       const nm = document.createElement('b'); nm.textContent = a.name;
-      const sm = document.createElement('small'); sm.textContent = a.description || 'open this app';
+      const sm = document.createElement('small'); sm.textContent = dockLine(a);
       tx.append(nm, sm); b.append(i, tx);
       b.addEventListener('click', () => {
         const cur = find(a.id), h = host();
@@ -78,6 +81,19 @@
       });
       box.appendChild(b);
     }
+    if (list.length > 12) {
+      const more = document.createElement('small'); more.className = 'bb-apps-more';
+      more.textContent = '+ ' + (list.length - 12) + ' more in MANAGE APPS';
+      box.appendChild(more);
+    }
+    const sep = document.createElement('div'); sep.className = 'bb-apps-sep'; sep.setAttribute('role', 'separator');
+    box.appendChild(sep);
+  }
+  // the dock's one line for an app: whether it exists yet / when it last changed, and whether it refreshes itself
+  function dockLine(a) {
+    const first = refreshing.has(a.id) ? 'Refreshing now' : a.updatedAt ? 'Updated ' + ago(a.updatedAt) : a.builtAt ? 'Built ' + ago(a.builtAt) : 'Not built yet';
+    const s = a.schedule;
+    return first + (s && !s.missing && s.enabled !== false ? ' · ' + (routinesOn ? 'refreshes ' + s.display : 'routines off') : '');
   }
 
   function ago(t) {
@@ -277,6 +293,7 @@
     });
   }
   function refreshBar(id) { return load().then(() => paintAll(id)); }
+  const repaintDock = () => { const box = document.getElementById('bb-apps-items'); if (box) delete box.dataset.sig; syncDock(); };
 
   /* ---- the APPS window ---------------------------------------------------------------------------------------- */
   let listEl = null;
@@ -327,7 +344,7 @@
       '<label for="app-what">What should it do?</label>' +
       '<textarea id="app-what" class="apps-field apps-what" maxlength="1500" rows="4" aria-describedby="apps-msg" placeholder="In your own words: what it shows or does, how it should look, and whether it updates by itself."></textarea>' +
       '<div class="mc-hint">It can be anything — a dashboard, a tracker, a tool, a game. Say how it should look and work; where you don\'t, it matches the station.</div>' +
-      '<div class="apps-examples"><span class="mc-hint">Try:</span>' + EXAMPLES.map((e, i) => '<button class="apps-btn apps-chip" type="button" data-app-example="' + i + '">' + esc(e[0]) + '</button>').join('') + '</div>' +
+      '<div class="apps-examples"><span class="mc-hint">Try:</span>' + EXAMPLES.map((e, i) => '<button class="apps-btn apps-chip" type="button" aria-pressed="false" data-app-example="' + i + '">' + esc(e[0]) + '</button>').join('') + '</div>' +
       '<div class="mc-acts"><button class="apps-btn primary" id="app-create" type="submit">+ BUILD IT</button><span id="apps-msg" class="mc-hint apps-msg" role="status"></span></div>' +
       '</form>' +
       '<div class="apps-h">YOUR APPS</div>' +
@@ -335,7 +352,8 @@
     listEl = body.querySelector('.apps-list');
     const form = body.querySelector('.apps-new'), btn = body.querySelector('#app-create');
     const nameEl = body.querySelector('#app-name'), whatEl = body.querySelector('#app-what'), msg = body.querySelector('.apps-msg');
-    body.querySelectorAll('[data-app-example]').forEach((b) => b.addEventListener('click', () => { const e = EXAMPLES[+b.dataset.appExample]; nameEl.value = e[0]; whatEl.value = e[1]; whatEl.focus(); }));
+    const chips = body.querySelectorAll('[data-app-example]');
+    chips.forEach((b) => b.addEventListener('click', () => { const e = EXAMPLES[+b.dataset.appExample]; nameEl.value = e[0]; whatEl.value = e[1]; chips.forEach((c) => c.setAttribute('aria-pressed', String(c === b))); whatEl.focus(); }));
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
       if (btn.disabled) return;
@@ -399,7 +417,7 @@
     const boot = () => load().then((ok) => { if (!ok && ++tries < 6) setTimeout(boot, 2500 * tries); else rerenderList(); });
     boot();
     // "Updated 3m ago" and "next 14:00" must not sit stale: repaint what is on screen once a minute (no fetch)
-    setInterval(() => { if (document.hidden) return; if (barsOf().length || (listEl && listEl.isConnected)) paintAll(); }, 60000);
+    setInterval(() => { if (document.hidden) return; repaintDock(); if (barsOf().length || (listEl && listEl.isConnected)) paintAll(); }, 60000);
   }
   root.AppsUI = { load, list: () => list.slice(), create, change, refreshNow, turnOnRoutines, renameApp, removeApp, mountBar, refreshBar, openNew, onReload, onData, _test: { statusOf, toCrew } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
