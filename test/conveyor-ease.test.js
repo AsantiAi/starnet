@@ -81,6 +81,12 @@ A.ok(/const fixInUse = x => \{ const p = prop\(x\.dockId\) \|\| \{\}; return \(x
 A.ok(/S\.exampleStamp === mine\.stamp && exampleKept\(mine\)/.test(panel) && /String\(p\.brief \|\| ''\)\.indexOf\(EX_HEAD\) >= 0/.test(panel), '…and the example tag only while the step still holds its example');
 A.ok(/if \(!el \|\| !sr \|\| !sr\.pending\) \{ clearInterval\(liveTimer\); liveTimer = 0; markWorking\(null\); return; \}/.test(panel) && /if \(n\) n\.textContent = now\.text;/.test(panel) && (panel.match(/startLive\(\);/g) || []).length >= 4,
   'the live read-out runs while a job is out whatever card is open, so the diagram\'s working lamp stays true');
+/* ---------- the header's numbers say what they count; the line sentence names the way to run it ---------- */
+const tips = at(panel, '  function todayTip(k) {', '  let todayTimer');
+A.ok(/'<span data-tip="' \+ esc\(todayTip\(c\[0\]\)\) \+ '">/.test(panel) && /one job through a 3-step line is 3 runs/.test(tips) && /A text-only answer is still delivered to the OUTBOX, but it is not counted here/.test(tips),
+  'each TODAY number has a tip saying what it counts (RUNS are step runs; SHIPPED is proven work — a text answer is delivered, not counted)');
+A.ok(/; it runs when you send it a job\. /.test(read('frontend/app/workflowline.js')) && !/runs when you test it/.test(read('frontend/app/workflowline.js') + panel),
+  'a line nothing starts by itself "runs when you send it a job" (the INBOX card sends one), not only "when you test it"');
 const route = at(sidecar, 'async function handleRoutingFixSuggest(req, res) {', 'async function stepTestRunDock(h) {');
 A.ok(/\{ m: 'POST', exact: '\/api\/routing\/fix-suggest', h: handleRoutingFixSuggest \}/.test(sidecar), 'POST /api/routing/fix-suggest is a route');
 A.ok(route.indexOf('budget.check(null, \'agent\', 0, Date.now(), null)') > 0 && route.indexOf('budget.check(') < route.indexOf('provider.stream('), '…the spending cap is read BEFORE the model call');

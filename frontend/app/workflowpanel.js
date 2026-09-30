@@ -242,7 +242,18 @@ const WorkflowPanel = (() => {
     const quiet = !!st && !(st.runs | 0) && !(st.tests | 0) && !(+st.usdToday > 0);
     row.hidden = !cells || quiet;
     if (!cells || quiet) { row.innerHTML = ''; return; }
-    row.innerHTML = '<span class="wf-today-l">TODAY</span>' + cells.map(c => '<span><span class="k">' + esc(c[0]) + '</span> <b' + (c[0] === 'FAILED' && c[1] !== '0' ? ' class="bad"' : '') + '>' + esc(c[1]) + '</b></span>').join('');
+    row.innerHTML = '<span class="wf-today-l">TODAY</span>' + cells.map(c => '<span data-tip="' + esc(todayTip(c[0])) + '"><span class="k">' + esc(c[0]) + '</span> <b' + (c[0] === 'FAILED' && c[1] !== '0' ? ' class="bad"' : '') + '>' + esc(c[1]) + '</b></span>').join('');
+  }
+  /* WHAT EACH TODAY NUMBER COUNTS (2026-09-30 — ease of use): the numbers are the line's run rows (line-stats.js), not jobs, and
+     SHIPPED is the station's proven-work count (the 2026-07-05 crate-honesty law) — so "RUNS 68 · SHIPPED 0" on a line that
+     delivered every job read as "nothing ever shipped". Each number's tip says what it counts. */
+  function todayTip(k) {
+    if (k === 'RUNS') return 'RUNS\nevery time a step of this line ran today: one job through a 3-step line is 3 runs';
+    if (k === 'SHIPPED') return 'SHIPPED\njobs that left through the OUTBOX having made something real (a tool used or a file saved). A text-only answer is still delivered to the OUTBOX, but it is not counted here';
+    if (k === 'FAILED') return 'FAILED\nstep runs that ended in an error, a refusal, a budget stop or too many turns';
+    if (k === 'TESTS') return 'TESTS\nstep tests (TEST THIS STEP, STEP THROUGH): not jobs, but their cost is in $ TODAY';
+    if (k === 'MEDIAN') return 'MEDIAN\nthe middle time of a step run today';
+    return /^\$ TODAY/.test(k) ? '$ TODAY\nwhat this line spent today, against its daily cap when one is set (LINE BUDGET on the INBOX)' : '';
   }
   let todayTimer = 0;
   function refreshToday() {
@@ -317,7 +328,7 @@ const WorkflowPanel = (() => {
       nodes.push({ kind: 'trigger', propId: ip, mach: 'intake', cls: 'wf-term' + (ip ? '' : ' none'), ok: !!ip && (sch + ch + ev) > 0, name: 'INBOX', warn: !ip,
         meta: !ip ? 'none yet' : kinds > 1 ? (sch + ch + ev) + ' ways in' : sch ? tr.schedules[0] : ch ? tr.channels[0] : ev ? (tr.events.length === 1 ? tr.events[0].replace(/^when /, '') : tr.events.length + ' events') : off ? 'schedule off' : 'manual',
         tip: 'INBOX · ' + (ip ? (kinds > 1 ? 'AUTO' : sch ? 'SCHEDULE' : ch ? 'CHANNEL' : ev ? 'TRIGGER' : off ? 'SCHEDULE · OFF' : 'MANUAL') : 'NO INBOX') + '\n'
-          + (ip ? (tr.channels.concat(tr.schedules, tr.events).join('\n') || (off ? tr.offSchedules[0] + ' · scheduling is off' : 'no trigger yet: it runs when you test it')) : 'add one on the floor') });
+          + (ip ? (tr.channels.concat(tr.schedules, tr.events).join('\n') || (off ? tr.offSchedules[0] + ' · scheduling is off' : 'no trigger yet: it runs when you send it a job')) : 'add one on the floor') });
       f.cols.forEach(col => {
         nodes.push({ kind: 'col', col, ok: col.docks.every(d => d.agentId && H.hasCompute(d.agentId, d.propId)) });
         if (col.gate) nodes.push({ kind: 'gate', gate: col.gate, propId: col.gate.propId });

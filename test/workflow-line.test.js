@@ -333,7 +333,7 @@ const nameOf = a => String(a).toUpperCase();
   A.eq(W.lineStarts(f, Object.assign({}, facts, { cron: { enabled: false, halted: false, jobs: [job] } })).paused.filter(p => /routine/.test(p)),
     ['its routine "Morning run" (H(daily 9)) is saved but the scheduler is off'], 'a disabled scheduler is "off", not E-STOP');
   const txt = W.sentenceText(W.howItRuns(f, { nameOf, triggers: s }));
-  A.ok(/^Nothing starts it right now \(its webhook "Orders" is waiting: .*; its routine "Morning run" .*\(E-STOP\); its Telegram channel .*\); it runs when you test it\. /.test(txt), 'the sentence says WHY nothing starts it: ' + txt);
+  A.ok(/^Nothing starts it right now \(its webhook "Orders" is waiting: .*; its routine "Morning run" .*\(E-STOP\); its Telegram channel .*\); it runs when you send it a job\. /.test(txt), 'the sentence says WHY nothing starts it: ' + txt);
   const r = W.readiness(f, x.comp, { hasCompute: () => true, errors: [], briefOf: () => 'x', triggers: s });
   A.ok(r.hints.some(h => /^nothing starts it right now: its webhook/.test(h.what)) && !r.hints.some(h => /no schedule, channel/.test(h.what)), 'the hint names the pause');
   const both = W.readiness(f, x.comp, { hasCompute: () => true, errors: [], briefOf: () => 'x', triggers: { schedules: ['daily'], channels: [], events: [], paused: ['its webhook "Orders" is waiting: x'] } });

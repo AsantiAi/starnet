@@ -377,8 +377,8 @@
     // are named, so "nothing starts it" is never said about a line whose start is merely stopped
     const paused = trig.paused || [];
     if (!flow || !flow.trigger.propId) T('This line has no INBOX yet, so nothing can start it. ');
-    else if (!starts.length && paused.length) T('Nothing starts it right now (' + paused.join('; ') + '); it runs when you test it. ');
-    else if (!starts.length) T('Nothing starts it on its own yet (no schedule, channel, folder or webhook runs this line); it runs when you test it. ');
+    else if (!starts.length && paused.length) T('Nothing starts it right now (' + paused.join('; ') + '); it runs when you send it a job. ');
+    else if (!starts.length) T('Nothing starts it on its own yet (no schedule, channel, folder or webhook runs this line); it runs when you send it a job. ');
     else T(cap(joinOr(starts)) + ', ');
     if (!flow || !flow.cols.length) { T('there is no BAY on it yet.'); return segs; }
     const run = flow.cols.filter(c => !c.detached), apart = flow.cols.filter(c => c.detached);
