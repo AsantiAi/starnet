@@ -108,4 +108,15 @@ PropSprites.draw({ t: big.id, x: 1, y: 1, w: 2, h: 2 }, false, {});
 global.PropRemaster = hadPR;
 A.ok(calls.some((c) => c[0] === 'scale' && Math.abs(c[1] - 0.5) < 1e-9 && Math.abs(c[2] - 0.5) < 1e-9), 'a copy saved at the old 2x2 size is drawn scaled 0.5 into its own box');
 
+// ---- the credits door (conversion): shown up front, wired to a module that exists, never offered when unlinkable
+{
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'frontend', 'app', 'build.js'), 'utf8');
+  const fe = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'frontend', 'app', 'friendlyerror.js'), 'utf8');
+  A.ok(/root\.Friendly = api/.test(fe) && !/root\.FriendlyError\b/.test(fe), 'the friendly-error module is the global Friendly');
+  A.ok(!/FriendlyError/.test(src), 'build.js never reaches for a FriendlyError global (the door silently did nothing)');
+  A.ok(/Friendly\.actionButton\(\{ action: 'store' \}\)/.test(src), 'the credits door opens PROVIDERS through Friendly.actionButton');
+  A.ok(/\/api\/credits\/linkable/.test(src) && /makeCredits\.linkable \? 'link' : ''/.test(src), 'GET STARNET CREDITS shows only when this build can link an account');
+  A.ok(/id="refit-makeprop-cta" hidden/.test(src), 'the card starts hidden: nothing is claimed before /api/credits answers');
+}
+
 A.report();

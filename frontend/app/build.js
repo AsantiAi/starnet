@@ -249,6 +249,7 @@ const Build = (() => {
 
   function open() {
     makeResumed = false;   // a fresh REFIT session picks up a made-prop job still running in the station
+    makeCreditsAsked = false;   // and re-reads the credit state (the player may have just linked or topped up)
     if (running) return;
     station = opts.getStation();
     if (!station) return;
@@ -586,7 +587,7 @@ const Build = (() => {
   const MAKE_STEP = { queued: 'Queued', waiting: 'Working', sizing: 'Sizing it against the catalog', drawing: 'Drawing', retrying: 'Redrawing', checking: 'Checking it matches the station' };
   function makeStatusText() {
     if (makeMsg) return makeMsg;
-    if (!makeJob) return { text: 'StarNet credits \u00b7 preview a sketch first (about 5\u00a2), then make it (about $0.35; a side view about $0.30)', tone: '' };
+    if (!makeJob) return { text: (makeCredits && makeCredits.linked && makeCredits.balanceUsd > 0 ? 'StarNet credits \u00b7 $' + makeCredits.balanceUsd.toFixed(2) + ' left' : 'StarNet credits') + ' \u00b7 preview first (about 5\u00a2), then make it (about $0.35; a side view about $0.30)', tone: '' };
     const j = makeJob, spent = j.costUsd > 0 ? ' \u00b7 $' + j.costUsd.toFixed(2) + ' so far' : '';
     if (j.status === 'done' && j.kind === 'side') return { text: 'Side view made \u00b7 cost $' + (Number(j.costUsd) || 0).toFixed(2) + (j.costPending ? ' (final cost settling)' : '') + ' \u00b7 press R to turn it', tone: 'ok' };
     if (j.status === 'done') return { text: 'Made ' + (j.label || j.noun) + ' \u00b7 cost $' + (Number(j.costUsd) || 0).toFixed(2) + (j.costPending ? ' (final cost settling)' : '') + ' \u00b7 in MADE BY YOU', tone: 'ok' };
@@ -601,7 +602,16 @@ const Build = (() => {
     const st = makeStatusText();
     el.textContent = st.text; el.className = 'refit-makeprop-status' + (st.tone ? ' ' + st.tone : '');
     const door = root.querySelector('#refit-makeprop-door');
-    if (door) door.hidden = !(makeMsg && makeMsg.door);
+    const cta = root.querySelector('#refit-makeprop-cta');
+    const need = !makeCredits ? '' : !makeCredits.linked ? (makeCredits.linkable ? 'link' : '') : !(makeCredits.balanceUsd > 0) ? 'topup' : '';
+    if (cta) {
+      cta.hidden = !need;
+      if (need) {
+        cta.querySelector('span').textContent = need === 'link' ? 'Props are made with StarNet credits: about 5\u00a2 to preview, 35\u00a2 to make.' : 'You\u2019re out of StarNet credits. A prop is about 35\u00a2.';
+        cta.querySelector('button').textContent = need === 'link' ? 'GET STARNET CREDITS' : 'TOP UP CREDITS';
+      }
+    }
+    if (door) door.hidden = !!need || !(makeMsg && makeMsg.door);   // the card above already carries the door
     const busy = !!(makeJob && makeJob.status !== 'done' && makeJob.status !== 'failed');
     const go = root.querySelector('#refit-makeprop-go');
     if (go) go.disabled = busy;
@@ -711,7 +721,35 @@ const Build = (() => {
   }
   // REFIT reopened while the station still has a job in flight: pick it back up instead of forgetting it.
   let makeResumed = false;   // once per REFIT open: a render must not refetch (and race) the made-prop list
+  let makeCredits = null, makeCreditsAsked = false;   // { linked, balanceUsd } from /api/credits; null = not known (show nothing)
+  function loadMakeCredits() {
+    if (makeCreditsAsked || typeof Harness === 'undefined' || !Harness.api) return;
+    makeCreditsAsked = true;
+    Harness.api.get('/api/credits?history=0').then((j) => {
+      if (j && typeof j.configured === 'boolean') makeCredits = { linked: j.configured, balanceUsd: typeof j.balanceUsd === 'number' && isFinite(j.balanceUsd) ? j.balanceUsd : 0 };
+    }, (e) => {   // /api/credits 404s by design when no account is linked: a definitive "not linked"
+      if (/http 404\b/.test(String((e && e.message) || e))) makeCredits = { linked: false, balanceUsd: 0 };
+    }).then(() => {
+      if (!makeCredits || makeCredits.linked) return null;
+      // never offer an account this build cannot create: the door shows only when linking is possible
+      return Harness.api.get('/api/credits/linkable').then((j) => { makeCredits.linkable = !!(j && j.available); }, () => { makeCredits.linkable = false; });
+    }).then(() => paintMakeStatus());
+  }
+  function openCreditsDoor() {
+    const door = typeof Friendly !== 'undefined' && Friendly.actionButton && Friendly.actionButton({ action: 'store' });
+    if (!door || !door.run) return;
+    door.run();
+    // land ON the StarNet card (PROVIDERS opens at the top of a long list); it renders after its own credits read
+    let tries = 0;
+    const seek = () => {
+      const card = document.querySelector('.prov-card[data-provider="starnet"]');
+      if (card && card.offsetParent) { try { card.scrollIntoView({ block: 'center' }); } catch (_) {} return; }
+      if (++tries < 12) setTimeout(seek, 250);
+    };
+    setTimeout(seek, 150);
+  }
   function resumeMakeJob() {
+    loadMakeCredits();
     if (makeResumed || makeJob || makeWatching || typeof UserProps === 'undefined') return;
     makeResumed = true;
     UserProps.load().then((r) => { const j = r && r.jobs && r.jobs[0]; if (j && !makeJob) watchMakeJob(j); paintMakeStatus(); });
@@ -768,6 +806,7 @@ const Build = (() => {
   function makePropPanel() {
     const box = document.createElement('section'); box.className = 'refit-makeprop'; box.setAttribute('aria-label', 'Make a prop');
     box.innerHTML = '<div class="refit-makeprop-head"><b>MAKE A PROP</b><small>Type any object. StarNet draws it in the station\u2019s style.</small></div>' +
+      '<div class="refit-makeprop-cta" id="refit-makeprop-cta" hidden><span></span><button type="button" class="bb sm" id="refit-makeprop-cta-go"></button></div>' +
       '<div class="refit-makeprop-row"><input type="text" class="refit-input refit-searchfield" id="refit-makeprop-input" maxlength="60" spellcheck="false" autocomplete="off" aria-label="Object to make" placeholder="e.g. a grandfather clock">' +
       '<button type="button" class="bb sm" id="refit-makeprop-go">PREVIEW</button></div>' +
       '<div class="refit-makeprop-preview" id="refit-makeprop-preview" hidden></div>' +
@@ -788,10 +827,8 @@ const Build = (() => {
     box.querySelectorAll('[data-size]').forEach((b) => { b.onclick = () => { sizeMadeProp(Number(b.dataset.size)); sfx('click'); }; });
     const delBtn = box.querySelector('#refit-makeprop-del');
     if (typeof ArmConfirm !== 'undefined' && ArmConfirm.wire) ArmConfirm.wire(delBtn, { armedLabel: '\u2715 DELETE FOR GOOD? \u00b7 credits are not refunded', onArm: () => sfx('bad'), onConfirm: () => deleteMadeProp() });
-    box.querySelector('#refit-makeprop-door').onclick = () => {
-      const door = typeof FriendlyError !== 'undefined' && FriendlyError.actionButton && FriendlyError.actionButton({ action: 'store' });
-      if (door && door.run) door.run();
-    };
+    box.querySelector('#refit-makeprop-door').onclick = openCreditsDoor;
+    box.querySelector('#refit-makeprop-cta-go').onclick = () => { openCreditsDoor(); sfx('click'); };
     setTimeout(() => { paintMakeStatus(); paintPreviewCard(); resumeMakeJob(); }, 0);
     return box;
   }
