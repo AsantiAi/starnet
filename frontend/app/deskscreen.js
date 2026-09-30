@@ -333,8 +333,8 @@ const DeskScreen = (() => {
   }
   function handoffOf(aid) {
     let h = handoffs.get(aid) || null;
-    if (!h && typeof StepIn !== 'undefined' && StepIn._state) {   // a handoff raised before this page loaded: STEP-IN's own sidecar read
-      try { const r = (StepIn._state().live || []).find(x => x && x.agentId === aid && (x.state === 'waiting' || x.state === 'taken')); if (r) h = { id: String(r.id), state: r.state, reason: r.reason || '', note: r.note || '', where: r.where || r.host || '' }; } catch (_) {}
+    if (!h && typeof StepIn !== 'undefined' && (typeof StepIn.live === 'function' || StepIn._state)) {   // a handoff raised before this page loaded: STEP-IN's own sidecar read
+      try { const r = ((typeof StepIn.live === 'function' ? StepIn.live() : StepIn._state().live) || []).find(x => x && x.agentId === aid && (x.state === 'waiting' || x.state === 'taken')); if (r) h = { id: String(r.id), state: r.state, reason: r.reason || '', note: r.note || '', where: r.where || r.host || '' }; } catch (_) {}
     }
     return h;
   }
