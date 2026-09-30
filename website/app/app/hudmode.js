@@ -743,8 +743,8 @@
     // the HUD's hands live in the COMMS header, where the project feed keeps its CREW / ACTIVITY switch
     const ctl = el('span', 'ph-actions hud-ctl');
     const view = el('button', 'btn'); view.type = 'button'; view.id = 'hud-view';
-    const small = el('button', 'btn', 'SMALL'); small.type = 'button'; small.id = 'hud-small';
-    small.title = 'Shrink the HUD to the widget';
+    const small = el('button', 'btn', 'AGENT CAM'); small.type = 'button'; small.id = 'hud-small';
+    small.title = 'Shrink the HUD to the agent cam';
     const pin = el('button', 'btn', 'PIN'); pin.type = 'button'; pin.id = 'hud-pin'; pin.hidden = true;
     const exitBtn = el('button', 'btn', 'STATION'); exitBtn.type = 'button'; exitBtn.id = 'hud-exit';
     exitBtn.title = 'Back to the full station';
