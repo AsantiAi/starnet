@@ -197,11 +197,12 @@
   function liveNote() {
     const d = state.driver;
     const win = station().visible ? ' It is open in its own window too (SHOW WINDOW).' : '';
+    if (d && d.signIn) return 'Sign in here: click the page and type. The agent is waiting and never sees what you type. Click Done in COMMS when you have finished.';
     if (d) return agentLabel(d.agentId) + ' is driving the browser. You\'re watching; it hands you the wheel in STEP-IN if it needs you.' + win;
     return 'The station browser, shared by you and your agents.' + (station().visible ? ' Use it in its own window, or click this live view to type in it.' : ' Click the page to type in it.') + (station().remembered ? ' Sign-ins are saved.' : '');
   }
   function setDriver(d) {
-    const was = state.driver ? state.driver.runId : '', is = d ? d.runId : '';
+    const was = state.driver ? state.driver.runId + (state.driver.signIn ? '+' : '') : '', is = d ? d.runId + (d.signIn ? '+' : '') : '';
     state.driver = d;
     if (was === is) return;
     if (state.mode === 'live' && mounted() && state.ui.root.dataset.state === 'live') setNote(liveNote());
@@ -214,7 +215,7 @@
     const ui = state.ui, m = state.mode, t = state.target, d = state.driver;
     ui.root.dataset.mode = m;
     ui.root.classList.toggle('driven', m === 'live' && !!d);
-    const who = m === 'page' && t ? agentLabel(t.agentId) : m === 'watch' && state.watch ? agentLabel(state.watch.agentId) : m === 'live' ? (d ? agentLabel(d.agentId) : 'YOU') : '';
+    const who = m === 'page' && t ? agentLabel(t.agentId) : m === 'watch' && state.watch ? agentLabel(state.watch.agentId) : m === 'live' ? (d && !d.signIn ? agentLabel(d.agentId) : 'YOU') : '';
     ui.who.textContent = who ? who.toUpperCase() : '';
     ui.who.hidden = !who;
     // never overwrite what the Commander is typing
@@ -222,7 +223,7 @@
       ui.url.value = m === 'page' && t ? t.path : (m === 'watch' || m === 'live') && state.page ? (state.page.url || '') : '';
     }
     ui.url.title = m === 'page' && t ? t.path + (t.source === 'workshop' ? ' (workshop)' : '') : (state.page && state.page.title) || '';
-    const yours = m === 'live' && !d;
+    const yours = m === 'live' && (!d || !!d.signIn);
     ui.front.hidden = !(m === 'live' && station().visible);
     ui.back.disabled = ui.fwd.disabled = !yours || state.busy;
     ui.reload.disabled = !(m === 'page' || yours) || state.busy;
@@ -453,6 +454,7 @@
       const first = !state.liveLoaded; state.liveLoaded = true;
       const st = station();
       const started = !!(st.driver && st.driver.runId !== wasRun);   // an agent just took the browser
+      if (st.driver && state.mode === 'live' && mounted()) setDriver(st.driver);   // e.g. a sign-in handed you the wheel
       paintDoor();
       if (mounted()) {
         const typing = root.document.activeElement === state.ui.url;
@@ -631,7 +633,12 @@
       U.bus.on('deliverable', p => { try { noteOutput(p); } catch (_) { /* a bad event never breaks the bus */ } });   // background (channel/routine) runs
       // who is driving changes when a run starts or ends, when an agent uses a browser tool, and around a handoff —
       // ask the station then (never poll, never guess from the event itself)
-      U.bus.on('agent.tool_call', p => { if (p && /^browser[._]/.test(String(p.name || ''))) scheduleLive(); });
+      U.bus.on('agent.tool_call', p => {
+        if (!p || !/^browser[._]/.test(String(p.name || ''))) return;
+        scheduleLive();
+        // a sign-in is for YOU: show the browser (the page it opens is where you sign in), FOLLOW or not
+        if (/^browser[._]login$/.test(String(p.name))) setTimeout(() => { refreshLive().then(() => showLive()); }, 300);
+      });
       U.bus.on('agent.tool_result', p => { if (p && /^browser[._]/.test(String(p.name || ''))) scheduleLive(); });
       ['agent.run.start', 'agent.run.end', 'agent.run.error', 'browser.handoff'].forEach(n => U.bus.on(n, () => scheduleLive()));
     }
