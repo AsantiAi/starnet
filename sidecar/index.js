@@ -256,8 +256,8 @@ const Discovery = require('./discovery.js');                // ENVIRONMENT DISCO
 const Outcomes = require('./outcomes.js');                  // OUTCOME LEARNING: the run history folded into a support-gated track record (pure)
 // THE STATION BUILDER (2026-09-29): the lead's line menu, read from the same pure catalog the page builds from, and the
 // plans it has made (planId -> { summary, steps, at }) so the approval card for station.build shows the PLAN's words
-let stationLineMenu = () => [], stationKitMenu = () => [], stationPresetMenu = () => [], stationStyleMenu = () => [];
-try { const RStyles = require('../frontend/app/roomstyles.js'); stationStyleMenu = () => RStyles.menu(); } catch (_) { stationStyleMenu = () => []; }
+let stationLineMenu = () => [], stationKitMenu = () => [], stationPresetMenu = () => [], stationStyleMenu = () => [], stationRoomMenu = () => [];
+try { const RStyles = require('../frontend/app/roomstyles.js'); stationStyleMenu = () => RStyles.menu(); stationRoomMenu = () => RStyles.roomMenu(); } catch (_) { stationStyleMenu = () => []; stationRoomMenu = () => []; }
 try { const WMenu = require('../frontend/app/worldmodel.js'), SBuilder = require('../frontend/app/stationbuilder.js'); stationLineMenu = () => SBuilder.catalog(WMenu); } catch (_) { stationLineMenu = () => []; }
 try { const STpl = require('../frontend/app/stationtemplates.js'); stationKitMenu = () => STpl.kits().map(k => ({ name: k.name, about: k.about })); stationPresetMenu = () => STpl.catalog.filter(c => STpl.presetKits(c.id).length).map(c => c.name); } catch (_) { stationKitMenu = () => []; stationPresetMenu = () => []; }
 const stationPlanMemo = new Map();
@@ -17514,7 +17514,7 @@ async function runOnceCore(o) {
   // worker can never open or steal the Commander's sessions. Only visual actions require a live page.
   makeStationTools({ station: require('./overseer.js').isCoordinatorRun({ ...o, agentId, surface })
     ? overseerStation(o.streamId, runId) : stationBridge, scanText: t => cronGuard.scanRoutinePrompt(t), now: () => Date.now(),
-    planMemo: stationPlanMemo, lineMenu: stationLineMenu, kitMenu: stationKitMenu, presetMenu: stationPresetMenu, styleMenu: stationStyleMenu,
+    planMemo: stationPlanMemo, lineMenu: stationLineMenu, kitMenu: stationKitMenu, presetMenu: stationPresetMenu, styleMenu: stationStyleMenu, roomMenu: stationRoomMenu,
     // station.layout's HARNESS facts (audit 2026-09-28): the plan the router actually holds, each line's effective
     // budget (the runner's own effectiveLimits), and today's numbers since local midnight (the line plate's window)
     layoutFacts: {
@@ -18989,9 +18989,7 @@ async function runOnceCore(o) {
     teamNote += '\n• CREW CONFIGURATION: use team.config to read Dossier documents, then team.configure to edit the requested agent by exact ID. '
       + 'A notebook entry does not update another agent\'s Purpose or standing orders. Report a change only after the tool confirms it was saved. '
       + 'Dossier Purpose and standing orders describe the ongoing role; Bay briefs add the workflow-stage job. '
-      + 'Bay assignment, briefs, and assembly-line layout are configured in the station UI; do not claim to change them with a Dossier or notebook edit. '
-      + 'You can BUILD on the floor when the Commander asks. Look first: station.map shows every room, where it is, what joins it, and what fits on each side. Then plan: station.plan_build adds rooms and hallways the way the Commander describes them (up to 6 rooms in one plan: any size up to giant, beside any room, north, south, east or west of it, by a hallway or open plan, left empty or filled with styled areas or workflow lines; it also lays lines into a room that already exists and joins two rooms with a hallway); station.plan_line adds one workflow line; station.plan_room adds a furnished room, a preset\'s rooms, or swaps the whole station for a preset; station.plan_restyle changes a room\'s floor or name. '
-      + 'You describe and StarNet places: say which room, which side and what size, never tile positions. Build what was asked in ONE plan when you can (several rooms go in one station.plan_build), tell the Commander its summary, then call station.build with its planId. If a plan is refused, read why (it says what does fit), fix the request and plan again; do not give up after one refusal and do not claim it was built. You cannot move or remove what is already there; the Commander does that in Build mode. '
+      + 'A Dossier or notebook edit changes no Bay, brief or floor. To build (a whole station layout, rooms, hallways, lines, furniture) when the Commander asks, tool_search "station builder" and follow station.plan; never claim a floor change station.build did not report. '
       + 'To explain or troubleshoot Bays and assembly lines (what runs, in what order, what starts a line, why a step is not running), read station.layout first and quote its status; never answer from memory.';
     /* SESSIONS (2026-07-30): the lead can also RUN the station's sessions — and the peek rule exists because
        of a live failure: asked "what did the researcher do?", a lead with no way to read the other session

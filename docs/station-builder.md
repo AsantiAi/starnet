@@ -3,6 +3,8 @@
 Added 2026-09-29. The plan is at https://claude.ai/artifact/CcFcnYcEJraKFMEaXHQiYv.
 
 When the Commander asks, the lead agent can change the floor in these ways:
+- **lay out a whole station** (2026-09-30): a ring of rooms round the bridge or a concourse off it, every room furnished
+  wall to wall in its style and every corridor planted and lit — beside what stands, or replacing it
 - **build** rooms and hallways where the Commander says (the spatial builder, 2026-09-30: "new rooms connected to the
   bridge, and a giant conveyor room we will fill with workflows")
 - **design** a room the way the Commander describes it, part by part (vibe design: "a new room, the left side cozy, the
@@ -18,11 +20,15 @@ break the station.
 
 ## How it works
 
-1. A plan tool: read-only, no approval.
-   - `station.plan_build` (`planBuild`), after `station.map` (`mapOf`)
-   - `station.plan_line` (`StationBuilder.plan`)
-   - `station.plan_room` (`planRoom`)
-   - `station.plan_restyle` (`planRestyle`)
+The lead has three tools, all DEFERRED (not on the wire until it looks them up, so they cost the per-call payload
+nothing): its note says to call `tool_search "station builder"`, which reveals all three, and each result reveals the
+rest. `station.map` shows the floor, `station.plan` plans, `station.build` builds.
+
+1. `station.plan`: read-only, no approval. The FORM of the request picks the page's planner:
+   - `layout`, `rooms` or `hallways` → `planBuild` (a layout goes on to `planLayout`), after `station.map` (`mapOf`)
+   - `line`, `shape` or `purpose` → `StationBuilder.plan`
+   - `kit`, `preset` or `zones` → `planRoom`
+   - `restyle: { … }` → `planRestyle`
 
    The page builds the request on a **copy** of the live station and checks it:
    - every new machine and piece of furniture can be walked up to
@@ -53,6 +59,33 @@ break the station.
 
    In Full Access the build runs without the card, like every other write tool: the consent broker bypasses every
    prompt in that posture.
+
+## Station layouts: a whole station, composed
+
+Added 2026-09-30. Andrew saw two stations laid out by hand in the real renderer ("this is so much better, can the agent
+reliably do this?"); this is those two layouts as patterns StarNet computes. `station.plan` with
+`{ layout: { pattern, rooms: [ { name, style, size, lines } ] }, replace }`:
+
+- `ring`: a 3-wide corridor loop four tiles out from the hub (the main room, or `around`), a spoke in from each side,
+  and up to six rooms on short halls round the outside: two north, two south, a big room east and one west.
+- `concourse`: a 4-wide corridor from one side of the hub (`side`, else the first free one), rooms on short halls down
+  both sides, a big room flush on its far end. Up to eight rooms.
+- A room's `style` is one of 15 whole-room styles (`RoomStyles.ROOMS`: lounge, cozy, games, library, quarters,
+  garden, cafe, desks, meeting, lab, workshop, comms, storage, gym, works), also by a word ("arcade", "conveyor
+  hall") or, with no style, by the room's name. A room with `lines` is a conveyor hall (works); its lines gather
+  round its middle, a clear tile apart, packed from the corner only when that is the only way they fit.
+- `replace: true` lays the station out again around its main room: the page's own `replaceLayout` clears everything
+  else (every agent that owned a desk gets one), then the layout is built piece by piece (a lamp on its table). The
+  page backs the old layout up to Build mode's slot first, so RESTORE PREVIOUS brings it back.
+- Beside what stands, a ring needs clear space all round its room; the refusal says to use `replace: true` or a
+  concourse from a free side.
+
+**Dressing a room** (`dressRoom`, also for a plain build's room with `style`): its floor and walls; the feature wall
+(opposite the door) lined with the style's signature pieces; the centrepiece cluster, facing it, rug first then
+furniture then what stands on tables; plants in the corners; accents on the side walls. Every doorway keeps a lane
+three tiles deep, nothing lands on a belt, and a piece nobody could walk up to is taken back out. **Dressing a
+corridor** (`dressHall`): planters, floor lights and benches every fourth tile along its edge rows, clear of the
+doorways on that row, always two rows clear to walk.
 
 ## The spatial builder: rooms where the Commander says
 
@@ -194,7 +227,8 @@ of furniture itself, so these fields are not accepted: x".
   - recruiting: listed on the card, nobody summoned while planning, seated by the build, one undo for the floor, and a failed recruit building nothing
   - vibe design, under both prop catalogs: every style in a half of a new room beside a working line (reachable, one undo, nothing existing moved); line zones of a shelf line, a purpose and every custom stage kind, each machine inside its zone and nothing but staffing missing; four corners; a whole-room style; an existing room split; the card's drawing; recruiting in a zone; 30 refusals; and a vibe gauntlet of 90 hostile zone requests
   - the spatial builder: the ask that failed live (three rooms in one plan, a giant empty hall east of the bridge, then three lines into it as three separate lines); every side with a hallway, open plan and a 5-tile hallway; every size word; six unnamed rooms making a block and not a strip; no wall opened that was not asked for; a hallway sliding clear of furniture; hallways between rooms; rooms north and west of a station with a working line (the origin bug); six lines in one giant hall; 25 refusals; the map, and every size it lists really planning; recruiting; and a build gauntlet of 140 plausible and hostile requests
-- `test/station-builder.e2e.test.mjs` (HTTP gate): a mock lead plans and then builds through the real sidecar, bridge
+  - station layouts, under both catalogs: a ring of six and a concourse of eight on a fresh station (every room walkable, none against another, each furnished in its style with its floor and walls, the hall's lines, the corridors dressed, one undo); a ring refused round a crowded bridge; `replace: true` on a busy station (the bridge untouched, every agent a desk, one undo back); a concourse finding a free side; 15 refusals; every style in a room on three sides; a 48-request layout gauntlet
+- `test/station-builder.e2e.test.mjs` (HTTP gate): a mock lead finds the builder with `tool_search`, then maps, plans and builds through the real sidecar, bridge
   and page in Chromium:
   - a line: the floor, the Workflow panel pill and the Build-mode refusal are checked, and one UNDO removes it
   - a LOUNGE kit holds exactly the kit's furniture

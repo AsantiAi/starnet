@@ -852,7 +852,7 @@ for (const c of T.catalog) {
     for (const [req, re] of [
       [{ rooms: [] }, /^Send \{ "rooms"/], [{}, /^Send \{ "rooms"/], [null, /^Send \{ "rooms"/], [{ rooms: 'big' }, /^Send \{ "rooms"/], [{ rooms: new Array(7).fill({}) }, /^Send \{ "rooms"/],
       [{ rooms: [{}], props: [] }, /these fields are not accepted: props/],
-      [{ rooms: [{ x: 4, y: 9 }] }, /a room does not take: x, y\. A room takes: name, size, beside, side, hallway, align, into, type, floorStyle, floorMat, zones, lines\./],
+      [{ rooms: [{ x: 4, y: 9 }] }, /a room does not take: x, y\. A room takes: name, style, size, beside, side, hallway, align, into, type, floorStyle, floorMat, zones, lines\./],
       [{ rooms: [{ beside: 'Mars' }] }, /There is no room called "Mars"\. Rooms: HOME, WORKROOM, LOUNGE\./],
       [{ rooms: [{ side: 'up-left' }] }, /^side is north, south, east or west/],
       [{ rooms: [{ hallway: 40 }] }, /^hallway is true/],
@@ -979,62 +979,268 @@ for (const c of T.catalog) {
   }
 }
 
-/* ---- 9. the sidecar tools: the memo the approval card reads, the lock, honest refusals ---- */
+/* ---- 14. STATION LAYOUTS (2026-09-30): a whole station composed — a ring round the bridge or a concourse off it — every
+        room furnished wall to wall in its style, corridors planted and lit; beside what stands, or replacing it ---- */
+{
+  const RS = require('../frontend/app/roomstyles.js'), LL = require('../frontend/app/linelayout.js'), LE = require('../frontend/app/lineedit.js');
+  const vm = require('node:vm'), rctx = { module: { exports: {} }, IndustrialTextures: { enabled: () => true, ready: { then: fn => fn() } } };
+  vm.runInNewContext(fs.readFileSync(require.resolve('../frontend/app/propsprites.js'), 'utf8'), rctx);
+  const catalogs = [['classic', Sprites], ['remastered', rctx.module.exports]];
+  const envOf = S => Object.assign({}, env, { StationTemplates: T, PropSprites: S, EquipmentHelp: require('../frontend/app/equipmenthelp.js'), RoomStyles: RS, LineLayout: LL, LineEdit: LE });
+  const touch = (p, q) => (p.x1 <= q.x2 && q.x1 <= p.x2 && (p.y2 + 1 === q.y1 || q.y2 + 1 === p.y1)) || (p.y1 <= q.y2 && q.y1 <= p.y2 && (p.x2 + 1 === q.x1 || q.x2 + 1 === p.x1));
+  const walks = (st, a, b) => {
+    const g = st.projectGeometry(), ox = g.origin.tx, oy = g.origin.ty;
+    const free = r => { const R = r.rects[0]; for (let y = R.y1; y <= R.y2; y++) for (let x = R.x1; x <= R.x2; x++) if (g.walkable(x - ox, y - oy)) return [x - ox, y - oy]; return null; };
+    const p = free(a), q = free(b);
+    return !!(p && q && g.path(p[0], p[1], q[0], q[1]));
+  };
+  const SIX = [{ style: 'lounge' }, { style: 'arcade' }, { style: 'library' }, { style: 'quarters' }, { style: 'garden' }, { name: 'Conveyor Hall', style: 'works', lines: [{ line: 'build_test' }, { line: 'research_line' }] }];
+  const inRoom = (st, id) => st.props().filter(p => st.roomAt(p.x, p.y) === id);
+
+  for (const [cat, S] of catalogs) {
+    const E = envOf(S);
+    // THE ASK, as a layout: a ring of six round the bridge, the conveyor hall with its lines
+    for (const pattern of ['ring', 'concourse']) {
+      const st = fresh(), before = snap(st), n0 = st.rooms().length, oldProps = new Set(st.props().map(p => JSON.stringify(p)));
+      const rooms = pattern === 'ring' ? SIX : SIX.concat([{ style: 'cafe' }, { style: 'lab' }]);
+      const r = SB.planBuild(st.serialize(), { layout: { pattern, rooms } }, E), what = cat + ' ' + pattern;
+      A.ok(r.ok, what + ': the layout plans (' + (r.error || '') + ')');
+      if (!r.ok) continue;
+      A.eq(snap(st), before, what + ': planning changes nothing');
+      A.ok(new RegExp('^A ' + pattern.toUpperCase() + ' (around|east from) HOME').test(r.plan.summary) && r.plan.rooms.length === rooms.length, what + ': the card names the pattern and every room: ' + r.plan.summary.slice(0, 90));
+      A.eq(r.plan.rooms.map(x => x.name), rooms.map(q => q.name ? q.name.toUpperCase() : { lounge: 'LOUNGE', arcade: 'ARCADE', library: 'LIBRARY', quarters: 'QUARTERS', garden: 'GARDEN', cafe: 'CAFE', lab: 'LAB' }[q.style]), what + ': in the order asked, named for their styles');
+      const a = SB.apply(st, r.plan, E);
+      A.ok(a.ok && a.kind === 'build', what + ': it builds (' + (a.error || '') + ')');
+      if (!a.ok) continue;
+      const home = st.rooms().find(x => x.name === 'HOME'), made = st.rooms().filter(x => x.kind !== 'corridor' && x.name !== 'HOME'), halls = st.rooms().filter(x => x.kind === 'corridor');
+      A.eq(made.length, rooms.length, what + ': every room stands');
+      A.ok(halls.length >= rooms.length, what + ': joined by corridors (' + halls.length + ')');
+      A.ok(made.every(x => walks(st, home, x)), what + ': the crew can walk from the bridge into every room');
+      // a room touches only corridors (and, at a concourse's end, the corridor itself): no wall opens between rooms
+      const stray = [];
+      for (const p of made) for (const q of st.rooms().filter(x => x.kind !== 'corridor')) if (p !== q && touch(p.rects[0], q.rects[0])) stray.push(p.name + '|' + q.name);
+      A.eq(stray, [], what + ': no two rooms stand against each other');
+      // every room is furnished wall to wall in its style: its own floor and walls, a dozen pieces or more
+      for (const q of rooms.filter(x => x.style !== 'works')) {
+        const rm = st.rooms().find(x => x.name === (q.name ? q.name.toUpperCase() : null) || (x.kind !== 'corridor' && r.plan.rooms.find(y => y.name === x.name && y.style === RS.resolveRoom(q.style))));
+        const rec = RS.ROOMS[RS.resolveRoom(q.style)], pieces = inRoom(st, rm.id);
+        A.ok(pieces.length >= 12, what + ' ' + rm.name + ': furnished wall to wall (' + pieces.length + ' pieces)');
+        A.eq([rm.floorStyle, rm.floorMat || (M.ROOM_KINDS[rm.kind] || {}).mat, rm.wallMat || 'plating'], [rec.deck.style, rec.deck.mat, rec.walls.mat], what + ' ' + rm.name + ': its style\'s floor and walls');
+      }
+      const hall = st.rooms().find(x => x.name === 'CONVEYOR HALL'), hp = inRoom(st, hall.id);
+      A.eq(hp.filter(p => p.t === 'intake').length, 2, what + ': the conveyor hall holds its two lines');
+      A.ok(hp.filter(p => !/^(intake|bay|outbox|loop|filter|merger|splitter|joiner)$/.test(p.t)).length >= 4, what + ': and crates and racks along its walls');
+      A.ok(halls.some(h => inRoom(st, h.id).length >= 4), what + ': a corridor is planted and lit');
+      const keep = new Set(st.props().map(p => JSON.stringify(p)));
+      A.ok([...oldProps].every(p => keep.has(p)), what + ': nothing already there moved or changed');
+      A.eq(routed(st).errs.length, 0, what + ': no routing error');
+      A.ok(st.undo().ok); A.eq(snap(st), before, what + ': one undo takes the whole layout back');
+    }
+  }
+  const E = envOf(rctx.module.exports);
+  // beside what stands: a ring needs clear space all round its room, and says what to do instead
+  {
+    const st = busy(), before = snap(st);
+    const r = SB.planBuild(st.serialize(), { layout: { pattern: 'ring', rooms: SIX } }, E);
+    A.ok(!r.ok && /^A ring needs clear space all round HOME \(.+\)\. Use replace: true to lay out the whole station again around HOME, or the concourse pattern from a free side\.$/.test(r.error), 'a ring round a crowded bridge is refused with the way forward: ' + r.error);
+    A.eq(snap(st), before, 'and changes nothing');
+  }
+  // replace: the whole station laid out again round the bridge, every agent keeping a desk, backed up like a preset swap
+  {
+    const st = busy(), before = snap(st), wasRooms = st.rooms().filter(x => x.kind !== 'corridor').length;
+    const homeProps = st.props().filter(p => st.roomAt(p.x, p.y) === st.rooms().find(x => x.name === 'HOME').id).map(p => JSON.stringify(p)).sort();
+    const r = SB.planBuild(st.serialize(), { layout: { pattern: 'ring', rooms: SIX }, replace: true }, E);
+    A.ok(r.ok && r.plan.spec.kind === 'relayout' && /It replaces everything beyond HOME \(\d+ rooms and \d+ props\); HOME, agents and conversations stay, and every agent keeps a desk\. Your current layout is backed up: RESTORE PREVIOUS in Build → Presets brings it back\./.test(r.plan.summary), 'replace plans a whole new station, backed up: ' + (r.error || r.plan.summary.slice(-220)));
+    if (r.ok) {
+      A.eq(snap(st), before, 'planning changes nothing');
+      const a = SB.apply(st, r.plan, E);
+      A.ok(a.ok && a.kind === 'swap', 'it builds (' + (a.error || '') + ')');
+      const names = st.rooms().filter(x => x.kind !== 'corridor').map(x => x.name).sort();
+      A.eq(names, ['ARCADE', 'CONVEYOR HALL', 'GARDEN', 'HOME', 'LIBRARY', 'LOUNGE', 'QUARTERS'], 'the station is now the bridge and the six rooms (it had ' + wasRooms + ')');
+      const home = st.rooms().find(x => x.name === 'HOME');
+      A.ok(homeProps.every(p => st.props().some(q => JSON.stringify(q) === p)), 'the bridge and everything in it stayed as it was');
+      A.ok(['agent', 'rex'].every(id => st.props().some(p => p.agentId === id && /^(desk|desk2|console|consoleL|pixelrig|bench|workbench)$/.test(p.t))), 'every agent keeps a desk');
+      A.eq(routed(st).errs.length, 0, 'no routing error');
+      A.ok(st.rooms().filter(x => x.kind !== 'corridor').every(x => walks(st, home, x)), 'every room is walkable from the bridge');
+      A.ok(st.undo().ok); A.eq(snap(st), before, 'one undo brings the old station back exactly');
+    }
+    const rec = SB.planBuild(st.serialize(), { layout: { pattern: 'ring', rooms: [{ style: 'works', lines: [{ line: 'build_test', staff: [{ step: 1, agent: 'new' }] }] }] }, replace: true }, Object.assign({}, E, { canRecruit: true, recruit: () => null }));
+    A.ok(!rec.ok && /cannot recruit/.test(rec.error), 'a layout that replaces the station does not recruit');
+  }
+  // a concourse from a crowded station finds a free side, or is refused naming the way forward
+  {
+    const st = fresh();
+    A.ok(st.addRoom({ kind: 'hab', name: 'EASTWING', rect: { x1: 21, y1: 0, x2: 38, y2: 10 } }).ok, 'fixture: a room east of HOME');
+    const r = SB.planBuild(st.serialize(), { layout: { pattern: 'concourse', rooms: [{ style: 'lounge' }, { style: 'library' }] } }, E);
+    A.ok(r.ok && /^A CONCOURSE (west|north|south) from HOME/.test(r.plan.summary), 'the concourse takes a free side: ' + (r.error || r.plan.summary.slice(0, 60)));
+    const e = SB.planBuild(st.serialize(), { layout: { pattern: 'concourse', side: 'east', rooms: [{ style: 'lounge' }] } }, E);
+    A.ok(!e.ok && /^A concourse east of HOME does not fit \(.+\)\. Use replace: true/.test(e.error), 'the side asked, taken, is refused: ' + e.error);
+  }
+  // refusals, in plain words, changing nothing
+  {
+    const st = fresh(), before = snap(st);
+    for (const [req, re] of [
+      [{ layout: {} }, /^layout\.rooms is a list of 1 to 8 rooms/],
+      [{ layout: 'ring' }, /^Send \{ "layout"/],
+      [{ layout: { pattern: 'spiral', rooms: [{ style: 'lounge' }] } }, /^pattern is ring .* or concourse/],
+      [{ layout: { pattern: 'ring', rooms: [{ style: 'lounge' }], x: 3 } }, /a layout does not take: x\. It takes: pattern, around, side, rooms\./],
+      [{ layout: { pattern: 'ring', rooms: [{ style: 'disco' }] } }, /There is no room style "disco"\. Styles: lounge, cozy, games/],
+      [{ layout: { pattern: 'ring', rooms: [{ name: 'X' }] } }, /needs a style/],
+      [{ layout: { pattern: 'ring', rooms: [{ style: 'lounge', x: 1 }] } }, /a layout room does not take: x\./],
+      [{ layout: { pattern: 'ring', rooms: [{ style: 'lounge', lines: [{ line: 'build_test' }] }] } }, /Lines go in a works room/],
+      [{ layout: { pattern: 'ring', rooms: new Array(7).fill({ style: 'lounge' }) } }, /A ring holds 6 rooms/],
+      [{ layout: { pattern: 'ring', rooms: [{ style: 'works' }, { style: 'works' }, { style: 'works' }] } }, /A ring has room for two big rooms/],
+      [{ layout: { pattern: 'concourse', rooms: new Array(9).fill({ style: 'lounge' }) } }, /^layout\.rooms is a list of 1 to 8 rooms/],
+      [{ layout: { pattern: 'ring', rooms: [{ style: 'lounge' }] }, replace: 'yes' }, /^replace is true/],
+      [{ layout: { pattern: 'ring', rooms: [{ style: 'lounge', name: 'Home' }] } }, /A room is already called HOME/],
+      [{ layout: { pattern: 'ring', around: 'Mars', rooms: [{ style: 'lounge' }] } }, /There is no room called "Mars"/],
+      [{ layout: { pattern: 'ring', rooms: [{ style: 'lounge' }] }, rooms: [] }, /A layout plans the whole floor, so leave out: rooms/],
+    ]) { const q = SB.planBuild(st.serialize(), req, E); A.ok(!q.ok && re.test(q.error), 'layout refused: ' + JSON.stringify(req).slice(0, 80) + ' -> ' + (q.error || 'NOT REFUSED').slice(0, 170)); }
+    A.eq(snap(st), before, 'no refusal changed anything');
+  }
+  // a room of a plain build may take a whole-room style too
+  {
+    const st = fresh(), before = snap(st);
+    const r = SB.planBuild(st.serialize(), { rooms: [{ name: 'Den', style: 'lounge', beside: 'HOME', side: 'north' }, { into: 'HOME', style: 'library' }] }, E);
+    A.ok(r.ok && /^DEN, a new 18 × 11 room north of HOME, through a hallway: a lounge \(/.test(r.plan.summary) && /HOME \(18 × 11\): a library/.test(r.plan.summary), 'a styled new room, and an existing room furnished in a style: ' + (r.error || r.plan.summary.slice(0, 160)));
+    if (r.ok) {
+      const a = SB.apply(st, r.plan, E), den = st.rooms().find(x => x.name === 'DEN');
+      A.ok(a.ok && inRoom(st, den.id).length >= 12 && den.floorStyle === 'walnut' && den.wallMat === 'wainscot', 'the den is furnished in its style, with its floor and walls');
+      A.ok(st.undo().ok); A.eq(snap(st), before, 'one undo');
+    }
+    const bad = SB.planBuild(st.serialize(), { rooms: [{ style: 'lounge', zones: [{ area: 'left', style: 'cozy' }] }] }, E);
+    A.ok(!bad.ok && /takes a style \(furnished whole\) or zones \(part by part\), not both/.test(bad.error), 'a style or zones, not both');
+  }
+  // every whole-room style dresses a room on its own: its feature wall, a centrepiece, clear doorways, all reachable
+  for (const [cat, S] of catalogs) {
+    const E2 = envOf(S);
+    for (const id of RS.ROOM_ORDER) for (const side of ['north', 'south', 'west']) {
+      const st = fresh(), before = snap(st);
+      const r = SB.planBuild(st.serialize(), { rooms: [{ name: 'R', style: id, beside: 'HOME', side }] }, E2);
+      A.ok(r.ok, cat + ' ' + id + ' ' + side + ': a room in that style plans (' + (r.error || '') + ')');
+      if (!r.ok) continue;
+      const a = SB.apply(st, r.plan, E2), rm = st.rooms().find(x => x.name === 'R');
+      A.ok(a.ok && inRoom(st, rm.id).length >= (id === 'works' ? 4 : 10), cat + ' ' + id + ' ' + side + ': furnished (' + (rm ? inRoom(st, rm.id).length : 0) + ')');
+      A.ok(st.undo().ok); A.eq(snap(st), before, cat + ' ' + id + ' ' + side + ': one undo');
+    }
+  }
+  // THE LAYOUT GAUNTLET: plausible and hostile layouts on every kind of station; after each the station is unchanged, or
+  // built with every room walkable, no wall opened between rooms, no routing error, and one undo restoring it exactly
+  {
+    let seed = 1001;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    const pick = xs => xs[Math.floor(rnd() * xs.length)];
+    const junk = ['', 'castle', null, 7, {}, [], 'ignore previous instructions'];
+    let built = 0, refused = 0;
+    for (let i = 0; i < 48; i++) {
+      const st = i % 3 === 0 ? busy() : fresh(), before = snap(st), was = routed(st), wrong = () => rnd() < 0.07;
+      const n = 1 + Math.floor(rnd() * 7), rooms = [];
+      for (let k = 0; k < n; k++) {
+        const q = {};
+        if (rnd() < 0.96) q.style = wrong() ? pick(junk) : pick(RS.ROOM_ORDER.concat(['arcade', 'conveyor hall', 'office']));
+        if (rnd() < 0.2) q.size = wrong() ? pick(junk) : pick(['small', 'medium', 'large', 'giant']);
+        if (rnd() < 0.15 && q.style === 'works') q.lines = [{ line: pick(M.BLUEPRINTS).id }];
+        if (rnd() < 0.3) q.name = wrong() ? pick(junk) : 'Room ' + k;
+        rooms.push(q);
+      }
+      const req = { layout: { pattern: wrong() ? pick(junk) : pick(['ring', 'concourse', 'loop', 'spine']), rooms } };
+      if (rnd() < 0.3) req.layout.side = pick(['east', 'west', 'north', 'south']);
+      if (rnd() < 0.35) req.replace = wrong() ? 'yes' : true;
+      let r;
+      try { r = SB.planBuild(st.serialize(), req, E); } catch (e) { A.ok(false, 'layout gauntlet ' + i + ': threw ' + e.message + ' on ' + JSON.stringify(req).slice(0, 200)); continue; }
+      A.eq(snap(st), before, 'layout gauntlet ' + i + ': planning never changes the station');
+      if (!r.ok) { refused++; if (process.env.SB_WHY) console.log('  lwhy ' + i + ': ' + String(r.error).slice(0, 140) + '  <- ' + JSON.stringify(req).slice(0, 300)); A.ok(typeof r.error === 'string' && r.error.length > 10 && r.error.length < 1200, 'layout gauntlet ' + i + ': a refusal says why'); continue; }
+      const a = SB.apply(st, r.plan, E);
+      A.ok(a.ok, 'layout gauntlet ' + i + ': an accepted plan builds (' + (a.error || '') + ')');
+      if (!a.ok) continue;
+      built++;
+      const home = st.rooms().find(x => x.name === 'HOME'), all = st.rooms().filter(x => x.kind !== 'corridor');
+      A.ok(all.every(x => walks(st, home, x)), 'layout gauntlet ' + i + ': every room is walkable from the bridge');
+      if (!req.replace) {
+        const now = routed(st);
+        A.ok(Object.keys(was.chains).every(d => JSON.stringify(now.chains[d]) === JSON.stringify(was.chains[d])), 'layout gauntlet ' + i + ': every existing line routes as before');
+      }
+      A.ok(routed(st).errs.length <= was.errs.length, 'layout gauntlet ' + i + ': no new routing error');
+      A.ok(st.undo().ok); A.eq(snap(st), before, 'layout gauntlet ' + i + ': one undo restores the station exactly');
+    }
+    A.ok(built >= 15 && refused >= 5, 'the layout gauntlet built some and refused some (' + built + ' built, ' + refused + ' refused)');
+  }
+}
+
+/* ---- 9. the sidecar tools: three DEFERRED tools (map, plan, build), the memo the approval card reads, the lock ---- */
 (async () => {
   const calls = [], used = new Set();   // the page uses a plan once (builderPlans.delete)
   const bridge = { request: async (verb, args) => { calls.push([verb, args]);
     if (verb === 'station.plan_line') return args.request.line === 'nope' ? { ok: false, error: 'There is no line called "nope". The lines are: …' }
-      : { ok: true, result: { planId: 'plan-t-1', summary: 'Build + test ("SHIP IT") in a new room beside HOME: Engineer (NOVA) → Tester (nobody yet) → Outbox.', line: { name: 'Build + test' }, steps: [{ step: 1, role: 'Engineer', agent: 'NOVA', instructions: 'Build what the incoming request asks for.' }, { step: 2, role: 'Tester', agent: null, instructions: 'Test the incoming change.' }], ready: false, blocking: ['BAY 2 (TESTER) needs an agent'] } };
-    if (verb === 'station.plan_room') return { ok: true, result: { planId: 'plan-r-1', summary: 'LIBRARY (a quiet reading room) in a new room beside HOME.', rooms: [{ name: 'LIBRARY' }], steps: [] } };
+      : { ok: true, result: { planId: 'plan-t-1', summary: 'Build + test ("SHIP IT") in a new room south of HOME, through a hallway: Engineer (NOVA) → Tester (nobody yet) → Outbox.', line: { name: 'Build + test' }, steps: [{ step: 1, role: 'Engineer', agent: 'NOVA', instructions: 'Build what the incoming request asks for.' }, { step: 2, role: 'Tester', agent: null, instructions: 'Test it.' }], ready: false, blocking: ['BAY 2 (TESTER) needs an agent'] } };
+    if (verb === 'station.plan_room') return { ok: true, result: { planId: 'plan-r-1', summary: 'LIBRARY (a quiet reading room) in a new room south of HOME, through a hallway.', rooms: [{ name: 'LIBRARY' }], steps: [] } };
+    if (verb === 'station.plan_restyle') return { ok: true, result: { planId: 'plan-s-1', summary: 'Restyle HOME: teal floor. Nothing is added, moved or removed.' } };
     if (verb === 'station.map') return { ok: true, result: { main: 'HOME', rooms: [{ name: 'HOME', main: true, w: 18, h: 11 }], hallways: 0, drawing: ['AAAAAAAAAAAAAAAAAA'] } };
     if (verb === 'station.plan_build') return (args.request.rooms || [])[0] && args.request.rooms[0].beside === 'Mars' ? { ok: false, error: 'There is no room called "Mars". Rooms: HOME.' }
-      : { ok: true, result: { planId: 'plan-b-1', summary: 'CONVEYOR HALL, a new 36 × 20 room east of HOME, through a hallway: empty floor, ready for lines and furniture.', rooms: [{ name: 'CONVEYOR HALL' }], hallways: [], lines: [], steps: [] } };
+      : { ok: true, result: { planId: 'plan-b-1', summary: args.request.layout ? 'A RING around HOME: a corridor loop with a hallway in from each side, planted and lit, and 2 rooms.' : 'CONVEYOR HALL, a new 36 × 20 room east of HOME, through a hallway: empty floor, ready for lines and furniture.', rooms: [{ name: 'CONVEYOR HALL' }], hallways: [], lines: [], steps: [] } };
     if (verb === 'station.build') return args.planId === 'plan-t-1' && !used.has(args.planId) && used.add(args.planId) ? { ok: true, result: { built: true, line: { name: 'Build + test' }, ready: false, blocking: ['BAY 2 (TESTER) needs an agent'] } } : { ok: false, error: 'There is no plan "' + args.planId + '"' };
     return { ok: false, error: 'unknown verb' }; } };
-  const memo = new Map();
-  const tools = makeStationTools({ station: bridge, now: () => 1000, planMemo: memo, lineMenu: () => SB.catalog(M) });
-  const planT = tools.planLineTool, buildT = tools.buildTool;
-  A.eq([planT.scope, planT.requiresConsent, buildT.scope, buildT.requiresConsent, buildT.taintLocked], ['read', false, 'write', true, true], 'plan changes nothing; build needs approval and is taint-locked (briefs persist into later runs)');
-  A.ok(/never place anything yourself/.test(planT.description) && /build_test \(Build \+ test: ENGINEER → TESTER\)/.test(planT.description), 'the plan tool lists the menu from the catalog');
-  A.ok(/OR shape \(a line the Commander DESCRIBED/.test(planT.description) && planT.schema.properties.shape.type === 'array', 'the line tool takes a described line as a shape');
+  const memo = new Map(), RSm = require('../frontend/app/roomstyles.js');
+  const tools = makeStationTools({ station: bridge, now: () => 1000, planMemo: memo, lineMenu: () => SB.catalog(M), styleMenu: () => RSm.menu(), roomMenu: () => RSm.roomMenu(),
+    kitMenu: () => T.kits().map(k => ({ name: k.name, about: k.about })), presetMenu: () => ['RESEARCH STATION'] });
+  const mapT = tools.mapTool, planT = tools.planTool, buildT = tools.buildTool;
+  A.eq([mapT.scope, mapT.requiresConsent, planT.scope, planT.requiresConsent, buildT.scope, buildT.requiresConsent, buildT.taintLocked], ['read', false, 'read', false, 'write', true, true], 'the map and plan change nothing; build needs approval and is taint-locked (briefs persist into later runs)');
+  A.ok([mapT, planT, buildT].every(t => /^STATION BUILDER, step [123]: /.test(t.description)), 'all three say STATION BUILDER, so one tool_search finds them together');
+  A.ok(!tools.planLineTool && !tools.planRoomTool && !tools.planBuildTool && !tools.planRestyleTool, 'one planner, not four');
+  // what the planner offers: a whole layout first, then rooms, a line, a kit or preset, zones, a restyle — with the menus
+  const d = planT.description;
+  A.ok(/1 LAYOUT, the way to a beautiful station: \{ "layout": \{ "pattern": "ring" \| "concourse"/.test(d) && /ring = a corridor loop round the main room/.test(d) && /concourse = a wide corridor from one side of the main room/.test(d), 'the planner leads with the two layout patterns');
+  A.ok(/Room styles: lounge \(a lounge\), cozy \(a cozy den\), games \(an arcade\)/.test(d) && /works \(a conveyor hall\)/.test(d), 'it lists every whole-room style');
+  A.ok(/replace: true lays the whole station out again around the main room/.test(d) && /backed up for RESTORE PREVIOUS/.test(d), 'it says what replace does and that the old layout is backed up');
+  A.ok(/size: small 12×8, medium 18×11, large 24×14, giant 36×20/.test(d) && /LINES: .*build_test \(ENGINEER → TESTER\)/.test(d) && /KITS WORKROOM/.test(d) && /PRESETS RESEARCH STATION/.test(d) && /zone styles cozy, lounge/.test(d), 'sizes, lines, kits, presets and zone styles are all on the menu');
+  A.ok(/Never give up after one refusal, and never say something was built that station\.build did not report\./.test(d), 'and how to treat a refusal');
+  A.ok(planT.schema.properties.layout.type === 'object' && planT.schema.properties.rooms.type === 'array' && planT.schema.properties.restyle.type === 'object' && !planT.schema.properties.x, 'its schema takes every form and no position');
+  // each form rides to the page's own planner for it, untouched
+  const forms = [
+    [{ layout: { pattern: 'ring', rooms: [{ style: 'lounge' }, { style: 'works' }] }, replace: true }, 'station.plan_build'],
+    [{ rooms: [{ name: 'Conveyor Hall', size: 'giant', beside: 'bridge' }] }, 'station.plan_build'],
+    [{ hallways: [{ from: 'A', to: 'B' }] }, 'station.plan_build'],
+    [{ line: 'build_test', name: 'SHIP IT' }, 'station.plan_line'],
+    [{ shape: ['WRITER', { review: true }] }, 'station.plan_line'],
+    [{ purpose: 'fix bugs and test them' }, 'station.plan_line'],
+    [{ kit: 'LIBRARY' }, 'station.plan_room'],
+    [{ preset: 'RESEARCH STATION', replace: true }, 'station.plan_room'],
+    [{ zones: [{ area: 'left', style: 'cozy' }] }, 'station.plan_room']];
+  for (const [req, verb] of forms) { await planT.run(req, {}); A.eq(calls[calls.length - 1], [verb, { request: req }], JSON.stringify(req).slice(0, 60) + ' goes to ' + verb); }
+  await planT.run({ restyle: { room: 'HOME', floorStyle: 'teal' } }, {});
+  A.eq(calls[calls.length - 1], ['station.plan_restyle', { request: { room: 'HOME', floorStyle: 'teal' } }], 'a restyle goes to the restyle planner with its own fields');
+  const n0 = calls.length;
+  for (const req of [{}, { name: 'X' }, { restyle: { room: 'HOME' }, kit: 'LIBRARY' }]) {
+    const r = await planT.run(req, {});
+    A.ok(/^REFUSED: (Send one form|restyle goes on its own)/.test(r.content), 'a request of no form is refused with the forms: ' + JSON.stringify(req));
+  }
+  A.eq(calls.length, n0, 'and never reaches the page');
+  // the plan is remembered for the approval card, reveals the next tools, and a refusal travels back as REFUSED
   const p = await planT.run({ line: 'build_test', name: 'SHIP IT' }, {});
-  A.eq(calls[0], ['station.plan_line', { request: { line: 'build_test', name: 'SHIP IT' } }], 'the request rides to the page untouched');
-  A.ok(memo.has('plan-t-1'), 'the plan is remembered for the approval card');
+  A.ok(memo.has('plan-t-1') && /^\{"planId":"plan-t-1"/.test(p.content) && p.summary === 'planned Build + test (1 to do)', 'the plan is remembered for the approval card');
+  A.eq(p.control, { revealTools: ['station.map', 'station.plan', 'station.build'] }, 'a plan reveals station.build (and the rest of the builder) for the next turn');
   const card = planSummaryFrom(memo, 'plan-t-1');
-  A.ok(/^Build \+ test \("SHIP IT"\) in a new room beside HOME/.test(card) && /Step 1 Engineer \(NOVA\): Build what the incoming request asks for\./.test(card) && /Step 2 Tester \(nobody yet\)/.test(card), 'the card shows the plan\'s own summary and every step\'s instructions');
+  A.ok(/^Build \+ test \("SHIP IT"\) in a new room south of HOME/.test(card) && /Step 1 Engineer \(NOVA\): Build what the incoming request asks for\./.test(card) && /Step 2 Tester \(nobody yet\)/.test(card), 'the card shows the plan\'s own summary and every step\'s instructions');
   A.eq(planSummaryFrom(memo, 'plan-forged'), null, 'an unknown plan id has no card text');
   const bad = await planT.run({ line: 'nope' }, {});
   A.ok(/^REFUSED: There is no line called "nope"/.test(bad.content) && /do not report this action as done/.test(bad.content), 'a page refusal travels back as REFUSED');
+  const lay = await planT.run({ layout: { pattern: 'ring', rooms: [{ style: 'lounge' }] } }, {});
+  A.ok(lay.summary === 'planned CONVEYOR HALL' && /^A RING around HOME/.test(planSummaryFrom(memo, 'plan-b-1')), 'a layout plan is remembered for the card');
+  const mp = await mapT.run({}, {});
+  A.ok(/"main":"HOME"/.test(mp.content) && mp.summary === '1 room(s), 0 hallway(s)' && calls[calls.length - 1][0] === 'station.map' && mp.control.revealTools.indexOf('station.plan') >= 0, 'the map rides back from the page and reveals the planner');
   const b = await buildT.run({ planId: 'plan-t-1' }, {});
   A.ok(/"built":true/.test(b.content) && !memo.has('plan-t-1'), 'a build uses the plan once and forgets it');
   const b2 = await buildT.run({ planId: 'plan-t-1' }, {});
   A.ok(/^REFUSED: There is no plan/.test(b2.content), 'the same plan cannot build again');
-  // the sidecar's approval card reads the memo, never the model's words
+  A.ok(/build exactly what station\.plan planned, by its planId, after the Commander approves/.test(buildT.description), 'one build tool builds any plan');
+  // the grants: all three deferred, so they cost the per-call payload nothing until the lead reaches for them
+  const reg = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'capability', 'registry.js'), 'utf8');
+  for (const [tool, scope, consent] of [['station.map', 'read', false], ['station.plan', 'read', false], ['station.build', 'write', true]])
+    A.ok(reg.indexOf("{ capId: 'orchestrator', tool: '" + tool + "', scope: '" + scope + "', requiresConsent: " + consent + ", network: false, deferred: true }") >= 0, tool + ' is granted to the lead, deferred');
+  A.ok(!/station\.plan_(line|room|build|restyle)'/.test(reg), 'the old four planners are not granted as tools any more (they are the page\'s verbs)');
+  // the sidecar's approval card reads the memo, never the model's words; the lead's note says how to reach the builder
   const idx = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
   A.ok(/if \(\/\^station\[\._\]build\$\/\.test\(String\(call && call\.name \|\| ''\)\)\) return stationPlanSummary\(stationPlanMemo, a\.planId\)/.test(idx), 'consentSummary reads the station.build card from the plan memo');
-  A.ok(/Look first: station\.map shows every room/.test(idx) && /station\.plan_build adds rooms and hallways the way the Commander describes them/.test(idx) && /never tile positions/.test(idx) && /do not give up after one refusal/.test(idx), 'the lead\'s team note says to look, then plan, then build, and to fix a refused plan');
-  // the spatial tools: the map, and rooms and hallways in words
-  const mapT = tools.mapTool, pbT = makeStationTools({ station: bridge, planMemo: memo, now: () => 1000, lineMenu: () => SB.catalog(M), styleMenu: () => require('../frontend/app/roomstyles.js').menu() }).planBuildTool;
-  A.eq([mapT.scope, mapT.requiresConsent, pbT.scope, pbT.requiresConsent], ['read', false, 'read', false], 'the map and the build plan change nothing');
-  A.ok(/Call this before station\.plan_build/.test(mapT.description) && /the bridge, the hub or the main room/.test(mapT.description), 'the map tool says when to call it and what the main room may be called');
-  A.ok(/size: small \(12 × 8\), medium \(18 × 11, the default for an empty room\), large \(24 × 14\), giant \(36 × 20\)/.test(pbT.description) && /hallway: true \(the default: a short hallway joins them\), false/.test(pbT.description) && /STYLES: cozy \(/.test(pbT.description) && /LINES: .*build_test \(/.test(pbT.description), 'the build tool lists sizes, hallways, styles and lines');
-  A.ok(pbT.schema.properties.rooms.type === 'array' && pbT.schema.properties.hallways.type === 'array' && !pbT.schema.properties.rooms.items.properties.x, 'its schema takes rooms and hallways, and no position');
-  const mp = await mapT.run({}, {});
-  A.ok(/"main":"HOME"/.test(mp.content) && mp.summary === '1 room(s), 0 hallway(s)' && calls[calls.length - 1][0] === 'station.map', 'the map rides back from the page');
-  const pb = await pbT.run({ rooms: [{ name: 'Conveyor Hall', size: 'giant', beside: 'bridge' }] }, {});
-  A.eq(calls[calls.length - 1], ['station.plan_build', { request: { rooms: [{ name: 'Conveyor Hall', size: 'giant', beside: 'bridge' }] } }], 'a build request rides to the page untouched');
-  A.ok(/^\{"planId":"plan-b-1"/.test(pb.content) && pb.summary === 'planned CONVEYOR HALL' && /^CONVEYOR HALL, a new 36 × 20 room east of HOME/.test(planSummaryFrom(memo, 'plan-b-1')), 'a build plan is remembered for the approval card');
-  const pbBad = await pbT.run({ rooms: [{ beside: 'Mars' }] }, {});
-  A.ok(/^REFUSED: There is no room called "Mars"/.test(pbBad.content), 'a refusal travels back as REFUSED, with the rooms that exist');
-  A.ok(/beside \/ side \/ hallway \(where its new room goes/.test(planT.description) && planT.schema.properties.side.type === 'string', 'the line tool places its room the same way');
-  const vibe = makeStationTools({ station: bridge, styleMenu: () => require('../frontend/app/roomstyles.js').menu() }).planRoomTool;
-  A.ok(/ZONES \(the usual way\)/.test(vibe.description) && /style: cozy \(a cozy corner: /.test(vibe.description) && vibe.schema.properties.zones.type === 'array', 'the room tool leads with zones and lists every style');
-  A.eq([tools.planRoomTool.scope, tools.planRoomTool.requiresConsent, tools.planRestyleTool.scope, tools.planRestyleTool.requiresConsent], ['read', false, 'read', false], 'the room and restyle plans change nothing');
-  A.ok(/Build exactly what a station\.plan_build, station\.plan_line, station\.plan_room or station\.plan_restyle call planned/.test(buildT.description), 'one build tool builds any plan');
-  const rp = await tools.planRoomTool.run({ kit: 'LIBRARY' }, {});
-  A.eq(calls[calls.length - 1], ['station.plan_room', { request: { kit: 'LIBRARY' } }], 'a room request rides to the page untouched');
-  A.ok(/^\{"planId":"plan-r-1"/.test(rp.content) && /^LIBRARY \(a quiet reading room\)/.test(planSummaryFrom(memo, 'plan-r-1')), 'a room plan is remembered for the card too');
-  const menuTools = makeStationTools({ station: bridge, kitMenu: () => T.kits().map(k => ({ name: k.name, about: k.about })), presetMenu: () => ['RESEARCH STATION'] });
-  A.ok(/KITS: WORKROOM \(/.test(menuTools.planRoomTool.description) && /PRESETS: RESEARCH STATION\./.test(menuTools.planRoomTool.description), 'the room tool lists the kits and presets');
+  A.ok(/To build \(a whole station layout, rooms, hallways, lines, furniture\) when the Commander asks, tool_search "station builder" and follow station\.plan; never claim a floor change station\.build did not report\./.test(idx), 'the lead\'s note says how to reach the builder, and never to claim what it did not report');
   A.report('station-builder');
 })();

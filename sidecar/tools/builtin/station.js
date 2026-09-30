@@ -325,40 +325,18 @@
       }
     };
 
-    /* THE STATION BUILDER (2026-09-29): the lead ADDS a ready-made line from a fixed menu — it never sends a position, a
-       belt or furniture; the page's StationBuilder does all the placing on a copy first. plan_line changes nothing (no
-       approval); station.build applies exactly one plan, behind the approval card. The card's text is the PLAN's own summary
-       (planSummaryFor), recorded here when plan_line answered — never words the model supplied. */
+    /* THE STATION BUILDER (2026-09-29, one planner 2026-09-30): three tools, DEFERRED (CAP_REGISTRY `deferred: true`) so
+       they cost the per-call payload nothing until the lead needs them — the lead's note names them and says to reach
+       them with tool_search "station builder"; each result reveals the next one. station.map sees the floor, station.plan
+       plans ANY floor change on a copy (nothing changes), station.build applies exactly one plan behind the approval
+       card. The model never sends a tile: it names a pattern, rooms, styles, sides and sizes, and the page's
+       StationBuilder places everything. The card's text is the PLAN's own summary (planSummaryFor), recorded here when
+       station.plan answered — never words the model supplied. */
     const planMemo = deps.planMemo instanceof Map ? deps.planMemo : new Map();
     const menu = typeof deps.lineMenu === 'function' ? deps.lineMenu : () => [];
-    const menuText = () => { try { return (menu() || []).map(l => l.id + ' (' + l.name + ': ' + (l.roles || []).join(' → ') + ')').join('; '); } catch (_) { return ''; } };
+    const menuText = () => { try { return (menu() || []).map(l => l.id + ' (' + (l.roles || []).join(' → ') + ')').join('; '); } catch (_) { return ''; } };
     const planSummaryFor = planId => planSummaryFrom(planMemo, planId);
-    const planLineTool = {
-      name: 'station.plan_line', capability: 'orchestrator', scope: 'read', requiresConsent: false,
-      get description() {
-        return 'Plan a new ready-made assembly line (and, by default, a new room for it) on the station, when the Commander asks for one. '
-          + 'You never place anything yourself: pick a line from this menu and StarNet chooses every position, belt and piece of furniture, builds it on a copy of the station, and checks it. '
-          + 'Fields: line (an id or plain name from the menu), OR shape (a line the Commander DESCRIBED that no menu line matches: a list of 1 to 6 stages in order, each a role like "RESEARCHER", { "together": [2 or 3 roles] } (each gets a copy of the job), { "turns": [2 or 3 roles] } (they take turns), { "sort": { "code": role, "research": role } } (everything else goes straight on), or { "review": true, "tries": 3 } right after a step (a reviewer sends it back until it is right); StarNet lays it out and checks it), purpose (the Commander\'s own words for what the line is for: with no line, StarNet picks one from the shape of the work, and every step\'s standard instructions carry those words), '
-          + 'where ("new room" or an existing room\'s name), beside / side / hallway (where its new room goes, as in station.plan_build: beside a named room, north, south, east or west of it, by a hallway or open to it), name (what to call the line), '
-          + 'steps (a list of { step: 1, instructions, agent } by step number or { role, instructions, agent }; agent is a crew member\'s name, "lead", or "new" to recruit a specialist for that step, only when the Commander wants one), '
-          + 'dailyCap (dollars per day, or null for no cap), tries (1-5 review passes, for lines with a review loop). '
-          + 'Nothing is built yet: it returns a planId, a plain summary, and what would still be missing. Tell the Commander the summary, then call station.build with the planId. '
-          + 'If it refuses, it says why and lists the valid choices; fix the request and plan again. Requires an open station page with Build mode closed. '
-          + 'LINES: ' + menuText();
-      },
-      schema: { type: 'object', properties: {
-        line: { type: 'string' }, shape: { type: 'array' }, purpose: { type: 'string' }, where: { type: 'string' }, beside: { type: 'string' }, side: { type: 'string' }, hallway: {}, name: { type: 'string' },
-        steps: { type: 'array', items: { type: 'object', properties: { step: { type: 'integer' }, role: { type: 'string' }, instructions: { type: 'string' }, agent: { type: 'string' } } } },
-        dailyCap: {}, tries: { type: 'integer' } } },
-      run: async (args) => {
-        const out = await ask('station.plan_line', { request: args || {} });
-        if (!out.ok) return refuse(out.error);
-        const p = out.result || {};
-        remember(p);
-        return { content: JSON.stringify(p), summary: 'planned ' + ((p.line && p.line.name) || 'a line') + (p.ready ? ' (ready once built)' : ' (' + ((p.blocking || []).length) + ' to do)') };
-      }
-    };
-    // every plan tool parks its plan in the memo the approval card reads (planSummaryFrom)
+    // every plan parks in the memo the approval card reads (planSummaryFrom)
     function remember(p) {
       if (!p || !p.planId) return;
       for (const [id, e] of planMemo) if (clock && clock() - e.at > 10 * 60 * 1000) planMemo.delete(id);
@@ -366,99 +344,75 @@
     }
     const kitMenu = typeof deps.kitMenu === 'function' ? deps.kitMenu : () => [];
     const presetMenu = typeof deps.presetMenu === 'function' ? deps.presetMenu : () => [];
-    const kitText = () => { try { return (kitMenu() || []).map(k => k.name + ' (' + k.about + ')').join('; '); } catch (_) { return ''; } };
+    const kitText = () => { try { return (kitMenu() || []).map(k => k.name).join(', '); } catch (_) { return ''; } };
     const presetText = () => { try { return (presetMenu() || []).join(', '); } catch (_) { return ''; } };
     const styleMenu = typeof deps.styleMenu === 'function' ? deps.styleMenu : () => [];
-    const styleText = () => { try { return (styleMenu() || []).map(s => s.id + ' (' + s.name + ': ' + s.about + ')').join('; '); } catch (_) { return ''; } };
-    const planRoomTool = {
-      name: 'station.plan_room', capability: 'orchestrator', scope: 'read', requiresConsent: false,
-      get description() {
-        return 'Plan a room the way the Commander describes it ("a new room, the left side cozy, the right side a line that builds and tests code"), or add a furnished room or a preset\'s rooms. For several rooms at once, an empty room, a room of a chosen size, or hallways, use station.plan_build. '
-          + 'You never place anything yourself: you name what goes in each part of the room and StarNet places every piece and every machine, checks it on a copy of the station, and keeps doorways clear. '
-          + 'ZONES (the usual way): zones is a list of 1 to 4 parts of the room, each { area, style } or { area, line | purpose | shape, name, staff, dailyCap, tries }. '
-          + 'area: left, right, back, front, back-left, back-right, front-left, front-right, or whole (top means back, bottom means front). '
-          + 'style: ' + styleText() + '. '
-          + 'A line zone holds one workflow line: line (an id or plain name from station.plan_line\'s menu), or purpose (the Commander\'s own words; StarNet picks the line), or shape (a custom line: a list of stages in order, each a role like "RESEARCHER", { "together": [roles] }, { "turns": [roles] }, { "sort": { "code": role, "research": role } }, or { "review": true, "tries": 3 }). '
-          + 'staff is a list of { step, agent, instructions } for that line (agent: a crew name, "lead", or "new" to recruit). With zones, also: where ("new room", sized for the zones, or an existing room\'s name to split it), name (a new room\'s name), size, beside, side, hallway (where a new room goes, as in station.plan_build), type, floorStyle, floorMat. '
-          + 'AS DESIGNED: kit (one room) OR preset (every room of that preset, added beside the station), replace (true only when the Commander asks to REPLACE or switch their whole station for a preset: it swaps every room, prop and conveyor, backs the old layout up for RESTORE PREVIOUS, and keeps agents and conversations), where ("new room", or an existing room\'s name to furnish it when it has clear floor), name (for a single new room), type (a room type\'s floor: HAB, BRIDGE, LAB, FOUNDRY, QUARTERS, STORAGE), floorStyle, floorMat. '
-          + 'Nothing is built yet: it returns a planId and a plain summary, including any equipment the room brings (a desk is a computer). Tell the Commander the summary, then call station.build with the planId. '
-          + 'If it refuses, it says why and lists the valid choices. Requires an open station page with Build mode closed. KITS: ' + kitText() + '. PRESETS: ' + presetText() + '.';
-      },
-      schema: { type: 'object', properties: {
-        zones: { type: 'array', items: { type: 'object', properties: { area: { type: 'string' }, style: { type: 'string' }, line: { type: 'string' }, purpose: { type: 'string' }, shape: { type: 'array' }, name: { type: 'string' },
-          staff: { type: 'array', items: { type: 'object', properties: { step: { type: 'integer' }, role: { type: 'string' }, instructions: { type: 'string' }, agent: { type: 'string' } } } }, dailyCap: {}, tries: { type: 'integer' } } } },
-        kit: { type: 'string' }, preset: { type: 'string' }, replace: { type: 'boolean' }, where: { type: 'string' }, size: {}, beside: { type: 'string' }, side: { type: 'string' }, hallway: {}, name: { type: 'string' }, type: { type: 'string' }, floorStyle: { type: 'string' }, floorMat: { type: 'string' } } },
-      run: async (args) => {
-        const out = await ask('station.plan_room', { request: args || {} });
-        if (!out.ok) return refuse(out.error);
-        remember(out.result);
-        const p = out.result || {};
-        return { content: JSON.stringify(p), summary: 'planned ' + ((p.rooms || []).map(r => r.name).join(', ') || 'a room') };
-      }
-    };
-    /* THE SPATIAL BUILDER (2026-09-30): station.map lets the lead SEE the floor; station.plan_build takes rooms and
-       hallways in words (beside which room, which side, how big, hallway or open, empty or filled) and the page turns
-       them into tiles. Both are reads: nothing changes until station.build, behind the approval card. */
+    const styleText = () => { try { return (styleMenu() || []).map(s => s.id).join(', '); } catch (_) { return ''; } };
+    const roomMenu = typeof deps.roomMenu === 'function' ? deps.roomMenu : () => [];
+    const roomText = () => { try { return (roomMenu() || []).map(s => s.id + ' (' + s.name + ')').join(', '); } catch (_) { return ''; } };
+    const BUILDER = ['station.map', 'station.plan', 'station.build'];
     const mapTool = {
       name: 'station.map', capability: 'orchestrator', scope: 'read', requiresConsent: false,
-      description: 'See the station floor before you build on it: every room with its position and size in tiles, its type, what it is joined to (through a hallway, or open to it), how many machines and pieces of furniture it holds, its lines, how much of its floor is clear, which sizes of new room fit on each of its sides, and a drawing of the whole floor in characters (one letter per room, + for a hallway). '
-        + '⛔ Call this before station.plan_build, and whenever the Commander names a place ("next to the bridge", "on the left", "the big room"). The room marked main is the one the station started from; the Commander may call it the bridge, the hub or the main room. North is the top of the drawing. Read-only. Requires an open station page.',
+      description: 'STATION BUILDER, step 1: see the station floor before you build on it. Every room with its position and size in tiles, its type, what it is joined to (through hallways, or open to it), its machines, furniture and lines, how much floor is clear, which sizes of new room fit on each side, and the floor drawn in characters (a letter per room, + for a hallway; north is the top). '
+        + 'The room marked main is the one the station started from; the Commander may call it the bridge, the hub or the main room. Then plan with station.plan. Read-only; needs an open station page.',
       schema: { type: 'object', properties: {} },
       run: async () => {
         const out = await ask('station.map', {});
         if (!out.ok) return refuse(out.error);
         const m = out.result || {};
-        return { content: JSON.stringify(m), summary: ((m.rooms || []).length) + ' room(s), ' + (m.hallways || 0) + ' hallway(s)' };
+        return { content: JSON.stringify(m), summary: ((m.rooms || []).length) + ' room(s), ' + (m.hallways || 0) + ' hallway(s)', control: { revealTools: BUILDER } };
       }
     };
-    const planBuildTool = {
-      name: 'station.plan_build', capability: 'orchestrator', scope: 'read', requiresConsent: false,
+    /* ONE PLANNER: the form of the request says what kind of change it is, and the page's own planner for that kind answers */
+    const PLAN_HOW = 'Send one form: { layout: { pattern, rooms } } (a whole station), { rooms, hallways } (rooms where the Commander says), { line | shape | purpose } (one workflow line), { kit | preset } (a furnished room or a preset), { zones } (one room part by part), or { restyle: { room, … } }.';
+    function planVerb(a) {
+      const has = k => a[k] !== undefined && a[k] !== null;
+      if (has('restyle')) return Object.keys(a).length === 1 ? { verb: 'station.plan_restyle', request: a.restyle } : { error: 'restyle goes on its own: { restyle: { room, type, floorStyle, floorMat, name } }.' };
+      if (has('layout') || has('rooms') || has('hallways')) return { verb: 'station.plan_build', request: a };
+      if (has('kit') || has('preset') || has('zones')) return { verb: 'station.plan_room', request: a };
+      if (has('line') || has('shape') || has('purpose')) return { verb: 'station.plan_line', request: a };
+      return { error: PLAN_HOW };
+    }
+    const planTool = {
+      name: 'station.plan', capability: 'orchestrator', scope: 'read', requiresConsent: false,
       get description() {
-        return 'Plan rooms and hallways on the station, the way the Commander describes them. One request adds up to 6 rooms (any size, beside any room, on any side, joined by a hallway or opened straight onto it, left EMPTY or filled) and hallways between rooms. Use it for "build me rooms", "add a giant room for conveyor lines", "connect these two rooms", "put three lines in that room". '
-          + 'You say where things go in words; StarNet computes every tile, places every piece and machine, checks it on a copy of the station, and keeps doorways clear. Call station.map first to see the rooms and what fits where. '
-          + 'rooms: a list. A NEW room takes name, size, beside, side, hallway, align, type, floorStyle, floorMat. A room that already exists takes into (its name) and what to put in it. '
-          + 'size: small (12 × 8), medium (18 × 11, the default for an empty room), large (24 × 14), giant (36 × 20), or { "w": 6-44, "h": 5-26 }; leave it out for a room with zones or lines and it is sized for them. '
-          + 'beside: the room it joins, by name ("bridge", "main" or "hub" mean the main room; a room earlier in the same list works too). Leave it out and StarNet picks the spot that keeps the station compact. '
-          + 'side: north, south, east or west of that room (north is the top of the map; left is west). hallway: true (the default: a short hallway joins them), false (the rooms touch and open onto each other), or a length from 2 to 8. align: center, start or end along the shared wall. '
-          + 'type: HAB, BRIDGE, LAB, FOUNDRY, QUARTERS, STORAGE (the room\'s floor and look; FOUNDRY suits a room of conveyor lines). '
-          + 'What goes in a room is optional: leave both out for an empty room the Commander fills later. zones: 1 to 4 parts of the room, each { area, style } or { area, line | purpose | shape, name, staff, dailyCap, tries } (area: left, right, back, front, back-left, back-right, front-left, front-right, whole). '
-          + 'lines: 1 to 6 workflow lines laid anywhere in the room, each { line | purpose | shape, name, staff, dailyCap, tries } (line: an id or name from the LINES menu; shape: a custom line as in station.plan_line; staff: [{ step, agent, instructions }], agent a crew name, "lead", or "new" to recruit). '
-          + 'hallways: [{ from, to }] lays a straight hallway between two rooms that face each other. '
-          + 'Nothing is built yet: it returns a planId and a plain summary. Tell the Commander the summary, then call station.build with the planId. If it refuses, it says why and what does fit; fix the request and plan again. Requires an open station page with Build mode closed. '
-          + 'STYLES: ' + styleText() + '. LINES: ' + menuText();
+        return 'STATION BUILDER, step 2: plan a change to the station floor when the Commander asks for one. It is built on a copy and checked; nothing changes until station.build. You never send a position: you name the pattern, rooms, styles, sides and sizes, and StarNet places every room, hallway, machine and piece of furniture. ' + PLAN_HOW + ' '
+          + '1 LAYOUT, the way to a beautiful station: { "layout": { "pattern": "ring" | "concourse", "rooms": [ { "name", "style", "size", "lines" } ] }, "replace": true? }. ring = a corridor loop round the main room with a hallway in from each side and rooms all round it (up to 6: two north, two south, a big room east and one west). concourse = a wide corridor from one side of the main room, rooms down both sides, a big room at the far end (up to 8; "side" picks the direction). '
+          + 'Each room is furnished wall to wall in its style (floor, walls, feature wall, centrepiece, plants) and the corridors are planted and lit. Room styles: ' + roomText() + '. A room given lines is a conveyor hall (works); a works room without lines is kept clear for lines to come. '
+          + 'replace: true lays the whole station out again around the main room: every other room is replaced, the main room, agents and conversations stay, and the old layout is backed up for RESTORE PREVIOUS. Use it when the Commander wants the station redone, or when there is no clear space round the main room. '
+          + '2 ROOMS where the Commander says: { "rooms": [ { name, style | zones | lines, size, beside, side, hallway, align, type } or { into: an existing room, style | zones | lines } ], "hallways": [ { from, to } ] }. size: small 12×8, medium 18×11, large 24×14, giant 36×20, or { w, h }. beside: a room name ("bridge" or "main" = the main room); side: north, south, east, west; hallway: true (default), false (open plan) or 2-8 long. '
+          + '3 ONE LINE: { line | shape | purpose, where, beside, side, hallway, name, steps, dailyCap, tries }. LINES: ' + menuText() + '. shape = stages in order: a role ("RESEARCHER"), { together: [roles] }, { turns: [roles] }, { sort: { code: role, research: role } }, { review: true, tries: 3 }. steps (or a line\'s staff): [ { step, agent, instructions } ], agent = a crew name, "lead", or "new" to recruit. '
+          + '4 { kit | preset, replace, where, name }: KITS ' + kitText() + '; PRESETS ' + presetText() + ' (replace: true swaps the whole station for the preset). '
+          + '5 { zones: [ { area, style } | { area, line | purpose | shape, … } ], where, name, size, beside, side }: area left, right, back, front, back-left, back-right, front-left, front-right or whole; zone styles ' + styleText() + '. '
+          + '6 { restyle: { room, type, floorStyle, floorMat, name } }. '
+          + 'It answers a planId and a plain summary: tell the Commander the summary, then call station.build with the planId. If it refuses it says why and what does fit: fix the request and plan again. Never give up after one refusal, and never say something was built that station.build did not report.';
       },
       schema: { type: 'object', properties: {
-        rooms: { type: 'array', items: { type: 'object', properties: {
-          name: { type: 'string' }, size: {}, beside: { type: 'string' }, side: { type: 'string' }, hallway: {}, align: { type: 'string' }, into: { type: 'string' },
-          type: { type: 'string' }, floorStyle: { type: 'string' }, floorMat: { type: 'string' },
-          zones: { type: 'array', items: { type: 'object' } }, lines: { type: 'array', items: { type: 'object' } } } } },
-        hallways: { type: 'array', items: { type: 'object', properties: { from: { type: 'string' }, to: { type: 'string' } } } } } },
+        layout: { type: 'object', properties: { pattern: { type: 'string' }, around: { type: 'string' }, side: { type: 'string' }, rooms: { type: 'array', items: { type: 'object' } } } },
+        replace: { type: 'boolean' }, rooms: { type: 'array', items: { type: 'object' } }, hallways: { type: 'array', items: { type: 'object' } },
+        line: { type: 'string' }, shape: { type: 'array' }, purpose: { type: 'string' }, steps: { type: 'array', items: { type: 'object' } }, dailyCap: {}, tries: { type: 'integer' },
+        kit: { type: 'string' }, preset: { type: 'string' }, zones: { type: 'array', items: { type: 'object' } }, restyle: { type: 'object' },
+        where: { type: 'string' }, name: { type: 'string' }, size: {}, beside: { type: 'string' }, side: { type: 'string' }, hallway: {}, type: { type: 'string' }, floorStyle: { type: 'string' }, floorMat: { type: 'string' } } },
       run: async (args) => {
-        const out = await ask('station.plan_build', { request: args || {} });
+        const a = args && typeof args === 'object' && !Array.isArray(args) ? args : {};
+        const route = planVerb(a);
+        if (route.error) return refuse(route.error);
+        const out = await ask(route.verb, { request: route.request });
         if (!out.ok) return refuse(out.error);
-        remember(out.result);
-        const p = out.result || {}, n = (p.rooms || []).length, h = (p.hallways || []).length;
-        return { content: JSON.stringify(p), summary: 'planned ' + ((p.rooms || []).map(r => r.name).join(', ') || 'a build') + (h ? (n ? ' + ' : '') + h + ' hallway' + (h > 1 ? 's' : '') : '') };
-      }
-    };
-    const planRestyleTool = {
-      name: 'station.plan_restyle', capability: 'orchestrator', scope: 'read', requiresConsent: false,
-      description: 'Plan restyling one existing room when the Commander asks: its floorStyle, its floorMat (deck material), a room type\'s floor (HAB, BRIDGE, LAB, FOUNDRY, QUARTERS, STORAGE), or its name, from fixed lists. It adds, moves and removes nothing. '
-        + 'Fields: room (its current name), type, floorStyle, floorMat, name. Nothing changes yet: it returns a planId and a summary; tell the Commander, then call station.build with the planId. If a value is not allowed it lists the allowed ones.',
-      schema: { type: 'object', properties: { room: { type: 'string' }, type: { type: 'string' }, floorStyle: { type: 'string' }, floorMat: { type: 'string' }, name: { type: 'string' } }, required: ['room'] },
-      run: async (args) => {
-        const out = await ask('station.plan_restyle', { request: args || {} });
-        if (!out.ok) return refuse(out.error);
-        remember(out.result);
-        return { content: JSON.stringify(out.result || {}), summary: 'planned a restyle' };
+        const p = out.result || {};
+        remember(p);
+        const rooms = (p.rooms || []).map(r => r.name).join(', '), h = (p.hallways || []).length;
+        const what = route.verb === 'station.plan_line' ? ((p.line && p.line.name) || 'a line') + (p.ready ? ' (ready once built)' : ' (' + ((p.blocking || []).length) + ' to do)')
+          : route.verb === 'station.plan_restyle' ? 'a restyle' : (rooms || 'a build') + (h ? ' + ' + h + ' hallway' + (h > 1 ? 's' : '') : '');
+        return { content: JSON.stringify(p), summary: 'planned ' + what, control: { revealTools: BUILDER } };
       }
     };
     const buildTool = {
       name: 'station.build', capability: 'orchestrator', scope: 'write', requiresConsent: true,
       // briefs persist and every later run of those Bays obeys them: a run that read untrusted content may not write them
       taintLocked: true,
-      description: 'Build exactly what a station.plan_build, station.plan_line, station.plan_room or station.plan_restyle call planned, by its planId, after the Commander approves. It lands as one step the Commander can take back with one UNDO in Build mode; '
-        + 'nothing already on the station is moved or removed, except by a preset swap (replace: true), which replaces the layout and backs the old one up for RESTORE PREVIOUS. It refuses if the plan expired (ten minutes), was already used, or the station changed since the plan: then plan again. Afterwards, report what it says is still missing, exactly.',
+      description: 'STATION BUILDER, step 3: build exactly what station.plan planned, by its planId, after the Commander approves. It lands as one step the Commander can take back with one UNDO in Build mode; '
+        + 'nothing already on the station is moved or removed, except by replace: true (a preset swap or a whole new layout), which backs the old layout up for RESTORE PREVIOUS. It refuses if the plan expired (ten minutes), was already used, or the station changed since the plan: then plan again. Afterwards, report what it says is still missing, exactly.',
       schema: { type: 'object', properties: { planId: { type: 'string' } }, required: ['planId'] },
       run: async (args) => {
         const planId = String((args && args.planId) || '').trim().slice(0, 60);
@@ -472,9 +426,9 @@
     };
 
     return {
-      agentConfigTool, agentConfigureTool, layoutTool, mapTool, planBuildTool, planLineTool, planRoomTool, planRestyleTool, buildTool, planSummaryFor,
+      agentConfigTool, agentConfigureTool, layoutTool, mapTool, planTool, buildTool, planSummaryFor,
       listTool, createTool, peekTool, focusTool, taskListTool, taskCreateTool, taskManageTool,
-      register(reg) { [listTool, createTool, peekTool, focusTool, taskListTool, taskCreateTool, taskManageTool, agentConfigTool, agentConfigureTool, layoutTool, mapTool, planBuildTool, planLineTool, planRoomTool, planRestyleTool, buildTool].forEach(t => reg.register(t)); return reg; }
+      register(reg) { [listTool, createTool, peekTool, focusTool, taskListTool, taskCreateTool, taskManageTool, agentConfigTool, agentConfigureTool, layoutTool, mapTool, planTool, buildTool].forEach(t => reg.register(t)); return reg; }
     };
   }
 

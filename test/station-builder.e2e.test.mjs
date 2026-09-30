@@ -48,11 +48,12 @@ const stopChild = (child, graceful = false) => new Promise(resolve => {
   if (graceful) killTimer = setTimeout(kill, 3000); else kill();
 });
 
-// the mock model: a lead that (with mock.lookFirst) reads station_map, then PLANS (mock.planTool with mock.planArgs), then
-// BUILDS the planId it was given, then answers.
+// the mock model: a lead that finds the station builder the way a real one must (tool_search: the builder is deferred),
+// (with mock.lookFirst) reads station_map, then PLANS (station_plan with mock.planArgs), then BUILDS the planId it was
+// given, then answers.
 // A refusal (no planId in the tool result) ends the run in words — the way a real model reads REFUSED.
 function startMock() {
-  const mock = { requests: [], results: [], planTool: 'station_plan_line', planArgs: {}, lookFirst: false };
+  const mock = { requests: [], results: [], planTool: 'station_plan', planArgs: {}, lookFirst: false, searched: [] };
   const server = http.createServer((req, res) => {
     if (req.url.indexOf('/models') >= 0) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -62,7 +63,7 @@ function startMock() {
     let body = ''; req.on('data', d => { body += d; }); req.on('end', () => {
       let p = {}; try { p = JSON.parse(body); } catch (_) {}
       mock.requests.push(p);
-      const offered = (p.tools || []).some(t => t && t.function && t.function.name === 'station_plan_line');
+      const offered = (p.tools || []).some(t => t && t.function && t.function.name === 'tool_search');
       const answered = (p.messages || []).filter(m => m && m.role === 'tool').map(m => typeof m.content === 'string' ? m.content : JSON.stringify(m.content));
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
       const send = o => res.write('data: ' + JSON.stringify(o) + '\n\n');
@@ -74,9 +75,11 @@ function startMock() {
         send({ choices: [{ delta: { content: text } }] });
         send({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 12, completion_tokens: 6, total_tokens: 18 } });
       };
-      const seq = mock.lookFirst ? 1 : 0;   // tool calls before the plan
-      if (offered && answered.length < seq) call('station_map', {});
-      else if (offered && answered.length === seq) { if (seq) mock.results.push(answered[0]); call(mock.planTool, mock.planArgs); }
+      const pre = ['tool_search'].concat(mock.lookFirst ? ['station_map'] : []), seq = pre.length;   // tool calls before the plan
+      if (offered && answered.length === 1) mock.searched.push({ result: answered[0], toolsAfter: null });
+      if (offered && answered.length === 1 && mock.searched.length) mock.searched[mock.searched.length - 1].toolsAfter = (p.tools || []).map(t => t && t.function && t.function.name);
+      if (offered && answered.length < seq) call(pre[answered.length], pre[answered.length] === 'tool_search' ? { query: 'station builder' } : {});
+      else if (offered && answered.length === seq) { if (mock.lookFirst) mock.results.push(answered[1]); call(mock.planTool, mock.planArgs); }
       else if (offered && answered.length === seq + 1) {
         mock.results.push(answered[seq]);
         let planId = null; try { planId = JSON.parse(answered[seq]).planId; } catch (_) { planId = null; }
@@ -129,13 +132,15 @@ try {
   for (let i = 0; i < 40; i++) { sync = await evalJS(cdp, 'World.planStatus()'); if (sync && !sync.pending && !sync.inflight && !sync.stale) break; await sleep(500); }
 
   // 1. the lead plans a line from the fixed menu, then builds exactly that plan (full access: no approval card here)
-  mock.planArgs = { line: 'Build + test', name: 'SHIP IT', steps: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'lead' }], dailyCap: 5 };
+  mock.planTool = 'station_plan'; mock.planArgs = { line: 'Build + test', name: 'SHIP IT', steps: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'lead' }], dailyCap: 5 };
   const run1 = await leadRun(base, token, 'make me a new room with a line that builds features and tests them');
   const end1 = run1.events.filter(e => e.name === 'agent.run.end').pop();
   check('the lead run completes', run1.status === 200 && !!end1 && end1.payload.reason === 'done', JSON.stringify(end1 && end1.payload && end1.payload.reason));
   const leadReq = mock.requests.find(r => JSON.stringify(r.messages || []).indexOf('builds features and tests them') >= 0) || {};
   const offeredNames = JSON.stringify(leadReq.tools || []);
-  check('the lead is offered the map, the planners and station_build', ['station_map', 'station_plan_build', 'station_plan_line', 'station_plan_room', 'station_plan_restyle', 'station_build'].every(n => offeredNames.indexOf('"' + n + '"') >= 0));
+  check('the builder is deferred: not on the wire at first, but named in the prompt as there to find', ['station_map', 'station_plan', 'station_build'].every(n => offeredNames.indexOf('"' + n + '"') < 0) && ['station_map', 'station_plan', 'station_build'].every(n => JSON.stringify(leadReq.messages || []).indexOf(n) >= 0), offeredNames.slice(0, 120));
+  const found = mock.searched[0] || {};
+  check('tool_search "station builder" reveals all three, callable on the next turn', /station\.map/.test(found.result || '') && /station\.plan/.test(found.result || '') && /station\.build/.test(found.result || '') && ['station_map', 'station_plan', 'station_build'].every(n => (found.toolsAfter || []).indexOf(n) >= 0), (found.result || '').slice(0, 200) + ' | ' + JSON.stringify(found.toolsAfter || []).slice(0, 200));
   let PL = null; try { PL = JSON.parse(mock.results[0] || ''); } catch (_) { PL = null; }
   check('the plan came back from a copy of the station: nothing built yet', !!PL && /^plan-/.test(PL.planId) && /Nothing has been built yet/.test(PL.next), (mock.results[0] || '').slice(0, 200));
   check('the plan speaks plainly and says it will be ready', !!PL && /^Build \+ test \("SHIP IT"\) in a new room (north|south|east|west) of HOME, through a hallway: Engineer \(.+\) → Tester \(.+\) → Outbox · daily cap \$5 · up to 3 review tries\. It will be ready to run\.$/.test(PL.summary) && PL.ready === true, PL && PL.summary);
@@ -175,7 +180,7 @@ try {
 
   // 6. a furnished room kit: the lead picks LOUNGE from the menu, StarNet places every piece
   const kit = await evalJS(cdp, `(() => { const k = StationTemplates.kits().find(x => x.id === 'cozyLounge'); return { name: k.name, n: k.props.length, types: k.props.map(p => p[0]).sort() }; })()`);
-  mock.planTool = 'station_plan_room'; mock.planArgs = { kit: kit.name };
+  mock.planTool = 'station_plan'; mock.planArgs = { kit: kit.name };
   let at = mock.results.length;
   const run3 = await leadRun(base, token, 'add a lounge');
   check('the room run completes', run3.status === 200);
@@ -187,7 +192,7 @@ try {
   check('the new room holds exactly the kit\'s furniture', !!lib && JSON.stringify(lib.types) === JSON.stringify(kit.types), JSON.stringify(lib));
 
   // 7. a restyle: only the floor changes
-  mock.planTool = 'station_plan_restyle'; mock.planArgs = { room: kit.name, floorStyle: 'teal', floorMat: 'tile' };
+  mock.planTool = 'station_plan'; mock.planArgs = { restyle: { room: kit.name, floorStyle: 'teal', floorMat: 'tile' } };
   at = mock.results.length;
   const propsBefore = await evalJS(cdp, 'JSON.stringify(App.station().serialize().props)');
   const run4 = await leadRun(base, token, 'make the lounge floor teal tile');
@@ -204,7 +209,7 @@ try {
   // 9. the whole-station swap: backed up to Build mode's own slot, so its RESTORE PREVIOUS brings the old station back
   const preSwap = await evalJS(cdp, `(() => { const st = App.station(); return { rooms: st.rooms().filter(r => r.kind !== 'corridor').map(r => r.name), props: st.props().length, key: 'starnet.layoutBackup.' + st.doc().meta.createdAt }; })()`);
   await evalJS(cdp, `(() => { try { localStorage.removeItem(${JSON.stringify(preSwap.key)}); } catch (e) {} return true; })()`);
-  mock.planTool = 'station_plan_room'; mock.planArgs = { preset: 'Research Station', replace: true };
+  mock.planTool = 'station_plan'; mock.planArgs = { preset: 'Research Station', replace: true };
   at = mock.results.length;
   const run5 = await leadRun(base, token, 'replace my station with the research station');
   check('the swap run completes', run5.status === 200);
@@ -223,7 +228,7 @@ try {
 
   // 10. understanding the ask: the Commander's words pick the line, and "new" recruits the Tester through the page's own summon
   const crew0 = await evalJS(cdp, `App.agents().map(a => a.id)`);
-  mock.planTool = 'station_plan_line'; mock.planArgs = { purpose: 'fix bugs in my repo and test them', steps: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'new' }] };
+  mock.planTool = 'station_plan'; mock.planArgs = { purpose: 'fix bugs in my repo and test them', steps: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'new' }] };
   at = mock.results.length;
   const run6 = await leadRun(base, token, 'fix bugs in my repo and test them, and hire someone to test');
   check('the purpose run completes', run6.status === 200);
@@ -240,7 +245,7 @@ try {
   check('one UNDO takes back the line and the seat; the recruit stays on the crew, as the card said', after6.ok && !after6.line && after6.onCrew && after6.crew === crew0.length + 1, JSON.stringify(after6));
 
   // 11. vibe design: "a new room, the left side cozy, the right side a line that builds and tests code"
-  mock.planTool = 'station_plan_room';
+  mock.planTool = 'station_plan';
   mock.planArgs = { name: 'Den', zones: [{ area: 'left side', style: 'cozy' }, { area: 'right side', line: 'build_test', staff: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'lead' }] }] };
   at = mock.results.length;
   const pre7 = await evalJS(cdp, `App.station().rooms().filter(r => r.kind !== 'corridor').map(r => r.name)`);
@@ -262,7 +267,7 @@ try {
 
 
   // 12. a line the Commander DESCRIBED: "research it, then a writer and an analyst at once, then a reviewer"
-  mock.planTool = 'station_plan_line';
+  mock.planTool = 'station_plan';
   mock.planArgs = { name: 'Weekly digest', shape: ['RESEARCHER', { together: ['WRITER', 'ANALYST'] }, 'REVIEWER'], steps: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'lead' }, { step: 3, agent: 'lead' }, { step: 4, agent: 'lead' }] };
   at = mock.results.length;
   const pre8 = await evalJS(cdp, `App.station().rooms().filter(r => r.kind !== 'corridor').map(r => r.name)`);
@@ -278,7 +283,7 @@ try {
 
   /* 13. THE ASK THAT FAILED LIVE (2026-09-30): "build new rooms connected to the bridge room, and a giant conveyor system
      room where we will fill it with workflows". The lead looks (station_map), plans three rooms in ONE plan, builds. */
-  mock.lookFirst = true; mock.planTool = 'station_plan_build';
+  mock.lookFirst = true; mock.planTool = 'station_plan';
   mock.planArgs = { rooms: [
     { name: 'Ops Room', beside: 'bridge', side: 'north' },
     { name: 'Rec Room', beside: 'the bridge room', side: 'west', zones: [{ area: 'left', style: 'games' }, { area: 'right', style: 'cafe' }] },
@@ -319,7 +324,32 @@ try {
   check('two UNDOs take back the lines, then every room and hallway', undone9.ok && JSON.stringify(undone9.now) === JSON.stringify(pre9), JSON.stringify(undone9));
   mock.lookFirst = false;
 
-  check('the mock carried every model call (no real provider)', mock.requests.length >= 25, String(mock.requests.length));
+  /* 15. "redo my station as a gorgeous layout with hallways": the lead lays the whole station out again as a RING round
+     the bridge — every room furnished in its style, the corridors planted and lit — and the old layout is backed up. */
+  mock.lookFirst = true;
+  mock.planArgs = { layout: { pattern: 'ring', rooms: [{ style: 'lounge' }, { style: 'arcade' }, { style: 'library' }, { style: 'quarters' }, { style: 'garden' }, { name: 'Conveyor Hall', style: 'works', lines: [{ line: 'build_test', staff: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'lead' }] }] }] }, replace: true };
+  at = mock.results.length;
+  const pre11 = await evalJS(cdp, `(() => { const st = App.station(); return { rooms: st.rooms().filter(r => r.kind !== 'corridor').map(r => r.name), props: st.props().length, json: JSON.stringify(st.serialize()) }; })()`);
+  const run11 = await leadRun(base, token, 'our station looks like one long thin strip; redo the whole station as a gorgeous layout with hallways: a lounge, an arcade, a library, quarters, a garden and a giant conveyor hall');
+  check('the layout run completes', run11.status === 200);
+  let LP = null, LB = null; try { LP = JSON.parse(mock.results[at + 1] || ''); LB = JSON.parse(mock.results[at + 2] || ''); } catch (_) {}
+  check('the plan is a ring round the bridge with every room, and says the old station is backed up', !!LP && /^A RING around HOME: a corridor loop with a hallway in from each side, planted and lit, and 6 rooms\. LOUNGE north, 18 × 10: a lounge \(/.test(LP.summary) && /RESTORE PREVIOUS in Build → Presets brings it back\./.test(LP.summary), (mock.results[at + 1] || '').slice(0, 400));
+  check('the build answered built, with how to get the old station back', !!LB && LB.built === true && /RESTORE PREVIOUS/.test(LB.undo || ''), (mock.results[at + 2] || '').slice(0, 300));
+  const lay = await evalJS(cdp, `(() => { const st = App.station(), g = st.projectGeometry(), ox = g.origin.tx, oy = g.origin.ty, rooms = st.rooms().filter(r => r.kind !== 'corridor'), home = rooms.find(r => r.name === 'HOME');
+    const free = r => { const R = r.rects[0]; for (let y = R.y1; y <= R.y2; y++) for (let x = R.x1; x <= R.x2; x++) if (g.walkable(x - ox, y - oy)) return [x - ox, y - oy]; return null; };
+    const a = free(home), inRoom = r => st.props().filter(p => st.roomAt(p.x, p.y) === r.id).length;
+    const key = 'starnet.layoutBackup.' + st.doc().meta.createdAt;
+    return { rooms: rooms.map(r => r.name).sort(), furnished: rooms.filter(r => r.name !== 'HOME' && r.name !== 'CONVEYOR HALL').map(inRoom), walk: rooms.every(r => { const b = free(r); return !!(a && b && g.path(a[0], a[1], b[0], b[1])); }),
+      halls: st.rooms().filter(r => r.kind === 'corridor').length, backup: (() => { try { return localStorage.getItem(key); } catch (_) { return null; } })(), line: st.props().some(p => p.t === 'intake' && p.label === 'BUILD + TEST') }; })()`);
+  check('the station is now the bridge and the six rooms, joined by corridors', JSON.stringify(lay.rooms) === JSON.stringify(['ARCADE', 'CONVEYOR HALL', 'GARDEN', 'HOME', 'LIBRARY', 'LOUNGE', 'QUARTERS']) && lay.halls >= 14, JSON.stringify(lay.rooms) + ' halls ' + lay.halls);
+  check('every room is furnished wall to wall and walkable from the bridge; the hall holds its line', lay.furnished.every(n => n >= 12) && lay.walk && lay.line, JSON.stringify(lay.furnished) + ' walk ' + lay.walk);
+  check('the old layout is in Build mode\'s backup slot', lay.backup === pre11.json, 'backup ' + (lay.backup ? lay.backup.length : 'none') + ' vs ' + pre11.json.length);
+  if (process.env.SB_SHOT) { try { await evalJS(cdp, `(() => { try { World.frameReviewRoom(''); } catch (_) {} return true; })()`); await sleep(3500); const shot = await cdp.send('Page.captureScreenshot', { format: 'png' }); (await import('node:fs')).writeFileSync(process.env.SB_SHOT.replace(/\.png$/, '-layout.png'), Buffer.from(shot.data, 'base64')); } catch (e) { console.log('(no screenshot: ' + e.message + ')'); } }
+  const undone11 = await evalJS(cdp, `(() => { const st = App.station(); const u = st.undo(); return { ok: u && u.ok, json: JSON.stringify(st.serialize()) }; })()`);
+  check('one UNDO brings the old station back exactly', undone11.ok && undone11.json === pre11.json, String(undone11.ok));
+  mock.lookFirst = false;
+
+  check('the mock carried every model call (no real provider)', mock.requests.length >= 30, String(mock.requests.length));
   check('no page exceptions', diagnostics.exceptions.length === 0, JSON.stringify(diagnostics.exceptions.slice(0, 3)));
 } catch (error) {
   console.log('FAIL harness :: ' + (error && error.stack || error));
