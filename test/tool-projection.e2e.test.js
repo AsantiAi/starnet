@@ -11,6 +11,8 @@ const { SidecarFixture } = require('./helpers/sidecar-fixture.js');
   const upstream = http.createServer((req, res) => {
     let raw = ''; req.on('data', b => raw += b); req.on('end', () => {
       if (req.method !== 'POST') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify({ data: [], models: [] })); }
+      if (req.url.endsWith('/api/show')) { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify({ model_info: { 'qwen3.context_length': 40960 }, capabilities: ['completion', 'tools'] })); }
+      const native = req.url.endsWith('/api/chat');   // Ollama chat rides its own /api/chat (NDJSON, object arguments)
       const body = JSON.parse(raw), names = (body.tools || []).map(t => t.function.name);
       calls.push(names);
       const results = (body.messages || []).filter(m => m.role === 'tool');
@@ -19,6 +21,12 @@ const { SidecarFixture } = require('./helpers/sidecar-fixture.js');
       if (results.length === 2) {
         assert.ok(String(results[1].content).includes('projection proof'), 'model receives the actual file readback');
         readbacks++;
+      }
+      if (native) {
+        const call = write ? { id: 'write_probe', function: { name: 'fs_write', arguments: { path: filename, content: 'projection proof' } } }
+          : read ? { id: 'read_probe', function: { name: 'fs_read', arguments: { path: filename } } } : null;
+        res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
+        return res.end(JSON.stringify({ message: call ? { role: 'assistant', content: '', tool_calls: [call] } : { role: 'assistant', content: 'Projection complete.' }, done: true, done_reason: 'stop', prompt_eval_count: 10, eval_count: 5 }) + '\n');
       }
       res.writeHead(200, { 'Content-Type': 'text/event-stream' });
       res.end('data: ' + JSON.stringify({ choices: [{ delta: write ? { tool_calls: [{ index: 0, id: 'write_probe', type: 'function', function: { name: 'fs_write', arguments: JSON.stringify({ path: filename, content: 'projection proof' }) } }] } : read ? { tool_calls: [{ index: 0, id: 'read_probe', type: 'function', function: { name: 'fs_read', arguments: JSON.stringify({ path: filename }) } }] } : { content: 'Projection complete.' }, finish_reason: (write || read) ? 'tool_calls' : 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5 } }) + '\n\ndata: [DONE]\n\n');
