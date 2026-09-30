@@ -661,6 +661,9 @@ test/conveyor-choices.test.js
 test/conveyor-links.test.js
 test/conveyor-link-tools.test.js
 test/line-layout.test.js
+test/line-edit.test.js
+test/line-edit-panel.test.js
+test/line-place.test.js
 test/refit-flow-polish.test.js
 test/refit-junction-cards.test.js
 test/refit-footprint.test.js
