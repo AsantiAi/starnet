@@ -7,14 +7,14 @@
    page parked (StationCommands.previewFor), never from the model's words. */
 'use strict';
 const PlanPreview = (() => {
-  const W = 230, H = 120;   // drawing units (the canvas is twice this, for crisp plates)
+  const W = 230, H_MIN = 56, H_MAX = 140;   // drawing units (the canvas is twice this, for crisp plates); the height follows the station's shape
   function el(pv) {
     if (!pv || !Array.isArray(pv.rooms) || !pv.rooms.length) return null;
     const fig = document.createElement('figure'); fig.className = 'consent-plan';
-    const cv = document.createElement('canvas'); cv.width = W * 2; cv.height = H * 2; cv.setAttribute('aria-hidden', 'true');
+    const H = heightOf(pv), cv = document.createElement('canvas'); cv.width = W * 2; cv.height = H * 2; cv.setAttribute('aria-hidden', 'true');
     fig.appendChild(cv);
     const ctx = cv.getContext && cv.getContext('2d');
-    if (ctx) draw(ctx, pv);
+    if (ctx) draw(ctx, pv, H);
     if (Array.isArray(pv.zones) && pv.zones.length) {
       const cap = document.createElement('figcaption');
       cap.textContent = pv.zones.map((z, i) => (i + 1) + ' · ' + z.where + ': ' + z.label).join('   ');
@@ -22,10 +22,15 @@ const PlanPreview = (() => {
     }
     return fig;
   }
-  function draw(ctx, pv) {
+  function boundsOf(pv) {
     let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
     for (const r of pv.rooms) for (const q of r.rects) { x1 = Math.min(x1, q.x1); y1 = Math.min(y1, q.y1); x2 = Math.max(x2, q.x2); y2 = Math.max(y2, q.y2); }
-    const tw = x2 - x1 + 1, th = y2 - y1 + 1, s = Math.min((W - 10) / tw, (H - 10) / th);
+    return { x1, y1, x2, y2 };
+  }
+  function heightOf(pv) { const b = boundsOf(pv); return Math.max(H_MIN, Math.min(H_MAX, Math.round((W - 10) * (b.y2 - b.y1 + 1) / (b.x2 - b.x1 + 1)) + 10)); }
+  function draw(ctx, pv, H) {
+    H = H || heightOf(pv);
+    const { x1, y1, x2, y2 } = boundsOf(pv), tw = x2 - x1 + 1, th = y2 - y1 + 1, s = Math.min((W - 10) / tw, (H - 10) / th);
     const ox = (W - tw * s) / 2, oy = (H - th * s) / 2, X = x => ox + (x - x1) * s, Y = y => oy + (y - y1) * s;
     let accent = '#b6a375';
     try { accent = getComputedStyle(document.documentElement).getPropertyValue('--ph').trim() || accent; } catch (_) {}
