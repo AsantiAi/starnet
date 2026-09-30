@@ -42,7 +42,9 @@ try {
   await run(`AppsUI.load().then(() => { const a = AppsUI.list ? AppsUI.list().find(x => x.id === ${JSON.stringify(APP)}) : null; PluginHost.openApp(a || { id: ${JSON.stringify(APP)} }); return true; })`);
   for (let i = 0; i < 90; i++) { try { if (await inFrame(`!!document.querySelector('a[href^="http"]')`)) break; } catch {} await sleep(500); }
   const before = (await frameInfo())[0].url;
-  const target = await inFrame(`(() => { const a = document.querySelector('a[href^="http"]'); a.click(); return a.getAttribute('href'); })()`);
+  // the frame can reload between the wait and the click (a new page version, a late data event): retry the click
+  let target = null;
+  for (let k = 0; k < 10 && !target; k++) { try { target = await inFrame(`(() => { const a = document.querySelector('a[href^="http"]'); a.click(); return a.getAttribute('href'); })()`); } catch (e) { console.log("click try", k, e.message); await sleep(1000); } }
   await sleep(1500);
   const after = (await frameInfo())[0].url;
   const opened = await run(`window.__opened`);
