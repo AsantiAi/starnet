@@ -368,9 +368,17 @@
     { path: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: false },
     process.env.LOCALAPPDATA && { path: P.join(process.env.LOCALAPPDATA, 'Microsoft', 'Edge', 'Application', 'msedge.exe'), headless: false },
     { path: '/usr/bin/google-chrome', headless: false },
+    { path: '/usr/bin/google-chrome-stable', headless: false },
     { path: '/usr/bin/chromium-browser', headless: false },
     { path: '/usr/bin/chromium', headless: false },
-    { path: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: false }
+    { path: '/snap/bin/chromium', headless: false },
+    { path: '/usr/bin/microsoft-edge', headless: false },
+    { path: '/usr/bin/brave-browser', headless: false },
+    { path: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: false },
+    { path: P.join(OS.homedir(), 'Applications', 'Google Chrome.app', 'Contents', 'MacOS', 'Google Chrome'), headless: false },
+    { path: '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge', headless: false },
+    { path: '/Applications/Chromium.app/Contents/MacOS/Chromium', headless: false },
+    { path: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: false }
   ].filter(Boolean);
 
   function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
@@ -605,6 +613,9 @@
   function resolveChrome(wantHeaded, existsSync) {
     existsSync = existsSync || FS.existsSync;
     const exists = (c) => { try { return existsSync(c.path); } catch (_) { return false; } };
+    /* A WINDOW THE COMMANDER USES is their own installed Chrome / Edge / Chromium first — a Playwright test build shows
+       "Chrome for Testing" banners and is what sign-in pages trust least. Headless work keeps the old order. */
+    if (wantHeaded) for (const c of CHROME_CANDIDATES) { if (!c.headless && !/ms-playwright/.test(c.path) && exists(c)) return { path: c.path, headless: false }; }
     for (const c of CHROME_CANDIDATES) { if (!c.headless && exists(c)) return { path: c.path, headless: false }; }
     for (const c of CHROME_CANDIDATES) { if (c.headless && exists(c)) return { path: c.path, headless: true }; }
     return null;

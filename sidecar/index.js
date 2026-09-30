@@ -4266,15 +4266,22 @@ const browserHandoffRoutes = makeHandoffRoutes({ host: browserHandoffs, readBody
    (browserProfileLeaseFor → fallback). */
 const STATION_BROWSER_ID = 'station-browser';
 const stationBrowserLogin = { prompt: undefined };   // browser.login's consent channel: the DRIVING run's prompt, set per run
-// Settings → Browser: where the station browser lives (sidecar/browser-view.js BROWSER_MODES). Default built-in.
+// Settings → Browser: where the station browser lives (sidecar/browser-view.js BROWSER_MODES). Default: a Chrome window.
 const BROWSER_SETTINGS_FILE = path.join(WORKSPACES, 'browser.settings.json');
-function readBrowserMode() { try { const v = fs.existsSync(BROWSER_SETTINGS_FILE) ? loadResilient(BROWSER_SETTINGS_FILE, 'browser-settings') : null; return (v && typeof v.mode === 'string') ? v.mode : 'builtin'; } catch (e) { failNote('browser-settings.read', e); return 'builtin'; } }
+function readBrowserMode() { try { const v = fs.existsSync(BROWSER_SETTINGS_FILE) ? loadResilient(BROWSER_SETTINGS_FILE, 'browser-settings') : null; return (v && typeof v.mode === 'string') ? v.mode : 'window'; } catch (e) { failNote('browser-settings.read', e); return 'window'; } }
 function writeBrowserMode(mode) { saveResilient(BROWSER_SETTINGS_FILE, { mode: String(mode) }); }
 const browserViews = makeBrowserViews({
   now: () => Date.now(),
   readMode: readBrowserMode,
   writeMode: writeBrowserMode,
-  chromeAvailable: () => false,   // YOUR CHROME needs the StarNet extension (its own lane): until then built-in
+  chromeAvailable: () => false,   // YOUR CHROME needs the StarNet extension (its own lane): until then a window
+  // a Chrome window needs a screen and a real installed Chromium-family browser; otherwise the station browses built-in
+  windowAvailable: () => {
+    if (browserInternals.headlessRequested(process.env)) return false;
+    if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) return false;
+    const r = browserInternals.resolveChrome(true);
+    return !!(r && !r.headless);
+  },
   handoffLive: runId => browserHandoffs.isLive(runId),
   attended: stationBrowserLogin,
   // the driving agent's own jail: a download must land where that agent can read it back

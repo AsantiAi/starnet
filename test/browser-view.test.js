@@ -260,9 +260,11 @@ function rig(extra) {
     let saved = null; const modesMade = []; const made = [];
     const clk = clock();
     const views = makeBrowserViews({ now: clk.now, setTimeout: clk.setTimeout, clearTimeout: clk.clearTimeout,
-      readMode: () => saved || 'builtin', writeMode: m => { saved = m; }, chromeAvailable: () => false,
+      readMode: () => saved || 'window', writeMode: m => { saved = m; }, chromeAvailable: () => false,
       makeStationSession: mode => { modesMade.push(mode); const x = fakeSession(); made.push(x); return x.api; } });
-    A.eq(views.settings().mode, 'builtin', 'the default is BUILT-IN');
+    A.eq(views.settings().mode, 'window', 'the default is a CHROME WINDOW (what Hermes does)');
+    const r0 = await views.setMode('builtin');
+    A.ok(r0.ok && saved === 'builtin', 'switching to BUILT-IN is saved');
     await views.open('example.com');
     A.eq(modesMade[0], 'builtin', 'the station browser is created in the chosen mode');
     A.eq(views.list().station.mode, 'builtin', 'and the list says which mode is running');
@@ -281,11 +283,27 @@ function rig(extra) {
     A.eq(made[1].closed, 1, 'it switches when that run lets go');
     // YOUR CHROME without the extension: honest fallback
     const r3 = await views.setMode('chrome');
-    A.ok(r3.ok && r3.mode === 'chrome' && r3.effective === 'builtin' && r3.chromeAvailable === false, 'YOUR CHROME is saved, but runs built-in until the extension is paired — and says so');
+    A.ok(r3.ok && r3.mode === 'chrome' && r3.effective === 'window' && r3.chromeAvailable === false, 'YOUR CHROME is saved, but runs as a Chrome window until the extension is paired — and says so');
     await views.open('example.com');
-    A.eq(modesMade[modesMade.length - 1], 'builtin', '…the browser that starts is built-in');
+    A.eq(modesMade[modesMade.length - 1], 'window', '…the browser that starts is a Chrome window');
     A.eq((await views.setMode('nonsense')).ok, false, 'an unknown mode is refused');
     A.eq(saved, 'chrome', '…and nothing was saved');
+  }
+
+  // ---- no window can open here (no screen / no installed Chromium / headless pin): built-in, and it says so ----
+  {
+    const modesMade = [];
+    const clk = clock();
+    const views = makeBrowserViews({ now: clk.now, setTimeout: clk.setTimeout, clearTimeout: clk.clearTimeout,
+      readMode: () => 'window', windowAvailable: () => false,
+      makeStationSession: mode => { modesMade.push(mode); return fakeSession().api; } });
+    const s = views.settings();
+    A.ok(s.mode === 'window' && s.effective === 'builtin' && s.windowAvailable === false, 'the default asks for a window, runs built-in, and says why');
+    await views.open('example.com');
+    A.eq(modesMade[0], 'builtin', 'the browser that starts is built-in');
+    const views2 = makeBrowserViews({ now: clk.now, setTimeout: clk.setTimeout, clearTimeout: clk.clearTimeout,
+      readMode: () => 'chrome', windowAvailable: () => false, makeStationSession: () => fakeSession().api });
+    A.eq(views2.settings().effective, 'builtin', 'YOUR CHROME with no extension and no window → built-in');
   }
 
   // ---- a station with no browser of its own ----

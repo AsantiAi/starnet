@@ -43,12 +43,15 @@ const VIEWER_RECENT_MS = 15000;            // a picture was asked for this recen
 const PAGE_INFO_EVERY_MS = 300;
 const SEARCH_URL = 'https://duckduckgo.com/?q=';
 /* WHERE THE STATION BROWSER LIVES (Settings → Browser, Andrew 2026-09-30 — Claude Code has the same split):
-     builtin — inside StarNet: the BROWSER window is the browser (default; nothing pops up on the desktop);
-     window  — a real, separate Chrome window you use directly; the BROWSER window mirrors it;
+     window  — a real Chrome / Edge window on the desktop that the Commander and the agents share (DEFAULT — this is
+               what Hermes does: its agent drives a real browser window on its own profile, and people sign in, type
+               and paste there natively). The BROWSER window follows it. Where no window can open (no screen, no
+               Chromium-family browser installed, or a headless pin) the station browses built-in and says so;
+     builtin — hidden inside StarNet: the BROWSER window is the browser; nothing opens on the desktop;
      chrome  — YOUR own Chrome with your logins, through the StarNet extension, asking per site. Not available
                until the extension is paired; until then the station says so and browses built-in. */
 const BROWSER_MODES = ['builtin', 'window', 'chrome'];
-function normalizeMode(m) { return BROWSER_MODES.indexOf(String(m || '')) >= 0 ? String(m) : 'builtin'; }
+function normalizeMode(m) { return BROWSER_MODES.indexOf(String(m || '')) >= 0 ? String(m) : 'window'; }
 
 /* What the Commander typed → the address to open. A scheme is kept; a bare host gets https (http for loopback —
    a dev server rarely has a certificate); anything that is not address-shaped becomes a web search. Only http(s)
@@ -82,11 +85,19 @@ function makeBrowserViews(deps) {
   const clearT = deps.clearTimeout || clearTimeout;
   const handoffLive = typeof deps.handoffLive === 'function' ? deps.handoffLive : () => false;
   const makeSession = typeof deps.makeStationSession === 'function' ? deps.makeStationSession : null;
-  const readMode = typeof deps.readMode === 'function' ? deps.readMode : () => 'builtin';
+  const readMode = typeof deps.readMode === 'function' ? deps.readMode : () => 'window';
   const writeMode = typeof deps.writeMode === 'function' ? deps.writeMode : () => {};
   const chromeAvailable = typeof deps.chromeAvailable === 'function' ? deps.chromeAvailable : () => false;
-  // the mode the station browser actually RUNS in: YOUR CHROME falls back to built-in until the extension is paired
-  function effectiveMode() { const m = normalizeMode(readMode()); return m === 'chrome' && !chromeAvailable() ? 'builtin' : m; }
+  const windowAvailable = typeof deps.windowAvailable === 'function' ? deps.windowAvailable : () => true;
+  /* the mode the station browser actually RUNS in: a Chrome window needs a screen and an installed browser (else
+     built-in); YOUR CHROME needs the paired extension (else the best of the other two). */
+  function effectiveMode() {
+    const m = normalizeMode(readMode());
+    const win = !!windowAvailable();
+    if (m === 'chrome' && !chromeAvailable()) return win ? 'window' : 'builtin';
+    if (m === 'window' && !win) return 'builtin';
+    return m;
+  }
   const downloadDirFor = typeof deps.downloadDirFor === 'function' ? deps.downloadDirFor : () => null;
   const attended = deps.attended || null;   // the session's attendedLogin holder: .prompt is set to the driving run's
   const streamIdleMs = deps.streamIdleMs > 0 ? deps.streamIdleMs : STREAM_IDLE_MS;
@@ -298,7 +309,7 @@ function makeBrowserViews(deps) {
     }
     return Object.assign({ ok: true, applied }, settings());
   }
-  function settings() { return { mode: normalizeMode(readMode()), effective: effectiveMode(), chromeAvailable: !!chromeAvailable(), running: station ? station.mode : null }; }
+  function settings() { return { mode: normalizeMode(readMode()), effective: effectiveMode(), chromeAvailable: !!chromeAvailable(), windowAvailable: !!windowAvailable(), running: station ? station.mode : null }; }
   async function front() {
     const s = station ? surfaceOf(station.session) : null;
     if (!s) return { ok: false, code: 'closed', error: 'the browser is not open' };
