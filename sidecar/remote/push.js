@@ -17,7 +17,7 @@
      push.has(deviceId)                        -> bool
      push.forget(deviceId)                     same as unsubscribe (a revoked phone)
      await push.send(deviceIds, { title, body, tag, url }) -> [{ deviceId, ok, status }]
-   A push service that answers 404 or 410 has dropped the subscription: it is removed here too. */
+   A push service that answers 410 (or 404 on a subscription over an hour old) has dropped it: removed here too. */
 'use strict';
 
 const nodeCrypto = require('crypto');
@@ -27,6 +27,7 @@ const { readJsonResilient, writeJsonResilient, saveJsonVerified } = require('../
 const TTL_S = 12 * 60 * 60;              // a push service may hold a message this long for a phone that is off
 const JWT_LIFE_S = 12 * 60 * 60;
 const RECORD_SIZE = 4096;
+const SETTLE_MS = 60 * 60 * 1000;          // a 404 on a subscription younger than this is not trusted to mean "gone"
 const MAX_PAYLOAD = 3000;                 // well under the 4 KB push services accept, after encryption overhead
 const ENDPOINT_RE = /^https:\/\/[A-Za-z0-9.-]+(:\d+)?\/\S{1,2000}$/;
 
@@ -150,7 +151,9 @@ function makePush(deps) {
           Authorization: 'vapid t=' + jwtFor(sub.endpoint) + ', k=' + publicKey() } });
       status = r.status;
     } catch (e) { note('remote.push.fetch', e); return { deviceId, ok: false, status: 0 }; }
-    if (status === 404 || status === 410) unsubscribe(deviceId);   // the push service forgot this subscription
+    // the push service forgot this subscription: 410 says so outright; a 404 counts only once the subscription is
+    // old enough that it cannot be a push service still settling a brand-new one
+    if (status === 410 || (status === 404 && now() - (Number(sub.at) || 0) > SETTLE_MS)) unsubscribe(deviceId);
     return { deviceId, ok: status >= 200 && status < 300, status };
   }
 

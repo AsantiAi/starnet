@@ -420,8 +420,9 @@
       const r = await call('pushOn', { endpoint: j.endpoint, keys: j.keys });
       if (!r.ok) { toast(r.error, true); return; }
       S.push.on = true;
-      call('pushTest').catch(() => {});
       toast('Notifications on');
+      // the first one proves the whole path; if the push service refuses it, say so rather than leave a silent switch
+      call('pushTest').then((t) => { if (!t.ok) toast(t.error, true); }).catch(() => {});
     } catch (e) { toast('Could not turn notifications on: ' + ((e && e.message) || e), true); }
     finally { S.push.busy = false; render(); }
   }

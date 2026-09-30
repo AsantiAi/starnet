@@ -88,6 +88,13 @@ function decrypt(body, ua) {
 
   // 4. only subscribed phones, and a dropped subscription is forgotten
   A.eq(await push.send(['nobody'], { title: 'x' }), [], 'a phone without a subscription gets nothing');
+  reply = 404;
+  A.eq((await push.send(['d1'], { title: 'x' }))[0].status, 404, 'a 404 on a brand-new subscription');
+  A.eq(push.has('d1'), true, 'is not trusted to mean gone (a push service may still be settling it)');
+  t += 2 * 60 * 60 * 1000;
+  await push.send(['d1'], { title: 'x' });
+  A.eq(push.has('d1'), false, 'an old subscription that 404s is forgotten');
+  push.subscribe('d1', ok);
   reply = 410;
   const gone = await push.send(null, { title: 'x' });
   A.eq(gone, [{ deviceId: 'd1', ok: false, status: 410 }], 'the push service says the subscription is gone');
