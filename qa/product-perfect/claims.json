@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "0557ad5c4185d440ae05d836367ee96d3a955879",
+    "sourceCommit": "0a8f5d781dfc0052c219ac2bfa8633fffe299d72",
     "pathSetSha256": "49f30a8095f0028e1c6d63d7c994c1056bcfe7644538e2c0821293a18c87a804",
     "files": [
       {
@@ -698,8 +698,8 @@
       },
       {
         "path": "frontend/app/outputbrowser.js",
-        "bytes": 31826,
-        "sha256": "cdb8c18558d894d00411b02a8e8648d7322d9f202aaa20aecc929952e55325da"
+        "bytes": 34941,
+        "sha256": "ca38904d526d094baad5319be986204880e5a39069b1e1d83bfe2ea1a6b67934"
       },
       {
         "path": "frontend/app/overseer-setup.js",
