@@ -5,6 +5,7 @@ description: Translate a document for meaning and register, localize idiom, keep
 category: Writing
 requires: [cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

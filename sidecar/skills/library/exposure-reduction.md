@@ -5,6 +5,7 @@ description: Find what is publicly exposed about the Commander, rank it by what 
 category: Research
 requires: [dish, cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

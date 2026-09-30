@@ -8,7 +8,8 @@
   'use strict';
 
   var INDEX = '/.well-known/starnet-skills.json';
-  var GEAR = { cabinet: 'FILE CABINET', dish: 'DISH', workbench: 'WORKBENCH', notebook: 'NOTEBOOK', studio: 'STUDIO', orchestrator: 'LEAD CONSOLE', computer: 'COMPUTER' };
+  // the app's own gear names (REFIT palette labels, the same ones the in-app SKILL LIBRARY and market show)
+  var GEAR = { cabinet: 'INTEL CAB', dish: 'DISH', workbench: 'WORKBENCH', notebook: 'NOTEBOOK', studio: 'STUDIO', orchestrator: 'ORCHESTRATOR', computer: 'COMPUTER' };
   var SHELVES = [
     { id: 'originals', title: 'STARNET ORIGINALS', note: 'Written and tested by StarNet for your station\'s gear and tools.' },
     { id: 'community', title: 'COMMUNITY PICKS', note: 'Open-source skills by other authors, adapted for StarNet and credited.' }
@@ -61,6 +62,19 @@
       var g = el('p', 'mk-gear', 'Uses ');
       g.appendChild(el('b', null, gear.join(', ')));
       c.appendChild(g);
+    }
+
+    // Download: the skill as a standard Agent Skills folder (.zip), its sha256 pinned in the signed catalog
+    var dl = s.download && /^[a-z0-9-]+-\d+\.\d+\.\d+\.zip$/.test(str(s.download.path)) ? safePath('/skills/' + s.slug + '/' + s.version + '/' + s.download.path) : '';
+    if (dl) {
+      var a2 = el('a', 'mk-dl', 'Download .zip');
+      a2.href = dl;
+      a2.setAttribute('download', s.download.path);
+      var kb = Math.max(1, Math.round((Number(s.download.bytes) || 0) / 1024));
+      var row = el('p', 'mk-dl-row');
+      row.appendChild(a2);
+      row.appendChild(el('span', null, ' ' + kb + ' KB · SKILL.md' + ((s.files || []).length > 1 ? ' + ' + ((s.files || []).length - 1) + ' more' : '')));
+      c.appendChild(row);
     }
 
     var path = safePath(str(s.sourceUrl));
@@ -121,7 +135,7 @@
       list.appendChild(grp);
     });
     var originals = skills.filter(function (s) { return s.shelf === 'originals'; }).length;
-    if (count) count.textContent = skills.length + ' skills: ' + originals + ' StarNet Originals, written and tested for your station\'s gear, and ' +
+    if (count) count.textContent = skills.length + ' skills: ' + originals + ' StarNet Originals, written for your station\'s gear, and ' +
       (skills.length - originals) + ' credited picks from the open-source community.';
     status.textContent = '';
     status.hidden = true;

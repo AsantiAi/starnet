@@ -5,6 +5,7 @@ description: Compose a recurring digest — gather the period's items, distill t
 category: Research
 requires: [dish, cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

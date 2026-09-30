@@ -5,6 +5,7 @@ description: Get an app from "works on my machine" to actually live — reproduc
 category: Engineering
 requires: [workbench, cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

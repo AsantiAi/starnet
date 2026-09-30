@@ -254,3 +254,5 @@ Missing required field `email`. Server validation rejects the request before pro
 *Needs the DISH (`web_request`, `web_fetch`) and the WORKBENCH (`curl` for headers, TLS, and timings).*
 
 Adapted for StarNet from rest-graphql-debug (eren-karakus0), MIT.
+
+*Sub-agent steps (team.spawn) need the ORCHESTRATOR, which every run the Commander starts carries. In a scheduled run, list those updates in the report instead of making them.*

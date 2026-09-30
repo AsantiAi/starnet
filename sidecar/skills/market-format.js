@@ -199,8 +199,14 @@ function readCatalog(doc) {
 function revokedUrl(indexUrl) { return new URL('starnet-skills-revoked.json', indexUrl).href; }
 
 // fileUrl(indexUrl, entry, path) -> the absolute URL of one package file
+//   Files live in skills/ BESIDE the site the index is published on: for https://host/.well-known/starnet-skills.json
+//   that is https://host/skills/…, and a catalog hosted under a subpath (https://host/market/.well-known/…) resolves
+//   to https://host/market/skills/… instead of the site root.
 function fileUrl(indexUrl, entry, path) {
-  return new URL('/skills/' + entry.slug + '/' + entry.version + '/' + path.split('/').map(encodeURIComponent).join('/'), indexUrl).href;
+  const u = new URL(indexUrl);
+  const at = u.pathname.lastIndexOf('/.well-known/');
+  const base = new URL(at >= 0 ? u.pathname.slice(0, at + 1) : './', u);
+  return new URL('skills/' + entry.slug + '/' + entry.version + '/' + path.split('/').map(encodeURIComponent).join('/'), base).href;
 }
 
 module.exports = {

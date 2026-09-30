@@ -5,6 +5,7 @@ description: Write email that gets opened and answered — one job per send, sub
 category: Marketing
 requires: [cabinet, dish]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

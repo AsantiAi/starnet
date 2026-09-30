@@ -40,7 +40,8 @@ for (const e of entries) {
     bundled++;
     const recipe = library.get(e.librarySlug);
     const d = recipe ? packageFormat.canonicalize([{ path: 'SKILL.md', content: market.libraryToSkillMd(recipe, { version: e.version }) }]).digest : '';
-    if (d !== e.digest) A.ok(false, e.slug + ': the bundled copy no longer matches its published version; bump its version in skills-catalog/originals.json and rebuild');
+    if (d !== e.digest) A.ok(false, e.slug + ': the bundled copy no longer matches its published version; bump the `version:` line in sidecar/skills/library/' + e.librarySlug + '.md and rebuild');
+    if (recipe && recipe.version !== e.version) A.ok(false, e.slug + ': the bundled recipe says version ' + (recipe.version || '(none)') + ' but the catalog publishes ' + e.version);
   }
   for (const f of e.files) {
     const p = path.join(ROOT, 'website', 'skills', e.slug, e.version, ...f.path.split('/'));
@@ -59,6 +60,24 @@ const notice = fs.readFileSync(path.join(ROOT, 'NOTICE.md'), 'utf8');
 const uncredited = entries.filter(e => notice.indexOf('`' + e.slug + '`') < 0).map(e => e.slug);
 A.eq(uncredited, [], 'NOTICE.md credits every skill in the catalog');
 
+// ---- downloads: every skill ships a .zip (a standard Agent Skills folder) pinned by sha256 in the signed index ----
+(async () => {
+  const { readZipStore } = await import('../scripts/lib/zip-store.mjs');
+  let zipsOk = true, why = '';
+  for (const e of JSON.parse(raw).skills) {
+    const d = e.download;
+    const file = d && path.join(ROOT, 'website', 'skills', e.slug, e.version, d.path);
+    if (!d || d.path !== e.slug + '-' + e.version + '.zip' || !fs.existsSync(file)) { zipsOk = false; why = why || e.slug + ': no download'; continue; }
+    const bytes = fs.readFileSync(file);
+    if (crypto.createHash('sha256').update(bytes).digest('hex') !== d.sha256 || bytes.length !== d.bytes) { zipsOk = false; why = why || e.slug + ': zip hash/size'; continue; }
+    const inside = readZipStore(bytes).map(x => ({ p: x.name, h: crypto.createHash('sha256').update(x.data).digest('hex') })).sort((a, b) => a.p.localeCompare(b.p));
+    const want = e.files.map(f => ({ p: e.slug + '/' + f.path, h: f.sha256 })).sort((a, b) => a.p.localeCompare(b.p));
+    if (JSON.stringify(inside) !== JSON.stringify(want)) { zipsOk = false; why = why || e.slug + ': zip contents'; }
+  }
+  A.ok(zipsOk, 'every skill has a download .zip whose bytes match the signed index and whose files are exactly the package' + (why ? ' (first problem: ' + why + ')' : ''));
+  A.report('skill-market-catalog.test');
+})().catch(e => { console.log('FAIL: skill-market-catalog.test threw - ' + (e && e.stack || e)); process.exit(1); });
+
 // ---- signatures ----
 const signing = require('../sidecar/skills/market-signing.js');
 const REVOKED = path.join(ROOT, 'website', '.well-known', 'starnet-skills-revoked.json');
@@ -76,5 +95,4 @@ A.eq((attr.stdout.match(/: text: unset/g) || []).length, 3, 'git never rewrites 
 const keyLeak = spawnSync('git', ['grep', '-l', '-I', '-E', '-e', '^-----BEGIN [A-Z ]*PRIVATE KEY-----$', '--', 'website', 'skills-catalog', 'sidecar/skills', 'scripts'], { cwd: ROOT, encoding: 'utf8' });
 A.ok(keyLeak.status === 0 || keyLeak.status === 1, 'the private-key scan ran (git grep exit ' + keyLeak.status + ')');
 A.eq(keyLeak.stdout.trim(), '', 'no private key is committed anywhere the market touches');
-
-A.report('skill-market-catalog.test');
+// (the report runs at the end of the async download check above, after every synchronous assertion here)

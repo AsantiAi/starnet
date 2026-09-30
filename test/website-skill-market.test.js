@@ -56,6 +56,8 @@ A.ok(/function safePath\(p\) \{ return \/\^\\\/skills\\\//.test(js), 'package fi
 A.ok(!/innerHTML|insertAdjacentHTML|outerHTML|document\.write/.test(js), 'catalog text is never inserted as HTML');
 A.ok(/function safeHttps\(u\)/.test(js) && /a\.href = up;/.test(js), 'upstream links go through the https check');
 A.ok(!/localStorage|sessionStorage|document\.cookie|navigator\.sendBeacon/.test(js), 'no storage and no tracking');
+A.ok(/var dl = s\.download && \/\^\[a-z0-9-\]\+-\\d\+\\\.\\d\+\\\.\\d\+\\\.zip\$\/\.test/.test(js) && /safePath\('\/skills\/' \+ s\.slug/.test(js) && /a2\.setAttribute\('download'/.test(js),
+  'Download links only to the published <slug>-<version>.zip inside the package folder, through the same path check');
 A.ok(!/https?:\/\//.test(js.replace(/^\s*(\/\*[\s\S]*?\*\/|\/\/.*)$/gm, '').replace(/safeHttps[\s\S]*?\}/, '')), 'no hard-coded outside hosts');
 
 // the path check behaves: published package files only

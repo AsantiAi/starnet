@@ -33,4 +33,4 @@ The folder is trusted, the house rules are read, the map notes exist in the note
 ## Output
 A one-screen project brief: what it is, stack, layout, commands (verified or not), conventions, traps and open questions — plus the titles of the notes saved.
 
-*Needs the CABINET object (fs.list / fs.search / fs.read) and the NOTEBOOK (the map). Pairs with the WORKBENCH to run the tests and read git history.*
+*Needs the INTEL CAB (fs.list / fs.search / fs.read) and the NOTEBOOK (the map). Pairs with the WORKBENCH to run the tests and read git history.*
