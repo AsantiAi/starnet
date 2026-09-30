@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "044259f2f2ee8212fa83372d7374ca73e3e3a30d",
+    "sourceCommit": "ad92ae979660bc45287b4a32d89ebf9b2fe586c1",
     "pathSetSha256": "40161224e42ea48c023e2ee93222c94841e2d6d5419933ceb6ea21c21014096b",
     "files": [
       {
@@ -183,8 +183,8 @@
       },
       {
         "path": "frontend/app/apps.js",
-        "bytes": 27045,
-        "sha256": "4e2c5aee201018becb9cd01986c365b79c392865f5cee675ccc71cea6893e269"
+        "bytes": 28475,
+        "sha256": "33e6d54f1b582b089cb1fe2c2df6aa4577de5a208d0179bef1ce2df593447014"
       },
       {
         "path": "frontend/app/armconfirm.js",
@@ -503,8 +503,8 @@
       },
       {
         "path": "frontend/app/glass-demo.js",
-        "bytes": 11534,
-        "sha256": "05101d4194d05093a1e3a135ba6d48bf73ce763989bb5e99b37129f3bb469432"
+        "bytes": 11679,
+        "sha256": "5c43eb2904f79998f98db554af824bf9ee6000e15169b0cc71fe17367f7a51d7"
       },
       {
         "path": "frontend/app/glossary.js",
@@ -1498,8 +1498,8 @@
       },
       {
         "path": "frontend/css/plugins.css",
-        "bytes": 7309,
-        "sha256": "f53273652cca15cf2374ce4f5d16f2d1b16fae9c01d164ff96bf54ae530d3060"
+        "bytes": 10033,
+        "sha256": "b2dd688b1a7a60ca4ab8134d324cb6647ba37d04c7d6dc7ae992aff5d75e9191"
       },
       {
         "path": "frontend/css/project-home.css",
@@ -1673,8 +1673,8 @@
       },
       {
         "path": "frontend/plugin-kit/kit.css",
-        "bytes": 15028,
-        "sha256": "3163c51ae4cad0250bb7d610fef4ff072528ccb4798f6fac2513da91392fd342"
+        "bytes": 15690,
+        "sha256": "feafb9ffea728039256ec615edadaec550602de4444ac60633aa520565d3891f"
       },
       {
         "path": "frontend/plugin-kit/kit.js",
