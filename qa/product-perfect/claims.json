@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "544071fdbbd3aea6242ae07e696bd7484b90c638",
+    "sourceCommit": "e09d1ab67b87fb5350a7ef672f640ceb7cec8ea5",
     "pathSetSha256": "0a2ce7e2e1cc2fd867ca918885c395732be36b82cd29380f6d52a772025a69db",
     "files": [
       {
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 405889,
-        "sha256": "1c1459c20b4d3bc44c65562a40fc0cfae0ab9d7a6a8d80dc2b85d859032e6ba5"
+        "bytes": 405542,
+        "sha256": "c251b2cd5755395141194643f7458c61fd11f85727a374214c4fc4944a00dffb"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
@@ -413,8 +413,8 @@
       },
       {
         "path": "frontend/app/deskscreen.js",
-        "bytes": 28720,
-        "sha256": "e1e1d11fc3ac6af3960fb3eb74f985652295168cdac6bdb69b7614faf69ac3d1"
+        "bytes": 27169,
+        "sha256": "46ddc119043805a458be20a54fc82b87ea7d836dd311c6f1ed4182c77bf841e9"
       },
       {
         "path": "frontend/app/diagnostics.js",
@@ -1083,8 +1083,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 746700,
-        "sha256": "2865c3eb9c16df4d3591386b92b063c12510430c460bd99a74aeacc459dc30e5"
+        "bytes": 747220,
+        "sha256": "37db858533284471ad99b027c156a03f71d284fce59e6acd91cdeaae0cdc0f53"
       },
       {
         "path": "frontend/app/study.js",
@@ -1438,8 +1438,8 @@
       },
       {
         "path": "frontend/css/deskscreen.css",
-        "bytes": 4109,
-        "sha256": "9a3e6a987faa44857adaf7034dad745f4f52210639af396f546dad3a6fdf672d"
+        "bytes": 4914,
+        "sha256": "2d4ec255d0d86530ef34ea95b5d5f4aae052478cdc517279de069eda51052915"
       },
       {
         "path": "frontend/css/glass-comms.css",
