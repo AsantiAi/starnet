@@ -13,7 +13,9 @@
      8. Across a restart: Remote stays on, the station key and the paired phone persist, and the phone reconnects.
      9. SESSION PARITY: a session that exists on the desk (in the station save) is in the phone's list with its
         title and history; a phone turn sent into it runs WITH that history and lands under the same session id;
-        phone-started runs are listed for the desk to adopt (GET /api/remote/recent). */
+        phone-started runs are listed for the desk to adopt (GET /api/remote/recent).
+    10. THE STATION PICTURE: the desk page hands over a still (POST /api/remote/view); the phone reads it with the
+        `view` verb, which is also what tells the desk a phone is looking; each agent's portrait is its own sprite. */
 'use strict';
 const A = require('./_assert.js');
 const http = require('http');
@@ -233,6 +235,30 @@ function startMockModel() {
     A.ok(recent.body.runs.some(r => r.streamId === streamId && /remote shell proof|slow reply/.test(r.title)), 'and the phone-started conversation, titled with what was said');
     const tr = await fx.json('GET', '/api/transcript?agent=forge&stream=ws_desk_launch&limit=50');
     A.ok((tr.body.turns || []).some(t => t.role === 'assistant' && /CODEWORD_HELIX_SEEN/.test(String(t.content))), 'the turn is in the station transcript under the desk session id (the desk merges it on open)');
+
+    // 10. the station picture
+    const want0 = await fx.json('GET', '/api/remote/view');
+    A.eq([want0.body.enabled, want0.body.at], [true, null], 'the desk is told Remote is on and that the station has no picture yet');
+    const noPic = await client.call('view', {});
+    A.ok(noPic.ok && noPic.data.none === true, 'a phone asking before any picture exists is told there is none');
+    const want1 = await fx.json('GET', '/api/remote/view');
+    A.eq(want1.body.want, true, 'and its asking is what makes the desk start drawing');
+    const pic = Buffer.concat([Buffer.from('RIFF'), Buffer.from([0, 0, 0, 0]), Buffer.from('WEBPVP8 '), Buffer.alloc(3000, 9)]);
+    const bad = await fx.json('POST', '/api/remote/view', { w: 640, h: 480, data: Buffer.from('not a picture').toString('base64') });
+    A.eq(bad.status, 400, 'the station refuses something that is not a picture');
+    const putPic = await fx.json('POST', '/api/remote/view', { w: 640, h: 480, bodies: [{ agentId: 'forge', x: 320, y: 200 }], data: pic.toString('base64') });
+    A.ok(putPic.status === 200 && putPic.body.ok, 'the desk page hands over a still: ' + JSON.stringify(putPic.body).slice(0, 120));
+    const got = await client.call('view', {});
+    A.eq([got.data.w, got.data.h, got.data.mime, got.data.eof], [640, 480, 'image/webp', true], 'the phone reads it over the sealed channel');
+    A.ok(Buffer.from(got.data.data, 'base64').equals(pic), 'byte for byte');
+    A.eq(got.data.bodies, [{ agentId: 'forge', x: 320, y: 200 }], 'with where the crew stood');
+    A.ok(got.data.now >= got.data.at, 'and the clocks to work out its age');
+    const again = await client.call('view', { have: got.data.at });
+    A.eq(again.data.same, true, 'an unchanged picture is not sent twice');
+    const face = await client.call('portrait', { agentId: 'forge' });
+    A.ok(face.ok && face.data.mime === 'image/png' && Buffer.from(face.data.data, 'base64').toString('latin1', 1, 4) === 'PNG', 'the portrait of an agent is a real sprite from the shipped art');
+    const stl = await client.call('status');
+    A.ok(stl.data.agents.every(a => typeof a.skin === 'string'), 'status says how each agent looks');
 
     // 7. the LAN door is not the API; revoke cuts a phone off
     A.eq((await fetch(lan + '/api/remote')).status, 404, 'the LAN door serves no /api route');

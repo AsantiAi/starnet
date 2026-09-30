@@ -31,7 +31,10 @@ function makeRemoteHost(d) {
   const broadcast = (evt) => { try { d.broadcast(evt); } catch (e) { note('remote.host.d.broadcast', e); } };
 
   function agentsList() {
-    return d.roster().map(a => ({ agentId: a.agentId, name: a.name || a.agentId, model: a.model || null, provider: a.provider || null }));
+    let looks = {};
+    try { looks = (d.crewLooks && d.crewLooks()) || {}; } catch (e) { note('remote.host.crewLooks', e); looks = {}; }
+    return d.roster().map(a => ({ agentId: a.agentId, name: a.name || a.agentId, model: a.model || null, provider: a.provider || null,
+      skin: clip((looks[a.agentId] && looks[a.agentId].skin) || '', 40), color: clip((looks[a.agentId] && looks[a.agentId].color) || '', 16) }));
   }
 
   async function status() {
@@ -195,9 +198,35 @@ function makeRemoteHost(d) {
 
   async function setRoutine(o) { return d.setRoutine(o.jobId, o.enabled); }
 
+  /* THE STATION VIEW. The desk page draws the still (the sidecar has no renderer); this hands it to a phone in
+     sealed chunks and notes that a phone is looking, which is what makes the desk keep it fresh. The phone gets
+     the time the desk drew it and shows that age: an old picture is never passed off as live. */
+  async function view(o) {
+    if (!d.view) return { none: true, now: now() };
+    d.view.want();
+    const m = d.view.meta();
+    if (!m) return { none: true, now: now() };
+    // `now` is this station's clock at the moment of the answer: the phone works out the picture's age from
+    // (now - at), so a phone whose own clock is off still shows the right age
+    if (!o.offset && o.have && o.have === m.at) return { at: m.at, now: now(), same: true };
+    if (o.offset && o.at !== m.at) return { at: m.at, now: now(), changed: true };   // the desk drew a newer one mid-read: start over
+    const buf = d.view.read(o.offset, o.length);
+    const out = { at: m.at, now: now(), w: m.w, h: m.h, mime: m.mime, size: m.size, offset: o.offset, bytes: buf.length, eof: o.offset + buf.length >= m.size, data: buf.toString('base64') };
+    if (!o.offset) out.bodies = m.bodies;
+    return out;
+  }
+
+  // an agent's own sprite (the same art the desk's crew list shows), so the phone draws the real crew
+  async function portrait(o) {
+    const a = agentsList().find(x => x.agentId === o.agentId);
+    if (!a || !d.portrait) return { ok: false, error: 'unknown agent' };
+    const p = d.portrait(a.skin);
+    return p ? { agentId: a.agentId, skin: p.skin, mime: p.mime, data: p.data } : { ok: false, error: 'no portrait' };
+  }
+
   function liveRemoteRuns() { return Array.from(remoteRuns, ([runId, r]) => ({ runId, agentId: r.agentId, startedAt: r.startedAt, source: 'remote' })); }
 
-  return { status, threads, thread, send, stop, files, fetchFile, routines, setRoutine, liveRemoteRuns, recentRuns, _remoteRuns: remoteRuns };
+  return { status, threads, thread, send, stop, files, fetchFile, routines, setRoutine, view, portrait, liveRemoteRuns, recentRuns, _remoteRuns: remoteRuns };
 }
 
 module.exports = { makeRemoteHost };
