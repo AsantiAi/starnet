@@ -173,6 +173,7 @@ const STORE_MAX_KEYS = 1000;
 function makePluginStore(deps) {
   const store = deps.store;   // makeDurableJsonStore keyed by plugin id
   async function op(id, verb, key, value) {
+    if (verb === 'clear') { store.set(id, {}); return { ok: true, value: null }; }   // the owner (an app/plugin) is being deleted
     if (verb === 'keys') {
       const cur = store.get(id);
       return { ok: true, value: cur && typeof cur === 'object' ? Object.keys(cur) : [] };

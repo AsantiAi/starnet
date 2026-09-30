@@ -84,7 +84,15 @@
       { capId: 'pluginauthor', tool: 'plugin.draft_write', scope: 'write', requiresConsent: false, network: false, deferred: true },
       { capId: 'pluginauthor', tool: 'plugin.check', scope: 'read', requiresConsent: false, network: false, deferred: true },
       { capId: 'pluginauthor', tool: 'plugin.preview', scope: 'read', requiresConsent: false, network: false, deferred: true },
-      { capId: 'pluginauthor', tool: 'plugin.submit', scope: 'execute', requiresConsent: true, network: false, deferred: true }
+      { capId: 'pluginauthor', tool: 'plugin.submit', scope: 'execute', requiresConsent: true, network: false, deferred: true },
+      // APPS: the crew builds and fills the Commander's apps (sidecar/apps.js). Inert by construction — an app page is a
+      // network-less sandbox and its data is whatever a crew run publishes — so nothing here asks first. Deferred.
+      { capId: 'apps', tool: 'app.create', scope: 'write', requiresConsent: false, network: false, deferred: true },
+      { capId: 'apps', tool: 'app.read', scope: 'read', requiresConsent: false, network: false, deferred: true },
+      { capId: 'apps', tool: 'app.write', scope: 'write', requiresConsent: false, network: false, deferred: true },
+      { capId: 'apps', tool: 'app.check', scope: 'read', requiresConsent: false, network: false, deferred: true },
+      { capId: 'apps', tool: 'app.publish', scope: 'write', requiresConsent: false, network: false, deferred: true },
+      { capId: 'apps', tool: 'app.schedule', scope: 'write', requiresConsent: false, network: false, deferred: true }
     ],
     notebook: [
       { capId: 'memory', tool: 'notebook.write', scope: 'write', requiresConsent: false, network: false },   // private sandboxed memory — no consent gate (see notebook.js)

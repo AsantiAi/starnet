@@ -59,6 +59,8 @@ const { makePluginUiServer, makePluginStore } = require('./plugin-surface.js'); 
 const { makePluginRuntime } = require('./plugin-runtime.js');   // each plugin's code in its own process (plugin-worker.js)
 const { makePluginToolDefs } = require('./plugin-tools.js');      // a plugin's api.tool()s as crew tools (connector trust)
 const { makePluginAuthorTools } = require('./tools/builtin/plugin-author.js');   // the crew drafts plugins; inert until approved
+const { makeApps } = require('./apps.js');                        // APPS: describe it -> a real app window, refreshed on a schedule
+const { makeAppTools } = require('./tools/builtin/apps.js');       // the crew builds / changes / fills apps
 const { makeFsTools } = require('./tools/builtin/fs.js');
 // fs.read extracts .docx / .xlsx / .ipynb to readable text. inflateRawSync is injected so the extractor stays
 // pure + headless-testable, and so the OOXML path needs no dependency beyond what Node already ships.
@@ -3590,6 +3592,51 @@ const servePluginUi = makePluginUiServer({
   tokenOk: (req) => apiauth.apiTokenOk(req, API_TOKEN), now: () => Date.now(),
   // who may FRAME a plugin page: the station itself (browser mode) and the desktop shell's app origins
   frameAncestors: () => Array.from(apiauth.TAURI_ORIGINS).concat(['http://127.0.0.1:' + PORT, 'http://localhost:' + PORT]).join(' ')
+});
+/* APPS (2026-09-29) — "describe it, get it": a page the crew writes (served network-less, like a draft), its data
+   (published by the crew), and an optional routine that refreshes it. sidecar/apps.js has the whole model. */
+const APPS_DIR = path.join(WORKSPACES, 'apps');
+const appDataStore = makeDurableJsonStore({
+  fs: fs, path: path,
+  fileFor: (id) => path.join(WORKSPACES, 'app-data', String(id) + '.json'),
+  writeDurable: writeFileDurable,
+  onRecover: (key, file) => console.warn('[apps] recovered ' + file + ' from .bak last-known-good.'),
+  onCorrupt: (key, file) => quarantineCorrupt(file, 'app-data')
+});
+const APP_TEMPLATE = fs.readFileSync(path.join(__dirname, 'app-template', 'index.html.tpl'), 'utf8');
+const appHtml = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const apps = makeApps({
+  fsp, path, dir: APPS_DIR, store: makePluginStore({ store: appDataStore }),
+  treeDigest: (d) => pluginLoader._internals.treeDigest(d),
+  relPathOk: require('./plugins.js')._internals.relPathOk,
+  now: () => Date.now(),
+  template: ({ name, description }) => ({ 'index.html': APP_TEMPLATE.split('{{NAME_HTML}}').join(appHtml(name)).split('{{DESCRIPTION_HTML}}').join(appHtml(description || '')) }),
+  cron: {
+    create: async (spec) => { const o = await createCronJobFromSpec(spec); return (o && o.body && o.body.ok && o.body.job) ? { ok: true, job: o.body.job } : { ok: false, error: (o && o.body && (o.body.error || o.body.message)) || 'the routine could not be created' }; },
+    remove: async (id) => { const lease = cronDriver.leases.get(id); if (lease && lease.ac) { try { lease.ac.abort(); } catch (e) { failNote('apps.routine-abort', e); } } await withCronWrite(jobs => cronStore.removeJob(jobs, id)); },
+    get: (id) => cronStore.getJob(cronJobs, id) || null,
+    armed: () => !!cronArmed && !cronHalted
+  },
+  // tell the open window (fire-and-forget: with no page open the command simply lapses)
+  notify: {
+    reload: (id, digest) => { stationBridge.request('app.reload', { id, digest: digest || null }).catch((e) => failNote('apps.notify-reload', e)); },
+    data: (id) => { stationBridge.request('app.data', { id }).catch((e) => failNote('apps.notify-data', e)); }
+  }
+});
+const serveAppUi = makePluginUiServer({
+  fs, fsp, path, frontendDir: FRONTEND, loader: pluginLoader, apitickets, apiKey: API_TOKEN, mime: MIME,
+  tokenOk: (req) => apiauth.apiTokenOk(req, API_TOKEN), now: () => Date.now(),
+  frameAncestors: () => Array.from(apiauth.TAURI_ORIGINS).concat(['http://127.0.0.1:' + PORT, 'http://localhost:' + PORT]).join(' '),
+  prefix: '/app-ui/', scopeFor: (id, digest) => apitickets.scopeApp(id, digest), resolve: (id) => apps.record(id),
+  goneMessage: 'this app changed — reopening it shows the new version',
+  // An app page only DRAWS: scripts, styles and images from its own files, no network, no forms, no popups.
+  sandbox: 'sandbox allow-scripts',
+  extraCsp: () => {
+    const self = 'http://127.0.0.1:' + PORT + ' http://localhost:' + PORT;
+    return "; default-src 'none'; script-src 'unsafe-inline' " + self + "; style-src 'unsafe-inline' " + self +
+      '; img-src data: blob: ' + self + '; font-src data: ' + self + '; media-src data: blob: ' + self +
+      "; connect-src 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'";
+  }
 });
 /* PLUGIN DRAFTS (plugin extensions phase 4) — the crew writes plugins into <workspaces>/plugin-drafts/<id>. A draft
    never runs: its window previews through /plugin-draft/ (the same sandboxed server, a draft-scoped ticket, the live
@@ -9611,7 +9658,7 @@ function rejectProcessFaultRequest(req, res) {
   const diagnosticRead = method === 'GET' && (pathname === '/api/health' || pathname === '/api/diagnostics');
   const staticRead = (method === 'GET' || method === 'HEAD') &&
     pathname.indexOf('/api') !== 0 && pathname.indexOf('/v1') !== 0 && pathname !== '/health' &&
-    pathname.indexOf('/workshop-run/') !== 0 && pathname.indexOf('/plugin-ui/') !== 0 && pathname.indexOf('/plugin-draft/') !== 0;
+    pathname.indexOf('/workshop-run/') !== 0 && pathname.indexOf('/plugin-ui/') !== 0 && pathname.indexOf('/plugin-draft/') !== 0 && pathname.indexOf('/app-ui/') !== 0;
   if (diagnosticRead || staticRead) return false;
   if (pathname.indexOf('/api') === 0) {
     try { applyApiCors(req, res); } catch (e) { failNote('process-fault.reply-cors', e); }
@@ -10118,6 +10165,8 @@ const ROUTES = [
   { m: ['GET', 'HEAD'], qprefix: '/plugin-ui/', h: servePluginUi },
   //   GET/HEAD /plugin-draft/~t/<ticket>/<pluginId>/<digest>/<path...> — a plugin DRAFT's preview window (never runs code)
   { m: ['GET', 'HEAD'], qprefix: '/plugin-draft/', h: servePluginDraft },
+  //   GET/HEAD /app-ui/~t/<ticket>/<appId>/<digest>/<path...> — an APP's page (sandboxed, network-less, kit injected)
+  { m: ['GET', 'HEAD'], qprefix: '/app-ui/', h: serveAppUi },
   // ADDITIVE (Lane B / ux-run-truth): read-only stat of a user-chosen KEEP destination folder, so the return
   // card can validate the typed path inline instead of failing silently on Keep. Strictly less powerful than
   // the existing keep copy (which already writes to an arbitrary destPath) — this only reports exists/isDir.
@@ -10134,6 +10183,11 @@ const ROUTES = [
   { m: 'POST', exact: '/api/plugins/delete', h: handlePluginsDelete },
   { m: 'POST', exact: '/api/plugins/store', h: handlePluginsStore },
   { m: 'POST', exact: '/api/plugins/call', h: handlePluginsCall },
+  { m: 'GET', exact: '/api/apps', h: handleAppsList },
+  { m: 'POST', exact: '/api/apps', h: handleAppsCreate },
+  { m: 'POST', exact: '/api/apps/delete', h: handleAppsDelete },
+  { m: 'POST', exact: '/api/apps/rename', h: handleAppsRename },
+  { m: 'POST', exact: '/api/apps/store', h: handleAppsStore },
   { m: 'POST', exact: '/api/checkpoint/restore', h: handleCheckpointRestore },
   { m: 'GET', prefix: '/api/checkpoint', h: handleCheckpointList },
   // /api/health is the topbar LINK / Diag liveness probe. After an uncaught exception it answers 503 with the fault
@@ -15169,6 +15223,47 @@ async function handlePluginsStore(req, res) {
   return json(r.ok ? 200 : 400, r);
 }
 
+/* APPS routes — the APPS window and the app windows. GET lists every app with its schedule's REAL state (the routine's
+   next/last run, and whether routines are switched on at all — an app never claims a refresh that will not fire). */
+async function appsBody(req, res, max) {
+  try { return JSON.parse(await readBody(req, max || (1 << 16), res)) || {}; }
+  catch (e) { if (!res.headersSent) { res.writeHead(400); res.end('bad json'); } return null; }
+}
+const appsJson = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+async function handleAppsList(req, res) {
+  let list = [];
+  try { list = await apps.list(); } catch (e) { return appsJson(res, 500, { error: 'could not read apps: ' + ((e && e.message) || e) }); }
+  return appsJson(res, 200, { apps: list, routinesOn: !!cronArmed && !cronHalted });
+}
+async function handleAppsCreate(req, res) {
+  const body = await appsBody(req, res); if (!body) return;
+  try { const made = await apps.create({ name: body.name, description: body.description }); return appsJson(res, 200, { ok: true, app: await apps.describe(made.id) }); }
+  catch (e) { return appsJson(res, 400, { ok: false, error: (e && e.message) || String(e) }); }
+}
+async function handleAppsDelete(req, res) {
+  const body = await appsBody(req, res); if (!body) return;
+  try { await apps.remove(body.id); return appsJson(res, 200, { ok: true }); }
+  catch (e) { return appsJson(res, 400, { ok: false, error: (e && e.message) || String(e) }); }
+}
+async function handleAppsRename(req, res) {
+  const body = await appsBody(req, res); if (!body) return;
+  try { const meta = await apps.rename(body.id, body.name); return appsJson(res, 200, { ok: true, name: meta.name }); }
+  catch (e) { return appsJson(res, 400, { ok: false, error: (e && e.message) || String(e) }); }
+}
+// the app page's own store (read its published data; keep its own UI state) — only the page host calls this
+async function handleAppsStore(req, res) {
+  const body = await appsBody(req, res, 512 << 10); if (!body) return;
+  let id;
+  try { id = (await apps.need(body.id)).id; } catch (e) { return appsJson(res, 404, { ok: false, error: (e && e.message) || String(e) }); }
+  const op = String(body.op || '');
+  if ((op === 'set' || op === 'delete') && body.key === apps.META_KEY) return appsJson(res, 400, { ok: false, error: 'that key is kept by the station' });
+  if (op === 'clear') return appsJson(res, 400, { ok: false, error: 'unknown store operation' });
+  const store = makePluginStore({ store: appDataStore });
+  let r;
+  try { r = await store.op(id, op, body.key, body.value); } catch (e) { return appsJson(res, 500, { ok: false, error: (e && e.message) || String(e) }); }
+  return appsJson(res, r.ok ? 200 : 400, r);
+}
+
 /* POST /api/plugins/call { id, fn, args } — a plugin WINDOW calling its own backend (api.handle(fn)). Only the page
    host calls this, naming the plugin from its own registry; refused unless the approval covers the bytes on disk
    right now. The handler runs in the plugin's process with a deadline — a hung plugin costs this call, nothing else. */
@@ -16949,6 +17044,7 @@ async function runOnceCore(o) {
   }).register(registry);
   makeManualReadTool().register(registry);   // same always-present COMPUTER grant: the manual's reference sections, verbatim
   pluginAuthor.register(registry);   // PLUGIN AUTHORING (computer grant, deferred): drafts + preview + submit — inert until the Commander approves
+  makeAppTools({ apps, now: () => Date.now(), compile: (source, file) => { try { new (require('node:vm').Script)('(function (exports, require, module, __filename, __dirname) {' + source + '\n})', { filename: file }); return ''; } catch (e) { return String((e && e.message) || e); } } }).register(registry);   // APPS (computer grant, deferred): create / write / publish / schedule
   // STUDIO media tools, built up-front so browser.vision can borrow its multimodal analyze path
   // (one provider seam, no duplication). Registered below; here we only need its vision callback.
   // STARNET_IMAGE_MODEL overrides the studio's default text->image model (image.js picks the current-gen

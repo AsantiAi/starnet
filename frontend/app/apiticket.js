@@ -94,6 +94,7 @@
   const scopeRun = (agent, runId) => 'run\n' + String(agent || '') + '\n' + String(runId || '');
   const scopePlugin = (id, digest) => 'plugin\n' + String(id || '') + '\n' + String(digest || '');
   const scopeDraft = (id, digest) => 'draft\n' + String(id || '') + '\n' + String(digest || '');
+  const scopeApp = (id, digest) => 'app\n' + String(id || '') + '\n' + String(digest || '');
   const SCOPE_SSE = 'sse\n/api/channels/events', SCOPE_SAVE = 'save\n/api/save';
   function mintWith(key, kind, scope, now, nonce) {
     const k = KINDS[kind];
@@ -137,6 +138,14 @@
     const parts = String(relPath || '').split('/').map(encodeURIComponent).join('/');
     return base() + '/plugin-draft/~t/' + t + '/' + encodeURIComponent(pid) + '/' + encodeURIComponent(dg) + '/' + parts;
   }
+  // An APP's window (the sidecar's /app-ui/ route): an app-scoped ticket at the app's current digest.
+  function appUrl(id, digest, relPath) {
+    const pid = String(id || ''), dg = String(digest || '');
+    const t = mint('plugin', scopeApp(pid, dg));
+    if (!t) return '';
+    const parts = String(relPath || '').split('/').map(encodeURIComponent).join('/');
+    return base() + '/app-ui/~t/' + t + '/' + encodeURIComponent(pid) + '/' + encodeURIComponent(dg) + '/' + parts;
+  }
   function sseUrl(query) {
     const t = mint('sse', SCOPE_SSE);
     const q = String(query || '');
@@ -165,8 +174,8 @@
     return base() + u.pathname + u.search;
   }
 
-  const api = { fileUrl, runUrl, pluginUrl, draftUrl, sseUrl, saveBeaconUrl, sign, mint,
-    _test: { sha256, hmacSha256, utf8, b64url, mintWith, scopeFile, scopeRun, scopePlugin, scopeDraft, SCOPE_SSE, SCOPE_SAVE, KINDS } };
+  const api = { fileUrl, runUrl, pluginUrl, draftUrl, appUrl, sseUrl, saveBeaconUrl, sign, mint,
+    _test: { sha256, hmacSha256, utf8, b64url, mintWith, scopeFile, scopeRun, scopePlugin, scopeDraft, scopeApp, SCOPE_SSE, SCOPE_SAVE, KINDS } };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root) root.ApiTicket = api;
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null));

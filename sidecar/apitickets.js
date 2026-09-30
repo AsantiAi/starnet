@@ -47,6 +47,8 @@ function scopePlugin(id, digest) { return 'plugin\n' + String(id || '') + '\n' +
 // a plugin DRAFT's preview window (/plugin-draft/): same kind, a different scope, so a draft ticket can never open an
 // installed plugin's files or the other way round
 function scopeDraft(id, digest) { return 'draft\n' + String(id || '') + '\n' + String(digest || ''); }
+// an APP's window (/app-ui/): its own scope, so an app ticket opens that app's page and nothing else
+function scopeApp(id, digest) { return 'app\n' + String(id || '') + '\n' + String(digest || ''); }
 const SCOPE_SSE = 'sse\n/api/channels/events';
 const SCOPE_SAVE = 'save\n/api/save';
 
@@ -165,5 +167,5 @@ function splitPluginTicket(rawPath) { return splitPrefixTicket(PLUGIN_PREFIX, ra
 
 module.exports = {
   KINDS, SKEW_MS, mint, verify, parse, replayGuard, apiTicketClaim, splitRunTicket, splitPluginTicket, splitPrefixTicket,
-  scopeFile, scopeRun, scopePlugin, scopeDraft, SCOPE_SSE, SCOPE_SAVE, message
+  scopeFile, scopeRun, scopePlugin, scopeDraft, scopeApp, SCOPE_SSE, SCOPE_SAVE, message
 };
