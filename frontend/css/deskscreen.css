@@ -1,22 +1,30 @@
-/* DESK SCREEN (2026-09-29) — frontend/app/deskscreen.js. Click an agent's workstation on the live floor: its work.
-   Rides the crate card's glass popover (.lw-card in linewatch.css: glass face, one hairline edge, top light, state
-   accent on the top rail) — this file only sizes it and lays out the step list. Matte, no glow; theme tokens only. */
-.lw-card.ds-card { width: 360px; max-height: calc(100vh - 16px); display: flex; flex-direction: column; }
-.lw-card.ds-card[data-state="ask"]  { --lw-accent: var(--gold, #ffc24a); }
-.lw-card.ds-card[data-state="idle"] { --lw-accent: var(--ph-dim); }
-.ds-head .lw-kind { white-space: nowrap; }
-.ds-head .lw-st { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.ds-who { display: inline-flex; flex: none; }
-.ds-body { overflow-y: auto; min-height: 0; flex: 1 1 auto; }
-.ds-card .lw-row { grid-template-columns: 66px 1fr; }
-.ds-task { font-size: 16px; }
-.ds-dim { color: var(--ph-dim); font-size: 14px; line-height: 1.25; margin: 4px 0; }
-.ds-sec { margin: 8px 0 3px; font-size: 13px; letter-spacing: 1.4px; color: var(--ph-dim); border-bottom: 1px solid var(--lw-edge); padding-bottom: 2px; }
-.ds-ask { margin: 6px 0 2px; padding: 4px 7px; font-size: 15px; color: var(--gold, #ffc24a); border: 1px solid rgba(var(--gold-rgb, 255,194,74), .35); border-radius: 4px; background: rgba(var(--gold-rgb, 255,194,74), .06); }
+/* DESK SCREEN (2026-09-29) — frontend/app/deskscreen.js. Click an agent's workstation on the live floor: the DESK SCREEN
+   window opens on that agent's work. It is a normal station window (StationUI 'desk', PANEL shell): the term system owns
+   the glass chrome, the dock rise, resizing and the roster switcher; this file only lays out the body. Matte, no glow;
+   theme tokens only. */
+.desk-win .ds-screen { display: flex; flex-direction: column; gap: 4px; }
+/* the status strip: lamp · agent · state (the lamp is drawn geometry, never a bloom) */
+.ds-strip { display: flex; align-items: baseline; gap: 10px; padding: 2px 0 6px; border-bottom: 1px solid var(--gd-edge, rgba(var(--ph-rgb),.24)); }
+.ds-lamp { width: 8px; height: 8px; border-radius: 50%; align-self: center; flex: none; background: var(--ph-dim); box-shadow: inset 0 0 0 1px rgba(0,0,0,.4); }
+.ds-screen[data-state="running"] .ds-lamp { background: var(--ph); }
+.ds-screen[data-state="ask"] .ds-lamp { background: var(--gold, #ffc24a); }
+.ds-screen[data-state="done"] .ds-lamp { background: var(--ok, #62ff9e); }
+.ds-screen[data-state="failed"] .ds-lamp { background: var(--bad, #ff4a3d); }
+.ds-name { font-weight: normal; font-size: 18px; letter-spacing: 1.2px; color: var(--ph-bright); text-transform: uppercase; }
+.ds-st { font-size: 14px; letter-spacing: 1.2px; color: var(--ph-dim); }
+.ds-screen[data-state="running"] .ds-st { color: var(--ph); }
+.ds-screen[data-state="ask"] .ds-st { color: var(--gold, #ffc24a); }
+
+.ds-kv { display: grid; grid-template-columns: 76px 1fr; gap: 3px 10px; margin: 6px 0 2px; align-items: baseline; }
+.ds-kv dt { font-size: 13px; letter-spacing: 1.3px; color: var(--ph-dim); }
+.ds-kv dd { margin: 0; font-size: 16px; line-height: 1.25; color: var(--text); overflow-wrap: anywhere; }
+.ds-dim { color: var(--ph-dim); font-size: 14px; line-height: 1.3; margin: 4px 0; }
+.ds-kv dd.ds-dim { font-size: 14px; }
+.ds-ask { margin: 6px 0 2px; padding: 4px 8px; font-size: 15px; color: var(--gold, #ffc24a); border: 1px solid rgba(var(--gold-rgb, 255,194,74), .35); border-radius: 4px; background: rgba(var(--gold-rgb, 255,194,74), .06); }
 
 /* the steps: one line per tool call — glyph · tool · the salient argument · time; the result summary under it */
-.ds-steps { list-style: none; margin: 0; padding: 0; max-height: 210px; overflow-y: auto; }
-.ds-step { display: grid; grid-template-columns: 14px auto 1fr auto; gap: 0 6px; align-items: baseline; padding: 2px 2px; border-radius: 3px; font-size: 15px; line-height: 1.2; }
+.ds-steps { list-style: none; margin: 0; padding: 0; }
+.ds-step { display: grid; grid-template-columns: 14px auto 1fr auto; gap: 0 8px; align-items: baseline; padding: 3px 4px; border-radius: 3px; font-size: 15px; line-height: 1.25; }
 .ds-step + .ds-step { border-top: 1px solid rgba(var(--ph-rgb), .07); }
 .ds-g { color: var(--ph-dim); text-align: center; }
 .ds-step[data-s="ok"]  .ds-g { color: var(--ok, #62ff9e); }
@@ -26,24 +34,25 @@
 .ds-n { color: var(--ph); white-space: nowrap; }
 .ds-a { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .ds-ms { color: var(--ph-dim); font-size: 13px; white-space: nowrap; grid-column: 4; }
-.ds-sum { grid-column: 2 / -1; color: var(--ph-dim); font-size: 13px; line-height: 1.2; overflow-wrap: anywhere; }
+.ds-sum { grid-column: 2 / -1; color: var(--ph-dim); font-size: 13px; line-height: 1.25; overflow-wrap: anywhere; }
 .ds-step[data-s="bad"] .ds-sum { color: color-mix(in srgb, var(--bad, #ff4a3d) 55%, var(--text)); }
 
-.ds-text { margin: 0; font-size: 15px; line-height: 1.25; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 110px; overflow-y: auto; }
+.ds-text { margin: 0; font-size: 15px; line-height: 1.3; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
 .ds-made, .ds-earlier { list-style: none; margin: 0; padding: 0; font-size: 15px; }
 .ds-made li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ds-made li::before { content: '▪ '; color: var(--ph-dim); }
-.ds-earlier li { display: flex; gap: 8px; justify-content: space-between; }
+.ds-earlier li { display: flex; gap: 10px; justify-content: space-between; padding: 1px 0; }
 .ds-earlier li > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
-/* hands: tell it something mid-run */
-.ds-steer { display: flex; gap: 6px; margin-top: 8px; }
+/* hands: tell it something mid-run, then the doors */
+.ds-steer { display: flex; gap: 6px; margin-top: 10px; }
 .ds-steer[hidden] { display: none; }
 /* (0,2,0) on purpose: the station's base field rule input[type=text] is (0,1,1) and would paint a 19px console field */
-.ds-card .ds-in { flex: 1; width: auto; min-width: 0; font: 15px/1.2 'VT323', monospace; color: var(--text); text-shadow: none; background: rgba(0,0,0,.28); border: 1px solid var(--lw-edge); border-radius: 4px; padding: 4px 8px; box-shadow: inset 0 1px 3px rgba(0,0,0,.3); }
-.ds-card .ds-in:focus { outline: none; border-color: rgba(var(--ph-rgb), .55); }
-.ds-card .ds-in::placeholder { color: var(--ph-dim); }
+.ds-screen .ds-in { flex: 1; width: auto; min-width: 0; font: 15px/1.2 'VT323', monospace; color: var(--text); text-shadow: none; background: rgba(0,0,0,.28); border: 1px solid var(--gd-edge, rgba(var(--ph-rgb),.24)); border-radius: 4px; padding: 4px 8px; box-shadow: inset 0 1px 3px rgba(0,0,0,.3); }
+.ds-screen .ds-in:focus { outline: none; border-color: rgba(var(--ph-rgb), .55); }
+.ds-screen .ds-in::placeholder { color: var(--ph-dim); }
 .ds-note { margin: 4px 0 0; font-size: 14px; color: var(--ph); }
 .ds-note:empty { display: none; }
+.ds-foot { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .ds-foot [hidden] { display: none; }
-.ds-card .ds-stop.armed { color: var(--bad); border-color: var(--bad); }
+.ds-screen .ds-stop.armed { color: var(--bad); border-color: var(--bad); }
