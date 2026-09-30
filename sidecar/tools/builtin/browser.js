@@ -729,7 +729,10 @@
       allowedLocalOrigins.add(new URL(url).origin);
       if (networkProxy) networkProxy.allowLocal(url);
     }
-    const downloads = deps.downloadDir ? makeDownloadLedger(deps.downloadDir) : null;
+    // `let`, not const: the station's shared browser outlives a run, and the next agent to drive it must get its
+    // downloads in ITS OWN jail (setDownloadDir below). A per-run browser never changes these.
+    let downloadDir = deps.downloadDir || null;
+    let downloads = downloadDir ? makeDownloadLedger(downloadDir) : null;
     // Owned-browser identity is derived after CDP connects. Windows Chrome GUI binaries often emit
     // nothing for `chrome.exe --version`; launch-time probing alone left their UA as HeadlessChrome.
     // Attached Commander-owned Chrome is intentionally excluded from every override.
@@ -999,10 +1002,8 @@
             attachedPort = port;
             // Browser.* download events are emitted on the root connection, not a page session. Register
             // before enabling downloads so a fast local/file response cannot finish between setup steps.
-            if (downloads) {
-              cdp.on('Browser.downloadWillBegin', event => { downloads.begin(event); });
-              cdp.on('Browser.downloadProgress', event => { downloads.progress(event); });
-            }
+            cdp.on('Browser.downloadWillBegin', event => { if (downloads) downloads.begin(event); });
+            cdp.on('Browser.downloadProgress', event => { if (downloads) downloads.progress(event); });
             if (deps.syntheticInputOnly !== false) {
               // New page targets do not inherit a target-scoped preload. Pause every related
               // target before its scripts run and close popups; inject the same shim into any
@@ -1173,9 +1174,9 @@
                unreachable even by accident. Point Chrome at the agent's own downloads/ directory.
                Browser.setDownloadBehavior is browser-scoped and not always accepted on a page
                connection; Page.setDownloadBehavior is the deprecated page-scoped equivalent. Try both. */
-            if (deps.downloadDir) {
-              try { FS.mkdirSync(deps.downloadDir, { recursive: true }); } catch (_) {}
-              const behavior = { behavior: 'allow', downloadPath: deps.downloadDir };
+            if (downloadDir) {
+              try { FS.mkdirSync(downloadDir, { recursive: true }); } catch (_) {}
+              const behavior = { behavior: 'allow', downloadPath: downloadDir };
               try { await cdp.send('Browser.setDownloadBehavior', Object.assign({ eventsEnabled: true }, behavior)); }
               catch (_) { try { await cdp.send('Page.setDownloadBehavior', behavior); } catch (_) {} }
             }
@@ -2051,6 +2052,21 @@
       if (castKick) { try { castKick(); } catch (e) { failNote('browser.cast-kick', e); } }
       return true;
     }
+    /* Re-point downloads at another agent's jail (the station's shared browser changes hands between runs). Before
+       Chrome is connected this only records the folder — connect applies it; after, Chrome is told at once. The
+       ledger is replaced with the folder: a receipt is only ever a claim about the CURRENT driver's own jail. */
+    async function setDownloadDir(dir) {
+      const next = dir ? String(dir) : null;
+      if (!next || next === downloadDir) return false;
+      downloadDir = next;
+      downloads = makeDownloadLedger(next);
+      if (!cdp) return true;
+      try { FS.mkdirSync(next, { recursive: true }); } catch (e) { failNote('browser.download-dir.mkdir', e); }
+      const behavior = { behavior: 'allow', downloadPath: next };
+      try { await cdp.send('Browser.setDownloadBehavior', Object.assign({ eventsEnabled: true }, behavior)); }
+      catch (e) { failNote('browser.download-dir.browser', e); try { await cdp.send('Page.setDownloadBehavior', behavior); } catch (e2) { failNote('browser.download-dir.page', e2); } }
+      return true;
+    }
     // One sanitized event from the handoff host (browser-handoff.js sanitizeInput owns the vocabulary).
     async function humanInput(ev) {
       const c = await page();
@@ -2121,7 +2137,7 @@
     // actually on the user's screen. Headless mode, or a headless-only binary fallback in
     // a headed request, both read as not visible.
     function visible() { return headed; }
-    return { navigate, snapshot, click, type, press, hover, drag, selectOption, viewport, forward, upload, tabs, waitForTabCount, selectTab, closeTab, inspect, evalPublic, waitFor, pdf, intercept, emulate, usingPersistentProfile: () => !!deps.profileIsPersistent, testInput, testEval, testState, scroll, back, getText, challengeStatus, handleDialog, screenshot, streamStart, streamStop, humanInput, pageInfo, close, consoleLog: readConsoleLog, networkLog: () => netLog.map(r => Object.assign({}, r)), lastDialog: () => dialog, lastResponse: () => lastResponse, visible, headed, headlessFallback: wantHeaded && binIsHeadlessOnly, attachedPort: () => attachedPort, allowLocal, profileDir };
+    return { navigate, snapshot, click, type, press, hover, drag, selectOption, viewport, forward, upload, tabs, waitForTabCount, selectTab, closeTab, inspect, evalPublic, waitFor, pdf, intercept, emulate, usingPersistentProfile: () => !!deps.profileIsPersistent, testInput, testEval, testState, scroll, back, getText, challengeStatus, handleDialog, screenshot, streamStart, streamStop, humanInput, pageInfo, setDownloadDir, close, consoleLog: readConsoleLog, networkLog: () => netLog.map(r => Object.assign({}, r)), lastDialog: () => dialog, lastResponse: () => lastResponse, visible, headed, headlessFallback: wantHeaded && binIsHeadlessOnly, attachedPort: () => attachedPort, allowLocal, profileDir };
   }
 
   function makeBrowserSession(deps) {
@@ -2671,6 +2687,19 @@
       version++; navEpoch++;   // the Commander drove the page: refs minted before the handoff point at a page that may be gone
     }
     function frozen() { return frozenBy; }
+    /* THE STATION'S SHARED BROWSER (sidecar/browser-view.js) changes hands: the Commander browses in it between
+       runs, and different agents drive it on different runs. handTo() is called as a run takes it:
+         · every ref dies (the page may be one the Commander opened or changed — the same rule thaw() applies
+           after a handoff);
+         · downloads are re-pointed at the driving agent's own jail. */
+    async function handTo(info) {
+      version++; navEpoch++;
+      const dir = info && info.downloadDir ? String(info.downloadDir) : null;
+      if (!dir) return;
+      deps.downloadDir = dir;   // a driver not yet built reads this at creation
+      if (driver && typeof driver.setDownloadDir === 'function') await driver.setDownloadDir(dir);
+    }
+    function hasDriver() { return !!driver; }
     async function close() {
       try { if (driver && driver.close) await driver.close(); }
       finally { releasePersistent(); }
@@ -2689,7 +2718,7 @@
       const d = driver || null;
       return d && typeof d.attachedPort === 'function' ? d.attachedPort() : null;
     }
-    return { waitForProfile, navigate, snapshot, click, type, press, hover, drag, select: selectOption, viewport, forward, upload, tabs, selectTab, closeTab, inspect, evalPublic, evalAllowed, wait, find, pdf, intercept, emulate, attach, detach, attachedToUser: () => attachedToUserBrowser, testInput, testEval, testState, testSnapshot, scroll, back, getText, challengeStatus, consoleLog, networkLog, dialog, vision, screenshot, login, handoffSurface, freeze, thaw, frozen, close, visible, headlessFallback, attachedPort, lastResponse, _internals: { refs, version: () => version, navEpoch: () => navEpoch, localMode: () => localMode, localOrigin: () => localOrigin, leaseHeld: () => leaseHeld } };
+    return { waitForProfile, navigate, snapshot, click, type, press, hover, drag, select: selectOption, viewport, forward, upload, tabs, selectTab, closeTab, inspect, evalPublic, evalAllowed, wait, find, pdf, intercept, emulate, attach, detach, attachedToUser: () => attachedToUserBrowser, testInput, testEval, testState, testSnapshot, scroll, back, getText, challengeStatus, consoleLog, networkLog, dialog, vision, screenshot, login, handoffSurface, freeze, thaw, frozen, handTo, hasDriver, close, visible, headlessFallback, attachedPort, lastResponse, _internals: { refs, version: () => version, navEpoch: () => navEpoch, localMode: () => localMode, localOrigin: () => localOrigin, leaseHeld: () => leaseHeld } };
   }
 
   function makeBrowserTools(deps) {

@@ -641,7 +641,15 @@ const browserProfileWaiters = new Set();
 function browserProfileLeaseFor(runId) {
   return {
     dir: BROWSER_PROFILE_DIR,
-    acquire: () => { if (browserProfileHolder && browserProfileHolder !== runId) return false; browserProfileHolder = runId; return true; },
+    acquire: () => {
+      if (browserProfileHolder && browserProfileHolder !== runId) {
+        // the station's shared browser holds the profile between runs: ask it to give the profile up when nobody is
+        // driving or watching it (it closes; this caller's own wait then gets the lease on a later poll)
+        if (browserProfileHolder === 'station-browser') { try { browserViews.yieldProfile(); } catch (e) { failNote('browser-profile.yield', e); } }
+        return false;
+      }
+      browserProfileHolder = runId; return true;
+    },
     release: () => { if (browserProfileHolder === runId) browserProfileHolder = null; }
   };
 }
@@ -4255,21 +4263,28 @@ const browserHandoffs = makeHandoffHost({
   }
 });
 const browserHandoffRoutes = makeHandoffRoutes({ host: browserHandoffs, readBody, respondJson, signins: browserSignins });
-/* BROWSER window (sidecar/browser-view.js): the Commander WATCHES a run's browser (frames only; the wheel stays
-   STEP-IN's) and browses on a station-owned session of their own. That session is headless, streamed, synthetic-input
-   only — the same host authority every run gets. It runs on a TEMPORARY profile on purpose: the durable station profile
-   is a single-owner lease, and a run that cannot get it errors after 8s — a window the Commander left open must never be
-   the reason an agent cannot browse. Signing in for the agents stays STEP-IN's job. */
-const COMMANDER_BROWSER_ID = 'commander-view';
+/* THE STATION BROWSER (sidecar/browser-view.js): ONE built-in browser the Commander and the agents share. An
+   interactive (COMMS) run's browser.* tools are bound to it (runOnce asks sessionForRun), the BROWSER window streams
+   it live, and between runs the Commander drives it — a typed address, clicks, keys. Same host authority as every run
+   browser (headless, synthetic input only, the pinned network proxy), and it holds the durable station profile under
+   its own lease id, so a sign-in either of you makes is there next time. The lease is single-owner, so this browser
+   YIELDS it to another run when nobody is driving or watching (browserProfileLeaseFor → yieldProfile). */
+const STATION_BROWSER_ID = 'station-browser';
+const stationBrowserLogin = { prompt: undefined };   // browser.login's consent channel: the DRIVING run's prompt, set per run
 const browserViews = makeBrowserViews({
   now: () => Date.now(),
   handoffLive: runId => browserHandoffs.isLive(runId),
-  makeCommanderSession: () => browserInternals.makeBrowserSession({
+  attended: stationBrowserLogin,
+  // the driving agent's own jail: a download must land where that agent can read it back
+  downloadDirFor: agentId => /^[A-Za-z0-9_-]{1,40}$/.test(String(agentId || '')) ? path.join(WORKSPACES, String(agentId), 'downloads') : null,
+  makeStationSession: () => browserInternals.makeBrowserSession({
     ledger: procLedger,
     allowVisible: false, forceHeadless: true, syntheticInputOnly: true,
     cdpPort: 0,
-    profileDir: path.join(os.tmpdir(), 'starnet-browser-' + process.pid + '-' + COMMANDER_BROWSER_ID),
-    cleanupProfile: true
+    profileDir: path.join(os.tmpdir(), 'starnet-browser-' + process.pid + '-' + STATION_BROWSER_ID),
+    cleanupProfile: true,
+    persistentProfile: browserProfileLeaseFor(STATION_BROWSER_ID),
+    attendedLogin: stationBrowserLogin
   })
 });
 const browserViewRoutes = makeViewRoutes({ views: browserViews, readBody, respondJson });
@@ -16808,6 +16823,13 @@ async function runOnce(o) {
    (past the stream's queue) until it returns; the snapshot merges it. Only real in-flight LINE runs — never a guess. */
 const hostLiveRuns = new Map();   // runId -> { agentId, startedAt, source }
 async function runOnceTracked(o) {
+  // BELT for the station browser: whatever way a run leaves (a throw before its own cleanup included), it must not
+  // stay the browser's "driver" — that would lock the Commander out of their own browser. releaseRun is a no-op for
+  // a run that never drove it.
+  try { return await runOnceTrackedInner(o); }
+  finally { if (o && o.runId) { try { browserViews.releaseRun(String(o.runId)); } catch (e) { failNote('browser-view.release-belt', e); } } }
+}
+async function runOnceTrackedInner(o) {
   const rid = o && o.runId ? String(o.runId) : '';
   // LINE work only (a run the host stamped with its line or bay): harness self-talk and plain chats keep their own
   // registries — this map exists so a bay lamp is never stood down while its run is really working
@@ -17076,6 +17098,7 @@ async function runOnceCore(o) {
   // Per-run headless CDP session. Kept outside the try so the outer finally always closes it,
   // including provider refusal, abort, timeout, and thrown-tool paths.
   let runBrowser = null;
+  let runStationBrowser = null;   // the station's shared browser, when THIS run drives it (else a private per-run one)
   let runComputer = null;
   // Only user-facing callers with a stable conversation key receive the intent layer. Unattended cron/night-shift
   // work has nobody present to answer and therefore remains byte-for-byte on its existing execution path.
@@ -17290,7 +17313,11 @@ async function runOnceCore(o) {
   const imageTools = makeImageTools({ openrouter: studioRoute.ok ? { apiKey: studioRoute.key, model, baseUrl: studioRoute.baseUrl, provider: studioRoute.provider, protocol: studioRoute.protocol } : null, fsp, pathMod: path, root: WORKSPACES, imageModel: String(ENV('IMAGE_MODEL') || '').trim() || undefined, auxVision: auxVisionCall, signal, onUsage: recordMediaUsage });
   // browser.vision uses the SAME vision model as image_analyze when a key exists; with no key it
   // reports "unavailable" honestly (never a success-shaped stub). Pass the dep only when usable.
+  // An interactive run drives the STATION browser — the one the Commander sees and uses — when it is free. Anything
+  // else (unattended runs, or a second run while another is driving) gets a private per-run browser as before.
+  runStationBrowser = await browserViews.sessionForRun({ agentId, runId, interactive: surface === 'interactive', loginPrompt: o.loginPrompt });
   runBrowser = makeBrowserTools({
+    session: runStationBrowser || undefined,
     vision: imageTools.hasVision ? imageTools.browserVision : null,
     ledger: procLedger,
     // The workspace jail, so browser.screenshot can SAVE a frame and emit it as a deliverable
@@ -17330,7 +17357,7 @@ async function runOnceCore(o) {
     }
   });
   runBrowser.register(registry);   // browser.* + isolated browser.test_* automation
-  browserViews.registerRun({ agentId, runId, session: runBrowser.session });   // BROWSER window: the Commander may watch this run's page
+  if (!runStationBrowser) browserViews.registerRun({ agentId, runId, session: runBrowser.session });   // a private browser: the Commander may still watch it
   makeDesktopTools({ allowRemoteDesktop: DESKTOP_SHELL }).register(registry);
   // NS-5: bind the per-run path-trust guard — the ONE way an fs call may reach outside the jail, mediated
   // against the station's blessed project roots. surface + pathPrompt are per-run: an autonomous run passes
@@ -19866,7 +19893,9 @@ async function runOnceCore(o) {
     // broken page cannot retain any browser-level state after the task finishes.
     try { browserHandoffs.abortRun(runId); } catch (e) { failNote('stepin.abort-run', e); }   // STEP-IN: a handoff never outlives its run
     try { browserViews.unregisterRun(runId); } catch (e) { failNote('browser-view.unregister', e); }   // before close: never capture a closing browser
-    if (runBrowser) { try { await runBrowser.session.close(); } catch (_) {} }
+    // The station browser OUTLIVES the run: the page stays for the Commander (and the next run). Only a private one closes.
+    if (runStationBrowser) { try { browserViews.releaseRun(runId); } catch (e) { failNote('browser-view.release', e); } }
+    else if (runBrowser) { try { await runBrowser.session.close(); } catch (_) {} }
     if (runComputer?.close) { try { await runComputer.close(); } catch (_) { failNote('computer.run.close', 'Native run cleanup failed'); } }
     computerRuns.delete(runComputer);
     concurrencyGate.leave(agentId);   // release the admission slot on EVERY exit (normal, early-return, or throw)
