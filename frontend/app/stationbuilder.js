@@ -1642,20 +1642,35 @@
       if (!groups) return 0;
       let depth = 0;
       const rowOf = h => wall === 'south' ? R.y2 - h + 1 : R.y1;
+      // a run of pieces from x0 along the wall; a piece that meets a doorway's lane steps past it rather than being lost
       const run = (list, x0, dir) => {
         let x = x0;
         for (const t of list || []) {
           const s = S.spec(t); if (!s) continue;
-          const px = dir > 0 ? x : x - s.w + 1;
-          if (px < R.x1 + 1 || px + s.w - 1 > R.x2 - 1) break;
-          if (add(t, px, rowOf(s.h), 0)) depth = Math.max(depth, s.h);
-          x = dir > 0 ? px + s.w : px - 1;
+          for (;;) {
+            const px = dir > 0 ? x : x - s.w + 1;
+            if (px < R.x1 + 1 || px + s.w - 1 > R.x2 - 1) return;
+            if (add(t, px, rowOf(s.h), 0)) { depth = Math.max(depth, s.h); x = dir > 0 ? px + s.w : px - 1; break; }
+            x += dir;
+          }
         }
       };
+      // the centre group first, so the wall's signature piece (the TV) takes the middle, or the nearest clear stretch of
+      // wall beside a doorway there, before the side groups fill in
+      const mid = groups.centre || [], ms = mid.map(t => S.spec(t)).filter(Boolean), mw = ms.reduce((n, sp) => n + sp.w, 0);
+      if (ms.length) {
+        const c0 = R.x1 + ((W - mw) >> 1), offs = [0];
+        for (let k = 1; k < W; k++) offs.push(-k, k);
+        for (const o of offs) {
+          const x0 = c0 + o;
+          if (x0 < R.x1 + 1 || x0 + mw - 1 > R.x2 - 1) continue;
+          let x = x0, fits = true;
+          for (const sp of ms) { if (blocks(sp, x, rowOf(sp.h))) { fits = false; break; } x += sp.w; }
+          if (fits) { run(mid, x0, 1); break; }
+        }
+      }
       run(groups.left, R.x1 + 1, 1);
       run(groups.right, R.x2 - 1, -1);
-      const mid = groups.centre || [], mw = mid.reduce((n, t) => n + ((S.spec(t) || {}).w || 0), 0);
-      if (mid.length) run(mid, R.x1 + ((W - mw) >> 1), 1);
       return depth;
     };
     const featureWall = flip ? 'south' : 'north';
@@ -1818,9 +1833,14 @@
     for (const q of want.filter(r => r.big)) {
       if (!wings.some(([i, j]) => !used.has(key(i, j)) && place(q, i, j, true))) return refuse('There is no wing of the diamond around ' + hub.name + ' clear for ' + q.name + ' (' + (why || 'every wing is taken') + '). A diamond takes up to four big rooms.');
     }
-    for (const q of want.filter(r => !r.big)) {
-      if (!order.some(([i, j]) => !used.has(key(i, j)) && place(q, i, j, false))) return refuse('There is no free place left on the diamond around ' + hub.name + ' for ' + q.name + ' (' + (why || 'the grid is full') + ').');
-    }
+    const normal = want.filter(r => !r.big);
+    normal.forEach((q, n) => {
+      // the order is a run of opposite pairs: the diamond is symmetric whenever its rooms come in pairs, and a room added
+      // later lands exactly where it would have stood had it been asked for with the rest
+      if (!order.some(([i, j]) => !used.has(key(i, j)) && place(q, i, j, false))) why = 'NOPLACE:' + q.name + ':' + (why || 'the grid is full');
+    });
+    const lost = /^NOPLACE:([^:]*):(.*)$/.exec(why || '');
+    if (lost) return refuse('There is no free place left on the diamond around ' + hub.name + ' for ' + lost[1] + ' (' + lost[2] + ').');
     return { ok: true, halls, rooms, ring: ringFree };
   }
   const CONCOURSE_ROOMS = 8;
@@ -2024,8 +2044,9 @@
         stepsView.forEach(s => steps.push(Object.assign({}, s, { role: s.role + ' on ' + (fv.z.label || fv.z.plain) })));
         bits.push(fv.z.plain + (fv.z.label ? ' ("' + fv.z.label + '")' : '') + ': ' + flowText(fv.shape.cols, fv.runOrder, stepsView));
       }
-      const pieces = v.dressed && v.dressed.props.length && v.q.style !== 'works' ? ' (' + short(v.dressed.props) + ')' : '';
-      return v.q.name + ' ' + at + ', ' + Wd + ' × ' + Hd + ': ' + bits.join('; ') + pieces;
+      const brief = view.length > 4, pieces = !brief && v.dressed && v.dressed.props.length && v.q.style !== 'works' ? ' (' + short(v.dressed.props) + ')' : '';
+      const size = brief && Wd === CELL[0] && Hd === CELL[1] ? '' : ', ' + Wd + ' × ' + Hd;
+      return v.q.name + ' ' + at + size + ': ' + bits.join('; ') + pieces;
     });
     const wasRooms = live0.rooms().filter(x => x.kind !== 'corridor').length - 1, wasProps = live0.props().length - live.props().length;
     const head = pattern === 'diamond'
@@ -2033,7 +2054,7 @@
         : view.length + (view.length === 1 ? ' room' : ' rooms') + ' on the diamond grid around ' + hub.name + ', each in the next free place of the grid, on its own planted, lit hallway. ')
       : 'A CONCOURSE ' + laid.dir + ' from ' + hub.name + ': a wide corridor, planted and lit, and ' + view.length + ' rooms. ';
     const blocking = [].concat(...lines.map(l => l.blocking.map(b => (lines.length > 1 ? (l.label || l.plain) + ': ' : '') + b)));
-    const summary = head + roomText.join('. ') + '.'
+    const summary = head + (view.length > 4 && pattern === 'diamond' ? 'Every room is 18 × 11 unless it says. ' : '') + roomText.join('. ') + '.'
       + (replace ? ' It replaces everything beyond ' + hub.name + ' (' + wasRooms + (wasRooms === 1 ? ' room' : ' rooms') + ' and ' + wasProps + ' props); ' + hub.name + ', agents and conversations stay, and every agent keeps a desk. Your current layout is backed up: RESTORE PREVIOUS in Build → Presets brings it back.' : '')
       + (lines.length ? ' ' + (blocking.length ? 'Still to do after building: ' + blocking.join('; ') + '.' : 'Its lines will be ready to run.') : '');
     const fpd = fp.serialize();
