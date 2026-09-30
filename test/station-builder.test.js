@@ -576,9 +576,13 @@ for (const c of T.catalog) {
     const st = fresh(), before = snap(st), made = [];
     const R = Object.assign({}, E, { canRecruit: true, recruit: role => { const id = 'zr' + (made.length + 1); if (!st.ensureWorkstation(id).ok) return null; made.push(id); return { id, name: role }; } });
     const r = SB.planRoom(st.serialize(), { zones: [{ area: 'left', style: 'desks' }, { area: 'right', line: 'build_test', staff: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'new' }] }] }, R);
-    A.ok(r.ok && /It will be ready to run\. It adds 1 crew member: TESTER, with a desk in HOME\. UNDO does not remove agents/.test(r.plan.summary) && made.length === 0, 'a zone line recruits on the card, nobody yet: ' + (r.error || r.plan.summary.slice(-160)));
+    A.ok(r.ok && /It will be ready to run\. It adds 1 crew member: TESTER, with a desk in DESKS\. UNDO does not remove agents/.test(r.plan.summary) && made.length === 0, 'a zone line recruits on the card, nobody yet, its desk by its line: ' + (r.error || r.plan.summary.slice(-160)));
+    const homeDesks = st.props().filter(p => p.t === 'desk' && st.roomAt(p.x, p.y) === st.rooms().find(x => x.name === 'HOME').id).length;
     const a = SB.apply(st, r.plan, R);
     A.ok(a.ok && a.recruited.length === 1 && a.lines[0].ready, 'the build recruits the Tester and the line is ready');
+    const mine = st.props().filter(p => p.agentId === 'zr1'), den = st.rooms().find(x => x.name === 'DESKS');
+    A.ok(mine.filter(p => /^desk/.test(p.t)).length === 1 && mine.some(p => p.t === 'desk' && st.roomAt(p.x, p.y) === den.id), 'the recruit owns ONE desk, by its line');
+    A.eq(st.props().filter(p => p.t === 'desk' && st.roomAt(p.x, p.y) === st.rooms().find(x => x.name === 'HOME').id).length, homeDesks, 'and none was left behind in the bridge');
     A.ok(st.undo().ok); A.eq(snap(st), before, 'one undo takes back the room, the line, the desk and the seat');
   }
   // refusals, in plain words, changing nothing
@@ -843,6 +847,28 @@ for (const c of T.catalog) {
       ['HOME', /Send \{ "rooms"/],
     ]) { const q = SB.planBuild(st.serialize(), { hallways: hw }, E); A.ok(!q.ok && re.test(q.error), 'hallway refused: ' + JSON.stringify(hw) + ' -> ' + (q.error || 'NOT REFUSED').slice(0, 120)); }
     A.eq(snap(st), before, 'no refusal changed anything');
+  }
+  // RECRUITS DONE ACCORDINGLY (Andrew 09-30: a lead recruited ten agents and their desks piled up in the bridge): at most
+  // three a plan, and each recruit's desk stands in a tidy row by its own line
+  {
+    const st = fresh(), before = snap(st), made = [];
+    const R = Object.assign({}, E, { canRecruit: true, recruit: role => { const id = 'rq' + (made.length + 1); if (!st.ensureWorkstation(id).ok) return null; made.push(id); return { id, name: role }; } });
+    const four = SB.planBuild(st.serialize(), { rooms: [{ name: 'Works', size: 'giant', lines: [{ line: 'build_test', staff: [{ step: 1, agent: 'new' }, { step: 2, agent: 'new' }] }, { line: 'research_line', staff: [{ step: 1, agent: 'new' }, { step: 2, agent: 'new' }] }] }] }, R);
+    A.ok(!four.ok && /^That plan recruits 4 new agents\. Recruit only when the Commander asks for new crew, and at most 3 in one plan/.test(four.error), 'four recruits are refused with what to do instead: ' + four.error);
+    const three = SB.planBuild(st.serialize(), { rooms: [{ name: 'Works', size: 'giant', lines: [{ line: 'build_test', staff: [{ step: 1, agent: 'new' }, { step: 2, agent: 'new' }] }, { line: 'research_line', staff: [{ step: 1, agent: 'new' }, { step: 2, agent: 'lead' }] }] }] }, R);
+    A.ok(three.ok && /It adds 3 crew members: ENGINEER, TESTER, RESEARCHER, with a desk in WORKS\./.test(three.plan.summary), 'three recruits, their desks in the hall of their lines: ' + (three.error || three.plan.summary.slice(-200)));
+    if (three.ok) {
+      const a = SB.apply(st, three.plan, R), works = st.rooms().find(x => x.name === 'WORKS');
+      A.ok(a.ok && a.recruited.length === 3, 'it builds and recruits the three (' + (a.error || '') + ')');
+      const desks = made.map(id => st.props().filter(p => p.agentId === id && /^desk/.test(p.t)));
+      A.ok(desks.every(d => d.length === 1 && st.roomAt(d[0].x, d[0].y) === works.id), 'each recruit owns one desk, in the hall');
+      const row = desks.map(d => d[0]).sort((p, q) => p.x - q.x);
+      A.ok(row.every((p, i) => !i || p.x - (row[i - 1].x + row[i - 1].w) >= 1), 'the desks stand in a row with a clear tile between them, never shoulder to shoulder');
+      A.eq(st.props().filter(p => /^desk/.test(p.t) && st.roomAt(p.x, p.y) === st.rooms().find(x => x.name === 'HOME').id).length, 2, 'the bridge keeps just the crew\'s own two desks: no recruit desk was piled into it');
+      A.ok(st.undo().ok); A.eq(snap(st).length > 0, true);
+    }
+    const line4 = SB.plan(fresh().serialize(), { shape: ['RESEARCHER', { together: ['WRITER', 'ANALYST'] }, 'REVIEWER'], steps: [1, 2, 3, 4].map(step => ({ step, agent: 'new' })) }, R);
+    A.ok(!line4.ok && /^That plan recruits 4 new agents/.test(line4.error), 'a single line with four recruits is refused too');
   }
   // refusals say why, and what does fit
   {
