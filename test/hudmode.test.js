@@ -214,7 +214,11 @@ A.eq([H.fmtAgo(10_000), H.fmtAgo(5 * 60_000), H.fmtAgo(2 * 3_600_000)], ['just n
   A.ok(has(js, "S.view = 'widget';", "classList.toggle('hud-view-widget', small)", "setView('activity')"), 'the HUD opens SMALL on the widget, and a click opens ACTIVITY');
   A.ok(has(js, 'World.lockBody(id)', 'if (small) worldStart(true); else { worldStop();', 'World.setFrameCap(capped ? WIDGET_FRAME_MS : 0)') && !js.includes('SPRITES.drawBody'),
     'the widget is the REAL station (the world renderer, its camera following the agent), never a staged scene; the world runs only while the widget shows it');
-  A.ok(css.includes('#screen-game.active > #stage-wrap {') && css.includes('.cam-cine { display: none !important; }'), 'the widget shows the station view and its camera frame, not the station\'s own controls');
+  A.ok(css.includes('#screen-game.active > #stage-wrap {') && css.includes('#stage-wrap .cam-hud { display: none !important; }'), 'the widget shows the world alone: no camera frame, no station controls');
+  A.ok(js.includes('World.setOverlays(!capped)'), 'the widget turns the in-world readouts off, and the station gets them back');
+  const world = read('frontend/app/world.js');
+  A.ok(world.includes('function setOverlays(on) { overlaysOn = on !== false; }') && world.includes('    if (overlaysOn) {\n    drawRunClocks(now);') && world.includes('setOverlays, setCinecamIdle'),
+    'World.setOverlays gates the in-world readout block (default on: the station frame is unchanged)');
   A.ok(has(read('src-tauri/src/hud_mode.rs'), 'width: Option<f64>', 'fn folded_width', 'keep_right'), 'the desktop window hugs the widget in width too, keeping its corner');
   A.ok(has(js, "el('section', 'project-home hud-activity')", "el('details', 'ph-card')"), 'ACTIVITY is the project activity feed markup (so it wears the project feed\'s glass)');
   A.ok(!css.includes('#chat-panel > h3 { display: none') && !css.includes('#chat-input {'), 'COMMS keeps its designed header and composer inside the HUD');

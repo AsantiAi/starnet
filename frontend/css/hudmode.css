@@ -152,3 +152,6 @@ html body.hud-mode.hud-view-widget #hud-widget .hud-wrow.on:only-child:not(:hove
   background: transparent; border-color: transparent; box-shadow: none;
 }
 html body.hud-mode.hud-view-widget #hud-widget .hud-wrow[data-state="ask"]:only-child { border-color: var(--gold, #e9c46a); }
+
+/* the widget is the world alone: no camera frame marks either (Andrew 09-30) */
+html body.hud-mode.hud-view-widget #stage-wrap .cam-hud { display: none !important; }

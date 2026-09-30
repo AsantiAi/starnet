@@ -578,7 +578,9 @@
   // still move at their true speed. The full station always gets its uncapped loop back.
   const WIDGET_FRAME_MS = 48;
   function worldStart(capped) {
-    try { if (typeof World !== 'undefined') { if (World.setFrameCap) World.setFrameCap(capped ? WIDGET_FRAME_MS : 0); if (World.start) World.start(); } } catch (_) {}
+    // the widget shows the world only: its rows already say who works, for how long and on what, so the
+    // station's in-world readouts (clocks, tickers, bubbles, plates, the work pulse) are off while it shows
+    try { if (typeof World !== 'undefined') { if (World.setFrameCap) World.setFrameCap(capped ? WIDGET_FRAME_MS : 0); if (World.setOverlays) World.setOverlays(!capped); if (World.start) World.start(); } } catch (_) {}
   }
   function worldStop() { try { if (typeof World !== 'undefined' && World.stop) World.stop(); } catch (_) {} }
 
