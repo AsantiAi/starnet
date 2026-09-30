@@ -173,3 +173,7 @@ html body.hud-mode.hud-view-widget #hud-widget .hud-wstep { grid-column: 3; grid
 html body.hud-mode.hud-view-widget #hud-widget .hud-wclock { grid-column: 4; grid-row: 1; font-size: 18px; }
 html body.hud-mode.hud-view-widget #hud-widget .hud-wrow[data-state="idle"] .hud-wclock { font-size: 13px; }
 html body.hud-mode.hud-view-widget #hud-widget .hud-wmore { border-top: 1px solid var(--gd-edge, var(--ph-dim)); border-radius: 0; padding: 5px 10px; }
+
+/* the HUD's own header controls exist only while the HUD is on: back in the full station the COMMS header is
+   exactly as designed (they are appended once, on first entry, and stay in the DOM) */
+body:not(.hud-mode) #chat-panel .hud-ctl { display: none !important; }

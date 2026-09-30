@@ -89,6 +89,7 @@ test/eval-parity-offline.test.js
 test/overnight-reliability-runner.test.js
 test/provider.openrouter.test.js
 test/provider.openai-compatible.test.js
+test/provider.ollama-native.test.js
 test/realtime-voice.test.js
 test/native-stt.test.js
 test/local-voice.test.js
@@ -257,6 +258,8 @@ test/skill-export.test.js
 test/skill-market.test.js
 test/skill-market-catalog.test.js
 test/skill-market-signing.test.js
+test/skill-market-tools.test.js
+test/skill-guard-remote-install.test.js
 test/abilities.skills-lane.test.js
 test/skills.library.test.js
 test/skills.gate.test.js
@@ -995,3 +998,4 @@ test/remote.core.test.js
 test/remote.relay.test.js
 test/remote-sessions.test.js
 test/remote-view.test.js
+test/remote-push.test.js

@@ -190,7 +190,7 @@
     await refreshStatus(); await refreshApprovals();
     if ((!S.target || !agentOf(S.target)) && agents().length) S.target = agents()[0].agentId;
     render(true);
-    refreshView(); ensurePortraits();
+    refreshView(); ensurePortraits(); refreshPush().then(() => render(true));
     await refreshThreads();
     render(true);
   }
@@ -389,6 +389,86 @@
     window.addEventListener('resize', () => { if (!v.hidden && S.view) { viewerFit(); paintViewer(); } });
   })();
 
+  /* ---------- notifications (Web Push, sent by the station itself) ---------- */
+  // what this phone can do: 'ok' | 'install' (iPhone Safari tab: only a Home Screen app may get pushes) | 'no'
+  const isStandalone = () => (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  function pushSupport() {
+    if ('serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window) return 'ok';
+    if (/iPhone|iPad/.test(navigator.userAgent) && !isStandalone()) return 'install';
+    return 'no';
+  }
+  S.push = { on: null, busy: false };   // on = the station holds a subscription for THIS phone (null until asked)
+  function keyBytes(b64) { const bin = b64uDecode(b64); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+  async function refreshPush() {
+    if (S.linkState !== 'open') return;
+    try { const r = await call('pushKey'); if (r.ok) { S.push.on = !!r.data.on; S.push.key = r.data.key; } } catch (_) {}
+  }
+  async function pushOn() {
+    if (S.push.busy) return;
+    S.push.busy = true; render();
+    try {
+      const perm = await Notification.requestPermission();   // must run inside the tap that asked for it
+      if (perm !== 'granted') { toast(perm === 'denied' ? 'Notifications are blocked for this app in your phone settings' : 'Notifications were not allowed', true); return; }
+      if (!S.push.key) await refreshPush();
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      // a subscription made for another station's key (paired elsewhere before) would be refused by the push service
+      const want = keyBytes(S.push.key), have = sub && sub.options && sub.options.applicationServerKey ? new Uint8Array(sub.options.applicationServerKey) : null;
+      if (sub && (!have || have.length !== want.length || have.some((x, i) => x !== want[i]))) { await sub.unsubscribe(); sub = null; }
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: want });
+      const j = sub.toJSON();
+      const r = await call('pushOn', { endpoint: j.endpoint, keys: j.keys });
+      if (!r.ok) { toast(r.error, true); return; }
+      S.push.on = true;
+      toast('Notifications on');
+      // the first one proves the whole path; if the push service refuses it, say so rather than leave a silent switch
+      call('pushTest').then((t) => { if (!t.ok) toast(t.error, true); }).catch(() => {});
+    } catch (e) { toast('Could not turn notifications on: ' + ((e && e.message) || e), true); }
+    finally { S.push.busy = false; render(); }
+  }
+  async function pushOff() {
+    S.push.busy = true; render();
+    try {
+      await call('pushOff');
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) await sub.unsubscribe();
+      S.push.on = false; toast('Notifications off');
+    } catch (e) { toast(e.message, true); }
+    finally { S.push.busy = false; render(); }
+  }
+  const nudgeKey = 'starnet.remote.pushNudge';
+  function nudgeDismissed() { try { return localStorage.getItem(nudgeKey) === '1'; } catch (_) { return false; } }
+  function pushCard(compact) {
+    const sup = pushSupport();
+    const box = el('div', 'glass pad push-card');
+    if (sup === 'install') {
+      box.appendChild(el('div', 'push-h', 'Get a tap when your crew needs you'));
+      box.appendChild(el('div', 'note-line', 'On iPhone, notifications work once StarNet is on your Home Screen: tap Share, then Add to Home Screen, and open it from there.'));
+    } else if (sup === 'no') {
+      box.appendChild(el('div', 'note-line', 'This browser cannot receive notifications.'));
+    } else {
+      box.appendChild(el('div', 'push-h', S.push.on ? 'Notifications are on' : 'Get a tap when your crew needs you'));
+      box.appendChild(el('div', 'note-line', S.push.on
+        ? 'Your station taps this phone when an agent needs your OK or has a question, and when a task you sent finishes.'
+        : 'When an agent needs your OK, has a question, or finishes a task you sent, your station taps this phone, even with the app closed.'));
+      const row = el('div', 'btns');
+      const b = el('button', 'btn' + (S.push.on ? ' no' : ' go'), S.push.busy ? '…' : S.push.on ? 'Turn off' : 'Turn on'); b.type = 'button';
+      b.disabled = S.push.busy || S.linkState !== 'open' || S.push.on === null;
+      b.onclick = () => (S.push.on ? pushOff() : pushOn());
+      row.appendChild(b);
+      if (compact && !S.push.on) { const x = el('button', 'btn quiet', 'Not now'); x.type = 'button'; x.onclick = () => { try { localStorage.setItem(nudgeKey, '1'); } catch (_) {} render(); }; row.appendChild(x); }
+      box.appendChild(row);
+    }
+    return box;
+  }
+  // a notification tap: '#needs' opens STATION, '#thread=<id>' opens that conversation
+  function openFromPush(url) {
+    const m = /^#thread=([A-Za-z0-9_-]{1,64})$/.exec(String(url || ''));
+    if (m) { const t = S.threads.find(x => x.streamId === m[1]); openThread(m[1], (t && t.agentId) || S.target); return; }
+    if (url === '#needs') { closeViewer(); setTab('station'); }
+  }
+
   /* ---------- rendering ---------- */
   const viewKey = () => (S.thread ? 'thread' : S.file ? 'file' : S.page ? S.page : S.tab);
   function setTab(t) {
@@ -536,6 +616,7 @@
     staleNote(v);
     paintHero();
     v.appendChild(hero.root);
+    if (S.push.on === false && pushSupport() !== 'no' && !nudgeDismissed()) v.appendChild(pushCard(true));
     if (S.approvals.length) {
       const s = section('Needs you · ' + S.approvals.length, true);
       for (const a of S.approvals) s.appendChild(askCard(a));
@@ -686,6 +767,7 @@
   }
 
   function renderSettings(v) {
+    const ns = section('Notifications'); ns.appendChild(pushCard(false)); v.appendChild(ns);
     if (S.routines.length) {
       const rs = section('Routines'), l = el('div', 'list');
       for (const j of S.routines) {
@@ -799,6 +881,9 @@
     }
     if (!S.rec) return showSetup(false);
     showDeck(); paintLamp(); render(); connect();
+    const openHash = /^#(needs|thread=[A-Za-z0-9_-]{1,64})$/.test(location.hash) ? location.hash : '';
+    if (openHash) { history.replaceState(null, '', location.pathname); setTimeout(() => openFromPush(openHash), 2500); }
+    if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open') openFromPush(e.data.url); });
     setInterval(ping, 20000);
     setInterval(() => { if (looking()) refreshStatus().then(() => { render(true); ensurePortraits(); }); paintLamp(); }, 10000);
     // the station picture: asked for only while it is on screen, which is also what keeps the desk drawing it

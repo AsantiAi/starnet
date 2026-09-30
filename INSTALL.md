@@ -70,10 +70,12 @@ To uninstall, quit StarNet and drag it from **Applications** to the Trash.
 ## Run free with a local model
 
 StarNet does not require an API key or a StarNet account. Install [Ollama](https://ollama.com),
-pull a model (`ollama pull llama3.1`), and choose **OLLAMA** as the provider — on the first-run
+pull a model (`ollama pull qwen3:8b`), and choose **OLLAMA** as the provider — on the first-run
 brain screen, or later under **SETTINGS → PROVIDERS**. StarNet reaches Ollama at `127.0.0.1:11434`
-and shows it as ready only after it has listed your local models. Local models are smaller than
-cloud models: expect slower, rougher results on long tasks.
+and shows it as ready only after it has listed your local models. Choose a model that supports
+tools (`ollama show <model>` lists them): agents act through tool calls. Local models are smaller than
+cloud models: expect slower, rougher results on long tasks, and a task needs a large context window —
+an 8B model takes about 10 GB of graphics memory while it works.
 
 ## Updates
 

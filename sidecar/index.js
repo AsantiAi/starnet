@@ -713,6 +713,10 @@ const BUDGET_CAPS = {
   perDay: num(ENV('BUDGET_PER_DAY'), BUDGET_SHIPPED.perDay),         // $25/day soft rail: run ends 'budget'/'day', one-click RESUME in the Budget panel
   global: num(ENV('BUDGET_GLOBAL'), BUDGET_SHIPPED.global)
 };
+// Issue #53: what a StarNet-credit run reserves (= its per-run ceiling) when no positive per-run cap is in force.
+// budgetcaps.DEFAULT_MANAGED_PER_RUN_USD explains the number; SKYNET_BUDGET_MANAGED_PER_RUN retunes it and 0
+// restores the old "the whole wallet is the ceiling" behaviour. A saved/env per-run cap > 0 always wins.
+const MANAGED_PER_RUN_DEFAULT = num(ENV('BUDGET_MANAGED_PER_RUN'), budgetCaps.DEFAULT_MANAGED_PER_RUN_USD);
 // Optional multi-agent fan-out ceiling. 0 = unlimited (the product default). See concurrency.js.
 const MAX_CONCURRENT_AGENTS = resolveKnob('MAX_CONCURRENT_AGENTS', 'maxConcurrentAgents', 0);   // P1-9: env > saved > default
 // Optional per-worker USD ceiling for delegated sub-runs. 0 = ungoverned.
@@ -9917,8 +9921,50 @@ const remoteDevices = require('./remote/devices.js').makeDevices({
 });
 const remoteSessions = require('./remote/session.js').makeSessions({ devices: remoteDevices, crypto: remoteCrypto, now: () => Date.now(), newId: () => crypto.randomUUID() });
 // hoisted on purpose: the approvals registry (defined far above) announces changes through this
-function remoteBroadcast(evt) { try { return remoteSessions.broadcast(evt); } catch (_) { return 0; } }
+function remoteBroadcast(evt) { try { remoteNotify(evt); } catch (e) { failNote('remote.index.notify', e); } try { return remoteSessions.broadcast(evt); } catch (_) { return 0; } }
+/* WHEN THE STATION TAPS A PHONE (only phones that turned notifications on; the push is sealed to each phone):
+     · an approval or question opened by a phone's own task: at once
+     · one opened at the desk or by a channel: only if nobody answers it within REMOTE_ASK_GRACE_MS (a Commander
+       sitting at the desk answers it there and the phone never buzzes)
+     · a task a phone sent finished (or failed): with the first line of the reply */
+const REMOTE_ASK_GRACE_MS = 20000;
+function remotePushSend(msg) {
+  if (!remoteDevices.enabled() || !remotePush.subscribed().length) return;
+  remotePush.send(null, msg).catch((e) => failNote('remote.index.push', e));
+}
+function remoteAgentName(id) { const a = agentRoster.get(id); return (a && a.name) || id || 'Your agent'; }
+function remoteAskMessage(row) {
+  const who = remoteAgentName(row.agentId);
+  if (row.kind === 'question') {
+    let q = ''; try { q = String((JSON.parse(row.argsSummary || '{}') || {}).question || ''); } catch (_) { q = ''; }
+    return { title: who + ' has a question', body: q.slice(0, 200) || 'Tap to answer', tag: 'ask:' + row.promptId, url: '#needs' };
+  }
+  return { title: who + ' needs your OK', body: 'wants to use ' + row.tool, tag: 'ask:' + row.promptId, url: '#needs' };
+}
+function remoteNotify(evt) {
+  if (!evt || !remotePush.subscribed().length) return;
+  if (evt.type === 'approval.opened' && evt.approval) {
+    const row = evt.approval;
+    if (row.surface === 'remote') return remotePushSend(remoteAskMessage(row));
+    const t = setTimeout(() => {
+      if (remoteApprovals.list().some(a => a.runId === row.runId && a.promptId === row.promptId)) remotePushSend(remoteAskMessage(row));
+    }, REMOTE_ASK_GRACE_MS);
+    if (t.unref) t.unref();
+    return;
+  }
+  if (evt.type === 'run.ended' && evt.streamId && evt.reason !== 'stopped') {
+    let last = '';
+    try { const turns = transcriptStore.history(evt.streamId, { limit: 4 }) || []; for (let i = turns.length - 1; i >= 0; i--) if (turns[i].role === 'assistant' && typeof turns[i].content === 'string' && turns[i].content.trim()) { last = turns[i].content; break; } }
+    catch (e) { failNote('remote.index.pushReply', e); }
+    const line = String(last).replace(/[*#`>_]+/g, '').replace(/\s+/g, ' ').trim();
+    remotePushSend({ title: remoteAgentName(evt.agentId) + (evt.error ? ' hit a problem' : ' finished'),
+      body: (evt.error ? String(evt.error) : line || 'Tap to read the reply').slice(0, 200), tag: 'run:' + evt.runId, url: '#thread=' + evt.streamId });
+  }
+}
 const remoteView = require('./remote/view.js').makeRemoteView({ now: () => Date.now() });
+// Web Push sent by this station itself (sidecar/remote/push.js): its own key, the phones' subscriptions
+const remotePush = require('./remote/push.js').makePush({ fs, path, file: path.join(WORKSPACES, '.secrets', 'remote-push.json'), now: () => Date.now(),
+  fetch: (url, o) => fetch(url, Object.assign({}, o, { signal: AbortSignal.timeout(15000) })) });
 const remotePortraits = require('./remote/portraits.js').makePortraits({ fs, path, frontend: FRONTEND });
 const remoteHost = require('./remote/host.js').makeRemoteHost({
   now: () => Date.now(), newId: () => crypto.randomUUID(), broadcast: remoteBroadcast,
@@ -9988,7 +10034,7 @@ const remoteHost = require('./remote/host.js').makeRemoteHost({
     return { ok: true, enabled: !!enabled };
   }
 });
-const remoteGateway = require('./remote/gateway.js').makeGateway({ host: remoteHost, approvals: remoteApprovals, now: () => Date.now() });
+const remoteGateway = require('./remote/gateway.js').makeGateway({ host: remoteHost, approvals: remoteApprovals, push: remotePush, now: () => Date.now() });
 const remoteLan = require('./remote/lan.js').makeLanListener({
   sessions: remoteSessions, devices: remoteDevices, gateway: remoteGateway, crypto: remoteCrypto, now: () => Date.now(),
   onPaired: () => { if (remoteRelay) remoteRelay.syncTokens(); },
@@ -10116,6 +10162,7 @@ async function handleRemoteRevoke(req, res) {
   const r = remoteDevices.revoke(id);
   remoteSessions.endDevice(id);
   if (remoteRelay) remoteRelay.kickDevice(id);
+  if (r.ok) { const f = remotePush.forget(id); if (!f.ok) failNote('remote.index.pushForget', new Error(f.error)); }   // a removed phone gets no more notifications
   if (!r.ok) return respondJson(res, r.error === 'no such device' ? 404 : 500, { ok: false, error: r.error });
   respondJson(res, 200, remoteSnapshot());
 }
@@ -11712,6 +11759,9 @@ function handleBudgetStatus(req, res) {
     saved: Object.assign({}, budgetOverrides),        // only the keys the user explicitly saved
     envDefaults: { perRun: BUDGET_CAPS.perRun, perAgent: BUDGET_CAPS.perAgent, perDay: BUDGET_CAPS.perDay, global: BUDGET_CAPS.global },
     perRun: effectiveCaps.perRun,                     // back-compat: pre-existing flat field kept
+    // Issue #53: the default a StarNet-credit run reserves (and stops at) while PER RUN is 0. Null on a station with
+    // no managed credits wired — nothing to govern, so the Budget panel says nothing about it.
+    managedRunDefaultUsd: (credits.configured() && MANAGED_PER_RUN_DEFAULT > 0) ? MANAGED_PER_RUN_DEFAULT : null,
     spentToday: known ? ledger.usdForDay(now) : null,
     lifetime: known ? ledger.totalUsd() : null,
     totalUsd: known ? ledger.totalUsd() : null, runs: known ? ledger.count() : null
@@ -11763,7 +11813,8 @@ async function handleCredits(req, res) {
     balanceStatus: snap.authStatus === 'valid' && typeof snap.observedBalanceUsd === 'number'
       ? (snap.observedBalanceUsd > 0 ? 'funded' : 'zero') : 'unavailable',
     purchaseUrl: snap.purchaseUrl,           // external link the STORE opens; this app renders no payment form
-    perRun: effectiveCaps.perRun,            // the reservation size a run will hold
+    perRun: effectiveCaps.perRun,            // the user's per-run cap (0 = none chosen); > 0 is the reservation a run holds
+    managedRunDefaultUsd: MANAGED_PER_RUN_DEFAULT > 0 ? MANAGED_PER_RUN_DEFAULT : null,   // #53: reserved (clamped to the balance) while perRun is 0
     // The plan, exactly as the backend reports it: {tier, status, grantUsd, currentPeriodEnd, graceUntil} or
     // null. NULL IS THE POINT — an operator-provisioned station or a backend that predates this field has no
     // subscription, and the STORE must then say nothing about one rather than invent a tier.
@@ -17163,14 +17214,15 @@ async function runOnceCore(o) {
   const managedRun = credits.configured() && !providerUnmetered && (providerId === 'starnet' || !!CREDITS_URL);
   if (managedRun) {
     await credits.refresh().catch(swallow('credits.refresh'));   // adapter owns the active bearer+account identity
-    // A managed reservation needs a FINITE cap to hold. With no opt-in cap the wallet itself is the run's
-    // only ceiling: reserve the full available balance — the least-limiting finite number there is — and
-    // settle refunds whatever the run didn't use. The reservation is also the loop's maxCostUsd (below),
-    // so a run can never overshoot what it reserved (that would fail the settle as over-cap).
+    // A managed reservation needs a FINITE cap to hold, and the reservation is also the loop's maxCostUsd
+    // (below). With no opt-in cap this used to reserve the WHOLE wallet, so one prompt could spend all of it
+    // (issue #53). Now it reserves the managed per-run default, clamped to the balance (a wallet smaller than
+    // the default still runs); settle refunds whatever the run didn't use. A user's positive per-run cap was
+    // already resolved into runCapUsd above and is honoured verbatim (budgetCaps.managedRunCapUsd).
     if (!(runCapUsd > 0 && isFinite(runCapUsd))) {
       const snap = credits.snapshot();
       const avail = Number(snap && snap.balanceUsd);
-      runCapUsd = (isFinite(avail) && avail > 0) ? avail : 0;
+      runCapUsd = budgetCaps.managedRunCapUsd(0, avail, MANAGED_PER_RUN_DEFAULT);
       if (!(runCapUsd > 0)) {
         // fail closed — never spend against an unknown/empty managed balance (same surface as a beginRun refusal).
         const exhausted = isFinite(avail);   // a known $0 balance vs. a balance the service never reported
@@ -18382,7 +18434,10 @@ async function runOnceCore(o) {
   // (supportsTools returns null when the catalog is cold, so this never false-refuses a real model).
   if (isTask && provider.supportsTools(model) === false) {
     emit('agent.run.start', { agentId, runId, trigger: trigger, model, ...runStartExtra });
-    emit('agent.run.error', { agentId, runId, transient: false, message: 'The model "' + model + '" does not support tool calls, so it can\'t run tasks. Pick a tool-capable model (e.g. anthropic/claude-sonnet-4.6 or openai/gpt-4o) on the connect screen.' });
+    emit('agent.run.error', { agentId, runId, transient: false, message: 'The model "' + model + '" does not support tool calls, so it can\'t run tasks. '
+      // A local station's alternative is another LOCAL model, not a cloud one it has no key for.
+      + (providerId === 'ollama' ? 'Pick an installed model that lists "tools" (run `ollama show <model>` to check), or pull one, e.g. `ollama pull qwen3:8b`.'
+        : 'Pick a tool-capable model (e.g. anthropic/claude-sonnet-4.6 or openai/gpt-4o) on the connect screen.') });
     emit('agent.run.end', { agentId, runId, reason: 'error', turns: 0, usd: 0 });
     return;
   }

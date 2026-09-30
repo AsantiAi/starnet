@@ -33,3 +33,9 @@ Fresh private intake read on 2026-09-16 reports provider_stream/timeout and dura
 ## Verdict
 
 Open P2 under the engineering rule for uncorrelated reports. Do not attribute a missing request to model size or close this as the existing verbosity fix. Obtain the sanitized capture, startup/provider configuration and exact request payload size; reproduce with the affected Ollama/runtime before assigning a cause or source fix.
+
+## Evidence (2026-09-30, agent/ollama-fixes)
+
+Measured on a real Ollama 0.34.4: the native /api/chat stream sends no bytes, not even response headers, until the first token (27.5 s here = 17.7 s model load + 9.0 s reading a 20,993-token prompt on the GPU), and Ollama's access log writes a request line only when it completes. A POST that is still loading or reading the prompt is therefore invisible to a reporter watching the server log. 605 s matches the loop's stall rule exactly: two consecutive 300 s silent attempts end the run as provider_stalled. After a client abort Ollama stops the work within ~3 s, so the retry repeats the work rather than queueing behind it.
+
+d476eaabc: a native-wire connect timeout now reads /api/ps and states where the model runs (not loaded yet / entirely on the CPU / N% on the GPU / fully on the GPU at its window) and the prompt size, instead of only "the provider may be down". Live-proven against the real server. The affected customer machine and capture remain unavailable, so this stays open until a reporter confirms.

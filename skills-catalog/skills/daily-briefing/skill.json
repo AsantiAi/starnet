@@ -1,0 +1,10 @@
+{
+  "slug": "daily-briefing",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Productivity",
+  "tags": ["morning", "briefing", "calendar", "email", "weather", "routine"],
+  "requires": ["dish", "cabinet"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}
