@@ -2720,6 +2720,7 @@ const Build = (() => {
       },
       machineDiagram: id => machineDiagramSVG(id),
       machineStill: type => machineStill(type),          // a part's own floor art, for the panel's line diagram
+      bayLive: id => (opts.world && opts.world.bayLive) ? opts.world.bayLive(id) : null,   // a bay's live lamp state (WORKING / WAITING …)
       preview: () => sendTestBoxes(null),               // the TEST view's WATCH IT: the free walkthrough on the floor
       splitModeInfo: id => splitModeInfo(id),            // { mode: 'copy'|'turns', toCopy, toTurns } — the SPLITTER switch
       setSplitMode: (id, mode) => setSplitMode(id, mode), // swaps the JOINER/MERGER where the branches meet (one undo)

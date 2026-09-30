@@ -67,6 +67,14 @@ A.ok(/The review loop used all ' \+ n \+ ' tries without an approval, so the las
   'a loop that ran out of tries is said in words over the result, and lifted out of the result box');
 A.ok(/text = loopNotes\(/.test(ex), '…and never becomes part of a kept example');
 A.ok(/\(pass > 1 \? ' · pass ' \+ pass : ''\)/.test(res), 'a looping line\'s repeated steps say which pass they were');
+/* ---------- where the job is now ---------- */
+const live = at(panel, '  let liveTimer = 0, liveSeen = false;', '  const LOOP_NOTE = ');
+const world = read('frontend/app/world.js');
+A.ok(/const w = at\('working'\);/.test(live) && /'Now: step ' \+ \(w\.i \+ 1\) \+ ' of ' \+ order\.length/.test(live) && /is working/.test(live), 'while a job rides, the send box names the step working it now — "Now: step 2 of 3 · REVIEWER · NOVA is working"');
+A.ok(/bayLive: id => \{ const w = lineWatch\(\);/.test(world) && /bayLive: id => \(opts\.world && opts\.world\.bayLive\) \? opts\.world\.bayLive\(id\) : null/.test(build), '…read from the floor\'s own bay lamps (LineWatch: WORKING only once the sidecar confirmed the run)');
+A.ok(/'Sending the job into the line…'/.test(live) && /'Handing the job on to the next step…'/.test(live), '…and between steps it says so — it never guesses a step');
+A.ok(/function markWorking\(id\)/.test(live) && /n\.classList\.toggle\('working', !!id && n\.dataset\.node === id\)/.test(live) && /markWorking\(null\); return;/.test(live), 'the diagram\'s tile of the working step wears the working lamp, cleared when the job is back');
+A.ok(/\.wf-node\.working \.dot \{ background: #ffb23e;/.test(css) && !/\.wf-node\.working \{[^}]*var\(--gold\)/.test(css), '…the floor lamp\'s working amber on the tile\'s own lamp — never the selection\'s gold');
 const route = at(sidecar, 'async function handleRoutingFixSuggest(req, res) {', 'async function stepTestRunDock(h) {');
 A.ok(/\{ m: 'POST', exact: '\/api\/routing\/fix-suggest', h: handleRoutingFixSuggest \}/.test(sidecar), 'POST /api/routing/fix-suggest is a route');
 A.ok(route.indexOf('budget.check(null, \'agent\', 0, Date.now(), null)') > 0 && route.indexOf('budget.check(') < route.indexOf('provider.stream('), '…the spending cap is read BEFORE the model call');

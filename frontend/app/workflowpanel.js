@@ -885,7 +885,8 @@ const WorkflowPanel = (() => {
       + '<div class="wf-row"><button type="button" class="bb sm refit-primary" id="wf-send"' + ((mine && mine.pending) || !c ? ' disabled' : '') + '>'
       + (mine && mine.pending ? (mine.phase === 'post' ? 'POSTING LINE…' : 'THE JOB IS RIDING THE LINE…') : '▶ SEND IT DOWN THE LINE') + '</button>'
       + (mine && mine.pending && mine.phase === 'run' && H.stopSample ? '<button type="button" class="bb sm" id="wf-send-stop"' + (mine.stopping ? ' disabled' : '') + ' data-tip="stop this job: the running step is cut off and nothing more runs — what already ran is counted">' + (mine.stopping ? 'STOPPING…' : '■ STOP') + '</button>' : '')
-      + '</div><p class="wf-help dim">The whole line works on it for real — real agents, real cost — and the result lands in the OUTBOX.</p>'
+      + '</div>' + (mine && mine.pending && mine.phase === 'run' ? '<p class="wf-help wf-live" id="wf-send-live" role="status">' + esc(liveText(f)) + '</p>' : '')
+      + '<p class="wf-help dim">The whole line works on it for real — real agents, real cost — and the result lands in the OUTBOX.</p>'
       + (mine && mine.view ? jobResultHTML(mine, f) : '') + '</section>';
     body.innerHTML = sendHTML + '<section class="wf-sec"><h3>Or start it automatically</h3>'
       + '<p class="wf-help">Any of these runs the <b>whole line</b> by itself. A direct COMMS message only runs the agent you message.</p>'
@@ -922,6 +923,7 @@ const WorkflowPanel = (() => {
       + limField('lb-day', 'maxUsdPerDay', '$ per day, this line', 'off', '0.50')
       + '<div class="wf-help lb-note" id="lb-note">' + esc(lbDefaultNote) + '</div></details>';
     wireJob();
+    if ($('#wf-send-live') && !liveTimer) liveTimer = setInterval(tickLive, 1000);
     // the job to send (it is also this line's test job)
     const job = $('#wf-send-in');
     job.addEventListener('input', () => { S.testJob[S.lineKey] = job.value; saveTests(); });
@@ -929,7 +931,7 @@ const WorkflowPanel = (() => {
       const cc = comp(); if (!cc) return;
       const t = job.value.trim();
       if (!t) { H.sfx('bad'); H.flashTip('write the job first: what should the line work on?', false); job.focus(); return; }
-      S.testJob[S.lineKey] = job.value; saveTests(); S.prevJob = null;   // a new job: nothing to compare it with
+      S.testJob[S.lineKey] = job.value; saveTests(); S.prevJob = null; liveSeen = false;   // a new job: nothing to compare it with, nothing seen working yet
       H.runSample(cc, { text: t, onUpdate: () => paint(false) });
     };
     const sendStop = $('#wf-send-stop'); if (sendStop) sendStop.onclick = () => {
@@ -1592,6 +1594,30 @@ const WorkflowPanel = (() => {
     });
     return { notes, rest };
   }
+  /* WHERE THE JOB IS NOW (2026-09-30 — ease of use): while a sent job rides the line, the send box names the step working it —
+     "Now: step 2 of 3 · REVIEWER · NOVA is working · 12s" — read from the floor's own bay lamps (LineWatch: WORKING only once the
+     sidecar confirmed the run at that bay), re-read every second while the job is out. Between steps it says the job is being
+     handed on; it never guesses a step. */
+  let liveTimer = 0, liveSeen = false;   // liveSeen: a step of THIS job has been seen working (else it is still going in)
+  function liveNow(f) {
+    const order = (f && f.order) || [];
+    if (!H.bayLive || !order.length) return { text: 'The job is riding the line…', id: null };
+    const at = st => { for (let i = 0; i < order.length; i++) { const s = H.bayLive(order[i]); if (s && s.state === st) return { i, s, id: order[i], p: prop(order[i]) || {} }; } return null; };
+    const w = at('working');
+    if (w) { liveSeen = true; return { id: w.id, text: 'Now: step ' + (w.i + 1) + ' of ' + order.length + ' · ' + (w.p.role || 'STEP') + ' · ' + String(nameOf(w.s.agentId || w.p.agentId)).toUpperCase() + ' is working' + (w.s.forMs != null ? ' · ' + Math.round(w.s.forMs / 1000) + 's' : '') }; }
+    const q = at('waiting');
+    if (q) return { id: null, text: 'Next: step ' + (q.i + 1) + ' of ' + order.length + ' · ' + (q.p.role || 'STEP') + ' · waiting for ' + String(nameOf(q.p.agentId)).toUpperCase() };
+    return { id: null, text: liveSeen ? 'Handing the job on to the next step…' : 'Sending the job into the line…' };
+  }
+  const liveText = f => liveNow(f).text;
+  // the diagram's tile of the step working now wears the working edge (only the lamp's WORKING — never a guess)
+  function markWorking(id) { if (el) el.querySelectorAll('#wf-strip .wf-node').forEach(n => n.classList.toggle('working', !!id && n.dataset.node === id)); }
+  function tickLive() {
+    const n = el && el.querySelector('#wf-send-live'), sr = H.sampleState ? H.sampleState() : null;
+    if (!n || !sr || !sr.pending) { clearInterval(liveTimer); liveTimer = 0; markWorking(null); return; }
+    const now = liveNow(flow());
+    n.textContent = now.text; markWorking(now.id);
+  }
   function jobResultHTML(mine, f) {
     const v = mine && mine.view; if (!v) return '';
     if (v.stopped || !v.ok) return '<div class="wf-sample-res">' + H.sampleHTML(v) + '</div>';
@@ -1709,7 +1735,7 @@ const WorkflowPanel = (() => {
     $$('[data-fix-use]').forEach(b => { b.onclick = () => useFix(+b.dataset.fixUse); });
     const kx = $('#wf-keep-ex'); if (kx) kx.onclick = () => keepExample(mine);
     const again = $('#wf-nr-again');
-    if (again) again.onclick = () => { const cc = comp(); if (!cc) return; H.sfx('click'); S.fixDraft = ''; S.prevJob = { text: mine.text, output: mine.output, stamp: mine.stamp }; H.runSample(cc, { text: mine.text || (S.testJob[S.lineKey] || '').trim() || undefined, onUpdate: () => paint(false) }); };
+    if (again) again.onclick = () => { const cc = comp(); if (!cc) return; H.sfx('click'); S.fixDraft = ''; liveSeen = false; S.prevJob = { text: mine.text, output: mine.output, stamp: mine.stamp }; H.runSample(cc, { text: mine.text || (S.testJob[S.lineKey] || '').trim() || undefined, onUpdate: () => paint(false) }); };
   }
   function testModeNow() {
     const m = S.testMode || (S.seam === true ? 'step' : 'real');
