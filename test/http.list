@@ -156,6 +156,7 @@ test/effective-toolsets.availability.test.js
 test/payload.budget.test.js
 test/prompt-on-demand.e2e.test.js
 test/byok-linked-credit.e2e.test.js
+test/managed-run-cap.e2e.test.js
 test/workflow-project.e2e.test.js
 test/workflow-project-multibay.e2e.test.js
 test/routing.linestats.e2e.test.js
