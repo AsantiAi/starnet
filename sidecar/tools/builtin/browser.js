@@ -954,6 +954,26 @@
         }
       } catch (e) { if (!(e && e.status === 1)) failNote('browser.launch-retry.orphans', e); }   // pkill exits 1 when nothing matched
     }
+    /* NEVER START ON A PROFILE ANOTHER CHROMIUM STILL HOLDS. Measured 2026-09-30, Andrew's "go to github so i can
+       sign in": browser.login relaunches hidden → visible on the SAME profile; the visible one started while the
+       hidden one's processes were still letting go, handed off to them and exited — four times — and GitHub never
+       opened. On Windows a running Chromium holds `lockfile` in its user-data-dir; it can be removed only once every
+       process on the profile is gone. Wait for that (cheap when already free), and if it is still held after ~8 s,
+       end whatever runs on this profile (ours by construction) and go. POSIX uses a SingletonLock symlink that a
+       dead owner does not pin, so this is Windows-only. */
+    async function waitProfileFree(dir) {
+      if (process.platform !== 'win32' || !dir) return true;
+      const lock = P.join(dir, 'lockfile');
+      for (let waited = 0; waited <= 8000; waited += 200) {
+        try { if (!FS.existsSync(lock)) return true; FS.rmSync(lock, { force: true }); return true; }
+        catch (e) { if (!/^(EBUSY|EPERM|EACCES)$/.test(String((e && e.code) || ''))) { failNote('browser.profile-free', e); return true; } }
+        await sleep(200);
+      }
+      failNote('browser.profile-free', new Error('profile still held after 8 s: ending its processes'));
+      killProfileOrphans(dir);
+      await sleep(600);
+      return false;
+    }
     function cleanStart(dir) {
       const d = P.join(dir, 'Default');
       for (const name of ['Sessions', 'Current Session', 'Current Tabs', 'Last Session', 'Last Tabs']) {
@@ -1023,6 +1043,7 @@
         if (deps.reclaimPid) killTree(deps.reclaimPid); else killProfileOrphans(profileDir);
         await sleep(600);
       }
+      await waitProfileFree(profileDir);
       cleanStart(profileDir);
       // Allocated here, not by Chromium, so the launch carries no automation flag. Chromium still
       // writes the bound port into this profile's DevToolsActivePort, which stays the readiness proof.
@@ -1277,6 +1298,11 @@
               stationIdentity = await deriveStationIdentity(S);
               await installStationIdentity(S);
               await installStationMetrics(S);
+              /* …and LEAVE that page. The pinned network proxy refuses loopback, so the probe tab sat on "Access to
+                 127.0.0.1 was denied — HTTP ERROR 403" (the probe only needs the trustworthy ORIGIN, not the body).
+                 While browsers were invisible nobody saw it; the station browser SHOWED it to the Commander as the first
+                 thing on screen, and an agent reading the fresh page reported a Chrome error. Start on a blank page. */
+              try { await cdp.send('Page.navigate', { url: 'about:blank' }, S, navTimeoutMs); } catch (e) { failNote('browser.probe-leave', e); }
             }
             // Identify the top frame so a sub-frame's document response can never be mistaken for the
             // page's own status (an ad iframe 404 must not read as "the page 404'd").
@@ -2299,7 +2325,7 @@
         exited = await exitedWithin(2000);
       }
       try { cdp && cdp.close(); } catch (_) {}
-      try { if (owned && !exited) owned.kill('SIGKILL'); } catch (_) {}
+      if (owned && !exited) { if (process.platform === 'win32' && owned.pid && spawn === CP.spawn) killTree(owned.pid); else { try { owned.kill('SIGKILL'); } catch (e) { failNote('browser.close.kill', e); } } }
       cdp = null; proc = null;
       if (owned && waitForClose && !exited) {
         exited = await exitedWithin(3000);
@@ -2832,7 +2858,7 @@
       if (!attended || typeof attended.prompt !== 'function') {
         throw new Error('browser.login needs a watched COMMS session — an unattended run cannot open a login window for the Commander');
       }
-      if (headlessRequested(deps.env) || deps.headless === true) {
+      if (deps.stationLogin !== true && (headlessRequested(deps.env) || deps.headless === true)) {
         throw new Error('browser.login unavailable: this host pins the browser headless (STARNET_BROWSER_HEADLESS)');
       }
       const u = assertSafeUrl(url);
@@ -2846,6 +2872,19 @@
       // hard stop (logging into a throwaway profile would silently lose the session at run end — dishonest);
       // a host with NO persistent profile still gets a within-run login on its ephemeral profile.
       await waitForProfile(signal);
+      /* THE STATION BROWSER (sidecar/browser-view.js) is ALREADY the browser the Commander sees and uses — in the
+         station's BROWSER window, or as its own Chrome window — on the durable profile. So a sign-in there needs no
+         relaunch at all: open the page right here and show it. Measured 2026-09-30 (Andrew: "go to github so i can
+         sign in … FAILS IMMEDIATELY"): the relaunch below closes and restarts Chromium twice on one profile, and on a
+         busy machine the restart raced the old process's shutdown (>8 s) and never opened GitHub. */
+      if (deps.stationLogin === true) {
+        const at = await navigate(u.href);
+        if (typeof deps.onLoginOpen === 'function') { try { await deps.onLoginOpen({ host, url: at }); } catch (e) { failNote('browser.login.show', e); } }
+        let doneHere = false;
+        try { doneHere = approved(await attended.prompt({ tool: 'browser.login.done', scope: 'execute', argsSummary: host })); }
+        finally { if (typeof deps.onLoginClose === 'function') { try { deps.onLoginClose({ host }); } catch (e) { failNote('browser.login.close', e); } } }
+        return { status: doneHere ? 'done' : 'unconfirmed', host, url: at || u.href, station: true };
+      }
       // Headed + real input: forceHeadless is HOST authority for model-driven navigation; this relaunch is
       // human-consented (the prompt above), so it may override it. syntheticInputOnly:false drops the popup
       // block and input shims — SSO login flows need real popups and the human's real pointer.
@@ -3251,7 +3290,7 @@
           const r = await session.login(a.url, ctx && ctx.signal);
           if (r.status === 'declined') return { content: 'Commander declined to open a login window for ' + r.host + '. Continue without authentication and say what is blocked.', summary: 'login declined' };
           if (r.status === 'unconfirmed') return { content: 'Login window for ' + r.host + ' closed without a Done confirmation. Any cookies the site set were saved to the station profile; verify with browser.navigate whether you are signed in before relying on it.', summary: 'login unconfirmed' };
-          return { content: 'Commander finished logging in at ' + r.host + '. The browser is back in headless research mode. Done is a human confirmation, not authentication proof: use browser.navigate to verify the account and access before continuing.', summary: 'login done' };
+          return { content: 'Commander finished logging in at ' + r.host + (r.station ? '. You are on the same page in the same shared browser, signed in on its saved profile.' : '. The browser is back in headless research mode.') + ' Done is a human confirmation, not authentication proof: use browser.navigate to verify the account and access before continuing.', summary: 'login done' };
         }
       },
       /* STEP-IN (2026-09-29): the agent hands its OWN live browser to the Commander and waits. Scope 'read' is the

@@ -4287,6 +4287,10 @@ const browserViews = makeBrowserViews({
     // STARNET_BROWSER_HEADLESS=1 still pins it headless (CI, gates, soak rigs). It never attaches to another Chrome.
     // built-in: headless — the BROWSER window IS the browser. window: a real Chrome window on the desktop.
     allowVisible: mode === 'window', forceHeadless: mode !== 'window', preferVisible: mode === 'window', noAttach: true, syntheticInputOnly: true,
+    // browser.login opens the page IN this browser (no relaunch); a Chrome window is raised for the Commander
+    stationLogin: true,
+    onLoginOpen: v => { browserViews.signInOpen(v); return browserViews.front().catch(e => failNote('browser-view.login-front', e)); },
+    onLoginClose: () => browserViews.signInClose(),
     cdpPort: 0,
     profileDir: path.join(os.tmpdir(), 'starnet-browser-' + process.pid + '-' + STATION_BROWSER_ID),
     cleanupProfile: true,

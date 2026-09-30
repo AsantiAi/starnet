@@ -190,7 +190,7 @@ function makeBrowserViews(deps) {
   }
   function releaseRun(runId) {
     if (!station || !station.driver || station.driver.runId !== String(runId || '')) return false;
-    station.driver = null;
+    station.driver = null; station.signIn = null;
     if (attended) attended.prompt = undefined;
     if (station.switchPending) { closeStation().catch(swallow('view.mode-switch-close')); return true; }   // the setting changed mid-run
     touchStation();
@@ -208,7 +208,13 @@ function makeBrowserViews(deps) {
   }
 
   // ---- the Commander's hands (only while no run is driving) ----
+  /* A SIGN-IN hands the wheel to the Commander. browser.login (station path) opens the page and then the run waits
+     for their Done — the agent does nothing meanwhile — so their clicks and keys must reach the page (they are the
+     one typing the password). Opened by the session's onLoginOpen, closed by onLoginClose or when the run lets go. */
+  function signInOpen(info) { if (station && station.driver) station.signIn = { host: String((info && info.host) || ''), runId: station.driver.runId }; return !!(station && station.signIn); }
+  function signInClose() { if (station) station.signIn = null; }
   function driving() {
+    if (station && station.signIn) return null;   // signing in: the page is the Commander's
     const d = station && station.driver;
     return d ? { ok: false, code: 'driving', agentId: d.agentId, error: 'an agent is driving the browser right now — you can watch, and it hands you the wheel in STEP-IN if it needs you' } : null;
   }
@@ -373,7 +379,7 @@ function makeBrowserViews(deps) {
     }
     const page = await pageOf(c);
     const d = r.key === 'station' && station ? station.driver : null;
-    return { ok: true, frame: c.frame && c.frame.seq > since ? c.frame : null, page, driver: d ? { agentId: d.agentId, runId: d.runId } : null };
+    return { ok: true, frame: c.frame && c.frame.seq > since ? c.frame : null, page, driver: d ? { agentId: d.agentId, runId: d.runId, signIn: !!(station && station.signIn) } : null };
   }
 
   function list() {
@@ -385,7 +391,7 @@ function makeBrowserViews(deps) {
     }
     const st = station;
     const s = st ? surfaceOf(st.session) : null;
-    const d = st && st.driver ? { agentId: st.driver.agentId, runId: st.driver.runId } : null;
+    const d = st && st.driver ? { agentId: st.driver.agentId, runId: st.driver.runId, signIn: !!st.signIn } : null;
     return { agents, settings: settings(), station: { available: !!makeSession, open: !!s, mode: st ? st.mode : effectiveMode(), visible: !!(s && s.visible), driver: d, handoff: !!(d && handoffLive(d.runId)), remembered: !!(s && s.remembered) } };
   }
   async function closeAll() {
@@ -393,7 +399,7 @@ function makeBrowserViews(deps) {
     if (station) { station.driver = null; await closeStation(); }
   }
 
-  return { sessionForRun, releaseRun, registerRun, unregisterRun, open, nav, input, front, warm, frame, list, setMode, settings, close: closeStation, closeAll,
+  return { sessionForRun, releaseRun, registerRun, unregisterRun, open, nav, input, front, warm, frame, list, setMode, settings, signInOpen, signInClose, close: closeStation, closeAll,
     _internals: { runs, chans, station: () => station } };
 }
 
