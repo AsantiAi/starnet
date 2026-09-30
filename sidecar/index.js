@@ -206,6 +206,8 @@ const { parseSlackTokens } = require('./channels/slack.js');                    
 const channelSecretsMod = require('./channels/secrets.js');                        // T1.4: token-vs-config split + keychain migration
 const { makeConnectGateway } = require('./channels/discord.gateway.js');           // P2-E: the real Discord gateway WS client (inbound)
 const { makeSseHub, runTeeView } = require('./channels/sse.js');
+const { makeHandoffHost } = require('./browser-handoff.js');   // STEP-IN: the agent hands its live browser to the Commander
+const { makeHandoffRoutes, makeSigninStore, nudgeLine: handoffNudgeLine } = require('./browser-handoff-routes.js');
 // relayWebhook (the signed-ingress verifier) is composed AFTER the WORKSPACES stores below —
 // its replay-nonce inbox is a durable JSONL sibling of the other ledgers.
 const { makeRouter } = require('./routing/router.js');
@@ -2240,14 +2242,30 @@ function warnRosterMiss(agentId, where) {
   rosterMissWarned.add(id);
   try { console.warn('[roster] identity fallback: agent ' + id + ' not in roster (' + (where || 'lookup') + ') — run proceeds on the station persona/default model, NOT impersonating it as ' + id); } catch (_) {}
 }
+/* "Follow station default": a specialist with NO model pin runs on the STATION DEFAULT — the Overseer's roster
+   model, provider and effort (what the page's stationDefaultWire resolves for COMMS). ONE resolver for every
+   headless surface: channel hops (channelRunConfigFor) and routines/loops/workshop (cronIdentityFor) both read it,
+   so an unpinned agent can never run on the Overseer's model in one lane and be refused in another (v0.12.5
+   refused every routine on an unpinned agent). Returns the Overseer's roster record, or null when the agent is
+   pinned, IS the Overseer, or the Overseer itself has no model (then there is no station default to follow). */
+function stationDefaultFor(id, ident) {
+  if (!ident || String(id || '') === 'agent' || String(ident.model || '').trim()) return null;
+  const hero = agentRoster.get('agent');
+  return hero && String(hero.model || '').trim() ? hero : null;
+}
 function cronIdentityFor(agentId) {
   const id = String(agentId || 'agent');
   const ident = agentRoster.get(id);
   if (!ident) { warnRosterMiss(id, 'cron'); return null; }
   const system = String(ident.system || '').trim();
+  const hero = stationDefaultFor(id, ident);
   return {
-    model: ident.model || null,
-    provider: ident.provider || null,
+    // an unpinned agent's routine runs on the station default model+provider (the SAME rule a channel hop uses);
+    // its own persona/name still ride the run — following the station changes the model, never who it is.
+    model: (hero ? hero.model : ident.model) || null,
+    provider: (hero ? (hero.provider || ident.provider) : ident.provider) || null,
+    followsStation: !!hero,
+    reasoningEffort: hero ? hero.reasoningEffort : undefined,
     system: system ? withDossier(system + CRON_ROUTINE_NOTE, dossierWithGoals()) : null,
     name: ident.name || id
   };
@@ -2413,8 +2431,8 @@ function channelRunConfigFor(agentId, candidate) {
   // model, provider and effort, exactly what COMMS resolves (frontend app.js stationDefaultWire). Refusing the
   // empty pin here broke workflow line hops, RUN A SAMPLE and chat channels for every unpinned specialist once
   // the empty choice started surviving reloads.
-  const hero = id !== 'agent' && !String(ident.model || '').trim() ? agentRoster.get('agent') : null;
-  const followsStation = !!(hero && String(hero.model || '').trim());
+  const hero = stationDefaultFor(id, ident);
+  const followsStation = !!hero;
   const provider = normalizeProvider(followsStation ? (hero.provider || ident.provider) : ident.provider);
   const model = String((followsStation ? hero.model : ident.model) || '').trim();
   if (!model) return { ok: false, error: 'target agent ' + id + ' has no roster model' + (id !== 'agent' ? ' and the station default (the Overseer) has none' : '') };
@@ -4218,6 +4236,41 @@ const stationBridge = makeStationBridge({ emit: (name, payload) => { try { sse.b
 
 const chanEmitValidated = makeEmitter(chanBus, e => console.warn('[channel-event]', e.kind, e.event, (e.errors || []).join(';')));
 const chanEmit = (name, payload) => { try { return chanEmitValidated(name, redact(payload)); } catch (_) {} };
+/* ---- STEP-IN (2026-09-29): the station-wide browser HANDOFF host. An agent that hits a login / 2FA / CAPTCHA calls
+   browser.need_human; its run parks HERE (own id, own 30-minute wait — never the /api/run consent socket) and the
+   station shows the agent's live browser in the STEP-IN window. State changes ride the SAME validated SSE bus as
+   channel/cron telemetry (browser.handoff), so any open page — or later a phone — renders the one truth. See
+   sidecar/browser-handoff.js (state machine) and sidecar/browser-handoff-routes.js (HTTP + remembered sign-ins). */
+const browserSignins = makeSigninStore({
+  dir: BROWSER_PROFILE_DIR, fs, path, now: () => Date.now(),
+  load: (file, tag) => loadResilient(file, tag), save: (file, value) => saveResilient(file, value),
+  isBusy: () => !!browserProfileHolder, anyLive: () => browserHandoffs.list().live.length > 0
+});
+const browserHandoffs = makeHandoffHost({
+  now: () => Date.now(),
+  emit: (name, payload) => chanEmit(name, payload),
+  onSettled: v => { try { browserSignins.note(v); } catch (e) { failNote('stepin.signins.note', e); } },
+  // D4: after 2 minutes unanswered, say so on the channel the Commander already uses — the SAME opt-in gate and chat
+  // map as routine/loop notifications (channelSecrets.notifyAutonomous, default OFF: nobody is messaged who did not ask).
+  onNudge: v => {
+    try {
+      if (!(channelSecrets && channelSecrets.notifyAutonomous)) return;
+      const map = channelStore.loadChatMap();
+      const chats = Object.keys((map && map.chats) || {}).filter(cid => map.chats[cid] && map.chats[cid].agentId === v.agentId)
+        .map(cid => ({ chatId: (map.chats[cid] && map.chats[cid].chatId) || cid, channel: (map.chats[cid] && map.chats[cid].channel) || 'telegram' }));
+      const ident = agentRoster.get(v.agentId);
+      const line = handoffNudgeLine(v, ident && ident.name);
+      for (const c of chats) {
+        const ch = liveChannelFor(c.channel);
+        if (!(ch && ch.adapter)) continue;
+        Promise.resolve(ch.adapter.send(c.chatId, redact(line)))
+          .then(r => { if (r && r.ok === false) console.warn('[step-in] nudge failed:', r.error); })
+          .catch(e => console.warn('[step-in] nudge failed:', (e && e.message) || e));
+      }
+    } catch (e) { failNote('stepin.nudge', e); }
+  }
+});
+const browserHandoffRoutes = makeHandoffRoutes({ host: browserHandoffs, readBody, respondJson, signins: browserSignins });
 
 // H2.2: the SINGLETON background-process manager — persists across runs so a backgrounded dev server survives the
 // run that started it. shell.bg.exit fires AFTER the originating run's NDJSON stream closed, so it rides the
@@ -10080,6 +10133,7 @@ const ROUTES = [
   // stt: qsplit == the old (url === '/api/stt' || url.indexOf('/api/stt?') === 0) disjunction, verbatim.
   { m: 'POST', qsplit: '/api/stt', h: media.handleStt, errorPolicy: media.sttFailOpenPolicy },
   { m: 'POST', exact: '/api/cancel', h: handleCancel },
+  ...browserHandoffRoutes.routes,   // STEP-IN: /api/browser/handoff* + /api/browser/signins* (sidecar/browser-handoff-routes.js)
   { m: 'POST', exact: '/api/run/steer', h: handleRunSteer },
   { m: 'GET', exact: '/api/version', h: handleVersion },
   { m: 'GET', exact: '/api/diagnostics', h: handleDiagnostics },   // T3.9 paste-ready bug report
@@ -13804,6 +13858,9 @@ async function handleCronRun(req, res) {
       // identical cron.fire/cron.result events, can fetch the real output via /api/transcript?stream=cron-<runId>.
       // Per-run id keeps the seed empty (index.js reconstructs a stream only when messages<=1) — no behavior drift.
       runId: runId, streamId: 'cron-' + runId, surface: 'autonomous', trigger: 'schedule', provider: provider, broadcast: true,
+      // "Follow station default": same effort rule as the scheduled fire (cron-driver.js) — an unpinned agent with
+      // no explicit routine model runs on the Overseer's effort along with its model.
+      reasoningEffort: (() => { const ri = !(job.model && String(job.model).trim()) ? cronIdentityFor(job.agentId) : null; return ri && ri.followsStation ? ri.reasoningEffort : undefined; })(),
       // LINE WATCH: the row records the bay + line this Run Now's crate named (placeCronWorkitem above)
       lineId: (cronItems.get(runId) || {}).lineId || undefined, dockId: (cronItems.get(runId) || {}).dockId || undefined,
       reflect: true,   // Run Now must match the scheduled fire's posture exactly, memory included (see the reflect note on /api/run)
@@ -17264,6 +17321,9 @@ async function runOnceCore(o) {
     persistentProfile: browserProfileLeaseFor(runId),
     onProfileWait: waiting => { if (waiting) browserProfileWaiters.add(runId); else browserProfileWaiters.delete(runId); },
     attendedLogin: (surface === 'interactive' && typeof o.loginPrompt === 'function') ? { prompt: o.loginPrompt } : null,
+    // STEP-IN: browser.need_human parks THIS run on the station handoff host. agentId/runId are host facts, never
+    // model args; the run's own signal (inside the tool ctx) ends the handoff if the run stops.
+    handoff: { request: f => browserHandoffs.request(Object.assign({}, f, { agentId, runId })) },
     requireOwnedServer: true,
     ownsLocalUrl: async ({ url, serverId, agentId: owner }) => {
       const st = shellBg.status(String(owner || agentId), String(serverId || ''));
@@ -19807,6 +19867,7 @@ async function runOnceCore(o) {
     if (billed) { try { credits.finishRun({ runId, agentId, usd: 0, reason: 'leak-guard' }); } catch (_) {} }
     // A test browser must die with its run. Besides process hygiene, this guarantees that a
     // broken page cannot retain any browser-level state after the task finishes.
+    try { browserHandoffs.abortRun(runId); } catch (e) { failNote('stepin.abortRun', e); }   // STEP-IN: a handoff never outlives its run
     if (runBrowser) { try { await runBrowser.session.close(); } catch (_) {} }
     if (runComputer?.close) { try { await runComputer.close(); } catch (_) { failNote('computer.run.close', 'Native run cleanup failed'); } }
     computerRuns.delete(runComputer);

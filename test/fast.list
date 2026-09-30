@@ -354,6 +354,9 @@ test/browser.wait-recovery.test.js
 test/browser.download-receipt.test.js
 test/browser.attach.test.js
 test/browser.pie.test.js
+test/browser-handoff.test.js
+test/browser.need-human.test.js
+test/browser-handoff-routes.test.js
 test/desktop.test.js
 test/computer.test.js
 test/cua-computer.test.js
@@ -517,6 +520,7 @@ test/reasoning-dials.test.js
 test/provider-connections-ui.test.js
 test/newhero-reset.test.js
 test/harness-internal.test.js
+test/stale-token-recovery.test.js
 test/chat-runmeta.test.js
 test/chat-stopped-retry.test.js
 test/retry-user-transcript.http.test.js
@@ -538,6 +542,7 @@ test/xpstore.test.js
 test/growthratings.test.js
 test/xp-upgrade.test.js
 test/dossier-reliability.test.js
+test/hero-color-resume.test.js
 test/roster-track.test.js
 test/chat-prompt-diet.test.js
 test/returns.test.js
@@ -949,6 +954,7 @@ test/shellbg.kill-verified.test.js
 test/shellbg.wait-and-wake.test.js
 test/shellbg.prune.test.js
 test/shell.fg-ledger.test.js
+test/shell.process-tree.test.js
 test/procledger.orphan-window.test.js
 test/loop.failure-breaker.test.js
 test/loop.no-progress-guard.test.js

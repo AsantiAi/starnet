@@ -151,6 +151,30 @@
       "sinceMs"
     ]
   },
+  "browser.handoff": {
+    "required": [
+      "agentId",
+      "id",
+      "runId",
+      "state"
+    ],
+    "properties": [
+      "agentId",
+      "endedAt",
+      "expiresAt",
+      "host",
+      "id",
+      "note",
+      "reason",
+      "remembered",
+      "requestedAt",
+      "runId",
+      "state",
+      "takenAt",
+      "title",
+      "where"
+    ]
+  },
   "budget.threshold": {
     "required": [
       "cap",
