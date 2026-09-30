@@ -23,6 +23,10 @@
      fetch     { agentId, path, offset?, length? }   read a file in sealed chunks (≤ 256 KB each)
      view      { have?, at?, offset?, length? }   the station picture the desk last drew, in sealed chunks
      portrait  { agentId }           that agent's sprite
+     pushKey                         the station's push key + whether THIS phone is subscribed
+     pushOn    { endpoint, keys }    subscribe this phone to the station's notifications
+     pushOff                         unsubscribe this phone
+     pushTest                        send this phone one notification now
      routines                        scheduled routines
      routine   { jobId, enabled }    pause or resume one
      ping                            liveness; the phone's link lamp reads this
@@ -126,6 +130,30 @@ function makeGateway(deps) {
       if (!agentId) return bad('unknown agent');
       const r = await host.portrait({ agentId });
       return r && r.ok === false ? bad(r.error || 'no portrait') : good(r);
+    },
+
+    async pushKey(a, ctx) {
+      if (!deps.push) return bad('this station cannot send notifications');
+      return good({ key: deps.push.publicKey(), on: deps.push.has(ctx.deviceId) });
+    },
+
+    async pushOn(a, ctx) {
+      if (!deps.push) return bad('this station cannot send notifications');
+      const keys = a.keys && typeof a.keys === 'object' ? { p256dh: String(a.keys.p256dh || ''), auth: String(a.keys.auth || '') } : {};
+      const r = deps.push.subscribe(ctx.deviceId, { endpoint: String(a.endpoint || ''), keys });
+      return r.ok ? good({ on: true }) : bad(r.error);
+    },
+
+    async pushOff(a, ctx) {
+      if (!deps.push) return good({ on: false });
+      const r = deps.push.unsubscribe(ctx.deviceId);
+      return r.ok ? good({ on: false }) : bad(r.error);
+    },
+
+    async pushTest(a, ctx) {
+      if (!deps.push || !deps.push.has(ctx.deviceId)) return bad('notifications are not on for this phone');
+      const [r] = await deps.push.send([ctx.deviceId], { title: 'Notifications are on', body: 'Your station will tap this phone when your crew needs you.', tag: 'test', url: '#needs' });
+      return r && r.ok ? good({ sent: true }) : bad('the push service did not take the notification' + (r && r.status ? ' (' + r.status + ')' : ''));
     },
 
     async routines() { return good(await host.routines()); },

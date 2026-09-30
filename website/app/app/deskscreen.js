@@ -384,7 +384,7 @@ const DeskScreen = (() => {
       } else { state = 'idle'; label = 'IDLE'; html = '<div class="ds-off"><span>Loading…</span></div>'; }
     }
     body.querySelector('.ds-screen').setAttribute('data-state', state);
-    const stripHtml = '<span class="ds-lamp" aria-hidden="true"></span><b class="ds-name">' + esc(v.name) + '</b><span class="ds-st">' + esc(label) + '</span>';
+    const stripHtml = '<span class="ds-lamp" aria-hidden="true"></span><span class="ds-st">' + esc(label) + '</span>';
     if (strip.__html !== stripHtml) { strip.innerHTML = stripHtml; strip.__html = stripHtml; }
     if (main.__html !== html) {
       // keep the reader's place inside the screen: follow new output only when they were already at the bottom
@@ -416,12 +416,25 @@ const DeskScreen = (() => {
     }, 1000);
   }
 
+  // the window is titled by whose desk it is — "NOVA'S DESK" — on open and every time another desk re-targets it.
+  // The term chrome drew the registered title once; the head, the footer label, the close label and the dock chip follow here.
+  const deskTitle = name => String(name || 'AGENT').toUpperCase() + '\'S DESK';
+  function setTitle(body, title) {
+    const term = body && body.closest ? body.closest('.term') : null;
+    const t = term && term.querySelector('.term-title'); if (t && t.textContent !== title) t.textContent = title;
+    const x = term && term.querySelector('.term-x'); if (x) x.setAttribute('aria-label', 'Close ' + title);
+    const foot = term && term.querySelector('.term-foot-k'); if (foot && foot.textContent !== title) foot.textContent = title;   // the window's footer label
+    const chip = typeof document !== 'undefined' ? document.querySelector('.term-chip[data-key="desk"]') : null;
+    if (chip) { const ct = chip.querySelector('.term-chip-t'); if (ct) ct.textContent = title; chip.setAttribute('aria-label', 'Restore ' + title); }
+  }
+
   // the window builder (StationUI calls it on open, and again when another desk re-targets it)
   function build(body) {
     const H = StationUI.h, a = H.present[H.sel] || null;
     if (!a) { body.innerHTML = '<p class="ds-dim">No agent selected.</p>'; return; }
     const same = cur && cur.agentId === a.id;
     cur = { agentId: a.id, name: a.name || a.id, body };
+    setTitle(body, deskTitle(cur.name));
     if (!same) { snap = null; hist = null; histFor = ''; steerNote = stopNote = ''; scr = { key: '', list: [], at: 0, busy: false, sig: '' }; pos = -1; }
     wasLive = !!currentOf(a.id);
     body.innerHTML = '<div class="ds-screen" data-state="idle">'
@@ -482,7 +495,7 @@ const DeskScreen = (() => {
   let wired = false;
   function init(o) {
     if (o) doors = o;
-    if (typeof StationUI !== 'undefined' && StationUI.registerWindow) StationUI.registerWindow('desk', 'DESK SCREEN', build, { className: 'desk-win' });
+    if (typeof StationUI !== 'undefined' && StationUI.registerWindow) StationUI.registerWindow('desk', 'DESK', build, { className: 'desk-win' });   // retitled "<NAME>'S DESK" by build()
     if (wired || typeof U === 'undefined' || !U.bus) return;
     wired = true;
     for (const n of ['agent.run.start', 'agent.tool_call', 'agent.tool_result', 'agent.token', 'agent.cost', 'agent.run.error', 'agent.run.end', 'permission.prompt', 'permission.response', 'deliverable', 'browser.handoff']) {
@@ -493,7 +506,7 @@ const DeskScreen = (() => {
   const isOpen = () => !!(cur && cur.body && cur.body.isConnected);
   const text = () => (isOpen() ? cur.body.innerText : null);
   const agentOfOpen = () => (isOpen() ? cur.agentId : null);
-  return { init, open, isOpen, text, agentOfOpen,
+  return { init, open, isOpen, text, agentOfOpen, _deskTitle: deskTitle,
     _fold: fold, _currentOf: currentOf, _lastEndedOf: lastEndedOf, _argDigest: argDigest, _taskOf: taskOf,
     _parseScreens: parseScreens, _screenOf: screenOf,
     _handoffOf: aid => handoffs.get(aid) || null,

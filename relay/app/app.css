@@ -254,3 +254,7 @@ input[type=search]::-webkit-search-cancel-button { display: none; }
 #toast.bad { color: var(--bad); border-color: rgba(var(--bad-rgb), .45); }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* the notifications card (Settings, and once under the station picture) */
+.push-card .push-h { font-size: 19px; letter-spacing: 1px; color: var(--ph-bright); text-transform: uppercase; }
+.btn.quiet { border-color: transparent; background: transparent; box-shadow: none; }
