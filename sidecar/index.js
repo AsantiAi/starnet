@@ -4294,6 +4294,19 @@ const browserHandoffRoutes = makeHandoffRoutes({ host: browserHandoffs, readBody
    (that would close the browser in front of the Commander): a run that loses to it browses on a temporary profile
    (browserProfileLeaseFor → fallback). */
 const STATION_BROWSER_ID = 'station-browser';
+// A computer with no Chrome, Edge or Chromium gets Chrome for Testing downloaded on first use (sidecar/browser-install.js)
+const chromiumInstaller = require('./browser-install.js').makeChromiumInstaller({ root: path.join(WORKSPACES, '.browsers') });
+browserInternals.setExtraChrome(() => chromiumInstaller.find());
+// Hermes installs its browser at setup; StarNet starts that download shortly after launch — only on a computer with no
+// browser at all, never for a headless-pinned rig (CI, gates) and never when STARNET_BROWSER_DOWNLOAD=0.
+{
+  const t = setTimeout(() => {
+    if (browserInternals.headlessRequested(process.env) || /^(0|false|no|off)$/i.test(String(process.env.STARNET_BROWSER_DOWNLOAD || ''))) return;
+    if (browserInternals.resolveChrome(false) || !chromiumInstaller.platformKey) return;
+    chromiumInstaller.ensure().catch(e => failNote('browser-install.startup', e));
+  }, 5000);
+  if (t && typeof t.unref === 'function') t.unref();
+}
 const stationBrowserLogin = { prompt: undefined };   // browser.login's consent channel: the DRIVING run's prompt, set per run
 // Settings → Browser: where the station browser lives (sidecar/browser-view.js BROWSER_MODES). Default: a Chrome window.
 const BROWSER_SETTINGS_FILE = path.join(WORKSPACES, 'browser.settings.json');
@@ -4309,8 +4322,10 @@ const browserViews = makeBrowserViews({
     if (browserInternals.headlessRequested(process.env)) return false;
     if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) return false;
     const r = browserInternals.resolveChrome(true);
-    return !!(r && !r.headless);
+    if (r) return !r.headless;
+    return !!chromiumInstaller.platformKey;   // none installed: one is downloaded on first use
   },
+  browserSetup: () => chromiumInstaller.status(),
   handoffLive: runId => browserHandoffs.isLive(runId),
   attended: stationBrowserLogin,
   // the driving agent's own jail: a download must land where that agent can read it back
@@ -4323,6 +4338,7 @@ const browserViews = makeBrowserViews({
     // STARNET_BROWSER_HEADLESS=1 still pins it headless (CI, gates, soak rigs). It never attaches to another Chrome.
     // built-in: headless — the BROWSER window IS the browser. window: a real Chrome window on the desktop.
     allowVisible: mode === 'window', forceHeadless: mode !== 'window', preferVisible: mode === 'window', noAttach: true, syntheticInputOnly: true,
+    ensureChromium: () => chromiumInstaller.ensure(),
     // browser.login opens the page IN this browser (no relaunch); a Chrome window is raised for the Commander
     stationLogin: true,
     onLoginOpen: v => { browserViews.signInOpen(v); return browserViews.front().catch(e => failNote('browser-view.login-front', e)); },
@@ -17503,6 +17519,7 @@ async function runOnceCore(o) {
   runStationBrowser = await browserViews.sessionForRun({ agentId, runId, interactive: surface === 'interactive', loginPrompt: o.loginPrompt });
   runBrowser = makeBrowserTools({
     session: runStationBrowser || undefined,
+    ensureChromium: () => chromiumInstaller.ensure(),
     vision: imageTools.hasVision ? imageTools.browserVision : null,
     ledger: procLedger,
     // The workspace jail, so browser.screenshot can SAVE a frame and emit it as a deliverable

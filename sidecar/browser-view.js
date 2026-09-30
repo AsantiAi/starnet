@@ -89,6 +89,9 @@ function makeBrowserViews(deps) {
   const writeMode = typeof deps.writeMode === 'function' ? deps.writeMode : () => {};
   const chromeAvailable = typeof deps.chromeAvailable === 'function' ? deps.chromeAvailable : () => false;
   const windowAvailable = typeof deps.windowAvailable === 'function' ? deps.windowAvailable : () => true;
+  // first-use download of a browser on a computer that has none (sidecar/browser-install.js): its progress, for the window
+  const browserSetup = typeof deps.browserSetup === 'function' ? deps.browserSetup : () => null;
+  function setupState() { try { const s = browserSetup(); return s ? { state: s.state, received: s.received || 0, total: s.total || 0, error: s.error || null } : null; } catch (e) { failNote('view.setup', e); return null; } }
   /* the mode the station browser actually RUNS in: a Chrome window needs a screen and an installed browser (else
      built-in); YOUR CHROME needs the paired extension (else the best of the other two). */
   function effectiveMode() {
@@ -403,7 +406,7 @@ function makeBrowserViews(deps) {
     const st = station;
     const s = st ? surfaceOf(st.session) : null;
     const d = st && st.driver ? { agentId: st.driver.agentId, runId: st.driver.runId, signIn: !!st.signIn } : null;
-    return { agents, settings: settings(), station: { available: !!makeSession, open: !!s, mode: st ? st.mode : effectiveMode(), visible: !!(s && s.visible), driver: d, handoff: !!(d && handoffLive(d.runId)), remembered: !!(s && s.remembered) } };
+    return { agents, settings: settings(), station: { available: !!makeSession, open: !!s, mode: st ? st.mode : effectiveMode(), visible: !!(s && s.visible), driver: d, handoff: !!(d && handoffLive(d.runId)), remembered: !!(s && s.remembered), setup: setupState() } };
   }
   async function closeAll() {
     for (const k of Array.from(chans.keys())) dropChan(k, k !== 'station');

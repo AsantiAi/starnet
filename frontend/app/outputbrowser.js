@@ -196,6 +196,13 @@
   }
   function liveNote() {
     const d = state.driver;
+    const su = station().setup;
+    if (su && (su.state === 'downloading' || su.state === 'unpacking')) {
+      const mb = n => Math.round(n / 1048576);
+      return 'Setting up the browser for the first time (this computer has no Chrome, Edge or Chromium): '
+        + (su.state === 'unpacking' ? 'unpacking…' : 'downloading Chromium' + (su.total ? ', ' + mb(su.received) + ' of ' + mb(su.total) + ' MB' : '') + '…');
+    }
+    if (su && su.state === 'failed' && !station().open) return 'Could not set up a browser on this computer: ' + su.error;
     const win = station().visible ? ' It is open in its own window too (SHOW WINDOW).' : '';
     if (d && d.signIn) return 'Sign in here: click the page and type. The agent is waiting and never sees what you type. Click Done in COMMS when you have finished.';
     if (d) return agentLabel(d.agentId) + ' is driving the browser. You\'re watching; it hands you the wheel in STEP-IN if it needs you.' + win;
@@ -470,6 +477,13 @@
           else if (a && !a.handoff && (state.ui.root.dataset.state === 'ask' || state.ui.root.dataset.state === 'ended')) { state.watch = { agentId: a.agentId, runId: a.runId, target: a.target }; startWatch(); }
         }
         paintStrip();
+        // first-use browser download: keep the progress line moving until it is ready
+        const su = st.setup;
+        if (su && (su.state === 'downloading' || su.state === 'unpacking')) {
+          if (state.mode === 'live') setNote(liveNote());
+          if (state.setupTimer) clearTimeout(state.setupTimer);
+          state.setupTimer = setTimeout(() => { state.setupTimer = null; refreshLive(); }, 1000);
+        }
       } else if (state.follow && started && !first) {
         showLive();   // FOLLOW: the window opens by itself when an agent starts browsing
       }

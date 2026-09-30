@@ -610,6 +610,10 @@
   // different browser surface (no plugins/window.chrome and HeadlessChrome Client Hints) even when
   // its legacy UA is overridden. A shell remains a compatibility fallback when no full build exists.
   // Returns { path, headless } where headless=true means a visible window is impossible.
+  /* The Chromium StarNet downloaded itself (sidecar/browser-install.js) for a computer with no Chrome, Edge or
+     Chromium installed. The composition root registers the finder; it is used only when nothing installed exists. */
+  let extraChrome = () => null;
+  function setExtraChrome(fn) { extraChrome = typeof fn === 'function' ? fn : () => null; }
   function resolveChrome(wantHeaded, existsSync) {
     existsSync = existsSync || FS.existsSync;
     const exists = (c) => { try { return existsSync(c.path); } catch (_) { return false; } };
@@ -617,6 +621,8 @@
        "Chrome for Testing" banners and is what sign-in pages trust least. Headless work keeps the old order. */
     if (wantHeaded) for (const c of CHROME_CANDIDATES) { if (!c.headless && !/ms-playwright/.test(c.path) && exists(c)) return { path: c.path, headless: false }; }
     for (const c of CHROME_CANDIDATES) { if (!c.headless && exists(c)) return { path: c.path, headless: false }; }
+    let own = null; try { own = extraChrome(); } catch (e) { failNote('browser.extra-chrome', e); }
+    if (own && exists({ path: own })) return { path: own, headless: false };
     for (const c of CHROME_CANDIDATES) { if (c.headless && exists(c)) return { path: c.path, headless: true }; }
     return null;
   }
@@ -743,9 +749,10 @@
     if (attachPort !== null && (!Number.isInteger(attachPort) || attachPort < 1 || attachPort > 65535)) {
       throw new Error('browser attach: port must be an integer 1-65535');
     }
-    if (!chromePath && attachPort === null) throw new Error('browser unavailable: Chromium not found; set STARNET_CHROME');
+    // No browser on this computer: one is downloaded on first use when the host can (deps.ensureChromium), else refuse.
+    if (!chromePath && attachPort === null && typeof deps.ensureChromium !== 'function') throw new Error('browser unavailable: Chromium not found; set STARNET_CHROME');
     // We run headed only if requested AND the chosen binary can actually show a window.
-    const headed = wantHeaded && !binIsHeadlessOnly;
+    let headed = wantHeaded && !binIsHeadlessOnly;
 
     let proc = null, procExited = false, procError = null, procClosePromise = null, cdp = null, consoleLog = [], dialog = null, attachedPort = null;
     let networkProxy = null;
@@ -1012,6 +1019,11 @@
     }
     async function connectWithRetry() {
       if (cdp) return cdp;
+      if (!chromePath && attachPort === null) {
+        const got = await deps.ensureChromium();   // single-flight download of Chrome for Testing
+        if (!got) throw new Error('browser unavailable: Chromium not found and none could be downloaded');
+        chromePath = got; binIsHeadlessOnly = false; headed = wantHeaded;
+      }
       let lastErr = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         try { return await connectOnce(); }
@@ -3472,5 +3484,5 @@
     return { tools, session, register(reg) { tools.forEach(t => reg.register(t)); return reg; }, _internals: { assertSafeUrl, assertLoopbackUrl, assertResolvedSafe, isPrivateV4, isPrivateV6, makeBrowserSession, makeCdpDriver, makeDownloadLedger, findChrome, resolveChrome, headlessRequested, SYNTHETIC_INPUT_BOOTSTRAP, CHROME_CANDIDATES } };
   }
 
-  return { makeBrowserTools, _internals: { CdpClient, assertSafeUrl, assertLoopbackUrl, assertResolvedSafe, isPrivateV4, isPrivateV6, makeBrowserSession, makeCdpDriver, makeDownloadLedger, findChrome, resolveChrome, headlessRequested, SYNTHETIC_INPUT_BOOTSTRAP, SETTLE_BOOTSTRAP, SETTLE_PROBE, SETTLE_QUIET_POLLS, describeResponse, jsLiteral, normalizeBrowserLocale, detectBrowserVersion, makeLaunchIdentity, browserVersionFrom, cleanBrandRows, makeCdpIdentity, CHROME_CANDIDATES } };
+  return { makeBrowserTools, _internals: { CdpClient, assertSafeUrl, assertLoopbackUrl, assertResolvedSafe, isPrivateV4, isPrivateV6, makeBrowserSession, makeCdpDriver, makeDownloadLedger, findChrome, resolveChrome, setExtraChrome, headlessRequested, SYNTHETIC_INPUT_BOOTSTRAP, SETTLE_BOOTSTRAP, SETTLE_PROBE, SETTLE_QUIET_POLLS, describeResponse, jsLiteral, normalizeBrowserLocale, detectBrowserVersion, makeLaunchIdentity, browserVersionFrom, cleanBrandRows, makeCdpIdentity, CHROME_CANDIDATES } };
 });
