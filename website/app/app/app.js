@@ -3175,6 +3175,9 @@ const App = (() => {
     agentDocs(agent);                              // seed config docs for older saves that predate them
     stripLegacyVoiceBlock(agent);                  // one-time: drop the old awakening's inline VOICE & MANNER so it doesn't double up with the archetype layer
     stripLegacySoloClause(agent);                  // one-time: swap the frozen "right now its only agent" identity block for the timeless clause (crew truth now rides rosterClause)
+    // a saved hero tint lands in style attributes (crew list, dossier, GROWTH gauge): hex only, else the Orchestrator's
+    // gold — the SAME rule rehydrateRoster applies to the crew. Inline (no module const): fixtures lift this function alone.
+    if (!/^#[0-9a-f]{3,8}$/i.test(String(agent.color || ''))) agent.color = (typeof ORCH_COLOR !== 'undefined') ? ORCH_COLOR : '#ffd34a';
     agent.systemPrompt = composeSystemPrompt(agent);
     registerHero(agent);                           // found the registry with the hero…
     rehydrateRoster(saved.agents);                 // …then restore any summoned crew (older saves: no-op)
