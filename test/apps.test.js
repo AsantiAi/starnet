@@ -77,6 +77,10 @@ const throwsMsg = async (fn) => { try { await fn(); return ''; } catch (e) { ret
     A.ok(/page file/.test(await throwsMsg(() => apps.writeFile(a.id, 'App.JSON', '{}'))), 'nor under another case (Windows would overwrite it)');
     A.ok(/page file/.test(await throwsMsg(() => apps.writeFile(a.id, 'a/b/c/d/e/deep.js', 'x'))), 'a path deeper than the file walk sees is refused (the size caps must see every file)');
     A.ok((await apps.describe(a.id)).builtAt === clock, 'the first page write marks the app built');
+    const built0 = clock; clock += 7000;
+    await apps.writeFile(a.id, 'index.html', '<div class="sn-panel">hi again</div>');
+    const dChanged = await apps.describe(a.id);
+    A.ok(dChanged.builtAt === built0 && dChanged.changedAt === clock, 'every later write moves changedAt (an automated redesign shows as "Updated"), builtAt stays the first');
     await apps.writeFile(a.id, 'big.js', '//' + 'x'.repeat(70 * 1024) + '\nvar tail = 1;');
     A.ok(/truncated/.test(await apps.readFile(a.id, 'big.js')) && /var tail = 1;$/.test(await apps.readWhole(a.id, 'big.js')), 'readFile shows 64 KB; readWhole (the check) reads it all');
     A.ok(/only text files/.test(await throwsMsg(() => apps.writeFile(a.id, 'run.exe', 'x'))), 'only text files');
@@ -103,6 +107,8 @@ const throwsMsg = async (fn) => { try { await fn(); return ''; } catch (e) { ret
     const job = jobs.get('job1');
     A.ok(job.name === 'App: AI News Brief' && job.meta.appId === a.id && /app\.publish/.test(job.prompt) && /research today's AI news/.test(job.prompt), 'the routine runs the task and ends by publishing to this app');
     A.ok(/FIRST call app\.read/.test(job.prompt) && /real date/.test(job.prompt), 'the routine starts by reading the real date (a model assumes its training era)');
+    A.ok(/app\.write the whole new file/.test(job.prompt) && /app\.check/.test(job.prompt), 'an automated update may change the app ITSELF (rewrite + check the page), not only its data');
+    A.eq((await apps.describe(a.id)).schedule.task, 'research today\'s AI news', 'describe gives the task back (the AUTO-UPDATE box shows the Commander\'s own words)');
     let desc = await apps.describe(a.id);
     A.ok(desc.schedule && desc.schedule.nextRunAt === 5000 && desc.schedule.armed === false && desc.updatedAt === clock, 'describe reports the routine\'s own next run, armed state and the last update');
     await apps.schedule(a.id, { every: 'every 6h', task: 'again' });

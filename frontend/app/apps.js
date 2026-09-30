@@ -91,7 +91,8 @@
   }
   // the dock's one line for an app: whether it exists yet / when it last changed, and whether it refreshes itself
   function dockLine(a) {
-    const first = refreshing.has(a.id) ? 'Refreshing now' : a.updatedAt ? 'Updated ' + ago(a.updatedAt) : a.builtAt ? 'Built ' + ago(a.builtAt) : 'Not built yet';
+    const last = Math.max(a.updatedAt || 0, a.changedAt || 0);
+    const first = refreshing.has(a.id) ? 'Refreshing now' : last ? 'Updated ' + ago(last) : a.builtAt ? 'Built ' + ago(a.builtAt) : 'Not built yet';
     const s = a.schedule;
     return first + (s && !s.missing && s.enabled !== false ? ' · ' + (routinesOn ? 'refreshes ' + s.display : 'routines off') : '');
   }
@@ -116,7 +117,8 @@
   function statusOf(a) {
     const parts = [];
     if (refreshing.has(a.id)) parts.push('Refreshing now');
-    parts.push(a.updatedAt ? 'Updated ' + ago(a.updatedAt) : a.builtAt ? 'Built ' + ago(a.builtAt) : 'Not built yet');
+    const last = Math.max(a.updatedAt || 0, a.changedAt || 0);
+    parts.push(last ? 'Updated ' + ago(last) : a.builtAt ? 'Built ' + ago(a.builtAt) : 'Not built yet');
     const s = a.schedule;
     if (s && s.missing) parts.push('its refresh routine was removed');
     else if (s) {
@@ -188,7 +190,7 @@
     if (!a || !a.schedule || !a.schedule.jobId || refreshing.has(id)) return;
     refreshing.add(id); paintAll(id);
     try {
-      const r = await post('/api/cron/run', { id: a.schedule.jobId });
+      const r = await post('/api/cron/run', { id: a.schedule.jobId, detach: true });   // closing this window must not cancel it
       if (!r.ok) { const j = await r.json().catch(() => ({})); notify(a.name + ': ' + ((j && (j.error || j.message)) || 'the refresh could not start'), 'warn'); return; }
       notify(a.name + ': refresh started — your crew is on it.');   // said only once the station accepted the run
       await r.text();   // the run streams until it finishes; reading it keeps it attached
@@ -253,7 +255,15 @@
       bar.className = 'app-bar';
       bar.innerHTML = '<div class="app-bar-row"><input class="apps-field app-change" maxlength="1500" autocomplete="off" aria-label="Describe a change to this app" placeholder="Describe a change — how it looks, what it shows, how it works">' +
         '<button class="apps-btn primary app-change-go" type="submit">CHANGE</button><button class="apps-btn app-refresh" type="button" hidden>⟳ REFRESH</button></div>' +
-        '<div class="app-bar-status"><span class="app-status" role="status"></span><button class="apps-btn app-arm" type="button" hidden>TURN ON ROUTINES</button></div>';
+        '<div class="app-bar-status"><span class="app-status" role="status"></span><button class="apps-btn app-auto-toggle" type="button" aria-expanded="false">AUTO-UPDATE</button><button class="apps-btn app-arm" type="button" hidden>TURN ON ROUTINES</button></div>' +
+        // AUTO-UPDATE: how often, and what each update does — in the Commander's own words
+        '<div class="app-auto" hidden>' +
+          '<div class="app-auto-h">Update this app by itself</div>' +
+          '<div class="app-auto-every" role="group" aria-label="How often">' + CADENCES.map((c) => '<button class="apps-btn apps-chip" type="button" aria-pressed="false" data-every="' + c[0] + '">' + c[1] + '</button>').join('') + '</div>' +
+          '<label class="app-auto-l">Each update should…</label>' +
+          '<textarea class="apps-field app-auto-task" rows="2" maxlength="2000" aria-label="What each update should do" placeholder="e.g. refresh what it shows · add today\'s numbers · give it a new look every Monday"></textarea>' +
+          '<div class="app-auto-acts"><button class="apps-btn primary app-auto-save" type="button">SAVE</button><span class="app-auto-note"></span></div>' +
+        '</div>';
       bar.addEventListener('submit', (e) => {
         e.preventDefault();
         const inp = bar.querySelector('.app-change');
@@ -263,13 +273,52 @@
       });
       bar.querySelector('.app-refresh').addEventListener('click', () => refreshNow(id));
       bar.querySelector('.app-arm').addEventListener('click', () => turnOnRoutines());
+      wireAuto(bar, id);
       body.appendChild(bar);
     }
     paintBar(bar, find(id));
     if (!find(id)) load().then(() => paintBar(bar, find(id)));
   }
+  // AUTO-UPDATE — the cadences on offer (the routine system goes down to a minute; each update is a crew run, so
+  // the shortest here is 15 minutes; anything that must tick live is the page's own JS)
+  const CADENCES = [['off', 'Off'], ['every 15m', 'Every 15 min'], ['every 1h', 'Hourly'], ['every 6h', 'Every 6h'], ['every 1d', 'Daily'], ['every 7d', 'Weekly']];
+  const DEFAULT_TASK = 'Bring it up to date: refresh what it shows with current information.';
+  function wireAuto(bar, id) {
+    const panel = bar.querySelector('.app-auto'), toggle = bar.querySelector('.app-auto-toggle');
+    const chips = bar.querySelectorAll('.app-auto-every [data-every]'), task = bar.querySelector('.app-auto-task');
+    const note = bar.querySelector('.app-auto-note'), save = bar.querySelector('.app-auto-save');
+    let pick = 'off';
+    const press = (every) => { pick = every; chips.forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.every === every))); task.disabled = every === 'off'; };
+    toggle.addEventListener('click', () => {
+      const open = panel.hidden;
+      panel.hidden = !open; toggle.setAttribute('aria-expanded', String(open));
+      if (!open) return;
+      const a = find(id), s = a && a.schedule && !a.schedule.missing ? a.schedule : null;
+      press(s ? (CADENCES.find((c) => c[0] === s.every) ? s.every : s.every) : 'off');
+      task.value = (s && s.task) || DEFAULT_TASK;
+      note.textContent = 'Each update is a crew run on your model.';
+    });
+    chips.forEach((c) => c.addEventListener('click', () => press(c.dataset.every)));
+    save.addEventListener('click', async () => {
+      const t = task.value.trim();
+      if (pick !== 'off' && !t) { note.textContent = 'Say what each update should do.'; task.focus(); return; }
+      save.disabled = true; note.textContent = 'Saving…';
+      try {
+        const r = await post('/api/apps/schedule', { id, every: pick, task: t });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j.ok) throw new Error((j && j.error) || 'the station could not save that');
+        await load();
+        panel.hidden = true; toggle.setAttribute('aria-expanded', 'false');
+        notify(pick === 'off' ? 'It no longer updates by itself.' : (find(id) || {}).name + ' updates ' + (j.display || pick) + (j.armed === false ? ' — once routines are on.' : '.'));
+        paintAll(id);
+      } catch (e) { note.textContent = (e && e.message) || String(e); }
+      finally { save.disabled = false; }
+    });
+  }
   function paintBar(bar, a) {
     if (!bar) return;
+    const at = bar.querySelector('.app-auto-toggle');
+    if (at) { const s = a && a.schedule; at.textContent = s && !s.missing ? 'AUTO-UPDATE · ' + String(s.display || s.every).replace(/^every /, '') : 'AUTO-UPDATE'; }
     bar.querySelector('.app-status').textContent = a ? statusOf(a) : '';
     const s = a && a.schedule, busy = !!(a && refreshing.has(a.id));
     const rf = bar.querySelector('.app-refresh');

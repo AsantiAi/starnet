@@ -10187,6 +10187,7 @@ const ROUTES = [
   { m: 'POST', exact: '/api/apps', h: handleAppsCreate },
   { m: 'POST', exact: '/api/apps/delete', h: handleAppsDelete },
   { m: 'POST', exact: '/api/apps/rename', h: handleAppsRename },
+  { m: 'POST', exact: '/api/apps/schedule', h: handleAppsSchedule },
   { m: 'POST', exact: '/api/apps/store', h: handleAppsStore },
   { m: 'POST', exact: '/api/checkpoint/restore', h: handleCheckpointRestore },
   { m: 'GET', prefix: '/api/checkpoint', h: handleCheckpointList },
@@ -13559,7 +13560,11 @@ async function handleCronRun(req, res) {
   cronDriver.leases.set(job.id, { runId: runId, startedAt: Date.now(), heartbeatAt: Date.now(), ac: ac, isOnce: false });
   // res 'close', not req 'close' — same disconnect-detection law as handleRun: readBody() already consumed the
   // request, so req 'close' has fired before this listener attaches and a dead watcher was never noticed (F1).
-  res.on('close', () => { ac.abort(); runs.delete(runId); runsMeta.delete(runId); });
+  // DETACHED (additive, APPS 2026-09-30): an app's REFRESH is the routine's own job, not the watcher's — closing the
+  // window that asked for it must not cancel it (it stays stoppable through its lease, like a scheduled fire).
+  // Without detach:true, Run Now keeps its law: the watcher leaving cancels the run.
+  const detached = body.detach === true;
+  res.on('close', () => { if (!detached) ac.abort(); runs.delete(runId); runsMeta.delete(runId); });
   const bus = { emit: (name, payload) => { try { res.write(JSON.stringify({ name, payload: redact(payload) }) + '\n'); } catch (_) {} } };
   const emit = wrapEmitDiag(makeEmitter(bus, e => { if (e) console.warn('[event]', e.kind, e.event, (e.errors || []).join(';')); }));
   // tee: stream every event to the watching browser AND capture the outcome so the last-run record is honest.
@@ -15246,6 +15251,15 @@ async function handleAppsDelete(req, res) {
   const body = await appsBody(req, res); if (!body) return;
   try { await apps.remove(body.id); return appsJson(res, 200, { ok: true }); }
   catch (e) { return appsJson(res, 400, { ok: false, error: (e && e.message) || String(e) }); }
+}
+// AUTO-UPDATE from the app's own bar: the Commander sets how often it updates and what each update does (the same
+// app.schedule the crew uses — an ordinary routine the app owns; "off" removes it)
+async function handleAppsSchedule(req, res) {
+  const body = await appsBody(req, res); if (!body) return;
+  try {
+    const out = await apps.schedule(body.id, { every: body.every, task: body.task });
+    return appsJson(res, 200, Object.assign({ ok: true }, out, { app: await apps.describe(String(body.id)) }));
+  } catch (e) { return appsJson(res, 400, { ok: false, error: (e && e.message) || String(e) }); }
 }
 async function handleAppsRename(req, res) {
   const body = await appsBody(req, res); if (!body) return;

@@ -171,7 +171,9 @@ function makeApps(deps) {
     await fsp.mkdir(P.dirname(abs), { recursive: true });
     await fsp.writeFile(abs, text, 'utf8');
     dirty(id);
-    if (!meta.builtAt) { meta.builtAt = now(); await writeMeta(id, meta); }   // the crew has written the page: it is no longer "not built yet"
+    // the crew (or an automated update) has written the page: it is built, and it changed NOW
+    meta.changedAt = now(); if (!meta.builtAt) meta.builtAt = meta.changedAt;
+    await writeMeta(id, meta);
     const rec = await record(id);
     notify.reload(id, rec && rec.digest);
     return { path: r, bytes };
@@ -219,10 +221,11 @@ function makeApps(deps) {
     if (!task) throw new Error('say what each refresh should do (`task`), e.g. "gather what the crew finished this week and publish the recap"');
     const prompt = 'Refresh the StarNet app "' + meta.name + '" (app id: ' + id + ').\n\n' +
       'FIRST call app.read { app: "' + id + '" } (find it with tool.search "app read"): it states TODAY\'s real date — your own sense of the date is out of date. The task is about today.\n\n' +
-      'TASK: ' + task + '\n\n' +
-      'When you have the result, save it with the app.publish tool (find it with tool.search "app publish"): app "' + id + '", ' +
-      'using the SAME key and data shape the app\'s page reads (check with app.read { app: "' + id + '" } if unsure). ' +
-      'Publishing is what the Commander sees — a refresh that does not publish did nothing.';
+      'TASK (the Commander\'s own words for every update): ' + task + '\n\n' +
+      'Do what the task says. New or current INFORMATION goes in with app.publish (find it with tool.search "app publish"): app "' + id + '", ' +
+      'using the SAME key and data shape the app\'s page reads (check with app.read { app: "' + id + '" }). ' +
+      'If the task asks the app ITSELF to change — its look, layout, what it shows or how it works — rewrite the page: app.read { app: "' + id + '", path: "index.html" }, then app.write the whole new file, then app.check it; keep everything that already works. ' +
+      'An update that neither publishes nor writes did nothing — the Commander sees only what you publish or write.';
     const out = await cron.create({ name: 'App: ' + meta.name, schedule: every, prompt, agentId: 'agent', meta: { appId: id } });
     if (!out.ok) throw new Error(out.error || 'the routine could not be created');
     // the routine must be THIS app's own new one — never an existing routine handed back as a "duplicate"
@@ -244,13 +247,13 @@ function makeApps(deps) {
     if (meta.schedule && meta.schedule.jobId && cron) {
       const job = cron.get(meta.schedule.jobId);
       sched = job ? {
-        jobId: job.id, every: meta.schedule.every, display: job.scheduleDisplay || meta.schedule.every,
+        jobId: job.id, every: meta.schedule.every, task: meta.schedule.task || '', display: job.scheduleDisplay || meta.schedule.every,
         enabled: job.enabled !== false, nextRunAt: job.nextRunAt || null, lastRunAt: job.lastRunAt || null,
         lastStatus: job.lastStatus || null, lastError: job.lastError || null, armed: cron.armed()
-      } : { jobId: meta.schedule.jobId, every: meta.schedule.every, missing: true };
+      } : { jobId: meta.schedule.jobId, every: meta.schedule.every, task: meta.schedule.task || '', missing: true };
     }
     return {
-      id, name: meta.name, description: meta.description || '', createdAt: meta.createdAt || null, builtAt: meta.builtAt || null,
+      id, name: meta.name, description: meta.description || '', createdAt: meta.createdAt || null, builtAt: meta.builtAt || null, changedAt: meta.changedAt || null,
       digest: rec ? rec.digest : null, updatedAt: (m && m.updatedAt) || null, schedule: sched
     };
   }
