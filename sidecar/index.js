@@ -1573,7 +1573,7 @@ function checkSkillMarketPulls() {
   skillMarketPullBusy = true;
   skillMarket.checkRevocations()
     .then(r => { if (r.pulled.length) console.warn('[skill-market] pulled from the market and switched off: ' + r.pulled.join(', ')); })
-    .catch(e => { try { console.warn('[skill-market] pulled-skills check failed: ' + (e && e.message || e)); } catch (_) {} })
+    .catch(e => failNote('skill-market.pull-check', e))   // offline or refused: the next tick retries; the failure stays counted and visible
     .finally(() => { skillMarketPullBusy = false; });
 }
 if (SKILL_MARKET_PULL_MS > 0) {
