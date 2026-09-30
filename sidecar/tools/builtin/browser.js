@@ -2136,11 +2136,66 @@
       } catch (e) { failNote('browser.cast-size', e); }
       return { width: stationMetrics.width, height: stationMetrics.height };
     }
+    /* SCREENCAST FIRST (2026-09-30, Andrew: the in-app browser was "SUPER laggy"). The capture loop above polls a
+       full screenshot every 140-700 ms. Chrome's screencast PUSHES a frame whenever the page repaints (up to the
+       display rate, nothing while still), which is what makes a streamed browser feel live. Each frame carries its
+       own CSS size, and — the headless=new trap measured above — a frame whose size is not the page viewport's is
+       dropped, never shown with the wrong geometry. If no usable frame arrives, the capture loop takes over. */
+    let castRoot = null, castSession, castMode = null, castExpect = null, castGood = 0, castWatch = null;
+    const castTarget = () => activeSession || openerSession || undefined;
+    async function startScreencast(c, gen) {
+      const root = c.__cdp;
+      if (castRoot !== root) {
+        castRoot = root;
+        root.on('Page.screencastFrame', (p, sid) => {
+          // ACK every frame on the session that sent it, or Chrome stops sending
+          root.send('Page.screencastFrameAck', { sessionId: p.sessionId }, sid).catch(swallow('browser.cast-ack'));
+          if (!castOn || castMode !== 'screencast' || gen !== castGen || (sid || undefined) !== castSession) return;
+          const m = p.metadata || {};
+          const w = Math.round(m.deviceWidth || 0), h = Math.round(m.deviceHeight || 0);
+          if (!(w > 0 && h > 0) || !p.data) return;
+          if (castExpect && (Math.abs(w - castExpect.width) > 2 || Math.abs(h - castExpect.height) > 2)) return;
+          castGood++;
+          try { if (castHandler) castHandler({ data: p.data, mime: 'image/jpeg', width: w, height: h }); } catch (e) { failNote('browser.cast-frame', e); }
+        });
+      }
+      castSession = castTarget();
+      castExpect = await castSize(c);
+      await root.send('Page.startScreencast', { format: 'jpeg', quality: 70, maxWidth: castExpect.width, maxHeight: castExpect.height, everyNthFrame: 1 }, castSession);
+    }
+    async function stopScreencast() {
+      if (castWatch) { clearInterval(castWatch); castWatch = null; }
+      if (castMode !== 'screencast' || !castRoot) return;
+      try { await castRoot.send('Page.stopScreencast', {}, castSession); } catch (e) { failNote('browser.cast-stop', e); }
+    }
     async function streamStart(onFrame) {
       const c = await page();
       castHandler = typeof onFrame === 'function' ? onFrame : null;
-      castOn = true; castSame = 0;
+      await stopScreencast();
+      castOn = true; castSame = 0; castGood = 0;
       const gen = ++castGen;
+      if (deps.screencast !== false) {
+        try {
+          castMode = 'screencast';
+          await startScreencast(c, gen);
+          // the tab can change under the stream (a popup adopted, a tab selected): follow it; and if the screencast
+          // gives nothing usable within ~1.5 s, fall back to the capture loop rather than show a frozen picture
+          let ticks = 0;
+          castWatch = setInterval(() => {
+            if (!castOn || gen !== castGen) { clearInterval(castWatch); castWatch = null; return; }
+            ticks++;
+            if (castTarget() !== castSession) startScreencast(c, gen).catch(e => failNote('browser.cast-retarget', e));
+            if (ticks === 3 && castGood === 0) { failNote('browser.cast-fallback', new Error('no screencast frames')); clearInterval(castWatch); castWatch = null; castMode = null; stopScreencastSafe(); startCaptureLoop(c, gen); }
+          }, 500);
+          return true;
+        } catch (e) { failNote('browser.cast-start', e); castMode = null; }
+      }
+      await startCaptureLoop(c, gen);
+      return true;
+    }
+    function stopScreencastSafe() { if (castRoot) castRoot.send('Page.stopScreencast', {}, castSession).catch(swallow('browser.cast-stop')); }
+    async function startCaptureLoop(c, gen) {
+      castMode = 'capture';
       let last = '';
       // the first frame is taken before we return, so the window never opens on a blank screen
       const shoot = async () => {
@@ -2156,14 +2211,14 @@
         while (castOn && gen === castGen) {
           await new Promise(resolve => { const t = setTimeout(resolve, castSame >= CAST_IDLE_AFTER ? CAST_IDLE_MS : CAST_FAST_MS); castKick = () => { clearTimeout(t); resolve(); }; });
           castKick = null;
-          if (!castOn || gen !== castGen || !cdp) break;
+          if (!castOn || gen !== castGen || !cdp || castMode !== 'capture') break;
           try { await shoot(); } catch (_) { await sleep(CAST_IDLE_MS); }
         }
       })();
-      return true;
     }
     async function streamStop() {
-      castOn = false; castHandler = null; castGen++;
+      await stopScreencast();
+      castOn = false; castHandler = null; castGen++; castMode = null;
       if (castKick) { try { castKick(); } catch (e) { failNote('browser.cast-kick', e); } }
       return true;
     }
