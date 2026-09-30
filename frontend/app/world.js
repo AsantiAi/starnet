@@ -1830,11 +1830,13 @@ const World = (() => {
   // agent locks the feed onto that agent immediately (no idle wait) and TRAILS it as it moves, until the
   // Commander grabs the camera (wheel/drag/click → the input handlers release the lock). One-shot focusBody
   // stays for programmatic reframes (boot restore, delete-fallback) — lockBody is only armed by a USER selection.
-  function lockBody(id) {
+  // zoom (optional, 2026-09-30): the lock's scale for a surface that frames one agent closer (the HUD widget);
+  // omitted = the station's own rule (at least 3, never zooming out), byte-identical.
+  function lockBody(id, zoom) {
     const b = bodyForAgent(id) || agent;
     if (!b || b.unplaced || !cache || camAnim || awakeFrozen) return;   // nothing to frame yet / the scripted awakening camera owns the transform
     camLerp = null;
-    camLock = { id: (b.agentId || b.id), sc: clampz(Math.max(scale, 3), MINZ, MAXZ), source: 'session' };
+    camLock = { id: (b.agentId || b.id), sc: clampz(zoom > 0 ? zoom : Math.max(scale, 3), MINZ, MAXZ), source: 'session' };
   }
   /* ---------- IDLE CINECAM — the security-feed auto-director ----------
      After cineIdleMs of true hands-off the camera starts hunting the floor's own life: it follow-locks a

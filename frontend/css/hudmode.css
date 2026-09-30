@@ -155,3 +155,21 @@ html body.hud-mode.hud-view-widget #hud-widget .hud-wrow[data-state="ask"]:only-
 
 /* the widget is the world alone: no camera frame marks either (Andrew 09-30) */
 html body.hud-mode.hud-view-widget #stage-wrap .cam-hud { display: none !important; }
+
+/* ---- the caption under the cam: one slim line per agent, no inner boxes (Andrew 09-30: a HUD, not panels) ----
+   lamp · NAME · step ............ clock. Rows share the panel; a hairline separates them. */
+html body.hud-mode.hud-view-widget #hud-widget { padding: 0; gap: 0; }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrows { gap: 0; }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow {
+  grid-template-columns: 6px auto minmax(0, 1fr) auto; grid-template-rows: auto; align-items: center; column-gap: 8px;
+  padding: 6px 10px; border: 0; border-radius: 0; background: transparent; box-shadow: none;
+}
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow + .hud-wrow { border-top: 1px solid var(--gd-edge, var(--ph-dim)); }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow:is(:hover, :focus-visible) { background: var(--gd-hover, var(--ph-faint)); border-color: var(--gd-edge, var(--ph-dim)); box-shadow: none; }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow.on:not(:only-child) { background: var(--gd-hover, var(--ph-faint)); box-shadow: inset 2px 0 0 var(--ph); }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow[data-state="ask"] { box-shadow: inset 2px 0 0 var(--gold, #e9c46a); }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wname { font-size: 15px; }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wstep { grid-column: 3; grid-row: 1; font-size: 13px; }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wclock { grid-column: 4; grid-row: 1; font-size: 18px; }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow[data-state="idle"] .hud-wclock { font-size: 13px; }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wmore { border-top: 1px solid var(--gd-edge, var(--ph-dim)); border-radius: 0; padding: 5px 10px; }

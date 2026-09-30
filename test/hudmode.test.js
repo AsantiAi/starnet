@@ -212,10 +212,12 @@ A.eq([H.fmtAgo(10_000), H.fmtAgo(5 * 60_000), H.fmtAgo(2 * 3_600_000)], ['just n
     'every card can be steered and stopped through the routes the station already has');
   A.ok(has(js, 'App.openWorkstream(mine[0].id)', 'Workstreams.get(sid)'), 'OPEN CONVERSATION goes to the conversation that owns the work, else the agent\'s own (never rebinds the blank thread on screen)');
   A.ok(has(js, "S.view = 'widget';", "classList.toggle('hud-view-widget', small)", "setView('activity')"), 'the HUD opens SMALL on the widget, and a click opens ACTIVITY');
-  A.ok(has(js, 'World.lockBody(id)', 'if (small) worldStart(true); else { worldStop();', 'World.setFrameCap(capped ? WIDGET_FRAME_MS : 0)') && !js.includes('SPRITES.drawBody'),
+  A.ok(has(js, 'World.lockBody(id, WIDGET_ZOOM)', 'if (small) worldStart(true); else { worldStop();', 'World.setFrameCap(capped ? WIDGET_FRAME_MS : 0)') && !js.includes('SPRITES.drawBody'),
     'the widget is the REAL station (the world renderer, its camera following the agent), never a staged scene; the world runs only while the widget shows it');
   A.ok(css.includes('#screen-game.active > #stage-wrap {') && css.includes('#stage-wrap .cam-hud { display: none !important; }'), 'the widget shows the world alone: no camera frame, no station controls');
   A.ok(js.includes('World.setOverlays(!capped)'), 'the widget turns the in-world readouts off, and the station gets them back');
+  A.ok(js.includes('World.lockBody(id, WIDGET_ZOOM)') && js.includes('World.lockBody(S.followId, S.stationZoom)'), 'the widget frames its agent closer and gives the station its zoom back');
+  A.ok(read('frontend/app/world.js').includes('sc: clampz(zoom > 0 ? zoom : Math.max(scale, 3), MINZ, MAXZ)'), 'World.lockBody takes an optional zoom (omitted = the station rule)');
   const world = read('frontend/app/world.js');
   A.ok(world.includes('function setOverlays(on) { overlaysOn = on !== false; }') && world.includes('    if (overlaysOn) {\n    drawRunClocks(now);') && world.includes('setOverlays, setCinecamIdle'),
     'World.setOverlays gates the in-world readout block (default on: the station frame is unchanged)');
