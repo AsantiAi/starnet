@@ -110,7 +110,7 @@
   box-shadow: inset 0 2px 6px rgba(0,0,0,.28), inset 0 -1px 0 rgba(var(--ph-bright-rgb),.04); }
 .wf-strip-wrap.pin { position: sticky; top: 0; z-index: 3; }
 @media (max-width: 900px), (max-height: 720px) { .wf-strip-wrap.pin { position: static; } }   /* a short panel keeps its height for the editor */
-.wf-strip { position: relative; display: flex; align-items: flex-start; padding: 14px 14px 16px; min-width: max-content; }   /* (an INBOX → BAY → OUTBOX line fits the panel whole) */
+.wf-strip { position: relative; display: flex; align-items: center; padding: 14px 14px 16px; min-width: max-content; }   /* every part and every join sit on the line's middle (an INBOX → BAY → OUTBOX line fits the panel whole) */
 .wf-strip.has-arcs { padding-bottom: 42px; }   /* a loop's way back is drawn under the tiles */
 /* THE LINE'S MACHINES AS TILES (2026-09-30, Andrew on this diagram: "make this look way better"): the Build Library's glass tile —
    the machine's own art big in a lit well (a BAY's agent stands at it), its name, one short line; the lamp top-right, a BAY's
@@ -152,19 +152,20 @@
 .wf-node.wf-addend { justify-content: center; border-style: dashed; color: var(--gold); font-size: 16px; letter-spacing: .8px; }
 .wf-colgroup { position: relative; display: grid; gap: 8px; padding: 28px 8px 8px; border: 1px dashed rgba(var(--ph-rgb),.3); border-radius: 12px; background: rgba(var(--ph-rgb),.02); }
 .wf-colmode { position: absolute; top: 7px; left: 11px; font-size: 14px; letter-spacing: 1.2px; color: var(--ph-dim); }
-/* a belt feeds the tiles at the height of their machines, what it carries over it and the + that adds to it ON it
-   (a belt is as wide as what it carries needs, within reason: a label wraps between words, never inside one) */
-.wf-belt { position: relative; flex: 0 0 auto; align-self: flex-start; width: max-content; min-width: 60px; max-width: 112px; display: grid; grid-template-rows: 27px 28px; justify-items: center; align-items: center; }
-.wf-belt.mid { align-self: center; }   /* (beside stacked branches: meet them at their middle) */
+/* a join sits on the MIDDLE of the tiles (2026-09-30, Andrew: "CENTER THE ARROW IN THE MIDDLE NOT ON THE TOP"): three rows —
+   what it carries over the line, the line with the + that adds to it ON it, and an empty row as tall as the first — so the
+   line is the join's centre, and every join is centred on the tiles (beside stacked branches it meets them at their middle
+   the same way). A join is as wide as what it carries needs, within reason: a label wraps between words, never inside one. */
+.wf-belt { position: relative; flex: 0 0 auto; align-self: center; width: max-content; min-width: 60px; max-width: 112px; display: grid; grid-template-rows: 27px 28px 27px; justify-items: center; align-items: center; }
 .wf-belt .carry { grid-row: 1; align-self: end; padding: 0 4px 3px; font-size: 14px; color: var(--ph-dim); text-align: center; line-height: 1.1; max-width: 112px; box-sizing: border-box; max-height: 2.3em; overflow: hidden; overflow-wrap: break-word; }
+.wf-belt.gap .carry { grid-row: 2; align-self: center; padding-bottom: 0; }   /* a break in the line says so where the line would run */
 .wf-belt :is(.rail,.wf-plus) { grid-row: 2; grid-column: 1; }
-/* the join between two parts: a clean line with a chevron into the next one — a shade brighter once the line can run, never
-   moving (2026-09-30: the floor's real conveyor art here was rejected outright — the diagram draws a line, not a belt) */
-.wf-belt .rail { position: relative; width: 100%; height: 2px; border-radius: 1px; background: rgba(var(--ph-rgb),.28); }
-.wf-belt .rail::after { content: ""; position: absolute; right: 0; top: 50%; width: 8px; height: 8px; box-sizing: border-box;
-  border-top: 2px solid rgba(var(--ph-rgb),.4); border-right: 2px solid rgba(var(--ph-rgb),.4); transform: translateY(-50%) rotate(45deg); }
-.wf-strip.live .wf-belt .rail { background: rgba(var(--ph-rgb),.5); }
-.wf-strip.live .wf-belt .rail::after { border-color: rgba(var(--ph-rgb),.6); }
+/* the join between two parts: ONE shape — a 2px line into a solid arrowhead whose tip touches the next part — a shade brighter
+   once the line can run, never moving (2026-09-30: the floor's real conveyor art here was rejected outright — the diagram draws
+   a line, not a belt). One clipped box with one fill, so the head never doubles over the line. */
+.wf-belt .rail { position: relative; width: 100%; height: 10px; background: rgba(var(--ph-rgb),.34);
+  clip-path: polygon(0 4px, calc(100% - 9px) 4px, calc(100% - 9px) 0, 100% 5px, calc(100% - 9px) 10px, calc(100% - 9px) 6px, 0 6px); }
+.wf-strip.live .wf-belt .rail { background: rgba(var(--ph-rgb),.55); }
 .wf-plus { position: relative; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--wf-edge);
   background: linear-gradient(180deg, rgba(var(--ph-rgb),.08), rgba(var(--ph-rgb),.02)), var(--panel2); box-shadow: var(--wf-light), 0 1px 3px rgba(0,0,0,.4);
   color: var(--ph); font: inherit; font-size: 22px; line-height: 1; padding: 0; display: grid; place-items: center; cursor: pointer; z-index: 2;
@@ -181,6 +182,8 @@
 .wf-arcs { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 0; overflow: visible; }
 .wf-arcs path { fill: none; stroke: rgba(0,0,0,.5); stroke-width: 6; }
 .wf-arcs path.chev { stroke: var(--wf-cyan); stroke-width: 2; stroke-dasharray: 6 8; opacity: .85; }
+.wf-arcs path.stem { stroke: var(--wf-cyan); stroke-width: 2; opacity: .85; }
+.wf-arcs .head { fill: var(--wf-cyan); stroke: none; opacity: .85; }   /* the way back ends in the joins' arrowhead on a solid stem, up into its part */
 .wf-strip.live .wf-arcs path.chev { animation: wf-rollb 1s linear infinite; }   /* the way back moves only on a line that can run */
 @keyframes wf-rollb { to { stroke-dashoffset: -14; } }
 .wf-arcs text { font-family: 'VT323', monospace; font-size: 15px; fill: var(--wf-cyan); letter-spacing: .6px; }

@@ -337,12 +337,11 @@ const WorkflowPanel = (() => {
       else if (i > 0) {
         const prev = nodes[i - 1], a = machineOf(prev), b = machineOf(n);
         const carry = n.kind === 'col' && n.col.escalation ? escCarry(n.col.escalation) : prev.kind === 'trigger' ? 'the job' : prev.kind === 'col' && prev.col.docks.length === 1 ? ((prop(prev.col.docks[0].propId) || {}).hands || '') : prev.kind === 'gate' ? (prev.gate.kind === 'loop' ? 'on DONE' : 'as one') : '';
-        const mid = (prev.kind === 'col' && prev.col.docks.length > 1) || (n.kind === 'col' && n.col.docks.length > 1);
         const canPlus = !!(a && b && S.lineKey);
         // a + that can only refuse is shown OFF with its reason (2026-09-27 audit B3) — never a role picker that ends in an error
         const lined = canPlus && H.lineEdit ? canEdit('insertStep', a, { from: a, to: b }) : null;
         const chk = lined && lined.ok ? lined : canPlus && H.canInsertBay ? (H.canInsertBay(a, b) || { ok: true }) : { ok: true };
-        html += '<div class="wf-belt' + (mid ? ' mid' : '') + '">' + (carry ? '<span class="carry">' + esc(carry) + '</span>' : '') + '<span class="rail"></span>'
+        html += '<div class="wf-belt">' + (carry ? '<span class="carry">' + esc(carry) + '</span>' : '') + '<span class="rail"></span>'
           + (canPlus ? (chk.ok
             ? '<button type="button" class="wf-plus" data-plus="' + i + '" data-from="' + esc(a) + '" data-to="' + esc(b) + '" aria-label="Add a step here" data-tip="Add a step here">+</button>'
             : '<button type="button" class="wf-plus off" aria-disabled="true" data-plus-off="' + esc(chk.msg || 'a step cannot be added here') + '" aria-label="Adding a step here is not possible" data-tip="' + esc(chk.msg || 'a step cannot be added here') + '">+</button>') : '')
@@ -416,7 +415,7 @@ const WorkflowPanel = (() => {
       const who = back ? (back.agentId ? nameOf(back.agentId) : back.role || 'BAY') : '?';
       const txt = loop ? '⟲ back to ' + who + ' · up to ' + (g.max || 5) + '×' : 'waits for every part';
       return tileHTML({ cls: 'gate ' + g.kind, sel: isSel(g.propId), attrs: ' data-node="' + esc(g.propId || '') + '" data-gate="' + esc(g.key) + '"',
-        mach: loop ? 'loop' : 'joiner', lamp: null, name: loop ? 'LOOP' : 'JOINER', meta: loop ? 'back to ' + who + ' · ' + (g.max || 5) + '×' : 'waits for all',
+        mach: loop ? 'loop' : 'joiner', lamp: null, name: loop ? 'LOOP' : 'JOINER', meta: loop ? 'back to ' + who : 'waits for all',   // (how many times: the way back's label and the tip)
         tip: (loop ? 'LOOP GATE' : 'JOINER') + '\n' + txt, label: (loop ? 'LOOP, ' : 'JOINER, ') + txt });
     }
     const col = n.col;
@@ -441,13 +440,21 @@ const WorkflowPanel = (() => {
     const NS = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(NS, 'svg'); svg.setAttribute('class', 'wf-arcs'); svg.setAttribute('aria-hidden', 'true');
     svg.setAttribute('width', strip.scrollWidth); svg.setAttribute('height', strip.scrollHeight);
+    // a part's box in the strip's own px (a BAY inside a branch group is offset from its group, not from the strip)
+    const box = el => { let x = 0, y = 0; for (let e = el; e && e !== strip; e = e.offsetParent) { x += e.offsetLeft; y += e.offsetTop; } return { x, y, w: el.offsetWidth, h: el.offsetHeight }; };
     for (const g of loops) {
       const a = strip.querySelector('[data-gate="' + g.key + '"]'), b = strip.querySelector('[data-node="' + g.backTo + '"]');
       if (!a || !b) continue;
-      const ax = a.offsetLeft + a.offsetWidth / 2, bx = b.offsetLeft + b.offsetWidth / 2;
-      const y0 = Math.max(a.offsetTop + a.offsetHeight, b.offsetTop + b.offsetHeight), y1 = y0 + 18;
-      const d = 'M' + ax + ' ' + (a.offsetTop + a.offsetHeight) + ' L' + ax + ' ' + y1 + ' L' + bx + ' ' + y1 + ' L' + bx + ' ' + (b.offsetTop + b.offsetHeight);
-      for (const c of ['', 'chev']) { const p = document.createElementNS(NS, 'path'); p.setAttribute('d', d); if (c) p.setAttribute('class', c); svg.appendChild(p); }
+      const A = box(a), B = box(b), ax = A.x + A.w / 2, bx = B.x + B.w / 2, aEnd = A.y + A.h, bEnd = B.y + B.h;
+      // the way back runs under everything between the two (the parts sit on the line's middle: a branch group between them hangs lower)
+      let y0 = Math.max(aEnd, bEnd);
+      for (const el of strip.children) if (el.offsetLeft < Math.max(ax, bx) && el.offsetLeft + el.offsetWidth > Math.min(ax, bx)) y0 = Math.max(y0, el.offsetTop + el.offsetHeight);
+      const y1 = y0 + 18, neck = bEnd + 10;
+      const d = 'M' + ax + ' ' + aEnd + ' L' + ax + ' ' + y1 + ' L' + bx + ' ' + y1 + ' L' + bx + ' ' + (neck + 8), stem = 'M' + bx + ' ' + (neck + 8) + ' L' + bx + ' ' + neck;
+      for (const [c, pd] of [['', d + ' L' + bx + ' ' + neck], ['chev', d], ['stem', stem]]) { const p = document.createElementNS(NS, 'path'); p.setAttribute('d', pd); if (c) p.setAttribute('class', c); svg.appendChild(p); }
+      // …and ends in the joins' arrowhead on a solid stem (a dash gap never leaves the head floating), up into the part it goes back to
+      const head = document.createElementNS(NS, 'polygon'); head.setAttribute('class', 'head');
+      head.setAttribute('points', (bx - 5) + ',' + neck + ' ' + bx + ',' + (bEnd + 1) + ' ' + (bx + 5) + ',' + neck); svg.appendChild(head);
       const t = document.createElementNS(NS, 'text'); t.setAttribute('x', (ax + bx) / 2); t.setAttribute('y', y1 + 15); t.setAttribute('text-anchor', 'middle');
       t.textContent = '⟲ ' + (g.when === 'approved' || g.when === 'revise' ? 'UNTIL ' + g.when.toUpperCase() : g.when ? 'WHILE ' + String(g.when).toUpperCase() : 'EVERY PASS') + ' · ' + (g.max || 5) + '×';
       svg.appendChild(t);
