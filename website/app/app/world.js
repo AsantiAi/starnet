@@ -10679,6 +10679,8 @@ const World = (() => {
   return { init, rebake, frameReviewRoom, renderStill, crt: CRT, slagLog: () => (slaglog ? slaglog.recent() : []),
     // LINE WATCH: the Workflow panel pushes the step-test session it polls; reads today's numbers for a line
     noteStepTest, lineStatsFor: id => (lineStats.known ? (lineStats.byLine[id] || null) : null), pollLineStats,
+    // a bay's live state — the lamp's own fold (WORKING only once the sidecar confirmed the run), with how long it has held
+    bayLive: id => { const w = lineWatch(); if (!w || !id) return null; const t = lwNow(), s = w.status(id, t); return Object.assign({}, s, { forMs: s.since != null ? Math.max(0, t - s.since) : null }); },
     _dbgLineWatch: () => ({ setDraw: on => { lwDrawOff = !on; return !lwDrawOff; }, watch: watch ? watch.snapshot() : null, stats: lineStats, status: id => (watch ? watch.status(id, lwNow()) : null),
       crates: () => (convey ? convey.peekBoxes().filter(b => b.payload && !b.payload.ghost).map(b => { const v = CRATE_DIRV[b.dir] || [0, 0]; const wx = (b.x + 0.5) * T + (b.prog - 0.5) * T * v[0], wy = (b.y + 0.5) * T + (b.prog - 0.5) * T * v[1] - 1; return { id: b.id, box: b.payload.box || null, workitemId: b.payload.workitemId || null, runId: b.payload.runId || null, sx: wx * scale + panX, sy: wy * scale + panY }; }) : []),
       bays: () => (routingPlan && routingPlan.dockBays ? routingPlan.dockBays.filter(d => d.agentId).map(d => { const b = bayPlateBox(d); return { propId: d.propId, agentId: d.agentId, sx: b.cx * scale + panX, sy: (d.y + (d.h || 1) / 2) * T * scale + panY, lampX: (b.left + b.width - 4.75) * scale + panX, lampY: (b.top - 0.9) * scale + panY }; }) : []),

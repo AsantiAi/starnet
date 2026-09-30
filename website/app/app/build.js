@@ -2720,6 +2720,7 @@ const Build = (() => {
       },
       machineDiagram: id => machineDiagramSVG(id),
       machineStill: type => machineStill(type),          // a part's own floor art, for the panel's line diagram
+      bayLive: id => (opts.world && opts.world.bayLive) ? opts.world.bayLive(id) : null,   // a bay's live lamp state (WORKING / WAITING …)
       preview: () => sendTestBoxes(null),               // the TEST view's WATCH IT: the free walkthrough on the floor
       splitModeInfo: id => splitModeInfo(id),            // { mode: 'copy'|'turns', toCopy, toTurns } — the SPLITTER switch
       setSplitMode: (id, mode) => setSplitMode(id, mode), // swaps the JOINER/MERGER where the branches meet (one undo)
@@ -3767,7 +3768,17 @@ const Build = (() => {
     finSampleRes = { key, stamp: Date.now(), pending: true, phase: 'post', exampleSignature:options.exampleSignature };   // phase: 'post' (posting line…) → 'run' (running)
     finSig = ''; renderFinCard();
     options.onUpdate?.();
-    const settle = (view, response) => { finSampleRes = { key, stamp: Date.now(), view, exampleSignature:options.exampleSignature, output:response?.replies?.slice(-1)[0] || '' }; finSig = ''; if (running) renderFinCard(); options.onUpdate?.(); sfx(view.ok ? 'chime' : 'bad'); };
+    /* what the server answered is KEPT (2026-09-30 — ease of use): every stage's run (the panel reads each step's own reply from
+       it), the job's stream, and the WHOLE delivered text (the hub delivers it in 4000-character chunks: joined, never just the last
+       one). THE OUTBOX IS TOLD: the panel promised "the result lands in the OUTBOX" but only COMMS' INBOX card folded a delivered
+       row into the OUTBOX's ledger — a job sent from the panel never showed there. Same rule as chat.js: a clean 'done' only. */
+    const settle = (view, response) => {
+      let folded = false;
+      if (view.ok && response && response.delivered && response.delivered.reason === 'done') { try { if (typeof ReturnStore !== 'undefined' && ReturnStore.foldRow) folded = !!ReturnStore.foldRow(response.delivered); } catch (_) {} }
+      finSampleRes = { key, stamp: Date.now(), view, exampleSignature:options.exampleSignature, output: Array.isArray(response?.replies) ? response.replies.join('') : '',
+        runs: Array.isArray(response?.runs) ? response.runs : [], streamId: response?.streamId || null, folded, text: options.text || '' };
+      finSig = ''; if (running) renderFinCard(); options.onUpdate?.(); sfx(view.ok ? 'chime' : 'bad');
+    };
     const bad = reason => ({ ok: false, stages: [], usd: null, reply: '', reason });
     finPlanGate(c).then(gate => {
       if (gate && gate.refuse) { settle(bad(gate.refuse)); return; }

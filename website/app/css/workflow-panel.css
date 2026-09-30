@@ -311,6 +311,29 @@ textarea.wf-io:focus { outline: none; border-color: var(--ph); box-shadow: var(-
 .wf-foot { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 12px 18px; border-top: 1px solid var(--wf-edge); background: rgba(0,0,0,.12); }
 .wf-foot-note { flex: 1; min-width: 150px; font-size: 15px; line-height: 1.3; color: var(--ph-dim); }
 .wf-sample-res { flex: 1 1 100%; font-size: 17px; line-height: 1.45; }
+/* a job, read back (2026-09-30): the whole result, then how each step did it — each step's reply one click open */
+.wf-job { flex: 1 1 100%; display: grid; gap: 8px; margin-top: 4px; }
+.wf-help.wf-live { color: var(--ph-bright); }   /* where the job is now, while it rides */
+/* the tile of the step working now (the floor lamp's WORKING): its own lamp turns the floor's working amber and pulses like the
+   bay lamp does, and the tile's edge brightens — never the selection's gold, so "working" and "picked" never look alike */
+.wf-node.working { border-color: rgba(var(--ph-rgb),.7); }
+.wf-node.working .dot { background: #ffb23e; box-shadow: 0 0 0 1px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.3); animation: wf-working 1.2s ease-in-out infinite; }
+@keyframes wf-working { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .wf-node.working .dot { animation: none; } }
+.wf-job-h { font-size: 16px; letter-spacing: .6px; color: var(--ph-dim); }
+.wf-job-h b { font-weight: normal; color: var(--ok); letter-spacing: 1.2px; }
+.wf-job-out { max-height: 320px; }
+.wf-steps { display: grid; gap: 2px; }
+.wf-step-out summary { display: flex; justify-content: space-between; gap: 10px; }
+.wf-step-out .src { color: var(--ph-dim); font-size: 15px; letter-spacing: .4px; }
+.wf-step-out .wf-io { margin: 4px 0 6px; }
+/* NOT RIGHT? — say what's wrong; each suggested change is a glass card to use or ignore (2026-09-30) */
+.wf-notright { display: grid; gap: 8px; margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--wf-edge); }
+.wf-fix { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--wf-edge); border-radius: 10px;
+  background: linear-gradient(135deg, rgba(var(--ph-rgb),.06), rgba(var(--ph-rgb),.015)), rgba(0,0,0,.18); box-shadow: var(--wf-light); }
+.wf-fix.applied { border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
+.wf-fix-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 16px; letter-spacing: .8px; color: var(--ph-bright); }
+.wf-fix-h b { font-weight: normal; }
 /* the real job's verdict (build.js finSampleHTML): RAN · COST · SAID as a result block — the panel's own left-rail voice
    (.wf-verdict): green when it reached the OUTBOX, gold when you stopped it, red when it was refused */
 .wf-sample-res .fl-result { display: grid; gap: 3px; border-left: 3px solid var(--ok); border-radius: 0 8px 8px 0; padding: 8px 12px; background: linear-gradient(90deg, rgba(var(--ok-rgb),.08), rgba(var(--ok-rgb),.02)); color: var(--text); }
