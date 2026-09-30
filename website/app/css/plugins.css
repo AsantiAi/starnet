@@ -50,3 +50,37 @@
 .term.apps-win .app-unbuilt { color: var(--ph-dim); }
 .term.apps-win .app-rename-in { flex: 1 1 auto; min-width: 0; margin-right: 8px; }
 .term.apps-win .app-row-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* APPS in the GLASS material — the widget studio's recipes (glass-demo.css .wg-library), never the old CRT
+   key-input (pitch-black gradient + glow). Fields: faint phosphor tint; buttons: glass face; rows: glass cards. */
+:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-field {
+  width: 100%; box-sizing: border-box; min-width: 0; padding: 6px 8px;
+  border: 1px solid var(--gd-edge, rgba(var(--ph-rgb),.24)); border-radius: 3px;
+  background: rgba(var(--ph-rgb),.035); color: var(--text); text-shadow: none;
+  box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb),.05);
+  font: 16px/1.35 'VT323',monospace; outline: none; transition: border-color var(--t-fast, .12s);
+}
+:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-field:focus { border-color: rgba(var(--ph-rgb),.45); box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb),.05); }
+:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-field::placeholder { color: var(--text); opacity: .55; }
+.term.apps-win textarea.apps-field { resize: vertical; min-height: 72px; }
+:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-btn {
+  min-height: 29px; padding: 5px 9px; border: 1px solid var(--gd-edge, rgba(var(--ph-rgb),.24)); border-radius: 3px;
+  background: var(--gd-face); box-shadow: inset 0 1px 0 var(--gd-light); color: var(--ph);
+  font: 15px/1.1 'VT323',monospace; letter-spacing: .5px; cursor: pointer; white-space: nowrap; text-shadow: none;
+}
+:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-btn.primary { color: var(--ph-bright); background: var(--gd-hover); border-color: var(--ph-dim); }
+:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-btn:not(:disabled):hover { color: var(--ph-bright); border-color: var(--ph-dim); background: var(--gd-hover); }
+:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-btn.danger:not(:disabled):hover { color: var(--bad); border-color: var(--bad); background: rgba(255,75,65,.08); }
+:is(.term.apps-win, .term.plugin-app-win .app-bar) .apps-btn:disabled { opacity: .4; cursor: default; }
+:is(.term.apps-win, .term.plugin-app-win .app-bar) :is(.apps-btn, .apps-field):focus-visible { outline: 1px solid var(--ph); outline-offset: 1px; }
+.term.apps-win .apps-chip { min-height: 26px; padding: 3px 8px; font-size: 14px; }
+.term.apps-win .apps-h { display: block; margin: 11px 1px 7px; padding: 0; font: 18px/1.2 'VT323',monospace; letter-spacing: .5px; color: var(--ph-bright); }
+.term.apps-win .apps-new label { font: 14px/1.2 'VT323',monospace; color: var(--text); margin-top: 4px; }
+.term.apps-win .app-row {
+  padding: 8px; margin: 0; border: 1px solid var(--gd-edge, rgba(var(--ph-rgb),.24)); border-radius: 4px;
+  background: var(--gd-face); box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb),.06);
+}
+.term.apps-win .app-row:is(:hover, :focus-within) { background: var(--gd-hover); border-color: var(--ph-dim); }
+.term.apps-win .app-row .mc-acts { gap: 6px; flex-wrap: wrap; }
+/* the bar under an app window: part of the window's glass, not a dark strip */
+.term.plugin-app-win .app-bar { background: transparent; border-top: 1px solid var(--gd-edge, rgba(var(--ph-rgb),.24)); }

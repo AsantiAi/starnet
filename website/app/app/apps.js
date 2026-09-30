@@ -1,7 +1,7 @@
 /* frontend/app/apps.js — APPS: describe it, get it (2026-09-29).
 
-   The Commander names an app and says what it should do ("A daily brief of the top AI news, refreshed every 24h" —
-   or a habit tracker, a timer, a game: anything). StarNet creates it at once (its window opens on a "building"
+   The Commander names an app and says, in their own words, what it should be — a tracker, a timer, a dashboard,
+   a game, a feed that refreshes itself: anything. StarNet creates it at once (its window opens on a "building"
    page), then hands the build to the lead in the app's OWN COMMS session — so the work is visible, runs under the
    station's normal rules, and the page appears the moment the crew writes it. Changing an app is the same move
    from the bar under its window: describe the change.
@@ -27,10 +27,10 @@
   const notify = (msg, cls) => { const ui = UI(); if (ui && ui.notify) ui.notify(msg, cls || 'good', 'general', { transient: true }); };
   const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const EXAMPLES = [
-    ['AI News Brief', 'A daily brief of the top AI news — headline, two-line summary and source for each story. Refresh every 24h.'],
-    ['Market Pulse', 'The day\'s biggest moves in crypto and tech stocks, with a one-line why for each. Refresh every 6h.'],
     ['Habit Tracker', 'A tracker for my daily habits: I add habits, tick them off each day, and see my streaks. Keep what I enter.'],
-    ['Focus Timer', 'A pomodoro timer: 25 minutes of focus, 5 of break, with a big clock, start/pause, and a count of sessions today. Make it look like a retro arcade cabinet.']
+    ['Focus Timer', 'A pomodoro timer: 25 minutes of focus, 5 of break, with a big clock, start/pause, and a count of sessions today. Make it look like a retro arcade cabinet.'],
+    ['Idea Board', 'A board where I jot ideas as cards, drag them between Now / Later / Maybe, and search them. Keep what I enter.'],
+    ['Weekly Recap', 'Every Friday evening, a one-page recap of what my crew finished this week, grouped by project. Refresh weekly.']
   ];
 
   async function load() {
@@ -235,9 +235,9 @@
     if (!bar) {
       bar = document.createElement('form');
       bar.className = 'app-bar';
-      bar.innerHTML = '<div class="app-bar-row"><input class="key-input app-change" maxlength="1500" autocomplete="off" aria-label="Describe a change to this app" placeholder="Describe a change — how it looks, what it shows, how it works">' +
-        '<button class="bb xs app-change-go" type="submit">CHANGE</button><button class="bb xs app-refresh" type="button" hidden>⟳ REFRESH</button></div>' +
-        '<div class="app-bar-status"><span class="app-status" role="status"></span><button class="bb xs app-arm" type="button" hidden>TURN ON ROUTINES</button></div>';
+      bar.innerHTML = '<div class="app-bar-row"><input class="apps-field app-change" maxlength="1500" autocomplete="off" aria-label="Describe a change to this app" placeholder="Describe a change — how it looks, what it shows, how it works">' +
+        '<button class="apps-btn primary app-change-go" type="submit">CHANGE</button><button class="apps-btn app-refresh" type="button" hidden>⟳ REFRESH</button></div>' +
+        '<div class="app-bar-status"><span class="app-status" role="status"></span><button class="apps-btn app-arm" type="button" hidden>TURN ON ROUTINES</button></div>';
       bar.addEventListener('submit', (e) => {
         e.preventDefault();
         const inp = bar.querySelector('.app-change');
@@ -282,16 +282,16 @@
   let listEl = null;
   function rerenderList() {
     if (!listEl || !listEl.isConnected) return;
-    if (loadError && !list.length) { listEl.innerHTML = '<div class="ext-empty">Could not load your apps — the station did not answer. <button class="bb xs" type="button" data-app-retry>RETRY</button></div>'; return; }
+    if (loadError && !list.length) { listEl.innerHTML = '<div class="ext-empty">Could not load your apps — the station did not answer. <button class="apps-btn" type="button" data-app-retry>RETRY</button></div>'; return; }
     if (!list.length) { listEl.innerHTML = '<div class="ext-empty">No apps yet. Describe one above — your crew builds it in its own window.</div>'; return; }
     listEl.innerHTML = list.map((a) => '<div class="mc-row ext-row app-row" data-app="' + esc(a.id) + '">' +
       '<div class="mc-top"><b class="app-row-name">' + esc(a.name) + '</b><span class="mc-state ' + (built(a) ? 'app-ready' : 'app-unbuilt') + '">' + (built(a) ? '● ready' : '○ not built yet') + '</span></div>' +
       (a.description ? '<div class="mc-hint app-row-desc">' + esc(a.description) + '</div>' : '') +
       '<div class="mc-hint app-row-status">' + esc(statusOf(a)) + '</div>' +
-      '<div class="mc-acts"><button class="bb xs" type="button" data-app-open="' + esc(a.id) + '">OPEN</button>' +
-      (a.schedule && a.schedule.jobId && !a.schedule.missing ? '<button class="bb xs" type="button" data-app-refresh="' + esc(a.id) + '"' + (refreshing.has(a.id) ? ' disabled' : '') + '>' + (refreshing.has(a.id) ? '⟳ REFRESHING…' : '⟳ REFRESH NOW') + '</button>' : '') +
-      '<button class="bb xs" type="button" data-app-rename="' + esc(a.id) + '">RENAME</button>' +
-      '<button class="bb xs danger" type="button" data-app-delete="' + esc(a.id) + '">DELETE</button></div></div>').join('');
+      '<div class="mc-acts"><button class="apps-btn" type="button" data-app-open="' + esc(a.id) + '">OPEN</button>' +
+      (a.schedule && a.schedule.jobId && !a.schedule.missing ? '<button class="apps-btn" type="button" data-app-refresh="' + esc(a.id) + '"' + (refreshing.has(a.id) ? ' disabled' : '') + '>' + (refreshing.has(a.id) ? '⟳ REFRESHING…' : '⟳ REFRESH NOW') + '</button>' : '') +
+      '<button class="apps-btn" type="button" data-app-rename="' + esc(a.id) + '">RENAME</button>' +
+      '<button class="apps-btn danger" type="button" data-app-delete="' + esc(a.id) + '">DELETE</button></div></div>').join('');
     listEl.querySelectorAll('[data-app-delete]').forEach((btn) => {
       const del = () => removeApp(btn.dataset.appDelete);
       if (typeof ArmConfirm !== 'undefined' && ArmConfirm.wire) ArmConfirm.wire(btn, { armedLabel: 'SURE? DELETE', restLabel: 'DELETE', timeoutMs: 4000, onConfirm: del });
@@ -304,7 +304,7 @@
     const a = find(id), nameEl = row && row.querySelector('.app-row-name');
     if (!a || !nameEl || row.querySelector('.app-rename-in')) return;
     const inp = document.createElement('input');
-    inp.className = 'key-input app-rename-in'; inp.maxLength = 60; inp.value = a.name; inp.autocomplete = 'off';
+    inp.className = 'apps-field app-rename-in'; inp.maxLength = 60; inp.value = a.name; inp.autocomplete = 'off';
     inp.setAttribute('aria-label', 'New name for ' + a.name);
     let done = false;
     const finish = async (save) => {
@@ -321,16 +321,16 @@
   function buildWindow(body) {
     body.innerHTML =
       '<form class="apps-new mc-form" aria-label="New app">' +
-      '<div class="apps-h">▮ NEW APP</div>' +
+      '<div class="apps-h">NEW APP</div>' +
       '<label for="app-name">Name</label>' +
-      '<input id="app-name" class="key-input" maxlength="60" autocomplete="off" aria-describedby="apps-msg" placeholder="e.g. AI News Brief">' +
+      '<input id="app-name" class="apps-field" maxlength="60" autocomplete="off" aria-describedby="apps-msg" placeholder="Call it anything">' +
       '<label for="app-what">What should it do?</label>' +
-      '<textarea id="app-what" class="key-input apps-what" maxlength="1500" rows="4" aria-describedby="apps-msg" placeholder="e.g. A daily brief of the top AI news — headline, short summary and source for each. Refresh every 24h."></textarea>' +
+      '<textarea id="app-what" class="apps-field apps-what" maxlength="1500" rows="4" aria-describedby="apps-msg" placeholder="In your own words: what it shows or does, how it should look, and whether it updates by itself."></textarea>' +
       '<div class="mc-hint">It can be anything — a dashboard, a tracker, a tool, a game. Say how it should look and work; where you don\'t, it matches the station.</div>' +
-      '<div class="apps-examples"><span class="mc-hint">Try:</span>' + EXAMPLES.map((e, i) => '<button class="bb xs" type="button" data-app-example="' + i + '">' + esc(e[0]) + '</button>').join('') + '</div>' +
-      '<div class="mc-acts"><button class="bb sm" id="app-create" type="submit">+ BUILD IT</button><span id="apps-msg" class="mc-hint apps-msg" role="status"></span></div>' +
+      '<div class="apps-examples"><span class="mc-hint">Try:</span>' + EXAMPLES.map((e, i) => '<button class="apps-btn apps-chip" type="button" data-app-example="' + i + '">' + esc(e[0]) + '</button>').join('') + '</div>' +
+      '<div class="mc-acts"><button class="apps-btn primary" id="app-create" type="submit">+ BUILD IT</button><span id="apps-msg" class="mc-hint apps-msg" role="status"></span></div>' +
       '</form>' +
-      '<div class="apps-h">▮ YOUR APPS</div>' +
+      '<div class="apps-h">YOUR APPS</div>' +
       '<div class="apps-list"><div class="mc-hint">loading…</div></div>';
     listEl = body.querySelector('.apps-list');
     const form = body.querySelector('.apps-new'), btn = body.querySelector('#app-create');
