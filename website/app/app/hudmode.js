@@ -586,13 +586,14 @@
 
   // Point the station's camera at an agent (its own follow-lock: the same one a CREW click makes).
   const WIDGET_ZOOM = 4.5;   // the agent fills the small picture; the station's own lock is 3
+  const WIDGET_SEAT_AT = 0.84;   // an agent at its desk: feet low in the frame, so its desk and screen show above it
   function follow(id) {
     if (!id || S.followId === id) return;
     S.followId = id;
     try {
       if (typeof World === 'undefined' || !World.lockBody) return;
       if (S.stationZoom == null) { const d = World.cameraDbg && World.cameraDbg(); S.stationZoom = d && d.scale > 0 ? d.scale : 0; }
-      World.lockBody(id, WIDGET_ZOOM);
+      World.lockBody(id, WIDGET_ZOOM, { seatAt: WIDGET_SEAT_AT });
     } catch (_) {}
   }
   // leaving the HUD: the camera keeps watching the same agent, at the zoom the station had
