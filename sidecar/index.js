@@ -15736,6 +15736,20 @@ function placedTypesFrom(v) {
   return String(v || '').split(',').map(s => s.trim()).filter(Boolean);
 }
 
+/* The gear a skill can use for this agent: what the browser reports placed (its room + shared station gear) PLUS what
+   the agent's execution profile or Full Access grants — the SAME reading SKILL LIBRARY and the Skill Market make
+   through /api/toolsets — so "/" offers exactly the skills the library calls READY. */
+function skillGearFor(agentId, placedTypes) {
+  const id = agentRoster.has(agentId) ? agentId : 'agent';
+  try {
+    const view = require('./capability/effective-toolsets.js').effectiveToolsets({
+      registry: CAP_REGISTRY, agentId: id, agent: agentRoster.get(id), placed: placedTypes, lead: true, disabled: toolsetDisabled,
+      fullAccess: FULL_ACCESS, masterBypass: masterBypassOn(), backendId: executionEnvironment.backendIdFor(id)
+    });
+    const granted = view.toolsets.filter(r => r.object && (r.placed || r.profileGranted || view.authority.unrestricted)).map(r => r.object);
+    return [...new Set(placedTypes.concat(granted))];
+  } catch (e) { failNote('slash.skill-gear', e); return placedTypes; }
+}
 function slashOptions(placedTypes) {
   const skills = skillsCatalog.catalog(skillLibrary(), { overrides: skillPrefs.overrides(), placedTypes: placedTypes || [] });
   const recipes = (Recipes && Recipes.builtins) ? Recipes.builtins() : [];
@@ -15744,13 +15758,14 @@ function slashOptions(placedTypes) {
 
 // GET /api/slash/catalog -- server-owned command metadata for chat palettes and future gateway surfaces.
 function serveSlashCatalog(req, res) {
-  let placedTypes = [];
+  let placedTypes = [], agentId = 'agent';
   try {
     const u = new URL(req.url, 'http://127.0.0.1');
     placedTypes = placedTypesFrom(u.searchParams.get('placed') || '');
+    agentId = String(u.searchParams.get('agent') || 'agent');
   } catch (_) {}
   res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-  res.end(JSON.stringify(slash.catalog(slashOptions(placedTypes))));
+  res.end(JSON.stringify(slash.catalog(slashOptions(skillGearFor(agentId, placedTypes)))));
 }
 
 /* SERVER-EXECUTED SLASH COMMANDS. Commands declaring dispatch:'server' in the registry name an action here
@@ -15995,7 +16010,9 @@ async function handleSlashDispatch(req, res) {
   let body; try { body = JSON.parse(await readBody(req, 1 << 14)) || {}; } catch (e) { return json(400, { ok: false, error: 'bad json' }); }
   const input = body.input != null ? body.input : ('/' + String(body.command || ''));
   const placed = placedTypesFrom(body.placed);
-  const out = slash.dispatch(input, slashOptions(placed));
+  // skills resolve against the agent's full gear (profile / Full Access grants included); `placed` itself still rides
+  // the server-action ctx unchanged below
+  const out = slash.dispatch(input, slashOptions(skillGearFor(String(body.agentId || 'agent'), placed)));
   // A Commander-defined exec command runs HERE (the browser has no shell) and comes back as a say directive,
   // so the palette prints its output like any other command result.
   if (out.ok && out.directive && out.directive.type === 'exec') {
