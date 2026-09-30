@@ -971,3 +971,4 @@ test/estop-sample-hub.test.js
 test/trigger-sweep.test.js
 test/steptest-restart-spend.test.js
 test/starnet-run-id-header.test.js
+test/tierlist.test.js

@@ -27,6 +27,7 @@ const { makeCostEngine } = require('./cost.js');
 const { makeLedger } = require('./ledger.js');
 const { makeBudget } = require('./budget.js');
 const { makeCredits } = require('./credits.js');   // managed-credit backend adapter (inert unless STARNET_CREDITS_URL is set)
+const { makeTierList } = require('./tierlist.js');   // editorial model tier list from the linked cloud (picker badges)
 const { makeCreditsLink } = require('./credits-link.js');   // device-pairing client + durable link config (inert unless STARNET_CLOUD_URL is set)
 const budgetCaps = require('./budgetcaps.js');   // pure resolve(env,overrides) + validate patch — SETTINGS→Budget (P0-2)
 const fallbackChain = require('./fallbackchain.js');   // pure resolve(env,saved) + validate patch — SETTINGS→Models fallback chain (P0-3)
@@ -1053,6 +1054,9 @@ const creditsLink = makeCreditsLink({
 // Resolve the credits adapter config. PRECEDENCE (additive, never breaks an env deploy): env CREDITS_* wins
 // (operator override / backward compat); else a linked device from .secrets/credits.json (deviceToken = bearer);
 // else nothing (inert). For a linked device the external "add credits" page is the account page on the cloud.
+// MODEL TIER LIST (2026-09-29): the cloud's editorial S/A/B/C boards, badged in the model picker. Read from the SAME
+// cloud the starnet provider talks to (linked/env credits URL), else the shipped cloud default. Cached 10 min.
+const tierList = makeTierList({ fetch: globalThis.fetch, baseUrl: () => resolveCreditsConfig().url || CLOUD_URL });
 function resolveCreditsConfig() {
   if (CREDITS_URL) return { url: CREDITS_URL, apiKey: CREDITS_API_KEY, accountId: CREDITS_ACCOUNT, purchaseUrl: CREDITS_PURCHASE_URL };
   const saved = creditsLink.loadSavedSync();
@@ -9883,6 +9887,7 @@ const ROUTES = [
   { m: 'POST', exact: '/api/auth/claude-cli/code', h: (req, res) => handleClaudeCliAuth(req, res, 'code') },
   { m: 'POST', exact: '/api/auth/claude-cli/cancel', h: (req, res) => handleClaudeCliAuth(req, res, 'cancel') },
   { m: 'GET', exact: '/api/providers', h: handleProviders },
+  { m: 'GET', qsplit: '/api/model-tiers', h: handleModelTiers },   // the cloud's editorial tier list (picker badges); {ok:false, reason} when unreachable
   { m: 'POST', exact: '/api/providers/probe', h: handleProviderProbe },
   { m: 'POST', exact: '/api/providers/validate', h: handleProviderValidate },
   // /api/models/openrouter is served by this same prefix (id='openrouter'). handleProviderModels answers 200
@@ -21168,6 +21173,15 @@ function publicModel(m) {
     // why a model's dial is what it is, when a profile documents it (gpt-5.6 on Chat Completions: OFF with tools)
     reasoningNote: (typeof m.reasoningNote === 'string' && m.reasoningNote) ? m.reasoningNote : null
   };
+}
+
+// GET /api/model-tiers[?force=1] — the linked cloud's editorial tier list for the model picker's badges. 200-always:
+// an unreachable/unconfigured cloud answers { ok:false, boards:[], reason } — never an invented list.
+async function handleModelTiers(req, res) {
+  let force = false;
+  try { force = new URL(req.url, 'http://127.0.0.1').searchParams.get('force') === '1'; } catch (_) {}
+  try { return respondJson(res, 200, await tierList.get({ force })); }
+  catch (e) { return respondJson(res, 200, { ok: false, boards: [], updated: '', reason: 'tier list unavailable: ' + String((e && e.message) || e).slice(0, 200) }); }
 }
 
 function handleProviders(req, res) {
