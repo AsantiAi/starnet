@@ -2,7 +2,9 @@
 
 Added 2026-09-29. The plan is at https://claude.ai/artifact/CcFcnYcEJraKFMEaXHQiYv.
 
-When the Commander asks, the lead agent can change the floor in three ways:
+When the Commander asks, the lead agent can change the floor in these ways:
+- **design** a room the way the Commander describes it, part by part (vibe design: "a new room, the left side cozy, the
+  right side a line that builds and tests code")
 - **add** a ready-made assembly line (by default in a new room)
 - **add** a furnished room, or every room of a preset
 - **swap** the whole station for a preset, backed up like Build mode's Presets
@@ -40,11 +42,44 @@ break the station.
 
    The approval card shows the plan's own summary and each step's instructions, including the steps of a kit's or a
    preset's own line. The sidecar reads them from the memo the plan tool filled; it never uses the model's words.
+   The card also **draws** the plan (`planpreview.js`, the station preset cards' recipe): the station's rooms dimmed, the
+   room the plan adds or changes lit, each zone outlined and numbered, and what will stand there. The page draws it
+   from its own parked plan (`StationCommands.previewFor`).
    After a build the camera shows the new room (the whole station after a preset), with the note "Built by NOVA: … ·
    open BUILD and press UNDO to remove it".
 
    In Full Access the build runs without the card, like every other write tool: the consent broker bypasses every
    prompt in that posture.
+
+## Vibe design: a room described part by part
+
+`station.plan_room` with `zones`: a list of 1 to 4 parts of the room, each `{ area, style }` or
+`{ area, line | purpose | shape, name, staff, dailyCap, tries }`.
+
+- `area`: left, right, back, front, back-left, back-right, front-left, front-right, or whole (on a 2 × 2 grid; top is
+  the back, bottom the front). Areas may not overlap.
+- `style`: one of 14 in `frontend/app/roomstyles.js` (cozy, lounge, library, desks, meeting, cafe, games, garden,
+  quarters, storage, gym, lab, comms, workshop), also by name or word ("comfy"). Each is a few hand-arranged sets of the
+  presets' own furniture, largest first. StarNet seats the largest set that fits, against the room's outer walls, as
+  arranged or mirrored, off every doorway's landing, with every piece reachable. The card lists the pieces really
+  placed.
+- A line zone holds one line, laid out **inside the zone** by the Workflow panel's own layout engine
+  (`LineLayout.layout`, written by `applyLineLayout`):
+  - `line`: a shelf line, by id or name
+  - `purpose`: the Commander's words; StarNet picks the line, as `station.plan_line` does
+  - `shape`: a custom line, built through the panel's own graph edits (`LineEdit.OPS`). Its stages, in order: a role,
+    `{ together: [roles] }` (each gets a copy), `{ turns: [roles] }`, `{ sort: { code: role, research: role } }`
+    (everything else goes straight on), and `{ review: true, tries }` after a step
+  - `staff`: `{ step, agent, instructions }` in run order, with `"new"` to recruit
+
+A new room is sized for what its zones need, from the engine's own measure of each line and the size of each style's
+set: at least 18 × 10 for several zones, at most 44 × 26. Anything bigger is refused with "Split it into two rooms".
+With `where` naming an existing plain room, that room is split down the middle, and each zone must fit around what
+already stands there. Lines go in first, then the furniture. The whole room lands in one undo.
+
+Sets survive either prop catalog. The page's remastered desk is 3 tiles wide, not 2, so a flat decor piece that would
+overlap is left out. The catalog's mount rules hold too (`app.js` hands them to the world model): a lava lamp stands on
+its side table, and what may stand on a table can. The tests install the same rules the page does.
 
 ## The menus (the only things the model can say)
 
@@ -100,6 +135,7 @@ of furniture itself, so these fields are not accepted: x".
   - a rooms gauntlet of 120 wrong or hostile room and restyle requests
   - purposes that pick each line shape, a vague one refused, a named line winning over a purpose
   - recruiting: listed on the card, nobody summoned while planning, seated by the build, one undo for the floor, and a failed recruit building nothing
+  - vibe design, under both prop catalogs: every style in a half of a new room beside a working line (reachable, one undo, nothing existing moved); line zones of a shelf line, a purpose and every custom stage kind, each machine inside its zone and nothing but staffing missing; four corners; a whole-room style; an existing room split; the card's drawing; recruiting in a zone; 30 refusals; and a vibe gauntlet of 90 hostile zone requests
 - `test/station-builder.e2e.test.mjs` (HTTP gate): a mock lead plans and then builds through the real sidecar, bridge
   and page in Chromium:
   - a line: the floor, the Workflow panel pill and the Build-mode refusal are checked, and one UNDO removes it
@@ -108,6 +144,8 @@ of furniture itself, so these fields are not accepted: x".
   - one UNDO each removes the restyle and the room
   - a swap to RESEARCH STATION backs the old layout up, and Build mode's RESTORE PREVIOUS brings it back
   - "fix bugs in my repo and test them" picks Build + test, and `"new"` recruits a real Tester through the page, seated and ready
+  - vibe design: "the left side cozy, the right side a line that builds and tests code" lands with every piece of furniture left of every machine, the lamp on its table, in one undo
+- Live, in ask mode, the design card read "DEN, a new 30 × 10 room beside HOME: the left half, a cozy corner (a bookshelf, a tall plant, a rug, a beanbag, a couch, a side table, a plant and a lava lamp); the right half, Build + test …". It drew the room with its two zones numbered, nothing was built while it waited, and Approve once built it.
 - Live, in ask mode:
   - the card read "NOVA wants to build this on your station: Build + test ("SHIP IT") in a new room beside HOME: Engineer (NOVA) → Tester (NOVA) → Outbox · daily cap $5 · up to 3 review tries. It will be ready to run. One UNDO in Build mode removes it." (it now ends "takes it back", which also fits a swap or a restyle)
   - Approve once built it
@@ -115,6 +153,4 @@ of furniture itself, so these fields are not accepted: x".
 
   In ask mode the lead first settles its Task Brief (`brief_proceed`), because `station.build` is consequential work.
 
-Not built yet:
-- the floor preview while the card is open. It needs a new overlay in the world renderer, which is a design call.
-- phase 4, custom shapes through the conveyor layout engine.
+Custom shapes (the plan's phase 4) are built as line zones. The card draws the plan rather than overlaying the live floor.
