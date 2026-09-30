@@ -6657,7 +6657,10 @@ const World = (() => {
       // plate is the resting truth and the caption only a projection, so a caption that would collide sits that pass out.
       const plates = lwDrawOff ? [] : lwPlateBoxes();
       const onPlate = bx => plates.some(p => p.box && bx.x < p.box.x + p.box.w && bx.x + bx.w > p.box.x && bx.y < p.box.y + p.box.h && bx.y + bx.h > p.box.y);
-      ghost.draw(ctx, now, T, 8, plates.length ? (bx, paint) => { if (!onPlate(bx)) paint(); } : null);
+      // (2026-09-30) the caption plate is set at a reading size ON SCREEN — 14px, by pixel ratio and TEXT SIZE — whatever the camera
+      // zoom: at the shared 8 world px a plate grew to twice the NO FEED nag at a close zoom and covered the machines it spoke of
+      const capPx = 14 * (window.devicePixelRatio || 1) * ((typeof U !== 'undefined' && U.uiZoom && U.uiZoom()) || 1) / (scale || 1);
+      ghost.draw(ctx, now, T, capPx, plates.length ? (bx, paint) => { if (!onPlate(bx)) paint(); } : null);
     }
     drawHandoffBoxes(now);   // Stage 2: lead→worker delegation boxes fly over the entities
     drawQueueJam(now);   // the live backlog as a physical jam of waiting crates at the INTAKE (world-space, under the lightmap)

@@ -110,6 +110,8 @@
       if (!el.isConnected) return;
       anchor = el;
       card.classList.toggle('dock-tip', !!el.closest('#bottombar'));
+      // (2026-09-30) a Build Library tile's tip is its name and what it does, on lines of their own, in the library's glass
+      card.classList.toggle('glass-tip', !!el.closest('.refit-dock'));
       card.textContent = text;
       card.hidden = false;
       card.classList.remove('show');
