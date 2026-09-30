@@ -71,7 +71,7 @@ const said = W.sentenceText(W.howItRuns(f, { triggers: off, nameOf: a => String(
 // (the station.layout audit, 2026-09-28, folded this into ONE "paused starts" sentence — the fact it must carry is unchanged)
 A.ok(/^Nothing starts it right now \(its routine "news" \(every day at 9:00 AM\) is saved but the scheduler is off\)/.test(said), 'the sentence says it is scheduled but the scheduler is OFF (' + said.slice(0, 110) + ')');
 A.ok(!/no schedule/.test(said), '…never "no schedule"');
-A.ok(/'SCHEDULE · OFF'/.test(panel) && /scheduling is off' : 'no trigger yet'/.test(panel), 'the INBOX node says SCHEDULE · OFF');
+A.ok(/'SCHEDULE · OFF'/.test(panel) && /scheduling is off' : 'no trigger yet(: it runs when you test it)?'/.test(panel), 'the INBOX node says SCHEDULE · OFF');
 A.ok(/id="trg-arm">▶ TURN SCHEDULING ON/.test(panel) && /api\('\/api\/cron\/arm', 'POST', \{ enabled: true \}\)/.test(panel), 'the panel carries the switch, on the same route AUTOMATION uses');
 A.ok(/refreshServerFacts\(\);\s*\}\)\.catch/.test(panel.slice(panel.indexOf('const wireArm'), panel.indexOf('const wireArm') + 900)), '…and re-reads the truth after pressing it');
 
