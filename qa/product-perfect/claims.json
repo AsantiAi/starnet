@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "089e86ff110660d6b6fa87d2f7aeb1e07aeaba03",
+    "sourceCommit": "1e1e7b7da4538097b46e1d407dfee4dd6c7b93cf",
     "pathSetSha256": "40161224e42ea48c023e2ee93222c94841e2d6d5419933ceb6ea21c21014096b",
     "files": [
       {
@@ -1678,8 +1678,8 @@
       },
       {
         "path": "frontend/plugin-kit/kit.js",
-        "bytes": 8130,
-        "sha256": "95bc7698d1ab70da64ae98ad37ca6532c6fd9db1568e8f97669b39bcfa702896"
+        "bytes": 8766,
+        "sha256": "d8d8c979027d08e39174c2c679cf09ab2d89aab7581bb3949071647426ebe89a"
       },
       {
         "path": "frontend/prop-atlas.html",
