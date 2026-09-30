@@ -10,7 +10,12 @@
      5. A run is DETACHED: the phone disconnects mid-run, the run still finishes, and the reply is there on reconnect.
      6. A DESKTOP run's approval is answerable from the phone, and the desk stream learns it was answered.
      7. The LAN door serves no /api route; revoke cuts a phone off at once.
-     8. Across a restart: Remote stays on, the station key and the paired phone persist, and the phone reconnects. */
+     8. Across a restart: Remote stays on, the station key and the paired phone persist, and the phone reconnects.
+     9. SESSION PARITY: a session that exists on the desk (in the station save) is in the phone's list with its
+        title and history; a phone turn sent into it runs WITH that history and lands under the same session id;
+        phone-started runs are listed for the desk to adopt (GET /api/remote/recent).
+    10. THE STATION PICTURE: the desk page hands over a still (POST /api/remote/view); the phone reads it with the
+        `view` verb, which is also what tells the desk a phone is looking; each agent's portrait is its own sprite. */
 'use strict';
 const A = require('./_assert.js');
 const http = require('http');
@@ -71,6 +76,8 @@ function startMockModel() {
         if (/remote shell proof/i.test(text)) return shellScript('remote', 'REMOTE_SHELL_DONE');
         if (/desk shell proof/i.test(text)) return shellScript('desk', 'DESK_SHELL_DONE');
         if (/slow reply/i.test(text)) return say('SLOW_DONE', true);
+        // session parity: did the run receive the desk session's earlier turns?
+        if (/what is the code word/i.test(text)) return say(msgs.some(m => /HELIX/.test(typeof m.content === 'string' ? m.content : JSON.stringify(m.content))) ? 'CODEWORD_HELIX_SEEN' : 'NO_CONTEXT');
         return say('OK');
       });
     });
@@ -195,6 +202,63 @@ function startMockModel() {
     A.ok(deskEvents.some(e => e.name === 'permission.response' && e.payload.promptId === deskAp.promptId && e.payload.decision === 'once'), 'the desk stream is told the prompt was answered');
     A.ok(deskEvents.some(e => e.name === 'agent.token' && /DESK_SHELL_DONE|SHELL_DONE/.test(JSON.stringify(e.payload))) || deskEvents.some(e => /DESK_SHELL_DONE/.test(JSON.stringify(e))), 'the desktop run finished after the phone approved it');
     A.eq((await client.call('approvals')).data.length, 0, 'nothing left waiting');
+
+    // 9. session parity with the desk
+    const saved = await fx.json('POST', '/api/save', { schema: 'starnet.save', version: 6, agent: { id: 'agent', name: 'ULTRON', createdAt: 1 },
+      workstreams: [
+        { id: 'ws_desk_launch', title: 'Launch plan', agentId: 'forge', conversationMode: 'direct', lane: 'active', kind: 'chat', archived: false, lastActiveAt: Date.now() - 5000,
+          history: [{ role: 'user', content: 'remember the code word is HELIX' }, { role: 'assistant', content: 'Noted. The code word is HELIX.' }] },
+        { id: 'ws_desk_blank', title: null, agentId: 'forge', conversationMode: 'direct', lane: 'active', kind: 'chat', archived: false, lastActiveAt: Date.now() - 9000, history: [] },
+        { id: 'ws_desk_archived', title: 'Old', agentId: 'forge', conversationMode: 'direct', archived: true, lastActiveAt: Date.now() - 100, history: [{ role: 'user', content: 'x' }] }
+      ] });
+    A.ok(saved.status === 200 && saved.body && saved.body.ok !== false, 'a desk save with sessions is stored: ' + JSON.stringify(saved.body).slice(0, 160));
+    const tl = await client.call('threads', { limit: 50 });
+    const deskRow = tl.data.find(t => t.streamId === 'ws_desk_launch');
+    A.ok(!!deskRow, 'the desk session is in the phone list');
+    A.eq(deskRow && deskRow.title, 'Launch plan', 'with the desk title');
+    A.eq(deskRow && deskRow.turns, 2, 'and its turn count');
+    A.ok(!tl.data.some(t => t.streamId === 'ws_desk_blank'), 'an untouched blank desk session is not listed');
+    A.ok(!tl.data.some(t => t.streamId === 'ws_desk_archived'), 'an archived desk session is not listed');
+    A.ok(tl.data.some(t => t.streamId === streamId && t.source === 'phone'), 'a phone-started conversation is listed too');
+    const dh = await client.call('thread', { streamId: 'ws_desk_launch' });
+    A.eq(dh.data.map(t => t.role), ['user', 'assistant'], 'the phone reads the desk session history');
+    const cont = await client.call('send', { agentId: 'forge', text: 'what is the code word', streamId: 'ws_desk_launch' });
+    A.eq(cont.ok && cont.data.streamId, 'ws_desk_launch', 'the phone continues the desk session under its own id');
+    // (this client has no event stream attached: read the conversation until the reply is there)
+    let dh2 = null;
+    await waitUntil(async () => { dh2 = await client.call('thread', { streamId: 'ws_desk_launch' }); return dh2.data.some(t => t.role === 'assistant' && /CODEWORD|NO_CONTEXT/.test(t.content)); }, 30000, 'continued desk session reply');
+    A.ok(dh2.data.some(t => t.role === 'assistant' && /CODEWORD_HELIX_SEEN/.test(t.content)), 'the run had the desk session history: ' + JSON.stringify(dh2.data.slice(-2)).slice(0, 200));
+    A.eq(dh2.data.filter(t => /remember the code word/.test(t.content)).length, 1, 'earlier turns are not duplicated');
+    A.eq(dh2.data.filter(t => t.role === 'user' && /what is the code word/.test(t.content)).length, 1, 'the phone turn is there once');
+    const recent = await fx.json('GET', '/api/remote/recent');
+    A.ok(recent.body.runs.some(r => r.runId === cont.data.runId && r.streamId === 'ws_desk_launch' && r.live === false && r.endedAt), 'the desk can see the phone run and its session');
+    A.ok(recent.body.runs.some(r => r.streamId === streamId && /remote shell proof|slow reply/.test(r.title)), 'and the phone-started conversation, titled with what was said');
+    const tr = await fx.json('GET', '/api/transcript?agent=forge&stream=ws_desk_launch&limit=50');
+    A.ok((tr.body.turns || []).some(t => t.role === 'assistant' && /CODEWORD_HELIX_SEEN/.test(String(t.content))), 'the turn is in the station transcript under the desk session id (the desk merges it on open)');
+
+    // 10. the station picture
+    const want0 = await fx.json('GET', '/api/remote/view');
+    A.eq([want0.body.enabled, want0.body.at], [true, null], 'the desk is told Remote is on and that the station has no picture yet');
+    const noPic = await client.call('view', {});
+    A.ok(noPic.ok && noPic.data.none === true, 'a phone asking before any picture exists is told there is none');
+    const want1 = await fx.json('GET', '/api/remote/view');
+    A.eq(want1.body.want, true, 'and its asking is what makes the desk start drawing');
+    const pic = Buffer.concat([Buffer.from('RIFF'), Buffer.from([0, 0, 0, 0]), Buffer.from('WEBPVP8 '), Buffer.alloc(3000, 9)]);
+    const bad = await fx.json('POST', '/api/remote/view', { w: 640, h: 480, data: Buffer.from('not a picture').toString('base64') });
+    A.eq(bad.status, 400, 'the station refuses something that is not a picture');
+    const putPic = await fx.json('POST', '/api/remote/view', { w: 640, h: 480, bodies: [{ agentId: 'forge', x: 320, y: 200 }], data: pic.toString('base64') });
+    A.ok(putPic.status === 200 && putPic.body.ok, 'the desk page hands over a still: ' + JSON.stringify(putPic.body).slice(0, 120));
+    const got = await client.call('view', {});
+    A.eq([got.data.w, got.data.h, got.data.mime, got.data.eof], [640, 480, 'image/webp', true], 'the phone reads it over the sealed channel');
+    A.ok(Buffer.from(got.data.data, 'base64').equals(pic), 'byte for byte');
+    A.eq(got.data.bodies, [{ agentId: 'forge', x: 320, y: 200 }], 'with where the crew stood');
+    A.ok(got.data.now >= got.data.at, 'and the clocks to work out its age');
+    const again = await client.call('view', { have: got.data.at });
+    A.eq(again.data.same, true, 'an unchanged picture is not sent twice');
+    const face = await client.call('portrait', { agentId: 'forge' });
+    A.ok(face.ok && face.data.mime === 'image/png' && Buffer.from(face.data.data, 'base64').toString('latin1', 1, 4) === 'PNG', 'the portrait of an agent is a real sprite from the shipped art');
+    const stl = await client.call('status');
+    A.ok(stl.data.agents.every(a => typeof a.skin === 'string'), 'status says how each agent looks');
 
     // 7. the LAN door is not the API; revoke cuts a phone off
     A.eq((await fetch(lan + '/api/remote')).status, 404, 'the LAN door serves no /api route');

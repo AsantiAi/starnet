@@ -989,3 +989,5 @@ test/trigger-sweep.test.js
 test/steptest-restart-spend.test.js
 test/remote.core.test.js
 test/remote.relay.test.js
+test/remote-sessions.test.js
+test/remote-view.test.js

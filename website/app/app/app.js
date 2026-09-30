@@ -3638,6 +3638,8 @@ const App = (() => {
     // recovers sessions for routines that finished while the browser was closed. Read-only on U.bus. Init AFTER
     // Chat.init + App is fully formed (this returns App) so the module's App.refreshRail/persist bridges resolve.
     if (typeof AutoSessions !== 'undefined') AutoSessions.init();
+    if (typeof RemoteView !== 'undefined') RemoteView.init();   // the station picture a paired phone sees (drawn only while one is looking)
+    if (typeof RemoteSessions !== 'undefined') RemoteSessions.init();   // phone conversations show up as desk sessions
     // Delegated-session recovery: if no page received the live delivery (or another open page won the ACK race
     // with a divergent local id), fold the durable run envelope into the matching named session exactly once.
     if (typeof StationCommands !== 'undefined' && StationCommands.reconcile) StationCommands.reconcile();

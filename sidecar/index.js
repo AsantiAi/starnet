@@ -9902,6 +9902,8 @@ const remoteDevices = require('./remote/devices.js').makeDevices({
 const remoteSessions = require('./remote/session.js').makeSessions({ devices: remoteDevices, crypto: remoteCrypto, now: () => Date.now(), newId: () => crypto.randomUUID() });
 // hoisted on purpose: the approvals registry (defined far above) announces changes through this
 function remoteBroadcast(evt) { try { return remoteSessions.broadcast(evt); } catch (_) { return 0; } }
+const remoteView = require('./remote/view.js').makeRemoteView({ now: () => Date.now() });
+const remotePortraits = require('./remote/portraits.js').makePortraits({ fs, path, frontend: FRONTEND });
 const remoteHost = require('./remote/host.js').makeRemoteHost({
   now: () => Date.now(), newId: () => crypto.randomUUID(), broadcast: remoteBroadcast,
   roster: () => [...agentRoster].map(([agentId, a]) => ({ agentId, name: a.name, model: a.model, provider: a.provider })),
@@ -9928,6 +9930,18 @@ const remoteHost = require('./remote/host.js').makeRemoteHost({
       system: raw ? withDossier(raw + REMOTE_NOTE, dossierWithGoals()) : withDossier(CRON_PERSONA + REMOTE_NOTE, dossierWithGoals()) };
   },
   runOnce: (o) => runOnce(o),
+  view: remoteView,
+  // how each agent looks (the skin the Commander picked), from the station save the page mirrors here
+  crewLooks: () => {
+    const save = saveStore.load('agent') || {}, out = {};
+    const add = (a) => { if (a && typeof a.id === 'string') out[a.id] = { skin: String(a.skin || ''), color: String(a.color || '') }; };
+    add(save.agent); for (const a of Array.isArray(save.agents) ? save.agents : []) add(a);
+    return out;
+  },
+  portrait: (skin) => remotePortraits.forSkin(skin),
+  // the desk's own sessions (title, agent, history) live in the station save the page mirrors here
+  deskSessions: () => { const save = saveStore.load('agent') || {}; return Array.isArray(save.workstreams) ? save.workstreams : []; },
+  classify: (text) => Classify.isTaskDirective(text),   // the SAME task-vs-talk call the desk and the channels make
   askConsent: (o) => channelAskConsent(o),
   stopRun: (runId) => { const ac = runs.get(runId); if (!ac) return false; try { ac.abort(); } catch (e) { failNote('remote.index.ac.abort', e); } return true; },
   deliverables: () => deliverableRows(),
@@ -10034,6 +10048,24 @@ function remoteSnapshot() {
 }
 // GET /api/remote — the desk's DEVICES panel: is Remote on, where does it listen, who is paired, who is connected
 function handleRemoteStatus(req, res) { respondJson(res, 200, remoteSnapshot()); }
+// GET /api/remote/recent — runs a phone started, newest first ({runId, agentId, streamId, title, startedAt, endedAt,
+// live}). The desk reads it to show a phone conversation as one of its own sessions (app/remotesessions.js).
+function handleRemoteRecent(req, res) { respondJson(res, 200, { ok: true, runs: remoteHost.recentRuns() }); }
+// GET /api/remote/view — does a phone want the station picture right now, and when was the last one drawn?
+// The desk page polls this (app/remoteview.js) and draws only while the answer is yes.
+function handleRemoteViewWant(req, res) {
+  const m = remoteView.meta();
+  respondJson(res, 200, { ok: true, enabled: remoteDevices.enabled(), want: remoteDevices.enabled() && remoteView.wanted(), at: m ? m.at : null });
+}
+// POST /api/remote/view { mime, w, h, bodies, data } — the desk page hands over a still it drew of the station
+async function handleRemoteViewPut(req, res) {
+  if (!remoteDevices.enabled()) return respondJson(res, 409, { ok: false, error: 'Remote is off' });
+  let b;
+  try { b = JSON.parse((await readBodyBuffer(req, 3 * 1024 * 1024, res)).toString('utf8') || '{}'); }
+  catch (_) { if (!res.headersSent) respondJson(res, 400, { ok: false, error: 'bad request' }); return; }
+  const r = remoteView.put(b);
+  respondJson(res, r.ok ? 200 : 400, r);
+}
 // POST /api/remote/enable { on } — the switch. Persisted; the LAN door opens or closes with it.
 async function handleRemoteEnable(req, res) {
   let b; try { b = JSON.parse(await readBody(req, 1024)) || {}; } catch (_) { return respondJson(res, 400, { ok: false, error: 'bad request' }); }
@@ -10224,6 +10256,9 @@ const ROUTES = [
   { m: 'POST', exact: '/api/credits/link/start', h: handleCreditsLinkStart },   // begin a pairing: returns a STAR-XXXX code + verifyUrl
   { m: 'POST', exact: '/api/credits/link/poll', h: handleCreditsLinkPoll },     // poll once; on confirm persists the token + configures credits live
   { m: 'POST', exact: '/api/credits/unlink', h: handleCreditsUnlink },          // forget the linked device, revert credits to inert
+  { m: 'GET', exact: '/api/remote/recent', h: handleRemoteRecent },   // phone-started runs, for the desk to adopt as sessions
+  { m: 'GET', exact: '/api/remote/view', h: handleRemoteViewWant },   // is a phone looking at the station picture?
+  { m: 'POST', exact: '/api/remote/view', h: handleRemoteViewPut },   // the desk page's still of the station, for phones
   { m: 'GET', exact: '/api/remote', h: handleRemoteStatus },          // STARNET REMOTE: on/off, where it listens, paired + connected phones
   { m: 'POST', exact: '/api/remote/enable', h: handleRemoteEnable },  // the switch (persisted); opens/closes the LAN door
   { m: 'POST', exact: '/api/remote/pair', h: handleRemotePair },      // one-time pairing code for ONE phone (10 min)
