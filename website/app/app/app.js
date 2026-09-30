@@ -1609,7 +1609,14 @@ const App = (() => {
     // drifted onto stale slugs while the right answer sat one inch below in the picks). defaultModelFor() covers
     // providers without a curated pick (custom / ollama).
     const picks = MODEL_PICKS[p];
-    const defId = (picks && picks[0] && picks[0].id) || defaultModelFor(p);
+    let defId = (picks && picks[0] && picks[0].id) || defaultModelFor(p);
+    // A LOCAL catalog is exactly what is installed. The seed slug ('llama3.1') is only a name Ollama resolves if that
+    // exact tag was pulled; prefilling it over a machine that has only qwen3:8b woke the agent on a model that does not
+    // exist and failed its first run. Default to an installed model instead — one Ollama says can call tools.
+    if (p === 'ollama' && list.length && !list.some(m => m && m.id === defId)) {
+      const usable = list.find(m => m && m.supportsTools !== false) || list[0];
+      if (usable && usable.id) defId = usable.id;
+    }
     if (list.length) {
       genesisModels = list; genesisOffline = false;
       countEl.textContent = '(' + list.length + ' in catalog)';
