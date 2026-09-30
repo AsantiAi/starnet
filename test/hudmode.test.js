@@ -232,6 +232,22 @@ A.eq([H.fmtAgo(10_000), H.fmtAgo(5 * 60_000), H.fmtAgo(2 * 3_600_000)], ['just n
   A.ok(has(js, "el('section', 'project-home hud-activity')", "el('details', 'ph-card')"), 'ACTIVITY is the project activity feed markup (so it wears the project feed\'s glass)');
   A.ok(!css.includes('#chat-panel > h3 { display: none') && !css.includes('#chat-input {'), 'COMMS keeps its designed header and composer inside the HUD');
   A.ok(!/background: var\(--ph\)\s*;/.test(css) && !css.includes('0 0 0 2px var(--ph-dim)'), 'no retired CRT chrome: no solid phosphor bar, no phosphor ring');
+  {
+    // Andrew 09-30: the HUD wears the NEWEST glass — the Workflow panel / Build Library sheet, keys and cards
+    const glass = css.slice(css.indexOf('THE NEW GLASS'));
+    A.ok(glass.length > 1000 && has(glass,
+      'html body.hud-mode #chat-panel {\n  border: 1px solid var(--hud-edge); border-radius: 12px;',
+      'backdrop-filter: blur(18px)',
+      "html body.hud-mode #chat-panel::before, html body.hud-mode #chat-panel::after { display: none; }",
+      'background: none; border: 0; border-bottom: 1px solid var(--hud-edge)'),
+      'the HUD is one 12px frosted sheet with a plain header over a hairline — no striped strip, no CRT corner brackets');
+    A.ok(/\.hud-ctl \.btn \{[^}]*min-height: 34px;[^}]*border-radius: 8px;/.test(glass) && /\.ph-controls \.btn \{[^}]*min-height: 36px;[^}]*border-radius: 8px;/.test(glass),
+      'the HUD keys are the Build Library glass key (8px, 34-36px tall), not the old 3px chip');
+    A.ok(/#hud-activity \.ph-card \{[^}]*border-radius: 10px;/.test(glass) && glass.includes('.ph-agent::before') && glass.includes('var(--hud-lamp)'),
+      'each piece of work is a 10px glass card with a housed status lamp');
+    A.ok(!/font(-size)?: 1[0-3]px/.test(glass), 'nothing in the new glass reads under 14px');
+    A.ok(glass.includes(':is(#chat-status, #chat-elapsed) { display: none !important; }'), 'the HUD header never squeezes its keys out of the window');
+  }
   const side = read('sidecar/index.js');
   A.ok(has(side, "source: 'interactive', streamId: streamId || '', internal: internal }", 'if (meta && meta.internal) row.internal = true;') && has(js, 'r.internal || workerRuns.has'),
     'live self-talk is marked by the sidecar and never shown as the Commander\'s work');
