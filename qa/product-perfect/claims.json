@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "09e1fec0f3a4dd263905d23d94975e5879c578f0",
+    "sourceCommit": "f82944f0682d103ec0b395d5c6c6a6257739da53",
     "pathSetSha256": "8bbb1097af843bfb2aa36f55bfe9583a546994f457a3b8b27396b3224788691b",
     "files": [
       {
@@ -543,8 +543,8 @@
       },
       {
         "path": "frontend/app/hudmode.js",
-        "bytes": 54374,
-        "sha256": "679cf8f9667fa0fbda76bb07633299022f3bfe902e6a094d8a74c7b433760ac9"
+        "bytes": 54381,
+        "sha256": "525942f185baa11f0ae83b83d897ff1e8b0b62edf9a9a83fceaaec0524702e93"
       },
       {
         "path": "frontend/app/industrialtextures.js",
