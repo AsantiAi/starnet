@@ -2649,6 +2649,7 @@ const Build = (() => {
       stepPositionOf,
       api: finApi, planGate: c => finPlanGate(c),
       runSample: (c, o) => finRunSample(c, o), sampleState: () => finSampleRes, sampleHTML: v => finSampleHTML(v),
+      stopSample: () => finStopSample(),   // ■ STOP on RUN ONE REAL JOB: this job only (E-STOP stops the station)
       feedState: () => (opts && opts.world && opts.world.feedState) ? opts.world.feedState() : { known: false, fed: false },
       pollFeed: () => { try { return Promise.resolve(opts && opts.world && opts.world.pollFeed && opts.world.pollFeed()); } catch (e) { return Promise.resolve(); } },
       human: d => { const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return ''; } })();
@@ -2977,7 +2978,8 @@ const Build = (() => {
     const reply = clean.length > 80 ? clean.slice(0, 80) + '…' : clean;
     const ok = !!r.ok && !!r.delivered;
     const reason = ok ? null : (r.error ? String(r.error) : ('sample refused (HTTP ' + (status == null ? '?' : status) + ')'));
-    return { ok: ok, stages: stages, usd: usd, reply: reply, reason: reason };
+    // stopped: the SERVER's word that the Commander stopped this job (POST /api/routing/sample/stop) — never the click's
+    return { ok: ok, stages: stages, usd: usd, reply: reply, reason: reason, stopped: !ok && r.stopped === true };
   }
   /* REFIT-JUNCTION-PURE-END */
   function openFlowCard(propId) {
@@ -3672,6 +3674,10 @@ const Build = (() => {
   let finSampleRes = null;   // { key, stamp, pending } | { key, stamp, view }
   function finSampleHTML(v) {
     if (!v) return '';
+    // a STOPPED job is the Commander's own act, not a refusal: it says so, with what already ran and what it cost
+    if (v.stopped) return '<div class="fl-result stopped"><div><span class="fl-result-k">STOPPED</span> ' + esc(v.reason || 'you stopped this job') + '</div>'
+      + (v.stages.length ? '<div><span class="fl-result-k">RAN</span> ' + esc(v.stages.join(' ▸ ')) + '</div>' : '')
+      + (v.usd != null ? '<div><span class="fl-result-k">COST</span> $' + esc(v.usd.toFixed(4)) + '</div>' : '') + '</div>';
     if (!v.ok) return '<div class="fl-result bad"><span class="fl-result-k">REFUSED</span> ' + esc(v.reason || 'no reason given') + '</div>';
     return '<div class="fl-result">'
       + '<div><span class="fl-result-k">RAN</span> ' + esc(v.stages.length ? v.stages.join(' ▸ ') : '(no stage recorded)') + '</div>'
@@ -3718,6 +3724,18 @@ const Build = (() => {
           .catch(() => settle(bad('sample failed — sidecar unreachable')));
       } catch (e) { settle(bad('sample failed — sidecar unreachable')); }
     });
+  }
+  /* ■ STOP (2026-09-29): RUN ONE REAL JOB could not be stopped short of the station-wide E-STOP. The sidecar kills THIS job's
+     runs (POST /api/routing/sample/stop — the E-STOP kill scoped to the sample hub) and the in-flight POST settles with the
+     server's stopped verdict, so the readout says STOPPED from the server's answer, never on the click alone. Until it
+     settles the button reads STOPPING… */
+  function finStopSample() {
+    if (!finSampleRes || !finSampleRes.pending || finSampleRes.phase !== 'run') return Promise.resolve({ ok: false, error: 'no job is riding the line' });
+    finSampleRes.stopping = true; finSig = ''; if (running) renderFinCard();
+    const undo = j => { if (finSampleRes && finSampleRes.pending) { finSampleRes.stopping = false; finSig = ''; if (running) renderFinCard(); } return j; };
+    return fetch(finApi('/api/routing/sample/stop'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
+      .then(r => r.json().catch(() => null).then(j => (j && j.ok) ? j : undo(j || { ok: false, error: 'the stop was not accepted (HTTP ' + r.status + ')' })))
+      .catch(() => undo({ ok: false, error: 'sidecar unreachable — the job may still be running (E-STOP stops everything)' }));
   }
   // per-frame: hide while anything coach-like is up (same gate family as the first ride), else pin
   // the card beside the line's bounding box in screen space (the flashTip/clientX coordinate basis).
