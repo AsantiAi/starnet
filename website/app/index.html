@@ -51,6 +51,7 @@
 <link rel="stylesheet" href="css/overseer-setup.css">
 <link rel="stylesheet" href="css/comms-layout.css">
 <link rel="stylesheet" href="css/project-home.css">
+<link rel="stylesheet" href="css/stepin.css"><!-- STEP-IN: the Commander takes an agent's live browser (app/stepin.js) -->
 
 <link rel="stylesheet" href="css/titlebar.css"><!-- custom window chrome (Windows desktop shell): themed titlebar + MIN/MAX/CLOSE; inert unless body.sn-chrome (titlebar.js) -->
 
@@ -714,11 +715,12 @@
          same Recruitment Bay in different modes — now a single #bb-recruit opens the bay once, and
          the class dossier offers BOTH verbs (summon new / deploy to current). -->
     <div class="bb-group" data-group="crew">
-      <button class="bb-grp" aria-haspopup="menu" aria-expanded="false" title="Your agents — dossiers, recruitment, and your own Commander file"><span class="bb-gi">☻</span>CREW</button>
+      <button class="bb-grp" aria-haspopup="menu" aria-expanded="false" title="Your agents — dossiers, recruitment, and your own Commander file"><span class="bb-gi">☻</span>CREW<span id="bb-crew-stepin-badge" class="bb-grp-badge" aria-label="agents waiting for you in STEP-IN" hidden></span></button>
       <div class="bb-menu" role="menu">
         <button class="bb" data-term="agents"><span class="bb-i">◉</span><span class="bb-tx"><b>AGENTS</b><small>each crew member's dossier — config, memory, record</small></span></button>
         <button class="bb" id="bb-recruit" data-hint="recruit"><span class="bb-i">＋</span><span class="bb-tx"><b>RECRUIT</b><small>grow the crew — summon a class, or re-spec your agent</small></span></button>
         <button class="bb" data-term="commander"><span class="bb-i">◈</span><span class="bb-tx"><b>COMMANDER</b><small>what the station has learned about you</small></span></button>
+        <button class="bb" data-term="stepin"><span class="bb-i">⇆</span><span class="bb-tx"><b>STEP-IN</b><small>take an agent's browser when it needs you to sign in — and your saved sign-ins</small></span><span id="si-badge" class="badge" style="display:none"></span></button>
       </div>
     </div>
     <div class="bb-group" data-group="work">
@@ -943,7 +945,8 @@
 <script src="app/windows/routines.js"></script><!-- ROUTINES lane — scheduled autonomous runs (thin CRUD client over /api/cron) -->
 <script src="app/windows/loops.js"></script><!-- LOOPS lane — standing objectives (thin polling client over /api/loops); needs loop-templates.js above -->
 <script src="app/windows/connectors.js"></script><!-- TOOLSETS & CONNECTORS — toolset kill-switches, MCP manager, catalog + service keys (Spotify flow embedded) -->
-<script src="app/windows/messaging.js"></script><!-- CHANNELS — messaging platforms catalog (Telegram/Discord/Slack/Matrix/Signal cards) -->
+<script src="app/windows/messaging.js"></script><!-- (STEP-IN follows) -->
+<script src="app/stepin.js"></script><!-- STEP-IN — an agent stuck on a sign-in / 2FA / human check hands you its live browser; you drive it, then HAND BACK --><!-- CHANNELS — messaging platforms catalog (Telegram/Discord/Slack/Matrix/Signal cards) -->
 <script src="app/navdock.js"></script>
 <script src="app/emergency-control.js"></script>
 <script src="app/chatresize.js"></script>
