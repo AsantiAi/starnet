@@ -1,144 +1,52 @@
 {
   "format": "starnet-skill-originals/v1",
-  "note": "StarNet-authored recipes from sidecar/skills/library published to the Skill Market. Bump a version when the recipe text changes; a published version is never rewritten.",
+  "note": "StarNet-authored recipes from sidecar/skills/library published to the Skill Market. The version lives in each recipe's frontmatter (version:): bump it when the recipe text changes; a published version is never rewritten.",
   "skills": {
-    "accessibility-audit": {
-      "version": "1.0.0"
-    },
-    "ad-copy-testing": {
-      "version": "1.0.0"
-    },
-    "adversarial-review-pass": {
-      "version": "1.0.0"
-    },
-    "announcement-kit": {
-      "version": "1.0.0"
-    },
-    "application-tailoring": {
-      "version": "1.0.0"
-    },
-    "browser-operation": {
-      "version": "1.0.0"
-    },
-    "commitment-tracking": {
-      "version": "1.0.0"
-    },
-    "content-calendar": {
-      "version": "1.0.0"
-    },
-    "contract-review": {
-      "version": "1.0.0"
-    },
-    "cost-audit": {
-      "version": "1.0.0"
-    },
-    "dataset-harvest": {
-      "version": "1.0.0"
-    },
-    "deploy-checklist": {
-      "version": "1.0.0"
-    },
-    "digest-composer": {
-      "version": "1.0.0"
-    },
-    "email-sequence": {
-      "version": "1.0.0"
-    },
-    "exposed-secrets-audit": {
-      "version": "1.0.0"
-    },
-    "exposure-reduction": {
-      "version": "1.0.0"
-    },
-    "feed-watch": {
-      "version": "1.0.0"
-    },
-    "file-curation": {
-      "version": "1.0.0"
-    },
-    "hard-conversation": {
-      "version": "1.0.0"
-    },
-    "health-record-prep": {
-      "version": "1.0.0"
-    },
-    "hiring-screen": {
-      "version": "1.0.0"
-    },
-    "inbox-triage": {
-      "version": "1.0.0"
-    },
-    "itinerary-planning": {
-      "version": "1.0.0"
-    },
-    "landing-copy": {
-      "version": "1.0.0"
-    },
-    "lead-scouting": {
-      "version": "1.0.0"
-    },
-    "ledger-upkeep": {
-      "version": "1.0.0"
-    },
-    "marketing-plan": {
-      "version": "1.0.0"
-    },
-    "meal-planning": {
-      "version": "1.0.0"
-    },
-    "negotiation-case": {
-      "version": "1.0.0"
-    },
-    "opportunity-scan": {
-      "version": "1.0.0"
-    },
-    "pitch-deck": {
-      "version": "1.0.0"
-    },
-    "price-watch": {
-      "version": "1.0.0"
-    },
-    "relationship-log": {
-      "version": "1.0.0"
-    },
-    "schema-and-access": {
-      "version": "1.0.0"
-    },
-    "security-sweep": {
-      "version": "1.0.0"
-    },
-    "short-form-script": {
-      "version": "1.0.0"
-    },
-    "sop-writing": {
-      "version": "1.0.0"
-    },
-    "source-triangulation": {
-      "version": "1.0.0"
-    },
-    "spec-drafting": {
-      "version": "1.0.0"
-    },
-    "study-plan": {
-      "version": "1.0.0"
-    },
-    "support-replies": {
-      "version": "1.0.0"
-    },
-    "translation-pass": {
-      "version": "1.0.0"
-    },
-    "ugc-brief": {
-      "version": "1.0.0"
-    },
-    "voice-match": {
-      "version": "1.0.0"
-    },
-    "website-workflow": {
-      "version": "1.0.0"
-    },
-    "work-splitting": {
-      "version": "1.0.0"
-    }
+    "accessibility-audit": {},
+    "ad-copy-testing": {},
+    "adversarial-review-pass": {},
+    "announcement-kit": {},
+    "application-tailoring": {},
+    "browser-operation": {},
+    "commitment-tracking": {},
+    "content-calendar": {},
+    "contract-review": {},
+    "cost-audit": {},
+    "dataset-harvest": {},
+    "deploy-checklist": {},
+    "digest-composer": {},
+    "email-sequence": {},
+    "exposed-secrets-audit": {},
+    "exposure-reduction": {},
+    "feed-watch": {},
+    "file-curation": {},
+    "hard-conversation": {},
+    "health-record-prep": {},
+    "hiring-screen": {},
+    "inbox-triage": {},
+    "itinerary-planning": {},
+    "landing-copy": {},
+    "lead-scouting": {},
+    "ledger-upkeep": {},
+    "marketing-plan": {},
+    "meal-planning": {},
+    "negotiation-case": {},
+    "opportunity-scan": {},
+    "pitch-deck": {},
+    "price-watch": {},
+    "relationship-log": {},
+    "schema-and-access": {},
+    "security-sweep": {},
+    "short-form-script": {},
+    "sop-writing": {},
+    "source-triangulation": {},
+    "spec-drafting": {},
+    "study-plan": {},
+    "support-replies": {},
+    "translation-pass": {},
+    "ugc-brief": {},
+    "voice-match": {},
+    "website-workflow": {},
+    "work-splitting": {}
   }
 }

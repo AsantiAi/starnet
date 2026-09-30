@@ -5,6 +5,7 @@ description: Answer customer questions in the company's voice, and turn the repe
 category: Communication
 requires: [cabinet, notebook]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

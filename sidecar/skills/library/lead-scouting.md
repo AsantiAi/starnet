@@ -5,6 +5,7 @@ description: Find where ideal customers gather and build qualified, evidence-bac
 category: Research
 requires: [dish, notebook]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

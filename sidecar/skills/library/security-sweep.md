@@ -1,10 +1,11 @@
 ---
 name: Security Sweep
 slug: security-sweep
-description: Sweep a tree for secrets, injection, and authz holes — each finding demonstrated and ranked.
+description: Sweep a codebase for secrets, injection, and missing permission checks — each finding demonstrated and ranked.
 category: Engineering
 requires: [cabinet, workbench]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

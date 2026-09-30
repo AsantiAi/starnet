@@ -5,6 +5,7 @@ description: Keep a durable record of the people the Commander deals with — wh
 category: Productivity
 requires: [notebook, cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 
