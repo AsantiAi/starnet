@@ -516,6 +516,7 @@ test/reasoning-dials.test.js
 test/provider-connections-ui.test.js
 test/newhero-reset.test.js
 test/harness-internal.test.js
+test/stale-token-recovery.test.js
 test/chat-runmeta.test.js
 test/chat-stopped-retry.test.js
 test/retry-user-transcript.http.test.js
