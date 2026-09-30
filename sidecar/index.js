@@ -9825,6 +9825,7 @@ const ROUTES = [
   // job through the armed line. Keeping discovery separate means probing can never spend or dispatch.
   { m: 'GET', exact: '/api/routing/sample', h: handleRoutingSampleStatus },
   { m: 'POST', exact: '/api/routing/sample', h: handleRoutingSample },
+  { m: 'POST', exact: '/api/routing/sample/stop', h: handleRoutingSampleStop },   // ■ STOP on RUN ONE REAL JOB: this station's one sample, nothing else
   // STEP-THROUGH TEST (2026-09-22): GET is the active-or-latest session (the panel's feature probe + poll);
   // POST starts one; /:id answers one session and /:id/<verb> drives it. Every refusal 409, never 404.
   { m: 'GET', qsplit: '/api/routing/steptest', h: handleStepTestLatest },
@@ -10697,6 +10698,8 @@ async function handleRoutingSample(req, res) {
       return json(409, { ok: false, error: 'no provider/model is configured for headless runs — connect a provider and set a default model first.' });
     }
 
+    // ■ STOP pressed while the line was still being checked (POST /api/routing/sample/stop): nothing runs, nothing is spent
+    if (sampleInFlight.stopRequested) return json(409, { ok: false, stopped: true, error: 'stopped before it started — nothing ran.' });
     const t0 = Date.now();
     const streamId = sampleInFlight.streamId;
     sampleReplies.length = 0;
@@ -10754,12 +10757,15 @@ async function handleRoutingSample(req, res) {
     }
     if (!completed) {
       // `line` is echoed only when it was requested, so a line-less POST's answer stays byte-identical.
+      // A job the Commander STOPPED (POST /api/routing/sample/stop) is named as a stop — never as a line that failed.
+      const stopped = !!sampleInFlight.stopRequested;
       return json(502, Object.assign({
-        ok: false, sample: true, error: !onLine ? 'sample job did not enter through line "' + line + '"'
+        ok: false, sample: true, error: stopped ? 'stopped — you stopped this job before it reached the OUTBOX'
+          : !onLine ? 'sample job did not enter through line "' + line + '"'
           : runs.length ? 'sample job did not complete cleanly' : 'sample job produced no durable run outcome',
         chatId: SAMPLE_CHAT, streamId: streamId, agentId: agentId || null, isTask: isTask,
         workitemId: workitemId || null, replies: sampleReplies.slice(), runs: runs, delivered: null, totalUsd: totalUsd
-      }, line ? { line: line } : null));
+      }, line ? { line: line } : null, stopped ? { stopped: true } : null));
     }
     return json(200, Object.assign({
       ok: true, sample: true, chatId: SAMPLE_CHAT, streamId: streamId,
@@ -10770,6 +10776,24 @@ async function handleRoutingSample(req, res) {
     sampleInFlight = null;
     sampleLineScope = null;
   }
+}
+/* ---- POST /api/routing/sample/stop — ■ STOP for RUN ONE REAL JOB (2026-09-29).
+   The Workflow panel's TEST › RUN ONE REAL JOB had no stop: while the job rode the line the panel showed only a disabled
+   "THE JOB IS RIDING THE LINE…", and the one way out was the station-wide E-STOP. This stops THIS station's one sample
+   and nothing else: the sample hub's live runs (its entry run AND every stage it chains live in its inflight record)
+   die the way E-STOP kills them (sidecar/halt.js killAll marks them superseded + halted, so the chain goes no further
+   and no stale reply is delivered), and the in-flight POST answers stopped:true — the panel says STOPPED from the
+   server's own answer, never on the click alone. A stop that lands before the first run starts is honoured by the POST
+   itself (stopRequested). Same contract as the sample route: behind the launch token, and 409 {ok:false,error} when
+   there is nothing to stop — never 404. */
+function handleRoutingSampleStop(_req, res) {
+  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  if (!sampleInFlight) return json(409, { ok: false, error: 'no sample job is riding the line — nothing to stop.' });
+  sampleInFlight.stopRequested = true;
+  let halted = 0;
+  try { halted = killAll(null, (sampleHub && sampleHub._internals) ? sampleHub._internals.inflight : null); }
+  catch (e) { failNote('routing.sample.stop', e); }
+  return json(200, { ok: true, stopped: true, halted: halted, streamId: sampleInFlight.streamId });
 }
 
 /* ---- LINE TRIGGERS (2026-09-23, owner-approved) — /api/routing/triggers[/:id[/secret]] + POST /api/hooks/:id.
@@ -16362,6 +16386,9 @@ async function runOnceCore(o) {
   const runStartExtra = {};
   if (o.dockId) runStartExtra.dockId = String(o.dockId);
   if (o.workitemId) runStartExtra.workitemId = String(o.workitemId);
+  // and WHICH stream it runs on (additive, 2026-09-29): a line test's run (a step test's steptest-…, RUN ONE REAL JOB's
+  // sample-…) is real work whose words live in the line's TEST view, not the agent's COMMS — the crew row names it
+  if (o.streamId) runStartExtra.streamId = String(o.streamId);
   const runStartedAt = Date.now();
   let system = rawSystem;
   if (o.workdir) {
