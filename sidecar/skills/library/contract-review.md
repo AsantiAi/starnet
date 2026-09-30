@@ -5,6 +5,7 @@ description: Read a contract, ToS, lease, or policy closely and surface the clau
 category: Research
 requires: [cabinet, dish]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

@@ -5,8 +5,8 @@
    sources, sinking at open ends, spaced so they never stack) and the pixel art.
 
    Bridge-reference materials: layered blackened steel rails, graphite mechanical rollers,
-   dull amber wear and sparse cyan drive markers. Riveted cargo modules retain semantic
-   inbound/result/unproductive-work colours. Topology-aware tracks keep every bend and
+   dull amber wear and sparse cyan drive markers. The crates that ride them are pale containers
+   whose lids keep the semantic inbound/result/unproductive-work colours. Topology-aware tracks keep every bend and
    incoming merge arm aligned with the tile graph. Cosmetic material changes never drive
    the simulation, create work, or report a run.
 
@@ -63,118 +63,74 @@ const Conveyor = (() => {
   /* ---- art context (module-local, set per draw call — like propsprites/sprites) ---- */
   let _ctx = null, _now = 0;
   const px = (x, y, w, h, c) => { _ctx.fillStyle = c; _ctx.fillRect(x, y, w, h); };
-  const SH = (c, n) => U.shade(c, n);
 
   /* ============================ CARGO ART ============================ */
-  // Handled blackened-steel modules keep the 9x8 floor stance. Nested armour,
-  // recessed seams, corner bolts and worn leading edges follow the bridge reference.
-  function cargoChassis(cx, py, h32, body, dir) {
-    const x = cx - 4, y = py - 5;
-    px(x, y, 9, 8, '#090c0c');
-    px(x + .4, y + .3, 8.2, 4.8, '#53534a');
-    px(x + .8, y + .8, 7.4, 4.2, '#252b29');
-    px(x + 1.2, y + 1.15, 6.6, 3.2, '#343934');
-    px(x + 1.7, y + 1.7, 5.6, 2.3, '#121918');
-    px(x + 2.1, y + 2, 4.8, 1.6, body);
-    // Deep apron with two protected catches and a recessed grab handle.
-    px(x + .4, y + 5, 8.2, 2.6, '#222725');
-    px(x + .5, y + 5, 8, .35, '#555448');
-    px(x + 2.8, y + 5.8, 3.4, 1.1, '#0a1111');
-    px(x + 3, y + 5.8, 3, .25, '#77705b');
-    for (const xx of [x + 1.2, x + 7.15]) {
-      px(xx, y + .65, .6, 6.1, '#161b1a');
-      px(xx, y + .65, .2, 6.1, '#696350');
-      px(xx - .1, y + 5.7, .85, 1.1, '#3e4239');
-      px(xx + .1, y + 5.8, .25, .5, '#9d8150');
-    }
-    for (const dx of [.9, 7.65]) for (const dy of [.7, 4.25]) {
-      px(x + dx, y + dy, .6, .6, '#111817');
-      px(x + dx + .05, y + dy + .05, .25, .25, '#8a8067');
-    }
-    // A restrained scuff is deterministic per module, never a flashing status.
-    const wear = (h32 >>> 2) % 4;
-    px(x + 2.2 + wear * .65, y + 1, .8, .2, '#7c7154');
-    px(x + 5.4 - wear * .5, y + 4.4, .45, .15, '#696854');
-    const v = DIRV[dir] || DIRV.E;
-    if (v[0]) px(cx + (v[0] > 0 ? 4.15 : -3.8), y + 1.2, .2, 2.6, '#7d755d');
-    else px(x + 2.5, v[1] < 0 ? y + .4 : y + 4.75, 4, .2, '#7d755d');
-    return { tx: x + 1, ty: y };
+  /* THE CRATE (2026-09-30 — "the crate is ugly"). The old module was blackened steel on a blackened belt: at the floor's own
+     scale it read as a smudge under a coloured tag. A crate is now a PALE container that fills its 9×8 stance, and the one
+     thing it says — what kind of work it carries — is its LID, a full slab of that colour: amber = work coming in, green =
+     a finished result, red = work that was wasted. Whole pixels only (one art pixel is one world pixel, so it sits at the
+     grain of the deck and the machines); the outline is a dark tint of the body's own warm grey, never black. */
+  const CRATE = { ink: '#2b261f', face: '#b8b2a0', faceLo: '#948e7c', latch: '#4b4538' };
+  // a lid's ramp: [the lit edge, the lid, the seam under it]
+  const LID = {
+    ore:        ['#f6d388', '#e0aa40', '#93681e'],
+    product:    ['#a2e8c2', '#57bd8b', '#2b7a56'],
+    slag:       ['#f2a189', '#d2684c', '#863829'],
+    data:       ['#9fe2ee', '#50b4c8', '#27707f'],
+    utility:    ['#dbe0da', '#a5b0ab', '#65706b'],
+    production: ['#e9cd92', '#c69c50', '#7c5e27'],
+    command:    ['#eea892', '#cb6b4f', '#7f3729'],
+    money:      ['#f5e493', '#d8bb45', '#897321'],
+  };
+  function crate(cx, py, lid) {
+    const x = cx - 4, y = py - 5, L = LID[lid] || LID.data;
+    px(x + 1, y, 7, 8, CRATE.ink); px(x, y + 1, 9, 6, CRATE.ink);   // the outline: the 9×8 stance with its corners cut
+    px(x + 1, y + 1, 7, 1, L[0]);                                    // the lid's lit edge
+    px(x + 1, y + 2, 7, 2, L[1]);                                    // the lid — the crate's one feature
+    px(x + 1, y + 4, 7, 1, L[2]);                                    // the seam under the lid
+    px(x + 1, y + 5, 7, 1, CRATE.face);                              // the front: pale, so the crate reads on a dark belt
+    px(x + 1, y + 6, 7, 1, CRATE.faceLo);
+    px(x + 3, y + 5, 3, 1, CRATE.latch);                             // the latch
+    return { x, y };
   }
 
-  function cargoProduction(cx, py, h32, dir) {
-    cargoChassis(cx, py, h32, '#454638', dir);
-    px(cx - 1.5, py - 2.5, 3, .5, '#a48c55');
-  }
-  function cargoUtility(cx, py, h32, dir) {
-    cargoChassis(cx, py, h32, '#303c39', dir);
-    px(cx - 1, py - 3, 2, 1, '#787b66');
-  }
-  function cargoData(cx, py, h32, dir) {
-    cargoChassis(cx, py, h32, '#1a353c', dir);
-    px(cx - 1.5, py - 2.5, 3, .5, '#659ca4');
-    px(cx + 1, py - 3, .5, 1, '#8bb8b6');
-  }
-  function cargoCommand(cx, py, h32, dir) {
-    cargoChassis(cx, py, h32, '#412927', dir);
-    px(cx, py - 3, .5, 1.5, '#ba7961');
-  }
-  function cargoMoney(cx, py, h32, dir) {
-    cargoChassis(cx, py, h32, '#41412b', dir);
-    px(cx - 1.5, py - 3, 1, 1, '#a79556');
-    px(cx + .5, py - 3, 1, 1, '#a79556');
-  }
-  // Incoming work has a uniform module size: it cannot imply a cost estimate.
-  function cargoOre(cx, py, h32, dir, weight) {
-    cargoChassis(cx, py, h32, '#4b412b', dir);
-    px(cx - 1.5, py - 2.5, 3, .5, '#ac8d48');
-  }
+  function cargoProduction(cx, py) { crate(cx, py, 'production'); }
+  function cargoUtility(cx, py) { crate(cx, py, 'utility'); }
+  function cargoData(cx, py) { crate(cx, py, 'data'); }
+  function cargoCommand(cx, py) { crate(cx, py, 'command'); }
+  function cargoMoney(cx, py) { crate(cx, py, 'money'); }
+  // Incoming work has a uniform crate: it cannot imply a cost estimate.
+  function cargoOre(cx, py) { crate(cx, py, 'ore'); }
   // Seal pips still express only reconciled spend, never a guessed future cost.
   const FULL_MASS_USD = 1.00;
   function weightForUsd(usd) { return (typeof usd === 'number' && isFinite(usd) && usd > 0) ? Math.min(1, usd / FULL_MASS_USD) : 0; }
   function cargoProduct(cx, py, h32, dir, weight) {
-    const w = Math.max(0, Math.min(1, weight || 0));
-    cargoChassis(cx, py, h32, '#233c32', dir);
-    px(cx - .5, py - 3, 1, 1, '#6d9c79');
-    for (let i = 0; i < Math.round(w * 2); i++) px(cx - 2 + i * 4, py - 2.5, .5, .5, '#95b799');
+    const w = Math.max(0, Math.min(1, weight || 0)), c = crate(cx, py, 'product');
+    for (let i = 0; i < Math.round(w * 2); i++) px(c.x + 1 + i * 6, c.y + 5, 1, 1, '#eafff3');   // one seal pip each side of the latch
   }
-  function cargoSlag(cx, py, h32, dir) {
-    cargoChassis(cx, py, h32, '#3e2421', dir);
-    px(cx - 1, py - 3, .5, .5, '#b16a4e'); px(cx + .5, py - 3, .5, .5, '#b16a4e');
-    px(cx - .5, py - 2.5, 1, .5, '#b16a4e');
+  function cargoSlag(cx, py) {
+    const c = crate(cx, py, 'slag');
+    const k = LID.slag[2];   // struck through: an ✕ across the lid
+    px(c.x + 3, c.y + 1, 1, 1, k); px(c.x + 5, c.y + 1, 1, 1, k); px(c.x + 4, c.y + 2, 1, 1, k); px(c.x + 3, c.y + 3, 1, 1, k); px(c.x + 5, c.y + 3, 1, 1, k);
   }
 
-  /* ---- GHOST projection crate (guided workflows Phase 3): NOT a cargo type. A payload flagged
-     `ghost:true` rides with a hollow dashed outline + a faint interior — deliberately unlike every
-     real body above (no solid faces, no economy colour, no shadow, no tag), so a viewer can never
-     mistake the projection for real work. Marching dashes + shimmer run off the injected _now only
-     (deterministic). Drawn by ghostline.js's DEDICATED engine — a real conveyor never carries one. */
-  function cargoGhost(cx, py, h32, dir) {
-    const x = cx - 4, y = py - 5;                 // same 9x8 stance as the chassis, so it rides the belt right
+  /* ---- GHOST projection crate (guided workflows Phase 3): NOT a cargo type. A payload flagged `ghost:true` rides as a
+     HOLOGRAM of the crate — the same silhouette in projection cyan: a hairline outline, a see-through body the belt shows
+     through, the lid's seam, one scan row sweeping down it. No solid face, no role colour, no shadow, no tag, so a viewer
+     can never mistake the projection for real work. (It was a marching-dash square: at this size the dashes read as noise.)
+     The sweep runs off the injected _now only (deterministic). Drawn by ghostline.js's DEDICATED engine — a real conveyor
+     never carries one. */
+  function cargoGhost(cx, py, h32) {
+    const x = cx - 4, y = py - 5;                 // the crate's own 9×8 stance, so it rides the belt right
     const C = '#8fd8e8';                          // projection phosphor (pale scanner cyan)
     const a = _ctx.globalAlpha;
-    _ctx.globalAlpha = a * 0.14; px(x + 1, y + 1, 7, 6, C);            // faint field — the belt shows through
-    _ctx.globalAlpha = a * 0.26; px(x + 2, y + 2, 5, 4, '#0c2a32');    // dim interior (net ~0.4 read)
-    // interior scan shimmer: one pale line sweeping the field (injected clock, hash-phased)
-    const sweep = ((((_now / 240) | 0) + (h32 & 7)) % 5);
-    _ctx.globalAlpha = a * 0.30; px(x + 2 + sweep, y + 2, 1, 4, C);
-    // ◇ projection glyph at the heart
-    _ctx.globalAlpha = a * 0.55;
-    px(cx, py - 3, 1, 1, C); px(cx - 1, py - 2, 1, 1, C); px(cx + 1, py - 2, 1, 1, C); px(cx, py - 1, 1, 1, C);
-    // dashed outline: 2-on/1-off pixels marching around the silhouette (reads "drawn, not built")
-    _ctx.globalAlpha = a * 0.75;
-    let i = ((_now / 160) | 0) % 3;
-    const dot = (dx, dy) => { if ((i++ % 3) !== 2) px(dx, dy, 1, 1, C); };
-    for (let k = 0; k < 9; k++) dot(x + k, y);
-    for (let k = 1; k < 8; k++) dot(x + 8, y + k);
-    for (let k = 8; k >= 0; k--) dot(x + k, y + 7);
-    for (let k = 7; k >= 1; k--) dot(x, y + k);
-    // leading-edge tick (travel direction, like the rim light — but dashed-thin, never a lit face)
-    const v = DIRV[dir];
-    _ctx.globalAlpha = a * 0.9;
-    if (v[0] > 0) px(x + 8, y + 3, 1, 2, C);
-    else if (v[0] < 0) px(x, y + 3, 1, 2, C);
-    else if (v[1] < 0) px(x + 3, y, 3, 1, C);
-    else px(x + 3, y + 7, 3, 1, C);
+    _ctx.globalAlpha = a * 0.16; px(x + 1, y + 1, 7, 6, C);                       // the body: the belt shows through
+    _ctx.globalAlpha = a * 0.20; px(x + 1, y + 2, 7, 2, C);                       // the lid, a shade more present
+    _ctx.globalAlpha = a * 0.55; px(x + 1, y + 4, 7, 1, C);                       // the seam under the lid
+    const sweep = ((((_now / 220) | 0) + (h32 & 3)) % 6);                         // one scan row sweeping down (injected clock, hash-phased)
+    _ctx.globalAlpha = a * 0.34; px(x + 1, y + 1 + sweep, 7, 1, C);
+    _ctx.globalAlpha = a * 0.9;                                                   // the outline: a hairline, corners cut like the crate's
+    px(x + 1, y, 7, 1, C); px(x + 1, y + 7, 7, 1, C); px(x, y + 1, 1, 6, C); px(x + 8, y + 1, 1, 6, C);
     _ctx.globalAlpha = a;
   }
 
@@ -188,18 +144,6 @@ const Conveyor = (() => {
     return 4;                  //  7% money (gold)
   }
   const CARGO_FN = [cargoUtility, cargoProduction, cargoData, cargoCommand, cargoMoney];
-
-  /* a floating tag marking a box that carries a REAL work-item. Colour reads its economic ROLE:
-     amber = inbound ore, green = banked product, red = wasted slag (legacy: outbound -> green). */
-  const TAG_FACE = { ore: ['#ad843c', '#d0b16c'], product: ['#4e8d79', '#86b3a2'], slag: ['#a8583e', '#cc8964'] };
-  function payloadTag(cx, py, role) {
-    const fs = TAG_FACE[role] || TAG_FACE.ore, face = fs[0], sheen = fs[1], yy = py - 8.5;
-    px(cx - .25, yy + 2.5, .5, 1.5, '#5b5744');
-    px(cx - 2.5, yy, 5, 3, '#080d0c');
-    px(cx - 2, yy + .5, 4, 2, face);
-    px(cx - 2, yy + .5, 4, .5, sheen);
-    px(cx - .75, yy + 1.5, 1.5, .5, SH(face, -.2));
-  }
 
   /* ---- motion bundle: bob/lean/shadow + spawn-pop + sink-chute. translate-only (no ctx.scale). ---- */
   function boxMotion(bx, now) {
@@ -672,15 +616,15 @@ const Conveyor = (() => {
         const sa = (0.30 - 0.12 * m.lift) * m.shadowMul;
         if (sa > 0 && !isGhost) { ctx.globalAlpha = sa * m.alpha; const sw = 9 + Math.round(m.lift * 2); px(cx - (sw >> 1), Math.round(base.py) + 3, sw, 2, '#05080a'); }
         ctx.globalAlpha = m.alpha;
-        if (isGhost) { cargoGhost(cx, py, h32, bx.dir); ctx.globalAlpha = 1; continue; }
-        // ECONOMIC role (set by world.js from real cost/outcome events) picks the art; an untyped
-        // payload still rides as the cyan data cassette, so nothing about existing boxes changes.
-        const role = bx.payload && bx.payload.box;
-        if (role === 'ore') cargoOre(cx, py, h32, bx.dir, +bx.payload.weight || 0);
-        else if (role === 'product') cargoProduct(cx, py, h32, bx.dir, +bx.payload.weight || 0);
-        else if (role === 'slag') cargoSlag(cx, py, h32, bx.dir);
-        else CARGO_FN[bx.payload ? 2 : cargoType(bx.id)](cx, py, h32, bx.dir);   // work-items default to cyan data cassettes
-        if (bx.payload) payloadTag(cx, py, role || (bx.payload.outbound ? 'product' : 'ore'));
+        if (isGhost) { cargoGhost(cx, py, h32); ctx.globalAlpha = 1; continue; }
+        // ECONOMIC role (set by world.js from real cost/outcome events) picks the LID: amber = inbound work, green = a
+        // banked result, red = wasted. A work-item with no role yet reads by its direction — outbound is a result, anything
+        // else is work coming in (the rule the floating tag over the old crate used; the lid says it now, so no tag).
+        const p = bx.payload, role = p ? (p.box || (p.outbound ? 'product' : 'ore')) : null;
+        if (role === 'ore') cargoOre(cx, py);
+        else if (role === 'product') cargoProduct(cx, py, h32, bx.dir, +p.weight || 0);
+        else if (role === 'slag') cargoSlag(cx, py);
+        else CARGO_FN[p ? 2 : cargoType(bx.id)](cx, py);   // a role this floor does not know rides as a data crate
         ctx.globalAlpha = 1;
       }
     }
@@ -696,7 +640,19 @@ const Conveyor = (() => {
     };
   }
 
-  return { create, weightForUsd };
+  /* THE CRATE, FOR A CALLER THAT PARKS ONE OFF THE BELT — the INBOX's waiting jam, the OUTBOX's shipped pallet, a paused step
+     test's hand-off. The same art the riding boxes wear, so a job reads as ONE object wherever it is. (cx, py) is the point a
+     riding box is drawn at: the crate covers cx-4…cx+4 by py-5…py+2. */
+  function drawCrate(ctx, cx, py, role, weight) {
+    const was = _ctx; _ctx = ctx;
+    try {
+      if (role === 'product') cargoProduct(cx, py, 0, null, weight || 0);
+      else if (role === 'slag') cargoSlag(cx, py);
+      else crate(cx, py, LID[role] ? role : 'ore');
+    } finally { _ctx = was; }
+  }
+
+  return { create, weightForUsd, drawCrate };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = Conveyor;

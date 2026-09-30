@@ -215,11 +215,100 @@ const Harness = (() => {
     if (!apiTokenPromise) apiTokenPromise = Promise.resolve('').then(t => { apiTokenPromise = null; return t; });
     return apiTokenPromise;
   }
+  /* STALE-TOKEN RECOVERY (#39, 2026-09-30). The token is a PER-LAUNCH secret the sidecar injects into the page it
+     serves (sidecar/index.js serveStatic), so in browser mode a sidecar restart — START FRESH's exit(75), a crash
+     respawn, a container restart — mints a NEW one while this open page keeps sending the old one. Every /api/ call
+     then 403s, and each surface misread it as its own failure: START FRESH greyed out forever after it SUCCEEDED,
+     the connect screen said "catalog offline", a rename looked saved and silently reverted.
+     The recovery is the page's own boot path, not a reload: re-read the token from the same-origin page the sidecar
+     serves ('/'), adopt it, and REPLAY the refused request once. That keeps every bit of unsaved page state (a reload
+     would drop it) and makes the refused save actually land. Exactly-once is safe: rejectBadApiToken answers BEFORE
+     any route runs, so the refused request had no effect.
+     NARROW BY CONSTRUCTION — it never swallows a real 403:
+       · only a 403 whose body is exactly 'forbidden token' (rejectBadApiToken's own reply) counts; a route's own
+         refusal ('forbidden', 'forbidden host/origin', JSON errors) passes through untouched;
+       · a replay needs PROOF of a rotation — the served page carries a token different from the one just refused;
+         the same token back (or none) is a real fault, reported by onStale, never retried;
+       · at most ONE replay per request and ONE in-flight page read shared by every concurrent 403, so no loop.
+     No new exposure: '/' is the page every load already reads; a foreign site gets an opaque response (no CORS on
+     static routes) and the Host pin stops rebinding. Desktop never gets here — the Tauri shell hands every respawn
+     the same launch token (src-tauri main.rs), and its bundled page is not served by the sidecar.
+     Self-contained on purpose (every dependency injected): test/stale-token-recovery.test.js lifts it by source. */
+  function staleTokenRecovery(o) {
+    const MARK = 'forbidden token';
+    const TOKEN_RE = /window\.__STARNET_API_TOKEN__=("(?:[^"\\]|\\.)*")/;
+    let inflight = null;
+    function isStaleReply(res) {
+      if (!res || res.status !== 403 || typeof res.clone !== 'function') return Promise.resolve(false);
+      let copy; try { copy = res.clone(); } catch (_) { return Promise.resolve(false); }   // the caller keeps an unread body
+      return Promise.resolve(copy.text()).then(t => String(t || '').trim() === MARK, () => false);
+    }
+    function refresh(sent) {
+      const cur = o.getToken();
+      if (cur && cur !== sent) return Promise.resolve(cur);   // a concurrent 403 already adopted the fresh token
+      if (!o.canRefresh()) return Promise.resolve('');
+      if (!inflight) {
+        inflight = Promise.resolve()
+          .then(() => o.rawFetch('/', { cache: 'no-store', credentials: 'same-origin' }))
+          .then(r => (r && r.ok) ? r.text() : '')
+          .then(html => {
+            const m = TOKEN_RE.exec(String(html || ''));
+            let t = '';
+            try { t = m ? String(JSON.parse(m[1])) : ''; } catch (_) { t = ''; }
+            if (!t || t === sent) return '';   // no rotation proven: this 403 is not ours to fix
+            o.setToken(t);
+            if (o.onRecovered) o.onRecovered();
+            return t;
+          }, () => '')
+          .then(t => { inflight = null; return t; }, () => { inflight = null; return ''; });
+      }
+      return inflight;
+    }
+    // The response the caller sees: the original, or ONE replay carrying the fresh token.
+    function settle(res, sent, replay) {
+      return isStaleReply(res).then(stale => {
+        if (!stale) return res;
+        return refresh(sent).then(fresh => {
+          if (!fresh || fresh === sent) { if (o.onStale) o.onStale(); return res; }
+          return replay ? replay(fresh) : res;   // an unreplayable (stream) body: the NEXT call carries the fresh token
+        });
+      });
+    }
+    return { settle, isStaleReply, refresh };
+  }
+  // Set when a stale-token 403 could NOT be recovered in place — the one state where the honest answer is
+  // "reload this page". Surfaces read it (Harness.sessionStale) so they stop blaming the network or the catalog.
+  let sessionStale = false;
+  let staleNotified = false;
+  function stationNotify(text, cls) {
+    try { if (typeof StationUI !== 'undefined' && StationUI && StationUI.notify) StationUI.notify(text, cls); } catch (_) {}
+  }
+  const staleToken = staleTokenRecovery({
+    rawFetch: (u, init) => window.fetch(u, init),   // '/' is not an API URL, so the wrapper passes it straight through
+    getToken: () => apiToken,
+    setToken: t => { apiToken = t; try { window.__STARNET_API_TOKEN__ = t; } catch (_) {} },   // apiticket.js mints from the window copy
+    canRefresh: () => !DESKTOP && !(typeof window !== 'undefined' && window.__STARNET_API__),
+    onRecovered: () => {
+      sessionStale = false; staleNotified = false;
+      stationNotify('The station service restarted — this page reconnected on its own.', 'good');
+    },
+    onStale: () => {
+      sessionStale = true;
+      if (!staleNotified) { staleNotified = true; stationNotify('The station restarted and this page could not reconnect — reload this page.', 'warn'); }
+    }
+  });
   if (typeof window !== 'undefined' && window.fetch && !window.__STARNET_FETCH_HARDENED__) {
     const rawFetch = window.fetch.bind(window);
     window.fetch = function (u, init) {
       if (!isApiUrl(u)) return rawFetch(u, init);
-      return ensureApiToken().then(t => rawFetch(u, withApiToken(init, t)));
+      // A Request input's body is single-use: keep a clone for the replay. A streamed body cannot be replayed at all.
+      const isReq = typeof Request !== 'undefined' && u instanceof Request;
+      let again = u;
+      try { if (isReq) again = u.clone(); } catch (_) { again = null; }
+      const body = init && init.body;
+      const replayable = again != null && !(body && typeof body.getReader === 'function');
+      return ensureApiToken().then(t => rawFetch(u, withApiToken(init, t)).then(res =>
+        staleToken.settle(res, t, replayable ? fresh => rawFetch(again, withApiToken(init, fresh)) : null)));
     };
     window.__STARNET_FETCH_HARDENED__ = true;
   }
@@ -1319,6 +1408,7 @@ const Harness = (() => {
     skillExchangeExport, skillExchangePublishHandoff, skillExchangeGenerations, skillExchangeRollback,
     api,
     apiToken: ensureApiToken,
+    sessionStale: () => sessionStale,   // a stale-token 403 that could not be recovered in place — the answer is "reload this page" (#39)
     apiFetch: (u, init) => ensureApiToken().then(t => fetch(u, withApiToken(init, t))),
     totals: () => totals,
     setTotals: t => { totals = { tokens: t.tokens || 0, cost: t.cost || 0, calls: t.calls || 0 }; },

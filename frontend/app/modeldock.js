@@ -73,6 +73,53 @@ const ModelDock = (() => {
   const selectionRevision = () => typeof Harness !== 'undefined' && Harness.getSelectionRevision ? Harness.getSelectionRevision() : 0;
   const selectionIdentity = () => opts.identity ? opts.identity() : '';
   let advancedEffortsOpen = false;
+  /* TIER BADGES (2026-09-29). The cloud's EDITORIAL tier list (GET /api/model-tiers → the linked cloud's
+     /v1/tierlist) badges the rows it names: "S · agent", "A · cheap". Its ids are OpenRouter ids, so only rows
+     whose id space IS OpenRouter's (the managed starnet catalog and direct OpenRouter) are matched — a direct
+     vendor id is never guessed onto a board. No list (cloud down / unlinked) = no badges, never invented ones. */
+  const TIER_ID_SPACE = { starnet: true, openrouter: true };
+  const TIER_REFRESH_MS = 10 * 60 * 1000;
+  let tierIndex = new Map();
+  let tierLoadedAt = 0, tierRequest = null;
+  function tierIndexFrom(payload) {
+    const idx = new Map();
+    const boards = (payload && payload.ok !== false && Array.isArray(payload.boards)) ? payload.boards : [];
+    for (const b of boards) {
+      const board = String((b && b.key) || '').trim();
+      if (!board) continue;
+      for (const t of (Array.isArray(b.tiers) ? b.tiers : [])) {
+        const tier = String((t && t.tier) || '').trim().toUpperCase();
+        if (!/^[SABC]$/.test(tier)) continue;
+        for (const m of (Array.isArray(t.models) ? t.models : [])) {
+          const id = String((m && m.id) || '').trim().toLowerCase();
+          if (!id) continue;
+          const list = idx.get(id) || [];
+          if (!list.some(x => x.board === board)) list.push({ board, tier, note: String((m && m.note) || '').trim() });
+          idx.set(id, list);
+        }
+      }
+    }
+    return idx;
+  }
+  function tiersFor(item, idx) {
+    if (!item || !TIER_ID_SPACE[normalizeProvider(item.provider)]) return [];
+    return (idx || tierIndex).get(String(item.id || '').trim().toLowerCase()) || [];
+  }
+  function loadTiers(force) {
+    if (tierRequest) return tierRequest;
+    if (!force && tierLoadedAt && Date.now() - tierLoadedAt < TIER_REFRESH_MS) return Promise.resolve(tierIndex);
+    tierRequest = Promise.resolve()
+      .then(() => apiFetch('/api/model-tiers' + (force ? '?force=1' : '')))
+      .then(r => (r && r.ok && typeof r.json === 'function') ? r.json() : null)
+      .then(j => {
+        // a failed refresh that still carries the last real list (stale) keeps its badges; nothing real → none
+        tierIndex = tierIndexFrom(j);
+        tierLoadedAt = Date.now();
+        return tierIndex;
+      }, () => tierIndex)
+      .finally(() => { tierRequest = null; });
+    return tierRequest;
+  }
 
   function provider() {
     const p = (typeof Harness !== 'undefined' && Harness.getProv) ? Harness.getProv() : 'openrouter';
@@ -514,6 +561,8 @@ const ModelDock = (() => {
     const selectedModel = getModel();
     loading = true;
     renderList();
+    // Tier badges ride beside the catalog, never gate it: a slow/unreachable cloud leaves the list badge-less.
+    loadTiers(!!force).then(() => { if (!loading && generation === fetchGeneration) renderList(); }).catch(() => {});
     // 'starnet' first: a linked station's own credits are the most direct way to run, and its catalog is
     // the whole managed lineup. providerEnabled() keeps it out of the list when no credits are configured.
     const ids = ['starnet', 'codex', 'grok', 'kimi', 'openrouter', 'openai', 'anthropic', 'gemini', 'xai', 'groq', 'mistral', 'deepseek', 'together', 'fireworks', 'perplexity', 'cerebras', 'ollama', 'claude-cli', 'custom'];
@@ -678,7 +727,9 @@ const ModelDock = (() => {
       const row = document.createElement('button');
       row.type = 'button';
       row.className = 'model-dock-row' + (m.id === current && normalizeProvider(m.provider) === activeProvider ? ' sel' : '') + (m.fallback ? ' fallback' : '');
-      row.title = m.fallback ? m.id + ' — fallback (catalog offline, unverified)' : m.id;
+      const tiers = tiersFor(m);
+      row.title = (m.fallback ? m.id + ' — fallback (catalog offline, unverified)' : m.id)
+        + tiers.map(t => ' · ' + t.tier + '-tier ' + t.board + (t.note ? ': ' + t.note : '')).join('');
       row.dataset.provider = normalizeProvider(m.provider);
       row.setAttribute('role', 'option');
       row.setAttribute('aria-selected', String(m.id === current && normalizeProvider(m.provider) === activeProvider));
@@ -689,6 +740,19 @@ const ModelDock = (() => {
       eff.className = 'model-dock-row-effort';
       eff.textContent = effortShown(effectiveEffort(m), m).label;
       row.appendChild(name);
+      if (tiers.length) {
+        const badges = document.createElement('span');
+        badges.className = 'model-dock-row-tiers';
+        for (const t of tiers) {
+          const b = document.createElement('span');
+          b.className = 'model-dock-row-tier';
+          b.dataset.tier = t.tier;
+          b.dataset.board = t.board;
+          b.textContent = t.tier + ' · ' + t.board;
+          badges.appendChild(b);
+        }
+        row.appendChild(badges);
+      }
       row.appendChild(eff);
       row.addEventListener('click', () => applyModel(m));
       frag.appendChild(row);
@@ -950,7 +1014,7 @@ const ModelDock = (() => {
     catalog: (o) => computeCatalog(!!(o && o.force), o && o.ensure),
     labels: { model: modelLabel, provider: providerLabel, group: groupOf, short: shortModelName, normProvider: normalizeProvider, orGroup: openRouterGroupName },
     efforts: { optionsFor: effortOptionsFor, label: effortLabel, clamp: clampEffortForModel, list: () => EFFORTS.slice(), presetsFor: reasoningPresetsFor, presetFor: reasoningPresetFor, forPreset: effortForPreset },
-    _internals: { reasoningPresetsFor, reasoningPresetFor, effortForPreset, effortOptionsFor, clampEffortForModel, modelFamily, supportsReasoning, selectorLabel, catalogEquivalent, isAgentModel, asModel, dialLess, effortShown }
+    _internals: { tierIndexFrom, tiersFor, reasoningPresetsFor, reasoningPresetFor, effortForPreset, effortOptionsFor, clampEffortForModel, modelFamily, supportsReasoning, selectorLabel, catalogEquivalent, isAgentModel, asModel, dialLess, effortShown }
   };
 })();
 

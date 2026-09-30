@@ -4,7 +4,7 @@ description: "Triage every inbox into one board — urgent to noise — with hel
 license: "MIT"
 metadata:
   title: "Inbox Triage"
-  category: "Comms"
+  category: "Communication"
   author: "StarNet"
   version: "1.0.0"
 ---

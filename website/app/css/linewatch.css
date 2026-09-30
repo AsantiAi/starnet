@@ -42,7 +42,7 @@
 @media (prefers-reduced-motion: reduce) { .lw-card .bb { transition: none; } }
 
 /* the Workflow panel header: today's numbers for the line (GET /api/routing/lines/stats) */
-.wf-today { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; font-size: 14px; color: var(--ph-dim); font-variant-numeric: tabular-nums; }
+.wf-today { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; margin: 0; font-size: 15px; color: var(--ph-dim); font-variant-numeric: tabular-nums; }
 .wf-today .k { letter-spacing: 1.3px; }
 .wf-today b { font-weight: normal; color: var(--text); }
 .wf-today b.bad { color: var(--bad, #ff4a3d); }

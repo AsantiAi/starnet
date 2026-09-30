@@ -97,6 +97,7 @@ test/desktop-voice-bundle.test.js
 test/transcript.compaction.e2e.test.js
 test/provider.anthropic.test.js
 test/provider.claude-cli.test.js
+test/provider-accounts.test.js
 test/claude-cli-login.test.js
 test/claude-cli-signin-engine.test.js
 test/prices.live.test.js
@@ -162,6 +163,7 @@ test/desktop-fresh-start-contract.test.js
 test/cloudsave-unload.test.js
 test/fullscreen.test.js
 test/titlebar.test.js
+test/hudmode.test.js
 test/logo-occlusion.test.js
 test/keepawake.test.js
 test/grace.test.js
@@ -254,6 +256,7 @@ test/skill-frontmatter.test.js
 test/skill-export.test.js
 test/skill-market.test.js
 test/skill-market-catalog.test.js
+test/skill-market-signing.test.js
 test/abilities.skills-lane.test.js
 test/skills.library.test.js
 test/skills.gate.test.js
@@ -312,6 +315,7 @@ test/qa-product-perfect-claims.test.js
 test/qa-claims-streaming.test.js
 test/website-pricing-hold.test.js
 test/website-docs-navigation.test.js
+test/website-skill-market.test.js
 test/genesis-starnet-link.test.js
 test/qa-product-perfect-provenance.test.js
 test/qa-cartographer.test.js
@@ -350,6 +354,9 @@ test/browser.wait-recovery.test.js
 test/browser.download-receipt.test.js
 test/browser.attach.test.js
 test/browser.pie.test.js
+test/browser-handoff.test.js
+test/browser.need-human.test.js
+test/browser-handoff-routes.test.js
 test/desktop.test.js
 test/computer.test.js
 test/cua-computer.test.js
@@ -513,6 +520,7 @@ test/reasoning-dials.test.js
 test/provider-connections-ui.test.js
 test/newhero-reset.test.js
 test/harness-internal.test.js
+test/stale-token-recovery.test.js
 test/chat-runmeta.test.js
 test/chat-stopped-retry.test.js
 test/retry-user-transcript.http.test.js
@@ -534,6 +542,7 @@ test/xpstore.test.js
 test/growthratings.test.js
 test/xp-upgrade.test.js
 test/dossier-reliability.test.js
+test/hero-color-resume.test.js
 test/roster-track.test.js
 test/chat-prompt-diet.test.js
 test/returns.test.js
@@ -946,6 +955,7 @@ test/shellbg.kill-verified.test.js
 test/shellbg.wait-and-wake.test.js
 test/shellbg.prune.test.js
 test/shell.fg-ledger.test.js
+test/shell.process-tree.test.js
 test/procledger.orphan-window.test.js
 test/loop.failure-breaker.test.js
 test/loop.no-progress-guard.test.js
@@ -970,7 +980,18 @@ test/openai-waiting-keepalive.test.js
 test/comms-wait-line.test.js
 test/line-stats.test.js
 test/linewatch.test.js
+test/deskscreen.test.js
 test/agent-skin-thumbs.test.js
 test/estop-sample-hub.test.js
+test/line-test-stop.test.js
+test/conveyor-tab-readable.test.js
+test/workflow-panel-overhaul.test.js
 test/trigger-sweep.test.js
 test/steptest-restart-spend.test.js
+test/starnet-run-id-header.test.js
+test/tierlist.test.js
+test/model-tier-badges.test.js
+test/remote.core.test.js
+test/remote.relay.test.js
+test/remote-sessions.test.js
+test/remote-view.test.js

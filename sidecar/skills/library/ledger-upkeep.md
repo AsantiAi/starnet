@@ -5,6 +5,7 @@ description: Log entries and reconcile a ledger with computed totals — never e
 category: Planning
 requires: [cabinet, workbench]
 license: MIT
+version: 1.0.0
 default: false
 ---
 
