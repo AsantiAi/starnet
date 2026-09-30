@@ -1611,6 +1611,16 @@ body.no-curve #stage-wrap::before { background: none; box-shadow: none; }
 }
 .model-dock-row-effort {
   min-width: 38px; text-align: right; font-size: 10px;}
+/* Tier badges (the cloud's editorial tier list): a matte tag between the name and the effort. */
+.model-dock-row:has(.model-dock-row-tiers) { grid-template-columns: minmax(0, 1fr) auto auto; }
+.model-dock-row-tiers { display: inline-flex; align-items: center; gap: 4px; }
+.model-dock-row-tier {
+  display: inline-flex; align-items: center; height: 18px; padding: 0 5px; white-space: nowrap;
+  font-size: var(--sn-type-meta, 14px); line-height: 1; letter-spacing: .3px;
+  color: var(--ph); background: rgba(0,0,0,.22); border: 1px solid rgba(var(--ph-rgb),.24); border-radius: 3px;
+}
+.model-dock-row-tier[data-tier="S"] { color: var(--ph-bright); border-color: rgba(var(--ph-rgb),.5); }
+.model-dock-row.sel .model-dock-row-tier { color: var(--ink); background: transparent; border-color: currentColor; }
 .model-dock-empty {   /* dim grade + size via the grouped empty rule (motion.css) */
   padding: 18px 6px; text-align: center;
 }
