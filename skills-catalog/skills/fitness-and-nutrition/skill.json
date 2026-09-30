@@ -1,0 +1,10 @@
+{
+  "slug": "fitness-and-nutrition",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Planning",
+  "tags": ["fitness", "training", "nutrition", "meal-planning", "health", "habit-tracking"],
+  "requires": ["cabinet"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}
