@@ -3635,7 +3635,7 @@ const serveAppUi = makePluginUiServer({
     const self = 'http://127.0.0.1:' + PORT + ' http://localhost:' + PORT;
     return "; default-src 'none'; script-src 'unsafe-inline' " + self + "; style-src 'unsafe-inline' " + self +
       '; img-src data: blob: ' + self + '; font-src data: ' + self + '; media-src data: blob: ' + self +
-      "; connect-src 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'";
+      "; connect-src 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'; webrtc 'block'";
   }
 });
 /* PLUGIN DRAFTS (plugin extensions phase 4) — the crew writes plugins into <workspaces>/plugin-drafts/<id>. A draft
@@ -3667,7 +3667,7 @@ const servePluginDraft = makePluginUiServer({
     const self = 'http://127.0.0.1:' + PORT + ' http://localhost:' + PORT;
     return "; default-src 'none'; script-src 'unsafe-inline' " + self + "; style-src 'unsafe-inline' " + self +
       '; img-src data: blob: ' + self + '; font-src data: ' + self + '; media-src data: blob: ' + self +
-      "; connect-src 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'";
+      "; connect-src 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'; webrtc 'block'";
   },
   goneMessage: 'this draft changed since this preview opened — preview it again'
 });
@@ -13292,7 +13292,9 @@ async function createCronJobFromSpec(body) {
   // W6 MINT GATE — server is the authority. If this agent already has a routine with the same (or near-same)
   // name, return the EXISTING job with a plain anti-retry message instead of minting a second one. Same guard
   // as routine.create so every create path funnels through it.
-  const gate = mintGate(agentId, body.name);
+  // An APP's refresh routine is exempt: the app owns exactly one (sidecar/apps.js replaces it itself), and the
+  // near-name match would hand "App: Tech News" the routine of "App: News" — then deleting one app deletes the other's.
+  const gate = (body.meta && body.meta.appId) ? {} : mintGate(agentId, body.name);
   if (gate.dup) return out(200, { ok: true, duplicate: true, job: gate.dup, message: mintLedger.ANTI_RETRY });
   if (gate.reason === 'declined') return out(200, { ok: false, declined: true, message: mintLedger.ANTI_RETRY });
   const id = crypto.randomUUID();
@@ -23266,7 +23268,7 @@ async function serveStatic(req, res) {
     // Host/Origin with its own requests, so a clickjacking overlay could drive consent cards and toggles).
     // SAMEORIGIN, not DENY: frontend/dev/comms-layout-review.html frames "/" from this same origin.
     res.writeHead(200, { 'Content-Type': MIME[path.extname(abs).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-store',
-      'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': "frame-ancestors 'self'", 'X-Content-Type-Options': 'nosniff' });
+      'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': "frame-ancestors 'self'; frame-src 'self' http://127.0.0.1:" + PORT + ' http://localhost:' + PORT, 'X-Content-Type-Options': 'nosniff' });
     res.end(data);
   } catch (e) { res.writeHead(404); res.end('not found'); }
 }

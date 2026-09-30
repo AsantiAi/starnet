@@ -14,13 +14,16 @@
 const GUIDE = [
   'HOW A STARNET APP WORKS (keep to this):',
   '- The app is ONE page: index.html (put CSS/JS inline or in style.css / app.js beside it). It opens in a StarNet window.',
-  '- The station kit is injected automatically — build ONLY with its classes so the app looks native: sn-stack · sn-row-flex · sn-grid · sn-panel · sn-card · sn-sect (▮ header strip) + sn-list/sn-item rows · sn-stats/sn-stat (<b>value</b><span>LABEL</span>) · sn-table · sn-badge · dot ok|warn|bad · sn-title · sn-label · sn-hint · sn-muted · sn-btn (.primary .xs) · sn-input · sn-select · sn-tabs/sn-tab.on · sn-empty · sn-loading · sn-error. Colours only via var(--ph), rgba(var(--ph-rgb),.2), var(--ok) --bad --warn. The page background stays transparent (the window glass shows through). No white, no other fonts, no glows.',
+  '- IT IS THE COMMANDER\'S APP — it can be ANYTHING: a dashboard, a tracker, a calculator, a timer, a game, a canvas toy. If they describe a look, layout, colours, fonts, animation or behaviour, build EXACTLY that with your own CSS/JS/canvas/SVG — their wish beats the station style. Only when they did not say how it should look, make it native:',
+  '- DEFAULT LOOK (no look asked for): the station kit is injected automatically — build with its classes so the app looks native: sn-stack · sn-row-flex · sn-grid · sn-panel · sn-card · sn-sect (▮ header strip) + sn-list/sn-item rows · sn-stats/sn-stat (<b>value</b><span>LABEL</span>) · sn-table · sn-badge · dot ok|warn|bad · sn-title · sn-label · sn-hint · sn-muted · sn-btn (.primary .xs) · sn-input · sn-select · sn-tabs/sn-tab.on · sn-empty · sn-loading · sn-error. Colours via var(--ph), rgba(var(--ph-rgb),.2), var(--ok) --bad --warn; the page background stays transparent (the window glass shows through).',
+  '- INTERACTIVE apps keep the Commander\'s own input with starnet.store.set(key, value) / starnet.store.get(key) / starnet.store.delete(key) / starnet.store.keys() (JSON, saved on the station, survives reloads) — a tracker, a to-do, settings, a high score. Never localStorage (the sandbox has none).',
+  '- Hard limits (the sandbox, not a style rule): the page has no network and loads nothing from the web (no CDN scripts, web fonts or remote images — inline everything, draw with CSS/SVG/canvas, images only as data: URIs); files are text.',
   '- TIME: your own sense of today\'s date is WRONG (it is your training era). app.read states the station\'s real date — anything current (news, prices, "today") is searched for THAT date, and every item you publish is from it.',
   '- The page has NO network: it never fetches anything. Its content is DATA you publish with app.publish(app, key, value) — any JSON (e.g. key "brief": { date, items:[{title, summary, source, url}] }).',
   '- In the page: const data = await starnet.store.get("brief"); render it; and re-render when new data lands: starnet.onData(async () => { … }). Show an empty state (sn-empty) until the first data arrives, and a small "updated <time>" line (data._meta is kept by the station: await starnet.store.get("_meta") → { updatedAt }).',
   '- Links: a plain <a href="https://…"> opens in the Commander\'s browser (the station catches the click) — just link. Never put a URL inside an inline onclick="…" attribute (its quotes break the attribute); for a whole clickable row, wrap it in the <a>.',
-  '- If it should update by itself (daily, hourly…), call app.schedule with `every` and the `task` each refresh performs (e.g. "search the web for today\'s top AI news and publish a brief with app.publish key brief"). Then do the FIRST refresh yourself now (do the task, app.publish) so the Commander sees real content immediately.',
-  '- Build order: app.read → app.write index.html → app.check → app.publish sample/real data → app.schedule. Tell the Commander in one or two sentences what the app does and when it refreshes.'
+  '- If it should update by itself (daily, hourly…), call app.schedule with `every` and the `task` each refresh performs (e.g. "search the web for today\'s top AI news and publish a brief with app.publish key brief"). Schedule FIRST, before you search or read anything from the web; then do the first refresh yourself (do the task, app.publish) so the Commander sees real content immediately.',
+  '- Build order: app.read → app.schedule (if it updates by itself — do this BEFORE any web research, or the station asks the Commander to approve it) → app.write index.html → app.check → research → app.publish real data. Tell the Commander in one or two sentences what the app does and when it refreshes.'
 ].join('\n');
 
 // the station's real date, in words — a model assumes its training-era date, so every app turn is told it
@@ -49,6 +52,7 @@ function makeAppTools(deps) {
       scope: 'read', readOnly: true,
       run: async (a) => {
         const { id, meta } = await apps.need(a.app);
+        if (a.path && a.key) throw new Error('give `path` (a file) or `key` (a data value), not both');
         if (a.path) return { content: await apps.readFile(id, a.path), summary: 'read ' + a.path };
         if (a.key) return { content: JSON.stringify(await apps.dataGet(id, a.key), null, 2) || 'null', summary: 'data ' + a.key };
         const files = await apps.listFiles(id);
@@ -58,7 +62,7 @@ function makeAppTools(deps) {
           content: todayLine(deps.now) + 'App "' + meta.name + '" (id: ' + id + ')\nDescription: ' + (meta.description || '—') +
             '\nFiles: ' + files.map(f => f.path + ' (' + f.bytes + ' B)').join(', ') +
             '\nData keys: ' + (keys.join(', ') || 'none yet') +
-            '\nSchedule: ' + (d.schedule ? (d.schedule.display + ' — task: ' + (meta.schedule && meta.schedule.task) + (d.schedule.armed === false ? ' (routines are switched OFF on this station — it will not fire until the Commander turns them on)' : '')) : 'none') +
+            '\nSchedule: ' + (d.schedule && d.schedule.missing ? 'its routine was removed — call app.schedule again to restore it' : d.schedule ? (d.schedule.display + ' — task: ' + (meta.schedule && meta.schedule.task) + (d.schedule.armed === false ? ' (routines are switched OFF on this station — it will not fire until the Commander turns them on)' : '')) : 'none') +
             '\n\n' + GUIDE,
           summary: 'app ' + id
         };
@@ -87,16 +91,18 @@ function makeAppTools(deps) {
         if (!files.some(f => f.path === 'index.html')) problems.push('index.html is missing — that is the app');
         for (const f of files) {
           if (!/\.(?:html?|js)$/i.test(f.path)) continue;
-          const text = await apps.readFile(id, f.path);
-          const scripts = /\.js$/i.test(f.path) ? [text] : Array.from(text.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)).map(m => m[1]);
+          const text = await (apps.readWhole || apps.readFile)(id, f.path);
+          // inline scripts only (a real src= attribute, not data-src=); a module script is skipped on its own, not the whole file
+          const scripts = /\.js$/i.test(f.path) ? [text] : Array.from(text.matchAll(/<script\b([^>]{0,400})>([\s\S]*?)<\/script>/gi)).filter(m => !/(?:^|\s)src\s*=/i.test(m[1]) && !/type\s*=\s*["']?module/i.test(m[1])).map(m => m[2]);
           for (const src of scripts) {
-            if (/^\s*(?:import|export)\s/m.test(src) || /type=["']module/.test(text)) continue;
+            if (/^\s*(?:import|export)\s/m.test(src)) continue;
             const err = deps.compile ? deps.compile(src, f.path) : '';
             if (err) problems.push(f.path + ': ' + err);
           }
           if (/\.html?$/i.test(f.path)) {
-            if (/background(?:-color)?\s*:\s*(?:#fff\b|#ffffff\b|white\b)/i.test(text)) warnings.push(f.path + ': a white background — leave the page transparent');
-            if (!/class="[^"]*\bsn-/.test(text)) warnings.push(f.path + ': no kit classes (sn-*) — it will not look like StarNet');
+            if (/background(?:-color)?\s*:\s*(?:#fff\b|#ffffff\b|white\b)/i.test(text)) warnings.push(f.path + ': a white background — fine if the Commander asked for that look; otherwise leave the page transparent');
+            if (!/class="[^"]*\bsn-/.test(text)) warnings.push(f.path + ': no kit classes (sn-*) — fine for a custom look the Commander asked for; otherwise it will not look like StarNet');
+            if (/<(?:script|link|img|iframe)\b[^>]*\b(?:src|href)=["']https?:/i.test(text) || /@import\s+(?:url\()?["']?https?:/i.test(text) || /\blocalStorage\b|\bsessionStorage\b/.test(text)) warnings.push(f.path + ': loads something from the web or uses localStorage — neither works in an app (no network, no browser storage); inline it, and keep data with starnet.store');
             if (/\bfetch\s*\(|XMLHttpRequest|new WebSocket/.test(text)) warnings.push(f.path + ': the page tries to use the network — it has none; publish data with app.publish instead');
             if (/onclick\s*=\s*"[^"]*\$\{\s*JSON\.stringify/i.test(text)) warnings.push(f.path + ': JSON.stringify inside an onclick="…" attribute — its quotes end the attribute and the handler never runs; use a plain <a href> (the station opens links) or addEventListener');
           }
@@ -117,6 +123,9 @@ function makeAppTools(deps) {
     },
     {
       name: 'app.schedule',
+      // it PERSISTS the task every later refresh obeys: a run that has read the web may not rewrite it unasked
+      // (the same laundering team.configure is locked against). Schedule BEFORE researching and nothing asks.
+      taintLocked: true,
       description: 'Make a StarNet app refresh itself: `every` ("every 24h", "every 6h", "0 8 * * *" for 8:00 daily) and the `task` each refresh performs (it must end by publishing with app.publish). every "off" stops it.',
       schema: { type: 'object', required: ['app', 'every'], properties: { app: { type: 'string' }, every: { type: 'string' }, task: { type: 'string' } } },
       scope: 'write',

@@ -134,7 +134,8 @@
     // Home/End jump, ArrowUp/Down on the closed trigger opens the menu, and Tab is
     // trapped inside an open popover so focus can't wander to the page behind it.
     // the adjacent group in the visual row (wrapping), for horizontal dock navigation.
-    const sibling = (dir) => { const gi = groups.indexOf(g); return groups[(gi + (dir > 0 ? 1 : groups.length - 1)) % groups.length]; };
+    // (a HIDDEN dock — APPS before the first app — is skipped)
+    const sibling = (dir) => { let gi = groups.indexOf(g); for (let k = 0; k < groups.length; k++) { gi = (gi + (dir > 0 ? 1 : groups.length - 1)) % groups.length; if (!groups[gi].hidden) break; } return groups[gi]; };
     g.addEventListener('keydown', ev => {
       const open = g.classList.contains('open');
       if (!open && (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') && document.activeElement === trigger) {

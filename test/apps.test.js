@@ -74,6 +74,11 @@ const throwsMsg = async (fn) => { try { await fn(); return ''; } catch (e) { ret
     A.ok(/page file/.test(await throwsMsg(() => apps.writeFile(a.id, 'app.json', '{}'))), 'app.json is the station\'s, never the crew\'s');
     A.ok(/page file/.test(await throwsMsg(() => apps.writeFile(a.id, '../escape.html', 'x'))), 'a path outside the app is refused');
     A.ok(/page file/.test(await throwsMsg(() => apps.writeFile(a.id, 'index.html:evil', 'x'))), 'an NTFS stream path is refused');
+    A.ok(/page file/.test(await throwsMsg(() => apps.writeFile(a.id, 'App.JSON', '{}'))), 'nor under another case (Windows would overwrite it)');
+    A.ok(/page file/.test(await throwsMsg(() => apps.writeFile(a.id, 'a/b/c/d/e/deep.js', 'x'))), 'a path deeper than the file walk sees is refused (the size caps must see every file)');
+    A.ok((await apps.describe(a.id)).builtAt === clock, 'the first page write marks the app built');
+    await apps.writeFile(a.id, 'big.js', '//' + 'x'.repeat(70 * 1024) + '\nvar tail = 1;');
+    A.ok(/truncated/.test(await apps.readFile(a.id, 'big.js')) && /var tail = 1;$/.test(await apps.readWhole(a.id, 'big.js')), 'readFile shows 64 KB; readWhole (the check) reads it all');
     A.ok(/only text files/.test(await throwsMsg(() => apps.writeFile(a.id, 'run.exe', 'x'))), 'only text files');
     A.ok(/512 KB/.test(await throwsMsg(() => apps.writeFile(a.id, 'big.txt', 'x'.repeat(512 * 1024 + 1)))), 'a file is bounded');
 
@@ -103,6 +108,21 @@ const throwsMsg = async (fn) => { try { await fn(); return ''; } catch (e) { ret
     await apps.schedule(a.id, { every: 'every 6h', task: 'again' });
     A.ok(!jobs.has('job1') && jobs.has('job2'), 'rescheduling replaces the routine (never two)');
     A.ok(/task/.test(await throwsMsg(() => apps.schedule(a.id, { every: 'every 1h' }))), 'a schedule needs a task');
+    A.ok(jobs.has('job2') && (await apps.describe(a.id)).schedule.jobId === 'job2', 'a refused schedule keeps the old routine (nothing is retired before the new one exists)');
+    // the station hands back ANOTHER routine as a "duplicate" (its near-name guard): never adopted, never deleted
+    jobs.set('foreign', { id: 'foreign', name: 'App: Tech News', meta: { appId: 'tech-news' } });
+    const realCreate = cron.create;
+    cron.create = async () => ({ ok: true, job: jobs.get('foreign') });
+    A.ok(/another routine/.test(await throwsMsg(() => apps.schedule(a.id, { every: 'every 2h', task: 't' }))), 'a routine that is not this app\'s own new one is refused');
+    A.ok(jobs.has('job2') && jobs.has('foreign') && (await apps.describe(a.id)).schedule.jobId === 'job2', 'and both the app\'s routine and the other one are untouched');
+    cron.create = realCreate;
+    // app.json pointed at someone else's routine (however it got there): deleting/rescheduling never removes it
+    const metaFile = path.join(DIR, 'apps', a.id, 'app.json');
+    const saved = await fsp.readFile(metaFile, 'utf8');
+    await fsp.writeFile(metaFile, saved.replace('"job2"', '"foreign"'));
+    await apps.schedule(a.id, { every: 'off' });
+    A.ok(jobs.has('foreign'), 'an app never retires a routine that belongs to another app');
+    await fsp.writeFile(metaFile, saved);
     jobs.delete('job2');
     desc = await apps.describe(a.id);
     A.ok(desc.schedule && desc.schedule.missing === true, 'a routine deleted elsewhere reads as missing, never as a live schedule');
@@ -123,6 +143,9 @@ const throwsMsg = async (fn) => { try { await fn(); return ''; } catch (e) { ret
     // ---- the tools ----
     A.eq(tools.defs.map(d => d.name), toolNames(), 'the tool list matches toolNames()');
     A.ok(tools.defs.every(d => d.capability === 'apps' && d.impact === 'none' && d.requiresConsent === false), 'app tools: capability apps, impact none, never ask');
+    A.eq(tools.defs.filter(d => d.taintLocked === true).map(d => d.name), ['app.schedule'], 'only app.schedule is taint-locked: a run that read the web cannot rewrite what every later refresh obeys');
+    A.ok(require('../sidecar/taint.js').allowedWhenTainted(tools.defs.find(d => d.name === 'app.publish')) === true && require('../sidecar/taint.js').allowedWhenTainted(tools.defs.find(d => d.name === 'app.schedule')) === false, 'a tainted run may still publish, but not schedule');
+    A.ok(/not both/.test(await throwsMsg(() => run('app.read', { app: a.id, path: 'index.html', key: 'brief' }))), 'app.read with a path AND a key says so');
     const grants = CAP_REGISTRY.computer ? JSON.stringify(CAP_REGISTRY.computer) : JSON.stringify(CAP_REGISTRY);
     A.ok(toolNames().every(n => grants.includes(n)), 'every app tool is granted by the computer');
     const r = await run('app.read', { app: a.id });

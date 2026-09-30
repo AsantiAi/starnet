@@ -29,6 +29,7 @@
   const nonce = () => { const a = new Uint8Array(12); (root.crypto || window.crypto).getRandomValues(a); return Array.from(a, (b) => b.toString(16).padStart(2, '0')).join(''); };
   // A plugin may notify, not flood: 4 toasts per 10 s per plugin, kept out of the notification history.
   const toastLog = new Map();   // plugin id -> [times]
+  const linkLog = new Map();    // plugin id -> [times] (ui.link)
   // The tokens a plugin page is kept in step with. The rgb triplets matter most: every kit recipe derives its
   // translucent glass from them, exactly as the station's own glass does.
   const THEME_VARS = ['--ph', '--ph-bright', '--ph-dim', '--ph-faint', '--ink', '--bg', '--panel', '--panel2', '--text',
@@ -174,6 +175,10 @@
       let u;
       try { u = new URL(String((a && a.url) || '')); } catch (_) { throw new Error('that is not a link'); }
       if (u.protocol !== 'https:') throw new Error('only https:// links can be opened');
+      // a page cannot open a storm of browser tabs (nothing here proves a click): one a second, eight a minute
+      const t = Date.now(), recent = (linkLog.get(entry.plugin.id) || []).filter((x) => t - x < 60000);
+      if (recent.length >= 8 || (recent.length && t - recent[recent.length - 1] < 1000)) throw new Error('too many links opened — slow down');
+      recent.push(t); linkLog.set(entry.plugin.id, recent);
       openExternal(u.href);
       return null;
     }
@@ -204,7 +209,10 @@
     // its state) because the station repainted. Same plugin code → keep the running frame.
     if (existing && def && existing.dataset.digest === def.plugin.digest) return;
     if (existing) forget(existing);
-    body.innerHTML = '';
+    // An APP keeps its bar across a reload: the crew rewrites the page while the Commander is typing the next change.
+    const keepBar = (def && def.app) ? body.querySelector(':scope > .app-bar') : null;
+    const keepHeight = existing ? existing.style.height : '';
+    for (const ch of Array.from(body.childNodes)) if (ch !== keepBar) ch.remove();
     body.classList.add('plugin-body');
     const w = body.closest && body.closest('.term');
     if (w && def && def.draft) w.classList.add('plugin-draft-win');   // one class token per add (the window manager adds className whole)
@@ -225,7 +233,7 @@
       // say WHY, from the listing: an edited plugin is not the same as a removed or switched-off one
       const pid = keyPlugin.get(key);
       const p = pid ? plugins.find((x) => x.id === pid) : null;
-      const why = !p ? 'This plugin was removed.'
+      const why = String(key).indexOf(APP_PREFIX) === 0 ? 'This app was deleted.' : !p ? 'This plugin was removed.'
         : (p.pending ? (p.name || p.id) + ' changed since you approved it, so its window is closed until you approve the new code in ABILITIES → EXTENSIONS.'
           : (p.name || p.id) + ' is turned off. Turn it on in ABILITIES → EXTENSIONS.');
       const note = document.createElement('div');
@@ -247,11 +255,11 @@
     iframe.setAttribute('aria-label', def.plugin.name + ' — ' + def.screen.title);
     iframe.dataset.digest = def.plugin.digest;
     iframe.dataset.plugin = def.plugin.id;
-    iframe.style.height = '240px';
+    iframe.style.height = keepHeight || '240px';   // a reload keeps the height the page already reported (no jump)
     const entry = { key, iframe, plugin: def.plugin, screen: def.screen, draft: !!def.draft, app: !!def.app, nonce: nonce() };
     frames.add(entry);
     iframe.src = url + '#sn=' + entry.nonce;
-    body.appendChild(iframe);
+    if (keepBar) body.insertBefore(iframe, keepBar); else body.appendChild(iframe);
     if (def.app && typeof AppsUI !== 'undefined' && AppsUI.mountBar) AppsUI.mountBar(body, def.plugin.id);
   }
 
@@ -386,9 +394,10 @@
   function appData(id) {
     const key = APP_PREFIX + id;
     for (const f of frames) if (f.key === key) post(f, { ev: 'data' });
-    if (typeof AppsUI !== 'undefined' && AppsUI.refreshBar) AppsUI.refreshBar(id);
     return true;
   }
+  // the app was deleted: its window key stops resolving (an open window says so instead of showing a dead page)
+  function forgetApp(id) { const key = APP_PREFIX + id; screens.delete(key); keyPlugin.delete(key); toastLog.delete(id); linkLog.delete(id); }
   function renameApp(id, name) {
     const key = APP_PREFIX + id, def = screens.get(key);
     if (def) { def.plugin.name = name; def.screen.title = name; registerApp({ id, name, digest: def.plugin.digest }); }
@@ -408,7 +417,7 @@
   }
 
   const api = {
-    refresh, open, preview, placeTerminal, terminalOf, registerApp, openApp, appReload, appData, renameApp,
+    refresh, open, preview, placeTerminal, terminalOf, registerApp, openApp, appReload, appData, renameApp, forgetApp,
     list: () => plugins.slice(),
     _test: { frames, screens, themeVars, METHODS, get lastError() { return lastError; } }
   };

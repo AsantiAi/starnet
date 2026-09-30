@@ -40,15 +40,19 @@ function makeApps(deps) {
   const notify = deps.notify || { reload() {}, data() {} };
   const appDir = (id) => P.join(dir, id);
   const idOk = (id) => ID_RX.test(String(id || ''));
-  const exists = async (p) => { try { await fsp.stat(p); return true; } catch (_) { return false; } };
+  // An app only ever retires a routine that is really ITS OWN (meta.appId): a jobId that points anywhere else —
+  // however it got into app.json — is never removed on the app's behalf.
+  const ownJob = (id, jobId) => { const j = cron && cron.get(jobId); return !j || !!(j.meta && j.meta.appId === id); };
   const digests = new Map();   // id -> { rec, at }
+  const gens = new Map();      // id -> n, bumped by every write: an in-flight record() must not cache a pre-write digest
+  const dirty = (id) => { gens.set(id, (gens.get(id) || 0) + 1); digests.delete(id); };
 
   async function readMeta(id) {
     try { return JSON.parse(await fsp.readFile(P.join(appDir(id), 'app.json'), 'utf8')); } catch (_) { return null; }
   }
   async function writeMeta(id, meta) {
     await fsp.writeFile(P.join(appDir(id), 'app.json'), JSON.stringify(meta, null, 2) + '\n', 'utf8');
-    digests.delete(id);
+    dirty(id);
   }
   async function need(id) {
     const a = String(id || '').trim();
@@ -64,9 +68,10 @@ function makeApps(deps) {
     if (!idOk(id)) return null;
     const c = digests.get(id);
     if (c && now() - c.at < 1500 && now() >= c.at) return c.rec;
+    const gen = gens.get(id) || 0;
     const tree = await treeDigest(appDir(id));
     const rec = tree.error ? null : { id, dir: appDir(id), digest: tree.digest };
-    digests.set(id, { rec, at: now() });
+    if ((gens.get(id) || 0) === gen) digests.set(id, { rec, at: now() });
     return rec;
   }
 
@@ -92,21 +97,35 @@ function makeApps(deps) {
   async function create(spec) {
     const name = plain(spec && spec.name, 60);
     if (!name) throw new Error('give the app a name');
-    const description = plain(spec && spec.description, 600);
+    const description = plain(spec && spec.description, 1500);
+    await fsp.mkdir(dir, { recursive: true });
     let id = slugify(name), n = 1;
-    while (await exists(appDir(id))) id = slugify(name).slice(0, 44) + '-' + (++n);
-    await fsp.mkdir(appDir(id), { recursive: true });
-    const files = template({ id, name, description });
-    for (const rel of Object.keys(files)) await fsp.writeFile(P.join(appDir(id), rel), files[rel], 'utf8');
-    await writeMeta(id, { id, name, description, createdAt: now(), schedule: null });
+    // mkdir WITHOUT recursive claims the id atomically: two creates of the same name can never share a folder
+    for (;;) {
+      try { await fsp.mkdir(appDir(id)); break; }
+      catch (e) { if (!e || e.code !== 'EEXIST' || n > 200) throw e; id = slugify(name).slice(0, 44) + '-' + (++n); }
+    }
+    try {
+      const files = template({ id, name, description });
+      for (const rel of Object.keys(files)) await fsp.writeFile(P.join(appDir(id), rel), files[rel], 'utf8');
+      await writeMeta(id, { id, name, description, createdAt: now(), builtAt: null, schedule: null });
+    } catch (e) {
+      await fsp.rm(appDir(id), { recursive: true, force: true }).catch((e2) => note('apps.create-cleanup', e2));
+      throw e;
+    }
+    notify.reload(id);   // the station page learns a new app exists (the APPS dock appears, its window opens)
     return { id, name, description };
   }
   async function remove(id) {
     const { meta } = await need(id);
-    if (meta.schedule && meta.schedule.jobId && cron) { try { await cron.remove(meta.schedule.jobId); } catch (e) { note('apps.remove-routine', e); } }
+    if (meta.schedule && meta.schedule.jobId && cron && ownJob(id, meta.schedule.jobId)) {
+      try { await cron.remove(meta.schedule.jobId); }
+      catch (e) { note('apps.remove-routine', e); throw new Error('its refresh routine could not be removed, so the app was kept — try again'); }
+    }
     await fsp.rm(appDir(id), { recursive: true, force: true });
     try { await store.op(id, 'clear'); } catch (e) { note('apps.remove-data', e); }
-    digests.delete(id);
+    dirty(id);
+    notify.reload(id);
     return true;
   }
   async function rename(id, name) {
@@ -127,10 +146,19 @@ function makeApps(deps) {
     const text = await fsp.readFile(P.join(appDir(id), ...r.split('/')), 'utf8');
     return text.length > 64 * 1024 ? text.slice(0, 64 * 1024) + '\n…[truncated at 64 KB]' : text;
   }
-  async function writeFile(id, rel, content) {
+  // the WHOLE file (app.check must compile what is really there, never a 64 KB view of it)
+  async function readWhole(id, rel) {
     await need(id);
     const r = String(rel || '').replace(/^\.\//, '');
-    if (!relPathOk(r) || r === 'app.json') throw new Error('`path` must be a page file inside the app (index.html, style.css, app.js …)');
+    if (!relPathOk(r)) throw new Error('`path` must be a file inside the app, like "index.html"');
+    return fsp.readFile(P.join(appDir(id), ...r.split('/')), 'utf8');
+  }
+  async function writeFile(id, rel, content) {
+    const { meta } = await need(id);
+    const r = String(rel || '').replace(/^\.\//, '');
+    // app.json is the station's (case-insensitive: Windows would let "App.json" overwrite it); 5 folders deep is
+    // as far as the file walk (and so the size caps) can see
+    if (!relPathOk(r) || r.toLowerCase() === 'app.json' || r.split('/').length > 5) throw new Error('`path` must be a page file inside the app (index.html, style.css, app.js …)');
     if (!TEXT_EXT.test(r)) throw new Error('only text files: .html .css .js .json .svg .txt .md');
     const text = String(content == null ? '' : content);
     const bytes = Buffer.byteLength(text, 'utf8');
@@ -141,7 +169,8 @@ function makeApps(deps) {
     const abs = P.join(appDir(id), ...r.split('/'));
     await fsp.mkdir(P.dirname(abs), { recursive: true });
     await fsp.writeFile(abs, text, 'utf8');
-    digests.delete(id);
+    dirty(id);
+    if (!meta.builtAt) { meta.builtAt = now(); await writeMeta(id, meta); }   // the crew has written the page: it is no longer "not built yet"
     const rec = await record(id);
     notify.reload(id, rec && rec.digest);
     return { path: r, bytes };
@@ -156,8 +185,9 @@ function makeApps(deps) {
     // show nothing. Text that is a JSON object or array is stored as that value.
     if (typeof value === 'string' && /^\s*[[{]/.test(value)) value = jsonOr(value);
     const r = await store.op(id, 'set', k, value);
-    if (!r.ok) throw new Error(r.error);
-    await store.op(id, 'set', META_KEY, { updatedAt: now(), key: k });
+    if (!r.ok) throw new Error(String(r.error || 'the data could not be saved').replace(/this plugin/g, 'this app'));
+    const m = await store.op(id, 'set', META_KEY, { updatedAt: now(), key: k });
+    if (!m.ok) note('apps.publish-meta', new Error(String(m.error)));
     notify.data(id);
     return { key: k };
   }
@@ -176,11 +206,13 @@ function makeApps(deps) {
     if (!cron) throw new Error('routines are not available on this station');
     const every = plain(spec && spec.every, 80);
     const task = plain(spec && spec.task, 2000);
-    if (meta.schedule && meta.schedule.jobId) { try { await cron.remove(meta.schedule.jobId); } catch (e) { note('apps.replace-routine', e); } }
+    const old = (meta.schedule && meta.schedule.jobId && ownJob(id, meta.schedule.jobId)) ? meta.schedule.jobId : null;
+    const retire = async () => { if (old) { try { await cron.remove(old); } catch (e) { note('apps.replace-routine', e); } } };
     if (!every || /^(?:off|none|never|stop)$/i.test(every)) {
+      await retire();
       meta.schedule = null;
       await writeMeta(id, meta);
-      notify.data(id);
+      notify.reload(id, (await record(id) || {}).digest);
       return { off: true };
     }
     if (!task) throw new Error('say what each refresh should do (`task`), e.g. "research today\'s top AI news and publish a brief"');
@@ -192,9 +224,12 @@ function makeApps(deps) {
       'Publishing is what the Commander sees — a refresh that does not publish did nothing.';
     const out = await cron.create({ name: 'App: ' + meta.name, schedule: every, prompt, agentId: 'agent', meta: { appId: id } });
     if (!out.ok) throw new Error(out.error || 'the routine could not be created');
+    // the routine must be THIS app's own new one — never an existing routine handed back as a "duplicate"
+    if (out.job.id === old || !out.job.meta || out.job.meta.appId !== id) throw new Error('the routine could not be created (the station answered with another routine)');
+    await retire();
     meta.schedule = { jobId: out.job.id, every, task };
     await writeMeta(id, meta);
-    notify.data(id);
+    notify.reload(id, (await record(id) || {}).digest);   // app.json is part of the page's version: move the open window onto it
     return { jobId: out.job.id, display: out.job.scheduleDisplay || every, armed: cron.armed() };
   }
 
@@ -214,7 +249,7 @@ function makeApps(deps) {
       } : { jobId: meta.schedule.jobId, every: meta.schedule.every, missing: true };
     }
     return {
-      id, name: meta.name, description: meta.description || '', createdAt: meta.createdAt || null,
+      id, name: meta.name, description: meta.description || '', createdAt: meta.createdAt || null, builtAt: meta.builtAt || null,
       digest: rec ? rec.digest : null, updatedAt: (m && m.updatedAt) || null, schedule: sched
     };
   }
@@ -226,7 +261,7 @@ function makeApps(deps) {
     return out;
   }
 
-  return { create, remove, rename, record, readFile, writeFile, listFiles, publish, dataKeys, dataGet, schedule, describe, list, need, META_KEY };
+  return { create, remove, rename, record, readFile, readWhole, writeFile, listFiles, publish, dataKeys, dataGet, schedule, describe, list, need, META_KEY };
 }
 
 module.exports = { makeApps, slugify };

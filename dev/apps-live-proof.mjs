@@ -52,9 +52,10 @@ try {
   check('the station is up with APPS loaded', await run(`typeof AppsUI === 'object' && !!document.querySelector('[data-group="apps"]')`));
 
   // ---- 1. the dock: APPS → NEW APP → pick the example → BUILD IT (real clicks through the DOM) ----
-  await run(`document.querySelector('[data-group="apps"] .bb-grp').click(), true`);
+  check('before the first app, the APPS dock is not displayed', await run(`(() => { const g = document.querySelector('#bottombar .bb-group[data-group="apps"]'); return !!g && g.getClientRects().length === 0; })()`));
+  await run(`document.querySelector('[data-group="build"] .bb-grp').click(), true`);
   await sleep(300);
-  await run(`document.getElementById('bb-newapp').click(), true`);
+  await run(`document.getElementById('bb-newapp-build').click(), true`);
   await waitApproving(`!!document.getElementById('app-name')`, 10000, 'the APPS window');
   await sleep(500);
   report.facts.shotApps = await capture(cdp, out, '01-apps-window');
@@ -64,6 +65,8 @@ try {
   await run(`document.getElementById('app-create').click(), true`);
   await waitApproving(`!!document.querySelector('.term.plugin-app-win iframe.plugin-frame')`, 20000, 'the app window');
   check('BUILD IT opens the app window at once (building page) and sends the build to COMMS', await run(`/Build my new StarNet app "AI News Brief"/.test(document.querySelector('#chat-panel').innerText)`));
+  check('the build went to the OWN COMMS session of the app (not whatever was open)', await run(`(() => { const w = Workstreams.get(Workstreams.activeId()); return !!w && /^App · AI News Brief/.test(w.title || '') ; })()`));
+  check('the APPS dock appeared with the first app', await run(`(() => { const g = document.querySelector('#bottombar .bb-group[data-group="apps"]'); return !!g && g.getClientRects().length > 0 && !!document.querySelector('#bb-apps-items .bb'); })()`));
   await sleep(800);
   report.facts.shotBuilding = await capture(cdp, out, '02-building');
 
