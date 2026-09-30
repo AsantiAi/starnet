@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "418b07b4bc4be3677cf0c836a932c07ae05f7293",
+    "sourceCommit": "3530d558ce37e4c4a01ec78f69ac2393302b14f2",
     "pathSetSha256": "c199669eb085a575613064f1d6b46dc9bcd6e61efdf0a70e8efaa3527db76159",
     "files": [
       {
@@ -1443,8 +1443,8 @@
       },
       {
         "path": "frontend/css/hudmode.css",
-        "bytes": 9187,
-        "sha256": "c01d53d8620acd7da7410f692545da323ddccb61339dd903e848028e8d8f278b"
+        "bytes": 11141,
+        "sha256": "eeb154aba3770a98bd98492ec1e6ea8018a86a6198f3679c8eccdfa1ec10457c"
       },
       {
         "path": "frontend/css/interface.css",
