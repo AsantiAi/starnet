@@ -972,6 +972,7 @@ test/openai-waiting-keepalive.test.js
 test/comms-wait-line.test.js
 test/line-stats.test.js
 test/linewatch.test.js
+test/deskscreen.test.js
 test/agent-skin-thumbs.test.js
 test/estop-sample-hub.test.js
 test/line-test-stop.test.js

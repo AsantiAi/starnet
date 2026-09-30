@@ -85,7 +85,7 @@ function startMockModel() {
     SKYNET_OPENROUTER_BASE: llm.base, STARNET_OPENROUTER_BASE: llm.base,
     SKYNET_OPENROUTER_KEY: 'sk-or-v1-remote-fake', STARNET_OPENROUTER_KEY: 'sk-or-v1-remote-fake',
     SKYNET_DEFAULT_MODEL: 'test/model', STARNET_DEFAULT_MODEL: 'test/model',
-    STARNET_REMOTE_PORT: String(lanPort), STARNET_REMOTE_LAN: '1'
+    STARNET_REMOTE_PORT: String(lanPort), STARNET_REMOTE_LAN: '1', STARNET_REMOTE_RELAY: 'off'
   } });
   const lan = 'http://' + HOST + ':' + lanPort;
   let client = null;

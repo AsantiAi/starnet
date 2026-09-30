@@ -9923,12 +9923,15 @@ sse.add({
   }
 });
 /* THE RELAY (the product path). The station dials OUT to it (sidecar/remote/relay-client.js, Node's built-in
-   WebSocket), so a phone reaches this station from anywhere with no port forwarding. REMOTE_RELAY_LIVE flips on
-   when the public relay is deployed; until then only an explicit STARNET_REMOTE_RELAY address is used (tests,
-   self-hosted relays). With no relay the desk says so plainly instead of pretending phones can connect. */
-const REMOTE_RELAY_LIVE = false;
+   WebSocket), so a phone reaches this station from anywhere with no port forwarding. The public relay is live at
+   remote.starnetos.com (relay/, Fly app starnet-relay). STARNET_REMOTE_RELAY=<url> points at another relay (a
+   self-hosted one, a test); STARNET_REMOTE_RELAY=off turns the relay off (hermetic tests, air-gapped installs).
+   With no relay the desk says so plainly instead of pretending phones can connect. Nothing dials out unless the
+   Commander switches Remote on. */
+const REMOTE_RELAY_LIVE = true;
 const REMOTE_RELAY_DEFAULT = 'https://remote.starnetos.com';
-const REMOTE_RELAY_URL = String(ENV('REMOTE_RELAY') || (REMOTE_RELAY_LIVE ? REMOTE_RELAY_DEFAULT : '')).trim().replace(/\/+$/, '');
+const REMOTE_RELAY_RAW = String(ENV('REMOTE_RELAY') || '').trim();
+const REMOTE_RELAY_URL = (/^(off|none|false|0)$/i.test(REMOTE_RELAY_RAW) ? '' : (REMOTE_RELAY_RAW || (REMOTE_RELAY_LIVE ? REMOTE_RELAY_DEFAULT : ''))).replace(/\/+$/, '');
 const remoteRelay = REMOTE_RELAY_URL ? require('./remote/relay-client.js').makeRelayClient({
   url: REMOTE_RELAY_URL, devices: remoteDevices, sessions: remoteSessions, gateway: remoteGateway, crypto: remoteCrypto, now: () => Date.now(),
   log: (m) => console.log('  · remote relay: ' + m)

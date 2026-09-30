@@ -1,4 +1,5 @@
-# StarNet Remote relay (NOT deployed yet — needs Andrew's go, a Fly app, and the remote.starnetos.com DNS record).
+# StarNet Remote relay — DEPLOYED 2026-09-30 as Fly app starnet-relay at https://remote.starnetos.com (DNS-only A/AAAA in
+# Cloudflare + a Fly cert). Deploy with --ha=false: the routing table lives in one process, so it must be ONE machine.
 # One small always-on machine: phones and stations hold WebSockets open, so nothing may auto-stop it.
 app = "starnet-relay"
 primary_region = "iad"
