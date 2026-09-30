@@ -14,8 +14,16 @@ const { isTaskDirective } = require('../frontend/app/classify.js');
     req.setEncoding('utf8');
     let raw = ''; for await (const chunk of req) raw += chunk;
     if (!raw) return res.end(JSON.stringify({ data: [{ id: 'fixture-model', context_length: 128000, supported_parameters: ['tools'] }] }));
+    // Ollama's own endpoints: model facts, and chat on /api/chat (its output ceiling rides options.num_predict).
+    if (req.url.endsWith('/api/show')) return res.end(JSON.stringify({ model_info: { 'x.context_length': 131072 }, capabilities: ['completion', 'tools'] }));
+    const native = req.url.endsWith('/api/chat');
     const body = JSON.parse(raw);
+    if (native && body.options && body.options.num_predict !== undefined) body.max_tokens = body.options.num_predict;
     if (body.messages?.some(m => m.role === 'system' && String(m.content).includes('CASUAL_SAFETY_IDENTITY'))) wires.push(body);
+    if (native) {
+      res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
+      return res.end(JSON.stringify({ message: { role: 'assistant', content: 'Hello, Commander.' }, done: true, done_reason: 'stop', prompt_eval_count: 10, eval_count: 4 }) + '\n');
+    }
     res.writeHead(200, { 'Content-Type': 'text/event-stream' });
     res.end('data: ' + JSON.stringify({ choices: [{ delta: { content: 'Hello, Commander.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 4 } }) + '\n\ndata: [DONE]\n\n');
   });
