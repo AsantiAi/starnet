@@ -2,7 +2,7 @@
    station window (StationUI 'browser', WIDE shell): the term system owns the glass chrome, the dock rise and the
    resize grip; this file lays out the body — address strip, recent strip, the page, a status line. Matte, glass
    recipes (--gd-*), theme tokens only. */
-.term.browser-win { height: min(var(--term-band, calc(88vh * var(--sn-unzoom, 1))), 860px); }
+/* height: the glass dock controller seats this sheet tall (glass-demo.js `page`); drag/EXPAND still win */
 .term.browser-win .term-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .ob { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
 

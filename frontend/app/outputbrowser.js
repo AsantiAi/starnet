@@ -238,17 +238,17 @@
     const agentId = String(ev.agentId || 'agent');
     const path = norm(ev.title);
     const t = state.target;
-    // the page on screen was rewritten, or a web asset under its folder was (its css, its js) → show the new bytes
-    if (t && t.source === 'workspace' && t.agentId === agentId && mounted() && feedsPage(path, t.path)) {
-      if (HTML_RE.test(path) && path !== t.path && state.follow) { open({ agentId, path }); return; }
-      scheduleReload();
+    const onScreen = !!(t && t.source === 'workspace' && t.agentId === agentId && mounted());
+    // ANOTHER page (not the one on screen): it joins RECENT, and with FOLLOW on it takes the window
+    if (HTML_RE.test(path) && !(onScreen && path === t.path)) {
+      const nt = { agentId, path, source: 'workspace', runId: '' };
+      remember(nt);
+      if (state.follow) { open(nt); return; }
+      if (mounted()) paintBar();   // the RECENT strip grows even when FOLLOW is off
       return;
     }
-    if (!HTML_RE.test(path)) return;
-    const nt = { agentId, path, source: 'workspace', runId: '' };
-    remember(nt);
-    if (state.follow) { open(nt); return; }
-    if (mounted()) paintBar();   // the RECENT strip grows even when FOLLOW is off
+    // the page on screen was rewritten, or a web asset under its folder was (its css, its js) → show the new bytes
+    if (onScreen && feedsPage(path, t.path)) scheduleReload();
   }
 
   let busWired = false;
