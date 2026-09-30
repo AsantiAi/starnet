@@ -672,7 +672,7 @@ const Build = (() => {
     card.innerHTML = '<img alt="Preview sketch of ' + esc(p.label || makePreview.noun) + '" src="' + esc(p.sketch) + '">' +
       '<div class="refit-makeprop-previewtxt"><b>' + esc(p.label || makePreview.noun) + '</b>' +
       '<span>About ' + esc(fp[0] || '?') + '\u00d7' + esc(fp[1] || '?') + ' tiles, ' + previewMetres(p.height) + ' tall' + (p.profile ? ' \u00b7 shown side-on' : '') + (p.symmetric ? ' \u00b7 turns freely' : '') + '</span>' +
-      '<small>Sketch only: the final is drawn in the station\u2019s style. Preview cost $' + (Number(makePreview.costUsd) || 0).toFixed(2) + '.</small>' +
+      '<small>Quick preview. The final is drawn in full detail from this, so small details can differ. Preview cost $' + (Number(makePreview.costUsd) || 0).toFixed(2) + '.</small>' +
       '<div class="refit-makeprop-previewbtns"><button type="button" class="bb sm" id="refit-makeprop-makeit">MAKE IT \u00b7 ~$0.35</button><button type="button" class="bb sm" id="refit-makeprop-again">ANOTHER \u00b7 ~5\u00a2</button><button type="button" class="bb sm" id="refit-makeprop-drop" aria-label="Discard preview">\u2715</button></div></div>';
     card.querySelector('#refit-makeprop-makeit').onclick = () => { const pv = makePreview; makePreview = null; paintPreviewCard(); startMakeProp(pv.noun, pv.id); sfx('click'); };
     card.querySelector('#refit-makeprop-again').onclick = () => { const n = makePreview.noun; makePreview = null; paintPreviewCard(); startPreviewProp(n); sfx('click'); };
@@ -1128,7 +1128,7 @@ const Build = (() => {
       if (propSection === 'decoration' && typeof UserProps !== 'undefined') browser.append(makePropPanel());
       else if (typeof UserProps !== 'undefined') {   // the door to MAKE A PROP from the other shelves: one click to FURNITURE with the field focused
         const door = document.createElement('button'); door.type = 'button'; door.className = 'bb sm refit-makeprop-door';
-        door.textContent = '\u2726 MAKE A PROP \u00b7 type any object \u25b8';
+        door.innerHTML = '<b>MAKE A PROP</b><small>Type any object. StarNet draws it in the station\u2019s style.</small>';
         door.onclick = () => { chooseLibrarySection('decoration'); setTimeout(() => { const f = root && root.querySelector('#refit-makeprop-input'); if (f) f.focus(); }, 0); sfx('click'); };
         browser.append(door);
       }
