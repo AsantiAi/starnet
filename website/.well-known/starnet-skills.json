@@ -1,7 +1,7 @@
 {
   "format": "starnet-skill-registry/v1",
   "name": "StarNet Skill Market",
-  "serial": 3,
+  "serial": 4,
   "skills": [
     {
       "slug": "accessibility-audit",
@@ -67,6 +67,48 @@
         "path": "ad-copy-testing-1.0.0.zip",
         "sha256": "ab9c8d6f23e5a38d909b48594c42412aebcf97939141cc4167e80265834cf8a4",
         "bytes": 2516
+      }
+    },
+    {
+      "slug": "address-pr-comments",
+      "name": "Address PR Comments",
+      "description": "Work through the review comments on a pull request: check each point against the code, make the changes that are right, answer the ones that are not, and hold every reply for approval before it is posted.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Engineering",
+      "tags": [
+        "github",
+        "pull-requests",
+        "code-review",
+        "review-comments",
+        "git"
+      ],
+      "requires": [
+        "cabinet",
+        "workbench"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/address-pr-comments/1.0.0/SKILL.md",
+      "digest": "6844487ae510437d92096a84165b049fdd0fd79da75c4358aa6470f489b73c7d",
+      "bytes": 6680,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "ab72bc1c9d902d88f497162187ed4250aaea977029bc932acc6b3f0650f6d1b2",
+          "bytes": 4775
+        },
+        {
+          "path": "references/review-threads.md",
+          "sha256": "552f51879e4a7f0538023f15531b94b4386b65b17fd2987fc9de68e915e55f88",
+          "bytes": 1905
+        }
+      ],
+      "download": {
+        "path": "address-pr-comments-1.0.0.zip",
+        "sha256": "d76ca0b5d131ef1b3534d2b96e94400821cc5c3739d28c2fd73bde27f6f44094",
+        "bytes": 7006
       }
     },
     {
@@ -169,6 +211,42 @@
       }
     },
     {
+      "slug": "bills-and-subscriptions",
+      "name": "Bills and Subscriptions",
+      "description": "Build and keep a list of your recurring charges: what each costs, how often, when it renews and how to cancel. Flags price rises, duplicates, trials about to start charging and things you no longer use, with a monthly total.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Planning",
+      "tags": [
+        "bills",
+        "subscriptions",
+        "budget",
+        "renewals",
+        "money"
+      ],
+      "requires": [
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/bills-and-subscriptions/1.0.0/SKILL.md",
+      "digest": "2c7e821987738c0a4ae729eea367b3f40c53df57521d3e13d950a0dbb0757adb",
+      "bytes": 5147,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "e460fe8d34881349ec2e479c5fe535ec827d2de8d6b9f4307794952a7efdaaee",
+          "bytes": 5147
+        }
+      ],
+      "download": {
+        "path": "bills-and-subscriptions-1.0.0.zip",
+        "sha256": "e29d08b30872133667b50d86663f92c6f173ba58b04de8a01e0e002750a9689a",
+        "bytes": 5309
+      }
+    },
+    {
       "slug": "brand-assets",
       "name": "Brand Assets",
       "description": "Make images, covers and transparent cutouts that look like one family: a pinned style sheet, fixed formats, every file checked against it, and cutouts confirmed truly transparent.",
@@ -236,6 +314,78 @@
         "path": "browser-operation-1.0.0.zip",
         "sha256": "c1fe53927ec9fbebf1eb31416d283e11c6455fc265ca186df96bd399a0b741fb",
         "bytes": 2472
+      }
+    },
+    {
+      "slug": "calendar-scheduling",
+      "name": "Calendar Scheduling",
+      "description": "Find meeting times that really work: checks your calendar, respects your working hours, time zones and breaks, offers three ranked options and drafts the invite. Nothing is booked, moved or cancelled without your go-ahead.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Productivity",
+      "tags": [
+        "calendar",
+        "scheduling",
+        "meetings",
+        "time-zones",
+        "invites"
+      ],
+      "requires": [
+        "notebook"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/calendar-scheduling/1.0.0/SKILL.md",
+      "digest": "9897e201e48447998b5168559e84eda0841d475992c893bc87491ae8973e0e59",
+      "bytes": 4395,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "0ed58792e5d6e7e98e6dea559047faccc1c020e59703276241b4fb39fba6d376",
+          "bytes": 4395
+        }
+      ],
+      "download": {
+        "path": "calendar-scheduling-1.0.0.zip",
+        "sha256": "8577685b82d8a353b3e9552c391cc1979eb6dac4b847bf2febb50cec8ba26cc7",
+        "bytes": 4549
+      }
+    },
+    {
+      "slug": "changelog-writing",
+      "name": "Changelog Writing",
+      "description": "Write the changelog between two versions: gather what changed, group it by what users notice, say each change in one plain sentence, credit contributors, and put breaking changes and their fixes first.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Engineering",
+      "tags": [
+        "github",
+        "changelog",
+        "release-notes",
+        "git",
+        "releases"
+      ],
+      "requires": [
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/changelog-writing/1.0.0/SKILL.md",
+      "digest": "58e476aff6e60e6e11dfc0966dbc53d9cda18e044e8aa5c6802be861425e08ca",
+      "bytes": 5144,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "312d601dd2a3a61518a27c2b8869eccec207fe35d4a1170c89f6fe8d34c10160",
+          "bytes": 5144
+        }
+      ],
+      "download": {
+        "path": "changelog-writing-1.0.0.zip",
+        "sha256": "a5f73c5d2866ec35059f155fe1f64c55bffe0f097d22a94175e366c4a197653b",
+        "bytes": 5294
       }
     },
     {
@@ -437,6 +587,80 @@
         "path": "crew-handoff-1.0.0.zip",
         "sha256": "0ec4b17c66cbb8332d28cbd84e5f805cc148c171f6344582db0ba855149b1c33",
         "bytes": 4027
+      }
+    },
+    {
+      "slug": "daily-briefing",
+      "name": "Daily Briefing",
+      "description": "One short morning message: today's calendar, mail that needs a reply, open tasks and promises, the weather where you live, and one thing to watch today. Can be set to arrive by itself every morning.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Productivity",
+      "tags": [
+        "morning",
+        "briefing",
+        "calendar",
+        "email",
+        "weather",
+        "routine"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/daily-briefing/1.0.0/SKILL.md",
+      "digest": "014bd9fd4867d92d746abd4c5022fcd822773c7415c2689cae5c5c64f38491ec",
+      "bytes": 5149,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "4cda236f59cc3984c42a3d1f68cba3d4c1ce67feb7b7ad9c0578079c454a75a3",
+          "bytes": 5149
+        }
+      ],
+      "download": {
+        "path": "daily-briefing-1.0.0.zip",
+        "sha256": "7eb779bdace044746a3e09d6572b62b59bc58020174d052f238c03893345250b",
+        "bytes": 5293
+      }
+    },
+    {
+      "slug": "data-cleanup-and-analysis",
+      "name": "Data Cleanup and Analysis",
+      "description": "Turn a messy spreadsheet or CSV export into a clean table, plain-English findings and a simple chart. Every cleaning decision is written down, and no row is dropped or changed without a recorded reason.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Productivity",
+      "tags": [
+        "csv",
+        "spreadsheet",
+        "data-cleaning",
+        "analysis",
+        "charts"
+      ],
+      "requires": [
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/data-cleanup-and-analysis/1.0.0/SKILL.md",
+      "digest": "95877fae1c82ddba06eb02c7ef22efb2ef710aae1cc3f7f9ac21fa538ca86461",
+      "bytes": 6209,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "4acefdd395f35bf082381d3fb2b07926392aa7e25b0d6cabd7a69f9be4c3bd47",
+          "bytes": 6209
+        }
+      ],
+      "download": {
+        "path": "data-cleanup-and-analysis-1.0.0.zip",
+        "sha256": "bcfaf295a4b97ba552bab911bf72ecdb7b5498a2e5b723efaf0473344747587f",
+        "bytes": 6375
       }
     },
     {
@@ -738,6 +962,153 @@
       }
     },
     {
+      "slug": "fitness-and-nutrition",
+      "name": "Fitness and Nutrition",
+      "description": "Build a weekly training and eating plan for a goal you name, keep a log of sessions and body weight, and adjust the plan from the log. General information only, not medical advice.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Planning",
+      "tags": [
+        "fitness",
+        "training",
+        "nutrition",
+        "meal-planning",
+        "health",
+        "habit-tracking"
+      ],
+      "requires": [
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/fitness-and-nutrition/1.0.0/SKILL.md",
+      "digest": "3b7e17f6e46e989e82b34bca50a4d05baf838dae5a19d19f37e2dd7926316c91",
+      "bytes": 5660,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "fa9902e696911637fa44451040cadbf36bd0baf4e2233de8c28d756fca13cad8",
+          "bytes": 5660
+        }
+      ],
+      "download": {
+        "path": "fitness-and-nutrition-1.0.0.zip",
+        "sha256": "a0e397eae34b9ccdee8397a8c8d68ce5afda2f0aaea490fb9e1e73fe69fd793e",
+        "bytes": 5818
+      }
+    },
+    {
+      "slug": "fix-failing-ci",
+      "name": "Fix Failing CI",
+      "description": "Find out why a project's automated checks (CI) failed and fix the real cause: read the failing log, reproduce it on this machine, fix it without hiding the failure, and prove it passes.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Engineering",
+      "tags": [
+        "github",
+        "ci",
+        "tests",
+        "debugging",
+        "pull-requests"
+      ],
+      "requires": [
+        "cabinet",
+        "workbench"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/fix-failing-ci/1.0.0/SKILL.md",
+      "digest": "56643dbf554b70b2f5653a97b44283965848eecbe0f6f8b7ce5f830590b4aea5",
+      "bytes": 5193,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "465e223befa35320769075d4924afebb6647ce68fdb4472fc73ab5321efbb568",
+          "bytes": 5193
+        }
+      ],
+      "download": {
+        "path": "fix-failing-ci-1.0.0.zip",
+        "sha256": "881b12e711666cea1db67a3b1538c227629231dfd92b7fc4985d2c1a8a0e190c",
+        "bytes": 5337
+      }
+    },
+    {
+      "slug": "flashcards",
+      "name": "Flashcards",
+      "description": "Study with spaced repetition: turn your notes or a chapter into question-and-answer cards, get quizzed, be graded honestly, and see each card again just before you would forget it.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Planning",
+      "tags": [
+        "flashcards",
+        "spaced-repetition",
+        "study",
+        "learning",
+        "memory"
+      ],
+      "requires": [
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/flashcards/1.0.0/SKILL.md",
+      "digest": "33b0bcad8786585d0aa1d8db6083d3e5da411954560d80fa8a3da521d26b4f47",
+      "bytes": 5433,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "8fa86d2c64d67ab0433589fba09aeda149caaebaf7ca57807f845b9319032cf2",
+          "bytes": 5433
+        }
+      ],
+      "download": {
+        "path": "flashcards-1.0.0.zip",
+        "sha256": "4c37b00fd6116708e053283cb82e5e69161ac9760ef462d48c253634f8398245",
+        "bytes": 5569
+      }
+    },
+    {
+      "slug": "grounded-citations",
+      "name": "Grounded Citations",
+      "description": "Answer a question so that every claim carries a numbered source and the exact sentence that backs it up. Use it when the answer has to be checkable, not just plausible.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Research",
+      "tags": [
+        "citations",
+        "sources",
+        "fact-checking",
+        "research",
+        "quotes"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/grounded-citations/1.0.0/SKILL.md",
+      "digest": "0459757ed84b58369832b61205cbfe4a8e8c19b9de8e009f481b0b64d356f8d8",
+      "bytes": 4641,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "af9f75bbe3e958fb1a4623d9b003d42679b3ef2882ea1532530e4f01744ffd10",
+          "bytes": 4641
+        }
+      ],
+      "download": {
+        "path": "grounded-citations-1.0.0.zip",
+        "sha256": "3206c816b8209885e309f67b2b02be4ca416db215511e680d1c2ec4a6fb77a48",
+        "bytes": 4793
+      }
+    },
+    {
       "slug": "hard-conversation",
       "name": "Hard Conversation",
       "description": "Draft the message the Commander is avoiding — the boundary, the apology, the bad news — clear, kind, and free of the lines they would regret.",
@@ -865,6 +1236,43 @@
         "path": "inbox-triage-1.0.0.zip",
         "sha256": "2d09ebd18465d3f6cebfb78ba7b5538da060bdda887e0963a1f0dd55f1bf7504",
         "bytes": 2238
+      }
+    },
+    {
+      "slug": "issue-triage",
+      "name": "Issue Triage",
+      "description": "Sort a backlog of issues and pull requests: label each by type and severity, link duplicates, try the bug reports, ask for the one missing detail, and turn the accepted ones into ready-to-work briefs.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Engineering",
+      "tags": [
+        "github",
+        "issues",
+        "triage",
+        "backlog",
+        "bug-reports",
+        "pull-requests"
+      ],
+      "requires": [
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/issue-triage/1.0.0/SKILL.md",
+      "digest": "082855a0f64fed6fa7efa1d9cdade82f00d9460c388915066234fa5136c7acb8",
+      "bytes": 5383,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "ac54a5f82141520576a678efb015bd20fecbca15810cd71ba49c3d585d74a891",
+          "bytes": 5383
+        }
+      ],
+      "download": {
+        "path": "issue-triage-1.0.0.zip",
+        "sha256": "c2a0f033c179b18bb1b963b0dcec9cdabb0f42d5f4a4446dbec0af8d34f8e0f1",
+        "bytes": 5523
       }
     },
     {
@@ -1070,6 +1478,44 @@
       }
     },
     {
+      "slug": "link-and-video-summary",
+      "name": "Link and Video Summary",
+      "description": "Turn a link (an article, PDF, thread or a video with captions) into a three-line gist, key points with where each came from, exact quotes, and what is opinion versus evidence. Can rewrite it as notes, a thread or a short post.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Research",
+      "tags": [
+        "summary",
+        "articles",
+        "video",
+        "pdf",
+        "quotes",
+        "notes"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/link-and-video-summary/1.0.0/SKILL.md",
+      "digest": "7d6d2874295cbc687653ded2b4ca152d82d8b9b778675cf4ce12b650a66f40c8",
+      "bytes": 4365,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "ed2002aa19ac09a9fb44fe240b4c490a6a4b2c376c7fd01e5678fa0d7a0edf7e",
+          "bytes": 4365
+        }
+      ],
+      "download": {
+        "path": "link-and-video-summary-1.0.0.zip",
+        "sha256": "0df01dfe90e6a76e9ab8d6502c4dd4f1e8089a7a2393254b4cf0d6dc0281d217",
+        "bytes": 4525
+      }
+    },
+    {
       "slug": "marketing-plan",
       "name": "Marketing Plan",
       "description": "Build a channel-and-campaign plan grounded in live audience research, with a measurable goal per play.",
@@ -1133,6 +1579,44 @@
         "path": "meal-planning-1.0.0.zip",
         "sha256": "8ddf2886aaed8826fd7f92553b377f1d350fcf9d84df552058fb274d86a925fa",
         "bytes": 2471
+      }
+    },
+    {
+      "slug": "meeting-prep",
+      "name": "Meeting Prep",
+      "description": "A one-page brief before a meeting: who is coming and what is known about them, the goal, the agenda, open items and promises from last time, questions to ask, the decision needed and an opening line. Sources shown; unknowns stay unknown.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Productivity",
+      "tags": [
+        "meetings",
+        "preparation",
+        "briefing",
+        "people",
+        "agenda"
+      ],
+      "requires": [
+        "dish",
+        "cabinet",
+        "notebook"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/meeting-prep/1.0.0/SKILL.md",
+      "digest": "0522e9e5aef32a07559bd94aaa5c1066050e1d8a744a7b77bf14afd7e2059de3",
+      "bytes": 3885,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "7706ab06099b5be1b7e23460ae99e41cd4e04967b406643688fb61d3421348a4",
+          "bytes": 3885
+        }
+      ],
+      "download": {
+        "path": "meeting-prep-1.0.0.zip",
+        "sha256": "a648c8e41ea8371eefd6f99087c65255745a95899abc3392352bb7f46b0a04f3",
+        "bytes": 4025
       }
     },
     {
@@ -1237,6 +1721,44 @@
       }
     },
     {
+      "slug": "persistent-reminders",
+      "name": "Persistent Reminders",
+      "description": "Reminders that keep coming back until you say they are done: bills, refills, chores and one-off tasks. You choose how often to be nudged, can snooze, and get one weekly line on what is still open.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Productivity",
+      "tags": [
+        "reminders",
+        "follow-up",
+        "recurring",
+        "bills",
+        "chores",
+        "routine"
+      ],
+      "requires": [
+        "cabinet",
+        "orchestrator"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/persistent-reminders/1.0.0/SKILL.md",
+      "digest": "077f0a60ad7c31c8868fe378f8f3a89f7ba1b7b9d97b35cdf5b912ab7a1abe53",
+      "bytes": 5447,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "a1ed9b18cbd107fb772f9da812cf1991308003817df96955a3eaf64526250210",
+          "bytes": 5447
+        }
+      ],
+      "download": {
+        "path": "persistent-reminders-1.0.0.zip",
+        "sha256": "b61c29d501a9c1a1b20e16d43d3bdfb764b185f6dde303085acd9abc652c79ce",
+        "bytes": 5603
+      }
+    },
+    {
       "slug": "pitch-deck",
       "name": "Pitch Deck",
       "description": "Build the narrative a deck has to carry — problem, why now, why you — with every number sourced and the weak slide named.",
@@ -1336,6 +1858,42 @@
         "path": "project-onboarding-1.0.0.zip",
         "sha256": "edd288088fd54af1d8c9e327d8037771a73710f534f2847601b8dcba0c98699c",
         "bytes": 4005
+      }
+    },
+    {
+      "slug": "receipt-organizer",
+      "name": "Receipt Organizer",
+      "description": "Turn a pile of receipts and invoices into a clean ledger and a tidy folder plan: who was paid, when, how much and what tax, with every figure traced to its file. Nothing is renamed or moved until you approve.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Productivity",
+      "tags": [
+        "receipts",
+        "invoices",
+        "ledger",
+        "bookkeeping",
+        "files"
+      ],
+      "requires": [
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/receipt-organizer/1.0.0/SKILL.md",
+      "digest": "e96db3e56928e6940849d8f633b57558f060f1c01ccaa89c36a4968043e99cfb",
+      "bytes": 3876,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "347f5e1fd389b76f219ddfa26139185b87b29670bcb01bba6636af9db6d4d78d",
+          "bytes": 3876
+        }
+      ],
+      "download": {
+        "path": "receipt-organizer-1.0.0.zip",
+        "sha256": "77245ba16879cce47c6c89ae839764fecde3b363c4037c821ff90c2143a2f24d",
+        "bytes": 4026
       }
     },
     {
@@ -2034,6 +2592,232 @@
       }
     },
     {
+      "slug": "cold-email",
+      "name": "Cold Email",
+      "description": "Write first-contact business emails and follow-ups that sound like a real person and earn a reply. Drafts only, for the Commander to send, and every personal detail comes from a source that was actually opened and read.",
+      "version": "1.0.0",
+      "author": "Corey Haines",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Marketing",
+      "tags": [
+        "cold-email",
+        "outreach",
+        "b2b",
+        "sales",
+        "follow-up",
+        "prospecting"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/cold-email/1.0.0/SKILL.md",
+      "digest": "4fe6f7f759f2718d93ca3e8ef6915300655b569108ce26981bc4dd4b9eab74c3",
+      "bytes": 23581,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "2142b07e174e5de6761c36fa1e6528899668527819b7dba04204bfc6272f05e4",
+          "bytes": 1110
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "a2e76de1e808978be3c2b8f36df9ae86353f98e83acc2e041c39ff1490ead270",
+          "bytes": 10291
+        },
+        {
+          "path": "references/benchmarks.md",
+          "sha256": "44b81a5d5a7000bb0f75d7d51f241aba7bf073030d797402e3fc01868eddb764",
+          "bytes": 3924
+        },
+        {
+          "path": "references/follow-ups-and-subject-lines.md",
+          "sha256": "0f83bfe63db24d09275f071cb75d37993faf0d6596734a9590f7e01a0a4626b5",
+          "bytes": 4232
+        },
+        {
+          "path": "references/frameworks.md",
+          "sha256": "b8fd6b6ceeb6e57d29f1c7b354c6b547755d4f77ead9d4d7eff48216ecea09dc",
+          "bytes": 4024
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/coreyhaines31/marketingskills/tree/5b2c0007766c6a1cf1d53fd8fc73e979e0821022/skills/cold-email",
+        "commit": "5b2c0007766c6a1cf1d53fd8fc73e979e0821022",
+        "license": "MIT"
+      },
+      "download": {
+        "path": "cold-email-1.0.0.zip",
+        "sha256": "50d0b737235ddfa67292b1a54805566f8fef5e9f0b2bdc158ee32c16993ed761",
+        "bytes": 24303
+      }
+    },
+    {
+      "slug": "competitor-news-monitor",
+      "name": "Competitor News Monitor",
+      "description": "Watch the companies you name and get a short, cited digest only when something that matters happens: pricing, launches, funding, leadership changes, incidents. Stays quiet when there is nothing new.",
+      "version": "1.0.0",
+      "author": "Ben Barclay, Nous Research",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Research",
+      "tags": [
+        "competitors",
+        "news",
+        "market-research",
+        "monitoring",
+        "digest"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/competitor-news-monitor/1.0.0/SKILL.md",
+      "digest": "c6846e0b7e6fd9d6216ce18993a3bffc1b7272cdb08357cc24c736a44453d02a",
+      "bytes": 9102,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "81e2221a1e1f1026724c0c57d0aeed366f1f369e2fcea5d8af2a808878ffe9be",
+          "bytes": 1150
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "99fef332500a4eec074b82fe64bb4ebb6a0de480ec0f11111eb4f3c48f79075a",
+          "bytes": 7952
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/NousResearch/hermes-agent/tree/abd83ab560327c58f17f8e2ecd9be0307d5c9cf9/skills/research/competitor-news-monitor",
+        "commit": "abd83ab560327c58f17f8e2ecd9be0307d5c9cf9",
+        "license": "MIT"
+      },
+      "download": {
+        "path": "competitor-news-monitor-1.0.0.zip",
+        "sha256": "5f01b78907a2676687d7b386e533ee56bb3346793f01e6606d2d4b6ef045a9af",
+        "bytes": 9402
+      }
+    },
+    {
+      "slug": "conversion-review",
+      "name": "Conversion Review",
+      "description": "Review a landing page or form to find why visitors do not sign up or buy: unclear message, friction, missing proof, weak call to action. Looks at the real page on desktop and phone and ranks the fixes.",
+      "version": "1.0.0",
+      "author": "Corey Haines",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Marketing",
+      "tags": [
+        "conversion",
+        "cro",
+        "landing-page",
+        "forms",
+        "review",
+        "website"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/conversion-review/1.0.0/SKILL.md",
+      "digest": "aacdd0e39afad1108d5d538e017ee23878f9f9cdc54e5a5bafec74ea2961860b",
+      "bytes": 20847,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "2142b07e174e5de6761c36fa1e6528899668527819b7dba04204bfc6272f05e4",
+          "bytes": 1110
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "38d542c604f7637ada9cd1f7474d581f8b0935affe1beee888b7a1fea0175520",
+          "bytes": 8748
+        },
+        {
+          "path": "references/experiments.md",
+          "sha256": "e4761de986d57aa7a6feb7444f58003b8b68a0ad4a374bc289ae86efa86049b8",
+          "bytes": 4676
+        },
+        {
+          "path": "references/forms.md",
+          "sha256": "4a43c3e810de74437ba59f94fb485ecc76dca57cd485751f21a2a7a0fbaa0c4e",
+          "bytes": 6313
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/coreyhaines31/marketingskills/tree/5b2c0007766c6a1cf1d53fd8fc73e979e0821022/skills/cro",
+        "commit": "5b2c0007766c6a1cf1d53fd8fc73e979e0821022",
+        "license": "MIT"
+      },
+      "download": {
+        "path": "conversion-review-1.0.0.zip",
+        "sha256": "b06da08a2cad3d57be94ef9fd520a1b16c253d7dc05f92baafbe3d7dfa049a6f",
+        "bytes": 21435
+      }
+    },
+    {
+      "slug": "customer-research",
+      "name": "Customer Research",
+      "description": "Find out what customers really want from reviews, forums and call transcripts: the jobs they hire the product for, their own words, their objections and what made them start looking. Every insight comes with a quoted source.",
+      "version": "1.0.0",
+      "author": "Corey Haines",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Marketing",
+      "tags": [
+        "customer-research",
+        "voice-of-customer",
+        "reviews",
+        "personas",
+        "jobs-to-be-done",
+        "interviews"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/customer-research/1.0.0/SKILL.md",
+      "digest": "524e2095b92dcd919a32615828dfea0495794f1b413c00120125e7cce0bedede",
+      "bytes": 24422,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "2142b07e174e5de6761c36fa1e6528899668527819b7dba04204bfc6272f05e4",
+          "bytes": 1110
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "5d48e46acc5c3cc29fbe37e8a3c18666ec14929d5934349942793e58638b3e93",
+          "bytes": 11085
+        },
+        {
+          "path": "references/interviews-and-surveys.md",
+          "sha256": "f432c6fccffaa48736e0c61ada6d28fa201b11cae6e80bb598c64e665aef9092",
+          "bytes": 5206
+        },
+        {
+          "path": "references/source-guides.md",
+          "sha256": "4d4bec8530029e31e1825cdc6d1d249d172f4990be692b90226198ade3cbd420",
+          "bytes": 7021
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/coreyhaines31/marketingskills/tree/5b2c0007766c6a1cf1d53fd8fc73e979e0821022/skills/customer-research",
+        "commit": "5b2c0007766c6a1cf1d53fd8fc73e979e0821022",
+        "license": "MIT"
+      },
+      "download": {
+        "path": "customer-research-1.0.0.zip",
+        "sha256": "af2491b9be8c8027d1e1294bae6161fcb2edcb32a34beb6c87d30af5d0cc9a8f",
+        "bytes": 25048
+      }
+    },
+    {
       "slug": "decision-questionnaire",
       "name": "Decision Questionnaire",
       "description": "Turn a decision the Commander cannot answer alone into a focused questionnaire document for the person who holds the missing knowledge, to fill in async or together in a meeting.",
@@ -2125,6 +2909,103 @@
       }
     },
     {
+      "slug": "finishing-a-branch",
+      "name": "Finishing a Branch",
+      "description": "Wrap up finished code work safely: confirm the tests pass, then let the Commander choose to merge it, open a pull request, or keep it for later. Nothing is deleted or overwritten without the Commander's clear go-ahead.",
+      "version": "1.0.0",
+      "author": "Jesse Vincent",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Engineering",
+      "tags": [
+        "git",
+        "branches",
+        "merge",
+        "pull-requests",
+        "worktrees",
+        "workflow"
+      ],
+      "requires": [
+        "workbench"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/finishing-a-branch/1.0.0/SKILL.md",
+      "digest": "3d42c7f7ab3a6294b55290abe4b5265132c8c37717bd65e10f0ab8853e8615e8",
+      "bytes": 11194,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "ba057cfc1a81aa0caf852c7123010fea7446c65fcac3840f646da8db75f68a98",
+          "bytes": 1111
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "6a1cfa653bab9257cf854113afff50e3625830f757b016c32f8306f181565b34",
+          "bytes": 10083
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/obra/superpowers/tree/b36e0829c6d0140e93cfef2ca599b1b07d4a7797/skills/finishing-a-development-branch",
+        "commit": "b36e0829c6d0140e93cfef2ca599b1b07d4a7797",
+        "license": "MIT"
+      },
+      "download": {
+        "path": "finishing-a-branch-1.0.0.zip",
+        "sha256": "8185b37a642666fb608500fc7961e74e97dcd76fdcca321252cc3530f842a143",
+        "bytes": 11474
+      }
+    },
+    {
+      "slug": "frontend-design",
+      "name": "Frontend Design",
+      "description": "Give a web page or app its own look instead of a generic AI-made one: choose colors, type and layout on purpose before building, then critique the result. Use when building a new interface or reshaping an existing one.",
+      "version": "1.0.0",
+      "author": "Anthropic",
+      "license": "Apache-2.0",
+      "shelf": "community",
+      "category": "Creative",
+      "tags": [
+        "design",
+        "frontend",
+        "ui",
+        "typography",
+        "web",
+        "critique"
+      ],
+      "requires": [],
+      "librarySlug": "",
+      "sourceUrl": "/skills/frontend-design/1.0.0/SKILL.md",
+      "digest": "45d3824ff77ddbaa78e53eb5b347bb28428671c52b142e6108ca71448a4292d9",
+      "bytes": 20243,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+          "bytes": 10174
+        },
+        {
+          "path": "NOTICE",
+          "sha256": "e8e4dcad6b1c725500ad8ab6a27ee7c9f5a95949a673f7ec2409ac8bcfa0158c",
+          "bytes": 355
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "798aa53d2fb15af0ab1dd6e56aefa7d28c146ca3d8202732fc7eb2e047f5998a",
+          "bytes": 9714
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/anthropics/skills/tree/41bbe19d1a1a7eaab5e7bb9050a417e5c6cffc8f/skills/frontend-design",
+        "commit": "41bbe19d1a1a7eaab5e7bb9050a417e5c6cffc8f",
+        "license": "Apache-2.0"
+      },
+      "download": {
+        "path": "frontend-design-1.0.0.zip",
+        "sha256": "01c11971e351b3d51ebd35c2e65e3133b506507c9f680ba5d61d62ddd65e1414",
+        "bytes": 20631
+      }
+    },
+    {
       "slug": "grill-me",
       "name": "Grill Me",
       "description": "Stress-test a plan before any code is written: list the decisions it rests on, then question the Commander on them, foundations first, with a recommendation for each, and confirm alignment.",
@@ -2168,6 +3049,62 @@
         "path": "grill-me-1.0.0.zip",
         "sha256": "bbabacdf39327df82b00f9bf42a52d6ac648a22803b40b052b1df995ad7f0953",
         "bytes": 6328
+      }
+    },
+    {
+      "slug": "lead-magnets",
+      "name": "Lead Magnets",
+      "description": "Plan a free resource people give their email address for: pick the right topic and format, outline it, decide what to ask for in return, and plan how to promote it and measure whether it brings good leads.",
+      "version": "1.0.0",
+      "author": "Corey Haines",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Marketing",
+      "tags": [
+        "lead-magnets",
+        "lead-generation",
+        "email-capture",
+        "content",
+        "gated-content"
+      ],
+      "requires": [
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/lead-magnets/1.0.0/SKILL.md",
+      "digest": "ce47719e10d407f7fa874dcc4a025a6b65fa6b3a37a8ca6307ad2241338bb98e",
+      "bytes": 20591,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "2142b07e174e5de6761c36fa1e6528899668527819b7dba04204bfc6272f05e4",
+          "bytes": 1110
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "3d03b02f2b32599548bf11e92fe6f76b1ab16e54d624c3c135523393a33f6b13",
+          "bytes": 10460
+        },
+        {
+          "path": "references/benchmarks.md",
+          "sha256": "a008212a2b784e162783691be2107506506a1e90d418ce994fa0cfc07adfdae8",
+          "bytes": 3673
+        },
+        {
+          "path": "references/format-guide.md",
+          "sha256": "bc0b4bc65a2bb58266cc401ee40169c515f9128268e77e2946ccd43e3f041383",
+          "bytes": 5348
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/coreyhaines31/marketingskills/tree/5b2c0007766c6a1cf1d53fd8fc73e979e0821022/skills/lead-magnets",
+        "commit": "5b2c0007766c6a1cf1d53fd8fc73e979e0821022",
+        "license": "MIT"
+      },
+      "download": {
+        "path": "lead-magnets-1.0.0.zip",
+        "sha256": "fe75f78c1ca54b4b186028df8ee2587a013b3666ed0459fa60e9b6265c109394",
+        "bytes": 21151
       }
     },
     {
@@ -2264,6 +3201,70 @@
       }
     },
     {
+      "slug": "mcp-server-building",
+      "name": "MCP Server Building",
+      "description": "Build a connector that lets AI agents use an outside service through well-designed tools (a Model Context Protocol server), in four phases: research, build, test, and prove it with realistic questions.",
+      "version": "1.0.0",
+      "author": "Anthropic",
+      "license": "Apache-2.0",
+      "shelf": "community",
+      "category": "Engineering",
+      "tags": [
+        "mcp",
+        "model-context-protocol",
+        "tools",
+        "api-integration",
+        "typescript",
+        "python"
+      ],
+      "requires": [
+        "dish",
+        "cabinet",
+        "workbench"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/mcp-server-building/1.0.0/SKILL.md",
+      "digest": "4216b897bcce87a47f306f738641a55a1335db2559d1c45a2be22cea85387df4",
+      "bytes": 43061,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "14099b9c79d031b9d4b32c736a4e20f2b941f52dd79500532d62d26dd716110c",
+          "bytes": 11346
+        },
+        {
+          "path": "NOTICE",
+          "sha256": "e0a6b110308eaf4733f1f869827c11aefa8a69af66d91a5334acf67fd1650bcf",
+          "bytes": 352
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "01fe53d56d6cb7d75bf4bd13b68c9d21ef114dbfb1b945fd1436b671d81ef63c",
+          "bytes": 10642
+        },
+        {
+          "path": "references/evaluation.md",
+          "sha256": "8d89f480527edd0f1a458772dcdaf62a6dc48f8e177973df6dc4e42b40f5ba25",
+          "bytes": 13550
+        },
+        {
+          "path": "references/mcp-best-practices.md",
+          "sha256": "c5620c0fb39bc7fa1820282dc8ff930692eef56b47bf68e5b8a6ec22d2293f98",
+          "bytes": 7171
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/anthropics/skills/tree/b9e19e6f44773509fbdd7001d77ff41a49a486c1/skills/mcp-builder",
+        "commit": "b9e19e6f44773509fbdd7001d77ff41a49a486c1",
+        "license": "Apache-2.0"
+      },
+      "download": {
+        "path": "mcp-server-building-1.0.0.zip",
+        "sha256": "082f9aca4c3c8dffca1a03b7925fb7889c2bb429ddd304107055b9ee12d1ad4c",
+        "bytes": 43817
+      }
+    },
+    {
       "slug": "meeting-action-items",
       "name": "Meeting Action Items",
       "description": "Turn meeting notes or a transcript into cited decisions, owned action items and a follow-up draft held for approval, reconciled against the Commander's existing tasks before anything is created.",
@@ -2354,6 +3355,169 @@
       }
     },
     {
+      "slug": "pricing-strategy",
+      "name": "Pricing Strategy",
+      "description": "Work out what to charge and how to package it: what unit you charge for, plans and tiers, a first price, when and how to raise prices. Also reviews a pricing page for how clearly people and AI assistants can read it.",
+      "version": "1.0.0",
+      "author": "Corey Haines",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Marketing",
+      "tags": [
+        "pricing",
+        "packaging",
+        "tiers",
+        "monetization",
+        "pricing-page",
+        "saas"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/pricing-strategy/1.0.0/SKILL.md",
+      "digest": "4a6fa08b74687332fe5394bf7c6ca4690025e0b038e67271424c220da373abfc",
+      "bytes": 30959,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "2142b07e174e5de6761c36fa1e6528899668527819b7dba04204bfc6272f05e4",
+          "bytes": 1110
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "8da8bcb8e4d94569a2f4ba817feab997d14b0605fd45ef248f83e2f13c6c12f7",
+          "bytes": 11221
+        },
+        {
+          "path": "references/pricing-models.md",
+          "sha256": "1706ee3fd76b2898f7f173ec49c628e6705f48eedb1b8d8864ac88d058c1e3ed",
+          "bytes": 4157
+        },
+        {
+          "path": "references/pricing-page-teardown.md",
+          "sha256": "a00148c774800b4bc6987913fd7f13634f3cdc52cd8975bd287c42de4cadf883",
+          "bytes": 5871
+        },
+        {
+          "path": "references/research-methods.md",
+          "sha256": "6834756843bd95ad6fc83ebde55a6ad2c627ddac8d24011ec5598c8737e8520f",
+          "bytes": 4141
+        },
+        {
+          "path": "references/tier-structure.md",
+          "sha256": "6a37efeb7fdd8e06672092448793e70019bc9e5ed36e4d2d21d183ddea6efb88",
+          "bytes": 4459
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/coreyhaines31/marketingskills/tree/5b2c0007766c6a1cf1d53fd8fc73e979e0821022/skills/pricing",
+        "commit": "5b2c0007766c6a1cf1d53fd8fc73e979e0821022",
+        "license": "MIT"
+      },
+      "download": {
+        "path": "pricing-strategy-1.0.0.zip",
+        "sha256": "153eed75fdf24a0dc2f6f0c29f6b6c5c1af8bc09c4c90cd406a17dee6b6139c6",
+        "bytes": 31913
+      }
+    },
+    {
+      "slug": "publish-site",
+      "name": "Publish Site",
+      "description": "Put a finished website online on the Commander's own hosting account (GitHub Pages, Cloudflare Pages or Netlify): preview it, publish a saved version, check the live address really works, and keep a way to roll back.",
+      "version": "1.0.0",
+      "author": "Nous Research",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Engineering",
+      "tags": [
+        "deploy",
+        "hosting",
+        "static-site",
+        "github-pages",
+        "cloudflare-pages",
+        "netlify"
+      ],
+      "requires": [
+        "workbench",
+        "dish"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/publish-site/1.0.0/SKILL.md",
+      "digest": "f50695507badc715f7afe18950b1fcd5d31766b9282687a63f82eb46b9778118",
+      "bytes": 13410,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "e06b5349fc7d64e22f8ea78259ada31fb18825ceec897824cace6e176b0077a3",
+          "bytes": 1111
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "9559852c00aadc861b34e2f3831463d14e0e9cf5280e87bc20373b9f33140022",
+          "bytes": 12299
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/NousResearch/hermes-agent/tree/034c6ac77ba4b911a121f60cb53245b66c3a4fc9/optional-skills/web-development/publish-site",
+        "commit": "034c6ac77ba4b911a121f60cb53245b66c3a4fc9",
+        "license": "MIT"
+      },
+      "download": {
+        "path": "publish-site-1.0.0.zip",
+        "sha256": "bebdbc41eb969c632cb5f23747543b1c3f3d5668722da6fd47ec9c76ccc81e1d",
+        "bytes": 13666
+      }
+    },
+    {
+      "slug": "receiving-code-review",
+      "name": "Receiving Code Review",
+      "description": "Handle review feedback on code with care: understand each point, check it against the real code before changing anything, fix what is right, and push back with reasons on what is wrong. Use when review comments arrive.",
+      "version": "1.0.0",
+      "author": "Jesse Vincent",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Engineering",
+      "tags": [
+        "code-review",
+        "feedback",
+        "verification",
+        "collaboration",
+        "quality"
+      ],
+      "requires": [
+        "cabinet",
+        "workbench"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/receiving-code-review/1.0.0/SKILL.md",
+      "digest": "db958d434decb13e54d1f156c570cff1f04ad4e1109820d15d328f8af77288c0",
+      "bytes": 9418,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "ba057cfc1a81aa0caf852c7123010fea7446c65fcac3840f646da8db75f68a98",
+          "bytes": 1111
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "136996ff63e244f57835ec7b4a355b62360f91c6a4c48f5320b4bf1aa0e7c0ad",
+          "bytes": 8307
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/obra/superpowers/tree/3fb75974186ea7fada621d8ab77b3b02169baf57/skills/receiving-code-review",
+        "commit": "3fb75974186ea7fada621d8ab77b3b02169baf57",
+        "license": "MIT"
+      },
+      "download": {
+        "path": "receiving-code-review-1.0.0.zip",
+        "sha256": "4df537d5d812ee75891284aeb9365bf4762161f2d8f169e052950d285ff01368",
+        "bytes": 9710
+      }
+    },
+    {
       "slug": "rest-graphql-debug",
       "name": "REST & GraphQL API Debugging",
       "description": "Debug REST and GraphQL APIs layer by layer: connectivity, timeouts, TLS, auth, request format, parsing and semantics, with a status-code playbook and a clean repro for every finding.",
@@ -2398,6 +3562,59 @@
         "path": "rest-graphql-debug-1.0.0.zip",
         "sha256": "3b254c444515a1a41f1162e0c278e16317c90311cdc7f9d69841b83a82d1a1f0",
         "bytes": 15217
+      }
+    },
+    {
+      "slug": "seo-audit",
+      "name": "SEO Audit",
+      "description": "Check a website for problems that keep it from showing up in search: pages search engines cannot reach, weak titles and headings, thin content. Findings are ranked by impact, each with the page and what was seen there.",
+      "version": "1.0.0",
+      "author": "Corey Haines",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Marketing",
+      "tags": [
+        "seo",
+        "audit",
+        "technical-seo",
+        "on-page",
+        "search",
+        "website"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/seo-audit/1.0.0/SKILL.md",
+      "digest": "7bc49defc699c2ec3e2c33d3997ed374ea12749f1d41c6efae6e392eae4c582a",
+      "bytes": 17455,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "2142b07e174e5de6761c36fa1e6528899668527819b7dba04204bfc6272f05e4",
+          "bytes": 1110
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "9c3d9d266e69b2e0c58d829f07c95e0bcca12a46d0b60bdbd87a1782862eb4ff",
+          "bytes": 10901
+        },
+        {
+          "path": "references/international-seo.md",
+          "sha256": "ebedc56f147f65a0b6428304a5e2aee158458561b8227628fcb045d6fb65c5c0",
+          "bytes": 5444
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/coreyhaines31/marketingskills/tree/5b2c0007766c6a1cf1d53fd8fc73e979e0821022/skills/seo-audit",
+        "commit": "5b2c0007766c6a1cf1d53fd8fc73e979e0821022",
+        "license": "MIT"
+      },
+      "download": {
+        "path": "seo-audit-1.0.0.zip",
+        "sha256": "742c0f7e244484665281bc68ba8e01fd79d498aad94e8edd848974d06a06ab3d",
+        "bytes": 17857
       }
     },
     {
@@ -2452,6 +3669,264 @@
         "path": "simple-english-1.0.0.zip",
         "sha256": "47acbc445c12f6d3c5601e6f245356ed7bba177eba9e2d5c2d1ba1728accae95",
         "bytes": 29094
+      }
+    },
+    {
+      "slug": "songwriting",
+      "name": "Songwriting",
+      "description": "Write songs: structure, rhyme, hooks and lyrics that sing well, plus ready-to-paste style prompts and tagged lyrics for AI music tools such as Suno. Also fits new words to an existing tune.",
+      "version": "1.0.0",
+      "author": "Teknium, Nous Research",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Creative",
+      "tags": [
+        "songwriting",
+        "lyrics",
+        "music",
+        "suno",
+        "parody"
+      ],
+      "requires": [],
+      "librarySlug": "",
+      "sourceUrl": "/skills/songwriting/1.0.0/SKILL.md",
+      "digest": "a0fd992f00e54c9e2ccd40401a4aefc66643f143acbd343a9d057507de13c412",
+      "bytes": 13216,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "61d836e641136d4a23a2710b26e519e95ea694fdca47bee5658106c2f1a97fc9",
+          "bytes": 1144
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "c36c045e055de0af7e5eec0095fab6036aabddc06a3035fdfda1305a7ea7f836",
+          "bytes": 12072
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/NousResearch/hermes-agent/tree/1c9433897c7b8a3b2754a84875e8f86d0a42991a/skills/creative/songwriting-and-ai-music",
+        "commit": "1c9433897c7b8a3b2754a84875e8f86d0a42991a",
+        "license": "MIT"
+      },
+      "download": {
+        "path": "songwriting-1.0.0.zip",
+        "sha256": "d53ce44b33a91243309db05207fed5faa440b85db78a336c9b96614dd800ae19",
+        "bytes": 13468
+      }
+    },
+    {
+      "slug": "teach-me",
+      "name": "Teach Me",
+      "description": "A patient tutor across many sessions: finds out why you want to learn something, teaches it in short lessons with practice, and keeps a record of what you have learned so each session picks up where the last one ended.",
+      "version": "1.0.0",
+      "author": "Matt Pocock",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Planning",
+      "tags": [
+        "learning",
+        "tutoring",
+        "lessons",
+        "study",
+        "teaching"
+      ],
+      "requires": [
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/teach-me/1.0.0/SKILL.md",
+      "digest": "3a804668faca04c2056534a9163fbea334b68559b4cbd26c6be03ead34ffe6ae",
+      "bytes": 17527,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "d96864515325a71fb2eeb3eb37f75250d5275033c8f9c225d64c91c32ef187ce",
+          "bytes": 1109
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "f3f5bf64da2c2d88971f75a85c3aff8dd897e83651dc151042a5fe725981811d",
+          "bytes": 10746
+        },
+        {
+          "path": "references/formats.md",
+          "sha256": "824d24ef83fffe30f4ec6a82b7c8953a9610909d185d4321dd1e2fe3b0a8eb1f",
+          "bytes": 5672
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/mattpocock/skills/tree/321658273cb1d20b76026717d027d505790106d4/skills/productivity/teach",
+        "commit": "321658273cb1d20b76026717d027d505790106d4",
+        "license": "MIT"
+      },
+      "download": {
+        "path": "teach-me-1.0.0.zip",
+        "sha256": "2a0b6086031942cc162996dc7b3b6e761333cb0aaabe872bc3eba9303378fff2",
+        "bytes": 17903
+      }
+    },
+    {
+      "slug": "threat-model",
+      "name": "Threat Model",
+      "description": "Map how a software project could be attacked, based on its actual code: what is worth protecting, where outside input gets in, how it could be abused, and what to fix first. Use when the Commander asks for a threat model or a list of abuse paths.",
+      "version": "1.0.0",
+      "author": "OpenAI",
+      "license": "Apache-2.0",
+      "shelf": "community",
+      "category": "Engineering",
+      "tags": [
+        "security",
+        "threat-modeling",
+        "appsec",
+        "risk",
+        "architecture"
+      ],
+      "requires": [
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/threat-model/1.0.0/SKILL.md",
+      "digest": "6cc1821192c7a16a01dd181d9b365d3ec3ce6f9652c085336f6d5d5885193eaf",
+      "bytes": 33366,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "4dd13869245e356246a5b770723247bbb80a8f07a181d1d3d873a1734297cdb9",
+          "bytes": 10776
+        },
+        {
+          "path": "NOTICE",
+          "sha256": "458d2f91b1b45f7fa80fb27cb65785c9270e0fb3dd086a5b8630b31af5b0a4db",
+          "bytes": 365
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "5352c98f7341ee26571f76f19ff4214c36220682a85bad71e2afb08f32a4172a",
+          "bytes": 8240
+        },
+        {
+          "path": "references/output-contract.md",
+          "sha256": "1ed45513d2a3ac6c438d491883528733d242ebcc15f83c56f12f27e1424dd7a9",
+          "bytes": 12108
+        },
+        {
+          "path": "references/security-controls-and-assets.md",
+          "sha256": "e7cc5d57b3b11490119f2b576eebc52ac922528b84ab0ab269b55857dbec3387",
+          "bytes": 1877
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/openai/skills/tree/5c8f1e26803bcfaffeceef1e7accbcf7e388417a/skills/.curated/security-threat-model",
+        "commit": "5c8f1e26803bcfaffeceef1e7accbcf7e388417a",
+        "license": "Apache-2.0"
+      },
+      "download": {
+        "path": "threat-model-1.0.0.zip",
+        "sha256": "2d3792db8eb44b26959e64fc7f81ee0a49069d1e57ffc9695f5fd2ce1e626127",
+        "bytes": 34082
+      }
+    },
+    {
+      "slug": "verification-before-completion",
+      "name": "Verification Before Completion",
+      "description": "Never say work is done, fixed or passing without fresh proof: run the check that proves it, read the result, then report what it showed. Use before any claim of success, and before saving, committing or handing work over.",
+      "version": "1.0.0",
+      "author": "Jesse Vincent",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Engineering",
+      "tags": [
+        "verification",
+        "testing",
+        "quality",
+        "evidence",
+        "honesty"
+      ],
+      "requires": [],
+      "librarySlug": "",
+      "sourceUrl": "/skills/verification-before-completion/1.0.0/SKILL.md",
+      "digest": "affae90e4af3bd5d58d8684bf6af375fc4b4cf8517f8e5cfdc897705b1114885",
+      "bytes": 7563,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "ba057cfc1a81aa0caf852c7123010fea7446c65fcac3840f646da8db75f68a98",
+          "bytes": 1111
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "63bea902b43dfbce2a71c7689d2875c2c5567aa78b07d6885f6d39b725ed0e7f",
+          "bytes": 6452
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/obra/superpowers/tree/3be5aad3dd2400ef23b15680969f4bcd3b6d7b8b/skills/verification-before-completion",
+        "commit": "3be5aad3dd2400ef23b15680969f4bcd3b6d7b8b",
+        "license": "MIT"
+      },
+      "download": {
+        "path": "verification-before-completion-1.0.0.zip",
+        "sha256": "7719d20d3482d045d07a642c27532c7199ac07d48521eece80e0ca010a1eb7a8",
+        "bytes": 7891
+      }
+    },
+    {
+      "slug": "web-app-qa",
+      "name": "Web App QA",
+      "description": "Test a web app the way a real user would: click through the main flows, try odd inputs, watch for errors, and keep screenshots as proof. You get a bug report ranked by how serious each problem is.",
+      "version": "1.0.0",
+      "author": "Teknium, Nous Research",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Engineering",
+      "tags": [
+        "qa",
+        "testing",
+        "browser",
+        "web",
+        "bugs",
+        "exploratory"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/web-app-qa/1.0.0/SKILL.md",
+      "digest": "1efc9a1cba3e49f3d611f3df26e900f5fb6664e065a703d0103488ae7f504763",
+      "bytes": 15532,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "61d836e641136d4a23a2710b26e519e95ea694fdca47bee5658106c2f1a97fc9",
+          "bytes": 1144
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "616aaaa399d8ab50003019f5f1fa03b95cd8ef4d4a087d46fd6693bcb4e81572",
+          "bytes": 8944
+        },
+        {
+          "path": "references/issue-taxonomy.md",
+          "sha256": "2f2801204f67e05bb1ee7072c43941bc7aa45cdb3ab9e1adadd511a103065d5c",
+          "bytes": 3823
+        },
+        {
+          "path": "references/output-template.md",
+          "sha256": "315965631c56faed754ab041447b0aeecebbe2484eb049c8038d493a2e4e8fe7",
+          "bytes": 1621
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/NousResearch/hermes-agent/tree/1c9433897c7b8a3b2754a84875e8f86d0a42991a/skills/software-development/dogfood",
+        "commit": "1c9433897c7b8a3b2754a84875e8f86d0a42991a",
+        "license": "MIT"
+      },
+      "download": {
+        "path": "web-app-qa-1.0.0.zip",
+        "sha256": "737e57e9f4c2d08dbb53b8b7d3d2337f7391cb1c85b2c6aa8dc7b69815eca2c8",
+        "bytes": 16090
       }
     },
     {

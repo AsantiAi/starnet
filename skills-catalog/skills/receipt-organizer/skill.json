@@ -1,0 +1,10 @@
+{
+  "slug": "receipt-organizer",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Productivity",
+  "tags": ["receipts", "invoices", "ledger", "bookkeeping", "files"],
+  "requires": ["cabinet"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}

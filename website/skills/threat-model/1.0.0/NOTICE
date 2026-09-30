@@ -1,0 +1,3 @@
+security-threat-model, a curated skill from the OpenAI skills repository (openai/skills). Copyright OpenAI. Licensed under the Apache License, Version 2.0.
+Upstream: https://github.com/openai/skills/tree/5c8f1e26803bcfaffeceef1e7accbcf7e388417a/skills/.curated/security-threat-model
+Modified by StarNet, 2026: tool names, station conventions and structure adapted.

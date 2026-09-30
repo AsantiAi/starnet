@@ -6766,7 +6766,9 @@ const World = (() => {
     let drawn = false;
     cv = off; ctx = g; scale = s; panX = 0; panY = 0; overlaysOn = false;
     stillPass = { fill: landed ? Terrain.baseColor() : '#040302' };
-    try { drawScene(fnow || performance.now(), 0); drawn = true; }
+    // the wall clock, never the last frame's time: a hidden or minimized window stops its frames, and a stale
+    // clock froze every timed effect (a failed run's red desk flash stayed lit in every still)
+    try { drawScene(performance.now(), 0); drawn = true; }
     catch (e) { try { console.error('[world] station still failed:', e); } catch (_) {} }
     finally {
       stillPass = null;

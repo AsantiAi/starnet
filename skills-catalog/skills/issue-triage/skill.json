@@ -1,0 +1,10 @@
+{
+  "slug": "issue-triage",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Engineering",
+  "tags": ["github", "issues", "triage", "backlog", "bug-reports", "pull-requests"],
+  "requires": ["cabinet"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}

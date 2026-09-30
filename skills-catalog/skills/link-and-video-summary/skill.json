@@ -1,0 +1,10 @@
+{
+  "slug": "link-and-video-summary",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Research",
+  "tags": ["summary", "articles", "video", "pdf", "quotes", "notes"],
+  "requires": ["dish", "cabinet"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}
