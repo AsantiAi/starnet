@@ -95,6 +95,7 @@
     try { o = JSON.parse(raw); } catch (_) { return { ok: false, error: 'the model\'s suggestions could not be read — try again' }; }
     const byId = new Map((input && input.steps || []).map(s => [s.dockId, s]));
     const fixes = [];
+    let same = 0;   // fixes whose text is what the step already says (e.g. a fix the Commander already used)
     for (const f of Array.isArray(o && o.fixes) ? o.fixes : []) {
       if (!f || typeof f !== 'object') continue;
       const id = oneLine(f.step != null ? f.step : f.dockId, 64), s = byId.get(id);
@@ -104,11 +105,12 @@
       const hands = typeof f.hands === 'string' ? oneLine(f.hands, MAX.hands) : '';
       if (does && does !== s.does) fix.does = does;
       if (hands && hands !== s.hands) fix.hands = hands;
-      if (fix.does == null && fix.hands == null) continue;
+      if (fix.does == null && fix.hands == null) { if (does || hands) same++; continue; }
       fixes.push(fix);
       if (fixes.length >= MAX.fixes) break;
     }
     const diagnosis = oneLine(o && o.diagnosis, MAX.diagnosis);
+    if (!fixes.length && same) return { ok: false, error: 'the change it suggests is already in this line\'s steps — run the job again to see it, or say what is still wrong another way' };
     if (!fixes.length) return { ok: false, error: diagnosis ? 'no change to suggest: ' + diagnosis : 'the model suggested no change to this line\'s steps — try saying what is wrong more specifically' };
     return { ok: true, diagnosis, fixes };
   }
