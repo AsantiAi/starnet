@@ -200,8 +200,9 @@
       corners: ['tallplant', 'plant', 'plant', 'tallplant'], sides: ['punchbag', 'industrial_locker', 'coffee'] },
     // a hall for workflow lines: its floor is kept for the belts; the walls get crates, racks and cable
     works: { name: 'a conveyor hall', about: 'its floor kept for workflow lines, crates and racks at the walls', kind: 'factory', deck: { style: 'rust', mat: 'treadway' }, walls: { mat: 'pipework' },
-      feature: { left: [], right: [] }, centre: [],
-      corners: ['crate', 'boxes', 'crate', 'boxes'], sides: ['rackV', 'rackV', 'industrial_toolcaddy', 'industrial_supplycart'] },
+      feature: { left: ['industrial_cabletray', 'industrial_cabletray', 'industrial_cabletray'], centre: ['industrial_floorvent'], right: ['industrial_cabletray', 'industrial_cabletray', 'industrial_cabletray'] },
+      front: { left: ['hazardpad', 'industrial_cabletray'], right: ['industrial_cabletray', 'hazardpad'] }, centre: [],
+      corners: ['crate', 'boxes', 'crate', 'boxes'], sides: ['rackV', 'rackV', 'industrial_toolcaddy', 'industrial_supplycart', 'industrial_servicecab', 'industrial_servicecab'] },
   };
   const ROOM_ORDER = ['lounge', 'cozy', 'games', 'library', 'quarters', 'garden', 'cafe', 'desks', 'meeting', 'lab', 'workshop', 'comms', 'storage', 'gym', 'works'];
   const ROOM_WORDS = { arcade: 'games', game: 'games', gaming: 'games', 'game room': 'games', rec: 'games', 'rec room': 'games', den: 'cozy', living: 'lounge', tv: 'lounge',
