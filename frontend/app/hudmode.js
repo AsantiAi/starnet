@@ -401,12 +401,13 @@
       const rect = p && p.rect && ['x', 'y', 'w', 'h'].every(k => isFinite(Number(p.rect[k]))) ? {
         x: Math.round(Number(p.rect.x)), y: Math.round(Number(p.rect.y)), w: Math.round(Number(p.rect.w)), h: Math.round(Number(p.rect.h))
       } : null;
-      return { pinned: !(p && p.pinned === false), rect };
-    } catch (_) { return { pinned: true, rect: null }; }
+      const widget = p && p.widget && ['w', 'h'].every(k => Number(p.widget[k]) > 0) ? { w: Math.round(Number(p.widget.w)), h: Math.round(Number(p.widget.h)) } : null;
+      return { pinned: !(p && p.pinned === false), rect, widget };
+    } catch (_) { return { pinned: true, rect: null, widget: null }; }
   }
 
   function writePrefs(store, prefs) {
-    try { if (store) store.setItem(PREF_KEY, JSON.stringify({ pinned: !!prefs.pinned, rect: prefs.rect || null })); } catch (_) {}
+    try { if (store) store.setItem(PREF_KEY, JSON.stringify({ pinned: !!prefs.pinned, rect: prefs.rect || null, widget: prefs.widget || null })); } catch (_) {}
   }
 
   /* ---------------- desktop bridge (Tauri) ---------------- */
@@ -587,13 +588,25 @@
   // Point the station's camera at an agent (its own follow-lock: the same one a CREW click makes).
   const WIDGET_ZOOM = 4.5;   // the agent fills the small picture; the station's own lock is 3
   const WIDGET_SEAT_AT = 0.84;   // an agent at its desk: feet low in the frame, so its desk and screen show above it
+  /* The framing follows the picture's size: the default 190px-tall picture frames its agent at 4.5 with a
+     seated worker's feet low (its desk and screen above it); a picture the Commander has made bigger zooms in
+     up to a third more (the station's own ceiling is 6) and brings a seated worker toward the middle, so a
+     bigger widget shows a bigger agent, not more empty floor. */
+  function widgetFraming() {
+    let h = 0; try { h = $('stage-wrap').clientHeight || 0; } catch (_) {}
+    const k = h > 0 ? Math.min(1.33, Math.max(1, h / WIDGET_VIEW_H)) : 1;
+    const t = h > WIDGET_VIEW_H ? Math.min(1, (h - WIDGET_VIEW_H) / 210) : 0;
+    return { zoom: +(WIDGET_ZOOM * k).toFixed(2), seatAt: +(WIDGET_SEAT_AT - 0.18 * t).toFixed(2) };
+  }
   function follow(id) {
-    if (!id || S.followId === id) return;
-    S.followId = id;
+    if (!id) return;
+    const fr = widgetFraming(), key = id + '|' + fr.zoom + '|' + fr.seatAt;
+    if (S.followId === id && S.followKey === key) return;
+    S.followId = id; S.followKey = key;
     try {
       if (typeof World === 'undefined' || !World.lockBody) return;
       if (S.stationZoom == null) { const d = World.cameraDbg && World.cameraDbg(); S.stationZoom = d && d.scale > 0 ? d.scale : 0; }
-      World.lockBody(id, WIDGET_ZOOM, { seatAt: WIDGET_SEAT_AT });
+      World.lockBody(id, fr.zoom, { seatAt: fr.seatAt });
     } catch (_) {}
   }
   // leaving the HUD: the camera keeps watching the same agent, at the zoom the station had
@@ -675,19 +688,43 @@
 
   function stopWidgetFrames() {}
 
-  // the window hugs the widget (the view + its rows), width and height
-  function widgetSize() {
+  /* The widget's window. It opens at the DEFAULT size (a 300x190 picture + its rows); the picture fills whatever
+     the window is, so when the Commander drags the window bigger the station view grows with it — and that
+     size is theirs: it is kept (no auto-fit fights it) and remembered for the next time the HUD opens. */
+  const WIDGET_VIEW_W = 300, WIDGET_VIEW_H = 190;
+  function widgetDefaultSize() {
     try {
-      const a = S.widget.box.getBoundingClientRect(), s = $('stage-wrap').getBoundingClientRect();
-      return { w: Math.ceil(Math.max(a.right, s.right) + 4), h: Math.ceil(Math.max(a.bottom, s.bottom) + 4) };
+      const box = S.widget.box, r = box.getBoundingClientRect();
+      const z = box.offsetWidth > 0 ? r.width / box.offsetWidth : 1;   // the text-size body zoom (visual px per css px)
+      return { w: Math.ceil((WIDGET_VIEW_W + 8) * z), h: Math.ceil((WIDGET_VIEW_H + 12) * z + r.height) };
     } catch (_) { return null; }
   }
-  function fitWidget() {
-    if (!S.active || S.view !== 'widget' || !S.desktop) return;
-    const z = widgetSize(); if (!z) return;
-    if (S.widgetFit && Math.abs(z.w - S.widgetFit.w) < 3 && Math.abs(z.h - S.widgetFit.h) < 3) return;
+  function widgetSize() { return S.widgetUser || widgetDefaultSize(); }
+  function askWidgetSize(z) {
+    if (!z) return Promise.resolve(null);
     S.widgetFit = z;
-    invoke('starnet_hud_fold', { folded: true, height: z.h, width: z.w });
+    S.fitQuietUntil = now() + 900;   // the resize this request causes is ours, not the Commander's
+    return invoke('starnet_hud_fold', { folded: true, height: z.h, width: z.w });
+  }
+  // default-sized: follow the rows (an agent starting or finishing adds or removes one); user-sized: hands off
+  function fitWidget() {
+    if (!S.active || S.view !== 'widget' || !S.desktop || S.widgetUser) return;
+    const z = widgetDefaultSize(); if (!z) return;
+    if (S.widgetFit && Math.abs(z.w - S.widgetFit.w) < 3 && Math.abs(z.h - S.widgetFit.h) < 3) return;
+    askWidgetSize(z);
+  }
+  // a resize we did not ask for, while the widget shows, is the Commander sizing it: keep and remember that size.
+  // Only a REAL window resize counts: the synthetic 'resize' the HUD dispatches after every view change (so the
+  // layout reflows) is untrusted, and the moments around a view change or an entry are quiet.
+  function onWindowResize(e) {
+    if (e && e.isTrusted === false) return;
+    if (!S.active || S.view !== 'widget' || !S.desktop || S.busy || now() < (S.fitQuietUntil || 0)) return;
+    const w = Math.round(root.innerWidth), h = Math.round(root.innerHeight);
+    if (!(w > 0 && h > 0)) return;
+    if (S.widgetFit && Math.abs(w - S.widgetFit.w) < 4 && Math.abs(h - S.widgetFit.h) < 4) return;
+    S.widgetUser = { w, h }; S.widgetFit = S.widgetUser;
+    const prefs = readPrefs(root.localStorage); prefs.widget = S.widgetUser; writePrefs(root.localStorage, prefs);
+    renderWidget();   // the picture changed size: re-frame the agent for it
   }
 
   function buildUi() {
@@ -706,8 +743,8 @@
     // the HUD's hands live in the COMMS header, where the project feed keeps its CREW / ACTIVITY switch
     const ctl = el('span', 'ph-actions hud-ctl');
     const view = el('button', 'btn'); view.type = 'button'; view.id = 'hud-view';
-    const small = el('button', 'btn', 'SMALL'); small.type = 'button'; small.id = 'hud-small';
-    small.title = 'Shrink the HUD to the widget';
+    const small = el('button', 'btn', 'AGENT CAM'); small.type = 'button'; small.id = 'hud-small';
+    small.title = 'Shrink the HUD to the agent cam';
     const pin = el('button', 'btn', 'PIN'); pin.type = 'button'; pin.id = 'hud-pin'; pin.hidden = true;
     const exitBtn = el('button', 'btn', 'STATION'); exitBtn.type = 'button'; exitBtn.id = 'hud-exit';
     exitBtn.title = 'Back to the full station';
@@ -853,6 +890,7 @@
     if (!S.active) return Promise.resolve(false);
     S.view = next === 'chat' ? 'chat' : next === 'widget' ? 'widget' : 'activity';
     if (S.view === 'widget') S.widgetFit = null;
+    S.fitQuietUntil = now() + 900;   // the window is about to change size for this view: that is ours
     applyView();
     render();
     announceLayout();
@@ -861,7 +899,7 @@
       S.foldedH = 0;
       return invoke('starnet_hud_fold', { folded: false, height: null }).then(() => true);
     }
-    if (S.view === 'widget') { const z = widgetSize(); S.widgetFit = z; return invoke('starnet_hud_fold', { folded: true, height: z && z.h, width: z && z.w }).then(() => true); }
+    if (S.view === 'widget') return askWidgetSize(widgetSize()).then(() => true);
     S.foldedH = activityHeight();
     return invoke('starnet_hud_fold', { folded: true, height: S.foldedH, width: null }).then(() => true);
   }
@@ -872,6 +910,8 @@
     S.busy = true;
     const prefs = readPrefs(root.localStorage);
     S.pinned = prefs.pinned;
+    S.widgetUser = prefs.widget || null;   // the size the Commander last gave the widget, if they ever did
+    S.fitQuietUntil = now() + 3000;        // entering reshapes the window several times: none of that is the Commander
     S.view = 'widget';                       // the HUD opens SMALL: the agents at work, a click from everything else
     S.desktop = !!tauriCore(root);
     S.active = true;
@@ -892,7 +932,7 @@
       .then(v => v || (prefs.rect && S.desktop ? invoke('starnet_hud_set', { active: true, pinned: S.pinned }) : v))
       .then(v => { if (v) { S.pinned = !!v.pinned; syncButtons(); } return true; })
       // the shell opened the HUD at its full rect: now hug the widget
-      .then(ok => { const z = widgetSize(); S.widgetFit = z; return invoke('starnet_hud_fold', { folded: true, height: z && z.h, width: z && z.w }).then(() => ok); })
+      .then(ok => askWidgetSize(widgetSize()).then(() => ok))
       .finally(() => { S.busy = false; });
   }
 
@@ -944,6 +984,7 @@
       btn.hidden = !tauriCore(root);
       btn.addEventListener('click', () => { enter(); });
     }
+    root.addEventListener('resize', onWindowResize);
     // Ctrl+Shift+H toggles the HUD from anywhere in the app (Alt+H stays the help overlay's).
     doc.addEventListener('keydown', e => {
       if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && (e.code === 'KeyH' || e.key === 'H' || e.key === 'h')) {
