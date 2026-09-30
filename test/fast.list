@@ -994,3 +994,4 @@ test/remote.core.test.js
 test/remote.relay.test.js
 test/remote-sessions.test.js
 test/remote-view.test.js
+test/remote-push.test.js
