@@ -22,6 +22,13 @@
 
   const KEY_PREFIX = 'plugin.';
   const SANDBOX = 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads';
+  const DRAFT_SANDBOX = 'allow-scripts';   // a crew-written draft draws and runs, nothing more (the sidecar's CSP agrees)
+  // A NONCE per frame, in the URL fragment the kit reads: the bridge answers only the page the host loaded. A plugin page
+  // that navigates its frame elsewhere (a plain link to some site) keeps the same contentWindow — without the nonce that
+  // site could call the plugin's store and backend.
+  const nonce = () => { const a = new Uint8Array(12); (root.crypto || window.crypto).getRandomValues(a); return Array.from(a, (b) => b.toString(16).padStart(2, '0')).join(''); };
+  // A plugin may notify, not flood: 4 toasts per 10 s per plugin, kept out of the notification history.
+  const toastLog = new Map();   // plugin id -> [times]
   // The tokens a plugin page is kept in step with. The rgb triplets matter most: every kit recipe derives its
   // translucent glass from them, exactly as the station's own glass does.
   const THEME_VARS = ['--ph', '--ph-bright', '--ph-dim', '--ph-faint', '--ink', '--bg', '--panel', '--panel2', '--text',
@@ -79,10 +86,18 @@
 
   function toastFor(entry, text, kind) {
     const ui = UI();
+    const t = Date.now(), recent = (toastLog.get(entry.plugin.id) || []).filter((x) => t - x < 10000);
+    if (recent.length >= 4) throw new Error('too many notifications — at most 4 every 10 seconds');
+    recent.push(t); toastLog.set(entry.plugin.id, recent);
     const msg = entry.plugin.name + ': ' + String(text || '').slice(0, 280);
     const cls = kind === 'bad' ? 'bad' : (kind === 'warn' ? 'warn' : 'good');
-    if (ui && ui.notify) ui.notify(msg, cls);
+    // transient: shown, never written into the station's notification history (a plugin cannot push the
+    // Commander's real approvals out of the bell)
+    if (ui && ui.notify) ui.notify(msg, cls, 'general', { transient: true });
   }
+  // The station refused a call for this plugin (turned off, edited, removed): learn the new state so its windows
+  // say so, instead of a page that keeps running old code under the PLUGIN plate.
+  function refusedRefresh(status) { if (status === 409 || status === 410) refresh().catch(() => {}); }
 
   async function storeOp(entry, op, a) {
     if (entry.draft) {
@@ -90,9 +105,14 @@
       if (!m) { m = new Map(); draftStores.set(entry.plugin.id, m); }
       const key = String((a && a.key) || '');
       if (op === 'keys') return Array.from(m.keys());
-      if (!/^[A-Za-z0-9_.:-]{1,128}$/.test(key)) throw new Error('a store key is 1-128 letters, numbers, _ . : or -');
+      if (!/^[A-Za-z0-9_.:-]{1,128}$/.test(key) || key === '__proto__' || key === 'constructor' || key === 'prototype') throw new Error('a store key is 1-128 letters, numbers, _ . : or -');
       if (op === 'get') return m.has(key) ? JSON.parse(m.get(key)) : null;
-      if (op === 'set') { m.set(key, JSON.stringify(a.value === undefined ? null : a.value)); return null; }
+      if (op === 'set') {
+        const text = JSON.stringify(a.value === undefined ? null : a.value);
+        if (text.length > 256 * 1024) throw new Error('that value is over 256 KB');
+        if (!m.has(key) && m.size >= 1000) throw new Error('this plugin already stores 1000 keys');
+        m.set(key, text); return null;
+      }
       if (op === 'delete') { m.delete(key); return null; }
       throw new Error('unknown store operation');
     }
@@ -101,7 +121,7 @@
       body: JSON.stringify({ id: entry.plugin.id, op, key: a && a.key, value: a && a.value })
     });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok || !j.ok) throw new Error((j && j.error) || ('the station refused (' + r.status + ')'));
+    if (!r.ok || !j.ok) { refusedRefresh(r.status); throw new Error((j && j.error) || ('the station refused (' + r.status + ')')); }
     return j.value;
   }
 
@@ -125,7 +145,7 @@
         body: JSON.stringify({ id: entry.plugin.id, fn: String((a && a.fn) || ''), args: a && a.args })
       });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok || !j.ok) throw new Error((j && j.error) || ('the station refused (' + r.status + ')'));
+      if (!r.ok || !j.ok) { refusedRefresh(r.status); throw new Error((j && j.error) || ('the station refused (' + r.status + ')')); }
       return j.value;
     },
     'ui.toast': (entry, a) => { toastFor(entry, a && a.text, a && a.kind); return null; },
@@ -134,7 +154,7 @@
       const w = entry.iframe.closest('.term');
       const t = w && w.querySelector('.term-title');
       const extra = String((a && a.text) || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 60);
-      if (t) t.textContent = entry.screen.title + (extra ? ' · ' + extra : '');
+      if (t) t.textContent = plainTitle(entry.screen.title) + (extra ? ' · ' + extra : '');
       return null;
     },
     'ui.open': (entry, a) => {
@@ -160,6 +180,7 @@
     let entry = null;
     for (const f of frames) { if (f.iframe.contentWindow === ev.source) { entry = f; break; } }
     if (!entry) return;   // not one of ours: never answered
+    if (d.n !== entry.nonce) return;   // the frame navigated away from the page we loaded: never answered
     const fn = Object.prototype.hasOwnProperty.call(METHODS, d.m) ? METHODS[d.m] : null;
     const reply = (ok, v, err) => post(entry, { re: d.id, ok, v: ok ? v : undefined, err: ok ? undefined : String(err || 'refused') });
     if (!fn) return reply(false, null, 'unknown call: ' + d.m);
@@ -213,16 +234,16 @@
     if (!url) { body.innerHTML = '<div class="plugin-gone">The station could not open this window (no session).</div>'; return; }
     const iframe = document.createElement('iframe');
     iframe.className = 'plugin-frame';
-    iframe.setAttribute('sandbox', SANDBOX);
+    iframe.setAttribute('sandbox', def.draft ? DRAFT_SANDBOX : SANDBOX);
     iframe.setAttribute('referrerpolicy', 'no-referrer');
     iframe.setAttribute('allow', '');
-    iframe.setAttribute('title', def.plugin.name + ' — ' + def.screen.title);
+    iframe.setAttribute('aria-label', def.plugin.name + ' — ' + def.screen.title);
     iframe.dataset.digest = def.plugin.digest;
     iframe.dataset.plugin = def.plugin.id;
     iframe.style.height = '240px';
-    const entry = { key, iframe, plugin: def.plugin, screen: def.screen, draft: !!def.draft };
+    const entry = { key, iframe, plugin: def.plugin, screen: def.screen, draft: !!def.draft, nonce: nonce() };
     frames.add(entry);
-    iframe.src = url;
+    iframe.src = url + '#sn=' + entry.nonce;
     body.appendChild(iframe);
   }
 
@@ -284,11 +305,14 @@
       keyPlugin.set(key, id);
       ui.registerWindow(key, plainTitle(s.title || s.id), (body) => build(key, body), { className: 'plugin-win', wide: s.size === 'wide' });
     }
-    const want = list.find((s) => s && s.id === (a && a.screen)) || list[0];
+    const want = list.find((s) => s && s.id && s.entry && s.id === (a && a.screen)) || list.find((s) => s && s.id && s.entry);
+    if (!want) throw new Error('that draft has no window to preview');
     const key = keyOf(id, want.id, true);
-    let already = false;
-    for (const f of frames) if (f.key === key) already = true;
-    if (already && ui.rerender) ui.rerender(key); else ui.openTerm(key);
+    // every open window of this draft moves to the new code (rerender swaps frames whose digest changed)
+    for (const f of Array.from(frames)) if (f.draft && f.plugin.id === id && ui.rerender) ui.rerender(f.key);
+    ui.openTerm(key);   // opens it, or restores it when minimized
+    const opened = Array.from(frames).some((f) => f.key === key);
+    if (!opened) throw new Error('the preview window did not open');
     return { title: plainTitle(want.title || want.id) };
   }
 
@@ -297,7 +321,11 @@
     const sid = screenId || (p && p.screens && p.screens[0] && p.screens[0].id);
     const key = keyOf(pluginId, sid || '');
     if (!screens.has(key)) return false;
-    const ui = UI(); if (ui && ui.openTerm) ui.openTerm(key);
+    const ui = UI();
+    // once a plugin is installed and opened, its DRAFT preview has done its job: close it rather than leave a stale
+    // copy of the same window docked on top
+    if (ui && ui.closeTerm) for (const f of Array.from(frames)) if (f.draft && f.plugin.id === pluginId) ui.closeTerm(f.key);
+    if (ui && ui.openTerm) ui.openTerm(key);
     return true;
   }
 

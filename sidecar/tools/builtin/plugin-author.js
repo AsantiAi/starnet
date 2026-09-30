@@ -37,6 +37,8 @@ function makePluginAuthorTools(deps) {
   const compile = typeof deps.compile === 'function' ? deps.compile : null;   // (source, filename) -> error text | ''
   const preview = typeof deps.preview === 'function' ? deps.preview : null;   // (id, screenId) -> { ok, error? }
   const afterInstall = typeof deps.afterInstall === 'function' ? deps.afterInstall : async () => {};
+  // a RUNNING plugin must be stopped (and gone) before its folder is replaced — Windows holds it open otherwise
+  const beforeReplace = typeof deps.beforeReplace === 'function' ? deps.beforeReplace : async () => {};
   if (typeof deps.now !== 'function') throw new Error('plugin author tools require an injected clock { now }');
   const now = deps.now;
 
@@ -61,12 +63,15 @@ function makePluginAuthorTools(deps) {
     await walk(base, '', 0);
     return out;
   }
+  // Copies the MAIN data of each ordinary file (readFile/writeFile, never copyFile): copyFile would carry NTFS
+  // alternate streams along, and those are invisible to the approval digest.
   async function copyTree(from, to) {
     await fsp.mkdir(to, { recursive: true });
     for (const f of await listFiles(from)) {
+      if (!relPathOk(f.path)) continue;
       const dst = P.join(to, ...f.path.split('/'));
       await fsp.mkdir(P.dirname(dst), { recursive: true });
-      await fsp.copyFile(P.join(from, ...f.path.split('/')), dst);
+      await fsp.writeFile(dst, await fsp.readFile(P.join(from, ...f.path.split('/'))));
     }
   }
   async function readManifest(base) {
@@ -115,13 +120,12 @@ function makePluginAuthorTools(deps) {
     {
       name: 'plugin.draft_start',
       description: 'Start a StarNet plugin DRAFT (a plugin is the Commander\'s own app/dashboard/tool inside StarNet: windows built from the station kit, plus optional code with crew tools). '
-        + 'Starts from a working template (a window with a notes list + a KIT reference tab, and code with two example tools), or with from_installed:true copies an INSTALLED plugin so you can edit it. '
+        + 'Starts from a working template (a window with a notes list + a KIT reference tab, and code with two example tools). To change an INSTALLED plugin use plugin.draft_from_installed instead. '
         + 'Drafts never run. Then edit with plugin.draft_write, check with plugin.check, show with plugin.preview, and install with plugin.submit.',
       schema: { type: 'object', required: ['id'], properties: {
         id: { type: 'string', description: 'folder id, e.g. "pr-radar"' },
         name: { type: 'string', description: 'display name, e.g. "PR Radar"' },
         description: { type: 'string' },
-        from_installed: { type: 'boolean', description: 'copy the installed plugin with this id instead of the template' },
         replace: { type: 'boolean', description: 'discard an existing draft with this id first' }
       } },
       run: async (a) => {
@@ -131,17 +135,11 @@ function makePluginAuthorTools(deps) {
           if (!a.replace) return { content: 'A draft named "' + id + '" already exists — keep editing it (plugin.draft_read lists its files), or pass replace:true to start over.', summary: 'draft exists' };
           await fsp.rm(base, { recursive: true, force: true });
         }
-        if (a.from_installed) {
-          const src = P.join(pluginsDir, id);
-          if (!(await exists(src))) throw new Error('no installed plugin named "' + id + '"');
-          await copyTree(src, base);
-        } else {
-          const files = template({ id, name: String(a.name || id).slice(0, 60), description: String(a.description || '').slice(0, 300) });
-          for (const rel of Object.keys(files)) {
-            const dst = P.join(base, ...rel.split('/'));
-            await fsp.mkdir(P.dirname(dst), { recursive: true });
-            await fsp.writeFile(dst, files[rel], 'utf8');
-          }
+        const files = template({ id, name: String(a.name || id).slice(0, 60), description: String(a.description || '').slice(0, 300) });
+        for (const rel of Object.keys(files)) {
+          const dst = P.join(base, ...rel.split('/'));
+          await fsp.mkdir(P.dirname(dst), { recursive: true });
+          await fsp.writeFile(dst, files[rel], 'utf8');
         }
         const list = await listFiles(base);
         return {
@@ -149,6 +147,27 @@ function makePluginAuthorTools(deps) {
             + GUIDE,
           summary: 'plugin draft ' + id
         };
+      }
+    },
+    {
+      name: 'plugin.draft_from_installed',
+      description: 'Copy an INSTALLED plugin into a draft so you can change it (asks the Commander first: it reads that plugin\'s code). Then edit with plugin.draft_write and plugin.submit it — the installed plugin turns off until the Commander approves the new version.',
+      schema: { type: 'object', required: ['id'], properties: {
+        id: { type: 'string', description: 'the installed plugin\'s folder id' },
+        replace: { type: 'boolean', description: 'discard an existing draft with this id first' }
+      } },
+      run: async (a) => {
+        const id = idOf(a);
+        const src = P.join(pluginsDir, id);
+        if (!(await exists(src))) throw new Error('no installed plugin named "' + id + '"');
+        const base = draftDir(id);
+        if (await exists(base)) {
+          if (!a.replace) return { content: 'A draft named "' + id + '" already exists — keep editing it, or pass replace:true to copy the installed plugin over it.', summary: 'draft exists' };
+          await fsp.rm(base, { recursive: true, force: true });
+        }
+        await copyTree(src, base);
+        const list = await listFiles(base);
+        return { content: 'Draft "' + id + '" ready with ' + list.length + ' files copied from the installed plugin: ' + list.map(f => f.path).join(', ') + '.\n' + GUIDE, summary: 'plugin draft from installed ' + id };
       }
     },
     {
@@ -209,7 +228,7 @@ function makePluginAuthorTools(deps) {
     },
     {
       name: 'plugin.preview',
-      description: 'Open a plugin draft\'s window on the Commander\'s screen as a DRAFT window, so they (and you, from their reply) can see it. The page runs sandboxed with a throwaway store and no backend. Open it again after edits to show the new version.',
+      description: 'Open a plugin draft\'s window on the Commander\'s screen as a DRAFT window, so they (and you, from their reply) can see it. The page runs sandboxed with no network, a throwaway store and no backend. Open it again after edits to show the new version.',
       schema: { type: 'object', required: ['id'], properties: { id: { type: 'string' }, screen: { type: 'string', description: 'screen id (default: the first)' } } },
       run: async (a) => {
         const id = idOf(a);
@@ -231,6 +250,7 @@ function makePluginAuthorTools(deps) {
         if (!r.ok) throw new Error('fix these first: ' + r.problems.join('; '));
         const dst = P.join(pluginsDir, id);
         const replacing = await exists(dst);
+        if (replacing) await beforeReplace(id);
         // Stage beside, then swap: a half-copied plugin folder must never be what discovery sees.
         const staging = P.join(draftsDir, '.staging-' + id + '-' + now());
         await copyTree(draftDir(id), staging);
@@ -249,12 +269,15 @@ function makePluginAuthorTools(deps) {
 
   // Inert until approved (drafts never run; submit installs OFF), so none of this is a host-process effect.
   // submit alone asks first: it changes what is installed on the Commander's station.
+  const ASKS = { 'plugin.submit': 1, 'plugin.draft_from_installed': 1 };
   const defs = tools.map(t => Object.assign({
-    scope: t.name === 'plugin.submit' ? 'write' : (/draft_(?:start|write)$/.test(t.name) ? 'write' : 'read'),
+    // submit is EXECUTE scope: the consent broker never lets a cached "Always" or an unattended run carry it —
+    // installing (or replacing, which turns the old plugin off) is decided by a watching Commander every time
+    scope: t.name === 'plugin.submit' ? 'execute' : (/draft_(?:start|write|from_installed)$/.test(t.name) ? 'write' : 'read'),
     readOnly: t.name === 'plugin.draft_read' || t.name === 'plugin.check',
     capability: 'pluginauthor',
     impact: 'none',
-    requiresConsent: t.name === 'plugin.submit',
+    requiresConsent: !!ASKS[t.name],
     network: false
   }, t));
 
@@ -265,6 +288,6 @@ function makePluginAuthorTools(deps) {
   };
 }
 
-function toolNames() { return ['plugin.draft_start', 'plugin.draft_read', 'plugin.draft_write', 'plugin.check', 'plugin.preview', 'plugin.submit']; }
+function toolNames() { return ['plugin.draft_start', 'plugin.draft_from_installed', 'plugin.draft_read', 'plugin.draft_write', 'plugin.check', 'plugin.preview', 'plugin.submit']; }
 
 module.exports = { makePluginAuthorTools, toolNames };

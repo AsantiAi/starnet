@@ -3047,7 +3047,7 @@ const Build = (() => {
     const closeP = () => { if (g.parentNode) g.parentNode.removeChild(g); };
     cardRegister(g, closeP);
     g.innerHTML = '<div class="refit-guide-card"><h3>▮ PLUGIN TERMINAL — choose its plugin</h3>'
-      + '<ul><li>This terminal gives its room’s agent the chosen plugin’s <b>tools</b> (each call asks you first).</li>'
+      + '<ul><li>This terminal gives its room’s agent the chosen plugin’s <b>tools</b> (each call asks you first, unless you choose Always or Full access).</li>'
       + '<li>Clicking it in the station opens that plugin’s window.</li></ul>'
       + '<div class="refit-conn-rows" id="pl-rows">loading…</div>'
       + '<div class="refit-actions"><button type="button" class="btn-sm" id="pl-unbind">✕ UNBIND</button><button type="button" class="btn-sm" id="pl-cancel">CANCEL</button></div></div>';
@@ -3060,8 +3060,12 @@ const Build = (() => {
     g.addEventListener('click', e => { if (e.target === g) closeP(); });
     if (typeof fetch === 'undefined') { rowsEl.innerHTML = '<div class="refit-conn-note">no sidecar — can’t list plugins here.</div>'; return; }
     fetch('/api/plugins').then(r => { if (!r.ok) throw new Error('http ' + r.status); return r.json(); }).then(j => {
-      const list = ((j && j.plugins) || []).filter(x => x.active);
-      if (!list.length) { rowsEl.innerHTML = '<div class="refit-conn-note">No plugins are on yet — create or approve one in <b>⇄ ABILITIES → EXTENSIONS</b>, then bind it here.</div>'; return; }
+      const all = (j && j.plugins) || [];
+      const list = all.filter(x => x.active);
+      const boundOff = p.pluginId ? all.find(x => x.id === p.pluginId && !x.active) : null;
+      const offNote = boundOff ? '<div class="refit-conn-note">Bound to <b>' + esc(boundOff.name || boundOff.id) + '</b>, which is off' + (boundOff.pending ? ' (changed since you approved it)' : '') + ' — turn it on in ⇄ ABILITIES → EXTENSIONS.</div>'
+        : (p.pluginId && !all.some(x => x.id === p.pluginId) ? '<div class="refit-conn-note">Bound to <b>' + esc(p.pluginId) + '</b>, which was removed.</div>' : '');
+      if (!list.length) { rowsEl.innerHTML = offNote + '<div class="refit-conn-note">No plugins are on yet — create or approve one in <b>⇄ ABILITIES → EXTENSIONS</b>, then bind it here.</div>'; return; }
       rowsEl.innerHTML = list.map(x => {
         const sel = (x.id === p.pluginId);
         const tools = Array.isArray(x.tools) ? x.tools.length : 0, wins = Array.isArray(x.screens) ? x.screens.length : 0;
@@ -3069,6 +3073,7 @@ const Build = (() => {
         return '<button type="button" class="bb sm conn-row' + (sel ? ' active' : '') + '" data-id="' + esc(x.id) + '" data-label="' + esc(x.name || x.id) + '">'
           + '<span class="conn-dot ok">●</span> ' + esc(x.name || x.id) + ' <span class="conn-meta">' + esc(meta) + '</span></button>';
       }).join('');
+      if (offNote) rowsEl.insertAdjacentHTML('afterbegin', offNote);
       rowsEl.querySelectorAll('.conn-row').forEach(b => b.onclick = () => bind(b.dataset.id, b.dataset.label));
     }).catch(() => { rowsEl.innerHTML = '<div class="refit-conn-note">sidecar offline — start it to bind a plugin.</div>'; });
   }

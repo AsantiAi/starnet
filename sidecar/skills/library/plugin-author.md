@@ -11,11 +11,12 @@ default: false
 A plugin is the Commander's own app inside StarNet: one or more **windows** (HTML/CSS/JS opened as real station windows, styled by the station kit) and optional **code** (its own process, with tools the crew can call, handlers for its windows, and background jobs). You write it as a **draft**. It stays off until the Commander approves it, and you can never switch it on yourself.
 
 ## The tools (find them with tool.search "plugin")
-- `plugin.draft_start { id, name, description }` starts from a working template. `from_installed: true` copies an installed plugin so you can change it.
+- `plugin.draft_start { id, name, description }` starts from a working template.
+- `plugin.draft_from_installed { id }` copies an installed plugin so you can change it. It asks the Commander first.
 - `plugin.draft_read { id, path? }` lists the files, or reads one. Always read a file before rewriting it.
 - `plugin.draft_write { id, path, content }` writes a whole file.
 - `plugin.check { id }` shows problems (manifest, windows, JS that won't compile) and look warnings.
-- `plugin.preview { id, screen? }` opens a DRAFT window on the Commander's screen. It's sandboxed, with a throwaway store and no backend.
+- `plugin.preview { id, screen? }` opens a DRAFT window on the Commander's screen. It's sandboxed, with no network, a throwaway store and no backend, so a page that fetches data shows its empty or loading state in preview.
 - `plugin.submit { id }` installs the plugin OFF, behind an approval card. The Commander then switches it on in ABILITIES → CREATE / ADVANCED → EXTENSIONS.
 
 ## Method

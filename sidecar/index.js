@@ -3531,7 +3531,9 @@ const pluginStore = makePluginStore({ store: pluginDataStore });
    the station. The loader starts/stops these as approvals change. */
 const pluginRuntime = makePluginRuntime({
   fork: stationChildProcess.fork, workerPath: path.join(__dirname, 'plugin-worker.js'), store: pluginStore,
-  now: () => Date.now(),
+  now: () => Date.now(), cwd: WORKSPACES,
+  // the approval must still cover the exact code a process runs (before tool/window calls, restarts, and jobs)
+  verify: async (id, digest) => { const r = await pluginLoader.approvedRecord(id); return !!r && r.digest === digest; },
   onLog: (id, line) => { for (const l of String(line || '').split(/\r?\n/)) if (l) console.log('[plugin:' + id + '] ' + l); }
 });
 /* A RE-APPROVAL MUST RUN THE NEW CODE. Node caches every require()d module forever, so after an edit + re-approve
@@ -3552,6 +3554,26 @@ const pluginLoader = makePluginLoader({
 });
 let pluginsLoaded = { loaded: [], pending: [], errors: [] };
 let hooksInstalled = { installed: [], pending: [], errors: [] };
+/* reloadExtensions() — THE way plugins + shell hooks are re-installed after any change. Two guarantees:
+   · ATOMIC: the new handlers are collected off to the side (a plugin's process may take seconds to start) and swapped
+     onto the live spine in one synchronous step — the Commander's blocking pre_tool_call hooks are never missing
+     while a reload is in flight (they used to be cleared first and re-added only after every plugin had started);
+   · SERIAL: overlapping reloads queue instead of interleaving (which registered handlers twice and let the two
+     loads kill each other's freshly started plugin processes). */
+let extReloadChain = Promise.resolve();
+function reloadExtensions() {
+  const run = extReloadChain.then(async () => {
+    const staged = [];
+    const collector = { register: (event, fn, meta) => { staged.push([event, fn, meta]); return () => {}; }, events: () => hookSpine.events() };
+    const pl = await pluginLoader.load(collector);
+    const hk = await shellHooks.install(collector);
+    hookSpine.clear();
+    for (const [event, fn, meta] of staged) hookSpine.register(event, fn, meta);
+    pluginsLoaded = pl; hooksInstalled = hk;
+  });
+  extReloadChain = run.catch((e) => failNote('extensions.reload', e));
+  return run;
+}
 const servePluginUi = makePluginUiServer({
   fs, fsp, path, frontendDir: FRONTEND, loader: pluginLoader, apitickets, apiKey: API_TOKEN, mime: MIME,
   tokenOk: (req) => apiauth.apiTokenOk(req, API_TOKEN), now: () => Date.now(),
@@ -3579,10 +3601,21 @@ const servePluginDraft = makePluginUiServer({
   tokenOk: (req) => apiauth.apiTokenOk(req, API_TOKEN), now: () => Date.now(),
   frameAncestors: () => Array.from(apiauth.TAURI_ORIGINS).concat(['http://127.0.0.1:' + PORT, 'http://localhost:' + PORT]).join(' '),
   prefix: '/plugin-draft/', scopeFor: (id, digest) => apitickets.scopeDraft(id, digest), resolve: draftRecord,
+  // A DRAFT never reaches the network: scripts and styles only from its own ticketed files (plus inline), no
+  // fetch/XHR/WebSocket, no form posts, no popups. A preview shows what the page LOOKS like; it can never carry
+  // what an agent read out of the station. (An installed plugin keeps the normal sandbox — approved code may fetch.)
+  sandbox: 'sandbox allow-scripts',
+  extraCsp: () => {
+    const self = 'http://127.0.0.1:' + PORT + ' http://localhost:' + PORT;
+    return "; default-src 'none'; script-src 'unsafe-inline' " + self + "; style-src 'unsafe-inline' " + self +
+      '; img-src data: blob: ' + self + '; font-src data: ' + self + '; media-src data: blob: ' + self +
+      "; connect-src 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'";
+  },
   goneMessage: 'this draft changed since this preview opened — preview it again'
 });
 const pluginAuthor = makePluginAuthorTools({
   fsp, path, draftsDir: PLUGIN_DRAFTS_DIR, pluginsDir: PLUGINS_DIR, now: () => Date.now(),
+  beforeReplace: (id) => pluginRuntime.stop(id),   // a running plugin holds its folder open on Windows
   template: require('./plugin-template.js').templateFiles,
   parseScreens: require('./plugins.js').parseScreens,
   relPathOk: require('./plugin-surface.js').relPathOk,
@@ -3606,7 +3639,7 @@ const pluginAuthor = makePluginAuthorTools({
   },
   // an installed draft is OFF until approved: re-list so EXTENSIONS shows it as needing approval right away
   afterInstall: async () => {
-    try { hookSpine.clear(); pluginsLoaded = await pluginLoader.load(hookSpine); hooksInstalled = await shellHooks.install(hookSpine); }
+    try { await reloadExtensions(); }
     catch (e) { console.warn('[plugins] reload after install failed: ' + ((e && e.message) || e)); }
   }
 });
@@ -10495,6 +10528,7 @@ function gracefulShutdown(signal) {
   try { if (typeof connectorLifecycleTimer !== 'undefined' && connectorLifecycleTimer) { clearInterval(connectorLifecycleTimer); } } catch (_) {}
   try { if (typeof shellBg !== 'undefined' && shellBg && shellBg.killAll) shellBg.killAll(); } catch (_) {}   // reap backgrounded shell children (dev servers etc.)
   try { if (typeof terminalSessions !== 'undefined' && terminalSessions && terminalSessions.stopAll) terminalSessions.stopAll(); } catch (_) {}   // reap owned PTY/ConPTY trees
+  try { pluginRuntime.stopAll().catch((e) => failNote('plugins.shutdown', e)); } catch (e) { failNote('plugins.shutdown', e); }   // reap plugin processes
   // release any cursor confinement a reaped child leaves stuck (the PS one-shot outlives our exit; best-effort —
   // the boot-time ensureFree is the reliable cover for the force-kill path this handler can't see at all)
   try { if (typeof inputGuard !== 'undefined' && inputGuard) inputGuard.observe('shutdown').catch(() => {}); } catch (_) {}
@@ -15004,7 +15038,7 @@ async function handleHooksCreate(req, res) {
   if (hookSpine.events().indexOf(event) < 0) return json(400, { error: 'unknown event — pick one of: ' + hookSpine.events().join(', ') });
   const r = await shellHooks.create({ event, command: (body && body.command) || '', name: (body && body.name) || '' });
   if (!r.ok) return json(400, { error: r.error });
-  try { hookSpine.clear(); pluginsLoaded = await pluginLoader.load(hookSpine); hooksInstalled = await shellHooks.install(hookSpine); }
+  try { await reloadExtensions(); }
   catch (e) { return json(500, { error: 'created, but could not start it: ' + ((e && e.message) || e) }); }
   return json(200, { ok: true, active: hooksInstalled.installed.length });
 }
@@ -15017,7 +15051,7 @@ async function handleHooksDelete(req, res) {
   const command = String((body && body.command) || '').trim();
   if (!event || !command) return json(400, { error: 'event and command are required' });
   if (!(await shellHooks.remove(event, command))) return json(404, { error: 'no such hook' });
-  try { hookSpine.clear(); pluginsLoaded = await pluginLoader.load(hookSpine); hooksInstalled = await shellHooks.install(hookSpine); }
+  try { await reloadExtensions(); }
   catch (e) { return json(500, { error: 'deleted, but reload failed: ' + ((e && e.message) || e) }); }
   return json(200, { ok: true, active: hooksInstalled.installed.length });
 }
@@ -15028,7 +15062,7 @@ async function handlePluginsCreate(req, res) {
   catch (e) { if (res.headersSent) return; res.writeHead(400); return res.end('bad json'); }
   const r = await pluginLoader.scaffold({ id: (body && body.id) || '', name: (body && body.name) || '', description: (body && body.description) || '' });
   if (!r.ok) return json(400, { error: r.error });
-  try { hookSpine.clear(); pluginsLoaded = await pluginLoader.load(hookSpine); hooksInstalled = await shellHooks.install(hookSpine); }
+  try { await reloadExtensions(); }
   catch (e) { return json(500, { error: 'created, but could not load it: ' + ((e && e.message) || e) }); }
   return json(200, { ok: true, id: r.id, active: pluginsLoaded.loaded.length });
 }
@@ -15040,7 +15074,7 @@ async function handlePluginsDelete(req, res) {
   const id = String((body && body.id) || '').trim();
   if (!id) return json(400, { error: 'id is required' });
   if (!(await pluginLoader.destroy(id))) return json(404, { error: 'no such plugin' });
-  try { hookSpine.clear(); pluginsLoaded = await pluginLoader.load(hookSpine); hooksInstalled = await shellHooks.install(hookSpine); }
+  try { await reloadExtensions(); }
   catch (e) { return json(500, { error: 'deleted, but reload failed: ' + ((e && e.message) || e) }); }
   return json(200, { ok: true, active: pluginsLoaded.loaded.length });
 }
@@ -15059,9 +15093,7 @@ async function handleHooksRevoke(req, res) {
   if (!event || !command) return json(400, { error: 'event and command are required' });
   if (!(await shellHooks.revoke(event, command))) return json(404, { error: 'that hook was not approved' });
   try {
-    hookSpine.clear();
-    pluginsLoaded = await pluginLoader.load(hookSpine);
-    hooksInstalled = await shellHooks.install(hookSpine);
+    await reloadExtensions();
   } catch (e) { return json(500, { error: 'revoked, but re-install failed: ' + ((e && e.message) || e) }); }
   return json(200, { ok: true, active: hooksInstalled.installed.length, pending: hooksInstalled.pending.length });
 }
@@ -15074,9 +15106,7 @@ async function handlePluginsRevoke(req, res) {
   if (!id) return json(400, { error: 'id is required' });
   if (!(await pluginLoader.revoke(id))) return json(404, { error: 'that plugin was not approved' });
   try {
-    hookSpine.clear();
-    pluginsLoaded = await pluginLoader.load(hookSpine);
-    hooksInstalled = await shellHooks.install(hookSpine);
+    await reloadExtensions();
   } catch (e) { return json(500, { error: 'revoked, but re-load failed: ' + ((e && e.message) || e) }); }
   return json(200, { ok: true, active: pluginsLoaded.loaded.length, pending: pluginsLoaded.pending.length });
 }
@@ -15163,9 +15193,7 @@ async function handlePluginsAllow(req, res) {
   if (!(await pluginLoader.allow(id, digest))) return json(500, { error: 'could not persist the approval' });
   // Same in-place rebuild as the hooks route, and the same ordering: plugins first, then shell hooks.
   try {
-    hookSpine.clear();
-    pluginsLoaded = await pluginLoader.load(hookSpine);
-    hooksInstalled = await shellHooks.install(hookSpine);
+    await reloadExtensions();
   } catch (e) { return json(500, { error: 'approved, but re-load failed: ' + ((e && e.message) || e) }); }
   return json(200, { ok: true, active: pluginsLoaded.loaded.length, pending: pluginsLoaded.pending.length });
 }
@@ -15209,9 +15237,10 @@ async function handleHooksAllow(req, res) {
   // rather than replaced: it was captured by reference at boot (by the dispatch ctx and by every in-flight
   // run), so handing out a new object would leave those holding the old one and the reload would look like it
   // did nothing. Clearing first is what stops the already-installed hooks being registered a second time.
+  // (reloadExtensions: plugins AND hooks, swapped atomically — this used to re-add only the shell hooks, which
+  // silently dropped every plugin's handlers until the next reload)
   try {
-    hookSpine.clear();
-    hooksInstalled = await shellHooks.install(hookSpine);
+    await reloadExtensions();
   } catch (e) { return json(500, { error: 'approved, but re-install failed: ' + ((e && e.message) || e) }); }
   return json(200, { ok: true, active: hooksInstalled.installed.length, pending: hooksInstalled.pending.length });
 }
@@ -20562,6 +20591,7 @@ async function handleHaltResume(req, res) {
     armLoops(true);
   });
   attempt('overseer', () => { overseer.resumeReviews(); });
+  attempt('plugins', () => { reloadExtensions().catch((e) => failNote('plugins.resume', e)); });   // E-STOP stopped their processes
   const state = haltStatus();
   const ok = !state.halted && Object.keys(errors).length === 0;
   haltJson(res, ok ? 200 : 503, { ok, ...state, errors });
@@ -20595,6 +20625,8 @@ function handleHalt(req, res) {
   // line triggers: every trigger hub's live runs die too, and whatever was waiting in their queues is dropped
   let triggerInflights = [];
   try { triggerRunner.haltAll(); triggerInflights = triggerRunner.inflights(); } catch (e) { failNote('triggers.halt', e); }
+  // plugin processes (their tools, window calls and background jobs) stop with everything else; RESUME restarts them
+  try { pluginRuntime.stopAll().catch((e) => failNote('plugins.halt', e)); } catch (e) { failNote('plugins.halt', e); }
   // the whole-line SAMPLE hub (POST /api/routing/sample): its entry run AND every stage it chains live in its inflight record
   const sampleInflight = (sampleHub && sampleHub._internals) ? sampleHub._internals.inflight : null;
   const halted = killAll(runs, tgInflight, dcInflight, ...genericInflights, ...tgBotInflights, devInflight, stepTest ? stepTest.inflight : null, ...triggerInflights, sampleInflight);   // browser runs + ALL channel hub runs, in one kill (see sidecar/halt.js)

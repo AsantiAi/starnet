@@ -146,6 +146,31 @@ function serve(handler, url, method) {
     A.eq(r.code, 403, 'an encoded .. is refused too');
     r = await serve(server, url('ui-only', rec.digest, 'ui/missing.html'));
     A.eq(r.code, 404, 'a missing file is 404');
+    // Windows aliases that would hide code from the approval digest (NTFS streams, trailing dots, 8.3 names, devices)
+    for (const alias of ['ui/app.js:hidden.js', 'ui/app.js%3Ahidden.js', 'ui/index.html.', 'ui/index.html%20', 'UI~1/app.js', 'ui/CON.js', 'ui/nul']) {
+      r = await serve(server, url('ui-only', rec.digest, alias));
+      A.eq(r.code, 403, 'a Windows alias path is refused: ' + alias);
+    }
+    r = await serve(server, url('ui-only', rec.digest, 'constructor'));
+    A.ok(r.code === 403 || r.code === 404, 'a prototype-named path is refused, never a 500 (got ' + r.code + ')');
+    r = await serve(server, url('ui-only', 'b'.repeat(64), 'ui/index.html'));
+    A.ok(/text\/html/.test(r.headers['Content-Type'] || '') && /color-scheme:dark/.test(r.body), 'a refusal is a small DARK page (never a white text page in a station window)');
+    A.ok(/sandbox; default-src 'none'/.test(r.headers['Content-Security-Policy'] || ''), 'the refusal page itself runs nothing');
+    // a DRAFT preview server: same files, locked down — scripts only, no network, no forms, no popups
+    const draftServer = makePluginUiServer({
+      fs, fsp, path, frontendDir: FRONTEND, loader, apitickets: T, apiKey: KEY, mime: MIME, now: () => 1.9e12,
+      frameAncestors: () => 'http://127.0.0.1:8787', prefix: '/plugin-draft/', scopeFor: T.scopeDraft,
+      resolve: async (id) => (id === 'ui-only' ? { id, dir: path.join(PLUGINS, 'ui-only'), digest: rec.digest } : null),
+      sandbox: 'sandbox allow-scripts', extraCsp: () => "; default-src 'none'; script-src 'unsafe-inline' http://127.0.0.1:8787; connect-src 'none'; form-action 'none'"
+    });
+    const dt = T.mint(KEY, 'plugin', T.scopeDraft('ui-only', rec.digest), { now: 1.9e12 });
+    r = await serve(draftServer, '/plugin-draft/~t/' + dt + '/ui-only/' + rec.digest + '/ui/index.html');
+    A.eq(r.code, 200, 'a draft page is served on its own route with a draft ticket');
+    const dcsp = r.headers['Content-Security-Policy'] || '';
+    A.ok(/^sandbox allow-scripts;/.test(dcsp) && !/allow-popups|allow-forms/.test(dcsp), 'a draft runs scripts only: no popups, no forms');
+    A.ok(/connect-src 'none'/.test(dcsp) && /form-action 'none'/.test(dcsp), 'a draft can never reach the network');
+    r = await serve(draftServer, '/plugin-draft/~t/' + tk('ui-only', rec.digest) + '/ui-only/' + rec.digest + '/ui/index.html');
+    A.eq(r.code, 403, 'an INSTALLED plugin ticket never opens a draft (scopes differ)');
     r = await serve(server, '/plugin-ui/ui-only/' + rec.digest + '/ui/index.html');
     A.eq(r.code, 403, 'no ticket and no header token: refused');
     r = await serve(server, url('ui-only', rec.digest, 'ui/index.html', tk('other', rec.digest)));

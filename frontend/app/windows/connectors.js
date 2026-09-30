@@ -466,7 +466,7 @@
       const host = typeof PluginHost !== 'undefined' ? PluginHost : null;
       const term = host && host.terminalOf ? host.terminalOf(p.id) : null;
       return '<div class="mc-hint">Tools: ' + tools.map(t => '<code>' + esc(t) + '</code>').join(' ') + '<br>' +
-        (term ? 'Its terminal stands in the station: agents in that room can use these (each call asks you first).'
+        (term ? 'Its terminal stands in the station: agents in that room can use these. Each call asks you first unless you choose Always or Full access.'
           : 'No terminal in the station yet, so no agent can use these. <button class="bb xs" data-ext="plugin-place" data-id="' + esc(p.id) + '">PLACE TERMINAL</button>') +
         '</div>';
     }
@@ -656,8 +656,13 @@
             // so "approve" is the only step between writing a tool and the crew being able to use it.
             const pid = openAfter || (kind === 'plugin-allow' ? btn.dataset.id : '');
             const p = pid ? PluginHost.list().find(x => x.id === pid) : null;
-            if (p && p.active && Array.isArray(p.tools) && p.tools.length) {
+            // FIRST TIME ONLY: a terminal the Commander deliberately removed is not put back by a later re-approve
+            // (that would quietly hand the tools back) — the row keeps offering PLACE TERMINAL instead
+            let placedBefore = [];
+            try { placedBefore = JSON.parse(localStorage.getItem('starnet.pluginTerminalsPlaced') || '[]'); } catch (_) { placedBefore = []; }
+            if (p && p.active && Array.isArray(p.tools) && p.tools.length && placedBefore.indexOf(pid) < 0) {
               const r = PluginHost.placeTerminal(pid);
+              if (r && r.ok) { try { localStorage.setItem('starnet.pluginTerminalsPlaced', JSON.stringify(placedBefore.concat([pid]).slice(-200))); } catch (_) { /* per-browser memory only */ } }
               const n = p.tools.length + ' tool' + (p.tools.length === 1 ? '' : 's');
               const note = r && r.ok ? (r.existing ? '' : ' Its terminal now stands in the lead’s room, so the lead can use its ' + n + '.')
                 : ' Its terminal could not be placed (' + ((r && (r.msg || r.error)) || 'unknown') + ') — place a PLUGIN TERMINAL in REFIT.';

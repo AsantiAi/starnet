@@ -2882,7 +2882,8 @@ const Chat = (() => {
     const pm = /^plugin__(.+?)__(.+)$/.exec(t);
     if (pm) {
       const host = typeof PluginHost !== 'undefined' ? PluginHost : null;
-      const p = host && host.list ? host.list().find(x => x.id === pm[1]) : null;
+      const san = (s) => String(s || '').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^[_-]+|[_-]+$/g, '');   // plugin-tools.js sanitizePart
+      const p = host && host.list ? host.list().find(x => x.id === pm[1] || san(x.id) === pm[1]) : null;
       return 'use the ' + ((p && p.name) || pm[1]) + ' plugin tool “' + pm[2] + '”' + (ev.argsSummary ? ' ' + ev.argsSummary : '');
     }
     // the crew INSTALLING a plugin it wrote: say that it stays off until the Commander's own approval

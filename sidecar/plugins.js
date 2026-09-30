@@ -51,10 +51,19 @@
        "screens": [{ "id": "main", "title": "PR RADAR", "entry": "ui/index.html", "size": "panel" | "wide" }] */
   const MAX_SCREENS = 8;
   const SCREEN_ID = /^[a-z0-9][a-z0-9_-]{0,31}$/i;
+  /* relPathOk — THE path rule for every file a plugin names or an agent writes (manifest entries, served files,
+     drafts). Relative, forward slashes, inside the folder — and nothing Windows would read as SOMETHING ELSE:
+       ':'                an NTFS alternate data stream (`app.js:evil.js`) is invisible to readdir, so it would
+                          escape the approval digest while still being readable, require()-able and copied
+       trailing '.'/' '   Windows strips them, so `index.html.` IS index.html under a different name
+       '~<digit>'         an 8.3 short name (PROGRA~1) aliases a real long name
+       device names       CON, NUL, COM1… are devices on every folder, not files */
+  const WIN_DEVICE = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9]|conin\$|conout\$)(?:\..*)?$/i;
   function relPathOk(rel) {
     const r = String(rel || '');
-    if (!r || r.length > 240 || r.indexOf('\\') >= 0 || r.charAt(0) === '/' || /^[A-Za-z]:/.test(r)) return false;
-    return r.split('/').every(seg => seg && seg !== '.' && seg !== '..' && seg.charAt(0) !== '.' && !/[\u0000-\u001f]/.test(seg));
+    if (!r || r.length > 240 || r.indexOf('\\') >= 0 || r.indexOf(':') >= 0 || r.charAt(0) === '/') return false;
+    return r.split('/').every(seg => seg && seg !== '.' && seg !== '..' && seg.charAt(0) !== '.' &&
+      !/[\u0000-\u001f<>"|?*]/.test(seg) && !/[. ]$/.test(seg) && !/~\d/.test(seg) && !WIN_DEVICE.test(seg));
   }
   function parseScreens(manifest, fileSet) {
     const out = [], errors = [];
@@ -297,6 +306,8 @@
       if (!idOk(pid)) return false;
       const base = P.join(dir, pid);
       try { await fsp.stat(base); } catch (_) { return false; }
+      // its process must be GONE first — a running plugin holds its folder open on Windows (EBUSY)
+      if (deps.runtime) await deps.runtime.stop(pid);
       try { await fsp.rm(base, { recursive: true, force: true }); }
       catch (e) { onError({ plugin: pid, error: (e && e.message) || String(e) }); return false; }
       await revoke(pid);
@@ -376,7 +387,8 @@
             s = r;
           }
           for (const event of s.subs || []) {
-            hookSpine.register(event, async (payload) => ((await stillApproved()) ? runtime.hook(p.id, event, payload) : null), { name: p.id });
+            const ms = s.hookTimeouts && Number(s.hookTimeouts[event]) > 0 ? Number(s.hookTimeouts[event]) : undefined;
+            hookSpine.register(event, async (payload) => ((await stillApproved()) ? runtime.hook(p.id, event, payload, ms) : null), { name: p.id, timeoutMs: ms });
           }
           loaded.push(Object.assign({}, p, {
             subscribed: (s.subs || []).length, process: true,

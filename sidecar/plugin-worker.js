@@ -19,6 +19,7 @@ const { note } = require('./failopen.js');   // the worker's own IPC failures ar
 const MIN_EVERY_MS = 10000;
 const MAX_TOOLS = 32, MAX_HANDLERS = 64, MAX_JOBS = 8;
 const subs = new Map();       // event -> [fn]
+const hookTimeouts = {};      // event -> the longest timeoutMs a handler asked for (api.on(event, fn, { timeoutMs }))
 const tools = new Map();      // name -> { def, run }
 const handlers = new Map();   // name -> fn
 const jobs = [];
@@ -58,12 +59,14 @@ function makeApi() {
   return {
     get id() { return info.id; },
     get name() { return info.name; },
-    on(event, fn) {
+    on(event, fn, meta) {
       needRegistering('api.on');
       if (typeof fn !== 'function') return () => {};
       const e = String(event || '');
       if (!subs.has(e)) subs.set(e, []);
       subs.get(e).push(fn);
+      const ms = Number(meta && meta.timeoutMs);
+      if (ms > 0) hookTimeouts[e] = Math.min(30000, Math.max(hookTimeouts[e] || 0, ms));
       return () => {};
     },
     tool(def) {
@@ -106,6 +109,18 @@ function plain(v) {
   return JSON.parse(JSON.stringify(v));
 }
 
+/* NO HIDDEN STREAMS. An NTFS alternate data stream ('lib.js:evil.js') is invisible to the folder listing the approval
+   digest is computed from, so require()ing one would run code nobody approved. Every module this plugin loads must
+   resolve to an ordinary path (the only ':' allowed is the drive letter). */
+const Module = require('module');
+const pathMod = require('path');   // resolved BEFORE the hook below: a require() inside it would recurse
+const resolveFilename = Module._resolveFilename;
+Module._resolveFilename = function (request, parent, isMain, options) {
+  const out = resolveFilename.call(this, request, parent, isMain, options);
+  if (typeof out === 'string' && pathMod.isAbsolute(out) && out.indexOf(':', 2) >= 0) throw new Error('refused to load ' + out + ' — a path with ":" can hide code from the approval');
+  return out;
+};
+
 async function onInit(m) {
   info = { id: String(m.id || ''), name: String(m.name || m.id || '') };
   let mod;
@@ -126,6 +141,7 @@ async function onInit(m) {
   send({
     t: 'ready', ok: true,
     subs: Array.from(subs.keys()),
+    hookTimeouts,
     tools: Array.from(tools.values()).map((x) => x.def),
     handlers: Array.from(handlers.keys()),
     jobs: jobs.length

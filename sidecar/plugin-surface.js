@@ -38,11 +38,8 @@ const HTML_RX = /\.html?$/i;
 // never allow-top-navigation (a plugin must not navigate the station away).
 const SANDBOX = 'sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads';
 
-function relPathOk(rel) {
-  const r = String(rel || '');
-  if (!r || r.length > 240 || r.indexOf('\\') >= 0 || r.charAt(0) === '/' || /^[A-Za-z]:/.test(r)) return false;
-  return r.split('/').every(seg => seg && seg !== '.' && seg !== '..' && seg.charAt(0) !== '.' && !/[\u0000-\u001f]/.test(seg));
-}
+// ONE path rule for plugins (sidecar/plugins.js): no streams (':'), no Windows aliases, no escapes.
+const { relPathOk } = require('./plugins.js')._internals;
 
 /* injectKit(html, rel) -> html with the kit's two tags first in <head>. Paths are RELATIVE to the page (one '../'
    per folder it sits in), so they carry the page's own ticket and resolve inside the same approved plugin. */
@@ -76,10 +73,20 @@ function makePluginUiServer(deps) {
   const scopeFor = typeof deps.scopeFor === 'function' ? deps.scopeFor : (id, digest) => apitickets.scopePlugin(id, digest);
   const resolve = typeof deps.resolve === 'function' ? deps.resolve : (id) => loader.approvedRecord(id);
   const goneMsg = deps.goneMessage || 'this plugin was changed or turned off — approve it again in ABILITIES → EXTENSIONS';
+  // A DRAFT is locked down harder than an installed plugin (deps.sandbox / deps.extraCsp): its code was written by an
+  // agent and never approved, so its page may draw and run but never reach the network, post a form or open a popup
+  // — a preview must not be a way to send what the agent read to someone else.
+  const sandbox = deps.sandbox || SANDBOX;
+  const extraCsp = typeof deps.extraCsp === 'function' ? deps.extraCsp : () => '';
 
+  // A refusal lands INSIDE a station window: a tiny dark page that says why, never a white browser text page.
   function fail(res, code, msg) {
-    res.writeHead(code, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
-    res.end(msg);
+    const body = '<!doctype html><meta charset="utf-8"><style>html{background:transparent;color-scheme:dark}' +
+      'body{margin:0;padding:16px;color:#eec88f;font:17px/1.35 "VT323",ui-monospace,monospace;letter-spacing:.4px}</style>' +
+      '<p>' + String(msg).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]) + '</p>';
+    res.writeHead(code, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'; frame-ancestors " + ancestors() });
+    res.end(body);
   }
 
   return async function servePluginUi(req, res) {
@@ -107,7 +114,7 @@ function makePluginUiServer(deps) {
     if (!rec || rec.digest !== digest) return fail(res, 410, goneMsg);
 
     let abs;
-    const kit = KIT_FILES[rel];
+    const kit = Object.prototype.hasOwnProperty.call(KIT_FILES, rel) ? KIT_FILES[rel] : null;
     if (kit) abs = P.join(frontendDir, kit);
     else {
       if (!relPathOk(rel)) return fail(res, 403, 'forbidden');
@@ -118,12 +125,20 @@ function makePluginUiServer(deps) {
     let st;
     try { st = await fsp.lstat(abs); } catch (_) { return fail(res, 404, 'not found'); }
     if (st.isSymbolicLink() || !st.isFile()) return fail(res, 404, 'not found');
+    // A junction swapped into a FOLDER along the path (lstat sees only the last segment) must not serve a file from
+    // outside the plugin: the real path of what we are about to read has to sit inside the real plugin folder.
+    if (!kit) {
+      let real, root;
+      try { real = await fsp.realpath(abs); root = await fsp.realpath(rec.dir); } catch (_) { return fail(res, 404, 'not found'); }
+      const back = P.relative(root, real);
+      if (!back || back.split(P.sep)[0] === '..' || P.isAbsolute(back)) return fail(res, 403, 'forbidden');
+    }
     const ext = P.extname(abs).toLowerCase();
     const headers = {
       'Content-Type': (ext === '.mjs' ? 'text/javascript; charset=utf-8' : (mime[ext] || 'application/octet-stream')),
       'Cache-Control': 'no-store',
       'X-Content-Type-Options': 'nosniff',
-      'Content-Security-Policy': SANDBOX + '; frame-ancestors ' + ancestors(),
+      'Content-Security-Policy': sandbox + extraCsp() + '; frame-ancestors ' + ancestors(),
       // The page is an opaque origin, so its own module scripts / fetch('./data.json') are cross-origin reads of
       // these very files. They are the plugin's approved static files, reachable only with a ticket for them.
       'Access-Control-Allow-Origin': '*',

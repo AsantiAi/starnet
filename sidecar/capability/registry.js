@@ -79,11 +79,12 @@
       // through the hash-locked approval in EXTENSIONS). submit alone asks first. Deferred: niche, found through
       // tool.search (the plugin-author skill says how).
       { capId: 'pluginauthor', tool: 'plugin.draft_start', scope: 'write', requiresConsent: false, network: false, deferred: true },
+      { capId: 'pluginauthor', tool: 'plugin.draft_from_installed', scope: 'write', requiresConsent: true, network: false, deferred: true },
       { capId: 'pluginauthor', tool: 'plugin.draft_read', scope: 'read', requiresConsent: false, network: false, deferred: true },
       { capId: 'pluginauthor', tool: 'plugin.draft_write', scope: 'write', requiresConsent: false, network: false, deferred: true },
       { capId: 'pluginauthor', tool: 'plugin.check', scope: 'read', requiresConsent: false, network: false, deferred: true },
       { capId: 'pluginauthor', tool: 'plugin.preview', scope: 'read', requiresConsent: false, network: false, deferred: true },
-      { capId: 'pluginauthor', tool: 'plugin.submit', scope: 'write', requiresConsent: true, network: false, deferred: true }
+      { capId: 'pluginauthor', tool: 'plugin.submit', scope: 'execute', requiresConsent: true, network: false, deferred: true }
     ],
     notebook: [
       { capId: 'memory', tool: 'notebook.write', scope: 'write', requiresConsent: false, network: false },   // private sandboxed memory — no consent gate (see notebook.js)

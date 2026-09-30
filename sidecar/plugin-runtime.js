@@ -27,9 +27,26 @@ function makePluginRuntime(deps) {
   const store = deps.store || null;
   if (typeof deps.now !== 'function') throw new Error('plugin-runtime requires an injected clock { now }');
   const now = deps.now;
-  const onLog = typeof deps.onLog === 'function' ? deps.onLog : () => {};
+  const rawLog = typeof deps.onLog === 'function' ? deps.onLog : () => {};
   const T = Object.assign({}, DEFAULTS, deps.timeouts || {});
   const procs = new Map();   // id -> record
+  // The process's working directory is NEUTRAL (never the plugin's own folder): on Windows a folder that is some
+  // process's cwd cannot be deleted (EBUSY), which broke DELETE and a replacing plugin.submit while it ran.
+  const workerCwd = deps.cwd || undefined;
+  /* verify(id, digest) -> bool: does the approval still cover exactly the code this process was started from?
+     Asked before every tool/window call, before any restart, and on a timer for plugins with background jobs — an
+     edit must never keep running (or be restarted from disk) without the Commander approving it again. */
+  const verify = typeof deps.verify === 'function' ? deps.verify : null;
+  // LOG BUDGET: a plugin printing in a loop must not flood the station log. 120 lines a minute, then one notice.
+  const LOG_PER_MIN = 120;
+  const logBudget = new Map();   // id -> { windowAt, n, muted }
+  function onLog(id, line) {
+    const t = now(); let b = logBudget.get(id);
+    if (!b || t - b.windowAt >= 60000 || t < b.windowAt) { b = { windowAt: t, n: 0, muted: false }; logBudget.set(id, b); }
+    b.n++;
+    if (b.n <= LOG_PER_MIN) return rawLog(id, line);
+    if (!b.muted) { b.muted = true; rawLog(id, '[runtime] more than ' + LOG_PER_MIN + ' log lines this minute — the rest are dropped'); }
+  }
 
   function rejectAll(rec, why) {
     for (const [, p] of rec.pending) { clearTimeout(p.timer); p.reject(new Error(why)); }
@@ -45,7 +62,7 @@ function makePluginRuntime(deps) {
     rec.ready = null;
     let child;
     try {
-      child = fork(workerPath, [], { stdio: ['ignore', 'pipe', 'pipe', 'ipc'], windowsHide: true, cwd: plugin.dir });
+      child = fork(workerPath, [], { stdio: ['ignore', 'pipe', 'pipe', 'ipc'], windowsHide: true, cwd: workerCwd });
     } catch (e) {
       rec.state = 'crashed'; rec.error = 'could not start its process: ' + ((e && e.message) || e);
       procs.set(plugin.id, rec);
@@ -63,6 +80,7 @@ function makePluginRuntime(deps) {
       rejectAll(rec, planned ? 'the plugin was stopped' : 'the plugin crashed: ' + rec.error);
       if (rec.readyResolve) { rec.readyResolve({ ok: false, error: rec.error || 'the plugin stopped' }); rec.readyResolve = null; }
       rec.child = null;
+      if (rec.exited) { const done = rec.exited; rec.exited = null; done(); }
     });
     child.on('error', (e) => { onLog(plugin.id, '[process] ' + ((e && e.message) || e)); });
     procs.set(plugin.id, rec);
@@ -108,6 +126,7 @@ function makePluginRuntime(deps) {
       rec.state = 'running';
       rec.surface = {
         subs: Array.isArray(m.subs) ? m.subs.map(String) : [],
+        hookTimeouts: (m.hookTimeouts && typeof m.hookTimeouts === 'object') ? m.hookTimeouts : {},
         tools: Array.isArray(m.tools) ? m.tools : [],
         handlers: Array.isArray(m.handlers) ? m.handlers.map(String) : [],
         jobs: Number(m.jobs) || 0
@@ -137,6 +156,11 @@ function makePluginRuntime(deps) {
     if (rec.state === 'running' && rec.child) return rec;
     if (rec.state === 'starting' && rec.ready) { await rec.ready; if (rec.state === 'running') return rec; }
     if (rec.state !== 'crashed') throw new Error('that plugin is ' + rec.state);
+    // never restart code from disk that the Commander has not approved as it is NOW
+    if (verify && !(await verify(id, rec.plugin.digest))) {
+      stop(id);
+      throw new Error('the plugin changed since it was approved — approve it again in ABILITIES → EXTENSIONS');
+    }
     const t = now();
     rec.restarts = rec.restarts.filter((x) => t - x < RESTART_WINDOW_MS);
     if (rec.restarts.length >= MAX_RESTARTS) throw new Error('the plugin crashed ' + MAX_RESTARTS + ' times in 5 minutes and is stopped: ' + rec.error);
@@ -169,30 +193,56 @@ function makePluginRuntime(deps) {
     try { return await send(rec, { t: 'hook', event, payload }, Math.min(Number(timeoutMs) || T.hookMs, 30000), 'the plugin\'s ' + event + ' hook'); }
     catch (e) { onLog(id, '[hook] ' + e.message); return null; }   // a failing hook never blocks the run
   }
-  async function callTool(id, name, args, ctx) {
+  async function checked(id) {
     const rec = await live(id);
+    if (verify && !(await verify(id, rec.plugin.digest))) {
+      stop(id);
+      throw new Error('the plugin changed since it was approved — approve it again in ABILITIES → EXTENSIONS');
+    }
+    return rec;
+  }
+  async function callTool(id, name, args, ctx) {
+    const rec = await checked(id);
     return send(rec, { t: 'tool', name, args: args || {}, ctx: ctx || {} }, T.toolMs, 'the plugin tool ' + name);
   }
   async function callHandler(id, name, args) {
-    const rec = await live(id);
+    const rec = await checked(id);
     return send(rec, { t: 'call', name, args: args == null ? null : args }, T.callMs, 'the plugin handler "' + name + '"');
   }
 
+  /* stop(id) -> Promise<bool>, settled once the process has really exited (or been killed): a caller about to
+     delete or replace the plugin's folder awaits it. */
   function stop(id) {
     const rec = procs.get(id);
-    if (!rec) return false;
+    if (!rec) return Promise.resolve(false);
     rec.state = 'stopping';
     rejectAll(rec, 'the plugin was stopped');
     const child = rec.child;
+    const exited = child ? new Promise((r) => { rec.exited = r; }) : Promise.resolve();
+    const deadline = new Promise((r) => { const t = setTimeout(r, 3000); if (t && typeof t.unref === 'function') t.unref(); });
     if (child) {
       try { child.send({ t: 'stop' }); } catch (e) { note('plugins.runtime.stop-send', e); }
       const killer = setTimeout(() => { try { child.kill(); } catch (e) { note('plugins.runtime.stop-kill', e); } }, 1500);
       if (killer && typeof killer.unref === 'function') killer.unref();
     }
     procs.delete(id);
-    return true;
+    return Promise.race([exited, deadline]).then(() => true);
   }
-  function stopAll() { for (const id of Array.from(procs.keys())) stop(id); }
+  function stopAll() { return Promise.all(Array.from(procs.keys()).map((id) => stop(id))); }
+
+  // Plugins with background jobs are re-verified on a timer: nothing else would ever notice an edit to them.
+  let jobCheck = null;
+  if (verify) {
+    jobCheck = setInterval(() => {
+      for (const [id, rec] of procs) {
+        if (rec.state !== 'running' || !rec.surface || !rec.surface.jobs) continue;
+        Promise.resolve(verify(id, rec.plugin.digest)).then((ok) => {
+          if (!ok && procs.get(id) === rec) { onLog(id, '[runtime] its files changed since approval — stopped until approved again'); stop(id); }
+        }, (e) => note('plugins.runtime.job-verify', e));
+      }
+    }, 10000);
+    if (jobCheck && typeof jobCheck.unref === 'function') jobCheck.unref();
+  }
   function status(id) {
     const rec = procs.get(id);
     return rec ? { state: rec.state, error: rec.error || '', restarts: rec.restarts.length } : { state: 'stopped', error: '', restarts: 0 };
@@ -209,7 +259,7 @@ function makePluginRuntime(deps) {
     return (rec && (rec.state === 'running' || rec.state === 'crashed') && rec.surface) ? Object.assign({ ok: true }, rec.surface) : null;
   }
 
-  return { start, hook, callTool, callHandler, stop, stopAll, status, tools, list, digestOf, surface };
+  return { start, hook, callTool, callHandler, stop, stopAll, status, tools, list, digestOf, surface, hookTimeout: (id, event) => { const s = surface(id); return s && s.hookTimeouts ? Number(s.hookTimeouts[event]) || 0 : 0; } };
 }
 
 module.exports = { makePluginRuntime, MAX_RESTARTS, RESTART_WINDOW_MS };

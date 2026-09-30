@@ -10770,7 +10770,7 @@ const PropSprites = (() => {
     // laid with the BELT tool and compile into the RoutingPlan. F.beltH stays so stations that placed one
     // still render; it just can't be placed anew.
     // CAPABILITY — object = capability. Place one in a BAY's room to grant that agent a power.
-    { id: "plugin_terminal", artId: "bridge_dispatch_pylon", label: "PLUGIN TERMINAL", cat: "capability", tier: "functional", w: 1, h: 2, animated: true, blocks: true, desc: "PLUGIN TERMINAL — one of your plugins, standing in the station. Gives the room's agent that plugin's tools (each call asks you first) and opens its window when clicked. Installing a plugin with tools places one for you." },
+    { id: "plugin_terminal", artId: "bridge_dispatch_pylon", label: "PLUGIN TERMINAL", cat: "capability", tier: "functional", w: 1, h: 2, animated: true, blocks: true, desc: "PLUGIN TERMINAL — one of your plugins, standing in the station. Gives the room's agent that plugin's tools (each call asks you first, unless you choose Always or Full access) and opens its window when clicked. Installing a plugin with tools places one for you." },
     { id: "connector_portal", label: "CONNECTOR", cat: "capability", tier: "functional", w: 1, h: 2, animated: true, blocks: true, desc: "CONNECTOR — bind an MCP server here to grant the room's agent that server's live tools. Click it to bind one." },
     { id: "comms_dish", label: "DISH", cat: "capability", tier: "functional", w: 2, h: 2, animated: true, blocks: true, desc: D_WEB },
     { id: "comms_uplink", label: "UPLINK", cat: "capability", tier: "functional", w: 2, h: 2, animated: true, blocks: true, desc: D_WEB },

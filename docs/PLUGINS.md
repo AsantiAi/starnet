@@ -8,7 +8,8 @@ jobs, a backend for its windows), and a **terminal** that stands in the station 
 - **Fastest start:** EXTENSIONS → **Create a plugin**. It writes a working starter (a window with notes saved by the
   station and a KIT tab showing every component) and opens that window. Edit the files from there.
 - **Approval:** approval is locked to a hash of **every file** in the folder. Change one character anywhere and the
-  plugin turns off, including any open window, until you approve the new code in EXTENSIONS.
+  plugin turns off until you approve the new code in EXTENSIONS: its code stops, and any open window says it changed
+  the next time it talks to the station (or when you reopen it).
 
 Plan and open decisions: <https://claude.ai/artifact/8qxbub7yipDMTfavubYwZq>.
 
@@ -101,6 +102,8 @@ starnet.ui.open('settings');                       // open another screen of THI
 starnet.ui.close();
 starnet.ui.openLink('https://github.com/…');       // https only, opens the real browser
 starnet.ui.setHeight(480);                         // fixed content height (default: follows your content)
+starnet.ui.autoHeight(true);                       // follow the content again (heights are kept between 80 px and
+                                                   // 78% of the screen; a docked or resized window fills its body)
 
 starnet.theme.vars;                                // the live tokens, e.g. vars['--ph']
 starnet.theme.onChange((vars) => redrawChart(vars));
@@ -145,7 +148,10 @@ module.exports = {
 
 Hook events: `pre_tool_call` (can block), `post_tool_call`, `pre_llm_call` (can add `{ context }` or block),
 `post_llm_call`, `on_session_start`, `on_session_end`, `on_pre_compress`, `on_memory_write`, `subagent_stop`.
-A hook has 5 s by default and a failing hook never blocks a run. A tool call has 120 s and a window call 30 s.
+A hook has 5 s by default (`api.on(event, fn, { timeoutMs })` asks for up to 30 s), and a failing hook never blocks a run.
+A tool call has 120 s; a window call has 30 s in the station (the page waits 45 s, to cover a cold start). Hook
+payloads are copies (they cross the process line): return a decision, never edit the payload in place. Logging is
+capped at 120 lines a minute per plugin.
 
 ## Terminals (how tools reach your crew)
 
@@ -163,14 +169,14 @@ data. The TOOLSETS **connectors** switch turns them all off.
 ## Your crew can build plugins
 
 Ask in COMMS: "build me a plugin that shows my open PRs". The agent uses the plugin authoring tools (`plugin.draft_start`,
-`plugin.draft_read`, `plugin.draft_write`, `plugin.check`, `plugin.preview`, `plugin.submit`; the opt-in
+`plugin.draft_from_installed`, `plugin.draft_read`, `plugin.draft_write`, `plugin.check`, `plugin.preview`, `plugin.submit`; the opt-in
 **Build a StarNet Plugin** library skill has the full recipe):
 
 - It writes a **draft** in `<workspaces>/plugin-drafts/<id>`, never in `plugins/` and never in its own files.
 - `plugin.check` parses and compiles the draft **without running it**, and warns about looks that don't match the station.
-- `plugin.preview` opens the draft as a **DRAFT** window (gold plate) on your screen. It's sandboxed, gets a throwaway
-  store, and has no backend. Its code never runs.
+- `plugin.preview` opens the draft as a **DRAFT** window (gold plate) on your screen. The page runs sandboxed with **no
+  network**, a throwaway store and no backend. Its station code never runs.
 - `plugin.submit` asks you first, then installs the plugin **OFF**. It switches on only when you press APPROVE & ENABLE in
   EXTENSIONS, the same hash-locked approval every plugin gets. An agent can never switch its own plugin on.
-- To change an installed plugin, the agent starts a draft `from_installed`. Submitting the new version turns the plugin
-  off until you approve the new code.
+- To change an installed plugin, the agent uses `plugin.draft_from_installed` (it asks you first, since it reads that
+  plugin's code). Submitting the new version turns the plugin off until you approve the new code.

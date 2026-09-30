@@ -71,6 +71,7 @@
   const listEl = document.getElementById('list');
   const input = document.getElementById('note');
   let notes = [];
+  let writing = 0;   // a local write in flight: the poll must not paint a list older than it
 
   function render() {
     document.getElementById('stat-notes').textContent = notes.length;
@@ -79,31 +80,41 @@
       listEl.innerHTML = '<li class="sn-empty">No notes yet. They are saved by the station, so they survive a restart.</li>';
       return;
     }
-    notes.forEach((n, i) => {
+    notes.forEach((n) => {
       const li = document.createElement('li');
       li.className = 'sn-item';
       // a note the crew added (the add_note tool in index.js) gets the gold lamp
       li.innerHTML = '<span class="dot ' + (n.by === 'crew' ? 'warn' : 'ok') + '"></span><span class="t"></span><span class="note-time"></span><button class="sn-btn xs danger">DELETE</button>';
       li.querySelector('.t').textContent = n.text;
       li.querySelector('.note-time').textContent = new Date(n.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      li.querySelector('button').onclick = async () => { notes.splice(i, 1); await save(); };
+      li.querySelector('button').onclick = () => change((list) => list.filter((x) => !(x.at === n.at && x.text === n.text)), 'Could not delete');
       listEl.appendChild(li);
     });
   }
-  async function save() {
-    await starnet.store.set('notes', notes);
-    document.getElementById('stat-saved').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    render();
+
+  // Every change RE-READS the stored list first: the crew may have added a note (add_note) since this window last
+  // looked, and writing back a stale copy would erase it.
+  async function change(edit, failText) {
+    writing++;
+    try {
+      const fresh = (await starnet.store.get('notes')) || [];
+      notes = edit(fresh);
+      await starnet.store.set('notes', notes);
+      document.getElementById('stat-saved').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      render();
+      return true;
+    } catch (err) {
+      starnet.ui.toast(failText + ': ' + err.message, 'bad').catch(() => {});
+      return false;
+    } finally { writing--; }
   }
 
   document.getElementById('add').addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = input.value.trim();
     if (!text) return;
-    notes.unshift({ text, at: Date.now() });
     input.value = '';
-    try { await save(); starnet.ui.toast('Note saved'); }
-    catch (err) { starnet.ui.toast('Could not save: ' + err.message, 'bad'); }
+    if (await change((list) => [{ text, at: Date.now() }].concat(list), 'Could not save')) starnet.ui.toast('Note saved').catch(() => {});
   });
 
   document.querySelectorAll('.sn-tab').forEach((tab) => tab.addEventListener('click', () => {
@@ -120,16 +131,17 @@
   render();
 
   // Stay live: notes the crew adds (add_note) and the backend's own count (api.handle('stats') in index.js).
+  // A timeout CHAIN, not setInterval: a slow station never stacks up overlapping polls.
   async function poll() {
     try {
       const fresh = (await starnet.store.get('notes')) || [];
-      if (JSON.stringify(fresh) !== JSON.stringify(notes)) { notes = fresh; render(); }
+      if (!writing && JSON.stringify(fresh) !== JSON.stringify(notes)) { notes = fresh; render(); }
       const s = await starnet.backend.call('stats');
       document.getElementById('stat-calls').textContent = s.toolCalls;
     } catch (_) { /* a window-only copy of this starter has no backend: the stat stays — */ }
+    setTimeout(poll, 4000);
   }
   poll();
-  setInterval(poll, 4000);
 })();
 </script>
 </body>

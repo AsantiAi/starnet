@@ -37,7 +37,8 @@ async function throwsMsg(fn) { try { await fn(); return ''; } catch (e) { return
     // ---- the defs and their grants ----
     A.eq(author.defs.map(d => d.name).sort(), toolNames().slice().sort(), 'six authoring tools');
     A.ok(author.defs.every(d => d.capability === 'pluginauthor' && d.impact === 'none' && d.network === false), 'all pluginauthor, no external effect, no network');
-    A.eq(author.defs.filter(d => d.requiresConsent).map(d => d.name), ['plugin.submit'], 'only submit asks first');
+    A.eq(author.defs.filter(d => d.requiresConsent).map(d => d.name).sort(), ['plugin.draft_from_installed', 'plugin.submit'], 'only submit and reading an installed plugin ask first');
+    A.eq(tool('plugin.submit').scope, 'execute', 'submit is EXECUTE scope (never carried by a cached Always or an unattended run)');
     const granted = CAP_REGISTRY.computer.filter(g => g.capId === 'pluginauthor').map(g => g.tool).sort();
     A.eq(granted, toolNames().slice().sort(), 'every authoring tool is granted (computer object, deferred)');
     A.ok(CAP_REGISTRY.computer.filter(g => g.capId === 'pluginauthor').every(g => g.deferred === true), '…and deferred (found through tool.search)');
@@ -97,12 +98,16 @@ async function throwsMsg(fn) { try { await fn(); return ''; } catch (e) { return
 
     // ---- edit an installed plugin ----
     await fsp.rm(path.join(DRAFTS, 'pr-radar'), { recursive: true, force: true });
-    const e = await run('plugin.draft_start', { id: 'pr-radar', from_installed: true });
-    A.ok(/Draft "pr-radar" ready with 4 files/.test(e.content), 'from_installed copies the installed plugin into a draft');
+    const e = await run('plugin.draft_from_installed', { id: 'pr-radar' });
+    A.ok(/Draft "pr-radar" ready with 4 files copied from the installed plugin/.test(e.content), 'draft_from_installed copies the installed plugin into a draft');
     await run('plugin.draft_write', { id: 'pr-radar', path: 'ui/extra.css', content: '.x { color: var(--gold); }' });
     A.ok(/Replaced the "pr-radar" plugin/.test((await run('plugin.submit', { id: 'pr-radar' })).content), 'resubmitting replaces the installed plugin (off until re-approved)');
     A.eq(await fsp.readFile(path.join(PLUGINS, 'pr-radar', 'ui', 'extra.css'), 'utf8'), '.x { color: var(--gold); }', 'the installed copy is the new code');
-    A.ok(/no installed plugin/.test(await throwsMsg(() => run('plugin.draft_start', { id: 'ghost', from_installed: true }))), 'from_installed needs a real installed plugin');
+    A.ok(/no installed plugin/.test(await throwsMsg(() => run('plugin.draft_from_installed', { id: 'ghost' }))), 'draft_from_installed needs a real installed plugin');
+    A.ok(/relative path/.test(await throwsMsg(() => run('plugin.draft_write', { id: 'pr-radar', path: 'ui/app.js:evil.js', content: 'x' }))), 'an NTFS alternate data stream path is refused');
+    A.ok(/relative path/.test(await throwsMsg(() => run('plugin.draft_write', { id: 'pr-radar', path: 'ui/index.html.', content: 'x' }))), 'a trailing dot (a Windows alias) is refused');
+    A.ok(/relative path/.test(await throwsMsg(() => run('plugin.draft_write', { id: 'pr-radar', path: 'ui/CON.js', content: 'x' }))), 'a device name is refused');
+    A.ok(/relative path/.test(await throwsMsg(() => run('plugin.draft_write', { id: 'pr-radar', path: 'UI~1/x.js', content: 'x' }))), 'an 8.3 short name is refused');
 
     // ---- a draft with no window cannot be previewed ----
     await run('plugin.draft_start', { id: 'hooks-only' });

@@ -8175,8 +8175,8 @@ const World = (() => {
     ctx.restore();
   }
   function setOnMissionBoard(fn) { onMissionBoard = fn; }   // G1b: click a placed MISSION BOARD → open the quest log
-  function setOnTrophyCase(fn) { onTrophyCase = fn; }
-  function setOnPluginTerminal(fn) { onPluginTerminal = fn; }   // click a placed PLUGIN TERMINAL → that plugin's window   // G3b: click a placed TROPHY CASE → open the trophy surface
+  function setOnTrophyCase(fn) { onTrophyCase = fn; }   // G3b: click a placed TROPHY CASE → open the trophy surface
+  function setOnPluginTerminal(fn) { onPluginTerminal = fn; }   // click a placed PLUGIN TERMINAL → that plugin's window (or why not)
   // G2.3 — the live uncollected-crate count (ReturnStore's pending ledger). Read per-frame for the
   // OUTBOX sprite stack and by the hit-test below; 0 when the store isn't loaded (headless tests).
   function returnCrates() {

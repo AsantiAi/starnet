@@ -27,6 +27,11 @@
   const ready = new Promise((r) => { resolveReady = r; });
   const themeListeners = [];
   const theme = { vars: {} };
+  // The host gave THIS page a nonce (in the URL fragment); every call carries it, so the station only ever answers
+  // the page it loaded — never whatever a link might navigate this frame to.
+  const NONCE = (/(?:^#|&)sn=([0-9a-f]{16,64})/.exec(location.hash || '') || [])[1] || '';
+  // A window call runs the plugin's own code (up to 30 s in the station, plus a cold start): wait longer for it.
+  const TIMEOUT = { 'backend.call': 45000 };
 
   function call(method, args) {
     if (!parentWin || parentWin === window) return Promise.reject(new Error('this page is not open in a StarNet window'));
@@ -35,10 +40,10 @@
       pending.set(id, { resolve, reject });
       // The frame is an opaque origin, so its messages carry origin "null" and the host checks the SOURCE window
       // instead. '*' is the only target an opaque origin can name; nothing sent here is secret.
-      parentWin.postMessage({ __sn: 1, id, m: String(method), a: args === undefined ? null : args }, '*');
+      parentWin.postMessage({ __sn: 1, n: NONCE, id, m: String(method), a: args === undefined ? null : args }, '*');
       setTimeout(() => {
         if (pending.has(id)) { pending.delete(id); reject(new Error('the station did not answer ' + method)); }
-      }, 15000);
+      }, TIMEOUT[method] || 15000);
     });
   }
 
@@ -66,16 +71,35 @@
   });
 
   // ---- auto height: the window hugs the page (like every native StarNet window) until the page opts out ----
-  let auto = true, lastH = 0, raf = 0;
+  // A page sized FROM the viewport (min-height:100vh plus a margin) would grow every time the frame grows: after a
+  // run of back-to-back growth the kit stops following and leaves the height where it is.
+  let auto = true, lastH = 0, raf = 0, growRun = 0, growAt = 0;
   function measure() {
     raf = 0;
     if (!auto || !document.body) return;
     const cs = getComputedStyle(document.body);
     const h = Math.ceil(document.body.getBoundingClientRect().height + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0));
     if (Math.abs(h - lastH) < 2) return;
+    const t = performance.now();
+    growRun = (h > lastH && t - growAt < 400) ? growRun + 1 : 0;
+    growAt = t;
+    if (growRun > 12) { auto = false; return; }
     lastH = h;
     call('ui.height', { px: h }).catch(() => {});
   }
+  // A link to another page of THIS plugin keeps the nonce, so a multi-page plugin keeps its bridge.
+  document.addEventListener('click', (ev) => {
+    const a = ev.target && ev.target.closest ? ev.target.closest('a[href]') : null;
+    if (!a || !NONCE) return;
+    let u;
+    try { u = new URL(a.getAttribute('href'), location.href); } catch (_) { return; }
+    // this plugin's own files: http://host/plugin-ui/~t/<ticket>/<id>/<digest>/… (or /plugin-draft/…) — same 8 parts
+    const prefix = location.href.split('#')[0].split('/').slice(0, 8).join('/') + '/';
+    if (u.href.indexOf(prefix) === 0 && !u.hash) {
+      u.hash = 'sn=' + NONCE;
+      a.setAttribute('href', u.href);
+    }
+  }, true);
   function schedule() { if (!raf) raf = requestAnimationFrame(measure); }
   function watch() {
     if (!document.body) return;

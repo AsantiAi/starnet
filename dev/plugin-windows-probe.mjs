@@ -185,14 +185,15 @@ try {
   report.facts.shot1 = await capture(cdp, out, '01-starter-window-amber');
 
   // ---- 3. the store round-trips through the host, and survives on disk ----
+  await run(`(()=>{ window.__pluginToasts=[]; const o=StationUI.notify; StationUI.notify=function(text, cls, cat, opts){ window.__pluginToasts.push({ text, transient: !!(opts && opts.transient) }); return o.apply(this, arguments); }; return true; })()`);
   const stored = await frameEval(`(async()=>{ await starnet.store.set('probe',{n:42}); return (await starnet.store.get('probe')).n; })()`);
   await check('store.set → store.get round-trips through the host', stored === 42);
   await frameEval(`(async()=>{ const i=document.getElementById('note'); i.value='Ship plugin windows'; document.getElementById('add').requestSubmit(); await new Promise(r=>setTimeout(r,600)); return true; })()`);
   await frameUntil(`document.querySelectorAll('#list .sn-item').length === 1`);
   const onDisk = join(ws, 'plugin-data', 'pr-radar.json');
   await check('the note is saved by the station on disk', existsSync(onDisk) && /Ship plugin windows/.test(readFileSync(onDisk, 'utf8')));
-  await until(`StationUI.h.store.notifs.some(n => /^PR Radar: Note saved/.test(n.txt))`, 40);
-  await check('a plugin toast reaches the station log, prefixed with the plugin name', true);
+  await until(`(window.__pluginToasts || []).some(t => /^PR Radar: Note saved/.test(t.text) && t.transient)`, 40);
+  await check('a plugin toast reaches the station, prefixed with the plugin name, and stays out of the notification history', await run(`!StationUI.h.store.notifs.some(n => /^PR Radar:/.test(n.txt))`));
   await frameUntil(`/^\\d+$/.test(document.getElementById('stat-calls').textContent)`, 60);
   await check('the window reaches its own backend (starnet.backend.call → api.handle, in the plugin process)', true);
   await sleep(300);
@@ -242,9 +243,15 @@ try {
   await run(`document.querySelector('[data-ext="plugin-allow"][data-id="weather-deck"]').click(), true`);
   await until(`!!document.querySelector('[data-ext="plugin-open"][data-id="weather-deck"]')`, 60);
   await check('the Commander\'s APPROVE & ENABLE turns it on', true);
+  await run(`(()=>{ const r=document.querySelector('[data-ext="plugin-open"][data-id="pr-radar"]'); (r||document.querySelector('#pl-list')).scrollIntoView({block:'center'}); return true; })()`);
+  await run(`(()=>{ document.querySelectorAll('.term.plugin-win').forEach(w => { if (w._minimize) w._minimize(); }); StationUI.openTerm('connectors','extensions'); const r=document.querySelector('#pl-list'); if (r) r.scrollIntoView({block:'start'}); return true; })()`);
+  await sleep(700);
+  report.facts.shotExt = await capture(cdp, out, '09-extensions-rows');
   await run(`document.querySelector('[data-ext="plugin-open"][data-id="weather-deck"]').click(), true`);
   await until(`[...document.querySelectorAll('.term.plugin-win:not(.plugin-draft-win) .term-title')].some(t => t.textContent === 'WEATHER DECK')`, 60);
   await frameUntil(`document.querySelectorAll('.sn-stat').length === 3`, 80, /\/plugin-ui\/.*weather-deck/);
+  await until(`!document.querySelector('.term.plugin-draft-win')`, 30);   // the close plays its exit motion first
+  await check('opening the installed plugin closed its DRAFT preview (no stale copy left docked)', true);
   await check('the crew-built plugin now opens as a real PLUGIN window', await run(`[...document.querySelectorAll('.term.plugin-win:not(.plugin-draft-win)')].some(w => w.querySelector('.term-title').textContent === 'WEATHER DECK' && w.querySelector('.plugin-plate').textContent === 'PLUGIN')`));
   await sleep(500);
   report.facts.shot8 = await capture(cdp, out, '08-crew-built-plugin-live');
@@ -258,6 +265,9 @@ try {
   await check('a direct /api call from the frame is refused', /blocked|status 403/.test(apiTry));
   const other = await frameEval(`starnet.call('store.get',{key:'probe',id:'someone-else'}).then(v=>JSON.stringify(v))`);
   await check('the page cannot name a different plugin (the host always uses its own)', other === JSON.stringify({ n: 42 }));
+  const noNonce = await frameEval(`new Promise((res) => { let got = false; const h = (ev) => { if (ev.data && ev.data.re === 9999) got = true; }; addEventListener('message', h); parent.postMessage({ __sn: 1, id: 9999, m: 'store.keys', a: {} }, '*'); setTimeout(() => { removeEventListener('message', h); res(got); }, 800); })`);
+  await check('a message WITHOUT the frame nonce is never answered (a page this frame navigated to cannot use the bridge)', noNonce === false);
+  await check('the frame is labelled for assistive tech with aria-label, never title= (the station tooltip would park over the plugin)', await run(`(()=>{ const f=document.querySelector('iframe.plugin-frame[data-plugin="pr-radar"]'); return !f.hasAttribute('title') && !f.hasAttribute('data-tip') && /PR Radar/.test(f.getAttribute('aria-label')||''); })()`));
   const unknown = await frameEval(`starnet.call('fs.read',{path:'C:/'}).then(()=>'answered',e=>e.message)`);
   await check('an unknown bridge call is refused', /unknown call/.test(unknown));
   const badLink = await frameEval(`starnet.ui.openLink('file:///C:/Windows').then(()=>'opened',e=>e.message)`);
