@@ -950,6 +950,7 @@ test/shellbg.kill-verified.test.js
 test/shellbg.wait-and-wake.test.js
 test/shellbg.prune.test.js
 test/shell.fg-ledger.test.js
+test/shell.process-tree.test.js
 test/procledger.orphan-window.test.js
 test/loop.failure-breaker.test.js
 test/loop.no-progress-guard.test.js
