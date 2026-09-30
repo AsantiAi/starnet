@@ -1084,6 +1084,19 @@ const Build = (() => {
       intro.className = 'refit-lineintro';
       intro.textContent = LINE_SENTENCE + ' Place single machines, or a whole line, then make it yours.';
       pal.appendChild(intro);
+      /* BUILD YOUR OWN (conveyor-links phase D): an INBOX, one step and an OUTBOX laid on clear floor in view, with its Workflow
+         panel open — where steps, branches, review loops and sorters are added, every change one UNDO */
+      if (typeof LineEdit !== 'undefined') {
+        const own = document.createElement('button'); own.type = 'button'; own.className = 'bb sm refit-ownline';
+        own.textContent = '▸ BUILD YOUR OWN LINE';
+        own.dataset.tip = 'an INBOX, one step and an OUTBOX, placed in view — then add steps, branches and review loops from its Workflow panel';
+        own.onclick = () => {
+          const r = lineEditRun('newLine', null, {});
+          if (r && r.ok) { sfx('chime'); flashTip(null, 'a new line: INBOX → a step → OUTBOX · UNDO removes it', true); openWorkflowPanel(r.focus); }
+          else { sfx('bad'); flashTip(null, (r && r.msg) || 'there is no clear floor for a new line here', false); }
+        };
+        pal.appendChild(own);
+      }
       /* START FROM INTENT (2026-09-28): the ready-made line with the SHAPE of the Commander's own goal leads the tab — their
          words quoted, so it is clear why — one click arms it (MAKE ROOM FOR IT when the deck is too small). */
       const goal = goalLine();
@@ -1691,6 +1704,37 @@ const Build = (() => {
   function clearLineFields() {
     for (const k of Object.keys(lineFields)) delete lineFields[k];
     for (const k of Object.keys(lineFitsMemo)) delete lineFitsMemo[k];
+    for (const k of Object.keys(lineLaidMemo)) delete lineLaidMemo[k];
+    lineLaidQueue.length = 0;
+  }
+  /* LAID OUT TO FIT (conveyor-links phase E): when a line's DRAWN tile map fits nowhere, the layout engine may still lay the
+     same line out on this floor — its tidy shape where a clear rectangle holds it, else anchored on its INBOX round what
+     stands here (LineEdit.canPlaceBlueprint). That answer is dearer than the drawn-shape scan, so a card asks it in the
+     background, one line at a time, and is re-said when it lands; it is cached until the floor changes, like lineFits. */
+  const lineLaidMemo = Object.create(null), lineLaidQueue = [];
+  let lineLaidT = 0;
+  const lineLaidFits = bpId => (bpId in lineLaidMemo) ? lineLaidMemo[bpId] : undefined;
+  function queueLineLaid(bpId) {
+    if (typeof LineEdit === 'undefined' || !LineEdit.canPlaceBlueprint || (bpId in lineLaidMemo) || lineLaidQueue.indexOf(bpId) >= 0) return;
+    lineLaidQueue.push(bpId);
+    if (!lineLaidT) lineLaidT = setTimeout(stepLineLaid, 30);
+  }
+  function stepLineLaid() {
+    lineLaidT = 0;
+    const id = lineLaidQueue.shift();
+    if (!id || !running || !station) return;
+    let r = null;
+    try { r = LineEdit.canPlaceBlueprint(station, id, lineNearTile()); } catch (e) { r = null; }
+    lineLaidMemo[id] = r && r.ok ? { ok: true, via: r.via } : { ok: false, needs: (r && r.needs) || null };
+    if (root) for (const b of root.querySelectorAll('.refit-linetile[data-line="' + id + '"]')) { const bp = blueprintOf(id); if (bp) setLineTileFit(b, bp); }
+    if (lineLaidQueue.length) lineLaidT = setTimeout(stepLineLaid, 30);
+  }
+  // where a line would be laid when no click says: the middle of the view, else the middle of the station
+  function lineNearTile() {
+    const v = viewCenterTile();
+    if (v) return v;
+    const b = boundsMemoed();
+    return { x: (b.minTx + b.maxTx) >> 1, y: (b.minTy + b.maxTy) >> 1 };
   }
   function lineField(bpId) {
     const bp = blueprintOf(bpId);
@@ -1776,7 +1820,9 @@ const Build = (() => {
     const rects = bp.props.map(p => ({ x1: o.x + p.x, y1: o.y + p.y, x2: o.x + p.x + p.w - 1, y2: o.y + p.y + p.h - 1 }))
       .concat(bp.belts.map(b => ({ x1: o.x + b.x, y1: o.y + b.y, x2: o.x + b.x, y2: o.y + b.y })));
     const links = ghostLinks({ props: bp.props.map(p => ({ t: p.t, x: o.x + p.x, y: o.y + p.y, w: p.w, h: p.h })), belts: bp.belts.map(b => ({ x: o.x + b.x, y: o.y + b.y, d: b.d })) });
-    return { rects, v: station.canPlaceBlueprint(bp.id, o.x, o.y), kind: 'line', label: bp.label, snapped: s.snapped, links };
+    const laid = lineLaidFits(bp.id);
+    if (laid === undefined && !lineFits(bp.id)) queueLineLaid(bp.id);
+    return { rects, v: station.canPlaceBlueprint(bp.id, o.x, o.y), kind: 'line', label: bp.label, snapped: s.snapped, links, laid: !!(laid && laid.ok) };
   }
   /* the test job the Workflow panel saved for the line this prop is on (localStorage, per station — the panel's own store),
      plus the line key; read by the live INBOX's COMMS card so ONE REAL JOB runs the Commander's own input (2026-09-27 X1) */
@@ -1843,14 +1889,24 @@ const Build = (() => {
      them claiming to fit a floor they no longer fit — the B1 trap again. setLineTileFit reconciles one card in place;
      scheduleLineFitSync re-reads every card on screen once the floor settles after an edit. */
   function setLineTileFit(b, bp) {
-    const fits = lineFits(bp.id);
+    const drawn = lineFits(bp.id), laid = drawn ? null : lineLaidFits(bp.id);
+    if (!drawn && laid === undefined) queueLineLaid(bp.id);   // (asked in the background — the card is re-said when it lands)
+    const fits = drawn || !!(laid && laid.ok);
     b.classList.toggle('nofit', !fits);
+    b.classList.toggle('laidfit', !drawn && fits);
     let nf = b.querySelector('.refit-linetile-nofit');
     const next = b.nextElementSibling;
     const make = next && next.classList.contains('refit-linetile-makeroom') ? next : null;
-    if (fits) { if (nf) nf.remove(); if (make) make.remove(); return; }
+    if (drawn) { if (nf) nf.remove(); if (make) make.remove(); return; }
     if (!nf) { nf = document.createElement('span'); nf.className = 'refit-linetile-nofit'; b.appendChild(nf); }
-    nf.textContent = 'NO ROOM ON THIS DECK — NEEDS ' + bp.w + '×' + bp.h + ' OF CLEAR FLOOR';
+    if (fits) {   // the drawn shape fits nowhere, but the line does, laid out round what stands here
+      nf.textContent = 'FITS LAID OUT — CLICK THE FLOOR WHERE YOU WANT IT';
+      if (make) make.remove();
+      return;
+    }
+    const need = laid && laid.needs ? laid.needs : { w: bp.w, h: bp.h };
+    nf.textContent = laid === undefined ? 'CHECKING WHERE IT FITS…' : 'NO ROOM ON THIS DECK — NEEDS ' + need.w + '×' + need.h + ' OF CLEAR FLOOR';
+    if (laid === undefined) { if (make) make.remove(); return; }
     if (make) return;
     const mk = document.createElement('button'); mk.type = 'button'; mk.className = 'bb sm refit-linetile-makeroom';
     mk.textContent = '＋ MAKE ROOM FOR IT'; mk.setAttribute('aria-label', 'Build a room big enough for ' + bp.label);
@@ -1869,7 +1925,8 @@ const Build = (() => {
   function makeRoomFor(bpId, ev) {
     const bp = blueprintOf(bpId);
     if (!bp || !station) return;
-    const W = bp.w + 2, H = bp.h + 2;   // a tile of walking room round the line
+    const laid = lineLaidFits(bp.id), need = laid && laid.needs ? laid.needs : { w: bp.w, h: bp.h };
+    const W = Math.min(bp.w, need.w) + 2, H = Math.min(bp.h, need.h) + 2;   // the smaller of the drawn and the laid-out line, a tile of walking room round it
     // the station's own room finder (worldmodel.roomSpots) — the same one the agent's station builder uses
     for (const rect of (station.roomSpots ? station.roomSpots(W, H, 'hab') : [])) {
       const res = station.addRoom({ kind: 'hab', rect });
@@ -1890,14 +1947,22 @@ const Build = (() => {
     // the SAME snap the ghost showed — the click commits exactly what was on screen, never the raw tile
     const s = lineSnap(w.tx, w.ty);
     const o = lineOrigin(bp, s.tx, s.ty);
-    const res = station.stampBlueprint(bp.id, o.x, o.y, lineStampOpts(bp));   // ONE undoable action, with the card's cap + tries — see worldmodel.stampBlueprint
+    let res = station.stampBlueprint(bp.id, o.x, o.y, lineStampOpts(bp));   // ONE undoable action, with the card's cap + tries — see worldmodel.stampBlueprint
+    /* LAID OUT TO FIT (phase E): where the drawn tile map will not go, the same line is laid out on the floor near the click —
+       its tidy shape, or anchored on its INBOX round what stands here — with the same cap and tries, one UNDO */
+    let laidOut = false;
+    if (!(res && res.ok) && typeof LineEdit !== 'undefined' && LineEdit.placeBlueprint) {
+      const lr = LineEdit.placeBlueprint(station, bp.id, { x: w.tx, y: w.ty }, { stamp: lineStampOpts(bp) });
+      if (lr && lr.ok) { res = lr; laidOut = true; } else if (lr && lr.msg) res = lr;
+    }
     if (res && res.ok) {
       lastStampIds = res.ids || null;   // the finish-the-line card adopts this line on the next recompile
       // LINE NAMING: a stamp leaves the intake's `label` UNSET (the save carries only what the Commander
       // typed) — but this session remembers which blueprint stamped it, so the intake card's name field
       // can offer the blueprint's name as its placeholder (session-scoped, like lastStampIds).
       try { for (const id of (res.ids || [])) { const sp = station.propById(id); if (sp && sp.t === 'intake') stampNameOf[id] = bp.label; } } catch (_) {}
-      pushFlash(bp.props.map(p => ({ x1: o.x + p.x, y1: o.y + p.y, x2: o.x + p.x + p.w - 1, y2: o.y + p.y + p.h - 1 })), false);
+      if (laidOut) pushFlash((res.ids || []).map(id => station.propById(id)).filter(Boolean).map(p => ({ x1: p.x, y1: p.y, x2: p.x + (p.w || 1) - 1, y2: p.y + (p.h || 1) - 1 })), false);
+      else pushFlash(bp.props.map(p => ({ x1: o.x + p.x, y1: o.y + p.y, x2: o.x + p.x + p.w - 1, y2: o.y + p.y + p.h - 1 })), false);
       sfx('chime');
       // PLACEMENT FLOW: a blueprint stamps ONCE, then the tool drops back to SELECT — the next
       // click on the fresh line inspects a dock instead of stamping a second copy on top of it.
@@ -1910,7 +1975,7 @@ const Build = (() => {
       try { for (const id of (res.ids || [])) { const sp = station.propById(id); if (sp && sp.t === 'bay') { firstBay = sp.id; break; } } } catch (_) {}
       if (firstBay && typeof WorkflowPanel !== 'undefined') {
         try { rebake(); openFlowCard(firstBay); } catch (_) {}
-        flashTip(ev, bp.label + ' PLACED — choose who works each BAY in the panel', true);
+        flashTip(ev, bp.label + (laidOut ? ' LAID OUT TO FIT HERE' : ' PLACED') + ' — choose who works each BAY in the panel', true);
       } else flashTip(ev, bp.label + ' STAMPED — now click each BAY to assign an agent', true);
       if (typeof StationUI !== 'undefined' && StationUI.pokeQuests) { try { StationUI.pokeQuests(); } catch (_) {} }
       // belts just landed — the same first-touch coach a hand-laid run earns (points at ▸ PREVIEW)
@@ -2612,8 +2677,51 @@ const Build = (() => {
         if (res && res.ok) { pushFlash([{ x1: res.x, y1: res.y, x2: res.x + (sp.w || 2) - 1, y2: res.y + (sp.h || 2) - 1 }], false); if (typeof Tutorial !== 'undefined' && Tutorial.onPropPlaced) Tutorial.onPropPlaced('bay'); }
         return res;
       },
+      /* LINE EDITS (conveyor-links phase D): every change the panel makes to the line's SHAPE — a step, a branch, a review
+         loop, a sorter, a removal, a move, TIDY LINE — is LineEdit: the line's graph edited, laid out by the engine and
+         written back in ONE undo slot (lineEditRun). canLineEdit answers without laying anything, so a button that could
+         only fail is shown off with its reason. */
+      lineEdit: (op, propId, args, how) => lineEditRun(op, propId, args, how),
+      canLineEdit: (op, propId, args) => (typeof LineEdit === 'undefined' || !station) ? { ok: false, msg: 'the line editor is not loaded' } : LineEdit.check(station, propId, op, args, { sizes: lineSizes() }),
     };
     return wfHostMemo;
+  }
+  /* LINE EDITS — the catalog's machine sizes, the tile in the middle of the visible glass (where a NEW line is laid), and the
+     one runner every edit goes through: the machines it placed flash, the tutorial hears them, and the plan is recompiled at
+     once so the panel repaints on the edited line (not on the next frame's) */
+  const lineSizes = () => { const s = t => { const sp = propSpec(t); return [sp.w || 2, sp.h || 2]; }; return { bay: s('bay'), intake: s('intake'), outbox: s('outbox') }; };
+  function viewCenterTile() {
+    if (!cv) return null;
+    const t = T(), ins = viewInsets();
+    const vw = Math.max(1, cv.width - ins.l - (ins.r || 0)), vh = Math.max(1, cv.height - ins.t - ins.b);
+    return { x: Math.floor((ins.l + vw / 2 - panX) / zoom / t), y: Math.floor((ins.t + vh / 2 - panY) / zoom / t) };
+  }
+  function lineEditRun(op, propId, args, how) {
+    if (typeof LineEdit === 'undefined' || !station) return { ok: false, msg: 'the line editor is not loaded' };
+    // where the line's machines stood before the edit (so the floor can show what moved and what went)
+    const before = {};
+    try {
+      const g0 = propId != null ? station.lineGraph(propId) : null;
+      if (g0 && g0.ok) for (const n of g0.graph.nodes) before[n.id] = { x1: n.pin.x, y1: n.pin.y, x2: n.pin.x + (n.w || 1) - 1, y2: n.pin.y + (n.h || 1) - 1 };
+    } catch (e) { /* (only the courtesy flash depends on it) */ }
+    const res = LineEdit.run(station, propId, op, args, { near: viewCenterTile(), sizes: lineSizes(), tidy: !!(how && how.tidy) });
+    if (res && res.ok) {
+      const placed = Object.keys(res.ids || {}).filter(k => k.charAt(0) === '+').map(k => station.propById(res.ids[k])).filter(Boolean);
+      if (placed.length) pushFlash(placed.map(p => ({ x1: p.x, y1: p.y, x2: p.x + (p.w || 1) - 1, y2: p.y + (p.h || 1) - 1 })), false);
+      // WHAT MOVED, WHAT WENT: a machine the edit moved glides an outline from where it stood to where it stands (the floor
+      // re-bakes at once — the glide is that jump made visible); one it took out flashes red where it was
+      const moves = [];
+      for (const id in before) {
+        const p = station.propById(id), b = before[id];
+        if (p && (p.x !== b.x1 || p.y !== b.y1)) moves.push({ from: b, to: { x1: p.x, y1: p.y, x2: p.x + (p.w || 1) - 1, y2: p.y + (p.h || 1) - 1 } });
+      }
+      if (moves.length) pushMoves(moves);
+      const gone = (res.removed || []).map(id => before[id]).filter(Boolean);
+      if (gone.length) pushFlash(gone, true);
+      if (typeof Tutorial !== 'undefined' && Tutorial.onPropPlaced) for (const p of placed) Tutorial.onPropPlaced(p.t);
+      try { rebake(); } catch (e) { /* the frame loop compiles on its next tick; the panel repaints when it does */ }
+    }
+    return res;
   }
   /* pan the floor so a part sits in the middle of the VISIBLE glass (clear of the kit dock and the panel) */
   function focusPropOnFloor(id, onlyIfHidden) {
@@ -4432,6 +4540,7 @@ const Build = (() => {
     else { sfx('bad'); flashTip(ev, (res && res.msg) || 'blocked'); }
   }
   function pushFlash(rects, bad) { flashes.push({ rects: rects.map(r => Object.assign({}, r)), t0: performance.now(), bad: !!bad }); }
+  function pushMoves(moves) { flashes.push({ moves: moves.map(m => ({ from: Object.assign({}, m.from), to: Object.assign({}, m.to) })), t0: performance.now() }); }
   function flashUndo() { if (undoBtn) { undoBtn.classList.add('pulse'); setTimeout(() => undoBtn && undoBtn.classList.remove('pulse'), 900); } }
 
   function onWheel(ev) {
@@ -5217,11 +5326,12 @@ const Build = (() => {
      structure materializes, right→left as it is stripped), a RING pushes out past the edge and
      fades, and the body glow decays under both. Eerie, not cute — it is the same construction
      vocabulary the bake and the CRT already speak, no particles and no confetti. */
-  const FLASH_MS = 620;
+  const FLASH_MS = 620, MOVE_MS = 760;
   function drawFlashes(now, t) {
     for (let i = flashes.length - 1; i >= 0; i--) {
-      const fl = flashes[i], k = (now - fl.t0) / FLASH_MS;
+      const fl = flashes[i], k = (now - fl.t0) / (fl.moves ? MOVE_MS : FLASH_MS);
       if (k >= 1) { flashes.splice(i, 1); continue; }
+      if (fl.moves) { drawMoves(fl, k, t); continue; }
       const ease = 1 - (1 - k) * (1 - k);         // fast out — the sweep leads, the glow trails
       const body = (1 - k) * (fl.bad ? 0.34 : 0.30);
       const hue = fl.bad ? '255,110,90' : '170,255,210';
@@ -5249,6 +5359,29 @@ const Build = (() => {
           ctx.strokeRect(X - grow, Y - grow, W + grow * 2, H + grow * 2);
         }
       }
+    }
+  }
+
+  /* A MACHINE A LINE EDIT MOVED (TIDY LINE, a swap, a line laid afresh round a change): its outline GLIDES from the footprint it
+     left to the one it now stands on — eased in and out, the old footprint fading, a dashed wake from where it was. The same
+     phosphor construction marks as the placement flash: the station shows the move, it does not animate the machine. */
+  function drawMoves(fl, k, t) {
+    const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2, a = 1 - k * 0.6, hue = '170,255,210';
+    ctx.lineWidth = 2 / zoom;
+    for (const m of fl.moves) {
+      const fw = (m.from.x2 - m.from.x1 + 1) * t, fh = (m.from.y2 - m.from.y1 + 1) * t;
+      const W = (m.to.x2 - m.to.x1 + 1) * t, H = (m.to.y2 - m.to.y1 + 1) * t;
+      const X = (m.from.x1 + (m.to.x1 - m.from.x1) * e) * t, Y = (m.from.y1 + (m.to.y1 - m.from.y1) * e) * t;
+      ctx.strokeStyle = 'rgba(' + hue + ',' + (0.3 * (1 - k)).toFixed(3) + ')';   // the footprint it left
+      ctx.strokeRect(m.from.x1 * t, m.from.y1 * t, fw, fh);
+      ctx.setLineDash([3 / zoom, 3 / zoom]);                                       // the wake
+      ctx.strokeStyle = 'rgba(' + hue + ',' + (0.4 * a).toFixed(3) + ')';
+      ctx.beginPath(); ctx.moveTo(m.from.x1 * t + fw / 2, m.from.y1 * t + fh / 2); ctx.lineTo(X + W / 2, Y + H / 2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(' + hue + ',' + (0.16 * a).toFixed(3) + ')';           // the outline, gliding over
+      ctx.fillRect(X, Y, W, H);
+      ctx.strokeStyle = 'rgba(' + hue + ',' + (0.85 * a).toFixed(3) + ')';
+      ctx.strokeRect(X, Y, W, H);
     }
   }
 
@@ -6212,13 +6345,14 @@ const Build = (() => {
     // no — the reason on its own line right under them. (Was a DOM tip trailing into a screen corner.)
     const r0 = g.rects[0], w = r0.x2 - r0.x1 + 1, h = r0.y2 - r0.y1 + 1;
     let dims = g.belt ? ('BELT ' + g.dir + ' · ' + Math.max(w, h) + ' LONG')
-      : g.kind === 'line' ? (String(g.label || '').toUpperCase() + (ok ? ' — CLICK TO STAMP' : ''))   // a red ghost never invites the click (2026-09-27 audit B1)
+      : g.kind === 'line' ? (String(g.label || '').toUpperCase() + (ok ? ' — CLICK TO STAMP' : g.laid ? ' — CLICK TO LAY IT OUT HERE' : ''))   // a red ghost invites the click only when the line fits laid out (2026-09-27 audit B1; phase E)
       : g.move ? ('MOVE ' + (g.dx >= 0 ? '+' : '') + g.dx + ', ' + (g.dy >= 0 ? '+' : '') + g.dy)
       : (tool === 'hall' ? (Math.max(w, h) + ' LONG × ' + Math.min(w, h) + ' WIDE') : (w + ' × ' + h));
     const lines = [dims];
     // a sized footprint also gets its area — "how much floor is this?" is the other question a drag asks
     if (!g.belt && !g.move && g.kind !== 'line' && w * h > 1) lines[0] = dims + '   ' + (w * h) + ' TILES';
-    if (!ok) lines.push(((footprint && footprint.msg) || placementReason(g)).toUpperCase());
+    // (a line that fits laid out: the drawn shape will not go here, but the click lays the same line out round what stands here)
+    if (!ok) lines.push(g.kind === 'line' && g.laid ? 'THE DRAWN SHAPE DOES NOT FIT HERE — IT WILL BE LAID OUT TO FIT' : ((footprint && footprint.msg) || placementReason(g)).toUpperCase());
     // the hover preview teaches BOTH gestures: this size on a click, any size on a drag
     else if (g.stamp) lines.push(g.kind === 'prop' ? 'CLICK TO PLACE' : 'CLICK TO PLACE · DRAG TO SIZE');
     /* SPACING (2026-09-27 audit B4): a dock hooks every belt in the 1-tile ring around it, so two docks with one empty tile

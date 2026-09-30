@@ -225,7 +225,10 @@
     { id: 'hands_on',    label: 'HANDS ON',    hint: '25 tool calls',     when: (c) => (c.toolsOk || 0) >= 25 },      // S4: 25 tools that really ran and really succeeded
     { id: 'workhorse',   label: 'WORKHORSE',   hint: '25 tasks',          when: (c) => (c.tasksDone || 0) >= 25 },    // 25 tasks shipped
     { id: 'centurion',   label: 'CENTURION',   hint: '100 tasks',         when: (c) => (c.tasksDone || 0) >= 100 },   // 100 tasks shipped
-    { id: 'night_shift', label: 'NIGHT SHIFT', hint: '1 delivery',        when: (c) => (c.delivered || 0) >= 1 },     // delivered work via an external channel
+    // delivered work OUT through a channel (Telegram, Discord, Slack…) — work that reached you away from the station.
+    // It used to read the COMMS `delivered` counter, so any finished chat task earned it in the same beat as FIRST
+    // LIGHT (first-hour walk 2026-09-28: "NIGHT SHIFT" at 22:50 for listings pasted into chat). The id stays.
+    { id: 'night_shift', label: 'NIGHT SHIFT', hint: '1 channel delivery', when: (c) => (c.awayDelivered || 0) >= 1 },
     { id: 'trusted',     label: 'TRUSTED',     hint: 'satisfaction 85%',  when: (c, s) => s.samples >= MIN_SAMPLES && s.confidence >= 85 },   // satisfaction -> TRUSTED
     { id: 'dependable',  label: 'DEPENDABLE',  hint: '85% of 10+ runs',   when: (c, s) => (c.runsOwned || 0) >= 10 && reliability(s).band === 'dependable' },   // S4: the harness's own read, SUSTAINED
     { id: 'seasoned',    label: 'SEASONED',    hint: 'reach Lv 5',        when: (c, s) => s.level >= 5 },             // S4: the one rung on an otherwise empty Lv1 -> Lv10 ladder
@@ -362,6 +365,7 @@
     }
     else if (name === 'memory.write') bump(s.counters, 'memWrites');
     else if (name === 'workitem.delivered') { if (!p.sample) bump(s.counters, 'delivered'); }   // a routing-sample PROOF dispatch marks itself sample:true — never durable dossier credit
+    else if (name === 'channel.delivery') { if (p && p.ok === true) bump(s.counters, 'awayDelivered'); }   // a CONFIRMED send out through a channel (a failed/delayed redelivery reports ok:false)
     else if (name === 'memory.feedback') {
       const quality = turnInFeedbackQuality(feedbackReason(p));
       if (quality === 1) bump(s.counters, 'positiveFeedback');

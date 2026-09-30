@@ -106,7 +106,7 @@ const QuestRefreshStore = (() => {
       if (shown && typeof Chat.spendAsk === 'function') { try { Chat.spendAsk(); } catch (_) {} }
     }
     if (!shown && typeof Chat.broadcast === 'function') {   // nudge refused (a question/beat won the race) → same ambient fallback as busy
-      try { Chat.broadcast('NORTH STAR TO CONFIRM · ' + String(ns.text).toUpperCase()); } catch (_) {}
+      try { Chat.broadcast('YOUR MAIN GOAL — CONFIRM? · ' + String(ns.text).toUpperCase()); } catch (_) {}
     }
   }
   function afterVerdict() { if (typeof StationUI !== 'undefined' && StationUI.rerender) { try { StationUI.rerender('quests', false); } catch (_) {} } }

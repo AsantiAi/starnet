@@ -1926,7 +1926,7 @@ const App = (() => {
       return;
     }
     // the catalog has NO data for this slug — split the honest reasons instead of one vague "custom model slug":
-    if (genesisOffline) { hint.textContent = 'catalog offline — this slug runs as-is (no price/context data here)'; return; }
+    if (genesisOffline) { hint.textContent = 'price and memory size unknown for this model — it will still run'; return; }
     if (genesisModels.some(m => m.id === id)) { hint.textContent = 'custom model — not priced in the catalog'; return; }
     hint.textContent = 'not in the catalog — double-check the slug, or it runs as a custom model';
   }
