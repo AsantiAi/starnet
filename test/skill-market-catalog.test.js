@@ -5,7 +5,10 @@
      - every bundled original's published digest equals its bundled text, so a fresh station reads BUILT IN, not
        UPDATE, for all of them
      - every file on disk matches the sha256 its entry pins, and the index fits the app's 256 KB fetch cap
-     - every community skill ships its LICENSE and names its upstream commit; NOTICE.md credits every skill */
+     - every community skill ships its LICENSE and names its upstream commit; NOTICE.md credits every skill
+     - the index and the pulled list are SIGNED: each .sig verifies over the committed bytes with a key the app ships,
+       both carry the same serial and the same pulled rows, git never rewrites their bytes (.gitattributes), and no
+       private key is anywhere in the repo */
 'use strict';
 const A = require('./_assert.js');
 const fs = require('fs');
@@ -55,5 +58,23 @@ A.ok(community.every(e => e.upstream && /^https:\/\//.test(e.upstream.url)), 'ev
 const notice = fs.readFileSync(path.join(ROOT, 'NOTICE.md'), 'utf8');
 const uncredited = entries.filter(e => notice.indexOf('`' + e.slug + '`') < 0).map(e => e.slug);
 A.eq(uncredited, [], 'NOTICE.md credits every skill in the catalog');
+
+// ---- signatures ----
+const signing = require('../sidecar/skills/market-signing.js');
+const REVOKED = path.join(ROOT, 'website', '.well-known', 'starnet-skills-revoked.json');
+const signer = (file) => { try { return signing.verify(fs.readFileSync(file), fs.readFileSync(file + '.sig', 'utf8')); } catch (e) { return 'FAILED: ' + e.message; } };
+A.ok(signing.TRUSTED_KEYS.some(k => k.id === signer(INDEX)), 'the index signature verifies with a key the app ships (' + signer(INDEX) + ')');
+A.ok(signing.TRUSTED_KEYS.some(k => k.id === signer(REVOKED)), 'the pulled-list signature verifies with a key the app ships (' + signer(REVOKED) + ')');
+const index = JSON.parse(raw);
+const revokedDoc = market.readRevocations(JSON.parse(fs.readFileSync(REVOKED, 'utf8')));
+A.ok(read.serial >= 1 && revokedDoc.serial === read.serial, 'the index and the pulled list carry the same serial (' + read.serial + ')');
+A.eq(revokedDoc.revoked, market.readRevoked(index.revoked), 'and the same pulled rows');
+A.eq(new Set(signing.TRUSTED_KEYS.map(k => k.publicKey)).size, signing.TRUSTED_KEYS.length, 'the app trusts distinct keys (a working key and a separate backup)');
+const attr = spawnSync('git', ['check-attr', 'text', 'website/.well-known/starnet-skills.json', 'website/.well-known/starnet-skills.json.sig', 'website/skills/grill-me/1.0.0/SKILL.md'], { cwd: ROOT, encoding: 'utf8' });
+A.eq((attr.stdout.match(/: text: unset/g) || []).length, 3, 'git never rewrites the signed and sha256-pinned files (.gitattributes -text)');
+// a real PEM block starts with this header on a line of its own (other files only mention it inside redaction patterns)
+const keyLeak = spawnSync('git', ['grep', '-l', '-I', '-E', '-e', '^-----BEGIN [A-Z ]*PRIVATE KEY-----$', '--', 'website', 'skills-catalog', 'sidecar/skills', 'scripts'], { cwd: ROOT, encoding: 'utf8' });
+A.ok(keyLeak.status === 0 || keyLeak.status === 1, 'the private-key scan ran (git grep exit ' + keyLeak.status + ')');
+A.eq(keyLeak.stdout.trim(), '', 'no private key is committed anywhere the market touches');
 
 A.report('skill-market-catalog.test');
