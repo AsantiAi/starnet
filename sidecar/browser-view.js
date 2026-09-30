@@ -42,6 +42,13 @@ const STATION_IDLE_MS = 30 * 60 * 1000;    // nobody driving, nobody watching fo
 const VIEWER_RECENT_MS = 15000;            // a picture was asked for this recently → somebody is watching
 const PAGE_INFO_EVERY_MS = 300;
 const SEARCH_URL = 'https://duckduckgo.com/?q=';
+/* WHERE THE STATION BROWSER LIVES (Settings → Browser, Andrew 2026-09-30 — Claude Code has the same split):
+     builtin — inside StarNet: the BROWSER window is the browser (default; nothing pops up on the desktop);
+     window  — a real, separate Chrome window you use directly; the BROWSER window mirrors it;
+     chrome  — YOUR own Chrome with your logins, through the StarNet extension, asking per site. Not available
+               until the extension is paired; until then the station says so and browses built-in. */
+const BROWSER_MODES = ['builtin', 'window', 'chrome'];
+function normalizeMode(m) { return BROWSER_MODES.indexOf(String(m || '')) >= 0 ? String(m) : 'builtin'; }
 
 /* What the Commander typed → the address to open. A scheme is kept; a bare host gets https (http for loopback —
    a dev server rarely has a certificate); anything that is not address-shaped becomes a web search. Only http(s)
@@ -75,6 +82,11 @@ function makeBrowserViews(deps) {
   const clearT = deps.clearTimeout || clearTimeout;
   const handoffLive = typeof deps.handoffLive === 'function' ? deps.handoffLive : () => false;
   const makeSession = typeof deps.makeStationSession === 'function' ? deps.makeStationSession : null;
+  const readMode = typeof deps.readMode === 'function' ? deps.readMode : () => 'builtin';
+  const writeMode = typeof deps.writeMode === 'function' ? deps.writeMode : () => {};
+  const chromeAvailable = typeof deps.chromeAvailable === 'function' ? deps.chromeAvailable : () => false;
+  // the mode the station browser actually RUNS in: YOUR CHROME falls back to built-in until the extension is paired
+  function effectiveMode() { const m = normalizeMode(readMode()); return m === 'chrome' && !chromeAvailable() ? 'builtin' : m; }
   const downloadDirFor = typeof deps.downloadDirFor === 'function' ? deps.downloadDirFor : () => null;
   const attended = deps.attended || null;   // the session's attendedLogin holder: .prompt is set to the driving run's
   const streamIdleMs = deps.streamIdleMs > 0 ? deps.streamIdleMs : STREAM_IDLE_MS;
@@ -135,7 +147,7 @@ function makeBrowserViews(deps) {
     return { ok: true, open: false };
   }
   function ensureStation() {
-    if (!station) station = { session: makeSession(), driver: null, idleTimer: null, lastPollAt: 0 };
+    if (!station) { const mode = effectiveMode(); station = { session: makeSession(mode), mode, driver: null, idleTimer: null, lastPollAt: 0 }; }
     return station;
   }
   // ---- a run takes / releases the station browser ----
@@ -180,6 +192,7 @@ function makeBrowserViews(deps) {
     if (!station || !station.driver || station.driver.runId !== String(runId || '')) return false;
     station.driver = null;
     if (attended) attended.prompt = undefined;
+    if (station.switchPending) { closeStation().catch(swallow('view.mode-switch-close')); return true; }   // the setting changed mid-run
     touchStation();
     return true;
   }
@@ -265,6 +278,21 @@ function makeBrowserViews(deps) {
     if (!st.warming) st.warming = Promise.resolve().then(() => st.session.tabs()).catch(e => failNote('view.warm', e)).then(() => { st.warming = null; });
     return { ok: true, warming: true };
   }
+  /* The Commander changed the setting. The browser that is open keeps running in its old mode until it next starts;
+     an idle one is restarted now (closed — the next use starts it in the new mode, same profile, sign-ins kept).
+     One an agent is driving is never pulled out from under it: it switches when that run lets go. */
+  async function setMode(m) {
+    const want = normalizeMode(m);
+    if (BROWSER_MODES.indexOf(String(m || '')) < 0) return { ok: false, error: 'unknown browser mode' };
+    writeMode(want);
+    let applied = true;
+    if (station && station.mode !== effectiveMode()) {
+      if (station.driver) { station.switchPending = true; applied = false; }
+      else await closeStation();
+    }
+    return Object.assign({ ok: true, applied }, settings());
+  }
+  function settings() { return { mode: normalizeMode(readMode()), effective: effectiveMode(), chromeAvailable: !!chromeAvailable(), running: station ? station.mode : null }; }
   async function front() {
     const s = station ? surfaceOf(station.session) : null;
     if (!s) return { ok: false, code: 'closed', error: 'the browser is not open' };
@@ -358,14 +386,14 @@ function makeBrowserViews(deps) {
     const st = station;
     const s = st ? surfaceOf(st.session) : null;
     const d = st && st.driver ? { agentId: st.driver.agentId, runId: st.driver.runId } : null;
-    return { agents, station: { available: !!makeSession, open: !!s, visible: !!(s && s.visible), driver: d, handoff: !!(d && handoffLive(d.runId)), remembered: !!(s && s.remembered) } };
+    return { agents, settings: settings(), station: { available: !!makeSession, open: !!s, mode: st ? st.mode : effectiveMode(), visible: !!(s && s.visible), driver: d, handoff: !!(d && handoffLive(d.runId)), remembered: !!(s && s.remembered) } };
   }
   async function closeAll() {
     for (const k of Array.from(chans.keys())) dropChan(k, k !== 'station');
     if (station) { station.driver = null; await closeStation(); }
   }
 
-  return { sessionForRun, releaseRun, registerRun, unregisterRun, open, nav, input, front, warm, frame, list, close: closeStation, closeAll,
+  return { sessionForRun, releaseRun, registerRun, unregisterRun, open, nav, input, front, warm, frame, list, setMode, settings, close: closeStation, closeAll,
     _internals: { runs, chans, station: () => station } };
 }
 
@@ -387,6 +415,12 @@ function makeViewRoutes(deps) {
   async function close(req, res) { const r = await views.close(); respondJson(res, r.ok ? 200 : 409, r); }
   async function front(req, res) { const r = await views.front(); respondJson(res, r.ok ? 200 : 409, r); }
   async function warm(req, res) { const r = views.warm(); respondJson(res, r.ok ? 200 : 409, r); }
+  async function getSettings(req, res) { respondJson(res, 200, Object.assign({ ok: true }, views.settings())); }
+  async function setSettings(req, res) {
+    const b = await body(req); if (!b) return respondJson(res, 400, { ok: false, error: 'bad json' });
+    const r = await views.setMode(b.mode);
+    respondJson(res, r.ok ? 200 : 400, r);
+  }
   async function frame(req, res) {
     const u = new URL(req.url, 'http://x');
     const r = await views.frame(String(u.searchParams.get('target') || '').slice(0, 120), Number(u.searchParams.get('after')) || 0, VIEW_POLL_MS);
@@ -415,10 +449,12 @@ function makeViewRoutes(deps) {
       { m: 'POST', exact: '/api/browser/view/close', h: close },
       { m: 'POST', exact: '/api/browser/view/front', h: front },
       { m: 'POST', exact: '/api/browser/view/warm', h: warm },
+      { m: 'GET', exact: '/api/browser/settings', h: getSettings },
+      { m: 'POST', exact: '/api/browser/settings', h: setSettings },
       { m: 'GET', qsplit: '/api/browser/view/frame', h: frame },
       { m: 'POST', exact: '/api/browser/view/input', h: input }
     ]
   };
 }
 
-module.exports = { makeBrowserViews, makeViewRoutes, resolveAddress, STREAM_IDLE_MS, STATION_IDLE_MS };
+module.exports = { makeBrowserViews, makeViewRoutes, resolveAddress, normalizeMode, BROWSER_MODES, STREAM_IDLE_MS, STATION_IDLE_MS };

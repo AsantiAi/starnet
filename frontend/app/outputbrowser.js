@@ -577,6 +577,48 @@
     return true;
   }
 
+  /* ---------- Settings → BROWSER ----------
+     Where the station browser lives. Same button idiom as AUTONOMY (.set-themes / .set-theme / .sel), so no new
+     chrome. The live line under it says what is RUNNING now, from the station — never just what was clicked. */
+  const MODE_TEXT = {
+    builtin: 'Inside StarNet: the BROWSER window is the browser. Nothing opens on your desktop.',
+    window: 'A real Chrome window on your desktop that you and your agents share. The BROWSER window mirrors it.',
+    chrome: 'Your own Chrome, with your logins. Agents ask before acting on each site. Needs the StarNet extension in your Chrome.'
+  };
+  function mountSettings(el, arrange) {
+    el.innerHTML = '<p class="set-about" id="brw-desc">' + esc(MODE_TEXT.builtin) + '</p>'
+      + '<div class="set-sub"><span class="set-sub-k">WHERE IT RUNS</span><span class="set-sub-d">for you and for your agents</span></div>'
+      + '<div class="set-themes" id="brw-mode">'
+      + '<button type="button" class="set-theme" data-mode="builtin" title="' + esc(MODE_TEXT.builtin) + '">BUILT-IN</button>'
+      + '<button type="button" class="set-theme" data-mode="window" title="' + esc(MODE_TEXT.window) + '">CHROME WINDOW</button>'
+      + '<button type="button" class="set-theme" data-mode="chrome" title="' + esc(MODE_TEXT.chrome) + '">YOUR CHROME</button>'
+      + '</div>'
+      + '<p class="set-about dim" id="brw-state" role="status"></p>';
+    if (typeof arrange === 'function') { try { arrange(el); } catch (_) { /* plain layout is fine */ } }
+    const wrap = el.querySelector('#brw-mode'), desc = el.querySelector('#brw-desc'), stateLine = el.querySelector('#brw-state');
+    let current = null;
+    const paint = s => {
+      current = s;
+      wrap.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('sel', !!s && b.dataset.mode === s.mode));
+      desc.textContent = MODE_TEXT[(s && s.mode) || 'builtin'];
+      const lines = [];
+      if (s && s.mode === 'chrome' && !s.chromeAvailable) lines.push('The StarNet extension is not paired with your Chrome yet, so the station browses built-in until it is.');
+      if (s && s.running && s.running !== s.effective) lines.push('The browser that is open now keeps its old mode until an agent finishes with it; it switches after that.');
+      else if (s && s.running) lines.push('Running now: ' + (s.running === 'window' ? 'a Chrome window' : 'built-in') + '.');
+      stateLine.textContent = lines.join(' ');
+    };
+    getJson('/api/browser/settings').then(r => { if (r.status === 200 && r.body && r.body.ok) paint(r.body); else stateLine.textContent = 'Could not read the browser setting from the station.'; }).catch(() => { stateLine.textContent = 'Could not read the browser setting from the station.'; });
+    wrap.addEventListener('click', ev => {
+      const b = ev.target && ev.target.closest ? ev.target.closest('[data-mode]') : null;
+      if (!b || (current && current.mode === b.dataset.mode)) return;
+      stateLine.textContent = 'Saving…';
+      postJson('/api/browser/settings', { mode: b.dataset.mode }).then(r => {
+        if (r.status === 200 && r.body && r.body.ok) { paint(r.body); refreshLive(); }
+        else stateLine.textContent = 'Could not save: ' + ((r.body && r.body.error) || 'the station did not answer') + '.';
+      }).catch(() => { stateLine.textContent = 'Could not save: the station did not answer.'; });
+    });
+  }
+
   let busWired = false;
   function init() {
     if (typeof StationUI !== 'undefined' && StationUI.registerWindow) {
@@ -599,7 +641,7 @@
     }
   }
 
-  const api = { open, openFor, noteOutput, setFollow, isFollowing: () => state.follow, isHtml: p => HTML_RE.test(String(p || '')), init,
+  const api = { open, openFor, noteOutput, setFollow, mountSettings, isFollowing: () => state.follow, isHtml: p => HTML_RE.test(String(p || '')), init,
     _state: state, _test: { norm, dirOf, jailRel, normalizeTarget, feedsPage } };
   root.OutputBrowser = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

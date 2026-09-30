@@ -4266,19 +4266,27 @@ const browserHandoffRoutes = makeHandoffRoutes({ host: browserHandoffs, readBody
    (browserProfileLeaseFor → fallback). */
 const STATION_BROWSER_ID = 'station-browser';
 const stationBrowserLogin = { prompt: undefined };   // browser.login's consent channel: the DRIVING run's prompt, set per run
+// Settings → Browser: where the station browser lives (sidecar/browser-view.js BROWSER_MODES). Default built-in.
+const BROWSER_SETTINGS_FILE = path.join(WORKSPACES, 'browser.settings.json');
+function readBrowserMode() { try { const v = fs.existsSync(BROWSER_SETTINGS_FILE) ? loadResilient(BROWSER_SETTINGS_FILE, 'browser-settings') : null; return (v && typeof v.mode === 'string') ? v.mode : 'builtin'; } catch (e) { failNote('browser-settings.read', e); return 'builtin'; } }
+function writeBrowserMode(mode) { saveResilient(BROWSER_SETTINGS_FILE, { mode: String(mode) }); }
 const browserViews = makeBrowserViews({
   now: () => Date.now(),
+  readMode: readBrowserMode,
+  writeMode: writeBrowserMode,
+  chromeAvailable: () => false,   // YOUR CHROME needs the StarNet extension (its own lane): until then built-in
   handoffLive: runId => browserHandoffs.isLive(runId),
   attended: stationBrowserLogin,
   // the driving agent's own jail: a download must land where that agent can read it back
   downloadDirFor: agentId => /^[A-Za-z0-9_-]{1,40}$/.test(String(agentId || '')) ? path.join(WORKSPACES, String(agentId), 'downloads') : null,
-  makeStationSession: () => browserInternals.makeBrowserSession({
+  makeStationSession: mode => browserInternals.makeBrowserSession({
     ledger: procLedger,
     // A REAL WINDOW on the Commander's screen (Andrew: it must work like Claude Code / Codex / Hermes): they use it
     // natively — typing, sign-in popups, full speed — and watch the agent drive it. Input from the AGENT stays
     // synthetic (CDP events; the shim keeps pointer lock logical, so a page can never capture the real mouse).
     // STARNET_BROWSER_HEADLESS=1 still pins it headless (CI, gates, soak rigs). It never attaches to another Chrome.
-    allowVisible: true, forceHeadless: false, preferVisible: true, noAttach: true, syntheticInputOnly: true,
+    // built-in: headless — the BROWSER window IS the browser. window: a real Chrome window on the desktop.
+    allowVisible: mode === 'window', forceHeadless: mode !== 'window', preferVisible: mode === 'window', noAttach: true, syntheticInputOnly: true,
     cdpPort: 0,
     profileDir: path.join(os.tmpdir(), 'starnet-browser-' + process.pid + '-' + STATION_BROWSER_ID),
     cleanupProfile: true,

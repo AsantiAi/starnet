@@ -255,6 +255,39 @@ function rig(extra) {
     A.ok(views.warm().ok && made[0].warmed === 1, 'a browser a run is driving is left alone');
   }
 
+  // ---- Settings → Browser: where it runs ----
+  {
+    let saved = null; const modesMade = []; const made = [];
+    const clk = clock();
+    const views = makeBrowserViews({ now: clk.now, setTimeout: clk.setTimeout, clearTimeout: clk.clearTimeout,
+      readMode: () => saved || 'builtin', writeMode: m => { saved = m; }, chromeAvailable: () => false,
+      makeStationSession: mode => { modesMade.push(mode); const x = fakeSession(); made.push(x); return x.api; } });
+    A.eq(views.settings().mode, 'builtin', 'the default is BUILT-IN');
+    await views.open('example.com');
+    A.eq(modesMade[0], 'builtin', 'the station browser is created in the chosen mode');
+    A.eq(views.list().station.mode, 'builtin', 'and the list says which mode is running');
+    const r1 = await views.setMode('window');
+    A.ok(r1.ok && r1.applied && saved === 'window', 'switching to CHROME WINDOW is saved and applied');
+    A.eq(made[0].closed, 1, 'the idle browser is restarted (closed now; the next use starts it in the new mode)');
+    await views.open('example.com');
+    A.eq(modesMade[1], 'window', 'the next start is a Chrome window');
+    // a driving run is never pulled out from under
+    await views.sessionForRun({ agentId: 'nova', runId: 'r1', interactive: true }).forward();
+    const r2 = await views.setMode('builtin');
+    A.ok(r2.ok && r2.applied === false, 'while an agent drives, the switch waits');
+    A.eq(made[1].closed, 0, 'the driven browser is NOT closed');
+    views.releaseRun('r1');
+    await tick();
+    A.eq(made[1].closed, 1, 'it switches when that run lets go');
+    // YOUR CHROME without the extension: honest fallback
+    const r3 = await views.setMode('chrome');
+    A.ok(r3.ok && r3.mode === 'chrome' && r3.effective === 'builtin' && r3.chromeAvailable === false, 'YOUR CHROME is saved, but runs built-in until the extension is paired — and says so');
+    await views.open('example.com');
+    A.eq(modesMade[modesMade.length - 1], 'builtin', '…the browser that starts is built-in');
+    A.eq((await views.setMode('nonsense')).ok, false, 'an unknown mode is refused');
+    A.eq(saved, 'chrome', '…and nothing was saved');
+  }
+
   // ---- a station with no browser of its own ----
   {
     const clk = clock();
