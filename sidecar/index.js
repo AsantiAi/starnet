@@ -206,6 +206,8 @@ const { parseSlackTokens } = require('./channels/slack.js');                    
 const channelSecretsMod = require('./channels/secrets.js');                        // T1.4: token-vs-config split + keychain migration
 const { makeConnectGateway } = require('./channels/discord.gateway.js');           // P2-E: the real Discord gateway WS client (inbound)
 const { makeSseHub, runTeeView } = require('./channels/sse.js');
+const { makeHandoffHost } = require('./browser-handoff.js');   // STEP-IN: the agent hands its live browser to the Commander
+const { makeHandoffRoutes, makeSigninStore, nudgeLine: handoffNudgeLine } = require('./browser-handoff-routes.js');
 // relayWebhook (the signed-ingress verifier) is composed AFTER the WORKSPACES stores below —
 // its replay-nonce inbox is a durable JSONL sibling of the other ledgers.
 const { makeRouter } = require('./routing/router.js');
@@ -4217,6 +4219,41 @@ const stationBridge = makeStationBridge({ emit: (name, payload) => { try { sse.b
 
 const chanEmitValidated = makeEmitter(chanBus, e => console.warn('[channel-event]', e.kind, e.event, (e.errors || []).join(';')));
 const chanEmit = (name, payload) => { try { return chanEmitValidated(name, redact(payload)); } catch (_) {} };
+/* ---- STEP-IN (2026-09-29): the station-wide browser HANDOFF host. An agent that hits a login / 2FA / CAPTCHA calls
+   browser.need_human; its run parks HERE (own id, own 30-minute wait — never the /api/run consent socket) and the
+   station shows the agent's live browser in the STEP-IN window. State changes ride the SAME validated SSE bus as
+   channel/cron telemetry (browser.handoff), so any open page — or later a phone — renders the one truth. See
+   sidecar/browser-handoff.js (state machine) and sidecar/browser-handoff-routes.js (HTTP + remembered sign-ins). */
+const browserSignins = makeSigninStore({
+  dir: BROWSER_PROFILE_DIR, fs, path, now: () => Date.now(),
+  load: (file, tag) => loadResilient(file, tag), save: (file, value) => saveResilient(file, value),
+  isBusy: () => !!browserProfileHolder, anyLive: () => browserHandoffs.list().live.length > 0
+});
+const browserHandoffs = makeHandoffHost({
+  now: () => Date.now(),
+  emit: (name, payload) => chanEmit(name, payload),
+  onSettled: v => { try { browserSignins.note(v); } catch (e) { failNote('stepin.signins.note', e); } },
+  // D4: after 2 minutes unanswered, say so on the channel the Commander already uses — the SAME opt-in gate and chat
+  // map as routine/loop notifications (channelSecrets.notifyAutonomous, default OFF: nobody is messaged who did not ask).
+  onNudge: v => {
+    try {
+      if (!(channelSecrets && channelSecrets.notifyAutonomous)) return;
+      const map = channelStore.loadChatMap();
+      const chats = Object.keys((map && map.chats) || {}).filter(cid => map.chats[cid] && map.chats[cid].agentId === v.agentId)
+        .map(cid => ({ chatId: (map.chats[cid] && map.chats[cid].chatId) || cid, channel: (map.chats[cid] && map.chats[cid].channel) || 'telegram' }));
+      const ident = agentRoster.get(v.agentId);
+      const line = handoffNudgeLine(v, ident && ident.name);
+      for (const c of chats) {
+        const ch = liveChannelFor(c.channel);
+        if (!(ch && ch.adapter)) continue;
+        Promise.resolve(ch.adapter.send(c.chatId, redact(line)))
+          .then(r => { if (r && r.ok === false) console.warn('[step-in] nudge failed:', r.error); })
+          .catch(e => console.warn('[step-in] nudge failed:', (e && e.message) || e));
+      }
+    } catch (e) { failNote('stepin.nudge', e); }
+  }
+});
+const browserHandoffRoutes = makeHandoffRoutes({ host: browserHandoffs, readBody, respondJson, signins: browserSignins });
 
 // H2.2: the SINGLETON background-process manager — persists across runs so a backgrounded dev server survives the
 // run that started it. shell.bg.exit fires AFTER the originating run's NDJSON stream closed, so it rides the
@@ -10047,6 +10084,7 @@ const ROUTES = [
   // stt: qsplit == the old (url === '/api/stt' || url.indexOf('/api/stt?') === 0) disjunction, verbatim.
   { m: 'POST', qsplit: '/api/stt', h: media.handleStt, errorPolicy: media.sttFailOpenPolicy },
   { m: 'POST', exact: '/api/cancel', h: handleCancel },
+  ...browserHandoffRoutes.routes,   // STEP-IN: /api/browser/handoff* + /api/browser/signins* (sidecar/browser-handoff-routes.js)
   { m: 'POST', exact: '/api/run/steer', h: handleRunSteer },
   { m: 'GET', exact: '/api/version', h: handleVersion },
   { m: 'GET', exact: '/api/diagnostics', h: handleDiagnostics },   // T3.9 paste-ready bug report
@@ -17259,6 +17297,9 @@ async function runOnceCore(o) {
     persistentProfile: browserProfileLeaseFor(runId),
     onProfileWait: waiting => { if (waiting) browserProfileWaiters.add(runId); else browserProfileWaiters.delete(runId); },
     attendedLogin: (surface === 'interactive' && typeof o.loginPrompt === 'function') ? { prompt: o.loginPrompt } : null,
+    // STEP-IN: browser.need_human parks THIS run on the station handoff host. agentId/runId are host facts, never
+    // model args; the run's own signal (inside the tool ctx) ends the handoff if the run stops.
+    handoff: { request: f => browserHandoffs.request(Object.assign({}, f, { agentId, runId })) },
     requireOwnedServer: true,
     ownsLocalUrl: async ({ url, serverId, agentId: owner }) => {
       const st = shellBg.status(String(owner || agentId), String(serverId || ''));
@@ -19802,6 +19843,7 @@ async function runOnceCore(o) {
     if (billed) { try { credits.finishRun({ runId, agentId, usd: 0, reason: 'leak-guard' }); } catch (_) {} }
     // A test browser must die with its run. Besides process hygiene, this guarantees that a
     // broken page cannot retain any browser-level state after the task finishes.
+    try { browserHandoffs.abortRun(runId); } catch (e) { failNote('stepin.abort-run', e); }   // STEP-IN: a handoff never outlives its run
     if (runBrowser) { try { await runBrowser.session.close(); } catch (_) {} }
     if (runComputer?.close) { try { await runComputer.close(); } catch (_) { failNote('computer.run.close', 'Native run cleanup failed'); } }
     computerRuns.delete(runComputer);
