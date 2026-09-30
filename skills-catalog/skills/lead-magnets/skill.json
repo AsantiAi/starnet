@@ -1,0 +1,15 @@
+{
+  "slug": "lead-magnets",
+  "version": "1.0.0",
+  "shelf": "community",
+  "category": "Marketing",
+  "tags": ["lead-magnets", "lead-generation", "email-capture", "content", "gated-content"],
+  "requires": ["cabinet"],
+  "license": "MIT",
+  "authors": ["Corey Haines"],
+  "upstream": {
+    "url": "https://github.com/coreyhaines31/marketingskills/tree/5b2c0007766c6a1cf1d53fd8fc73e979e0821022/skills/lead-magnets",
+    "commit": "5b2c0007766c6a1cf1d53fd8fc73e979e0821022",
+    "license": "MIT"
+  }
+}

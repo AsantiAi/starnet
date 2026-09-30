@@ -39,6 +39,15 @@
     [/reveal (the )?(system|developer) prompt/i, 'reveal_prompt', 'high', 'injection', 'prompt disclosure request'],
     [/rm\s+-rf\s+(\/|\$HOME|~|\.)/i, 'rm_rf', 'critical', 'destructive', 'destructive recursive removal'],
     [/Remove-Item\s+.*-Recurse\s+.*-Force/i, 'ps_remove_recurse', 'critical', 'destructive', 'destructive PowerShell removal'],
+    /* FETCHED-INSTALL INSTRUCTIONS (2026-09-30). The malicious skills found in another harness's public registry
+       (hundreds of them, one campaign) carried no code at all: their TEXT told the reader to install a fake
+       "prerequisite" by piping a download into a shell. A text-only package is no defence against that, so a skill
+       that tells anyone to download-and-run is rated dangerous, and the softer "paste this into your terminal"
+       phrasing is a caution a person must look at. A skill that needs a CLI says so and checks `<tool> --version`. */
+    [/\b(curl|wget)\b[^\n|]*\|\s*(sudo\s+)?(ba|z|da|k)?sh\b/i, 'remote_install_pipe', 'high', 'remote-execution', 'a download piped straight into a shell'],
+    [/\b(irm|iwr|Invoke-RestMethod|Invoke-WebRequest)\b[^\n|]*\|\s*(iex|Invoke-Expression)\b/i, 'remote_install_pipe_ps', 'high', 'remote-execution', 'a download piped straight into PowerShell'],
+    [/\b(ba|z)?sh\b[^\n]*(<\(|\$\()\s*(curl|wget)\b/i, 'remote_install_subshell', 'high', 'remote-execution', 'a shell running a downloaded script'],
+    [/\b(paste|copy and paste|run)\s+(this|the following)\s+(command\s+|line\s+|script\s+)?(in|into)\s+(your\s+|a\s+|the\s+)?(terminal|powershell|command prompt|shell|console)\b/i, 'paste_into_terminal', 'medium', 'remote-execution', 'tells the reader to paste a command into a terminal'],
     [/>+\s*~\/\.(bashrc|zshrc|profile|powershell)/i, 'shell_profile_persist', 'medium', 'persistence', 'shell profile persistence'],
     [/\b(base64|fromCharCode|eval|Invoke-Expression)\b/i, 'obfuscation_eval', 'medium', 'obfuscation', 'obfuscation or dynamic execution'],
     [/https?:\/\/[^\s`'")]+/i, 'network_url', 'low', 'network', 'embedded network URL']

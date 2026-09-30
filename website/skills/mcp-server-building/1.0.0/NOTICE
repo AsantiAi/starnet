@@ -1,0 +1,3 @@
+mcp-builder, a skill from the Anthropic skills repository (anthropics/skills). Copyright 2026 Anthropic, PBC. Licensed under the Apache License, Version 2.0.
+Upstream: https://github.com/anthropics/skills/tree/b9e19e6f44773509fbdd7001d77ff41a49a486c1/skills/mcp-builder
+Modified by StarNet, 2026: tool names, station conventions and structure adapted.

@@ -1,0 +1,10 @@
+{
+  "slug": "flashcards",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Planning",
+  "tags": ["flashcards", "spaced-repetition", "study", "learning", "memory"],
+  "requires": ["cabinet"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}
