@@ -57,7 +57,7 @@ test('fetches {base}/v1/tierlist once and caches for the TTL', async () => {
 
 test('concurrent callers share one fetch', async () => {
   const f = fakeFetch(() => new Promise(r => setTimeout(() => r(ok(PAYLOAD)), 20)));
-  const tl = makeTierList({ fetch: f, baseUrl: 'https://c.example.test' });
+  const tl = makeTierList({ fetch: f, baseUrl: 'https://c.example.test', now: Date.now });
   const [a, b] = await Promise.all([tl.get(), tl.get()]);
   assert.equal(f.calls.length, 1);
   assert.equal(a.ok && b.ok, true);
@@ -70,7 +70,7 @@ test('a failed fetch returns an EMPTY list with a reason, never invented tiers',
     () => ok({ hello: 'world' }),
     () => { throw new Error('ECONNREFUSED'); }
   ]) {
-    const tl = makeTierList({ fetch: fakeFetch(handler), baseUrl: 'https://c.example.test' });
+    const tl = makeTierList({ fetch: fakeFetch(handler), baseUrl: 'https://c.example.test', now: Date.now });
     const r = await tl.get();
     assert.equal(r.ok, false);
     assert.deepEqual(r.boards, []);
@@ -80,7 +80,7 @@ test('a failed fetch returns an EMPTY list with a reason, never invented tiers',
 
 test('a slow cloud times out quickly', async () => {
   const f = (url, init) => new Promise((_, reject) => init.signal.addEventListener('abort', () => { const e = new Error('aborted'); e.name = 'AbortError'; reject(e); }));
-  const tl = makeTierList({ fetch: f, baseUrl: 'https://c.example.test', timeoutMs: 50 });
+  const tl = makeTierList({ fetch: f, baseUrl: 'https://c.example.test', now: Date.now, timeoutMs: 50 });
   const started = Date.now();
   const r = await tl.get();
   assert.ok(Date.now() - started < 2000);
@@ -105,7 +105,7 @@ test('failures are remembered briefly; a later refresh failure keeps the last go
 
 test('no configured cloud → honest empty answer, no fetch', async () => {
   const f = fakeFetch(() => ok(PAYLOAD));
-  const tl = makeTierList({ fetch: f, baseUrl: () => '' });
+  const tl = makeTierList({ fetch: f, baseUrl: () => '', now: Date.now });
   const r = await tl.get();
   assert.equal(r.ok, false);
   assert.deepEqual(r.boards, []);

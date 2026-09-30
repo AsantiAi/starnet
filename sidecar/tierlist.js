@@ -51,7 +51,9 @@ function normalize(payload) {
 function makeTierList(deps) {
   deps = deps || {};
   const doFetch = deps.fetch || (typeof fetch !== 'undefined' ? fetch : null);
-  const now = typeof deps.now === 'function' ? deps.now : () => Date.now();
+  // the clock is INJECTED (determinism lint: no ambient time in backend logic) — index.js passes the real one
+  if (typeof deps.now !== 'function') throw new Error('makeTierList requires deps.now (the injected clock)');
+  const now = deps.now;
   const baseUrl = typeof deps.baseUrl === 'function' ? deps.baseUrl : () => String(deps.baseUrl || '');
   const ttlMs = deps.ttlMs > 0 ? deps.ttlMs : TTL_MS;
   const failTtlMs = deps.failTtlMs > 0 ? deps.failTtlMs : FAIL_TTL_MS;

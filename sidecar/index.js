@@ -1056,7 +1056,7 @@ const creditsLink = makeCreditsLink({
 // else nothing (inert). For a linked device the external "add credits" page is the account page on the cloud.
 // MODEL TIER LIST (2026-09-29): the cloud's editorial S/A/B/C boards, badged in the model picker. Read from the SAME
 // cloud the starnet provider talks to (linked/env credits URL), else the shipped cloud default. Cached 10 min.
-const tierList = makeTierList({ fetch: globalThis.fetch, baseUrl: () => resolveCreditsConfig().url || CLOUD_URL });
+const tierList = makeTierList({ fetch: globalThis.fetch, now: () => Date.now(), baseUrl: () => resolveCreditsConfig().url || CLOUD_URL });
 function resolveCreditsConfig() {
   if (CREDITS_URL) return { url: CREDITS_URL, apiKey: CREDITS_API_KEY, accountId: CREDITS_ACCOUNT, purchaseUrl: CREDITS_PURCHASE_URL };
   const saved = creditsLink.loadSavedSync();
