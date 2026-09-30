@@ -83,6 +83,8 @@ module.exports = (async () => {
     try {
       const fetchImpl = async (url, init) => {
         if (!init || init.method !== 'POST') return new Response(JSON.stringify({ data: [] }), { status: 200 });
+        // Ollama's model facts (/api/show) are a separate local lookup, not a chat attempt.
+        if (/\/api\/show$/.test(url)) return new Response('{}', { status: 200 });
         postAttempts++;
         return new Promise((resolve, reject) => {
           const timer = setTimeout(() => resolve(new Response('data: [DONE]\n\n', {
@@ -185,10 +187,13 @@ module.exports = (async () => {
       try {
         let wire = null;
         const p = factory.selectProvider({ provider: id, key: 'k', fetch: async (url, init) => {
+          if (/\/api\/show$/.test(url)) return new Response('{}', { status: 200 });
           if (init && init.method === 'POST') { wire = JSON.parse(init.body); return new Response('data: [DONE]\n\n', { status: 200, headers: { 'Content-Type': 'text/event-stream' } }); }
           return new Response(JSON.stringify({ data: [] }), { status: 200 });
         } });
         for await (const _ of p.stream({ model: 'm', messages: [{ role: 'user', content: 'hi' }], isTask })) { /* drain */ }
+        // Ollama chat rides the native /api/chat, where the output ceiling is options.num_predict.
+        if (wire && wire.options && wire.max_tokens === undefined) return { max_tokens: wire.options.num_predict };
         return wire;
       } finally {
         if (prev == null) delete process.env.SKYNET_OLLAMA_MAX_TOKENS; else process.env.SKYNET_OLLAMA_MAX_TOKENS = prev;

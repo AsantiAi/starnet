@@ -18383,7 +18383,10 @@ async function runOnceCore(o) {
   // (supportsTools returns null when the catalog is cold, so this never false-refuses a real model).
   if (isTask && provider.supportsTools(model) === false) {
     emit('agent.run.start', { agentId, runId, trigger: trigger, model, ...runStartExtra });
-    emit('agent.run.error', { agentId, runId, transient: false, message: 'The model "' + model + '" does not support tool calls, so it can\'t run tasks. Pick a tool-capable model (e.g. anthropic/claude-sonnet-4.6 or openai/gpt-4o) on the connect screen.' });
+    emit('agent.run.error', { agentId, runId, transient: false, message: 'The model "' + model + '" does not support tool calls, so it can\'t run tasks. '
+      // A local station's alternative is another LOCAL model, not a cloud one it has no key for.
+      + (providerId === 'ollama' ? 'Pick an installed model that lists "tools" (run `ollama show <model>` to check), or pull one, e.g. `ollama pull qwen3:8b`.'
+        : 'Pick a tool-capable model (e.g. anthropic/claude-sonnet-4.6 or openai/gpt-4o) on the connect screen.') });
     emit('agent.run.end', { agentId, runId, reason: 'error', turns: 0, usd: 0 });
     return;
   }
