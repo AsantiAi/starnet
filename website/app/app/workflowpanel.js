@@ -120,12 +120,12 @@ const WorkflowPanel = (() => {
     S.sel = propId; S.insertAt = null;
     if (!el) mount();
     if (newLine) { S.drafts = {}; S.trgOpen = false; S.trgMsg = null; S.ltForm = null; S.ltMsg = null; S.ltReveal = null; S.hop = null; if (!S.session || S.session.lineId !== S.lineKey) S.view = 'edit'; refreshServerFacts(); refreshToday(); }
-    if (!todayTimer) todayTimer = setInterval(() => { if (el) paintToday(); }, 60000);
+    if (!todayTimer) todayTimer = setInterval(() => { if (el) parked(paintToday); }, 60000);
     probeSeam();
     // line triggers change on their own (a file lands, a webhook is called): re-read them while the INBOX is open
     if (!S.ltTimer) S.ltTimer = setInterval(() => { const sp = el && S.sel ? prop(S.sel) : null; if (sp && sp.t === 'intake') ltRefresh(); }, 5000);
     paint(true);
-    if (newLine) { const sc = $('#wf-scroll'); if (sc) sc.scrollTop = 0; } else toCard();
+    if (newLine) { const sc = $('#wf-scroll'), bd = $('#wf-body'); if (bd) bd.style.minHeight = ''; if (sc) sc.scrollTop = 0; } else toCard();
     H.highlight(propId);
     // the panel may have just docked over the line: a newly shown line is framed in the visible floor; a part
     // picked in the panel is centred; a floor click leaves the camera alone unless the part went under the panel
@@ -174,8 +174,15 @@ const WorkflowPanel = (() => {
      (`always`): its modes, the test job and its RUN key are what the Commander came for, and the header would push
      them under the fold. */
   function toCard(always) {
-    const sc = $('#wf-scroll'), head = $('#wf-head');
-    if (sc && head && (always || sc.scrollTop > head.offsetHeight)) sc.scrollTop = head.offsetHeight;
+    const sc = $('#wf-scroll'), head = $('#wf-head'), body = $('#wf-body');
+    if (!sc || !head) return;
+    if (body) body.style.minHeight = '';
+    if (!always && sc.scrollTop <= head.offsetHeight) return;
+    // a short card (WATCH IT is three lines) cannot scroll the header away: hold the room open under it, so the map sits at
+    // the top instead of stopping half-way up the header
+    const lack = head.offsetHeight - (sc.scrollHeight - sc.clientHeight);
+    if (always && lack > 0 && body) body.style.minHeight = (body.offsetHeight + lack) + 'px';
+    sc.scrollTop = head.offsetHeight;
   }
   // called by build.js after every plan recompile (and on edits) — the card follows the floor
   function refresh() {
@@ -198,18 +205,26 @@ const WorkflowPanel = (() => {
   // a draft is only what the Commander TYPED: a field painted empty (e.g. before the INBOX had a test job) must
   // never be remembered as an empty draft and later clobber the real default it now has
   function keepDrafts() { for (const n of $$('[data-keep]')) if (n.dataset.typed === '1') S.drafts[n.dataset.keep] = n.value; }
+  /* A VIEW PARKED WITH THE MAP AT THE TOP STAYS PARKED when the header above it changes height — a TODAY row arriving a
+     second after TEST opened, a hint going. Every repaint that can resize the header runs through here: without it the
+     header's growth slid its last lines back in over the map. */
+  function parked(fn) {
+    const sc = $('#wf-scroll'), hd = $('#wf-head');
+    const atMap = !!(sc && hd && sc.scrollTop > 0 && Math.abs(sc.scrollTop - hd.offsetHeight) < 2);
+    fn();
+    if (atMap && Math.abs(sc.scrollTop - hd.offsetHeight) >= 1) sc.scrollTop = hd.offsetHeight;
+  }
   function paint(force) {
     if (!el || !H) return;
+    parked(() => paintAll(force));
+  }
+  function paintAll(force) {
     const f = flow();
-    // a view parked with the map at the top stays parked there when the header above it changes height (a TODAY row
-    // appearing mid-test, a hint going): the header's growth must not slide back in over the map
-    const sc = $('#wf-scroll'), hd = $('#wf-head'), atMap = !!(sc && hd && sc.scrollTop > 0 && Math.abs(sc.scrollTop - hd.offsetHeight) < 2);
     paintHead(f);
     paintStrip(f);
     paintFoot(f);
     if (force || !typing()) { keepDrafts(); paintBody(f); }
     else paintLive(f);
-    if (atMap && sc.scrollTop !== hd.offsetHeight) sc.scrollTop = hd.offsetHeight;
     if (S.session && S.session.state === 'paused') {
       const h = S.session.hops[S.session.paused.afterHop];
       H.pausedMarker(h ? { agentId: h.agentId, dockId: h.dockId || null, label: 'HANDOFF WAITING ▸ ' + ((WL().pausedNext(S.session, nameOf) || {}).label || '') } : null);
@@ -233,7 +248,7 @@ const WorkflowPanel = (() => {
   function refreshToday() {
     if (typeof World === 'undefined' || !World.pollLineStats) return;
     World.pollLineStats();
-    setTimeout(() => { if (el) paintToday(); }, 1500);   // the answer lands in the floor's cache; repaint from it
+    setTimeout(() => { if (el) parked(paintToday); }, 1500);   // the answer lands in the floor's cache; repaint from it
   }
   function paintHead(f) {
     const head = $('#wf-head'); if (!head) return;
