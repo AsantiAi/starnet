@@ -18,7 +18,12 @@ const crew = [{ id: 'agent', name: 'NOVA' }, { id: 'rex', name: 'REX' }];
 const env = { WorldModel: M, Pipeline: P, WorkflowLine: W, crew, heroId: 'agent' };
 const snap = st => JSON.stringify(st.serialize());
 function fresh() { const s = M.create(M.starterDoc()); s.ensureWorkstation('agent'); s.ensureWorkstation('rex'); return s; }
-function routed(st) { const plan = P.compileRoutingPlan(st.projectGeometry()), L = P.dockLayer(plan); return { errs: plan.errors.filter(e => !e.warn), chains: L.dockChains || {}, reach: L.reachDock || {} }; }
+// routing facts in WORLD tiles: the plan's own tiles count from the station's top-left corner, which a room added north or west moves
+function routed(st) {
+  const g = st.projectGeometry(), plan = P.compileRoutingPlan(g), L = P.dockLayer(plan), chains = {};
+  for (const d in (L.dockChains || {})) { const c = L.dockChains[d]; chains[d] = c && c.tile ? Object.assign({}, c, { tile: { x: c.tile.x + g.origin.tx, y: c.tile.y + g.origin.ty } }) : c; }
+  return { errs: plan.errors.filter(e => !e.warn), chains, reach: L.reachDock || {} };
+}
 // a station that already has a working line (Software Studio, both steps staffed), so "existing lines unchanged" has teeth
 function busy() {
   const st = M.create(M.starterDoc()); st.ensureWorkstation('agent'); st.ensureWorkstation('rex');
@@ -232,7 +237,7 @@ for (const kit of T.kits()) {
   A.ok(r.ok, kit.id + ': plans by name (' + (r.error || '') + ')');
   if (!r.ok) continue;
   A.eq(snap(st), before, kit.id + ': planning changes nothing');
-  A.ok(r.plan.summary.indexOf(kit.name + ' (' + kit.about + ') in a new room beside HOME') === 0, kit.id + ': the summary names the kit and where it goes');
+  A.ok(['south', 'north'].some(sd => r.plan.summary.indexOf(kit.name + ' (' + kit.about + ') in a new room ' + sd + ' of HOME, through a hallway') === 0), kit.id + ': the summary names the kit, the side it goes on and the hallway that joins it');
   const caps = kit.props.filter(([t]) => M.capForProp(t)).length;
   A.eq(/It brings equipment: /.test(r.plan.summary), caps > 0, kit.id + ': equipment is named exactly when the kit brings some (object = capability)');
   A.eq(/\. What agents gain there: /.test(r.plan.summary), caps > 0, kit.id + ': and what agents gain there, in EquipmentHelp\'s words');
@@ -488,9 +493,9 @@ for (const c of T.catalog) {
       A.ok(r.ok, cat + ' ' + id + ': a design plans (' + (r.error || '') + ')');
       if (!r.ok) continue;
       A.eq(snap(st), before, cat + ' ' + id + ': planning changes nothing');
-      A.ok(new RegExp('^' + id.toUpperCase() + ', a new \\d+ × \\d+ room beside ').test(r.plan.summary) && r.plan.summary.indexOf('the left half, ' + RS.STYLES[id].name + ' (') > 0, cat + ' ' + id + ': the card says where the room goes and what is in each part: ' + r.plan.summary.slice(0, 120));
+      A.ok(new RegExp('^' + id.toUpperCase() + '( \\d)?, a new \\d+ × \\d+ room (north|south|east|west) of [A-Z &]+, through a hallway: ').test(r.plan.summary) && r.plan.summary.indexOf('the left half, ' + RS.STYLES[id].name + ' (') > 0, cat + ' ' + id + ': the card says where the room goes and what is in each part: ' + r.plan.summary.slice(0, 120));
       const a = SB.apply(st, r.plan, E);
-      A.ok(a.ok && a.kind === 'design', cat + ' ' + id + ': builds (' + (a.error || '') + ')');
+      A.ok(a.ok && a.kind === 'build', cat + ' ' + id + ': builds (' + (a.error || '') + ')');
       if (!a.ok) continue;
       const room = st.rooms().find(x => x.id === a.roomIds[0]), zl = r.plan.preview.zones[0].rect;
       const mine = st.props().filter(p => !oldProps.has(JSON.stringify(p)) && st.roomAt(p.x, p.y) === room.id);
@@ -537,7 +542,7 @@ for (const c of T.catalog) {
     A.ok(r.ok && /^REC DECK, a new/.test(r.plan.summary) && r.plan.preview.zones.length === 4, 'four corners plan into one named room: ' + (r.error || r.plan.summary.slice(0, 100)));
     const a = SB.apply(st, r.plan, E); A.ok(a.ok); st.undo(); A.eq(snap(st), before, 'one undo');
     const w = SB.planRoom(st.serialize(), { zones: [{ area: 'whole', style: 'library' }] }, E);
-    A.ok(w.ok && /the whole room, a reading nook/.test(w.plan.summary), 'a whole-room style');
+    A.ok(w.ok && /^LIBRARY, a new 12 × 8 room south of HOME, through a hallway: a reading nook \(/.test(w.plan.summary), 'a whole-room style: ' + (w.error || w.plan.summary.slice(0, 90)));
   }
   // furnishing an existing room part by part, around what already stands there
   {
@@ -558,7 +563,7 @@ for (const c of T.catalog) {
   // the card's drawing: the station, the new room lit, its zones, what will stand there
   {
     const st = fresh(), r = SB.planRoom(st.serialize(), { zones: [{ area: 'left', style: 'cozy' }, { area: 'right', line: 'build_test' }] }, E), pv = r.plan.preview;
-    A.ok(pv.rooms.filter(x => x.mine).length === 1 && pv.rooms.length === st.rooms().length + 1, 'the preview holds every room, the new one lit');
+    A.ok(pv.rooms.filter(x => x.mine).length === 2 && pv.rooms.length === st.rooms().length + 2, 'the preview holds every room; the new room and its hallway are lit');
     A.eq(pv.zones.map(z => z.where + ': ' + z.label), ['left half: a cozy corner', 'right half: BUILD + TEST'], 'the preview names each zone');
     const a = SB.apply(st, r.plan, E), added = st.props().length - M.create(M.starterDoc()).props().length;
     A.ok(a.ok && pv.props.length > 8 && pv.belts.length > 5, 'the preview holds what will stand there and its belts');
@@ -617,14 +622,14 @@ for (const c of T.catalog) {
   {
     const st = fresh(), before = snap(st);
     const r = SB.plan(st.serialize(), { name: 'Weekly digest', shape: ['RESEARCHER', { together: ['WRITER', 'ANALYST'] }, 'REVIEWER'], purpose: 'a weekly digest of AI news', steps: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'rex' }, { step: 3, agent: 'rex' }, { step: 4, agent: 'lead' }], dailyCap: 3 }, E);
-    A.ok(r.ok && /^WEEKLY DIGEST, a new \d+ × \d+ room beside HOME: the whole room, a custom line \("Weekly digest"\): Researcher \(NOVA\) → Writer \(REX\) \+ Analyst \(REX\) \(at once\) → Reviewer \(NOVA\) → Outbox · daily cap \$3\. It will be ready to run\./.test(r.plan.summary), 'a described line plans in a room of its own, staffed in run order: ' + (r.error || r.plan.summary.slice(0, 200)));
+    A.ok(r.ok && /^WEEKLY DIGEST, a new \d+ × \d+ room south of HOME, through a hallway: a custom line \("Weekly digest"\): Researcher \(NOVA\) → Writer \(REX\) \+ Analyst \(REX\) \(at once\) → Reviewer \(NOVA\) → Outbox · daily cap \$3\. It will be ready to run\./.test(r.plan.summary), 'a described line plans in a room of its own, staffed in run order: ' + (r.error || r.plan.summary.slice(0, 200)));
     A.ok(r.ok && r.plan.line.label === 'Weekly digest' && r.plan.ready === true && r.plan.blocking.length === 0, 'plan_line\'s own fields: the line, ready');
     A.ok(r.plan.steps.every(s => s.instructions.endsWith(' This line is for: "a weekly digest of AI news".')), 'every step carries the Commander\'s purpose');
     A.ok(SB.apply(st, r.plan, E).ok && st.props().filter(p => p.t === 'bay').length === 4, 'it builds: four steps');
     A.eq(routed(st).errs.length, 0, 'no routing error');
     A.ok(st.undo().ok); A.eq(snap(st), before, 'one undo');
     const home = SB.plan(st.serialize(), { shape: [{ sort: { code: 'ENGINEER', research: 'RESEARCHER' } }, 'WRITER', { review: true, tries: 2 }], where: 'HOME', name: 'Sorted' }, E);
-    A.ok(home.ok && /^HOME \(\d+ × \d+\): the whole room, a custom line \("Sorted"\)/.test(home.plan.summary) && !home.plan.rooms.some(x => x.name === 'SORTED'), 'into an existing room, around what stands there, the name is the line\'s: ' + (home.error || home.plan.summary.slice(0, 120)));
+    A.ok(home.ok && /^HOME \(\d+ × \d+\): a custom line \("Sorted"\)/.test(home.plan.summary) && !home.plan.rooms.some(x => x.name === 'SORTED'), 'into an existing room, around what stands there, the name is the line\'s: ' + (home.error || home.plan.summary.slice(0, 120)));
     const both = SB.plan(st.serialize(), { shape: ['WRITER'], line: 'build_test' }, E);
     A.ok(!both.ok && /not both/.test(both.error), 'a menu line or a shape, not both');
     const bad = SB.plan(st.serialize(), { shape: ['PILOT'] }, E);
@@ -673,6 +678,307 @@ for (const c of T.catalog) {
   }
 }
 
+/* ---- 13. THE SPATIAL BUILDER (2026-09-30): rooms where the Commander says — beside any room, on any side, by a hallway
+        or open plan, any size, empty or filled — several in one plan, plus hallways between rooms, and the MAP the lead reads ---- */
+{
+  const RS = require('../frontend/app/roomstyles.js'), LL = require('../frontend/app/linelayout.js'), LE = require('../frontend/app/lineedit.js');
+  const E = Object.assign({}, env, { StationTemplates: T, PropSprites: Sprites, EquipmentHelp: require('../frontend/app/equipmenthelp.js'), RoomStyles: RS, LineLayout: LL, LineEdit: LE });
+  // HOME with a room north and a room south of it, each through a hallway (the Cozy preset)
+  const cozy = () => { const st = fresh(); A.ok(st.replaceLayout(T.build('cozy', M, Sprites, st.doc()._nid + 100)).ok, 'fixture: the Cozy preset'); return st; };
+  const room = (st, name) => st.rooms().find(r => r.name === name);
+  const size = r => { const R = r.rects[0]; return (R.x2 - R.x1 + 1) + 'x' + (R.y2 - R.y1 + 1); };
+  const walks = (st, a, b) => {
+    const g = st.projectGeometry(), ox = g.origin.tx, oy = g.origin.ty;
+    const free = r => { const R = r.rects[0]; for (let y = R.y1; y <= R.y2; y++) for (let x = R.x1; x <= R.x2; x++) if (g.walkable(x - ox, y - oy)) return [x - ox, y - oy]; return null; };
+    const p = free(a), q = free(b);
+    return !!(p && q && g.path(p[0], p[1], q[0], q[1]));
+  };
+  const touch = (p, q) => (p.x1 <= q.x2 && q.x1 <= p.x2 && (p.y2 + 1 === q.y1 || q.y2 + 1 === p.y1)) || (p.y1 <= q.y2 && q.y1 <= p.y2 && (p.x2 + 1 === q.x1 || q.x2 + 1 === p.x1));
+  const mapRoom = (st, name) => SB.mapOf(st.serialize(), E).map.rooms.find(x => x.name === name);
+
+  // THE ASK THAT FAILED LIVE: "build new rooms connected to the bridge room, and a giant conveyor room we will fill with workflows"
+  {
+    const st = cozy(), before = snap(st), was = routed(st), n0 = st.rooms().length, oldProps = new Set(st.props().map(p => JSON.stringify(p)));
+    const r = SB.planBuild(st.serialize(), { rooms: [
+      { name: 'Conveyor Hall', size: 'giant', beside: 'the bridge room', type: 'FOUNDRY' },
+      { name: 'War Room', beside: 'bridge', side: 'left' },
+      { name: 'Annex', size: 'small', beside: 'Conveyor Hall', side: 'south', hallway: false }] }, E);
+    A.ok(r.ok, 'three rooms plan in one request (' + (r.error || '') + ')');
+    if (r.ok) {
+      A.ok(/^CONVEYOR HALL, a new 36 × 20 room east of HOME, through a hallway: empty floor, ready for lines and furniture\. WAR ROOM, a new 18 × 11 room west of HOME, through a hallway: empty floor, ready for lines and furniture\. ANNEX, a new 12 × 8 room south of CONVEYOR HALL, open to it: empty floor, ready for lines and furniture\.$/.test(r.plan.summary),
+        'the card says each room, its size, the room it joins, the side, and hallway or open: ' + r.plan.summary);
+      A.eq(snap(st), before, 'planning changes nothing');
+      A.eq(r.plan.preview.rooms.filter(x => x.mine).length, 5, 'the drawing lights the three rooms and the two hallways');
+      const a = SB.apply(st, r.plan, E);
+      A.ok(a.ok && a.kind === 'build' && a.roomIds.length === 3, 'it builds (' + (a.error || '') + ')');
+      A.eq(st.rooms().length, n0 + 5, 'three rooms and two hallways were added');
+      const hall = room(st, 'CONVEYOR HALL'), war = room(st, 'WAR ROOM'), annex = room(st, 'ANNEX'), home = room(st, 'HOME');
+      A.eq([size(hall), hall.kind, size(war), size(annex)], ['36x20', 'factory', '18x11', '12x8'], 'each at the size asked, the hall a foundry');
+      A.ok(hall.rects[0].x1 > home.rects[0].x2 + 1 && war.rects[0].x2 < home.rects[0].x1 - 1, 'the hall stands east of the bridge and the war room west, a hallway apart');
+      A.ok(touch(hall.rects[0], annex.rects[0]) && annex.rects[0].y1 === hall.rects[0].y2 + 1, 'the annex stands against the hall\'s south wall');
+      A.ok([hall, war, annex].every(x => walks(st, home, x)), 'the crew can walk from the bridge into every new room');
+      A.eq(mapRoom(st, 'CONVEYOR HALL').joinedTo.slice().sort(), ['ANNEX (open to it)', 'HOME (through a hallway)'], 'the map reads the joins back');
+      const keep = new Set(st.props().map(p => JSON.stringify(p)));
+      A.ok([...oldProps].every(p => keep.has(p)), 'nothing already there moved or changed');
+      A.ok(Object.keys(was.chains).every(d => JSON.stringify(routed(st).chains[d]) === JSON.stringify(was.chains[d])), 'every existing line routes as before');
+
+      // "…where we will fill it with workflows": three lines into the hall, each its own line
+      const mid = snap(st), comps0 = P.lineComponents(st.projectGeometry()).length;
+      const f = SB.planBuild(st.serialize(), { rooms: [{ into: 'conveyor hall', lines: [{ line: 'build_test' }, { purpose: 'research a topic and write it up', name: 'Briefing' }, { shape: ['RESEARCHER', { together: ['WRITER', 'ANALYST'] }, 'REVIEWER'], name: 'Digest' }] }] }, E);
+      A.ok(f.ok && /^CONVEYOR HALL \(36 × 20\): /.test(f.plan.summary) && f.plan.lines.length === 3, 'three lines plan into the hall that now exists: ' + (f.error || f.plan.summary.slice(0, 140)));
+      if (f.ok) {
+        const b = SB.apply(st, f.plan, E);
+        A.ok(b.ok && b.lines.length === 3 && b.lines.every(l => l.lineId), 'they build (' + (b.error || '') + ')');
+        A.eq(P.lineComponents(st.projectGeometry()).length, comps0 + 3, 'as three separate lines: none touches another');
+        A.eq(new Set(b.lines.map(l => l.lineId)).size, 3, 'each with its own line id');
+        A.ok(st.props().filter(p => /^(intake|bay|outbox)$/.test(p.t) && st.roomAt(p.x, p.y) === hall.id).length >= 9, 'their machines stand in the hall');
+        A.eq(routed(st).errs.length, was.errs.length, 'no new routing error');
+        A.eq(st.rooms().length, n0 + 5, 'no room was added');
+        A.ok(st.undo().ok); A.eq(snap(st), mid, 'one undo takes the three lines back');
+      }
+      A.ok(st.undo().ok); A.eq(snap(st), before, 'and one more takes the rooms back: the station is exactly as it was');
+    }
+  }
+
+  // THE ORIGIN BUG (found 2026-09-30): a room that grows the station north or west moves the corner the routing plan counts
+  // its tiles from, and every line then read as re-routed — so a station with a line refused every such room
+  {
+    const st = busy(), was = routed(st);
+    A.ok(Object.keys(was.chains).length >= 2, 'fixture: a station with a working line');
+    for (const [beside, side] of [['WORKSHOP', 'west'], ['WORKSHOP', 'north'], ['BUILD & TEST', 'north'], ['REVIEW', 'east'], ['LIBRARY', 'south']]) {
+      const before = snap(st), o0 = st.projectGeometry().origin, r = SB.planBuild(st.serialize(), { rooms: [{ name: 'Edge', size: 'large', beside, side }] }, E);
+      A.ok(r.ok && SB.apply(st, r.plan, E).ok, 'a large room ' + side + ' of ' + beside + ' builds beside a working line (' + (r.error || '') + ')');
+      const o1 = st.projectGeometry().origin;
+      if (side === 'west' || side === 'north') A.ok(o1.tx !== o0.tx || o1.ty !== o0.ty, side + ' of ' + beside + ': the station\'s corner really moved');
+      A.ok(Object.keys(was.chains).every(d => JSON.stringify(routed(st).chains[d]) === JSON.stringify(was.chains[d])), side + ' of ' + beside + ': and the line routes exactly as before');
+      A.ok(st.undo().ok); A.eq(snap(st), before, side + ' of ' + beside + ': one undo');
+    }
+    const ln = SB.plan(st.serialize(), { line: 'build_test', beside: 'WORKSHOP', side: 'west' }, E), kt = SB.planRoom(st.serialize(), { kit: 'LIBRARY', beside: 'BUILD & TEST', side: 'north' }, E);
+    A.ok(ln.ok && kt.ok, 'a line\'s room and a furnished room go north and west too (' + (ln.error || kt.error || '') + ')');
+  }
+  // a giant hall holds many lines: they pack in rows, and a room StarNet sizes grows to hold what goes in it
+  {
+    const st = fresh(), six = ['build_test', 'research_line', 'second_opinion', 'revision_loop', 'front_desk', 'deep_dive'].map(line => ({ line }));
+    const g = SB.planBuild(st.serialize(), { rooms: [{ name: 'Factory', size: 'giant', lines: six }] }, E);
+    A.ok(g.ok && /^FACTORY, a new 36 × 20 room /.test(g.plan.summary) && g.plan.lines.length === 6, 'six lines plan into one giant hall: ' + (g.error || g.plan.summary.slice(0, 80)));
+    if (g.ok) { const a = SB.apply(st, g.plan, E); A.ok(a.ok && new Set(a.lines.map(l => l.lineId)).size === 6, 'and build as six separate lines'); st.undo(); }
+    const auto = SB.planBuild(st.serialize(), { rooms: [{ name: 'Works', lines: six.slice(0, 4) }] }, E);
+    const m = auto.ok && /^WORKS, a new (\d+) × (\d+) room /.exec(auto.plan.summary);
+    A.ok(m && +m[1] <= 44 && +m[2] <= 26 && +m[1] > +m[2], 'with no size, four lines get a room wider than it is tall, within what StarNet builds (' + (auto.error || (m && m[1] + ' × ' + m[2])) + ')');
+    const tiny = SB.planBuild(st.serialize(), { rooms: [{ name: 'Closet', size: 'medium', lines: six }] }, E);
+    A.ok(!tiny.ok && /^CLOSET at 18 × 11 is too small for what goes in it: that needs about \d+ × \d+\. Leave size out, or ask for a bigger one\.$/.test(tiny.error), 'a size too small for its lines says the size that would do: ' + tiny.error);
+  }
+  // every side, a hallway or open plan, and a named size
+  for (const side of ['north', 'south', 'east', 'west']) for (const hallway of [true, false, 5]) {
+    const st = fresh(), before = snap(st), home = room(st, 'HOME'), n0 = st.rooms().length;
+    const r = SB.planBuild(st.serialize(), { rooms: [{ name: 'Wing', size: 'large', beside: 'HOME', side, hallway }] }, E), what = side + (hallway === false ? ' open' : ' hallway ' + hallway);
+    A.ok(r.ok && r.plan.summary === 'WING, a new 24 × 14 room ' + side + ' of HOME, ' + (hallway === false ? 'open to it' : 'through a hallway') + ': empty floor, ready for lines and furniture.', what + ': plans (' + (r.error || r.plan.summary) + ')');
+    if (!r.ok) continue;
+    A.ok(SB.apply(st, r.plan, E).ok, what + ': builds');
+    const w = room(st, 'WING').rects[0], h = home.rects[0], gap = hallway === false ? 0 : hallway === true ? 3 : hallway;
+    const d = side === 'east' ? w.x1 - h.x2 - 1 : side === 'west' ? h.x1 - w.x2 - 1 : side === 'south' ? w.y1 - h.y2 - 1 : h.y1 - w.y2 - 1;
+    A.eq(d, gap, what + ': the room stands exactly that far from HOME, on that side');
+    A.eq(st.rooms().length, n0 + (gap ? 2 : 1), what + ': ' + (gap ? 'a room and its hallway' : 'a room, no hallway'));
+    A.ok(walks(st, room(st, 'HOME'), room(st, 'WING')), what + ': walkable from HOME');
+    A.ok(st.undo().ok); A.eq(snap(st), before, what + ': one undo');
+  }
+  // sizes: the four words, other words for them, exact tiles, and what is refused
+  {
+    const st = fresh();
+    for (const [sz, want] of [['small', '12x8'], ['medium', '18x11'], ['large', '24x14'], ['giant', '36x20'], ['huge', '36x20'], ['big', '24x14'], [{ w: 30, h: 9 }, '30x9'], ['20x12', '20x12'], [undefined, '18x11']]) {
+      const s2 = M.create(st.serialize()), r = SB.planBuild(s2.serialize(), { rooms: [{ name: 'S', size: sz }] }, E);
+      A.ok(r.ok && SB.apply(s2, r.plan, E).ok && size(room(s2, 'S')) === want, 'size ' + JSON.stringify(sz) + ' is ' + want + ' (' + (r.error || '') + ')');
+    }
+    for (const sz of ['enormous-ish', { w: 3, h: 3 }, { w: 80, h: 9 }, 7, []]) { const r = SB.planBuild(st.serialize(), { rooms: [{ size: sz }] }, E); A.ok(!r.ok && /^size is small \(12 × 8\), medium \(18 × 11\), large \(24 × 14\), giant \(36 × 20\), or/.test(r.error), 'size ' + JSON.stringify(sz) + ' is refused with the sizes: ' + r.error); }
+  }
+  // no room named: the spot that keeps the station compact, never a strip marching east
+  {
+    const st = fresh();
+    for (let i = 0; i < 6; i++) { const r = SB.planBuild(st.serialize(), { rooms: [{ name: 'R' + i }] }, E); A.ok(r.ok && SB.apply(st, r.plan, E).ok, 'room ' + i + ' of six finds a place (' + (r.error || '') + ')'); }
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for (const r of st.rooms()) for (const q of r.rects) { x1 = Math.min(x1, q.x1); y1 = Math.min(y1, q.y1); x2 = Math.max(x2, q.x2); y2 = Math.max(y2, q.y2); }
+    const w = x2 - x1 + 1, h = y2 - y1 + 1;
+    A.ok(Math.max(w, h) / Math.min(w, h) < 2.2, 'seven rooms make a block, not a strip (' + w + ' × ' + h + ')');
+    A.ok(st.rooms().filter(r => r.kind !== 'corridor').every(r => walks(st, room(st, 'HOME'), r)), 'and every one is walkable from HOME');
+  }
+  // a room never stands against a room it was not asked to join, and a doorway never opens onto furniture
+  {
+    const st = cozy();
+    for (let i = 0; i < 8; i++) { const r = SB.planBuild(st.serialize(), { rooms: [{ name: 'N' + i, size: i % 2 ? 'small' : 'large', hallway: i % 3 !== 0 }] }, E); if (!r.ok || !SB.apply(st, r.plan, E).ok) break; }
+    const rooms = st.rooms(), real = rooms.filter(r => r.kind !== 'corridor');
+    A.ok(real.length > 8, 'fixture: a crowded station (' + real.length + ' rooms)');
+    const want = new Set();
+    for (const r of real) for (const j of mapRoom(st, r.name).joinedTo) if (/open to it/.test(j)) want.add([r.name, j.replace(/ \(.*/, '')].sort().join('|'));
+    const open = new Set();
+    for (const a of real) for (const b of real) if (a !== b && touch(a.rects[0], b.rects[0])) open.add([a.name, b.name].sort().join('|'));
+    A.eq([...open].sort(), [...want].sort(), 'rooms touch only where an open join was asked');
+    A.ok([...open].every(k => /^N\d\|/.test(k) || /\|N\d$/.test(k)), 'and never two rooms that were there before');
+    // a bookshelf against HOME's east wall: the hallway slides along the wall to clear floor
+    const s2 = fresh(), H = room(s2, 'HOME').rects[0], cy = (H.y1 + H.y2) >> 1;
+    for (let y = cy - 2; y <= cy + 2; y++) s2.addProp({ t: 'crate', x: H.x2, y, w: 1, h: 1 });
+    const blocked = s2.props().filter(p => p.x === H.x2 && p.block !== false);
+    if (blocked.length >= 3) {
+      const r = SB.planBuild(s2.serialize(), { rooms: [{ name: 'East', beside: 'HOME', side: 'east' }] }, E);
+      A.ok(r.ok && SB.apply(s2, r.plan, E).ok, 'a wall with furniture against it still takes a hallway (' + (r.error || '') + ')');
+      const hl = s2.rooms().find(x => x.kind === 'corridor').rects[0];
+      A.ok(blocked.every(p => p.y < hl.y1 || p.y > hl.y2), 'and the hallway opens beside the furniture, not onto it');
+    }
+  }
+  // hallways between rooms that face each other
+  {
+    const st = cozy(), before = snap(st);
+    const r = SB.planBuild(st.serialize(), { rooms: [{ name: 'A', beside: 'WORKROOM', side: 'east' }, { name: 'B', beside: 'LOUNGE', side: 'east' }], hallways: [{ from: 'A', to: 'B' }] }, E);
+    A.ok(r.ok && / A new hallway joins A and B\.$/.test(r.plan.summary) && r.plan.hallways.length === 1, 'two rooms and a hallway between them, in one plan: ' + (r.error || r.plan.summary.slice(-60)));
+    const a = SB.apply(st, r.plan, E);
+    A.ok(a.ok && a.hallways.length === 1 && st.rooms().filter(x => x.kind === 'corridor').length === 5, 'it builds: the preset\'s two hallways, one per room, and the one joining them');
+    A.ok(mapRoom(st, 'A').joinedTo.indexOf('B (through a hallway)') >= 0, 'the map reads A joined to B');
+    A.ok(st.undo().ok); A.eq(snap(st), before, 'one undo');
+    const only = SB.planBuild(st.serialize(), { hallways: [{ from: 'WORKROOM', to: 'LOUNGE' }] }, E);
+    A.ok(!only.ok && /^There is no clear straight run for a hallway between WORKROOM and LOUNGE: something is already between them\.$/.test(only.error), 'a hallway through another room is refused: ' + only.error);
+    for (const [hw, re] of [
+      [[{ from: 'HOME', to: 'HOME' }], /A hallway joins two different rooms/],
+      [[{ from: 'HOME', to: 'Mars' }], /There is no room called "Mars"\. Rooms: HOME, WORKROOM, LOUNGE\./],
+      [[{ from: 'HOME' }], /Each hallway is \{ "from": a room, "to": another room \}/],
+      [[{ from: 'HOME', to: 'LOUNGE', x: 4 }], /Each hallway is/],
+      ['HOME', /Send \{ "rooms"/],
+    ]) { const q = SB.planBuild(st.serialize(), { hallways: hw }, E); A.ok(!q.ok && re.test(q.error), 'hallway refused: ' + JSON.stringify(hw) + ' -> ' + (q.error || 'NOT REFUSED').slice(0, 120)); }
+    A.eq(snap(st), before, 'no refusal changed anything');
+  }
+  // refusals say why, and what does fit
+  {
+    const st = cozy(), before = snap(st);
+    const r = SB.planBuild(st.serialize(), { rooms: [{ name: 'X', beside: 'HOME', side: 'north' }] }, E);
+    A.ok(!r.ok && /^There is no room for a 18 × 11 room north of HOME with a hallway: a hallway is already there\. That size fits east, west of HOME\./.test(r.error), 'a taken side names the free ones: ' + r.error);
+    for (const [req, re] of [
+      [{ rooms: [] }, /^Send \{ "rooms"/], [{}, /^Send \{ "rooms"/], [null, /^Send \{ "rooms"/], [{ rooms: 'big' }, /^Send \{ "rooms"/], [{ rooms: new Array(7).fill({}) }, /^Send \{ "rooms"/],
+      [{ rooms: [{}], props: [] }, /these fields are not accepted: props/],
+      [{ rooms: [{ x: 4, y: 9 }] }, /a room does not take: x, y\. A room takes: name, size, beside, side, hallway, align, into, type, floorStyle, floorMat, zones, lines\./],
+      [{ rooms: [{ beside: 'Mars' }] }, /There is no room called "Mars"\. Rooms: HOME, WORKROOM, LOUNGE\./],
+      [{ rooms: [{ side: 'up-left' }] }, /^side is north, south, east or west/],
+      [{ rooms: [{ hallway: 40 }] }, /^hallway is true/],
+      [{ rooms: [{ align: 'diagonal' }] }, /^align is center, start or end/],
+      [{ rooms: [{ type: 'castle' }] }, /^type must be one of: HAB, BRIDGE, LAB, FOUNDRY, QUARTERS, STORAGE\./],
+      [{ rooms: [{ name: 'Home' }] }, /A room is already called HOME/],
+      [{ rooms: [{ name: 'Twin' }, { name: 'twin' }] }, /A room is already called TWIN/],
+      [{ rooms: [{ into: 'LOUNGE' }] }, /names an existing room \(into\) but nothing to put in it/],
+      [{ rooms: [{ into: 'LOUNGE', size: 'giant', lines: [{ line: 'build_test' }] }] }, /fills an existing room \(into\), so it takes no size/],
+      [{ rooms: [{ into: 'LOUNGE', name: 'Den', lines: [{ line: 'build_test' }] }] }, /name names a NEW room/],
+      [{ rooms: [{ zones: [{ area: 'left', style: 'cozy' }], lines: [{ line: 'build_test' }] }] }, /takes zones .* or lines .*, not both/],
+      [{ rooms: [{ lines: [] }] }, /lines is a list of 1 to 6 workflow lines/],
+      [{ rooms: [{ lines: [{ line: 'teleporter' }] }] }, /There is no line called "teleporter"/],
+      [{ rooms: [{ lines: [{ line: 'build_test', belts: [] }] }] }, /A line only takes: line, purpose, shape, name, staff, dailyCap, tries\. Not accepted: belts\./],
+      [{ rooms: [{ size: 'small', lines: [{ line: 'gauntlet' }] }] }, /at 12 × 8 is too small for what goes in it: that needs about \d+ × \d+\. Leave size out, or ask for a bigger one\./],
+    ]) { const q = SB.planBuild(st.serialize(), req, E); A.ok(!q.ok && re.test(q.error), 'build refused: ' + JSON.stringify(req).slice(0, 80) + ' -> ' + (q.error || 'NOT REFUSED').slice(0, 170)); }
+    A.eq(snap(st), before, 'no refusal changed anything');
+  }
+  // the older tools place their new rooms the same way
+  {
+    const st = cozy();
+    const l = SB.plan(st.serialize(), { line: 'build_test', beside: 'LOUNGE', side: 'east', hallway: false }, E);
+    A.ok(l.ok && /^Build \+ test \("BUILD \+ TEST"\) in a new room east of LOUNGE, open to it: /.test(l.plan.summary), 'a line\'s room goes where it is asked: ' + (l.error || l.plan.summary.slice(0, 90)));
+    const k = SB.planRoom(st.serialize(), { kit: 'LIBRARY', beside: 'workroom', side: 'west' }, E);
+    A.ok(k.ok && /^LIBRARY \(.*\) in a new room west of WORKROOM, through a hallway\./.test(k.plan.summary), 'a furnished room too: ' + (k.error || k.plan.summary.slice(0, 110)));
+    const z = SB.planRoom(st.serialize(), { zones: [{ area: 'left', style: 'cozy' }, { area: 'right', style: 'games' }], beside: 'HOME', side: 'west', size: 'large', name: 'Den' }, E);
+    A.ok(z.ok && /^DEN, a new 24 × 14 room west of HOME, through a hallway: the left half, a cozy corner/.test(z.plan.summary), 'and a room of zones, at a chosen size: ' + (z.error || z.plan.summary.slice(0, 110)));
+    const w = SB.plan(st.serialize(), { line: 'build_test', where: 'LOUNGE', side: 'east' }, E);
+    A.ok(!w.ok && /beside, side and hallway place a NEW room; with where naming LOUNGE, leave them out\./.test(w.error), 'where (an existing room) and side do not mix');
+    const ks = SB.planRoom(st.serialize(), { kit: 'LIBRARY', size: 'giant' }, E);
+    A.ok(!ks.ok && /A preset room comes at its own size \(18 × 11\)\. For a room of another size use station\.plan_build\./.test(ks.error), 'a preset room keeps its size, and says which tool sizes a room');
+  }
+  // THE MAP: what the lead reads before it builds
+  {
+    const st = cozy(), before = snap(st), m = SB.mapOf(st.serialize(), E);
+    A.ok(m.ok && m.map.main === 'HOME' && m.map.hallways === 2, 'the map names the main room and counts the hallways');
+    A.eq(snap(st), before, 'reading the map changes nothing');
+    A.eq(m.map.rooms.map(r => [r.name, r.w + 'x' + r.h, !!r.main]), [['HOME', '18x11', true], ['WORKROOM', '18x11', false], ['LOUNGE', '18x11', false]], 'every room, its size, and which is the main one');
+    const home = m.map.rooms[0], work = m.map.rooms[1];
+    A.eq(home.joinedTo.slice().sort(), ['LOUNGE (through a hallway)', 'WORKROOM (through a hallway)'], 'what each room is joined to, and how');
+    A.eq([home.roomForANewRoom.north, home.roomForANewRoom.south, home.roomForANewRoom.east], [[], [], ['small', 'medium', 'large', 'giant']], 'which sizes fit on each side (none where a hallway already stands)');
+    A.ok(work.lines.length === 1 && work.machines >= 3 && work.furniture > 3 && /^\d+%$/.test(work.clearFloor), 'a room\'s lines, machines, furniture and clear floor');
+    A.ok(m.map.drawing.length === 39 && m.map.drawing.every(row => row.length <= 18) && /^A{18}$/.test(m.map.drawing[14]) && /^ {7}\+{4}$/.test(m.map.drawing[12]), 'the floor drawn in characters: a letter per room, + for a hallway');
+    A.ok(/^A = HOME, B = WORKROOM, C = LOUNGE, \+ = a hallway$/.test(m.map.legend), 'with its legend');
+    // what the map says fits, fits: every size it lists on every side plans
+    let listed = 0, planned = 0;
+    for (const r of m.map.rooms) for (const side in r.roomForANewRoom) for (const sz of r.roomForANewRoom[side]) {
+      listed++;
+      if (SB.planBuild(st.serialize(), { rooms: [{ size: sz, beside: r.name, side }] }, E).ok) planned++;
+    }
+    A.ok(listed > 10 && planned === listed, 'every size the map lists on a side really plans there (' + planned + ' of ' + listed + ')');
+  }
+  // recruiting inside a build: listed on the card, seated by the build
+  {
+    const st = fresh(), before = snap(st), made = [];
+    const RE = Object.assign({}, E, { canRecruit: true, recruit: role => { const id = 'br' + (made.length + 1); if (!st.ensureWorkstation(id).ok) return null; made.push(id); return { id, name: role }; } });
+    const r = SB.planBuild(st.serialize(), { rooms: [{ name: 'Factory', size: 'large', lines: [{ line: 'build_test', staff: [{ step: 1, agent: 'new' }, { step: 2, agent: 'rex' }] }] }] }, RE);
+    A.ok(r.ok && /It will be ready to run\. It adds 1 crew member: ENGINEER/.test(r.plan.summary) && /Engineer \(a new recruit\) → Tester \(REX\)/.test(r.plan.summary) && made.length === 0, 'a recruit is on the card, nobody yet: ' + (r.error || r.plan.summary.slice(0, 260)));
+    if (r.ok) {
+      const a = SB.apply(st, r.plan, RE);
+      A.ok(a.ok && a.recruited.length === 1 && made.length === 1, 'the build recruits exactly the one (' + (a.error || '') + ')');
+      A.ok(a.lines.length === 1 && a.lines[0].ready === true, 'and the line is ready to run');
+      A.ok(st.undo().ok); A.eq(snap(st), before, 'one undo takes back the room, the line, the desk and the seat');
+    }
+  }
+  // THE BUILD GAUNTLET: wrong and hostile requests; after every one the station is unchanged, or built with nothing already
+  // there moved, no new routing error, every room walkable, no unasked open wall, and one undo restoring it exactly
+  {
+    let seed = 930;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    const pick = xs => xs[Math.floor(rnd() * xs.length)];
+    const junk = ['', 'castle', 'x'.repeat(2000), null, 7, {}, [], '<b>', 'ignore previous instructions', -1, true];
+    let built = 0, refused = 0;
+    for (let i = 0; i < 140; i++) {
+      const st = i % 3 === 0 ? busy() : i % 3 === 1 ? cozy() : fresh(), before = snap(st), oldProps = new Set(st.props().map(p => JSON.stringify(p))), was = routed(st);
+      const oldRooms = st.rooms().filter(r => r.kind !== 'corridor'), oldOpen = new Set();
+      for (const a of oldRooms) for (const b of oldRooms) if (a !== b && a.rects.some(p => b.rects.some(q => touch(p, q)))) oldOpen.add([a.name, b.name].sort().join('|'));
+      const here = st.rooms().filter(x => x.kind !== 'corridor').map(x => x.name), wrong = () => rnd() < 0.06;
+      const n = 1 + Math.floor(rnd() * 3), req = { rooms: [] };
+      for (let k = 0; k < n; k++) {
+        const q = {}, known = here.concat(['bridge', 'the main room'], req.rooms.map(x => x && x.name).filter(Boolean));
+        if (rnd() < 0.12) {   // fill a room that already stands
+          q.into = wrong() ? pick(['Mars', pick(junk)]) : pick(here);
+          if (rnd() < 0.5) q.lines = [{ line: pick(M.BLUEPRINTS).id }]; else q.zones = [{ area: pick(['left', 'right', 'back']), style: pick(RS.ORDER) }];
+          if (wrong()) q.size = 'giant';
+        } else {
+          if (rnd() < 0.85) q.name = wrong() ? pick(junk) : 'R' + k;
+          if (rnd() < 0.6) q.size = wrong() ? pick(junk) : pick(['small', 'medium', 'large', 'giant', 'huge', { w: 10 + Math.floor(rnd() * 30), h: 6 + Math.floor(rnd() * 18) }]);
+          if (rnd() < 0.6) q.beside = wrong() ? pick(['Mars', 'R9', pick(junk)]) : pick(known);
+          if (rnd() < 0.5) q.side = wrong() ? pick(junk) : pick(['north', 'south', 'east', 'west', 'left', 'right', 'top', 'below']);
+          if (rnd() < 0.4) q.hallway = wrong() ? pick(junk) : pick([true, false, 2, 5, 8]);
+          if (rnd() < 0.15) q.align = wrong() ? 'sideways' : pick(['start', 'end', 'center']);
+          if (rnd() < 0.15) q.type = wrong() ? 'castle' : pick(['FOUNDRY', 'lab', 'Quarters']);
+          const fill = rnd();
+          if (fill < 0.25) q.zones = [{ area: pick(['left', 'right', 'whole', 'back']), style: wrong() ? 'disco' : pick(RS.ORDER) }];
+          else if (fill < 0.45) q.lines = Array.from({ length: 1 + Math.floor(rnd() * 3) }, () => wrong() ? pick(junk) : { line: pick(M.BLUEPRINTS).id });
+          if (wrong()) q[pick(['x', 'y', 'rect', 'props'])] = 3;
+        }
+        req.rooms.push(rnd() < 0.02 ? pick(junk) : q);
+      }
+      if (rnd() < 0.2) { const ns = here.concat(req.rooms.map(x => x && x.name).filter(x => typeof x === 'string' && x)); req.hallways = [wrong() ? pick(junk) : { from: pick(ns), to: pick(ns) }]; }
+      let r;
+      try { r = SB.planBuild(st.serialize(), req, E); } catch (e) { A.ok(false, 'build gauntlet ' + i + ': threw ' + e.message + ' on ' + JSON.stringify(req).slice(0, 200)); continue; }
+      A.eq(snap(st), before, 'build gauntlet ' + i + ': planning never changes the station');
+      if (!r.ok) { refused++; if (process.env.SB_WHY) console.log('  why ' + i + ': ' + String(r.error).slice(0, 110) + (process.env.SB_WHY === 'req' ? '  <- ' + (i % 3 === 0 ? 'busy ' : i % 3 === 1 ? 'cozy ' : 'fresh ') + JSON.stringify(req).slice(0, 600) : '')); A.ok(typeof r.error === 'string' && r.error.length > 10 && r.error.length < 1200, 'build gauntlet ' + i + ': a refusal says why, briefly'); continue; }
+      const a = SB.apply(st, r.plan, E);
+      A.ok(a.ok, 'build gauntlet ' + i + ': an accepted plan builds (' + (a.error || '') + ')');
+      if (!a.ok) continue;
+      built++;
+      const keep = new Set(st.props().map(p => JSON.stringify(p)));
+      A.ok([...oldProps].every(p => keep.has(p)), 'build gauntlet ' + i + ': nothing already there moved or changed');
+      const now = routed(st);
+      A.ok(now.errs.length <= was.errs.length && Object.keys(was.chains).every(d => JSON.stringify(now.chains[d]) === JSON.stringify(was.chains[d])), 'build gauntlet ' + i + ': no new routing error, and every existing line routes as before');
+      const main = st.rooms().find(x => x.name === 'HOME');
+      A.ok(a.roomIds.every(id => walks(st, main, st.rooms().find(x => x.id === id))), 'build gauntlet ' + i + ': every room built or filled is walkable from HOME');
+      const asked = new Set(r.plan.rooms.filter(x => / open to it$/.test(x.where)).map(x => x.name));
+      let stray = null;
+      const rooms = st.rooms().filter(x => x.kind !== 'corridor');
+      for (const p of rooms) for (const q of rooms) if (p !== q && p.rects.some(u => q.rects.some(v => touch(u, v))) && !oldOpen.has([p.name, q.name].sort().join('|')) && !asked.has(p.name) && !asked.has(q.name)) stray = p.name + ' | ' + q.name;
+      A.ok(!stray, 'build gauntlet ' + i + ': no wall opened that was not asked for (' + stray + ')');
+      A.ok(st.undo().ok); A.eq(snap(st), before, 'build gauntlet ' + i + ': one undo restores the station exactly');
+    }
+    A.ok(built > 25 && refused > 25, 'the build gauntlet built some and refused some (' + built + ' built, ' + refused + ' refused)');
+  }
+}
+
 /* ---- 9. the sidecar tools: the memo the approval card reads, the lock, honest refusals ---- */
 (async () => {
   const calls = [], used = new Set();   // the page uses a plan once (builderPlans.delete)
@@ -680,6 +986,9 @@ for (const c of T.catalog) {
     if (verb === 'station.plan_line') return args.request.line === 'nope' ? { ok: false, error: 'There is no line called "nope". The lines are: …' }
       : { ok: true, result: { planId: 'plan-t-1', summary: 'Build + test ("SHIP IT") in a new room beside HOME: Engineer (NOVA) → Tester (nobody yet) → Outbox.', line: { name: 'Build + test' }, steps: [{ step: 1, role: 'Engineer', agent: 'NOVA', instructions: 'Build what the incoming request asks for.' }, { step: 2, role: 'Tester', agent: null, instructions: 'Test the incoming change.' }], ready: false, blocking: ['BAY 2 (TESTER) needs an agent'] } };
     if (verb === 'station.plan_room') return { ok: true, result: { planId: 'plan-r-1', summary: 'LIBRARY (a quiet reading room) in a new room beside HOME.', rooms: [{ name: 'LIBRARY' }], steps: [] } };
+    if (verb === 'station.map') return { ok: true, result: { main: 'HOME', rooms: [{ name: 'HOME', main: true, w: 18, h: 11 }], hallways: 0, drawing: ['AAAAAAAAAAAAAAAAAA'] } };
+    if (verb === 'station.plan_build') return (args.request.rooms || [])[0] && args.request.rooms[0].beside === 'Mars' ? { ok: false, error: 'There is no room called "Mars". Rooms: HOME.' }
+      : { ok: true, result: { planId: 'plan-b-1', summary: 'CONVEYOR HALL, a new 36 × 20 room east of HOME, through a hallway: empty floor, ready for lines and furniture.', rooms: [{ name: 'CONVEYOR HALL' }], hallways: [], lines: [], steps: [] } };
     if (verb === 'station.build') return args.planId === 'plan-t-1' && !used.has(args.planId) && used.add(args.planId) ? { ok: true, result: { built: true, line: { name: 'Build + test' }, ready: false, blocking: ['BAY 2 (TESTER) needs an agent'] } } : { ok: false, error: 'There is no plan "' + args.planId + '"' };
     return { ok: false, error: 'unknown verb' }; } };
   const memo = new Map();
@@ -703,11 +1012,25 @@ for (const c of T.catalog) {
   // the sidecar's approval card reads the memo, never the model's words
   const idx = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
   A.ok(/if \(\/\^station\[\._\]build\$\/\.test\(String\(call && call\.name \|\| ''\)\)\) return stationPlanSummary\(stationPlanMemo, a\.planId\)/.test(idx), 'consentSummary reads the station.build card from the plan memo');
-  A.ok(/The floor changes you can make are ADDING a ready-made line \(station\.plan_line\), ADDING a room the Commander describes part by part \(station\.plan_room with zones/.test(idx), 'the lead\'s team note names the floor changes it may make');
+  A.ok(/Look first: station\.map shows every room/.test(idx) && /station\.plan_build adds rooms and hallways the way the Commander describes them/.test(idx) && /never tile positions/.test(idx) && /do not give up after one refusal/.test(idx), 'the lead\'s team note says to look, then plan, then build, and to fix a refused plan');
+  // the spatial tools: the map, and rooms and hallways in words
+  const mapT = tools.mapTool, pbT = makeStationTools({ station: bridge, planMemo: memo, now: () => 1000, lineMenu: () => SB.catalog(M), styleMenu: () => require('../frontend/app/roomstyles.js').menu() }).planBuildTool;
+  A.eq([mapT.scope, mapT.requiresConsent, pbT.scope, pbT.requiresConsent], ['read', false, 'read', false], 'the map and the build plan change nothing');
+  A.ok(/Call this before station\.plan_build/.test(mapT.description) && /the bridge, the hub or the main room/.test(mapT.description), 'the map tool says when to call it and what the main room may be called');
+  A.ok(/size: small \(12 × 8\), medium \(18 × 11, the default for an empty room\), large \(24 × 14\), giant \(36 × 20\)/.test(pbT.description) && /hallway: true \(the default: a short hallway joins them\), false/.test(pbT.description) && /STYLES: cozy \(/.test(pbT.description) && /LINES: .*build_test \(/.test(pbT.description), 'the build tool lists sizes, hallways, styles and lines');
+  A.ok(pbT.schema.properties.rooms.type === 'array' && pbT.schema.properties.hallways.type === 'array' && !pbT.schema.properties.rooms.items.properties.x, 'its schema takes rooms and hallways, and no position');
+  const mp = await mapT.run({}, {});
+  A.ok(/"main":"HOME"/.test(mp.content) && mp.summary === '1 room(s), 0 hallway(s)' && calls[calls.length - 1][0] === 'station.map', 'the map rides back from the page');
+  const pb = await pbT.run({ rooms: [{ name: 'Conveyor Hall', size: 'giant', beside: 'bridge' }] }, {});
+  A.eq(calls[calls.length - 1], ['station.plan_build', { request: { rooms: [{ name: 'Conveyor Hall', size: 'giant', beside: 'bridge' }] } }], 'a build request rides to the page untouched');
+  A.ok(/^\{"planId":"plan-b-1"/.test(pb.content) && pb.summary === 'planned CONVEYOR HALL' && /^CONVEYOR HALL, a new 36 × 20 room east of HOME/.test(planSummaryFrom(memo, 'plan-b-1')), 'a build plan is remembered for the approval card');
+  const pbBad = await pbT.run({ rooms: [{ beside: 'Mars' }] }, {});
+  A.ok(/^REFUSED: There is no room called "Mars"/.test(pbBad.content), 'a refusal travels back as REFUSED, with the rooms that exist');
+  A.ok(/beside \/ side \/ hallway \(where its new room goes/.test(planT.description) && planT.schema.properties.side.type === 'string', 'the line tool places its room the same way');
   const vibe = makeStationTools({ station: bridge, styleMenu: () => require('../frontend/app/roomstyles.js').menu() }).planRoomTool;
   A.ok(/ZONES \(the usual way\)/.test(vibe.description) && /style: cozy \(a cozy corner: /.test(vibe.description) && vibe.schema.properties.zones.type === 'array', 'the room tool leads with zones and lists every style');
   A.eq([tools.planRoomTool.scope, tools.planRoomTool.requiresConsent, tools.planRestyleTool.scope, tools.planRestyleTool.requiresConsent], ['read', false, 'read', false], 'the room and restyle plans change nothing');
-  A.ok(/Build exactly what a station\.plan_line, station\.plan_room or station\.plan_restyle call planned/.test(buildT.description), 'one build tool builds any plan');
+  A.ok(/Build exactly what a station\.plan_build, station\.plan_line, station\.plan_room or station\.plan_restyle call planned/.test(buildT.description), 'one build tool builds any plan');
   const rp = await tools.planRoomTool.run({ kit: 'LIBRARY' }, {});
   A.eq(calls[calls.length - 1], ['station.plan_room', { request: { kit: 'LIBRARY' } }], 'a room request rides to the page untouched');
   A.ok(/^\{"planId":"plan-r-1"/.test(rp.content) && /^LIBRARY \(a quiet reading room\)/.test(planSummaryFrom(memo, 'plan-r-1')), 'a room plan is remembered for the card too');

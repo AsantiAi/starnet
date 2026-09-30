@@ -48,10 +48,11 @@ const stopChild = (child, graceful = false) => new Promise(resolve => {
   if (graceful) killTimer = setTimeout(kill, 3000); else kill();
 });
 
-// the mock model: a lead that PLANS (mock.planTool with mock.planArgs), then BUILDS the planId it was given, then answers.
+// the mock model: a lead that (with mock.lookFirst) reads station_map, then PLANS (mock.planTool with mock.planArgs), then
+// BUILDS the planId it was given, then answers.
 // A refusal (no planId in the tool result) ends the run in words — the way a real model reads REFUSED.
 function startMock() {
-  const mock = { requests: [], results: [], planTool: 'station_plan_line', planArgs: {} };
+  const mock = { requests: [], results: [], planTool: 'station_plan_line', planArgs: {}, lookFirst: false };
   const server = http.createServer((req, res) => {
     if (req.url.indexOf('/models') >= 0) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -73,12 +74,14 @@ function startMock() {
         send({ choices: [{ delta: { content: text } }] });
         send({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 12, completion_tokens: 6, total_tokens: 18 } });
       };
-      if (offered && !answered.length) call(mock.planTool, mock.planArgs);
-      else if (offered && answered.length === 1) {
-        mock.results.push(answered[0]);
-        let planId = null; try { planId = JSON.parse(answered[0]).planId; } catch (_) { planId = null; }
+      const seq = mock.lookFirst ? 1 : 0;   // tool calls before the plan
+      if (offered && answered.length < seq) call('station_map', {});
+      else if (offered && answered.length === seq) { if (seq) mock.results.push(answered[0]); call(mock.planTool, mock.planArgs); }
+      else if (offered && answered.length === seq + 1) {
+        mock.results.push(answered[seq]);
+        let planId = null; try { planId = JSON.parse(answered[seq]).planId; } catch (_) { planId = null; }
         if (planId) call('station_build', { planId }); else say('I could not plan that.');
-      } else { for (const t of answered.slice(1)) mock.results.push(t); say('Done.'); }
+      } else { for (const t of answered.slice(seq + 1)) mock.results.push(t); say('Done.'); }
       res.write('data: [DONE]\n\n'); res.end();
     });
   });
@@ -132,10 +135,10 @@ try {
   check('the lead run completes', run1.status === 200 && !!end1 && end1.payload.reason === 'done', JSON.stringify(end1 && end1.payload && end1.payload.reason));
   const leadReq = mock.requests.find(r => JSON.stringify(r.messages || []).indexOf('builds features and tests them') >= 0) || {};
   const offeredNames = JSON.stringify(leadReq.tools || []);
-  check('the lead is offered the planners and station_build', ['station_plan_line', 'station_plan_room', 'station_plan_restyle', 'station_build'].every(n => offeredNames.indexOf('"' + n + '"') >= 0));
+  check('the lead is offered the map, the planners and station_build', ['station_map', 'station_plan_build', 'station_plan_line', 'station_plan_room', 'station_plan_restyle', 'station_build'].every(n => offeredNames.indexOf('"' + n + '"') >= 0));
   let PL = null; try { PL = JSON.parse(mock.results[0] || ''); } catch (_) { PL = null; }
   check('the plan came back from a copy of the station: nothing built yet', !!PL && /^plan-/.test(PL.planId) && /Nothing has been built yet/.test(PL.next), (mock.results[0] || '').slice(0, 200));
-  check('the plan speaks plainly and says it will be ready', !!PL && /^Build \+ test \("SHIP IT"\) in a new room beside HOME: Engineer \(.+\) → Tester \(.+\) → Outbox · daily cap \$5 · up to 3 review tries\. It will be ready to run\.$/.test(PL.summary) && PL.ready === true, PL && PL.summary);
+  check('the plan speaks plainly and says it will be ready', !!PL && /^Build \+ test \("SHIP IT"\) in a new room (north|south|east|west) of HOME, through a hallway: Engineer \(.+\) → Tester \(.+\) → Outbox · daily cap \$5 · up to 3 review tries\. It will be ready to run\.$/.test(PL.summary) && PL.ready === true, PL && PL.summary);
   let BL = null; try { BL = JSON.parse(mock.results[1] || ''); } catch (_) { BL = null; }
   check('the build answered: built, ready to run, and how to undo it', !!BL && BL.built === true && BL.ready === true && /one UNDO/.test(BL.undo), (mock.results[1] || '').slice(0, 200));
 
@@ -177,7 +180,7 @@ try {
   const run3 = await leadRun(base, token, 'add a lounge');
   check('the room run completes', run3.status === 200);
   let RP = null, RB = null; try { RP = JSON.parse(mock.results[at] || ''); RB = JSON.parse(mock.results[at + 1] || ''); } catch (_) {}
-  check('the room plan speaks plainly', !!RP && RP.summary.indexOf(kit.name + ' (') === 0 && / in a new room beside HOME/.test(RP.summary) && /Nothing has been built yet/.test(RP.next), (mock.results[at] || '').slice(0, 240));
+  check('the room plan speaks plainly', !!RP && RP.summary.indexOf(kit.name + ' (') === 0 && / in a new room (north|south|east|west) of HOME, through a hallway/.test(RP.summary) && /Nothing has been built yet/.test(RP.next), (mock.results[at] || '').slice(0, 240));
   check('the room build answered with the room and how to undo it', !!RB && RB.ok !== false && (RB.rooms || []).some(r => r.name === kit.name) && /one UNDO/.test(RB.undo || ''), (mock.results[at + 1] || '').slice(0, 240));
   const lib = await evalJS(cdp, `(() => { const st = App.station(), r = st.rooms().find(x => x.name === ${JSON.stringify(kit.name)}); if (!r) return null;
     return { types: st.props().filter(p => st.roomAt(p.x, p.y) === r.id).map(p => p.t).sort(), style: r.floorStyle }; })()`);
@@ -244,7 +247,7 @@ try {
   const run7 = await leadRun(base, token, 'make me a new room called den: the left side cozy, the right side a line that builds and tests code');
   check('the vibe run completes', run7.status === 200);
   let VP = null, VB = null; try { VP = JSON.parse(mock.results[at] || ''); VB = JSON.parse(mock.results[at + 1] || ''); } catch (_) {}
-  check('the plan says what goes in each part of the room', !!VP && /^DEN, a new \d+ × \d+ room beside HOME: the left half, a cozy corner \(.+\); the right half, Build \+ test \("BUILD \+ TEST"\): Engineer \(.+\) → Tester \(.+\) → Outbox/.test(VP.summary) && /It will be ready to run\./.test(VP.summary), (mock.results[at] || '').slice(0, 400));
+  check('the plan says what goes in each part of the room', !!VP && /^DEN, a new \d+ × \d+ room (north|south|east|west) of HOME, through a hallway: the left half, a cozy corner \(.+\); the right half, Build \+ test \("BUILD \+ TEST"\): Engineer \(.+\) → Tester \(.+\) → Outbox/.test(VP.summary) && /It will be ready to run\./.test(VP.summary), (mock.results[at] || '').slice(0, 400));
   check('the build answered built, one undo', !!VB && VB.built === true && /one UNDO/.test(VB.undo || ''), (mock.results[at + 1] || '').slice(0, 200));
   // the zones split where their contents need (not at the middle): every piece of the cozy corner stands left of every machine
   const den = await evalJS(cdp, `(() => { const st = App.station(), r = st.rooms().find(x => x.name === 'DEN'); if (!r) return null; const hero = App.heroId();
@@ -273,7 +276,50 @@ try {
   const undone8 = await evalJS(cdp, `(() => { const st = App.station(); const u = st.undo(); return { ok: u && u.ok, rooms: st.rooms().filter(r => r.kind !== 'corridor').map(r => r.name) }; })()`);
   check('one UNDO removes the described line and its room', undone8.ok && JSON.stringify(undone8.rooms) === JSON.stringify(pre8), JSON.stringify(undone8));
 
-  check('the mock carried every model call (no real provider)', mock.requests.length >= 19, String(mock.requests.length));
+  /* 13. THE ASK THAT FAILED LIVE (2026-09-30): "build new rooms connected to the bridge room, and a giant conveyor system
+     room where we will fill it with workflows". The lead looks (station_map), plans three rooms in ONE plan, builds. */
+  mock.lookFirst = true; mock.planTool = 'station_plan_build';
+  mock.planArgs = { rooms: [
+    { name: 'Ops Room', beside: 'bridge', side: 'north' },
+    { name: 'Rec Room', beside: 'the bridge room', side: 'west', zones: [{ area: 'left', style: 'games' }, { area: 'right', style: 'cafe' }] },
+    { name: 'Conveyor Hall', size: 'giant', beside: 'bridge', side: 'east', type: 'FOUNDRY' }] };
+  at = mock.results.length;
+  const snap9 = `(() => { const st = App.station(); return { rooms: st.rooms().filter(r => r.kind !== 'corridor').map(r => r.name), halls: st.rooms().filter(r => r.kind === 'corridor').length, props: st.props().length }; })()`;
+  const pre9 = await evalJS(cdp, snap9);
+  const run9 = await leadRun(base, token, 'I want you to build new rooms connected to the bridge room, I want you to also add a giant conveyor system room where we will fill it with workflows we will run');
+  check('the build run completes', run9.status === 200);
+  let MP = null, BP = null, BB = null; try { MP = JSON.parse(mock.results[at] || ''); BP = JSON.parse(mock.results[at + 1] || ''); BB = JSON.parse(mock.results[at + 2] || ''); } catch (_) {}
+  check('the lead read the map first: the rooms, the main one, what fits where, the floor drawn', !!MP && MP.main === 'HOME' && Array.isArray(MP.drawing) && MP.drawing.length > 5 && MP.rooms.some(r => r.main && r.roomForANewRoom && r.roomForANewRoom.east.indexOf('giant') >= 0), (mock.results[at] || '').slice(0, 300));
+  check('one plan holds all three rooms, each where it was asked, joined to the bridge by a hallway', !!BP && /^OPS ROOM, a new 18 × 11 room north of HOME, through a hallway: empty floor, ready for lines and furniture\. REC ROOM, a new \d+ × \d+ room west of HOME, through a hallway: the left half, a games corner \(.+\); the right half, a café corner \(.+\)\. CONVEYOR HALL, a new 36 × 20 room east of HOME, through a hallway: empty floor, ready for lines and furniture\./.test(BP.summary), (mock.results[at + 1] || '').slice(0, 500));
+  check('the build answered built, with the three rooms and how to undo it', !!BB && BB.built === true && (BB.rooms || []).length === 3 && /one UNDO/.test(BB.undo || ''), (mock.results[at + 2] || '').slice(0, 300));
+  const built9 = await evalJS(cdp, `(() => { const st = App.station(), g = st.projectGeometry(), ox = g.origin.tx, oy = g.origin.ty, by = n => st.rooms().find(r => r.name === n);
+    const free = r => { const R = r.rects[0]; for (let y = R.y1; y <= R.y2; y++) for (let x = R.x1; x <= R.x2; x++) if (g.walkable(x - ox, y - oy)) return [x - ox, y - oy]; return null; };
+    const home = by('HOME'), h = home.rects[0], out = { halls: st.rooms().filter(r => r.kind === 'corridor').length, rooms: {} };
+    for (const n of ['OPS ROOM', 'REC ROOM', 'CONVEYOR HALL']) { const r = by(n); if (!r) { out.rooms[n] = null; continue; } const R = r.rects[0], a = free(home), b = free(r);
+      out.rooms[n] = { w: R.x2 - R.x1 + 1, h: R.y2 - R.y1 + 1, kind: r.kind, side: R.y2 < h.y1 ? 'north' : R.x2 < h.x1 ? 'west' : R.x1 > h.x2 ? 'east' : 'south', walk: !!(a && b && g.path(a[0], a[1], b[0], b[1])), props: st.props().filter(p => st.roomAt(p.x, p.y) === r.id).length }; }
+    return out; })()`);
+  const R9 = built9.rooms;
+  check('the floor has them: north, west and east of the bridge, each through its own hallway', built9.halls === pre9.halls + 3 && !!R9['OPS ROOM'] && R9['OPS ROOM'].side === 'north' && !!R9['REC ROOM'] && R9['REC ROOM'].side === 'west' && !!R9['CONVEYOR HALL'] && R9['CONVEYOR HALL'].side === 'east', JSON.stringify(built9));
+  check('the conveyor hall is giant, a foundry, and empty; the rec room is furnished', !!R9['CONVEYOR HALL'] && R9['CONVEYOR HALL'].w === 36 && R9['CONVEYOR HALL'].h === 20 && R9['CONVEYOR HALL'].kind === 'factory' && R9['CONVEYOR HALL'].props === 0 && R9['REC ROOM'].props > 8, JSON.stringify(R9));
+  check('the crew can walk from the bridge into every one', Object.values(R9).every(r => r && r.walk), JSON.stringify(R9));
+
+  // 14. "…fill it with workflows": two lines into the hall that now exists, in one plan
+  mock.planArgs = { rooms: [{ into: 'Conveyor Hall', lines: [{ line: 'build_test', staff: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'lead' }] }, { shape: ['RESEARCHER', { together: ['WRITER', 'ANALYST'] }, 'REVIEWER'], name: 'Digest' }] }] };
+  at = mock.results.length;
+  const run10 = await leadRun(base, token, 'now put a build and test line and a digest line in the conveyor hall');
+  check('the fill run completes', run10.status === 200);
+  let FP = null, FB = null; try { FP = JSON.parse(mock.results[at + 1] || ''); FB = JSON.parse(mock.results[at + 2] || ''); } catch (_) {}
+  check('the plan lays both lines in the hall that stands there', !!FP && /^CONVEYOR HALL \(36 × 20\): Build \+ test \("BUILD \+ TEST"\): .+; a custom line \("Digest"\): /.test(FP.summary) && (FP.lines || []).length === 2, (mock.results[at + 1] || '').slice(0, 400));
+  const lines10 = await evalJS(cdp, `(() => { const st = App.station(), r = st.rooms().find(x => x.name === 'CONVEYOR HALL'), inRoom = st.props().filter(p => st.roomAt(p.x, p.y) === r.id);
+    const comps = Pipeline.lineComponents(st.projectGeometry()), ids = new Set(inRoom.map(p => p.id));
+    return { intakes: inRoom.filter(p => p.t === 'intake').map(p => p.label).sort(), bays: inRoom.filter(p => p.t === 'bay').length, rooms: st.rooms().filter(x => x.kind !== 'corridor').length }; })()`);
+  check('both lines stand in the hall, as two lines, and no room was added', !!FB && FB.built === true && (FB.lines || []).length === 2 && new Set(FB.lines.map(l => l.lineId)).size === 2 && JSON.stringify(lines10.intakes) === JSON.stringify(['BUILD + TEST', 'Digest']) && lines10.bays === 6 && lines10.rooms === pre9.rooms.length + 3, JSON.stringify(lines10) + ' ' + (mock.results[at + 2] || '').slice(0, 300));
+  if (process.env.SB_SHOT) { try { await sleep(2500); const shot = await cdp.send('Page.captureScreenshot', { format: 'png' }); (await import('node:fs')).writeFileSync(process.env.SB_SHOT, Buffer.from(shot.data, 'base64')); } catch (e) { console.log('(no screenshot: ' + e.message + ')'); } }
+  const undone9 = await evalJS(cdp, `(() => { const st = App.station(); const a = st.undo(), b = st.undo(); return { ok: a && a.ok && b && b.ok, now: ${snap9} }; })()`);
+  check('two UNDOs take back the lines, then every room and hallway', undone9.ok && JSON.stringify(undone9.now) === JSON.stringify(pre9), JSON.stringify(undone9));
+  mock.lookFirst = false;
+
+  check('the mock carried every model call (no real provider)', mock.requests.length >= 25, String(mock.requests.length));
   check('no page exceptions', diagnostics.exceptions.length === 0, JSON.stringify(diagnostics.exceptions.slice(0, 3)));
 } catch (error) {
   console.log('FAIL harness :: ' + (error && error.stack || error));

@@ -20,7 +20,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const MENU = ['line', 'shape', 'purpose', 'where', 'name', 'steps', 'dailyCap', 'tries'];
+  const MENU = ['line', 'shape', 'purpose', 'where', 'beside', 'side', 'hallway', 'name', 'steps', 'dailyCap', 'tries'];
   const STEP_KEYS = ['step', 'role', 'instructions', 'agent'];
   const LEAD_WORDS = { lead: 1, me: 1, you: 1, yourself: 1, overseer: 1, hero: 1 };
   // "recruit someone for this step": the build summons that role's specialist (Build's own summonForRole) and seats it
@@ -88,11 +88,17 @@
   }
   const nameOf = (env, id) => { const a = (env.crew || []).find(x => x && x.id === id); return a ? (a.name || a.id) : id; };
 
-  // what the floor routes, so a build can prove it changed no existing line
+  /* what the floor routes, so a build can prove it changed no existing line. The routing plan speaks in the geometry's
+     LOCAL tiles (counted from the station's top-left corner), and a room added north or west of everything moves that
+     corner: so every tile here is put back into WORLD tiles, or such a room would read as "every line re-routed". */
   function floorFacts(st, P) {
     const geo = st.projectGeometry(), plan = P.compileRoutingPlan(geo), L = P.dockLayer ? P.dockLayer(plan) : {};
-    const errs = new Set((plan.errors || []).filter(e => e && !e.warn).map(e => e.code + ':' + (e.propId || '') + ':' + (e.tile ? e.tile.x + ',' + e.tile.y : '')));
-    return { geo, plan, errs, chains: L.dockChains || {}, reach: L.reachDock || plan.reachDock || {} };
+    const ox = (geo.origin && geo.origin.tx) || 0, oy = (geo.origin && geo.origin.ty) || 0;
+    const world = t => (t && isFinite(t.x) && isFinite(t.y)) ? { x: t.x + ox, y: t.y + oy } : t;
+    const errs = new Set((plan.errors || []).filter(e => e && !e.warn).map(e => { const t = world(e.tile); return e.code + ':' + (e.propId || '') + ':' + (t ? t.x + ',' + t.y : ''); }));
+    const chains = {}, raw = L.dockChains || {};
+    for (const d in raw) chains[d] = raw[d] && raw[d].tile ? Object.assign({}, raw[d], { tile: world(raw[d].tile) }) : raw[d];
+    return { geo, plan, errs, chains, reach: L.reachDock || plan.reachDock || {} };
   }
   // where a walk starts: the walkable tile nearest the middle of the spawn room (a desk may stand on the middle itself)
   function spawnTile(doc, g) {
@@ -134,7 +140,7 @@
      room's floor, material or name). Every setter's answer is checked; one failure fails the whole edit. */
   function buildInto(st, spec, WM) {
     if (spec && spec.kind === 'restyle') return restyleInto(st, spec);
-    if (spec && spec.kind === 'design') return buildDesign(st, spec, WM);
+    if (spec && spec.kind === 'build') return buildParts(st, spec, WM);
     if (spec && spec.kind === 'swap') { const r = st.replaceLayout(spec.layout); return r && r.ok ? { ok: true, ids: [] } : refuse('the preset could not be applied' + (r && r.msg ? ' (' + r.msg + ')' : '')); }
     if (spec && spec.kind === 'rooms') {
       const ids = [], parts = [];
@@ -146,6 +152,7 @@
   function buildKit(st, part, WM) {
     const ids = [];
     let roomId = part.roomId || null;
+    if (part.hall) { const h = st.placeHallway({ rect: part.hall }); if (!h || !h.ok) return refuse('the hallway could not be laid there' + (h && h.msg ? ' (' + h.msg + ')' : '')); }
     if (part.room) {
       const before = new Set(st.rooms().map(r => r.id));
       const r = st.addRoom({ kind: part.room.kind, name: part.room.name, floorStyle: part.room.floorStyle, floorMat: part.room.floorMat, rect: part.room.rect });
@@ -174,6 +181,7 @@
   function buildLine(st, spec, WM) {
     const bp = (WM.BLUEPRINTS || []).find(x => x.id === spec.bpId);
     if (!bp) return refuse('unknown line');
+    if (spec.hall) { const h = st.placeHallway({ rect: spec.hall }); if (!h || !h.ok) return refuse('the hallway could not be laid there' + (h && h.msg ? ' (' + h.msg + ')' : '')); }
     if (spec.room) {
       const r = st.addRoom({ kind: spec.room.kind, name: spec.room.name, rect: spec.room.rect });
       if (!r || !r.ok) return refuse('the room could not be added there' + (r && r.msg ? ' (' + r.msg + ')' : ''));
@@ -341,18 +349,28 @@
     const base = { bpId: bp.id, opts, label: hasIntake ? label : '' };
     let placed = null, spec = null;
     if (!target) {
+      // a room of its own: beside the asked room (the main room by default), on the asked side or the one that keeps the
+      // station compact, joined by a hallway (the spatial builder's own placement)
+      const tq = req.beside != null ? roomNamed(live, req.beside) : { ok: true, room: null }; if (!tq.ok) return tq;
+      const sd = sideOf(req.side); if (!sd.ok) return sd;
+      const hl = hallOf(req.hallway); if (!hl.ok) return hl;
+      let none = null;
       for (const m of [1, 2]) {
         const Wd = Math.max(bp.w + 2 * m, MIN_W), Hd = Math.max(bp.h + 2 * m, MIN_H);
-        for (const rect of live.roomSpots(Wd, Hd, 'hab', 24)) {
-          const s = Object.assign({}, base, { room: { kind: 'hab', name: label.toUpperCase().slice(0, 24), rect },
+        const pl = roomPlacements(live, tq.room, Wd, Hd, { side: sd.side, len: hl.len, align: null, kind: 'hab', hangs: hangsOf(env) });
+        if (!pl.ok) { none = none || pl; continue; }
+        for (const cand of pl.list) {
+          const rect = cand.rect;
+          const s = Object.assign({}, base, { hall: cand.hall, placed: { side: cand.side, target: cand.target, len: cand.len }, room: { kind: 'hab', name: label.toUpperCase().slice(0, 24), rect },
             ox: rect.x1 + ((Wd - bp.w) >> 1), oy: rect.y1 + ((Hd - bp.h) >> 1) });
           const t = tryPlacement(doc, bp, s, env, before);
           if (t.ok) { placed = t; spec = s; break; }
         }
         if (placed) break;
       }
-      if (!placed) return refuse('There is no clear space beside the station for a room that fits ' + plain + '. Remove something or choose a smaller line.');
+      if (!placed) return none || refuse('There is no clear space ' + (tq.room ? 'beside ' + tq.room.name : 'beside the station') + ' for a room that fits ' + plain + '. Try another side or another room (station.map shows what is free).');
     } else {
+      if (['beside', 'side', 'hallway'].some(k => req[k] != null)) return refuse('beside, side and hallway place a NEW room; with where naming ' + target.name + ', leave them out.');
       let tries = 0;
       // every machine and belt must stand inside THIS room: a stamp that fits the floor can still run through a doorway
       // into the next room, and "in the HOME room" would then be a lie
@@ -396,11 +414,7 @@
       rp.assignPropAgent(fb.ids[rc.propIndex], id); crewIds.push(id);
     });
     const rd = readLine(rp, fb.ids, env, crewIds);
-    const neighbour = spec.room ? (() => {
-      const R = spec.room.rect, adj = rooms.find(rm => rm.rects.some(q => q.x1 <= R.x2 + 1 && q.x2 >= R.x1 - 1 && q.y1 <= R.y2 + 1 && q.y2 >= R.y1 - 1));
-      return adj ? adj.name : null;
-    })() : null;
-    const whereText = spec.room ? 'a new room' + (neighbour ? ' beside ' + neighbour : '') : 'the ' + target.name + ' room';
+    const whereText = spec.room ? 'a new room ' + spec.placed.side + ' of ' + spec.placed.target + (spec.placed.len ? ', through a hallway' : ', open to it') : 'the ' + target.name + ' room';
     const stepsView = stepsOut.map(x => ({ step: x.step, role: titleCase(x.role), agent: x.recruit ? 'a new recruit' : x.agentId ? nameOf(env, x.agentId) : null, instructions: x.brief }));
     const capNow = (() => { const ip = fb.ids.map(id => finalProbe.propById(id)).find(p => p && p.t === 'intake'); return ip && ip.limits ? ip.limits.maxUsdPerDay : null; })();
     const summary = plain + (hasIntake ? ' ("' + label + '")' : '') + ' in ' + whereText + ': '
@@ -427,7 +441,7 @@
      as designed and mirrored (never a kit with a line: mirroring would reverse its belts) until every piece can be
      walked up to and no piece blocks a doorway. planRestyle is the one cosmetic change: a room's floor, material or
      name, from fixed lists. The card says what equipment a kit brings (a desk is a computer: object = capability). */
-  const ROOM_MENU = ['zones', 'kit', 'preset', 'replace', 'where', 'name', 'type', 'floorStyle', 'floorMat'];
+  const ROOM_MENU = ['zones', 'kit', 'preset', 'replace', 'where', 'beside', 'side', 'hallway', 'size', 'name', 'type', 'floorStyle', 'floorMat'];
   const STYLE_MENU = ['room', 'name', 'type', 'floorStyle', 'floorMat'];
   const KIT_W = 18, KIT_H = 11;
   const kitsOf = env => (env.StationTemplates && env.StationTemplates.kits) ? env.StationTemplates.kits() : [];
@@ -611,6 +625,13 @@
       target = m[0];
     }
     const before = floorFacts(live, P), parts = [];
+    // where new rooms go: beside the asked room (the main room by default), on the asked side or the compact one, by a hallway
+    const bq = req.beside != null ? roomNamed(live, req.beside) : { ok: true, room: null }; if (!bq.ok) return bq;
+    const sq = sideOf(req.side); if (!sq.ok) return sq;
+    const hq = hallOf(req.hallway); if (!hq.ok) return hq;
+    if (target && ['beside', 'side', 'hallway'].some(k => req[k] != null)) return refuse('beside, side and hallway place a NEW room; with where naming ' + target.name + ', leave them out.');
+    if (req.size != null) return refuse('A preset room comes at its own size (18 × 11). For a room of another size use station.plan_build.');
+    const besideRoom = bq.room, placeSide = sq.side, placeHall = hq.len;
     for (const kit of list) {
       let found = null;
       const mirrors = kit.line ? [false] : [false, true];
@@ -628,13 +649,17 @@
         const sofar = WM.create(clone(doc));
         if (parts.length) { const b = buildInto(sofar, { kind: 'rooms', parts }, WM); if (!b.ok) return b; }
         const roomName = name || kit.name;
-        outer: for (const rect of sofar.roomSpots(KIT_W, KIT_H, kit.kind, 24)) for (const mirror of mirrors) {
-          const props = kitProps(env, kit, rect.x1, rect.y1, mirror); if (!props) return refuse('this page is missing the furniture for ' + kit.name);
-          const part = { room: { kind: kit.kind, name: roomName, floorStyle: style.floorStyle || kit.floorStyle, floorMat: style.floorMat || kit.floorMat, rect },
-            props, line: kitLine(env, kit, rect.x1, rect.y1), meta: { kit: kit.id, name: roomName, about: kit.about, existing: false } };
+        // beside the asked room, else wherever keeps the station compact (a preset's later rooms may stand beside its earlier ones)
+        const T = besideRoom ? (sofar.rooms().find(r => r.id === besideRoom.id) || besideRoom) : null;
+        const pl = roomPlacements(sofar, T, KIT_W, KIT_H, { side: placeSide, len: placeHall, align: null, kind: kit.kind, hangs: hangsOf(env) });
+        if (!pl.ok) return pl;
+        outer: for (const cand of pl.list) for (const mirror of mirrors) {
+          const rect = cand.rect, props = kitProps(env, kit, rect.x1, rect.y1, mirror); if (!props) return refuse('this page is missing the furniture for ' + kit.name);
+          const part = { hall: cand.hall, room: { kind: kit.kind, name: roomName, floorStyle: style.floorStyle || kit.floorStyle, floorMat: style.floorMat || kit.floorMat, rect },
+            props, line: kitLine(env, kit, rect.x1, rect.y1), meta: { kit: kit.id, name: roomName, about: kit.about, existing: false, placed: { side: cand.side, target: cand.target, len: cand.len } } };
           if (tryKit(doc, { kind: 'rooms', parts: parts.concat([part]) }, env, before).ok) { found = part; break outer; }
         }
-        if (!found) return refuse('There is no clear space beside the station for an 18 × 11 ' + kit.name + '. Remove something, or try a smaller build.');
+        if (!found) return refuse('There is no clear space ' + (besideRoom ? 'beside ' + besideRoom.name : 'beside the station') + ' for an 18 × 11 ' + kit.name + '. Try another side or another room (station.map shows what is free).');
       }
       parts.push(found);
     }
@@ -646,7 +671,6 @@
     const steps = [], manyLines = fb.parts.filter(b => b.lineIds.length).length > 1;
     const view = parts.map((part, i) => {
       const built = fb.parts[i], pr = finalProbe.rooms().find(r => r.id === built.roomId);
-      const neighbour = part.room ? (() => { const R = part.room.rect; const adj = finalProbe.rooms().find(rm => rm.id !== built.roomId && rm.kind !== 'corridor' && rm.rects.some(q => q.x1 <= R.x2 + 1 && q.x2 >= R.x1 - 1 && q.y1 <= R.y2 + 1 && q.y2 >= R.y1 - 1)); return adj ? adj.name : null; })() : null;
       const equip = equipmentOf(env, part.props), gains = gainsOf(env, part.props);
       const line = built.lineIds.length ? readLine(finalProbe, built.lineIds, env, crewIds) : null;
       const roomName = pr ? pr.name : part.meta.name;
@@ -655,7 +679,7 @@
         const b = finalProbe.props().find(q => q.id === pid);
         if (b && b.t === 'bay') steps.push({ step: ++n, role: titleCase(b.role) + (manyLines ? ' in ' + roomName : ''), agent: null, instructions: b.brief || '' });
       }
-      return { name: roomName, kit: part.meta.kit, about: part.meta.about, where: part.room ? 'a new room' + (neighbour ? ' beside ' + neighbour : '') : 'the ' + part.meta.name + ' room',
+      return { name: roomName, kit: part.meta.kit, about: part.meta.about, where: part.room ? 'a new room ' + part.meta.placed.side + ' of ' + part.meta.placed.target + (part.meta.placed.len ? ', through a hallway' : ', open to it') : 'the ' + part.meta.name + ' room',
         equipment: equip, gains, line: line ? { label: part.line.label, ready: line.ready, blocking: line.blocking } : null };
     });
     const summary = view.map(v => (v.where.indexOf('a new room') === 0 ? v.name + ' (' + v.about + ') in ' + v.where : v.about.charAt(0).toUpperCase() + v.about.slice(1) + ', furnishing ' + v.where)
@@ -696,7 +720,7 @@
      room is sized to hold what its zones need; an existing room is split down the middle. Lines go in first, then the
      furniture, which keeps doorways clear and every piece reachable. Every check the other plans run runs here too, on a
      copy, and the whole room lands in ONE undo. */
-  const DESIGN_MENU = ['zones', 'where', 'name', 'type', 'floorStyle', 'floorMat'];
+  const DESIGN_MENU = ['zones', 'where', 'name', 'size', 'beside', 'side', 'hallway', 'type', 'floorStyle', 'floorMat'];
   const ZONE_KEYS = ['area', 'style', 'line', 'purpose', 'shape', 'name', 'staff', 'dailyCap', 'tries'];
   // [column, row, columns, rows] on the room's 2 × 2 grid; the back is the far wall (the top of the floor)
   const AREAS = { whole: [0, 0, 2, 2], left: [0, 0, 1, 2], right: [1, 0, 1, 2], back: [0, 0, 2, 1], front: [0, 1, 2, 1],
@@ -897,72 +921,212 @@
     return false;
   }
 
-  function buildDesign(st, spec, WM) {
-    let roomId = spec.roomId || null;
-    const ids = [], lines = [];
-    if (spec.room) {
-      const before = new Set(st.rooms().map(r => r.id));
-      const r = st.addRoom({ kind: spec.room.kind, name: spec.room.name, floorStyle: spec.room.floorStyle, floorMat: spec.room.floorMat, rect: spec.room.rect });
-      if (!r || !r.ok) return refuse('the room could not be added there' + (r && r.msg ? ' (' + r.msg + ')' : ''));
-      roomId = (st.rooms().find(x => !before.has(x.id)) || {}).id || null;
+  /* ================= THE SPATIAL BUILDER (2026-09-30): rooms where the Commander says, joined by hallways =================
+     The first builder could not say WHERE a room goes: every room landed flush against the station's east wall, and the
+     station grew into one long strip with no hallways (Andrew's test, 09-30). Now a room is placed on a named SIDE of a
+     named ROOM, at a named SIZE, joined by a HALLWAY the way the presets join their wings (or flush, open plan). With no
+     side given StarNet takes the one that keeps the station compact. One plan may hold several rooms, a later one attached
+     to an earlier one; a room may stay EMPTY (floor for lines to come), be furnished by zones, or be filled with lines.
+     The model names intent; StarNet computes every tile and refuses with what IS free. */
+  const SIZES = { small: [12, 8], medium: [18, 11], large: [24, 14], giant: [36, 20] };
+  const SIZE_WORDS = { tiny: 'small', little: 'small', normal: 'medium', standard: 'medium', regular: 'medium', big: 'large', huge: 'giant', massive: 'giant', enormous: 'giant' };
+  const SIZE_MENU = 'small (12 × 8), medium (18 × 11), large (24 × 14), giant (36 × 20), or { "w": 6-' + 44 + ', "h": 5-' + 26 + ' }';
+  const SIDES = ['east', 'south', 'west', 'north'];
+  const SIDE_WORDS = { right: 'east', left: 'west', top: 'north', up: 'north', above: 'north', back: 'north', bottom: 'south', down: 'south', below: 'south', front: 'south', e: 'east', w: 'west', n: 'north', s: 'south' };
+  const HALL_LEN = 3, HALL_W = { east: 3, west: 3, north: 4, south: 4 };   // the presets' own hallways (stationtemplates slots)
+  const MAIN_WORDS = { bridge: 1, main: 1, hub: 1, home: 1, center: 1, centre: 1, station: 1, base: 1, core: 1, start: 1, 'main room': 1, 'first room': 1 };
+  const BUILD_MENU = ['rooms', 'hallways'];
+  const ROOM_KEYS = ['name', 'size', 'beside', 'side', 'hallway', 'align', 'into', 'type', 'floorStyle', 'floorMat', 'zones', 'lines'];
+  const LINE_KEYS = ['line', 'purpose', 'shape', 'name', 'staff', 'dailyCap', 'tries'];
+
+  const bboxOf = room => { let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity; for (const r of room.rects) { x1 = Math.min(x1, r.x1); y1 = Math.min(y1, r.y1); x2 = Math.max(x2, r.x2); y2 = Math.max(y2, r.y2); } return { x1, y1, x2, y2 }; };
+  // the room every station starts from (the Commander may call it the bridge, the hub, the main room)
+  function mainRoom(st) {
+    const d = st.serialize(), id = (d.meta && (d.meta.trunkRoomId || d.meta.spawnRoomId)) || d.order[0];
+    return st.rooms().find(r => r.id === id && r.kind !== 'corridor') || st.rooms().find(r => r.kind !== 'corridor') || null;
+  }
+  // a room by the name the Commander used: its own name, or a word for the main room when no room carries that name
+  function roomNamed(st, raw) {
+    const rooms = st.rooms().filter(r => r.kind !== 'corridor'), n = norm(raw), bare = n.replace(/^the /, '').replace(/ room$/, '');
+    const m = rooms.filter(r => norm(r.name) === n || norm(r.name) === bare);
+    if (m.length === 1) return { ok: true, room: m[0] };
+    if (m.length > 1) return refuse('More than one room is called "' + String(raw).slice(0, 40) + '". Rename one first (station.plan_restyle).');
+    if (MAIN_WORDS[bare]) { const main = mainRoom(st); if (main) return { ok: true, room: main }; }
+    return refuse('There is no room called "' + String(raw).slice(0, 40) + '". Rooms: ' + rooms.map(r => r.name).join(', ') + '.');
+  }
+  function sizeOfRoom(raw) {
+    if (raw == null) return { ok: true, size: null };
+    let v = raw;
+    if (typeof v === 'string') {
+      const k = norm(v).replace(/ (room|size|sized)$/, ''), word = SIZE_WORDS[k] || k;
+      if (SIZES[word]) return { ok: true, size: SIZES[word].slice(), word };
+      const m = /^(\d+)\s*(?:x|×|by)\s*(\d+)$/.exec(v.toLowerCase().trim());
+      if (m) v = { w: +m[1], h: +m[2] };
     }
-    // lines first (the layout each was planned with was laid on exactly this floor), then the furniture
-    for (const ln of spec.lines || []) {
-      const a = st.applyLineLayout(clone(ln.graph), ln.L);
-      if (!a || !a.ok) return refuse('a line could not be laid there' + (a && a.msg ? ' (' + a.msg + ')' : ''));
-      const idOf = a.ids || {};
-      for (const s of ln.steps || []) {
-        const pid = idOf[s.node];
-        if (!pid) return refuse('a step is missing');
-        if (s.brief) { const r = st.setPropBrief(pid, s.brief); if (!r || !r.ok) return refuse('a step\'s instructions could not be saved'); }
-        if (s.agentId) { const r = st.assignPropAgent(pid, s.agentId); if (!r || !r.ok) return refuse('a step\'s agent could not be assigned'); }
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const w = Number(v.w), h = Number(v.h);
+      if (Number.isInteger(w) && Number.isInteger(h) && w >= 6 && h >= 5 && w <= DESIGN_MAX[0] && h <= DESIGN_MAX[1]) return { ok: true, size: [w, h] };
+    }
+    return refuse('size is ' + SIZE_MENU + '.');
+  }
+  function sideOf(raw) {
+    if (raw == null) return { ok: true, side: null };
+    const k = norm(raw).replace(/^(the|to the|on the) /, '').replace(/ (side|of|wall)$/, ''), s = SIDE_WORDS[k] || k;
+    return SIDES.indexOf(s) >= 0 ? { ok: true, side: s } : refuse('side is north, south, east or west (north is the back wall, the top of the map).');
+  }
+  function hallOf(raw) {
+    if (raw == null || raw === true || /^(yes|true|hall|hallway|corridor)$/i.test(String(raw))) return { ok: true, len: HALL_LEN };
+    if (raw === false || raw === 0 || /^(no|none|false|flush|open|door|0)$/i.test(String(raw))) return { ok: true, len: 0 };
+    const n = Number(raw);
+    if (Number.isInteger(n) && n >= 2 && n <= 8) return { ok: true, len: n };
+    return refuse('hallway is true (a short hallway joins the rooms), false (the rooms touch, open plan), or a length from 2 to 8.');
+  }
+
+  /* What a new opening in a room's wall would run into. A HALLWAY's doorway (`door`): a solid piece on the tile just inside
+     that wall. Any opening in a NORTH wall (the only wall boards and screens hang on): a piece that hangs there, which would
+     be left hanging on nothing. `hangs` is the catalog's rule (type -> true when it mounts on a wall); without it every
+     piece on that row counts. `from`..`to` runs along the wall. */
+  const hangsOf = env => { const S = env && env.PropSprites; return S && S.spec ? (t => { const sp = S.spec(t); return !!(sp && sp.mount === 'wall'); }) : null; };
+  function doorwayBlocked(st, side, B, from, to, door, hangs) {
+    for (const p of st.props()) {
+      const solid = door && p.block !== false, hung = side === 'north' && (hangs ? hangs(p.t) : true);
+      if (!solid && !hung) continue;
+      const px2 = p.x + (p.w || 1) - 1, py2 = p.y + (p.h || 1) - 1;
+      const hit = side === 'east' ? (p.x <= B.x2 && px2 >= B.x2 && p.y <= to && py2 >= from)
+        : side === 'west' ? (p.x <= B.x1 && px2 >= B.x1 && p.y <= to && py2 >= from)
+        : side === 'south' ? (p.y <= B.y2 && py2 >= B.y2 && p.x <= to && px2 >= from)
+        : (p.y <= B.y1 && py2 >= B.y1 && p.x <= to && px2 >= from);
+      if (hit) return true;
+    }
+    return false;
+  }
+  // rooms that touch open onto each other, so a new rect may stand against the rooms in `allow` and no other: the first
+  // other room it would touch (its name), or null
+  function neighbourOf(st, r, allow) {
+    const other = (x, y) => { const id = st.roomAt(x, y); return id && allow.indexOf(id) < 0 ? id : null; };
+    let id = null;
+    for (let x = r.x1; x <= r.x2 && !id; x++) id = other(x, r.y1 - 1) || other(x, r.y2 + 1);
+    for (let y = r.y1; y <= r.y2 && !id; y++) id = other(r.x1 - 1, y) || other(r.x2 + 1, y);
+    if (!id) return null;
+    const rm = st.rooms().find(x => x.id === id);
+    return !rm ? 'another room' : rm.kind === 'corridor' ? 'a hallway' : rm.name;
+  }
+
+  /* Every place a W × H room may stand on one SIDE of the room T: against T through a hallway `len` tiles long (0 = the
+     rooms touch). The room slides ALONG the shared wall: centred first, then outward, or pinned by `align`. The hallway
+     sits in the middle of the stretch both rooms face, and the wall it meets must really be T's floor (T may be L-shaped). */
+  function placementsOn(st, T, side, W, H, len, align, kind, hangs) {
+    const B = bboxOf(T), horiz = side === 'east' || side === 'west', out = [];
+    const lo = horiz ? B.y1 : B.x1, hi = horiz ? B.y2 : B.x2, span = horiz ? H : W, centre = lo + ((hi - lo + 1 - span) >> 1);
+    let offs, why = '';
+    if (align === 'start') offs = [lo]; else if (align === 'end') offs = [hi - span + 1]; else if (align === 'center') offs = [centre];
+    else { offs = [centre]; for (let d = 1; d <= Math.max(span, hi - lo + 1); d++) offs.push(centre - d, centre + d); }
+    for (const a of offs) {
+      const o1 = Math.max(lo, a), o2 = Math.min(hi, a + span - 1), facing = o2 - o1 + 1;
+      if (facing < 2) continue;   // the two rooms must face each other across at least a doorway
+      const w = len ? Math.min(HALL_W[side], facing) : facing, h1 = o1 + ((facing - w) >> 1);
+      let rect, hall = null;
+      if (side === 'east') { rect = { x1: B.x2 + 1 + len, y1: a, x2: B.x2 + len + W, y2: a + H - 1 }; if (len) hall = { x1: B.x2 + 1, y1: h1, x2: B.x2 + len, y2: h1 + w - 1 }; }
+      else if (side === 'west') { rect = { x1: B.x1 - len - W, y1: a, x2: B.x1 - len - 1, y2: a + H - 1 }; if (len) hall = { x1: B.x1 - len, y1: h1, x2: B.x1 - 1, y2: h1 + w - 1 }; }
+      else if (side === 'south') { rect = { x1: a, y1: B.y2 + 1 + len, x2: a + W - 1, y2: B.y2 + len + H }; if (len) hall = { x1: h1, y1: B.y2 + 1, x2: h1 + w - 1, y2: B.y2 + len }; }
+      else { rect = { x1: a, y1: B.y1 - len - H, x2: a + W - 1, y2: B.y1 - len - 1 }; if (len) hall = { x1: h1, y1: B.y1 - len, x2: h1 + w - 1, y2: B.y1 - 1 }; }
+      // T's own floor along the wall the hallway (or, flush, the doorway) meets
+      let meets = 0;
+      for (let i = h1; i < h1 + w; i++) {
+        const tx = side === 'east' ? B.x2 : side === 'west' ? B.x1 : i, ty = side === 'south' ? B.y2 : side === 'north' ? B.y1 : i;
+        if (st.roomAt(tx, ty) === T.id) meets++;
       }
-      const lineIds = ln.graph.nodes.map(n => idOf[n.id]).filter(Boolean);
-      ids.push(...lineIds);
-      lines.push({ idOf, lineIds });
+      if (meets < (len ? w : 2)) { why = why || T.name + '\'s wall is not straight there'; continue; }
+      // the doorway opens onto clear floor in T (open plan: only what hangs on a north wall matters)
+      const inWay = m => /^overlaps CORRIDOR/i.test(m || '') ? 'a hallway is already there' : /^overlaps /.test(m || '') ? m.replace(/^overlaps /, '') + ' is in the way' : (m || 'it does not fit');
+      if (hall) { const c = st.canPlaceHallway([hall]); if (!c.ok) { why = why || inWay(c.msg); continue; } }
+      const c = st.canPlaceRoom([rect], kind || 'hab');
+      if (!c.ok) { why = why || inWay(c.msg); continue; }
+      // nothing built here stands against a room it was not asked to join
+      const nb = (hall && neighbourOf(st, hall, [T.id])) || neighbourOf(st, rect, len ? [] : [T.id]);
+      if (nb) { why = why || 'it would stand against ' + nb; continue; }
+      // and the opening runs onto clear floor in T (open plan: only what hangs on a north wall matters)
+      if (doorwayBlocked(st, side, B, h1, h1 + w - 1, !!len, hangs)) { why = why || (len ? 'furniture in ' + T.name + ' stands against that wall' : 'something hangs on ' + T.name + '\'s wall there'); continue; }
+      out.push({ rect, hall, side, target: T.name, targetId: T.id, len });
+      if (out.length >= 10) break;
     }
-    for (const p of spec.props || []) {
-      const r = st.addProp({ t: p.t, x: p.x, y: p.y, w: p.w, h: p.h, r: p.r || 0, block: p.block });
-      if (!r || !r.ok) return refuse('a piece of furniture could not be placed there' + (r && r.msg ? ' (' + r.msg + ')' : ''));
-      ids.push(r.id);
-    }
-    return { ok: true, ids, roomId, lines, propIds: ids.slice(ids.length - (spec.props || []).length) };
+    return { list: out, why: why || 'there is no floor there for it' };
+  }
+  /* WHERE A NEW ROOM GOES. Beside the room T when the Commander named one, on the asked side, else on whichever side leaves
+     the station most COMPACT (the smaller long side of its outline, then the smaller area) — never just "to the east", which
+     is how a station becomes one long strip. With no room named (T null) every room is a candidate, the main room first on
+     a tie. Answers every spot in preference order, or why there is none and what does fit. */
+  function roomPlacements(st, T, W, H, o) {
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for (const r of st.rooms()) { const b = bboxOf(r); x1 = Math.min(x1, b.x1); y1 = Math.min(y1, b.y1); x2 = Math.max(x2, b.x2); y2 = Math.max(y2, b.y2); }
+    const score = c => { const r = c.rect, w = Math.max(x2, r.x2) - Math.min(x1, r.x1) + 1, h = Math.max(y2, r.y2) - Math.min(y1, r.y1) + 1; return Math.max(w, h) * 100000 + w * h; };
+    const main = mainRoom(st), hosts = T ? [T] : st.rooms().filter(r => r.kind !== 'corridor').sort((p, q) => (p === main ? -1 : q === main ? 1 : 0));
+    const per = [];
+    hosts.forEach((host, hi) => (o.side ? [o.side] : SIDES).forEach((side, si) => {
+      const p = placementsOn(st, host, side, W, H, o.len, o.align, o.kind, o.hangs);
+      per.push({ host, side, list: p.list, why: p.why, score: p.list.length ? score(p.list[0]) : Infinity, order: hi * 10 + si });
+    }));
+    // a named room on a named side is taken as asked; otherwise the most compact spot wins
+    if (!(T && o.side)) per.sort((p, q) => p.score - q.score || p.order - q.order);
+    const list = [].concat(...per.map(p => p.list));
+    if (list.length) return { ok: true, list };
+    const size = W + ' × ' + H, hall = o.len ? ' with a hallway' : '';
+    if (!T) return refuse('There is no clear space beside any room for a ' + size + ' room' + (o.side ? ' on its ' + o.side + ' side' : '') + hall + '. Try a smaller size, or name the room and side (station.map shows what is free).');
+    // nothing fits as asked: say why, and what does fit around T, or beside which other rooms it would fit
+    const elsewhere = () => {
+      const spots = [];
+      for (const r of st.rooms()) { if (r === T || r.kind === 'corridor') continue; const sides = SIDES.filter(sd => placementsOn(st, r, sd, W, H, o.len, null, o.kind, o.hangs).list.length); if (sides.length) spots.push(r.name + ' (' + sides.join(', ') + ')'); if (spots.length >= 5) break; }
+      return spots.length ? ' That size fits beside: ' + spots.join('; ') + '.' : ' Nothing that size fits beside any room; try a smaller one.';
+    };
+    const free = SIDES.filter(sd => (!o.side || sd !== o.side) && placementsOn(st, T, sd, W, H, o.len, null, o.kind, o.hangs).list.length);
+    const smaller = Object.keys(SIZES).filter(k => SIZES[k][0] * SIZES[k][1] < W * H && (o.side ? [o.side] : SIDES).some(sd => placementsOn(st, T, sd, SIZES[k][0], SIZES[k][1], o.len, null, o.kind, o.hangs).list.length));
+    return refuse('There is no room for a ' + size + ' room ' + (o.side ? o.side + ' of ' : 'beside ') + T.name + hall + ': ' + per.map(p => (o.side ? '' : p.side + ': ') + p.why).join('; ') + '.'
+      + (free.length ? ' That size fits ' + free.join(', ') + ' of ' + T.name + '.' : '') + (smaller.length ? ' Sizes that fit ' + (o.side ? 'there' : 'beside it') + ': ' + smaller.join(', ') + '.' : '')
+      + (!free.length ? elsewhere() : ''), { free, smaller });
   }
 
-  // the same checks as every plan: no new routing problem, every existing line routes as before, and in the room nothing
-  // solid on a doorway's landing and every new piece and machine reachable on foot
-  function tryDesign(doc, spec, env, before) {
-    const WM = env.WorldModel, P = env.Pipeline;
-    const probe = WM.create(clone(doc));
-    const b = buildDesign(probe, spec, WM);
-    if (!b.ok) return b;
-    const after = floorFacts(probe, P), g = after.geo;
-    for (const e of after.errs) if (!before.errs.has(e)) return refuse('that would add a routing problem (' + e.split(':')[0] + ')');
-    for (const dock in before.chains) if (JSON.stringify(before.chains[dock]) !== JSON.stringify(after.chains[dock])) return refuse('that would change how an existing line routes');
-    for (const dock in before.reach) if (!!before.reach[dock] !== !!after.reach[dock]) return refuse('that would change which existing steps an Inbox reaches');
-    const o = spawnTile(probe.serialize(), g), land = landingTiles(probe, g, b.roomId);
-    for (const pid of b.ids) {
-      const p = probe.propById(pid);
-      if (!p || p.block === false) continue;
-      for (let yy = p.y; yy < p.y + p.h; yy++) for (let xx = p.x; xx < p.x + p.w; xx++) if (land.has(xx + ',' + yy)) return refuse('something would block a doorway');
-      if (!sideReachable(g, o, p)) return refuse('something could not be walked up to');
+  /* A HALLWAY BETWEEN TWO ROOMS that face each other across a gap: straight, as wide as the presets' own, in the middle of
+     the stretch both rooms face, sliding along it to find clear wall at both ends. */
+  function hallBetween(st, A, Bm, hangs) {
+    const a = bboxOf(A), b = bboxOf(Bm);
+    const yo1 = Math.max(a.y1, b.y1), yo2 = Math.min(a.y2, b.y2), xo1 = Math.max(a.x1, b.x1), xo2 = Math.min(a.x2, b.x2);
+    const pair = A.name + ' and ' + Bm.name;
+    let horiz;
+    if (yo2 - yo1 + 1 >= 2 && (a.x2 < b.x1 || b.x2 < a.x1)) horiz = true;
+    else if (xo2 - xo1 + 1 >= 2 && (a.y2 < b.y1 || b.y2 < a.y1)) horiz = false;
+    else return refuse(pair + ' do not face each other, and a hallway runs straight. Join rooms that stand side by side or one above the other (station.map shows where each room is).');
+    const firstIsA = horiz ? a.x2 < b.x1 : a.y2 < b.y1, F = firstIsA ? A : Bm, S = firstIsA ? Bm : A, fb = firstIsA ? a : b, sb = firstIsA ? b : a;
+    const g1 = (horiz ? fb.x2 : fb.y2) + 1, g2 = (horiz ? sb.x1 : sb.y1) - 1, gap = g2 - g1 + 1;
+    if (gap < 1) return refuse(pair + ' already stand against each other: they are open to each other.');
+    if (gap < 2) return refuse(pair + ' are one tile apart, and a hallway is at least two tiles long.');
+    if (gap > 40) return refuse(pair + ' are ' + gap + ' tiles apart; a hallway runs at most 40.');
+    const o1 = horiz ? yo1 : xo1, o2 = horiz ? yo2 : xo2, w = Math.min(horiz ? HALL_W.east : HALL_W.south, o2 - o1 + 1), centre = o1 + ((o2 - o1 + 1 - w) >> 1);
+    const offs = [centre]; for (let d = 1; d <= o2 - o1; d++) offs.push(centre - d, centre + d);
+    let why = '';
+    for (const h1 of offs) {
+      if (h1 < o1 || h1 + w - 1 > o2) continue;
+      const rect = horiz ? { x1: g1, y1: h1, x2: g2, y2: h1 + w - 1 } : { x1: h1, y1: g1, x2: h1 + w - 1, y2: g2 };
+      let meets = true;
+      for (let i = h1; i < h1 + w && meets; i++) meets = horiz ? (st.roomAt(fb.x2, i) === F.id && st.roomAt(sb.x1, i) === S.id) : (st.roomAt(i, fb.y2) === F.id && st.roomAt(i, sb.y1) === S.id);
+      if (!meets) { why = why || 'a wall is not straight there'; continue; }
+      if (doorwayBlocked(st, horiz ? 'east' : 'south', fb, h1, h1 + w - 1, true, hangs)) { why = why || 'furniture in ' + F.name + ' stands against that wall'; continue; }
+      if (doorwayBlocked(st, horiz ? 'west' : 'north', sb, h1, h1 + w - 1, true, hangs)) { why = why || 'furniture in ' + S.name + ' stands against that wall'; continue; }
+      const c = st.canPlaceHallway([rect]);
+      if (!c.ok) { why = why || (/^overlaps /.test(c.msg || '') ? 'something is already between them' : (c.msg || 'it does not fit')); continue; }
+      const nb = neighbourOf(st, rect, [A.id, Bm.id]);
+      if (nb) { why = why || 'it would stand against ' + nb; continue; }
+      return { ok: true, rect };
     }
-    return { ok: true, probe, built: b };
+    return refuse('There is no clear straight run for a hallway between ' + pair + ': ' + (why || 'nothing fits') + '.');
   }
 
-  function planDesign(doc, req, env) {
-    const WM = env && env.WorldModel, P = env && env.Pipeline, W = env && env.WorkflowLine, RS = env && env.RoomStyles;
-    if (!WM || !P || !W || !doc || !env.PropSprites || !RS) return refuse('the station builder is not loaded on this page');
-    if (!req || typeof req !== 'object' || Array.isArray(req)) return refuse('Send the request as an object with: ' + DESIGN_MENU.join(', ') + '.');
-    const extra = Object.keys(req).filter(k => DESIGN_MENU.indexOf(k) < 0);
-    if (extra.length) return refuse('StarNet chooses every position and piece of furniture itself, so these fields are not accepted with zones: ' + extra.slice(0, 8).join(', ') + '. Use only: ' + DESIGN_MENU.join(', ') + '.');
-    const styleMenu = RS.menu().map(s => s.id + ' (' + s.name + ': ' + s.about + ')').join('; ');
+  // a room's zones, checked and measured: each a style or a line, no two on the same part of the room
+  function parseZones(list, env, live, notes) {
+    const RS = env.RoomStyles, styleMenu = RS.menu().map(s => s.id + ' (' + s.name + ': ' + s.about + ')').join('; ');
     const ZONE_HOW = 'zones is a list of 1 to 4 parts of the room, each { area, style } or { area, line | purpose | shape }. Areas: ' + AREA_MENU + '. Styles: ' + styleMenu + '.';
-    if (!Array.isArray(req.zones) || !req.zones.length || req.zones.length > 4) return refuse(ZONE_HOW);
-    const style = styleOf(WM, req); if (!style.ok) return style;
-    const notes = [], zones = [], cells = {};
-    const live = WM.create(clone(doc));
-    for (const z of req.zones) {
+    if (!Array.isArray(list) || !list.length || list.length > 4) return refuse(ZONE_HOW);
+    const zones = [], cells = {};
+    for (const z of list) {
       if (!z || typeof z !== 'object' || Array.isArray(z)) return refuse(ZONE_HOW);
       const bad = Object.keys(z).filter(k => ZONE_KEYS.indexOf(k) < 0);
       if (bad.length) return refuse('A zone only takes: ' + ZONE_KEYS.join(', ') + '. Not accepted: ' + bad.slice(0, 6).join(', ') + '.');
@@ -982,31 +1146,40 @@
         const set0 = RS.STYLES[id].sets[0];
         zones.push({ area, kind: 'style', style: id, need: { w: set0.w + 3, h: set0.h + 2 } });
       } else {
-        if (!env.LineLayout || !env.LineLayout.layout) return refuse('the layout engine is not loaded on this page');
-        const staff = z.staff == null ? [] : z.staff;
-        const sl = stepsListOk(staff); if (!sl.ok) return refuse(sl.error.replace(/^steps /, 'staff '));
-        const zl = zoneLine(live, env, z, notes); if (!zl.ok) return zl;
-        // what the line takes laid out on open floor (the engine's own box: its machines, belts and a walking ring)
-        const L0 = env.LineLayout.layout(zl.graph, { rects: [{ x1: 0, y1: 0, x2: 119, y2: 79 }], blocked: [], belts: {}, junctions: [] });
-        if (!L0.ok) return refuse('that line could not be laid out (' + (L0.error || 'no layout') + ')');
-        zones.push(Object.assign({ area, kind: 'line', staff, need: { w: L0.box.x2 - L0.box.x1 + 1, h: L0.box.y2 - L0.box.y1 + 1 } }, zl));
+        const ln = parseLine(z, env, live, notes); if (!ln.ok) return ln;
+        zones.push(Object.assign({ area }, ln.line));
       }
     }
-    for (const s of zones) for (const x of s.staff || []) if (x && x.agent != null) { const a = agentOf(env, x.agent); if (!a.ok) return a; }
-    const roomName = typeof req.name === 'string' ? req.name.replace(/\s+/g, ' ').trim().toUpperCase().slice(0, 24) : '';
-
-    // where: a new room sized for the zones (default), or an existing plain room split down the middle
-    const rooms = live.rooms().filter(r => r.kind !== 'corridor');
-    const whereRaw = req.where == null ? '' : String(req.where).trim();
-    let target = null;
-    if (whereRaw && !/^(a )?new( room)?$/i.test(whereRaw)) {
-      const m = rooms.filter(r => norm(r.name) === norm(whereRaw));
-      if (m.length !== 1) return refuse((m.length ? 'More than one room is called "' + whereRaw.slice(0, 40) + '".' : 'There is no room called "' + whereRaw.slice(0, 40) + '".') + ' Use "new room", or one of: ' + rooms.map(r => r.name).join(', ') + '.');
-      target = m[0];
-      if (target.rects.length > 1) return refuse(target.name + ' is not a plain rectangle, so it cannot be split into zones. Use "new room".');
-      if (roomName) return refuse('name names a NEW room; ' + target.name + ' keeps its name (plan_restyle renames a room).');
-    }
-    // the grid: each column as wide as its widest zone, each row as tall as its tallest; a zone across both shares them out
+    return { ok: true, zones };
+  }
+  // one workflow line asked for (a zone's, or one of a room's `lines`): its graph, and the floor it takes laid out in the open
+  function parseLine(z, env, live, notes) {
+    if (!env.LineLayout || !env.LineLayout.layout) return refuse('the layout engine is not loaded on this page');
+    const staff = z.staff == null ? [] : z.staff;
+    const sl = stepsListOk(staff); if (!sl.ok) return refuse(sl.error.replace(/^steps /, 'staff '));
+    for (const x of staff) if (x && x.agent != null) { const a = agentOf(env, x.agent); if (!a.ok) return a; }
+    const zl = zoneLine(live, env, z, notes); if (!zl.ok) return zl;
+    const L0 = env.LineLayout.layout(zl.graph, { rects: [{ x1: 0, y1: 0, x2: 119, y2: 79 }], blocked: [], belts: {}, junctions: [] });
+    if (!L0.ok) return refuse('that line could not be laid out (' + (L0.error || 'no layout') + ')');
+    return { ok: true, line: Object.assign({ kind: 'line', staff, need: { w: L0.box.x2 - L0.box.x1 + 1, h: L0.box.y2 - L0.box.y1 + 1 } }, zl) };
+  }
+  /* The floor a list of lines takes, laid the way the layout engine fills a room: left to right in a row while they fit,
+     then a new row, a clear tile between neighbours. Of every row width it answers the one nearest a room's usual shape
+     (about 1.7 wide to 1 tall) that StarNet can build at once. */
+  function packLines(lines) {
+    const shelf = maxW => { let w = 0, h = 0, rw = 0, rh = 0; for (const l of lines) { const lw = l.need.w, lh = l.need.h; if (rw && rw + 1 + lw > maxW) { w = Math.max(w, rw); h += rh + 1; rw = 0; rh = 0; } rw = rw ? rw + 1 + lw : lw; rh = Math.max(rh, lh); } return { w: Math.max(w, rw), h: h + rh }; };
+    const widths = new Set(); let acc = 0;
+    for (const l of lines) { acc = acc ? acc + 1 + l.need.w : l.need.w; widths.add(acc); widths.add(l.need.w); }
+    let best = null, bs = Infinity;
+    for (const mw of widths) { const p = shelf(mw), over = p.w > DESIGN_MAX[0] || p.h > DESIGN_MAX[1], sc = Math.max(p.w / 1.7, p.h) + (over ? 1000 : 0); if (sc < bs) { bs = sc; best = p; } }
+    return best;
+  }
+  /* what a room's contents need: for zones, a 2 × 2 grid (each column as wide as its widest zone, each row as tall as its
+     tallest; a zone across both shares them out) and where the grid splits, as fractions of the room; for a list of lines,
+     the rows packLines lays them in (hardW × hardH: the least any room must be, its biggest single line) */
+  function contentNeed(zones, lines) {
+    if (lines.length) { const p = packLines(lines); return { w: p.w, h: p.h, fx: 1, fy: 1, one: true, hardW: Math.max(...lines.map(l => l.need.w)), hardH: Math.max(...lines.map(l => l.need.h)) }; }
+    if (!zones.length) return { w: 0, h: 0, fx: 1, fy: 1, one: true };
     const colNeed = [0, 0], rowNeed = [0, 0];
     let spanW = 0, spanH = 0;
     for (const z of zones) {
@@ -1022,144 +1195,377 @@
       return [a, b];
     };
     const one = zones.length === 1 && zones[0].area === 'whole';
-    let [c0, c1] = one ? [zones[0].need.w, 0] : share(colNeed, spanW), [r0, r1] = one ? [zones[0].need.h, 0] : share(rowNeed, spanH);
-    const minWH = zones.length > 1 ? DESIGN_MIN_MANY : DESIGN_MIN_ONE;
-    const RW = Math.max(minWH[0], c0 + c1), RH = Math.max(minWH[1], r0 + r1);
-    if (!target && (RW > DESIGN_MAX[0] || RH > DESIGN_MAX[1])) return refuse('Those zones need a ' + (c0 + c1) + ' × ' + (r0 + r1) + ' room, larger than the ' + DESIGN_MAX[0] + ' × ' + DESIGN_MAX[1] + ' StarNet builds at once. Split it into two rooms.');
-    if (!one) { c0 += (RW - c0 - c1) >> 1; r0 += (RH - r0 - r1) >> 1; }   // any extra room goes evenly to both sides
+    if (one) return { w: zones[0].need.w, h: zones[0].need.h, fx: 1, fy: 1, one: true };
+    const [c0, c1] = share(colNeed, spanW), [r0, r1] = share(rowNeed, spanH);
+    return { w: c0 + c1, h: r0 + r1, fx: c0 / (c0 + c1), fy: r0 / (r0 + r1), one: false };
+  }
 
-    const before = floorFacts(live, P);
-    const kind = (style.type && style.type.id) || 'hab';
-    function attempt(R, roomSpec, roomId) {
-      const probe = WM.create(clone(doc));
-      if (roomSpec) {
-        const was = new Set(probe.rooms().map(r => r.id));
-        const a = probe.addRoom(Object.assign({}, roomSpec, { rect: R }));
-        if (!a || !a.ok) return refuse('the room could not be added there');
-        roomId = (probe.rooms().find(x => !was.has(x.id)) || {}).id;
+  /* FILL A ROOM on the probe: lines first (each laid inside its zone, or anywhere in the room, by the layout engine — never
+     on a doorway's landing), then every style's furniture. `split` says where the 2 × 2 grid divides the room. Answers the
+     part of the spec it built ({ lines, props }) and what the card will say about it; the probe holds the result. */
+  function fillRoom(probe, env, roomId, R, zones, lines, split, roomLabel, recruitBase) {
+    const WM = env.WorldModel;
+    const Wd = R.x2 - R.x1 + 1, Hd = R.y2 - R.y1 + 1;
+    const cx = R.x1 + Math.max(1, Math.min(Wd - 1, Math.round(Wd * split.fx))), ry = R.y1 + Math.max(1, Math.min(Hd - 1, Math.round(Hd * split.fy)));
+    const colX = [[R.x1, cx - 1], [cx, R.x2]], rowY = [[R.y1, ry - 1], [ry, R.y2]];
+    const rectOf = a => { if (a == null || a === 'whole' || split.one) return { x1: R.x1, y1: R.y1, x2: R.x2, y2: R.y2 }; const [c, r, cs, rs] = AREAS[a]; return { x1: colX[c][0], x2: colX[c + cs - 1][1], y1: rowY[r][0], y2: rowY[r + rs - 1][1] }; };
+    const land = landingTiles(probe, probe.projectGeometry(), roomId);
+    const out = { lines: [], props: [], view: [], recruits: [] };
+    const whereOf = z => z.area ? AREA_LABEL[z.area] + ' of ' + roomLabel : roomLabel;
+    for (const z of zones.filter(q => q.kind === 'line').concat(lines)) {
+      const zr = rectOf(z.area), fl = probe.lineGraph(null);
+      if (!fl || !fl.ok) return refuse('this floor does not build by links');
+      /* lines are told apart by their belts TOUCHING (Pipeline.lineComponents), so a new line keeps a clear tile from every
+         belt and every workflow machine already on the floor; and it never stands on a doorway's landing */
+      const halo = [];
+      for (const k in fl.floor.belts) { const [x, y] = k.split(',').map(Number); halo.push({ x: x - 1, y: y - 1, w: 3, h: 3 }); }
+      for (const p of probe.props()) if (MACHINE_T.test(p.t)) halo.push({ x: p.x - 1, y: p.y - 1, w: (p.w || 1) + 2, h: (p.h || 1) + 2 });
+      const floor = Object.assign({}, fl.floor, { rects: [zr], blocked: fl.floor.blocked.concat(halo, [...land].map(k => { const [x, y] = k.split(',').map(Number); return { x, y, w: 1, h: 1 }; })) });
+      const near = { x: (zr.x1 + zr.x2) >> 1, y: (zr.y1 + zr.y2) >> 1 };
+      let L = env.LineLayout.layout(z.graph, floor, z.area ? { near } : undefined);
+      if (!L.ok && env.LineEdit && env.LineEdit._internals && env.LineEdit._internals.layoutNear) L = env.LineEdit._internals.layoutNear(env.LineLayout, z.graph, floor, near, 12);
+      if (!L.ok) return refuse(whereOf(z) + ' is ' + (zr.x2 - zr.x1 + 1) + ' × ' + (zr.y2 - zr.y1 + 1) + (z.area ? '' : ' and has no clear floor left') + '; ' + (z.plain === 'a custom line' ? 'that line' : z.plain) + ' needs ' + z.need.w + ' × ' + z.need.h + '.', { tooSmall: true });
+      const a = probe.applyLineLayout(clone(z.graph), L);
+      if (!a || !a.ok) return refuse('that line could not be laid in ' + whereOf(z) + (a && a.msg ? ' (' + a.msg + ')' : ''));
+      // its steps in RUN ORDER (a stand-in crew on a copy, so the order follows the belts), then who works them
+      const lineIds = z.graph.nodes.map(n => a.ids[n.id]).filter(Boolean), nodeOf = {};
+      for (const n of z.graph.nodes) nodeOf[a.ids[n.id]] = n;
+      const cp = WM.create(clone(probe.serialize())), bayIds = lineIds.filter(pid => (nodeOf[pid] || {}).t === 'bay');
+      bayIds.forEach((pid, i) => cp.assignPropAgent(pid, '__sb_probe_' + i));
+      const shape = readLine(cp, lineIds, env, null), runOrder = shape.order.length === bayIds.length ? shape.order : bayIds;
+      const stepsOut = runOrder.map((pid, i) => ({ step: i + 1, role: (nodeOf[pid] || {}).role || 'STEP', node: nodeOf[pid].id, brief: '', agentId: '' }));
+      const st = staffSteps(stepsOut, z.staff, env, z.purpose); if (!st.ok) return st;
+      for (const x of stepsOut) {
+        if (x.brief) probe.setPropBrief(a.ids[x.node], x.brief);
+        if (x.agentId) probe.assignPropAgent(a.ids[x.node], x.agentId);
       }
-      const Wd = R.x2 - R.x1 + 1, Hd = R.y2 - R.y1 + 1;
-      const cx = target ? R.x1 + (Wd >> 1) : R.x1 + (one ? Wd : c0), ry = target ? R.y1 + (Hd >> 1) : R.y1 + (one ? Hd : r0);
-      const colX = [[R.x1, cx - 1], [cx, R.x2]], rowY = [[R.y1, ry - 1], [ry, R.y2]];
-      const rectOf = a => { const [c, r, cs, rs] = AREAS[a]; return { x1: a === 'whole' ? R.x1 : colX[c][0], x2: a === 'whole' ? R.x2 : colX[c + cs - 1][1], y1: a === 'whole' ? R.y1 : rowY[r][0], y2: a === 'whole' ? R.y2 : rowY[r + rs - 1][1] }; };
-      const land = landingTiles(probe, probe.projectGeometry(), roomId);
-      const spec = { kind: 'design', room: roomSpec ? Object.assign({}, roomSpec, { rect: R }) : null, roomId: roomSpec ? null : roomId, lines: [], props: [] };
-      const view = [], recruits = [];
-      // 1. every line, laid out inside its zone by the engine (never on a doorway's landing)
-      for (const z of zones.filter(q => q.kind === 'line')) {
-        const zr = rectOf(z.area), fl = probe.lineGraph(null);
-        if (!fl || !fl.ok) return refuse('this floor does not build by links');
-        const floor = Object.assign({}, fl.floor, { rects: [zr], blocked: fl.floor.blocked.concat([...land].map(k => { const [x, y] = k.split(',').map(Number); return { x, y, w: 1, h: 1 }; })) });
-        const near = { x: (zr.x1 + zr.x2) >> 1, y: (zr.y1 + zr.y2) >> 1 };
-        let L = env.LineLayout.layout(z.graph, floor, { near });
-        if (!L.ok && env.LineEdit && env.LineEdit._internals && env.LineEdit._internals.layoutNear) L = env.LineEdit._internals.layoutNear(env.LineLayout, z.graph, floor, near, 12);
-        if (!L.ok) return refuse(AREA_LABEL[z.area] + ' of ' + (roomSpec ? 'the new room' : target.name) + ' is ' + (zr.x2 - zr.x1 + 1) + ' × ' + (zr.y2 - zr.y1 + 1) + '; ' + (z.plain === 'a custom line' ? 'that line' : z.plain) + ' needs ' + z.need.w + ' × ' + z.need.h + '.', { tooSmall: true });
-        const a = probe.applyLineLayout(clone(z.graph), L);
-        if (!a || !a.ok) return refuse('that line could not be laid in ' + AREA_LABEL[z.area] + (a && a.msg ? ' (' + a.msg + ')' : ''));
-        // its steps in RUN ORDER (a stand-in crew on a copy, so the order follows the belts), then who works them
-        const lineIds = z.graph.nodes.map(n => a.ids[n.id]).filter(Boolean), nodeOf = {};
-        for (const n of z.graph.nodes) nodeOf[a.ids[n.id]] = n;
-        const cp = WM.create(clone(probe.serialize())), bayIds = lineIds.filter(pid => (nodeOf[pid] || {}).t === 'bay');
-        bayIds.forEach((pid, i) => cp.assignPropAgent(pid, '__sb_probe_' + i));
-        const shape = readLine(cp, lineIds, env, null), runOrder = shape.order.length === bayIds.length ? shape.order : bayIds;
-        const stepsOut = runOrder.map((pid, i) => ({ step: i + 1, role: (nodeOf[pid] || {}).role || 'STEP', node: nodeOf[pid].id, brief: '', agentId: '' }));
-        const st = staffSteps(stepsOut, z.staff, env, z.purpose); if (!st.ok) return st;
-        for (const x of stepsOut) {
-          if (x.brief) probe.setPropBrief(a.ids[x.node], x.brief);
-          if (x.agentId) probe.assignPropAgent(a.ids[x.node], x.agentId);
-        }
-        spec.lines.push({ graph: clone(z.graph), L, steps: stepsOut.map(x => ({ node: x.node, brief: x.brief, agentId: x.agentId })) });
-        stepsOut.filter(x => x.recruit).forEach(x => recruits.push({ line: spec.lines.length - 1, node: x.node, role: x.role }));
-        view.push({ area: z.area, kind: 'line', rect: zr, z, lineIds, shape, runOrder, stepsOut, line: spec.lines.length - 1 });
-      }
-      // 2. every style: its largest set that fits, against the room's outer walls first, as arranged or mirrored
-      for (const z of zones.filter(q => q.kind === 'style')) {
-        const zr = rectOf(z.area), sets = env.RoomStyles.STYLES[z.style].sets, inner = { x1: zr.x1 + 1, y1: zr.y1 + 1, x2: zr.x2 - 1, y2: zr.y2 - 1 };
-        const iw = inner.x2 - inner.x1 + 1, ih = inner.y2 - inner.y1 + 1, onRight = zr.x2 === R.x2 && zr.x1 !== R.x1;
-        let placed = null;
-        const belts = probe.serialize().belts;
-        for (const set of sets) {
-          if (set.w > iw || set.h > ih) continue;
-          const wallX = onRight ? inner.x2 - set.w + 1 : inner.x1, xs = [...new Set([wallX, onRight ? wallX - 1 : wallX + 1, inner.x1 + ((iw - set.w) >> 1), onRight ? inner.x1 : inner.x2 - set.w + 1])].filter(x => x >= inner.x1 && x + set.w - 1 <= inner.x2);
-          const ys = [inner.y1, inner.y1 + ((ih - set.h) >> 1), inner.y2 - set.h + 1];
-          outer: for (const mirror of onRight ? [true, false] : [false, true]) for (const y0 of ys) for (const x0 of xs) {
-            const props = setProps(env, set, x0, y0, mirror); if (!props) return refuse('this page is missing the furniture for ' + env.RoomStyles.STYLES[z.style].name);
-            const clash = props.some(p => { for (let yy = p.y; yy < p.y + p.h; yy++) for (let xx = p.x; xx < p.x + p.w; xx++) {
-              if (probe.roomAt(xx, yy) !== roomId || probe.propAt(xx, yy) || belts[xx + ',' + yy] || (p.block && land.has(xx + ',' + yy))) return true; }
-              return false; });
-            if (clash) continue;
-            const cp = WM.create(clone(probe.serialize())), added = [];
-            let ok = true;
-            for (const p of props) { const r = cp.addProp({ t: p.t, x: p.x, y: p.y, w: p.w, h: p.h, r: p.r || 0, block: p.block }); if (!r || !r.ok) { ok = false; break; } added.push(r.id); }
-            if (!ok) continue;
-            const g = cp.projectGeometry(), o = spawnTile(cp.serialize(), g);
-            if (added.some(pid => { const p = cp.propById(pid); return p && p.block !== false && !sideReachable(g, o, p); })) continue;
-            placed = { props, cp }; break outer;
-          }
-          if (placed) break;
-        }
-        if (!placed) return refuse(AREA_LABEL[z.area] + ' of ' + (roomSpec ? 'the new room' : target.name) + ' is ' + (zr.x2 - zr.x1 + 1) + ' × ' + (zr.y2 - zr.y1 + 1) + ', with no clear spot there for ' + env.RoomStyles.STYLES[z.style].name + ' (it needs ' + (sets[sets.length - 1].w + 2) + ' × ' + (sets[sets.length - 1].h + 2) + ' of clear floor).', { tooSmall: true });
-        for (const p of placed.props) probe.addProp({ t: p.t, x: p.x, y: p.y, w: p.w, h: p.h, r: p.r || 0, block: p.block });
-        spec.props.push(...placed.props);
-        view.push({ area: z.area, kind: 'style', rect: zr, z, props: placed.props });
-      }
-      const t = tryDesign(doc, spec, env, before);
-      if (!t.ok) return t;
-      return { ok: true, spec, view, recruits, R, roomId: t.built.roomId, final: t.probe, built: t.built };
+      out.lines.push({ graph: clone(z.graph), L, steps: stepsOut.map(x => ({ node: x.node, brief: x.brief, agentId: x.agentId })) });
+      stepsOut.filter(x => x.recruit).forEach(x => out.recruits.push({ line: out.lines.length - 1, node: x.node, role: x.role }));
+      out.view.push({ area: z.area || null, kind: 'line', rect: zr, z, lineIds, shape, runOrder, stepsOut, line: out.lines.length - 1 });
     }
-    let got = null, why = null;
-    if (target) {
-      got = attempt(target.rects[0], null, target.id);
-      if (!got.ok) return got;
-    } else {
-      // no name given: the room is named for what fills it first (COZY, LIBRARY, or the line's own name)
-      const z0 = zones[0], autoName = z0.kind === 'style' ? z0.style.toUpperCase() : String(z0.label || z0.plain || 'WORKROOM').toUpperCase();
-      const roomSpec = { kind, name: (roomName || autoName).slice(0, 24), floorStyle: style.floorStyle || undefined, floorMat: style.floorMat || undefined };
-      for (const R of live.roomSpots(RW, RH, kind, 24)) {
-        const a = attempt(R, roomSpec, null);
-        if (a.ok) { got = a; break; }
-        if (!why || a.tooSmall) why = a;
+    for (const z of zones.filter(q => q.kind === 'style')) {
+      const zr = rectOf(z.area), sets = env.RoomStyles.STYLES[z.style].sets, inner = { x1: zr.x1 + 1, y1: zr.y1 + 1, x2: zr.x2 - 1, y2: zr.y2 - 1 };
+      const iw = inner.x2 - inner.x1 + 1, ih = inner.y2 - inner.y1 + 1, onRight = zr.x2 === R.x2 && zr.x1 !== R.x1;
+      let placed = null;
+      const belts = probe.serialize().belts;
+      for (const set of sets) {
+        if (set.w > iw || set.h > ih) continue;
+        const wallX = onRight ? inner.x2 - set.w + 1 : inner.x1, xs = [...new Set([wallX, onRight ? wallX - 1 : wallX + 1, inner.x1 + ((iw - set.w) >> 1), onRight ? inner.x1 : inner.x2 - set.w + 1])].filter(x => x >= inner.x1 && x + set.w - 1 <= inner.x2);
+        const ys = [...new Set([inner.y1, inner.y1 + 1, inner.y1 + ((ih - set.h) >> 1), inner.y2 - set.h + 1])].filter(y => y >= inner.y1 && y + set.h - 1 <= inner.y2);
+        outer: for (const mirror of onRight ? [true, false] : [false, true]) for (const y0 of ys) for (const x0 of xs) {
+          const props = setProps(env, set, x0, y0, mirror); if (!props) return refuse('this page is missing the furniture for ' + env.RoomStyles.STYLES[z.style].name);
+          const clash = props.some(p => { for (let yy = p.y; yy < p.y + p.h; yy++) for (let xx = p.x; xx < p.x + p.w; xx++) {
+            if (probe.roomAt(xx, yy) !== roomId || probe.propAt(xx, yy) || belts[xx + ',' + yy] || (p.block && land.has(xx + ',' + yy))) return true; }
+            return false; });
+          if (clash) continue;
+          const cp = WM.create(clone(probe.serialize())), added = [];
+          let ok = true;
+          for (const p of props) { const r = cp.addProp({ t: p.t, x: p.x, y: p.y, w: p.w, h: p.h, r: p.r || 0, block: p.block }); if (!r || !r.ok) { ok = false; break; } added.push(r.id); }
+          if (!ok) continue;
+          const g = cp.projectGeometry(), o = spawnTile(cp.serialize(), g);
+          if (added.some(pid => { const p = cp.propById(pid); return p && p.block !== false && !sideReachable(g, o, p); })) continue;
+          placed = { props }; break outer;
+        }
+        if (placed) break;
       }
-      if (!got) return why && why.tooSmall ? why : refuse('There is no clear space beside the station for a ' + RW + ' × ' + RH + ' room with those zones. Remove something, or ask for fewer zones.');
+      if (!placed) return refuse(whereOf(z) + ' is ' + (zr.x2 - zr.x1 + 1) + ' × ' + (zr.y2 - zr.y1 + 1) + ', with no clear spot there for ' + env.RoomStyles.STYLES[z.style].name + ' (it needs ' + (sets[sets.length - 1].w + 2) + ' × ' + (sets[sets.length - 1].h + 2) + ' of clear floor).', { tooSmall: true });
+      for (const p of placed.props) probe.addProp({ t: p.t, x: p.x, y: p.y, w: p.w, h: p.h, r: p.r || 0, block: p.block });
+      out.props.push(...placed.props);
+      out.view.push({ area: z.area, kind: 'style', rect: zr, z, props: placed.props });
     }
+    return Object.assign({ ok: true }, out);
+  }
 
-    // what the card says: where the room goes, each zone in plain words, the equipment, and what is still to do
-    const fp = got.final, crewIds = (env.crew || []).map(a => a && a.id).filter(Boolean);
+  // the edit list of a build: each part its hallway, its room (or the existing room it fills), its lines, its furniture
+  function buildParts(st, spec, WM) {
+    const ids = [], parts = [];
+    for (const part of spec.parts || []) {
+      let roomId = part.roomId || null, hallId = null;
+      if (part.hall) { const r = st.placeHallway({ rect: part.hall }); if (!r || !r.ok) return refuse('the hallway could not be laid there' + (r && r.msg ? ' (' + r.msg + ')' : '')); hallId = r.id; }
+      if (part.room) {
+        const r = st.addRoom({ kind: part.room.kind, name: part.room.name, floorStyle: part.room.floorStyle, floorMat: part.room.floorMat, rect: part.room.rect });
+        if (!r || !r.ok) return refuse('the room could not be added there' + (r && r.msg ? ' (' + r.msg + ')' : ''));
+        roomId = r.id;
+      }
+      // lines first (the layout each was planned with was laid on exactly this floor), then the furniture
+      const lines = [], mine = [];
+      for (const ln of part.lines || []) {
+        const a = st.applyLineLayout(clone(ln.graph), ln.L);
+        if (!a || !a.ok) return refuse('a line could not be laid there' + (a && a.msg ? ' (' + a.msg + ')' : ''));
+        const idOf = a.ids || {};
+        for (const s of ln.steps || []) {
+          const pid = idOf[s.node];
+          if (!pid) return refuse('a step is missing');
+          if (s.brief) { const r = st.setPropBrief(pid, s.brief); if (!r || !r.ok) return refuse('a step\'s instructions could not be saved'); }
+          if (s.agentId) { const r = st.assignPropAgent(pid, s.agentId); if (!r || !r.ok) return refuse('a step\'s agent could not be assigned'); }
+        }
+        const lineIds = ln.graph.nodes.map(n => idOf[n.id]).filter(Boolean);
+        mine.push(...lineIds);
+        lines.push({ idOf, lineIds });
+      }
+      for (const p of part.props || []) {
+        const r = st.addProp({ t: p.t, x: p.x, y: p.y, w: p.w, h: p.h, r: p.r || 0, block: p.block });
+        if (!r || !r.ok) return refuse('a piece of furniture could not be placed there' + (r && r.msg ? ' (' + r.msg + ')' : ''));
+        mine.push(r.id);
+      }
+      ids.push(...mine);
+      parts.push({ roomId, hallId, lines, ids: mine });
+    }
+    return { ok: true, ids, parts, roomId: parts.length ? parts[0].roomId : null, lines: [].concat(...parts.map(p => p.lines)) };
+  }
+  // the same checks as every plan: no new routing problem, every existing line routes as before, and in each room nothing
+  // solid on a doorway's landing and every new piece and machine reachable on foot (through the new hallways)
+  function tryBuild(doc, spec, env, before) {
+    const WM = env.WorldModel, P = env.Pipeline;
+    const probe = WM.create(clone(doc));
+    const b = buildParts(probe, spec, WM);
+    if (!b.ok) return b;
+    const after = floorFacts(probe, P), g = after.geo;
+    for (const e of after.errs) if (!before.errs.has(e)) return refuse('that would add a routing problem (' + e.split(':')[0] + ')');
+    for (const dock in before.chains) if (JSON.stringify(before.chains[dock]) !== JSON.stringify(after.chains[dock])) return refuse('that would change how an existing line routes');
+    for (const dock in before.reach) if (!!before.reach[dock] !== !!after.reach[dock]) return refuse('that would change which existing steps an Inbox reaches');
+    const o = spawnTile(probe.serialize(), g);
+    for (const part of b.parts) {
+      const land = landingTiles(probe, g, part.roomId);
+      for (const pid of part.ids) {
+        const p = probe.propById(pid);
+        if (!p || p.block === false) continue;
+        for (let yy = p.y; yy < p.y + p.h; yy++) for (let xx = p.x; xx < p.x + p.w; xx++) if (land.has(xx + ',' + yy)) return refuse('something would block a doorway');
+        if (!sideReachable(g, o, p)) return refuse('something could not be walked up to');
+      }
+      if (o && part.hallId && !part.roomId) {
+        const hr = probe.rooms().find(r => r.id === part.hallId), H = hr && hr.rects[0];
+        if (H && !g.path(o.x - g.origin.tx, o.y - g.origin.ty, ((H.x1 + H.x2) >> 1) - g.origin.tx, ((H.y1 + H.y2) >> 1) - g.origin.ty)) return refuse('that hallway could not be walked into');
+      }
+      // an empty room must still be one the crew can walk into
+      if (o && part.roomId && !part.ids.length) {
+        const rm = probe.rooms().find(r => r.id === part.roomId), R = rm && rm.rects[0];
+        if (R && !g.path(o.x - g.origin.tx, o.y - g.origin.ty, ((R.x1 + R.x2) >> 1) - g.origin.tx, ((R.y1 + R.y2) >> 1) - g.origin.ty)) return refuse('that room could not be walked into');
+      }
+    }
+    return { ok: true, probe, built: b };
+  }
+
+  function planBuild(doc, req, env) {
+    const WM = env && env.WorldModel, P = env && env.Pipeline, W = env && env.WorkflowLine, RS = env && env.RoomStyles;
+    if (!WM || !P || !W || !doc || !env.PropSprites || !RS) return refuse('the station builder is not loaded on this page');
+    const HOW = 'Send { "rooms": [ … ] }: 1 to 6 rooms, each with ' + ROOM_KEYS.join(', ') + '; and/or { "hallways": [ { "from": room, "to": room } ] } to join rooms that face each other.';
+    if (!req || typeof req !== 'object' || Array.isArray(req)) return refuse(HOW);
+    const extra = Object.keys(req).filter(k => BUILD_MENU.indexOf(k) < 0);
+    if (extra.length) return refuse('StarNet computes every tile itself, so these fields are not accepted: ' + extra.slice(0, 8).join(', ') + '. ' + HOW);
+    const reqRooms = req.rooms == null ? [] : req.rooms, reqHalls = req.hallways == null ? [] : req.hallways;
+    if (!Array.isArray(reqRooms) || reqRooms.length > 6 || !Array.isArray(reqHalls) || reqHalls.length > 6 || !(reqRooms.length + reqHalls.length)) return refuse(HOW);
+    const notes = [], live = WM.create(clone(doc)), before = floorFacts(live, P);
+    let probe = WM.create(clone(doc));
+    const spec = { kind: 'build', parts: [], recruits: [] }, rooms = [], usedNames = {};
+    for (let i = 0; i < reqRooms.length; i++) {
+      const q = reqRooms[i], nth = 'Room ' + (i + 1);
+      if (!q || typeof q !== 'object' || Array.isArray(q)) return refuse(HOW);
+      const bad = Object.keys(q).filter(k => ROOM_KEYS.indexOf(k) < 0);
+      if (bad.length) return refuse('StarNet computes every tile itself, so a room does not take: ' + bad.slice(0, 8).join(', ') + '. A room takes: ' + ROOM_KEYS.join(', ') + '.');
+      const style = styleOf(WM, q); if (!style.ok) return style;
+      // what goes in it: zones (by part of the room), or lines (anywhere in it), or nothing yet
+      if (q.zones != null && q.lines != null) return refuse(nth + ' takes zones (what goes in each part of it) or lines (workflow lines anywhere in it), not both.');
+      let zones = [], lines = [];
+      if (q.zones != null) { const z = parseZones(q.zones, env, live, notes); if (!z.ok) return z; zones = z.zones; }
+      if (q.lines != null) {
+        if (!Array.isArray(q.lines) || !q.lines.length || q.lines.length > 6) return refuse('lines is a list of 1 to 6 workflow lines, each { line | purpose | shape, name, staff, dailyCap, tries }.');
+        for (const l of q.lines) {
+          if (!l || typeof l !== 'object' || Array.isArray(l)) return refuse('Each of a room\'s lines is an object with: ' + LINE_KEYS.join(', ') + '.');
+          const lb = Object.keys(l).filter(k => LINE_KEYS.indexOf(k) < 0);
+          if (lb.length) return refuse('A line only takes: ' + LINE_KEYS.join(', ') + '. Not accepted: ' + lb.slice(0, 6).join(', ') + '.');
+          const ln = parseLine(l, env, live, notes); if (!ln.ok) return ln;
+          lines.push(ln.line);
+        }
+      }
+      const need = contentNeed(zones, lines);
+      const given = typeof q.name === 'string' ? q.name.replace(/\s+/g, ' ').trim().toUpperCase().slice(0, 24) : '';
+
+      // an EXISTING room, furnished or filled where it stands
+      if (q.into != null) {
+        if (['size', 'beside', 'side', 'hallway', 'align'].some(k => q[k] != null)) return refuse(nth + ' fills an existing room (into), so it takes no size, beside, side, hallway or align.');
+        if (given) return refuse('name names a NEW room; ' + String(q.into).slice(0, 40) + ' keeps its name (plan_restyle renames a room).');
+        if (!zones.length && !lines.length) return refuse(nth + ' names an existing room (into) but nothing to put in it: give zones or lines.');
+        const t = roomNamed(probe, q.into); if (!t.ok) return t;
+        const T = t.room;
+        if (T.rects.length > 1) return refuse(T.name + ' is not a plain rectangle, so it cannot be split into zones. Build a new room instead.');
+        const cp = WM.create(clone(probe.serialize())), R = T.rects[0];
+        const f = fillRoom(cp, env, T.id, R, zones, lines, zones.length && !need.one ? { fx: 0.5, fy: 0.5, one: false } : { fx: 1, fy: 1, one: true }, T.name, 0);
+        if (!f.ok) return f;
+        probe = cp;
+        spec.parts.push({ hall: null, room: null, roomId: T.id, lines: f.lines, props: f.props });
+        f.recruits.forEach(rc => spec.recruits.push(Object.assign({ part: spec.parts.length - 1 }, rc)));
+        rooms.push({ part: spec.parts.length - 1, name: T.name, existing: true, R, view: f.view, placed: null });
+        continue;
+      }
+
+      // a NEW room: its size, the room it stands beside, the side, the hallway
+      const sz = sizeOfRoom(q.size); if (!sz.ok) return sz;
+      const sd = sideOf(q.side); if (!sd.ok) return sd;
+      const hl = hallOf(q.hallway); if (!hl.ok) return hl;
+      let align = null;
+      if (q.align != null) { align = { center: 'center', centre: 'center', middle: 'center', start: 'start', end: 'end' }[norm(q.align)]; if (!align) return refuse('align is center, start or end (where along the shared wall the room sits; start is the north or west end).'); }
+      const minWH = zones.length > 1 ? DESIGN_MIN_MANY : (zones.length || lines.length) ? DESIGN_MIN_ONE : SIZES.medium;
+      const tooSmall = () => refuse((given || nth) + ' at ' + sz.size[0] + ' × ' + sz.size[1] + ' is too small for what goes in it: that needs about ' + Math.max(need.w, minWH[0]) + ' × ' + Math.max(need.h, minWH[1]) + '. Leave size out, or ask for a bigger one.');
+      if (sz.size && ((need.hardW || need.w) > sz.size[0] || (need.hardH || need.h) > sz.size[1])) return tooSmall();
+      const RW = sz.size ? sz.size[0] : Math.max(need.w, minWH[0]), RH = sz.size ? sz.size[1] : Math.max(need.h, minWH[1]);
+      if (RW > DESIGN_MAX[0] || RH > DESIGN_MAX[1]) return refuse('What goes in ' + (given || nth) + ' needs a ' + RW + ' × ' + RH + ' room, larger than the ' + DESIGN_MAX[0] + ' × ' + DESIGN_MAX[1] + ' StarNet builds at once. Split it into two rooms.');
+      const tq = q.beside != null ? roomNamed(probe, q.beside) : { ok: true, room: null };   // no room named: beside whichever keeps the station compact
+      if (!tq.ok) return tq;
+      const kind = (style.type && style.type.id) || 'hab';
+      // no name given: the room is named for what fills it first (COZY, the line's own name), else ROOM n
+      const z0 = zones[0] || lines[0], auto = !z0 ? 'ROOM ' + (live.rooms().filter(r => r.kind !== 'corridor').length + rooms.filter(r => !r.existing).length + 1) : z0.kind === 'style' ? z0.style.toUpperCase() : String(z0.label || z0.plain || 'WORKROOM').toUpperCase();
+      const taken = nm => probe.rooms().some(r => r.kind !== 'corridor' && norm(r.name) === norm(nm)) || usedNames[norm(nm)];
+      let name = (given || auto).slice(0, 24);
+      if (given && taken(name)) return refuse('A room is already called ' + name + '. Give this one another name.');
+      for (let k = 2; !given && taken(name) && k < 50; k++) name = (auto.slice(0, 21) + ' ' + k);
+      usedNames[norm(name)] = 1;
+      const roomSpec = { kind, name, floorStyle: style.floorStyle || undefined, floorMat: style.floorMat || undefined };
+      // a size StarNet chose is an estimate: when the contents do not fit it, the room grows and tries again
+      const tries = sz.size ? [[RW, RH]] : [[RW, RH], [RW + 2, RH + 1], [RW + 4, RH + 3], [RW + 7, RH + 5]].filter(([w, h], i) => !i || (w <= DESIGN_MAX[0] && h <= DESIGN_MAX[1]));
+      let got = null, why = null;
+      for (const [TW, TH] of tries) {
+      const pl = roomPlacements(probe, tq.room, TW, TH, { side: sd.side, len: hl.len, align, kind, hangs: hangsOf(env) });
+      if (!pl.ok) { why = why || pl; break; }
+      let small = false;
+      for (const cand of pl.list) {
+        const cp = WM.create(clone(probe.serialize()));
+        if (cand.hall) { const h = cp.placeHallway({ rect: cand.hall }); if (!h || !h.ok) { why = why || refuse('the hallway could not be laid there'); continue; } }
+        const a = cp.addRoom(Object.assign({}, roomSpec, { rect: cand.rect }));
+        if (!a || !a.ok) { why = why || refuse('the room could not be added there'); continue; }
+        const f = fillRoom(cp, env, a.id, cand.rect, zones, lines, need, name, 0);
+        if (!f.ok) { if (!why || f.tooSmall) why = f; if (f.tooSmall) { small = true; break; } continue; }
+        const part = { hall: cand.hall, room: Object.assign({}, roomSpec, { rect: cand.rect }), roomId: null, lines: f.lines, props: f.props };
+        const t = tryBuild(doc, { kind: 'build', parts: spec.parts.concat([part]) }, env, before);
+        if (!t.ok) { why = why || t; continue; }
+        got = { cand, f, part, cp }; break;
+      }
+      if (got || !small) break;
+      }
+      if (!got && sz.size && why && why.tooSmall) return tooSmall();
+      if (!got) return why || refuse('There is no clear space for ' + name + (tq.room ? ' beside ' + tq.room.name : '') + '.');
+      probe = got.cp;
+      spec.parts.push(got.part);
+      got.f.recruits.forEach(rc => spec.recruits.push(Object.assign({ part: spec.parts.length - 1 }, rc)));
+      rooms.push({ part: spec.parts.length - 1, name, existing: false, R: got.cand.rect, view: got.f.view, placed: got.cand, word: sz.word || null });
+    }
+    // hallways between rooms that already stand, or that this plan has just added
+    const halls = [];
+    for (const h of reqHalls) {
+      if (!h || typeof h !== 'object' || Array.isArray(h) || h.from == null || h.to == null || Object.keys(h).some(k => k !== 'from' && k !== 'to')) return refuse('Each hallway is { "from": a room, "to": another room }. StarNet lays it straight between them.');
+      const A = roomNamed(probe, h.from); if (!A.ok) return A;
+      const B = roomNamed(probe, h.to); if (!B.ok) return B;
+      if (A.room.id === B.room.id) return refuse('A hallway joins two different rooms.');
+      const hb = hallBetween(probe, A.room, B.room, hangsOf(env)); if (!hb.ok) return hb;
+      const r = probe.placeHallway({ rect: hb.rect }); if (!r || !r.ok) return refuse('the hallway could not be laid there');
+      spec.parts.push({ hall: hb.rect, room: null, roomId: null, lines: [], props: [] });
+      halls.push({ from: A.room.name, to: B.room.name, len: Math.max(hb.rect.x2 - hb.rect.x1, hb.rect.y2 - hb.rect.y1) + 1 });
+    }
+    const t = tryBuild(doc, spec, env, before);
+    if (!t.ok) return t;
+
+    // what the card says: each room (where it stands and how it is joined), what is in it, the equipment, what is still to do
+    const fp = t.probe, built = t.built, crewIds = (env.crew || []).map(a => a && a.id).filter(Boolean);
     const rp = WM.create(clone(fp.serialize())), deskRooms = [];
-    got.recruits.forEach((rc, i) => {
+    spec.recruits.forEach((rc, i) => {
       const id = '__sb_recruit_' + i, d = rp.ensureWorkstation(id);
       if (d && d.ok && d.roomId) { const rm = rp.roomById ? rp.roomById(d.roomId) : null; if (rm && deskRooms.indexOf(rm.name) < 0) deskRooms.push(rm.name); }
-      rp.assignPropAgent(got.built.lines[rc.line].idOf[rc.node], id); crewIds.push(id);
+      rp.assignPropAgent(built.parts[rc.part].lines[rc.line].idOf[rc.node], id); crewIds.push(id);
     });
-    const room = fp.rooms().find(r => r.id === got.roomId);
-    const neighbour = target ? null : (() => { const R = got.R; const adj = rooms.find(rm => rm.rects.some(q => q.x1 <= R.x2 + 1 && q.x2 >= R.x1 - 1 && q.y1 <= R.y2 + 1 && q.y2 >= R.y1 - 1)); return adj ? adj.name : null; })();
-    const lines = [], steps = [], equipProps = [];
-    const zoneText = got.view.sort((a, b) => req.zones.findIndex(z => areaOf(z.area) === a.area) - req.zones.findIndex(z => areaOf(z.area) === b.area)).map(v => {
-      if (v.kind === 'style') { equipProps.push(...v.props); return AREA_LABEL[v.area] + ', ' + env.RoomStyles.STYLES[v.z.style].name + ' (' + piecesText(env, v.props) + ')'; }
-      const built = got.built.lines[v.line], ids = built.lineIds, rd = readLine(rp, ids, env, crewIds);
-      const recruitNodes = new Set(got.recruits.filter(r => r.line === v.line).map(r => r.node));
-      const stepsView = v.stepsOut.map(x => ({ step: x.step, role: titleCase(x.role), agent: recruitNodes.has(x.node) ? 'a new recruit' : x.agentId ? nameOf(env, x.agentId) : null, instructions: x.brief }));
-      stepsView.forEach(s => steps.push(Object.assign({}, s, { role: s.role + (got.view.filter(q => q.kind === 'line').length > 1 ? ' on ' + (v.z.label || v.z.plain) : '') })));
-      const capP = ids.map(id => fp.propById(id)).find(p => p && p.t === 'intake'), capNow = capP && capP.limits ? capP.limits.maxUsdPerDay : null;
-      lines.push({ label: v.z.label, plain: v.z.plain, area: v.area, ready: rd.ready, blocking: rd.blocking, picked: v.z.picked });
-      return AREA_LABEL[v.area] + ', ' + v.z.plain + (v.z.label ? ' ("' + v.z.label + '")' : '') + ': ' + flowText(v.shape.cols, v.runOrder, stepsView)
-        + (v.z.graph.nodes.some(n => n.t === 'outbox') ? ' → Outbox' : '') + (capP ? (capNow != null ? ' · daily cap $' + capNow : ' · no daily cap') : '');
+    const allLines = [].concat(...rooms.map(r => r.view.filter(v => v.kind === 'line')));
+    const lines = [], steps = [], equipProps = [], zonesView = [];
+    const roomText = rooms.map(r => {
+      const Wd = r.R.x2 - r.R.x1 + 1, Hd = r.R.y2 - r.R.y1 + 1;
+      const where = r.existing ? r.name + ' (' + Wd + ' × ' + Hd + ')'
+        : r.name + ', a new ' + Wd + ' × ' + Hd + ' room ' + r.placed.side + ' of ' + r.placed.target + (r.placed.len ? ', through a hallway' : ', open to it');
+      r.where = where;
+      const order = (reqRooms[rooms.indexOf(r)].zones || []).map(z => areaOf(z.area));
+      const body = r.view.slice().sort((a, b) => (a.area ? order.indexOf(a.area) : 99) - (b.area ? order.indexOf(b.area) : 99)).map(v => {
+        const at = v.area && !(r.view.length === 1 && v.area === 'whole') ? AREA_LABEL[v.area] + ', ' : '';
+        if (v.kind === 'style') {
+          equipProps.push(...v.props);
+          zonesView.push({ rect: v.rect, where: v.area ? AREA_LABEL[v.area].replace(/^the /, '') + (rooms.length > 1 ? ' of ' + r.name : '') : (rooms.length > 1 ? r.name : 'room'), label: env.RoomStyles.STYLES[v.z.style].name });
+          return at + env.RoomStyles.STYLES[v.z.style].name + ' (' + piecesText(env, v.props) + ')';
+        }
+        const bl = built.parts[r.part].lines[v.line], ids = bl.lineIds, rd = readLine(rp, ids, env, crewIds);
+        const recruitNodes = new Set(spec.recruits.filter(x => x.part === r.part && x.line === v.line).map(x => x.node));
+        const stepsView = v.stepsOut.map(x => ({ step: x.step, role: titleCase(x.role), agent: recruitNodes.has(x.node) ? 'a new recruit' : x.agentId ? nameOf(env, x.agentId) : null, instructions: x.brief }));
+        stepsView.forEach(s => steps.push(Object.assign({}, s, { role: s.role + (allLines.length > 1 ? ' on ' + (v.z.label || v.z.plain) : '') })));
+        const capP = ids.map(id => fp.propById(id)).find(p => p && p.t === 'intake'), capNow = capP && capP.limits ? capP.limits.maxUsdPerDay : null;
+        lines.push({ label: v.z.label, plain: v.z.plain, room: r.name, area: v.area, part: r.part, line: v.line, ready: rd.ready, blocking: rd.blocking, picked: v.z.picked });
+        equipProps.push(...ids.map(id => fp.propById(id)).filter(Boolean));
+        zonesView.push({ rect: v.area ? v.rect : r.R, where: v.area ? AREA_LABEL[v.area].replace(/^the /, '') + (rooms.length > 1 ? ' of ' + r.name : '') : (rooms.length > 1 ? r.name : 'room'), label: v.z.label || v.z.plain });
+        return at + v.z.plain + (v.z.label ? ' ("' + v.z.label + '")' : '') + ': ' + flowText(v.shape.cols, v.runOrder, stepsView)
+          + (v.z.graph.nodes.some(n => n.t === 'outbox') ? ' → Outbox' : '') + (capP ? (capNow != null ? ' · daily cap $' + capNow : ' · no daily cap') : '');
+      });
+      return where + ': ' + (body.length ? body.join('; ') : 'empty floor, ready for lines and furniture') + '.';
     });
-    for (const v of got.view) if (v.kind === 'line') equipProps.push(...v.lineIds.map(id => fp.propById(id)).filter(Boolean));
     const equip = equipmentOf(env, equipProps), gains = gainsOf(env, equipProps);
     const blocking = [].concat(...lines.map(l => l.blocking.map(b => (lines.length > 1 ? (l.label || l.plain) + ': ' : '') + b)));
-    const Wd = got.R.x2 - got.R.x1 + 1, Hd = got.R.y2 - got.R.y1 + 1;
-    const where = target ? target.name + ' (' + Wd + ' × ' + Hd + ')' : (room ? room.name : roomName || 'NEW ROOM') + ', a new ' + Wd + ' × ' + Hd + ' room' + (neighbour ? ' beside ' + neighbour : '');
-    const summary = where + ': ' + zoneText.join('; ') + '.'
+    const hallText = halls.map(h => 'A new hallway joins ' + h.from + ' and ' + h.to + '.');
+    const summary = roomText.concat(hallText).join(' ')
       + (equip.length ? ' It brings equipment: ' + equip.join(', ') + (gains.length ? '. What agents gain there: ' + gains.join('; ') : '') + '.' : '')
       + (lines.length ? ' ' + (blocking.length ? 'Still to do after building: ' + blocking.join('; ') + '.' : (lines.length > 1 ? 'Its lines will be ready to run.' : 'It will be ready to run.')) : '')
-      + (got.recruits.length ? ' It adds ' + got.recruits.length + ' crew member' + (got.recruits.length > 1 ? 's' : '') + ': ' + got.recruits.map(r => r.role).join(', ') + (deskRooms.length ? ', with a desk in ' + deskRooms.join(' and ') : '') + '. UNDO does not remove agents; DELETE AGENT in a Dossier does.' : '')
-      + lines.filter(l => l.picked).map(l => ' Picked for the ' + AREA_LABEL[l.area].replace(/^the /, '') + ': ' + l.picked + '.').join('');
-    // the card's drawing: the station's rooms, this room lit, each zone outlined and numbered, what will stand there
+      + (spec.recruits.length ? ' It adds ' + spec.recruits.length + ' crew member' + (spec.recruits.length > 1 ? 's' : '') + ': ' + spec.recruits.map(r => r.role).join(', ') + (deskRooms.length ? ', with a desk in ' + deskRooms.join(' and ') : '') + '. UNDO does not remove agents; DELETE AGENT in a Dossier does.' : '')
+      + lines.filter(l => l.picked).map(l => ' Picked for ' + (l.label || l.plain) + ': ' + l.picked + '.').join('');
     const fpd = fp.serialize();
-    const preview = previewOf(WM, doc, fpd, got.view.map(v => ({ rect: v.rect, where: AREA_LABEL[v.area].replace(/^the /, ''), label: v.kind === 'style' ? env.RoomStyles.STYLES[v.z.style].name : (v.z.label || v.z.plain) })), got.roomId);
-    return { ok: true, plan: { floorSig: sigOf(doc), resultSig: sigOf(fpd), spec: Object.assign({}, got.spec, { recruits: got.recruits }), summary, notes, steps,
-      rooms: [{ name: room ? room.name : roomName, where }], where, lines, preview, line: null } };
+    const preview = previewOf(WM, doc, fpd, zonesView, null);
+    for (const r of rooms) if (r.existing) { const pr = preview.rooms[fpd.order.indexOf(spec.parts[r.part].roomId)]; if (pr) pr.mine = true; }
+    return { ok: true, plan: { floorSig: sigOf(doc), resultSig: sigOf(fpd), spec, summary, notes, steps,
+      rooms: rooms.map(r => ({ name: r.name, where: r.where, existing: r.existing })), hallways: halls,
+      where: rooms.map(r => r.where).concat(halls.map(h => 'a hallway between ' + h.from + ' and ' + h.to)).join('; '), lines, preview, line: null } };
+  }
+
+  /* A ROOM DESCRIBED PART BY PART (station.plan_room's zones, 2026-09-29): one room of the spatial builder. `where` names an
+     existing room to furnish; else a new room, sized for its zones, goes beside the main room on the side that keeps the
+     station compact, joined by a hallway. */
+  function planDesign(doc, req, env) {
+    if (!req || typeof req !== 'object' || Array.isArray(req)) return refuse('Send the request as an object with: ' + DESIGN_MENU.join(', ') + '.');
+    const extra = Object.keys(req).filter(k => DESIGN_MENU.indexOf(k) < 0);
+    if (extra.length) return refuse('StarNet chooses every position and piece of furniture itself, so these fields are not accepted with zones: ' + extra.slice(0, 8).join(', ') + '. Use only: ' + DESIGN_MENU.join(', ') + '.');
+    const into = req.where != null && !/^(a )?new( room)?$/i.test(String(req.where).trim());
+    const room = { zones: req.zones };
+    for (const k of ['type', 'floorStyle', 'floorMat', 'beside', 'side', 'hallway', 'size']) if (req[k] !== undefined) room[k] = req[k];
+    if (into) room.into = req.where;
+    if (req.name !== undefined) room.name = req.name;
+    return planBuild(doc, { rooms: [room] }, env);
+  }
+
+  /* THE MAP (station.map): what the lead needs to SEE before it builds — every room's place and size, what joins it to
+     what, what stands in it, which sizes of room fit on each of its sides, and the floor drawn in characters. x grows
+     east, y grows south; north is the back wall (the top). Pure: it reads a doc and changes nothing. */
+  function mapOf(doc, env) {
+    const WM = env && env.WorldModel, P = env && env.Pipeline;
+    if (!WM || !doc) return refuse('the station builder is not loaded on this page');
+    const st = WM.create(clone(doc)), all = st.rooms(), rooms = all.filter(r => r.kind !== 'corridor'), halls = all.filter(r => r.kind === 'corridor');
+    const main = mainRoom(st), touching = (a, b) => a.rects.some(p => b.rects.some(q => (p.x1 <= q.x2 && q.x1 <= p.x2 && (p.y2 + 1 === q.y1 || q.y2 + 1 === p.y1)) || (p.y1 <= q.y2 && q.y1 <= p.y2 && (p.x2 + 1 === q.x1 || q.x2 + 1 === p.x1))));
+    const MACHINE = MACHINE_T, KIND = WM.ROOM_KINDS || {};
+    let comps = [];
+    try { comps = P && P.lineComponents ? P.lineComponents(st.projectGeometry()) : []; } catch (_) { comps = []; }
+    const out = rooms.map(r => {
+      const B = bboxOf(r), props = st.props().filter(p => st.roomAt(p.x, p.y) === r.id);
+      const joined = new Set();
+      for (const o of rooms) if (o !== r && touching(r, o)) joined.add(o.name + ' (open to it)');
+      for (const h of halls) if (touching(r, h)) for (const o of rooms) if (o !== r && touching(h, o)) joined.add(o.name + ' (through a hallway)');
+      const lineLabels = props.filter(p => p.t === 'intake').map(p => p.label || 'an unnamed line');
+      const tiles = r.rects.reduce((s, q) => s + (q.x2 - q.x1 + 1) * (q.y2 - q.y1 + 1), 0), usedTiles = props.filter(p => p.block !== false).reduce((s, p) => s + (p.w || 1) * (p.h || 1), 0);
+      const fits = {};
+      for (const side of ['north', 'south', 'east', 'west']) fits[side] = Object.keys(SIZES).filter(k => placementsOn(st, r, side, SIZES[k][0], SIZES[k][1], HALL_LEN, null, 'hab', hangsOf(env)).list.length);
+      return { name: r.name, main: r === main || undefined, type: (KIND[r.kind] && KIND[r.kind].label) || r.kind, x: B.x1, y: B.y1, w: B.x2 - B.x1 + 1, h: B.y2 - B.y1 + 1,
+        joinedTo: [...joined], machines: props.filter(p => MACHINE.test(p.t)).length, furniture: props.filter(p => !MACHINE.test(p.t)).length, lines: lineLabels,
+        clearFloor: Math.round(100 * (tiles - usedTiles) / Math.max(1, tiles)) + '%', roomForANewRoom: fits };
+    });
+    // the floor in characters: each room its letter, hallways '+', space for nothing
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for (const r of all) { const b = bboxOf(r); x1 = Math.min(x1, b.x1); y1 = Math.min(y1, b.y1); x2 = Math.max(x2, b.x2); y2 = Math.max(y2, b.y2); }
+    const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', letter = {}, step = (x2 - x1 + 1) > 120 ? 2 : 1, rows = [];
+    rooms.forEach((r, i) => { letter[r.id] = LETTERS[i % 26]; });
+    for (let y = y1; y <= y2; y += step) { let row = ''; for (let x = x1; x <= x2; x += step) { const id = st.roomAt(x, y); row += !id ? ' ' : letter[id] || '+'; } rows.push(row.replace(/\s+$/, '')); }
+    return { ok: true, map: { main: main ? main.name : null, rooms: out, hallways: halls.length,
+      sizes: 'small 12 × 8, medium 18 × 11, large 24 × 14, giant 36 × 20',
+      reading: 'x grows east, y grows south; north is the back wall (the top of the drawing). roomForANewRoom lists the sizes that fit on each side of a room, joined by a hallway.',
+      legend: rooms.map(r => letter[r.id] + ' = ' + r.name).join(', ') + (halls.length ? ', + = a hallway' : '') + (step > 1 ? ' (one character is 2 × 2 tiles)' : ''),
+      drawing: rows } };
   }
 
   function apply(st, pl, env) {
@@ -1182,7 +1588,7 @@
         try { a = env.recruit(rc.role); } catch (_) { a = null; }
         if (!a || !a.id) return refuse('StarNet could not recruit a ' + rc.role + ', so nothing was built.');
         recruited.push({ id: a.id, name: a.name || a.id, role: rc.role });
-        const pid = rc.propIndex != null ? b.ids[rc.propIndex] : ((((b.lines || [])[rc.line]) || {}).idOf || {})[rc.node];
+        const pid = rc.propIndex != null ? b.ids[rc.propIndex] : (((((b.parts || [])[rc.part] || {}).lines || [])[rc.line] || {}).idOf || {})[rc.node];
         const s = st.assignPropAgent(pid, a.id);
         if (!s || !s.ok) return refuse('The new ' + rc.role + ' could not be seated at its step, so nothing was built.');
       }
@@ -1194,10 +1600,10 @@
       return refuse(((r && r.error) || 'The build failed, so nothing was changed.') + kept, { recruited });
     }
     const crewIds = (env.crew || []).map(a => a && a.id).filter(Boolean);
-    if (pl.spec.kind === 'design') {
+    if (pl.spec.kind === 'build') {
       for (const x of recruited) crewIds.push(x.id);
-      const lines = (built.lines || []).map((ln, i) => { const rl = readLine(st, ln.lineIds, env, crewIds); return { label: (pl.lines[i] || {}).label || null, lineId: rl.comp ? rl.comp.key : null, ready: rl.ready, blocking: rl.blocking }; });
-      return { ok: true, kind: 'design', summary: pl.summary, rooms: pl.rooms || [], where: pl.where, lines, roomIds: built.roomId ? [built.roomId] : [], recruited };
+      const lines = (pl.lines || []).map(l => { const ln = ((built.parts[l.part] || {}).lines || [])[l.line], rl = ln ? readLine(st, ln.lineIds, env, crewIds) : { ready: false, blocking: [] }; return { label: l.label || null, room: l.room, lineId: rl.comp ? rl.comp.key : null, ready: rl.ready, blocking: rl.blocking }; });
+      return { ok: true, kind: 'build', summary: pl.summary, rooms: pl.rooms || [], hallways: pl.hallways || [], where: pl.where, lines, roomIds: built.parts.map(p => p.roomId).filter(Boolean), recruited };
     }
     if (pl.spec.kind === 'swap') return { ok: true, kind: 'swap', summary: pl.summary, rooms: pl.rooms || [], where: pl.where, lines: pl.lines || [], preset: pl.preset, roomIds: [] };
     if (pl.spec.kind === 'rooms' || pl.spec.kind === 'restyle') {
@@ -1211,5 +1617,5 @@
       lineKey: rd.comp ? rd.comp.key : null, ready: rd.ready, blocking: rd.blocking, recruited };
   }
 
-  return { MENU, STEP_KEYS, ROOM_MENU, STYLE_MENU, DESIGN_MENU, ZONE_KEYS, AREAS, catalog, resolveLine, plan, planRoom, planRestyle, planDesign, shapeGraph, areaOf, apply, sigOf };
+  return { MENU, STEP_KEYS, ROOM_MENU, STYLE_MENU, DESIGN_MENU, ZONE_KEYS, ROOM_KEYS, LINE_KEYS, AREAS, SIZES, catalog, resolveLine, plan, planRoom, planRestyle, planDesign, planBuild, mapOf, roomPlacements, shapeGraph, areaOf, apply, sigOf };
 });

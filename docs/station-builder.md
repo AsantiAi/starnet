@@ -3,6 +3,8 @@
 Added 2026-09-29. The plan is at https://claude.ai/artifact/CcFcnYcEJraKFMEaXHQiYv.
 
 When the Commander asks, the lead agent can change the floor in these ways:
+- **build** rooms and hallways where the Commander says (the spatial builder, 2026-09-30: "new rooms connected to the
+  bridge, and a giant conveyor room we will fill with workflows")
 - **design** a room the way the Commander describes it, part by part (vibe design: "a new room, the left side cozy, the
   right side a line that builds and tests code")
 - **add** a ready-made assembly line (by default in a new room)
@@ -17,6 +19,7 @@ break the station.
 ## How it works
 
 1. A plan tool: read-only, no approval.
+   - `station.plan_build` (`planBuild`), after `station.map` (`mapOf`)
    - `station.plan_line` (`StationBuilder.plan`)
    - `station.plan_room` (`planRoom`)
    - `station.plan_restyle` (`planRestyle`)
@@ -50,6 +53,57 @@ break the station.
 
    In Full Access the build runs without the card, like every other write tool: the consent broker bypasses every
    prompt in that posture.
+
+## The spatial builder: rooms where the Commander says
+
+Added 2026-09-30, after a live test where the lead could not place a room, use a hallway, or build an empty one. The
+model still never sends a tile. It **looks**, then says where things go in words.
+
+`station.map` (read-only) is what the lead sees:
+- every room: its name, position and size in tiles, its type, which one is the main room (the Commander may say
+  "bridge", "hub" or "main room")
+- what each is joined to, and how: "HOME (through a hallway)", "ANNEX (open to it)"
+- its lines, how many machines and pieces of furniture it holds, how much of its floor is clear
+- `roomForANewRoom`: which sizes fit on each of its four sides. Every size it lists really plans there (tested).
+- the floor drawn in characters, one letter per room and `+` for a hallway; north is the top
+
+`station.plan_build` takes `rooms` (1 to 6) and/or `hallways`. One plan, one approval card, one undo.
+
+| Field of a room | Accepts |
+| --- | --- |
+| `name` | A new room's name. Left out, the room is named for what fills it first, else `ROOM n`. |
+| `size` | `small` (12 × 8), `medium` (18 × 11, an empty room's default), `large` (24 × 14), `giant` (36 × 20), or `{ w: 6-44, h: 5-26 }`. Left out, a room with zones or lines is sized for them and grows until they fit. |
+| `beside` | The room it joins, by name. "bridge", "main" or "hub" mean the main room. A room earlier in the same list works. Left out, StarNet tries every room and takes the spot that keeps the station most compact. |
+| `side` | north, south, east or west of that room (also left, right, top, below). Left out, the most compact side. |
+| `hallway` | `true` (the default: a hallway 3 tiles long, as wide as the presets' own), `false` (the rooms touch and open onto each other), or a length from 2 to 8. |
+| `align` | center, start or end along the shared wall. Left out, centred, sliding along the wall to find clear floor. |
+| `into` | Instead of all of the above: an existing room's name, to fill it where it stands. |
+| `type`, `floorStyle`, `floorMat` | As in `station.plan_room`. FOUNDRY suits a room of conveyor lines. |
+| `zones` | Parts of the room, as in vibe design below. |
+| `lines` | Instead of zones: 1 to 6 workflow lines laid anywhere in the room, each `{ line | purpose | shape, name, staff, dailyCap, tries }`. They pack in rows, and each stays a clear tile from every other line, so they read as separate lines. |
+
+A room with neither zones nor lines is built **empty**, for the Commander to fill later ("put three lines in the
+conveyor hall" is then `{ into: "Conveyor Hall", lines: [...] }`).
+
+`hallways: [{ from, to }]` lays a straight hallway between two rooms that face each other across a gap, including rooms
+added earlier in the same plan.
+
+What placement guarantees, beyond every plan's checks:
+- A hallway's doorway never opens onto furniture: it slides along the wall to clear floor. Nothing that hangs on a north
+  wall is left hanging over an opening.
+- A new room or hallway never stands against a room it was not asked to join. Rooms that touch open onto each other, so
+  that would open a wall nobody asked for.
+- Every new room can be walked into from the main room.
+- A refusal says why and what does fit: "There is no room for a 18 × 11 room north of HOME with a hallway: a hallway is
+  already there. That size fits east, west of HOME." When the named room is full, it names the rooms that have space.
+
+`station.plan_line` and `station.plan_room` place their new rooms the same way, and take `beside`, `side` and `hallway`
+(and `size`, for a room of zones).
+
+**The origin bug.** Found while building this. The routing plan counts tiles from the station's top-left corner, and a
+room added north or west of everything moves that corner. `floorFacts` compared those local tiles, so on any station
+with a working line every such room was refused as "that would change how an existing line routes". It went unseen
+because the old placement only ever grew east and south. Routing facts are now compared in world tiles.
 
 ## Vibe design: a room described part by part
 
@@ -90,7 +144,8 @@ its side table, and what may stand on a table can. The tests install the same ru
 | `line` | One of the Lines shelf's tested lines, by id or plain name (read from `WorldModel.BLUEPRINTS`) |
 | `shape` | Instead of `line`: a line the Commander DESCRIBED, as stages in order (a role, `{ together }`, `{ turns }`, `{ sort }`, `{ review, tries }`: see Vibe design). It is laid out whole by the layout engine in a new room sized for it, or in an existing room (`where`) around what already stands there. `name` is the line's name, `steps` staff it in run order. |
 | `purpose` | The Commander's own words for what the line is for. With no `line`, StarNet picks one with `WorkflowLine.suggestLineFor`, the reader behind FOR YOUR GOAL (the shape of the work: research then writing, a draft and a reviewer, code with tests or a review, two takes), and the card says why. Words with no such shape are refused with the menu. Every step's standard instructions end with `This line is for: "…"`. |
-| `where` | `"new room"` (the default: `worldmodel.roomSpots`, shared with Build mode's MAKE ROOM), or an existing room by name. In an existing room, every machine and belt must fit on clear floor **inside** it. |
+| `where` | `"new room"` (the default), or an existing room by name. In an existing room, every machine and belt must fit on clear floor **inside** it. |
+| `beside`, `side`, `hallway` | Where its new room goes, as in the spatial builder. |
 | `name` | What to call the line (on its Inbox), up to 48 characters |
 | `steps` | `{ step, instructions, agent }` by step number in run order, or `{ role, … }`. `agent` is a crew name or id, `"lead"`, or `"new"` to recruit that role's specialist. A step without instructions gets its role's standard ones. |
 
@@ -109,6 +164,7 @@ card says so. If a recruit fails, nothing is built, and the refusal names any ag
 | `preset` | Instead of a kit: every room of that preset, added beside the station. Nothing already there changes. |
 | `replace` | `true` with a preset: swap the whole station for it, exactly as Build mode's Presets does (`StationTemplates.build` → `replaceLayout`, every agent keeps a desk). The page first backs the current layout up to Build mode's own slot, so RESTORE PREVIOUS in Build → Presets brings it back; if the backup fails, nothing changes. |
 | `where` | `"new room"` (the default), or an existing plain room of at least 18 × 11 with clear floor, to furnish it. A preset always adds new rooms. |
+| `beside`, `side`, `hallway`, `size` | Where a new room goes, as in the spatial builder. `size` is for a room of zones; a kit comes at its own 18 × 11. |
 | `name` | A single new room's name |
 | `type` | A room type's floor, as in Build mode's TYPE palette (HAB, BRIDGE, LAB, FOUNDRY, QUARTERS, STORAGE): its floor style and material |
 | `floorStyle`, `floorMat` | From `WorldModel.FLOOR_STYLES` and `FLOOR_MATERIALS`; they win over a `type` |
@@ -137,6 +193,7 @@ of furniture itself, so these fields are not accepted: x".
   - purposes that pick each line shape, a vague one refused, a named line winning over a purpose
   - recruiting: listed on the card, nobody summoned while planning, seated by the build, one undo for the floor, and a failed recruit building nothing
   - vibe design, under both prop catalogs: every style in a half of a new room beside a working line (reachable, one undo, nothing existing moved); line zones of a shelf line, a purpose and every custom stage kind, each machine inside its zone and nothing but staffing missing; four corners; a whole-room style; an existing room split; the card's drawing; recruiting in a zone; 30 refusals; and a vibe gauntlet of 90 hostile zone requests
+  - the spatial builder: the ask that failed live (three rooms in one plan, a giant empty hall east of the bridge, then three lines into it as three separate lines); every side with a hallway, open plan and a 5-tile hallway; every size word; six unnamed rooms making a block and not a strip; no wall opened that was not asked for; a hallway sliding clear of furniture; hallways between rooms; rooms north and west of a station with a working line (the origin bug); six lines in one giant hall; 25 refusals; the map, and every size it lists really planning; recruiting; and a build gauntlet of 140 plausible and hostile requests
 - `test/station-builder.e2e.test.mjs` (HTTP gate): a mock lead plans and then builds through the real sidecar, bridge
   and page in Chromium:
   - a line: the floor, the Workflow panel pill and the Build-mode refusal are checked, and one UNDO removes it
@@ -147,6 +204,8 @@ of furniture itself, so these fields are not accepted: x".
   - "fix bugs in my repo and test them" picks Build + test, and `"new"` recruits a real Tester through the page, seated and ready
   - a described line ("research it, then a writer and an analyst at once, then a reviewer") lands as four steps with a split and a join, in its own room, in one undo
   - vibe design: "the left side cozy, the right side a line that builds and tests code" lands with every piece of furniture left of every machine, the lamp on its table, in one undo
+  - the ask that failed live, word for word: the lead reads `station.map`, plans an Ops Room north, a furnished Rec Room west and a giant Conveyor Hall east of the bridge in one plan, and builds; each is joined by its own hallway and can be walked into; then two lines go into the hall as two lines; two UNDOs restore the station
+- Live, in ask mode, the same three-room build: the card listed each room with its side and hallway, drew all three and their hallways around the bridge, built nothing while it waited, and Approve once built them.
 - Live, in ask mode, the design card read "DEN, a new 30 × 10 room beside HOME: the left half, a cozy corner (a bookshelf, a tall plant, a rug, a beanbag, a couch, a side table, a plant and a lava lamp); the right half, Build + test …". It drew the room with its two zones numbered, nothing was built while it waited, and Approve once built it.
 - Live, in ask mode:
   - the card read "NOVA wants to build this on your station: Build + test ("SHIP IT") in a new room beside HOME: Engineer (NOVA) → Tester (NOVA) → Outbox · daily cap $5 · up to 3 review tries. It will be ready to run. One UNDO in Build mode removes it." (it now ends "takes it back", which also fits a swap or a restyle)
@@ -156,3 +215,6 @@ of furniture itself, so these fields are not accepted: x".
   In ask mode the lead first settles its Task Brief (`brief_proceed`), because `station.build` is consequential work.
 
 Custom shapes (the plan's phase 4) are built as line zones. The card draws the plan rather than overlaying the live floor.
+
+Not built: the lead cannot move, resize or remove what already stands (rooms, hallways, furniture, lines). The Commander
+does that in Build mode. Hallways run straight, so two rooms that do not face each other cannot be joined directly.

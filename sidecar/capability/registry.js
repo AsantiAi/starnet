@@ -281,6 +281,8 @@
       { capId: 'orchestrator', tool: 'station.layout', scope: 'read', requiresConsent: false, network: false },
       // the station builder (2026-09-29): plan a ready-made line on a copy (changes nothing), then build exactly that
       // plan behind the approval card (one undo, add-only)
+      { capId: 'orchestrator', tool: 'station.map', scope: 'read', requiresConsent: false, network: false },
+      { capId: 'orchestrator', tool: 'station.plan_build', scope: 'read', requiresConsent: false, network: false },
       { capId: 'orchestrator', tool: 'station.plan_line', scope: 'read', requiresConsent: false, network: false },
       { capId: 'orchestrator', tool: 'station.plan_room', scope: 'read', requiresConsent: false, network: false },
       { capId: 'orchestrator', tool: 'station.plan_restyle', scope: 'read', requiresConsent: false, network: false },
