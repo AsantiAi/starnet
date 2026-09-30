@@ -4231,6 +4231,7 @@ const browserSignins = makeSigninStore({
   isBusy: () => !!browserProfileHolder, anyLive: () => browserHandoffs.list().live.length > 0
 });
 const browserHandoffs = makeHandoffHost({
+  now: () => Date.now(),
   emit: (name, payload) => chanEmit(name, payload),
   onSettled: v => { try { browserSignins.note(v); } catch (e) { failNote('stepin.signins.note', e); } },
   // D4: after 2 minutes unanswered, say so on the channel the Commander already uses — the SAME opt-in gate and chat
@@ -19807,7 +19808,7 @@ async function runOnceCore(o) {
     if (billed) { try { credits.finishRun({ runId, agentId, usd: 0, reason: 'leak-guard' }); } catch (_) {} }
     // A test browser must die with its run. Besides process hygiene, this guarantees that a
     // broken page cannot retain any browser-level state after the task finishes.
-    try { browserHandoffs.abortRun(runId); } catch (_) {}   // STEP-IN: a handoff never outlives its run
+    try { browserHandoffs.abortRun(runId); } catch (e) { failNote('stepin.abortRun', e); }   // STEP-IN: a handoff never outlives its run
     if (runBrowser) { try { await runBrowser.session.close(); } catch (_) {} }
     if (runComputer?.close) { try { await runComputer.close(); } catch (_) { failNote('computer.run.close', 'Native run cleanup failed'); } }
     computerRuns.delete(runComputer);

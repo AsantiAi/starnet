@@ -2017,7 +2017,7 @@
         const m = await c.send('Page.getLayoutMetrics', {});
         const v = (m && (m.cssVisualViewport || m.visualViewport)) || {};
         if (v.clientWidth > 0 && v.clientHeight > 0) return { width: Math.round(v.clientWidth), height: Math.round(v.clientHeight) };
-      } catch (_) {}
+      } catch (e) { swallow('stepin.castSize')(e); }
       return { width: stationMetrics.width, height: stationMetrics.height };
     }
     async function streamStart(onFrame) {
@@ -2033,7 +2033,7 @@
         if (!r || !r.data || !castOn || gen !== castGen) return;
         if (r.data === last) { castSame++; return; }
         last = r.data; castSame = 0;
-        try { if (castHandler) castHandler({ data: r.data, mime: 'image/jpeg', width: size.width, height: size.height }); } catch (_) {}
+        try { if (castHandler) castHandler({ data: r.data, mime: 'image/jpeg', width: size.width, height: size.height }); } catch (e) { swallow('stepin.castFrame')(e); }
       };
       await shoot();
       (async () => {
@@ -2048,7 +2048,7 @@
     }
     async function streamStop() {
       castOn = false; castHandler = null; castGen++;
-      if (castKick) { try { castKick(); } catch (_) {} }
+      if (castKick) { try { castKick(); } catch (e) { swallow('stepin.castKick')(e); } }
       return true;
     }
     // One sanitized event from the handoff host (browser-handoff.js sanitizeInput owns the vocabulary).
@@ -2086,7 +2086,7 @@
         const h = await c.send('Page.getNavigationHistory', {});
         const cur = h && Array.isArray(h.entries) ? h.entries[h.currentIndex] : null;
         if (cur) return { url: String(cur.url || ''), title: String(cur.title || '') };
-      } catch (_) {}
+      } catch (e) { swallow('stepin.pageInfo')(e); }
       return { url: '', title: '' };
     }
     async function close() {
@@ -3039,7 +3039,7 @@
           finally { session.thaw(); }
           if (outcome.state === 'returned') {
             let now = { url: '', title: '' };
-            try { now = await surface.pageInfo(); } catch (_) {}
+            try { now = await surface.pageInfo(); } catch (e) { swallow('stepin.handoff.pageInfo')(e); }
             const kept = surface.remembered
               ? ' Their sign-in is kept in the station browser profile, so later runs start signed in.'
               : ' This run uses a temporary browser profile, so the sign-in lasts only for this run.';

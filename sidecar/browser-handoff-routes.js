@@ -21,6 +21,8 @@
    whole profile) can never leave a list claiming sign-ins that no longer exist. */
 'use strict';
 
+const { note: failNote } = require('./failopen.js');
+
 const LIST_FILE = 'StarNet-signins.json';
 const MAX_SITES = 60;
 const MAX_EVENTS = 64;
@@ -45,7 +47,7 @@ function makeSigninStore(deps) {
     } catch (_) { return false; }
   }
   function view() {
-    let exists = false; try { exists = fs.existsSync(dir); } catch (_) {}
+    let exists = false; try { exists = fs.existsSync(dir); } catch (e) { failNote('stepin.profile.exists', e); }
     return { profile: exists, inUse: !!isBusy(), sites: exists ? sites() : [] };
   }
   function forget() {
@@ -53,7 +55,7 @@ function makeSigninStore(deps) {
     if (isBusy()) return { ok: false, error: 'a run is using the station browser right now - try again when it finishes' };
     try { fs.rmSync(dir, { recursive: true, force: true }); }
     catch (e) { return { ok: false, error: 'could not remove the saved browser profile: ' + ((e && e.message) || e) }; }
-    let gone = true; try { gone = !fs.existsSync(dir); } catch (_) {}
+    let gone = true; try { gone = !fs.existsSync(dir); } catch (e) { failNote('stepin.profile.gone', e); }
     return gone ? { ok: true } : { ok: false, error: 'the saved browser profile is still on disk' };
   }
   return { note, view, forget, sites };
