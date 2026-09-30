@@ -3351,6 +3351,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     else if (e.status === 'bundled') { action = '<button class="bb xs" disabled>BUILT IN</button>'; hint = 'Built into StarNet and up to date (v' + esc(e.version) + '). Switch it on or off in SKILL LIBRARY.'; }
     else if (e.status === 'update') { action = '<button class="bb xs" data-skm-act="install" data-slug="' + esc(e.slug) + '">UPDATE</button>'; hint = (e.installedVersion ? 'v' + esc(e.installedVersion) + ' → ' : 'A newer version than your built-in copy: ') + 'v' + esc(e.version); }
     else if (e.status === 'tampered') { action = '<button class="bb xs" data-skm-act="install" data-slug="' + esc(e.slug) + '">REINSTALL</button>'; hint = 'Its files changed on disk after install, so agents are not given it. Reinstall to restore it.'; }
+    else if (e.status === 'pulled') { action = '<button class="bb xs" data-skm-act="uninstall" data-slug="' + esc(e.slug) + '">REMOVE</button>'; hint = 'PULLED from the market: ' + esc(e.pulledReason || 'no reason given') + '. It is switched off and agents are not given it.'; }
     else { action = '<button class="bb sm" data-skm-act="install" data-slug="' + esc(e.slug) + '">+ INSTALL</button>'; hint = gear.length ? 'Needs ' + esc(gear.join(', ')) + ' placed to be used.' : 'Ready to use as soon as it is installed.'; }
     const files = (e.files || []).map(f => '<li><code>' + esc(f.path) + '</code> <span class="dim">' + esc(String(f.bytes)) + ' B</span></li>').join('');
     const upstream = e.upstream && /^https:\/\//.test(String(e.upstream.url || ''))
@@ -3363,7 +3364,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       '<details class="cc-details"><summary>Skill details</summary><div class="cc-details-body">' + origin +
         '<div class="mc-hint">v' + esc(e.version) + ' · ' + esc(e.license || 'no license') + (e.requires && e.requires.length ? ' · uses ' + esc(e.requires.map(g => SKM_GEAR[g] || g).join(', ')) : '') + '</div>' +
         upstream + (files ? '<ul class="skm-files">' + files + '</ul>' : '') + '</div></details>' +
-      '<div class="mc-hint cc-setup-hint"' + (e.status === 'tampered' ? ' style="color:var(--gold)"' : '') + '>' + hint + '</div>' +
+      '<div class="mc-hint cc-setup-hint"' + (e.status === 'tampered' || e.status === 'pulled' ? ' style="color:var(--gold)"' : '') + '>' + hint + '</div>' +
       '<div class="cc-acts">' + action + '</div></div>';
   }
   function skmApplyFilter(list) {
@@ -3372,8 +3373,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       let vis = 0;
       g.querySelectorAll('.cc-card').forEach(c => {
         const hit = skmFilter === 'all' ? true
-          : skmFilter === 'installed' ? (c.dataset.status === 'installed' || c.dataset.status === 'bundled')
-          : skmFilter === 'update' ? (c.dataset.status === 'update' || c.dataset.status === 'tampered')
+          : skmFilter === 'installed' ? (c.dataset.status === 'installed' || c.dataset.status === 'bundled' || c.dataset.status === 'pulled')
+          : skmFilter === 'update' ? (c.dataset.status === 'update' || c.dataset.status === 'tampered' || c.dataset.status === 'pulled')
           : c.dataset.shelf === skmFilter;
         c.hidden = !hit; if (hit) vis++;
       });
@@ -3389,7 +3390,12 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   }
   function renderSkillMarket(host, d, agentId) {
     if (!d || !d.ok) {
-      host.innerHTML = '<p class="mc-hint">Couldn\'t reach the skill market: ' + esc((d && d.error) || 'no answer') + '. Skills you already installed keep working.</p>' +
+      const err = String((d && d.error) || 'no answer');
+      // a catalog that failed its signature or serial check was reached but REFUSED — say that, not "couldn't reach"
+      const refused = /^the skill market (.+?) was not trusted: (.+)$/.exec(err);
+      host.innerHTML = (refused
+        ? '<p class="mc-hint" style="color:var(--gold)">StarNet refused the skill market\'s ' + esc(refused[1]) + ': ' + esc(refused[2]) + '. Nothing from it was used, and skills you already installed keep working.</p>'
+        : '<p class="mc-hint">Couldn\'t reach the skill market: ' + esc(err) + '. Skills you already installed keep working.</p>') +
         '<button class="bb xs" type="button" data-skm-act="retry">TRY AGAIN</button>';
       return;
     }
@@ -3400,7 +3406,12 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       return '<div class="cc-group"><div class="sec"><span class="sec-l">' + esc(label) + '</span><span class="sec-tag">' + rows.length + '</span><span class="sec-r"></span><span class="sec-nd"></span></div>' +
         '<p class="mc-hint">' + esc(note) + '</p><div class="cc-grid">' + rows.map(skmCard).join('') + '</div></div>';
     }).join('');
-    host.innerHTML = html || '<p class="mc-hint">The skill market is empty right now.</p>';
+    const pulled = d.entries.filter(e => e.status === 'pulled');
+    const banner = pulled.length
+      ? '<p class="mc-hint skm-pulled" style="color:var(--gold)">' + (pulled.length === 1 ? esc(pulled[0].name) + ' was' : pulled.length + ' skills you installed were') +
+        ' pulled from the market and switched off. Agents are no longer given ' + (pulled.length === 1 ? 'it' : 'them') + '; REMOVE clears ' + (pulled.length === 1 ? 'it' : 'them') + ' from this station.</p>'
+      : '';
+    host.innerHTML = html ? banner + html : '<p class="mc-hint">The skill market is empty right now.</p>';
     skmApplyFilter(host);
   }
   function loadSkillMarket(agentId, refresh) {

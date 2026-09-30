@@ -7,16 +7,28 @@
      D. refused: a changed file, a digest that doesn't match, dangerous content — and nothing is written
      E. tamper: a file changed on disk after install drops out of the library and shows as tampered
      F. uninstall brings the bundled copy back; the off switch says so
-   Real fs in a temp folder, a fake catalog server, no network. */
+     G. trust: a catalog whose signature does not verify (changed bytes, an untrusted key, no signature) is refused
+        whole; an older signed catalog than one already seen is refused; a manifest listing a file the market does
+        not allow is never offered
+     H. the kill switch: a newer signed pulled list switches an installed skill off (out of the library, PULLED with
+        the reason, re-install refused); an older list can't restore it, a newer one that stops naming it does; a
+        pull by digest leaves a fixed version installable
+   Real fs in a temp folder, a fake catalog server signed with a test key, no network. */
 'use strict';
 const A = require('./_assert.js');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const market = require('../sidecar/skills/market-format.js');
+const signing = require('../sidecar/skills/market-signing.js');
 const { makeSkillMarket } = require('../sidecar/skills/market.js');
 const catalog = require('../sidecar/skills/catalog.js');
 const guard = require('../sidecar/skills/guard.js');
+
+const TEST_KEY = signing.generateKeyPair();
+const TEST_KEYS = [{ id: 'test-market', publicKey: TEST_KEY.publicKey }];
+const INDEX_URL = 'https://market.example/.well-known/starnet-skills.json';
+const REVOKED_URL = 'https://market.example/.well-known/starnet-skills-revoked.json';
 
 const BUNDLED = catalog.parse('---\nname: Feed Watch\nslug: feed-watch\ndescription: Watch a source for change.\ncategory: Research\nrequires: [dish]\nlicense: MIT\n---\n1. Fetch the source.\n2. Compare with the baseline.', 'feed-watch');
 const COMMUNITY_MD = '---\nname: grill-me\ndescription: "Question a plan hard before building it."\nlicense: MIT\nmetadata:\n  title: "Grill Me"\n  category: "Planning"\n  author: "Matt Pocock"\n---\n1. Ask one hard question at a time.\n2. Stop when the plan survives.';
@@ -34,35 +46,44 @@ const MIT = 'MIT License\n\nCopyright (c) 2025 Matt Pocock\n';
   A.throws(() => market.buildEntry({ slug: 'feed-watch', version: '1.0.0', shelf: 'originals', files: [{ path: 'SKILL.md', content: md }, { path: 'scripts/run.sh', content: 'echo' }] }), /not allowed/, 'only SKILL.md, LICENSE/NOTICE and references/ ship');
   A.throws(() => market.buildEntry({ slug: 'feed-watch', version: '1.0.0', shelf: 'originals', files: [{ path: 'SKILL.md', content: md + '\u0000' }] }), /text/, 'market packages are text only');
   A.throws(() => market.buildEntry({ slug: 'feed-watch', version: '1.0.0', shelf: 'originals', requires: ['laser'], files: [{ path: 'SKILL.md', content: md }] }), /unknown gear/, 'gear must be real station objects');
-  const read = market.readCatalog({ format: market.FORMAT, skills: [{ slug: 'ok-one', version: '1.0.0', digest: 'a'.repeat(64), files: [{ path: 'SKILL.md', sha256: 'b'.repeat(64) }] }, { slug: 'Bad', version: '1.0.0' }, { slug: 'no-files', version: '1.0.0', digest: 'a'.repeat(64), files: [] }] });
+  const read = market.readCatalog({ format: market.FORMAT, serial: 1, skills: [{ slug: 'ok-one', version: '1.0.0', digest: 'a'.repeat(64), files: [{ path: 'SKILL.md', sha256: 'b'.repeat(64) }] }, { slug: 'Bad', version: '1.0.0' }, { slug: 'no-files', version: '1.0.0', digest: 'a'.repeat(64), files: [] }] });
   A.eq([read.entries.map(e => e.slug), read.rejected.map(r => r.why)], [['ok-one'], ['bad slug', 'no SKILL.md in its manifest']], 'readCatalog keeps valid rows and names why it dropped the rest');
-  A.throws(() => market.readCatalog({ format: 'other', skills: [] }), /unsupported/, 'an unknown document format is refused outright');
+  A.throws(() => market.readCatalog({ format: 'other', serial: 1, skills: [] }), /unsupported/, 'an unknown document format is refused outright');
+  A.throws(() => market.readCatalog({ format: market.FORMAT, skills: [] }), /unsupported/, 'a catalog without a serial is refused (a station could not tell it from an older one)');
   A.eq(market.compareVersions('1.10.0', '1.9.3'), 1, 'versions compare numerically');
 }
 
-// ---- a fake catalog server built from real entries ----
-function serve(sources, mutate) {
+// ---- a fake catalog server built from real entries, signed with the test key ----
+// opts: serial, revoked, key (a private key PEM to sign with), forge(files) runs AFTER signing (a changed website)
+function serve(sources, mutate, opts) {
+  opts = opts || {};
   const built = sources.map(src => market.buildEntry(src));
-  const doc = market.catalogDocument(built.map(b => b.entry));
+  const doc = market.catalogDocument(built.map(b => b.entry), { serial: opts.serial || 1, revoked: opts.revoked || [] });
   const files = new Map();
-  for (const b of built) for (const f of b.pkg.files) files.set(market.fileUrl('https://market.example/.well-known/starnet-skills.json', b.entry, f.path), Buffer.from(f.content, 'base64').toString('utf8'));
+  for (const b of built) for (const f of b.pkg.files) files.set(market.fileUrl(INDEX_URL, b.entry, f.path), Buffer.from(f.content, 'base64').toString('utf8'));
   if (mutate) mutate(doc, files);
+  const key = opts.key || TEST_KEY.privateKeyPem;
+  const keys = [{ id: opts.keyId || 'test-market', publicKey: signing.publicKeyOf(key) }];
+  const put = (url, value) => { const text = JSON.stringify(value, null, 2) + '\n'; files.set(url, text); files.set(signing.sigUrl(url), signing.sign(Buffer.from(text), key, keys)); };
+  put(INDEX_URL, doc);
+  put(REVOKED_URL, market.revocationDocument({ serial: doc.serial, revoked: doc.revoked }));
+  if (opts.forge) opts.forge(files);
   const calls = [];
   return {
-    calls, doc,
+    calls, doc, files,
     fetchDocument: async (url) => {
       calls.push(url);
-      if (url === 'https://market.example/.well-known/starnet-skills.json') return { url, text: JSON.stringify(doc) };
       if (files.has(url)) return { url, text: files.get(url) };
       throw new Error('404 ' + url);
     }
   };
 }
-function client(server, root, url) {
-  const store = new Map();
+// a client; pass the same `store` to model one station reading different servers over time
+function client(server, root, url, store) {
+  store = store || new Map();
   return makeSkillMarket({
-    fetchDocument: server.fetchDocument, fs, path, root, guard, now: () => 1000,
-    catalogUrl: () => (url === undefined ? 'https://market.example/.well-known/starnet-skills.json' : url),
+    fetchDocument: (u) => server.fetchDocument(u), fs, path, root, guard, now: () => 1000, trustedKeys: TEST_KEYS,
+    catalogUrl: () => (url === undefined ? INDEX_URL : url),
     loadJson: (f) => (store.has(f) ? JSON.parse(store.get(f)) : undefined), saveJson: (f, v) => store.set(f, JSON.stringify(v))
   });
 }
@@ -143,6 +164,82 @@ A.rejects = async (fn, re, label) => { let err = null; try { await fn(); } catch
     const back = m.mergeLibrary([BUNDLED]).find(x => x.slug === 'feed-watch');
     A.ok(!back.market && back.body === BUNDLED.body, 'uninstalling brings the bundled copy back');
     await A.rejects(() => client(serve([GRILL]), tmp(), '').listing({}), /turned off/, 'with the market turned off, it says so');
+  }
+
+  // ---- G. trust: signatures, rollback, the file rule ----
+  {
+    const forged = serve([GRILL], null, { forge: (files) => files.set(INDEX_URL, files.get(INDEX_URL).replace('"Grill Me"', '"Grill Me!"')) });
+    await A.rejects(() => client(forged, tmp()).listing({}), /catalog was not trusted: its signature does not match/, 'a catalog changed after signing is refused whole');
+    await A.rejects(() => client(forged, tmp()).install({ slug: 'grill-me' }), /not trusted/, 'and nothing installs from it');
+    const strangerKey = signing.generateKeyPair().privateKeyPem;
+    const stranger = serve([GRILL], null, { key: strangerKey, keyId: 'someone-else' });
+    await A.rejects(() => client(stranger, tmp()).listing({}), /signed by a key this app does not trust/, 'a catalog signed by any other key is refused');
+    const impostor = serve([GRILL], null, { key: strangerKey });
+    await A.rejects(() => client(impostor, tmp()).listing({}), /signature does not match/, 'and so is one signed by another key that claims to be ours');
+    const unsigned = serve([GRILL], null, { forge: (files) => files.delete(signing.sigUrl(INDEX_URL)) });
+    await A.rejects(() => client(unsigned, tmp()).listing({}), /signature is missing/, 'an unsigned catalog is refused');
+    A.throws(() => signing.sign(Buffer.from('x'), signing.generateKeyPair().privateKeyPem, TEST_KEYS), /not one the app trusts/, 'the build can only sign with a key the app trusts');
+
+    // one station, two servers over time: it saw serial 5, then an OLDER signed catalog shows up
+    const store = new Map();
+    let current = serve([GRILL], null, { serial: 5 });
+    const root = tmp();
+    const m = client({ fetchDocument: (u) => current.fetchDocument(u) }, root, undefined, store);
+    A.eq((await m.listing({})).catalog.serial, 5, 'the station reads catalog serial 5');
+    current = serve([GRILL], null, { serial: 4 });
+    await A.rejects(() => m.listing({ refresh: true }), /older than one this station already saw \(4 < 5\)/, 'a replayed older catalog is refused even though it is validly signed');
+    await A.rejects(() => client({ fetchDocument: (u) => current.fetchDocument(u) }, root, undefined, store).listing({}), /older/, 'and the station remembers the serial across restarts');
+
+    // the file rule, shared by build and app
+    A.eq(['SKILL.md', 'LICENSE', 'NOTICE.md', 'references/checklist.md', 'references/data.csv'].map(market.marketFileAllowed), [true, true, true, true, true], 'SKILL.md, license files and plain-text references are allowed');
+    A.eq(['scripts/run.sh', 'references/tool.py', 'references/x.exe', 'run.js', '../SKILL.md', 'references/'].map(market.marketFileAllowed), [false, false, false, false, false, false], 'scripts, programs and anything else are not, even under references/');
+    const smuggled = serve([GRILL], (doc) => { doc.skills[0].files.push({ path: 'scripts/setup.sh', sha256: 'c'.repeat(64), bytes: 10 }); });
+    const lst = await client(smuggled, tmp()).listing({});
+    A.eq(lst.entries.length, 0, 'a signed catalog entry that lists a script is still never offered');
+    A.eq(lst.catalog.rejected, 1, 'it is counted as rejected');
+  }
+
+  // ---- H. the kill switch ----
+  {
+    const store = new Map();
+    const root = tmp();
+    let current = serve([GRILL], null, { serial: 1 });
+    const m = client({ fetchDocument: (u) => current.fetchDocument(u) }, root, undefined, store);
+    await m.install({ slug: 'grill-me' });
+    A.ok(m.mergeLibrary([BUNDLED]).some(r => r.slug === 'grill-me'), 'precondition: grill-me is installed and in the library');
+    A.eq((await m.checkRevocations()).pulled, [], 'the pulled list names nothing yet');
+
+    current = serve([], null, { serial: 2, revoked: [{ slug: 'grill-me', reason: 'asks the agent to send files out', at: '2026-09-30' }] });
+    const r = await m.checkRevocations();
+    A.eq([r.serial, r.pulled], [2, ['grill-me']], 'a newer signed pulled list switches grill-me off');
+    A.ok(!m.mergeLibrary([BUNDLED]).some(x => x.slug === 'grill-me'), 'it is out of the station library (no agent is offered it)');
+    A.ok(fs.existsSync(path.join(root, 'grill-me', 'SKILL.md')), 'its files stay on disk until the Commander removes it');
+    const row = (await m.listing({ refresh: true })).entries.find(e => e.slug === 'grill-me');
+    A.eq([row && row.status, row && row.pulledReason, row && row.delisted], ['pulled', 'asks the agent to send files out', true], 'the market shows it PULLED with the reason, though the catalog no longer offers it');
+    await A.rejects(() => m.install({ slug: 'grill-me' }), /was pulled from the skill market \(asks the agent to send files out\)/, 're-installing it is refused with the reason');
+    A.eq((await m.checkRevocations()).pulled, [], 'a repeat check does not report it again');
+
+    current = serve([GRILL], null, { serial: 1 });
+    await A.rejects(() => m.checkRevocations(), /older/, 'the old pulled list (serial 1) cannot bring it back');
+    A.ok(!m.mergeLibrary([BUNDLED]).some(x => x.slug === 'grill-me'), 'it stays off');
+    current = serve([GRILL], null, { serial: 3 });
+    await m.checkRevocations();
+    A.ok(m.mergeLibrary([BUNDLED]).some(x => x.slug === 'grill-me'), 'a NEWER list that stops naming it switches it back on');
+
+    // a pull by digest: only that published package
+    const root2 = tmp();
+    const store2 = new Map();
+    let cur2 = serve([GRILL], null, { serial: 1 });
+    const m2 = client({ fetchDocument: (u) => cur2.fetchDocument(u) }, root2, undefined, store2);
+    await m2.install({ slug: 'grill-me' });
+    const badDigest = m2.installed()['grill-me'].digest;
+    const FIXED = Object.assign({}, GRILL, { version: '1.0.1', files: [{ path: 'SKILL.md', content: COMMUNITY_MD + '\n3. Never send files anywhere.' }, { path: 'LICENSE', content: MIT }] });
+    cur2 = serve([FIXED], null, { serial: 2, revoked: [{ slug: 'grill-me', digest: badDigest, reason: 'bad 1.0.0', at: '2026-09-30' }] });
+    const lst2 = await m2.listing({ refresh: true });
+    A.eq(lst2.entries.find(e => e.slug === 'grill-me').status, 'pulled', 'opening the market applies the pulled list too');
+    const up = await m2.install({ slug: 'grill-me' });
+    A.eq([up.ok, up.version], [true, '1.0.1'], 'the fixed version installs over the pulled one');
+    A.ok(!m2.installed()['grill-me'].pulled && m2.mergeLibrary([BUNDLED]).some(x => x.slug === 'grill-me' && x.version === '1.0.1'), 'and is on, in the library');
   }
 
   A.report('skill-market.test');
