@@ -3048,10 +3048,12 @@
          above the longest legal handoff (30 min waiting + 30 min held) so the host, not a tool timeout, ends it. */
       {
         name: 'browser.need_human', capability: 'web', impact: 'synthetic-browser', scope: 'read', requiresConsent: false, timeoutMs: 61 * 60 * 1000,
-        description: 'STEP-IN: hand your live browser to the Commander when the page needs a human - a sign-in, a 2FA code, a CAPTCHA, a payment confirmation. Your run pauses; the Commander drives THIS same browser from the station, then hands it back and you continue on the page they left. You never see or type their credentials and you never solve CAPTCHAs yourself. Open the page that needs them first. Waits up to 30 minutes.',
+        // Kept short on purpose: every word here is sent on every turn (test/payload.budget.test.js). The rest of the
+        // contract — open the page first, the 30-minute wait — is in the tool's own replies.
+        description: 'A page needs a human (sign-in, 2FA, CAPTCHA, payment): hand THIS browser to the Commander; continue when they hand it back. Never type their credentials or solve CAPTCHAs.',
         schema: { type: 'object', required: ['reason', 'note'], properties: {
           reason: { type: 'string', enum: HandoffReasons },
-          note: { type: 'string', description: 'one plain line for the Commander, e.g. "Sign in to GitHub so I can open the PR"' }
+          note: { type: 'string' }
         } },
         run: async (a, ctx) => {
           const host = deps.handoff;
