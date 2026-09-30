@@ -1,0 +1,10 @@
+{
+  "slug": "grounded-citations",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Research",
+  "tags": ["citations", "sources", "fact-checking", "research", "quotes"],
+  "requires": ["dish", "cabinet"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}

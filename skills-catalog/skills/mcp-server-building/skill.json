@@ -1,0 +1,15 @@
+{
+  "slug": "mcp-server-building",
+  "version": "1.0.0",
+  "shelf": "community",
+  "category": "Engineering",
+  "tags": ["mcp", "model-context-protocol", "tools", "api-integration", "typescript", "python"],
+  "requires": ["dish", "cabinet", "workbench"],
+  "license": "Apache-2.0",
+  "authors": ["Anthropic"],
+  "upstream": {
+    "url": "https://github.com/anthropics/skills/tree/b9e19e6f44773509fbdd7001d77ff41a49a486c1/skills/mcp-builder",
+    "commit": "b9e19e6f44773509fbdd7001d77ff41a49a486c1",
+    "license": "Apache-2.0"
+  }
+}
