@@ -145,3 +145,14 @@
   .settings-console .set-slider { grid-template-columns:82px minmax(0,1fr) 40px; gap:8px; }
 }
 @media(prefers-reduced-motion:reduce) { .settings-console .prov-card[data-provider="starnet"]::before { animation:none; } }
+
+/* SETTINGS › REMOTE (app/remote-devices.js): the pairing code sits in a plain well; a QR needs its white ground to scan */
+.settings-console .rmt-pair { display:flex; flex-wrap:wrap; gap:14px; align-items:flex-start; margin:6px 0 4px; }
+.settings-console .rmt-qr { flex:0 0 auto; width:220px; max-width:100%; padding:0; border:1px solid var(--gd-edge, var(--ph-dim)); border-radius:4px; overflow:hidden; background:#fff; }
+.settings-console .rmt-qr svg { display:block; width:100%; height:auto; }
+.settings-console .rmt-pair-text { flex:1 1 220px; min-width:0; display:flex; flex-direction:column; gap:6px; }
+.settings-console .rmt-dev { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.settings-console .rmt-dev .dot { flex:none; width:7px; height:7px; border-radius:50%; background:var(--ph-dim); box-shadow:none; animation:none; }
+.settings-console .rmt-dev .dot.on { background:var(--ok); }
+.settings-console .rmt-dev .bb { margin-left:auto; }
+.settings-console #rmt-msg.bad { color:var(--bad); }

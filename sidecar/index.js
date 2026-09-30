@@ -3465,6 +3465,14 @@ const pendingSummonByRun = new Map();      // runId -> Map(requestId -> resolve(
    would surface prompts through GET /api/state/snapshot that the app is structurally unable to answer — a card
    that lies about being actionable. A Telegram prompt is answered on Telegram (or it fail-closes). */
 const channelPendingByRun = new Map();     // runId -> Map(promptId -> finish(decision)); live CHANNEL consent prompts
+/* STARNET REMOTE (phase 1): every open approval on the station, indexed in ONE registry so a paired phone can
+   see and answer it (sidecar/remote/approvals.js). It is a read-side index: the waiters above keep their
+   fail-closed timing, and a phone answer calls the SAME finisher the original surface would have. The two maps
+   stay separate for the reason given above; the registry is what lets a phone reach both. */
+const remoteApprovals = require('./remote/approvals.js').makeApprovals({
+  now: () => Date.now(),
+  onChange: (kind, row) => { try { if (typeof remoteBroadcast === 'function') remoteBroadcast(kind === 'opened' ? { type: 'approval.opened', approval: row } : { type: 'approval.closed', runId: row.runId, promptId: row.promptId }); } catch (e) { failNote('remote.index.approvalBroadcast', e); } }
+});
 function channelAskConsent(o) {
   const runId = String((o && o.runId) || '');
   let pend = channelPendingByRun.get(runId);
@@ -3475,14 +3483,19 @@ function channelAskConsent(o) {
     scope: (o.tool && o.tool.scope) || 'write',
     argsSummary: consentSummary(o.call)
   };
+  let untrack = null;
   return makeConsentWait({
     pending: pend, signal: o.signal, timeoutMs: CONSENT_TIMEOUT_MS, extendMs: CONSENT_ACK_EXTEND_MS,
     uuid: () => crypto.randomUUID(),
     // onPrompt is the hub's cue to render the keyboard. It is called synchronously while the deny timer is
     // already armed, so a throw from the renderer must never escape into the waiter (it would leave the run
     // paused with no timer owner) — hence the guard.
-    emitPrompt: (promptId) => { try { if (typeof o.onPrompt === 'function') o.onPrompt(promptId, fields); } catch (_) {} }
+    emitPrompt: (promptId) => {
+      try { untrack = remoteApprovals.add(Object.assign({ runId, promptId, agentId: o.agentId, surface: o.surface === 'remote' ? 'remote' : 'channel', finish: pend.get(promptId) }, fields)); } catch (e) { failNote('remote.index.trackChannelPrompt', e); }
+      try { if (typeof o.onPrompt === 'function') o.onPrompt(promptId, fields); } catch (e) { failNote('channels.consent.onPrompt', e); }
+    }
   }).ask().then((decision) => {
+    if (untrack) untrack();
     // makeConsentWait removes its own promptId; drop the run's bucket once the last prompt settles so a long
     // -lived channel can't accumulate one empty Map per run forever.
     if (pend.size === 0) channelPendingByRun.delete(runId);
@@ -9818,6 +9831,190 @@ async function handleGroups(req, res) {
     respondJson(res, 200, { ok: true, result: out });
   } catch (e) { if (!res.headersSent) respondJson(res, e.status || 400, { ok: false, error: redact(String(e.message || e)) }); }
 }
+/* ======================================================================================================================
+   STARNET REMOTE (phase 1) — a paired phone drives this station from anywhere on the home network.
+   The pieces live in sidecar/remote/ (crypto, devices, session, approvals, gateway, lan, host). This block only wires
+   them to the SAME in-process functions the desktop and channels already use. OFF by default: nothing listens on the
+   LAN until the Commander switches Remote on at the desk. The main sidecar port stays loopback-only either way.
+   ==================================================================================================================== */
+const REMOTE_NOTE = '\n\n[REMOTE] The Commander sent this from their phone through StarNet Remote. Work exactly as you normally '
+  + 'would. They will read your reply on a small screen, so lead with the result.';
+const remoteCrypto = require('./remote/crypto.js');
+const remoteDevices = require('./remote/devices.js').makeDevices({
+  fs, path, crypto: remoteCrypto, file: path.join(WORKSPACES, '.secrets', 'remote.json'),
+  now: () => Date.now(), newId: () => crypto.randomUUID(),
+  tighten: () => { if (process.platform !== 'win32') { try { fs.chmodSync(path.join(WORKSPACES, '.secrets', 'remote.json'), 0o600); } catch (e) { failNote('remote.index.fs.chmodSync', e); } } }
+});
+const remoteSessions = require('./remote/session.js').makeSessions({ devices: remoteDevices, crypto: remoteCrypto, now: () => Date.now(), newId: () => crypto.randomUUID() });
+// hoisted on purpose: the approvals registry (defined far above) announces changes through this
+function remoteBroadcast(evt) { try { return remoteSessions.broadcast(evt); } catch (_) { return 0; } }
+const remoteHost = require('./remote/host.js').makeRemoteHost({
+  now: () => Date.now(), newId: () => crypto.randomUUID(), broadcast: remoteBroadcast,
+  roster: () => [...agentRoster].map(([agentId, a]) => ({ agentId, name: a.name, model: a.model, provider: a.provider })),
+  liveRuns: () => {
+    const out = [];
+    for (const [runId, m] of runsMeta) out.push({ runId, agentId: m.agentId, startedAt: m.startedAt, source: m.source || 'interactive' });
+    for (const [runId, m] of hostLiveRuns) if (!out.some(r => r.runId === runId)) out.push({ runId, agentId: m.agentId, startedAt: m.startedAt, source: m.source || 'host' });
+    return out;
+  },
+  transcript: {
+    streams: (o) => transcriptStore.streams(o),
+    history: (sid, o) => transcriptStore.history(sid, o),
+    reconstruct: (sid, o) => transcriptStore.reconstruct(sid, o)
+  },
+  // the same resolution a scheduled routine uses (roster model/provider, runtime key), minus the routine note
+  credentials: (agentId) => {
+    const job = { agentId };
+    const model = cronModelFor(job), provider = cronProviderFor(job), key = cronKeyFor(provider);
+    if (!model) return { ok: false, error: 'choose a model for this agent at the desk first' };
+    if (!cronHasCredential(provider, key)) return { ok: false, error: providerCredentialError(provider) + ' to run tasks from your phone' };
+    const ident = agentRoster.get(agentId) || {};
+    const raw = String(ident.system || '').trim();
+    return { ok: true, model, provider, key, baseUrl: providerRuntimeBaseUrl(provider, ''), reasoningEffort: resolveReasoningEffort(provider, ident.reasoningEffort),
+      system: raw ? withDossier(raw + REMOTE_NOTE, dossierWithGoals()) : withDossier(CRON_PERSONA + REMOTE_NOTE, dossierWithGoals()) };
+  },
+  runOnce: (o) => runOnce(o),
+  askConsent: (o) => channelAskConsent(o),
+  stopRun: (runId) => { const ac = runs.get(runId); if (!ac) return false; try { ac.abort(); } catch (e) { failNote('remote.index.ac.abort', e); } return true; },
+  deliverables: () => deliverableRows(),
+  readFile: async (agentId, rel, offset, length) => {
+    let abs;
+    try { ({ abs } = await fsJail.resolveInside(agentId, rel)); } catch (_) { return { ok: false, error: 'unknown file' }; }
+    let st; try { st = await fsp.stat(abs); } catch (_) { return { ok: false, error: 'unknown file' }; }
+    if (!st.isFile()) return { ok: false, error: 'unknown file' };
+    const start = Math.min(offset, st.size);
+    const want = Math.max(0, Math.min(length, st.size - start));
+    const buf = Buffer.alloc(want);
+    let n = 0;
+    if (want) { const fh = await fsp.open(abs, 'r'); try { ({ bytesRead: n } = await fh.read(buf, 0, want, start)); } finally { await fh.close(); } }
+    const ext = path.extname(abs).toLowerCase();
+    return { path: rel, size: st.size, offset: start, bytes: n, eof: start + n >= st.size,
+      mime: MIME[ext] || 'application/octet-stream', active: isActiveDeliverable(abs), name: safeDownloadName(abs), data: buf.subarray(0, n).toString('base64') };
+  },
+  routines: () => cronStateSnapshot(Date.now()).jobs,
+  setRoutine: async (jobId, enabled) => {
+    if (!cronStore.getJob(cronJobs, jobId)) return { ok: false, error: 'no such routine' };
+    try {
+      await withCronWrite(jobs => enabled
+        ? cronStore.resumeJob(jobs, jobId, { now: Date.now(), defaultTz: CRON_HOST_TZ })
+        : cronStore.pauseJob(jobs, jobId));
+    } catch (e) { return { ok: false, error: 'could not save: ' + ((e && e.message) || e) }; }
+    // pause means stop unattended work now (the same rule as the ROUTINES panel's pause)
+    if (!enabled) { const lease = cronDriver.leases.get(jobId); if (lease && lease.ac) { try { lease.ac.abort(); } catch (e) { failNote('remote.index.lease.ac.abort', e); } } }
+    return { ok: true, enabled: !!enabled };
+  }
+});
+const remoteGateway = require('./remote/gateway.js').makeGateway({ host: remoteHost, approvals: remoteApprovals, now: () => Date.now() });
+const remoteLan = require('./remote/lan.js').makeLanListener({
+  sessions: remoteSessions, devices: remoteDevices, gateway: remoteGateway, crypto: remoteCrypto, now: () => Date.now(),
+  onPaired: () => { if (remoteRelay) remoteRelay.syncTokens(); },
+  log: (m) => console.log('  · remote: ' + m)
+});
+// The station floor's own redacted feed, teed to phones. Only parsed when a phone is actually listening.
+sse.add({
+  writableLength: 0,
+  write(line) {
+    if (!remoteSessions.list().some(s => s.sink)) return true;
+    const i = String(line).indexOf('data: ');
+    if (i < 0) return true;
+    let m; try { m = JSON.parse(String(line).slice(i + 6)); } catch (_) { return true; }
+    if (m && m.name && m.name !== 'station.command') remoteBroadcast({ type: 'station', name: m.name, payload: m.payload });
+    return true;
+  }
+});
+/* THE RELAY (the product path). The station dials OUT to it (sidecar/remote/relay-client.js, Node's built-in
+   WebSocket), so a phone reaches this station from anywhere with no port forwarding. REMOTE_RELAY_LIVE flips on
+   when the public relay is deployed; until then only an explicit STARNET_REMOTE_RELAY address is used (tests,
+   self-hosted relays). With no relay the desk says so plainly instead of pretending phones can connect. */
+const REMOTE_RELAY_LIVE = false;
+const REMOTE_RELAY_DEFAULT = 'https://remote.starnetos.com';
+const REMOTE_RELAY_URL = String(ENV('REMOTE_RELAY') || (REMOTE_RELAY_LIVE ? REMOTE_RELAY_DEFAULT : '')).trim().replace(/\/+$/, '');
+const remoteRelay = REMOTE_RELAY_URL ? require('./remote/relay-client.js').makeRelayClient({
+  url: REMOTE_RELAY_URL, devices: remoteDevices, sessions: remoteSessions, gateway: remoteGateway, crypto: remoteCrypto, now: () => Date.now(),
+  log: (m) => console.log('  · remote relay: ' + m)
+}) : null;
+// The LAN door is a developer/test transport: a phone browser can't use WebCrypto on a plain-http LAN page,
+// so real phones go through the relay. It opens only when asked for (STARNET_REMOTE_LAN=1).
+const REMOTE_LAN_ON = /^(1|true|yes|on)$/i.test(String(ENV('REMOTE_LAN') || '').trim());
+const REMOTE_PORT = Number(ENV('REMOTE_PORT')) || 8797;
+function remoteLanUrls() {
+  const info = remoteLan.info();
+  if (!info.listening) return [];
+  const out = [];
+  let ifs = {}; try { ifs = os.networkInterfaces() || {}; } catch (e) { failNote('remote.index.networkInterfaces', e); }
+  for (const name of Object.keys(ifs)) for (const a of ifs[name] || []) {
+    if (a && a.family === 'IPv4' && !a.internal) out.push('http://' + a.address + ':' + info.port);
+  }
+  return out;
+}
+// Opens whatever doors this build has: the relay link (product) and, only when asked for, the LAN test door.
+async function remoteStartDoors() {
+  if (remoteRelay) remoteRelay.start();
+  if (REMOTE_LAN_ON) return remoteStartLan();
+  return remoteLan.info();
+}
+async function remoteStopDoors() {
+  for (const s of remoteSessions.list()) remoteSessions.end(s.id);
+  if (remoteRelay) remoteRelay.stop();
+  await remoteLan.stop();
+}
+async function remoteStartLan() {
+  if (remoteLan.info().listening) return remoteLan.info();
+  try { return await remoteLan.start({ host: '0.0.0.0', port: REMOTE_PORT }); }
+  catch (e) {
+    if (e && e.code === 'EADDRINUSE') { console.warn('[remote] port ' + REMOTE_PORT + ' is busy — using a free port instead'); return remoteLan.start({ host: '0.0.0.0', port: 0 }); }
+    throw e;
+  }
+}
+function remoteSnapshot() {
+  let station = null;
+  try { const s = remoteDevices.stationKeys(); station = { id: s.id, fingerprint: remoteCrypto.fingerprint(s.publicRaw) }; } catch (e) { failNote('remote.index.stationKeys', e); }
+  const info = remoteLan.info();
+  return { ok: true, enabled: remoteDevices.enabled(), listening: !!info.listening, port: info.port || null, urls: remoteLanUrls(),
+    relay: remoteRelay ? remoteRelay.info() : null,
+    station, devices: remoteDevices.list(), connected: remoteSessions.list().map(s => ({ deviceId: s.deviceId, since: s.createdAt, lastAt: s.lastAt, live: !!s.sink })),
+    approvals: remoteApprovals.size() };
+}
+// GET /api/remote — the desk's DEVICES panel: is Remote on, where does it listen, who is paired, who is connected
+function handleRemoteStatus(req, res) { respondJson(res, 200, remoteSnapshot()); }
+// POST /api/remote/enable { on } — the switch. Persisted; the LAN door opens or closes with it.
+async function handleRemoteEnable(req, res) {
+  let b; try { b = JSON.parse(await readBody(req, 1024)) || {}; } catch (_) { return respondJson(res, 400, { ok: false, error: 'bad request' }); }
+  const on = b.on === true;
+  const saved = remoteDevices.setEnabled(on);
+  if (!saved.ok) return respondJson(res, 500, { ok: false, error: 'could not save the Remote switch (' + saved.error + ')' });
+  try {
+    if (on) await remoteStartDoors();
+    else await remoteStopDoors();
+  } catch (e) { return respondJson(res, 500, Object.assign(remoteSnapshot(), { ok: false, error: 'Remote is on but the network door could not open: ' + ((e && e.message) || e) })); }
+  respondJson(res, 200, remoteSnapshot());
+}
+// POST /api/remote/pair { name? } — a one-time code for ONE phone, valid 10 minutes
+async function handleRemotePair(req, res) {
+  let b; try { b = JSON.parse(await readBody(req, 1024)) || {}; } catch (_) { b = {}; }
+  if (!remoteDevices.enabled()) return respondJson(res, 409, { ok: false, error: 'switch Remote on first' });
+  if (!remoteRelay && !remoteLan.info().listening) return respondJson(res, 409, { ok: false, error: 'this build has no relay set up yet, so a phone has no way to reach this station' });
+  let p; try { p = remoteDevices.startPairing({ name: b.name }); } catch (e) { return respondJson(res, 500, { ok: false, error: (e && e.message) || String(e) }); }
+  const urls = remoteLanUrls();
+  // what the phone needs, in one blob; carried in a URL FRAGMENT so it never reaches a server log. The relay URL
+  // rides along only when it isn't the page's own origin (a self-hosted or test relay).
+  const blob = remoteCrypto.b64u(Buffer.from(JSON.stringify(Object.assign({ v: remoteCrypto.VERSION, i: p.stationId, s: p.stationPub, p: p.pairingId, c: p.code },
+    remoteRelay ? { r: REMOTE_RELAY_URL } : { u: urls }))));
+  const pairUrl = remoteRelay ? REMOTE_RELAY_URL + '/#pair=' + blob : (urls.length ? urls[0] + '/remote/app/#pair=' + blob : null);
+  respondJson(res, 200, { ok: true, pairingId: p.pairingId, code: p.code, stationId: p.stationId, stationPub: p.stationPub, fingerprint: p.fingerprint,
+    expiresAt: p.expiresAt, urls, relay: remoteRelay ? REMOTE_RELAY_URL : null, pairBlob: blob, pairUrl });
+}
+// POST /api/remote/revoke { deviceId } — forget a phone; its live sessions end at once
+async function handleRemoteRevoke(req, res) {
+  let b; try { b = JSON.parse(await readBody(req, 1024)) || {}; } catch (_) { return respondJson(res, 400, { ok: false, error: 'bad request' }); }
+  const id = String(b.deviceId || '');
+  const r = remoteDevices.revoke(id);
+  remoteSessions.endDevice(id);
+  if (remoteRelay) remoteRelay.kickDevice(id);
+  if (!r.ok) return respondJson(res, r.error === 'no such device' ? 404 : 500, { ok: false, error: r.error });
+  respondJson(res, 200, remoteSnapshot());
+}
+
 const ROUTES = [
   { m: 'GET', qsplit: '/api/groups', h: handleGroups },
   { m: 'POST', exact: '/api/groups', h: handleGroups },
@@ -9968,6 +10165,10 @@ const ROUTES = [
   { m: 'POST', exact: '/api/credits/link/start', h: handleCreditsLinkStart },   // begin a pairing: returns a STAR-XXXX code + verifyUrl
   { m: 'POST', exact: '/api/credits/link/poll', h: handleCreditsLinkPoll },     // poll once; on confirm persists the token + configures credits live
   { m: 'POST', exact: '/api/credits/unlink', h: handleCreditsUnlink },          // forget the linked device, revert credits to inert
+  { m: 'GET', exact: '/api/remote', h: handleRemoteStatus },          // STARNET REMOTE: on/off, where it listens, paired + connected phones
+  { m: 'POST', exact: '/api/remote/enable', h: handleRemoteEnable },  // the switch (persisted); opens/closes the LAN door
+  { m: 'POST', exact: '/api/remote/pair', h: handleRemotePair },      // one-time pairing code for ONE phone (10 min)
+  { m: 'POST', exact: '/api/remote/revoke', h: handleRemoteRevoke },  // forget a phone; its sessions end at once
   { m: 'POST', exact: '/api/budget/caps', h: handleBudgetCaps },
   { m: 'POST', exact: '/api/budget/resume', h: handleBudgetResume },
   { m: 'GET', exact: '/api/fallback/chain', h: handleFallbackStatus },
@@ -10357,6 +10558,12 @@ server.listen(PORT, '127.0.0.1', () => {
   if (DEV_MODE) console.log('     ⚡ DEV SEED MODE — onboarding auto-skipped; the page resumes the seeded agent.');
   console.log(bar + '\n');
   try { openaiCompat.announce(); } catch (_) {}   // one honest boot line: is the /v1 external-harness API live?
+  // STARNET REMOTE: reopen the phone door only if the Commander left Remote switched on
+  try {
+    if (remoteDevices.enabled()) remoteStartDoors().then(
+      (i) => console.log('  · remote: on (' + remoteDevices.list().length + ' paired' + (remoteRelay ? ', relay ' + REMOTE_RELAY_URL : ', no relay in this build') + (i && i.listening ? ', LAN test door on port ' + i.port : '') + ')'),
+      (e) => console.warn('[remote] could not open the network door: ' + ((e && e.message) || e)));
+  } catch (e) { console.warn('[remote] ' + ((e && e.message) || e)); }
   // Interrupted runs -> run history (background, chunked; see scanInterruptedRuns). The list was captured at
   // module load, before this process could begin a run, so every file in it belongs to a process that is gone.
   scanInterruptedRuns(bootRunJournalFiles);
@@ -16195,11 +16402,24 @@ async function handleRun(req, res) {
   // unit-tested waiter (consentwait.js) — same fail-closed contract, plus the one-shot CONSENT_ACK_EXTEND_MS
   // extension the browser earns via POST /api/consent/ack once the prompt is provably rendered to a human.
   function askHuman(fields) {
+    let untrack = null;
     return makeConsentWait({
       pending, signal: ac.signal, timeoutMs: CONSENT_TIMEOUT_MS, extendMs: CONSENT_ACK_EXTEND_MS,
       uuid: () => crypto.randomUUID(),
-      emitPrompt: (promptId) => emit('permission.prompt', { promptId, agentId, tool: (fields && fields.tool) || 'tool', scope: (fields && fields.scope) || 'write', argsSummary: (fields && fields.argsSummary) || '' })
-    }).ask();
+      emitPrompt: (promptId) => {
+        const row = { promptId, agentId, tool: (fields && fields.tool) || 'tool', scope: (fields && fields.scope) || 'write', argsSummary: (fields && fields.argsSummary) || '' };
+        emit('permission.prompt', row);
+        // STARNET REMOTE: index the prompt so a paired phone can answer it too. A phone answer resolves the same
+        // finisher and then tells this run's page (permission.response on its own stream), so the floor stops
+        // waiting on a question somebody already answered elsewhere.
+        const orig = pending.get(promptId);
+        if (orig) {
+          const viaRemote = (d) => { orig(d); if (typeof d === 'string') { try { emit('permission.response', { promptId, decision: d === 'once' || d === 'session' ? d : 'deny' }); } catch (e) { failNote('remote.index.deskPermissionResponse', e); } } };
+          viaRemote.extend = orig.extend;
+          try { untrack = remoteApprovals.add(Object.assign({ runId, surface: 'desk', finish: viaRemote }, row)); } catch (e) { failNote('remote.index.trackDeskPrompt', e); }
+        }
+      }
+    }).ask().then((v) => { if (untrack) untrack(); return v; });
   }
   function promptConsent(call, tool) {
     return askHuman({ tool: call.name, scope: (tool && tool.scope) || 'write', argsSummary: consentSummary(call) });
