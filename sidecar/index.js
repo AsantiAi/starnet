@@ -641,15 +641,9 @@ const browserProfileWaiters = new Set();
 function browserProfileLeaseFor(runId) {
   return {
     dir: BROWSER_PROFILE_DIR,
-    acquire: () => {
-      if (browserProfileHolder && browserProfileHolder !== runId) {
-        // the station's shared browser holds the profile between runs: ask it to give the profile up when nobody is
-        // driving or watching it (it closes; this caller's own wait then gets the lease on a later poll)
-        if (browserProfileHolder === 'station-browser') { try { browserViews.yieldProfile(); } catch (e) { failNote('browser-profile.yield', e); } }
-        return false;
-      }
-      browserProfileHolder = runId; return true;
-    },
+    acquire: () => { if (browserProfileHolder && browserProfileHolder !== runId) return false; browserProfileHolder = runId; return true; },
+    // lost to the STATION's shared browser (open for the Commander): browse on a temporary profile, never close theirs
+    fallback: () => browserProfileHolder === 'station-browser' && runId !== 'station-browser',
     release: () => { if (browserProfileHolder === runId) browserProfileHolder = null; }
   };
 }
@@ -4267,8 +4261,9 @@ const browserHandoffRoutes = makeHandoffRoutes({ host: browserHandoffs, readBody
    interactive (COMMS) run's browser.* tools are bound to it (runOnce asks sessionForRun), the BROWSER window streams
    it live, and between runs the Commander drives it — a typed address, clicks, keys. Same host authority as every run
    browser (headless, synthetic input only, the pinned network proxy), and it holds the durable station profile under
-   its own lease id, so a sign-in either of you makes is there next time. The lease is single-owner, so this browser
-   YIELDS it to another run when nobody is driving or watching (browserProfileLeaseFor → yieldProfile). */
+   its own lease id, so a sign-in either of you makes is there next time. It never gives the profile up to another run
+   (that would close the browser in front of the Commander): a run that loses to it browses on a temporary profile
+   (browserProfileLeaseFor → fallback). */
 const STATION_BROWSER_ID = 'station-browser';
 const stationBrowserLogin = { prompt: undefined };   // browser.login's consent channel: the DRIVING run's prompt, set per run
 const browserViews = makeBrowserViews({

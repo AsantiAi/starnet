@@ -2180,6 +2180,11 @@
     function profileDeps() {
       // cleanupProfile:false is load-bearing — the durable profile must never ride the ephemeral rm on close.
       if (acquirePersistent()) return { profileDir: deps.persistentProfile.dir, cleanupProfile: false, profileIsPersistent: true };
+      // The STATION's shared browser (browser-view.js) holds the profile while it is open, which can be for a long time.
+      // A run that loses to IT browses on its own temporary profile (signed out, and its handoff says `remembered:
+      // false` truthfully) rather than erroring or closing the browser the Commander is using. Against another RUN the
+      // old rule stands: wait, then refuse — two runs never silently swap account identity.
+      if (deps.persistentProfile && !attachedToUserBrowser && typeof deps.persistentProfile.fallback === 'function' && deps.persistentProfile.fallback()) return { profileIsPersistent: false };
       if (deps.persistentProfile && !attachedToUserBrowser) throw new Error('the station browser profile is in use by another agent run — retry after it finishes; saved logins were not replaced');
       return { profileIsPersistent: false };
     }
@@ -2191,6 +2196,7 @@
       for (let elapsed = 0; ; elapsed += 100) {
         if (signal && signal.aborted) throw new Error('browser session wait cancelled');
         if (acquirePersistent()) return;
+        if (typeof deps.persistentProfile.fallback === 'function' && deps.persistentProfile.fallback()) return;   // profileDeps goes temporary
         if (!reported && typeof deps.onProfileWait === 'function') { deps.onProfileWait(true); reported = true; }
         if (elapsed >= limit) throw new Error('the station browser profile is in use by another agent run — retry after it finishes; saved logins were not replaced');
         await new Promise((resolve, reject) => {

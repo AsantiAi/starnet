@@ -16,9 +16,10 @@
    A second interactive run that starts while another is driving gets a private per-run browser exactly as before
    (sessionForRun returns null), and so does every unattended run (cron, night shift, channels).
 
-   THE PROFILE LEASE. The durable profile is a single-owner lease and a run that cannot get it errors after 8s. So
-   the station browser YIELDS: when another run asks for the profile and nobody is driving or watching this browser,
-   it closes (yieldProfile) and the run gets the profile within its wait. It also closes after ten idle minutes.
+   THE PROFILE LEASE. The durable profile is a single-owner lease. The station browser holds it while open and NEVER
+   gives it up to another run (Andrew: it "constantly closes" — a browser closing under you is the bug): a run that
+   loses to it browses on a temporary profile instead (index.js browserProfileLeaseFor → fallback). It closes only
+   after half an hour with nobody driving or watching it.
 
    LAWS
      · Truthful telemetry: `open` means the session really has a browser; `driver` is the run bound right now;
@@ -33,7 +34,7 @@ const { sanitizeInput } = require('./browser-handoff.js');
 const FRAME_POLL_MAX_MS = 12000;
 const VIEW_POLL_MS = 2500;                 // a still page answers this often, so the address shown is never long stale
 const STREAM_IDLE_MS = 6000;               // nobody polled a picture for this long → stop capturing it
-const STATION_IDLE_MS = 10 * 60 * 1000;    // nobody driving, nobody watching for this long → the browser closes
+const STATION_IDLE_MS = 30 * 60 * 1000;    // nobody driving, nobody watching for this long → the browser closes
 const VIEWER_RECENT_MS = 15000;            // a picture was asked for this recently → somebody is watching
 const PAGE_INFO_EVERY_MS = 300;
 const SEARCH_URL = 'https://duckduckgo.com/?q=';
@@ -131,15 +132,6 @@ function makeBrowserViews(deps) {
     if (!station) station = { session: makeSession(), driver: null, idleTimer: null, lastPollAt: 0 };
     return station;
   }
-  /* Another run wants the durable profile. If nobody is driving and nobody is watching, give it up (close) so that
-     run gets the profile inside its own wait. Returns true when a close was started. */
-  function yieldProfile() {
-    if (!station || station.driver) return false;
-    if (now() - station.lastPollAt < VIEWER_RECENT_MS) return false;
-    closeStation().catch(swallow('view.station-yield'));
-    return true;
-  }
-
   // ---- a run takes / releases the station browser ----
   /* Session methods that do not DRIVE the page: asking them never makes a run the driver. */
   const PASSIVE = new Set(['handoffSurface', 'freeze', 'thaw', 'frozen', 'handTo', 'hasDriver', 'visible', 'headlessFallback', 'attachedPort', 'lastResponse', 'evalAllowed', 'close']);
@@ -346,7 +338,7 @@ function makeBrowserViews(deps) {
     if (station) { station.driver = null; await closeStation(); }
   }
 
-  return { sessionForRun, releaseRun, registerRun, unregisterRun, yieldProfile, open, nav, input, frame, list, close: closeStation, closeAll,
+  return { sessionForRun, releaseRun, registerRun, unregisterRun, open, nav, input, frame, list, close: closeStation, closeAll,
     _internals: { runs, chans, station: () => station } };
 }
 

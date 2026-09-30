@@ -250,6 +250,7 @@ test/apiauth.test.js
 test/apitickets.test.js
 test/outputbrowser.test.js
 test/browser-view.test.js
+test/browser-profile-fallback.test.js
 test/notebook.test.js
 test/skills.test.js
 test/skill-exchange.test.js

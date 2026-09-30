@@ -191,27 +191,25 @@ function rig(extra) {
     clk.advance(11 * 60 * 1000); await tick();
     A.eq(made[0].closed, 0, 'a driven browser never idles out');
     views.releaseRun('r1');
-    clk.advance(10 * 60 * 1000 + 1); await tick();
-    A.eq(made[0].closed, 1, 'ten minutes with nobody driving or watching → it closes');
+    clk.advance(30 * 60 * 1000 + 1); await tick();
+    A.eq(made[0].closed, 1, 'half an hour with nobody driving or watching → it closes');
     A.eq(views.list().station.open, false, 'and is no longer open');
     A.eq((await views.frame('station', 0, 0)).code, 'closed', 'no picture after it closed');
   }
 
-  // ---- the profile lease yields to another run only when nobody is driving or watching ----
+  // ---- it NEVER closes under the Commander: only after half an hour with nobody driving or watching ----
   {
     const { clk, made, views } = rig();
-    A.eq(views.yieldProfile(), false, 'nothing to yield when no browser is open');
     await views.open('example.com');
     await views.frame('station', 0, 0);
-    A.eq(views.yieldProfile(), false, 'somebody is watching: it keeps the profile');
-    clk.advance(16000);
-    await views.sessionForRun({ agentId: 'nova', runId: 'r1', interactive: true }).forward();
-    A.eq(views.yieldProfile(), false, 'a run is driving: it keeps the profile');
-    views.releaseRun('r1');
-    A.eq(views.yieldProfile(), true, 'idle and unwatched: it gives the profile up');
-    await tick();
-    A.eq(made[0].closed, 1, '…by closing, which releases the lease');
-    A.eq(views.list().station.open, false, 'closed');
+    clk.advance(29 * 60 * 1000); await tick();
+    A.eq(made[0].closed, 0, 'still open after 29 idle minutes');
+    await views.frame('station', 0, 0);   // somebody looks at it: the half hour starts again
+    clk.advance(29 * 60 * 1000); await tick();
+    A.eq(made[0].closed, 0, 'looking at it keeps it open');
+    A.eq(typeof views.yieldProfile, 'undefined', 'there is no path that closes it for another run');
+    clk.advance(60 * 1000 + 1); await tick();
+    A.eq(made[0].closed, 1, 'half an hour with nobody driving or watching → it closes');
   }
 
   // ---- a navigation the browser refuses on a fresh session leaves nothing open ----
