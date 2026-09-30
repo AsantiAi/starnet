@@ -406,6 +406,8 @@ const StepIn = (() => {
     else refresh();
   }
 
-  return { mount, unmount, open, refresh, _state: () => ({ live: live.slice(), recent: recent.slice(), signins, focusId, streaming: !!(view && view.streamId), seq: view ? view.seq : 0 }) };
+  // live(): the handoffs waiting on / held by the Commander right now (a copy) — the public read other windows use
+  // (the DESK SCREEN banner), so nobody has to reach into _state().
+  return { mount, unmount, open, refresh, live: () => live.slice(), _state: () => ({ live: live.slice(), recent: recent.slice(), signins, focusId, streaming: !!(view && view.streamId), seq: view ? view.seq : 0 }) };
 })();
 if (typeof window !== 'undefined') window.StepIn = StepIn;

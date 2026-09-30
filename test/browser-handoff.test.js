@@ -137,7 +137,7 @@ const flush = () => new Promise(r => setImmediate(r));
 
   // ---- cancel ("can't do it") ----
   {
-    const host = H.makeHandoffHost({});
+    const host = H.makeHandoffHost({ now: () => Date.now() });
     const r = host.request({ agentId: 'a', runId: 'r4', surface: fakeSurface() });
     host.cancel(r.id);
     A.eq((await r.done).state, 'cancelled', 'CANCEL tells the agent to take another route');
@@ -146,7 +146,7 @@ const flush = () => new Promise(r => setImmediate(r));
 
   // ---- the run's own signal ends the handoff ----
   {
-    const host = H.makeHandoffHost({});
+    const host = H.makeHandoffHost({ now: () => Date.now() });
     const ac = new AbortController();
     const surf = fakeSurface();
     const r = host.request({ agentId: 'a', runId: 'r5', surface: surf, signal: ac.signal });
@@ -164,7 +164,7 @@ const flush = () => new Promise(r => setImmediate(r));
 
   // ---- surface contract + stream failure is honest ----
   {
-    const host = H.makeHandoffHost({});
+    const host = H.makeHandoffHost({ now: () => Date.now() });
     A.throws(() => host.request({ agentId: 'a', runId: 'r8', surface: {} }), 'a handoff needs a real browser surface');
     A.throws(() => host.request({ runId: 'r8', surface: fakeSurface() }), 'a handoff needs an agent');
     const bad = fakeSurface(); bad.startStream = async () => { throw new Error('no page'); };
