@@ -117,3 +117,15 @@ body.glass-demo #screen-game #bottombar .bb-menu .bb.bb-app { min-height: 50px; 
 .term.apps-win .app-row .mc-acts { gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .term.apps-win .ext-empty { font-size: 16px; }
 .term.plugin-app-win .app-bar { background: transparent; border-top: 1px solid var(--gd-edge, rgba(var(--ph-rgb),.24)); }
+/* AUTO-UPDATE under an app: how often + what each update does, in the same glass as the rest of the bar */
+.term.plugin-app-win .app-auto { display: flex; flex-direction: column; gap: 8px; padding: 10px 0 2px; border-top: 1px solid var(--ap-edge, rgba(var(--ph-rgb),.2)); }
+.term.plugin-app-win .app-auto-h { font: 17px/1.2 'VT323',monospace; color: var(--ph-bright); letter-spacing: .5px; }
+.term.plugin-app-win .app-auto-every { display: flex; flex-wrap: wrap; gap: 8px; }
+.term.plugin-app-win .app-auto-every .apps-chip { min-height: 34px; padding: 5px 12px; }
+.term.plugin-app-win .app-auto-every .apps-chip[aria-pressed="true"] { background: var(--ap-on, rgba(var(--ph-rgb),.13)); border-color: var(--ph); color: var(--ph-bright); box-shadow: var(--ap-light), inset 0 -2px 0 rgba(var(--ph-rgb),.65); }
+.term.plugin-app-win .app-auto-l { font: 16px/1.2 'VT323',monospace; color: var(--text); }
+.term.plugin-app-win .app-auto-task { resize: vertical; min-height: 58px; }
+.term.plugin-app-win .app-auto-task:disabled { opacity: .45; }
+.term.plugin-app-win .app-auto-acts { display: flex; align-items: center; gap: 12px; }
+.term.plugin-app-win .app-auto-note { font: 15px/1.3 'VT323',monospace; color: var(--ph-dim); }
+.term.plugin-app-win .app-auto-toggle[aria-expanded="true"] { color: var(--ph-bright); border-color: var(--ph); background: var(--ap-on, rgba(var(--ph-rgb),.13)); }
