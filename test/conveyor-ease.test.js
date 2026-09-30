@@ -75,6 +75,12 @@ A.ok(/bayLive: id => \{ const w = lineWatch\(\);/.test(world) && /bayLive: id =>
 A.ok(/'Sending the job into the line…'/.test(live) && /'Handing the job on to the next step…'/.test(live), '…and between steps it says so — it never guesses a step');
 A.ok(/function markWorking\(id\)/.test(live) && /n\.classList\.toggle\('working', !!id && n\.dataset\.node === id\)/.test(live) && /markWorking\(null\); return;/.test(live), 'the diagram\'s tile of the working step wears the working lamp, cleared when the job is back');
 A.ok(/\.wf-node\.working \.dot \{ background: #ffb23e;/.test(css) && !/\.wf-node\.working \{[^}]*var\(--gold\)/.test(css), '…the floor lamp\'s working amber on the tile\'s own lamp — never the selection\'s gold');
+/* ---------- nothing claims what an UNDO took back; the live lamp holds on every card ---------- */
+A.ok(/const fixInUse = x => \{ const p = prop\(x\.dockId\) \|\| \{\}; return \(x\.does == null \|\| \(p\.brief \|\| ''\) === x\.does\) && \(x\.hands == null \|\| \(p\.hands \|\| ''\) === x\.hands\); \};/.test(panel) && !/x\.applied/.test(panel),
+  'a fix says IN USE only while the step says exactly what it suggested (an UNDO puts USE THIS back)');
+A.ok(/S\.exampleStamp === mine\.stamp && exampleKept\(mine\)/.test(panel) && /String\(p\.brief \|\| ''\)\.indexOf\(EX_HEAD\) >= 0/.test(panel), '…and the example tag only while the step still holds its example');
+A.ok(/if \(!el \|\| !sr \|\| !sr\.pending\) \{ clearInterval\(liveTimer\); liveTimer = 0; markWorking\(null\); return; \}/.test(panel) && /if \(n\) n\.textContent = now\.text;/.test(panel) && (panel.match(/startLive\(\);/g) || []).length >= 4,
+  'the live read-out runs while a job is out whatever card is open, so the diagram\'s working lamp stays true');
 const route = at(sidecar, 'async function handleRoutingFixSuggest(req, res) {', 'async function stepTestRunDock(h) {');
 A.ok(/\{ m: 'POST', exact: '\/api\/routing\/fix-suggest', h: handleRoutingFixSuggest \}/.test(sidecar), 'POST /api/routing/fix-suggest is a route');
 A.ok(route.indexOf('budget.check(null, \'agent\', 0, Date.now(), null)') > 0 && route.indexOf('budget.check(') < route.indexOf('provider.stream('), '…the spending cap is read BEFORE the model call');

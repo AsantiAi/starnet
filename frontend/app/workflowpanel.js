@@ -923,7 +923,7 @@ const WorkflowPanel = (() => {
       + limField('lb-day', 'maxUsdPerDay', '$ per day, this line', 'off', '0.50')
       + '<div class="wf-help lb-note" id="lb-note">' + esc(lbDefaultNote) + '</div></details>';
     wireJob();
-    if ($('#wf-send-live') && !liveTimer) liveTimer = setInterval(tickLive, 1000);
+    if (mine && mine.pending) startLive();   // (a job already out when the card opens: the read-out picks it up)
     // the job to send (it is also this line's test job)
     const job = $('#wf-send-in');
     job.addEventListener('input', () => { S.testJob[S.lineKey] = job.value; saveTests(); });
@@ -932,7 +932,7 @@ const WorkflowPanel = (() => {
       const t = job.value.trim();
       if (!t) { H.sfx('bad'); H.flashTip('write the job first: what should the line work on?', false); job.focus(); return; }
       S.testJob[S.lineKey] = job.value; saveTests(); S.prevJob = null; liveSeen = false;   // a new job: nothing to compare it with, nothing seen working yet
-      H.runSample(cc, { text: t, onUpdate: () => paint(false) });
+      H.runSample(cc, { text: t, onUpdate: () => paint(false) }); startLive();
     };
     const sendStop = $('#wf-send-stop'); if (sendStop) sendStop.onclick = () => {
       H.sfx('click');
@@ -1613,11 +1613,13 @@ const WorkflowPanel = (() => {
   // the diagram's tile of the step working now wears the working edge (only the lamp's WORKING — never a guess)
   function markWorking(id) { if (el) el.querySelectorAll('#wf-strip .wf-node').forEach(n => n.classList.toggle('working', !!id && n.dataset.node === id)); }
   function tickLive() {
-    const n = el && el.querySelector('#wf-send-live'), sr = H.sampleState ? H.sampleState() : null;
-    if (!n || !sr || !sr.pending) { clearInterval(liveTimer); liveTimer = 0; markWorking(null); return; }
-    const now = liveNow(flow());
-    n.textContent = now.text; markWorking(now.id);
+    const sr = H.sampleState ? H.sampleState() : null;
+    if (!el || !sr || !sr.pending) { clearInterval(liveTimer); liveTimer = 0; markWorking(null); return; }
+    const now = liveNow(flow()), n = el.querySelector('#wf-send-live');
+    if (n) n.textContent = now.text;
+    markWorking(now.id);
   }
+  function startLive() { if (!liveTimer) liveTimer = setInterval(tickLive, 1000); }
   function jobResultHTML(mine, f) {
     const v = mine && mine.view; if (!v) return '';
     if (v.stopped || !v.ok) return '<div class="wf-sample-res">' + H.sampleHTML(v) + '</div>';
@@ -1636,7 +1638,7 @@ const WorkflowPanel = (() => {
       + '<div class="wf-job-h"><b>✓ DELIVERED</b> · ' + runs.length + ' step' + (runs.length === 1 ? '' : 's') + (v.usd != null ? ' · $' + v.usd.toFixed(4) : '') + (mine.folded ? ' · in the OUTBOX' : '') + '</div>'
       + ln.notes.map(t => '<div class="wf-warnline">⚠ ' + esc(t) + '</div>').join('')
       + '<div class="wf-from"><span>THE RESULT</span></div><div class="wf-io out wf-job-out">' + esc(shown.trim() || '(the line delivered an empty reply)') + '</div>'
-      + '<div class="wf-row">' + (S.exampleStamp === mine.stamp ? '<span class="wf-tag">★ THE LINE’S EXAMPLE</span>'
+      + '<div class="wf-row">' + (S.exampleStamp === mine.stamp && exampleKept(mine) ? '<span class="wf-tag">★ THE LINE’S EXAMPLE</span>'
         : '<button type="button" class="bb sm" id="wf-keep-ex" data-tip="The step that wrote this result will match its format, length and tone every time: the result is added to that step’s instructions as its example. UNDO takes it back.">★ KEEP AS THE EXAMPLE</button>') + '</div>'
       // the same job run again after a fix: what it gave LAST time stays one click away, to see the change
       + (prev ? '<details class="wf-more wf-lasttime"><summary>Last time, before your fix</summary><div class="wf-io">' + esc(loopNotes(P && P.stripVerdictLine ? P.stripVerdictLine(prev.output) : prev.output).rest.trim() || '(empty)') + '</div></details>' : '')
@@ -1658,20 +1660,22 @@ const WorkflowPanel = (() => {
     if (fx && fx.state === 'error') h += '<div class="wf-warnline">✕ ' + esc(fx.error) + '</div>';
     if (fx && fx.state === 'done') {
       h += (fx.diagnosis ? '<p class="wf-help">' + esc(fx.diagnosis) + '</p>' : '') + fx.fixes.map((x, i) => fixCardHTML(x, i, f)).join('')
-        + '<div class="wf-row"><button type="button" class="bb sm' + (fx.fixes.some(x => x.applied) ? ' refit-primary' : '') + '" id="wf-nr-again">↻ RUN THE SAME JOB AGAIN</button></div>'
+        + '<div class="wf-row"><button type="button" class="bb sm' + (fx.fixes.some(fixInUse) ? ' refit-primary' : '') + '" id="wf-nr-again">↻ RUN THE SAME JOB AGAIN</button></div>'
         + '<p class="wf-help dim">Suggested by ' + esc(fx.model || 'the station’s model') + (fx.usd ? ' · $' + (+fx.usd).toFixed(4) : '') + '. Nothing changes until you use a fix, and UNDO takes it back.</p>';
     }
     return h + '</div>';
   }
+  // a fix is IN USE while the step's instructions say exactly what it suggested (read live: an UNDO puts USE THIS back)
+  const fixInUse = x => { const p = prop(x.dockId) || {}; return (x.does == null || (p.brief || '') === x.does) && (x.hands == null || (p.hands || '') === x.hands); };
   function fixCardHTML(x, i, f) {
-    const p = prop(x.dockId) || {}, n = f ? f.order.indexOf(x.dockId) + 1 : 0;
+    const p = prop(x.dockId) || {}, n = f ? f.order.indexOf(x.dockId) + 1 : 0, inUse = fixInUse(x);
     const label = (n > 0 ? 'BAY ' + n + ' · ' : '') + (p.role || 'STEP') + (p.agentId ? ' · ' + String(nameOf(p.agentId)).toUpperCase() : '');
-    return '<div class="wf-fix' + (x.applied ? ' applied' : '') + '"><div class="wf-fix-h"><b>' + esc(label) + '</b>' + (x.applied ? '<span class="wf-tag">IN USE</span>' : '') + '</div>'
+    return '<div class="wf-fix' + (inUse ? ' applied' : '') + '"><div class="wf-fix-h"><b>' + esc(label) + '</b>' + (inUse ? '<span class="wf-tag">IN USE</span>' : '') + '</div>'
       + (x.why ? '<p class="wf-help">' + esc(x.why) + '</p>' : '')
       + (x.does != null ? '<div class="wf-from"><span>DOES · NEW</span></div><div class="wf-io edited">' + esc(x.does) + '</div>'
         + '<details class="wf-more"><summary>What it said before</summary><div class="wf-io">' + esc(x.was || '(no instructions)') + '</div></details>' : '')
       + (x.hands != null ? '<div class="wf-from"><span>HANDS OFF · NEW</span></div><div class="wf-io edited">' + esc(x.hands) + '</div>' : '')
-      + (x.applied ? '' : '<div class="wf-row"><button type="button" class="bb sm refit-primary" data-fix-use="' + i + '">✓ USE THIS</button></div>') + '</div>';
+      + (inUse ? '' : '<div class="wf-row"><button type="button" class="bb sm refit-primary" data-fix-use="' + i + '">✓ USE THIS</button></div>') + '</div>';
   }
   function askFixes(mine, complaint) {
     if (!complaint) { H.sfx('bad'); H.flashTip('say what’s wrong with the result first', false); const n = $('#wf-nr-in'); if (n) n.focus(); return; }
@@ -1692,12 +1696,12 @@ const WorkflowPanel = (() => {
     }, () => { if (S.fix && S.fix.stamp === mine.stamp) { S.fix = Object.assign(S.fix, { state: 'error', error: 'the station could not be reached' }); paint(false); } });
   }
   function useFix(i) {
-    const x = S.fix && S.fix.fixes[i]; if (!x || x.applied) return;
+    const x = S.fix && S.fix.fixes[i]; if (!x || fixInUse(x)) return;
     const st = H.station(); let ok = true;
     if (x.does != null) { const r = st.setPropBrief(x.dockId, x.does); ok = !!(r && r.ok); }
     if (ok && x.hands != null && st.setPropHands) { const r = st.setPropHands(x.dockId, x.hands); ok = !!(r && r.ok); }
     if (!ok) { H.sfx('bad'); H.flashTip('this step could not be changed — it may have been removed', false); return; }
-    x.applied = true; H.sfx('chime'); H.flashTip('step instructions changed · UNDO takes it back', true);
+    H.sfx('chime'); H.flashTip('step instructions changed · UNDO takes it back', true);
     paint(false);
   }
   /* ★ KEEP AS THE EXAMPLE (2026-09-30 — "if the output is … not consistent"): a result the Commander likes becomes the model the
@@ -1711,6 +1715,8 @@ const WorkflowPanel = (() => {
     if (room < 300) return null;
     return (base ? base + '\n\n' : '') + EX_HEAD + '\n"""\n' + String(example).trim().slice(0, Math.min(1200, room)) + '\n"""';
   }
+  // is this job's result still the example? — read from the delivered step's CURRENT instructions (an UNDO takes the tag away)
+  function exampleKept(mine) { const last = (mine.runs || [])[0], p = last && last.dockId ? prop(last.dockId) : null; return !!(p && String(p.brief || '').indexOf(EX_HEAD) >= 0); }
   function keepExample(mine) {
     const last = (mine.runs || [])[0], dockId = last && last.dockId, p = dockId ? prop(dockId) : null;
     if (!p || p.t !== 'bay') { H.sfx('bad'); H.flashTip('the step that made this result is not on the floor any more', false); return; }
@@ -1735,7 +1741,7 @@ const WorkflowPanel = (() => {
     $$('[data-fix-use]').forEach(b => { b.onclick = () => useFix(+b.dataset.fixUse); });
     const kx = $('#wf-keep-ex'); if (kx) kx.onclick = () => keepExample(mine);
     const again = $('#wf-nr-again');
-    if (again) again.onclick = () => { const cc = comp(); if (!cc) return; H.sfx('click'); S.fixDraft = ''; liveSeen = false; S.prevJob = { text: mine.text, output: mine.output, stamp: mine.stamp }; H.runSample(cc, { text: mine.text || (S.testJob[S.lineKey] || '').trim() || undefined, onUpdate: () => paint(false) }); };
+    if (again) again.onclick = () => { const cc = comp(); if (!cc) return; H.sfx('click'); S.fixDraft = ''; liveSeen = false; S.prevJob = { text: mine.text, output: mine.output, stamp: mine.stamp }; H.runSample(cc, { text: mine.text || (S.testJob[S.lineKey] || '').trim() || undefined, onUpdate: () => paint(false) }); startLive(); };
   }
   function testModeNow() {
     const m = S.testMode || (S.seam === true ? 'step' : 'real');
@@ -1821,7 +1827,7 @@ const WorkflowPanel = (() => {
       const c = comp(); if (!c) return;
       const t = (($('#wf-st-in') || {}).value || '').trim();
       S.testJob[S.lineKey] = t;
-      H.runSample(c, { text: t || undefined, onUpdate: () => paint(false) });
+      H.runSample(c, { text: t || undefined, onUpdate: () => paint(false) }); startLive();
     };
     const realStop = $('#wf-real-stop'); if (realStop) realStop.onclick = () => {
       H.sfx('click');
