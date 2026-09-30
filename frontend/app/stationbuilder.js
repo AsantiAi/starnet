@@ -20,7 +20,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  const MENU = ['line', 'purpose', 'where', 'name', 'steps', 'dailyCap', 'tries'];
+  const MENU = ['line', 'shape', 'purpose', 'where', 'name', 'steps', 'dailyCap', 'tries'];
   const STEP_KEYS = ['step', 'role', 'instructions', 'agent'];
   const LEAD_WORDS = { lead: 1, me: 1, you: 1, yourself: 1, overseer: 1, hero: 1 };
   // "recruit someone for this step": the build summons that role's specialist (Build's own summonForRole) and seats it
@@ -265,6 +265,22 @@
     const extra = Object.keys(req).filter(k => MENU.indexOf(k) < 0);
     if (extra.length) return refuse('StarNet chooses every position, belt and piece of furniture itself, so these fields are not accepted: '
       + extra.slice(0, 8).join(', ') + '. Use only: ' + MENU.join(', ') + '.');
+    /* a CUSTOM line the Commander described (a SHAPE of steps: in order, at once, taking turns, sorted, reviewed): the whole
+       of a room of its own, or of an existing room around what stands there, laid out by the layout engine through the
+       same planner as a designed room's line zone */
+    if (req.shape != null) {
+      if (req.line != null) return refuse('Give a line from the menu or a shape of its own, not both.');
+      const into = req.where != null && !/^(a )?new( room)?$/i.test(String(req.where).trim());
+      const zone = { area: 'whole', shape: req.shape, staff: req.steps == null ? [] : req.steps };
+      for (const k of ['name', 'purpose', 'dailyCap', 'tries']) if (req[k] !== undefined) zone[k] = req[k];
+      const d = { zones: [zone] };
+      if (req.where != null) d.where = req.where;
+      if (!into && typeof req.name === 'string') d.name = req.name;
+      const r = planDesign(doc, d, env);
+      if (!r.ok) return r;
+      const l = r.plan.lines[0] || {};
+      return { ok: true, plan: Object.assign(r.plan, { line: { id: null, name: l.plain || 'a custom line', label: l.label || null }, ready: !!l.ready, blocking: l.blocking || [] }) };
+    }
     // purpose: the Commander's own words. With no line named, StarNet picks one with the reader behind FOR YOUR GOAL
     // (WorkflowLine.suggestLineFor: the SHAPE of the work), and every step's standard instructions carry those words
     if (req.purpose != null && typeof req.purpose !== 'string') return refuse('purpose is the Commander\'s own words for what the line is for, as text.');

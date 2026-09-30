@@ -613,6 +613,24 @@ for (const c of T.catalog) {
     ]) { const r = SB.planRoom(st.serialize(), req, E); A.ok(!r.ok && re.test(r.error), 'design refused: ' + JSON.stringify(req).slice(0, 90) + ' -> ' + (r.error || 'NOT REFUSED').slice(0, 160)); }
     A.eq(snap(st), before, 'no refusal changed anything');
   }
+  // a line the Commander DESCRIBED, through station.plan_line: a room of its own sized by the engine, or an existing room
+  {
+    const st = fresh(), before = snap(st);
+    const r = SB.plan(st.serialize(), { name: 'Weekly digest', shape: ['RESEARCHER', { together: ['WRITER', 'ANALYST'] }, 'REVIEWER'], purpose: 'a weekly digest of AI news', steps: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'rex' }, { step: 3, agent: 'rex' }, { step: 4, agent: 'lead' }], dailyCap: 3 }, E);
+    A.ok(r.ok && /^WEEKLY DIGEST, a new \d+ × \d+ room beside HOME: the whole room, a custom line \("Weekly digest"\): Researcher \(NOVA\) → Writer \(REX\) \+ Analyst \(REX\) \(at once\) → Reviewer \(NOVA\) → Outbox · daily cap \$3\. It will be ready to run\./.test(r.plan.summary), 'a described line plans in a room of its own, staffed in run order: ' + (r.error || r.plan.summary.slice(0, 200)));
+    A.ok(r.ok && r.plan.line.label === 'Weekly digest' && r.plan.ready === true && r.plan.blocking.length === 0, 'plan_line\'s own fields: the line, ready');
+    A.ok(r.plan.steps.every(s => s.instructions.endsWith(' This line is for: "a weekly digest of AI news".')), 'every step carries the Commander\'s purpose');
+    A.ok(SB.apply(st, r.plan, E).ok && st.props().filter(p => p.t === 'bay').length === 4, 'it builds: four steps');
+    A.eq(routed(st).errs.length, 0, 'no routing error');
+    A.ok(st.undo().ok); A.eq(snap(st), before, 'one undo');
+    const home = SB.plan(st.serialize(), { shape: [{ sort: { code: 'ENGINEER', research: 'RESEARCHER' } }, 'WRITER', { review: true, tries: 2 }], where: 'HOME', name: 'Sorted' }, E);
+    A.ok(home.ok && /^HOME \(\d+ × \d+\): the whole room, a custom line \("Sorted"\)/.test(home.plan.summary) && !home.plan.rooms.some(x => x.name === 'SORTED'), 'into an existing room, around what stands there, the name is the line\'s: ' + (home.error || home.plan.summary.slice(0, 120)));
+    const both = SB.plan(st.serialize(), { shape: ['WRITER'], line: 'build_test' }, E);
+    A.ok(!both.ok && /not both/.test(both.error), 'a menu line or a shape, not both');
+    const bad = SB.plan(st.serialize(), { shape: ['PILOT'] }, E);
+    A.ok(!bad.ok && /"PILOT" is not a step\. shape is a list/.test(bad.error), 'a bad shape says how shapes go');
+    A.eq(snap(st), before, 'no refusal changed anything');
+  }
   // THE VIBE GAUNTLET: wrong and hostile zone requests; after every one the station is unchanged, or built with nothing
   // already there moved, no new routing error, and one undo restoring it exactly
   {
@@ -669,6 +687,7 @@ for (const c of T.catalog) {
   const planT = tools.planLineTool, buildT = tools.buildTool;
   A.eq([planT.scope, planT.requiresConsent, buildT.scope, buildT.requiresConsent, buildT.taintLocked], ['read', false, 'write', true, true], 'plan changes nothing; build needs approval and is taint-locked (briefs persist into later runs)');
   A.ok(/never place anything yourself/.test(planT.description) && /build_test \(Build \+ test: ENGINEER → TESTER\)/.test(planT.description), 'the plan tool lists the menu from the catalog');
+  A.ok(/OR shape \(a line the Commander DESCRIBED/.test(planT.description) && planT.schema.properties.shape.type === 'array', 'the line tool takes a described line as a shape');
   const p = await planT.run({ line: 'build_test', name: 'SHIP IT' }, {});
   A.eq(calls[0], ['station.plan_line', { request: { line: 'build_test', name: 'SHIP IT' } }], 'the request rides to the page untouched');
   A.ok(memo.has('plan-t-1'), 'the plan is remembered for the approval card');

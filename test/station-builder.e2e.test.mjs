@@ -257,7 +257,23 @@ try {
   const undone7 = await evalJS(cdp, `(() => { const st = App.station(); const u = st.undo(); return { ok: u && u.ok, rooms: st.rooms().filter(r => r.kind !== 'corridor').map(r => r.name) }; })()`);
   check('one UNDO removes the designed room', undone7.ok && JSON.stringify(undone7.rooms) === JSON.stringify(pre7), JSON.stringify(undone7));
 
-  check('the mock carried every model call (no real provider)', mock.requests.length >= 17, String(mock.requests.length));
+
+  // 12. a line the Commander DESCRIBED: "research it, then a writer and an analyst at once, then a reviewer"
+  mock.planTool = 'station_plan_line';
+  mock.planArgs = { name: 'Weekly digest', shape: ['RESEARCHER', { together: ['WRITER', 'ANALYST'] }, 'REVIEWER'], steps: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'lead' }, { step: 3, agent: 'lead' }, { step: 4, agent: 'lead' }] };
+  at = mock.results.length;
+  const pre8 = await evalJS(cdp, `App.station().rooms().filter(r => r.kind !== 'corridor').map(r => r.name)`);
+  const run8 = await leadRun(base, token, 'build me a line: research it, then a writer and an analyst at the same time, then a reviewer');
+  check('the described-line run completes', run8.status === 200);
+  let DP = null, DB = null; try { DP = JSON.parse(mock.results[at] || ''); DB = JSON.parse(mock.results[at + 1] || ''); } catch (_) {}
+  check('the plan lays the described line out, staffed and ready', !!DP && DP.line && DP.line.label === 'Weekly digest' && DP.ready === true && /Researcher \(.+\) → Writer \(.+\) \+ Analyst \(.+\) \(at once\) → Reviewer/.test(DP.summary), (mock.results[at] || '').slice(0, 300));
+  const dig = await evalJS(cdp, `(() => { const st = App.station(), r = st.rooms().find(x => x.name === 'WEEKLY DIGEST'); if (!r) return null; const inRoom = st.props().filter(p => st.roomAt(p.x, p.y) === r.id);
+    return { bays: inRoom.filter(p => p.t === 'bay').map(p => p.role).sort(), splitter: inRoom.some(p => p.t === 'splitter'), joiner: inRoom.some(p => p.t === 'joiner') }; })()`);
+  check('the room holds the line as described: four steps, a split and a join', !!DB && DB.built === true && !!dig && JSON.stringify(dig.bays) === JSON.stringify(['ANALYST', 'RESEARCHER', 'REVIEWER', 'WRITER']) && dig.splitter && dig.joiner, JSON.stringify(dig));
+  const undone8 = await evalJS(cdp, `(() => { const st = App.station(); const u = st.undo(); return { ok: u && u.ok, rooms: st.rooms().filter(r => r.kind !== 'corridor').map(r => r.name) }; })()`);
+  check('one UNDO removes the described line and its room', undone8.ok && JSON.stringify(undone8.rooms) === JSON.stringify(pre8), JSON.stringify(undone8));
+
+  check('the mock carried every model call (no real provider)', mock.requests.length >= 19, String(mock.requests.length));
   check('no page exceptions', diagnostics.exceptions.length === 0, JSON.stringify(diagnostics.exceptions.slice(0, 3)));
 } catch (error) {
   console.log('FAIL harness :: ' + (error && error.stack || error));

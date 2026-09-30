@@ -338,7 +338,7 @@
       get description() {
         return 'Plan a new ready-made assembly line (and, by default, a new room for it) on the station, when the Commander asks for one. '
           + 'You never place anything yourself: pick a line from this menu and StarNet chooses every position, belt and piece of furniture, builds it on a copy of the station, and checks it. '
-          + 'Fields: line (an id or plain name from the menu), purpose (the Commander\'s own words for what the line is for: with no line, StarNet picks one from the shape of the work, and every step\'s standard instructions carry those words), '
+          + 'Fields: line (an id or plain name from the menu), OR shape (a line the Commander DESCRIBED that no menu line matches: a list of 1 to 6 stages in order, each a role like "RESEARCHER", { "together": [2 or 3 roles] } (each gets a copy of the job), { "turns": [2 or 3 roles] } (they take turns), { "sort": { "code": role, "research": role } } (everything else goes straight on), or { "review": true, "tries": 3 } right after a step (a reviewer sends it back until it is right); StarNet lays it out and checks it), purpose (the Commander\'s own words for what the line is for: with no line, StarNet picks one from the shape of the work, and every step\'s standard instructions carry those words), '
           + 'where ("new room" or an existing room\'s name), name (what to call the line), '
           + 'steps (a list of { step: 1, instructions, agent } by step number or { role, instructions, agent }; agent is a crew member\'s name, "lead", or "new" to recruit a specialist for that step, only when the Commander wants one), '
           + 'dailyCap (dollars per day, or null for no cap), tries (1-5 review passes, for lines with a review loop). '
@@ -347,7 +347,7 @@
           + 'LINES: ' + menuText();
       },
       schema: { type: 'object', properties: {
-        line: { type: 'string' }, purpose: { type: 'string' }, where: { type: 'string' }, name: { type: 'string' },
+        line: { type: 'string' }, shape: { type: 'array' }, purpose: { type: 'string' }, where: { type: 'string' }, name: { type: 'string' },
         steps: { type: 'array', items: { type: 'object', properties: { step: { type: 'integer' }, role: { type: 'string' }, instructions: { type: 'string' }, agent: { type: 'string' } } } },
         dailyCap: {}, tries: { type: 'integer' } } },
       run: async (args) => {
