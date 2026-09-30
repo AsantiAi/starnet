@@ -43,7 +43,22 @@ const rd = at(panel, '  function readStep(r, streamId) {', '  function jobResult
 A.ok(/api\('\/api\/transcript\?stream=' \+ encodeURIComponent\(streamId \|\| r\.streamId \|\| ''\) \+ '&agent=' \+ encodeURIComponent\(r\.agentId \|\| 'agent'\) \+ '&runId=' \+ encodeURIComponent\(r\.runId\) \+ '&limit=50'\)/.test(rd),
   'each step\'s reply is read from its own run (the transcript by runId — the OUTBOX window\'s read)');
 A.ok(/done\(\{ err: 'this step’s reply could not be read' \}\)/.test(rd), '…and a reply that cannot be read says so');
-A.ok((panel.match(/\? jobResultHTML\(mine, /g) || []).length === 2 && (panel.match(/readJobSteps\(\);/g) || []).length === 2, 'the SEND block and the TEST view both read the job back');
+A.ok((panel.match(/\? jobResultHTML\(mine, /g) || []).length === 2 && (panel.match(/    wireJob\(\);/g) || []).length === 2, 'the SEND block and the TEST view both read the job back');
+
+/* ---------- NOT RIGHT? — say what's wrong, get exact changes, use them, run the same job again ---------- */
+const nr = at(panel, '  function notRightHTML(mine, f) {', '  function testModeNow() {');
+A.ok(/notRightHTML\(mine, f\) \+ '<\/div>';/.test(res) && /NOT RIGHT\?/.test(nr) && /SUGGEST FIXES/.test(nr), 'under a delivered job: NOT RIGHT? — a box to say what is wrong');
+A.ok(/api\('\/api\/routing\/fix-suggest', 'POST', \{ complaint, job: mine\.text \|\| '', result: mine\.output \|\| '', steps \}\)/.test(nr), '…sent with the job, the result and every step (what it was told, what it produced)');
+A.ok(/for \(const r of \(mine\.runs \|\| \[\]\)\.slice\(\)\.reverse\(\)\) \{ if \(!r\.dockId\) continue; const got = stepOut\[r\.runId\]; byDock\.set\(r\.dockId/.test(nr), '…each BAY once, with its LAST reply (a looping line runs a BAY more than once)');
+A.ok(/const r = st\.setPropBrief\(x\.dockId, x\.does\);/.test(nr) && /st\.setPropHands\(x\.dockId, x\.hands\)/.test(nr) && /✓ USE THIS/.test(nr), 'USE THIS is the ordinary brief edit (saved, one UNDO) — nothing changes on its own');
+A.ok(/↻ RUN THE SAME JOB AGAIN/.test(nr) && /S\.prevJob = \{ text: mine\.text, output: mine\.output, stamp: mine\.stamp \};/.test(nr) && /H\.runSample\(cc, \{ text: mine\.text/.test(nr), '…then the same job runs again');
+A.ok(/const prev = S\.prevJob && S\.prevJob\.stamp !== mine\.stamp && S\.prevJob\.text === mine\.text \? S\.prevJob : null;/.test(res) && /Last time, before your fix/.test(res), '…and what it gave last time stays one click away beside the new result');
+A.ok(/Suggested by ' \+ esc\(fx\.model/.test(nr) && /\$' \+ \(\+fx\.usd\)\.toFixed\(4\)/.test(nr), 'the suggestion says which model made it and what it cost');
+const route = at(sidecar, 'async function handleRoutingFixSuggest(req, res) {', 'async function stepTestRunDock(h) {');
+A.ok(/\{ m: 'POST', exact: '\/api\/routing\/fix-suggest', h: handleRoutingFixSuggest \}/.test(sidecar), 'POST /api/routing/fix-suggest is a route');
+A.ok(route.indexOf('budget.check(null, \'agent\', 0, Date.now(), null)') > 0 && route.indexOf('budget.check(') < route.indexOf('provider.stream('), '…the spending cap is read BEFORE the model call');
+A.ok(/cfg = sampleRunConfigFor\('agent'\)/.test(route) && /ledger\.record\(\{ runId: 'linefix-' \+ crypto\.randomUUID\(\), agentId: 'station'/.test(route), '…one call on the station default model, its spend booked on the ledger');
+A.ok(/const parsed = LineFix\.parseFixes\(out, input\);/.test(route) && /return json\(400, \{ ok: false, error: input\.error \}\);/.test(route), '…the reply checked (LineFix), bad input refused');
 A.ok(/dockId: r\.dockId \|\| null, lineId: r\.lineId \|\| null/.test(sidecar), 'the server names the BAY each stage ran at');
 
 /* ---------- the OUTBOX is told ---------- */

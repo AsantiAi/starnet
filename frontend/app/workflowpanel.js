@@ -696,7 +696,7 @@ const WorkflowPanel = (() => {
       + '<div class="row"><span class="lab">TO</span><span class="val ro" data-live="to">→ <b>' + esc(cr.to) + '</b></span></div></div>'
       + '<p class="wf-help wf-adds">' + addsOnTopHTML(p) + '</p>'
       + '<p class="wf-help dim">HANDS OFF is added as <i>' + esc((typeof Pipeline !== 'undefined' && Pipeline.HANDS_LEAD) || "When you're done, hand off: ") + '…</i></p>'
-      + (f && f.order.length > 1 ? '<p class="wf-help dim">A direct COMMS message to this agent runs only this step. The whole line runs from its INBOX triggers or a test.</p>' : '')
+      + (f && f.order.length > 1 ? '<p class="wf-help dim">A direct COMMS message to this agent runs only this step. The whole line runs from its INBOX: send it a job there, or let a schedule or channel start it.</p>' : '')
       + '</section>' + shapeHTML(p) + tr.html;
     wireEdits(body);
     $$('[data-role]').forEach(b => b.onclick = () => {
@@ -880,7 +880,7 @@ const WorkflowPanel = (() => {
        automatic starts (schedule, channel, folder) follow it. */
     const sr = H.sampleState ? H.sampleState() : null, mine = sr && c && sr.key === c.key ? sr : null;
     const sendHTML = '<section class="wf-sec wf-send"><h3><span class="n">INBOX</span>Send it a job</h3>'
-      + '<textarea id="wf-send-in" class="refit-input refit-brief" rows="3" maxlength="4000" aria-label="The job to send down this line" placeholder="What should the line work on? e.g. Find this week’s most useful research on sleep and memory.">'
+      + '<textarea id="wf-send-in" class="refit-input refit-brief" rows="3" maxlength="2000" aria-label="The job to send down this line" placeholder="What should the line work on? e.g. Find this week’s most useful research on sleep and memory.">'
       + esc(S.testJob[S.lineKey] || (routines.find(r => r.startsLine) || {}).prompt || '') + '</textarea>'
       + '<div class="wf-row"><button type="button" class="bb sm refit-primary" id="wf-send"' + ((mine && mine.pending) || !c ? ' disabled' : '') + '>'
       + (mine && mine.pending ? (mine.phase === 'post' ? 'POSTING LINE…' : 'THE JOB IS RIDING THE LINE…') : '▶ SEND IT DOWN THE LINE') + '</button>'
@@ -921,7 +921,7 @@ const WorkflowPanel = (() => {
       + limField('lb-msg', 'maxUsdPerMessage', '$ per message, whole line', LD.maxUsdPerMessage.toFixed(2), '0.05')
       + limField('lb-day', 'maxUsdPerDay', '$ per day, this line', 'off', '0.50')
       + '<div class="wf-help lb-note" id="lb-note">' + esc(lbDefaultNote) + '</div></details>';
-    readJobSteps();
+    wireJob();
     // the job to send (it is also this line's test job)
     const job = $('#wf-send-in');
     job.addEventListener('input', () => { S.testJob[S.lineKey] = job.value; saveTests(); });
@@ -929,7 +929,7 @@ const WorkflowPanel = (() => {
       const cc = comp(); if (!cc) return;
       const t = job.value.trim();
       if (!t) { H.sfx('bad'); H.flashTip('write the job first: what should the line work on?', false); job.focus(); return; }
-      S.testJob[S.lineKey] = job.value; saveTests();
+      S.testJob[S.lineKey] = job.value; saveTests(); S.prevJob = null;   // a new job: nothing to compare it with
       H.runSample(cc, { text: t, onUpdate: () => paint(false) });
     };
     const sendStop = $('#wf-send-stop'); if (sendStop) sendStop.onclick = () => {
@@ -1585,6 +1585,7 @@ const WorkflowPanel = (() => {
     const runs = (mine.runs || []).slice().reverse();   // line order (the server lists the newest first)
     const P = typeof Pipeline !== 'undefined' ? Pipeline : null, out = String(mine.output || '');
     const shown = P && P.stripVerdictLine ? P.stripVerdictLine(out) : out;   // a reviewer's VERDICT line steers the loop; it is not the work
+    const prev = S.prevJob && S.prevJob.stamp !== mine.stamp && S.prevJob.text === mine.text ? S.prevJob : null;
     const steps = runs.map((r, i) => {
       const pr = r.dockId ? prop(r.dockId) : null, role = (pr && pr.role) || null;
       return '<details class="wf-more wf-step-out" data-run="' + esc(r.runId) + '"><summary><span>' + (i + 1) + ' · ' + esc((role ? role + ' · ' : '') + String(nameOf(r.agentId)).toUpperCase()) + '</span>'
@@ -1594,8 +1595,80 @@ const WorkflowPanel = (() => {
     return '<div class="wf-job">'
       + '<div class="wf-job-h"><b>✓ DELIVERED</b> · ' + runs.length + ' step' + (runs.length === 1 ? '' : 's') + (v.usd != null ? ' · $' + v.usd.toFixed(4) : '') + (mine.folded ? ' · in the OUTBOX' : '') + '</div>'
       + '<div class="wf-from"><span>THE RESULT</span></div><div class="wf-io out wf-job-out">' + esc(shown.trim() || '(the line delivered an empty reply)') + '</div>'
+      // the same job run again after a fix: what it gave LAST time stays one click away, to see the change
+      + (prev ? '<details class="wf-more wf-lasttime"><summary>Last time, before your fix</summary><div class="wf-io">' + esc((P && P.stripVerdictLine ? P.stripVerdictLine(prev.output) : prev.output).trim() || '(empty)') + '</div></details>' : '')
       + (runs.length ? '<div class="wf-from"><span>HOW EACH STEP DID IT</span><span class="src">open a step to read its reply</span></div><div class="wf-steps">' + steps + '</div>' : '')
-      + '</div>';
+      + notRightHTML(mine, f) + '</div>';
+  }
+  /* NOT RIGHT? (2026-09-30 — "if they run the belt and its not as intended … how the user can fix the conveyor system to their
+     liking"): under a delivered job, the Commander says in plain words what is wrong; the station's own model reads each step's
+     instructions and what it actually produced (POST /api/routing/fix-suggest — one billed call, its cost shown) and suggests the
+     exact changes: which step's DOES or HANDS OFF to rewrite, and why. Each is a card to USE (the ordinary brief edit: saved, one
+     UNDO) or ignore; nothing changes on its own. RUN THE SAME JOB AGAIN is the proof: the new result comes back in this same card.
+     S.fix = { stamp (the job it is for), state 'asking'|'done'|'error', complaint, diagnosis, fixes:[{dockId, does?, hands?, why,
+     was, applied?}], usd, model, error }. */
+  function notRightHTML(mine, f) {
+    const fx = S.fix && S.fix.stamp === mine.stamp ? S.fix : null, asking = !!(fx && fx.state === 'asking');
+    let h = '<div class="wf-notright"><div class="wf-from"><span>NOT RIGHT?</span><span class="src">say what’s wrong: the station suggests exact changes</span></div>'
+      + '<textarea id="wf-nr-in" class="wf-io" rows="2" maxlength="1200" aria-label="What is wrong with the result" placeholder="e.g. too long, no sources, the wrong tone, it missed the main point">' + esc(fx ? fx.complaint : (S.fixDraft || '')) + '</textarea>'
+      + '<div class="wf-row"><button type="button" class="bb sm refit-primary" id="wf-nr-go"' + (asking ? ' disabled' : '') + '>' + (asking ? 'THINKING…' : 'SUGGEST FIXES') + '</button></div>';
+    if (fx && fx.state === 'error') h += '<div class="wf-warnline">✕ ' + esc(fx.error) + '</div>';
+    if (fx && fx.state === 'done') {
+      h += (fx.diagnosis ? '<p class="wf-help">' + esc(fx.diagnosis) + '</p>' : '') + fx.fixes.map((x, i) => fixCardHTML(x, i, f)).join('')
+        + '<div class="wf-row"><button type="button" class="bb sm' + (fx.fixes.some(x => x.applied) ? ' refit-primary' : '') + '" id="wf-nr-again">↻ RUN THE SAME JOB AGAIN</button></div>'
+        + '<p class="wf-help dim">Suggested by ' + esc(fx.model || 'the station’s model') + (fx.usd ? ' · $' + (+fx.usd).toFixed(4) : '') + '. Nothing changes until you use a fix, and UNDO takes it back.</p>';
+    }
+    return h + '</div>';
+  }
+  function fixCardHTML(x, i, f) {
+    const p = prop(x.dockId) || {}, n = f ? f.order.indexOf(x.dockId) + 1 : 0;
+    const label = (n > 0 ? 'BAY ' + n + ' · ' : '') + (p.role || 'STEP') + (p.agentId ? ' · ' + String(nameOf(p.agentId)).toUpperCase() : '');
+    return '<div class="wf-fix' + (x.applied ? ' applied' : '') + '"><div class="wf-fix-h"><b>' + esc(label) + '</b>' + (x.applied ? '<span class="wf-tag">IN USE</span>' : '') + '</div>'
+      + (x.why ? '<p class="wf-help">' + esc(x.why) + '</p>' : '')
+      + (x.does != null ? '<div class="wf-from"><span>DOES · NEW</span></div><div class="wf-io edited">' + esc(x.does) + '</div>'
+        + '<details class="wf-more"><summary>What it said before</summary><div class="wf-io">' + esc(x.was || '(no instructions)') + '</div></details>' : '')
+      + (x.hands != null ? '<div class="wf-from"><span>HANDS OFF · NEW</span></div><div class="wf-io edited">' + esc(x.hands) + '</div>' : '')
+      + (x.applied ? '' : '<div class="wf-row"><button type="button" class="bb sm refit-primary" data-fix-use="' + i + '">✓ USE THIS</button></div>') + '</div>';
+  }
+  function askFixes(mine, complaint) {
+    if (!complaint) { H.sfx('bad'); H.flashTip('say what’s wrong with the result first', false); const n = $('#wf-nr-in'); if (n) n.focus(); return; }
+    // one entry per BAY, with its LAST reply (a line that loops runs a BAY more than once)
+    const byDock = new Map();
+    for (const r of (mine.runs || []).slice().reverse()) { if (!r.dockId) continue; const got = stepOut[r.runId]; byDock.set(r.dockId, got && got.output ? got.output : ''); }
+    const steps = [...byDock.entries()].map(([dockId, output]) => { const p = prop(dockId) || {}; return { dockId, role: p.role || '', agent: p.agentId ? nameOf(p.agentId) : '', does: p.brief || '', hands: p.hands || '', output }; });
+    S.fix = { stamp: mine.stamp, state: 'asking', complaint, fixes: [] };
+    paint(false);
+    api('/api/routing/fix-suggest', 'POST', { complaint, job: mine.text || '', result: mine.output || '', steps }).then(({ status, j }) => {
+      if (!S.fix || S.fix.stamp !== mine.stamp) return;
+      if (status === 200 && j && j.ok) {
+        S.fix = Object.assign(S.fix, { state: 'done', diagnosis: j.diagnosis || '', usd: j.usd || 0, model: j.model || '',
+          fixes: (j.fixes || []).map(x => Object.assign({}, x, { was: (prop(x.dockId) || {}).brief || '' })) });
+        H.sfx('chime');
+      } else { S.fix = Object.assign(S.fix, { state: 'error', error: (j && j.error) || ('the station refused (HTTP ' + status + ')') }); H.sfx('bad'); }
+      paint(false);
+    }, () => { if (S.fix && S.fix.stamp === mine.stamp) { S.fix = Object.assign(S.fix, { state: 'error', error: 'the station could not be reached' }); paint(false); } });
+  }
+  function useFix(i) {
+    const x = S.fix && S.fix.fixes[i]; if (!x || x.applied) return;
+    const st = H.station(); let ok = true;
+    if (x.does != null) { const r = st.setPropBrief(x.dockId, x.does); ok = !!(r && r.ok); }
+    if (ok && x.hands != null && st.setPropHands) { const r = st.setPropHands(x.dockId, x.hands); ok = !!(r && r.ok); }
+    if (!ok) { H.sfx('bad'); H.flashTip('this step could not be changed — it may have been removed', false); return; }
+    x.applied = true; H.sfx('chime'); H.flashTip('step instructions changed · UNDO takes it back', true);
+    paint(false);
+  }
+  // after a job's card is painted: read each step's reply, and wire NOT RIGHT?
+  function wireJob() {
+    readJobSteps();
+    const sr = H.sampleState ? H.sampleState() : null, c = comp();
+    const mine = sr && c && sr.key === c.key && sr.view && sr.view.ok ? sr : null;
+    if (!mine) return;
+    const inp = $('#wf-nr-in'), go = $('#wf-nr-go');
+    if (inp) inp.addEventListener('input', () => { if (S.fix && S.fix.stamp === mine.stamp) S.fix.complaint = inp.value; else S.fixDraft = inp.value; });
+    if (go) go.onclick = () => askFixes(mine, ((inp && inp.value) || '').trim());
+    $$('[data-fix-use]').forEach(b => { b.onclick = () => useFix(+b.dataset.fixUse); });
+    const again = $('#wf-nr-again');
+    if (again) again.onclick = () => { const cc = comp(); if (!cc) return; H.sfx('click'); S.fixDraft = ''; S.prevJob = { text: mine.text, output: mine.output, stamp: mine.stamp }; H.runSample(cc, { text: mine.text || (S.testJob[S.lineKey] || '').trim() || undefined, onUpdate: () => paint(false) }); };
   }
   function testModeNow() {
     const m = S.testMode || (S.seam === true ? 'step' : 'real');
@@ -1676,7 +1749,7 @@ const WorkflowPanel = (() => {
       S.testMode = b.dataset.tmode; H.sfx('click'); paint(true);
     });
     const watch = $('#wf-watch'); if (watch) watch.onclick = () => { H.sfx('click'); if (H.preview) H.preview(); };
-    readJobSteps();
+    wireJob();
     const real = $('#wf-real'); if (real) real.onclick = () => {
       const c = comp(); if (!c) return;
       const t = (($('#wf-st-in') || {}).value || '').trim();

@@ -320,6 +320,13 @@ textarea.wf-io:focus { outline: none; border-color: var(--ph); box-shadow: var(-
 .wf-step-out summary { display: flex; justify-content: space-between; gap: 10px; }
 .wf-step-out .src { color: var(--ph-dim); font-size: 15px; letter-spacing: .4px; }
 .wf-step-out .wf-io { margin: 4px 0 6px; }
+/* NOT RIGHT? — say what's wrong; each suggested change is a glass card to use or ignore (2026-09-30) */
+.wf-notright { display: grid; gap: 8px; margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--wf-edge); }
+.wf-fix { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--wf-edge); border-radius: 10px;
+  background: linear-gradient(135deg, rgba(var(--ph-rgb),.06), rgba(var(--ph-rgb),.015)), rgba(0,0,0,.18); box-shadow: var(--wf-light); }
+.wf-fix.applied { border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
+.wf-fix-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 16px; letter-spacing: .8px; color: var(--ph-bright); }
+.wf-fix-h b { font-weight: normal; }
 /* the real job's verdict (build.js finSampleHTML): RAN · COST · SAID as a result block — the panel's own left-rail voice
    (.wf-verdict): green when it reached the OUTBOX, gold when you stopped it, red when it was refused */
 .wf-sample-res .fl-result { display: grid; gap: 3px; border-left: 3px solid var(--ok); border-radius: 0 8px 8px 0; padding: 8px 12px; background: linear-gradient(90deg, rgba(var(--ok-rgb),.08), rgba(var(--ok-rgb),.02)); color: var(--text); }
