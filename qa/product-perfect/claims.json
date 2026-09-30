@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "ff50ad735b6632ded123bb792e51f7e7356cfb16",
+    "sourceCommit": "f919b9671f23e122655802e6afa9026e2e97b5c0",
     "pathSetSha256": "ea555ca4c31fb5f84b8f7ccc953c49051f5cc1fc819d40a2149682e74309ce98",
     "files": [
       {
@@ -988,8 +988,8 @@
       },
       {
         "path": "frontend/app/remoteview.js",
-        "bytes": 4666,
-        "sha256": "8c787bf5ec88916750ccb400e5edcda225bce78ca5218af18b753e59578c13ca"
+        "bytes": 5127,
+        "sha256": "b6fdfcf2a1b05b0d4f32f1c771fd00ac40fdfd3a94d8098f1b237aa1de8560b2"
       },
       {
         "path": "frontend/app/resummonstore.js",
