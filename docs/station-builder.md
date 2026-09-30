@@ -66,8 +66,15 @@ Added 2026-09-30. Andrew saw two stations laid out by hand in the real renderer 
 reliably do this?"); this is those two layouts as patterns StarNet computes. `station.plan` with
 `{ layout: { pattern, rooms: [ { name, style, size, lines } ] }, replace }`:
 
-- `ring`: a 3-wide corridor loop four tiles out from the hub (the main room, or `around`), a spoke in from each side,
-  and up to six rooms on short halls round the outside: two north, two south, a big room east and one west.
+- `diamond` (was `ring`; `ring` still means it): every room on an EVEN GRID round the hub, the bridge's size (18 × 11), a
+  hallway apart, filled in diamond order — the four sides, then the four corners and the far sides, then the next ring
+  out — each room paired with the one opposite it, so the station keeps its diamond at any size (up to 16 rooms a
+  plan). At the centre, when the space round the hub is clear, a corridor loop with a hallway in from each side. Big
+  rooms take the east and west wings (then north and south), anchored on the grid's inner edge. Each room is joined
+  by a straight hallway to what faces it toward the hub. A layout sent again with only NEW rooms puts them in the next
+  free places of the same grid, so a station grown two rooms at a time ends exactly where one built all at once does
+  (tested). Added after Andrew's test: "good at designing the rooms, terrible at judging where to place them… keep
+  the diamond shape even with the new rooms".
 - `concourse`: a 4-wide corridor from one side of the hub (`side`, else the first free one), rooms on short halls down
   both sides, a big room flush on its far end. Up to eight rooms.
 - A room's `style` is one of 15 whole-room styles (`RoomStyles.ROOMS`: lounge, cozy, games, library, quarters,

@@ -979,7 +979,7 @@ for (const c of T.catalog) {
   }
 }
 
-/* ---- 14. STATION LAYOUTS (2026-09-30): a whole station composed — a ring round the bridge or a concourse off it — every
+/* ---- 14. STATION LAYOUTS (2026-09-30): a whole station composed — a diamond round the bridge or a concourse off it — every
         room furnished wall to wall in its style, corridors planted and lit; beside what stands, or replacing it ---- */
 {
   const RS = require('../frontend/app/roomstyles.js'), LL = require('../frontend/app/linelayout.js'), LE = require('../frontend/app/lineedit.js');
@@ -994,21 +994,22 @@ for (const c of T.catalog) {
     const p = free(a), q = free(b);
     return !!(p && q && g.path(p[0], p[1], q[0], q[1]));
   };
+  const size = r => { const R = r.rects[0]; return (R.x2 - R.x1 + 1) + 'x' + (R.y2 - R.y1 + 1); };
   const SIX = [{ style: 'lounge' }, { style: 'arcade' }, { style: 'library' }, { style: 'quarters' }, { style: 'garden' }, { name: 'Conveyor Hall', style: 'works', lines: [{ line: 'build_test' }, { line: 'research_line' }] }];
   const inRoom = (st, id) => st.props().filter(p => st.roomAt(p.x, p.y) === id);
 
   for (const [cat, S] of catalogs) {
     const E = envOf(S);
-    // THE ASK, as a layout: a ring of six round the bridge, the conveyor hall with its lines
-    for (const pattern of ['ring', 'concourse']) {
+    // THE ASK, as a layout: twelve rooms on the diamond round the bridge (Andrew's test, 09-30), a concourse of eight
+    for (const pattern of ['diamond', 'concourse']) {
       const st = fresh(), before = snap(st), n0 = st.rooms().length, oldProps = new Set(st.props().map(p => JSON.stringify(p)));
-      const rooms = pattern === 'ring' ? SIX : SIX.concat([{ style: 'cafe' }, { style: 'lab' }]);
+      const rooms = pattern === 'diamond' ? SIX.slice(0, 5).concat([{ style: 'lab' }, { style: 'comms' }, { style: 'workshop' }, { style: 'gym' }, { style: 'cafe' }, { name: 'Council Room', style: 'meeting' }, SIX[5]]) : SIX.concat([{ style: 'cafe' }, { style: 'lab' }]);
       const r = SB.planBuild(st.serialize(), { layout: { pattern, rooms } }, E), what = cat + ' ' + pattern;
       A.ok(r.ok, what + ': the layout plans (' + (r.error || '') + ')');
       if (!r.ok) continue;
       A.eq(snap(st), before, what + ': planning changes nothing');
       A.ok(new RegExp('^A ' + pattern.toUpperCase() + ' (around|east from) HOME').test(r.plan.summary) && r.plan.rooms.length === rooms.length, what + ': the card names the pattern and every room: ' + r.plan.summary.slice(0, 90));
-      A.eq(r.plan.rooms.map(x => x.name), rooms.map(q => q.name ? q.name.toUpperCase() : { lounge: 'LOUNGE', arcade: 'ARCADE', library: 'LIBRARY', quarters: 'QUARTERS', garden: 'GARDEN', cafe: 'CAFE', lab: 'LAB' }[q.style]), what + ': in the order asked, named for their styles');
+      A.eq(r.plan.rooms.map(x => x.name), rooms.map(q => q.name ? q.name.toUpperCase() : { lounge: 'LOUNGE', arcade: 'ARCADE', library: 'LIBRARY', quarters: 'QUARTERS', garden: 'GARDEN', cafe: 'CAFE', lab: 'LAB', comms: 'COMMS', workshop: 'WORKSHOP', gym: 'GYM' }[q.style]), what + ': in the order asked, named for their styles');
       const a = SB.apply(st, r.plan, E);
       A.ok(a.ok && a.kind === 'build', what + ': it builds (' + (a.error || '') + ')');
       if (!a.ok) continue;
@@ -1024,7 +1025,8 @@ for (const c of T.catalog) {
       for (const q of rooms.filter(x => x.style !== 'works')) {
         const rm = st.rooms().find(x => x.name === (q.name ? q.name.toUpperCase() : null) || (x.kind !== 'corridor' && r.plan.rooms.find(y => y.name === x.name && y.style === RS.resolveRoom(q.style))));
         const rec = RS.ROOMS[RS.resolveRoom(q.style)], pieces = inRoom(st, rm.id);
-        A.ok(pieces.length >= 12, what + ' ' + rm.name + ': furnished wall to wall (' + pieces.length + ' pieces)');
+        A.ok(pieces.length >= 10, what + ' ' + rm.name + ': furnished wall to wall (' + pieces.length + ' pieces)');
+        if (pattern === 'diamond') A.eq(size(rm), '18x11', what + ' ' + rm.name + ': the grid\'s own size, like the bridge');
         A.eq([rm.floorStyle, rm.floorMat || (M.ROOM_KINDS[rm.kind] || {}).mat, rm.wallMat || 'plating'], [rec.deck.style, rec.deck.mat, rec.walls.mat], what + ' ' + rm.name + ': its style\'s floor and walls');
       }
       const hall = st.rooms().find(x => x.name === 'CONVEYOR HALL'), hp = inRoom(st, hall.id);
@@ -1038,12 +1040,31 @@ for (const c of T.catalog) {
     }
   }
   const E = envOf(rctx.module.exports);
-  // beside what stands: a ring needs clear space all round its room, and says what to do instead
+  // THE DIAMOND KEEPS ITS SHAPE AS IT GROWS ("I still want it to keep the diamond shape even with the new rooms"):
+  // six rooms, then two more asked for later, land exactly where the twelve-room diamond put its seventh and eighth
   {
-    const st = busy(), before = snap(st);
-    const r = SB.planBuild(st.serialize(), { layout: { pattern: 'ring', rooms: SIX } }, E);
-    A.ok(!r.ok && /^A ring needs clear space all round HOME \(.+\)\. Use replace: true to lay out the whole station again around HOME, or the concourse pattern from a free side\.$/.test(r.error), 'a ring round a crowded bridge is refused with the way forward: ' + r.error);
-    A.eq(snap(st), before, 'and changes nothing');
+    const whole = fresh(), grown = fresh();
+    const eight = SIX.slice(0, 5).concat([SIX[5], { style: 'lab' }, { style: 'comms' }]);
+    const all = SB.planBuild(whole.serialize(), { layout: { pattern: 'diamond', rooms: eight } }, E);
+    A.ok(all.ok && SB.apply(whole, all.plan, E).ok, 'fixture: eight rooms at once (' + (all.error || '') + ')');
+    const first = SB.planBuild(grown.serialize(), { layout: { pattern: 'diamond', rooms: eight.slice(0, 6) } }, E);
+    A.ok(first.ok && SB.apply(grown, first.plan, E).ok, 'six rooms first');
+    const more = SB.planBuild(grown.serialize(), { layout: { pattern: 'diamond', rooms: eight.slice(6) } }, E);
+    A.ok(more.ok && /^2 rooms on the diamond grid around HOME, each in the next free place of the grid/.test(more.plan.summary) && /^LAB north-west/.test(more.plan.summary.split('. ')[1] || '') , 'then two more, in the next free places: ' + (more.error || more.plan.summary.slice(0, 160)));
+    if (more.ok) {
+      A.ok(SB.apply(grown, more.plan, E).ok, 'they build');
+      const at = st => st.rooms().filter(x => x.kind !== 'corridor').map(x => x.name + '@' + x.rects[0].x1 + ',' + x.rects[0].y1).sort();
+      A.eq(at(grown), at(whole), 'every room stands exactly where the eight-at-once diamond put it: the shape held');
+      // point symmetry: every pair of rooms laid together stands opposite each other through the bridge
+      const home = grown.rooms().find(x => x.name === 'HOME').rects[0], c2x = home.x1 + home.x2, c2y = home.y1 + home.y2;
+      const pos = grown.rooms().filter(x => x.kind !== 'corridor' && x.name !== 'HOME' && x.name !== 'CONVEYOR HALL').map(x => [x.rects[0].x1 + x.rects[0].x2, x.rects[0].y1 + x.rects[0].y2]);
+      // (the east-west row is the wings' own: the conveyor hall stands east, so the room west of the bridge has no twin)
+      A.ok(pos.filter(([x, y]) => y !== c2y).every(([x, y]) => pos.some(([u, v]) => u === 2 * c2x - x && v === 2 * c2y - y)), 'every room off the row of the wings has its twin across the bridge (the diamond is symmetric)');
+    }
+    // on a crowded station the diamond takes only the free places of its grid, and never stands against a room
+    const st = busy(), before = snap(st), r = SB.planBuild(st.serialize(), { layout: { pattern: 'diamond', rooms: [{ style: 'lounge' }, { style: 'library' }] } }, E);
+    A.ok(r.ok, 'a diamond beside a crowded bridge takes the free places of its grid (' + (r.error || '') + ')');
+    if (r.ok) { A.ok(SB.apply(st, r.plan, E).ok); const home = st.rooms().find(x => x.name === 'HOME'); A.ok(st.rooms().filter(x => x.kind !== 'corridor').every(x => walks(st, home, x)), 'every room walkable'); A.ok(st.undo().ok); A.eq(snap(st), before, 'one undo'); }
   }
   // replace: the whole station laid out again round the bridge, every agent keeping a desk, backed up like a preset swap
   {
@@ -1080,17 +1101,17 @@ for (const c of T.catalog) {
   {
     const st = fresh(), before = snap(st);
     for (const [req, re] of [
-      [{ layout: {} }, /^layout\.rooms is a list of 1 to 8 rooms/],
+      [{ layout: {} }, /^layout\.rooms is a list of 1 to 16 rooms/],
       [{ layout: 'ring' }, /^Send \{ "layout"/],
-      [{ layout: { pattern: 'spiral', rooms: [{ style: 'lounge' }] } }, /^pattern is ring .* or concourse/],
+      [{ layout: { pattern: 'spiral', rooms: [{ style: 'lounge' }] } }, /^pattern is diamond .* or concourse/],
       [{ layout: { pattern: 'ring', rooms: [{ style: 'lounge' }], x: 3 } }, /a layout does not take: x\. It takes: pattern, around, side, rooms\./],
       [{ layout: { pattern: 'ring', rooms: [{ style: 'disco' }] } }, /There is no room style "disco"\. Styles: lounge, cozy, games/],
       [{ layout: { pattern: 'ring', rooms: [{ name: 'X' }] } }, /needs a style/],
       [{ layout: { pattern: 'ring', rooms: [{ style: 'lounge', x: 1 }] } }, /a layout room does not take: x\./],
       [{ layout: { pattern: 'ring', rooms: [{ style: 'lounge', lines: [{ line: 'build_test' }] }] } }, /Lines go in a works room/],
-      [{ layout: { pattern: 'ring', rooms: new Array(7).fill({ style: 'lounge' }) } }, /A ring holds 6 rooms/],
-      [{ layout: { pattern: 'ring', rooms: [{ style: 'works' }, { style: 'works' }, { style: 'works' }] } }, /A ring has room for two big rooms/],
-      [{ layout: { pattern: 'concourse', rooms: new Array(9).fill({ style: 'lounge' }) } }, /^layout\.rooms is a list of 1 to 8 rooms/],
+      [{ layout: { pattern: 'diamond', rooms: new Array(17).fill({ style: 'lounge' }) } }, /^layout\.rooms is a list of 1 to 16 rooms/],
+      [{ layout: { pattern: 'diamond', rooms: new Array(5).fill({ style: 'works' }) } }, /There is no wing of the diamond around HOME clear for CONVEYOR HALL 5 .*A diamond takes up to four big rooms\./],
+      [{ layout: { pattern: 'concourse', rooms: new Array(9).fill({ style: 'lounge' }) } }, /^A concourse holds 8 rooms \(9 were asked\)\./],
       [{ layout: { pattern: 'ring', rooms: [{ style: 'lounge' }] }, replace: 'yes' }, /^replace is true/],
       [{ layout: { pattern: 'ring', rooms: [{ style: 'lounge', name: 'Home' }] } }, /A room is already called HOME/],
       [{ layout: { pattern: 'ring', around: 'Mars', rooms: [{ style: 'lounge' }] } }, /There is no room called "Mars"/],
@@ -1189,7 +1210,7 @@ for (const c of T.catalog) {
   A.ok(!tools.planLineTool && !tools.planRoomTool && !tools.planBuildTool && !tools.planRestyleTool, 'one planner, not four');
   // what the planner offers: a whole layout first, then rooms, a line, a kit or preset, zones, a restyle — with the menus
   const d = planT.description;
-  A.ok(/1 LAYOUT, the way to a beautiful station: \{ "layout": \{ "pattern": "ring" \| "concourse"/.test(d) && /ring = a corridor loop round the main room/.test(d) && /concourse = a wide corridor from one side of the main room/.test(d), 'the planner leads with the two layout patterns');
+  A.ok(/1 LAYOUT, the way to a beautiful station: \{ "layout": \{ "pattern": "diamond" \| "concourse"/.test(d) && /diamond \(the usual one\) = every room on an even grid all round the main room/.test(d) && /To ADD rooms to a diamond later, send a layout again with only the new rooms/.test(d) && /concourse = a wide corridor from one side of the main room/.test(d), 'the planner leads with the diamond, says how to grow it, and offers the concourse');
   A.ok(/Room styles: lounge \(a lounge: a TV, a couch on a big rug/.test(d) && /cozy \(a cozy den: a TV, bookshelves/.test(d) && /works \(a conveyor hall: its floor kept for workflow lines/.test(d), 'it lists every whole-room style');
   A.ok(/replace: true lays the whole station out again around the main room/.test(d) && /backed up for RESTORE PREVIOUS/.test(d), 'it says what replace does and that the old layout is backed up');
   A.ok(/size: small 12×8, medium 18×11, large 24×14, giant 36×20/.test(d) && /LINES: .*build_test \(ENGINEER → TESTER\)/.test(d) && /KITS WORKROOM/.test(d) && /PRESETS RESEARCH STATION/.test(d) && /zone styles cozy, lounge/.test(d), 'sizes, lines, kits, presets and zone styles are all on the menu');

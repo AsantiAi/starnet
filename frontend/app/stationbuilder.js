@@ -1567,7 +1567,7 @@
      whole station is laid out again around the hub (backed up for RESTORE PREVIOUS, like a preset swap). */
   const LAYOUT_KEYS = ['pattern', 'around', 'side', 'rooms'];
   const LAYOUT_ROOM_KEYS = ['name', 'style', 'size', 'lines', 'zones'];
-  const PATTERNS = { ring: 'ring', loop: 'ring', circle: 'ring', hub: 'ring', concourse: 'concourse', corridor: 'concourse', spine: 'concourse', hallway: 'concourse', street: 'concourse', main: 'concourse' };
+  const PATTERNS = { diamond: 'diamond', ring: 'diamond', loop: 'diamond', circle: 'diamond', hub: 'diamond', star: 'diamond', cross: 'diamond', grid: 'diamond', concourse: 'concourse', corridor: 'concourse', spine: 'concourse', hallway: 'concourse', street: 'concourse', main: 'concourse' };
   const AUTO_NAME = { lounge: 'LOUNGE', cozy: 'DEN', games: 'ARCADE', library: 'LIBRARY', quarters: 'QUARTERS', garden: 'GARDEN', cafe: 'CAFE', desks: 'OFFICE',
     meeting: 'MEETING ROOM', lab: 'LAB', workshop: 'WORKSHOP', comms: 'COMMS', storage: 'STORES', gym: 'GYM', works: 'CONVEYOR HALL' };
   const CORRIDOR_DECK = { style: 'onyx', mat: 'runner' };
@@ -1729,40 +1729,99 @@
   /* THE PATTERNS' GEOMETRY: pure rects around the hub's box B. Each answers { halls: [{ rect, dress, outer }], rooms:
      [{ i, rect, side }] } — halls in the order they are laid, `dress` on the corridors people walk along (not the short
      halls), and every room i of the request in its slot — or a refusal saying how many rooms the pattern holds. */
-  const RING_ROOMS = 6;
-  function ringGeometry(B, want) {
-    const gap = 4, t = 3, stub = 3;
-    const X1 = B.x1 - gap - t, X2 = B.x2 + gap + t, Y1 = B.y1 - gap - t, Y2 = B.y2 + gap + t;
-    const cx = (B.x1 + B.x2) >> 1, cy = (B.y1 + B.y2) >> 1, mid = (X1 + X2) >> 1;
-    const halls = [
+  /* THE DIAMOND (2026-09-30, after Andrew's test: "good at designing the rooms, terrible at judging where to place them…
+     I still want it to keep the diamond shape even with the new rooms"). Every room stands on an EVEN GRID around the
+     hub, the same size as the bridge, a hallway apart, and the grid is filled in diamond order — the four sides first,
+     then the four corners and the far sides, then the next ring out — each room paired with the one opposite it, so the
+     station keeps its diamond at every size. A room added later goes in the next free place of the same grid, so the
+     shape holds as the station grows. At the centre, when the space round the hub is clear, a corridor loop with a
+     hallway in from each side (the ring). Big rooms (a conveyor hall) take the east and west wings first, then north and
+     south, anchored on the grid's inner edge. Each room is joined by a straight hallway to what faces it toward the hub
+     (the ring, the hub, or the room one step in). Answers { halls, rooms } laid on `scratch`, or why a room found no place. */
+  const CELL = [18, 11], DIAMOND_ROOMS = 16;
+  function diamondOrder(maxD) {
+    const out = [];
+    for (let d = 1; d <= maxD; d++) {
+      for (let a = 1; a < d; a++) { const b = d - a; out.push([a, -b], [-a, b], [-a, -b], [a, b]); }
+      out.push([0, -d], [0, d], [d, 0], [-d, 0]);
+    }
+    return out;
+  }
+  function cellName(i, j) {
+    const ns = j < 0 ? 'north' : j > 0 ? 'south' : '', ew = i < 0 ? 'west' : i > 0 ? 'east' : '', d = Math.abs(i) + Math.abs(j);
+    return (d >= 2 && (!ns || !ew) ? 'far ' : d >= 3 ? 'outer ' : '') + (ns && ew ? ns + '-' + ew : ns || ew);
+  }
+  function diamondGeometry(scratch, hubId, want, hangs) {
+    const hub = scratch.rooms().find(r => r.id === hubId);
+    const B = bboxOf(hub), hw = B.x2 - B.x1 + 1, hh = B.y2 - B.y1 + 1, [CW, CH] = CELL;
+    const PX = ((hw + CW) >> 1) + 10, PY = ((hh + CH) >> 1) + 10;   // a room 10 tiles off the hub: ring 4 out, 3 thick, a 3-tile hall
+    const ox = B.x1 + ((hw - CW) >> 1), oy = B.y1 + ((hh - CH) >> 1);
+    const halls = [], rooms = [];
+    // the ring at the centre, when everything it needs is clear
+    const gap = 4, t = 3, X1 = B.x1 - gap - t, X2 = B.x2 + gap + t, Y1 = B.y1 - gap - t, Y2 = B.y2 + gap + t;
+    const cx = (B.x1 + B.x2) >> 1, cy = (B.y1 + B.y2) >> 1;
+    const ring = [
       { rect: { x1: X1, y1: Y1, x2: X2, y2: Y1 + 2 }, dress: true, outer: 'north' }, { rect: { x1: X1, y1: Y2 - 2, x2: X2, y2: Y2 }, dress: true, outer: 'south' },
       { rect: { x1: X1, y1: Y1 + 3, x2: X1 + 2, y2: Y2 - 3 }, dress: true, outer: 'west' }, { rect: { x1: X2 - 2, y1: Y1 + 3, x2: X2, y2: Y2 - 3 }, dress: true, outer: 'east' },
       { rect: { x1: cx - 1, y1: B.y1 - gap, x2: cx + 2, y2: B.y1 - 1 } }, { rect: { x1: cx - 1, y1: B.y2 + 1, x2: cx + 2, y2: B.y2 + gap } },
       { rect: { x1: B.x2 + 1, y1: cy - 1, x2: B.x2 + gap, y2: cy + 1 } }, { rect: { x1: B.x1 - gap, y1: cy - 1, x2: B.x1 - 1, y2: cy + 1 } }];
-    const big = want.filter(r => r.big), rest = want.filter(r => !r.big);
-    if (big.length > 2) return refuse('A ring has room for two big rooms (east and west of it); ' + big.length + ' were asked. Make the others medium, or use the concourse pattern.');
-    const sides = big.length === 2 ? [] : big.length === 1 ? ['west'] : ['west', 'east'];
-    const k = rest.length, slots = k <= 1 ? ['north'] : k === 2 ? ['north', 'south'] : k === 3 ? ['north-left', 'north-right', 'south'] : ['north-left', 'north-right', 'south-left', 'south-right'].concat(sides).slice(0, k);
-    if (k > 4 + sides.length || want.length > RING_ROOMS) return refuse('A ring holds ' + RING_ROOMS + ' rooms (' + want.length + ' were asked). Use the concourse pattern for more, or build the rest beside the ring afterwards.');
-    const rooms = [], place = (r, slot) => {
-      const w = r.w, h = r.h;
-      let rect, hall;
-      if (/^north|^south/.test(slot)) {
-        const north = /^north/.test(slot), x1 = /-left$/.test(slot) ? mid - w : /-right$/.test(slot) ? mid + 2 : mid - ((w - 2) >> 1);
-        rect = north ? { x1, y1: Y1 - stub - h, x2: x1 + w - 1, y2: Y1 - stub - 1 } : { x1, y1: Y2 + stub + 1, x2: x1 + w - 1, y2: Y2 + stub + h };
-        const hx = Math.max(X1 + 3, Math.min(X2 - 6, x1 + ((w - 4) >> 1)));
-        hall = north ? { x1: hx, y1: Y1 - stub, x2: hx + 3, y2: Y1 - 1 } : { x1: hx, y1: Y2 + 1, x2: hx + 3, y2: Y2 + stub };
-      } else {
-        const east = slot === 'east', y1 = cy - ((h - 1) >> 1);
-        rect = east ? { x1: X2 + stub + 1, y1, x2: X2 + stub + w, y2: y1 + h - 1 } : { x1: X1 - stub - w, y1, x2: X1 - stub - 1, y2: y1 + h - 1 };
-        hall = east ? { x1: X2 + 1, y1: cy - 1, x2: X2 + stub, y2: cy + 2 } : { x1: X1 - stub, y1: cy - 1, x2: X1 - 1, y2: cy + 2 };
-      }
-      halls.push({ rect: hall });
-      rooms.push({ i: r.i, rect, side: slot.replace(/-.*/, '') });
+    const ringFree = ring.every(h => scratch.canPlaceHallway([h.rect]).ok && !neighbourOf(scratch, h.rect, [hub.id]));
+    if (ringFree) for (const h of ring) { const a = scratch.placeHallway({ rect: h.rect }); if (!a || !a.ok) return refuse('the ring could not be laid'); halls.push(h); }
+    // where a room of w × h stands on cell (i, j): a normal room fills the cell; a big one is anchored on its inner edge
+    const cellRect = (i, j) => ({ x1: ox + i * PX, y1: oy + j * PY, x2: ox + i * PX + CW - 1, y2: oy + j * PY + CH - 1 });
+    const bigRect = (i, j, w, h) => {
+      const c = cellRect(i, j);
+      if (j === 0) { const y1 = B.y1 + ((hh - h) >> 1); return i > 0 ? { x1: c.x1, y1, x2: c.x1 + w - 1, y2: y1 + h - 1 } : { x1: c.x2 - w + 1, y1, x2: c.x2, y2: y1 + h - 1 }; }
+      const x1 = B.x1 + ((hw - w) >> 1);
+      return j > 0 ? { x1, y1: c.y1, x2: x1 + w - 1, y2: c.y1 + h - 1 } : { x1, y1: c.y2 - h + 1, x2: x1 + w - 1, y2: c.y2 };
     };
-    big.forEach((r, j) => place(r, j === 0 ? 'east' : 'west'));
-    rest.forEach((r, j) => place(r, slots[j]));
-    return { ok: true, halls, rooms };
+    // the first zone met walking from a room's inner edge toward the hub, along its middle
+    const facing = (rect, dx, dy) => {
+      const mx = (rect.x1 + rect.x2) >> 1, my = (rect.y1 + rect.y2) >> 1;
+      let x = dx > 0 ? rect.x2 + 1 : dx < 0 ? rect.x1 - 1 : mx, y = dy > 0 ? rect.y2 + 1 : dy < 0 ? rect.y1 - 1 : my;
+      for (let k = 0; k < Math.max(PX - CW, PY - CH) + 2; k++, x += dx, y += dy) { const id = scratch.roomAt(x, y); if (id) return scratch.rooms().find(r => r.id === id) || null; }
+      return null;
+    };
+    const used = new Set(), key = (i, j) => i + ',' + j;
+    let why = '';
+    const place = (q, i, j, big) => {
+      const rect = big ? bigRect(i, j, q.w, q.h) : cellRect(i, j);
+      const c = scratch.canPlaceRoom([rect], 'hab');
+      if (!c.ok) { why = why || (/^overlaps /.test(c.msg || '') ? c.msg.replace(/^overlaps /, '') + ' is in the way' : (c.msg || 'it does not fit')); return false; }
+      const nb = neighbourOf(scratch, rect, []);
+      if (nb) { why = why || 'it would stand against ' + nb; return false; }
+      const a = scratch.addRoom({ kind: 'hab', name: q.name, rect });
+      if (!a || !a.ok) return false;
+      const room = scratch.rooms().find(r => r.id === a.id);
+      // toward the hub: along the row first (to the room nearer the north-south line), then along the column
+      const dirs = [];
+      if (i) dirs.push([-Math.sign(i), 0]);
+      if (j) dirs.push([0, -Math.sign(j)]);
+      for (const [dx, dy] of dirs) {
+        const Z = facing(rect, dx, dy);
+        if (!Z || Z.id === a.id) continue;
+        const hb = hallBetween(scratch, Z, room, hangs);
+        if (!hb.ok) { why = why || hb.error; continue; }
+        const h = scratch.placeHallway({ rect: hb.rect });
+        if (!h || !h.ok) continue;
+        halls.push({ rect: hb.rect, dress: true });
+        rooms.push({ i: q.i, rect, side: cellName(i, j) });
+        used.add(key(i, j));
+        // a big room covers the next place out along its axis as well
+        if (big) { const s = j === 0 ? [Math.sign(i), 0] : [0, Math.sign(j)]; for (let k = 1; k <= 2; k++) used.add(key(i + s[0] * k, j + s[1] * k)); }
+        return true;
+      }
+      scratch.removeRoom(a.id);
+      return false;
+    };
+    const wings = [[1, 0], [-1, 0], [0, -1], [0, 1], [2, 0], [-2, 0], [0, -2], [0, 2]], order = diamondOrder(4);
+    for (const q of want.filter(r => r.big)) {
+      if (!wings.some(([i, j]) => !used.has(key(i, j)) && place(q, i, j, true))) return refuse('There is no wing of the diamond around ' + hub.name + ' clear for ' + q.name + ' (' + (why || 'every wing is taken') + '). A diamond takes up to four big rooms.');
+    }
+    for (const q of want.filter(r => !r.big)) {
+      if (!order.some(([i, j]) => !used.has(key(i, j)) && place(q, i, j, false))) return refuse('There is no free place left on the diamond around ' + hub.name + ' for ' + q.name + ' (' + (why || 'the grid is full') + ').');
+    }
+    return { ok: true, halls, rooms, ring: ringFree };
   }
   const CONCOURSE_ROOMS = 8;
   function concourseGeometry(B, dir, want) {
@@ -1804,8 +1863,8 @@
 
   // a layout's rooms, checked: a style (or lines, or zones), a size, a name
   function parseLayoutRooms(list, env, live, notes, usedNames) {
-    const RS = env.RoomStyles, HOW = 'layout.rooms is a list of 1 to 8 rooms, each { name, style, size, lines } (style: ' + RS.ROOM_ORDER.join(', ') + ').';
-    if (!Array.isArray(list) || !list.length || list.length > CONCOURSE_ROOMS) return refuse(HOW);
+    const RS = env.RoomStyles, HOW = 'layout.rooms is a list of 1 to ' + DIAMOND_ROOMS + ' rooms, each { name, style, size, lines } (style: ' + RS.ROOM_ORDER.join(', ') + ').';
+    if (!Array.isArray(list) || !list.length || list.length > DIAMOND_ROOMS) return refuse(HOW);
     const out = [];
     for (let i = 0; i < list.length; i++) {
       const q = list[i];
@@ -1861,8 +1920,8 @@
     if (!L || typeof L !== 'object' || Array.isArray(L)) return refuse(HOW);
     const bad = Object.keys(L).filter(k => LAYOUT_KEYS.indexOf(k) < 0);
     if (bad.length) return refuse('StarNet computes every tile itself, so a layout does not take: ' + bad.slice(0, 6).join(', ') + '. It takes: ' + LAYOUT_KEYS.join(', ') + '.');
-    const pattern = PATTERNS[norm(L.pattern)] || (L.pattern == null ? 'ring' : null);
-    if (!pattern) return refuse('pattern is ring (a corridor loop around the main room, rooms all round it) or concourse (a wide corridor with rooms down both sides and a big room at the end).');
+    const pattern = PATTERNS[norm(L.pattern)] || (L.pattern == null ? 'diamond' : null);
+    if (!pattern) return refuse('pattern is diamond (rooms on an even grid all round the main room, a corridor loop at its centre) or concourse (a wide corridor with rooms down both sides and a big room at the end).');
     if (req.replace != null && typeof req.replace !== 'boolean') return refuse('replace is true (lay out the whole station again) or left out (add the layout beside what stands).');
     const replace = req.replace === true;
     const sd = sideOf(L.side); if (!sd.ok) return sd;
@@ -1885,16 +1944,18 @@
       base = bp.serialize();
     }
     const live = WM.create(clone(base)), notes = [], usedNames = {};
-    if (pattern === 'ring' && L.side != null) notes.push('A ring goes all the way round its room, so side was left out.');
+    if (pattern === 'diamond' && L.side != null) notes.push('A diamond goes all the way round its room, so side was left out.');
     const pr = parseLayoutRooms(L.rooms, env, live, notes, usedNames); if (!pr.ok) return pr;
+    // on the diamond every room but a big one is the grid's own size, so the station reads as one consistent plan
+    if (pattern === 'diamond') for (const q of pr.rooms) if (!q.big) { q.w = CELL[0]; q.h = CELL[1]; }
     if (replace && pr.rooms.some(r => [].concat(...r.lines.map(l => l.staff || []), ...r.zones.map(z => z.staff || [])).some(s => s && /^(new|recruit)/i.test(String(s.agent || ''))))) return refuse('A layout that replaces the station cannot recruit; staff the lines with the crew you have, or recruit after it is built.');
     const hub = live.rooms().find(r => r.id === hubQ.room.id), B = bboxOf(hub);
     const before = floorFacts(live, P);
     // the geometry: the ring round the hub, or the concourse off the side asked (else the first side it fits)
-    const dirs = pattern === 'ring' ? [null] : sd.side ? [sd.side] : SIDES.slice().sort((a, b) => { const free = s => placementsOn(live, hub, s, 12, 8, 3, null, 'hab').list.length ? 0 : 1; return free(a) - free(b); });
+    const dirs = pattern === 'diamond' ? [null] : sd.side ? [sd.side] : SIDES.slice().sort((a, b) => { const free = s => placementsOn(live, hub, s, 12, 8, 3, null, 'hab').list.length ? 0 : 1; return free(a) - free(b); });
     let laid = null, why = null;
     for (const dir of dirs) {
-      const geo = pattern === 'ring' ? ringGeometry(B, pr.rooms) : concourseGeometry(B, dir, pr.rooms);
+      const geo = pattern === 'diamond' ? diamondGeometry(WM.create(clone(base)), hub.id, pr.rooms, hangsOf(env)) : concourseGeometry(B, dir, pr.rooms);
       if (!geo.ok) return geo;
       const probe = WM.create(clone(base)), hallIds = [], roomIds = {};
       let fail = null;
@@ -1919,11 +1980,11 @@
         const other = neighbourOf(probe, r.rect, [...mine]);
         if (other) { fail = pr.rooms.find(x => x.i === r.i).name + ' would stand against ' + other; break; }
       }
-      if (fail) { why = why || (pattern === 'ring' ? 'A ring needs clear space all round ' + hub.name + ' (' + fail + ').' : 'A concourse ' + dir + ' of ' + hub.name + ' does not fit (' + fail + ').'); continue; }
+      if (fail) { why = why || (pattern === 'diamond' ? 'The diamond around ' + hub.name + ' could not be laid (' + fail + ').' : 'A concourse ' + dir + ' of ' + hub.name + ' does not fit (' + fail + ').'); continue; }
       laid = { geo, probe, hallIds, roomIds, dir };
       break;
     }
-    if (!laid) return refuse(why + (replace ? '' : ' Use replace: true to lay out the whole station again around ' + hub.name + (pattern === 'ring' ? ', or the concourse pattern from a free side.' : '.')));
+    if (!laid) return refuse(why + (replace ? '' : ' Use replace: true to lay out the whole station again around ' + hub.name + (pattern === 'diamond' ? '.' : ', or the diamond pattern.')));
     // fill every room (lines first, then its style or zones), then dress the corridors
     const probe = laid.probe, parts = [], recruits = [], view = [];
     laid.geo.halls.forEach((h, j) => parts.push({ hall: h.rect, hallDeck: CORRIDOR_DECK, room: null, roomId: null, lines: [], props: [], dress: h.dress ? h.outer || null : undefined, hallId: laid.hallIds[j] }));
@@ -1967,7 +2028,10 @@
       return v.q.name + ' ' + at + ', ' + Wd + ' × ' + Hd + ': ' + bits.join('; ') + pieces;
     });
     const wasRooms = live0.rooms().filter(x => x.kind !== 'corridor').length - 1, wasProps = live0.props().length - live.props().length;
-    const head = (pattern === 'ring' ? 'A RING around ' + hub.name + ': a corridor loop with a hallway in from each side, planted and lit, and ' : 'A CONCOURSE ' + laid.dir + ' from ' + hub.name + ': a wide corridor, planted and lit, and ') + view.length + ' rooms. ';
+    const head = pattern === 'diamond'
+      ? (laid.geo.ring ? 'A DIAMOND around ' + hub.name + ': a corridor loop round it with a hallway in from each side, and ' + view.length + ' rooms on an even grid round the loop, each on its own planted, lit hallway. '
+        : view.length + (view.length === 1 ? ' room' : ' rooms') + ' on the diamond grid around ' + hub.name + ', each in the next free place of the grid, on its own planted, lit hallway. ')
+      : 'A CONCOURSE ' + laid.dir + ' from ' + hub.name + ': a wide corridor, planted and lit, and ' + view.length + ' rooms. ';
     const blocking = [].concat(...lines.map(l => l.blocking.map(b => (lines.length > 1 ? (l.label || l.plain) + ': ' : '') + b)));
     const summary = head + roomText.join('. ') + '.'
       + (replace ? ' It replaces everything beyond ' + hub.name + ' (' + wasRooms + (wasRooms === 1 ? ' room' : ' rooms') + ' and ' + wasProps + ' props); ' + hub.name + ', agents and conversations stay, and every agent keeps a desk. Your current layout is backed up: RESTORE PREVIOUS in Build → Presets brings it back.' : '')
@@ -1976,7 +2040,7 @@
     const preview = previewOf(WM, doc, fpd, [], null);
     const roomsOut = view.map(v => ({ name: v.q.name, style: v.q.style || null, where: v.r.side, existing: false }));
     const plan = { floorSig: sigOf(doc), resultSig: sigOf(fpd), summary, notes, steps, rooms: roomsOut, hallways: [], lines, preview, line: null,
-      where: (pattern === 'ring' ? 'a ring around ' : 'a concourse ' + laid.dir + ' of ') + hub.name, layout: { pattern, replace } };
+      where: (pattern === 'diamond' ? 'the diamond around ' : 'a concourse ' + laid.dir + ' of ') + hub.name, layout: { pattern, replace } };
     plan.spec = replace ? { kind: 'relayout', stripped, build: spec, pattern } : spec;
     if (replace) plan.preset = { id: 'layout-' + pattern, name: 'your new ' + pattern.toUpperCase() + ' layout' };
     return { ok: true, plan };

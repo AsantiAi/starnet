@@ -324,7 +324,7 @@ try {
   check('two UNDOs take back the lines, then every room and hallway', undone9.ok && JSON.stringify(undone9.now) === JSON.stringify(pre9), JSON.stringify(undone9));
   mock.lookFirst = false;
 
-  /* 15. "redo my station as a gorgeous layout with hallways": the lead lays the whole station out again as a RING round
+  /* 15. "redo my station as a gorgeous layout with hallways": the lead lays the whole station out again as a DIAMOND round
      the bridge — every room furnished in its style, the corridors planted and lit — and the old layout is backed up. */
   mock.lookFirst = true;
   mock.planArgs = { layout: { pattern: 'ring', rooms: [{ style: 'lounge' }, { style: 'arcade' }, { style: 'library' }, { style: 'quarters' }, { style: 'garden' }, { name: 'Conveyor Hall', style: 'works', lines: [{ line: 'build_test', staff: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'lead' }] }] }] }, replace: true };
@@ -333,7 +333,7 @@ try {
   const run11 = await leadRun(base, token, 'our station looks like one long thin strip; redo the whole station as a gorgeous layout with hallways: a lounge, an arcade, a library, quarters, a garden and a giant conveyor hall');
   check('the layout run completes', run11.status === 200);
   let LP = null, LB = null; try { LP = JSON.parse(mock.results[at + 1] || ''); LB = JSON.parse(mock.results[at + 2] || ''); } catch (_) {}
-  check('the plan is a ring round the bridge with every room, and says the old station is backed up', !!LP && /^A RING around HOME: a corridor loop with a hallway in from each side, planted and lit, and 6 rooms\. LOUNGE north, 18 × 10: a lounge \(/.test(LP.summary) && /RESTORE PREVIOUS in Build → Presets brings it back\./.test(LP.summary), (mock.results[at + 1] || '').slice(0, 400));
+  check('the plan is a diamond round the bridge with every room, and says the old station is backed up', !!LP && /^A DIAMOND around HOME: a corridor loop round it with a hallway in from each side, and 6 rooms on an even grid round the loop, each on its own planted, lit hallway\. LOUNGE north, 18 × 11: a lounge \(/.test(LP.summary) && /RESTORE PREVIOUS in Build → Presets brings it back\./.test(LP.summary), (mock.results[at + 1] || '').slice(0, 400));
   check('the build answered built, with how to get the old station back', !!LB && LB.built === true && /RESTORE PREVIOUS/.test(LB.undo || ''), (mock.results[at + 2] || '').slice(0, 300));
   const lay = await evalJS(cdp, `(() => { const st = App.station(), g = st.projectGeometry(), ox = g.origin.tx, oy = g.origin.ty, rooms = st.rooms().filter(r => r.kind !== 'corridor'), home = rooms.find(r => r.name === 'HOME');
     const free = r => { const R = r.rects[0]; for (let y = R.y1; y <= R.y2; y++) for (let x = R.x1; x <= R.x2; x++) if (g.walkable(x - ox, y - oy)) return [x - ox, y - oy]; return null; };
