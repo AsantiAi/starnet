@@ -115,6 +115,18 @@
     const hit = byId && byId.get(String(id || ''));
     return hit ? { levels: hit.levels.slice(), defaultLevel: hit.defaultLevel } : null;
   }
+  // The largest window each Ollama model has been run at in this PROCESS (endpoint -> model -> num_ctx). A run builds
+  // a fresh provider, so a per-instance record forgot it between runs: a greeting after a task reloaded the model at
+  // 8k and the next task reloaded it back to 32k, seconds each way. Every distinct num_ctx is a reload, so a model
+  // never steps down here once it has run larger.
+  const ollamaWindows = new Map();
+  function ollamaWindow(endpoint, model) { const m = ollamaWindows.get(endpoint); return (m && m.get(String(model || ''))) || 0; }
+  function noteOllamaWindow(endpoint, model, numCtx) {
+    let m = ollamaWindows.get(endpoint);
+    if (!m) { m = new Map(); ollamaWindows.set(endpoint, m); }
+    const id = String(model || '');
+    if (numCtx > (m.get(id) || 0)) m.set(id, numCtx);
+  }
   // What an endpoint TOLD us at request time outranks every catalog and table, and a catalog reload never erases it.
   const learnedByEndpoint = new Map();   // endpoint -> Map(modelId -> levels)
   function rememberLearned(endpoint, id, levels) {
@@ -368,7 +380,6 @@
     const nativeBase = nativeWire ? ollamaNative.nativeRoot(baseUrl) : '';
     const pinnedCtx = Math.max(0, Math.floor(Number(opts.numCtx) || 0));
     const ctxCeiling = Math.max(0, Math.floor(Number(opts.maxCtx) || 0)) || (ollamaNative ? ollamaNative.DEFAULT_MAX_CTX : 0);
-    const ctxFloor = new Map();        // model -> the largest window it has run at here (never step down: a reload)
     const modelFacts = new Map();      // model -> Promise<{ contextLength, supportsTools, supportsReasoning }>
     const knownFacts = new Map();      // model -> the settled facts, for the synchronous contextLimit()/supportsTools()
     function factsFor(model) {
@@ -509,7 +520,21 @@
         const facts = await factsFor(req.model);
         const modelMax = (facts && facts.contextLength) || 0;
         const need = ollamaNative.estimateTokens(body) + (Number(body.max_tokens) || 0);
-        wire = { native: true, modelMax, numCtx: ollamaNative.pickNumCtx(need, { pinned: pinnedCtx, ceiling: ctxCeiling, modelMax, floor: ctxFloor.get(String(req.model || '')) || 0 }) };
+        // First use of this model in this process: if Ollama already holds it loaded at a usable window (StarNet was
+        // restarted inside the keep-alive, or the Commander loaded it larger), keep that window rather than reload.
+        if (!pinnedCtx && !ollamaWindow(nativeBase, req.model)) {
+          const loaded = ollamaNative.loadedWindow(await ollamaStatus(), req.model);
+          if (loaded > 0 && loaded <= (usableWindow(modelMax) || ctxCeiling)) noteOllamaWindow(nativeBase, req.model, loaded);
+        }
+        /* BACKGROUND CALLS DO NOT THINK (measured on qwen3:8b, 2026-09-30). After a task the host fires its own
+           housekeeping calls (reflection, profile update): no tools, and not a Commander turn (isTask is unset; a
+           greeting is isTask:false, a task carries tools). Ollama serves one request at a time, and each of those
+           spent 12-24s producing 2-3k characters of thinking for a few characters of output, so the Commander's
+           next "hello" waited 26s behind them. Only a model Ollama says can think is told not to, and only here:
+           Commander turns and tasks keep the model's own default. */
+        const background = !(req.tools && req.tools.length) && typeof req.isTask !== 'boolean';
+        const think = (background && facts && facts.supportsReasoning === true) ? false : undefined;
+        wire = { native: true, modelMax, think, numCtx: ollamaNative.pickNumCtx(need, { pinned: pinnedCtx, ceiling: ctxCeiling, modelMax, floor: ollamaWindow(nativeBase, req.model) }) };
       }
       let res;
       try { res = await requestWithRetry(body, req.signal, provider.runtime.preStreamRetries(req, RETRY_DELAYS.length), wire); }
@@ -663,7 +688,7 @@
           res = await doFetch(native ? nativeBase + '/api/chat' : baseUrl + chatPath, {
             method: 'POST',
             headers: headerBag(key, opts.headers),
-            body: JSON.stringify(native ? ollamaNative.toNativeRequest(body, { numCtx: wire.numCtx }) : body),
+            body: JSON.stringify(native ? ollamaNative.toNativeRequest(body, { numCtx: wire.numCtx, think: wire.think }) : body),
             signal: guard.signal
           });
         } catch (e) {
@@ -682,7 +707,7 @@
           guard.disarm();
         }
         if (res.ok && res.body) {
-          if (native) { const id = String(body.model || ''); ctxFloor.set(id, Math.max(ctxFloor.get(id) || 0, wire.numCtx)); }
+          if (native) noteOllamaWindow(nativeBase, body.model, wire.numCtx);
           return res;
         }
         const upstreamError = await responseErrorDetail(res);

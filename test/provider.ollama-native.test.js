@@ -201,6 +201,65 @@ module.exports = (async () => {
     } finally { if (prev == null) delete process.env.SKYNET_OLLAMA_NUM_CTX; else process.env.SKYNET_OLLAMA_NUM_CTX = prev; }
   }
 
+  // The window outlives the provider INSTANCE (a run builds a fresh one): a greeting after a task must not reload
+  // the model at a smaller window, and the next task must not reload it back.
+  {
+    const sizes = [];
+    const fetch = async (url, init) => {
+      if (url.endsWith('/api/show')) return SHOW(40960, ['completion', 'tools']);
+      if (url.endsWith('/api/chat')) { sizes.push(JSON.parse(init.body).options.num_ctx); return ndjson([{ message: { content: 'ok' }, done: true, done_reason: 'stop' }]); }
+      return new Response('{"models":[]}', { status: 200 });
+    };
+    const mk = () => makeOpenAICompatibleProvider({ fetch, baseUrl: 'http://sticky.test:11434/v1', nativeOllama: true, maxTokens: 4096 });
+    await collect(mk(), { model: 'q', messages: [{ role: 'user', content: 'x'.repeat(84000) }] });
+    await collect(mk(), { model: 'q', messages: [{ role: 'user', content: 'hello' }] });
+    A.eq(sizes, [32768, 32768], 'a small turn on a NEW provider instance keeps the window the task loaded');
+  }
+  // StarNet restarted while Ollama still holds the model at a larger window: adopt it instead of reloading smaller.
+  {
+    const sizes = [];
+    const fetch = async (url, init) => {
+      if (url.endsWith('/api/show')) return SHOW(40960, ['completion', 'tools']);
+      if (url.endsWith('/api/ps')) return new Response(JSON.stringify({ models: [{ name: 'q', size: 10e9, size_vram: 10e9, context_length: 32768 }] }), { status: 200 });
+      if (url.endsWith('/api/chat')) { sizes.push(JSON.parse(init.body).options.num_ctx); return ndjson([{ message: { content: 'ok' }, done: true, done_reason: 'stop' }]); }
+      return new Response('{}', { status: 200 });
+    };
+    await collect(makeOpenAICompatibleProvider({ fetch, baseUrl: 'http://loaded.test:11434/v1', nativeOllama: true }), { model: 'q', messages: [{ role: 'user', content: 'hello' }] });
+    A.eq(sizes, [32768], 'an already-loaded window is kept (no reload to a smaller one)');
+    A.eq(N.loadedWindow({ models: [{ name: 'q', context_length: 8192 }] }, 'other'), 0, 'a model that is not loaded has no window to adopt');
+  }
+  // A screenshot is megabytes of base64 but a fixed handful of tokens: it must not size the window to the ceiling.
+  {
+    const img = { role: 'user', content: [{ type: 'text', text: 'what is this' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,' + 'A'.repeat(2000000) } }] };
+    const est = N.estimateTokens({ messages: [img] });
+    A.ok(est > 1000 && est < 2000, 'an image counts as a flat allowance, not as its base64 length (got ' + est + ')');
+  }
+
+  // The host's own background calls (no tools, not a Commander turn) do not think on a thinking model: Ollama serves
+  // one request at a time, and two such calls held the Commander's next greeting for 26s (measured, qwen3:8b).
+  {
+    const seen = [];
+    const mkFetch = (caps) => async (url, init) => {
+      if (url.endsWith('/api/show')) return SHOW(40960, caps);
+      if (url.endsWith('/api/chat')) { seen.push(JSON.parse(init.body)); return ndjson([{ message: { content: 'ok' }, done: true, done_reason: 'stop' }]); }
+      return new Response('{"models":[]}', { status: 200 });
+    };
+    const thinker = () => makeOpenAICompatibleProvider({ fetch: mkFetch(['completion', 'tools', 'thinking']), baseUrl: 'http://think.test:11434/v1', nativeOllama: true });
+    const msg = [{ role: 'user', content: 'hi' }];
+    await collect(thinker(), { model: 'q', messages: msg });
+    A.eq(seen.pop().think, false, 'a background call (no tools, isTask unset) tells a thinking model not to think');
+    await collect(thinker(), { model: 'q', messages: msg, isTask: false });
+    A.eq(seen.pop().think, undefined, 'a Commander greeting keeps the model default');
+    await collect(thinker(), { model: 'q', messages: msg, tools: TOOLS, isTask: true });
+    A.eq(seen.pop().think, undefined, 'a task keeps the model default');
+    await collect(thinker(), { model: 'q', messages: msg, tools: TOOLS });
+    A.eq(seen.pop().think, undefined, 'an internal run WITH tools keeps the model default');
+    await collect(makeOpenAICompatibleProvider({ fetch: mkFetch(['completion', 'tools', 'thinking']), baseUrl: 'http://think.test:11434/v1', nativeOllama: true, sendReasoningEffort: true, reasoningEffort: 'high' }), { model: 'q', messages: msg });
+    A.eq(seen.pop().think, true, 'an explicit reasoning effort still wins on a background call');
+    await collect(makeOpenAICompatibleProvider({ fetch: mkFetch(['completion', 'tools']), baseUrl: 'http://nothink.test:11434/v1', nativeOllama: true }), { model: 'q', messages: msg });
+    A.eq('think' in seen.pop(), false, 'a model that cannot think is never sent the field');
+  }
+
   // A silent local model says WHERE it runs (the 605s "stalled" report = two 300s attempts with no bytes).
   {
     const ps = (vram) => ({ models: [{ name: 'qwen3:8b', size: 10e9, size_vram: vram, context_length: 32768 }] });

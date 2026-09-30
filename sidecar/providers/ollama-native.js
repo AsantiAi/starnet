@@ -115,6 +115,9 @@
     // The chat wire's reasoning_effort maps onto native `think` only when the request carried one; otherwise the
     // model's own default applies, exactly as the /v1 wire behaved (effort 'none' is never put on the wire there).
     if (typeof b.reasoning_effort === 'string' && b.reasoning_effort) req.think = b.reasoning_effort !== 'none';
+    // `think` from the caller applies only when the request itself chose no effort (see the adapter: the host's own
+    // background calls on a thinking model).
+    else if (typeof o.think === 'boolean') req.think = o.think;
     return req;
   }
 
@@ -123,9 +126,18 @@
   function jsonChars(value) {
     try { return JSON.stringify(value || []).length; } catch (_) { return 0; }
   }
+  // An image is a fixed handful of tokens to a vision model, but megabytes of base64 on the wire: counted as text it
+  // would size every screenshot turn to the ceiling. Images are counted apart, at a flat allowance each.
+  const IMAGE_TOKENS = 1024;
   function estimateTokens(body) {
     const b = body || {};
-    return Math.ceil((jsonChars(b.messages) + jsonChars(b.tools)) / CHARS_PER_TOKEN);
+    let images = 0;
+    const text = toNativeMessages(b.messages).map(m => {
+      if (!m.images) return m;
+      images += m.images.length;
+      const copy = Object.assign({}, m); delete copy.images; return copy;
+    });
+    return Math.ceil((jsonChars(text) + jsonChars(b.tools)) / CHARS_PER_TOKEN) + images * IMAGE_TOKENS;
   }
 
   // Smallest ladder step holding `need`, never below `floor` (the largest window this model already ran at in this
@@ -226,6 +238,13 @@
       + (!vram || (size && vram < size) ? 'A model running on the CPU reads StarNet task prompts slowly; a smaller model, or one that fits the GPU, answers sooner.' : '');
   }
 
-  return { CTX_LADDER, DEFAULT_MAX_CTX, placementNote, nativeRoot, toNativeMessages, toNativeRequest, estimateTokens, pickNumCtx,
+  // The window a model is CURRENTLY loaded at according to /api/ps, or 0 (not loaded / unreadable).
+  function loadedWindow(psJson, model) {
+    const id = String(model || '');
+    const row = psJson && Array.isArray(psJson.models) ? psJson.models.find(m => m && (m.name === id || m.model === id)) : null;
+    return row ? (Math.floor(Number(row.context_length)) || 0) : 0;
+  }
+
+  return { CTX_LADDER, DEFAULT_MAX_CTX, placementNote, loadedWindow, nativeRoot, toNativeMessages, toNativeRequest, estimateTokens, pickNumCtx,
     exceedFrom, makeChunkTranslator, showFacts };
 });
