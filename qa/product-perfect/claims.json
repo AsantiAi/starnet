@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "a9842a65af55cf1a946c5c9c620605a10fca6c1b",
+    "sourceCommit": "bb0cc31660216c007f45b1318f9b1280f501f30a",
     "pathSetSha256": "d208b530ebf640e2fa520c2d157593c6ee2e74b85483317e129967112d6ed60a",
     "files": [
       {
@@ -318,8 +318,8 @@
       },
       {
         "path": "frontend/app/build.js",
-        "bytes": 475513,
-        "sha256": "a77731e7a4fe42d5dd7033efba46c777b05977b59212c349ae3d650f78e9f516"
+        "bytes": 473401,
+        "sha256": "a0983f04dce96649e71f95bb30a1fd54caf9f77a6cb27941109ec9561296b513"
       },
       {
         "path": "frontend/app/channels.js",
@@ -358,8 +358,8 @@
       },
       {
         "path": "frontend/app/codexsignin.js",
-        "bytes": 10352,
-        "sha256": "9a30b8801c585d7370319b4ee850523df2c24204b0c2325da614b70bc7fe2050"
+        "bytes": 14399,
+        "sha256": "971a66473c3b261cdbc4426ac8d88ae389a81023a2e61e2505625b75dc1d5563"
       },
       {
         "path": "frontend/app/confbeats.js",
@@ -1093,8 +1093,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 758669,
-        "sha256": "3770ad389d9da7e5edd96827c8dbc57cd3eb05e8c43d8159992c79d9c1ff51e0"
+        "bytes": 772877,
+        "sha256": "fb7c7a89cccc7b30c7a4366090a6dceacfa403211e6b0afc4abdb863313b4aed"
       },
       {
         "path": "frontend/app/study.js",
@@ -1288,8 +1288,8 @@
       },
       {
         "path": "frontend/app/workflowpanel.js",
-        "bytes": 142825,
-        "sha256": "ecf654c97079173c8d45e1e7613a79223d0036fcaddfbca3fd977fc9bf61ecd5"
+        "bytes": 141921,
+        "sha256": "0bb4a584040ef1728d7015574ae3aec9ba1b266ee7a7b405a1ed55819d6782c6"
       },
       {
         "path": "frontend/app/workflowtakeoverstore.js",
@@ -1338,8 +1338,8 @@
       },
       {
         "path": "frontend/app/world.js",
-        "bytes": 808426,
-        "sha256": "9a6297abba445ea223efb391280d74742371d1a1d2e93f54f260aed1e44b0fca"
+        "bytes": 808686,
+        "sha256": "69accfc369c14ba710f544ae8d968ab5da9a6c61ffd6f43c056089b962656eea"
       },
       {
         "path": "frontend/app/worldlab.js",
@@ -1533,8 +1533,8 @@
       },
       {
         "path": "frontend/css/settings.css",
-        "bytes": 16985,
-        "sha256": "d4da07d726f0f9c2f8abefe720905fdf34d57ab65aacc69efd62b36300445fc0"
+        "bytes": 17907,
+        "sha256": "e57248fccb9503e8748947a65fa6b3714f57c1c64839b27577966c687fb91222"
       },
       {
         "path": "frontend/css/style.css",
