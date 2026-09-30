@@ -4005,33 +4005,62 @@ body.crew-rail-off #screen-game.active {
 .refit-propsearch { display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0; }
 .refit-propsearch .refit-searchfield { flex: 1 1 auto; min-width: 0; margin: 4px 0; font-size: 13.5px; letter-spacing: 1px; }
 .refit-searchclear { flex: 0 0 auto; font-size: 12px; padding-inline: 8px; line-height: 1; }
-/* MAKE A PROP — player-made props (userprops.js). Same well, input and key vocabulary as the search row above;
-   the status line is VT323 phosphor like .refit-searchnote, tinted only by the job's real state. */
-.refit-makeprop { width: 100%; min-width: 0; margin: 4px 0 2px; padding: 6px 8px 5px; border: 1px solid var(--ph-dim); box-shadow: var(--ui-well); }
-.refit-makeprop-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-family: 'VT323', monospace; letter-spacing: 1.5px; }
-.refit-makeprop-head b { font-weight: normal; font-size: 14px; color: var(--ph); text-shadow: 0 0 6px var(--ph-glow2); }
-.refit-makeprop-head small { font-size: 11.5px; color: var(--ph-dim); }
-.refit-makeprop-row { display: flex; align-items: center; gap: 5px; min-width: 0; }
-.refit-makeprop-row .refit-searchfield { flex: 1 1 auto; min-width: 0; }
+/* MAKE A PROP — player-made props (userprops.js). Built from the REFIT glass recipes in refit-polish.css
+   (--refit-glass / --refit-edge, the .refit-tool-help card and its buttons, .refit-presets-entry for the door,
+   .station-build-art for the sketch well): matte glass, soft corners, no glow, no black CRT well. */
+.refit-makeprop {
+  width: 100%; min-width: 0; margin: 6px 0 4px; padding: 10px 11px; display: flex; flex-direction: column; gap: 7px;
+  border: 1px solid var(--refit-edge, rgba(var(--ph-rgb),.2)); border-radius: 9px;
+  background: var(--refit-glass, rgba(var(--ph-rgb),.04)); box-shadow: inset 0 1px rgba(var(--ph-bright-rgb),.08); text-shadow: none;
+}
+.refit-makeprop-head { display: flex; flex-direction: column; gap: 3px; font-family: 'VT323', monospace; }
+.refit-makeprop-head b { font-weight: normal; font-size: 15px; letter-spacing: 1px; color: var(--ph-bright); text-shadow: none; }
+.refit-makeprop-head small { font-size: 13px; line-height: 1.35; letter-spacing: .2px; color: var(--text); }
+.refit-makeprop-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.refit-makeprop-row .refit-searchfield { flex: 1 1 auto; min-width: 0; margin: 0; }
 .refit-makeprop-row .bb { flex: 0 0 auto; }
 .refit-makeprop-foot { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.refit-makeprop-status { flex: 1 1 auto; min-width: 0; font-family: 'VT323', monospace; font-size: 11.5px; letter-spacing: 1px; line-height: 1.3; color: var(--ph-dim); text-shadow: 0 0 5px var(--ph-glow2); white-space: normal; }
-.refit-makeprop-status.busy { color: var(--ph); }
-.refit-makeprop-status.ok { color: var(--ph); }
-.refit-makeprop-status.bad { color: var(--bad); text-shadow: none; }
+.refit-makeprop-status { flex: 1 1 auto; min-width: 0; font-family: 'VT323', monospace; font-size: 13px; letter-spacing: .3px; line-height: 1.35; color: var(--ph-dim); text-shadow: none; white-space: normal; }
+.refit-makeprop-status.busy, .refit-makeprop-status.ok { color: var(--ph-bright); }
+.refit-makeprop-status.bad { color: var(--bad); }
 /* the PROVIDERS door appears only after a not-linked / out-of-credit refusal; .bb sets display, so [hidden] needs the win */
 .refit-makeprop [hidden] { display: none !important; }
-.refit-makeprop-actions { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 3px; }
-.refit-makeprop-preview { display: flex; gap: 8px; align-items: flex-start; margin-top: 5px; padding: 5px; border: 1px dashed var(--ph-dim); }
-.refit-makeprop-preview img { width: 96px; height: 96px; object-fit: contain; flex: 0 0 auto; image-rendering: auto; filter: saturate(.85); }
-.refit-makeprop-previewtxt { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-family: 'VT323', monospace; letter-spacing: 1px; line-height: 1.25; }
-.refit-makeprop-previewtxt b { font-weight: normal; font-size: 14px; color: var(--ph); text-shadow: 0 0 5px var(--ph-glow2); }
-.refit-makeprop-previewtxt span { font-size: 12px; color: var(--ph); }
-.refit-makeprop-previewtxt small { font-size: 11px; color: var(--ph-dim); }
-.refit-makeprop-previewbtns { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 3px; }
-.refit-makeprop-door { width: 100%; justify-content: center; margin: 4px 0 2px; letter-spacing: 1.2px; }
-.refit-makeprop-size { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-family: 'VT323', monospace; letter-spacing: 1.5px; color: var(--ph-dim); }
-.refit-makeprop-size .refit-makeprop-sizeval { font-weight: normal; min-width: 4ch; text-align: center; color: var(--ph); text-shadow: 0 0 5px var(--ph-glow2); font-variant-numeric: tabular-nums; }
+/* buttons: the .refit-tool-help button recipe (quiet glass key), hover = the REFIT hover language */
+.refit-overlay .refit-makeprop .bb, .refit-overlay .refit-makeprop-door {
+  padding: 5px 10px; border: 1px solid var(--refit-edge, rgba(var(--ph-rgb),.2)); border-radius: 6px;
+  background: rgba(0,0,0,.15); box-shadow: none; text-shadow: none; color: var(--ph); font-size: 14px; letter-spacing: .6px;
+}
+.refit-overlay .refit-makeprop .bb:hover, .refit-overlay .refit-makeprop .bb:focus-visible { background: rgba(var(--ph-rgb),.14); border-color: var(--ph); color: var(--ph-bright); }
+.refit-overlay .refit-makeprop .bb:disabled { opacity: .45; background: rgba(0,0,0,.15); border-color: var(--refit-edge, rgba(var(--ph-rgb),.2)); color: var(--ph-dim); }
+/* the one paid step reads as the primary action: the selected-tile look, still matte */
+.refit-overlay .refit-makeprop #refit-makeprop-makeit { border-color: rgba(var(--ph-rgb),.55); background: rgba(var(--ph-rgb),.13); color: var(--ph-bright); }
+.refit-makeprop-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+/* the sketch card: a .station-build-card (quiet inner glass) with the .station-build-art well */
+.refit-makeprop-preview {
+  display: flex; gap: 10px; align-items: flex-start; padding: 8px; border: 1px solid var(--refit-edge, rgba(var(--ph-rgb),.2)); border-radius: 8px;
+  background: rgba(var(--ph-rgb),.025); box-shadow: inset 0 1px rgba(var(--ph-bright-rgb),.06);
+}
+.refit-makeprop-preview img {
+  width: 96px; height: 96px; object-fit: contain; flex: 0 0 auto; padding: 4px; box-sizing: border-box; border: 1px solid var(--refit-edge, rgba(var(--ph-rgb),.2)); border-radius: 6px;
+  background: radial-gradient(ellipse at 50% 80%,rgba(var(--ph-rgb),.08),transparent 75%),rgba(0,0,0,.17); image-rendering: auto;
+}
+.refit-makeprop-previewtxt { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-family: 'VT323', monospace; line-height: 1.3; }
+.refit-makeprop-previewtxt b { font-weight: normal; font-size: 16px; letter-spacing: .6px; color: var(--ph-bright); text-shadow: none; }
+.refit-makeprop-previewtxt span { font-size: 13px; letter-spacing: .2px; color: var(--text); }
+.refit-makeprop-previewtxt small { font-size: 12px; letter-spacing: .2px; color: var(--ph-dim); }
+.refit-makeprop-previewbtns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 3px; }
+/* the EQUIPMENT door: the .refit-presets-entry recipe */
+.refit-overlay .refit-makeprop-door {
+  width: 100%; justify-content: flex-start; margin: 6px 0 4px; padding: 10px 12px; text-align: left;
+  border-color: rgba(var(--ph-rgb),.34); border-radius: 10px; background: var(--refit-glass, rgba(var(--ph-rgb),.04));
+  box-shadow: inset 0 1px rgba(var(--ph-bright-rgb),.12); color: var(--ph-bright); font-size: 15px;
+}
+.refit-overlay .refit-makeprop-door:hover { background: rgba(var(--ph-rgb),.14); border-color: var(--ph); }
+.refit-overlay .refit-makeprop-door { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; white-space: normal; }
+.refit-makeprop-door b { font-weight: normal; font-size: 15px; letter-spacing: 1px; color: var(--ph-bright); }
+.refit-makeprop-door small { font-size: 13px; line-height: 1.3; letter-spacing: .2px; color: var(--text); }
+.refit-makeprop-size { display: flex; align-items: center; gap: 6px; font-family: 'VT323', monospace; font-size: 14px; letter-spacing: .6px; color: var(--ph-dim); }
+.refit-makeprop-size .refit-makeprop-sizeval { font-weight: normal; min-width: 4ch; text-align: center; color: var(--ph-bright); text-shadow: none; font-variant-numeric: tabular-nums; }
 /* the result readout: a real count, or an honest miss — never an empty grid with no explanation */
 .refit-searchnote {
   width: 100%; margin: 2px 0 1px; font-size: 11px; letter-spacing: 1.5px;
