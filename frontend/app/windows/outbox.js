@@ -28,7 +28,7 @@
     const RS = (typeof ReturnStore !== 'undefined') ? ReturnStore : null;
     const rows = (RS && RS.pendingRows) ? RS.pendingRows() : [];
     body.innerHTML =
-      '<header class="utility-head"><h2>Ready to review</h2><p>Work that finished while you were away. Open a result, then decide what comes next.</p></header>' +
+      '<header class="utility-head"><h2>Ready to review</h2><p>Finished work from your lines and routines, including what ran while you were away. Open a result, then decide what comes next.</p></header>' +
       '<div id="ob-list" class="ob-list"></div>' +
       '<div class="row ob-doors" style="margin-top:10px;gap:8px"><button class="bb sm" id="ob-library">LIBRARY · all saved outputs</button><button class="bb sm" id="ob-logbook">AGENT RECORD · run history</button></div>';
     const list = body.querySelector('#ob-list');
