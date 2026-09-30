@@ -49,6 +49,7 @@
 
   // the card's drawing of a plan (planpreview.js): every room (those the plan adds or changes marked), what it adds, its new belts
   const MACHINE_T = /^(intake|bay|outbox|filter|merger|splitter|joiner|loop)$/;
+  const AISLE = 3;   // clear tiles between two lines that share a room, every way (a walkway, and room for each line's plate)
   function previewOf(WM, before, after, zones, markRoomId) {
     const was = new Set(before.order || []), wasProps = new Set((before.props || []).map(p => p.id)), wasBelts = before.belts || {};
     return {
@@ -146,7 +147,10 @@
     if (spec && spec.kind === 'relayout') {
       const r = st.replaceLayout(clone(spec.stripped));
       if (!r || !r.ok) return refuse('the station could not be cleared for the new layout' + (r && r.msg ? ' (' + r.msg + ')' : ''));
-      return buildParts(st, spec.build, WM);
+      const b = buildParts(st, spec.build, WM);
+      if (!b.ok) return b;
+      for (const m of spec.moves || []) { const mv = st.moveProp(m.id, m.dx, m.dy); if (!mv || !mv.ok) return refuse('a desk could not be moved to its new room'); }
+      return b;
     }
     if (spec && spec.kind === 'rooms') {
       const ids = [], parts = [];
@@ -280,6 +284,13 @@
     const extra = Object.keys(req).filter(k => MENU.indexOf(k) < 0);
     if (extra.length) return refuse('StarNet chooses every position, belt and piece of furniture itself, so these fields are not accepted: '
       + extra.slice(0, 8).join(', ') + '. Use only: ' + MENU.join(', ') + '.');
+    /* NOWHERE NAMED: a line goes into the station's conveyor hall when one has room for it (that is what the hall is for),
+       and only then into a room of its own on the grid */
+    if (req.where == null && req.beside == null && req.side == null && req.hallway == null) {
+      let halls = [];
+      try { halls = worksHalls(WM.create(clone(doc))); } catch (_) { halls = []; }
+      for (const h of halls) { const r = plan(doc, Object.assign({}, req, { where: h.name }), env); if (r.ok) return r; }
+    }
     /* a CUSTOM line the Commander described (a SHAPE of steps: in order, at once, taking turns, sorted, reviewed): the whole
        of a room of its own, or of an existing room around what stands there, laid out by the layout engine through the
        same planner as a designed room's line zone */
@@ -364,12 +375,13 @@
       let none = null;
       for (const m of [1, 2]) {
         const Wd = Math.max(bp.w + 2 * m, MIN_W), Hd = Math.max(bp.h + 2 * m, MIN_H);
+        const grid = req.beside == null && req.side == null && req.hallway == null ? gridSpots(WM, live, Wd, Hd, hangsOf(env)) : [];
         const pl = roomPlacements(live, tq.room, Wd, Hd, { side: sd.side, len: hl.len, align: null, kind: 'hab', hangs: hangsOf(env) });
-        if (!pl.ok) { none = none || pl; continue; }
-        for (const cand of pl.list) {
-          const rect = cand.rect;
+        if (!pl.ok && !grid.length) { none = none || pl; continue; }
+        for (const cand of grid.concat(pl.ok ? pl.list : [])) {
+          const rect = cand.rect, rw = rect.x2 - rect.x1 + 1, rh = rect.y2 - rect.y1 + 1;
           const s = Object.assign({}, base, { hall: cand.hall, placed: { side: cand.side, target: cand.target, len: cand.len }, room: { kind: 'hab', name: label.toUpperCase().slice(0, 24), rect },
-            ox: rect.x1 + ((Wd - bp.w) >> 1), oy: rect.y1 + ((Hd - bp.h) >> 1) });
+            ox: rect.x1 + ((rw - bp.w) >> 1), oy: rect.y1 + ((rh - bp.h) >> 1) });
           const t = tryPlacement(doc, bp, s, env, before);
           if (t.ok) { placed = t; spec = s; break; }
         }
@@ -384,12 +396,28 @@
       const inRoom = (x, y) => target.rects.some(q => x >= q.x1 && x <= q.x2 && y >= q.y1 && y <= q.y2);
       const staysInside = (ox, oy) => bp.props.every(p => { for (let yy = 0; yy < p.h; yy++) for (let xx = 0; xx < p.w; xx++) if (!inRoom(ox + p.x + xx, oy + p.y + yy)) return false; return true; })
         && bp.belts.every(b => inRoom(ox + b.x, oy + b.y));
-      outer: for (const r of target.rects) for (let y = r.y1; y <= r.y2; y++) for (let x = r.x1; x <= r.x2; x++) {
-        if (!staysInside(x, y) || !live.canPlaceBlueprint(bp.id, x, y).ok) continue;
-        if (++tries > MAX_TRIES_IN_ROOM) break outer;
-        const s = Object.assign({}, base, { room: null, roomId: target.id, ox: x, oy: y });
-        const t = tryPlacement(doc, bp, s, env, before);
-        if (t.ok) { placed = t; spec = s; break outer; }
+      /* TIDY first: a tile in from the walls, off the doorways' landings and AISLE clear of every line already there — at
+         the first such spot in reading order when the room has lines or is a hall (so it fills in rows), else as near the
+         middle of a small empty room as it goes; then, failing that, the first spot that fits at all */
+      const inset = (x, y) => target.rects.some(q => x > q.x1 && x < q.x2 && y > q.y1 && y < q.y2);
+      const aisle = aisleTiles(live, target.id), land = landingTiles(live, live.projectGeometry(), target.id);
+      const tidy = (ox, oy) => bp.props.every(p => { for (let yy = 0; yy < p.h; yy++) for (let xx = 0; xx < p.w; xx++) { const x = ox + p.x + xx, y = oy + p.y + yy; if (!inset(x, y) || aisle.has(x + ',' + y) || land.has(x + ',' + y)) return false; } return true; })
+        && bp.belts.every(b => { const x = ox + b.x, y = oy + b.y; return inset(x, y) && !aisle.has(x + ',' + y) && !land.has(x + ',' + y); });
+      const spots = [];
+      for (const r of target.rects) for (let y = r.y1; y <= r.y2; y++) for (let x = r.x1; x <= r.x2; x++) spots.push([x, y]);
+      const R0 = target.rects[0], shelved = roomHasLines(live, target.id) || target.rects.length > 1 || isHallSized(R0);
+      const mid = [(R0.x1 + R0.x2 + 1 - bp.w) / 2, (R0.y1 + R0.y2 + 1 - bp.h) / 2];
+      const tidySpots = spots.filter(([x, y]) => tidy(x, y));
+      if (!shelved) tidySpots.sort((p, q) => (Math.abs(p[0] - mid[0]) + Math.abs(p[1] - mid[1])) - (Math.abs(q[0] - mid[0]) + Math.abs(q[1] - mid[1])) || p[1] - q[1] || p[0] - q[0]);
+      outer: for (const pass of [tidySpots, spots]) {
+        tries = 0;
+        for (const [x, y] of pass) {
+          if (!staysInside(x, y) || !live.canPlaceBlueprint(bp.id, x, y).ok) continue;
+          if (++tries > MAX_TRIES_IN_ROOM) continue outer;
+          const s = Object.assign({}, base, { room: null, roomId: target.id, ox: x, oy: y });
+          const t = tryPlacement(doc, bp, s, env, before);
+          if (t.ok) { placed = t; spec = s; break outer; }
+        }
       }
       if (!placed) return refuse(plain + ' does not fit on clear floor in ' + target.name + '. Use "new room", or clear some floor there first.');
     }
@@ -522,6 +550,17 @@
     }
     return out;
   }
+  // every tile within AISLE of a workflow machine or a belt already in the room: a new line there keeps clear of them all
+  function aisleTiles(st, roomId) {
+    const out = new Set(), mark = (x, y, w, h) => { for (let yy = y - AISLE; yy < y + h + AISLE; yy++) for (let xx = x - AISLE; xx < x + w + AISLE; xx++) out.add(xx + ',' + yy); };
+    for (const p of st.props()) if (MACHINE_T.test(p.t) && st.roomAt(p.x, p.y) === roomId) mark(p.x, p.y, p.w || 1, p.h || 1);
+    const belts = st.serialize().belts || {};
+    for (const k in belts) { const [x, y] = k.split(',').map(Number); if (st.roomAt(x, y) === roomId) mark(x, y, 1, 1); }
+    return out;
+  }
+  // a room holds lines already, or is a hall big enough for several (two grid rooms' floor or more)
+  function roomHasLines(st, roomId) { return st.props().some(p => MACHINE_T.test(p.t) && st.roomAt(p.x, p.y) === roomId); }
+  function isHallSized(R) { return (R.x2 - R.x1 + 1) * (R.y2 - R.y1 + 1) >= 2 * CELL[0] * CELL[1]; }
   // the same checks as a line's placement, plus: no piece of furniture on a doorway's landing
   function tryKit(doc, spec, env, before) {
     const WM = env.WorldModel, P = env.Pipeline;
@@ -669,9 +708,10 @@
         const roomName = name || kit.name;
         // beside the asked room, else wherever keeps the station compact (a preset's later rooms may stand beside its earlier ones)
         const T = besideRoom ? (sofar.rooms().find(r => r.id === besideRoom.id) || besideRoom) : null;
+        const grid = !besideRoom && !placeSide && req.hallway == null ? gridSpots(env.WorldModel, sofar, KIT_W, KIT_H, hangsOf(env)) : [];
         const pl = roomPlacements(sofar, T, KIT_W, KIT_H, { side: placeSide, len: placeHall, align: null, kind: kit.kind, hangs: hangsOf(env) });
-        if (!pl.ok) return pl;
-        outer: for (const cand of pl.list) for (const mirror of mirrors) {
+        if (!pl.ok && !grid.length) return pl;
+        outer: for (const cand of grid.concat(pl.ok ? pl.list : [])) for (const mirror of mirrors) {
           const rect = cand.rect, props = kitProps(env, kit, rect.x1, rect.y1, mirror); if (!props) return refuse('this page is missing the furniture for ' + kit.name);
           const part = { hall: cand.hall, room: { kind: kit.kind, name: roomName, floorStyle: style.floorStyle || kit.floorStyle, floorMat: style.floorMat || kit.floorMat, rect },
             props, line: kitLine(env, kit, rect.x1, rect.y1), meta: { kit: kit.id, name: roomName, about: kit.about, existing: false, placed: { side: cand.side, target: cand.target, len: cand.len } } };
@@ -1012,12 +1052,29 @@
     for (const d of doorTiles(probe, g, roomId)) for (let k = 0; k < 3; k++) lane.add((d.x + d.dx * k) + ',' + (d.y + d.dy * k));
     const solidAt = (x, y) => probe.props().some(p => { const s2 = S.spec(p.t); return !(s2 && s2.flat) && x >= p.x && x < p.x + (p.w || 1) && y >= p.y && y < p.y + (p.h || 1); });
     const clear = (x, y) => probe.roomAt(x, y) === roomId && !belts[x + ',' + y] && !lane.has(x + ',' + y) && !solidAt(x, y);
+    const deskOk = (x, y) => { if (x < R.x1 + 1 || x + sp.w - 1 > R.x2 - 1) return false; for (let k = -1; k <= sp.w; k++) for (const yy of [y, y + 1]) if (!clear(x + k, yy)) return false; return true; };   // the desk, its seat row, a tile each side
+    // ONE ROW for them all first, centred on the wall (the top wall, then the bottom): a batch is never split while a row takes it
+    const span = n * (sp.w + 1) - 1, mid = (R.x1 + R.x2 + 1 - span) / 2;
+    for (const y of [R.y1, R.y2 - 1]) {
+      const starts = [];
+      for (let x = R.x1 + 1; x + span - 1 <= R.x2 - 1; x++) starts.push(x);
+      starts.sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid) || a - b);
+      for (const x0 of starts) {
+        const xs = Array.from({ length: n }, (_, i) => x0 + i * (sp.w + 1));
+        if (!xs.every(x => deskOk(x, y))) continue;
+        const ids = [];
+        let ok = true;
+        for (const x of xs) { const a = probe.addProp({ t: 'desk', x, y, w: sp.w, h: sp.h, r: 0, block: true }); if (!a || !a.ok) { ok = false; break; } ids.push(a.id); }
+        if (ok) { const g2 = probe.projectGeometry(), o = spawnTile(probe.serialize(), g2); ok = xs.every(x => sideReachable(g2, o, { x, y, w: sp.w, h: sp.h })); }
+        if (ok) return xs.map(x => ({ t: 'desk', x, y, w: sp.w, h: sp.h, r: 0, block: true }));
+        for (const id of ids) probe.removeProp(id);
+      }
+    }
+    // else wherever each fits, the top row then the bottom
     const out = [];
     for (const y of [R.y1, R.y2 - 1]) {
       for (let x = R.x1 + 1; x + sp.w - 1 <= R.x2 - 1 && out.length < n; x++) {
-        let ok = true;
-        for (let k = -1; k <= sp.w && ok; k++) for (const yy of [y, y + 1]) if (!clear(x + k, yy)) { ok = false; break; }   // the desk, its seat row, a tile each side
-        if (!ok) continue;
+        if (!deskOk(x, y)) continue;
         const a = probe.addProp({ t: 'desk', x, y, w: sp.w, h: sp.h, r: 0, block: true });
         if (!a || !a.ok) continue;
         const g2 = probe.projectGeometry();
@@ -1274,14 +1331,20 @@
   /* FILL A ROOM on the probe: lines first (each laid inside its zone, or anywhere in the room, by the layout engine — never
      on a doorway's landing), then every style's furniture. `split` says where the 2 × 2 grid divides the room. Answers the
      part of the spec it built ({ lines, props }) and what the card will say about it; the probe holds the result. */
+  /* a room's lines are SHELVED when it takes several, already holds some, or is a hall: each at the first clear spot in
+     reading order, a tile in from the walls, AISLE clear of every line there (rows that fill the same at once or one by
+     one); one line in a room its own size is CENTRED; failing both, anywhere it fits */
   function fillRoom(probe, env, roomId, R, zones, lines, split, roomLabel, recruitBase) {
     if (lines.length) {
-      const cp = env.WorldModel.create(clone(probe.serialize()));
-      if (fillRoomOnce(cp, env, roomId, R, zones, lines, split, roomLabel, recruitBase, true).ok) return fillRoomOnce(probe, env, roomId, R, zones, lines, split, roomLabel, recruitBase, true);
+      const shelved = lines.length > 1 || roomHasLines(probe, roomId) || isHallSized(R);
+      for (const mode of shelved ? ['shelf', 'centred'] : ['centred']) {
+        const cp = env.WorldModel.create(clone(probe.serialize()));
+        if (fillRoomOnce(cp, env, roomId, R, zones, lines, split, roomLabel, recruitBase, mode).ok) return fillRoomOnce(probe, env, roomId, R, zones, lines, split, roomLabel, recruitBase, mode);
+      }
     }
-    return fillRoomOnce(probe, env, roomId, R, zones, lines, split, roomLabel, recruitBase, false);
+    return fillRoomOnce(probe, env, roomId, R, zones, lines, split, roomLabel, recruitBase, 'loose');
   }
-  function fillRoomOnce(probe, env, roomId, R, zones, lines, split, roomLabel, recruitBase, centred) {
+  function fillRoomOnce(probe, env, roomId, R, zones, lines, split, roomLabel, recruitBase, mode) {
     const WM = env.WorldModel;
     const Wd = R.x2 - R.x1 + 1, Hd = R.y2 - R.y1 + 1;
     const cx = R.x1 + Math.max(1, Math.min(Wd - 1, Math.round(Wd * split.fx))), ry = R.y1 + Math.max(1, Math.min(Hd - 1, Math.round(Hd * split.fy)));
@@ -1292,17 +1355,17 @@
     const whereOf = z => z.area ? AREA_LABEL[z.area] + ' of ' + roomLabel : roomLabel;
     const lineList = zones.filter(q => q.kind === 'line').concat(lines);
     for (const z of lineList) {
-      const zr = rectOf(z.area), fl = probe.lineGraph(null), nth = lines.indexOf(z);
+      const zr = rectOf(z.area), fl = probe.lineGraph(null), nth = lines.indexOf(z), shelf = mode === 'shelf' && nth >= 0, gap = shelf ? AISLE : 1;
       if (!fl || !fl.ok) return refuse('this floor does not build by links');
       /* lines are told apart by their belts TOUCHING (Pipeline.lineComponents), so a new line keeps a clear tile from every
          belt and every workflow machine already on the floor; and it never stands on a doorway's landing */
       const halo = [];
-      for (const k in fl.floor.belts) { const [x, y] = k.split(',').map(Number); halo.push({ x: x - 1, y: y - 1, w: 3, h: 3 }); }
-      for (const p of probe.props()) if (MACHINE_T.test(p.t)) halo.push({ x: p.x - 1, y: p.y - 1, w: (p.w || 1) + 2, h: (p.h || 1) + 2 });
-      const floor = Object.assign({}, fl.floor, { rects: [zr], blocked: fl.floor.blocked.concat(halo, [...land].map(k => { const [x, y] = k.split(',').map(Number); return { x, y, w: 1, h: 1 }; })) });
+      for (const k in fl.floor.belts) { const [x, y] = k.split(',').map(Number); halo.push({ x: x - gap, y: y - gap, w: 2 * gap + 1, h: 2 * gap + 1 }); }
+      for (const p of probe.props()) if (MACHINE_T.test(p.t)) halo.push({ x: p.x - gap, y: p.y - gap, w: (p.w || 1) + 2 * gap, h: (p.h || 1) + 2 * gap });
+      const floor = Object.assign({}, fl.floor, { rects: [shelf ? { x1: zr.x1 + 1, y1: zr.y1 + 1, x2: zr.x2 - 1, y2: zr.y2 - 1 } : zr], blocked: fl.floor.blocked.concat(halo, [...land].map(k => { const [x, y] = k.split(',').map(Number); return { x, y, w: 1, h: 1 }; })) });
       const near = { x: (zr.x1 + zr.x2) >> 1, y: (zr.y1 + zr.y2) >> 1 };
-      let L = env.LineLayout.layout(z.graph, floor, z.area || (nth >= 0 && centred) ? { near } : undefined);
-      if (!L.ok && env.LineEdit && env.LineEdit._internals && env.LineEdit._internals.layoutNear) L = env.LineEdit._internals.layoutNear(env.LineLayout, z.graph, floor, near, 12);
+      let L = env.LineLayout.layout(z.graph, floor, shelf ? undefined : z.area || (nth >= 0 && mode === 'centred') ? { near } : undefined);
+      if (!L.ok && !shelf && env.LineEdit && env.LineEdit._internals && env.LineEdit._internals.layoutNear) L = env.LineEdit._internals.layoutNear(env.LineLayout, z.graph, floor, near, 12);
       if (!L.ok) return refuse(whereOf(z) + ' is ' + (zr.x2 - zr.x1 + 1) + ' × ' + (zr.y2 - zr.y1 + 1) + (z.area ? '' : ' and has no clear floor left') + '; ' + (z.plain === 'a custom line' ? 'that line' : z.plain) + ' needs ' + z.need.w + ' × ' + z.need.h + '.', { tooSmall: true });
       const a = probe.applyLineLayout(clone(z.graph), L);
       if (!a || !a.ok) return refuse('that line could not be laid in ' + whereOf(z) + (a && a.msg ? ' (' + a.msg + ')' : ''));
@@ -1488,10 +1551,11 @@
         const dr = rec ? dressRoom(cp, env, T.id, rstyle) : null;
         if (dr && !dr.ok) return dr;
         if (dr && !dr.props.length) return refuse(T.name + ' has no clear floor left for ' + rec.name + '.');
+        const acc = accentsFor(cp, env, T.id, zones, rec);
         probe = cp;
-        spec.parts.push({ hall: null, room: null, roomId: T.id, lines: f.lines, props: f.props.concat(dr ? dr.props : []) });
+        spec.parts.push({ hall: null, room: null, roomId: T.id, lines: f.lines, props: f.props.concat(dr ? dr.props : [], acc || []) });
         f.recruits.forEach(rc => spec.recruits.push(Object.assign({ part: spec.parts.length - 1 }, rc)));
-        rooms.push({ part: spec.parts.length - 1, name: T.name, existing: true, R, view: f.view, placed: null, dressed: dr ? { style: rstyle, props: dr.props } : null });
+        rooms.push({ part: spec.parts.length - 1, name: T.name, existing: true, R, view: f.view, placed: null, dressed: dr ? { style: rstyle, props: dr.props } : null, accents: acc });
         continue;
       }
 
@@ -1509,8 +1573,8 @@
       const tq = q.beside != null ? roomNamed(probe, q.beside) : { ok: true, room: null };   // no room named: beside whichever keeps the station compact
       if (!tq.ok) return tq;
       const kind = (style.type && style.type.id) || (rec && rec.kind) || 'hab';
-      // no name given: the room is named for what fills it first (COZY, the line's own name), else ROOM n
-      const z0 = zones[0] || lines[0], auto = !z0 ? 'ROOM ' + (live.rooms().filter(r => r.kind !== 'corridor').length + rooms.filter(r => !r.existing).length + 1) : z0.kind === 'style' ? z0.style.toUpperCase() : String(z0.label || z0.plain || 'WORKROOM').toUpperCase();
+      // no name given: a whole-room style names it (LOUNGE, CONVEYOR HALL), else what fills it first (COZY, the line's own name), else ROOM n
+      const z0 = zones[0] || lines[0], auto = rstyle && AUTO_NAME[rstyle] ? AUTO_NAME[rstyle] : !z0 ? 'ROOM ' + (live.rooms().filter(r => r.kind !== 'corridor').length + rooms.filter(r => !r.existing).length + 1) : z0.kind === 'style' ? z0.style.toUpperCase() : String(z0.label || z0.plain || 'WORKROOM').toUpperCase();
       const taken = nm => probe.rooms().some(r => r.kind !== 'corridor' && norm(r.name) === norm(nm)) || usedNames[norm(nm)];
       let name = (given || auto).slice(0, 24);
       if (given && taken(name)) return refuse('A room is already called ' + name + '. Give this one another name.');
@@ -1520,11 +1584,13 @@
       // a size StarNet chose is an estimate: when the contents do not fit it, the room grows and tries again
       const tries = sz.size ? [[RW, RH]] : [[RW, RH], [RW + 2, RH + 1], [RW + 4, RH + 3], [RW + 7, RH + 5]].filter(([w, h], i) => !i || (w <= DESIGN_MAX[0] && h <= DESIGN_MAX[1]));
       let got = null, why = null;
+      const onGrid = q.beside == null && q.side == null && q.align == null && q.hallway == null;   // a size asked keeps the grid too, at that size
       for (const [TW, TH] of tries) {
+      const grid = onGrid ? gridSpots(WM, probe, TW, TH, hangsOf(env), !!sz.size) : [];
       const pl = roomPlacements(probe, tq.room, TW, TH, { side: sd.side, len: hl.len, align, kind, hangs: hangsOf(env) });
-      if (!pl.ok) { why = why || pl; break; }
+      if (!pl.ok && !grid.length) { why = why || pl; break; }
       let small = false;
-      for (const cand of pl.list) {
+      for (const cand of grid.concat(pl.ok ? pl.list : [])) {
         const cp = WM.create(clone(probe.serialize()));
         if (cand.hall) { const h = cp.placeHallway({ rect: cand.hall }); if (!h || !h.ok) { why = why || refuse('the hallway could not be laid there'); continue; } }
         const a = cp.addRoom(Object.assign({}, roomSpec, { rect: cand.rect }));
@@ -1534,10 +1600,11 @@
         if (!f.ok) { if (!why || f.tooSmall) why = f; if (f.tooSmall) { small = true; break; } continue; }
         const dr = rec ? dressRoom(cp, env, a.id, rstyle) : null;
         if (dr && !dr.ok) { why = why || dr; continue; }
-        const part = { hall: cand.hall, room: Object.assign({}, roomSpec, { rect: cand.rect }), roomId: null, lines: f.lines, props: f.props.concat(dr ? dr.props : []) };
+        const acc = accentsFor(cp, env, a.id, zones, rec);
+        const part = { hall: cand.hall, room: Object.assign({}, roomSpec, { rect: cand.rect }), roomId: null, lines: f.lines, props: f.props.concat(dr ? dr.props : [], acc || []) };
         const t = tryBuild(doc, { kind: 'build', parts: spec.parts.concat([part]) }, env, before);
         if (!t.ok) { why = why || t; continue; }
-        got = { cand, f, part, cp, dr }; break;
+        got = { cand, f, part, cp, dr, acc }; break;
       }
       if (got || !small) break;
       }
@@ -1546,7 +1613,7 @@
       probe = got.cp;
       spec.parts.push(got.part);
       got.f.recruits.forEach(rc => spec.recruits.push(Object.assign({ part: spec.parts.length - 1 }, rc)));
-      rooms.push({ part: spec.parts.length - 1, name, existing: false, R: got.cand.rect, view: got.f.view, placed: got.cand, word: sz.word || null, dressed: got.dr ? { style: rstyle, props: got.dr.props } : null });
+      rooms.push({ part: spec.parts.length - 1, name, existing: false, R: got.cand.rect, view: got.f.view, placed: got.cand, word: sz.word || null, dressed: got.dr ? { style: rstyle, props: got.dr.props } : null, accents: got.acc });
     }
     // hallways between rooms that already stand, or that this plan has just added
     const halls = [];
@@ -1605,6 +1672,7 @@
         const txt = piecesText(env, r.dressed.props).split(', '), pieces = txt.length > 7 ? txt.slice(0, 6).join(', ') + ' and more' : txt.join(', ');
         body.unshift(env.RoomStyles.ROOMS[r.dressed.style].name + (r.dressed.props.length && r.dressed.style !== 'works' ? ' (' + pieces + ')' : ''));
       }
+      if (r.accents) body.push(piecesText(env, r.accents) + ' in the corners');
       return where + ': ' + (body.length ? body.join('; ') : 'empty floor, ready for lines and furniture') + '.';
     });
     const equip = equipmentOf(env, equipProps), gains = gainsOf(env, equipProps);
@@ -1670,8 +1738,15 @@
      the middle facing it; plants take the corners; accents stand along the side walls. Every doorway keeps a clear lane
      three tiles deep, nothing lands on a belt, and a piece nobody could walk up to is taken back out. Answers the pieces
      placed, in the order they were placed (a lamp after its table), for the build to lay again exactly. */
+  // corner plants for a room of styled zones (it has no whole-room recipe of its own)
+  const ACCENTS = { corners: ['tallplant', 'plant', 'plant', 'tallplant'] };
+  function accentsFor(st, env, roomId, zones, rec) {
+    if (rec || !zones.some(z => z.kind === 'style')) return null;
+    const d = dressRoom(st, env, roomId, ACCENTS);
+    return d.ok && d.props.length ? d.props : null;
+  }
   function dressRoom(st, env, roomId, styleId) {
-    const RS = env.RoomStyles, S = env.PropSprites, rec = RS && RS.ROOMS ? RS.ROOMS[styleId] : null;
+    const RS = env.RoomStyles, S = env.PropSprites, rec = styleId && typeof styleId === 'object' ? styleId : RS && RS.ROOMS ? RS.ROOMS[styleId] : null;
     if (!rec) return refuse('there is no room style "' + styleId + '"');
     const rm = st.rooms().find(r => r.id === roomId); if (!rm) return refuse('the room is missing');
     const R = rm.rects[0], W = R.x2 - R.x1 + 1, H = R.y2 - R.y1 + 1;
@@ -1834,7 +1909,7 @@
     const ns = j < 0 ? 'north' : j > 0 ? 'south' : '', ew = i < 0 ? 'west' : i > 0 ? 'east' : '', d = Math.abs(i) + Math.abs(j);
     return (d >= 2 && (!ns || !ew) ? 'far ' : d >= 3 ? 'outer ' : '') + (ns && ew ? ns + '-' + ew : ns || ew);
   }
-  function diamondGeometry(scratch, hubId, want, hangs) {
+  function diamondGeometry(scratch, hubId, want, hangs, opts) {
     const hub = scratch.rooms().find(r => r.id === hubId);
     const B = bboxOf(hub), hw = B.x2 - B.x1 + 1, hh = B.y2 - B.y1 + 1, [CW, CH] = CELL;
     const PX = ((hw + CW) >> 1) + 10, PY = ((hh + CH) >> 1) + 10;   // a room 10 tiles off the hub: ring 4 out, 3 thick, a 3-tile hall
@@ -1848,7 +1923,7 @@
       { rect: { x1: X1, y1: Y1 + 3, x2: X1 + 2, y2: Y2 - 3 }, dress: true, outer: 'west' }, { rect: { x1: X2 - 2, y1: Y1 + 3, x2: X2, y2: Y2 - 3 }, dress: true, outer: 'east' },
       { rect: { x1: cx - 1, y1: B.y1 - gap, x2: cx + 2, y2: B.y1 - 1 } }, { rect: { x1: cx - 1, y1: B.y2 + 1, x2: cx + 2, y2: B.y2 + gap } },
       { rect: { x1: B.x2 + 1, y1: cy - 1, x2: B.x2 + gap, y2: cy + 1 } }, { rect: { x1: B.x1 - gap, y1: cy - 1, x2: B.x1 - 1, y2: cy + 1 } }];
-    const ringFree = ring.every(h => scratch.canPlaceHallway([h.rect]).ok && !neighbourOf(scratch, h.rect, [hub.id]));
+    const ringFree = !(opts && opts.ring === false) && ring.every(h => scratch.canPlaceHallway([h.rect]).ok && !neighbourOf(scratch, h.rect, [hub.id]));
     if (ringFree) for (const h of ring) { const a = scratch.placeHallway({ rect: h.rect }); if (!a || !a.ok) return refuse('the ring could not be laid'); halls.push(h); }
     // where a room of w × h stands on cell (i, j): a normal room fills the cell; a big one is anchored on its inner edge
     const cellRect = (i, j) => ({ x1: ox + i * PX, y1: oy + j * PY, x2: ox + i * PX + CW - 1, y2: oy + j * PY + CH - 1 });
@@ -1856,6 +1931,12 @@
       const c = cellRect(i, j);
       if (j === 0) { const y1 = B.y1 + ((hh - h) >> 1); return i > 0 ? { x1: c.x1, y1, x2: c.x1 + w - 1, y2: y1 + h - 1 } : { x1: c.x2 - w + 1, y1, x2: c.x2, y2: y1 + h - 1 }; }
       const x1 = B.x1 + ((hw - w) >> 1);
+      return j > 0 ? { x1, y1: c.y1, x2: x1 + w - 1, y2: c.y1 + h - 1 } : { x1, y1: c.y2 - h + 1, x2: x1 + w - 1, y2: c.y2 };
+    };
+    // a room asked smaller than the grid's own: centred in its cell, on the cell's inner edge (the side its hallway meets)
+    const smallRect = (i, j, w, h) => {
+      const c = cellRect(i, j), x1 = c.x1 + ((CW - w) >> 1), y1 = c.y1 + ((CH - h) >> 1);
+      if (i) return i > 0 ? { x1: c.x1, y1, x2: c.x1 + w - 1, y2: y1 + h - 1 } : { x1: c.x2 - w + 1, y1, x2: c.x2, y2: y1 + h - 1 };
       return j > 0 ? { x1, y1: c.y1, x2: x1 + w - 1, y2: c.y1 + h - 1 } : { x1, y1: c.y2 - h + 1, x2: x1 + w - 1, y2: c.y2 };
     };
     // the first zone met walking from a room's inner edge toward the hub, along its middle
@@ -1868,7 +1949,7 @@
     const used = new Set(), key = (i, j) => i + ',' + j;
     let why = '';
     const place = (q, i, j, big) => {
-      const rect = big ? bigRect(i, j, q.w, q.h) : cellRect(i, j);
+      const rect = big ? bigRect(i, j, q.w, q.h) : q.exact && q.w <= CW && q.h <= CH && (q.w < CW || q.h < CH) ? smallRect(i, j, q.w, q.h) : cellRect(i, j);
       const c = scratch.canPlaceRoom([rect], 'hab');
       if (!c.ok) { why = why || (/^overlaps /.test(c.msg || '') ? c.msg.replace(/^overlaps /, '') + ' is in the way' : (c.msg || 'it does not fit')); return false; }
       const nb = neighbourOf(scratch, rect, []);
@@ -1910,6 +1991,23 @@
     const lost = /^NOPLACE:([^:]*):(.*)$/.exec(why || '');
     if (lost) return refuse('There is no free place left on the diamond around ' + hub.name + ' for ' + lost[1] + ' (' + lost[2] + ').');
     return { ok: true, halls, rooms, ring: ringFree };
+  }
+  /* THE NEXT PLACE ON THE GRID for one new room of W × H (the grid's own size when it fits in it, else a big room on a
+     wing, never smaller than the grid's own rooms either way; `exact` keeps the size the Commander asked): the room and the one hallway that joins it, as a placement candidate. Empty when the grid has no place left. */
+  function gridSpots(WM, st, W, H, hangs, exact) {
+    const main = mainRoom(st); if (!main) return [];
+    const big = W > CELL[0] || H > CELL[1];
+    let g;
+    try { g = diamondGeometry(WM.create(clone(st.serialize())), main.id, [{ i: 0, name: '__grid__', w: exact ? W : Math.max(W, CELL[0]), h: exact ? H : Math.max(H, CELL[1]), big, exact: !!exact }], hangs, { ring: false }); } catch (_) { return []; }
+    if (!g || !g.ok || !g.rooms.length || !g.halls.length) return [];
+    const hall = g.halls[g.halls.length - 1].rect, len = Math.max(hall.x2 - hall.x1, hall.y2 - hall.y1) + 1;
+    return [{ rect: g.rooms[0].rect, hall, side: g.rooms[0].side, target: main.name, targetId: main.id, len, grid: true }];
+  }
+  // the station's conveyor halls (a works room, a foundry named for lines), largest clear floor first
+  function worksHalls(st) {
+    return st.rooms().filter(r => r.kind === 'factory' && (r.floorMat === 'treadway' || /CONVEYOR|WORKS|FACTORY|FOUNDRY|ASSEMBLY|PRODUCTION|LINES?\b|HALL/.test(r.name)))
+      .map(r => { const R = r.rects[0]; return { r, free: (R.x2 - R.x1 + 1) * (R.y2 - R.y1 + 1) - st.props().filter(p => st.roomAt(p.x, p.y) === r.id).reduce((n, p) => n + (p.w || 1) * (p.h || 1), 0) }; })
+      .sort((a, b) => b.free - a.free).map(x => x.r);
   }
   const CONCOURSE_ROOMS = 8;
   function concourseGeometry(B, dir, want) {
@@ -1991,7 +2089,7 @@
       for (let k = 2; !given && taken(name) && k < 50; k++) name = (style ? AUTO_NAME[style] : 'ROOM').slice(0, 21) + ' ' + k;
       usedNames[norm(name)] = 1;
       const big = style === 'works' || lines.length > 0 || w * h >= 24 * 14;
-      out.push({ i, name, style, zones, lines, w, h, big, need });
+      out.push({ i, name, style, zones, lines, w, h, big, need, exact: !!sz.size });
     }
     return { ok: true, rooms: out };
   }
@@ -2087,8 +2185,10 @@
       }
       let dressed = null;
       if (rec) { dressed = dressRoom(probe, env, id, q.style); if (!dressed.ok) return dressed; props = props.concat(dressed.props); }
+      const accents = q.lines.length || q.zones.length ? accentsFor(probe, env, id, q.zones, rec) : null;
+      if (accents) props = props.concat(accents);
       parts.push({ hall: null, room: { kind: (rec && rec.kind) || 'hab', name: q.name, rect: r.rect, floorStyle: rec ? rec.deck.style : undefined, floorMat: rec ? rec.deck.mat : undefined, walls: rec ? rec.walls : undefined }, roomId: null, lines, props });
-      view.push({ q, r, part: parts.length - 1, fillView, dressed });
+      view.push({ q, r, part: parts.length - 1, fillView, dressed, accents });
     }
     for (const p of parts) if (p.dress !== undefined) { const d = dressHall(probe, env, p.hallId, p.dress); p.props = d.props; }
     for (const p of parts) { delete p.dress; delete p.hallId; }
@@ -2098,6 +2198,33 @@
     const t = tryBuild(base, spec, env, before);
     if (!t.ok) return refuse('The layout did not pass its checks (' + t.error + '), so nothing would be built. Try fewer or smaller rooms, or the other pattern.');
     const fp = t.probe;
+    /* a replaced station seats its crew ACCORDINGLY: the desks the page's replaceLayout gave the agents whose rooms are
+       gone (the main room's first free spots), and every specialist's desk when the main room holds a pile of them (more
+       than 3, as summons leave), move to tidy rows in the rooms of the new layout, two to a room, the rooms where desks
+       belong first (an office, a lab, a library…). The lead keeps its desk on the bridge; a bridge with a desk or two
+       stays as it was. station.build makes the same moves after the build. */
+    const moves = [], reseated = [];
+    if (replace) {
+      const DESK = /^(desk|desk2)$/, was = new Map();
+      for (const p of live0.props()) if (p.agentId && DESK.test(p.t)) was.set(p.agentId, live0.roomAt(p.x, p.y));
+      const onBridge = fp.props().filter(p => p.agentId && DESK.test(p.t) && fp.roomAt(p.x, p.y) === hub.id), pile = onBridge.length > 3;
+      const moved = onBridge.filter(p => p.agentId !== env.heroId && (pile || (was.has(p.agentId) && was.get(p.agentId) !== hub.id)));
+      if (moved.length) {
+        const PREFER = ['desks', 'lab', 'library', 'comms', 'workshop', 'meeting', 'works', 'cafe', 'lounge', 'cozy', 'storage', 'quarters', 'garden', 'games', 'gym'];
+        const rank = v => { const k = PREFER.indexOf(v.q.style); return k < 0 ? 99 : k; };
+        const targets = view.slice().sort((a, b) => rank(a) - rank(b)).map(v => fp.roomAt(v.r.rect.x1, v.r.rect.y1)).filter(Boolean);
+        const scratch = WM.create(clone(fp.serialize()));
+        let k = 0;
+        for (const rid of targets) {
+          if (k >= moved.length) break;
+          for (const d of recruitDesks(scratch, env, rid, Math.min(2, moved.length - k))) {   // two to a room: spread, never a pile
+            const p = moved[k++], m = { id: p.id, dx: d.x - p.x, dy: d.y - p.y };
+            const r = fp.moveProp(m.id, m.dx, m.dy);
+            if (r && r.ok) { moves.push(m); const rm = fp.rooms().find(x => x.id === rid); if (rm && reseated.indexOf(rm.name) < 0) reseated.push(rm.name); }
+          }
+        }
+      }
+    }
     // the card: the pattern, then each room where it sits and what is in it
     const built = t.built, crewIds = (env.crew || []).map(a => a && a.id).filter(Boolean), lines = [], steps = [];
     const short = props => { const txt = piecesText(env, props), parts2 = txt.split(', '); return parts2.length > 7 ? parts2.slice(0, 6).join(', ') + ' and more' : txt; };
@@ -2114,6 +2241,7 @@
         stepsView.forEach(s => steps.push(Object.assign({}, s, { role: s.role + ' on ' + (fv.z.label || fv.z.plain) })));
         bits.push(fv.z.plain + (fv.z.label ? ' ("' + fv.z.label + '")' : '') + ': ' + flowText(fv.shape.cols, fv.runOrder, stepsView));
       }
+      if (v.accents) bits.push(piecesText(env, v.accents) + ' in the corners');
       const brief = view.length > 4, pieces = !brief && v.dressed && v.dressed.props.length && v.q.style !== 'works' ? ' (' + short(v.dressed.props) + ')' : '';
       const size = brief && Wd === CELL[0] && Hd === CELL[1] ? '' : ', ' + Wd + ' × ' + Hd;
       return v.q.name + ' ' + at + size + ': ' + bits.join('; ') + pieces;
@@ -2125,14 +2253,14 @@
       : 'A CONCOURSE ' + laid.dir + ' from ' + hub.name + ': a wide corridor, planted and lit, and ' + view.length + ' rooms. ';
     const blocking = [].concat(...lines.map(l => l.blocking.map(b => (lines.length > 1 ? (l.label || l.plain) + ': ' : '') + b)));
     const summary = head + (view.length > 4 && pattern === 'diamond' ? 'Every room is 18 × 11 unless it says. ' : '') + roomText.join('. ') + '.'
-      + (replace ? ' It replaces everything beyond ' + hub.name + ' (' + wasRooms + (wasRooms === 1 ? ' room' : ' rooms') + ' and ' + wasProps + ' props); ' + hub.name + ', agents and conversations stay, and every agent keeps a desk. Your current layout is backed up: RESTORE PREVIOUS in Build → Presets brings it back.' : '')
+      + (replace ? ' It replaces everything beyond ' + hub.name + ' (' + wasRooms + (wasRooms === 1 ? ' room' : ' rooms') + ' and ' + wasProps + ' props); ' + hub.name + ', agents and conversations stay, and every agent keeps a desk' + (reseated.length ? ' (' + moves.length + (moves.length === 1 ? ' desk moves' : ' desks move') + ' to ' + reseated.join(', ') + ')' : '') + '. Your current layout is backed up: RESTORE PREVIOUS in Build → Presets brings it back.' : '')
       + (lines.length ? ' ' + (blocking.length ? 'Still to do after building: ' + blocking.join('; ') + '.' : 'Its lines will be ready to run.') : '');
     const fpd = fp.serialize();
     const preview = previewOf(WM, doc, fpd, [], null);
     const roomsOut = view.map(v => ({ name: v.q.name, style: v.q.style || null, where: v.r.side, existing: false }));
     const plan = { floorSig: sigOf(doc), resultSig: sigOf(fpd), summary, notes, steps, rooms: roomsOut, hallways: [], lines, preview, line: null,
       where: (pattern === 'diamond' ? 'the diamond around ' : 'a concourse ' + laid.dir + ' of ') + hub.name, layout: { pattern, replace } };
-    plan.spec = replace ? { kind: 'relayout', stripped, build: spec, pattern } : spec;
+    plan.spec = replace ? { kind: 'relayout', stripped, build: spec, pattern, moves } : spec;
     if (replace) plan.preset = { id: 'layout-' + pattern, name: 'your new ' + pattern.toUpperCase() + ' layout' };
     return { ok: true, plan };
   }

@@ -79,11 +79,16 @@ reliably do this?"); this is those two layouts as patterns StarNet computes. `st
   both sides, a big room flush on its far end. Up to eight rooms.
 - A room's `style` is one of 15 whole-room styles (`RoomStyles.ROOMS`: lounge, cozy, games, library, quarters,
   garden, cafe, desks, meeting, lab, workshop, comms, storage, gym, works), also by a word ("arcade", "conveyor
-  hall") or, with no style, by the room's name. A room with `lines` is a conveyor hall (works); its lines gather
-  round its middle, a clear tile apart, packed from the corner only when that is the only way they fit.
+  hall") or, with no style, by the room's name. A room with `lines` is a conveyor hall (works); its lines are
+  **shelved** (see "Lines that share a room" below).
 - `replace: true` lays the station out again around its main room: the page's own `replaceLayout` clears everything
   else (every agent that owned a desk gets one), then the layout is built piece by piece (a lamp on its table). The
-  page backs the old layout up to Build mode's slot first, so RESTORE PREVIOUS brings it back.
+  page backs the old layout up to Build mode's slot first, so RESTORE PREVIOUS brings it back. The crew is seated
+  **accordingly**: the desks `replaceLayout` gave agents whose rooms are gone (the main room's first free spots), and
+  every specialist's desk when the main room holds a pile of them (more than 3, as summons leave), move to tidy rows in
+  the new rooms, two to a room, the rooms where desks belong first (office, lab, library…). The lead keeps its desk on
+  the bridge; a bridge with a desk or two stays as it was. The card says where they go ("8 desks move to OFFICE, LAB,
+  LIBRARY, CONVEYOR HALL").
 - Beside what stands, a ring needs clear space all round its room; the refusal says to use `replace: true` or a
   concourse from a free side.
 
@@ -111,16 +116,16 @@ model still never sends a tile. It **looks**, then says where things go in words
 
 | Field of a room | Accepts |
 | --- | --- |
-| `name` | A new room's name. Left out, the room is named for what fills it first, else `ROOM n`. |
+| `name` | A new room's name. Left out, a room with a whole-room `style` is named for it (LOUNGE, OFFICE, CONVEYOR HALL), else for what fills it first, else `ROOM n`. |
 | `size` | `small` (12 × 8), `medium` (18 × 11, an empty room's default), `large` (24 × 14), `giant` (36 × 20), or `{ w: 6-44, h: 5-26 }`. Left out, a room with zones or lines is sized for them and grows until they fit. |
-| `beside` | The room it joins, by name. "bridge", "main" or "hub" mean the main room. A room earlier in the same list works. Left out, StarNet tries every room and takes the spot that keeps the station most compact. |
+| `beside` | The room it joins, by name. "bridge", "main" or "hub" mean the main room. A room earlier in the same list works. Left out (and no `side`), the room takes the **next free place of the station's grid**, the same place a diamond layout would give it, at its own size (a small room centred on its cell's inner edge, a big one on a wing); so rooms asked one at a time grow the same diamond as one laid out at once (tested). Only when the grid has no place left does StarNet take the spot that keeps the station most compact. |
 | `side` | north, south, east or west of that room (also left, right, top, below). Left out, the most compact side. |
 | `hallway` | `true` (the default: a hallway 3 tiles long, as wide as the presets' own), `false` (the rooms touch and open onto each other), or a length from 2 to 8. |
 | `align` | center, start or end along the shared wall. Left out, centred, sliding along the wall to find clear floor. |
 | `into` | Instead of all of the above: an existing room's name, to fill it where it stands. |
 | `type`, `floorStyle`, `floorMat` | As in `station.plan_room`. FOUNDRY suits a room of conveyor lines. |
 | `zones` | Parts of the room, as in vibe design below. |
-| `lines` | Instead of zones: 1 to 6 workflow lines laid anywhere in the room, each `{ line | purpose | shape, name, staff, dailyCap, tries }`. They pack in rows, and each stays a clear tile from every other line, so they read as separate lines. |
+| `lines` | Instead of zones: 1 to 6 workflow lines laid anywhere in the room, each `{ line | purpose | shape, name, staff, dailyCap, tries }`. They are shelved (below), so they read as separate lines. |
 
 A room with neither zones nor lines is built **empty**, for the Commander to fill later ("put three lines in the
 conveyor hall" is then `{ into: "Conveyor Hall", lines: [...] }`).
@@ -139,6 +144,20 @@ What placement guarantees, beyond every plan's checks:
 
 `station.plan_line` and `station.plan_room` place their new rooms the same way, and take `beside`, `side` and `hallway`
 (and `size`, for a room of zones).
+
+**Lines that share a room** (the polish pass, 2026-09-30, after Andrew asked for "a bunch of useful workflow conveyor
+systems" and saw them come out as one interleaved clump in the middle of the hall, their stat plates over each other's
+machines). A room's lines are SHELVED when it takes several, already holds some, or is a hall (two grid rooms' floor or
+more): each line goes at the first clear spot in reading order, a tile in from the walls, off the doorways' landings,
+with `AISLE` (3) clear tiles round every line already there. A hall therefore fills in tidy rows with walkways between,
+the same whether its lines come in one plan or one at a time (`fillRoom` for designed rooms and `plan()`'s stamp scan for
+shelf lines both do it). One line in a room its own size stays centred. Failing both, a line goes wherever it fits.
+With no `where`, `station.plan_line` puts a line into the station's conveyor hall (a works room, or one named for lines)
+when it has room, before it makes the line a room of its own on the grid. Recruits' desks stand together: one row
+centred on a wall (the top, then the bottom), split only when no row takes them all.
+
+**A room of zones is never half bare.** A room split into styled parts, with no whole-room style of its own, gets plants
+in its free corners, and the card says so ("two tall plants and two plants in the corners").
 
 **The origin bug.** Found while building this. The routing plan counts tiles from the station's top-left corner, and a
 room added north or west of everything moves that corner. `floorFacts` compared those local tiles, so on any station
@@ -235,6 +254,7 @@ of furniture itself, so these fields are not accepted: x".
   - vibe design, under both prop catalogs: every style in a half of a new room beside a working line (reachable, one undo, nothing existing moved); line zones of a shelf line, a purpose and every custom stage kind, each machine inside its zone and nothing but staffing missing; four corners; a whole-room style; an existing room split; the card's drawing; recruiting in a zone; 30 refusals; and a vibe gauntlet of 90 hostile zone requests
   - the spatial builder: the ask that failed live (three rooms in one plan, a giant empty hall east of the bridge, then three lines into it as three separate lines); every side with a hallway, open plan and a 5-tile hallway; every size word; six unnamed rooms making a block and not a strip; no wall opened that was not asked for; a hallway sliding clear of furniture; hallways between rooms; rooms north and west of a station with a working line (the origin bug); six lines in one giant hall; 25 refusals; the map, and every size it lists really planning; recruiting; and a build gauntlet of 140 plausible and hostile requests
   - station layouts, under both catalogs: a ring of six and a concourse of eight on a fresh station (every room walkable, none against another, each furnished in its style with its floor and walls, the hall's lines, the corridors dressed, one undo); a ring refused round a crowded bridge; `replace: true` on a busy station (the bridge untouched, every agent a desk, one undo back); a concourse finding a free side; 15 refusals; every style in a room on three sides; a 48-request layout gauntlet
+  - the polish pass: `replace: true` over a bridge piled with nine desks (the lead keeps its desk there, the other eight move two to a room, one desk each, never touching, one undo back to the pile); four rooms asked one at a time landing exactly where a diamond of the same four does, each named for its style; a small and a giant room asked with a size keeping the grid; lines with no `where` going into the conveyor hall, else a grid room at least 18 × 11; three lines in one hall, then a fourth, and three more one at a time into an empty hall, every line three clear tiles from the next and a tile in from the walls (the old builder gave one clump: checked); a recruit batch on ONE row; a room of zones with plants in its corners, named on the card; recruits capped at three
 - `test/station-builder.e2e.test.mjs` (HTTP gate): a mock lead finds the builder with `tool_search`, then maps, plans and builds through the real sidecar, bridge
   and page in Chromium:
   - a line: the floor, the Workflow panel pill and the Build-mode refusal are checked, and one UNDO removes it
