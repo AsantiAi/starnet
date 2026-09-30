@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "8846b6ed3d5a1ceb4dc95c38c5e5ff20be2b6726",
+    "sourceCommit": "c2d3e9dff3290daf90eadde938aa6351cad5c800",
     "pathSetSha256": "c218737e8fb339c74f073e42d11f580a04bde46b042e931855728791613abf73",
     "files": [
       {
@@ -318,8 +318,8 @@
       },
       {
         "path": "frontend/app/build.js",
-        "bytes": 501821,
-        "sha256": "dbfbc997576d8984b32e1b79767c6749955bba3eaf70112927979ef337a7eb60"
+        "bytes": 506058,
+        "sha256": "20d43bc4d9a9117e03aefec5805d1e118c79a8a7bca480240da17aa34577d713"
       },
       {
         "path": "frontend/app/channels.js",
@@ -723,8 +723,8 @@
       },
       {
         "path": "frontend/app/pipeline.js",
-        "bytes": 129444,
-        "sha256": "749996c80fbdc4cb8cd6b8366aed4cee1aabcdccd71efa947ae10842cac4fa0a"
+        "bytes": 130196,
+        "sha256": "bc503c56280da4da5ac9107d1003dae6434ea551dd66e4f50439debe811e2fab"
       },
       {
         "path": "frontend/app/pitch.js",
@@ -1093,8 +1093,8 @@
       },
       {
         "path": "frontend/app/stationcommands.js",
-        "bytes": 48435,
-        "sha256": "92e82ee1b8978af58b477afaa2f1804bf6b99f2e95ca258bdd6173b8e211499d"
+        "bytes": 48509,
+        "sha256": "773293a14350427b7a12034edf758d6a9831fa876ff7d6850d47458fc1d43ce4"
       },
       {
         "path": "frontend/app/stationquests.js",
@@ -1168,8 +1168,8 @@
       },
       {
         "path": "frontend/app/tooltip.js",
-        "bytes": 8661,
-        "sha256": "66a6eeff4d283c6b20e37343e76b7908857bced70285389346e5a7af28d8a84c"
+        "bytes": 8913,
+        "sha256": "07c38bba46fd02c999c1265a377c9a6f2e133930815f244f3551d0cfe261bd26"
       },
       {
         "path": "frontend/app/topbar.js",
@@ -1293,8 +1293,8 @@
       },
       {
         "path": "frontend/app/windows/outbox.js",
-        "bytes": 16509,
-        "sha256": "58f4f4ee795d71f3ca97126c1b8449fbd2c58ed6a7ba757f81671bf1bc1d6252"
+        "bytes": 16553,
+        "sha256": "06b91e9eddd7aa5ac232b3354de861915115ae2093a045a69fcb85ef34cc3c19"
       },
       {
         "path": "frontend/app/windows/rewind.js",
@@ -1313,13 +1313,13 @@
       },
       {
         "path": "frontend/app/workflowline.js",
-        "bytes": 51614,
-        "sha256": "2299cc673c16676da0878abeb9989b008167e15be14bdd9acca4c6509c3fd267"
+        "bytes": 52964,
+        "sha256": "29c8a7ed10786d9ccc2271fa85989376c226c4098dc84df6fdc4adbfe3111157"
       },
       {
         "path": "frontend/app/workflowpanel.js",
-        "bytes": 148479,
-        "sha256": "4887629551d0e731472b6253101812ee413a8c22f88579a959fc683b6b3bfdd8"
+        "bytes": 180019,
+        "sha256": "2ca43f2ad26ff416cb037736b0c1f8f211fc499a326bf0c80ff36827e6f765dd"
       },
       {
         "path": "frontend/app/workflowtakeoverstore.js",
@@ -1368,8 +1368,8 @@
       },
       {
         "path": "frontend/app/world.js",
-        "bytes": 816306,
-        "sha256": "dfcca4461f62a5e9f11e588c9fe6ccf1a45a83f93b1cb353e37c9e3ff4aadb5f"
+        "bytes": 817046,
+        "sha256": "e7ea13714b0cca0389142c79d2cdf73aeda4e8078d442b7a82febb7bb5659e04"
       },
       {
         "path": "frontend/app/worldlab.js",
@@ -1383,8 +1383,8 @@
       },
       {
         "path": "frontend/app/worldmodel.js",
-        "bytes": 226007,
-        "sha256": "00ed59b36a6051c71ad36290b1168bbf4c3080ab693e02d2c6a6c80d57ae8175"
+        "bytes": 227062,
+        "sha256": "6b57e6349abee89060e7fed55cd4673c57bba9389ad10950bd7db5b44b9ad411"
       },
       {
         "path": "frontend/app/worldrenderer.js",
@@ -1443,8 +1443,8 @@
       },
       {
         "path": "frontend/css/app.css",
-        "bytes": 414770,
-        "sha256": "0bbdc5a63081bf6dd77bb1648a73711e35bb29489434430e426f612f180d6e65"
+        "bytes": 411624,
+        "sha256": "620a84224b7e37d97f14ade078410ccab769c220bcbdd1dd401a683833e675a4"
       },
       {
         "path": "frontend/css/asciifx.css",
@@ -1548,8 +1548,8 @@
       },
       {
         "path": "frontend/css/readability.css",
-        "bytes": 11010,
-        "sha256": "7a18169e2659124580d9adb54c29a0379e0073c8b33efe7d5eef3ccbfdb3ebc5"
+        "bytes": 11164,
+        "sha256": "6379713408b302ec61d358641740149a918229b204152acadb9c904648855ad7"
       },
       {
         "path": "frontend/css/refit-kit.css",
@@ -1558,8 +1558,8 @@
       },
       {
         "path": "frontend/css/refit-polish.css",
-        "bytes": 30433,
-        "sha256": "bb3aa118eead08906d8362096960f153aab6fd4f724e59529ca8e86dd3e0f471"
+        "bytes": 31721,
+        "sha256": "96be36b9442811463443a55ca09c800dbd678eb6deee2eb071b3bcc134fc3c4d"
       },
       {
         "path": "frontend/css/refit.css",
@@ -1623,8 +1623,8 @@
       },
       {
         "path": "frontend/css/workflow-panel.css",
-        "bytes": 40156,
-        "sha256": "1bb4e0dbe739292fefbc115c6e23f3a5c840ef2d57c7c49adad06c36ebdbe2dc"
+        "bytes": 43749,
+        "sha256": "4fe1c26068bdb957661ecd69bd3929e32a2901b7ddeb60db034a3da0c3644bea"
       },
       {
         "path": "frontend/css/workhub.css",
