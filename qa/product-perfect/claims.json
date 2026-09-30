@@ -18,8 +18,8 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "b49c68cb1c491358a8a28b54c9af3963beb97901",
-    "pathSetSha256": "d208b530ebf640e2fa520c2d157593c6ee2e74b85483317e129967112d6ed60a",
+    "sourceCommit": "2827f15b4f2c076dbb6c5bedb0c04a29f095ad68",
+    "pathSetSha256": "c6f7049e734305ed1e41a2f49eb76bb4df3c1d009c1bc413a312a1394bb5326b",
     "files": [
       {
         "path": "INSTALL.md",
@@ -43,8 +43,8 @@
       },
       {
         "path": "TERMS.md",
-        "bytes": 5602,
-        "sha256": "190867dde79e12d400af4b62c489640077e1ae2d69cae4ec0e2fe1dde3946fc1"
+        "bytes": 5309,
+        "sha256": "4ec233df27b6781838559005fcef2e7a214e21431b9cd0ef0cb5768a78eee24c"
       },
       {
         "path": "docs/DOWNLOAD_PAGE.md",
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 404598,
-        "sha256": "da7003f96852cff0b2e1c2ddf4522688427407b909135f8a17c40a272d338a03"
+        "bytes": 405251,
+        "sha256": "02ab4a0643fbf7f11aec5ac570292602f8b6fae31f41b11fbcbd3ba5a525cdc9"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
@@ -410,6 +410,11 @@
         "path": "frontend/app/deliverables.js",
         "bytes": 33712,
         "sha256": "b976c298d91b4ee5d8bc1a3aebc07fd70384aa59469e134cc15b482ed4ce4c75"
+      },
+      {
+        "path": "frontend/app/deskscreen.js",
+        "bytes": 35767,
+        "sha256": "be9a119a1f0f31a0f3505f076bacb1e7c7419d8cefb7e946fa4c9d782ca3581c"
       },
       {
         "path": "frontend/app/diagnostics.js",
@@ -653,8 +658,8 @@
       },
       {
         "path": "frontend/app/modeldock.js",
-        "bytes": 51721,
-        "sha256": "7d92920fe4639683b3533b5ab569959a5dd34947b8b1f1f4c6abb2d91f130fef"
+        "bytes": 48449,
+        "sha256": "c63fc82e11fd656fdf5d94b7359944591d00691ec89fcebad3ff5ba86ea6c936"
       },
       {
         "path": "frontend/app/modelpicker.js",
@@ -1093,8 +1098,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 772877,
-        "sha256": "fb7c7a89cccc7b30c7a4366090a6dceacfa403211e6b0afc4abdb863313b4aed"
+        "bytes": 773397,
+        "sha256": "33d2a8ba7afc47048f757126ffadcdc2a7cb9308c9050c19be0038ce58051058"
       },
       {
         "path": "frontend/app/study.js",
@@ -1338,8 +1343,8 @@
       },
       {
         "path": "frontend/app/world.js",
-        "bytes": 808686,
-        "sha256": "69accfc369c14ba710f544ae8d968ab5da9a6c61ffd6f43c056089b962656eea"
+        "bytes": 811238,
+        "sha256": "f68d6c2e78a22936311f4005476ad7c2e7f0fee9e74f9ea0765fc26c27707b37"
       },
       {
         "path": "frontend/app/worldlab.js",
@@ -1413,8 +1418,8 @@
       },
       {
         "path": "frontend/css/app.css",
-        "bytes": 407152,
-        "sha256": "6c40b8aa4729ccf6a0eb829502eb7e46b1a1fd42863ed51fb7583aa90a8c8811"
+        "bytes": 406348,
+        "sha256": "dd33e55d6a68aec8038f0e8b3a0d29c3d75d2bbf9743fc1d32c45103702a3817"
       },
       {
         "path": "frontend/css/asciifx.css",
@@ -1447,9 +1452,14 @@
         "sha256": "64e9c4154f4092c5b255ac4754c8774d281324bdda439982d93b7c7973e6ba5f"
       },
       {
+        "path": "frontend/css/deskscreen.css",
+        "bytes": 6988,
+        "sha256": "dd5ba2a9a071f9d5dc60a5705c3e527d3e00641b6bf5bb80ba7c325813e14fe0"
+      },
+      {
         "path": "frontend/css/glass-comms.css",
-        "bytes": 25241,
-        "sha256": "c121f4d4bbceaa61d90fcb5d5e4da4df1500b19a4a646f9af18d7d8cde1056e7"
+        "bytes": 24916,
+        "sha256": "b7cec05b4d62e5b985b4d086217ffa2a3b33d5c76510abb92b3c2666bdb53650"
       },
       {
         "path": "frontend/css/glass-demo.css",
@@ -1638,8 +1648,8 @@
       },
       {
         "path": "frontend/index.html",
-        "bytes": 91519,
-        "sha256": "b70039489673bc81185fae9842f9fe01099e842409739f2fc0b1bc7245f02329"
+        "bytes": 91757,
+        "sha256": "7349756ac436ce4b0e65f762c3360f739b87ffa087a6d7c2022edd1c610ae1cb"
       },
       {
         "path": "frontend/js/arcade.js",
