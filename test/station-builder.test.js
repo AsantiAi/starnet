@@ -1190,7 +1190,7 @@ for (const c of T.catalog) {
   // what the planner offers: a whole layout first, then rooms, a line, a kit or preset, zones, a restyle — with the menus
   const d = planT.description;
   A.ok(/1 LAYOUT, the way to a beautiful station: \{ "layout": \{ "pattern": "ring" \| "concourse"/.test(d) && /ring = a corridor loop round the main room/.test(d) && /concourse = a wide corridor from one side of the main room/.test(d), 'the planner leads with the two layout patterns');
-  A.ok(/Room styles: lounge \(a lounge\), cozy \(a cozy den\), games \(an arcade\)/.test(d) && /works \(a conveyor hall\)/.test(d), 'it lists every whole-room style');
+  A.ok(/Room styles: lounge \(a lounge: a TV, a couch on a big rug/.test(d) && /cozy \(a cozy den: a TV, bookshelves/.test(d) && /works \(a conveyor hall: its floor kept for workflow lines/.test(d), 'it lists every whole-room style');
   A.ok(/replace: true lays the whole station out again around the main room/.test(d) && /backed up for RESTORE PREVIOUS/.test(d), 'it says what replace does and that the old layout is backed up');
   A.ok(/size: small 12×8, medium 18×11, large 24×14, giant 36×20/.test(d) && /LINES: .*build_test \(ENGINEER → TESTER\)/.test(d) && /KITS WORKROOM/.test(d) && /PRESETS RESEARCH STATION/.test(d) && /zone styles cozy, lounge/.test(d), 'sizes, lines, kits, presets and zone styles are all on the menu');
   A.ok(/Never give up after one refusal, and never say something was built that station\.build did not report\./.test(d), 'and how to treat a refusal');

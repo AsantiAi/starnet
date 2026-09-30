@@ -349,7 +349,7 @@
     const styleMenu = typeof deps.styleMenu === 'function' ? deps.styleMenu : () => [];
     const styleText = () => { try { return (styleMenu() || []).map(s => s.id).join(', '); } catch (_) { return ''; } };
     const roomMenu = typeof deps.roomMenu === 'function' ? deps.roomMenu : () => [];
-    const roomText = () => { try { return (roomMenu() || []).map(s => s.id + ' (' + s.name + ')').join(', '); } catch (_) { return ''; } };
+    const roomText = () => { try { return (roomMenu() || []).map(s => s.id + ' (' + s.name + (s.about ? ': ' + s.about : '') + ')').join('; '); } catch (_) { return ''; } };
     const BUILDER = ['station.map', 'station.plan', 'station.build'];
     const mapTool = {
       name: 'station.map', capability: 'orchestrator', scope: 'read', requiresConsent: false,
