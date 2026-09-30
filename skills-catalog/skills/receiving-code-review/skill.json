@@ -1,0 +1,15 @@
+{
+  "slug": "receiving-code-review",
+  "version": "1.0.0",
+  "shelf": "community",
+  "category": "Engineering",
+  "tags": ["code-review", "feedback", "verification", "collaboration", "quality"],
+  "requires": ["cabinet", "workbench"],
+  "license": "MIT",
+  "authors": ["Jesse Vincent"],
+  "upstream": {
+    "url": "https://github.com/obra/superpowers/tree/3fb75974186ea7fada621d8ab77b3b02169baf57/skills/receiving-code-review",
+    "commit": "3fb75974186ea7fada621d8ab77b3b02169baf57",
+    "license": "MIT"
+  }
+}

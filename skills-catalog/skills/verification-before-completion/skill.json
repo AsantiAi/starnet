@@ -1,0 +1,15 @@
+{
+  "slug": "verification-before-completion",
+  "version": "1.0.0",
+  "shelf": "community",
+  "category": "Engineering",
+  "tags": ["verification", "testing", "quality", "evidence", "honesty"],
+  "requires": [],
+  "license": "MIT",
+  "authors": ["Jesse Vincent"],
+  "upstream": {
+    "url": "https://github.com/obra/superpowers/tree/3be5aad3dd2400ef23b15680969f4bcd3b6d7b8b/skills/verification-before-completion",
+    "commit": "3be5aad3dd2400ef23b15680969f4bcd3b6d7b8b",
+    "license": "MIT"
+  }
+}

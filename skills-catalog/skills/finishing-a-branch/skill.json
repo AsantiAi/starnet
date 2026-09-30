@@ -1,0 +1,15 @@
+{
+  "slug": "finishing-a-branch",
+  "version": "1.0.0",
+  "shelf": "community",
+  "category": "Engineering",
+  "tags": ["git", "branches", "merge", "pull-requests", "worktrees", "workflow"],
+  "requires": ["workbench"],
+  "license": "MIT",
+  "authors": ["Jesse Vincent"],
+  "upstream": {
+    "url": "https://github.com/obra/superpowers/tree/b36e0829c6d0140e93cfef2ca599b1b07d4a7797/skills/finishing-a-development-branch",
+    "commit": "b36e0829c6d0140e93cfef2ca599b1b07d4a7797",
+    "license": "MIT"
+  }
+}
