@@ -1797,7 +1797,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const earned = cat.filter(m => m.earned).length, locked = cat.length - earned;
     const nextMilestone = cat.find(m => !m.earned);
     const pad2 = n => (n < 10 ? '0' : '') + n;
-    const mark = a.color || 'var(--ph-bright)';
+    // the gauge mark paints only a hex suit tint (the crew restore rule), else the phosphor default.
+    const mark = /^#[0-9a-f]{3,8}$/i.test(String(a.color || '')) ? String(a.color) : 'var(--ph-bright)';
 
     const progression =
       '<div class="ag-xp-panel">' +
