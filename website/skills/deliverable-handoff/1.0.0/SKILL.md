@@ -1,10 +1,10 @@
 ---
 name: deliverable-handoff
-description: "Finish work as files the Commander can open: a format that previews, a clear name and place, one deliverable note naming the main file, and a closing message that points to it."
+description: "Finish work as files the Commander can open: a format that previews, a clear name and place, the main file marked in DELIVERABLES, and a closing message that points to it."
 license: MIT
 metadata:
   title: "Deliverable Handoff"
-  category: "Productivity"
+  category: "Station"
   author: "StarNet"
 ---
 
@@ -33,4 +33,4 @@ The main file exists at the path you named, reads correctly on its own, previews
 ## Output
 The title, the main file path, the supporting files, and one line on what to read first.
 
-*Needs the CABINET object (fs.write / fs.read). deliverable_note is available to every agent.*
+*Needs the INTEL CAB (fs.write / fs.read). deliverable_note is available to every agent.*

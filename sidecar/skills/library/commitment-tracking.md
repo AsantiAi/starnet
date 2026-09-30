@@ -5,6 +5,7 @@ description: Hold the Commander to what they actually said they would do — dur
 category: Productivity
 requires: [notebook]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

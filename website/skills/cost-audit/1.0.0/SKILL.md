@@ -4,7 +4,7 @@ description: "Sweep real spend line by line, verify cheaper alternatives against
 license: "MIT"
 metadata:
   title: "Cost Audit"
-  category: "Finance"
+  category: "Research"
   author: "StarNet"
   version: "1.0.0"
 ---

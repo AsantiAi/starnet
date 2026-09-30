@@ -5,6 +5,7 @@ description: Turn how the Commander actually does something into a procedure ano
 category: Productivity
 requires: [cabinet, notebook]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

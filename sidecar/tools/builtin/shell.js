@@ -27,6 +27,7 @@
   const AID_RE = /^[A-Za-z0-9_-]{1,40}$/;
   // foreground receipts for the boot orphan sweep (procledger.js trackChild); inert when no ledger is injected
   const trackChild = (typeof require === 'function') ? require('../../procledger.js').trackChild : function () { return { exited: function () {}, done: function () {} }; };
+  const shellFailNote = (typeof require === 'function') ? require('../../failopen.js').note : function () {};
   function safeAgentId(id) { if (!AID_RE.test(id || '')) throw new Error('bad agentId'); return id; }
   function clip(s, n) { s = String(s == null ? '' : s); n = n || 200; return s.length > n ? s.slice(0, n) + '…' : s; }
   function clamp(n, lo, hi) { n = Number(n); if (!isFinite(n)) return lo; return Math.max(lo, Math.min(hi, n)); }
@@ -670,8 +671,14 @@
     return abs;
   }
 
-  // best-effort tree-kill: on Windows taskkill must inspect the live shell root to discover `/T` descendants.
-  function killTree(spawn, child, isWin) {
+  /* best-effort tree-kill: on Windows taskkill must inspect the live shell root to discover `/T` descendants.
+     POSIX (macOS/Linux): `group` is true when the shell was spawned detached, i.e. as the leader of its OWN
+     process group, so the group IS the command's tree — one SIGKILL to -pid reaches every child and grandchild.
+     Killing only the /bin/sh wrapper (the old POSIX path) orphaned whatever the command started (`sleep 30 &`,
+     a dev server, a watcher): they kept running, kept their ports/files, and kept the stdout pipe open, so the
+     call did not even settle until they exited on their own. A group that can no longer be signalled (already
+     gone / never a leader) falls back to killing the leader directly, exactly as before. */
+  function killTree(spawn, child, isWin, group) {
     if (isWin && child.pid) {
       let fellBack = false;
       const fallback = () => {
@@ -692,10 +699,18 @@
         return;
       }
     }
+    // pid > 1 always: process.kill(-1) would signal EVERY process this user owns
+    if (group && Number.isInteger(child.pid) && child.pid > 1) {
+      try { process.kill(-child.pid, 'SIGKILL'); return; } catch (e) { shellFailNote('shell.killTree.group', e); }
+    }
     try { child.kill(); } catch (_) {}
     try {
       if (child.pid) process.kill(child.pid, 'SIGKILL');
     } catch (_) {}
+  }
+  // A real POSIX host (not merely isWin:false injected by a test on Windows, where detached would open a console).
+  function posixGroupHost(isWin) {
+    return !isWin && typeof process !== 'undefined' && process.platform !== 'win32';
   }
 
   /* ANSI/VT control sequences, stripped before any shell output reaches the model (ref-parity: the reference
@@ -746,6 +761,10 @@
       // sidecar's env holds provider keys and a user snippet has no business reading them.
       const spawnOpts = { cwd: cwd, shell: true, windowsHide: true };
       if (opts.env) spawnOpts.env = opts.env;
+      // POSIX: the shell leads its own process group so a timeout/abort can kill the whole tree (see killTree).
+      // Stdio stays piped and the child is NOT unref'd — we still await its 'close'.
+      const group = posixGroupHost(isWin);
+      if (group) spawnOpts.detached = true;
       try { child = spawn(cmd, spawnOpts); }
       catch (e) { return reject(new Error('could not start shell: ' + ((e && e.message) || e))); }
       const receipt = trackChild(opts.ledger || null, child && child.pid, { cmd: opts.ledgerCmd != null ? opts.ledgerCmd : '', kind: 'shell.fg', pinAfterMs: opts.ledgerPinAfterMs, exitStampMs: opts.ledgerExitStampMs });
@@ -769,8 +788,8 @@
       };
       if (child.stdout) child.stdout.on('data', mkDecoded());
       if (child.stderr) child.stderr.on('data', mkDecoded());
-      const timer = setTimeout(function () { timedOut = true; killTree(spawn, child, isWin); }, timeoutMs);
-      const onAbort = function () { aborted = true; killTree(spawn, child, isWin); };
+      const timer = setTimeout(function () { timedOut = true; killTree(spawn, child, isWin, group); }, timeoutMs);
+      const onAbort = function () { aborted = true; killTree(spawn, child, isWin, group); };
       if (sig) { if (sig.aborted) { onAbort(); } else { try { sig.addEventListener('abort', onAbort, { once: true }); } catch (_) {} } }
       function finish(code) {
         if (settled) return; settled = true;

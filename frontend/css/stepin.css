@@ -1,0 +1,69 @@
+/* STEP-IN (2026-09-29) — frontend/app/stepin.js. The Commander takes an agent's live browser: a normal station
+   window ('stepin', PANEL shell) that rises from the dock between CREW and COMMS; the term system owns the glass
+   chrome, rise and resize, this file lays out the body. Same material vocabulary as the DESK SCREEN: a recessed
+   dark well for the picture, hairline --gd-edge rings, state shown by lamp/rail colour — matte, no glow. */
+.stepin-win .term-body { display: flex; flex-direction: column; }
+.si-root { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+
+/* status strip: lamp · agent · state · clock */
+.si-strip { display: flex; align-items: baseline; gap: 10px; padding: 2px 0 6px; border-bottom: 1px solid var(--gd-edge, rgba(var(--ph-rgb),.24)); }
+.si-lamp { width: 8px; height: 8px; border-radius: 50%; align-self: center; flex: none; background: var(--ph-dim); box-shadow: inset 0 0 0 1px rgba(0,0,0,.4); }
+.si-root[data-state="waiting"] .si-lamp { background: var(--gold, #ffc24a); }
+.si-root[data-state="taken"] .si-lamp { background: var(--ok, #62ff9e); }
+.si-name { font-size: 18px; letter-spacing: 1.2px; color: var(--ph-bright); text-transform: uppercase; }
+.si-st { font-size: 14px; letter-spacing: 1.2px; color: var(--ph-dim); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; }
+.si-root[data-state="waiting"] .si-st { color: var(--gold, #ffc24a); }
+.si-root[data-state="taken"] .si-st { color: var(--ph); }
+.si-clock { font-size: 13px; color: var(--ph-dim); flex: none; font-variant-numeric: tabular-nums; }
+
+.si-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+.si-tabs[hidden] { display: none; }
+.si-tabs .bb.on { color: var(--ph-bright); border-color: var(--ph); }
+/* the ask + the hands on one row, above the picture (HAND BACK never scrolls away) */
+.si-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; flex: none; }
+.si-ask { margin: 0; font-size: 16px; color: var(--text); flex: 1 1 220px; min-width: 0; }
+.si-ask:empty { display: none; }
+
+/* THE SCREEN: a recessed monitor well holding the agent's page */
+.si-screen { flex: 1 1 auto; min-height: 140px; display: flex; flex-direction: column; border: 1px solid var(--gd-edge, rgba(var(--ph-rgb),.24)); border-radius: 5px; background: rgba(0,0,0,.34); box-shadow: inset 0 1px 6px rgba(0,0,0,.45); overflow: hidden; }
+.si-root[data-state="taken"] .si-screen { border-color: rgba(var(--ph-rgb), .5); }
+.si-view { flex: 1 1 auto; min-height: 0; display: flex; outline: none; }
+.si-view[hidden] { display: none; }
+.si-view:focus-visible { box-shadow: inset 0 0 0 1px var(--ph); }
+.si-img { flex: 1 1 auto; min-width: 0; min-height: 0; width: 100%; height: 100%; object-fit: contain; cursor: default; user-select: none; -webkit-user-drag: none; background: #000; }
+.si-screen[data-mode="live"] .si-off { display: none; }
+.si-off { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; padding: 16px; }
+.si-off-h { font-size: 17px; letter-spacing: 2px; color: var(--ph-dim); text-transform: uppercase; }
+.si-root[data-state="waiting"] .si-off-h { color: var(--gold, #ffc24a); }
+.si-off-s { font-size: 14px; color: var(--ph-dim); max-width: 52ch; line-height: 1.3; }
+
+.si-note { margin: 0; font-size: 14px; color: var(--ph); }
+.si-note:empty { display: none; }
+.si-keep { margin: 0; font-size: 13px; color: var(--ph-dim); }
+.si-keep:empty { display: none; }
+
+/* hands: the big HAND BACK, TAKE THE WHEEL, and the two-step CAN'T DO IT */
+.si-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: none; margin-left: auto; }
+.si-foot [hidden] { display: none; }
+.si-root .si-take, .si-root .si-back { font-size: 17px; letter-spacing: 2px; padding: 6px 18px; }
+.si-root .si-back { color: var(--ph-bright); border-color: var(--ph); background: var(--gd-hover, rgba(var(--ph-rgb),.12)); }
+.si-root .si-cancel.armed { color: var(--bad, #ff4a3d); border-color: var(--bad, #ff4a3d); }
+
+/* saved sign-ins + history, folded away by default */
+.si-more { flex: none; border-top: 1px solid var(--gd-edge, rgba(var(--ph-rgb),.24)); padding-top: 4px; }
+.si-more > summary { cursor: pointer; font-size: 13px; letter-spacing: 1.5px; color: var(--ph-dim); list-style: none; }
+.si-more > summary::-webkit-details-marker { display: none; }
+.si-more > summary::before { content: '▸ '; }
+.si-more[open] > summary::before { content: '▾ '; }
+.si-h { margin: 8px 0 4px; font-size: 13px; letter-spacing: 1.5px; color: var(--ph-bright); font-weight: normal; }
+.si-list { list-style: none; margin: 0; padding: 0; font-size: 14px; color: var(--text); }
+.si-list li { padding: 2px 0; border-bottom: 1px solid rgba(var(--ph-rgb), .08); }
+.si-list b { font-weight: normal; color: var(--ph-bright); }
+.si-list small { color: var(--ph-dim); }
+.si-end[data-s="expired"], .si-end[data-s="aborted"] { color: var(--ph-dim); }
+.si-end[data-s="cancelled"] { color: var(--gold, #ffc24a); }
+.si-end[data-s="returned"] { color: var(--ok, #62ff9e); }
+.si-dim { margin: 4px 0; font-size: 13px; color: var(--ph-dim); }
+.si-saved .si-forget { margin-top: 6px; }
+.si-saved .si-forget.armed { color: var(--bad, #ff4a3d); border-color: var(--bad, #ff4a3d); }
+.si-saved .si-forget:disabled { opacity: .45; cursor: default; }

@@ -488,6 +488,10 @@
           // reconstructs a stream when messages<=1), so cron behavior is byte-identical — the frontend
           // autosessions module reads GET /api/transcript?stream=cron-<runId> to surface the output as a session.
           runId: runId, streamId: 'cron-' + runId, surface: 'autonomous', trigger: 'schedule', provider: provider,
+          // "Follow station default": an unpinned agent's routine runs on the Overseer's model AND effort (the
+          // identity resolver supplies both), exactly as a channel hop does. A pinned agent or an explicit routine
+          // model leaves this undefined, so the run's own roster effort applies unchanged.
+          reasoningEffort: (!(job.model && String(job.model).trim()) && ident.followsStation) ? ident.reasoningEffort : undefined,
           // Host-minted recovery identity. The active-run journal can now tie an interrupted headless run back
           // to the routine that launched it without trusting model text or guessing from the stream id.
           cronJobId: job.id, cronJobName: job.name || '',

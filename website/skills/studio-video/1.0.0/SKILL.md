@@ -4,7 +4,7 @@ description: "Turn a script into a narrated video edit: voiceover takes, matchin
 license: MIT
 metadata:
   title: "Studio Video"
-  category: "Studio"
+  category: "Creative"
   author: "StarNet"
 ---
 

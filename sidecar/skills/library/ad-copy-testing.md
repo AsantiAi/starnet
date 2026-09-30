@@ -5,6 +5,7 @@ description: Write paid-ad variants that test one lever at a time, grounded in a
 category: Marketing
 requires: [dish, cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

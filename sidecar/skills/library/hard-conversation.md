@@ -5,6 +5,7 @@ description: Draft the message the Commander is avoiding — the boundary, the a
 category: Communication
 requires: [cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

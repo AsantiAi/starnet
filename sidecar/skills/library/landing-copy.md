@@ -5,6 +5,7 @@ description: Write the page that converts — one audience, one promise above th
 category: Marketing
 requires: [dish, cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

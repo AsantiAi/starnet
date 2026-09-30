@@ -2,7 +2,7 @@
   "slug": "crew-handoff",
   "version": "1.0.0",
   "shelf": "originals",
-  "category": "Planning",
+  "category": "Station",
   "tags": ["delegation", "crew", "briefs", "team"],
   "requires": ["orchestrator"],
   "license": "MIT",
