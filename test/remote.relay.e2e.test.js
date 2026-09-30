@@ -5,7 +5,7 @@
      · the relay serves the phone app itself, locked down by CSP
      · a real task from the phone; its shell approval answered on the phone; the reply in the thread
      · revoke at the desk kicks the phone at the relay
-     · with no relay configured, pairing says so plainly instead of offering a dead link */
+     · with the relay switched off (STARNET_REMOTE_RELAY=off), pairing says so plainly instead of offering a dead link */
 'use strict';
 const A = require('./_assert.js');
 const http = require('http');
@@ -55,7 +55,7 @@ function startMockModel() {
     SKYNET_DEFAULT_MODEL: 'test/model', STARNET_DEFAULT_MODEL: 'test/model'
   };
   const fx = new SidecarFixture({ prefix: 'sn-relay-e2e-', timeoutMs: 15000, env: Object.assign({ STARNET_REMOTE_RELAY: relayUrl }, env) });
-  const bare = new SidecarFixture({ prefix: 'sn-relay-none-', timeoutMs: 15000, env });
+  const bare = new SidecarFixture({ prefix: 'sn-relay-none-', timeoutMs: 15000, env: Object.assign({ STARNET_REMOTE_RELAY: 'off' }, env) });
   let c = null;
   try {
     // the relay serves the phone app, locked down
