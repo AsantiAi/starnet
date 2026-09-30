@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "9f1e3c361d5823a6e9226c84e71adb1c209a1752",
+    "sourceCommit": "8ecae35670855a636e8edd8297e07cc99a70b833",
     "pathSetSha256": "05e95dafeb91f7b67a770405b6de2f31dd9eed0b7943cbe350a8596931f9c682",
     "files": [
       {
@@ -1013,8 +1013,8 @@
       },
       {
         "path": "frontend/app/roomstyles.js",
-        "bytes": 22137,
-        "sha256": "345d119c54e9e25d82dd18adff776a49c00327112a3c5c35b78fa8d472084cc1"
+        "bytes": 22469,
+        "sha256": "14565b8ad3f8bee520eafd7386145e25384fa746710515cbccbaac3bf8f330e5"
       },
       {
         "path": "frontend/app/routinenudgestore.js",
@@ -1103,8 +1103,8 @@
       },
       {
         "path": "frontend/app/stationbuilder.js",
-        "bytes": 173738,
-        "sha256": "51d4645be2f02db6df8b216d891675aa94b78e97d4bbe5efaca6b9ea8a143bdf"
+        "bytes": 175105,
+        "sha256": "b9850f81643e35b567a470f0dbaf6f7c3376a423e820005778b872e34997e1bd"
       },
       {
         "path": "frontend/app/stationcommands.js",
