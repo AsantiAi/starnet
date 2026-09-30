@@ -1,11 +1,12 @@
 /* sidecar/apps.js — APPS: describe what you want, get a real app inside StarNet (2026-09-29).
 
-   "I want a Daily AI News Brief" → a window in the station, drawn with the station's own glass UI, that fills itself
-   on a schedule. No manifests, approvals, terminals or folders to think about: an app is
+   "I want a habit tracker" / "a dashboard of my crew's week" / "a pomodoro timer that looks like an arcade cabinet" →
+   a window in the station that the crew builds from those words. No manifests, approvals, terminals or folders to
+   think about: an app is
      · a PAGE the crew writes (HTML with the station kit — served sandboxed, scripts only, NO network),
      · its DATA (a private store the page reads; the crew publishes into it with app.publish),
-     · an optional SCHEDULE (an ordinary routine that runs the app's task — "research today's AI news" — and
-       publishes the result). Every 24h the brief refreshes itself; you just open the window.
+     · an optional SCHEDULE (an ordinary routine that runs the app's task and publishes the result), for an app
+       that should update by itself; you just open the window.
    Changing it is vibe coding: describe the change, the crew rewrites the page.
 
    WHY NO APPROVAL STEP: an app page can only draw. Its frame is an opaque-origin sandbox with the network switched
@@ -56,7 +57,7 @@ function makeApps(deps) {
   }
   async function need(id) {
     const a = String(id || '').trim();
-    if (!idOk(a)) throw new Error('`app` is the app id, like "ai-news-brief"');
+    if (!idOk(a)) throw new Error('`app` is the app id, like "habit-tracker"');
     const meta = await readMeta(a);
     if (!meta) throw new Error('there is no app "' + a + '" — see the APPS window, or create it with app.create');
     return { id: a, meta };
@@ -215,7 +216,7 @@ function makeApps(deps) {
       notify.reload(id, (await record(id) || {}).digest);
       return { off: true };
     }
-    if (!task) throw new Error('say what each refresh should do (`task`), e.g. "research today\'s top AI news and publish a brief"');
+    if (!task) throw new Error('say what each refresh should do (`task`), e.g. "gather what the crew finished this week and publish the recap"');
     const prompt = 'Refresh the StarNet app "' + meta.name + '" (app id: ' + id + ').\n\n' +
       'FIRST call app.read { app: "' + id + '" } (find it with tool.search "app read"): it states TODAY\'s real date — your own sense of the date is out of date. The task is about today.\n\n' +
       'TASK: ' + task + '\n\n' +

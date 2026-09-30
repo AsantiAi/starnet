@@ -59,9 +59,10 @@ try {
   await waitApproving(`!!document.getElementById('app-name')`, 10000, 'the APPS window');
   await sleep(500);
   report.facts.shotApps = await capture(cdp, out, '01-apps-window');
-  await run(`document.querySelector('[data-app-example="0"]').click(), true`);
+  // a FEED app typed by the Commander (a test scenario: nothing in the product is about news)
+  await run(`(() => { document.getElementById('app-name').value = 'AI News Brief'; document.getElementById('app-what').value = 'A daily brief of the top AI news: headline, two-line summary and source for each story. Refresh every 24h.'; return true; })()`);
   const filled = await run(`({ name: document.getElementById('app-name').value, what: document.getElementById('app-what').value })`);
-  check('the example fills the name and what-it-does', /AI News Brief/.test(filled.name) && /24h/.test(filled.what));
+  check('the form holds the name and what-it-does', /AI News Brief/.test(filled.name) && /24h/.test(filled.what));
   await run(`document.getElementById('app-create').click(), true`);
   await waitApproving(`!!document.querySelector('.term.plugin-app-win iframe.plugin-frame')`, 20000, 'the app window');
   check('BUILD IT opens the app window at once (building page) and sends the build to COMMS', await run(`/Build my new StarNet app "AI News Brief"/.test(document.querySelector('#chat-panel').innerText)`));

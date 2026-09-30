@@ -1,6 +1,6 @@
 /* sidecar/tools/builtin/apps.js — the crew's side of APPS (sidecar/apps.js).
 
-   The Commander describes an app ("a Daily AI News Brief, refreshed every 24h"); the lead builds it with these:
+   The Commander describes an app in their own words (a tracker, a timer, a dashboard, a game…); the lead builds it:
      app.create    a new app (the APPS window's NEW APP does this for the Commander; the tool is for "make me an app…" in chat)
      app.read      what an app is made of: its files, its data keys, its schedule — or one file / one data value
      app.write     write one page file (index.html …) — the open window reloads onto it at once
@@ -19,10 +19,10 @@ const GUIDE = [
   '- INTERACTIVE apps keep the Commander\'s own input with starnet.store.set(key, value) / starnet.store.get(key) / starnet.store.delete(key) / starnet.store.keys() (JSON, saved on the station, survives reloads) — a tracker, a to-do, settings, a high score. Never localStorage (the sandbox has none).',
   '- Hard limits (the sandbox, not a style rule): the page has no network and loads nothing from the web (no CDN scripts, web fonts or remote images — inline everything, draw with CSS/SVG/canvas, images only as data: URIs); files are text.',
   '- TIME: your own sense of today\'s date is WRONG (it is your training era). app.read states the station\'s real date — anything current (news, prices, "today") is searched for THAT date, and every item you publish is from it.',
-  '- The page has NO network: it never fetches anything. Its content is DATA you publish with app.publish(app, key, value) — any JSON (e.g. key "brief": { date, items:[{title, summary, source, url}] }).',
-  '- In the page: const data = await starnet.store.get("brief"); render it; and re-render when new data lands: starnet.onData(async () => { … }). Show an empty state (sn-empty) until the first data arrives, and a small "updated <time>" line (data._meta is kept by the station: await starnet.store.get("_meta") → { updatedAt }).',
+  '- The page has NO network: it never fetches anything. Its content is DATA you publish with app.publish(app, key, value) — any JSON (e.g. key "items": [{ title, detail, url }]).',
+  '- In the page: const data = await starnet.store.get("items"); render it; and re-render when new data lands: starnet.onData(async () => { … }). Show an empty state (sn-empty) until the first data arrives, and a small "updated <time>" line (data._meta is kept by the station: await starnet.store.get("_meta") → { updatedAt }).',
   '- Links: a plain <a href="https://…"> opens in the Commander\'s browser (the station catches the click) — just link. Never put a URL inside an inline onclick="…" attribute (its quotes break the attribute); for a whole clickable row, wrap it in the <a>.',
-  '- If it should update by itself (daily, hourly…), call app.schedule with `every` and the `task` each refresh performs (e.g. "search the web for today\'s top AI news and publish a brief with app.publish key brief"). Schedule FIRST, before you search or read anything from the web; then do the first refresh yourself (do the task, app.publish) so the Commander sees real content immediately.',
+  '- If it should update by itself (daily, hourly…), call app.schedule with `every` and the `task` each refresh performs (e.g. "gather what the crew finished this week and publish it with app.publish key items"). Schedule FIRST, before you search or read anything from the web; then do the first refresh yourself (do the task, app.publish) so the Commander sees real content immediately.',
   '- Build order: app.read → app.schedule (if it updates by itself — do this BEFORE any web research, or the station asks the Commander to approve it) → app.write index.html → app.check → research → app.publish real data. Tell the Commander in one or two sentences what the app does and when it refreshes.'
 ].join('\n');
 
@@ -113,7 +113,7 @@ function makeAppTools(deps) {
     {
       name: 'app.publish',
       description: 'Put data into a StarNet app — what its page shows (any JSON under a key the page reads). The open window updates immediately. Scheduled refreshes end with this.',
-      schema: { type: 'object', required: ['app', 'key', 'value'], properties: { app: { type: 'string' }, key: { type: 'string', description: 'the key the page reads, e.g. "brief"' }, value: { description: 'any JSON value' } } },
+      schema: { type: 'object', required: ['app', 'key', 'value'], properties: { app: { type: 'string' }, key: { type: 'string', description: 'the key the page reads, e.g. "items"' }, value: { description: 'any JSON value' } } },
       scope: 'write',
       run: async (a) => {
         const { id } = await apps.need(a.app);
