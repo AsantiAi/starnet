@@ -420,6 +420,22 @@ const StationCommands = (() => {
       const p = park(StationBuilder.planRoom(st.serialize(), (a && a.request) || {}, env));
       return { planId: p.planId, summary: p.plan.summary, rooms: p.plan.rooms, lines: p.plan.lines, steps: p.plan.steps, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
     },
+    /* THE SPATIAL BUILDER (2026-09-30): the lead SEES the floor (station.map: every room's place and size, what joins what,
+       what fits where, the floor drawn in characters) and then says where rooms go in words — beside which room, on which
+       side, how big, by a hallway or open plan, empty or filled. StationBuilder.planBuild turns that into tiles. */
+    'station.map': () => {
+      const st = typeof App !== 'undefined' && App.station ? App.station() : null;
+      if (!st || !st.serialize || !st.rooms) throw new Error('the station is not ready yet');
+      if (typeof StationBuilder === 'undefined' || !StationBuilder.mapOf || typeof WorldModel === 'undefined') throw new Error('the station builder is not loaded on this page');
+      const r = StationBuilder.mapOf(st.serialize(), { WorldModel, Pipeline: typeof Pipeline !== 'undefined' ? Pipeline : null });
+      if (!r || !r.ok) throw new Error((r && r.error) || 'the map could not be read');
+      return r.map;
+    },
+    'station.plan_build': (a) => {
+      const { st, env } = builderReady();
+      const p = park(StationBuilder.planBuild(st.serialize(), (a && a.request) || {}, env));
+      return { planId: p.planId, summary: p.plan.summary, rooms: p.plan.rooms, hallways: p.plan.hallways, lines: p.plan.lines, steps: p.plan.steps, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
+    },
     // the one cosmetic change: a room's floor, material or name
     'station.plan_restyle': (a) => {
       const { st, env } = builderReady();
@@ -445,7 +461,9 @@ const StationCommands = (() => {
         throw new Error(r.error);
       }
       builderPlans.delete(planId);
-      const what = r.line ? r.line.name + ' in ' + r.where : r.kind === 'restyle' ? 'the restyle of ' + r.where : r.kind === 'swap' ? (r.preset ? r.preset.name : 'the preset') + ' (RESTORE PREVIOUS in Build → Presets brings your old station back)' : (r.rooms || []).map(x => x.name).join(', ');
+      const hallsBuilt = (r.hallways || []).length, roomNames = (r.rooms || []).map(x => x.name).join(', ');
+      const what = r.line ? r.line.name + ' in ' + r.where : r.kind === 'restyle' ? 'the restyle of ' + r.where : r.kind === 'swap' ? (r.preset ? r.preset.name : 'the preset') + ' (RESTORE PREVIOUS in Build → Presets brings your old station back)'
+        : roomNames + (hallsBuilt ? (roomNames ? ' and ' : '') + (hallsBuilt > 1 ? hallsBuilt + ' hallways' : 'a hallway') : '');
       const lead = (env.crew || []).find(x => x.id === env.heroId);
       try { if (typeof StationUI !== 'undefined' && StationUI.notify) StationUI.notify('Built by ' + (lead ? lead.name : 'your lead') + ': ' + what + ' · open BUILD and press UNDO to remove it', 'good'); } catch (_) {}
       // the camera shows what was built: the one room, or the whole station when a preset added several
@@ -456,7 +474,7 @@ const StationCommands = (() => {
         + ((r.recruited || []).length ? '; the recruited agents stay on the crew (DELETE AGENT in a Dossier removes one)' : '') + '.';
       return Object.assign({ built: true, undo }, r.line
         ? { summary: r.summary, line: r.line, where: r.where, steps: r.steps, lineId: r.lineKey, ready: r.ready, blocking: r.blocking, recruited: r.recruited }
-        : { summary: r.summary, rooms: r.rooms, lines: r.lines });
+        : { summary: r.summary, rooms: r.rooms, hallways: r.hallways, lines: r.lines, recruited: r.recruited });
     },
 
     'station.agent_config': (args) => {
