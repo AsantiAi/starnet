@@ -161,3 +161,5 @@ test/workflow-project.e2e.test.js
 test/workflow-project-multibay.e2e.test.js
 test/routing.linestats.e2e.test.js
 test/user-study-loop.http.test.js
+test/remote.e2e.test.js
+test/remote.relay.e2e.test.js

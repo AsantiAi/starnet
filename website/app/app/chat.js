@@ -3115,6 +3115,28 @@ const Chat = (() => {
       mk('Deny', 'deny', 'deny', '✕ denied', true);
     }
     r.body.appendChild(btns);
+    // STARNET REMOTE: a paired phone can answer this same prompt. The sidecar then puts permission.response on
+    // this run's own stream (harness re-emits it on U.bus). Settle the card to what actually happened, so the
+    // desk never keeps live buttons on a question that was already answered elsewhere. The desk's own answer
+    // also emits permission.response, but by then `decided` is set and this listener just unsubscribes.
+    if (typeof U !== 'undefined' && U.bus && U.bus.on && U.bus.off) {
+      const onElsewhere = (resp) => {
+        if (!resp || resp.promptId !== p.promptId) return;
+        U.bus.off('permission.response', onElsewhere);
+        if (decided) return;
+        decided = true;
+        const denied = resp.decision === 'deny';
+        if (ws && typeof Channels !== 'undefined') Channels.clearPending(ws.id, Date.now());
+        if (isActiveWs(ws)) renderPresence();
+        btns.remove();
+        const tag = document.createElement('span');
+        tag.className = 'consent-result' + (denied ? ' err' : '');
+        tag.textContent = denied ? '✕ denied from your phone' : (resp.decision === 'session' ? '✓ approved for this session from your phone' : '✓ approved once from your phone');
+        r.body.appendChild(tag);
+        syncStatus();
+      };
+      U.bus.on('permission.response', onElsewhere);
+    }
     // a blocking, run-pausing prompt: make it keyboard-operable. Esc on the focused CONTAINER = Deny (the row,
     // not a button — so a reflexive Enter never lands on Approve and greenlights a write the user didn't read).
     r.d.tabIndex = -1;
