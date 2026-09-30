@@ -258,3 +258,19 @@ input[type=search]::-webkit-search-cancel-button { display: none; }
 /* the notifications card (Settings, and once under the station picture) */
 .push-card .push-h { font-size: 19px; letter-spacing: 1px; color: var(--ph-bright); text-transform: uppercase; }
 .btn.quiet { border-color: transparent; background: transparent; box-shadow: none; }
+
+/* the live station: the room is a still, the crew are drawn on a canvas on top */
+.hero-frame canvas { display: block; width: 100%; height: 100%; touch-action: manipulation; }
+.hero.stale .hero-frame canvas { filter: saturate(.7) brightness(.88); }
+#viewer .viewer-stage { position: absolute; inset: 0; transform: none; width: auto; height: auto; }
+#viewer .viewer-stage canvas { display: block; width: 100%; height: 100%; }
+
+/* ACTIVITY */
+.act { display: flex; flex-direction: column; }
+.act .row .t span.why.done { opacity: .75; }
+.act .row .t span.why.failed { color: var(--bad); opacity: 1; }
+.act .row .t span.why.stopped { opacity: .5; }
+.act-files { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 8px 8px 55px; }
+.file-chip { font-size: 15px; letter-spacing: .4px; color: var(--ph-bright); padding: 4px 9px; border: 1px solid var(--gd-edge); border-radius: 4px;
+  background: rgba(var(--ph-rgb), .04); box-shadow: inset 0 1px 0 var(--gd-light); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-chip:active { background: var(--gd-hover); border-color: var(--ph-dim); }

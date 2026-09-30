@@ -20,10 +20,13 @@
 const RemoteView = (() => {
   const IDLE_MS = 60000;      // Remote is off: look again this often
   const WATCH_MS = 6000;      // Remote is on, nobody looking
-  const LIVE_MS = 3000;       // a phone is looking: redraw this often
+  const LIVE_MS = 8000;       // a phone is looking: redraw the room this often (the crew move on their own stream)
+  const CREW_MS = 200;        // a phone is looking: where the crew are, this often
+  const CREW_KEEPALIVE_MS = 2000;
   const SLOWEST_MS = 20000;   // …and never slower than this, however heavy the station
   const MAX_PX = 1600;        // longest side of the still
   let timer = null, busy = false, sentOnce = false, started = false;
+  let stillScale = 0, crewTimer = null, crewUntil = 0, crewBusy = false, lastCrew = '', lastCrewAt = 0;
 
   const hasWorld = () => typeof World !== 'undefined' && World && typeof World.renderStill === 'function';
 
@@ -57,15 +60,48 @@ const RemoteView = (() => {
   async function draw() {
     if (!hasWorld()) return false;
     let still = null;
-    try { still = World.renderStill(MAX_PX); } catch (_) { still = null; }
+    // the room WITHOUT the crew: the phone draws them itself from the crew stream, so they move smoothly
+    try { still = World.renderStill(MAX_PX, { noBodies: true }); } catch (_) { still = null; }
     if (!still || !still.canvas) return false;
     const enc = await api._internals.encode(still.canvas);
     if (!enc) return false;
     try {
       const r = await fetch('/api/remote/view', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mime: enc.mime, w: still.width, h: still.height, bodies: still.bodies || [], data: enc.data }) });
+        body: JSON.stringify({ mime: enc.mime, w: still.width, h: still.height, bodies: still.bodies || [], crewFree: true, data: enc.data }) });
+      if (r && r.ok) stillScale = Number(still.scale) || 0;
       return !!(r && r.ok);
     } catch (_) { return false; }
+  }
+
+  /* THE CREW STREAM: while a phone is looking, where each agent is and which drawing of theirs the stage is
+     showing (World.crewFrames), in the still's pixels. A few hundred bytes, five times a second. */
+  function crewNow() {
+    if (!hasWorld() || typeof World.crewFrames !== 'function' || !stillScale) return null;
+    const k = stillScale, r1 = (v) => Math.round(v * k * 10) / 10;
+    let list = [];
+    try { list = World.crewFrames() || []; } catch (_) { return null; }
+    return list.map(b => ({ agentId: b.agentId, key: b.key, idx: b.idx, x: r1(b.x), y: r1(b.y), w: r1(b.w), h: r1(b.h), walking: !!b.walking, working: !!b.working }));
+  }
+  async function sendCrew() {
+    if (crewBusy) return;
+    const bodies = crewNow();
+    if (!bodies) return;
+    const json = JSON.stringify(bodies), now = Date.now();
+    if (json === lastCrew && now - lastCrewAt < CREW_KEEPALIVE_MS) return;   // nothing moved: say so only now and then
+    crewBusy = true;
+    try {
+      const r = await fetch('/api/remote/view/crew', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bodies }) });
+      if (r && r.ok) { lastCrew = json; lastCrewAt = now; }
+    } catch (_) { /* the next beat tries again */ }
+    finally { crewBusy = false; }
+  }
+  function crewWhileWanted() {
+    crewUntil = Date.now() + LIVE_MS + 4000;
+    if (crewTimer) return;
+    crewTimer = setInterval(() => {
+      if (Date.now() > crewUntil) { clearInterval(crewTimer); crewTimer = null; return; }
+      sendCrew();
+    }, CREW_MS);
   }
 
   // one look at the station's answer, maybe one picture; returns how long to wait before the next look
@@ -74,6 +110,7 @@ const RemoteView = (() => {
     if (!s || !s.enabled) { sentOnce = false; return IDLE_MS; }
     let cost = 0;
     if (s.want || !sentOnce || !s.at) { const t0 = performance.now(); if (await draw()) sentOnce = true; cost = performance.now() - t0; }
+    if (s.want) crewWhileWanted();
     // a big station takes longer to draw: never spend more than about a fifteenth of the desk's time on the phone's picture
     return s.want ? Math.max(LIVE_MS, Math.min(SLOWEST_MS, Math.round(cost * 15))) : WATCH_MS;
   }
@@ -94,9 +131,9 @@ const RemoteView = (() => {
     started = true;
     schedule(4000);   // after the floor is up and the first frames have drawn
   }
-  function reset() { started = false; sentOnce = false; if (timer) { clearTimeout(timer); timer = null; } }
+  function reset() { started = false; sentOnce = false; stillScale = 0; if (timer) { clearTimeout(timer); timer = null; } if (crewTimer) { clearInterval(crewTimer); crewTimer = null; } }
 
-  const api = { init, reset, _internals: { step, draw, encode, IDLE_MS, WATCH_MS, LIVE_MS } };
+  const api = { init, reset, _internals: { step, draw, encode, crewNow, sendCrew, IDLE_MS, WATCH_MS, LIVE_MS, CREW_MS } };
   return api;
 })();
 
