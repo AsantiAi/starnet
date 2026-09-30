@@ -67,24 +67,26 @@ html body.hud-mode #hud-activity .ph-result:empty { display: none; }
    HUD at widget size; the rows under it are crew-row glass: lamp (the station .dot), name, run clock,
    step. The row being watched takes the selected glass state; waiting on the Commander, the gold edge. */
 #hud-widget, .hud-wview { display: none; }
+/* the picture takes every pixel the window gives it; the rows keep their own height under it. The window
+   opens at the widget's default size and, once the Commander drags it, stays the size they chose. */
 html body.hud-mode.hud-view-widget #screen-game.active {
-  grid-template-columns: 300px;
-  grid-template-rows: 190px auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(120px, 1fr) auto;
   grid-template-areas: "view" "hud";
-  align-content: start; justify-content: start;
+  align-content: stretch; justify-content: stretch;
   gap: 4px;
 }
 html body.hud-mode.hud-view-widget #chat-panel { display: none !important; }
 html body.hud-mode.hud-view-widget #screen-game.active > #stage-wrap {
   display: block !important; grid-area: view; position: relative;
-  width: 300px; height: 190px; min-width: 0; min-height: 0;
+  width: auto; height: auto; min-width: 0; min-height: 0;
 }
 /* only the world and its camera frame: the station's own buttons and toasts stay with the station */
 html body.hud-mode.hud-view-widget #stage-wrap > :not(#stage):not(.cam-hud) { display: none !important; }
 html body.hud-mode.hud-view-widget #stage-wrap .cam-cine { display: none !important; }
 html body.hud-mode.hud-view-widget .hud-wview {
   display: block; grid-area: view; position: relative; z-index: 5;
-  width: 300px; height: 190px; margin: 0; padding: 0;
+  width: auto; height: auto; margin: 0; padding: 0;
   background: transparent; border: 0; border-radius: 5px; box-shadow: none; cursor: pointer;
 }
 html body.hud-mode.hud-view-widget .hud-wview:focus-visible { outline: 1px solid var(--ph); outline-offset: -2px; }
@@ -92,7 +94,7 @@ html body.hud-mode.hud-view-widget.hud-asking #stage-wrap { outline: 1px solid v
 html body.hud-mode.hud-view-widget #hud-widget {
   grid-area: hud;
   display: flex; flex-direction: column; gap: 2px;
-  width: 300px; box-sizing: border-box; padding: 4px;
+  width: auto; min-width: 0; box-sizing: border-box; padding: 4px;
   background: var(--gd-face, var(--panel));
   border: 1px solid var(--gd-edge, var(--ph-dim)); border-radius: 5px;
   box-shadow: var(--gd-shadow, none);

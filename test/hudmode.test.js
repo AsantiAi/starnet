@@ -178,12 +178,12 @@ A.eq([H.fmtAgo(10_000), H.fmtAgo(5 * 60_000), H.fmtAgo(2 * 3_600_000)], ['just n
 {
   const mem = new Map();
   const store = { getItem: k => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, String(v)) };
-  A.eq(H.readPrefs(store), { pinned: true, rect: null }, 'defaults: pinned, no remembered rect');
-  H.writePrefs(store, { pinned: false, rect: { x: 10, y: 20, w: 400, h: 640 } });
-  A.eq(H.readPrefs(store), { pinned: false, rect: { x: 10, y: 20, w: 400, h: 640 } }, 'prefs round-trip');
+  A.eq(H.readPrefs(store), { pinned: true, rect: null, widget: null }, 'defaults: pinned, no remembered rect or widget size');
+  H.writePrefs(store, { pinned: false, rect: { x: 10, y: 20, w: 400, h: 640 }, widget: { w: 520, h: 410 } });
+  A.eq(H.readPrefs(store), { pinned: false, rect: { x: 10, y: 20, w: 400, h: 640 }, widget: { w: 520, h: 410 } }, 'prefs round-trip, the widget size the Commander chose included');
   mem.set('starnet.hud', '{not json');
-  A.eq(H.readPrefs(store), { pinned: true, rect: null }, 'corrupt prefs read as defaults');
-  A.eq(H.readPrefs({ getItem() { throw new Error('blocked'); } }), { pinned: true, rect: null }, 'blocked storage reads as defaults');
+  A.eq(H.readPrefs(store), { pinned: true, rect: null, widget: null }, 'corrupt prefs read as defaults');
+  A.eq(H.readPrefs({ getItem() { throw new Error('blocked'); } }), { pinned: true, rect: null, widget: null }, 'blocked storage reads as defaults');
 }
 
 // ---- page wiring ----
@@ -212,12 +212,15 @@ A.eq([H.fmtAgo(10_000), H.fmtAgo(5 * 60_000), H.fmtAgo(2 * 3_600_000)], ['just n
     'every card can be steered and stopped through the routes the station already has');
   A.ok(has(js, 'App.openWorkstream(mine[0].id)', 'Workstreams.get(sid)'), 'OPEN CONVERSATION goes to the conversation that owns the work, else the agent\'s own (never rebinds the blank thread on screen)');
   A.ok(has(js, "S.view = 'widget';", "classList.toggle('hud-view-widget', small)", "setView('activity')"), 'the HUD opens SMALL on the widget, and a click opens ACTIVITY');
-  A.ok(has(js, 'World.lockBody(id, WIDGET_ZOOM, { seatAt: WIDGET_SEAT_AT })', 'if (small) worldStart(true); else { worldStop();', 'World.setFrameCap(capped ? WIDGET_FRAME_MS : 0)') && !js.includes('SPRITES.drawBody'),
+  A.ok(has(js, 'World.lockBody(id, fr.zoom, { seatAt: fr.seatAt })', 'if (small) worldStart(true); else { worldStop();', 'World.setFrameCap(capped ? WIDGET_FRAME_MS : 0)') && !js.includes('SPRITES.drawBody'),
     'the widget is the REAL station (the world renderer, its camera following the agent), never a staged scene; the world runs only while the widget shows it');
   A.ok(css.includes('#screen-game.active > #stage-wrap {') && css.includes('#stage-wrap .cam-hud { display: none !important; }'), 'the widget shows the world alone: no camera frame, no station controls');
   A.ok(css.includes('body:not(.hud-mode) #chat-panel .hud-ctl { display: none !important; }'), 'back in the full station the COMMS header shows none of the HUD controls');
+  A.ok(css.includes('grid-template-rows: minmax(120px, 1fr) auto;') && !/#stage-wrap \{[^}]*width: 300px/.test(css), 'the widget picture fills its window (no fixed 300x190 box)');
+  A.ok(js.includes("root.addEventListener('resize', onWindowResize);") && js.includes('S.widgetUser = { w, h }') && js.includes('S.widgetUser = prefs.widget || null;') && js.includes('|| S.widgetUser) return;'),
+    'a size the Commander drags the widget to is kept (no auto-fit fights it) and remembered');
   A.ok(js.includes('World.setOverlays(!capped)'), 'the widget turns the in-world readouts off, and the station gets them back');
-  A.ok(js.includes('World.lockBody(id, WIDGET_ZOOM, { seatAt: WIDGET_SEAT_AT })') && js.includes('World.lockBody(S.followId, S.stationZoom)'), 'the widget frames its agent closer (a seated one with its desk in view) and gives the station its zoom back');
+  A.ok(js.includes('World.lockBody(id, fr.zoom, { seatAt: fr.seatAt })') && js.includes('function widgetFraming()') && js.includes('World.lockBody(S.followId, S.stationZoom)'), 'the widget frames its agent closer (a seated one with its desk in view) and gives the station its zoom back');
   const w2 = read('frontend/app/world.js');
   A.ok(w2.includes('const fy = (camLock.seatAt && (lb.seated || lb.sitting)) ? camLock.seatAt : 0.56;') && w2.includes('function lockBody(id, zoom, opts)'), 'World.lockBody takes an optional seated framing (omitted = 0.56 for every body)');
   A.ok(read('frontend/app/world.js').includes('sc: clampz(zoom > 0 ? zoom : Math.max(scale, 3), MINZ, MAXZ)'), 'World.lockBody takes an optional zoom (omitted = the station rule)');
