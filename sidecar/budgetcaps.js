@@ -29,8 +29,38 @@
      2026-09-17, amending the older "quotas default off" decision for this one runaway-spend case. */
   const DEFAULT_PER_DAY_USD = 25;
   const SHIPPED_DEFAULTS = Object.freeze({ perRun: 0, perAgent: 0, perDay: DEFAULT_PER_DAY_USD, global: 0 });
+  /* MANAGED PER-RUN DEFAULT (issue #53, 2026-09-30). A StarNet-credit run must reserve a FINITE amount before
+     its first model call. With no per-run cap in force, admission used to reserve the ENTIRE wallet — and the
+     reservation is the loop's per-run ceiling — so one "simple" prompt on a busy/expensive model was allowed to
+     spend every dollar the user had just added (reporter: $10 top-up gone on a four-sentence question).
+     Now a managed run with no positive per-run cap reserves at most this much. Why $2: the smallest top-up is
+     $10, so one prompt can take at most a fifth of it; a simple question costs cents and a real multi-step task
+     on a mid-tier model rarely passes a dollar; it is well under the $25/day rail so the day rail stays the
+     backstop, not the first thing a user hits. It is a DEFAULT, not a wall: any per-run cap the user saves in
+     SETTINGS → BUDGET (higher or lower) replaces it, the stop says which cap it hit and opens BUDGET, and
+     SKYNET_BUDGET_MANAGED_PER_RUN retunes it (0 = the old wallet-is-the-ceiling behaviour). BYOK and
+     subscription runs never see it — they are not spending StarNet credit. */
+  const DEFAULT_MANAGED_PER_RUN_USD = 2;
   function shippedDefaults() { return Object.assign({}, SHIPPED_DEFAULTS); }
   function isNum(v) { return typeof v === 'number' && isFinite(v); }
+
+  /* The amount a MANAGED (StarNet-credit) run reserves — which is also its per-run spend ceiling.
+       capUsd      the cap already in force for this run: an explicit caller cap (a delegated worker's) or the
+                   user's positive per-run cap. Honoured verbatim, as before — admission refuses it if the
+                   balance can't cover it (the low-balance warning fires at exactly that threshold).
+       balanceUsd  the managed wallet as last reported.
+       defaultUsd  the managed per-run default (DEFAULT_MANAGED_PER_RUN_USD unless an operator retuned it);
+                   0/absent = no default, i.e. the wallet itself is the ceiling (pre-#53 behaviour).
+     With no cap in force the run reserves min(default, balance): a wallet smaller than the default still runs
+     (it is never refused for a cap the user never chose). Returns 0 for an unknown/empty wallet so the caller
+     fails closed exactly as before. Pure — no IO. */
+  function managedRunCapUsd(capUsd, balanceUsd, defaultUsd) {
+    if (isNum(capUsd) && capUsd > 0) return capUsd;
+    const bal = Number(balanceUsd);
+    if (!(isFinite(bal) && bal > 0)) return 0;
+    const d = Number(defaultUsd);
+    return (isFinite(d) && d > 0) ? Math.min(d, bal) : bal;
+  }
 
   // a stored override is only honoured if it's a finite number >= 0 (0 = explicit "no cap"). Anything else is junk
   // and treated as "not set" (fall back to env) — a corrupt persisted value can never grant unintended headroom.
@@ -79,5 +109,5 @@
     return { ok: true, overrides: next };
   }
 
-  return { KEYS, CAP_MAX, DEFAULT_PER_DAY_USD, shippedDefaults, resolveCaps, validateOverridesPatch, cleanOverrides };
+  return { KEYS, CAP_MAX, DEFAULT_PER_DAY_USD, DEFAULT_MANAGED_PER_RUN_USD, shippedDefaults, resolveCaps, validateOverridesPatch, cleanOverrides, managedRunCapUsd };
 });

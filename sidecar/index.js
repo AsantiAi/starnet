@@ -706,6 +706,10 @@ const BUDGET_CAPS = {
   perDay: num(ENV('BUDGET_PER_DAY'), BUDGET_SHIPPED.perDay),         // $25/day soft rail: run ends 'budget'/'day', one-click RESUME in the Budget panel
   global: num(ENV('BUDGET_GLOBAL'), BUDGET_SHIPPED.global)
 };
+// Issue #53: what a StarNet-credit run reserves (= its per-run ceiling) when no positive per-run cap is in force.
+// budgetcaps.DEFAULT_MANAGED_PER_RUN_USD explains the number; SKYNET_BUDGET_MANAGED_PER_RUN retunes it and 0
+// restores the old "the whole wallet is the ceiling" behaviour. A saved/env per-run cap > 0 always wins.
+const MANAGED_PER_RUN_DEFAULT = num(ENV('BUDGET_MANAGED_PER_RUN'), budgetCaps.DEFAULT_MANAGED_PER_RUN_USD);
 // Optional multi-agent fan-out ceiling. 0 = unlimited (the product default). See concurrency.js.
 const MAX_CONCURRENT_AGENTS = resolveKnob('MAX_CONCURRENT_AGENTS', 'maxConcurrentAgents', 0);   // P1-9: env > saved > default
 // Optional per-worker USD ceiling for delegated sub-runs. 0 = ungoverned.
@@ -11726,6 +11730,9 @@ function handleBudgetStatus(req, res) {
     saved: Object.assign({}, budgetOverrides),        // only the keys the user explicitly saved
     envDefaults: { perRun: BUDGET_CAPS.perRun, perAgent: BUDGET_CAPS.perAgent, perDay: BUDGET_CAPS.perDay, global: BUDGET_CAPS.global },
     perRun: effectiveCaps.perRun,                     // back-compat: pre-existing flat field kept
+    // Issue #53: the default a StarNet-credit run reserves (and stops at) while PER RUN is 0. Null on a station with
+    // no managed credits wired — nothing to govern, so the Budget panel says nothing about it.
+    managedRunDefaultUsd: (credits.configured() && MANAGED_PER_RUN_DEFAULT > 0) ? MANAGED_PER_RUN_DEFAULT : null,
     spentToday: known ? ledger.usdForDay(now) : null,
     lifetime: known ? ledger.totalUsd() : null,
     totalUsd: known ? ledger.totalUsd() : null, runs: known ? ledger.count() : null
@@ -11777,7 +11784,8 @@ async function handleCredits(req, res) {
     balanceStatus: snap.authStatus === 'valid' && typeof snap.observedBalanceUsd === 'number'
       ? (snap.observedBalanceUsd > 0 ? 'funded' : 'zero') : 'unavailable',
     purchaseUrl: snap.purchaseUrl,           // external link the STORE opens; this app renders no payment form
-    perRun: effectiveCaps.perRun,            // the reservation size a run will hold
+    perRun: effectiveCaps.perRun,            // the user's per-run cap (0 = none chosen); > 0 is the reservation a run holds
+    managedRunDefaultUsd: MANAGED_PER_RUN_DEFAULT > 0 ? MANAGED_PER_RUN_DEFAULT : null,   // #53: reserved (clamped to the balance) while perRun is 0
     // The plan, exactly as the backend reports it: {tier, status, grantUsd, currentPeriodEnd, graceUntil} or
     // null. NULL IS THE POINT — an operator-provisioned station or a backend that predates this field has no
     // subscription, and the STORE must then say nothing about one rather than invent a tier.
@@ -17245,14 +17253,15 @@ async function runOnceCore(o) {
   const managedRun = credits.configured() && !providerUnmetered && (providerId === 'starnet' || !!CREDITS_URL);
   if (managedRun) {
     await credits.refresh().catch(swallow('credits.refresh'));   // adapter owns the active bearer+account identity
-    // A managed reservation needs a FINITE cap to hold. With no opt-in cap the wallet itself is the run's
-    // only ceiling: reserve the full available balance — the least-limiting finite number there is — and
-    // settle refunds whatever the run didn't use. The reservation is also the loop's maxCostUsd (below),
-    // so a run can never overshoot what it reserved (that would fail the settle as over-cap).
+    // A managed reservation needs a FINITE cap to hold, and the reservation is also the loop's maxCostUsd
+    // (below). With no opt-in cap this used to reserve the WHOLE wallet, so one prompt could spend all of it
+    // (issue #53). Now it reserves the managed per-run default, clamped to the balance (a wallet smaller than
+    // the default still runs); settle refunds whatever the run didn't use. A user's positive per-run cap was
+    // already resolved into runCapUsd above and is honoured verbatim (budgetCaps.managedRunCapUsd).
     if (!(runCapUsd > 0 && isFinite(runCapUsd))) {
       const snap = credits.snapshot();
       const avail = Number(snap && snap.balanceUsd);
-      runCapUsd = (isFinite(avail) && avail > 0) ? avail : 0;
+      runCapUsd = budgetCaps.managedRunCapUsd(0, avail, MANAGED_PER_RUN_DEFAULT);
       if (!(runCapUsd > 0)) {
         // fail closed — never spend against an unknown/empty managed balance (same surface as a beginRun refusal).
         const exhausted = isFinite(avail);   // a known $0 balance vs. a balance the service never reported
