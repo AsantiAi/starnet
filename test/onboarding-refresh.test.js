@@ -3,8 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync(require('node:path').join(__dirname, '../frontend/app/onboarding.js'), 'utf8');
-async function quickRun(answers, stopAt, wake = false, mind = null, receipts = []) {
-  const timers = new Map(), prompts = [], stages = [], writes = [], postures = [], beliefs = [];
+async function quickRun(answers, stopAt, wake = false, mind = null, receipts = [], extra = {}) {
+  const timers = new Map(), prompts = [], stages = [], writes = [], postures = [], beliefs = [], said = [];
   let timerId = 0, done = 0, taught = 0, context;
   const storage = new Map(), calls = [];
   context = vm.createContext({
@@ -19,7 +19,7 @@ async function quickRun(answers, stopAt, wake = false, mind = null, receipts = [
     Dialogue: {
       open() {}, close() {}, isOpen() { return false; },
       setStage(title, detail) { stages.push([title, detail]); },
-      say() { return Promise.resolve(); },
+      say(segs) { said.push((segs || []).map(x => x && x.text).join(' ')); return Promise.resolve(); },
       node(cfg) {
         prompts.push(cfg);
         if (prompts.length === stopAt) vm.runInContext('Onboarding.stop()', context);
@@ -28,7 +28,8 @@ async function quickRun(answers, stopAt, wake = false, mind = null, receipts = [
     },
     DossierStore: { upsert(...args) { beliefs.push(args); } },
     AutonomyStore: { async applyPreset(value) { postures.push(value); return receipts.shift() || { ok: true }; } },
-    opts: { name:'NOVA', wake, docs:{}, commit(patch) { writes.push(patch); }, done() { done++; }, taught() { taught++; } }
+    opts: { name:'NOVA', wake, docs:{}, commit(patch) { writes.push(patch); }, done() { done++; }, taught() { taught++; } },
+    ...extra
   });
   vm.runInContext(source, context);
   vm.runInContext('Onboarding.start(opts)', context);
@@ -39,7 +40,7 @@ async function quickRun(answers, stopAt, wake = false, mind = null, receipts = [
     if (taught || stopAt && prompts.length >= stopAt) break;
   }
   vm.runInContext('Onboarding.stop()', context);
-  return { prompts, stages, writes, postures, beliefs, done, taught, storage, calls };
+  return { prompts, stages, writes, postures, beliefs, done, taught, storage, calls, said };
 }
 (async () => {
   const result = await quickRun([{value:'quick'}, {value:'Help me prepare weekly client updates.'}, {value:'wait'}]);
@@ -98,5 +99,44 @@ async function quickRun(answers, stopAt, wake = false, mind = null, receipts = [
     d => d.includes('THE TUESDAY') ? {text:'ACK: noted.\nASK: question ' + (++nextQuestion) + '?'} : mind(d));
   assert.equal(deep.prompts.filter(p => /^question \d/.test(p.lines[0].text)).length, 3, 'deep path cannot exceed three follow-ups');
   assert(deep.calls.some(c => c.includes('A playable prototype.')), 'final answer reaches the synthesis');
-  console.log('onboarding-refresh: OK (quick setup, exact answers, posture, deferred profile and cancellation)');
+  /* USER-STUDY LOOP — the confirmed mission is drafted into steps while the cadence beat is asked, then offered. */
+  const pathRun = async (pathAnswer, enabled, readAnswers) => {
+    const confirmed = [], declined = [], proposedFor = [];
+    const mission = 'Help choose and build useful features.';
+    // a REAL-shaped dossier: upsert appends + trims + caps at 280, and an OLDER identical belief already exists
+    const goals = [{ id: 'cd_old', text: mission }];
+    const extra = {
+      Goals: require('../frontend/app/goals.js'),
+      DossierStore: { upsert(dim, b) { if (dim === 'goals') goals.push({ id: 'cd_' + (goals.length + 1), text: String(b.text).trim().slice(0, 280) }); }, beliefs: dim => dim === 'goals' ? goals.slice() : [] },
+      AutonomyStore: { async applyPreset() { return { ok: true }; }, summary: () => ({ enabled }) },
+      GoalStore: {
+        proposeDecomposition: async b => { proposedFor.push(b && b.id); return { belief: b, texts: ['Shortlist three features', 'Prototype the best one', 'Ship it to five users'] }; },
+        confirm: (b, texts) => { confirmed.push([b.id, texts]); return { id: 'g1' }; },
+        declineDecomposition: b => declined.push(b.id)
+      }
+    };
+    const r = await quickRun([{value:'loose'}, {value:'I want help deciding what to build.'}, {value:'My station onboarding.'}].concat(readAnswers || [{value:'yes'}], [{value:'suggest'}, pathAnswer]), null, false, mind, [], extra);
+    return Object.assign(r, { confirmed, declined, proposedFor, goals });
+  };
+  const yes = await pathRun({ value: 'confirm' }, true);
+  assert.deepEqual(yes.proposedFor, [yes.goals[yes.goals.length - 1].id], 'the belief this meeting just wrote (not an older identical one) is drafted into steps');
+  assert.notEqual(yes.proposedFor[0], 'cd_old');
+  const pathPrompt = yes.prompts.find(p => p.customLabel === '✎ edit the steps');
+  assert.ok(pathPrompt, 'the path is offered in the meeting with an edit option');
+  assert.ok(yes.prompts.indexOf(pathPrompt) > yes.prompts.findIndex(p => (p.options || []).some(o => o.value === 'suggest')), 'the path comes after the cadence beat');
+  assert.deepEqual(yes.confirmed, [[yes.proposedFor[0], ['Shortlist three features', 'Prototype the best one', 'Ship it to five users']]], 'confirm persists the drafted path');
+  assert.ok(yes.said.some(t => /line up quests for the first step/.test(t)), 'at propose or above it says quests will be lined up');
+  assert.equal(yes.taught, 1, 'the meeting still hands off to the tutorial once');
+  const edited = await pathRun({ custom: true, value: 'Talk to users; Pick one feature; Ship it' }, false);
+  assert.deepEqual(edited.confirmed[0][1], ['Talk to users', 'Pick one feature', 'Ship it'], 'an edited path is what gets saved');
+  assert.ok(edited.said.some(t => /start the first step whenever you’re ready/.test(t)) && !edited.said.some(t => /line up quests/.test(t)), 'at wait it never promises quests it will not plan');
+  const no = await pathRun({ value: 'other', skip: true }, true);
+  assert.deepEqual([no.confirmed.length, no.declined], [0, [no.proposedFor[0]]], 'not now saves nothing and records the decline (re-offers only on change)');
+  const longMission = 'Build and launch a local-first newsletter platform for indie game developers ' + 'with weekly issues, reader surveys, and a sponsorship pipeline '.repeat(6);
+  const long = await pathRun({ value: 'confirm' }, true, [{ value: 'adjust' }, { value: longMission }]);
+  assert.ok(longMission.length > 280, 'precondition: the mission is longer than a belief can hold');
+  assert.equal(long.confirmed.length, 1, 'a mission longer than 280 chars (the dossier caps it) still gets its path offered and saved');
+  const noGoalStore = await quickRun([{value:'loose'}, {value:'I want help deciding what to build.'}, {value:'My station onboarding.'}, {value:'yes'}, {value:'wait'}], null, false, mind);
+  assert.ok(!noGoalStore.prompts.some(p => p.customLabel === '✎ edit the steps'), 'without a goal store the meeting is unchanged');
+  console.log('onboarding-refresh: OK (quick setup, exact answers, posture, deferred profile, cancellation, first path)');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -105,6 +105,9 @@ test/servicekeys.shell.e2e.test.js
 test/skills.gate.http.test.js
 test/skill-exchange.http.test.js
 test/skills.gate.prompt.e2e.test.js
+test/skills.learning.e2e.test.js
+test/skill-market.e2e.test.js
+test/skills.trust-origin.e2e.test.js
 test/roster-track.e2e.test.js
 test/chat-prompt-diet.e2e.test.js
 test/casual-response-safety.e2e.test.js
@@ -157,3 +160,6 @@ test/workflow-project.e2e.test.js
 test/workflow-project-multibay.e2e.test.js
 test/routing.linestats.e2e.test.js
 test/userprops.e2e.test.js
+test/user-study-loop.http.test.js
+test/remote.e2e.test.js
+test/remote.relay.e2e.test.js

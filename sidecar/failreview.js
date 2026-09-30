@@ -61,6 +61,14 @@
   const BLAME = /^(the\s+)?(user|commander|model|provider|agent)\s+(should\s+have|shouldn't\s+have|failed\s+to|was\s+(wrong|bad|at\s+fault)|didn'?t|is\s+to\s+blame)\b/i;
   const TRANSIENT = /\b(one[-\s]?off|momentary|temporar(?:y|ily)|transient|blip|glitch|fluke)\b/i;
   const RECURRENT = /\b(recurr?(?:ing|ent|ed)|repeated(?:ly)?|pattern|every\s+(time|attempt|retry)|each\s+(time|attempt|retry)|consistently|again)\b/i;
+  /* GATE-SKIP: a lesson that teaches the agent to route around a step the host REQUIRES. The first-hour walk
+     (2026-09-28) banked "treat a gating/setup tool as non-blocking and complete the deliverable anyway" and
+     "instead of blocking on an optional brief-gate" after a harness bug broke the brief tool — both are wrong
+     advice the next run would follow. The host still enforces the gate; the lesson only teaches a worse agent. */
+  const GATE_WORD = '(?:gate|gating|task\\s+brief|brief[-_ ]?(?:gate|proceed|ask|update)|approval|consent|permission)';
+  const GATE_SKIP = new RegExp('\\b(?:skip|bypass|ignore|route\\s+around|work\\s+around|circumvent|treat)\\b[^.;]{0,80}' + GATE_WORD
+    + '|' + GATE_WORD + '[^.;]{0,80}\\b(?:non[-\\s]?blocking|optional|not\\s+required|isn\'?t\\s+required|unnecessary)\\b'
+    + '|\\boptional\\b[^.;]{0,30}' + GATE_WORD, 'i');
 
   const SIM_STOP = new Set(('a an the of to in on for and or but is are was were be been it its this that with as at by from your you i we they').split(/\s+/));
   function floorTokens(s) {   // significant-word count for the floor (2-char tech names admitted, reflect parity)
@@ -75,6 +83,8 @@
     if (RESTATE.test(c)) return true;                       // a bare restatement of the failure teaches nothing
     if (BLAME.test(c)) return true;                         // never blame
     if (TRANSIENT.test(c) && !RECURRENT.test(c)) return true;   // one-off noise, no recovery pattern named
+    const gs = GATE_SKIP.exec(c);                           // never teach routing around a step the host requires —
+    if (gs && !/\b(?:don'?t|do\s+not|never|must\s+not|avoid)\s+$/i.test(c.slice(Math.max(0, gs.index - 24), gs.index))) return true;   // ("never skip the approval" is good advice)
     return false;
   }
 
@@ -147,7 +157,10 @@
       ' durable LESSONS worth remembering for future runs — one per line, each tagged LESSON:. A lesson names ' +
       'what failed, why, and what to do differently next time — concrete and reusable, never a restatement of ' +
       'the failure, never blame. Skip one-off transient noise (a single network blip) unless a recovery ' +
-      'pattern is visible across attempts. If nothing durable can be learned, reply NONE.\n\n' +
+      'pattern is visible across attempts. The Commander reads these lessons: write them in plain words about ' +
+      'the task, never internal tool names, schemas or error codes. Never advise skipping, bypassing or treating ' +
+      'as optional a step the station requires (the task brief, an approval, consent, a permission) — if such a ' +
+      'step kept failing, the lesson is how to satisfy it. If nothing durable can be learned, reply NONE.\n\n' +
       head.join('\n') + (body ? ('\n\nTRANSCRIPT TAIL:\n' + body) : '');
   }
 

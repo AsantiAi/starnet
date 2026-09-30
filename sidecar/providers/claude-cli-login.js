@@ -101,7 +101,7 @@ function makeClaudeCliLogin(opts) {
     if (flow === f) flow = null;
     if (st.loggedIn) return Object.assign({ status: 'connected' }, publicStatus(st));
     const why = tail(f.stderr) || tail(f.out);
-    return { status: 'error', error: 'Claude sign-in did not finish' + (why ? ' — ' + why : '') + '. Press SIGN IN WITH CLAUDE to try again.', code: 'login_failed' };
+    return { status: 'error', error: 'Claude sign-in did not finish' + (why ? ' — ' + why : '') + ' — sign in again to retry.', code: 'login_failed' };
   }
 
   async function poll(id) {

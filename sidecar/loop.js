@@ -959,6 +959,14 @@
     let dedupeAgainst = null;
     const continuationParts = [];
     const continuationPrompts = [];
+    /* TURN BREAK (first-hour walk 2026-09-28). The page resets its reply at every agent.tool_call — but HIDDEN tools
+       (the Task Brief's brief_ask/proceed/update) emit none, so a turn that followed one streamed straight onto the
+       previous turn's last line: prose glued onto a TASK_QUESTION marker, the marker parser swallowed it into an
+       option chip ("…fix the detailsI've done everything…"), and stripping that marker line would have deleted real
+       prose. A new turn that starts while this run's streamed text has had no visible reset leads its first emitted
+       delta with a paragraph break. Only the live stream changes — every turn's durable text is untouched — and a
+       length-continuation (which joins mid-sentence) never gets one. */
+    let spokeSinceReset = false, turnBreakPending = false;
 
     /* dedupeKeepFull distinguishes the two callers of the dedupe machinery. A LENGTH-CONTINUATION's previous
        partial is already in `messages`, so stripping the overlap from acc.text is correct — the parts join back
@@ -972,6 +980,7 @@
       if (!dedupeKeepFull) acc.text = novel.text;
       for (const delta of continuation.novelChunks(chunks, novel.removed)) {
         emit('agent.token', { agentId, runId, delta });
+        if (delta) spokeSinceReset = true;
       }
       dedupeAgainst = null;
       dedupeKeepFull = false;
@@ -1550,6 +1559,7 @@
       //     transient backend failure retries the SAME turn instead of killing the run. Bounded: at most one
       //     compaction plus one switch per fallback entry, so a degraded backend can't spin.
       const acc = { text: '', toolCalls: {}, reasoning: [] };
+      turnBreakPending = spokeSinceReset;   // see TURN BREAK: this turn's first visible delta starts a new paragraph
       let streamedTextChunks = [];
       let usage = null, fatal = null;
       let usageModel = model;   // the model that produced `usage` — a fallback swaps `model` before its `continue`
@@ -1600,7 +1610,12 @@
               // went silent for minutes and the liveness sweep (subagents.checkStalls) marked it stale.
               if (delta && dedupeAgainst == null) waiting.pause();
               acc.text += delta;
-              if (dedupeAgainst == null) emit('agent.token', { agentId, runId, delta });
+              if (dedupeAgainst == null) {
+                let shown = delta;
+                if (turnBreakPending && shown) { shown = '\n\n' + shown; turnBreakPending = false; }
+                if (shown) spokeSinceReset = true;
+                emit('agent.token', { agentId, runId, delta: shown });
+              }
               else streamedTextChunks.push(delta);
             }
             else if (ev.type === 'reasoning') { if (ev.block) acc.reasoning.push(ev.block); }
@@ -1896,6 +1911,7 @@
           messages.push(nudge);
           continuationPrompts.push(nudge);
           dedupeAgainst = continuationText;
+          spokeSinceReset = false;   // a length-continuation joins mid-sentence: no TURN BREAK before it
           continue;
         }
         collapseContinuation();
@@ -2135,6 +2151,8 @@
         return end('error');
       }
       let results;
+      // a VISIBLE tool call resets the page's reply (agent.tool_call) — only hidden-only turns need a TURN BREAK next
+      if (calls.some(c => (o.hiddenTools || []).indexOf(c.name) < 0)) spokeSinceReset = false;
       try {
         results = await executeCalls(calls, dispatch, capCtx, emit, { agentId, runId, clock, signal, hiddenTools: new Set(o.hiddenTools || []), parallelSafe: (typeof o.parallelSafe === 'function') ? o.parallelSafe : null, turnOutputMax: turnOutputMaxNow() });
         assertPaired(calls, results); // (7) HARD INVARIANT

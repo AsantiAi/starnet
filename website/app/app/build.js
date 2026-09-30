@@ -1259,6 +1259,19 @@ const Build = (() => {
       intro.className = 'refit-lineintro';
       intro.textContent = LINE_SENTENCE + ' Place single machines, or a whole line, then make it yours.';
       pal.appendChild(intro);
+      /* BUILD YOUR OWN (conveyor-links phase D): an INBOX, one step and an OUTBOX laid on clear floor in view, with its Workflow
+         panel open — where steps, branches, review loops and sorters are added, every change one UNDO */
+      if (typeof LineEdit !== 'undefined') {
+        const own = document.createElement('button'); own.type = 'button'; own.className = 'bb sm refit-ownline';
+        own.textContent = '▸ BUILD YOUR OWN LINE';
+        own.dataset.tip = 'an INBOX, one step and an OUTBOX, placed in view — then add steps, branches and review loops from its Workflow panel';
+        own.onclick = () => {
+          const r = lineEditRun('newLine', null, {});
+          if (r && r.ok) { sfx('chime'); flashTip(null, 'a new line: INBOX → a step → OUTBOX · UNDO removes it', true); openWorkflowPanel(r.focus); }
+          else { sfx('bad'); flashTip(null, (r && r.msg) || 'there is no clear floor for a new line here', false); }
+        };
+        pal.appendChild(own);
+      }
       /* START FROM INTENT (2026-09-28): the ready-made line with the SHAPE of the Commander's own goal leads the tab — their
          words quoted, so it is clear why — one click arms it (MAKE ROOM FOR IT when the deck is too small). */
       const goal = goalLine();
@@ -1269,6 +1282,7 @@ const Build = (() => {
         pal.appendChild(gh);
         const gg = document.createElement('div'); gg.className = 'refit-linegrid refit-goalgrid'; gg.setAttribute('aria-label', 'Suggested for your goal');
         const gb = makeLineTile(goal.bp); gg.appendChild(gb); setLineTileFit(gb, goal.bp);
+        if (tool === 'line' && goal.bp.id === lineType) gg.appendChild(linePrefsEl(goal.bp));
         pal.appendChild(gg);
       }
       pal.appendChild(machinePalette());
@@ -1278,9 +1292,10 @@ const Build = (() => {
       const grid = document.createElement('div'); grid.className = 'refit-linegrid';
       grid.setAttribute('aria-label', 'Line library');
       const groups = {};
-      for (const bp of blueprints()) { const k = LINE_GROUPS.some(g => g.id === bp.grp) ? bp.grp : 'flagship'; (groups[k] = groups[k] || []).push(bp); }
+      const lastWork = LINE_WORK_GROUPS[LINE_WORK_GROUPS.length - 1].id;
+      for (const bp of blueprints()) { const k = LINE_WORK_GROUPS.some(g => g.id === LINE_WORK[bp.id]) ? LINE_WORK[bp.id] : lastWork; (groups[k] = groups[k] || []).push(bp); }
       const ordered = [];
-      for (const g of LINE_GROUPS) {
+      for (const g of LINE_WORK_GROUPS) {
         if (!groups[g.id] || !groups[g.id].length) continue;
         ordered.push({ hd: g });
         for (const bp of groups[g.id]) ordered.push({ bp });
@@ -1298,6 +1313,7 @@ const Build = (() => {
         const b = makeLineTile(bp);
         grid.appendChild(b);
         setLineTileFit(b, bp);   // DECK-FIT HONESTY — and kept current as the floor changes (see setLineTileFit)
+        if (tool === 'line' && bp.id === lineType) grid.appendChild(linePrefsEl(bp));   // the armed card's settings, right under it
       }
       pal.appendChild(grid);
       const note = document.createElement('div');
@@ -1667,6 +1683,7 @@ const Build = (() => {
     second_opinion: 'two independent takes on the same job, shipped as one',
     ship_out: 'one agent, straight to the outbox — the minimal line',
     assembly_line: 'four agents deep — each stage builds on the last',
+    build_test: 'a builder makes it, a tester sends it back until it passes',
     code_foundry: 'code is built and review-looped; the rest takes a side lane',
     gauntlet: 'two takes, one synthesis, and a reviewer holding the door',
     crucible: 'two review gates in series — approved, then approved again',
@@ -1677,16 +1694,69 @@ const Build = (() => {
     load_balancer: 'jobs alternate between two desks; one door ships it all',
     fire_escape: 'a third lane on the gate — out-of-passes work drops to a fixer',
   };
-  /* the LIBRARY's sections — what a line is FOR, simplest family first. `id` matches the catalog's
-     `grp` field on each blueprint (worldmodel.js); the render falls an unknown grp into the last
-     section so a catalog entry can never vanish from the shelf. */
-  const LINE_GROUPS = [
-    { id: 'chain', label: 'THE BASICS', blurb: 'door to door — one desk, a budgeted desk, or a hand-off chain' },
-    { id: 'sort', label: 'SORTERS', blurb: 'the right work to the right desk, read from the job itself' },
-    { id: 'crew', label: 'CREWS', blurb: 'many agents on one stream — split the load, or run every take' },
-    { id: 'gate', label: 'QUALITY GATES', blurb: 'a reviewer holds the door — nothing ships unapproved' },
-    { id: 'flagship', label: 'FLAGSHIPS', blurb: 'the whole machine — sorters, crews and gates on one floor' },
+  /* PLAIN NAMES (2026-09-28): a card leads with what the line does in everyday words; the catalog's station name
+     (REVISION LOOP …) rides beside it as a small tag, so a Commander who knows the old names still finds them. */
+  const LINE_PLAIN = {
+    front_desk: 'One agent', allowance_desk: 'One agent, capped', ship_out: 'Straight to outbox', two_doors: 'Two doors, one agent',
+    revision_loop: 'Draft + review', crucible: 'Two review rounds', fire_escape: 'Review + a fixer',
+    build_test: 'Build + test', code_foundry: 'Build + review',
+    research_line: 'Research + write', swarm_synthesis: 'Three researchers', deep_dive: 'Deep dive + review', assembly_line: 'Four-step chain',
+    sorting_office: 'Sort by type', triage_desk: 'Three specialists', parallel_crew: 'Split across three', load_balancer: 'Take turns', mission_control: 'Full triage',
+    second_opinion: 'Second opinion', gauntlet: 'Two takes, reviewed',
+  };
+
+  /* THE SHELF BY KIND OF WORK (2026-09-28): the same kinds the station presets are for. A line with no entry here falls
+     into the last section, so a catalog entry can never vanish from the shelf. */
+  const LINE_WORK = {
+    front_desk: 'any', allowance_desk: 'any', ship_out: 'any', two_doors: 'any',
+    revision_loop: 'write', crucible: 'write', fire_escape: 'write',
+    build_test: 'code', code_foundry: 'code',
+    research_line: 'research', swarm_synthesis: 'research', deep_dive: 'research', assembly_line: 'research',
+    sorting_office: 'volume', triage_desk: 'volume', parallel_crew: 'volume', load_balancer: 'volume', mission_control: 'volume',
+    second_opinion: 'decide', gauntlet: 'decide',
+  };
+  const LINE_WORK_GROUPS = [
+    { id: 'any', label: 'ANY JOB', blurb: 'one agent takes the work door to door' },
+    { id: 'write', label: 'WRITING & CONTENT', blurb: 'a draft, and a reviewer who can send it back' },
+    { id: 'code', label: 'BUILDING SOFTWARE', blurb: 'a builder makes the change, and it is checked before it ships' },
+    { id: 'research', label: 'RESEARCH', blurb: 'dig up sources, then write it up' },
+    { id: 'volume', label: 'LOTS OF REQUESTS', blurb: 'sort the incoming work, or share it across agents' },
+    { id: 'decide', label: 'DECISIONS', blurb: 'more than one take before you decide' },
   ];
+  /* SET UP BEFORE YOU PLACE (2026-09-28): the armed card offers the line's daily spending cap (when it has an INBOX) and
+     its review tries (when it has a LOOP). Session-scoped per line; stampLine passes them INTO the stamp
+     (worldmodel.stampBlueprint opts), so one UNDO still removes the whole line. Defaults are the catalog's own. */
+  const LINE_CAPS = [[null, 'No cap'], [1, '$1'], [5, '$5'], [20, '$20']];
+  const linePrefs = {};
+  function linePrefsOf(bp) {
+    const intake = bp.props.find(p => p.t === 'intake'), loop = bp.props.find(p => p.t === 'loop');
+    const base = { cap: intake && intake.limits && intake.limits.maxUsdPerDay != null ? intake.limits.maxUsdPerDay : null, tries: loop ? (loop.maxIter || 3) : null };
+    return Object.assign(base, linePrefs[bp.id] || {});
+  }
+  function lineStampOpts(bp) {
+    const p = linePrefsOf(bp), o = {};
+    if (bp.props.some(x => x.t === 'intake')) o.limits = { maxUsdPerDay: p.cap };
+    if (p.tries != null) o.maxIter = p.tries;
+    return o;
+  }
+  function linePrefsEl(bp) {
+    const hasIn = bp.props.some(x => x.t === 'intake'), p = linePrefsOf(bp);
+    const el = document.createElement('div'); el.className = 'refit-lineprefs';
+    el.setAttribute('role', 'group'); el.setAttribute('aria-label', 'Set up ' + (LINE_PLAIN[bp.id] || bp.label) + ' before you place it');
+    const row = (label, opts, cur, key) => '<div class="refit-lineprefs-row"><span class="refit-lineprefs-k">' + label + '</span>'
+      + opts.map(([v, t]) => '<button type="button" class="bb sm" data-pref="' + key + '" data-val="' + (v == null ? '' : v) + '" aria-pressed="' + (v === cur) + '">' + esc(t) + '</button>').join('') + '</div>';
+    el.innerHTML = '<div class="refit-lineprefs-hd">SET UP BEFORE YOU PLACE</div>'
+      + (hasIn ? row('DAILY CAP', LINE_CAPS, p.cap, 'cap') : '')
+      + (p.tries != null ? row('REVIEW TRIES', [1, 2, 3, 4, 5].map(n => [n, String(n)]), p.tries, 'tries') : '')
+      + '<div class="refit-lineprefs-note">Then click the floor to place it. Who works each step comes next, in the panel.</div>';
+    el.querySelectorAll('[data-pref]').forEach(b => b.onclick = ev => {
+      ev.stopPropagation();
+      const v = b.dataset.val === '' ? null : +b.dataset.val;
+      linePrefs[bp.id] = Object.assign({}, linePrefs[bp.id] || {}, { [b.dataset.pref]: v });
+      el.replaceWith(linePrefsEl(bp)); sfx('click');
+    });
+    return el;
+  }
   /* schematic v2 — the card draws a MINIATURE of what will stamp, in the floor's own colour
      economy (hex families lifted from propsprites.js RAMP.steel/ACC and conveyor.js's belt bed)
      so the schematic teaches the real floor: the INBOX feeds amber, a BAY is a steel berth with
@@ -1826,6 +1896,37 @@ const Build = (() => {
   function clearLineFields() {
     for (const k of Object.keys(lineFields)) delete lineFields[k];
     for (const k of Object.keys(lineFitsMemo)) delete lineFitsMemo[k];
+    for (const k of Object.keys(lineLaidMemo)) delete lineLaidMemo[k];
+    lineLaidQueue.length = 0;
+  }
+  /* LAID OUT TO FIT (conveyor-links phase E): when a line's DRAWN tile map fits nowhere, the layout engine may still lay the
+     same line out on this floor — its tidy shape where a clear rectangle holds it, else anchored on its INBOX round what
+     stands here (LineEdit.canPlaceBlueprint). That answer is dearer than the drawn-shape scan, so a card asks it in the
+     background, one line at a time, and is re-said when it lands; it is cached until the floor changes, like lineFits. */
+  const lineLaidMemo = Object.create(null), lineLaidQueue = [];
+  let lineLaidT = 0;
+  const lineLaidFits = bpId => (bpId in lineLaidMemo) ? lineLaidMemo[bpId] : undefined;
+  function queueLineLaid(bpId) {
+    if (typeof LineEdit === 'undefined' || !LineEdit.canPlaceBlueprint || (bpId in lineLaidMemo) || lineLaidQueue.indexOf(bpId) >= 0) return;
+    lineLaidQueue.push(bpId);
+    if (!lineLaidT) lineLaidT = setTimeout(stepLineLaid, 30);
+  }
+  function stepLineLaid() {
+    lineLaidT = 0;
+    const id = lineLaidQueue.shift();
+    if (!id || !running || !station) return;
+    let r = null;
+    try { r = LineEdit.canPlaceBlueprint(station, id, lineNearTile()); } catch (e) { r = null; }
+    lineLaidMemo[id] = r && r.ok ? { ok: true, via: r.via } : { ok: false, needs: (r && r.needs) || null };
+    if (root) for (const b of root.querySelectorAll('.refit-linetile[data-line="' + id + '"]')) { const bp = blueprintOf(id); if (bp) setLineTileFit(b, bp); }
+    if (lineLaidQueue.length) lineLaidT = setTimeout(stepLineLaid, 30);
+  }
+  // where a line would be laid when no click says: the middle of the view, else the middle of the station
+  function lineNearTile() {
+    const v = viewCenterTile();
+    if (v) return v;
+    const b = boundsMemoed();
+    return { x: (b.minTx + b.maxTx) >> 1, y: (b.minTy + b.maxTy) >> 1 };
   }
   function lineField(bpId) {
     const bp = blueprintOf(bpId);
@@ -1911,7 +2012,9 @@ const Build = (() => {
     const rects = bp.props.map(p => ({ x1: o.x + p.x, y1: o.y + p.y, x2: o.x + p.x + p.w - 1, y2: o.y + p.y + p.h - 1 }))
       .concat(bp.belts.map(b => ({ x1: o.x + b.x, y1: o.y + b.y, x2: o.x + b.x, y2: o.y + b.y })));
     const links = ghostLinks({ props: bp.props.map(p => ({ t: p.t, x: o.x + p.x, y: o.y + p.y, w: p.w, h: p.h })), belts: bp.belts.map(b => ({ x: o.x + b.x, y: o.y + b.y, d: b.d })) });
-    return { rects, v: station.canPlaceBlueprint(bp.id, o.x, o.y), kind: 'line', label: bp.label, snapped: s.snapped, links };
+    const laid = lineLaidFits(bp.id);
+    if (laid === undefined && !lineFits(bp.id)) queueLineLaid(bp.id);
+    return { rects, v: station.canPlaceBlueprint(bp.id, o.x, o.y), kind: 'line', label: bp.label, snapped: s.snapped, links, laid: !!(laid && laid.ok) };
   }
   /* the test job the Workflow panel saved for the line this prop is on (localStorage, per station — the panel's own store),
      plus the line key; read by the live INBOX's COMMS card so ONE REAL JOB runs the Commander's own input (2026-09-27 X1) */
@@ -1952,8 +2055,9 @@ const Build = (() => {
     view.appendChild(lineSchematic(bp));
     b.appendChild(view);
     const hd = document.createElement('span'); hd.className = 'refit-linetile-hd';
-    const nm = document.createElement('span'); nm.className = 'refit-matname'; nm.textContent = bp.label;
+    const nm = document.createElement('span'); nm.className = 'refit-matname'; nm.textContent = LINE_PLAIN[bp.id] || bp.label;
     hd.appendChild(nm);
+    if (LINE_PLAIN[bp.id]) { const tg = document.createElement('span'); tg.className = 'refit-linetile-tag'; tg.textContent = bp.label; hd.appendChild(tg); }
     // footprint + dock count, derived from the catalog (never hand-kept). Mixed VT323 glyphs
     // ('×', '·') fall back fonts, so the chip is BOX-centred in CSS — never padded by font math.
     const docks = bp.props.filter(p => p.t === 'bay').length;
@@ -1977,14 +2081,24 @@ const Build = (() => {
      them claiming to fit a floor they no longer fit — the B1 trap again. setLineTileFit reconciles one card in place;
      scheduleLineFitSync re-reads every card on screen once the floor settles after an edit. */
   function setLineTileFit(b, bp) {
-    const fits = lineFits(bp.id);
+    const drawn = lineFits(bp.id), laid = drawn ? null : lineLaidFits(bp.id);
+    if (!drawn && laid === undefined) queueLineLaid(bp.id);   // (asked in the background — the card is re-said when it lands)
+    const fits = drawn || !!(laid && laid.ok);
     b.classList.toggle('nofit', !fits);
+    b.classList.toggle('laidfit', !drawn && fits);
     let nf = b.querySelector('.refit-linetile-nofit');
     const next = b.nextElementSibling;
     const make = next && next.classList.contains('refit-linetile-makeroom') ? next : null;
-    if (fits) { if (nf) nf.remove(); if (make) make.remove(); return; }
+    if (drawn) { if (nf) nf.remove(); if (make) make.remove(); return; }
     if (!nf) { nf = document.createElement('span'); nf.className = 'refit-linetile-nofit'; b.appendChild(nf); }
-    nf.textContent = 'NO ROOM ON THIS DECK — NEEDS ' + bp.w + '×' + bp.h + ' OF CLEAR FLOOR';
+    if (fits) {   // the drawn shape fits nowhere, but the line does, laid out round what stands here
+      nf.textContent = 'FITS LAID OUT — CLICK THE FLOOR WHERE YOU WANT IT';
+      if (make) make.remove();
+      return;
+    }
+    const need = laid && laid.needs ? laid.needs : { w: bp.w, h: bp.h };
+    nf.textContent = laid === undefined ? 'CHECKING WHERE IT FITS…' : 'NO ROOM ON THIS DECK — NEEDS ' + need.w + '×' + need.h + ' OF CLEAR FLOOR';
+    if (laid === undefined) { if (make) make.remove(); return; }
     if (make) return;
     const mk = document.createElement('button'); mk.type = 'button'; mk.className = 'bb sm refit-linetile-makeroom';
     mk.textContent = '＋ MAKE ROOM FOR IT'; mk.setAttribute('aria-label', 'Build a room big enough for ' + bp.label);
@@ -2003,7 +2117,8 @@ const Build = (() => {
   function makeRoomFor(bpId, ev) {
     const bp = blueprintOf(bpId);
     if (!bp || !station) return;
-    const W = bp.w + 2, H = bp.h + 2;   // a tile of walking room round the line
+    const laid = lineLaidFits(bp.id), need = laid && laid.needs ? laid.needs : { w: bp.w, h: bp.h };
+    const W = Math.min(bp.w, need.w) + 2, H = Math.min(bp.h, need.h) + 2;   // the smaller of the drawn and the laid-out line, a tile of walking room round it
     const b = boundsMemoed();
     const cands = [];
     // right of the station, below it, left of it, above it — each slid along the edge; nearest to the station middle first
@@ -2038,14 +2153,22 @@ const Build = (() => {
     // the SAME snap the ghost showed — the click commits exactly what was on screen, never the raw tile
     const s = lineSnap(w.tx, w.ty);
     const o = lineOrigin(bp, s.tx, s.ty);
-    const res = station.stampBlueprint(bp.id, o.x, o.y);   // ONE undoable action — see worldmodel.stampBlueprint
+    let res = station.stampBlueprint(bp.id, o.x, o.y, lineStampOpts(bp));   // ONE undoable action, with the card's cap + tries — see worldmodel.stampBlueprint
+    /* LAID OUT TO FIT (phase E): where the drawn tile map will not go, the same line is laid out on the floor near the click —
+       its tidy shape, or anchored on its INBOX round what stands here — with the same cap and tries, one UNDO */
+    let laidOut = false;
+    if (!(res && res.ok) && typeof LineEdit !== 'undefined' && LineEdit.placeBlueprint) {
+      const lr = LineEdit.placeBlueprint(station, bp.id, { x: w.tx, y: w.ty }, { stamp: lineStampOpts(bp) });
+      if (lr && lr.ok) { res = lr; laidOut = true; } else if (lr && lr.msg) res = lr;
+    }
     if (res && res.ok) {
       lastStampIds = res.ids || null;   // the finish-the-line card adopts this line on the next recompile
       // LINE NAMING: a stamp leaves the intake's `label` UNSET (the save carries only what the Commander
       // typed) — but this session remembers which blueprint stamped it, so the intake card's name field
       // can offer the blueprint's name as its placeholder (session-scoped, like lastStampIds).
       try { for (const id of (res.ids || [])) { const sp = station.propById(id); if (sp && sp.t === 'intake') stampNameOf[id] = bp.label; } } catch (_) {}
-      pushFlash(bp.props.map(p => ({ x1: o.x + p.x, y1: o.y + p.y, x2: o.x + p.x + p.w - 1, y2: o.y + p.y + p.h - 1 })), false);
+      if (laidOut) pushFlash((res.ids || []).map(id => station.propById(id)).filter(Boolean).map(p => ({ x1: p.x, y1: p.y, x2: p.x + (p.w || 1) - 1, y2: p.y + (p.h || 1) - 1 })), false);
+      else pushFlash(bp.props.map(p => ({ x1: o.x + p.x, y1: o.y + p.y, x2: o.x + p.x + p.w - 1, y2: o.y + p.y + p.h - 1 })), false);
       sfx('chime');
       // PLACEMENT FLOW: a blueprint stamps ONCE, then the tool drops back to SELECT — the next
       // click on the fresh line inspects a dock instead of stamping a second copy on top of it.
@@ -2058,7 +2181,7 @@ const Build = (() => {
       try { for (const id of (res.ids || [])) { const sp = station.propById(id); if (sp && sp.t === 'bay') { firstBay = sp.id; break; } } } catch (_) {}
       if (firstBay && typeof WorkflowPanel !== 'undefined') {
         try { rebake(); openFlowCard(firstBay); } catch (_) {}
-        flashTip(ev, bp.label + ' PLACED — choose who works each BAY in the panel', true);
+        flashTip(ev, bp.label + (laidOut ? ' LAID OUT TO FIT HERE' : ' PLACED') + ' — choose who works each BAY in the panel', true);
       } else flashTip(ev, bp.label + ' STAMPED — now click each BAY to assign an agent', true);
       if (typeof StationUI !== 'undefined' && StationUI.pokeQuests) { try { StationUI.pokeQuests(); } catch (_) {} }
       // belts just landed — the same first-touch coach a hand-laid run earns (points at ▸ PREVIEW)
@@ -2289,6 +2412,25 @@ const Build = (() => {
   // an opener calls this FIRST: whatever is up closes properly, then the new card takes the surface.
   function cardCloseAll() { for (let i = 0; i < 16; i++) { const el = cardTop(); if (!el) break; cardClose(el); } }
 
+  /* STATION PRESETS (reimagined 2026-09-28). Two groups: WORK presets — a whole station for one kind of work, its line
+     wired, every step's instructions written, a sample job ready — and LOOK presets (rooms and furniture only). Picking
+     a card previews what it builds; applying replaces the layout in one undoable step (the old one is backed up), and a
+     WORK preset opens its setup guide straight after. Staffing is that guide's next click — a preset never hires. */
+  const PRESET_GROUPS = [
+    ['work', 'BUILT FOR YOUR WORK', 'A whole station for one kind of work. Its line is wired, every step has instructions, and a sample job is ready to try.'],
+    ['look', 'JUST THE LOOK', 'Rooms and furniture only. Add a line from the Lines shelf whenever you want one.'],
+  ];
+  function presetPreviewHTML(item, doc) {
+    const guide = StationTemplates.guides && StationTemplates.guides[item.id];
+    const rooms = item.rooms + (item.rooms === 1 ? ' room' : ' rooms');
+    if (!guide) return '<span><b>' + esc(item.name) + '</b> · ' + rooms + ' · ' + doc.props.length + ' props</span><span class="station-build-need">Rooms and furniture only; add a line from the Lines shelf whenever you want one.</span>';
+    const steps = Object.values(guide.roles).map(r => r.name);
+    return '<span><b>' + esc(item.name) + '</b> · ' + rooms + '</span>'
+      + '<span class="station-build-flow">' + guide.flow.map(esc).join(' <i>→</i> ') + '</span>'
+      + '<span>' + esc(guide.purpose) + '</span>'
+      + '<span class="station-build-need">Next you choose who works ' + (steps.length === 1 ? 'its one step' : 'its ' + steps.length + ' steps') + ' (' + esc(steps.join(', ')) + '). One agent can work every step.'
+      + (item.purpose === 'code' ? ' Point its Inbox at your project folder so the Builder works on your code.' : '') + '</span>';
+  }
   function showStationBuilds() {
     if (!root || !station || typeof StationTemplates === 'undefined') return;
     cardCloseAll();
@@ -2296,16 +2438,18 @@ const Build = (() => {
     g.className = 'refit-guide refit-station-builds refit-workflow-editor';
     g.setAttribute('role','dialog');g.setAttribute('aria-modal','true');g.setAttribute('aria-label','Station presets');
     g.innerHTML = '<div class="refit-guide-box station-build-box"><div class="station-build-heading"><div><span class="station-build-eyebrow">BUILD MODE / STATION PRESETS</span><h2>A place for your work</h2></div><button class="bb sm" data-workflow-close>BACK TO BUILD</button></div>' +
-      '<p class="station-build-intro">Choose your starting layout, then make it yours. Every station includes your workstation and all five essentials.</p>' +
-      '<div class="station-build-grid" aria-label="Available station presets"></div><div class="station-build-footer"><p class="station-build-status" role="status">Select a preset to continue. You can customize every room afterward.</p>' +
+      '<p class="station-build-intro">Pick a station for the kind of work you do, then make it yours. Every station includes your workstation and all five essentials.</p>' +
+      '<div class="station-build-scroll">' + PRESET_GROUPS.map(([id, label, blurb]) => '<section class="station-build-section" data-build-section="' + id + '"><div class="station-build-section-head"><h3>' + label + '</h3><p>' + esc(blurb) + '</p></div><div class="station-build-grid" aria-label="' + esc(label.toLowerCase()) + '"></div></section>').join('') + '</div>' +
+      '<div class="station-build-footer"><div class="station-build-status" role="status">Select a preset to see what it builds.</div>' +
       '<div class="station-build-actions"><button class="bb" data-restore-build>RESTORE PREVIOUS</button><button class="bb refit-primary" data-use-build disabled>CHOOSE A PRESET</button></div><small class="station-build-note">Applying replaces rooms, props and conveyors. Your current layout is backed up; agents and conversations stay.</small></div></div>';
     g.style.setProperty('--station-build-scale', typeof U.uiZoom === 'function' ? U.uiZoom() : 1);
     const closeP = () => { g.remove(); root?.querySelector('#refit-stations')?.focus(); };
     cardRegister(g, closeP); root.appendChild(g);
     g.querySelector('[data-workflow-close]').onclick = closeP;
     const status = g.querySelector('.station-build-status'), apply = g.querySelector('[data-use-build]');
-    if (currentPresetExample()) {
-      const setup = document.createElement('button'); setup.className='bb'; setup.textContent='SET UP CURRENT STUDIO';
+    const current = currentPresetExample();
+    if (current) {
+      const setup = document.createElement('button'); setup.className='bb'; setup.textContent='SET UP ' + String(current.title).toUpperCase();
       setup.onclick=openPresetExample; g.querySelector('.station-build-actions').prepend(setup);
     }
     const backupKey = 'starnet.layoutBackup.' + station.doc().meta.createdAt;
@@ -2313,11 +2457,12 @@ const Build = (() => {
     const backupButton = g.querySelector('[data-restore-build]');
     try { backupButton.disabled = !localStorage.getItem(backupKey); } catch (_) { backupButton.disabled = true; }
     for (const item of StationTemplates.catalog) {
+      const grid = g.querySelector('[data-build-section="' + (item.group === 'work' ? 'work' : 'look') + '"] .station-build-grid');
       const button = document.createElement('button'); button.className = 'bb station-build-card';
       button.type = 'button'; button.dataset.stationBuild = item.id; button.setAttribute('aria-pressed','false');
       const doc = StationTemplates.build(item.id, WorldModel, PropSprites);
       const bays = doc.props.filter(p=>p.t==='bay').length;
-      button.innerHTML = '<div class="station-build-art"><canvas width="460" height="280" aria-hidden="true"></canvas><span class="station-build-check" aria-hidden="true">✓</span></div><div class="station-build-copy"><div class="station-build-meta"><span>' + item.rooms + (item.rooms === 1 ? ' ROOM' : ' ROOMS') + '</span>' + (bays ? '<span>'+bays+' WORKFLOW '+(bays===1?'STEP':'STEPS')+'</span>' : '') + '</div><b>' + esc(item.name) + '</b><small>' + esc(item.description) + '</small></div>';
+      button.innerHTML = '<div class="station-build-art"><canvas width="460" height="280" aria-hidden="true"></canvas><span class="station-build-check" aria-hidden="true">✓</span></div><div class="station-build-copy"><div class="station-build-meta"><span>' + item.rooms + (item.rooms === 1 ? ' ROOM' : ' ROOMS') + '</span>' + (bays ? '<span>'+bays+'-STEP LINE</span>' : '') + '</div><b>' + esc(item.name) + '</b><small>' + esc(item.description) + '</small></div>';
       const bounds = WorldModel.create(doc).bounds(), ctx = button.querySelector('canvas').getContext('2d');
       ctx.scale(2,2);
       const theme = getComputedStyle(root), accent = theme.getPropertyValue('--ph').trim() || '#b6a375';
@@ -2333,9 +2478,9 @@ const Build = (() => {
       button.onclick = () => {
         selected=item;armed=false;apply.disabled=false;apply.textContent='USE '+item.name;
         for(const b of g.querySelectorAll('[data-station-build]'))b.setAttribute('aria-pressed',b===button?'true':'false');
-        status.textContent=item.name+' · '+item.rooms+' '+(item.rooms===1?'room':'rooms')+' · '+doc.props.length+' props'+(bays?' · Optional conveyor workflow; set up agents whenever you want to use it.':'.');
+        status.innerHTML=presetPreviewHTML(item, doc);
       };
-      g.querySelector('.station-build-grid').appendChild(button);
+      grid.appendChild(button);
     }
     apply.onclick = () => {
       if(!selected)return;
@@ -2345,6 +2490,7 @@ const Build = (() => {
         localStorage.setItem(backupKey,JSON.stringify(station.serialize()));
         const result=station.replaceLayout(doc);if(!result.ok)throw Error(result.msg||result.error);
         fitCamera();closeP();sfx('click');
+        if (currentPresetExample()) openPresetExample();   // a WORK preset: choosing who works it is the next click
       }catch(e){armed=false;status.textContent='Layout unchanged: '+e.message;apply.textContent='USE '+selected.name;}
     };
     backupButton.onclick = () => {
@@ -2361,47 +2507,81 @@ const Build = (() => {
 
   function currentPresetExample() {
     return typeof StationTemplates !== 'undefined' && StationTemplates.example
-      ? StationTemplates.example(station.serialize(),WorldModel,Pipeline) : null;
+      ? StationTemplates.example(station.serialize(),WorldModel,Pipeline,typeof WorkflowLine !== 'undefined' ? WorkflowLine : null) : null;
   }
+  /* THE SETUP GUIDE (every WORK preset, 2026-09-28; was Creative Studio only, and refused one agent on both steps). Steps
+     come in the line's run order. Each offers the crew, a one-click RECRUIT of that step's specialist (summonForRole —
+     the Workflow panel's own seam) and, when the step's agent has no computer of its own there, the panel's ADD A
+     WORKSTATION fix (requisitionPcFor). One agent may work every step (multi-bay). Readiness is StationTemplates.example
+     → WorkflowLine.readiness: the Workflow panel pill's own blocking list. RUN SAMPLE posts the plan and runs the
+     preset's sample job through the real harness (finRunSample). */
   function openPresetExample() {
-    if (!root || !currentPresetExample()) return;
+    const first = currentPresetExample();
+    if (!root || !first) return;
     cardCloseAll();
     const g = document.createElement('div');
     g.className = 'refit-guide refit-preset-example';
-    g.setAttribute('role','dialog'); g.setAttribute('aria-modal','true'); g.setAttribute('aria-label','Set up Creative Studio');
-    g.innerHTML = '<div class="refit-guide-card"><header class="refit-prop-actions-head"><div><span class="ui-overline">WORKING EXAMPLE</span><h3>Creative Studio</h3></div><button class="bb" data-workflow-close>CLOSE</button></header><div data-example-body></div></div>';
+    g.setAttribute('role','dialog'); g.setAttribute('aria-modal','true'); g.setAttribute('aria-label','Set up '+first.title);
+    g.innerHTML = '<div class="refit-guide-card"><header class="refit-prop-actions-head"><div><span class="ui-overline">SET UP YOUR STATION</span><h3>'+esc(first.title)+'</h3></div><button class="bb" data-workflow-close>CLOSE</button></header><div data-example-body></div></div>';
     let unsubscribe;
     const closeP = () => { unsubscribe?.(); g.remove(); root?.querySelector('[data-build-group="workflow"]')?.focus(); };
     cardRegister(g,closeP); root.appendChild(g); g.querySelector('[data-workflow-close]').onclick = closeP;
+    const say = t => { const el = g.querySelector('.example-status'); if (el) el.textContent = t; };
+    const needsPc = r => !!r.agentId && bayObjectsMemoed(r.agentId, r.propId).indexOf('computer') < 0;
     const refresh = () => {
       if (!g.isConnected) return;
       const e = currentPresetExample(); if (!e) return closeP();
       const agents = (opts.agents && opts.agents()) || [];
       const pending = !!finSampleRes?.pending;
-      const rosterOK = e.roles.length===2 && e.roles.every(r=>agents.some(a=>a.id===r.agentId));
+      const rosterOK = e.roles.length > 0 && e.roles.every(r=>agents.some(a=>a.id===r.agentId));
       const ready = e.ready && rosterOK;
       const signature = JSON.stringify(station.serialize());
       const sr = finSampleRes?.key===e.key && finSampleRes?.exampleSignature===signature ? finSampleRes : null;
-      const status = e.issue ? e.issue : !rosterOK ? 'Choose an agent for each role.' : !ready ? 'Each role needs a different agent and a clear route to the outbox.' : sr?.pending ? 'Sample in progress…' : sr?.view?.ok ? 'Sample completed · the harness confirmed delivery to the outbox.' : 'Configured · ready to try a sample.';
+      const status = e.issue ? e.issue : !rosterOK ? 'Choose an agent from your crew for each step.' : sr?.pending ? 'Sample in progress…' : sr?.view?.ok ? 'Sample completed · the harness confirmed delivery to the outbox.' : 'Ready · try the sample job.';
+      const canSummon = typeof App !== 'undefined' && !!App.summonAgent;
+      const firstAid = e.roles[0] && e.roles[0].agentId;
+      const offerAll = e.roles.length > 1 && !!firstAid && e.roles.some(r=>r.agentId!==firstAid);
+      const software = station.doc().meta.templateId === 'software';
       const body = g.querySelector('[data-example-body]');
-      body.innerHTML = '<p class="example-purpose">'+esc(e.purpose)+'</p><div class="example-flow" aria-label="Example flow"><span>Your brief</span><b>→</b><span>Drafter</span><b>→</b><span>Reviewer</span><b>→</b><span>Outbox</span></div>'+
-        '<h4>Choose who does each step</h4><div class="example-roles">'+e.roles.map((r,i)=>'<label class="example-role"><b>'+(i+1)+'. '+esc(r.name)+'</b><span>'+esc(r.description)+'</span><select class="refit-input" aria-label="'+esc(r.name)+' agent" data-example-agent="'+esc(r.propId)+'"'+(pending?' disabled':'')+'><option value="">Choose an agent</option>'+agents.map(a=>'<option value="'+esc(a.id)+'"'+(a.id===r.agentId?' selected':'')+'>'+esc(a.name||a.id)+'</option>').join('')+'</select></label>').join('')+'</div>'+
-        (agents.length<2?'<p class="example-note">This example needs two different agents. Recruit another agent from Crew, then return to Conveyors → Set up Creative Studio.</p>':'')+
-        '<p class="example-note">Assignments save when selected. The prepared instructions belong to the Bays; you can edit them by clicking those props.</p>'+
-        '<section class="example-sample"><h4>Try a small task</h4><p>'+esc(e.sample.replace(/^SAMPLE JOB: /,''))+'</p><p class="example-note">Runs the selected agents using their configured models. Normal model costs apply.</p><button class="bb refit-primary" data-example-run'+(!ready||pending?' disabled':'')+'>'+(pending?'SAMPLE IN PROGRESS…':sr?.view?.ok?'RUN SAMPLE AGAIN':'RUN SAMPLE TASK')+'</button></section>'+
+      body.innerHTML = '<p class="example-purpose">'+esc(e.purpose)+'</p><div class="example-flow" aria-label="How the line runs">'+e.flow.map(x=>'<span>'+esc(x)+'</span>').join('<b>→</b>')+'</div>'+
+        '<h4>Choose who works each step</h4><div class="example-roles">'+e.roles.map((r,i)=>'<div class="example-role"><b>'+(i+1)+'. '+esc(r.name)+'</b><span>'+esc(r.description)+'</span>'+
+          '<div class="example-role-pick"><select class="refit-input" aria-label="'+esc(r.name)+' agent" data-example-agent="'+esc(r.propId)+'"'+(pending?' disabled':'')+'><option value="">Choose an agent</option>'+agents.map(a=>'<option value="'+esc(a.id)+'"'+(a.id===r.agentId?' selected':'')+'>'+esc(a.name||a.id)+'</option>').join('')+'</select>'+
+          (canSummon && r.role ? '<button type="button" class="bb sm" data-example-recruit="'+esc(r.propId)+'"'+(pending?' disabled':'')+'>+ RECRUIT</button>' : '')+'</div>'+
+          (needsPc(r) ? '<div class="example-role-fix"><span>This agent has no workstation of its own here.</span><button type="button" class="bb sm" data-example-pc="'+esc(r.propId)+'"'+(pending?' disabled':'')+'>+ ADD A WORKSTATION</button></div>' : '')+'</div>').join('')+'</div>'+
+        (offerAll ? '<button type="button" class="bb sm example-all" data-example-all'+(pending?' disabled':'')+'>USE '+esc(String(agentLabelFor(firstAid)).toUpperCase())+' FOR EVERY STEP</button>' : '')+
+        '<p class="example-note">'+(agents.length ? 'One agent can work every step. ' : 'You have no agents yet. ')+(canSummon ? 'RECRUIT adds that step\'s specialist to your crew; it costs nothing until it works.' : '')+'</p>'+
+        '<p class="example-note">Assignments save when selected. Each step\'s instructions live on its Bay; click the Bay to edit them.</p>'+
+        '<section class="example-sample"><h4>Try the sample job</h4><p>'+esc(e.sample.replace(/^SAMPLE JOB: /,''))+'</p><p class="example-note">This is one real job: the agents you chose run it on their own models, and normal model costs apply.</p><button class="bb refit-primary" data-example-run'+(!ready||pending?' disabled':'')+'>'+(pending?'SAMPLE IN PROGRESS…':sr?.view?.ok?'RUN THE SAMPLE AGAIN':'RUN THE SAMPLE JOB')+'</button></section>'+
         '<p class="example-status" role="status">'+esc(status)+'</p>'+
         (sr?.view ? '<div class="example-result">'+finSampleHTML(sr.view)+(sr.output?'<details><summary>Read the finished result</summary><pre>'+esc(sr.output)+'</pre></details>':'')+'</div>' : '')+
-        '<p class="example-note">To use this workflow afterward, open its Inbox to configure a schedule or connected source. The Outbox opens delivered work in the Logbook.</p>';
+        /* NEXT: USE IT FOR REAL — one click to the Inbox's own settings in the Workflow panel (what starts it; the working
+           folder a software line builds in), instead of a sentence about where to click */
+        '<section class="example-next"><h4>Use it for real</h4><p>'+(software ? 'Choose the project folder the Builder works in, and when the line runs: on a schedule or from a chat app.' : 'Choose when the line runs: on a schedule or from a chat app.')+' Finished work lands in the Outbox and opens in the Logbook.</p>'+
+        (e.inboxId ? '<button type="button" class="bb" data-example-inbox'+(pending?' disabled':'')+'>'+(software ? 'OPEN THE INBOX: FOLDER + START' : 'OPEN THE INBOX: HOW IT STARTS')+'</button>' : '')+'</section>';
       body.querySelectorAll('[data-example-agent]').forEach(select => { select.onchange = () => {
-        const propId = select.dataset.exampleAgent, aid = select.value;
-        if (aid && e.roles.some(r=>r.propId!==propId && r.agentId===aid)) {
-          select.value = e.roles.find(r=>r.propId===propId).agentId;
-          body.querySelector('.example-status').textContent = 'Choose a different agent for each role so the draft can hand off to its reviewer.'; return;
-        }
-        const result = station.assignPropAgent(propId,aid);
-        if (!result.ok) body.querySelector('.example-status').textContent = result.msg || 'Assignment could not be saved.';
+        const propId = select.dataset.exampleAgent;
+        const result = station.assignPropAgent(propId,select.value);
+        if (!result.ok) say(result.msg || 'That assignment could not be saved.');
         else { refresh(); g.querySelector('[data-example-agent="'+propId+'"]')?.focus(); }
       }; });
+      body.querySelectorAll('[data-example-recruit]').forEach(b => { b.onclick = () => {
+        const r = e.roles.find(x=>x.propId===b.dataset.exampleRecruit); if (!r) return;
+        b.disabled = true;
+        const ri = WorldModel.bayRoleInfo ? WorldModel.bayRoleInfo(r.role) : null;
+        const a = summonForRole(r.role, ri), res = a && station.assignPropAgent(r.propId, a.id);
+        if (res && res.ok) { sfx('chime'); refresh(); }
+        else { b.disabled = false; sfx('bad'); say(a ? 'Recruited, but the step refused the assignment. Pick the new agent from the list.' : 'Recruiting failed. Pick an agent from your crew instead.'); }
+      }; });
+      body.querySelectorAll('[data-example-pc]').forEach(b => { b.onclick = () => {
+        b.disabled = true;
+        const res = requisitionPcFor(b.dataset.examplePc);
+        if (res.ok) { bumpGeo(); sfx('chime'); refresh(); }
+        else { b.disabled = false; sfx('bad'); say(res.reason === 'no-room-for-a-desk' ? 'There is no clear floor for a desk in this room. Make some space, then try again.' : 'A workstation could not be placed here.'); }
+      }; });
+      const inboxBtn = body.querySelector('[data-example-inbox]');
+      if (inboxBtn) inboxBtn.onclick = () => { closeP(); try { rebake(); openFlowCard(e.inboxId); } catch (_) {} };
+      const all = body.querySelector('[data-example-all]');
+      if (all) all.onclick = () => { for (const r of e.roles) station.assignPropAgent(r.propId, firstAid); sfx('click'); refresh(); };
       body.querySelector('[data-example-run]').onclick = () => {
         const now = currentPresetExample();
         if (!now?.ready || finSampleRes?.pending) return;
@@ -2499,6 +2679,9 @@ const Build = (() => {
     const duty = 'You crew this station line as its ' + role + ' — you ' + ((ri && ri.desc) || 'work this dock') + '.';
     const spec = Object.assign({}, cls || { name: role, model: 'balanced' });
     spec.purpose = duty + (cls && cls.purpose ? '\n\n' + cls.purpose : '');
+    // a role that borrows another class (TESTER rides the reviewer class) names its recruit for the STEP — the button said
+    // "a new tester" — through the creation-time name key, so the class still drives the specialty and the id
+    if (ri && ri.name) spec.agentName = ri.name;
     try { return App.summonAgent(spec, { activate: false, desk: true }); } catch (e) { return null; }
   }
   /* ---------- THE STEP CARD (workflow studio, 2026-08-05) ----------
@@ -2700,8 +2883,51 @@ const Build = (() => {
         if (res && res.ok) { pushFlash([{ x1: res.x, y1: res.y, x2: res.x + (sp.w || 2) - 1, y2: res.y + (sp.h || 2) - 1 }], false); if (typeof Tutorial !== 'undefined' && Tutorial.onPropPlaced) Tutorial.onPropPlaced('bay'); }
         return res;
       },
+      /* LINE EDITS (conveyor-links phase D): every change the panel makes to the line's SHAPE — a step, a branch, a review
+         loop, a sorter, a removal, a move, TIDY LINE — is LineEdit: the line's graph edited, laid out by the engine and
+         written back in ONE undo slot (lineEditRun). canLineEdit answers without laying anything, so a button that could
+         only fail is shown off with its reason. */
+      lineEdit: (op, propId, args, how) => lineEditRun(op, propId, args, how),
+      canLineEdit: (op, propId, args) => (typeof LineEdit === 'undefined' || !station) ? { ok: false, msg: 'the line editor is not loaded' } : LineEdit.check(station, propId, op, args, { sizes: lineSizes() }),
     };
     return wfHostMemo;
+  }
+  /* LINE EDITS — the catalog's machine sizes, the tile in the middle of the visible glass (where a NEW line is laid), and the
+     one runner every edit goes through: the machines it placed flash, the tutorial hears them, and the plan is recompiled at
+     once so the panel repaints on the edited line (not on the next frame's) */
+  const lineSizes = () => { const s = t => { const sp = propSpec(t); return [sp.w || 2, sp.h || 2]; }; return { bay: s('bay'), intake: s('intake'), outbox: s('outbox') }; };
+  function viewCenterTile() {
+    if (!cv) return null;
+    const t = T(), ins = viewInsets();
+    const vw = Math.max(1, cv.width - ins.l - (ins.r || 0)), vh = Math.max(1, cv.height - ins.t - ins.b);
+    return { x: Math.floor((ins.l + vw / 2 - panX) / zoom / t), y: Math.floor((ins.t + vh / 2 - panY) / zoom / t) };
+  }
+  function lineEditRun(op, propId, args, how) {
+    if (typeof LineEdit === 'undefined' || !station) return { ok: false, msg: 'the line editor is not loaded' };
+    // where the line's machines stood before the edit (so the floor can show what moved and what went)
+    const before = {};
+    try {
+      const g0 = propId != null ? station.lineGraph(propId) : null;
+      if (g0 && g0.ok) for (const n of g0.graph.nodes) before[n.id] = { x1: n.pin.x, y1: n.pin.y, x2: n.pin.x + (n.w || 1) - 1, y2: n.pin.y + (n.h || 1) - 1 };
+    } catch (e) { /* (only the courtesy flash depends on it) */ }
+    const res = LineEdit.run(station, propId, op, args, { near: viewCenterTile(), sizes: lineSizes(), tidy: !!(how && how.tidy) });
+    if (res && res.ok) {
+      const placed = Object.keys(res.ids || {}).filter(k => k.charAt(0) === '+').map(k => station.propById(res.ids[k])).filter(Boolean);
+      if (placed.length) pushFlash(placed.map(p => ({ x1: p.x, y1: p.y, x2: p.x + (p.w || 1) - 1, y2: p.y + (p.h || 1) - 1 })), false);
+      // WHAT MOVED, WHAT WENT: a machine the edit moved glides an outline from where it stood to where it stands (the floor
+      // re-bakes at once — the glide is that jump made visible); one it took out flashes red where it was
+      const moves = [];
+      for (const id in before) {
+        const p = station.propById(id), b = before[id];
+        if (p && (p.x !== b.x1 || p.y !== b.y1)) moves.push({ from: b, to: { x1: p.x, y1: p.y, x2: p.x + (p.w || 1) - 1, y2: p.y + (p.h || 1) - 1 } });
+      }
+      if (moves.length) pushMoves(moves);
+      const gone = (res.removed || []).map(id => before[id]).filter(Boolean);
+      if (gone.length) pushFlash(gone, true);
+      if (typeof Tutorial !== 'undefined' && Tutorial.onPropPlaced) for (const p of placed) Tutorial.onPropPlaced(p.t);
+      try { rebake(); } catch (e) { /* the frame loop compiles on its next tick; the panel repaints when it does */ }
+    }
+    return res;
   }
   /* pan the floor so a part sits in the middle of the VISIBLE glass (clear of the kit dock and the panel) */
   function focusPropOnFloor(id, onlyIfHidden) {
@@ -3580,7 +3806,7 @@ const Build = (() => {
     finCardEl.querySelector('.fl-x').onclick = () => { finMark(station, c.key, 'dis'); sfx('click'); renderFinCard(); };
     const example = currentPresetExample();
     const overviewButton = finCardEl.querySelector('[data-act="overview"]');
-    if (example?.key === c.key) overviewButton.textContent = 'SET UP CREATIVE STUDIO';
+    if (example?.key === c.key) overviewButton.textContent = 'SET UP ' + String(example.title).toUpperCase();
     overviewButton.onclick = () => { if (example?.key === c.key) openPresetExample(); else if (c.intakes.length) openFlowCard(c.intakes[0]); else if (c.bays.length) openStepCard(c.bays[0].propId); };
     const bCrew = finCardEl.querySelector('[data-act="crew"]');
     if (bCrew && !crewDone) bCrew.onclick = () => finFocusCrew(c);
@@ -4520,6 +4746,7 @@ const Build = (() => {
     else { sfx('bad'); flashTip(ev, (res && res.msg) || 'blocked'); }
   }
   function pushFlash(rects, bad) { flashes.push({ rects: rects.map(r => Object.assign({}, r)), t0: performance.now(), bad: !!bad }); }
+  function pushMoves(moves) { flashes.push({ moves: moves.map(m => ({ from: Object.assign({}, m.from), to: Object.assign({}, m.to) })), t0: performance.now() }); }
   function flashUndo() { if (undoBtn) { undoBtn.classList.add('pulse'); setTimeout(() => undoBtn && undoBtn.classList.remove('pulse'), 900); } }
 
   function onWheel(ev) {
@@ -5056,7 +5283,9 @@ const Build = (() => {
     }
     if (bakeDirty || !cache || planDirty) rebake();
     // an armed first ride waits out the tutorial + the first-run card (.refit-firstrun, never .refit-guide)
-    if (ridePending && !tutorialCoaching() && !(root && root.querySelector('.refit-firstrun'))) fireFirstRide();
+    // ONE VOICE: the first ride waits while the presets dialog or a preset's setup guide is open (staffing in the guide is
+    // what completes the line) — it narrates on the floor once that card closes, never over it
+    if (ridePending && !tutorialCoaching() && !(root && root.querySelector('.refit-firstrun, .refit-preset-example, .refit-station-builds'))) fireFirstRide();
     // finish-the-line card: slow re-derive (feed truth changes on the world's poll, not on edits) + per-frame pin
     if (finCardEl && now - finPollTs > 2000) { finPollTs = now; renderFinCard(); }
     const hT0 = perfAcc ? performance.now() : 0;
@@ -5303,11 +5532,12 @@ const Build = (() => {
      structure materializes, right→left as it is stripped), a RING pushes out past the edge and
      fades, and the body glow decays under both. Eerie, not cute — it is the same construction
      vocabulary the bake and the CRT already speak, no particles and no confetti. */
-  const FLASH_MS = 620;
+  const FLASH_MS = 620, MOVE_MS = 760;
   function drawFlashes(now, t) {
     for (let i = flashes.length - 1; i >= 0; i--) {
-      const fl = flashes[i], k = (now - fl.t0) / FLASH_MS;
+      const fl = flashes[i], k = (now - fl.t0) / (fl.moves ? MOVE_MS : FLASH_MS);
       if (k >= 1) { flashes.splice(i, 1); continue; }
+      if (fl.moves) { drawMoves(fl, k, t); continue; }
       const ease = 1 - (1 - k) * (1 - k);         // fast out — the sweep leads, the glow trails
       const body = (1 - k) * (fl.bad ? 0.34 : 0.30);
       const hue = fl.bad ? '255,110,90' : '170,255,210';
@@ -5335,6 +5565,29 @@ const Build = (() => {
           ctx.strokeRect(X - grow, Y - grow, W + grow * 2, H + grow * 2);
         }
       }
+    }
+  }
+
+  /* A MACHINE A LINE EDIT MOVED (TIDY LINE, a swap, a line laid afresh round a change): its outline GLIDES from the footprint it
+     left to the one it now stands on — eased in and out, the old footprint fading, a dashed wake from where it was. The same
+     phosphor construction marks as the placement flash: the station shows the move, it does not animate the machine. */
+  function drawMoves(fl, k, t) {
+    const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2, a = 1 - k * 0.6, hue = '170,255,210';
+    ctx.lineWidth = 2 / zoom;
+    for (const m of fl.moves) {
+      const fw = (m.from.x2 - m.from.x1 + 1) * t, fh = (m.from.y2 - m.from.y1 + 1) * t;
+      const W = (m.to.x2 - m.to.x1 + 1) * t, H = (m.to.y2 - m.to.y1 + 1) * t;
+      const X = (m.from.x1 + (m.to.x1 - m.from.x1) * e) * t, Y = (m.from.y1 + (m.to.y1 - m.from.y1) * e) * t;
+      ctx.strokeStyle = 'rgba(' + hue + ',' + (0.3 * (1 - k)).toFixed(3) + ')';   // the footprint it left
+      ctx.strokeRect(m.from.x1 * t, m.from.y1 * t, fw, fh);
+      ctx.setLineDash([3 / zoom, 3 / zoom]);                                       // the wake
+      ctx.strokeStyle = 'rgba(' + hue + ',' + (0.4 * a).toFixed(3) + ')';
+      ctx.beginPath(); ctx.moveTo(m.from.x1 * t + fw / 2, m.from.y1 * t + fh / 2); ctx.lineTo(X + W / 2, Y + H / 2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(' + hue + ',' + (0.16 * a).toFixed(3) + ')';           // the outline, gliding over
+      ctx.fillRect(X, Y, W, H);
+      ctx.strokeStyle = 'rgba(' + hue + ',' + (0.85 * a).toFixed(3) + ')';
+      ctx.strokeRect(X, Y, W, H);
     }
   }
 
@@ -6298,13 +6551,14 @@ const Build = (() => {
     // no — the reason on its own line right under them. (Was a DOM tip trailing into a screen corner.)
     const r0 = g.rects[0], w = r0.x2 - r0.x1 + 1, h = r0.y2 - r0.y1 + 1;
     let dims = g.belt ? ('BELT ' + g.dir + ' · ' + Math.max(w, h) + ' LONG')
-      : g.kind === 'line' ? (String(g.label || '').toUpperCase() + (ok ? ' — CLICK TO STAMP' : ''))   // a red ghost never invites the click (2026-09-27 audit B1)
+      : g.kind === 'line' ? (String(g.label || '').toUpperCase() + (ok ? ' — CLICK TO STAMP' : g.laid ? ' — CLICK TO LAY IT OUT HERE' : ''))   // a red ghost invites the click only when the line fits laid out (2026-09-27 audit B1; phase E)
       : g.move ? ('MOVE ' + (g.dx >= 0 ? '+' : '') + g.dx + ', ' + (g.dy >= 0 ? '+' : '') + g.dy)
       : (tool === 'hall' ? (Math.max(w, h) + ' LONG × ' + Math.min(w, h) + ' WIDE') : (w + ' × ' + h));
     const lines = [dims];
     // a sized footprint also gets its area — "how much floor is this?" is the other question a drag asks
     if (!g.belt && !g.move && g.kind !== 'line' && w * h > 1) lines[0] = dims + '   ' + (w * h) + ' TILES';
-    if (!ok) lines.push(((footprint && footprint.msg) || placementReason(g)).toUpperCase());
+    // (a line that fits laid out: the drawn shape will not go here, but the click lays the same line out round what stands here)
+    if (!ok) lines.push(g.kind === 'line' && g.laid ? 'THE DRAWN SHAPE DOES NOT FIT HERE — IT WILL BE LAID OUT TO FIT' : ((footprint && footprint.msg) || placementReason(g)).toUpperCase());
     // the hover preview teaches BOTH gestures: this size on a click, any size on a drag
     else if (g.stamp) lines.push(g.kind === 'prop' ? 'CLICK TO PLACE' : 'CLICK TO PLACE · DRAG TO SIZE');
     /* SPACING (2026-09-27 audit B4): a dock hooks every belt in the 1-tile ring around it, so two docks with one empty tile
@@ -6680,6 +6934,11 @@ const Build = (() => {
     if (!running || !station) return;
     // the panel names the line from the compiled line groups (valComps): compile NOW, or it opens on a bare "single BAY"
     try { rebake(); } catch (e) { /* the frame loop compiles on its next tick; the panel repaints when it does */ }
+    /* ONE DOOR TO SET UP A PRESET (2026-09-28): while a work preset's line still has a step nobody works, WORKFLOWS opens its
+       setup guide (who works each step + the sample job) — the onboarding pick's closing line points here. Once every
+       step is staffed it opens the Workflow panel as always. */
+    const ex = currentPresetExample();
+    if (ex && ex.roles.length && ex.roles.some(r => !r.agentId)) { openPresetExample(); return; }
     const first = station.props().find(p => p.t === 'intake') || station.props().find(p => p.t === 'bay');
     if (first && typeof WorkflowPanel !== 'undefined') { try { openFlowCard(first.id); } catch (e) {} }
     else if (!first) { try { selectTool('line'); } catch (e) {} }

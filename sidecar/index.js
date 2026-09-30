@@ -223,8 +223,8 @@ const googleClientConfig = require('./mcp/google-client.js');
 const { makeStdioTransport } = require('./mcp/transport.stdio.js');
 const mcpSchemaCache = require('./mcp/schema-cache.js');
 const connectorCatalog = require('./mcp/catalog.js');       // curated one-click MCP connector catalog (pure data + selectors)
-const serviceKeysMod = require('./servicekeys.js');         // KEYS tab: custom service API keys (pure core — env injection + masked list)
-const serviceKeysCatalog = require('./servicekeys-catalog.js');   // KEYS tab: the curated PLATFORM directory (pure data)
+const serviceKeysMod = require('./servicekeys.js');         // ABILITIES › SAVED API CONNECTIONS: custom service API keys (pure core — env injection + masked list)
+const serviceKeysCatalog = require('./servicekeys-catalog.js');   // SAVED API CONNECTIONS: the curated PLATFORM directory (pure data)
 const mcpOauth = require('./mcp/oauth.js');                 // generic OAuth 2.1 client for MCP connectors (discover/DCR/PKCE/refresh)
 const { sameEndpoint, resolveConnectorOauthTarget } = require('./mcp/oauth-target.js');
 const connectorStateMod = require('./connectorstate.js');   // one transactional envelope for connector config + OAuth secrets
@@ -285,6 +285,7 @@ const { makeJourneyStore } = require('./journey-store.js'); // Commander journey
 const { makeQuestTools } = require('./tools/builtin/quests.js'); // QUEST V2 §B: quest.update — the agent's read/write reach into the ledger
 const { questBlock, withQuests } = require('./questinject.js'); // QUEST V2 §B: fold an agent's OPEN quests into its system prompt (pure, dossierinject idiom)
 const QuestSweeps = require('./questsweeps.js');
+const GoalAdvance = require('./goal-advance.js'); // USER-STUDY LOOP: pure — a finished quest slate settles its plan step; journey completions fold onto the goal mirror
 const QuestRefresh = require('./questrefresh.js'); // QUEST V3: the standing 24h + caught-up quest-refresh engine (pure gates/directive/parse) // QUEST V2 §A: pure seam-matchers for the mechanical contract sweeps (run-bind / prop-live / fact-learned / artifact-exists)
 const { makeThreadsStore } = require('./threads-store.js');   // NS-6: durable THREAD LEDGER (ideas raised but never acted on)
 const Recommendation = require('./recommendation-ledger.js');
@@ -313,7 +314,9 @@ const { makeSkillExchange } = require('./skills/exchange.js');
 const { makeSkillDocumentFetcher, makeSkillPackageFetcher } = require('./skills/exchange-fetch.js');
 const { makeSkillRegistry } = require('./skills/registry.js');
 const { makeSkillMetrics } = require('./skills/metrics.js');
-const skillReview = require('./skillreview.js');            // background skill maintenance trigger/prompt
+const skillReview = require('./skillreview.js');
+const { makeSkillMarket, DEFAULT_CATALOG_URL: SKILL_MARKET_DEFAULT_URL } = require('./skills/market.js');   // the Skill Market client (curated catalog → station library)            // background skill maintenance trigger/prompt
+const skillMarketSigning = require('./skills/market-signing.js');   // the Skill Market's trusted signing keys
 const { makeVerdictReview } = require('./verdictreview.js');   // consistency loop: a rated ok/miss run earns a skill review
 const skillCurator = require('./skillcurator.js');          // skill lifecycle/consolidation maintenance
 const slash = require('./slash.js');                       // slash-command catalog + dispatch descriptors
@@ -1560,6 +1563,38 @@ try {
 // enable/disable choices persist append-only (same fsync discipline as skillStore). Injected into each run's
 // system prompt below, gated by requires ⊆ the agent's placed objects (object = capability — the moat).
 const SKILL_LIBRARY = skillsCatalog.loadDir(path.join(__dirname, 'skills', 'library'), fs, path);
+// SKILL MARKET (2026-09-29): curated skills from starnetos.com, installed into the station library. The catalog is
+// fetched when the Commander opens the market; the catalog and the pulled-skills list are signed and verified against
+// the app's built-in keys (skills/market-signing.js). STARNET_SKILL_MARKET_URL overrides the catalog ('off' or empty
+// turns the market off); STARNET_SKILL_MARKET_KEYS adds the public key of a catalog you run yourself.
+const skillMarket = makeSkillMarket({
+  fetchDocument: fetchSkillDocument, fs, path, root: path.join(WORKSPACES, 'skill-market'), guard: skillGuard, now: () => Date.now(),
+  catalogUrl: () => { const v = process.env.STARNET_SKILL_MARKET_URL; return v == null ? SKILL_MARKET_DEFAULT_URL : (String(v).trim().toLowerCase() === 'off' ? '' : String(v).trim()); },
+  trustedKeys: skillMarketSigning.TRUSTED_KEYS.concat(skillMarketSigning.keysFromEnv(process.env.STARNET_SKILL_MARKET_KEYS)),
+  loadJson: (file) => loadResilient(file, 'skill market'), saveJson: (file, value) => saveResilient(file, value)
+});
+// THE MARKET'S KILL SWITCH: while at least one market skill is installed, re-read the small signed pulled-skills list
+// shortly after boot and every few minutes, and switch off anything the market has pulled. A station with no market
+// skills installed never makes this request. SKYNET_SKILL_MARKET_PULL_MS tunes the interval (0 turns the check off).
+const SKILL_MARKET_PULL_MS = (() => { const v = Number(process.env.SKYNET_SKILL_MARKET_PULL_MS); return Number.isFinite(v) && v >= 0 ? v : 5 * 60 * 1000; })();
+let skillMarketPullBusy = false;
+function checkSkillMarketPulls() {
+  if (skillMarketPullBusy) return;
+  let installed = 0; try { installed = Object.keys(skillMarket.installed()).length; } catch (_) { installed = 0; }
+  if (!installed) return;
+  skillMarketPullBusy = true;
+  skillMarket.checkRevocations()
+    .then(r => { if (r.pulled.length) console.warn('[skill-market] pulled from the market and switched off: ' + r.pulled.join(', ')); })
+    .catch(e => failNote('skill-market.pull-check', e))   // offline or refused: the next tick retries; the failure stays counted and visible
+    .finally(() => { skillMarketPullBusy = false; });
+}
+if (SKILL_MARKET_PULL_MS > 0) {
+  const first = setTimeout(checkSkillMarketPulls, Math.min(20000, SKILL_MARKET_PULL_MS)); if (first.unref) first.unref();
+  const every = setInterval(checkSkillMarketPulls, SKILL_MARKET_PULL_MS); if (every.unref) every.unref();
+}
+// the station library every reader uses: the bundled recipes, with market installs merged in (a market copy of a
+// bundled original replaces it for this station)
+function skillLibrary() { try { return skillMarket.mergeLibrary(SKILL_LIBRARY); } catch (_) { return SKILL_LIBRARY; } }
 const SKILL_PREFS_FILE = path.join(WORKSPACES, 'skillprefs.jsonl');
 const skillPrefsIo = {
   readAll() {
@@ -2073,24 +2108,36 @@ commanderDossier.load();
 // composed autonomous personas (cron) so an unattended run knows the current direction (goal + progress + next
 // step). A sibling of the dossier block (outside every agent's fs jail); survives a restart. A null goal clears it
 // (no active arc). Contract-free: plain HTTP, no bus event — mirrors commanderDossier exactly.
+// USER-STUDY LOOP (2026-09-28): the push now carries the whole ordered milestone list, so the SIDECAR can move the
+// plan forward on its own (sidecar/goal-advance.js): a step whose planned quests are all settled is recorded in the
+// journey and the mirror advances to the next step, with the window closed. Every set/load re-folds the journey's
+// recorded completions, so a stale push from a webview that hasn't seen a completion yet never walks the plan back.
 const GOALS_FILE = path.join(WORKSPACES, '_commander.goals.json');
 const commanderGoals = {
   _goal: null,
   get() { return this._goal; },
+  _fold(goal) {
+    if (!goal || !Array.isArray(goal.milestones) || !goal.milestones.length) return goal;
+    let keys = null;
+    try { keys = journeyStore.milestoneDoneKeys(); } catch (_) { keys = null; }   // an unreadable journey folds nothing (the push stands)
+    return keys ? GoalAdvance.overlay(goal, keys) : goal;
+  },
   set(goal) {
-    this._goal = (goal && typeof goal === 'object') ? {
+    const milestones = goal && typeof goal === 'object' ? GoalAdvance.normMilestones(goal.milestones) : [];
+    this._goal = this._fold((goal && typeof goal === 'object') ? {
       id: goal.id == null ? null : String(goal.id).slice(0, 64),
       text: String(goal.text || '').slice(0, 280),
       done: Number(goal.done) | 0, total: Number(goal.total) | 0, pct: Number(goal.pct) | 0,
       next: goal.next == null ? null : String(goal.next).slice(0, 200),
-      milestoneId: goal.milestoneId == null ? null : String(goal.milestoneId).slice(0, 80)
-    } : null;
+      milestoneId: goal.milestoneId == null ? null : String(goal.milestoneId).slice(0, 80),
+      milestones: milestones.length ? milestones : null
+    } : null);
     try {
       fs.mkdirSync(WORKSPACES, { recursive: true });
       saveResilient(GOALS_FILE, { goal: this._goal });
     } catch (e) { console.warn('[goals] persist failed:', (e && e.message) || e); }
   },
-  load() { const o = loadResilient(GOALS_FILE, 'goals'); if (o && o.goal && typeof o.goal === 'object') this._goal = o.goal; },
+  load() { const o = loadResilient(GOALS_FILE, 'goals'); if (o && o.goal && typeof o.goal === 'object') this._goal = this._fold(o.goal); },
   // the one-line note folded into a cron persona: "Current goal: X (2/5 milestones done). Next: Y." '' when none.
   note() {
     const g = this._goal;
@@ -2525,6 +2572,7 @@ const lastReflectAt = new Map();       // agentId -> ts of the last reflection w
 const reflectingNow = new Set();       // agentIds with a reflection in flight — closes the gap before lastReflectAt is armed
 const lastFailReviewAt = new Map();    // agentId -> ts of the last failure review we fired (its own cooldown gate)
 const failReviewingNow = new Set();    // agentIds with a failure review in flight — same gap-closer as reflectingNow
+const skillReviewingNow = new Set();   // agentIds with a nudge-due skill review in flight: two run-ends close together must not both rewrite one skillbase
 function stashProposals(agentId, runId, proposals) {
   proposalsByRun.set(runId, { agentId, runId, createdAt: Date.now(), proposals });
   latestProposalRun.set(agentId, runId);
@@ -3042,6 +3090,22 @@ async function runThreadMine(o) {
 
 const SKILL_REVIEW_TIMEOUT_MS = num(process.env.SKYNET_SKILL_REVIEW_TIMEOUT_MS, 45000);
 const SKILL_REVIEW_MAX_COST_USD = num(process.env.SKYNET_SKILL_REVIEW_MAX_USD, 0.08);
+// THE SKILL NUDGE (skillreview.nudgeAfterRun): per agent, the model turns taken with skill tools on the wire since
+// its skillbase last changed. Carried across runs AND restarts: a desktop station restarts most days, and a count
+// that reset with the process would rarely reach the bar. SKYNET_SKILL_REVIEW_EVERY sets the bar (default 10, 0 = off).
+const SKILL_REVIEW_EVERY = skillReview.parseNudgeEvery(process.env.SKYNET_SKILL_REVIEW_EVERY);
+const SKILL_NUDGE_FILE = path.join(WORKSPACES, 'skill.nudge.json');
+const skillNudge = (() => {
+  try {
+    const o = loadResilient(SKILL_NUDGE_FILE, 'skill-nudge');
+    const counts = o && o.counts && typeof o.counts === 'object' ? o.counts : {};
+    return new Map(Object.keys(counts).map(k => [k, Math.max(0, Math.floor(Number(counts[k]) || 0))]));
+  } catch (_) { return new Map(); }
+})();
+function persistSkillNudge() {
+  try { saveResilient(SKILL_NUDGE_FILE, { v: 1, counts: Object.fromEntries(skillNudge) }); }
+  catch (e) { failNote('skill.nudge.persist', e); }
+}
 const verdictReview = makeVerdictReview({ cap: num(process.env.SKYNET_VERDICT_REVIEW_CAP, 40), ttlMs: num(process.env.SKYNET_VERDICT_REVIEW_TTL_MS, 6 * 60 * 60 * 1000), graceMs: num(process.env.SKYNET_VERDICT_REVIEW_GRACE_MS, 90 * 1000), now: () => Date.now() });
 const SKILL_CURATOR_INTERVAL_MS = num(process.env.SKYNET_SKILL_CURATOR_INTERVAL_MS, 24 * 60 * 60 * 1000);
 const SKILL_CURATOR_MAX_COST_USD = num(process.env.SKYNET_SKILL_CURATOR_MAX_USD, 0.12);
@@ -3063,7 +3127,7 @@ async function runBackgroundSkillReview(o) {
     // rewrite or archive it — the ledger lives in this per-pass tool instance. gate: the fork is a
     // model too; a withheld skill is withheld from IT as well, or the review pass becomes the way
     // an unreviewed body reaches a prompt.
-    makeSkillTools({ store: skillStore, gate: skillGate, readBeforeWrite: true, onManage: (skill, ctx, action) => reviewObserver.onManage(skill, action) }).register(registry);
+    makeSkillTools({ store: skillStore, gate: skillGate, readBeforeWrite: true, countViews: false, onManage: (skill, ctx, action) => reviewObserver.onManage(skill, action) }).register(registry);
     const allowed = ['skill.write', 'skill.manage', 'skill.list', 'skill.view'];
     const resolved = {
       agentId, room: 'skill-review', hasCompute: true, tools: allowed.slice(),
@@ -3149,7 +3213,7 @@ async function runSkillCurator(o) {
     const registry = makeRegistry();
     // A2: same un-silencing for the curator — merges/archives now surface a deliverable + audit line once each.
     const curatorObserver = skillReview.makeReviewObserver({ emit: chanEmit, log: (s) => console.log(s), now: () => Date.now(), source: 'skill-curator' });
-    makeSkillTools({ store: skillStore, gate: skillGate, readBeforeWrite: true, onManage: (skill, ctx, action) => curatorObserver.onManage(skill, action) }).register(registry);   // same two guards as the review fork: read before you rewrite, and the guard's verdict binds here too
+    makeSkillTools({ store: skillStore, gate: skillGate, readBeforeWrite: true, countViews: false, onManage: (skill, ctx, action) => curatorObserver.onManage(skill, action) }).register(registry);   // same two guards as the review fork: read before you rewrite, and the guard's verdict binds here too
     const allowed = ['skill.write', 'skill.manage', 'skill.list', 'skill.view'];
     const resolved = { agentId, room: 'skill-curator', hasCompute: true, tools: allowed.slice(), approvalRules: {}, networkCaps: {} };
     const toolDefs = registry.wireFormat(registry.list(new Set(allowed)));
@@ -3394,6 +3458,14 @@ const pendingSummonByRun = new Map();      // runId -> Map(requestId -> resolve(
    would surface prompts through GET /api/state/snapshot that the app is structurally unable to answer — a card
    that lies about being actionable. A Telegram prompt is answered on Telegram (or it fail-closes). */
 const channelPendingByRun = new Map();     // runId -> Map(promptId -> finish(decision)); live CHANNEL consent prompts
+/* STARNET REMOTE (phase 1): every open approval on the station, indexed in ONE registry so a paired phone can
+   see and answer it (sidecar/remote/approvals.js). It is a read-side index: the waiters above keep their
+   fail-closed timing, and a phone answer calls the SAME finisher the original surface would have. The two maps
+   stay separate for the reason given above; the registry is what lets a phone reach both. */
+const remoteApprovals = require('./remote/approvals.js').makeApprovals({
+  now: () => Date.now(),
+  onChange: (kind, row) => { try { if (typeof remoteBroadcast === 'function') remoteBroadcast(kind === 'opened' ? { type: 'approval.opened', approval: row } : { type: 'approval.closed', runId: row.runId, promptId: row.promptId }); } catch (e) { failNote('remote.index.approvalBroadcast', e); } }
+});
 function channelAskConsent(o) {
   const runId = String((o && o.runId) || '');
   let pend = channelPendingByRun.get(runId);
@@ -3404,14 +3476,19 @@ function channelAskConsent(o) {
     scope: (o.tool && o.tool.scope) || 'write',
     argsSummary: consentSummary(o.call)
   };
+  let untrack = null;
   return makeConsentWait({
     pending: pend, signal: o.signal, timeoutMs: CONSENT_TIMEOUT_MS, extendMs: CONSENT_ACK_EXTEND_MS,
     uuid: () => crypto.randomUUID(),
     // onPrompt is the hub's cue to render the keyboard. It is called synchronously while the deny timer is
     // already armed, so a throw from the renderer must never escape into the waiter (it would leave the run
     // paused with no timer owner) — hence the guard.
-    emitPrompt: (promptId) => { try { if (typeof o.onPrompt === 'function') o.onPrompt(promptId, fields); } catch (_) {} }
+    emitPrompt: (promptId) => {
+      try { untrack = remoteApprovals.add(Object.assign({ runId, promptId, agentId: o.agentId, surface: o.surface === 'remote' ? 'remote' : 'channel', finish: pend.get(promptId) }, fields)); } catch (e) { failNote('remote.index.trackChannelPrompt', e); }
+      try { if (typeof o.onPrompt === 'function') o.onPrompt(promptId, fields); } catch (e) { failNote('channels.consent.onPrompt', e); }
+    }
   }).ask().then((decision) => {
+    if (untrack) untrack();
     // makeConsentWait removes its own promptId; drop the run's bucket once the last prompt settles so a long
     // -lived channel can't accumulate one empty Map per run forever.
     if (pend.size === 0) channelPendingByRun.delete(runId);
@@ -6104,7 +6181,7 @@ async function runScoutCycle(o) {
       }
       const existing = scoutExistingClasses();
       let skillSlugs = [];
-      try { skillSlugs = skillsCatalog.catalog(SKILL_LIBRARY, { overrides: skillPrefs.overrides(), placedTypes: SCOUT_CAP_KEYS }).map(s => s.slug).filter(Boolean); } catch (_) { skillSlugs = []; }
+      try { skillSlugs = skillsCatalog.catalog(skillLibrary(), { overrides: skillPrefs.overrides(), placedTypes: SCOUT_CAP_KEYS }).map(s => s.slug).filter(Boolean); } catch (_) { skillSlugs = []; }
       const cx = scoutState.context || {};
       const directive = ProspectGen.buildDirective({
         dossierBlock: commanderDossier.get(),
@@ -6604,7 +6681,9 @@ function nightshiftContextPack() {
   // recent RUNS (newest-first already from runStore.list). We pass the whole recent window; the pure core windows
   // to ~7d + excludes internal streamIds (nightshift-/cron-/workshop-) + de-dupes. limit generous; core caps to 8.
   let runs = [];
-  try { runs = (runStore.list(null, { limit: 60 }) || []).map(r => ({ title: r.title, ts: r.ts, streamId: r.streamId, reason: r.reason })); } catch (_) { runs = []; }
+  // `internal` rides through: the pure core's `!r.internal` filter was dead because this map dropped the flag, so the
+  // station's own reason-only calls read as the Commander's recent work (USER-STUDY LOOP, 2026-09-28).
+  try { runs = (runStore.list(null, { limit: 60 }) || []).map(r => ({ title: r.title, ts: r.ts, streamId: r.streamId, reason: r.reason, internal: !!r.internal })); } catch (_) { runs = []; }
   // recent CHATS: all transcript rows (the store already redacted content on write); the core filters role:'user',
   // excludes internal streams, takes first-lines, re-redacts as a backstop. Bound the tail we hand over (RAM-safe).
   let chats = [];
@@ -6809,7 +6888,7 @@ async function runNightshiftBeat(opts) {
   // +1 per delivered draft until restart. Place it NOW (a job was selected — work genuinely starts) and settle it
   // on every exit below, exactly like the act/workshop/cron paths do.
   const beatItemId = 'nsbeat-' + crypto.randomUUID();
-  try { placeCronWorkitem(agentId, '✦ night-shift: ' + String(sel.selected.title || 'draft'), beatItemId); } catch (_) {}
+  try { placeCronWorkitem(agentId, '✦ autonomy: ' + String(sel.selected.title || 'draft'), beatItemId); } catch (_) {}
   let beatDelivered = false;
   try {
   // 3) DO — the do directive stays on the declared focus too.
@@ -6834,7 +6913,7 @@ async function runNightshiftBeat(opts) {
   // morning report needs an app-closure absence and the drafts nudge waits for N unseen. 'notify' is a
   // registered bare-string bus event with no other emitter; the station HUD toasts it on arrival. (The
   // built-artifact path needs no twin: workshop.built already fires there and the HUD presents that card.)
-  try { chanEmit('notify', '✦ night shift — drafted “' + entry.title + '” while you were away · review it in the NIGHT SHIFT panel'); } catch (_) {}
+  try { chanEmit('notify', '✦ autonomy — drafted “' + entry.title + '” while you were away · review it in SETTINGS › AUTONOMY'); } catch (_) {}
   beatDelivered = true;
   return { delivered: true, reason: 'delivered', title: deliverable.title, archetype: sel.selected.archetype, verdict: crit.verdict };
   } finally {
@@ -6943,7 +7022,7 @@ async function runNightshiftActShift(opts) {
     target: sel.selected.threadId || targetRoot || '', evidence: [{ id: sel.selected.threadId ? 'thread:' + sel.selected.threadId : (targetRoot ? 'project:' + targetRoot : 'nightshift-grounds'), type: sel.selected.threadId ? 'thread' : (targetRoot ? 'project' : 'context'), quote: sel.selected.grounds || focusHeader || '' }],
     readiness: { ready: rd.tier === 'hot', reasons: rd.tier === 'hot' ? [] : [rd.tier] }, score: sel.selected.score, modelVersion: 'autopilot-v2' }, Date.now()).catch(swallow('recledger.record'));
   const backlogId = 'ns-act-' + runId;
-  const title = String(sel.selected.title || 'Night-shift build').slice(0, 200);
+  const title = String(sel.selected.title || 'Autonomy build').slice(0, 200);
   try { await workshopStore.queue(agentId, { id: backlogId, title, detail: String(sel.selected.spec || ''), source: 'nightshift', grounds: String(sel.selected.grounds || '') }, Date.now()); }
   catch (_) { /* a queue hiccup (e.g. a title the Commander earlier discarded) → stand down honestly */ return { delivered: false, reason: 'queue-refused' }; }
   await workshopStore.claimNext(agentId, runId, isRunLive).catch(swallow('workshop.claim', null));   // stamp buildingRunId (zombie-reap aware)
@@ -6954,7 +7033,7 @@ async function runNightshiftActShift(opts) {
   const sig = signal || (ac && ac.signal);
   if (ac) runs.set(runId, ac);
   runsMeta.set(runId, { agentId, startedAt: Date.now(), source: 'nightshift' });
-  try { placeCronWorkitem(agentId, '✦ night-shift: ' + title, runId); } catch (_) {}
+  try { placeCronWorkitem(agentId, '✦ autonomy: ' + title, runId); } catch (_) {}
   let threw = null;
   try {
     await runOnce({
@@ -7174,7 +7253,7 @@ function loopPrecheck(loop) {
     }
     const provider = cronProviderFor(loop);
     if (!cronHasCredential(provider, cronKeyFor(provider))) {
-      return { ok: false, reason: 'no credential for ' + (provider || 'the selected provider') + ' — add a key in the KEYS tab' };
+      return { ok: false, reason: 'no credential for ' + (provider || 'the selected provider') + ' — connect it in SETTINGS › PROVIDERS' };
     }
     return { ok: true };
   } catch (e) { return { ok: false, reason: 'precheck error: ' + ((e && e.message) || e) }; }
@@ -8231,7 +8310,45 @@ async function completeQuestRecommendationIds(ids) {
     // into the journey ledger; duplicate sweeps are idempotent by quest id.
     try { const q = questStore.get(id); if (q && q.status === 'done') await journeyStore.recordQuest(q, commanderGoals.get(), q.completedAt || Date.now()); } catch (e) { console.warn('[journey] quest fold failed:', (e && e.message) || e); }
   }
+  await advanceGoalFromQuests();
   return ids;
+}
+
+/* USER-STUDY LOOP — THE PLAN MOVES WITHOUT THE WINDOW. Quest refresh plans the current step as a slate of
+   contract-verified quests (bound goalId + milestoneId). When that slate is settled — none open, at least one
+   completed by its contract — the step is recorded in the journey with 'harness-contract' authority and the goal
+   mirror advances to the next step, so the next refresh plans forward instead of re-planning a finished step.
+   The webview folds the same journey record onto its tree when it next syncs. Idempotent (the journey's
+   source-key ledger), fail-open, and never a claim about the life goal itself. */
+let goalAdvancing = null, goalAdvanceAgain = false;
+function advanceGoalFromQuests() {
+  // single-flight, but never a lost look: a completion that lands mid-pass re-runs the pass once it finishes.
+  if (goalAdvancing) { goalAdvanceAgain = true; return goalAdvancing; }
+  const task = (async () => {
+    let advanced = 0;
+    // a slate can finish more than one step in a row only if later steps already have settled quests; bounded.
+    for (let guard = 0; guard < GoalAdvance.MILESTONE_CAP; guard++) {
+      const goal = commanderGoals.get();
+      const fin = GoalAdvance.slateFinished(goal, questStore.list());
+      if (!fin) break;
+      const r = await journeyStore.recordMilestone({ goalId: fin.goalId, goalText: goal.text, milestoneId: fin.milestoneId,
+        milestoneText: fin.milestoneText, evidence: fin.evidence, agentId: null }, Date.now(), { authority: fin.authority });
+      if (!r || !r.ok) break;
+      commanderGoals.set(goal);   // re-fold: the step now reads done and the mirror names the next one
+      questRefreshNote({ outcome: 'advanced', reason: 'every quest planned for this step is settled — the plan moved to the next step', title: fin.milestoneText });
+      advanced++;
+      const after = commanderGoals.get();
+      if (!after || after.milestoneId === fin.milestoneId) break;   // defensive: the fold did not move it
+    }
+    if (advanced) { try { questRefreshTick(); } catch (e) { failNote('goals.advance.refreshTick', e); } }   // caught up on a new step: the refresh gate decides whether to plan it now
+    return advanced;
+  })().catch(e => { console.warn('[goals] advance failed:', (e && e.message) || e); return 0; });
+  goalAdvancing = task;
+  task.finally(() => {
+    if (goalAdvancing === task) goalAdvancing = null;
+    if (goalAdvanceAgain) { goalAdvanceAgain = false; advanceGoalFromQuests(); }
+  });
+  return task;
 }
 
 // A quest completion is durable before its journey fold. Recover a crash/write failure by replaying every done
@@ -8250,7 +8367,7 @@ function reconcileCompletedJourneyQuests() {
   task.finally(() => { if (journeyQuestReconcile === task) journeyQuestReconcile = null; }).catch(() => {});
   return task;
 }
-setImmediate(() => reconcileCompletedJourneyQuests().catch(e => console.warn('[journey] boot reconciliation failed:', (e && e.message) || e)));
+setImmediate(() => reconcileCompletedJourneyQuests().then(() => advanceGoalFromQuests()).catch(e => console.warn('[journey] boot reconciliation failed:', (e && e.message) || e)));
 
 let questRefreshingNow = false;   // one cycle in flight, ever (the scout's in-flight-guard discipline)
 async function runQuestRefreshCycle(why) {
@@ -8301,6 +8418,7 @@ async function runQuestRefreshCycle(why) {
     const dossierBlock = dossierNotReady ? '' : commanderDossier.get();
     const evidenceCtx = {
       goalNote: goalNote,
+      nextStep: (capturedGoal && capturedGoal.milestoneId && capturedGoal.next) ? capturedGoal.next : '',
       progress: questProgressContext(),
       // ground on the EFFECTIVE star: a pending (unconfirmed) inference still steers the directive so the cycle
       // isn't rudderless while awaiting the Commander's verdict — the UI is what labels it unconfirmed, not here.
@@ -9624,6 +9742,190 @@ async function handleGroups(req, res) {
     respondJson(res, 200, { ok: true, result: out });
   } catch (e) { if (!res.headersSent) respondJson(res, e.status || 400, { ok: false, error: redact(String(e.message || e)) }); }
 }
+/* ======================================================================================================================
+   STARNET REMOTE (phase 1) — a paired phone drives this station from anywhere on the home network.
+   The pieces live in sidecar/remote/ (crypto, devices, session, approvals, gateway, lan, host). This block only wires
+   them to the SAME in-process functions the desktop and channels already use. OFF by default: nothing listens on the
+   LAN until the Commander switches Remote on at the desk. The main sidecar port stays loopback-only either way.
+   ==================================================================================================================== */
+const REMOTE_NOTE = '\n\n[REMOTE] The Commander sent this from their phone through StarNet Remote. Work exactly as you normally '
+  + 'would. They will read your reply on a small screen, so lead with the result.';
+const remoteCrypto = require('./remote/crypto.js');
+const remoteDevices = require('./remote/devices.js').makeDevices({
+  fs, path, crypto: remoteCrypto, file: path.join(WORKSPACES, '.secrets', 'remote.json'),
+  now: () => Date.now(), newId: () => crypto.randomUUID(),
+  tighten: () => { if (process.platform !== 'win32') { try { fs.chmodSync(path.join(WORKSPACES, '.secrets', 'remote.json'), 0o600); } catch (e) { failNote('remote.index.fs.chmodSync', e); } } }
+});
+const remoteSessions = require('./remote/session.js').makeSessions({ devices: remoteDevices, crypto: remoteCrypto, now: () => Date.now(), newId: () => crypto.randomUUID() });
+// hoisted on purpose: the approvals registry (defined far above) announces changes through this
+function remoteBroadcast(evt) { try { return remoteSessions.broadcast(evt); } catch (_) { return 0; } }
+const remoteHost = require('./remote/host.js').makeRemoteHost({
+  now: () => Date.now(), newId: () => crypto.randomUUID(), broadcast: remoteBroadcast,
+  roster: () => [...agentRoster].map(([agentId, a]) => ({ agentId, name: a.name, model: a.model, provider: a.provider })),
+  liveRuns: () => {
+    const out = [];
+    for (const [runId, m] of runsMeta) out.push({ runId, agentId: m.agentId, startedAt: m.startedAt, source: m.source || 'interactive' });
+    for (const [runId, m] of hostLiveRuns) if (!out.some(r => r.runId === runId)) out.push({ runId, agentId: m.agentId, startedAt: m.startedAt, source: m.source || 'host' });
+    return out;
+  },
+  transcript: {
+    streams: (o) => transcriptStore.streams(o),
+    history: (sid, o) => transcriptStore.history(sid, o),
+    reconstruct: (sid, o) => transcriptStore.reconstruct(sid, o)
+  },
+  // the same resolution a scheduled routine uses (roster model/provider, runtime key), minus the routine note
+  credentials: (agentId) => {
+    const job = { agentId };
+    const model = cronModelFor(job), provider = cronProviderFor(job), key = cronKeyFor(provider);
+    if (!model) return { ok: false, error: 'choose a model for this agent at the desk first' };
+    if (!cronHasCredential(provider, key)) return { ok: false, error: providerCredentialError(provider) + ' to run tasks from your phone' };
+    const ident = agentRoster.get(agentId) || {};
+    const raw = String(ident.system || '').trim();
+    return { ok: true, model, provider, key, baseUrl: providerRuntimeBaseUrl(provider, ''), reasoningEffort: resolveReasoningEffort(provider, ident.reasoningEffort),
+      system: raw ? withDossier(raw + REMOTE_NOTE, dossierWithGoals()) : withDossier(CRON_PERSONA + REMOTE_NOTE, dossierWithGoals()) };
+  },
+  runOnce: (o) => runOnce(o),
+  askConsent: (o) => channelAskConsent(o),
+  stopRun: (runId) => { const ac = runs.get(runId); if (!ac) return false; try { ac.abort(); } catch (e) { failNote('remote.index.ac.abort', e); } return true; },
+  deliverables: () => deliverableRows(),
+  readFile: async (agentId, rel, offset, length) => {
+    let abs;
+    try { ({ abs } = await fsJail.resolveInside(agentId, rel)); } catch (_) { return { ok: false, error: 'unknown file' }; }
+    let st; try { st = await fsp.stat(abs); } catch (_) { return { ok: false, error: 'unknown file' }; }
+    if (!st.isFile()) return { ok: false, error: 'unknown file' };
+    const start = Math.min(offset, st.size);
+    const want = Math.max(0, Math.min(length, st.size - start));
+    const buf = Buffer.alloc(want);
+    let n = 0;
+    if (want) { const fh = await fsp.open(abs, 'r'); try { ({ bytesRead: n } = await fh.read(buf, 0, want, start)); } finally { await fh.close(); } }
+    const ext = path.extname(abs).toLowerCase();
+    return { path: rel, size: st.size, offset: start, bytes: n, eof: start + n >= st.size,
+      mime: MIME[ext] || 'application/octet-stream', active: isActiveDeliverable(abs), name: safeDownloadName(abs), data: buf.subarray(0, n).toString('base64') };
+  },
+  routines: () => cronStateSnapshot(Date.now()).jobs,
+  setRoutine: async (jobId, enabled) => {
+    if (!cronStore.getJob(cronJobs, jobId)) return { ok: false, error: 'no such routine' };
+    try {
+      await withCronWrite(jobs => enabled
+        ? cronStore.resumeJob(jobs, jobId, { now: Date.now(), defaultTz: CRON_HOST_TZ })
+        : cronStore.pauseJob(jobs, jobId));
+    } catch (e) { return { ok: false, error: 'could not save: ' + ((e && e.message) || e) }; }
+    // pause means stop unattended work now (the same rule as the ROUTINES panel's pause)
+    if (!enabled) { const lease = cronDriver.leases.get(jobId); if (lease && lease.ac) { try { lease.ac.abort(); } catch (e) { failNote('remote.index.lease.ac.abort', e); } } }
+    return { ok: true, enabled: !!enabled };
+  }
+});
+const remoteGateway = require('./remote/gateway.js').makeGateway({ host: remoteHost, approvals: remoteApprovals, now: () => Date.now() });
+const remoteLan = require('./remote/lan.js').makeLanListener({
+  sessions: remoteSessions, devices: remoteDevices, gateway: remoteGateway, crypto: remoteCrypto, now: () => Date.now(),
+  onPaired: () => { if (remoteRelay) remoteRelay.syncTokens(); },
+  log: (m) => console.log('  · remote: ' + m)
+});
+// The station floor's own redacted feed, teed to phones. Only parsed when a phone is actually listening.
+sse.add({
+  writableLength: 0,
+  write(line) {
+    if (!remoteSessions.list().some(s => s.sink)) return true;
+    const i = String(line).indexOf('data: ');
+    if (i < 0) return true;
+    let m; try { m = JSON.parse(String(line).slice(i + 6)); } catch (_) { return true; }
+    if (m && m.name && m.name !== 'station.command') remoteBroadcast({ type: 'station', name: m.name, payload: m.payload });
+    return true;
+  }
+});
+/* THE RELAY (the product path). The station dials OUT to it (sidecar/remote/relay-client.js, Node's built-in
+   WebSocket), so a phone reaches this station from anywhere with no port forwarding. REMOTE_RELAY_LIVE flips on
+   when the public relay is deployed; until then only an explicit STARNET_REMOTE_RELAY address is used (tests,
+   self-hosted relays). With no relay the desk says so plainly instead of pretending phones can connect. */
+const REMOTE_RELAY_LIVE = false;
+const REMOTE_RELAY_DEFAULT = 'https://remote.starnetos.com';
+const REMOTE_RELAY_URL = String(ENV('REMOTE_RELAY') || (REMOTE_RELAY_LIVE ? REMOTE_RELAY_DEFAULT : '')).trim().replace(/\/+$/, '');
+const remoteRelay = REMOTE_RELAY_URL ? require('./remote/relay-client.js').makeRelayClient({
+  url: REMOTE_RELAY_URL, devices: remoteDevices, sessions: remoteSessions, gateway: remoteGateway, crypto: remoteCrypto, now: () => Date.now(),
+  log: (m) => console.log('  · remote relay: ' + m)
+}) : null;
+// The LAN door is a developer/test transport: a phone browser can't use WebCrypto on a plain-http LAN page,
+// so real phones go through the relay. It opens only when asked for (STARNET_REMOTE_LAN=1).
+const REMOTE_LAN_ON = /^(1|true|yes|on)$/i.test(String(ENV('REMOTE_LAN') || '').trim());
+const REMOTE_PORT = Number(ENV('REMOTE_PORT')) || 8797;
+function remoteLanUrls() {
+  const info = remoteLan.info();
+  if (!info.listening) return [];
+  const out = [];
+  let ifs = {}; try { ifs = os.networkInterfaces() || {}; } catch (e) { failNote('remote.index.networkInterfaces', e); }
+  for (const name of Object.keys(ifs)) for (const a of ifs[name] || []) {
+    if (a && a.family === 'IPv4' && !a.internal) out.push('http://' + a.address + ':' + info.port);
+  }
+  return out;
+}
+// Opens whatever doors this build has: the relay link (product) and, only when asked for, the LAN test door.
+async function remoteStartDoors() {
+  if (remoteRelay) remoteRelay.start();
+  if (REMOTE_LAN_ON) return remoteStartLan();
+  return remoteLan.info();
+}
+async function remoteStopDoors() {
+  for (const s of remoteSessions.list()) remoteSessions.end(s.id);
+  if (remoteRelay) remoteRelay.stop();
+  await remoteLan.stop();
+}
+async function remoteStartLan() {
+  if (remoteLan.info().listening) return remoteLan.info();
+  try { return await remoteLan.start({ host: '0.0.0.0', port: REMOTE_PORT }); }
+  catch (e) {
+    if (e && e.code === 'EADDRINUSE') { console.warn('[remote] port ' + REMOTE_PORT + ' is busy — using a free port instead'); return remoteLan.start({ host: '0.0.0.0', port: 0 }); }
+    throw e;
+  }
+}
+function remoteSnapshot() {
+  let station = null;
+  try { const s = remoteDevices.stationKeys(); station = { id: s.id, fingerprint: remoteCrypto.fingerprint(s.publicRaw) }; } catch (e) { failNote('remote.index.stationKeys', e); }
+  const info = remoteLan.info();
+  return { ok: true, enabled: remoteDevices.enabled(), listening: !!info.listening, port: info.port || null, urls: remoteLanUrls(),
+    relay: remoteRelay ? remoteRelay.info() : null,
+    station, devices: remoteDevices.list(), connected: remoteSessions.list().map(s => ({ deviceId: s.deviceId, since: s.createdAt, lastAt: s.lastAt, live: !!s.sink })),
+    approvals: remoteApprovals.size() };
+}
+// GET /api/remote — the desk's DEVICES panel: is Remote on, where does it listen, who is paired, who is connected
+function handleRemoteStatus(req, res) { respondJson(res, 200, remoteSnapshot()); }
+// POST /api/remote/enable { on } — the switch. Persisted; the LAN door opens or closes with it.
+async function handleRemoteEnable(req, res) {
+  let b; try { b = JSON.parse(await readBody(req, 1024)) || {}; } catch (_) { return respondJson(res, 400, { ok: false, error: 'bad request' }); }
+  const on = b.on === true;
+  const saved = remoteDevices.setEnabled(on);
+  if (!saved.ok) return respondJson(res, 500, { ok: false, error: 'could not save the Remote switch (' + saved.error + ')' });
+  try {
+    if (on) await remoteStartDoors();
+    else await remoteStopDoors();
+  } catch (e) { return respondJson(res, 500, Object.assign(remoteSnapshot(), { ok: false, error: 'Remote is on but the network door could not open: ' + ((e && e.message) || e) })); }
+  respondJson(res, 200, remoteSnapshot());
+}
+// POST /api/remote/pair { name? } — a one-time code for ONE phone, valid 10 minutes
+async function handleRemotePair(req, res) {
+  let b; try { b = JSON.parse(await readBody(req, 1024)) || {}; } catch (_) { b = {}; }
+  if (!remoteDevices.enabled()) return respondJson(res, 409, { ok: false, error: 'switch Remote on first' });
+  if (!remoteRelay && !remoteLan.info().listening) return respondJson(res, 409, { ok: false, error: 'this build has no relay set up yet, so a phone has no way to reach this station' });
+  let p; try { p = remoteDevices.startPairing({ name: b.name }); } catch (e) { return respondJson(res, 500, { ok: false, error: (e && e.message) || String(e) }); }
+  const urls = remoteLanUrls();
+  // what the phone needs, in one blob; carried in a URL FRAGMENT so it never reaches a server log. The relay URL
+  // rides along only when it isn't the page's own origin (a self-hosted or test relay).
+  const blob = remoteCrypto.b64u(Buffer.from(JSON.stringify(Object.assign({ v: remoteCrypto.VERSION, i: p.stationId, s: p.stationPub, p: p.pairingId, c: p.code },
+    remoteRelay ? { r: REMOTE_RELAY_URL } : { u: urls }))));
+  const pairUrl = remoteRelay ? REMOTE_RELAY_URL + '/#pair=' + blob : (urls.length ? urls[0] + '/remote/app/#pair=' + blob : null);
+  respondJson(res, 200, { ok: true, pairingId: p.pairingId, code: p.code, stationId: p.stationId, stationPub: p.stationPub, fingerprint: p.fingerprint,
+    expiresAt: p.expiresAt, urls, relay: remoteRelay ? REMOTE_RELAY_URL : null, pairBlob: blob, pairUrl });
+}
+// POST /api/remote/revoke { deviceId } — forget a phone; its live sessions end at once
+async function handleRemoteRevoke(req, res) {
+  let b; try { b = JSON.parse(await readBody(req, 1024)) || {}; } catch (_) { return respondJson(res, 400, { ok: false, error: 'bad request' }); }
+  const id = String(b.deviceId || '');
+  const r = remoteDevices.revoke(id);
+  remoteSessions.endDevice(id);
+  if (remoteRelay) remoteRelay.kickDevice(id);
+  if (!r.ok) return respondJson(res, r.error === 'no such device' ? 404 : 500, { ok: false, error: r.error });
+  respondJson(res, 200, remoteSnapshot());
+}
+
 const ROUTES = [
   { m: 'GET', qsplit: '/api/groups', h: handleGroups },
   { m: 'POST', exact: '/api/groups', h: handleGroups },
@@ -9783,6 +10085,10 @@ const ROUTES = [
   { m: 'POST', exact: '/api/userprops/scale', h: handleUserPropScale },         // {id, scale} → the player's size for a made prop (0.5..3, free: no regeneration)
   { m: 'POST', exact: '/api/userprops/delete', h: handleUserPropDelete },       // {id} → delete a made prop (files + index; id tombstoned so saves drop it)
   { m: 'POST', exact: '/api/userprops/side', h: handleUserPropSide },           // {id} → turn a made prop into its left-facing side view (credits, 200-always)
+  { m: 'GET', exact: '/api/remote', h: handleRemoteStatus },          // STARNET REMOTE: on/off, where it listens, paired + connected phones
+  { m: 'POST', exact: '/api/remote/enable', h: handleRemoteEnable },  // the switch (persisted); opens/closes the LAN door
+  { m: 'POST', exact: '/api/remote/pair', h: handleRemotePair },      // one-time pairing code for ONE phone (10 min)
+  { m: 'POST', exact: '/api/remote/revoke', h: handleRemoteRevoke },  // forget a phone; its sessions end at once
   { m: 'POST', exact: '/api/budget/caps', h: handleBudgetCaps },
   { m: 'POST', exact: '/api/budget/resume', h: handleBudgetResume },
   { m: 'GET', exact: '/api/fallback/chain', h: handleFallbackStatus },
@@ -9844,6 +10150,9 @@ const ROUTES = [
   { m: 'GET', prefix: '/api/slash/catalog', h: serveSlashCatalog },
   { m: 'POST', exact: '/api/slash/dispatch', h: handleSlashDispatch },
   { m: 'POST', exact: '/api/skills/toggle', h: handleSkillToggle },
+  { m: 'GET', qsplit: '/api/skill-market', h: serveSkillMarket },                // the Skill Market: catalog + this station's install state
+  { m: 'POST', exact: '/api/skill-market/install', h: handleSkillMarketInstall },
+  { m: 'POST', exact: '/api/skill-market/uninstall', h: handleSkillMarketUninstall },
   { m: 'POST', exact: '/api/skill-exchange/inspect', h: handleSkillExchangeInspect },
   { m: 'POST', exact: '/api/skill-exchange/registry', h: handleSkillExchangeRegistry },
   { m: 'POST', exact: '/api/skill-exchange/discover', h: handleSkillExchangeDiscover },
@@ -10007,6 +10316,7 @@ const ROUTES = [
   { m: 'GET', prefix: '/api/memory/pending', h: servePending },   // un-answered high-stakes decks (durable, cross-run)
   { m: 'POST', exact: '/api/memory/turnin', h: handleMemoryTurnin },
   { m: 'GET', prefix: '/api/study/proposals', h: serveStudyProposals },   // GROWTH Tier 1: dossier belief-update proposals for a run
+  { m: 'GET', exact: '/api/study/pending', h: serveStudyPending },   // USER-STUDY LOOP: every undecided study batch (incl. runs that finished while the window was closed)
   { m: 'POST', exact: '/api/study/resolve', h: handleStudyResolve },   // GROWTH Tier 1: consume one decided study proposal + mirror the denylist
   { m: 'GET', prefix: '/api/threads/proposals', h: serveThreadProposals },   // NS-6: pending mined thread candidates for a run (turn-in)
   { m: 'POST', exact: '/api/threads/turnin', h: handleThreadTurnin },   // NS-6: keep/edit → commit an open thread; discard → permanently deny the fingerprint
@@ -10148,6 +10458,12 @@ server.listen(PORT, '127.0.0.1', () => {
   if (DEV_MODE) console.log('     ⚡ DEV SEED MODE — onboarding auto-skipped; the page resumes the seeded agent.');
   console.log(bar + '\n');
   try { openaiCompat.announce(); } catch (_) {}   // one honest boot line: is the /v1 external-harness API live?
+  // STARNET REMOTE: reopen the phone door only if the Commander left Remote switched on
+  try {
+    if (remoteDevices.enabled()) remoteStartDoors().then(
+      (i) => console.log('  · remote: on (' + remoteDevices.list().length + ' paired' + (remoteRelay ? ', relay ' + REMOTE_RELAY_URL : ', no relay in this build') + (i && i.listening ? ', LAN test door on port ' + i.port : '') + ')'),
+      (e) => console.warn('[remote] could not open the network door: ' + ((e && e.message) || e)));
+  } catch (e) { console.warn('[remote] ' + ((e && e.message) || e)); }
   // Interrupted runs -> run history (background, chunked; see scanInterruptedRuns). The list was captured at
   // module load, before this process could begin a run, so every file in it belongs to a process that is gone.
   scanInterruptedRuns(bootRunJournalFiles);
@@ -12082,6 +12398,34 @@ async function handleServiceKeyRemove(req, res) {
   applyServiceKeysEnv();   // scrubs the owned env var so the very next run no longer sees it
   return json(200, { ok: true, saved: true, removed: String(body.id || '') });
 }
+/* Only availability crosses the wire, never publisher registration values. Missing configuration is StarNet's
+   responsibility, so the customer UI never exposes an application-credential form. Module-level (was local to the
+   catalog route) so connectors.list reads the SAME verdict the ABILITIES card draws — the first-hour walk
+   (2026-09-28) had the agent promise "sign in with Google, no setup" beside a disabled GOOGLE SIGN-IN button.
+   IDEMPOTENT: browse() lists one entry object under both `connectors` and its group, so a second pass must not
+   prefix the early-access sentence again (the card printed it twice). */
+const EARLY_ACCESS_BLURB = 'Early access — Google has not finished verifying StarNet yet. When Google says the app isn’t verified, choose Advanced, then Go to StarNet. ';
+function annotateConnectorAvailability(e) {
+  if (!e) return e;
+  if (e.staticOauth) e.needsClient = !connectorOauthClient(e.staticOauth.authorizationServer).clientId;
+  if (e.googleApi) {
+    e.releaseDeferred = googleConnectorDeferred(e);
+    if (!e.releaseDeferred && googleClientConfig.EARLY_ACCESS === true && !googleClientConfig.isSelectedFiles(e)) {
+      e.earlyAccess = true;
+      if (String(e.blurb || '').indexOf(EARLY_ACCESS_BLURB) !== 0) e.blurb = EARLY_ACCESS_BLURB + (e.blurb || '');   // catalog entries are fresh clones per request
+    }
+    if (e.releaseDeferred) e.blurb = 'Planned for a later update. ' + e.blurb.replace(/^Planned for a later update\. /, '').replace(' Sign in with Google to connect your account.', '');
+    e.signInAvailable = !connectorStorageError && !e.releaseDeferred && !e.needsClient && (!googleClientConfig.isSelectedFiles(e) || connectorVault.protected);
+    if (!e.signInAvailable) e.signInMessage = connectorStorageError || (e.releaseDeferred ? googleDeferredMessage(e) : googleClientConfig.UNAVAILABLE);
+  }
+  return e;
+}
+// '' when the card's sign-in works in this build, else the card's own reason (read on a shallow copy — never mutates).
+function connectorSignInUnavailable(entry) {
+  if (!entry || !entry.googleApi) return '';
+  const e = annotateConnectorAvailability(Object.assign({}, entry));
+  return e.signInAvailable === false ? String(e.signInMessage || googleClientConfig.UNAVAILABLE || 'sign-in is not available in this build') : '';
+}
 /* GET /api/connectors/catalog — the curated one-click catalog (pure data). Annotated with `installed`
    by cross-referencing the live connector configs (by id), so the browse panel can show what's already
    added. No secrets involved — the catalog carries only public endpoints + metadata, never a token. */
@@ -12090,23 +12434,8 @@ function handleConnectorCatalog(req, res) {
   // pass {id,url} so `installed` is a TRUTHFUL match: a manually-added connector that merely reuses a catalog id
   // (e.g. id 'notion' pointing at a different / self-hosted URL) must NOT flip the vetted vendor card to ADDED.
   const payload = connectorCatalog.browse((connectorConfigs || []).map(c => c && { id: c.id, url: c.url || '' }));
-  // Only availability crosses the wire, never publisher registration values. Missing configuration
-  // is StarNet's responsibility, so the customer UI never exposes an application-credential form.
-  const markNeedsClient = (e) => {
-    if (e.staticOauth) e.needsClient = !connectorOauthClient(e.staticOauth.authorizationServer).clientId;
-    if (e.googleApi) {
-      e.releaseDeferred = googleConnectorDeferred(e);
-      if (!e.releaseDeferred && googleClientConfig.EARLY_ACCESS === true && !googleClientConfig.isSelectedFiles(e)) {
-        e.earlyAccess = true;
-        e.blurb = 'Early access — Google has not finished verifying StarNet yet. When Google says the app isn’t verified, choose Advanced, then Go to StarNet. ' + e.blurb;   // catalog entries are fresh clones per request
-      }
-      if (e.releaseDeferred) e.blurb = 'Planned for a later update. ' + e.blurb.replace(/^Planned for a later update\. /, '').replace(' Sign in with Google to connect your account.', '');
-      e.signInAvailable = !connectorStorageError && !e.releaseDeferred && !e.needsClient && (!googleClientConfig.isSelectedFiles(e) || connectorVault.protected);
-      if (!e.signInAvailable) e.signInMessage = connectorStorageError || (e.releaseDeferred ? googleDeferredMessage(e) : googleClientConfig.UNAVAILABLE);
-    }
-  };
-  payload.connectors.forEach(markNeedsClient);
-  payload.groups.forEach(g => g.connectors.forEach(markNeedsClient));
+  payload.connectors.forEach(annotateConnectorAvailability);
+  payload.groups.forEach(g => g.connectors.forEach(annotateConnectorAvailability));
   res.end(JSON.stringify(payload));
 }
 /* POST /api/connectors/oauth/client {id, clientId, clientSecret} — store the ONE-TIME pre-registered OAuth
@@ -12831,7 +13160,7 @@ function lifecycleArmedSnapshot(now) {
   const reasons = [];
   if (routines.armed) reasons.push(routines.count === 1 ? '1 routine armed' : (routines.count + ' routines armed'));
   for (const id of channels.connected) reasons.push((id.charAt(0).toUpperCase() + id.slice(1)) + ' connected');
-  if (nsArmedActive) reasons.push('Night shift armed');
+  if (nsArmedActive) reasons.push('Autonomy armed');
   if (terminals.armed) reasons.push(terminals.count === 1 ? '1 terminal running' : (terminals.count + ' terminals running'));
   return { armed: armed, categories: { routines: routines, channels: channels, nightshift: nightshift, terminals: terminals }, reasons: reasons, ts: now };
 }
@@ -14088,6 +14417,8 @@ async function handleQuestsDismiss(req, res) {
   if (!id) return json(400, { ok: false, error: 'which quest?' });
   let did; try { did = await questStore.dismiss(id, Date.now()); } catch (e) { return json(500, { ok: false, error: 'could not dismiss that quest' }); }
   if (did) await recommendationLedger.verdict('quest:' + id, 'declined', String(body.reason || 'wrong_thing'), Date.now()).catch(swallow('recledger.verdict', null));
+  // dismissing the last open quest of a step whose other quests were completed settles that step.
+  if (did) await advanceGoalFromQuests();
   if (did) { try { questRefreshTick(); } catch (_) {} }   // caught-up nudge (QUEST V3) — same early look as confirm
   json(200, { ok: !!did });
 }
@@ -14563,7 +14894,7 @@ async function applyNightPatch(agentId, runId, relDir, target, title) {
     return { ok: false, error: 'the patch failed to apply after branching (rolled back, no change kept):\n' + String(ap.stderr).slice(0, 400), branch };
   }
   await runGit(root, ['add', '-A']);
-  const commit = await runGit(root, ['-c', 'user.name=StarNet Night Shift', '-c', 'user.email=nightshift@starnet.local', 'commit', '-m', 'night-shift: ' + String(title || 'patch').slice(0, 80)]);
+  const commit = await runGit(root, ['-c', 'user.name=StarNet Autonomy', '-c', 'user.email=autonomy@starnet.local', 'commit', '-m', 'autonomy: ' + String(title || 'patch').slice(0, 80)]);
   if (!commit.ok) return { ok: false, error: 'applied the patch but could not commit it:\n' + String(commit.stderr).slice(0, 300), branch };
   const head = await runGit(root, ['rev-parse', '--short', 'HEAD']);
   return { ok: true, branch, commit: head.stdout.trim(), root, prevBranch: curBranch };
@@ -15294,7 +15625,7 @@ async function handleAgentDelete(req, res) {
   try {
     for (const [rid, b] of proposalsByRun) { if (b && b.agentId === agentId) proposalsByRun.delete(rid); }
     latestProposalRun.delete(agentId); lastReflectAt.delete(agentId); reflectingNow.delete(agentId);
-    lastFailReviewAt.delete(agentId); failReviewingNow.delete(agentId);
+    lastFailReviewAt.delete(agentId); failReviewingNow.delete(agentId); skillReviewingNow.delete(agentId); if (skillNudge.delete(agentId)) persistSkillNudge();
     for (const [rid, b] of studyByRun) { if (b && b.agentId === agentId) studyByRun.delete(rid); }
     latestStudyRun.delete(agentId); lastStudyAt.delete(agentId); studyingNow.delete(agentId); studyDeclinedByAgent.delete(agentId);
     persistStudyState();
@@ -15373,7 +15704,7 @@ function placedTypesFrom(v) {
 }
 
 function slashOptions(placedTypes) {
-  const skills = skillsCatalog.catalog(SKILL_LIBRARY, { overrides: skillPrefs.overrides(), placedTypes: placedTypes || [] });
+  const skills = skillsCatalog.catalog(skillLibrary(), { overrides: skillPrefs.overrides(), placedTypes: placedTypes || [] });
   const recipes = (Recipes && Recipes.builtins) ? Recipes.builtins() : [];
   return { skills, recipes, userCommands: userCommandEntries() };
 }
@@ -15664,8 +15995,40 @@ function serveSkills(req, res) {
   try {
     const u = new URL(req.url, 'http://127.0.0.1');
     const placedTypes = String(u.searchParams.get('placed') || '').split(',').map(s => s.trim()).filter(Boolean);
-    json(200, { skills: skillsCatalog.catalog(SKILL_LIBRARY, { overrides: skillPrefs.overrides(), placedTypes: placedTypes }) });
+    json(200, { skills: skillsCatalog.catalog(skillLibrary(), { overrides: skillPrefs.overrides(), placedTypes: placedTypes }) });
   } catch (e) { json(500, readRouteFailure('skills', e)); }   // broken ≠ empty (chat.js already prints "could not load", not "none")
+}
+// GET /api/skill-market?refresh=1&placed=cabinet,dish — the Skill Market catalog with each entry's state on this
+// station (available / installed / bundled / update / tampered) and the gear it still needs. The catalog is fetched
+// here, on demand, and cached for 5 minutes; nothing fetches it in the background.
+async function serveSkillMarket(req, res) {
+  const json = (code, obj) => respondJson(res, code, obj);
+  try {
+    const u = new URL(req.url, 'http://127.0.0.1');
+    const placedTypes = String(u.searchParams.get('placed') || '').split(',').map(s => s.trim()).filter(Boolean);
+    const out = await skillMarket.listing({ refresh: u.searchParams.get('refresh') === '1', bundled: SKILL_LIBRARY, placedTypes });
+    json(200, Object.assign({ ok: true }, out));
+  } catch (e) { json(200, { ok: false, error: (e && e.message) || 'could not reach the skill market' }); }   // offline is a state, not a crash
+}
+// POST /api/skill-market/install { slug } — install (or update) a market skill into the station library and switch
+// it on. The download must reproduce the catalog's pinned digest or nothing is written.
+async function handleSkillMarketInstall(req, res) {
+  const json = (code, obj) => respondJson(res, code, obj);
+  const body = await readJsonBody(req, readBody, 1 << 16, res);
+  if (body === null) return json(400, { ok: false, error: 'bad json' });
+  try {
+    const r = await skillMarket.install({ slug: body.slug });
+    const on = skillPrefs.set(r.slug, true);
+    json(200, Object.assign({}, r, { enabled: !!(on && on.ok && on.enabled) }));
+  } catch (e) { json(400, { ok: false, error: (e && e.message) || 'could not install that skill' }); }
+}
+// POST /api/skill-market/uninstall { slug } — remove a market install; a bundled original falls back to its bundled copy.
+async function handleSkillMarketUninstall(req, res) {
+  const json = (code, obj) => respondJson(res, code, obj);
+  const body = await readJsonBody(req, readBody, 1 << 16, res);
+  if (body === null) return json(400, { ok: false, error: 'bad json' });
+  try { json(200, skillMarket.uninstall({ slug: body.slug })); }
+  catch (e) { json(400, { ok: false, error: (e && e.message) || 'could not remove that skill' }); }
 }
 // POST /api/skills/toggle { slug, enabled } — persist a station-wide enable/disable choice for a library recipe.
 // Station-wide by design: per-AGENT reach stays the capability gate (the placed objects), not a per-agent toggle.
@@ -16007,11 +16370,24 @@ async function handleRun(req, res) {
   // unit-tested waiter (consentwait.js) — same fail-closed contract, plus the one-shot CONSENT_ACK_EXTEND_MS
   // extension the browser earns via POST /api/consent/ack once the prompt is provably rendered to a human.
   function askHuman(fields) {
+    let untrack = null;
     return makeConsentWait({
       pending, signal: ac.signal, timeoutMs: CONSENT_TIMEOUT_MS, extendMs: CONSENT_ACK_EXTEND_MS,
       uuid: () => crypto.randomUUID(),
-      emitPrompt: (promptId) => emit('permission.prompt', { promptId, agentId, tool: (fields && fields.tool) || 'tool', scope: (fields && fields.scope) || 'write', argsSummary: (fields && fields.argsSummary) || '' })
-    }).ask();
+      emitPrompt: (promptId) => {
+        const row = { promptId, agentId, tool: (fields && fields.tool) || 'tool', scope: (fields && fields.scope) || 'write', argsSummary: (fields && fields.argsSummary) || '' };
+        emit('permission.prompt', row);
+        // STARNET REMOTE: index the prompt so a paired phone can answer it too. A phone answer resolves the same
+        // finisher and then tells this run's page (permission.response on its own stream), so the floor stops
+        // waiting on a question somebody already answered elsewhere.
+        const orig = pending.get(promptId);
+        if (orig) {
+          const viaRemote = (d) => { orig(d); if (typeof d === 'string') { try { emit('permission.response', { promptId, decision: d === 'once' || d === 'session' ? d : 'deny' }); } catch (e) { failNote('remote.index.deskPermissionResponse', e); } } };
+          viaRemote.extend = orig.extend;
+          try { untrack = remoteApprovals.add(Object.assign({ runId, surface: 'desk', finish: viaRemote }, row)); } catch (e) { failNote('remote.index.trackDeskPrompt', e); }
+        }
+      }
+    }).ask().then((v) => { if (untrack) untrack(); return v; });
   }
   function promptConsent(call, tool) {
     return askHuman({ tool: call.name, scope: (tool && tool.scope) || 'write', argsSummary: consentSummary(call) });
@@ -16721,7 +17097,8 @@ async function runOnceCore(o) {
     connectors: { list: connectedConnectorSnapshot },
     serviceKeys: () => serviceKeys,
     connectorCatalog: connectorCatalog,
-    keysCatalog: serviceKeysCatalog
+    keysCatalog: serviceKeysCatalog,
+    signInUnavailable: connectorSignInUnavailable
   }).register(registry);
   // HARNESS SELF-KNOWLEDGE: always-present COMPUTER grant, local/read-only and secret-free. The reader
   // closes over this run's identity while every mutable section is collected fresh at call time from the
@@ -18427,7 +18804,7 @@ async function runOnceCore(o) {
     // prefs — ADD-only (see catalog.compose). Still gated by the station gear + the budget; package composes first.
     const agentSkills = (rosterIdent && Array.isArray(rosterIdent.skills)) ? rosterIdent.skills : [];
     const recipeOpts = { overrides: skillPrefs.overrides(), placedTypes: skillPlacedTypes, agentSkills: agentSkills };
-    if (isTask) runRecipes = skillsCatalog.live(SKILL_LIBRARY, recipeOpts);
+    if (isTask) runRecipes = skillsCatalog.live(skillLibrary(), recipeOpts);
     // CHAT DIET: recipes are for WORK. A greeting shipped ~12KB of skill bodies (5 library skills are default-on with
     // no gear requirement) to every provider, and a 3B local model spent minutes re-reading them before saying hi.
     // ON DEMAND (2026-09-23): the bodies were also the largest block of every TASK call (~12.4K of ~37K). When
@@ -18436,8 +18813,8 @@ async function runOnceCore(o) {
     // so the index can never point at a tool the model cannot call.
     skillBlock = isTask
       ? (coreNames.indexOf('skill.view') >= 0
-        ? skillsCatalog.composeIndex(SKILL_LIBRARY, recipeOpts)
-        : skillsCatalog.compose(SKILL_LIBRARY, recipeOpts))
+        ? skillsCatalog.composeIndex(skillLibrary(), recipeOpts)
+        : skillsCatalog.compose(skillLibrary(), recipeOpts))
       : '';
   } catch (_) { /* a skill-injection hiccup must never break a run */ }
   // STARNET OPERATOR MANUAL: how the station works, so the agent can guide a stuck Commander. Interactive
@@ -18456,10 +18833,14 @@ async function runOnceCore(o) {
   try {
     // CHAT DIET: the index exists so the model can CALL skill.view; on a non-task turn no tool is on the wire.
     if (isTask && resolved.tools.indexOf('skill.view') >= 0) {
-      const rs = runtimeSkills.composeIndex(skillStore.list(agentId), {
+      // WITH archived rows: composeIndex drops them from the index, but counts them so an all-archived skillbase is
+      // never told "you have no saved skills yet"
+      const rs = runtimeSkills.composeIndex(skillStore.list(agentId, { includeArchived: true }), {
         budget: 6000,
         platform: process.platform,
         canManage: resolved.tools.indexOf('skill.manage') >= 0,
+        // an agent with no saved skills still gets one constant line asking it to save its first (skills/runtime.js)
+        emptyGuide: true,
         // Relevance-first ordering under the budget: the skill this ask needs must never be the row the
         // 6000-char cap skips. Same widened query as memory recall; no query -> store order, as before.
         query: recentUserText(messages),
@@ -18468,7 +18849,7 @@ async function runOnceCore(o) {
         gate: (s) => skillGate.decide(s)
       });
       runtimeSkillBlock = rs.text || '';
-      if (rs.ids && rs.ids.length && typeof skillStore.markUsed === 'function') skillStore.markUsed(agentId, rs.ids);
+      // No markUsed here: being LISTED is not being used. The run end counts the skills this run actually loaded.
     }
   } catch (_) { /* runtime skill indexing must never break a run */ }
   try {
@@ -19108,6 +19489,13 @@ async function runOnceCore(o) {
         } catch (_) { /* a non-path or escaping key simply never completes — truthful telemetry */ }
       }
     })().catch(swallow('quest.artifactsweep'));
+    // SKILL USE, counted where it happened: once per run for each saved skill this run actually LOADED (skill.view, or
+    // a /skill preload that passed the guard), never for a skill that was only listed in the index. In the finally so a
+    // run that throws still counts what it loaded; markUsed persists, so the count and the aging clock survive a restart
+    // (a view alone bumps RAM only).
+    if (loadedSkills.length) {
+      try { skillStore.markUsed(agentId, loadedSkills.map(s => s.id)); } catch (e) { failNote('skill.markUsed', e); }
+    }
     budget.clearLive(runId);
   }
 
@@ -19119,7 +19507,8 @@ async function runOnceCore(o) {
   // governor caps how many may SPEND this run-end (SKYNET_AUX_BUDGET, default 2; a literal 0 = unlimited/off), in
   // the LOCKED beat priority (reflection > study > threadmine > scout > skill-review > skill-curator). DEFERRED ≠
   // SUPPRESSED: a deferred pass fires NOTHING and arms NO cooldown here, so its own gate re-qualifies and it retries
-  // on the next run. STARNET_AUX_MODEL (legacy REFLECT_MODEL) optionally points the aux passes at a cheaper
+  // on the next run. One exception: a DUE skill review (the skill nudge, below) is reserved and spends outside the
+  // ceiling. STARNET_AUX_MODEL (legacy REFLECT_MODEL) optionally points the aux passes at a cheaper
   // model — resolveAuxModel is the single resolution; it defaults to the run's own model.
   const reflectModel = resolveAuxModel() || '';
   // finishReason gate (Lane A plumbs result.finishReason from loop.js): a run TRUNCATED by the provider ('length'
@@ -19170,7 +19559,17 @@ async function runOnceCore(o) {
       && !studyingNow.has(agentId) && (Date.now() - (lastStudyAt.get(agentId) || 0) >= memoryConfig.studyCooldownMs));
   const _gateThreadmine = !!(process.env.SKYNET_THREAD_MINE !== '0' && o.reflect && isTask && _auxDone && threadmine.mineSalient(result.messages)
       && !threadMiningNow.has(agentId) && (Date.now() - (lastThreadMineAt.get(agentId) || 0) >= THREAD_MINE_COOLDOWN_MS));
-  const _gateSkillReview = !!(process.env.SKYNET_SKILL_REVIEW !== '0' && _auxDone && skillReview.shouldReviewRun(result));
+  // skill review rides THE SKILL NUDGE (skillreview.nudgeAfterRun), not run size: this run's turns with skill tools on
+  // the wire join the agent's carried count, and the review is a candidate only once the count reaches the bar. A
+  // due review is RESERVED below: it spends outside the ceiling, so it can no longer lose every run-end to the beats.
+  // Counted only while a review could ever fire (review on, bar > 0), and never for a team.spawn clone: its 'sub-'
+  // id is thrown away after the run, so a count (and any skill a review wrote) would be kept for an agent no one runs.
+  const _skillToolsOn = resolved.tools.indexOf('skill.manage') >= 0 || resolved.tools.indexOf('skill.write') >= 0;
+  const _throwawayAgent = /^sub-/.test(agentId) && !agentRoster.has(agentId);
+  const _nudge = (process.env.SKYNET_SKILL_REVIEW !== '0' && SKILL_REVIEW_EVERY > 0 && isTask && !internal && _skillToolsOn && !_throwawayAgent)
+    ? skillReview.nudgeAfterRun(skillNudge.get(agentId) || 0, { turns: (result && result.turns) || 0, managed: managedSkills.some(m => skillReview.isWriteAction(m.action)), every: SKILL_REVIEW_EVERY })
+    : null;
+  const _gateSkillReview = !!(_auxDone && _nudge && _nudge.due && !skillReviewingNow.has(agentId));
   // curator: candidate only when its 24h interval is DUE (else runSkillCurator early-returns anyway — no spend, no slot).
   const _gateCurator = !!(process.env.SKYNET_SKILL_CURATOR !== '0' && _auxDone && auxCuratorDue(agentId, _auxNow));
   // scout: the CADENCE COUNTERS fold ALWAYS (below, synchronous bookkeeping — never a model call); the CYCLE is the
@@ -19188,8 +19587,14 @@ async function runOnceCore(o) {
   if (_gateSkillReview) _auxCandidates.push('skill-review');
   if (_gateCurator) _auxCandidates.push('skill-curator');
   const _auxBudget = AuxGovernor.parseBudget(process.env.SKYNET_AUX_BUDGET);
-  const _auxPlan = AuxGovernor.decide({ candidates: _auxCandidates, budget: _auxBudget });
+  const _auxPlan = AuxGovernor.decide({ candidates: _auxCandidates, budget: _auxBudget, reserved: ['skill-review'] });
   const _auxSpend = new Set(_auxPlan.spend);
+  // the nudge count starts over when its review fires; otherwise it carries (a due count on a run that could not
+  // review, e.g. a failed run, stays due for the next finished one). Written only when it changes.
+  if (_nudge) {
+    const _nudgeNext = _auxSpend.has('skill-review') ? 0 : _nudge.count;
+    if (_nudgeNext !== (skillNudge.get(agentId) || 0)) { skillNudge.set(agentId, _nudgeNext); persistSkillNudge(); }
+  }
 
   // SCOUT cadence counters ALWAYS fold when the run qualifies — synchronous bookkeeping, NOT a model call, and a
   // concurrent (or deferred) cycle must never eat the count. This is deliberately OUTSIDE the budget.
@@ -19232,14 +19637,14 @@ async function runOnceCore(o) {
     runScoutCycle({ runId, agentId, provider, model: _auxModel, reasoningEffort: _auxEffort, cost, unmetered: providerUnmetered }).catch(swallow('aux.scout.envelope')).finally(() => { scoutingNow = false; });
   }
   if (_auxSpend.has('skill-review')) {
-    runBackgroundSkillReview({ agentId, runId, messages: result.messages.slice(), provider, model: _auxSkillModel, cost, loadedSkills, managedSkills, unmetered: providerUnmetered }).catch(swallow('aux.skillreview.envelope'));
+    skillReviewingNow.add(agentId);
+    runBackgroundSkillReview({ agentId, runId, messages: result.messages.slice(), provider, model: _auxSkillModel, cost, loadedSkills, managedSkills, unmetered: providerUnmetered }).catch(swallow('aux.skillreview.envelope')).finally(() => { skillReviewingNow.delete(agentId); });
   }
   if (process.env.SKYNET_SKILL_REVIEW !== '0' && _auxDone && isTask && !internal) {
     // CONSISTENCY LOOP (2026-08-22): park this real task run's review packet so that if the Commander rates it
     // `ok`/`miss` (POST /api/growth/ratings) the SAME quiet review runs again WITH THE VERDICT in the prompt.
-    // Parked even when the size-review above already fired: that pass ran before the verdict existed and is
-    // blind to it (live-proved 2026-08-22 — the chars gate counts the system prompt, so it fires on nearly every
-    // run). The verdict pass is the one that knows the work fell short. Bounded LRU + TTL in verdictreview.js;
+    // Parked even when the nudge review above already fired: that pass ran before the verdict existed and is
+    // blind to it. The verdict pass is the one that knows the work fell short. Bounded LRU + TTL in verdictreview.js;
     // `great` never spends it; taken once; one extra aux pass per rated-short run, a Commander-initiated signal.
     verdictReview.stash(runId, { agentId, messages: result.messages.slice(), provider, model: _auxSkillModel, cost, loadedSkills, managedSkills, unmetered: providerUnmetered });
   }
@@ -19254,6 +19659,7 @@ async function runOnceCore(o) {
   if (_auxCandidates.length && (_auxPlan.deferred.length || DEBUG_CHANNEL_LOGS)) {
     console.log('[aux-governor] run=' + runId + ' agent=' + agentId + ' budget=' + (_auxPlan.unlimited ? 'off' : _auxBudget)
       + ' spent=' + _auxPlan.spend.length + '[' + _auxPlan.spend.join(',') + ']'
+      + (_auxPlan.reserved.length ? ' RESERVED[' + _auxPlan.reserved.join(',') + ']' : '')
       + (_auxPlan.deferred.length ? ' DEFERRED[' + _auxPlan.deferred.join(',') + ']' : ''));
   }
   // WORK VISIBILITY: hand the caller this run's PROVEN outputs (the same ledger runStore just recorded).
@@ -22341,6 +22747,24 @@ function serveStudyProposals(req, res) {
   } catch (e) { json(200, { proposals: [] }); }
 }
 
+// GET /api/study/pending — USER-STUDY LOOP: the index of EVERY undecided study batch, oldest first. Study runs
+// after cron, channel, and night-shift runs too, but the browser only ever asked about the run it had just
+// watched end — so what the station learned about the Commander while the window was closed sat unasked and
+// was eventually evicted. The browser reads this on open/return and queues those batches through the SAME
+// consent card (nothing is written to the dossier without a Keep). Index only — the proposals themselves are
+// still fetched per run through /api/study/proposals. Read-only; empty (never a 500) on any failure.
+function serveStudyPending(req, res) {
+  try {
+    const batches = [];
+    for (const b of studyByRun.values()) {
+      if (!b || !isAgentId(b.agentId) || !Array.isArray(b.proposals) || !b.proposals.length) continue;
+      batches.push({ agentId: b.agentId, runId: b.runId, createdAt: Number(b.createdAt) || 0, count: b.proposals.length });
+    }
+    batches.sort((a, b) => a.createdAt - b.createdAt);
+    respondJson(res, 200, { batches: batches.slice(-STUDY_CAP) });
+  } catch (e) { respondJson(res, 200, { batches: [] }); }
+}
+
 // POST /api/study/resolve { agentId, runId, id, declined:[] } — GROWTH Tier 1: CONSUME one decided study proposal
 // (mirrors the memory turn-in dropping its batch entry at handleMemoryTurnin): remove it from the pending stash so
 // the latestStudyRun fallback can never re-serve it, delete the batch when it empties, and mirror the browser's
@@ -22642,7 +23066,7 @@ async function handleMemoryReset(req, res) {
   // also drop any in-memory pending proposals for this agent so a stale turn-in can't land on the new hero
   for (const [rid, b] of proposalsByRun) { if (b && b.agentId === agentId) proposalsByRun.delete(rid); }
   latestProposalRun.delete(agentId); lastReflectAt.delete(agentId); reflectingNow.delete(agentId);
-  lastFailReviewAt.delete(agentId); failReviewingNow.delete(agentId);
+  lastFailReviewAt.delete(agentId); failReviewingNow.delete(agentId); skillReviewingNow.delete(agentId); if (skillNudge.delete(agentId)) persistSkillNudge();
   // GROWTH Tier 1: also drop any pending STUDY proposals so a fresh Commander never inherits a stranger's belief-update queue.
   for (const [rid, b] of studyByRun) { if (b && b.agentId === agentId) studyByRun.delete(rid); }
   latestStudyRun.delete(agentId); lastStudyAt.delete(agentId); studyingNow.delete(agentId); studyDeclinedByAgent.delete(agentId);

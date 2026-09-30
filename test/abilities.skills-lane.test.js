@@ -22,10 +22,10 @@ const context = {
 };
 vm.runInNewContext(laneSource + '\nresult = abilitySkillsLane({});', context);
 
-A.eq(context.result.sections.map(section => section.id), ['library', 'agent', 'exchange'],
-  'the live lane builds all three Skills sections without throwing');
-A.eq(context.result.sections.map(section => section.label), ['SKILL LIBRARY', 'AGENT SKILLS', 'SKILL EXCHANGE'],
-  'the live lane exposes the three promised labels');
+A.eq(context.result.sections.map(section => section.id), ['market', 'library', 'agent', 'exchange'],
+  'the live lane builds all four Skills sections without throwing');
+A.eq(context.result.sections.map(section => section.label), ['SKILL MARKET', 'SKILL LIBRARY', 'AGENT SKILLS', 'SKILL EXCHANGE'],
+  'the live lane exposes the four promised labels');
 A.ok(/function\s+scanFindingText\s*\(/.test(source), 'Skill Exchange scan findings renderer is defined');
 A.ok(/function\s+renderSkillExchangePreview\s*\(/.test(source), 'Skill Exchange preview renderer is defined');
 A.ok(/function\s+wireSkillExchange\s*\(/.test(source), 'Skill Exchange controls are wired');

@@ -122,4 +122,16 @@ A.ok(/app\/queststate\.js/.test(html) && /app\/queststatestore\.js/.test(html), 
 const css = fs.readFileSync(path.join(__dirname, '../frontend/css/app.css'), 'utf8');
 A.ok(/q-celebrate/.test(css) && /q-dismiss/.test(css), 'app.css styles the flourish and the dismiss affordance');
 
+/* ---------- a MILESTONE quest mirrors its trophy: flash only, no second sting or COMMS line (first-hour walk 2026-09-28) ---------- */
+{
+  quests = [mq('pack_rat', 'open')];
+  QuestStateStore.sync();
+  const stingsBefore = stings, castsBefore = casts.length, rerBefore = rerenders.length;
+  quests = [mq('pack_rat', 'done')];
+  const done = QuestStateStore.sync();
+  A.eq(done.length, 1, 'the milestone quest still completes (durable completedAt)');
+  A.eq(stings, stingsBefore, 'no quest sting — the trophy already stung');
+  A.eq(casts.length, castsBefore, 'no QUEST COMPLETE line — the trophy already announced PACK RAT');
+  A.ok(rerenders.length > rerBefore && QuestStateStore.isCelebrating('ms:pack_rat'), 'the quest log row still flashes');
+}
 A.report('queststatestore.test');

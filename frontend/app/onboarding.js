@@ -20,6 +20,7 @@
 
 const Onboarding = (() => {
   let docs = null, commit = null, doneCb = null, notifyFn = null, NAME = 'AGENT';
+  let stationsApi = null, purposeSaid = '';   // CHOOSE YOUR STATION: the app's preset seam (opts.stations) + the purpose they gave
   let taughtCb = null;    // fired once the awakening's closing line lands — hands off to the FIRST COMMAND tutorial
   let steps = [], i = 0, ignited = false, kindleTimer = null;
   let running = false;   // true between start() and finish()/stop() — lets other COMMS flows (the intake interview) avoid hijacking the awakening's input handler
@@ -101,8 +102,8 @@ const Onboarding = (() => {
         ],
         build: () => null,
         ack: t => t
-          ? 'set — and you can retune that any time from my station panel.'
-          : 'no rush — i’ll wait for you, and you can dial it up whenever.' }
+          ? 'set — and you can retune that any time in SETTINGS › AUTONOMY.'
+          : 'no rush — until you decide, i’ll only line up suggestions for you to approve. nothing runs on its own.' }
     ];
     // Recruited specialists inherit the station posture and keep only their context beat.
     return specialty ? all.filter(s => s.field !== 'purpose' && s.field !== 'manual' && !s.dossierDim && !s.posturePreset) : all.filter(s => !s.specialtyOnly);
@@ -125,7 +126,7 @@ const Onboarding = (() => {
       custom: true, placeholder: 'in your own words — what’s the purpose?',
       build: t => ({ purpose: t }),
       ack: lead
-        ? 'there it is — purpose.md, in ink. that’s what this station’s for.'
+        ? 'there it is — your station’s purpose, in ink. that’s what this station’s for.'
         : 'there it is. now the firepower has a target.' };
   }
 
@@ -138,6 +139,7 @@ const Onboarding = (() => {
     specialty = opts.specialty || null;
     role = opts.role || 'orchestrator';
     persona = opts.persona || null;
+    stationsApi = opts.stations || null; purposeSaid = '';
     getSystem = opts.getSystem || null;
     steps = buildSteps(); i = 0; beatN = 0; ignited = false; running = true;
     // THE FIRST WORDS, LIVE (full birth script): kick ONE prefetched call the moment the wake begins — the
@@ -425,6 +427,43 @@ const Onboarding = (() => {
     if (!done && running) await capped;                  // the last stretch, bounded by the ceiling
     return done ? out : null;
   }
+  const PATH_PATTER = [
+    'one more moment — i’m laying that out as steps.',
+    'almost. i want the first step to be something we can actually start.'
+  ];
+  // THE FIRST PATH (USER-STUDY LOOP): the mission drafted as ordered steps (GoalStore.proposeDecomposition,
+  // started while the cadence beat was asked) is offered here — confirm, edit, or not now — through the same pure
+  // resolver the post-run arc confirm uses (Goals.resolveConfirmChoice), so both doors persist identically. A
+  // slow/failed/unusable draft simply skips the beat; the post-run arc offer still covers it later.
+  async function offerFirstPath(pending) {
+    const res = await awaitPatiently(pending, PATH_PATTER, SYNTHESIS_MS);
+    if (!running || !res || !res.belief || !Array.isArray(res.texts) || res.texts.length < 3) return;
+    if (typeof GoalStore === 'undefined' || typeof Goals === 'undefined' || !Goals.resolveConfirmChoice) return;
+    stage('YOUR FIRST PATH', 'Steps toward what you told me');
+    await Dialogue.say([seg('one last thing. here’s how i’d break that into steps — the first one is where we start. does this look right?', 44, 320)]);
+    if (!running) return;
+    const path = res.texts.slice();
+    const choice = await Dialogue.node({
+      lines: path.map((t, i) => seg((i ? '  ' : '') + (i + 1) + '. ' + t, 46, 200)),
+      options: [{ label: 'Confirm the path', value: 'confirm' }, { label: 'Not now', value: 'other', skip: true }],
+      allowCustom: true, customLabel: '✎ edit the steps', customPlaceholder: 'your steps, separated by ; …'
+    });
+    if (!running) return;
+    const decision = Goals.resolveConfirmChoice(choice, path);
+    const goal = decision.action === 'confirm' ? GoalStore.confirm(res.belief, decision.path) : null;
+    if (!goal) {
+      GoalStore.declineDecomposition(res.belief);   // re-offers only if the mission itself changes (never a nag)
+      await Dialogue.say([seg('fine — the mission stays in your dossier. you can plan it any time from QUESTS.', 44, 340)]);
+      return;
+    }
+    bumpTruth();
+    // say only what the dial will actually do: at 'propose' or above quest refresh plans the first step on its
+    // own; at 'wait' nothing starts until the Commander does.
+    const plans = typeof AutonomyStore !== 'undefined' && AutonomyStore.summary && (AutonomyStore.summary() || {}).enabled;
+    await Dialogue.say([seg(plans
+      ? 'then that’s the path. i’ll line up quests for the first step — they’ll be waiting in QUESTS.'
+      : 'then that’s the path. it’s in QUESTS — start the first step whenever you’re ready.', 44, 340)]);
+  }
   async function mindWait(pending, parse, patter, capMs) {
     if (!pending) return null;
     const res = await awaitPatiently(pending, patter, capMs);
@@ -499,11 +538,13 @@ const Onboarding = (() => {
       }
       const text = isSkip ? '' : String(res.value).trim();
       if (!isSkip && commit) { const patch = s.build(text); if (patch) commit(patch); }
+      if (!isSkip && s.field === 'purpose') purposeSaid = text;   // the station pick reads what they said they want help with
       // a beat that targets a dossier dimension (not a config .md) writes its answer STRAIGHT to the station-wide
       // dossier — same authoring path the COMMANDER panel uses (recomposes the live prompt + persists at the edge).
       if (!isSkip && s.dossierDim && typeof DossierStore !== 'undefined' && DossierStore.upsert) { DossierStore.upsert(s.dossierDim, { text, source: 'onboarding', weight: 'stated' }); ink(s.dossierDim, text); }   // V3: always the Commander's own words now (steer chips can't write); the ink stamp shows the write landing
       // the autonomy cadence beat writes the chosen OPENING posture straight to AutonomyStore (the option value is a
-      // cadence-preset id). Skipping ('Decide later') leaves the safe floor — fully wait-for-me.
+      // cadence-preset id). Skipping ('Decide later') leaves the new-station default — PROPOSE: suggestions to
+      // approve, never an unattended act (Autonomy.fresh).
       if (!isSkip && s.posturePreset && typeof AutonomyStore !== 'undefined' && AutonomyStore.applyPreset) {
         const saved = await AutonomyStore.applyPreset(text);
         if (!saved.ok) { await Dialogue.say([seg(saved.error || 'That setting could not be saved. Please try again.', 44, 360)]); continue; }
@@ -591,7 +632,7 @@ const Onboarding = (() => {
     const pace = await Dialogue.node({
       lines: [seg(interviewOnly
         ? 'let’s fill in the picture. a few questions about your work, or a deeper conversation about your goals? you can review and change what we save in your dossier.'
-        : 'i’m awake. let’s give this station a direction. start with two setup questions, or take time to tell me about your work. you can edit what we save in your dossier.', 46, 0)],
+        : 'i’m awake. let’s give this station a direction. start with two setup questions, or take time to tell me about your work. you can edit what we save in your dossier — the COMMANDER file of what the station knows about you.', 46, 0)],
       options: [
         ...(!interviewOnly ? [{ label: 'Quick setup — two questions', value: 'quick' }] : []),
         { label: 'A short conversation', value: 'loose' },
@@ -752,6 +793,7 @@ const Onboarding = (() => {
     //    time, the year, the grabbed offer), and on a thin/loose run the directive makes the read OWN the
     //    thinness — "i barely know you yet" is the honest read, never faked familiarity.
     let purposeDone = false;
+    let pathPending = null;   // USER-STUDY LOOP: the confirmed mission's step plan, drafted while the cadence beat is asked
     const gaveAnything = !!(tuesdayT || digT || grabbedMove);
     const synPending = brainReady()
       ? llmCall(WakeMind.buildSynthesis({ tuesday: tuesdayT, dig: digT, grabbed: grabbedMove, thin: !gaveAnything, name: NAME })) : null;
@@ -782,12 +824,28 @@ const Onboarding = (() => {
         // A THIN run's confirmed synthesis is grounded in NOTHING the Commander said — it lands as 'seed'
         // (purpose.md still exists; the readiness gate stays honestly shut until real words arrive).
         if (typeof DossierStore !== 'undefined' && DossierStore.upsert) { DossierStore.upsert('goals', { text: purposeT, source: 'onboarding', weight: (purposeT !== syn.purpose ? 'stated' : (gaveAnything ? 'synth' : 'seed')) }); if (purposeT !== syn.purpose || gaveAnything) ink('goals', purposeT); }   // a seed-weight thin purpose is never inked — nothing was learned
+        // THE MISSION BECOMES A PLAN (USER-STUDY LOOP). A mission grounded in something the Commander actually
+        // said (never a thin seed) is drafted into ordered steps NOW, in parallel with the cadence question, so
+        // the path can be confirmed before the meeting ends — quests then have a real step to aim at on day one
+        // instead of waiting for a first clean task run. The draft is the existing decomposition (one reason-only
+        // call); nothing is saved until the Commander confirms it below.
+        if ((purposeT !== syn.purpose || gaveAnything) && typeof GoalStore !== 'undefined' && GoalStore.proposeDecomposition && typeof DossierStore !== 'undefined' && DossierStore.beliefs) {
+          // the belief THIS beat just wrote = the NEWEST goals belief (upsert without an id always appends). Never an
+          // exact-text find: the dossier trims + caps a belief at 280 chars, so a long mission in the Commander's own
+          // words never matched (the offer silently vanished), and an identical older belief would win the find.
+          const goalsNow = DossierStore.beliefs('goals') || [];
+          const newest = goalsNow[goalsNow.length - 1];
+          const head = s => String(s || '').trim().slice(0, 40);
+          const missionBelief = (newest && newest.text && head(newest.text) === head(purposeT)) ? newest : null;
+          if (missionBelief) pathPending = Promise.resolve(GoalStore.proposeDecomposition(missionBelief)).catch(() => null);
+        }
         if (commit) commit({ purpose: purposeT });
+        purposeSaid = purposeT;
         // the one durable belief only this conversation could surface: the stack/domain they live in.
         if (syn.stack && typeof DossierStore !== 'undefined' && DossierStore.upsert) DossierStore.upsert('stack', { text: syn.stack, source: 'onboarding', weight: 'synth' });
         if (typeof ProfileStore !== 'undefined' && typeof Classify !== 'undefined') ProfileStore.seed(Classify.getTag(purposeT));
         bumpTruth();
-        await Dialogue.say([seg('there it is — purpose.md, in ink. that’s what this station’s for.', 44, 360)]);
+        await Dialogue.say([seg('there it is — your station’s purpose, in ink. that’s what this station’s for.', 44, 360)]);
         if (!running) return;
         purposeDone = true;
       }
@@ -800,6 +858,12 @@ const Onboarding = (() => {
     // B9. THE CADENCE — unchanged scripted beat.
     if (postureStep) {
       await askStep(postureStep);
+      if (!running) return;
+    }
+
+    // B10. THE FIRST PATH — the mission drafted above, offered as ordered steps to confirm or edit.
+    if (pathPending) {
+      await offerFirstPath(pathPending);
       if (!running) return;
     }
 
@@ -818,7 +882,46 @@ const Onboarding = (() => {
     if (specialty) { beatTotal = Math.max(1, steps.length); await runSteps(steps); }
     else { beatTotal = 6; await runLeadMeeting(); }   // pain, its follow-up, ambition, its follow-up, purpose, cadence
     if (!running) return;
+    if (!specialty && role === 'orchestrator') { await pickStation(); if (!running) return; }
     finish();
+  }
+
+  /* CHOOSE YOUR STATION (2026-09-28): the lead's last question, asked while the room is still dark so the dawn reveals
+     the station they chose. The recommendation reads the purpose they just gave (StationTemplates.recommend: the five
+     purpose chips map one to one onto the five work presets); no clear match recommends one room, never a guess. It
+     is offered only over the untouched starter room (stations.fresh()), so a resumed briefing after a pick, or any
+     station already built, never has its floor swapped. A deferred interview (offerDeferred) never reaches it. Every
+     question stays: this ADDS a beat. The app's seam (opts.stations) builds the preset through the same
+     StationTemplates.build + replaceLayout path Build mode's Presets use. */
+  const titleCase = s => String(s || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  async function pickStation() {
+    const S = stationsApi;
+    if (!S || typeof S.fresh !== 'function' || !S.fresh() || typeof Dialogue === 'undefined') return;
+    const works = (S.catalog() || []).filter(c => c && c.group === 'work');
+    if (!works.length) return;
+    const recId = S.recommend ? S.recommend(purposeSaid) : null, rec = works.find(c => c.id === recId) || null;
+    const ordered = rec ? [rec].concat(works.filter(c => c !== rec)) : works;
+    stage('YOUR STATION', 'Where the work happens');
+    const ask = 'one more question: which station should i build for you? '
+      + (rec ? 'from what you told me, i’d start with the ' + rec.name.toLowerCase() + ': ' + rec.pitch + '.'
+             : 'pick the kind of work you’ll do most, or start with one room and build it yourself.')
+      + ' you can change it any time in BUILD › Presets.';
+    const res = await Dialogue.node({
+      lines: [seg(ask, 46, 0)],
+      // each choice names its kind of work in the purpose question's own words ("Software Studio — Code & build")
+      options: ordered.map(c => ({ label: titleCase(c.name) + (c.purposeLabel ? ' — ' + c.purposeLabel : '') + (c === rec ? ' (recommended)' : ''), value: c.id }))
+        .concat([{ label: 'Start with one room', value: 'default' }])
+    });
+    if (!running) return;
+    const id = res && !res.skip ? String(res.value || '') : '';
+    const pick = works.find(c => c.id === id);
+    if (!pick) { await Dialogue.say([seg('one room it is. you can pick a station any time in BUILD › Presets.', 44, 360)]); return; }
+    let r = null;
+    try { r = S.apply(pick.id); } catch (_) { r = null; }
+    if (!running) return;
+    await Dialogue.say([seg(r && r.ok
+      ? 'done. the ' + pick.name.toLowerCase() + ' is built, and its line is waiting for a crew: WORK › WORKFLOWS walks you through who works each step.'
+      : 'i couldn’t build that station here, so we’ll keep one room. you can try again in BUILD › Presets.', 44, 360)]);
   }
 
   // DAWN — the pull-back reveals its whole world, the light blooms, and it speaks its first WHOLE sentences

@@ -2541,7 +2541,7 @@ const Marketplace = (() => {
      A one-click path for a Commander arriving from OpenClaw or hermes-agent: detect installs (or pick a folder),
      preview exactly what the scan found, then RECRUIT mints a StarNet agent with the persona/orders/memory
      pre-filled. Every field shown comes straight from /api/harness/scan — nothing is invented (truthful telemetry).
-     Keys are NEVER read or transferred; the preview says so and the KEYS tab is where the Commander re-enters them.
+     Keys are NEVER read or transferred; the preview says so and ABILITIES › SAVED API CONNECTIONS is where the Commander re-enters them.
      Backend routes (built in parallel this session): POST /api/harness/detect, POST /api/harness/scan. The folder
      fallback reuses the existing POST /api/projects/pickfolder. If a route is missing the flow degrades to an honest
      empty/error state — it never fakes a detection or a scan. */
@@ -2708,7 +2708,7 @@ const Marketplace = (() => {
     // warnings: render every entry the scan returned verbatim, and ALWAYS state the keys-never-transfer truth
     // (added only if the scan didn't already say it).
     const warns = Array.isArray(s.warnings) ? s.warnings.slice() : [];
-    if (!warns.some(w => /key/i.test(w) && /transfer/i.test(w))) warns.push('keys never transfer — re-enter them in the KEYS tab');
+    if (!warns.some(w => /key/i.test(w) && /transfer/i.test(w))) warns.push('keys never transfer — re-enter them in ABILITIES › INSTALLED › SAVED API CONNECTIONS');
     const warnHTML = warns.map(w => '<div class="mkt-r-warn dim">⚠ ' + esc(w) + '</div>').join('');
     return '<div class="mkt-save mkt-imp mkt-imp-preview">' +
       '<div class="mkt-save-h">⇪ IMPORT — ' + esc(s.name || H) + '</div>' +
@@ -3549,7 +3549,7 @@ const Marketplace = (() => {
       '<div class="mkt-save-h">' + esc(title) + '</div>' +
       '<p class="mkt-hint">' + intro + '</p>' +
       '<div class="mkt-save-row"><label class="mkt-lbl">ICON<input class="mkt-in mkt-emoji-in" id="mkt-f-emoji" maxlength="2" value="' + esc(d.emoji || '✦') + '"></label>' +
-        '<label class="mkt-lbl mkt-grow">NAME<input class="mkt-in" id="mkt-f-name" maxlength="28" value="' + esc(d.name || '') + '" placeholder="e.g. Night-Shift Researcher"></label></div>' +
+        '<label class="mkt-lbl mkt-grow">NAME<input class="mkt-in" id="mkt-f-name" maxlength="28" value="' + esc(d.name || '') + '" placeholder="e.g. Market Researcher"></label></div>' +
       '<label class="mkt-lbl">TAGLINE<input class="mkt-in" id="mkt-f-tag" maxlength="48" value="' + esc(d.tagline || '') + '" placeholder="one line — what it’s for"></label>' +
       '<div class="mkt-save-acts"><button class="bb sm mkt-cancel">‹ BACK</button>' +
         '<button class="bb sm mkt-do-save' + ctaCls + '">' + ctaText + '</button></div></div>';

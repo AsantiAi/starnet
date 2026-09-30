@@ -49,8 +49,10 @@ const ghost = read('frontend/app/ghostline.js'), outbox = read('frontend/app/win
 /* ---------- B1: line cards stay honest as the floor changes ---------- */
 {
   const fit = build.slice(build.indexOf('  function setLineTileFit(b, bp) {'), build.indexOf('  function makeRoomFor(bpId, ev) {'));
-  A.ok(/const fits = lineFits\(bp\.id\)/.test(fit) && /b\.classList\.toggle\('nofit', !fits\)/.test(fit), 'a card reads its fit from the same scan the ghost snaps to');
-  A.ok(/if \(fits\) \{ if \(nf\) nf\.remove\(\); if \(make\) make\.remove\(\); return; \}/.test(fit), 'a card that fits again sheds NO ROOM and MAKE ROOM');
+  // (phase E, 2026-09-29: the card's fit is the drawn-shape scan the ghost snaps to OR the engine's laid-out answer — a click
+  // places the line either way, so the card never says NO ROOM for a line a click can place)
+  A.ok(/const drawn = lineFits\(bp\.id\)/.test(fit) && /const fits = drawn \|\| !!\(laid && laid\.ok\)/.test(fit) && /b\.classList\.toggle\('nofit', !fits\)/.test(fit), 'a card reads its fit from the same scan the ghost snaps to');
+  A.ok(/if \(drawn\) \{ if \(nf\) nf\.remove\(\); if \(make\) make\.remove\(\); return; \}/.test(fit) && /if \(fits\) \{[^}]*if \(make\) make\.remove\(\);/.test(fit), 'a card that fits again sheds NO ROOM and MAKE ROOM');
   A.ok(/b\.after\(mk\)/.test(fit) && /mk\.onclick = e => makeRoomFor\(bp\.id, e\)/.test(fit), 'a card that stops fitting gains MAKE ROOM FOR IT as a sibling button');
   A.ok(/grid\.appendChild\(b\);\s*setLineTileFit\(b, bp\);/.test(build), 'every card is fit-checked as it renders');
   const onChange = build.slice(build.indexOf('unsub = station.onChange('), build.indexOf('unsub = station.onChange(') + 500);

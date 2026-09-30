@@ -1734,6 +1734,16 @@ const Chat = (() => {
   function historyWindow(ws) {
     return ws ? modelFitHistory(ws.history, ws) : [];
   }
+  /* A retry re-runs the LAST user turn, so nothing after it may ride the wire. retryLast() trims the local rows,
+     but load() then re-syncs the thread from the server transcript, which puts the replaced attempt's replies back
+     before send() builds the request — and current Claude models refuse a conversation that ends on an assistant
+     message ("This model does not support assistant message prefill"): every Try again / retry failed in ~1.5s
+     with "Provider returned error" (first-hour walk 2026-09-28, re-proven live on the fix branch). */
+  function endOnUserTurn(messages) {
+    const list = Array.isArray(messages) ? messages : [];
+    const at = list.map(m => m && m.role).lastIndexOf('user');
+    return at >= 0 ? list.slice(0, at + 1) : list;
+  }
   function contextIssueFor(messages, limit, projectedUsed) {
     limit = Math.max(0, Number(limit) || 0);
     if (!limit) return null;   // unknown catalog => never invent a ceiling
@@ -2166,6 +2176,7 @@ const Chat = (() => {
   const BROADCAST_COALESCE_MS = 3000;
   const BROADCAST_QUEUE_CAP = 8;   // bounded FIFO: a celebration flood drops the OLDEST queued line, never grows unbounded
   let lastBroadcastAt = 0;
+  let lastTrophyLine = null, lastTrophyAt = 0;   // the moment's trophy line (see ONE MOMENT, ONE TROPHY LINE)
   const broadcastQueue = [];       // {text, opts} coalesced inside the window — drained in order, one per window slot
   let broadcastDrainTimer = null;
   function broadcastBlocked() {
@@ -2227,6 +2238,31 @@ const Chat = (() => {
     const line = document.createElement('span');
     line.className = 'bc-line' + (opts.tone === 'gold' ? ' bc-gold' : '');   // tone rides the LINE (a shared block can mix tones)
     const raw = String(text == null ? '' : text);
+    // ONE MOMENT, ONE TROPHY LINE (first-hour walk 2026-09-28: three TROPHY EARNED rows landed back to back after the
+    // first good answer). A trophy that joins a block whose last line is already a trophy line folds into it —
+    // "◆ 3 trophies — FIRST LIGHT · PACK RAT · NIGHT SHIFT (see GROWTH)". Every name still shows; one row, not three.
+    const TROPHY = 'TROPHY EARNED · ';
+    // the moment's trophy line: the last trophy line, if it landed in the last 10s — even when a card (a REMEMBERED
+    // fact landed between them in the walk) started a new block since. An older trophy line is a different moment.
+    const prevLine = (lastTrophyLine && lastTrophyLine.isConnected && Date.now() - lastTrophyAt < 10000) ? lastTrophyLine : null;
+    if (raw.indexOf(TROPHY) === 0 && prevLine && prevLine.dataset && prevLine.dataset.trophies) {
+      let names = [];
+      try { names = JSON.parse(prevLine.dataset.trophies) || []; } catch (_) { names = []; }
+      const nm = raw.slice(TROPHY.length).trim();
+      if (nm && names.indexOf(nm) < 0) names.push(nm);
+      prevLine.dataset.trophies = JSON.stringify(names);
+      prevLine.textContent = '';
+      const g = document.createElement('span'); g.className = 'bc-glyph'; g.textContent = '▸ ';
+      const em = document.createElement('span'); em.className = 'bc-name'; em.textContent = names.join(' · ');
+      prevLine.appendChild(g);
+      prevLine.appendChild(document.createTextNode('◆ ' + names.length + ' trophies — '));
+      prevLine.appendChild(em);
+      prevLine.appendChild(document.createTextNode(' (see GROWTH)'));
+      lastTrophyAt = Date.now();
+      autoscroll();
+      return true;
+    }
+    if (raw.indexOf(TROPHY) === 0) { line.dataset.trophies = JSON.stringify([raw.slice(TROPHY.length).trim()]); lastTrophyLine = line; lastTrophyAt = Date.now(); }
     const hi = opts.highlight ? String(opts.highlight) : '';
     const ix = hi ? raw.indexOf(hi) : -1;
     // prefix glyph
@@ -2811,7 +2847,7 @@ const Chat = (() => {
       const label = String(sum.textContent || '').split(' · ')[0];
       const bits = [];
       if (Number(entry.durationMs) > 0) bits.push(fmtMs(Number(entry.durationMs)));
-      bits.push(leadCalls + ' lead ' + (leadCalls === 1 ? 'call' : 'calls'));
+      bits.push(leadCalls + ' tool ' + (leadCalls === 1 ? 'call' : 'calls'));   // the LEAD's tool calls (runCallCount = toolTrace) — not model calls
       if (children.length) bits.push(workerCalls + ' worker ' + (workerCalls === 1 ? 'call' : 'calls'));
       const identity = [entry.model && entry.model !== '(unknown)' ? entry.model : '', (entry.reasoningEffort && entry.reasoningEffort !== 'none') ? entry.reasoningEffort : ''].filter(Boolean).join(' ');
       if (identity) bits.push(identity);
@@ -3079,6 +3115,28 @@ const Chat = (() => {
       mk('Deny', 'deny', 'deny', '✕ denied', true);
     }
     r.body.appendChild(btns);
+    // STARNET REMOTE: a paired phone can answer this same prompt. The sidecar then puts permission.response on
+    // this run's own stream (harness re-emits it on U.bus). Settle the card to what actually happened, so the
+    // desk never keeps live buttons on a question that was already answered elsewhere. The desk's own answer
+    // also emits permission.response, but by then `decided` is set and this listener just unsubscribes.
+    if (typeof U !== 'undefined' && U.bus && U.bus.on && U.bus.off) {
+      const onElsewhere = (resp) => {
+        if (!resp || resp.promptId !== p.promptId) return;
+        U.bus.off('permission.response', onElsewhere);
+        if (decided) return;
+        decided = true;
+        const denied = resp.decision === 'deny';
+        if (ws && typeof Channels !== 'undefined') Channels.clearPending(ws.id, Date.now());
+        if (isActiveWs(ws)) renderPresence();
+        btns.remove();
+        const tag = document.createElement('span');
+        tag.className = 'consent-result' + (denied ? ' err' : '');
+        tag.textContent = denied ? '✕ denied from your phone' : (resp.decision === 'session' ? '✓ approved for this session from your phone' : '✓ approved once from your phone');
+        r.body.appendChild(tag);
+        syncStatus();
+      };
+      U.bus.on('permission.response', onElsewhere);
+    }
     // a blocking, run-pausing prompt: make it keyboard-operable. Esc on the focused CONTAINER = Deny (the row,
     // not a button — so a reflexive Enter never lands on Approve and greenlights a write the user didn't read).
     r.d.tabIndex = -1;
@@ -4429,12 +4487,13 @@ const Chat = (() => {
   // context, about a real decision, immediately acted on; + the R4 receipt proves it stuck) AND continues
   // the conversation as the Commander's next message so the task proceeds with it. "you decide" banks
   // nothing and hands the choice back. One fork per reply by construction (parse reads the first marker).
-  function offerFork(fk) {
+  function offerFork(fk, runId) {
     clearNudge();   // same law as offerTaskQuestion: the fork claims the moment; a live nudge leaves WITH its chips
     const items = fk.options.map(o => ({ label: o, value: o }));
     items.push({ label: 'you decide', value: '', skip: true });
     const q = row('agent'); q.d.classList.add('nudge');
     q.body.textContent = '⌖ ' + fk.question;
+    taskQuestionDoor(q.body, runId);   // the fork's chips replace this run's connect chip in the one slot — the card carries the door
     autoscroll();
     choices(items, item => {
       vanish(q.d);
@@ -4478,6 +4537,7 @@ const Chat = (() => {
         // send() routes this whole answer back into the same durable brief.
         send(text);vanish(r.d);return true;
       });
+      taskQuestionDoor(r.body, tq.runId);
       autoscroll();return;
     }
     // TWO KINDS of suggestion, and they must never be confused. GROUNDED comes from the Commander's own
@@ -4528,6 +4588,7 @@ const Chat = (() => {
       ? 'these aren\'t exclusive — tap all that apply, then confirm; or type your own answer'
       : 'or ignore these and type your own answer — more than one is fine';
     q.body.appendChild(hint);
+    taskQuestionDoor(q.body, tq.runId);
     autoscroll();
     choices(items, item => {
       vanish(q.d);
@@ -4981,6 +5042,34 @@ const Chat = (() => {
       if (beatCards) beatCards.scheduleExpire('study', 900);
       setTimeout(flushStudyPending, 900);
     });
+    // USER-STUDY LOOP — WHAT THE STATION LEARNED WHILE YOU WERE AWAY. Study also runs after cron, channel and
+    // night-shift runs, but this lane only ever asked about the run it had just watched end, so those batches
+    // were never offered and aged out of the stash. On open and on return, queue every undecided batch through
+    // the SAME consent card (FIFO, deduped by run, one card per moment, the session cap still binds): nothing
+    // reaches the dossier without the Commander's Keep.
+    setTimeout(lookForAwayStudy, AWAY_STUDY_FIRST_LOOK_MS);
+    try {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible') return;
+        lookForAwayStudy();
+      });
+    } catch (_) {}
+  }
+  const AWAY_STUDY_FIRST_LOOK_MS = 8000;     // after boot settles (the return digest takes the first beat)
+  const AWAY_STUDY_LOOK_GAP_MS = 10 * 60000; // a tab flicker is not a return — at most one look per 10 minutes
+  let awayStudyLookAt = 0;
+  async function lookForAwayStudy() {
+    const t = Date.now();
+    if (awayStudyLookAt && t - awayStudyLookAt < AWAY_STUDY_LOOK_GAP_MS) return;
+    awayStudyLookAt = t;
+    if (typeof Harness === 'undefined' || !Harness.studyPending || !beatCards) return;
+    const batches = await Harness.studyPending();
+    let queued = 0;
+    for (const b of batches) {
+      if (!b || !b.runId || beatCards.hasSeen('study', b.runId)) continue;
+      queueStudy(b.runId, b.agentId || 'agent'); queued++;
+    }
+    if (queued) flushStudyPending();
   }
 
   /* GROWTH Tier 2 — THE GOAL-ARC CONFIRM BEAT (understanding → direction). When a goals-dim belief exists with no
@@ -5216,7 +5305,7 @@ const Chat = (() => {
     const card0 = recCard({
       kind: 'thread', evidence: prop.spec ? recWhy(recCite(prop.spec, threadCiteKind(prop))) : '',
       label: 'THREAD', proposal: prop.title,
-      note: 'kept threads feed the night shift'
+      note: 'kept threads feed autonomy'
     });
     if (!card0) return false;
     const r = { d: card0.row };
@@ -6580,13 +6669,17 @@ const Chat = (() => {
       if (m && m.sys) { if ((m.content || '').trim()) toolLine(m.content, !!m.error); continue; }
       if (m.role !== 'assistant') continue;   // only dialogue turns render (a stray system marker never shows as an agent reply)
       if (!(m.content || '').trim()) { if (m.stopped) lastReal = m; continue; }   // zero-token stop: durable recovery truth, never a blank speech row
+      // rows re-synced from the server transcript still carry their FORK:/TASK_QUESTION: machine lines — they are
+      // chip data, never speech (a reload used to print them raw, first-hour walk 2026-09-28)
+      const shownText = (typeof Fork !== 'undefined' && Fork.stripMarkers) ? Fork.stripMarkers(m.content) : m.content;
+      if (!shownText.trim()) { lastReal = m; continue; }   // a reply that was ONLY a marker has no prose to show
       // a turn produced by a WORK LINE stage carries its own agentId — replay names that agent, not the focused
       // one, or a reload would silently re-attribute two other agents' work to whoever owns the stream now.
       const spoke = (m && m.agentId && typeof App !== 'undefined' && App.agentName) ? App.agentName(m.agentId) : null;
       if (stamp !== false) flushDeliverablesBefore(stamp);   // the files this reply's run produced were shown BEFORE the reply landed
       const r = row('agent', { stamp: stamp, who: spoke });   // past turns render as plain GROUPED messages; only the LIVE reply is the lit headline
       if (m.error) r.d.classList.add('err');
-      renderProse(r.body, m.content);   // same linkify path as live tokens, so replayed history matches
+      renderProse(r.body, shownText);   // same linkify path as live tokens, so replayed history matches
       lastReal = m;
     }
     flushDeliverablesBefore(null);   // files newer than the last stored turn (or from turns without a stamp)
@@ -6692,7 +6785,11 @@ const Chat = (() => {
         }
       },
       breakSeg() { closeSeg(); },   // an inline action is about to render below — end this paragraph
-      cleanTaskIntent() { if (seg && typeof TaskIntent !== 'undefined' && TaskIntent.strip) { raw = TaskIntent.strip(raw); flushProse(); } },
+      cleanTaskIntent() {   // every choice marker (FORK + TASK_QUESTION) leaves the live row once the chips take over
+        if (!seg) return;
+        if (typeof Fork !== 'undefined' && Fork.stripMarkers) { raw = Fork.stripMarkers(raw); flushProse(); }
+        else if (typeof TaskIntent !== 'undefined' && TaskIntent.strip) { raw = TaskIntent.strip(raw); flushProse(); }
+      },
       done() { closeSeg(); },
       // m = the plain-language headline to LEAD with; rawDetail (optional) = the original technical text, kept
       // accessible as a dim sub-line + a title tooltip so debugging info isn't lost, just de-emphasized.
@@ -6862,7 +6959,13 @@ const Chat = (() => {
     if (!activeWs) return localLine('No active workstream to retry in.');
     if (isBusy()) return localLine('This stream is still running — stop it first, then /retry.');
     const h = activeWs.history;
-    if (h.length && h[h.length - 1].role === 'assistant' && (h[h.length - 1].error || h[h.length - 1].stopped)) h.pop();   // drop the failed/stopped partial reply
+    /* A retry re-runs the LAST user turn, so every row after it is the attempt being replaced — drop all of them,
+       not just the ⚠ row. A failed run that streamed several replies ("The tool needs the required objective
+       field." …) used to leave them after the user turn, the retry request then ENDED ON AN ASSISTANT MESSAGE, and
+       current Claude models refuse that outright ("This model does not support assistant message prefill") — every
+       Try again failed in ~1.5s with "Provider returned error" (first-hour walk 2026-09-28). */
+    const lastUser = h.map(m => m && m.role).lastIndexOf('user');
+    if (lastUser >= 0) h.length = lastUser + 1;
     let text = null;
     for (let i = h.length - 1; i >= 0; i--) { if (h[i].role === 'user') { text = h[i].content; break; } }
     if (text == null) return localLine('Nothing to retry yet — send a message first.');
@@ -6905,12 +7008,49 @@ const Chat = (() => {
     choices([{ label: door.label, value: 'connect' }], () => door.run());
     return true;
   }
+  /* A run that ends on a TASK_QUESTION owns the one post-run slot, so the connect chip cannot take a row of its own —
+     but connectors.list has already told the model "the Commander now has a ⇄ CONNECT chip", and the model tells
+     the Commander to tap it (first-hour walk 2026-09-28: said three times, no chip anywhere). Record the handoff
+     exactly as offerConnectorDoor would; offerTaskQuestion then draws the door INSIDE the question card. */
+  function holdConnectorDoor(runId, originWs) {
+    const ev = runId ? CONNECTOR_NEEDED.get(runId) : null;
+    if (!ev) return false;
+    CONNECTOR_NEEDED.delete(runId);
+    const ws = originWs || activeWs;
+    if (!ws || typeof Workstreams === 'undefined') return false;
+    // awaitingAnswer: the question is still open, so ABILITIES offers RETURN TO TASK, never CONTINUE TASK — that
+    // sends a continuation prompt, which send() would route in as the question's ANSWER (review 2026-09-28).
+    Workstreams.setConnectorHandoff(ws.id, Object.assign({}, ev, { agentId: ws.agentId || 'agent', awaitingAnswer: true }));
+    App.persist();
+    return true;
+  }
+  // The door for the displayed stream's durable connector handoff, drawn inside a question card — a task question
+  // or a FORK, fresh or restored after a reload. Opening the connect screen does NOT answer the question. A fresh
+  // card passes its runId so an older run's handoff never rides along on every later question in the stream.
+  function taskQuestionDoor(body, runId) {
+    const h = (activeWs && typeof Workstreams !== 'undefined') ? Workstreams.connectorHandoff(activeWs.id) : null;
+    if (h && runId && h.runId && h.runId !== runId) return null;
+    const door = (h && typeof Friendly !== 'undefined' && Friendly.connectorDoor) ? Friendly.connectorDoor(h) : null;
+    if (!door || !body) return null;
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'choice tq-door'; b.textContent = door.label;
+    b.onclick = () => door.run();
+    body.appendChild(b);
+    return b;
+  }
   // An explicit continuation carries existing history, unlike retryLast(), which repeats the user turn.
   // The connector is re-read on click; no OAuth callback can start work or change the originating agent.
   const connectorContinuing = new Set();
   async function continueConnectorTask(streamId) {
     const ws = Workstreams.get(streamId), h = Workstreams.connectorHandoff(streamId);
     if (!ws || !h || connectorContinuing.has(streamId) || Channels.isBusy(streamId)) return false;
+    // The run that raised this door ended on a question that is still open: a continuation prompt would be taken
+    // as its answer. Take the Commander back to the question instead; answering it continues with the connection.
+    if (h.awaitingAnswer) {
+      App.openWorkstream(streamId);
+      if (typeof StationUI !== 'undefined') StationUI.notify('Answer the open question in this task to continue with ' + h.connectorId + '.', 'info');
+      return false;
+    }
     const continuationFocusVersion = focusVersion;
     connectorContinuing.add(streamId);
     try {
@@ -8676,7 +8816,7 @@ const Chat = (() => {
         activeLiveRow = streamingAgent(); historyRead.repaint = false;
       }
       const { text: reply, error, endReason, finishReason, completionVerdict, effectVerdict, budgetScope, budgetCapUsd } = await Harness.chat({
-        system: sys, messages: historyWindow(ws), agentId: ws.agentId || 'agent', isTask, recurring, signal: ac.signal, streamId: ws.id,
+        system: sys, messages: retry ? endOnUserTurn(historyWindow(ws)) : historyWindow(ws), agentId: ws.agentId || 'agent', isTask, recurring, signal: ac.signal, streamId: ws.id,
         taskAction: taskAction || undefined,
         postconditions: opts && opts.postconditions != null ? opts.postconditions : undefined,
         recovery: recoveryResume ? opts.recovery : undefined,
@@ -8795,6 +8935,16 @@ const Chat = (() => {
           if (taskQuestion.question) voiceQuestion = taskQuestion.question;   // spoken (question only, no options) at reply end
           if (isActiveWs(ws) && activeLiveRow && activeLiveRow.cleanTaskIntent) activeLiveRow.cleanTaskIntent();
         }
+        // FORK is parsed from the RAW reply, then every choice marker (FORK and any leftover TASK_QUESTION) leaves the
+        // displayed + saved text: nothing used to strip a FORK line, so it always printed raw under its own chips.
+        const forkAsked = (replyText && typeof Fork !== 'undefined' && Fork.parse) ? Fork.parse(replyText) : null;
+        if (typeof Fork !== 'undefined' && Fork.stripMarkers) {
+          const shown = Fork.stripMarkers(replyText);
+          if (shown !== replyText) {
+            replyText = shown;
+            if (isActiveWs(ws) && activeLiveRow && activeLiveRow.cleanTaskIntent) activeLiveRow.cleanTaskIntent();
+          }
+        }
         finalReply = replyText;
         titleOk = !!replyText.trim();   // a real, non-empty reply landed → this stream is eligible for a summary title
         if (replyText.trim()) ws.history.push({ role: 'assistant', content: replyText, ts: Date.now(), sourceRunId: thisRunId || undefined });   // never persist an empty turn
@@ -8837,6 +8987,7 @@ const Chat = (() => {
         // a CLEAN end that hit an unwired connector mid-run: the reply already says "not connected" — the chip is
         // the door. Only on a clean end: a stopped run owns the slot with its retry/budget chip above.
         if (!taskQuestion && (!endReason || endReason === 'done')) offerConnectorDoor(thisRunId, ws);
+        if (taskQuestion || endReason === 'clarifying') holdConnectorDoor(thisRunId, ws);   // the question owns the slot (parsed here, or restored from the store below); its card carries the door
         // GOLDEN-RUN DRIFT (2026-08-22): a recipe-launched run is compared by the sidecar against that recipe's own
         // good history; a drifted run is a failure class, so it earns the bell ONCE (keyed by the run). The durable
         // row lands a beat after run end, so the read waits; it is advisory and never blocks the turn.
@@ -8859,7 +9010,7 @@ const Chat = (() => {
           }, 1500);
         }
         if (isActiveWs(ws) && activeLiveRow) activeLiveRow.done();
-        if (isActiveWs(ws) && taskQuestion) presentTaskQuestion(ws, taskQuestion);   // enriches with the stored recommendation, then renders
+        if (isActiveWs(ws) && taskQuestion) presentTaskQuestion(ws, Object.assign({ runId: thisRunId }, taskQuestion));   // enriches with the stored recommendation, then renders
         // Belt-and-braces (live-caught 2026-07-16): a run can end 'clarifying' with the marker unparseable
         // client-side (e.g. a malformed/glued reply line) while the DURABLE brief holds the real validated
         // question — re-present from the store so the Commander is never left with a question-less pause.
@@ -8867,9 +9018,9 @@ const Chat = (() => {
         // R1 MID-TASK FORK: the agent may have ended this reply with one FORK marker (earned only while the
         // style model's confidence is low — the directive isn't even in the prompt otherwise). Render the
         // one-tap chips at the run boundary; a malformed marker parses null and stays plain text.
-        if (isActiveWs(ws) && replyText && typeof Fork !== 'undefined' && Fork.parse) {
-          const fk = Fork.parse(replyText);
-          if (fk) { offerFork(fk); if (!voiceQuestion && fk.question) voiceQuestion = fk.question; }
+        if (isActiveWs(ws) && forkAsked) {
+          const fk = forkAsked;   // parsed before the marker left the displayed text (above)
+          offerFork(fk, thisRunId); if (!voiceQuestion && fk.question) voiceQuestion = fk.question;
         }
         /* THE WORK LINE. This dock has answered; if the Commander drew stages past it, run them now — still
            INSIDE the run's try, so the stream stays busy and Stop/E-STOP reach the whole line rather than a

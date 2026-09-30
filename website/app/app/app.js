@@ -1590,7 +1590,7 @@ const App = (() => {
     perplexity: ['sonar-pro', 'sonar', 'sonar-reasoning-pro'],
     cerebras: ['llama-4-scout-17b-16e-instruct', 'llama3.1-8b', 'qwen-3-coder-480b'],
     ollama: ['llama3.1', 'qwen2.5-coder', 'mistral'],
-    'claude-cli': ['sonnet', 'opus', 'haiku'],
+    'claude-cli': ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-4-5-20251001'],   // [0] = the default pick; the live catalog adds the rest
     openrouter: ['gpt-5.5', 'anthropic/claude-sonnet-4.6', 'anthropic/claude-opus-4.8', 'openai/gpt-5', 'google/gemini-2.5-pro']
   });
   // The genesis model catalog for the ACTIVE provider — {id, name, pricing, context_length, fallback?} items
@@ -1926,7 +1926,7 @@ const App = (() => {
       return;
     }
     // the catalog has NO data for this slug — split the honest reasons instead of one vague "custom model slug":
-    if (genesisOffline) { hint.textContent = 'catalog offline — this slug runs as-is (no price/context data here)'; return; }
+    if (genesisOffline) { hint.textContent = 'price and memory size unknown for this model — it will still run'; return; }
     if (genesisModels.some(m => m.id === id)) { hint.textContent = 'custom model — not priced in the catalog'; return; }
     hint.textContent = 'not in the catalog — double-check the slug, or it runs as a custom model';
   }
@@ -3766,6 +3766,18 @@ const App = (() => {
         persona: (typeof Personas !== 'undefined') ? Personas.get(agent.personaId) : null,   // the voice was chosen on the create screen — the awakening acknowledges it instead of re-asking
         specialty: opts.specialty || null,                   // (reserved) a pre-specced wake skips re-asking the mission; the orchestrator authors it live
         commit: applyAgentConfig,                            // each answer folds a real doc into the live prompt + persists
+        /* CHOOSE YOUR STATION (2026-09-28): the awakening's last question builds a work preset over the UNTOUCHED
+           starter room, through the same StationTemplates.build + replaceLayout path Build mode's Presets use
+           (one undo slot; the lead keeps its desk). fresh() = still the one-room starter no preset has built. */
+        stations: (typeof StationTemplates !== 'undefined' && typeof WorldModel !== 'undefined' && typeof PropSprites !== 'undefined') ? {
+          catalog: () => StationTemplates.catalog,
+          recommend: text => (StationTemplates.recommend ? StationTemplates.recommend(text) : null),
+          fresh: () => { const d = station && station.doc(); return !!d && !(d.meta && d.meta.templateId) && station.rooms().filter(r => r.kind !== 'corridor').length === 1; },
+          apply: id => {
+            try { return station.replaceLayout(StationTemplates.build(id, WorldModel, PropSprites, station.doc()._nid + 100)); }
+            catch (e) { return { ok: false, msg: e && e.message }; }
+          }
+        } : null,
         getSystem: () => agent ? agent.systemPrompt : '',    // Interview 2.0: the generated beats (wakemind.js) reason on the LIVE prompt (persona + dossier already folded in)
         done: () => { if (agent) agent.onboarded = true; persist(); if (typeof KeyCTA !== 'undefined' && KeyCTA.arm) KeyCTA.arm(); },   // the awakening landed — mark onboarded so a later refresh resumes into the game, not back into the ceremony; arm the keyless-brain CTA (shows only if no key is truly stored)
         notify: (typeof StationUI !== 'undefined') ? StationUI.notify : null,

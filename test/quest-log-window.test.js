@@ -92,7 +92,9 @@ A.ok(/the station had nothing it could honestly ground/.test(station), 'a reject
 const stationFns = station.slice(station.indexOf('function questGoDest'), station.indexOf('function buildQuests'));
 A.ok(/return 'session'/.test(station) && !/GO ▸ task board/.test(station), 'work/ledger quests route to their OWN session — the TASK BOARD misroute is dead');
 A.ok(/function questOpenSession/.test(station) && /\.find\(s => s && !s\.archived && s\.title === title\)/.test(station), 'START QUEST is idempotent by title (a second click returns to the same conversation)');
-A.ok(/Chat\.prefill\(/.test(station.slice(station.indexOf('function questOpenSession'), station.indexOf('function questSessionTitle') + 4000)), 'the ask is PREFILLED, never sent — no fabricated turns');
+A.ok(/Chat\.prefill\(/.test(station.slice(station.indexOf('function questOpenSession'), station.indexOf('function questSessionTitle') + 4000)), 'a quest the Commander performs, a revisit, or a busy COMMS keeps the PREFILL path');
+{ const qos = station.slice(station.indexOf('function questOpenSession'), station.indexOf('function questOpenSession') + 3000);
+  A.ok(/const startsWork = !existing && q\.executionMode === 'agent' && Chat\.send && !\(Chat\.isBusy && Chat\.isBusy\(\)\)/.test(qos), 'START QUEST sends only for an AGENT quest, only into its brand-new session, only when COMMS is free'); }
 A.ok(/q\.agentId && String\(q\.agentId\)/.test(station), 'a ledger quest binds its OWN agent; agent-less kinds fall to the hero');
 A.ok(/q\.id === 'st:crew'/.test(stationFns) && /return 'recruit'/.test(stationFns), 'the recruit quest routes to Recruitment Bay, never Refit');
 A.ok(/App\.openSummonBay/.test(station.slice(station.indexOf("body.querySelectorAll('.q-go')"), station.indexOf("body.querySelectorAll('.q-attest-yes')"))), 'the recruit destination opens the real Recruitment Bay surface');

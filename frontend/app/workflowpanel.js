@@ -282,7 +282,9 @@ const WorkflowPanel = (() => {
         nodes.push({ kind: 'col', col, ok: col.docks.every(d => d.agentId && H.hasCompute(d.agentId, d.propId)) });
         if (col.gate) nodes.push({ kind: 'gate', gate: col.gate, propId: col.gate.propId });
       });
-      nodes.push({ kind: 'outbox', propId: f.outbox.propId, cls: 'wf-term', ok: f.outbox.reached,
+      const lastCol = f.cols[f.cols.length - 1];
+      const endId = lastCol ? (lastCol.gate ? lastCol.gate.propId : lastCol.docks.length === 1 ? lastCol.docks[0].propId : null) : null;
+      nodes.push({ kind: 'outbox', propId: f.outbox.propId, addAfter: !f.outbox.propId && endId && H.lineEdit ? endId : null, cls: 'wf-term', ok: f.outbox.reached,
         html: '<span class="k">OUTBOX</span><span class="t">RESULT</span><span class="a">' + (f.outbox.reached ? 'the line ends here' : f.outbox.propId ? (f.outbox.reachedOnceCrewed ? 'connected · waiting on agents' : 'not connected yet') : 'no OUTBOX') + '</span>' });
     } else if (S.lone) {
       nodes.push({ kind: 'col', col: { docks: [{ propId: S.lone, agentId: (prop(S.lone) || {}).agentId || null, role: (prop(S.lone) || {}).role || null, routed: false }], mode: 'single' }, ok: false });
@@ -296,7 +298,8 @@ const WorkflowPanel = (() => {
         const carry = n.kind === 'col' && n.col.escalation ? escCarry(n.col.escalation) : prev.kind === 'trigger' ? 'the job' : prev.kind === 'col' && prev.col.docks.length === 1 ? ((prop(prev.col.docks[0].propId) || {}).hands || '…') : prev.kind === 'gate' ? (prev.gate.kind === 'loop' ? 'on DONE' : 'as one') : '…';
         const canPlus = !!(a && b && S.lineKey);
         // a + that can only refuse is shown OFF with its reason (2026-09-27 audit B3) — never a role picker that ends in an error
-        const chk = canPlus && H.canInsertBay ? (H.canInsertBay(a, b) || { ok: true }) : { ok: true };
+        const lined = canPlus && H.lineEdit ? canEdit('insertStep', a, { from: a, to: b }) : null;
+        const chk = lined && lined.ok ? lined : canPlus && H.canInsertBay ? (H.canInsertBay(a, b) || { ok: true }) : { ok: true };
         html += '<div class="wf-belt"><span class="carry">' + esc(carry) + '</span><span class="rail"></span>'
           + (canPlus ? (chk.ok
             ? '<button type="button" class="wf-plus" data-plus="' + i + '" data-from="' + esc(a) + '" data-to="' + esc(b) + '" aria-label="Add a step here" data-tip="Add a step here">+</button>'
@@ -313,21 +316,35 @@ const WorkflowPanel = (() => {
     strip.querySelectorAll('[data-node]').forEach(b => { b.onclick = () => { if (b.dataset.node) { H.sfx('click'); select(b.dataset.node); } }; });
     strip.querySelectorAll('.wf-plus').forEach(b => { b.onclick = e => { e.stopPropagation(); if (b.dataset.plusOff) { H.sfx('bad'); H.flashTip(b.dataset.plusOff, false); return; } S.insertAt = S.insertAt === +b.dataset.plus ? null : +b.dataset.plus; paintStrip(flow()); }; });
     ins.querySelectorAll('[data-ins-role]').forEach(b => { b.onclick = e => { e.stopPropagation(); insertStep(open.dataset.from, open.dataset.to, b.dataset.insRole); }; });
+    wireEdits(ins);
+    wireEdits(strip);   // (an OUTBOX the line still needs is added from its place on the strip)
     const cx = ins.querySelector('[data-ins-close]'); if (cx) cx.onclick = () => { S.insertAt = null; paintStrip(flow()); };
     drawArcs(strip, f);
     const selN = strip.querySelector('.wf-node.sel');
     if (selN) { const wrap = strip.parentNode, l = selN.offsetLeft, r = l + selN.offsetWidth; if (l < wrap.scrollLeft || r > wrap.scrollLeft + wrap.clientWidth) wrap.scrollLeft = Math.max(0, l - (wrap.clientWidth - selN.offsetWidth) / 2); }
   }
+  // the roles a step can take, in the order the inserter and a BAY's ROLE chips offer them
+  const STEP_ROLES = ['RESEARCHER', 'WRITER', 'REVIEWER', 'ENGINEER', 'TESTER', 'ANALYST', 'SHIPPER', 'GENERALIST'];
   function inserterHTML(from, to, f) {
-    const roles = ['RESEARCHER', 'WRITER', 'REVIEWER', 'ENGINEER', 'ANALYST', 'SHIPPER', 'GENERALIST'];
+    const roles = STEP_ROLES;
     const nm = id => { const p = prop(id); return !p ? '?' : p.t === 'intake' ? 'the INBOX' : p.t === 'outbox' ? 'the OUTBOX' : dockLabel(f, id); };
-    return '<div class="wf-inserter" role="group" aria-label="Add a BAY"><div class="h">ADD A BAY BETWEEN ' + esc(nm(from)) + ' AND ' + esc(nm(to)) + '<button type="button" class="bb sm" data-ins-close aria-label="Cancel">✕</button></div>'
-      + '<div class="wf-chips">' + roles.map(r => '<button type="button" class="wf-chip" data-ins-role="' + r + '">' + r + '</button>').join('')
-      + '<button type="button" class="wf-chip" data-ins-role="">NO ROLE</button></div><span class="n">A real BAY is placed on the floor near this belt and the belts re-route through it — one UNDO takes it all back. If there is no room, nothing changes.</span></div>';
+    const B = prop(to), JN = { splitter: 1, filter: 1, merger: 1, joiner: 1, loop: 1 };
+    const lined = !!(H.lineEdit && canEdit('insertStep', from, { from, to }).ok);
+    const shapes = lined ? '<div class="wf-chips" aria-label="Or a junction">'
+      + editBtn('addBranch', from, { from, to, mode: 'copy' }, '⑂ BRANCH · COPY TO EACH', 'two new steps both get the job and a JOINER combines their results')
+      + editBtn('addBranch', from, { from, to, mode: 'turns' }, '⑂ BRANCH · TAKE TURNS', 'two new steps take turns and a MERGER passes each job on')
+      + (B && !JN[B.t] ? editBtn('addSorter', from, { from, to }, '⧩ SORT BY TASK TYPE', 'a FILTER: CODE work to an ENGINEER, RESEARCH to a RESEARCHER, everything else straight on') : '')
+      + '</div>' : '';
+    return '<div class="wf-inserter" role="group" aria-label="Add to the line"><div class="h">' + (lined ? 'ADD BETWEEN ' : 'ADD A BAY BETWEEN ') + esc(nm(from)) + ' AND ' + esc(nm(to)) + '<button type="button" class="bb sm" data-ins-close aria-label="Cancel">✕</button></div>'
+      + '<div class="wf-chips" aria-label="A step">' + roles.map(r => '<button type="button" class="wf-chip" data-ins-role="' + r + '">' + r + '</button>').join('')
+      + '<button type="button" class="wf-chip" data-ins-role="">NO ROLE</button></div>' + shapes
+      + '<span class="n">' + (lined ? 'A step, or a branch or sorter with its steps: real machines are placed on the floor with their belts, and every other belt stays where it is — one UNDO takes it all back. If there is no room, nothing changes.'
+        : 'A real BAY is placed on the floor near this belt and the belts re-route through it — one UNDO takes it all back. If there is no room, nothing changes.') + '</span></div>';
   }
   function nodeHTML(n, f) {
     const sel = id => (id && id === S.sel ? ' sel' : '');
     const dot = ok => '<span class="dot' + (ok ? ' ok' : '') + '"></span>';
+    if (n.kind === 'outbox' && n.addAfter) return editBtn('addOutbox', n.addAfter, { after: n.addAfter }, '+ OUTBOX', 'an OUTBOX after the last step — where finished work lands', 'wf-node wf-term wf-addend');
     if (n.kind === 'trigger' || n.kind === 'outbox') {
       return '<button type="button" class="wf-node ' + n.cls + sel(n.propId) + '" data-node="' + esc(n.propId || '') + '"' + (n.propId ? '' : ' disabled') + '>'
         + n.html.replace('</span>', dot(n.ok) + '</span>') + '</button>';
@@ -373,11 +390,83 @@ const WorkflowPanel = (() => {
     strip.appendChild(svg);
   }
   function insertStep(fromId, toId, role) {
+    // a floor that builds by links: the step goes in as a LINE EDIT (only what changed moves); an older floor keeps the
+    // insert that lays its belts by the ring rule
+    if (H.lineEdit && canEdit('insertStep', fromId, { from: fromId, to: toId }).ok) return lineEdit('insertStep', fromId, { from: fromId, to: toId, role: role || null }, 'step added');
     const res = H.insertBay(fromId, toId, role || null);
     S.insertAt = null;
     if (res && res.ok) { H.sfx('chime'); H.flashTip('BAY placed on the floor · belts re-routed · UNDO removes it', true); S.sel = res.id; paint(true); H.highlight(res.id); H.focusProp(res.id); }
     else { H.sfx('bad'); H.flashTip((res && res.msg) || 'could not add a step here', false); paintStrip(flow()); }
     return res;
+  }
+
+  /* ---------- SHAPE THE LINE (conveyor-links phase D, 2026-09-29): the panel edits the line itself ----------
+     A step, a branch (COPY TO EACH / TAKE TURNS), a review loop, a sorter, a removal, a move, an OUTBOX, TIDY LINE: each is ONE
+     edit of the line's graph, laid out by the engine and written back in one UNDO slot (H.lineEdit → LineEdit). A button whose
+     edit could only fail is shown OFF with the reason as its tip — never a click that ends in an error. */
+  const canEdit = (op, id, args) => (H && H.canLineEdit) ? (H.canLineEdit(op, id, args) || { ok: false }) : { ok: false, msg: 'this station cannot edit lines' };
+  const EDIT_DONE = { insertStep: 'step added', appendStep: 'step added', addBranch: 'branch added', addLoop: 'review added', addSorter: 'sorter added',
+    removeStep: 'step removed', removeLoop: 'review removed', moveStep: 'step moved', tidy: 'line tidied', addOutbox: 'OUTBOX added', wrapLine: 'line made',
+    addArm: 'branch added', removeArm: 'branch removed', addRoute: 'route added', removeSorter: 'sorter removed' };
+  /* NO ROOM WHERE THE LINE STANDS (the edit would fit with the line laid out afresh): the button ARMS in place — its label says
+     what a second click does (TIDY the line round the change, one UNDO) and it rests again after a few seconds. Never a silent
+     re-layout of the whole line: every machine of it may move, so that takes the Commander's second click. */
+  const ARM_MS = 4000;
+  const armKey = (op, id, args) => op + '|' + id + '|' + JSON.stringify(args || {});
+  function lineEdit(op, id, args, okMsg, how) {
+    if (!H.lineEdit) return null;
+    saveOpenFields();   // a half-typed brief is saved before the floor changes under it
+    const res = H.lineEdit(op, id, args, how);
+    S.insertAt = null; S.armTidy = null;
+    if (res && res.ok) {
+      H.sfx('chime'); H.flashTip((okMsg || EDIT_DONE[op] || 'line changed') + (res.tidied ? ' · the whole line laid out afresh round it' : res.relaid ? ' · the belts round it re-routed' : '') + ' · UNDO takes it back', true);
+      const focus = res.focus && prop(res.focus) ? res.focus : (prop(S.sel) ? S.sel : null);
+      if (focus) { S.sel = focus; H.highlight(focus); }
+      refresh(); paint(true);
+      if (focus) H.focusProp(focus, true);
+    } else if (res && res.canTidy && op !== 'tidy' && !(how && how.tidy)) {
+      H.sfx('bad');
+      const key = armKey(op, id, args);
+      S.armTidy = { key, t: Date.now() };
+      H.flashTip('no room for that with the line where it stands — click it again to TIDY the line round it (every machine may move · one UNDO)', false);
+      paint(true);
+      setTimeout(() => { if (S.armTidy && S.armTidy.key === key && Date.now() - S.armTidy.t >= ARM_MS - 50) { S.armTidy = null; if (el) el.querySelectorAll('[data-tidy-armed]').forEach(disarmBtn); } }, ARM_MS);
+    } else { H.sfx('bad'); H.flashTip((res && res.msg) || 'that change cannot be made here', false); paint(true); }
+    return res;
+  }
+  function disarmBtn(b) { b.textContent = b.dataset.rest || b.textContent; b.classList.remove('armed'); b.removeAttribute('data-tidy-armed'); }
+  // one edit as a button: live when it can be made, OFF with its reason when it cannot, ARMED when a second click tidies round it
+  function editBtn(op, id, args, label, tip, cls) {
+    const c = canEdit(op, id, args);
+    const armed = c.ok && S.armTidy && S.armTidy.key === armKey(op, id, args) && Date.now() - S.armTidy.t < ARM_MS;
+    return '<button type="button" class="' + (cls || 'wf-chip') + (c.ok ? '' : ' off') + (armed ? ' armed' : '') + '" data-edit="' + esc(op) + '" data-edit-id="' + esc(id) + '" data-edit-args="' + esc(JSON.stringify(args)) + '"'
+      + (c.ok ? '' : ' aria-disabled="true"') + (armed ? ' data-tidy-armed="1" data-rest="' + esc(label) + '"' : '')
+      + ' data-tip="' + esc(armed ? 'the line where it stands has no room for this: a second click lays the whole line out afresh with it (its INBOX stays put) — one UNDO' : c.ok ? tip : (c.msg || tip)) + '">' + esc(armed ? '⌗ TIDY LINE TO FIT IT?' : label) + '</button>';
+  }
+  function wireEdits(scope) {
+    if (!scope) return;
+    scope.querySelectorAll('[data-edit]').forEach(b => { b.onclick = e => {
+      e.stopPropagation();
+      if (b.classList.contains('off')) { H.sfx('bad'); H.flashTip(b.dataset.tip, false); return; }
+      let args = {}; try { args = JSON.parse(b.dataset.editArgs || '{}'); } catch (x) { args = {}; }
+      const tidy = !!b.getAttribute('data-tidy-armed') && !!S.armTidy && S.armTidy.key === armKey(b.dataset.edit, b.dataset.editId, args);
+      lineEdit(b.dataset.edit, b.dataset.editId, args, null, tidy ? { tidy: true } : null);
+    }; });
+  }
+  // a BAY's line edits: move it, review it, give it a partner, take it out — or, for a BAY on no line, make it one
+  function shapeHTML(p) {
+    if (!H.lineEdit) return '';
+    if (S.lone === p.id) return '<section class="wf-sec wf-shape"><h3>Make it a line</h3><div class="wf-chips">'
+      + editBtn('wrapLine', p.id, { id: p.id }, '▸ MAKE IT A LINE', 'an INBOX feeds this step and an OUTBOX takes its work')
+      + '</div><p class="wf-help dim">Places an INBOX before it and an OUTBOX after it, belts laid — one UNDO takes it back.</p></section>';
+    return '<section class="wf-sec wf-shape"><h3>Shape the line</h3><div class="wf-chips">'
+      + editBtn('moveStep', p.id, { id: p.id, dir: -1 }, '◂ EARLIER', 'swap this step with the one before it')
+      + editBtn('moveStep', p.id, { id: p.id, dir: 1 }, 'LATER ▸', 'swap this step with the one after it')
+      + editBtn('addLoop', p.id, { around: p.id }, '⟲ ADD A REVIEW', 'a REVIEWER checks this step\'s work and sends it back until it is approved (up to 3 times)')
+      + editBtn('addBranch', p.id, { around: p.id, mode: 'copy' }, '⑂ SECOND OPINION', 'a second step gets the same job and a JOINER combines both results (COPY TO EACH)')
+      + editBtn('addBranch', p.id, { around: p.id, mode: 'turns' }, '⑂ SHARE THE LOAD', 'a second step takes turns with this one and a MERGER passes each job on (TAKE TURNS)')
+      + editBtn('removeStep', p.id, { id: p.id }, '✕ REMOVE STEP', 'take this step out; the step before it hands straight on')
+      + '</div><p class="wf-help dim">Each change places real machines and belts on the floor and keeps every other belt where it is — one UNDO takes it back.</p></section>';
   }
 
   /* ---------- the footer: step-test the line (or the whole-line sample when the route is absent) ---------- */
@@ -392,8 +481,10 @@ const WorkflowPanel = (() => {
       html += S.view === 'test' ? '<button type="button" class="bb sm" id="wf-back">◂ SETUP</button>'
         : '<button type="button" class="bb sm refit-primary" id="wf-test">' + (s && W.isLive(s) ? '▶ TEST · ' + s.state.toUpperCase() : '▶ TEST') + '</button>';
     }
+    if (c && S.view !== 'test' && H.lineEdit && S.sel) html += editBtn('tidy', S.sel, {}, '⌗ TIDY LINE', 'lay the whole line out afresh — its INBOX stays where it is', 'bb sm');
     html += '<button type="button" class="bb sm" id="wf-done">✓ DONE</button>';
     foot.innerHTML = html;
+    wireEdits(foot);
     const b1 = $('#wf-test'); if (b1) b1.onclick = () => { H.sfx('click'); S.view = 'test'; paint(true); if (s && s.state === 'paused') refreshPaused(); };
     const b2 = $('#wf-back'); if (b2) b2.onclick = () => { H.sfx('click'); S.view = 'edit'; paint(true); };
     $('#wf-done').onclick = () => { H.sfx('click'); close(); };
@@ -512,6 +603,8 @@ const WorkflowPanel = (() => {
       + '<button type="button" class="bb sm" id="wf-aid-ok">▸ ASSIGN</button><button type="button" class="bb sm" id="wf-aid-clear">UNASSIGN</button></div><div class="refit-error" id="wf-aid-err">unknown agent — pick one above, or check the id</div></details>'
       + '<div class="wf-compute" data-live="compute">' + computeHTML(p) + '</div></section>'
       + '<section class="wf-sec"><h3>What is their job?</h3>'
+      // the step's ROLE is its name on the line (and which starters it offers) — click the pressed one again to clear it
+      + (H.station().setPropRole ? '<div class="wf-chips wf-roles" aria-label="This step’s role">' + STEP_ROLES.map(r => '<button type="button" class="wf-chip" data-role="' + r + '" aria-pressed="' + (p.role === r) + '">' + r + '</button>').join('') + '</div>' : '')
       + '<div class="wf-chips" aria-label="Starters">' + st.map((x, i) => '<button type="button" class="wf-chip" data-st="' + i + '">' + esc(x.label) + '</button>').join('') + '</div>'
       + '<div class="wf-contract">'
       + '<div class="row"><span class="lab">GETS</span><span class="val ro" data-live="gets">→ <b>' + esc(cr.gets) + '</b></span></div>'
@@ -520,7 +613,12 @@ const WorkflowPanel = (() => {
       + '<div class="row"><span class="lab">TO</span><span class="val ro" data-live="to">→ <b>' + esc(cr.to) + '</b></span></div></div>'
       + '<p class="wf-help">These instructions apply to every job that reaches this step. HANDS OFF is added to them as <i>' + esc((typeof Pipeline !== 'undefined' && Pipeline.HANDS_LEAD) || "When you're done, hand off: ") + '…</i></p>'
       + (f && f.order.length > 1 ? '<p class="wf-help dim">A direct COMMS message to this agent runs only this step. The whole line runs from its INBOX triggers or a test.</p>' : '')
-      + '</section>' + tr.html;
+      + '</section>' + shapeHTML(p) + tr.html;
+    wireEdits(body);
+    $$('[data-role]').forEach(b => b.onclick = () => {
+      const res = H.station().setPropRole(p.id, b.getAttribute('aria-pressed') === 'true' ? '' : b.dataset.role);
+      if (res && res.ok) { H.sfx('click'); H.flashTip(res.role ? 'this step is the ' + res.role : 'role cleared', true); paint(true); } else H.sfx('bad');
+    });
     // agent picks — ONE CLICK is the assignment
     $$('.wf-agent[data-aid]').forEach(b => b.onclick = () => {
       const res = H.station().assignPropAgent(p.id, b.dataset.aid);
@@ -1105,8 +1203,12 @@ const WorkflowPanel = (() => {
         + [['code', 'CODE'], ['research', 'RESEARCH'], ['general', 'GENERAL']].map(([tag, lbl]) => '<button type="button" class="bb sm loop-when' + (p.when === tag ? ' sel' : '') + '" data-tag="' + tag + '">' + lbl + '</button>').join('')
         + '</div></details>'
         + '<div class="wf-help" id="loop-note">' + esc(H.loopRuleTxt(p.when, p.maxIter || loopMaxDef)) + ' Blank max = ' + loopMaxDef + '.</div></section>'
+        + (H.lineEdit ? '<section class="wf-sec wf-shape"><h3>Shape the line</h3><div class="wf-chips">'
+          + editBtn('removeLoop', p.id, { id: p.id }, '✕ REMOVE THE REVIEW', 'the LOOP gate and the REVIEWER it came with go; the step they reviewed hands straight on')
+          + '</div></section>' : '')
       : '';
     body.innerHTML = joinerHtml + loopHtml;
+    wireEdits(body);
     const jnTimeout = $('#jn-timeout'), jnNote = $('#jn-note');
     const loopMax = $('#loop-max'), loopNote = $('#loop-note'), loopBackEl = $('#loop-back');
     const gate = { done: loopDoneCur, when: p.when || null };
@@ -1164,6 +1266,11 @@ const WorkflowPanel = (() => {
      The FILTER's routes are edited here too (they used to open a full-screen modal): pick the belt each task type takes. */
   /* a junction's belt, named by where it lands: a BAY on this line by the panel's own name for it ("BAY 2 · NOVA", or "BAY 2
      (no agent yet)" — 2026-09-28 retest: a fresh split listed both branches as "nowhere yet"); anything else keeps the floor's label */
+  // a branch on its ✕ chip, named the way the strip names it — BAY n · ROLE (two WRITER branches must never read alike)
+  function branchLabel(f, pid) {
+    const i = f && f.order ? f.order.indexOf(pid) : -1, d = f && f.docks ? f.docks[pid] : null;
+    return i < 0 ? dockLabel(f, pid) : 'BAY ' + (i + 1) + (d && d.role ? ' · ' + d.role : '');
+  }
   function laneName(f, l, arrow) {
     const d = l && l.dock && f && f.docks ? f.docks[l.dock] : null;
     if (!d) return l.label;
@@ -1196,7 +1303,12 @@ const WorkflowPanel = (() => {
           ? 'Each job is copied to <b>every</b> branch. The JOINER after the branches waits for all of them, then sends one combined result on.'
           : 'Each job goes down <b>one</b> branch, and the next job takes the next branch. Use this to share a heavy load between agents.') + '</p></div>'
         + '<h4 class="wf-sub">Branches</h4>' + branches('No branches yet. Run two belts OUT of the splitter: BELT, click the SPLITTER, then the next machine. Repeat for the second branch.')
-        + '<p class="wf-help" id="split-note">Switching swaps the JOINER or MERGER where the branches meet. Same belts, one UNDO.</p></section>';
+        + '<p class="wf-help" id="split-note">Switching swaps the JOINER or MERGER where the branches meet. Same belts, one UNDO.</p></section>'
+        + (H.lineEdit ? '<section class="wf-sec wf-shape"><h3>Shape the line</h3><div class="wf-chips">'
+          + editBtn('addArm', p.id, { split: p.id }, '⑂ ADD A BRANCH', copies ? 'one more step gets a copy of every job — the JOINER waits for it too' : 'one more step takes its turn with the others')
+          + lanes.filter(l => l.dock).map(l => editBtn('removeArm', p.id, { split: p.id, head: l.dock }, '✕ ' + branchLabel(f, l.dock), 'take this branch out, every step on it; a split left with one branch folds away')).join('')
+          + '</div><p class="wf-help dim">A branch comes out whole — the steps on it and their belts. One UNDO takes it back.</p></section>' : '');
+      wireEdits(body);
       body.querySelectorAll('[data-smode]').forEach(b => { b.onclick = () => {
         const note = $('#split-note');
         if (b.getAttribute('aria-pressed') === 'true') return;
@@ -1232,7 +1344,13 @@ const WorkflowPanel = (() => {
       + (lanes.length ? '' : '<p class="wf-warnline">Run belts OUT of the filter first (BELT: click the FILTER, then the next machine). Each belt out appears here.</p>')
       + '<div class="wf-routes">' + rows + '</div>'
       + '<p class="wf-help" id="flt-note">' + (cur.def ? 'Saved as you choose.' : 'Choose a belt for EVERYTHING ELSE so no task is left without a way out.') + '</p>'
-      + '<p class="wf-help dim">The filter only knows these three types. A task already addressed to one agent follows that agent’s belt instead.</p></section>';
+      + '<p class="wf-help dim">The filter only knows these three types. A task already addressed to one agent follows that agent’s belt instead.</p></section>'
+      + (H.lineEdit ? '<section class="wf-sec wf-shape"><h3>Shape the line</h3><div class="wf-chips">'
+        + [['code', 'CODE', 'an ENGINEER'], ['research', 'RESEARCH', 'a RESEARCHER']].filter(([tag]) => canEdit('addRoute', p.id, { id: p.id, tag }).error !== 'HAS_ROUTE')
+          .map(([tag, lbl, who]) => editBtn('addRoute', p.id, { id: p.id, tag }, '+ A STEP FOR ' + lbl, who + ' takes ' + lbl + ' work, then hands on to where everything else goes')).join('')
+        + editBtn('removeSorter', p.id, { id: p.id }, '✕ REMOVE THE SORTER', 'the FILTER and the steps it sorts work to go; the line runs straight on to where everything else went')
+        + '</div><p class="wf-help dim">Take out a route step (its card: ✕ REMOVE STEP) and that type goes with everything else. One UNDO takes any change back.</p></section>' : '');
+    wireEdits(body);
     const note = $('#flt-note');
     body.querySelectorAll('[data-ftag]').forEach(b => { b.onclick = () => {
       const tag = b.dataset.ftag, dir = b.dataset.fdir;

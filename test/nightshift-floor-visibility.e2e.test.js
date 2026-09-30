@@ -154,8 +154,8 @@ function hotBeliefs(now) {
 
     // ── 2. the crate rode WHILE the work ran: workitem.placed (night-shift preview) arrives BEFORE the last
     //      nightshift run.end (the DO/critique runs execute after placement — pending work is visible live).
-    const placedIdx = ev.findIndex(e => e.name === 'workitem.placed' && e.payload && /night-shift/.test(String(e.payload.preview || '')));
-    A.ok(placedIdx >= 0, 'a night-shift work-item crate was placed on the conveyor');
+    const placedIdx = ev.findIndex(e => e.name === 'workitem.placed' && e.payload && /^✦ autonomy: /.test(String(e.payload.preview || '')));
+    A.ok(placedIdx >= 0, 'an autonomy work-item crate was placed on the conveyor');
     A.ok(ev[placedIdx].payload.kind === 'cron' && ev[placedIdx].payload.agentId === 'agent', 'the crate is agent-bound autonomous work (kind cron, agentId agent)');
     let lastEndIdx = -1;
     for (let i = 0; i < ev.length; i++) if (ev[i].name === 'agent.run.end') lastEndIdx = i;

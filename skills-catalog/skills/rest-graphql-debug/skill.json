@@ -1,0 +1,15 @@
+{
+  "slug": "rest-graphql-debug",
+  "version": "1.0.0",
+  "shelf": "community",
+  "category": "Engineering",
+  "tags": ["api", "rest", "graphql", "http", "debugging"],
+  "requires": ["dish", "workbench"],
+  "license": "MIT",
+  "authors": ["eren-karakus0", "Nous Research"],
+  "upstream": {
+    "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/software-development/rest-graphql-debug",
+    "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
+    "license": "MIT"
+  }
+}

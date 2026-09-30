@@ -141,7 +141,13 @@ const result = (extra) => Object.assign({ type: 'result', subtype: 'success', is
   // I. listModels is gated on `claude auth status`.
   {
     const ok = make(call => ({ lines: call.args.indexOf('auth') >= 0 ? [{ loggedIn: true, authMethod: 'claude.ai' }] : [] })).p;
-    A.eq((await ok.listModels()).map(m => m.id), ['sonnet', 'opus', 'haiku'], 'signed-in CLI lists its model aliases');
+    const listed = await ok.listModels();
+    const ids = listed.map(m => m.id);
+    A.eq(ids.slice(0, 7), ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-4-5-20251001', 'claude-opus-5-5[1m]', 'claude-sonnet-5-5[1m]', 'claude-opus-4-8', 'claude-sonnet-4-6'], 'signed-in CLI lists the named models first');
+    A.ok(['opus', 'sonnet', 'haiku'].every(a => ids.indexOf(a) >= 0), 'the aliases stay listed, so a station already pinned to one keeps its model');
+    A.ok(!ids.some(id => /fable/i.test(id)), 'Fable is not listed (an account without it is silently served Opus 4.8)');
+    A.eq([listed.find(m => m.id === 'claude-opus-5-5[1m]').context_length, listed.find(m => m.id === 'claude-opus-5-5').context_length], [1000000, 200000], 'the 1M variants carry their real context window');
+    A.eq([ok.contextLimit('claude-sonnet-5-5[1m]'), ok.contextLimit('sonnet'), ok.contextLimit('custom-m')], [1000000, 200000, 200000], 'contextLimit follows the model (and only a real [1m] suffix means 1M)');
     const out = make(call => ({ lines: [{ loggedIn: false }], code: 1 })).p;
     let err = null; try { await out.listModels(); } catch (e) { err = e; }
     A.ok(err && /not signed in/.test(err.message) && err.code === 'provider_not_configured', 'signed-out CLI lists nothing and says why');

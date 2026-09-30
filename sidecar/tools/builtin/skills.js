@@ -21,12 +21,28 @@
     }
   }
 
+  /* A MODEL SETS ONLY WHAT ITS SCHEMA OFFERS. skill.manage used to hand the model's arguments to the store
+     wholesale, so a model could write provenance the store trusts: sourceUrl/sourceDigest (the trust tier),
+     packageFiles/packageDigest (what hydrate serves and export seals), createdBy, force. Everything outside the
+     advertised schema is dropped here; the host adds agentId/createdBy/sourceRunId itself. */
+  const MODEL_FIELDS = ['action', 'target', 'id', 'name', 'summary', 'description', 'body', 'category', 'setup',
+    'platforms', 'requires', 'find', 'replace', 'path', 'content', 'absorbedInto', 'pinned'];
+  function modelArgs(args) {
+    const out = {};
+    if (!args || typeof args !== 'object') return out;
+    for (const k of MODEL_FIELDS) if (Object.prototype.hasOwnProperty.call(args, k)) out[k] = args[k];
+    return out;
+  }
+
   function makeSkillTools(deps) {
     const store = deps && deps.store;
     const onView = deps && deps.onView;
     const onManage = deps && deps.onManage;
     const gate = (deps && deps.gate) || null;                          // skills/gate.js instance: may the MODEL read this skill?
     const readBeforeWrite = !!(deps && deps.readBeforeWrite);           // set for the autonomous review/curator passes
+    // countViews:false for the review/curator passes: a maintenance read is not a use, so it must not refresh a
+    // skill's lastUsedAt (the 30/90-day aging clock) or its view count.
+    const countViews = !(deps && deps.countViews === false);
     /* BUNDLED RECIPES ON DEMAND (2026-09-23). The run prompt indexes the Commander's enabled library recipes
        instead of inlining their bodies; this is where a body is fetched. `bundled(name, ctx)` resolves a name
        against the recipes THIS run is offered and returns { name, content } or null. It is consulted ONLY after
@@ -150,7 +166,7 @@
           const unread = unreadRefusal(prior, action);
           if (unread) return unread;
         }
-        const r = store.manage(Object.assign({}, args || {}, { agentId: aid, createdBy: (ctx && ctx.createdBy) || (ctx && ctx.skillReview ? 'background-review' : 'agent'), sourceRunId: ctx && ctx.runId }));
+        const r = store.manage(Object.assign(modelArgs(args), { agentId: aid, createdBy: (ctx && ctx.createdBy) || (ctx && ctx.skillReview ? 'background-review' : 'agent'), sourceRunId: ctx && ctx.runId }));
         if (!r.ok) return { content: 'Could not manage the skill: ' + r.error, summary: 'not saved' };
         emitSkill(ctx, r.skill);
         if (typeof onManage === 'function') { try { onManage(r.skill, ctx, r.action || (args && args.action) || 'manage'); } catch (_) {} }
@@ -191,7 +207,7 @@
       schema: { type: 'object', required: ['name'], properties: { name: { type: 'string' } } },
       run: (args, ctx) => {
         if (!store) return { content: 'The skill library is unavailable.', summary: 'unavailable' };
-        const v = store.view((ctx && ctx.agentId) || 'agent', args && args.name);
+        const v = store.view((ctx && ctx.agentId) || 'agent', args && args.name, countViews ? undefined : { bump: false });
         if (!v) {
           const recipe = bundled ? bundled(args && args.name, ctx) : null;
           if (recipe && recipe.content) return { content: recipe.content, summary: 'loaded ' + recipe.name };

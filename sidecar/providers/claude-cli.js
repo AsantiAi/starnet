@@ -32,13 +32,26 @@
   // failopen.note — the tagged SYNC swallow (per-tag count + throttled warn): a fail-open catch must never be invisible.
   const { note: failNote } = (typeof require === 'function') ? require('../failopen.js') : { note: function (tag, e) { console.warn('[failopen] ' + tag + ':', (e && e.message) || e); } };
   const DEFAULT_CONTEXT = 200000;
-  // The CLI's own model aliases: they always resolve to the newest model of each family the account can use,
-  // and they cannot collide with the Anthropic API provider's dated model ids.
+  /* What `claude --model` runs on a subscription sign-in — every id here was proven live 2026-09-29 (a one-line call
+     each; the CLI answered on exactly that model). Named models first; the `[1m]` ids are the CLI's own 1M-context
+     variants. The bare aliases come last: they always follow the newest model of each family, and they stay listed
+     because a station pinned to one (every claude-cli station before this list) must keep a model the catalog
+     proves — ModelDock clears a pin the live catalog no longer carries. Fable is left out on purpose: the CLI
+     accepts it but an account without Fable is silently served Opus 4.8, so listing it would name a model the run
+     did not use. */
   const MODELS = [
-    { id: 'sonnet', name: 'Claude Sonnet (latest) · CLI' },
-    { id: 'opus', name: 'Claude Opus (latest) · CLI' },
-    { id: 'haiku', name: 'Claude Haiku (latest) · CLI' }
+    { id: 'claude-opus-5-5', name: 'Claude Opus 5.5' },
+    { id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5' },
+    { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5' },
+    { id: 'claude-opus-5-5[1m]', name: 'Claude Opus 5.5 · 1M context', context: 1000000 },
+    { id: 'claude-sonnet-5-5[1m]', name: 'Claude Sonnet 5.5 · 1M context', context: 1000000 },
+    { id: 'claude-opus-4-8', name: 'Claude Opus 4.8' },
+    { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6' },
+    { id: 'opus', name: 'Latest Claude Opus · follows new releases' },
+    { id: 'sonnet', name: 'Latest Claude Sonnet · follows new releases' },
+    { id: 'haiku', name: 'Latest Claude Haiku · follows new releases' }
   ];
+  const contextOf = id => { const m = MODELS.find(x => x.id === String(id || '')); return (m && m.context) || (/\[1m\]$/i.test(String(id || '')) ? 1000000 : DEFAULT_CONTEXT); };
   const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
   const CALL_OPEN = '<tool_call>';
   const CALL_CLOSE = '</tool_call>';
@@ -59,7 +72,7 @@
       if (typeof p === 'string') parts.push(p);
       else if (p && typeof p.text === 'string') parts.push(p.text);
       // The CLI's text input has no image channel: say so rather than silently dropping the attachment.
-      else if (p && (p.type === 'image_url' || p.type === 'image')) parts.push('[image attachment omitted — the Claude CLI brain cannot see images]');
+      else if (p && (p.type === 'image_url' || p.type === 'image')) parts.push('[image attachment omitted — the Claude Code brain cannot see images]');
     }
     return parts.join('\n');
   }
@@ -218,12 +231,12 @@
       return { file: bin, pre: [] };
     }
     function notInstalled() {
-      const e = new Error('Claude Code is not installed on this computer — install it, then pick CLAUDE CLI and sign in with Claude');
+      const e = new Error('Claude Code is not installed on this computer — install it, then pick CLAUDE CODE and sign in with Claude');
       e.code = 'provider_not_configured';
       return e;
     }
     function notSignedIn() {
-      const e = new Error('Claude Code is installed but not signed in — pick CLAUDE CLI and press SIGN IN WITH CLAUDE, then retry');
+      const e = new Error('Claude Code is installed but not signed in — press SIGN IN on the CLAUDE CODE card (Settings → PROVIDERS), then retry');
       e.code = 'provider_not_configured';
       return e;
     }
@@ -312,7 +325,7 @@
       const st = await probeStatus();
       if (!st.ok) throw st.error;
       return MODELS.map(m => ({
-        id: m.id, name: m.name, context_length: DEFAULT_CONTEXT, max_completion_tokens: null, pricing: null,
+        id: m.id, name: m.name, context_length: m.context || DEFAULT_CONTEXT, max_completion_tokens: null, pricing: null,
         supportsTools: true, supportsReasoning: true, supported_parameters: ['tools', 'reasoning'], reasoningEfforts: EFFORTS.slice()
       }));
     }
@@ -411,17 +424,17 @@
         if (signal && signal.aborted) return;
         if (!result) {
           const tail = stderr.trim().split(/\r?\n/).slice(-3).join(' ').slice(0, 400);
-          throw new Error('Claude CLI exited with code ' + exitCode + ' before answering' + (tail ? ': ' + tail : ''));
+          throw new Error('Claude Code exited with code ' + exitCode + ' before answering' + (tail ? ': ' + tail : ''));
         }
         if (result.is_error || (result.subtype && result.subtype !== 'success')) {
           // The CLI tags a lost sign-in on its assistant line ("error":"authentication_failed"). Carry it as a 401 so
           // errorClass files it as `auth` (fail now, say why) instead of `unknown`, which the loop retries for ~105s.
           if (apiError === 'authentication_failed') {
-            const e = new Error('Claude CLI is not signed in (' + String(result.result || 'authentication failed').slice(0, 200) + ') — run `claude` in a terminal and log in, then retry');
+            const e = new Error('Claude Code is not signed in (' + String(result.result || 'authentication failed').slice(0, 200) + ') — press SIGN IN on the CLAUDE CODE card (Settings → PROVIDERS), then retry');
             e.status = 401; e.code = 'provider_not_configured';
             throw e;
           }
-          throw new Error('Claude CLI error: ' + String(result.result || result.subtype || 'unknown error').slice(0, 400));
+          throw new Error('Claude Code error: ' + String(result.result || result.subtype || 'unknown error').slice(0, 400));
         }
         if (!sawText && callIndex === 0 && typeof result.result === 'string') yield* emitSplit(splitter.push(result.result));
         yield* emitSplit(splitter.end());
@@ -455,7 +468,7 @@
     return {
       stream,
       listModels,
-      contextLimit() { return DEFAULT_CONTEXT; },
+      contextLimit(id) { return contextOf(id); },
       // The CLI reports its own billed cost per turn (see COST TRUTH above); there is no list-rate table here.
       priceOf() { return null; },
       supportsTools() { return true; },

@@ -132,7 +132,10 @@ try {
   const run1 = await leadRun(base, token, 'what does my research line do?');
   const end1 = run1.events.filter(e => e.name === 'agent.run.end').pop();
   check('the lead run completes', run1.status === 200 && !!end1 && end1.payload.reason === 'done', JSON.stringify(end1 && end1.payload && end1.payload.reason));
-  check('the lead is offered station_layout', JSON.stringify((mock.requests[0] || {}).tools || []).indexOf('station_layout') >= 0);
+  // the LEAD's own request, not requests[0]: a new station now proposes by default, so background propose-level
+  // work (the quest refresh's boot look) may reach the mock first — that call carries no tools by design.
+  const leadReq = mock.requests.find(r => JSON.stringify(r.messages || []).indexOf('what does my research line do?') >= 0) || {};
+  check('the lead is offered station_layout', JSON.stringify(leadReq.tools || []).indexOf('station_layout') >= 0);
   let R = null; try { R = JSON.parse(mock.results[0] || ''); } catch (_) { R = null; }
   check('the model received the layout (not a refusal)', !!R, (mock.results[0] || '').slice(0, 160));
   const L = R && (R.lines || []).find(l => l.name === 'RESEARCH DESK');

@@ -154,8 +154,11 @@ const GoalStore = (() => {
       if (g) {
         const pr = Goals.progress(g);
         const next = Goals.nextMilestone(g);
+        // the ordered plan rides along so the sidecar can settle a step and move to the next one with this
+        // window closed (sidecar/goal-advance.js) — ids + text + status only, never evidence or history.
         payload = { id: g.id, text: g.text, done: pr.done, total: pr.total, pct: pr.pct,
-          next: next ? next.text : null, milestoneId: next ? next.id : null };
+          next: next ? next.text : null, milestoneId: next ? next.id : null,
+          milestones: g.milestones.map(m => ({ id: m.id, text: m.text, status: m.status })) };
       }
       fetch('/api/goals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ goal: payload }) }).catch(() => {});
     } catch (_) {}
@@ -195,13 +198,23 @@ const GoalStore = (() => {
   // SPEND-ONCE: a usable path is CACHED by the belief fingerprint — if the caller lost the beat moment after this
   // (paid) aux call (memory/study claimed it mid-round-trip), the next offer for the SAME belief state reuses the
   // cached path instead of re-calling the model. The cache clears the moment the belief is decided (markOffered).
-  async function proposeDecomposition() {
+  // `target` (optional, USER-STUDY LOOP): plan THIS goals belief — the onboarding meeting names the mission it
+  // just confirmed rather than taking whichever goals belief is first. It passes the same gates the proactive
+  // path does: a live goals belief, no tree yet, not already offered/declined in this exact state.
+  function eligible(target) {
+    if (!target || !target.id) return null;
+    const live = goalsBeliefs().find(b => b && String(b.id) === String(target.id) && b.text);
+    if (!live) return null;
+    if (state.goals.some(g => g.sourceBeliefId === String(live.id) && (g.status === 'active' || g.status === 'done'))) return null;
+    return state.offered[beliefFingerprint(live)] ? null : live;
+  }
+  async function proposeDecomposition(target) {
     // NOTE: no `firing` guard here — the offer flow (chat.js offerArc) sets firing BEFORE this call, so
     // gating on it deadlocked the arc into always returning null (re-entry is already blocked by
     // willOfferDecomposition + offerArc's isFiring() entry check).
     if (!ready()) return null;
     if (typeof Harness === 'undefined' || !Harness.chat) return null;
-    const belief = pendingDecomposition();
+    const belief = target ? eligible(target) : pendingDecomposition();
     if (!belief) return null;
     const fp = beliefFingerprint(belief);
     if (cachedProposal && cachedProposal.fp === fp) return { belief, texts: cachedProposal.texts.slice() };   // reuse the already-paid-for path
@@ -653,6 +666,18 @@ const GoalStore = (() => {
       if (g.pendingRegistration) { g.pendingRegistration = false; changed = true; }
       if (known.successCondition && g.successCondition !== known.successCondition) { g.successCondition = known.successCondition; changed = true; }
       if (known.status === 'achieved') { g.status = 'done'; g.outcomeEvidence = known.evidence; changed = true; }
+    }
+    // A plan step the SIDECAR settled while this window was closed (every quest planned for it completed by
+    // contract — sidecar/goal-advance.js) is already a durable journey record: fold it onto the local tree with
+    // the journey's own evidence, and mark it synced (the journey already holds it, so the outbox never re-posts).
+    for (const done of (journey && journey.milestones || [])) {
+      const g = done && state.goals.find(x => x.id === done.goalId && x.status === 'active');
+      const m = g && g.milestones.find(x => x && x.id === done.milestoneId && x.status === 'open');
+      if (!m || questLive(m.questRef)) continue;   // a step with its own build in flight folds through that build
+      const at = Number(done.at) || now();
+      if (Goals.foldMilestoneDone(g, m.id, done.evidence || ('completed: ' + m.text), at).changed) {
+        m.source = 'harness'; m.journeySyncedAt = at; changed = true; bumpStudySalience(g, m);
+      }
     }
     if (changed) { save(); pushToSidecar(); }
     syncDrift(); reconcile(''); queueJourneySync();

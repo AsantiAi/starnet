@@ -307,6 +307,11 @@
         '</div>' +
       '</details>';
 
+    // FIRST OPEN LANDS ON THE CATALOG (first-hour walk 2026-09-28): a newcomer who came here to connect Gmail met
+    // "capability grants", "ASK mode" and REFRESH AUTHORITY first. With no remembered section yet, land on
+    // DISCOVER › CATALOG ("find a service by name"); every later open returns to the section last used. Tabs and
+    // sections are unchanged — only the first one shown.
+    if (H.consoleSection && !H.consoleSection.connectors) H.consoleSection.connectors = 'catalog';
     const host = mountConsole(body, 'connectors', [
       { id: 'toolsets', label: 'BUILT-IN ABILITIES', glyph: '▤', desc: 'Inspect an agent’s capability grants. Switches apply in ASK mode; Full Access overrides them. Connected services still need working credentials.', build: frag(secToolsets) },
       { id: 'computer', label: 'COMPUTER CONTROL', glyph: '▣', desc: 'Choose how agents interact with native desktop apps. Full Power or a paired remote-owner lease is required.', build: frag(
@@ -329,7 +334,7 @@
       search: true,
       groups: [
         { id: 'installed', label: 'INSTALLED', sections: ['toolsets', 'computer', 'mcp', 'keys', 'agent'] },
-        { id: 'discover', label: 'DISCOVER', sections: ['catalog', 'library'] },
+        { id: 'discover', label: 'DISCOVER', sections: ['catalog', 'market', 'library'] },
         { id: 'advanced', label: 'CREATE / ADVANCED', sections: ['custom', 'extensions', 'exchange'] }
       ],
       searchLabel: 'Search abilities',
@@ -359,14 +364,16 @@
         const c = connectors.find(x => x.id === h.connectorId);
         const ready = c && c.enabled && c.state === 'up' && !c.authRequired;
         const dormant = c && c.enabled && c.state === 'cached' && !c.authRequired;
-        const supported = dormant || (ready && (!h.toolName || (c.tools || []).includes(h.toolName)));
+        // a handoff held while the task's question is open only ever RETURNS to it — continuing would answer it
+        const supported = !h.awaitingAnswer && (dormant || (ready && (!h.toolName || (c.tools || []).includes(h.toolName))));
         const line = document.createElement('div');
         const caption = document.createElement('span');
         caption.textContent = (ws.title || 'Task') + ' · ' + h.connectorId + ' — '
-          + (dormant ? 'saved connection will be checked. ' : supported ? 'connection ready. ' : ready ? 'requested operation is unavailable. ' : 'waiting for connection. ');
+          + (h.awaitingAnswer ? (ready || dormant ? 'connected — answer the task\'s open question to continue. ' : 'waiting for connection; the task has an open question. ')
+            : dormant ? 'saved connection will be checked. ' : supported ? 'connection ready. ' : ready ? 'requested operation is unavailable. ' : 'waiting for connection. ');
         line.appendChild(caption);
         const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'bb xs';
-        btn.textContent = dormant ? 'CHECK & CONTINUE TASK' : supported ? 'CONTINUE TASK' : 'RETURN TO TASK';
+        btn.textContent = h.awaitingAnswer ? 'RETURN TO TASK' : dormant ? 'CHECK & CONTINUE TASK' : supported ? 'CONTINUE TASK' : 'RETURN TO TASK';
         btn.onclick = async () => {
           if (!supported) { App.openWorkstream(ws.id); return; }
           btn.disabled = true;
