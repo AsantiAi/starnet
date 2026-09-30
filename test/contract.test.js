@@ -39,6 +39,8 @@ const cases = [
   ['provider.retry', { agentId: 'a', runId: 'r', attempt: 2, reason: 'timeout', delayMs: 0 }, { agentId: 'a', runId: 'r', attempt: 2, reason: 'timeout', delayMs: 0, stage: 'mid_flight' }],
   ['agent.waiting', { agentId: 'a', runId: 'r', phase: 'first_byte', sinceMs: 15000, model: 'm' }, { agentId: 'a', runId: 'r', phase: 'first_byte' }],
   ['agent.waiting', { agentId: 'a', runId: 'r', phase: 'retry_backoff', sinceMs: 0 }, { agentId: 'a', runId: 'r', phase: 'sleeping', sinceMs: 15000 }],
+  // ADDITIVE STEP-IN handoff (2026-09-29): its own id + a closed state/reason enum; a missing state is invalid.
+  ['browser.handoff', { id: 'ho_1', agentId: 'a', runId: 'r', state: 'taken', reason: 'login', where: 'github.com/login', remembered: true, requestedAt: 1, takenAt: 2, endedAt: null, expiresAt: 3 }, { id: 'ho_1', agentId: 'a', runId: 'r', state: 'paused' }],
   ['budget.threshold', { scope: 'run', usd: 1, cap: 5 }, { scope: 'weekly', usd: 1, cap: 5 }],
   ['permission.response', { promptId: 'p', decision: 'full' }, { promptId: 'p', decision: 'maybe' }],
   ['memory.recall', { agentId: 'a', runId: 'r', count: 3, chars: 120 }, { agentId: 'a', runId: 'r', count: 'three' }],
