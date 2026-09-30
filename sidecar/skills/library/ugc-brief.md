@@ -5,6 +5,7 @@ description: Package an idea into a ready-to-shoot UGC/video brief — hooks, ti
 category: Creator
 requires: [dish, cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

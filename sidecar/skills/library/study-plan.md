@@ -5,6 +5,7 @@ description: Build a milestone study plan from the learner's real level to a con
 category: Planning
 requires: [dish, cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

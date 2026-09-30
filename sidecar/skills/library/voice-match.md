@@ -5,6 +5,7 @@ description: Study what the Commander actually wrote, name their voice explicitl
 category: Writing
 requires: [cabinet, notebook]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

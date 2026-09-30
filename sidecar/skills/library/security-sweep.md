@@ -5,6 +5,7 @@ description: Sweep a tree for secrets, injection, and authz holes — each findi
 category: Engineering
 requires: [cabinet, workbench]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

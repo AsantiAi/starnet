@@ -5,6 +5,7 @@ description: Sweep real spend line by line, verify cheaper alternatives against 
 category: Finance
 requires: [cabinet, dish]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

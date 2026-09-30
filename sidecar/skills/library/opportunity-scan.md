@@ -5,6 +5,7 @@ description: Hunt monetizable openings matched to the Commander's hand, sized wi
 category: Research
 requires: [dish, notebook]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

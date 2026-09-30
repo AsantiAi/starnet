@@ -5,6 +5,7 @@ description: Turn a repeated read-only website lookup into a verified reusable A
 category: Productivity
 requires: [dish, cabinet, workbench]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

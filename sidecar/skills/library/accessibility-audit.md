@@ -5,6 +5,7 @@ description: Check a live page against the barriers that actually lock people ou
 category: Engineering
 requires: [dish, cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

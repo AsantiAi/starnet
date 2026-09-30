@@ -5,6 +5,7 @@ description: Turn scattered live pages into one structured dataset the Commander
 category: Research
 requires: [dish, cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

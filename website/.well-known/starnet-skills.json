@@ -1,7 +1,7 @@
 {
   "format": "starnet-skill-registry/v1",
   "name": "StarNet Skill Market",
-  "serial": 1,
+  "serial": 2,
   "skills": [
     {
       "slug": "accessibility-audit",
@@ -29,7 +29,12 @@
           "sha256": "468b148e3ede7a379d5a457b5f8a960d0fbf1391a52ede6324981b08a125b047",
           "bytes": 2491
         }
-      ]
+      ],
+      "download": {
+        "path": "accessibility-audit-1.0.0.zip",
+        "sha256": "31699d5b55c14d01eaeb399efafde227e602033571a585177e1508ca292bc7d2",
+        "bytes": 2645
+      }
     },
     {
       "slug": "ad-copy-testing",
@@ -57,7 +62,12 @@
           "sha256": "7cd7bbabc1ba3d7cc3b87e463b25ec55f0e1901d2d0cbb6dca7b020cc2427cca",
           "bytes": 2370
         }
-      ]
+      ],
+      "download": {
+        "path": "ad-copy-testing-1.0.0.zip",
+        "sha256": "ab9c8d6f23e5a38d909b48594c42412aebcf97939141cc4167e80265834cf8a4",
+        "bytes": 2516
+      }
     },
     {
       "slug": "adversarial-review-pass",
@@ -85,7 +95,12 @@
           "sha256": "3b98b9250946595b21eeec46f20818a548696f6bee18a68585627233c1a0f02d",
           "bytes": 1766
         }
-      ]
+      ],
+      "download": {
+        "path": "adversarial-review-pass-1.0.0.zip",
+        "sha256": "8d6ebd4c23045dff249b7daa941ff405f765ecd3364d6de4d1e99d22936c67ff",
+        "bytes": 1928
+      }
     },
     {
       "slug": "announcement-kit",
@@ -113,7 +128,12 @@
           "sha256": "da50d70786d297aa0b0d588e5ed0d80959d0a236345193e32e4e1d23624ba274",
           "bytes": 1606
         }
-      ]
+      ],
+      "download": {
+        "path": "announcement-kit-1.0.0.zip",
+        "sha256": "8161fa09b6163dadc1cab411bc197dcbafba7174b431c0d54ff12afbf36be4b9",
+        "bytes": 1754
+      }
     },
     {
       "slug": "application-tailoring",
@@ -141,7 +161,12 @@
           "sha256": "bfc6afc899eb7e2f5daf9b2b512334a809798e20feec1d7c816b034aee1ba8a6",
           "bytes": 2239
         }
-      ]
+      ],
+      "download": {
+        "path": "application-tailoring-1.0.0.zip",
+        "sha256": "eeb8a699afffac064ebc70f48ac763b9e301e043ac0bf66acb411870a0bd2050",
+        "bytes": 2397
+      }
     },
     {
       "slug": "brand-assets",
@@ -173,7 +198,12 @@
           "sha256": "4b8dbcfe07ea168082cbba00f0ff6da688fed89b57edd4a5db4f4a7d75f8c83b",
           "bytes": 3612
         }
-      ]
+      ],
+      "download": {
+        "path": "brand-assets-1.0.0.zip",
+        "sha256": "3eb5337917b6bbc33b0f951d0eef6912245abaf0dc12b34c51a0eb35802522a7",
+        "bytes": 3752
+      }
     },
     {
       "slug": "browser-operation",
@@ -201,7 +231,12 @@
           "sha256": "47517b969c30e0632b302d4c7cfeda45ee68b2858fec1cf019c3f73c8bdd5596",
           "bytes": 2322
         }
-      ]
+      ],
+      "download": {
+        "path": "browser-operation-1.0.0.zip",
+        "sha256": "c1fe53927ec9fbebf1eb31416d283e11c6455fc265ca186df96bd399a0b741fb",
+        "bytes": 2472
+      }
     },
     {
       "slug": "channel-updates",
@@ -231,7 +266,12 @@
           "sha256": "6ca849c2551e888106b08c9375679d6e00c1c2ea1be115dd633352cb6296482b",
           "bytes": 3264
         }
-      ]
+      ],
+      "download": {
+        "path": "channel-updates-1.0.0.zip",
+        "sha256": "7c0f6ee081debe3e267df838668eaa895703effbbdec8dcc22fbc56bff2cfeb2",
+        "bytes": 3410
+      }
     },
     {
       "slug": "commitment-tracking",
@@ -258,7 +298,12 @@
           "sha256": "690061cec3971491adaf2371a8e2cfa81fae210210f5b004b5783ebba006e79a",
           "bytes": 2332
         }
-      ]
+      ],
+      "download": {
+        "path": "commitment-tracking-1.0.0.zip",
+        "sha256": "c75cb12e68352e8071537c233bfd734b878419c02324cfc5b41860abc342ceb4",
+        "bytes": 2486
+      }
     },
     {
       "slug": "content-calendar",
@@ -286,7 +331,12 @@
           "sha256": "a4d29d766ea4de03a8a43ced4f05c49eeaad8902058f466bd687ceb5ea285497",
           "bytes": 1788
         }
-      ]
+      ],
+      "download": {
+        "path": "content-calendar-1.0.0.zip",
+        "sha256": "3f873319eed092eb130b395ad919d5577e076433ad547e122617f14b3069bde8",
+        "bytes": 1936
+      }
     },
     {
       "slug": "contract-review",
@@ -314,7 +364,12 @@
           "sha256": "c1bdd3553498af62c71d405fbb00a792f86010cf6571c571ab034c0115629831",
           "bytes": 2525
         }
-      ]
+      ],
+      "download": {
+        "path": "contract-review-1.0.0.zip",
+        "sha256": "134246cd34988b59352f302ede862ae6c2bdc7119b21dcc37ded7e708c7d61c6",
+        "bytes": 2671
+      }
     },
     {
       "slug": "cost-audit",
@@ -342,7 +397,12 @@
           "sha256": "b3e51518cd7dc38a7f7be408db7bf32891eb21e8f1f96564bef3d3773ee64bc4",
           "bytes": 1829
         }
-      ]
+      ],
+      "download": {
+        "path": "cost-audit-1.0.0.zip",
+        "sha256": "7277ea93397963286dcdf5e10bae2a2c3136ee0ca03573cdb508fa62816c0573",
+        "bytes": 1965
+      }
     },
     {
       "slug": "crew-handoff",
@@ -372,7 +432,12 @@
           "sha256": "98733e6c2f2546725db64855140b3c10e943036d407d53dac29ea885a63c5653",
           "bytes": 3924
         }
-      ]
+      ],
+      "download": {
+        "path": "crew-handoff-1.0.0.zip",
+        "sha256": "5e4892639249f64f125eb2cad3c689863951f496753a0f1b0b5b1388175c7a27",
+        "bytes": 4064
+      }
     },
     {
       "slug": "dataset-harvest",
@@ -400,7 +465,12 @@
           "sha256": "8256e0a8f4b7a6a0a37e11d82eadf8228ffce1b0edd5681f75697b2d2f6265ad",
           "bytes": 2406
         }
-      ]
+      ],
+      "download": {
+        "path": "dataset-harvest-1.0.0.zip",
+        "sha256": "ac8416c503eb3ccbe779f1f9515277cfcfd2117f6f80749d148c308871bf1025",
+        "bytes": 2552
+      }
     },
     {
       "slug": "deliverable-handoff",
@@ -430,7 +500,12 @@
           "sha256": "35f0ce4bdce4a7cfcfdb85508fef21e23042f1a61506cdba2f8498d6385e0b50",
           "bytes": 3324
         }
-      ]
+      ],
+      "download": {
+        "path": "deliverable-handoff-1.0.0.zip",
+        "sha256": "749c42f01a5b77e8cbc506a128142ef988a7475d0a6413435c56b49f8c110469",
+        "bytes": 3478
+      }
     },
     {
       "slug": "deploy-checklist",
@@ -458,7 +533,12 @@
           "sha256": "f1927be273153c68111cecc9731c562333896082ad0a4e9b1ebf978d07c3d7dc",
           "bytes": 2546
         }
-      ]
+      ],
+      "download": {
+        "path": "deploy-checklist-1.0.0.zip",
+        "sha256": "2a1cd91fe136ed9d3825ab0e3c13fdef3c51df5ccffa061e402cc982b737afd9",
+        "bytes": 2694
+      }
     },
     {
       "slug": "digest-composer",
@@ -486,7 +566,12 @@
           "sha256": "b21588bbf4560aeb2d090cf6bbe2bc42494d4467accd3be32a6859aef3c87e68",
           "bytes": 1614
         }
-      ]
+      ],
+      "download": {
+        "path": "digest-composer-1.0.0.zip",
+        "sha256": "2742f51de7ff6a96c56f0071d34b70b234bd73bf35c75834acca2b3093f35969",
+        "bytes": 1760
+      }
     },
     {
       "slug": "email-sequence",
@@ -514,7 +599,12 @@
           "sha256": "f98797f3c5a09c938b441678b28b04a2d5930b4751ace699d67c43606c6e1332",
           "bytes": 2364
         }
-      ]
+      ],
+      "download": {
+        "path": "email-sequence-1.0.0.zip",
+        "sha256": "86e8155b7a1aa4e2df4452ee035af9b65ecf44e7ae2e078cc1b7cf56ed60b377",
+        "bytes": 2508
+      }
     },
     {
       "slug": "exposed-secrets-audit",
@@ -542,7 +632,12 @@
           "sha256": "f8883327e7dbcb52832fe162c77df001b6119938a99282afbf5bfce445494eae",
           "bytes": 2710
         }
-      ]
+      ],
+      "download": {
+        "path": "exposed-secrets-audit-1.0.0.zip",
+        "sha256": "89e7c1a68529c9f328ee02cc2f18420acaa704503697db808d83be2dd8d23711",
+        "bytes": 2868
+      }
     },
     {
       "slug": "exposure-reduction",
@@ -570,7 +665,12 @@
           "sha256": "6e07429a062260e8d0e06ccc8415689ee833d056cbae8482d0f8a2bca67e0446",
           "bytes": 2547
         }
-      ]
+      ],
+      "download": {
+        "path": "exposure-reduction-1.0.0.zip",
+        "sha256": "9dd683f0a6682d2ebd902d566db1684d7d2ce9686da930a5c32b47b6e4571b29",
+        "bytes": 2699
+      }
     },
     {
       "slug": "feed-watch",
@@ -597,7 +697,12 @@
           "sha256": "31bde3a34cce1af6584ee72d12da6aa593ff87e1f2d5c45e55226efef579958f",
           "bytes": 1605
         }
-      ]
+      ],
+      "download": {
+        "path": "feed-watch-1.0.0.zip",
+        "sha256": "b9d12dee1d92a03537113f4ba9527b93a236ad590569e95365db7a0baaed1a53",
+        "bytes": 1741
+      }
     },
     {
       "slug": "file-curation",
@@ -625,7 +730,12 @@
           "sha256": "5956bf31b01d289d1c573e6b660eaea633314421b6665b515785a5781a2a891b",
           "bytes": 1938
         }
-      ]
+      ],
+      "download": {
+        "path": "file-curation-1.0.0.zip",
+        "sha256": "5dc63b3c1e5f3ba73e6d6b0f9052c41e05203eac72743d320ca164ebea0324ee",
+        "bytes": 2080
+      }
     },
     {
       "slug": "hard-conversation",
@@ -652,7 +762,12 @@
           "sha256": "83a2f0b6d4c725bcb5a9794c00ded2dbb7086de41bfc860f16a30fb177dab89a",
           "bytes": 2412
         }
-      ]
+      ],
+      "download": {
+        "path": "hard-conversation-1.0.0.zip",
+        "sha256": "3e35513280dc23cd65f62721468e6040fc908c009779fa3d81a55679e7738124",
+        "bytes": 2562
+      }
     },
     {
       "slug": "health-record-prep",
@@ -680,7 +795,12 @@
           "sha256": "969260f919b95aba4c7cdeecfc64770def63796bd9bffca1c4b46828cc135518",
           "bytes": 2721
         }
-      ]
+      ],
+      "download": {
+        "path": "health-record-prep-1.0.0.zip",
+        "sha256": "62821e82c1296838b0155c5c1af8ef0d8d8a3daacbaff864c246843870328174",
+        "bytes": 2873
+      }
     },
     {
       "slug": "hiring-screen",
@@ -708,7 +828,12 @@
           "sha256": "d0c71e05b9086955b22d504a5124bbd64f0cf3dfa1228a09aacb588dba51f873",
           "bytes": 2589
         }
-      ]
+      ],
+      "download": {
+        "path": "hiring-screen-1.0.0.zip",
+        "sha256": "3527bb17f4a3c385ff9216fc98686e61adb98c55624c6663ebdaa87901194592",
+        "bytes": 2731
+      }
     },
     {
       "slug": "inbox-triage",
@@ -735,7 +860,12 @@
           "sha256": "b20979e5a6d7081cbe86a6f1f45c0b2eb77a6b982a12911e041343d332a030ea",
           "bytes": 2090
         }
-      ]
+      ],
+      "download": {
+        "path": "inbox-triage-1.0.0.zip",
+        "sha256": "8266076233e93e88a7d09731638b9eaa41777dc0491e915ddff8130f6ac4d7c3",
+        "bytes": 2230
+      }
     },
     {
       "slug": "itinerary-planning",
@@ -763,7 +893,12 @@
           "sha256": "268709e6c098cf0722ce971c1dc41849f778337c1d860e79f707ac629cb081f3",
           "bytes": 2022
         }
-      ]
+      ],
+      "download": {
+        "path": "itinerary-planning-1.0.0.zip",
+        "sha256": "3bbcad9f200e56d599274d47c6e0f005429da682468d625d2b20343173f8f1e9",
+        "bytes": 2174
+      }
     },
     {
       "slug": "landing-copy",
@@ -791,7 +926,12 @@
           "sha256": "321c5789137e601ccf5f2ed9325428088fb3be52a024f8d21647b83a64374944",
           "bytes": 2368
         }
-      ]
+      ],
+      "download": {
+        "path": "landing-copy-1.0.0.zip",
+        "sha256": "5ab1650cc444c434f7056db316956fb1291719e21149f1b574fde7b271d50413",
+        "bytes": 2508
+      }
     },
     {
       "slug": "lead-scouting",
@@ -819,7 +959,12 @@
           "sha256": "b98ccdcbae1e21382c174e21dc04450a75c14d75c76c116daf22aca5ad7f786c",
           "bytes": 1644
         }
-      ]
+      ],
+      "download": {
+        "path": "lead-scouting-1.0.0.zip",
+        "sha256": "d03c90d093dc131539c613de139f7d9ad662d343dcdee635d9f9f94dd1f2c02c",
+        "bytes": 1786
+      }
     },
     {
       "slug": "website-workflow",
@@ -848,7 +993,12 @@
           "sha256": "caa3cc49712e8ab20eec8414280ac0a7cd76e3ad318c65fbb793ee77aa0e2b68",
           "bytes": 2866
         }
-      ]
+      ],
+      "download": {
+        "path": "website-workflow-1.0.0.zip",
+        "sha256": "140bf8dc8be5c9d6f88c9e40755e0e76ccc3e1da0dfc5b55fbd1c14d9ad46d1d",
+        "bytes": 3014
+      }
     },
     {
       "slug": "ledger-upkeep",
@@ -876,7 +1026,12 @@
           "sha256": "b725a933d9b8890288d9838e0fdd1dd8f6fb2f25e78ecd27d0b3d06d8ca92439",
           "bytes": 1699
         }
-      ]
+      ],
+      "download": {
+        "path": "ledger-upkeep-1.0.0.zip",
+        "sha256": "29d3d0977b3debb0f3ef7c6f666123f19dad33eb5d15fad6e16edab1850d132c",
+        "bytes": 1841
+      }
     },
     {
       "slug": "line-design",
@@ -907,7 +1062,12 @@
           "sha256": "5060ea54fca386d8f3d6c1c2e97b1a244bf286f08769a17d54dc20fa9d5a4cdf",
           "bytes": 4240
         }
-      ]
+      ],
+      "download": {
+        "path": "line-design-1.0.0.zip",
+        "sha256": "0c05d3a24446bb16a039b6549c8c13b65dea0e334ea97721e757127dcfaf2f99",
+        "bytes": 4378
+      }
     },
     {
       "slug": "marketing-plan",
@@ -935,7 +1095,12 @@
           "sha256": "20f0ecc87b63e5de70904f877d6784a9cf5fe8172bba3e629df2ec8b5e2a6001",
           "bytes": 1763
         }
-      ]
+      ],
+      "download": {
+        "path": "marketing-plan-1.0.0.zip",
+        "sha256": "504091c42bb9d9fef296730c695f78267cce49238a47b0689d495287629df858",
+        "bytes": 1907
+      }
     },
     {
       "slug": "meal-planning",
@@ -963,7 +1128,12 @@
           "sha256": "7d77cd197846b25f5e64c2d9a11bade7a9cf9576ddbaf1d1d6bd44468d9b520a",
           "bytes": 2329
         }
-      ]
+      ],
+      "download": {
+        "path": "meal-planning-1.0.0.zip",
+        "sha256": "8ddf2886aaed8826fd7f92553b377f1d350fcf9d84df552058fb274d86a925fa",
+        "bytes": 2471
+      }
     },
     {
       "slug": "negotiation-case",
@@ -991,7 +1161,12 @@
           "sha256": "48f4363cdb14e2b95b17f7551775bcb8c82e610469643c152070f0f19be235f6",
           "bytes": 2384
         }
-      ]
+      ],
+      "download": {
+        "path": "negotiation-case-1.0.0.zip",
+        "sha256": "9441c76d6273baf57efb2b97c632628539fdc92d6fea97ea2b35a275fe0d247b",
+        "bytes": 2532
+      }
     },
     {
       "slug": "notebook-gardening",
@@ -1021,7 +1196,12 @@
           "sha256": "2c003b279fb45f6a25ab5669e4c6ca7b69fe69be00293109363ef3cb5c6a2aa0",
           "bytes": 3609
         }
-      ]
+      ],
+      "download": {
+        "path": "notebook-gardening-1.0.0.zip",
+        "sha256": "a95a405046525a2acf585597ec34c38d04a538cd0ceeadebb60abf54e93b1b75",
+        "bytes": 3761
+      }
     },
     {
       "slug": "opportunity-scan",
@@ -1049,7 +1229,12 @@
           "sha256": "2b150f4ad675d8a0d23d8c7ee8cd15d3abc70ab56533eba43837413020e1f90a",
           "bytes": 2197
         }
-      ]
+      ],
+      "download": {
+        "path": "opportunity-scan-1.0.0.zip",
+        "sha256": "80173d0ef6b26f7a5bac582685f634fe8f0e15ecb1959944edbefc83e7fd9798",
+        "bytes": 2345
+      }
     },
     {
       "slug": "pitch-deck",
@@ -1077,7 +1262,12 @@
           "sha256": "d5984c48522f5dee7438f365a87eac198cf1bb803540730d3383ff96de471ea6",
           "bytes": 2487
         }
-      ]
+      ],
+      "download": {
+        "path": "pitch-deck-1.0.0.zip",
+        "sha256": "138adfa1e61f9b366a6527cac22a0c97c085212a19d66a11a742344c043635ca",
+        "bytes": 2623
+      }
     },
     {
       "slug": "price-watch",
@@ -1105,7 +1295,12 @@
           "sha256": "cb5e533636886eceaa03dea1e5bfcf0890462d46ecaa1adac795024a76631786",
           "bytes": 1634
         }
-      ]
+      ],
+      "download": {
+        "path": "price-watch-1.0.0.zip",
+        "sha256": "1df89285f8bc54a0551d5e1e30840b1e3356427e056cb72c1f6f5b9630df0065",
+        "bytes": 1772
+      }
     },
     {
       "slug": "project-onboarding",
@@ -1136,7 +1331,12 @@
           "sha256": "53b8d8e1aed0ce590d9cc881e25c0dada109b212cef741cd853cafcba0494340",
           "bytes": 3858
         }
-      ]
+      ],
+      "download": {
+        "path": "project-onboarding-1.0.0.zip",
+        "sha256": "317b0045c4c7767f13ce1241367c794e7b78582f884bdd23fa035bf18ee4172c",
+        "bytes": 4010
+      }
     },
     {
       "slug": "relationship-log",
@@ -1164,7 +1364,12 @@
           "sha256": "f92aba6cbcf5955562f477b71ac67c6a1c0beb1b0b477599af22a4606be1225d",
           "bytes": 2297
         }
-      ]
+      ],
+      "download": {
+        "path": "relationship-log-1.0.0.zip",
+        "sha256": "ccf295f84186d47e5618a22c43e306dcec958048caab0777e703136f36dd2fad",
+        "bytes": 2445
+      }
     },
     {
       "slug": "routine-craft",
@@ -1194,7 +1399,12 @@
           "sha256": "b8b6d557a4585240189a406b6da702823477dfa6983d736fa8fab955ba288646",
           "bytes": 4115
         }
-      ]
+      ],
+      "download": {
+        "path": "routine-craft-1.0.0.zip",
+        "sha256": "a4dabcec9784cb933fdb7b272b57c4456c65267ae2f3d6bb47d0b0fd5ecddf6e",
+        "bytes": 4257
+      }
     },
     {
       "slug": "schema-and-access",
@@ -1222,7 +1432,12 @@
           "sha256": "c2d02afcaaa47da8b691cd981f4754423bba000bb488f5572ed8942c0c7eb798",
           "bytes": 2581
         }
-      ]
+      ],
+      "download": {
+        "path": "schema-and-access-1.0.0.zip",
+        "sha256": "ac2c70c30bfe8cf8aeef9df729f873af5af65ca875ca685408af8fd975ef1238",
+        "bytes": 2731
+      }
     },
     {
       "slug": "security-sweep",
@@ -1250,7 +1465,12 @@
           "sha256": "e1fec7e727cd45e4d6aa1eb722283e813ec82583aa1bebfa460d975a91fdc59d",
           "bytes": 1673
         }
-      ]
+      ],
+      "download": {
+        "path": "security-sweep-1.0.0.zip",
+        "sha256": "8fc0634579066c2805fea733b30b8ae2e4abcd67d62071de3b043406f0952741",
+        "bytes": 1817
+      }
     },
     {
       "slug": "short-form-script",
@@ -1277,7 +1497,12 @@
           "sha256": "a45effd13796d33a8dfbf5e447e0172e4a5c32427a8b3555341e0b1146461482",
           "bytes": 1547
         }
-      ]
+      ],
+      "download": {
+        "path": "short-form-script-1.0.0.zip",
+        "sha256": "2317fa0b7cb3c48c3d4a01f590602a701d920100e26caaa7c6c91e3cb6229614",
+        "bytes": 1697
+      }
     },
     {
       "slug": "skill-authoring",
@@ -1307,7 +1532,12 @@
           "sha256": "3688ce2038a421f5f09a47322aeae3420f5641e376a7d9772ac28f65cf97327b",
           "bytes": 3829
         }
-      ]
+      ],
+      "download": {
+        "path": "skill-authoring-1.0.0.zip",
+        "sha256": "a0a4bc5d283b8301140d7be81837e54fe15dfbed7cd7fc39ee4af8d616452dd8",
+        "bytes": 3975
+      }
     },
     {
       "slug": "sop-writing",
@@ -1335,7 +1565,12 @@
           "sha256": "b854a47a750b3ca1f10730077ff45d11c466eb8373aa3f1a10e75b55a1dbeff5",
           "bytes": 2394
         }
-      ]
+      ],
+      "download": {
+        "path": "sop-writing-1.0.0.zip",
+        "sha256": "1b820b47fa094cfbebc90ebae4c5caf676329dac9fb3720ca0c82672be425163",
+        "bytes": 2532
+      }
     },
     {
       "slug": "source-triangulation",
@@ -1363,7 +1598,12 @@
           "sha256": "1d6f4e1f7565e659f199cd005c85f59ba34d3a917f977fd4b9b1df2571477c64",
           "bytes": 1795
         }
-      ]
+      ],
+      "download": {
+        "path": "source-triangulation-1.0.0.zip",
+        "sha256": "dd0be5e57506cef2d505ca0b87662b23b9d69ef4dc3f02007a4a9447cff0484a",
+        "bytes": 1951
+      }
     },
     {
       "slug": "spec-drafting",
@@ -1390,7 +1630,12 @@
           "sha256": "398149cd04e2a36367651fbdd2ee174d7da6fe02fd5a9698865cb34368dc6d2c",
           "bytes": 2260
         }
-      ]
+      ],
+      "download": {
+        "path": "spec-drafting-1.0.0.zip",
+        "sha256": "df5f04b5e0b94d1964717f239b0bea6a2afa42c46c8cb8c91f0d71f69646bf63",
+        "bytes": 2402
+      }
     },
     {
       "slug": "spend-aware-work",
@@ -1420,7 +1665,12 @@
           "sha256": "0e3df41b6e561b6bf47e1dcdd464e41947211cd03195be4c8ab635bf9fe0c42c",
           "bytes": 4070
         }
-      ]
+      ],
+      "download": {
+        "path": "spend-aware-work-1.0.0.zip",
+        "sha256": "fa690bd58568b711ab4794b8ce57c53d7b6c0568511840187fcea6c4ed2d014d",
+        "bytes": 4218
+      }
     },
     {
       "slug": "station-self-check",
@@ -1451,7 +1701,12 @@
           "sha256": "cb052b18511168ccd23c5623076fa8ffae35983cf849e09cc8305279b29a084e",
           "bytes": 3521
         }
-      ]
+      ],
+      "download": {
+        "path": "station-self-check-1.0.0.zip",
+        "sha256": "dc86ca1a77de1e1ae93a7a15637642f12fdd281d45e54dc30d57fe212bbe764f",
+        "bytes": 3673
+      }
     },
     {
       "slug": "studio-video",
@@ -1482,7 +1737,12 @@
           "sha256": "73dcf14d0670f3b21da0a05dc547f357d4d9e87e478a18cef1ec44699e847ddf",
           "bytes": 3947
         }
-      ]
+      ],
+      "download": {
+        "path": "studio-video-1.0.0.zip",
+        "sha256": "d2451571ebc081ddb8708dd6fb706ee4ab10505926eea9f452b1c1884f464ce5",
+        "bytes": 4087
+      }
     },
     {
       "slug": "study-plan",
@@ -1510,7 +1770,12 @@
           "sha256": "56674abadd3a54c5308b27b50333ca6a15d9e9cc918bc350e21d4a870c5363ea",
           "bytes": 1625
         }
-      ]
+      ],
+      "download": {
+        "path": "study-plan-1.0.0.zip",
+        "sha256": "5211f2aeb0eff3ca9f2ccddf5d306cb0b00b79add9845de9a80fb0486d7c8a1b",
+        "bytes": 1761
+      }
     },
     {
       "slug": "support-replies",
@@ -1538,7 +1803,12 @@
           "sha256": "8885ae66e8578fa55c99c1dfc75547f178ef07f1cbcf152b2c19fb0105f167a5",
           "bytes": 2865
         }
-      ]
+      ],
+      "download": {
+        "path": "support-replies-1.0.0.zip",
+        "sha256": "3dd1aa31d1625cdc32df4ca5c6fd6b86d2332ba3c3e3911b6c3ccab949ae38cd",
+        "bytes": 3011
+      }
     },
     {
       "slug": "translation-pass",
@@ -1565,7 +1835,12 @@
           "sha256": "d11d95d7e6a5d1903b108344951f75bb4fd2d7cb84371347a65650e6ab97965b",
           "bytes": 1648
         }
-      ]
+      ],
+      "download": {
+        "path": "translation-pass-1.0.0.zip",
+        "sha256": "df6dd4827c5853b31f6b0282047226962099ea2149647d3cf8412fd0d93d4104",
+        "bytes": 1796
+      }
     },
     {
       "slug": "ugc-brief",
@@ -1593,7 +1868,12 @@
           "sha256": "716f583af57bff23e0af8824fbe6d547b9d8ce19596cd1b1400a7a72df2e1d2e",
           "bytes": 1663
         }
-      ]
+      ],
+      "download": {
+        "path": "ugc-brief-1.0.0.zip",
+        "sha256": "6681ca513070cdfd2b24fb5f35e3aedc71be548a5e6958eabe9fe3d6cba3b3ce",
+        "bytes": 1797
+      }
     },
     {
       "slug": "voice-match",
@@ -1621,7 +1901,12 @@
           "sha256": "3fe3fa979d32429c859af7d402d740ba62dcbb1866e93918ebae8e47bd1bd8a5",
           "bytes": 2274
         }
-      ]
+      ],
+      "download": {
+        "path": "voice-match-1.0.0.zip",
+        "sha256": "6ac0b54dd55de5938db4c94ea6912369e6ef5a4e7e195f5902eb405e2a9accb4",
+        "bytes": 2412
+      }
     },
     {
       "slug": "work-splitting",
@@ -1648,7 +1933,12 @@
           "sha256": "b605800be84284b0dee024694724ff982dc404a13cf76bff134a5000c5d30617",
           "bytes": 2207
         }
-      ]
+      ],
+      "download": {
+        "path": "work-splitting-1.0.0.zip",
+        "sha256": "9b8afdab0de1c44220946693e87ecf221c05009933c92ff5f8e32c2ffe42ca52",
+        "bytes": 2351
+      }
     },
     {
       "slug": "blocked-page-recovery",
@@ -1689,6 +1979,11 @@
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/web/blocked-page-recovery",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "blocked-page-recovery-1.0.0.zip",
+        "sha256": "23c1aeea75a093a36b012a8e542637dbd63645ae4e5c1109cdda48ec9f2b4114",
+        "bytes": 7946
       }
     },
     {
@@ -1731,6 +2026,11 @@
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/software-development/code-wiki",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "code-wiki-1.0.0.zip",
+        "sha256": "eb7f684b1c1fa61160107b4ad229e11e98f11698c8e2146b1b19155cf63430cd",
+        "bytes": 15305
       }
     },
     {
@@ -1771,6 +2071,11 @@
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/productivity/decision-questionnaire",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "decision-questionnaire-1.0.0.zip",
+        "sha256": "cddc851b6954d4b56b16b238bee4c2690bfa0ea47a25fb1b6021135389944eed",
+        "bytes": 5812
       }
     },
     {
@@ -1812,6 +2117,11 @@
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/productivity/document-to-action-items",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "document-to-action-items-1.0.0.zip",
+        "sha256": "eacd583df59644aae19413a31bc978daa162cc0a424e61d95486b06b61414e01",
+        "bytes": 6089
       }
     },
     {
@@ -1853,6 +2163,11 @@
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/software-development/grill-me",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "grill-me-1.0.0.zip",
+        "sha256": "368bddf270023264ff25fdf8cfdd375fe043edb785c3b793079f1c5c27ca24a8",
+        "bytes": 6143
       }
     },
     {
@@ -1895,6 +2210,11 @@
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/research/llm-wiki",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "llm-wiki-1.0.0.zip",
+        "sha256": "961a02ba93b7503a1705d0e9f105959b38129737d0fc24aea3f55f6f0bf323c1",
+        "bytes": 17481
       }
     },
     {
@@ -1936,6 +2256,11 @@
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/productivity/maps",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "maps-1.0.0.zip",
+        "sha256": "7b286bc0705311079ac2a78aabc7a637bc40f383643d3a5b2eff6323bb4bb498",
+        "bytes": 12753
       }
     },
     {
@@ -1976,6 +2301,11 @@
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/productivity/meeting-action-items",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "meeting-action-items-1.0.0.zip",
+        "sha256": "dbe5f00184868f0e98ebc473561a4ce6fe3905106484ecb6c0a5836a5287d02a",
+        "bytes": 5811
       }
     },
     {
@@ -2016,6 +2346,11 @@
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/note-taking/obsidian",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "notes-vault-1.0.0.zip",
+        "sha256": "32291dd5f54c7ee896b6fe685a4d79a7f3ae1324a06cb54d88759721507398b2",
+        "bytes": 4996
       }
     },
     {
@@ -2058,6 +2393,11 @@
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/software-development/rest-graphql-debug",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "rest-graphql-debug-1.0.0.zip",
+        "sha256": "93fc203de6c59141e6e850fc4fca595e390334a60724fcd257bb6d45a59491fc",
+        "bytes": 15039
       }
     },
     {
@@ -2107,6 +2447,11 @@
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/creative/simple-english",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "simple-english-1.0.0.zip",
+        "sha256": "b24fd9c17c9ad0221856f8a932788885062b9346e534eaba4d750ce0a4bd1803",
+        "bytes": 29079
       }
     },
     {
@@ -2149,6 +2494,11 @@
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/productivity/weekly-review-planning",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "weekly-review-1.0.0.zip",
+        "sha256": "c8be97d64a2911422b094860f6a725dc241e1c7604be00815a49e3a669dce8d2",
+        "bytes": 6605
       }
     }
   ],

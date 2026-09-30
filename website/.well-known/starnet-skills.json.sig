@@ -2,5 +2,5 @@
   "format": "starnet-signature/v1",
   "alg": "ed25519",
   "keyId": "market-2026-a",
-  "sig": "eVHz7g8ylUcNaj5wnX9gd6DwXTNKf0XqxhdpWVzeSJO8XPrEJDWP8yXu+l2YKc50Ej+Ar0cQUV/7cUdl/7LhBg=="
+  "sig": "G13W4zPJDetJrQBRCqT33N/O0uSNGq4ohhp2f8GkJy2snaoEmPd5OZoUOdVIOeOSfwjB2V+vjW91gaEYkmYzAQ=="
 }

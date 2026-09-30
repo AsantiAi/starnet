@@ -5,6 +5,7 @@ description: Build a channel-and-campaign plan grounded in live audience researc
 category: Marketing
 requires: [dish, cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

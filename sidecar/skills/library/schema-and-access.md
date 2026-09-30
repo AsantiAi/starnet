@@ -5,6 +5,7 @@ description: Design a data model that will not need rewriting, and the access ru
 category: Engineering
 requires: [cabinet, workbench]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

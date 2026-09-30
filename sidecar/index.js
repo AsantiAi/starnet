@@ -1559,6 +1559,7 @@ const skillMarket = makeSkillMarket({
   fetchDocument: fetchSkillDocument, fs, path, root: path.join(WORKSPACES, 'skill-market'), guard: skillGuard, now: () => Date.now(),
   catalogUrl: () => { const v = process.env.STARNET_SKILL_MARKET_URL; return v == null ? SKILL_MARKET_DEFAULT_URL : (String(v).trim().toLowerCase() === 'off' ? '' : String(v).trim()); },
   trustedKeys: skillMarketSigning.TRUSTED_KEYS.concat(skillMarketSigning.keysFromEnv(process.env.STARNET_SKILL_MARKET_KEYS)),
+  floorSerial: (() => { try { return Number(require('./skills/market-floor.json').serial) || 0; } catch (e) { failNote('skill-market.floor', e); return 0; } })(),
   loadJson: (file) => loadResilient(file, 'skill market'), saveJson: (file, value) => saveResilient(file, value)
 });
 // THE MARKET'S KILL SWITCH: while at least one market skill is installed, re-read the small signed pulled-skills list

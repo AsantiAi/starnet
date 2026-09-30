@@ -5,6 +5,7 @@ description: Try to break the work, then try to refute your own finding, before 
 category: Engineering
 requires: [cabinet, workbench]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

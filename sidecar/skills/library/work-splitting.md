@@ -5,6 +5,7 @@ description: Cut a job too big for one agent into genuinely parallel pieces, dis
 category: Planning
 requires: [orchestrator]
 license: MIT
+version: 1.0.0
 default: false
 ---
 
