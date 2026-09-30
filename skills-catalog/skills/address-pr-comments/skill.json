@@ -1,0 +1,10 @@
+{
+  "slug": "address-pr-comments",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Engineering",
+  "tags": ["github", "pull-requests", "code-review", "review-comments", "git"],
+  "requires": ["cabinet", "workbench"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}

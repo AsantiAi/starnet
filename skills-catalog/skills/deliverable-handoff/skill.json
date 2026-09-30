@@ -2,7 +2,7 @@
   "slug": "deliverable-handoff",
   "version": "1.0.0",
   "shelf": "originals",
-  "category": "Productivity",
+  "category": "Station",
   "tags": ["deliverables", "files", "handoff", "reporting"],
   "requires": ["cabinet"],
   "license": "MIT",

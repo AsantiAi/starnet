@@ -1622,6 +1622,17 @@ const World = (() => {
     frame(last);
   }
   function stop() { cancelArrival(); running = false; if (raf) { cancelAnimationFrame(raf); raf = 0; } }
+  /* FRAME CAP (HUD widget, 2026-09-29): an opt-in ceiling on how often the floor is DRAWN. Frames in between are
+     skipped whole; the simulation still reads the real clock, so bodies move at their true speed, just drawn fewer
+     times a second. 0 = uncapped (the station's normal loop, byte-identical). */
+  let frameCapMs = 0, lastDrawnAt = 0;
+  function setFrameCap(ms) { frameCapMs = ms > 0 ? +ms : 0; }
+  /* OVERLAYS (HUD widget, 2026-09-30): the station's in-world readouts — run clocks, tool tickers, await tags,
+     routing callouts, bay names/lamps/plates, hover glances, dock flashes, speech bubbles, nameplates and the
+     working pulse at a worker's feet. A surface that says all of that itself (the HUD widget's rows) turns
+     them off to show only the world. true = the station's normal frame, byte-identical. */
+  let overlaysOn = true;
+  function setOverlays(on) { overlaysOn = on !== false; }
   function wakeIn() { wakeAt = performance.now(); }
 
   /* ---------- THE AWAKENING — a witnessed birth (cinematic camera + spark + dark->dawn) ----------
@@ -1822,11 +1833,17 @@ const World = (() => {
   // agent locks the feed onto that agent immediately (no idle wait) and TRAILS it as it moves, until the
   // Commander grabs the camera (wheel/drag/click → the input handlers release the lock). One-shot focusBody
   // stays for programmatic reframes (boot restore, delete-fallback) — lockBody is only armed by a USER selection.
-  function lockBody(id) {
+  // zoom (optional, 2026-09-30): the lock's scale for a surface that frames one agent closer (the HUD widget);
+  // omitted = the station's own rule (at least 3, never zooming out), byte-identical.
+  // opts.seatAt (optional): where a SEATED body's feet sit in the frame (0..1 of its height). A seated worker
+  // faces its desk, which stands ABOVE it on screen; a small frame that keeps the default 0.56 cuts the desk
+  // and its screen off. Omitted = 0.56 for every body, byte-identical.
+  function lockBody(id, zoom, opts) {
     const b = bodyForAgent(id) || agent;
     if (!b || b.unplaced || !cache || camAnim || awakeFrozen) return;   // nothing to frame yet / the scripted awakening camera owns the transform
     camLerp = null;
-    camLock = { id: (b.agentId || b.id), sc: clampz(Math.max(scale, 3), MINZ, MAXZ), source: 'session' };
+    camLock = { id: (b.agentId || b.id), sc: clampz(zoom > 0 ? zoom : Math.max(scale, 3), MINZ, MAXZ), source: 'session' };
+    if (opts && opts.seatAt > 0 && opts.seatAt < 1) camLock.seatAt = +opts.seatAt;
   }
   /* ---------- IDLE CINECAM — the security-feed auto-director ----------
      After cineIdleMs of true hands-off the camera starts hunting the floor's own life: it follow-locks a
@@ -6233,6 +6250,8 @@ const World = (() => {
   }
   function frame(now) {
     if (running) raf = requestAnimationFrame(frame);   // schedule next frame FIRST — a throw below can't kill the loop
+    if (frameCapMs && now - lastDrawnAt < frameCapMs - 1) return;
+    lastDrawnAt = now;
     const reviewStart=reviewPerformance.enabled?performance.now():0;
     reviewParts=reviewPerformance.enabled?{}:null;reviewStamp=reviewStart;
     try {
@@ -6395,7 +6414,8 @@ const World = (() => {
       const lb = bodyForAgent(camLock.id);
       if (!lb || lb.unplaced) camLock = null;   // subject despawned / off-floor → release (the director re-casts next frame if it owns the camera)
       else {
-        const ts = camLock.sc, lx = cv.width / 2 - bodyPosX(lb) * ts, ly = cv.height * 0.56 - bodyPosY(lb) * ts;
+        const fy = (camLock.seatAt && (lb.seated || lb.sitting)) ? camLock.seatAt : 0.56;   // desk = `sitting`, couch/bench = `seated`
+        const ts = camLock.sc, lx = cv.width / 2 - bodyPosX(lb) * ts, ly = cv.height * fy - bodyPosY(lb) * ts;
         const k = 0.08;   // softer than the one-shot focus ease (0.16): a trailing, cinematic follow of a moving body
         scale += (ts - scale) * k; panX += (lx - panX) * k; panY += (ly - panY) * k;
       }
@@ -6412,7 +6432,16 @@ const World = (() => {
        camLerp ran would leave every finite-distance layer a frame behind the station, which is
        exactly the "picture behind a picture" tell the parallax exists to kill. Still screen
        space, still under the identity transform, still first — nothing has drawn yet. */
-    drawBackdrop(now, { panX, panY, scale });
+    drawScene(now, dt);
+  }
+
+  /* THE SCENE PASS — the station drawn once onto whatever {cv, ctx, scale, panX, panY} currently are. The frame
+     loop runs it on the stage every frame; renderStill() runs it once on an offscreen canvas. Everything that
+     belongs to the live stage alone (the backdrop, bloom, the curve, scanlines, the heartbeat pixel, the camera
+     readout) is skipped for a still. */
+  function drawScene(now, dt) {
+    if (stillPass) { ctx.fillStyle = stillPass.fill; ctx.fillRect(0, 0, cv.width, cv.height); }
+    else drawBackdrop(now, { panX, panY, scale });
 
     ctx.setTransform(scale, 0, 0, scale, panX, panY); ctx.imageSmoothingEnabled = false;
 
@@ -6679,6 +6708,7 @@ const World = (() => {
     if (floodAt) drawFlood(now);   // THE FLOOD — the cascade of knowledge streaming in, over the dark room
     if (dawnAt && now - dawnAt < 1300) drawDawnBloom(now);   // the room takes its first breath of light
     // (the context-window gauge now lives engraved in the bottom bar — StationUI.ctxTick, not the desk)
+    if (overlaysOn) {
     drawRunClocks(now);   // G0.2: the honest elapsed-time tag at every desk with a live run (world-space, over the lightmap)
     drawWorkGlyphs(now);  // stage-ticker STRETCH: the "▸ TOOL" tag at a desk with a real tool in flight (one line below the run clock)
     drawAwaitTag(now);    // the existing lead wait anchor
@@ -6702,9 +6732,11 @@ const World = (() => {
     if (agent && !agent.unplaced) drawBubble(now);
     for (const b of crew) drawBubble(now, b);   // crew speech and useful status messages
     if (hoverAgent && !hoverAgent.unplaced) drawNameplate(now, hoverAgent);
+    }   // overlaysOn
     // FLOOR-STATS OVERLAY REMOVED (2026-07-09 decision): the YIELD/RUNS/CACHE/SLAG/THRU/DWELL box no
     // longer floats over the world sim. The FloorStats engine stays live (event-fed) so any panel or
     // widget consumer keeps honest numbers — only the floating canvas readout is gone.
+    if (stillPass) { if (sceneRenderer) sceneRenderer.finish(); return; }   // a still ends here: no stage chrome, no post-processing
     if (linkStaleDim) drawLinkDown(now);   // E1: honest "the live telemetry is not live" marker in the chrome
     // (station growth headline now lives in the top bar's STATION chip — see xpstore.pushTopbar)
     drawBloom(now); // phosphor bloom: the bright things in the frame haze outward (screen-space, before the warp so it bows with the picture)
@@ -6716,6 +6748,54 @@ const World = (() => {
     updateCameraHud(now);
     if (sceneRenderer) sceneRenderer.finish();
     // NOTE: the next rAF is scheduled by the frame() crash-guard wrapper, BEFORE this body runs — never here.
+  }
+
+  /* A STILL OF THE WHOLE STATION, for a surface that is not this window (StarNet Remote's phone view).
+     It is the same scene pass the stage gets — floor, walls, props, crew where they really stand, light — aimed
+     at an offscreen canvas framed on the full station. It never reads the live stage canvas. Returns
+     { canvas, width, height, bodies:[{ agentId, name, x, y, working }] } with bodies in still pixels, or null
+     when there is no honest picture to give (no bake yet, the awakening is still playing). */
+  let stillPass = null;
+  function renderStill(maxPx) {
+    if (stillPass || !cache || !cv || !ctx || !geo || camAnim || kindleArmed || arrivalScene || wakeDark > 0.002) return null;
+    const W = cache.baseCv.width, H = cache.baseCv.height;
+    if (!(W > 1 && H > 1)) return null;
+    const cap = Math.max(320, Math.min(2400, Number(maxPx) || 1600));
+    const s = Math.max(1, Math.min(6, cap / Math.max(W, H)));   // never draw the pixel art below 1:1 (that crushes it); a big station is shrunk smoothly afterwards
+    const off = document.createElement('canvas');
+    off.width = Math.max(1, Math.round(W * s)); off.height = Math.max(1, Math.round(H * s));
+    const g = off.getContext('2d');
+    if (!g) return null;
+    const keep = { cv, ctx, scale, panX, panY, overlaysOn };
+    const landed = typeof Terrain !== 'undefined' && Terrain.active();
+    let drawn = false;
+    cv = off; ctx = g; scale = s; panX = 0; panY = 0; overlaysOn = false;
+    stillPass = { fill: landed ? Terrain.baseColor() : '#040302' };
+    // the wall clock, never the last frame's time: a hidden or minimized window stops its frames, and a stale
+    // clock froze every timed effect (a failed run's red desk flash stayed lit in every still)
+    try { drawScene(performance.now(), 0); drawn = true; }
+    catch (e) { try { console.error('[world] station still failed:', e); } catch (_) {} }
+    finally {
+      stillPass = null;
+      cv = keep.cv; ctx = keep.ctx; scale = keep.scale; panX = keep.panX; panY = keep.panY; overlaysOn = keep.overlaysOn;
+      if (typeof PropSprites !== 'undefined') PropSprites.setCtx(ctx);
+    }
+    if (!drawn) return null;
+    let out = off, k = 1;
+    if (Math.max(off.width, off.height) > cap) {
+      k = cap / Math.max(off.width, off.height);
+      out = document.createElement('canvas');
+      out.width = Math.max(1, Math.round(off.width * k)); out.height = Math.max(1, Math.round(off.height * k));
+      const og = out.getContext('2d');
+      if (!og) return null;
+      og.imageSmoothingEnabled = true; og.imageSmoothingQuality = 'high';
+      og.drawImage(off, 0, 0, out.width, out.height);
+    }
+    const bodies = [agent, ...crew].filter(b => b && !b.unplaced).map(b => ({
+      agentId: String(b.agentId || b.id || ''), name: String(b.name || ''),
+      x: Math.round(bodyPosX(b) * s * k), y: Math.round(bodyPosY(b) * s * k), working: !!b.working
+    }));
+    return { canvas: out, width: out.width, height: out.height, bodies };
   }
 
   // ---- CRT SCANLINES + FADE (screen-space, drawn last, OVER the curved feed) --------
@@ -7427,7 +7507,7 @@ const World = (() => {
       // SUMMONED-WORKER "working" glow — a soft sustained pulse at the feet of a crew body while ITS real run
       // is in flight (workUntil set by setActivityFor). The honest "this agent is actually working" cue for a
       // deskless summoned worker; hero-exempt (the hero shows work at its desk).
-      if (who !== agent && !crewIsAwaiting(who) && who.workUntil && now < who.workUntil) {
+      if (overlaysOn && who !== agent && !crewIsAwaiting(who) && who.workUntil && now < who.workUntil) {
         const wp = 0.35 + 0.25 * Math.sin(now / 360);
         ctx.save(); ctx.globalAlpha = wp * 0.7; ctx.strokeStyle = who.color; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.ellipse(who.px, who.py, 7 + 1.5 * Math.sin(now / 360), 3, 0, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
@@ -10355,13 +10435,9 @@ const World = (() => {
     }
     ctx.restore();
   }
-  // one parked amber crate (waiting ore) — matches the riding-box silhouette/palette
+  // one parked amber crate (waiting work) — the SAME crate that rides the belts (Conveyor.drawCrate), so a job is one object
   function drawWaitCrate(cx, cy) {
-    const x = Math.round(cx - 4), y = Math.round(cy - 4);
-    ctx.fillStyle = '#161210'; ctx.fillRect(x - 1, y - 1, 11, 8);   // dark outline
-    ctx.fillStyle = '#8a7330'; ctx.fillRect(x, y + 3, 9, 3);        // shaded front face
-    ctx.fillStyle = '#caa84a'; ctx.fillRect(x, y, 9, 3);           // lit amber top
-    ctx.fillStyle = '#e8c860'; ctx.fillRect(x, y, 9, 1);           // top sheen
+    if (typeof Conveyor !== 'undefined' && Conveyor.drawCrate) Conveyor.drawCrate(ctx, Math.round(cx), Math.round(cy), 'ore');
   }
 
   /* SHIPPED TODAY — the production pride display. Every job completed today stacks a green PRODUCT
@@ -10419,15 +10495,12 @@ const World = (() => {
     ctx.shadowBlur = 0;
     ctx.restore();
   }
-  // one banked PRODUCT crate — the green economy family (same read as the outbound product box)
+  // one banked PRODUCT crate — the SAME green-lidded crate the outbound result rode in on (Conveyor.drawCrate)
   function drawShipCrate(cx, cy, pop) {
     const lift = pop > 0 ? Math.round(pop * 3) : 0;
-    const x = Math.round(cx - 4), y = Math.round(cy - 4) - lift;
-    ctx.fillStyle = '#0e1a12'; ctx.fillRect(x - 1, y - 1, 11, 8);   // dark outline
-    ctx.fillStyle = '#2e6b40'; ctx.fillRect(x, y + 3, 9, 3);        // shaded front face
-    ctx.fillStyle = '#3fa86a'; ctx.fillRect(x, y, 9, 3);            // lit green top
-    ctx.fillStyle = '#7ee2a8'; ctx.fillRect(x, y, 9, 1);            // top sheen
-    if (pop > 0.4) { const a = ctx.globalAlpha; ctx.globalAlpha = a * (pop - 0.4); ctx.fillStyle = '#c9ffe0'; ctx.fillRect(x, y, 9, 7); ctx.globalAlpha = a; }   // arrival glint
+    const x = Math.round(cx), y = Math.round(cy) - lift;
+    if (typeof Conveyor !== 'undefined' && Conveyor.drawCrate) Conveyor.drawCrate(ctx, x, y, 'product');
+    if (pop > 0.4) { const a = ctx.globalAlpha; ctx.globalAlpha = a * (pop - 0.4); ctx.fillStyle = '#c9ffe0'; ctx.fillRect(x - 3, y - 4, 7, 6); ctx.globalAlpha = a; }   // arrival glint
   }
 
 
@@ -10600,7 +10673,7 @@ const World = (() => {
     pollFeed: () => pollFeedState(),
     pollShip: () => pollShipStats()
   });
-  return { init, rebake, frameReviewRoom, crt: CRT, slagLog: () => (slaglog ? slaglog.recent() : []),
+  return { init, rebake, frameReviewRoom, renderStill, crt: CRT, slagLog: () => (slaglog ? slaglog.recent() : []),
     // LINE WATCH: the Workflow panel pushes the step-test session it polls; reads today's numbers for a line
     noteStepTest, lineStatsFor: id => (lineStats.known ? (lineStats.byLine[id] || null) : null), pollLineStats,
     _dbgLineWatch: () => ({ setDraw: on => { lwDrawOff = !on; return !lwDrawOff; }, watch: watch ? watch.snapshot() : null, stats: lineStats, status: id => (watch ? watch.status(id, lwNow()) : null),
@@ -10638,7 +10711,7 @@ const World = (() => {
        floor to the router. `station: false` = no floor loaded (nothing is known). */
     planStatus: () => Object.assign({ station: !!station, pending: !!(station && (geoDirty || !geo)),
       errors: (routingPlan && routingPlan.errors ? routingPlan.errors : []).filter(e => !e.warn), hash: routingPlan ? routingPlan.hash : null }, planPoster.state()),
-    loadStation, spawn, spawnAgent, despawnAgent, setSkin, relabel, setActivityFor, agentRunsLive, dropRun: noteRunEnd, focusBody, lockBody, cameraMode, setCinecamIdle, setChatFocus, chatFocusPing, start, stop, setActivity, wakeIn, beginAwakening, playArrival, cancelArrival, setWakeProgress, igniteSpark, armKindle, kindleHold, camPushIn, camCreep, camPunch, camPullBack, awakenTurn, truthPulse, beginFlood, collapseFlood, endAwakening, releaseAwakening, say, focusAgent, getActivity: () => activity, getUse: () => (agent ? agent.usingProp : null), setOnClick, setOnArcade, setOnOutbox, setOnMissionBoard, setOnTrophyCase, setOnDesk, setOnBayAssign, setOnIntakeFeed, setOnIntakeSample, refit, pauseBridge, resumeBridge, linkState, _dbgSeedRun, _dbgAgeRun, _dbgReconcile, _dbgSweep, _dbgLinkState, _dbgDropBridge, _dbgCurveState, _dbgLoseCurveContext, _dbgLoseCanvases, _dbgCanvasLoss, _dbgKillStageContext, _dbgStageState, _dbgBeltLegibility, _dbgPropClientPoint, _dbgDeskClientPoint, _dbgSleep, _dbgUseProp, _dbgArrive, _dbgLeisure,
+    loadStation, spawn, spawnAgent, despawnAgent, setSkin, relabel, setActivityFor, agentRunsLive, dropRun: noteRunEnd, focusBody, lockBody, cameraMode, setFrameCap, setOverlays, setCinecamIdle, setChatFocus, chatFocusPing, start, stop, setActivity, wakeIn, beginAwakening, playArrival, cancelArrival, setWakeProgress, igniteSpark, armKindle, kindleHold, camPushIn, camCreep, camPunch, camPullBack, awakenTurn, truthPulse, beginFlood, collapseFlood, endAwakening, releaseAwakening, say, focusAgent, getActivity: () => activity, getUse: () => (agent ? agent.usingProp : null), setOnClick, setOnArcade, setOnOutbox, setOnMissionBoard, setOnTrophyCase, setOnDesk, setOnBayAssign, setOnIntakeFeed, setOnIntakeSample, refit, pauseBridge, resumeBridge, linkState, _dbgSeedRun, _dbgAgeRun, _dbgReconcile, _dbgSweep, _dbgLinkState, _dbgDropBridge, _dbgCurveState, _dbgLoseCurveContext, _dbgLoseCanvases, _dbgCanvasLoss, _dbgKillStageContext, _dbgStageState, _dbgBeltLegibility, _dbgPropClientPoint, _dbgDeskClientPoint, _dbgSleep, _dbgUseProp, _dbgArrive, _dbgLeisure,
     // AGENT GROWTH: XpStore pushes pre-computed Xp.compute() snapshots here; pulseLevelUp fires
     // the addressed body's gold ring. The colony headline is the top-bar STATION chip.
     setXp: (agentId, a) => {

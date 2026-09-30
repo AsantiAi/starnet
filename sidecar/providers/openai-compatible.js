@@ -3,9 +3,9 @@
    It implements the same LLMProvider seam as OpenRouter and Codex. */
 'use strict';
 (function (root, factory) {
-  if (typeof module !== 'undefined' && module.exports) module.exports = factory(require('./provider.js'), require('./errorClass.js'), require('./prices.js'), require('./toolschema.js'));
-  else { root.SK = root.SK || {}; root.SK.providers = root.SK.providers || {}; root.SK.providers.openaiCompatible = factory(root.SK.providers.provider, root.SK.providers.errorClass, root.SK.providers.prices, root.SK.providers.toolschema); }
-})(typeof globalThis !== 'undefined' ? globalThis : this, function (provider, errorClass, prices, toolschema) {
+  if (typeof module !== 'undefined' && module.exports) module.exports = factory(require('./provider.js'), require('./errorClass.js'), require('./prices.js'), require('./toolschema.js'), require('./ollama-native.js'));
+  else { root.SK = root.SK || {}; root.SK.providers = root.SK.providers || {}; root.SK.providers.openaiCompatible = factory(root.SK.providers.provider, root.SK.providers.errorClass, root.SK.providers.prices, root.SK.providers.toolschema, root.SK.providers.ollamaNative); }
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (provider, errorClass, prices, toolschema, ollamaNative) {
   'use strict';
 
   const normalizeFinish = provider.normalizeFinish;
@@ -114,6 +114,18 @@
     const byId = declaredByEndpoint.get(endpoint);
     const hit = byId && byId.get(String(id || ''));
     return hit ? { levels: hit.levels.slice(), defaultLevel: hit.defaultLevel } : null;
+  }
+  // The largest window each Ollama model has been run at in this PROCESS (endpoint -> model -> num_ctx). A run builds
+  // a fresh provider, so a per-instance record forgot it between runs: a greeting after a task reloaded the model at
+  // 8k and the next task reloaded it back to 32k, seconds each way. Every distinct num_ctx is a reload, so a model
+  // never steps down here once it has run larger.
+  const ollamaWindows = new Map();
+  function ollamaWindow(endpoint, model) { const m = ollamaWindows.get(endpoint); return (m && m.get(String(model || ''))) || 0; }
+  function noteOllamaWindow(endpoint, model, numCtx) {
+    let m = ollamaWindows.get(endpoint);
+    if (!m) { m = new Map(); ollamaWindows.set(endpoint, m); }
+    const id = String(model || '');
+    if (numCtx > (m.get(id) || 0)) m.set(id, numCtx);
   }
   // What an endpoint TOLD us at request time outranks every catalog and table, and a catalog reload never erases it.
   const learnedByEndpoint = new Map();   // endpoint -> Map(modelId -> levels)
@@ -319,7 +331,17 @@
        names the prices.js table to fall back to (null for ollama/custom/perplexity — genuinely unpriced, and
        the run stays honestly 'unpriced' there). Catalog pricing, when an endpoint DOES publish it, still wins. */
     const priceFamily = (typeof opts.priceFamily === 'string' && opts.priceFamily.trim()) ? opts.priceFamily.trim() : null;
-    const listPrices = (prices && typeof prices.priceOf === 'function') ? prices : null;
+    /* RUN ATTRIBUTION (2026-09-29). A profile that names a runIdHeader (only `starnet`: our own proxy) gets the
+       harness run id of the calling run (req.runId) on every chat request, so the cloud ledger can tie each
+       debit to the run that spent it. Off for every other profile: a run id is never sent to a third party. */
+    const runIdHeader = (typeof opts.runIdHeader === 'string' && /^[A-Za-z0-9-]{1,64}$/.test(opts.runIdHeader)) ? opts.runIdHeader : '';
+    function requestHeaders(req) {
+      if (!runIdHeader || !req || req.runId == null) return opts.headers;
+      const runId = String(req.runId).replace(/[^\x21-\x7e]/g, '').slice(0, 128);   // a header value: printable ASCII only
+      if (!runId) return opts.headers;
+      return Object.assign({}, opts.headers || {}, { [runIdHeader]: runId });
+    }
+    const listPrices =(prices && typeof prices.priceOf === 'function') ? prices : null;
     const defaultEffort = String(opts.reasoningEffort || '');
     /* PROFILE-DOCUMENTED LEVELS (registry `reasoningModels`) for endpoints whose catalog publishes none — OpenAI's
        /v1/models carries only id/created/owned_by. First match wins; a model no rule matches stays unknown. A
@@ -360,6 +382,53 @@
     // live endpoint yields nothing — a real catalog always wins.
     const staticModels = Array.isArray(opts.staticModels) ? opts.staticModels.map(normalizeModel).filter(Boolean).map(declare) : [];
     const droppedParams = new Map();   // model -> Set(param) learned from unsupported-param 400s
+    /* OLLAMA NATIVE WIRE (profile `nativeOllama`, see ollama-native.js for the measured why). Chat goes to the
+       server's own /api/chat with a window sized to the request; /v1/models stays the catalog. `nativeWire` turns
+       off for this instance if the endpoint turns out to have no /api/chat (a proxy that only speaks /v1), and the
+       run continues on the /v1 wire exactly as before. */
+    let nativeWire = opts.nativeOllama === true && !!ollamaNative;
+    const nativeBase = nativeWire ? ollamaNative.nativeRoot(baseUrl) : '';
+    const pinnedCtx = Math.max(0, Math.floor(Number(opts.numCtx) || 0));
+    const ctxCeiling = Math.max(0, Math.floor(Number(opts.maxCtx) || 0)) || (ollamaNative ? ollamaNative.DEFAULT_MAX_CTX : 0);
+    const modelFacts = new Map();      // model -> Promise<{ contextLength, supportsTools, supportsReasoning }>
+    const knownFacts = new Map();      // model -> the settled facts, for the synchronous contextLimit()/supportsTools()
+    function factsFor(model) {
+      const id = String(model || '');
+      if (!nativeWire || !id) return Promise.resolve(null);
+      if (!modelFacts.has(id)) {
+        modelFacts.set(id, (async () => {
+          const guard = timeouts.connectGuard(null, 5000);
+          try {
+            const res = await doFetch(nativeBase + '/api/show', { method: 'POST', headers: headerBag(key, opts.headers), body: JSON.stringify({ model: id }), signal: guard.signal });
+            if (!res.ok) return null;
+            return ollamaNative.showFacts(await res.json());
+          } catch (_) { return null; }
+          finally { guard.disarm(); }
+        })().then(f => { if (f) knownFacts.set(id, f); else modelFacts.delete(id); return f; }));
+      }
+      return modelFacts.get(id);
+    }
+    // /api/ps (what is loaded, where, at what window), or null when it cannot be read within 3s.
+    async function ollamaStatus() {
+      const guard = timeouts.connectGuard(null, 3000);
+      try {
+        const res = await doFetch(nativeBase + '/api/ps', { headers: headerBag(key, opts.headers), signal: guard.signal });
+        return res.ok ? await res.json() : null;
+      } catch (_) { return null; }
+      finally { guard.disarm(); }
+    }
+    // The window this model actually gets here: a pinned size, else min(its trained maximum, the ceiling).
+    function usableWindow(modelMax) {
+      if (pinnedCtx) return pinnedCtx;
+      return modelMax > 0 ? Math.min(modelMax, ctxCeiling) : 0;
+    }
+    function applyFacts(m, f) {
+      if (!m || !f) return;
+      const win = usableWindow(f.contextLength);
+      if (win) m.context_length = win;
+      if (typeof f.supportsTools === 'boolean') m.supportsTools = f.supportsTools;
+      if (f.supportsReasoning === true && m.supportsReasoning == null) m.supportsReasoning = true;
+    }
     let catalog = null;
     let catalogPromise = null;
     let catalogRewarmAt = 0;
@@ -454,9 +523,34 @@
           && ((declared && declared.some(e => e !== 'none')) || emitsReasoning(baseUrl, req.model));
         body.messages = replayReasoningContent(body.messages, thinking, !!body.tools);
       }
+      // OLLAMA NATIVE: size the window to THIS request before it leaves (the model's trained maximum is one local
+      // /api/show, cached per model). requestWithRetry resizes once more if Ollama counts more tokens than estimated.
+      let wire = null;
+      if (nativeWire) {
+        const facts = await factsFor(req.model);
+        const modelMax = (facts && facts.contextLength) || 0;
+        const need = ollamaNative.estimateTokens(body) + (Number(body.max_tokens) || 0);
+        // First use of this model in this process: if Ollama already holds it loaded at a usable window (StarNet was
+        // restarted inside the keep-alive, or the Commander loaded it larger), keep that window rather than reload.
+        if (!pinnedCtx && !ollamaWindow(nativeBase, req.model)) {
+          const loaded = ollamaNative.loadedWindow(await ollamaStatus(), req.model);
+          if (loaded > 0 && loaded <= (usableWindow(modelMax) || ctxCeiling)) noteOllamaWindow(nativeBase, req.model, loaded);
+        }
+        /* BACKGROUND CALLS DO NOT THINK (measured on qwen3:8b, 2026-09-30). After a task the host fires its own
+           housekeeping calls (reflection, profile update): no tools, and not a Commander turn (isTask is unset; a
+           greeting is isTask:false, a task carries tools). Ollama serves one request at a time, and each of those
+           spent 12-24s producing 2-3k characters of thinking for a few characters of output, so the Commander's
+           next "hello" waited 26s behind them. Only a model Ollama says can think is told not to, and only here:
+           Commander turns and tasks keep the model's own default. */
+        const background = !(req.tools && req.tools.length) && typeof req.isTask !== 'boolean';
+        const think = (background && facts && facts.supportsReasoning === true) ? false : undefined;
+        wire = { native: true, modelMax, think, numCtx: ollamaNative.pickNumCtx(need, { pinned: pinnedCtx, ceiling: ctxCeiling, modelMax, floor: ollamaWindow(nativeBase, req.model) }) };
+      }
       let res;
-      try { res = await requestWithRetry(body, req.signal, provider.runtime.preStreamRetries(req, RETRY_DELAYS.length)); }
+      try { res = await requestWithRetry(body, req.signal, provider.runtime.preStreamRetries(req, RETRY_DELAYS.length), requestHeaders(req), wire); }
       catch (e) { if (isAbort(e, req.signal)) return; throw e; }
+      // Native NDJSON is translated into the chat-completions chunk shape, so everything below parses one format.
+      const translate = (wire && wire.native) ? ollamaNative.makeChunkTranslator() : null;
       const reader = timeouts.idleGuardedReader(res.body.getReader(), { signal: req.signal });
       const dec = new TextDecoder();
       let buf = '';
@@ -494,6 +588,13 @@
 
       function parseLine(line) {
         const t = line.replace(/\r$/, '').trim();
+        if (translate) {
+          // one JSON object per line; the object with done:true is the whole stream's end (Ollama sends no [DONE])
+          if (!t) return null;
+          let j; try { j = JSON.parse(t); } catch (_) { return null; }
+          const chunk = translate(j);
+          return chunk ? { json: chunk, last: j.done === true } : null;
+        }
         if (!t || t.charAt(0) === ':') return null;
         if (t.indexOf('data:') !== 0) return null;
         const data = t.slice(5).trim();
@@ -555,6 +656,7 @@
             if (!p) continue;
             if (p.done) { sawSentinel = true; break; }
             yield* emitFrom(p.json);
+            if (p.last) { sawSentinel = true; break; }
           }
         }
         if (!sawSentinel) {
@@ -562,7 +664,7 @@
           if (buf.trim()) {
             const p = parseLine(buf);
             if (p && p.done) sawSentinel = true;
-            else if (p && p.json) yield* emitFrom(p.json);
+            else if (p && p.json) { yield* emitFrom(p.json); if (p.last) sawSentinel = true; }
           }
         }
         // STREAM-END TRUTH (truthful-telemetry law): always emit exactly ONE terminal event, and say honestly
@@ -578,7 +680,7 @@
       }
     }
 
-    async function requestWithRetry(body, signal, maxRetries) {
+    async function requestWithRetry(body, signal, maxRetries, wireHeaders, wire) {
       // maxRetries: the loop may LOWER this ladder (req.preStreamRetries = 0 once it owns the pacing — provider.js).
       // `waited` is the backoff actually spent; the exhaustion marker reports it so the loop counts it, not repeats it.
       const retries = (maxRetries == null) ? RETRY_DELAYS.length : maxRetries;
@@ -590,15 +692,23 @@
         // Fresh connect guard per attempt; disarmed the instant the fetch settles so the ceiling can't abort
         // the streaming body (a connect expiry rejects as a `timeout`, a user-cancel as AbortError).
         const guard = timeouts.connectGuard(signal, connectTimeoutMs);
+        const native = !!(wire && wire.native && nativeWire);
+        if (wire) wire.native = native;
         try {
-          res = await doFetch(baseUrl + chatPath, {
+          res = await doFetch(native ? nativeBase + '/api/chat' : baseUrl + chatPath, {
             method: 'POST',
-            headers: headerBag(key, opts.headers),
-            body: JSON.stringify(body),
+            headers: headerBag(key, wireHeaders === undefined ? opts.headers : wireHeaders),
+            body: JSON.stringify(native ? ollamaNative.toNativeRequest(body, { numCtx: wire.numCtx, think: wire.think }) : body),
             signal: guard.signal
           });
         } catch (e) {
           if (isAbort(e, signal)) throw e;
+          // Local Ollama silent past the connect ceiling: say where the model actually runs (one /api/ps read).
+          // Appended, so the message still reads "timed out" and classifies exactly as before.
+          if (native && e && e.timeout && e.phase === 'connect' && !e.ollamaPlacement) {
+            e.ollamaPlacement = true;
+            e.message += ' — ' + ollamaNative.placementNote(await ollamaStatus(), body.model, ollamaNative.estimateTokens(body));
+          }
           // a TLS rejection or a crash in our own request code cannot heal by re-sending: fail fast, unmarked
           if (!classifyApiError(e, { model: body.model }).retryable) throw e;
           if (attempt < retries) { waited += RETRY_DELAYS[attempt]; await delay(RETRY_DELAYS[attempt], signal); continue; }
@@ -606,9 +716,29 @@
         } finally {
           guard.disarm();
         }
-        if (res.ok && res.body) return res;
+        if (res.ok && res.body) {
+          if (native) noteOllamaWindow(nativeBase, body.model, wire.numCtx);
+          return res;
+        }
         const upstreamError = await responseErrorDetail(res);
         let detail = upstreamError.detail;
+        if (native) {
+          // No /api/chat behind this URL (a proxy that only forwards /v1): the /v1 wire, for the rest of this
+          // instance. Ollama's own 404 for an unpulled model names the model and is a real error, not this.
+          if (res.status === 404 && !/model\b[^]*\bnot found/i.test(String(detail))) { nativeWire = false; attempt--; continue; }
+          // truncate:false refused a prompt bigger than the window: step up to one that holds it (plus the output
+          // allowance) and resend. At the model's usable maximum there is no bigger window, so the refusal goes on
+          // as-is — its wording classifies as context_overflow and the loop's reactive compaction takes it from there.
+          const over = ollamaNative.exceedFrom(detail);
+          if (over && !pinnedCtx) {
+            const next = ollamaNative.pickNumCtx(over.promptTokens + (Number(body.max_tokens) || 0), { ceiling: ctxCeiling, modelMax: wire.modelMax, floor: wire.numCtx + 1 });
+            if (next > wire.numCtx) { wire.numCtx = next; attempt--; continue; }
+          }
+          // A model without a thinking mode refuses `think`; the request means the same without it.
+          if (body.reasoning_effort !== undefined && /does not support thinking/i.test(String(detail))) {
+            delete body.reasoning_effort; rememberDrop(body.model, 'reasoning_effort'); attempt--; continue;
+          }
+        }
         // The endpoint NAMED the levels this model takes (or, for gpt-5.6 with tools on Chat Completions, that only
         // 'none' works): learn them for the model and resend a level it accepts. Checked BEFORE the generic drop
         // below, which would otherwise delete the param and silently run the model at its own default instead.
@@ -682,6 +812,10 @@
             const j = await res.json();
             const raw = Array.isArray(j.data) ? j.data : (Array.isArray(j.models) ? j.models : []);
             const list = raw.map(normalizeModel).filter(Boolean).map(declare);
+            // Ollama's /v1/models says nothing but ids. Its /api/show states each model's trained window and whether
+            // it takes tools or thinks — one local call per installed model, so the picker, the compaction threshold
+            // and the up-front "this model can't run tasks" check all read the server's own facts.
+            if (nativeWire) await Promise.all(list.map(m => factsFor(m.id).then(f => applyFacts(m, f))));
             rememberDeclared(baseUrl, list);   // live catalog only; the static fallback roster never feeds the memo
             return list;
           } catch (_) { return []; }
@@ -729,7 +863,12 @@
       return r ? { levels: withOff(r.efforts.slice()), defaultLevel: r.defaultLevel || null } : null;
     }
     function declaredFor(id) { const d = declarationFor(id); return d ? d.levels : null; }
-    function contextLimit(id) { const m = findModel(id); return (m && m.context_length) || defaultContext; }
+    function contextLimit(id) {
+      const m = findModel(id);
+      if (m && m.context_length) return m.context_length;
+      const f = nativeWire ? knownFacts.get(String(id || '')) : null;   // facts a run fetched before the catalog warmed
+      return (f && usableWindow(f.contextLength)) || defaultContext;
+    }
     function catalogPriceOf(id) {
       const m = findModel(id);
       if (!m || !m.pricing) return null;
@@ -748,6 +887,8 @@
     function supportsTools(id) {
       const m = findModel(id);
       if (m && typeof m.supportsTools === 'boolean') return m.supportsTools;
+      const f = nativeWire ? knownFacts.get(String(id || '')) : null;
+      if (f && typeof f.supportsTools === 'boolean') return f.supportsTools;
       return profileSupportsTools;
     }
     function reasoningEfforts(id) {

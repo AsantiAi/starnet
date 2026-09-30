@@ -96,7 +96,9 @@ function makeRelay(opts) {
       const ext = path.extname(abs).toLowerCase();
       res.writeHead(200, {
         'Content-Type': MIME[ext] || 'application/octet-stream',
-        'Cache-Control': rel === '/sw.js' || rel === '/index.html' ? 'no-cache' : 'public, max-age=300',
+        // the page, its script and its styles are one version: always revalidated, so a phone never runs new markup
+        // against an old script. Only the font and icons may be reused from cache.
+        'Cache-Control': /\.(html|js|css|webmanifest)$/.test(ext) ? 'no-cache' : 'public, max-age=300',
         'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY',
         // the page may talk only to this relay; no third-party script, frame or connection
         'Content-Security-Policy': "default-src 'self'; connect-src 'self' wss: ws:; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",

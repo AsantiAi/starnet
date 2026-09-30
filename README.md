@@ -103,10 +103,12 @@ explicitly use a network tool or connector. See [PRIVACY.md](PRIVACY.md) for the
 ### Run free with a local model
 
 No key, no account, no bill: install [Ollama](https://ollama.com), pull a model
-(`ollama pull llama3.1`), and pick **OLLAMA** as the provider — on the first-run brain screen, or
+(`ollama pull qwen3:8b`), and pick **OLLAMA** as the provider — on the first-run brain screen, or
 later in **SETTINGS → PROVIDERS**. StarNet talks to Ollama on `127.0.0.1:11434` and only reports
-it ready once it can list your local models. Honest caveat: local models are smaller than the
-cloud ones, so expect slower and rougher work on long tasks.
+it ready once it can list your local models. Pick a model that supports tools (`ollama show <model>`
+lists them): agents act through tool calls. Honest caveat: local models are smaller than the
+cloud ones, so expect slower and rougher work on long tasks, and a task needs a large context
+window — an 8B model takes about 10 GB of graphics memory while it works.
 
 For desktop development:
 

@@ -201,6 +201,7 @@ function makeSummarizer(deps) {
       ] };
       const effort = auxEffortFor(sProvider, useModel);
       if (effort) req.reasoningEffort = effort;
+      if (deps.runId) req.runId = deps.runId;   // run attribution (starnet proxy header; other providers ignore it)
       let out = '', usage = null, finish = null, truncated = false;
       const it = deps.streamFn ? deps.streamFn(req, sProvider) : sProvider.stream(req);
       for await (const ev of it) {

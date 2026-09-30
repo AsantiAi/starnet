@@ -186,6 +186,9 @@ body.glass-demo #model-dock .model-dock-row-effort { font-size: 14px; color: var
 body.glass-demo #model-dock .model-dock-row:is(.sel,:hover,:focus-visible) .model-dock-row-effort { opacity: .8; }
 body.glass-demo #model-dock .model-dock-row.sel { background: var(--gd-hover); border-color: var(--gd-edge); box-shadow: inset 2px 0 0 var(--ph), inset 0 1px 0 var(--gd-light); }
 body.glass-demo #model-dock .model-dock-row.sel .model-dock-row-name { color: var(--ph-bright); }
+body.glass-demo #model-dock .model-dock-row-tier { color: var(--text); border-color: var(--gd-edge); }
+body.glass-demo #model-dock .model-dock-row-tier[data-tier="S"],
+body.glass-demo #model-dock .model-dock-row.sel .model-dock-row-tier { color: var(--ph-bright); background: rgba(0,0,0,.22); border-color: var(--gd-edge); }
 body.glass-demo #model-dock .model-dock-row:is(:hover,:focus-visible) { background: var(--gd-hover); border-color: var(--gd-edge); box-shadow: inset 0 1px 0 var(--gd-light),0 2px 8px rgba(0,0,0,.2); }
 body.glass-demo #model-dock .model-dock-foot { grid-template-columns: auto auto; justify-content: space-between; gap: 8px; }
 body.glass-demo #model-dock .model-dock-foot :is(button,a) {

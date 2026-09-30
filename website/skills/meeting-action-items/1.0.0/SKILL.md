@@ -1,6 +1,6 @@
 ---
 name: meeting-action-items
-description: "Turn meeting notes or a transcript into cited decisions, owned action items and a held follow-up package, reconciled against the Commander's existing tasks before anything is created."
+description: "Turn meeting notes or a transcript into cited decisions, owned action items and a follow-up draft held for approval, reconciled against the Commander's existing tasks before anything is created."
 license: MIT
 metadata:
   title: "Meeting Action Items"
@@ -86,3 +86,5 @@ Create or update only the approved records, each carrying meeting provenance (ti
 *Needs the CABINET to read notes files. Uses the station task board or a connected tracker for the records.*
 
 Adapted for StarNet from meeting-action-items (Ben Barclay), MIT.
+
+*Task-board steps (task.list, task.create) need the ORCHESTRATOR, which every run the Commander starts carries. In a scheduled run, list those updates in the report instead of making them.*

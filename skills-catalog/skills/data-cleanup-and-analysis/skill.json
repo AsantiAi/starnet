@@ -1,0 +1,10 @@
+{
+  "slug": "data-cleanup-and-analysis",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Productivity",
+  "tags": ["csv", "spreadsheet", "data-cleaning", "analysis", "charts"],
+  "requires": ["cabinet"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}

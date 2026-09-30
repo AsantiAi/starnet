@@ -1,6 +1,6 @@
 ---
 name: notebook-gardening
-description: "Keep the agent's notebook true: find duplicates and contradictions, correct beliefs in place with their source, sink stale ones, and hand the forget list to the Commander."
+description: "Keep the agent's notebook true: find duplicates and contradictions, correct beliefs in place with their source, fade stale ones, and list for the Commander what to delete."
 license: MIT
 metadata:
   title: "Notebook Gardening"
@@ -35,4 +35,4 @@ No two active entries state the same fact, no active entry contradicts another, 
 ## Output
 Counts before and after (kept · merged · corrected · sunk), each correction with its old wording, new wording and source, then the forget list with entry ids.
 
-*Needs the NOTEBOOK object (notebook.read / notebook.write / notebook.feedback, recall_conversation).*
+*Needs the NOTEBOOK (notebook.read / notebook.write / notebook.feedback, recall_conversation).*

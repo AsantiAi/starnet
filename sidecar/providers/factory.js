@@ -168,8 +168,15 @@
         // Output ceiling: only profiles that declare one (Ollama) send max_tokens; an env override wins.
         maxTokens: resolveMaxOutputTokens(profile),
         maxChatTokens: resolveMaxOutputTokens(profile, 'maxChatOutputTokens'),
+        // Ollama: chat on the native /api/chat with a request-sized window (registry `nativeOllama`); an env pin or
+        // ceiling wins over the profile's, the same way the output ceilings above resolve.
+        nativeOllama: profile.nativeOllama === true,
+        numCtx: resolveMaxOutputTokens(profile, 'numCtx'),
+        maxCtx: resolveMaxOutputTokens(profile, 'maxCtx'),
         defaultContext: opts.defaultContext,
-        headers: mergedHeaders
+        headers: mergedHeaders,
+        // run attribution header (starnet only — the profile names it; see openai-compatible requestHeaders)
+        runIdHeader: typeof profile.runIdHeader === 'string' ? profile.runIdHeader : undefined
       });
     }
     if (profile.adapter === 'anthropic') {

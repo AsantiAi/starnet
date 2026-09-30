@@ -5,6 +5,7 @@ description: Build a week of meals around what the Commander already has, actual
 category: Planning
 requires: [dish, cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

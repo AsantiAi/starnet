@@ -27,6 +27,7 @@ const { makeCostEngine } = require('./cost.js');
 const { makeLedger } = require('./ledger.js');
 const { makeBudget } = require('./budget.js');
 const { makeCredits } = require('./credits.js');   // managed-credit backend adapter (inert unless STARNET_CREDITS_URL is set)
+const { makeTierList } = require('./tierlist.js');   // editorial model tier list from the linked cloud (picker badges)
 const { makeCreditsLink } = require('./credits-link.js');   // device-pairing client + durable link config (inert unless STARNET_CLOUD_URL is set)
 const budgetCaps = require('./budgetcaps.js');   // pure resolve(env,overrides) + validate patch — SETTINGS→Budget (P0-2)
 const fallbackChain = require('./fallbackchain.js');   // pure resolve(env,saved) + validate patch — SETTINGS→Models fallback chain (P0-3)
@@ -708,6 +709,10 @@ const BUDGET_CAPS = {
   perDay: num(ENV('BUDGET_PER_DAY'), BUDGET_SHIPPED.perDay),         // $25/day soft rail: run ends 'budget'/'day', one-click RESUME in the Budget panel
   global: num(ENV('BUDGET_GLOBAL'), BUDGET_SHIPPED.global)
 };
+// Issue #53: what a StarNet-credit run reserves (= its per-run ceiling) when no positive per-run cap is in force.
+// budgetcaps.DEFAULT_MANAGED_PER_RUN_USD explains the number; SKYNET_BUDGET_MANAGED_PER_RUN retunes it and 0
+// restores the old "the whole wallet is the ceiling" behaviour. A saved/env per-run cap > 0 always wins.
+const MANAGED_PER_RUN_DEFAULT = num(ENV('BUDGET_MANAGED_PER_RUN'), budgetCaps.DEFAULT_MANAGED_PER_RUN_USD);
 // Optional multi-agent fan-out ceiling. 0 = unlimited (the product default). See concurrency.js.
 const MAX_CONCURRENT_AGENTS = resolveKnob('MAX_CONCURRENT_AGENTS', 'maxConcurrentAgents', 0);   // P1-9: env > saved > default
 // Optional per-worker USD ceiling for delegated sub-runs. 0 = ungoverned.
@@ -1059,6 +1064,9 @@ const creditsLink = makeCreditsLink({
 // Resolve the credits adapter config. PRECEDENCE (additive, never breaks an env deploy): env CREDITS_* wins
 // (operator override / backward compat); else a linked device from .secrets/credits.json (deviceToken = bearer);
 // else nothing (inert). For a linked device the external "add credits" page is the account page on the cloud.
+// MODEL TIER LIST (2026-09-29): the cloud's editorial S/A/B/C boards, badged in the model picker. Read from the SAME
+// cloud the starnet provider talks to (linked/env credits URL), else the shipped cloud default. Cached 10 min.
+const tierList = makeTierList({ fetch: globalThis.fetch, now: () => Date.now(), baseUrl: () => resolveCreditsConfig().url || CLOUD_URL });
 function resolveCreditsConfig() {
   if (CREDITS_URL) return { url: CREDITS_URL, apiKey: CREDITS_API_KEY, accountId: CREDITS_ACCOUNT, purchaseUrl: CREDITS_PURCHASE_URL };
   const saved = creditsLink.loadSavedSync();
@@ -1564,6 +1572,7 @@ const skillMarket = makeSkillMarket({
   fetchDocument: fetchSkillDocument, fs, path, root: path.join(WORKSPACES, 'skill-market'), guard: skillGuard, now: () => Date.now(),
   catalogUrl: () => { const v = process.env.STARNET_SKILL_MARKET_URL; return v == null ? SKILL_MARKET_DEFAULT_URL : (String(v).trim().toLowerCase() === 'off' ? '' : String(v).trim()); },
   trustedKeys: skillMarketSigning.TRUSTED_KEYS.concat(skillMarketSigning.keysFromEnv(process.env.STARNET_SKILL_MARKET_KEYS)),
+  floorSerial: (() => { try { return Number(require('./skills/market-floor.json').serial) || 0; } catch (e) { failNote('skill-market.floor', e); return 0; } })(),
   loadJson: (file) => loadResilient(file, 'skill market'), saveJson: (file, value) => saveResilient(file, value)
 });
 // THE MARKET'S KILL SWITCH: while at least one market skill is installed, re-read the small signed pulled-skills list
@@ -2244,14 +2253,30 @@ function warnRosterMiss(agentId, where) {
   rosterMissWarned.add(id);
   try { console.warn('[roster] identity fallback: agent ' + id + ' not in roster (' + (where || 'lookup') + ') — run proceeds on the station persona/default model, NOT impersonating it as ' + id); } catch (_) {}
 }
+/* "Follow station default": a specialist with NO model pin runs on the STATION DEFAULT — the Overseer's roster
+   model, provider and effort (what the page's stationDefaultWire resolves for COMMS). ONE resolver for every
+   headless surface: channel hops (channelRunConfigFor) and routines/loops/workshop (cronIdentityFor) both read it,
+   so an unpinned agent can never run on the Overseer's model in one lane and be refused in another (v0.12.5
+   refused every routine on an unpinned agent). Returns the Overseer's roster record, or null when the agent is
+   pinned, IS the Overseer, or the Overseer itself has no model (then there is no station default to follow). */
+function stationDefaultFor(id, ident) {
+  if (!ident || String(id || '') === 'agent' || String(ident.model || '').trim()) return null;
+  const hero = agentRoster.get('agent');
+  return hero && String(hero.model || '').trim() ? hero : null;
+}
 function cronIdentityFor(agentId) {
   const id = String(agentId || 'agent');
   const ident = agentRoster.get(id);
   if (!ident) { warnRosterMiss(id, 'cron'); return null; }
   const system = String(ident.system || '').trim();
+  const hero = stationDefaultFor(id, ident);
   return {
-    model: ident.model || null,
-    provider: ident.provider || null,
+    // an unpinned agent's routine runs on the station default model+provider (the SAME rule a channel hop uses);
+    // its own persona/name still ride the run — following the station changes the model, never who it is.
+    model: (hero ? hero.model : ident.model) || null,
+    provider: (hero ? (hero.provider || ident.provider) : ident.provider) || null,
+    followsStation: !!hero,
+    reasoningEffort: hero ? hero.reasoningEffort : undefined,
     system: system ? withDossier(system + CRON_ROUTINE_NOTE, dossierWithGoals()) : null,
     name: ident.name || id
   };
@@ -2417,8 +2442,8 @@ function channelRunConfigFor(agentId, candidate) {
   // model, provider and effort, exactly what COMMS resolves (frontend app.js stationDefaultWire). Refusing the
   // empty pin here broke workflow line hops, RUN A SAMPLE and chat channels for every unpinned specialist once
   // the empty choice started surviving reloads.
-  const hero = id !== 'agent' && !String(ident.model || '').trim() ? agentRoster.get('agent') : null;
-  const followsStation = !!(hero && String(hero.model || '').trim());
+  const hero = stationDefaultFor(id, ident);
+  const followsStation = !!hero;
   const provider = normalizeProvider(followsStation ? (hero.provider || ident.provider) : ident.provider);
   const model = String((followsStation ? hero.model : ident.model) || '').trim();
   if (!model) return { ok: false, error: 'target agent ' + id + ' has no roster model' + (id !== 'agent' ? ' and the station default (the Overseer) has none' : '') };
@@ -2790,6 +2815,7 @@ async function runReflection(o) {
       { role: 'user', content: prompt }
     ] };
     if (auxEffort) req.reasoningEffort = auxEffort;
+    if (runId) req.runId = runId;   // run attribution (starnet proxy header; other providers ignore it)
     let out = '', usage = null;
     for await (const ev of provider.stream(req)) {
       if (ev && ev.type === 'text') out += ev.delta;
@@ -2886,6 +2912,7 @@ async function runFailureReview(o) {
       { role: 'user', content: prompt }
     ] };
     if (auxEffort) req.reasoningEffort = auxEffort;
+    if (runId) req.runId = runId;   // run attribution (starnet proxy header; other providers ignore it)
     let out = '', usage = null;
     for await (const ev of provider.stream(req)) {
       if (ev && ev.type === 'text') out += ev.delta;
@@ -2994,6 +3021,7 @@ async function runStudy(o) {
       { role: 'user', content: prompt }
     ] };
     if (auxEffort) req.reasoningEffort = auxEffort;
+    if (runId) req.runId = runId;   // run attribution (starnet proxy header; other providers ignore it)
     let out = '', usage = null;
     for await (const ev of provider.stream(req)) {
       if (ev && ev.type === 'text') out += ev.delta;
@@ -3062,6 +3090,7 @@ async function runThreadMine(o) {
       { role: 'user', content: prompt }
     ] };
     if (auxEffort) req.reasoningEffort = auxEffort;
+    if (runId) req.runId = runId;   // run attribution (starnet proxy header; other providers ignore it)
     let out = '', usage = null;
     for await (const ev of provider.stream(req)) {
       if (ev && ev.type === 'text') out += ev.delta;
@@ -6262,6 +6291,7 @@ async function runScoutCycle(o) {
   const propose = async (system, prompt) => {
     const req = { model, stream: true, signal: ac.signal, messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }] };
     if (auxEffort) req.reasoningEffort = auxEffort;
+    if (runId) req.runId = runId;   // run attribution (starnet proxy header; other providers ignore it)
     let out = '', usage = null;
     for await (const ev of provider.stream(req)) {
       if (ev && ev.type === 'text') out += ev.delta;
@@ -9936,7 +9966,51 @@ const remoteDevices = require('./remote/devices.js').makeDevices({
 });
 const remoteSessions = require('./remote/session.js').makeSessions({ devices: remoteDevices, crypto: remoteCrypto, now: () => Date.now(), newId: () => crypto.randomUUID() });
 // hoisted on purpose: the approvals registry (defined far above) announces changes through this
-function remoteBroadcast(evt) { try { return remoteSessions.broadcast(evt); } catch (_) { return 0; } }
+function remoteBroadcast(evt) { try { remoteNotify(evt); } catch (e) { failNote('remote.index.notify', e); } try { return remoteSessions.broadcast(evt); } catch (_) { return 0; } }
+/* WHEN THE STATION TAPS A PHONE (only phones that turned notifications on; the push is sealed to each phone):
+     · an approval or question opened by a phone's own task: at once
+     · one opened at the desk or by a channel: only if nobody answers it within REMOTE_ASK_GRACE_MS (a Commander
+       sitting at the desk answers it there and the phone never buzzes)
+     · a task a phone sent finished (or failed): with the first line of the reply */
+const REMOTE_ASK_GRACE_MS = 20000;
+function remotePushSend(msg) {
+  if (!remoteDevices.enabled() || !remotePush.subscribed().length) return;
+  remotePush.send(null, msg).catch((e) => failNote('remote.index.push', e));
+}
+function remoteAgentName(id) { const a = agentRoster.get(id); return (a && a.name) || id || 'Your agent'; }
+function remoteAskMessage(row) {
+  const who = remoteAgentName(row.agentId);
+  if (row.kind === 'question') {
+    let q = ''; try { q = String((JSON.parse(row.argsSummary || '{}') || {}).question || ''); } catch (_) { q = ''; }
+    return { title: who + ' has a question', body: q.slice(0, 200) || 'Tap to answer', tag: 'ask:' + row.promptId, url: '#needs' };
+  }
+  return { title: who + ' needs your OK', body: 'wants to use ' + row.tool, tag: 'ask:' + row.promptId, url: '#needs' };
+}
+function remoteNotify(evt) {
+  if (!evt || !remotePush.subscribed().length) return;
+  if (evt.type === 'approval.opened' && evt.approval) {
+    const row = evt.approval;
+    if (row.surface === 'remote') return remotePushSend(remoteAskMessage(row));
+    const t = setTimeout(() => {
+      if (remoteApprovals.list().some(a => a.runId === row.runId && a.promptId === row.promptId)) remotePushSend(remoteAskMessage(row));
+    }, REMOTE_ASK_GRACE_MS);
+    if (t.unref) t.unref();
+    return;
+  }
+  if (evt.type === 'run.ended' && evt.streamId && evt.reason !== 'stopped') {
+    let last = '';
+    try { const turns = transcriptStore.history(evt.streamId, { limit: 4 }) || []; for (let i = turns.length - 1; i >= 0; i--) if (turns[i].role === 'assistant' && typeof turns[i].content === 'string' && turns[i].content.trim()) { last = turns[i].content; break; } }
+    catch (e) { failNote('remote.index.pushReply', e); }
+    const line = String(last).replace(/[*#`>_]+/g, '').replace(/\s+/g, ' ').trim();
+    remotePushSend({ title: remoteAgentName(evt.agentId) + (evt.error ? ' hit a problem' : ' finished'),
+      body: (evt.error ? String(evt.error) : line || 'Tap to read the reply').slice(0, 200), tag: 'run:' + evt.runId, url: '#thread=' + evt.streamId });
+  }
+}
+const remoteView = require('./remote/view.js').makeRemoteView({ now: () => Date.now() });
+// Web Push sent by this station itself (sidecar/remote/push.js): its own key, the phones' subscriptions
+const remotePush = require('./remote/push.js').makePush({ fs, path, file: path.join(WORKSPACES, '.secrets', 'remote-push.json'), now: () => Date.now(),
+  fetch: (url, o) => fetch(url, Object.assign({}, o, { signal: AbortSignal.timeout(15000) })) });
+const remotePortraits = require('./remote/portraits.js').makePortraits({ fs, path, frontend: FRONTEND });
 const remoteHost = require('./remote/host.js').makeRemoteHost({
   now: () => Date.now(), newId: () => crypto.randomUUID(), broadcast: remoteBroadcast,
   roster: () => [...agentRoster].map(([agentId, a]) => ({ agentId, name: a.name, model: a.model, provider: a.provider })),
@@ -9963,6 +10037,18 @@ const remoteHost = require('./remote/host.js').makeRemoteHost({
       system: raw ? withDossier(raw + REMOTE_NOTE, dossierWithGoals()) : withDossier(CRON_PERSONA + REMOTE_NOTE, dossierWithGoals()) };
   },
   runOnce: (o) => runOnce(o),
+  view: remoteView,
+  // how each agent looks (the skin the Commander picked), from the station save the page mirrors here
+  crewLooks: () => {
+    const save = saveStore.load('agent') || {}, out = {};
+    const add = (a) => { if (a && typeof a.id === 'string') out[a.id] = { skin: String(a.skin || ''), color: String(a.color || '') }; };
+    add(save.agent); for (const a of Array.isArray(save.agents) ? save.agents : []) add(a);
+    return out;
+  },
+  portrait: (skin) => remotePortraits.forSkin(skin),
+  // the desk's own sessions (title, agent, history) live in the station save the page mirrors here
+  deskSessions: () => { const save = saveStore.load('agent') || {}; return Array.isArray(save.workstreams) ? save.workstreams : []; },
+  classify: (text) => Classify.isTaskDirective(text),   // the SAME task-vs-talk call the desk and the channels make
   askConsent: (o) => channelAskConsent(o),
   stopRun: (runId) => { const ac = runs.get(runId); if (!ac) return false; try { ac.abort(); } catch (e) { failNote('remote.index.ac.abort', e); } return true; },
   deliverables: () => deliverableRows(),
@@ -9993,7 +10079,7 @@ const remoteHost = require('./remote/host.js').makeRemoteHost({
     return { ok: true, enabled: !!enabled };
   }
 });
-const remoteGateway = require('./remote/gateway.js').makeGateway({ host: remoteHost, approvals: remoteApprovals, now: () => Date.now() });
+const remoteGateway = require('./remote/gateway.js').makeGateway({ host: remoteHost, approvals: remoteApprovals, push: remotePush, now: () => Date.now() });
 const remoteLan = require('./remote/lan.js').makeLanListener({
   sessions: remoteSessions, devices: remoteDevices, gateway: remoteGateway, crypto: remoteCrypto, now: () => Date.now(),
   onPaired: () => { if (remoteRelay) remoteRelay.syncTokens(); },
@@ -10069,6 +10155,24 @@ function remoteSnapshot() {
 }
 // GET /api/remote — the desk's DEVICES panel: is Remote on, where does it listen, who is paired, who is connected
 function handleRemoteStatus(req, res) { respondJson(res, 200, remoteSnapshot()); }
+// GET /api/remote/recent — runs a phone started, newest first ({runId, agentId, streamId, title, startedAt, endedAt,
+// live}). The desk reads it to show a phone conversation as one of its own sessions (app/remotesessions.js).
+function handleRemoteRecent(req, res) { respondJson(res, 200, { ok: true, runs: remoteHost.recentRuns() }); }
+// GET /api/remote/view — does a phone want the station picture right now, and when was the last one drawn?
+// The desk page polls this (app/remoteview.js) and draws only while the answer is yes.
+function handleRemoteViewWant(req, res) {
+  const m = remoteView.meta();
+  respondJson(res, 200, { ok: true, enabled: remoteDevices.enabled(), want: remoteDevices.enabled() && remoteView.wanted(), at: m ? m.at : null });
+}
+// POST /api/remote/view { mime, w, h, bodies, data } — the desk page hands over a still it drew of the station
+async function handleRemoteViewPut(req, res) {
+  if (!remoteDevices.enabled()) return respondJson(res, 409, { ok: false, error: 'Remote is off' });
+  let b;
+  try { b = JSON.parse((await readBodyBuffer(req, 3 * 1024 * 1024, res)).toString('utf8') || '{}'); }
+  catch (_) { if (!res.headersSent) respondJson(res, 400, { ok: false, error: 'bad request' }); return; }
+  const r = remoteView.put(b);
+  respondJson(res, r.ok ? 200 : 400, r);
+}
 // POST /api/remote/enable { on } — the switch. Persisted; the LAN door opens or closes with it.
 async function handleRemoteEnable(req, res) {
   let b; try { b = JSON.parse(await readBody(req, 1024)) || {}; } catch (_) { return respondJson(res, 400, { ok: false, error: 'bad request' }); }
@@ -10103,6 +10207,7 @@ async function handleRemoteRevoke(req, res) {
   const r = remoteDevices.revoke(id);
   remoteSessions.endDevice(id);
   if (remoteRelay) remoteRelay.kickDevice(id);
+  if (r.ok) { const f = remotePush.forget(id); if (!f.ok) failNote('remote.index.pushForget', new Error(f.error)); }   // a removed phone gets no more notifications
   if (!r.ok) return respondJson(res, r.error === 'no such device' ? 404 : 500, { ok: false, error: r.error });
   respondJson(res, 200, remoteSnapshot());
 }
@@ -10240,6 +10345,7 @@ const ROUTES = [
   // job through the armed line. Keeping discovery separate means probing can never spend or dispatch.
   { m: 'GET', exact: '/api/routing/sample', h: handleRoutingSampleStatus },
   { m: 'POST', exact: '/api/routing/sample', h: handleRoutingSample },
+  { m: 'POST', exact: '/api/routing/sample/stop', h: handleRoutingSampleStop },   // ■ STOP on RUN ONE REAL JOB: this station's one sample, nothing else
   // STEP-THROUGH TEST (2026-09-22): GET is the active-or-latest session (the panel's feature probe + poll);
   // POST starts one; /:id answers one session and /:id/<verb> drives it. Every refusal 409, never 404.
   { m: 'GET', qsplit: '/api/routing/steptest', h: handleStepTestLatest },
@@ -10259,6 +10365,9 @@ const ROUTES = [
   { m: 'POST', exact: '/api/credits/link/start', h: handleCreditsLinkStart },   // begin a pairing: returns a STAR-XXXX code + verifyUrl
   { m: 'POST', exact: '/api/credits/link/poll', h: handleCreditsLinkPoll },     // poll once; on confirm persists the token + configures credits live
   { m: 'POST', exact: '/api/credits/unlink', h: handleCreditsUnlink },          // forget the linked device, revert credits to inert
+  { m: 'GET', exact: '/api/remote/recent', h: handleRemoteRecent },   // phone-started runs, for the desk to adopt as sessions
+  { m: 'GET', exact: '/api/remote/view', h: handleRemoteViewWant },   // is a phone looking at the station picture?
+  { m: 'POST', exact: '/api/remote/view', h: handleRemoteViewPut },   // the desk page's still of the station, for phones
   { m: 'GET', exact: '/api/remote', h: handleRemoteStatus },          // STARNET REMOTE: on/off, where it listens, paired + connected phones
   { m: 'POST', exact: '/api/remote/enable', h: handleRemoteEnable },  // the switch (persisted); opens/closes the LAN door
   { m: 'POST', exact: '/api/remote/pair', h: handleRemotePair },      // one-time pairing code for ONE phone (10 min)
@@ -10317,6 +10426,7 @@ const ROUTES = [
   { m: 'POST', exact: '/api/auth/claude-cli/add', h: (req, res) => handleClaudeCliAuth(req, res, 'add') },
   { m: 'POST', exact: '/api/auth/claude-cli/remove', h: (req, res) => handleClaudeCliAuth(req, res, 'remove') },
   { m: 'GET', exact: '/api/providers', h: handleProviders },
+  { m: 'GET', qsplit: '/api/model-tiers', h: handleModelTiers },   // the cloud's editorial tier list (picker badges); {ok:false, reason} when unreachable
   { m: 'POST', exact: '/api/providers/probe', h: handleProviderProbe },
   { m: 'POST', exact: '/api/providers/validate', h: handleProviderValidate },
   // /api/models/openrouter is served by this same prefix (id='openrouter'). handleProviderModels answers 200
@@ -11145,6 +11255,8 @@ async function handleRoutingSample(req, res) {
       return json(409, { ok: false, error: 'no provider/model is configured for headless runs — connect a provider and set a default model first.' });
     }
 
+    // ■ STOP pressed while the line was still being checked (POST /api/routing/sample/stop): nothing runs, nothing is spent
+    if (sampleInFlight.stopRequested) return json(409, { ok: false, stopped: true, error: 'stopped before it started — nothing ran.' });
     const t0 = Date.now();
     const streamId = sampleInFlight.streamId;
     sampleReplies.length = 0;
@@ -11202,12 +11314,15 @@ async function handleRoutingSample(req, res) {
     }
     if (!completed) {
       // `line` is echoed only when it was requested, so a line-less POST's answer stays byte-identical.
+      // A job the Commander STOPPED (POST /api/routing/sample/stop) is named as a stop — never as a line that failed.
+      const stopped = !!sampleInFlight.stopRequested;
       return json(502, Object.assign({
-        ok: false, sample: true, error: !onLine ? 'sample job did not enter through line "' + line + '"'
+        ok: false, sample: true, error: stopped ? 'stopped — you stopped this job before it reached the OUTBOX'
+          : !onLine ? 'sample job did not enter through line "' + line + '"'
           : runs.length ? 'sample job did not complete cleanly' : 'sample job produced no durable run outcome',
         chatId: SAMPLE_CHAT, streamId: streamId, agentId: agentId || null, isTask: isTask,
         workitemId: workitemId || null, replies: sampleReplies.slice(), runs: runs, delivered: null, totalUsd: totalUsd
-      }, line ? { line: line } : null));
+      }, line ? { line: line } : null, stopped ? { stopped: true } : null));
     }
     return json(200, Object.assign({
       ok: true, sample: true, chatId: SAMPLE_CHAT, streamId: streamId,
@@ -11218,6 +11333,24 @@ async function handleRoutingSample(req, res) {
     sampleInFlight = null;
     sampleLineScope = null;
   }
+}
+/* ---- POST /api/routing/sample/stop — ■ STOP for RUN ONE REAL JOB (2026-09-29).
+   The Workflow panel's TEST › RUN ONE REAL JOB had no stop: while the job rode the line the panel showed only a disabled
+   "THE JOB IS RIDING THE LINE…", and the one way out was the station-wide E-STOP. This stops THIS station's one sample
+   and nothing else: the sample hub's live runs (its entry run AND every stage it chains live in its inflight record)
+   die the way E-STOP kills them (sidecar/halt.js killAll marks them superseded + halted, so the chain goes no further
+   and no stale reply is delivered), and the in-flight POST answers stopped:true — the panel says STOPPED from the
+   server's own answer, never on the click alone. A stop that lands before the first run starts is honoured by the POST
+   itself (stopRequested). Same contract as the sample route: behind the launch token, and 409 {ok:false,error} when
+   there is nothing to stop — never 404. */
+function handleRoutingSampleStop(_req, res) {
+  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  if (!sampleInFlight) return json(409, { ok: false, error: 'no sample job is riding the line — nothing to stop.' });
+  sampleInFlight.stopRequested = true;
+  let halted = 0;
+  try { halted = killAll(null, (sampleHub && sampleHub._internals) ? sampleHub._internals.inflight : null); }
+  catch (e) { failNote('routing.sample.stop', e); }
+  return json(200, { ok: true, stopped: true, halted: halted, streamId: sampleInFlight.streamId });
 }
 
 /* ---- LINE TRIGGERS (2026-09-23, owner-approved) — /api/routing/triggers[/:id[/secret]] + POST /api/hooks/:id.
@@ -11675,6 +11808,9 @@ function handleBudgetStatus(req, res) {
     saved: Object.assign({}, budgetOverrides),        // only the keys the user explicitly saved
     envDefaults: { perRun: BUDGET_CAPS.perRun, perAgent: BUDGET_CAPS.perAgent, perDay: BUDGET_CAPS.perDay, global: BUDGET_CAPS.global },
     perRun: effectiveCaps.perRun,                     // back-compat: pre-existing flat field kept
+    // Issue #53: the default a StarNet-credit run reserves (and stops at) while PER RUN is 0. Null on a station with
+    // no managed credits wired — nothing to govern, so the Budget panel says nothing about it.
+    managedRunDefaultUsd: (credits.configured() && MANAGED_PER_RUN_DEFAULT > 0) ? MANAGED_PER_RUN_DEFAULT : null,
     spentToday: known ? ledger.usdForDay(now) : null,
     lifetime: known ? ledger.totalUsd() : null,
     totalUsd: known ? ledger.totalUsd() : null, runs: known ? ledger.count() : null
@@ -11726,7 +11862,8 @@ async function handleCredits(req, res) {
     balanceStatus: snap.authStatus === 'valid' && typeof snap.observedBalanceUsd === 'number'
       ? (snap.observedBalanceUsd > 0 ? 'funded' : 'zero') : 'unavailable',
     purchaseUrl: snap.purchaseUrl,           // external link the STORE opens; this app renders no payment form
-    perRun: effectiveCaps.perRun,            // the reservation size a run will hold
+    perRun: effectiveCaps.perRun,            // the user's per-run cap (0 = none chosen); > 0 is the reservation a run holds
+    managedRunDefaultUsd: MANAGED_PER_RUN_DEFAULT > 0 ? MANAGED_PER_RUN_DEFAULT : null,   // #53: reserved (clamped to the balance) while perRun is 0
     // The plan, exactly as the backend reports it: {tier, status, grantUsd, currentPeriodEnd, graceUntil} or
     // null. NULL IS THE POINT — an operator-provisioned station or a backend that predates this field has no
     // subscription, and the STORE must then say nothing about one rather than invent a tier.
@@ -13318,7 +13455,7 @@ function handleLifecycleArmed(req, res) {
    SHAPE (every field is backed by REAL in-memory server state — nothing is fabricated; truthful-telemetry law):
      {
        ts: <ms>,                                  // when this snapshot was taken (server clock)
-       runs: [ { runId, agentId, startedAt, source } ],   // live runs (runsMeta + the channel hubs' inflight maps)
+       runs: [ { runId, agentId, startedAt, source, streamId?, internal? } ],   // live runs (runsMeta + the channel hubs' inflight maps); streamId/internal only when known
                                                           //   source ∈ 'interactive' | 'cron' | 'workshop' | 'telegram' | 'discord' | 'slack' | 'matrix' | 'signal' | 'host' (line work runOnce drives: trigger/sample hubs, chain hops, step tests)
                                                           //   Channel runs are driven by the messaging hub, which keeps its OWN inflight
                                                           //   map (keyed by chatId) rather than runsMeta — so they are read from the SAME maps E-STOP kills
@@ -13337,7 +13474,12 @@ function handleStateSnapshot(req, res) {
   try {
     for (const [runId, meta] of runsMeta) {
       seenRunIds.add(runId);
-      out.runs.push({ runId: runId, agentId: (meta && meta.agentId) || null, startedAt: (meta && meta.startedAt) || null, source: (meta && meta.source) || null });
+      const row = { runId: runId, agentId: (meta && meta.agentId) || null, startedAt: (meta && meta.startedAt) || null, source: (meta && meta.source) || null };
+      // ADDITIVE (HUD activity feed): the run's own conversation, and whether it is the harness's self-talk (the same
+      // body.internal the run history later records) — so a live view never shows self-talk as the Commander's work.
+      if (meta && meta.streamId) row.streamId = String(meta.streamId);
+      if (meta && meta.internal) row.internal = true;
+      out.runs.push(row);
     }
   } catch (_) {}
   // every run runOnce is driving (hub entry runs, chain hops, step tests, routine hops) — see runOnceTracked
@@ -13857,6 +13999,9 @@ async function handleCronRun(req, res) {
       // identical cron.fire/cron.result events, can fetch the real output via /api/transcript?stream=cron-<runId>.
       // Per-run id keeps the seed empty (index.js reconstructs a stream only when messages<=1) — no behavior drift.
       runId: runId, streamId: 'cron-' + runId, surface: 'autonomous', trigger: 'schedule', provider: provider, broadcast: true,
+      // "Follow station default": same effort rule as the scheduled fire (cron-driver.js) — an unpinned agent with
+      // no explicit routine model runs on the Overseer's effort along with its model.
+      reasoningEffort: (() => { const ri = !(job.model && String(job.model).trim()) ? cronIdentityFor(job.agentId) : null; return ri && ri.followsStation ? ri.reasoningEffort : undefined; })(),
       // LINE WATCH: the row records the bay + line this Run Now's crate named (placeCronWorkitem above)
       lineId: (cronItems.get(runId) || {}).lineId || undefined, dockId: (cronItems.get(runId) || {}).dockId || undefined,
       reflect: true,   // Run Now must match the scheduled fire's posture exactly, memory included (see the reflect note on /api/run)
@@ -15883,6 +16028,21 @@ function placedTypesFrom(v) {
   return String(v || '').split(',').map(s => s.trim()).filter(Boolean);
 }
 
+/* The gear a skill can use for this agent: what the browser reports placed (its room + shared station gear) PLUS what
+   the agent's execution profile or Full Access grants, plus the ORCHESTRATOR every Commander-started run carries
+   (runtimeGranted; it is not a prop) — the SAME reading SKILL LIBRARY and the Skill Market make through
+   /api/toolsets — so "/" offers exactly the skills the library calls READY. */
+function skillGearFor(agentId, placedTypes) {
+  const id = agentRoster.has(agentId) ? agentId : 'agent';
+  try {
+    const view = require('./capability/effective-toolsets.js').effectiveToolsets({
+      registry: CAP_REGISTRY, agentId: id, agent: agentRoster.get(id), placed: placedTypes, lead: true, disabled: toolsetDisabled,
+      fullAccess: FULL_ACCESS, masterBypass: masterBypassOn(), backendId: executionEnvironment.backendIdFor(id)
+    });
+    const granted = view.toolsets.filter(r => r.object && (r.placed || r.profileGranted || r.runtimeGranted || view.authority.unrestricted)).map(r => r.object);
+    return [...new Set(placedTypes.concat(granted))];
+  } catch (e) { failNote('slash.skill-gear', e); return placedTypes; }
+}
 function slashOptions(placedTypes) {
   const skills = skillsCatalog.catalog(skillLibrary(), { overrides: skillPrefs.overrides(), placedTypes: placedTypes || [] });
   const recipes = (Recipes && Recipes.builtins) ? Recipes.builtins() : [];
@@ -15891,13 +16051,14 @@ function slashOptions(placedTypes) {
 
 // GET /api/slash/catalog -- server-owned command metadata for chat palettes and future gateway surfaces.
 function serveSlashCatalog(req, res) {
-  let placedTypes = [];
+  let placedTypes = [], agentId = 'agent';
   try {
     const u = new URL(req.url, 'http://127.0.0.1');
     placedTypes = placedTypesFrom(u.searchParams.get('placed') || '');
+    agentId = String(u.searchParams.get('agent') || 'agent');
   } catch (_) {}
   res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-  res.end(JSON.stringify(slash.catalog(slashOptions(placedTypes))));
+  res.end(JSON.stringify(slash.catalog(slashOptions(skillGearFor(agentId, placedTypes)))));
 }
 
 /* SERVER-EXECUTED SLASH COMMANDS. Commands declaring dispatch:'server' in the registry name an action here
@@ -16142,7 +16303,9 @@ async function handleSlashDispatch(req, res) {
   let body; try { body = JSON.parse(await readBody(req, 1 << 14)) || {}; } catch (e) { return json(400, { ok: false, error: 'bad json' }); }
   const input = body.input != null ? body.input : ('/' + String(body.command || ''));
   const placed = placedTypesFrom(body.placed);
-  const out = slash.dispatch(input, slashOptions(placed));
+  // skills resolve against the agent's full gear (profile / Full Access grants included); `placed` itself still rides
+  // the server-action ctx unchanged below
+  const out = slash.dispatch(input, slashOptions(skillGearFor(String(body.agentId || 'agent'), placed)));
   // A Commander-defined exec command runs HERE (the browser has no shell) and comes back as a say directive,
   // so the palette prints its output like any other command result.
   if (out.ok && out.directive && out.directive.type === 'exec') {
@@ -16519,7 +16682,7 @@ async function handleRun(req, res) {
 
   const ac = new AbortController();
   runs.set(runId, ac);
-  runsMeta.set(runId, { agentId: agentId, startedAt: Date.now(), source: 'interactive', streamId: streamId || '' });
+  runsMeta.set(runId, { agentId: agentId, startedAt: Date.now(), source: 'interactive', streamId: streamId || '', internal: internal });
   // NS-1 AWAY DETECTION: a browser /api/run is genuinely user-triggered work — stamp the away clock so the
   // night-shift driver treats the Commander as PRESENT. Cron/workshop/night-shift runs go through runOnce with
   // surface:'autonomous' and NEVER reach this route, so they can't reset the away clock (which would make the
@@ -16881,6 +17044,9 @@ async function runOnceCore(o) {
   const runStartExtra = {};
   if (o.dockId) runStartExtra.dockId = String(o.dockId);
   if (o.workitemId) runStartExtra.workitemId = String(o.workitemId);
+  // and WHICH stream it runs on (additive, 2026-09-29): a line test's run (a step test's steptest-…, RUN ONE REAL JOB's
+  // sample-…) is real work whose words live in the line's TEST view, not the agent's COMMS — the crew row names it
+  if (o.streamId) runStartExtra.streamId = String(o.streamId);
   const runStartedAt = Date.now();
   let system = rawSystem;
   if (o.workdir) {
@@ -17156,14 +17322,15 @@ async function runOnceCore(o) {
   const managedRun = credits.configured() && !providerUnmetered && (providerId === 'starnet' || !!CREDITS_URL);
   if (managedRun) {
     await credits.refresh().catch(swallow('credits.refresh'));   // adapter owns the active bearer+account identity
-    // A managed reservation needs a FINITE cap to hold. With no opt-in cap the wallet itself is the run's
-    // only ceiling: reserve the full available balance — the least-limiting finite number there is — and
-    // settle refunds whatever the run didn't use. The reservation is also the loop's maxCostUsd (below),
-    // so a run can never overshoot what it reserved (that would fail the settle as over-cap).
+    // A managed reservation needs a FINITE cap to hold, and the reservation is also the loop's maxCostUsd
+    // (below). With no opt-in cap this used to reserve the WHOLE wallet, so one prompt could spend all of it
+    // (issue #53). Now it reserves the managed per-run default, clamped to the balance (a wallet smaller than
+    // the default still runs); settle refunds whatever the run didn't use. A user's positive per-run cap was
+    // already resolved into runCapUsd above and is honoured verbatim (budgetCaps.managedRunCapUsd).
     if (!(runCapUsd > 0 && isFinite(runCapUsd))) {
       const snap = credits.snapshot();
       const avail = Number(snap && snap.balanceUsd);
-      runCapUsd = (isFinite(avail) && avail > 0) ? avail : 0;
+      runCapUsd = budgetCaps.managedRunCapUsd(0, avail, MANAGED_PER_RUN_DEFAULT);
       if (!(runCapUsd > 0)) {
         // fail closed — never spend against an unknown/empty managed balance (same surface as a beginRun refusal).
         const exhausted = isFinite(avail);   // a known $0 balance vs. a balance the service never reported
@@ -18379,7 +18546,10 @@ async function runOnceCore(o) {
   // (supportsTools returns null when the catalog is cold, so this never false-refuses a real model).
   if (isTask && provider.supportsTools(model) === false) {
     emit('agent.run.start', { agentId, runId, trigger: trigger, model, ...runStartExtra });
-    emit('agent.run.error', { agentId, runId, transient: false, message: 'The model "' + model + '" does not support tool calls, so it can\'t run tasks. Pick a tool-capable model (e.g. anthropic/claude-sonnet-4.6 or openai/gpt-4o) on the connect screen.' });
+    emit('agent.run.error', { agentId, runId, transient: false, message: 'The model "' + model + '" does not support tool calls, so it can\'t run tasks. '
+      // A local station's alternative is another LOCAL model, not a cloud one it has no key for.
+      + (providerId === 'ollama' ? 'Pick an installed model that lists "tools" (run `ollama show <model>` to check), or pull one, e.g. `ollama pull qwen3:8b`.'
+        : 'Pick a tool-capable model (e.g. anthropic/claude-sonnet-4.6 or openai/gpt-4o) on the connect screen.') });
     emit('agent.run.end', { agentId, runId, reason: 'error', turns: 0, usd: 0 });
     return;
   }
@@ -21722,6 +21892,16 @@ function publicModel(m) {
     // why a model's dial is what it is, when a profile documents it (gpt-5.6 on Chat Completions: OFF with tools)
     reasoningNote: (typeof m.reasoningNote === 'string' && m.reasoningNote) ? m.reasoningNote : null
   };
+}
+
+// GET /api/model-tiers[?force=1] — the linked cloud's editorial tier list for the model picker's badges. 200-always:
+// an unreachable/unconfigured cloud answers { ok:false, boards:[], reason } — never an invented list.
+async function handleModelTiers(req, res) {
+  try {
+    const force = new URL(req.url, 'http://127.0.0.1').searchParams.get('force') === '1';
+    return respondJson(res, 200, await tierList.get({ force }));
+  }
+  catch (e) { return respondJson(res, 200, { ok: false, boards: [], updated: '', reason: 'tier list unavailable: ' + String((e && e.message) || e).slice(0, 200) }); }
 }
 
 function handleProviders(req, res) {
