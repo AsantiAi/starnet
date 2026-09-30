@@ -11194,7 +11194,8 @@ async function handleRoutingSample(req, res) {
     try {
       runs = (runStore.list(null, { streamId: streamId, limit: 200 }) || [])   // THIS sample's rows, not the station's newest 50
         .filter(r => r && String(r.streamId || '') === streamId)
-        .map(r => ({ runId: r.runId, agentId: r.agentId, reason: r.reason, usd: r.usd, ts: r.ts, title: r.title, streamId: r.streamId, turns: r.turns }));
+        .map(r => ({ runId: r.runId, agentId: r.agentId, reason: r.reason, usd: r.usd, ts: r.ts, title: r.title, streamId: r.streamId, turns: r.turns,
+          dockId: r.dockId || null, lineId: r.lineId || null }));   // (the BAY each stage ran at: the panel names each step's work by it)
     } catch (_) { runs = []; }
     // Outbound warning text is not delivery evidence. The proof succeeds only when every durable stage
     // outcome is clean, including every hop after the routed entry dock.

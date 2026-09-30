@@ -988,6 +988,7 @@ test/estop-sample-hub.test.js
 test/line-test-stop.test.js
 test/conveyor-tab-readable.test.js
 test/workflow-panel-overhaul.test.js
+test/conveyor-ease.test.js
 test/trigger-sweep.test.js
 test/steptest-restart-spend.test.js
 test/starnet-run-id-header.test.js

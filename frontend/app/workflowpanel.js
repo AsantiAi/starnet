@@ -653,6 +653,17 @@ const WorkflowPanel = (() => {
     const c = H.lineOfProp(other.id), ln = c ? H.lineNameOf(c) : null;
     return { busy: false, also: true, txt: 'also on ' + (ln ? ln + ' ' : '') + (other.role || 'another') + ' bay' + (others.length > 1 ? ' +' + (others.length - 1) : '') };
   }
+  /* WHAT A STEP'S INSTRUCTIONS ARE (2026-09-30, issue #28: "Are these BAY instructions being used instead of the Agent's Purpose
+     or in addition to it?" · "It's not obvious when I'm supposed to include instructions in a BAY versus in the Dossier"): the
+     agent works as itself — its own purpose and skills — and DOES is ADDED for every job at this step (router.stageBrief: prompt
+     text riding the run, never a replacement). The line names the agent and quotes its purpose, so the two are never confused. */
+  function addsOnTopHTML(p) {
+    const a = p.agentId ? agentOf(p.agentId) : null, who = a ? '<b>' + esc(String(a.name || a.id).toUpperCase()) + '</b>' : 'Whoever works this step';
+    const purpose = a && typeof a.purpose === 'string' ? a.purpose.replace(/\s+/g, ' ').trim() : '';
+    const q = purpose ? ' — “' + esc(purpose.length > 90 ? purpose.slice(0, 90).replace(/\s+\S*$/, '') + '…' : purpose) + '” —' : '';
+    return who + ' keeps their own purpose' + q + ' and skills. <b>DOES</b> is added on top, for every job at this step: put what this step needs here, and what '
+      + (a ? esc(String(a.name || a.id).toUpperCase()) : 'the agent') + ' should do everywhere in ' + (a ? 'their' : 'the agent’s') + ' dossier.';
+  }
   function paintBay(body, f, p) {
     const W = WL(), ri = p.role ? H.roleInfo(p.role) : null, agents = H.agents();
     const cur = p.agentId || '', canSummon = !!(ri && H.canSummon());
@@ -683,7 +694,8 @@ const WorkflowPanel = (() => {
       + '<div class="row"><label class="lab" for="wf-does">DOES</label><span class="val"><textarea id="wf-does" data-keep="does:' + esc(p.id) + '" maxlength="2000" rows="4" placeholder="' + esc(ph) + '">' + esc(p.brief || '') + '</textarea></span></div>'
       + '<div class="row"><label class="lab" for="wf-hands">HANDS OFF</label><span class="val"><input id="wf-hands" data-keep="hands:' + esc(p.id) + '" type="text" maxlength="160" placeholder="optional — e.g. a 200-word draft" value="' + esc(p.hands || '') + '" /></span></div>'
       + '<div class="row"><span class="lab">TO</span><span class="val ro" data-live="to">→ <b>' + esc(cr.to) + '</b></span></div></div>'
-      + '<p class="wf-help">These instructions apply to every job that reaches this step. HANDS OFF is added to them as <i>' + esc((typeof Pipeline !== 'undefined' && Pipeline.HANDS_LEAD) || "When you're done, hand off: ") + '…</i></p>'
+      + '<p class="wf-help wf-adds">' + addsOnTopHTML(p) + '</p>'
+      + '<p class="wf-help dim">HANDS OFF is added as <i>' + esc((typeof Pipeline !== 'undefined' && Pipeline.HANDS_LEAD) || "When you're done, hand off: ") + '…</i></p>'
       + (f && f.order.length > 1 ? '<p class="wf-help dim">A direct COMMS message to this agent runs only this step. The whole line runs from its INBOX triggers or a test.</p>' : '')
       + '</section>' + shapeHTML(p) + tr.html;
     wireEdits(body);
@@ -861,8 +873,22 @@ const WorkflowPanel = (() => {
     const lbDefaultNote = 'blank = station default · ceilings ' + LC.maxHops + ' stages / $' + LC.maxUsdPerMessage + ' / $' + LC.maxUsdPerDay + ' a day, never above the global pool — saved on Enter / blur';
     const limField = (id, k, label, ph, step) => '<label class="refit-field lb-field" for="' + id + '">' + label
       + '<input id="' + id + '" class="refit-num lb-num" type="number" min="0" step="' + step + '" data-k="' + k + '" placeholder="' + esc(ph) + '" value="' + esc(limVal(k)) + '" /></label>';
-    body.innerHTML = '<section class="wf-sec"><h3><span class="n">INBOX</span>What starts this line?</h3>'
-      + '<p class="wf-help">Any of these runs the <b>whole line</b>. A direct COMMS message only runs the agent you message.</p>'
+    /* SEND IT A JOB (2026-09-30, issue #28: "I still haven't figured out how to add a new work item to an INBOX"): the INBOX card
+       opens on the one thing a Commander came to do — type the job, send it down the line. It is the same real job the TEST view's
+       RUN ONE REAL JOB sends (H.runSample → POST /api/routing/sample: real agents, real cost, delivered to the OUTBOX), its verdict
+       read back from the server; the text is also this line's test job (TEST THIS STEP and the TEST view start from it). The
+       automatic starts (schedule, channel, folder) follow it. */
+    const sr = H.sampleState ? H.sampleState() : null, mine = sr && c && sr.key === c.key ? sr : null;
+    const sendHTML = '<section class="wf-sec wf-send"><h3><span class="n">INBOX</span>Send it a job</h3>'
+      + '<textarea id="wf-send-in" class="refit-input refit-brief" rows="3" maxlength="4000" aria-label="The job to send down this line" placeholder="What should the line work on? e.g. Find this week’s most useful research on sleep and memory.">'
+      + esc(S.testJob[S.lineKey] || (routines.find(r => r.startsLine) || {}).prompt || '') + '</textarea>'
+      + '<div class="wf-row"><button type="button" class="bb sm refit-primary" id="wf-send"' + ((mine && mine.pending) || !c ? ' disabled' : '') + '>'
+      + (mine && mine.pending ? (mine.phase === 'post' ? 'POSTING LINE…' : 'THE JOB IS RIDING THE LINE…') : '▶ SEND IT DOWN THE LINE') + '</button>'
+      + (mine && mine.pending && mine.phase === 'run' && H.stopSample ? '<button type="button" class="bb sm" id="wf-send-stop"' + (mine.stopping ? ' disabled' : '') + ' data-tip="stop this job: the running step is cut off and nothing more runs — what already ran is counted">' + (mine.stopping ? 'STOPPING…' : '■ STOP') + '</button>' : '')
+      + '</div><p class="wf-help dim">The whole line works on it for real — real agents, real cost — and the result lands in the OUTBOX.</p>'
+      + (mine && mine.view ? jobResultHTML(mine, f) : '') + '</section>';
+    body.innerHTML = sendHTML + '<section class="wf-sec"><h3>Or start it automatically</h3>'
+      + '<p class="wf-help">Any of these runs the <b>whole line</b> by itself. A direct COMMS message only runs the agent you message.</p>'
       + startHead('A schedule', !S.cron ? 'reading…' : routines.length ? '' : 'none yet', 'rt',
         '<button type="button" class="bb sm' + (S.trgOpen ? ' active' : '') + '" id="trg-new" aria-expanded="' + S.trgOpen + '" aria-controls="trg-form">⊕ ADD A SCHEDULE</button><button type="button" class="bb sm" id="trg-auto">MANAGE</button>')
       + '<div class="trg-list" id="wf-routines">' + rtRows + '</div>'
@@ -890,17 +916,31 @@ const WorkflowPanel = (() => {
       + (S.lineKey ? ltSectionHtml() : '')
       + '<p class="wf-help dim" id="trg-feed">' + esc(feedTxt) + '</p></section>'
       + projectSectionHtml(p)
-      + '<section class="wf-sec"><h3>Test job</h3><p class="wf-help">What a test sends in, as if it arrived at the INBOX. Used by Try this step and the step test. Not saved to the line.</p>'
-      + '<textarea id="wf-job" class="refit-input refit-brief" rows="3" maxlength="4000" placeholder="e.g. Find this week’s most useful research on sleep and memory.">' + esc(S.testJob[S.lineKey] || (routines.find(r => r.startsLine) || {}).prompt || '') + '</textarea>'
-      + (docks[0] ? '<div class="wf-row"><button type="button" class="bb sm" data-go="' + esc(f.order[0]) + '">Set up the first step ▸</button></div>' : '') + '</section>'
       + '<details class="wf-sec refit-workflow-advanced"><summary>Optional limits · LINE BUDGET</summary>'
       + limField('lb-hops', 'maxHops', 'max stages after the first', String(LD.maxHops), '1')
       + limField('lb-msg', 'maxUsdPerMessage', '$ per message, whole line', LD.maxUsdPerMessage.toFixed(2), '0.05')
       + limField('lb-day', 'maxUsdPerDay', '$ per day, this line', 'off', '0.50')
       + '<div class="wf-help lb-note" id="lb-note">' + esc(lbDefaultNote) + '</div></details>';
-    // test job
-    const job = $('#wf-job');
+    readJobSteps();
+    // the job to send (it is also this line's test job)
+    const job = $('#wf-send-in');
     job.addEventListener('input', () => { S.testJob[S.lineKey] = job.value; saveTests(); });
+    const send = $('#wf-send'); if (send) send.onclick = () => {
+      const cc = comp(); if (!cc) return;
+      const t = job.value.trim();
+      if (!t) { H.sfx('bad'); H.flashTip('write the job first: what should the line work on?', false); job.focus(); return; }
+      S.testJob[S.lineKey] = job.value; saveTests();
+      H.runSample(cc, { text: t, onUpdate: () => paint(false) });
+    };
+    const sendStop = $('#wf-send-stop'); if (sendStop) sendStop.onclick = () => {
+      H.sfx('click');
+      H.stopSample().then(r => {
+        if (!r || !r.ok) { H.sfx('bad'); H.flashTip('✕ ' + ((r && r.error) || 'could not stop the job'), false); }
+        else H.flashTip('stopping — the running step is cut off and nothing more runs', true);
+        paint(false);
+      });
+      paint(false);
+    };
     $$('[data-go]').forEach(b => b.onclick = () => { if (b.dataset.go) select(b.dataset.go); });
     // LINE BUDGET: one save for the three fields; the saved (clamped) answer is re-painted INTO the fields
     const lbNums = $$('.lb-num'), lbNote = $('#lb-note');
@@ -1513,6 +1553,50 @@ const WorkflowPanel = (() => {
     ['step', 'STEP THROUGH · REAL', 'pauses at every hand-off; nothing is delivered'],
     ['real', 'RUN ONE REAL JOB', 'end to end; the result lands in the OUTBOX']
   ];
+  /* THE JOB, READ BACK (2026-09-30 — Andrew: "if the output is terrible and not consistent … how the user can properly correct
+     it"): a job sent from the panel (SEND IT DOWN THE LINE, RUN ONE REAL JOB) comes back as the WHOLE result — never 80 characters
+     — and HOW EACH STEP DID IT: every stage's own reply, read from its run's transcript (GET /api/transcript by runId: the OUTBOX
+     window's own read), in line order and named by its BAY, so a Commander can see which step made the result what it is. A
+     refused or stopped job keeps the server's verdict as before. A step whose reply cannot be read says so — nothing is guessed. */
+  const stepOut = {};   // runId → 'loading' | { output } | { err }
+  const stepText = got => !got || got === 'loading' ? 'reading…' : got.err ? '⚠ ' + got.err : (got.output || 'this step replied with nothing');
+  function readStep(r, streamId) {
+    if (!r || !r.runId || stepOut[r.runId]) return;
+    stepOut[r.runId] = 'loading';
+    const done = got => {
+      stepOut[r.runId] = got;
+      if (el) el.querySelectorAll('.wf-step-out').forEach(n => { if (n.dataset.run === r.runId) { const io = n.querySelector('.wf-io'); if (io) io.textContent = stepText(got); } });
+    };
+    api('/api/transcript?stream=' + encodeURIComponent(streamId || r.streamId || '') + '&agent=' + encodeURIComponent(r.agentId || 'agent') + '&runId=' + encodeURIComponent(r.runId) + '&limit=50')
+      .then(({ status, j }) => {
+        const turns = status === 200 && j && Array.isArray(j.turns) ? j.turns : null;
+        if (!turns) return done({ err: 'this step’s reply could not be read' });
+        const said = turns.filter(m => m && m.role === 'assistant' && String(m.content || '').trim() && String(m.content).trim() !== '[SILENT]');
+        done({ output: said.length ? String(said[said.length - 1].content) : '' });
+      }, () => done({ err: 'this step’s reply could not be read — is the station running?' }));
+  }
+  function readJobSteps() {
+    const sr = H.sampleState ? H.sampleState() : null, c = comp();
+    if (sr && c && sr.key === c.key && sr.view && sr.view.ok) (sr.runs || []).forEach(r => readStep(r, sr.streamId));
+  }
+  function jobResultHTML(mine, f) {
+    const v = mine && mine.view; if (!v) return '';
+    if (v.stopped || !v.ok) return '<div class="wf-sample-res">' + H.sampleHTML(v) + '</div>';
+    const runs = (mine.runs || []).slice().reverse();   // line order (the server lists the newest first)
+    const P = typeof Pipeline !== 'undefined' ? Pipeline : null, out = String(mine.output || '');
+    const shown = P && P.stripVerdictLine ? P.stripVerdictLine(out) : out;   // a reviewer's VERDICT line steers the loop; it is not the work
+    const steps = runs.map((r, i) => {
+      const pr = r.dockId ? prop(r.dockId) : null, role = (pr && pr.role) || null;
+      return '<details class="wf-more wf-step-out" data-run="' + esc(r.runId) + '"><summary><span>' + (i + 1) + ' · ' + esc((role ? role + ' · ' : '') + String(nameOf(r.agentId)).toUpperCase()) + '</span>'
+        + '<span class="src">' + (r.reason && r.reason !== 'done' ? esc(r.reason) + ' · ' : '') + '$' + (+r.usd || 0).toFixed(4) + '</span></summary>'
+        + '<div class="wf-io">' + esc(stepText(stepOut[r.runId])) + '</div></details>';
+    }).join('');
+    return '<div class="wf-job">'
+      + '<div class="wf-job-h"><b>✓ DELIVERED</b> · ' + runs.length + ' step' + (runs.length === 1 ? '' : 's') + (v.usd != null ? ' · $' + v.usd.toFixed(4) : '') + (mine.folded ? ' · in the OUTBOX' : '') + '</div>'
+      + '<div class="wf-from"><span>THE RESULT</span></div><div class="wf-io out wf-job-out">' + esc(shown.trim() || '(the line delivered an empty reply)') + '</div>'
+      + (runs.length ? '<div class="wf-from"><span>HOW EACH STEP DID IT</span><span class="src">open a step to read its reply</span></div><div class="wf-steps">' + steps + '</div>' : '')
+      + '</div>';
+  }
   function testModeNow() {
     const m = S.testMode || (S.seam === true ? 'step' : 'real');
     return m === 'step' && S.seam !== true ? 'real' : m;
@@ -1545,7 +1629,7 @@ const WorkflowPanel = (() => {
         + (mine && mine.pending && mine.phase === 'run' && H.stopSample ? '<button type="button" class="bb sm" id="wf-real-stop"' + (mine.stopping ? ' disabled' : '') + ' data-tip="stop this job: the running step is cut off and nothing more runs — what already ran is counted">' + (mine.stopping ? 'STOPPING…' : '■ STOP') + '</button>' : '')
         + '</div>'
         // the verdict lands UNDER the keys that asked for it (above them, it pushed RUN down the panel as it arrived)
-        + (mine && mine.view ? '<div class="wf-sample-res">' + H.sampleHTML(mine.view) + '</div>' : '');
+        + (mine && mine.view ? jobResultHTML(mine, flow()) : '');
     }
     return '<section class="wf-sec"><h3><span class="n">TEST</span>' + (s ? 'Test it again' : 'How do you want to test it?') + '</h3>'
       + '<div class="wf-modepicks wf-modepicks-3" role="group" aria-label="How to test">' + chips + '</div>' + body + '</section>';
@@ -1592,6 +1676,7 @@ const WorkflowPanel = (() => {
       S.testMode = b.dataset.tmode; H.sfx('click'); paint(true);
     });
     const watch = $('#wf-watch'); if (watch) watch.onclick = () => { H.sfx('click'); if (H.preview) H.preview(); };
+    readJobSteps();
     const real = $('#wf-real'); if (real) real.onclick = () => {
       const c = comp(); if (!c) return;
       const t = (($('#wf-st-in') || {}).value || '').trim();
