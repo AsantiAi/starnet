@@ -3,7 +3,7 @@
 (() => {
   const recovery = document.getElementById('automation-resume');
   if (!recovery) return;
-  const names = { cron: 'routines', nightshift: 'night shift', loops: 'loops' };
+  const names = { cron: 'routines', nightshift: 'autonomy', loops: 'loops' };
   let state = null, busy = false, sequence = 0, failure = '';
 
   async function request(path, body) {

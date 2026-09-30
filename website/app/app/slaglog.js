@@ -48,7 +48,9 @@
       case 'error':
         return { reason, title: 'errored out',
           cause: 'The run failed partway, so no useful work was produced.',
-          fix: 'Check the agent log for the failing tool or step, then fix the cause before re-running.' };
+          // no "agent log" exists and the cause is often the station's own bug (first-hour walk 2026-09-28): name
+          // what a person can actually do — see the failed step, send it again, report it if it repeats.
+          fix: 'Open the agent’s RECORD tab to see which step failed, then send the request again. If it fails the same way, copy the diagnostics from the failed reply and report it.' };
       case 'refusal':
         return { reason, title: 'the model refused',
           cause: 'The model declined the task, so no work was produced.',

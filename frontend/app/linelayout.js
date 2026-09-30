@@ -3,7 +3,7 @@
    Pure, zero-dep, UMD (node tests + the browser). Takes ONE line as a graph — its machines and the links between
    them — plus the floor it has to fit on, and answers where every machine stands and which belt every link rides:
 
-     LineLayout.layout(graph, floor)
+     LineLayout.layout(graph, floor, opts)          (opts.near = { x, y }: an unpinned line goes to the clear spot nearest it)
        -> { ok: true, nodes: { id: { x, y } }, links: [{ id, from, to, path: [{ x, y, d }] }], belts: [{ x, y, d }], box }
        -> { ok: false, error, needs?: { w, h }, link?, why? }
           (needs: the room a line this size would take — MAKE ROOM's input; link: the link that found no way; why:
@@ -56,6 +56,7 @@
   const PITCHES = [2, 3, 4];  // rows from one lane's belt row to the next — tightest first (2: branches stacked edge to edge,
                               // the way the hand-drawn lines pack them); a looser one only when the tight one cannot route
   const BEND = 2, NEAR = 1; // routing costs on top of 1 per step
+  const SPOTS = 3, MAX_TRIES = 24;   // a pinned line's loose machines: clear spots tried each, and layouts routed at most in all
   const key = (x, y) => x + ',' + y;
   const dirTo = (a, b) => (b.x > a.x ? 'E' : b.x < a.x ? 'W' : b.y > a.y ? 'S' : 'N');
   const sizeOf = n => (n.w && n.h) ? [n.w | 0, n.h | 0] : (JUNCTION[n.t] ? [1, 1] : [2, 2]);
@@ -74,7 +75,9 @@
       if (!l || !l.from || !l.to) return;
       const a = l.from.node, b = l.to.node;
       if (!nodes[a] || !nodes[b] || a === b) return;
-      links.push({ idx: i, id: l.id != null ? l.id : 'l' + (i + 1), from: l.from, to: l.to, a, b });
+      // a link may arrive with the belt it already rides (path): kept verbatim when both its machines are pinned (keptOf)
+      const path = Array.isArray(l.path) && l.path.length ? l.path.map(t => ({ x: t.x | 0, y: t.y | 0, d: t.d })) : null;
+      links.push({ idx: i, id: l.id != null ? l.id : 'l' + (i + 1), from: l.from, to: l.to, a, b, path });
     });
     const out = {}, inn = {};
     for (const id of order) { out[id] = []; inn[id] = []; }
@@ -255,7 +258,8 @@
      of its own — the one it wants where it can — and the lanes the compiler reads E, S, W, N keep the order they are
      meant to have. Four sides, at most four links: every assignment is tried, and the fewest links off their wanted
      side wins (the first found, wanted sides tried first, on a tie). A junction that cannot seat its links fails. */
-  function sidesOf(a, at, G) {
+  function sidesOf(a, at, G, kept) {
+    kept = kept || new Set();
     const sides = {};   // link id -> { a: its side at the junction it leaves, b: its side at the junction it enters }
     for (const id of a.order) {
       const n = a.nodes[id];
@@ -263,12 +267,14 @@
       const p = at[id], me = n.i + 1;
       const free = ORDER.filter(d => {
         const x = p.x + DIRV[d][0], y = p.y + DIRV[d][1], t = G.idx(x, y);
-        if (t < 0 || G.open[t] !== 1) return false;
+        if (t < 0 || G.open[t] !== 1 || G.used[t] === 1) return false;   // (a kept belt already rides it)
         for (let k = 0; k < 4; k++) { const u = G.idx(x + DX[k], y + DY[k]); if (u >= 0 && G.junc[u] && G.junc[u] !== me) return false; }   // beside another junction too: it can serve neither
         return true;
       });
-      const ends = a.out[id].map(l => ({ l, out: true, want: sideOf(a, l, id, l.b, true) }))
-        .concat(a.inn[id].map(l => ({ l, out: false, want: sideOf(a, l, id, l.a, false) })));
+      // a kept link's side is the one its belt already takes (fixed); the rest are chosen
+      const fixedSide = (l, out) => !kept.has(l) ? null : out ? dirTo(p, l.path[0]) : dirTo(p, l.path[l.path.length - 1]);
+      const ends = a.out[id].map(l => ({ l, out: true, want: sideOf(a, l, id, l.b, true), fixed: fixedSide(l, true) }))
+        .concat(a.inn[id].map(l => ({ l, out: false, want: sideOf(a, l, id, l.a, false), fixed: fixedSide(l, false) })));
       const kids = (n.t === 'splitter' || n.t === 'filter') ? kidsOf(a, id) : [];
       const readsRight = pick => {
         if (kids.length < 2) return true;
@@ -281,8 +287,9 @@
       const walk = (i, cost) => {
         if (cost >= bestCost) return;
         if (i === ends.length) { if (readsRight(pick)) { bestCost = cost; best = pick.slice(); } return; }
-        for (const d of [ends[i].want].concat(free.filter(f => f !== ends[i].want))) {
-          if (taken[d] || free.indexOf(d) < 0) continue;
+        const e = ends[i];
+        for (const d of (e.fixed ? [e.fixed] : [e.want].concat(free.filter(f => f !== e.want)))) {
+          if (taken[d] || (!e.fixed && free.indexOf(d) < 0)) continue;
           taken[d] = true; pick[i] = d;
           walk(i + 1, cost + (d === ends[i].want ? 0 : 1));
           taken[d] = false;
@@ -371,20 +378,51 @@
     return path;
   }
 
+  /* a link's given belt is KEPT when both its machines are pinned and the belt still joins them: every tile steps to the
+     next, none lies under a pinned machine, it leaves from beside its source (a junction's side, a box's ring) and its
+     last tile points into the machine it feeds (a junction's tile, a box's footprint). Anything else is routed afresh. */
+  function keptOf(a, at) {
+    const kept = new Set();
+    const inFoot = (n, p, x, y) => x >= p.x && x < p.x + n.w && y >= p.y && y < p.y + n.h;
+    const nextTo = (p, q) => Math.abs(p.x - q.x) + Math.abs(p.y - q.y) === 1;
+    const inRing = (n, p, q) => q.x >= p.x - 1 && q.x <= p.x + n.w && q.y >= p.y - 1 && q.y <= p.y + n.h && !inFoot(n, p, q.x, q.y);
+    for (const l of a.links) {
+      const A = a.nodes[l.a], B = a.nodes[l.b], path = l.path;
+      if (!path || !A.pin || !B.pin) continue;
+      let ok = true;
+      for (let i = 0; i < path.length && ok; i++) {
+        const t = path[i], v = DIRV[t.d];
+        if (!v || (i + 1 < path.length && (t.x + v[0] !== path[i + 1].x || t.y + v[1] !== path[i + 1].y))) ok = false;
+        for (const id of a.order) if (ok && a.nodes[id].pin && inFoot(a.nodes[id], at[id], t.x, t.y)) ok = false;
+      }
+      if (!ok) continue;
+      const pa = at[l.a], pb = at[l.b], f = path[0], t = path[path.length - 1], v = DIRV[t.d];
+      const leaves = JUNCTION[A.t] ? nextTo(pa, f) : inRing(A, pa, f);
+      const lands = JUNCTION[B.t] ? (t.x + v[0] === pb.x && t.y + v[1] === pb.y) : inFoot(B, pb, t.x + v[0], t.y + v[1]);
+      if (leaves && lands) kept.add(l);
+    }
+    return kept;
+  }
+
   /* lay every link at one placement: the main run first (by column, then lane), ways back last. A link that finds no
      way (the belts laid before it walled it in) is laid FIRST on the next try and the rest go round it — a few tries,
      then the answer is NO_ROUTE and which link. */
   const RETRIES = 4;
-  function routeAll(a, at, fl) {
+  function routeAll(a, at, fl, kept) {
+    kept = kept || new Set();
     const G = gridOf(a, at, fl);
     if (!G) return { ok: false, error: 'NO_ROUTE', link: null };
-    const S = sidesOf(a, at, G);
+    // a kept belt is where it is: its tiles are taken before anything is routed, and it is never routed again
+    for (const l of kept) for (const t of l.path) { const k = G.idx(t.x, t.y); if (k >= 0) G.used[k] = 1; }
+    G.used0 = G.used.slice();
+    const S = sidesOf(a, at, G, kept);
     if (S.fail != null) return { ok: false, error: 'NO_ROUTE', link: null, why: 'SIDES', node: S.fail };
-    let order = a.links.slice().sort((p, q) => (a.back.has(p) - a.back.has(q)) || (a.rank[p.a] - a.rank[q.a]) || (a.lane[p.a] - a.lane[q.a]) || (a.lane[p.b] - a.lane[q.b]) || (p.idx - q.idx));
+    let order = a.links.filter(l => !kept.has(l)).sort((p, q) => (a.back.has(p) - a.back.has(q)) || (a.rank[p.a] - a.rank[q.a]) || (a.lane[p.a] - a.lane[q.a]) || (a.lane[p.b] - a.lane[q.b]) || (p.idx - q.idx));
     let failed = null;
     for (let tries = 0; tries <= RETRIES; tries++) {
       G.used.set(G.used0);
       const paths = {};
+      for (const l of kept) paths[l.id] = l.path.map(t => ({ x: t.x, y: t.y, d: t.d }));
       failed = null;
       for (const l of order) {
         const path = routeLink(l, at, a, G, S.sides);
@@ -392,7 +430,7 @@
         for (const t of path) G.used[G.idx(t.x, t.y)] = 1;
         paths[l.id] = path;
       }
-      if (!failed) return orderKept(a, at, paths) ? { ok: true, paths } : { ok: false, error: 'NO_ROUTE', link: null, why: 'LANE_ORDER' };
+      if (!failed) return orderKept(a, at, paths) ? { ok: true, paths, kept } : { ok: false, error: 'NO_ROUTE', link: null, why: 'LANE_ORDER' };
       if (order[0] === failed) break;   // it found no way with the floor to itself: no order helps
       order = [failed].concat(order.filter(l => l !== failed));
     }
@@ -407,11 +445,12 @@
   }
   const shift = (rel, dx, dy) => { const o = {}; for (const id in rel) o[id] = { x: rel[id].x + dx, y: rel[id].y + dy }; return o; };
 
-  function layout(graph, floor) {
+  function layout(graph, floor, opts) {
+    const near = opts && opts.near && isFinite(opts.near.x) && isFinite(opts.near.y) ? opts.near : null;
     const a = analyze(graph);
     if (!a.order.length) return { ok: false, error: 'EMPTY' };
     const fl = floorOf(floor);
-    const finish = (at, paths) => {
+    const finish = (at, paths, kept) => {
       const nodes = {};
       for (const id of a.order) nodes[id] = { x: at[id].x, y: at[id].y };
       const links = [], belts = [], seen = new Set();
@@ -420,7 +459,9 @@
         const from = { prop: l.a, port: l.from.port || 'out' };
         if (Array.isArray(l.from.tags) && l.from.tags.length) from.tags = l.from.tags.slice();
         if (l.from.else) from.else = true;
-        links.push({ id: l.id, from, to: { prop: l.b, port: 'in' }, path: path.map(t => ({ x: t.x, y: t.y, d: t.d })) });
+        const out = { id: l.id, from, to: { prop: l.b, port: 'in' }, path: path.map(t => ({ x: t.x, y: t.y, d: t.d })) };
+        if (kept && kept.has(l)) out.kept = true;   // this belt was already on the floor, exactly as given
+        links.push(out);
         for (const t of path) if (!seen.has(key(t.x, t.y))) { seen.add(key(t.x, t.y)); belts.push({ x: t.x, y: t.y, d: t.d }); }
       }
       // a junction's own tile is a belt too, aimed at its first way out (its arrow is the floor's, never the compiler's)
@@ -439,54 +480,79 @@
     /* PINNED: the first pin anchors the line and pinned machines stay put; every other machine keeps its place relative
        to the machine feeding it (where that one stands, pinned or stepped, the next follows — a branch moves as one),
        stepping to the nearest clear lane if its spot is taken, or failing that the nearest clear spot at all. The belts
-       are found on the real floor round what already stands there. Tightest lanes first, as below. */
+       are found on the real floor round what already stands there. When they cannot be, the loose machines try their next
+       few clear spots (a short search, first spots first, so a line that fits the first time is laid exactly as before).
+       Tightest lanes first, as below. */
     const pinned = a.order.filter(id => a.nodes[id].pin);
     if (pinned.length) {
-      let last = { ok: false, error: 'NO_SPACE' };
+      let last = { ok: false, error: 'NO_SPACE' }, tries = 0;
       for (const pitch of PITCHES) {
         const rel = arrange(a, pitch); if (!rel) continue;
         const p0 = pinned[0], at = shift(rel, a.nodes[p0].pin.x - rel[p0].x, a.nodes[p0].pin.y - rel[p0].y);
+        const base = shift(at, 0, 0);   // each machine's place in the arrangement, anchored on the first pin
         for (const id of pinned) at[id] = { x: a.nodes[id].pin.x, y: a.nodes[id].pin.y };
-        const occ = new Set();
-        const mark = (id, p) => { const n = a.nodes[id]; for (let y = p.y - 1; y <= p.y + n.h; y++) for (let x = p.x - 1; x <= p.x + n.w; x++) occ.add(key(x, y)); };
-        for (const id of pinned) mark(id, at[id]);
+        // what is taken: machines' footprints and rings, counted per tile (a machine lifted while searching gives its tiles back)
+        const occ = new Map();
+        const taken = k => (occ.get(k) || 0) > 0;
+        const occupy = (k, s) => occ.set(k, (occ.get(k) || 0) + s);
+        const mark = (id, p, s) => { const n = a.nodes[id]; for (let y = p.y - 1; y <= p.y + n.h; y++) for (let x = p.x - 1; x <= p.x + n.w; x++) occupy(key(x, y), s); };
+        for (const id of pinned) mark(id, at[id], 1);
+        // the belts that stay (a link between two pinned machines that still joins them): no machine lands on one, and no
+        // new junction stands beside one (it would sit beside a lane it does not serve)
+        const kept = keptOf(a, at), keptTile = new Set();
+        for (const l of kept) for (const t of l.path) { keptTile.add(key(t.x, t.y)); occupy(key(t.x, t.y), 1); }
         // a spot is clear when its tiles are, and — for a junction — when the sides its links want are free and there is
         // a free side for every link it carries
         const clear = (id, p) => {
           const n = a.nodes[id];
-          for (let y = p.y; y < p.y + n.h; y++) for (let x = p.x; x < p.x + n.w; x++) if (!fl.free(x, y) || occ.has(key(x, y)) || fl.inflow(x, y)) return false;
+          for (let y = p.y; y < p.y + n.h; y++) for (let x = p.x; x < p.x + n.w; x++) if (!fl.free(x, y) || taken(key(x, y)) || fl.inflow(x, y)) return false;
           if (!JUNCTION[n.t]) return true;
+          for (const d of ORDER) if (keptTile.has(key(p.x + DIRV[d][0], p.y + DIRV[d][1]))) return false;
           const want = new Set(a.out[id].map(l => sideOf(a, l, id, l.b, true)).concat(a.inn[id].map(l => sideOf(a, l, id, l.a, false))));
           let sides = 0;
           for (const d of ORDER) {
             const x = p.x + DIRV[d][0], y = p.y + DIRV[d][1];
-            if (fl.free(x, y) && !fl.inflow(x, y) && !fl.nearJunction(x, y) && !occ.has(key(x, y))) sides++;
+            if (fl.free(x, y) && !fl.inflow(x, y) && !fl.nearJunction(x, y) && !taken(key(x, y))) sides++;
             else if (want.has(d)) return false;
           }
           return sides >= a.inn[id].length + a.out[id].length;
         };
-        let placed = true;
+        // a machine's clear spots, best first: its own place (as its feeder stands), the nearest clear lane in its column,
+        // then the nearest clear spot at all
+        const spotsFor = (id, p) => {
+          const out = [], seen = new Set();
+          const add = q => { const k = key(q.x, q.y); if (!seen.has(k) && clear(id, q)) { seen.add(k); out.push(q); } return out.length >= SPOTS; };
+          if (add(p)) return out;
+          for (let d = 1; d <= 12; d++) for (const sgn of [d, -d]) if (add({ x: p.x, y: p.y + sgn * pitch })) return out;
+          for (let r = 1; r <= 40; r++) for (let dy = -r; dy <= r; dy++) for (const dx of [r - Math.abs(dy), Math.abs(dy) - r]) if (add({ x: p.x + dx, y: p.y + dy })) return out;
+          return out;
+        };
         const off = {};   // how far each machine stands from its place in the arrangement
-        for (const id of pinned) off[id] = { x: at[id].x - (rel[id].x + a.nodes[p0].pin.x - rel[p0].x), y: at[id].y - (rel[id].y + a.nodes[p0].pin.y - rel[p0].y) };
-        for (const id of a.topo) {
-          if (a.nodes[id].pin) continue;
-          const par = a.inn[id].filter(a.fwd).map(l => l.a).find(q => off[q]), o = par != null ? off[par] : { x: 0, y: 0 };
-          let p = { x: at[id].x + o.x, y: at[id].y + o.y };
-          if (!clear(id, p)) {
-            let found = null;
-            for (let d = 1; d <= 12 && !found; d++) for (const sgn of [d, -d]) { const q = { x: p.x, y: p.y + sgn * pitch }; if (clear(id, q)) { found = q; break; } }
-            // no clear lane in its column (it would stand off the deck, or the column is full): the nearest clear spot at all
-            for (let r = 1; r <= 40 && !found; r++) for (let dy = -r; dy <= r && !found; dy++) for (const dx of [r - Math.abs(dy), Math.abs(dy) - r]) { const q = { x: p.x + dx, y: p.y + dy }; if (clear(id, q)) { found = q; break; } }
-            if (!found) { placed = false; last = { ok: false, error: 'NO_SPACE', node: id }; break; }
-            p = found;
+        for (const id of pinned) off[id] = { x: at[id].x - base[id].x, y: at[id].y - base[id].y };
+        const loose = a.topo.filter(id => !a.nodes[id].pin);
+        const place = i => {
+          if (i === loose.length) {
+            tries++;
+            const routed = routeAll(a, at, fl, kept);
+            if (routed.ok) return finish(at, routed.paths, kept);
+            last = { ok: false, error: routed.error, link: routed.link, why: routed.why };
+            return null;
           }
-          off[id] = { x: p.x - at[id].x, y: p.y - at[id].y };
-          at[id] = p; mark(id, p);
-        }
-        if (!placed) continue;
-        const routed = routeAll(a, at, fl);
-        if (routed.ok) return finish(at, routed.paths);
-        last = { ok: false, error: routed.error, link: routed.link, why: routed.why };
+          const id = loose[i];
+          const par = a.inn[id].filter(a.fwd).map(l => l.a).find(q => off[q]), o = par != null ? off[par] : { x: 0, y: 0 };
+          const spots = spotsFor(id, { x: base[id].x + o.x, y: base[id].y + o.y });
+          if (!spots.length) { if (last.error === 'NO_SPACE') last = { ok: false, error: 'NO_SPACE', node: id }; return null; }
+          for (const p of spots) {
+            if (tries >= MAX_TRIES) return null;
+            at[id] = p; off[id] = { x: p.x - base[id].x, y: p.y - base[id].y }; mark(id, p, 1);
+            const r = place(i + 1);
+            if (r) return r;
+            mark(id, p, -1); delete off[id]; at[id] = base[id];
+          }
+          return null;
+        };
+        const laid = place(0);
+        if (laid) return laid;
       }
       return last;
     }
@@ -520,7 +586,12 @@
       for (const t of mach.concat(belt)) { sx1 = Math.min(sx1, t.x); sy1 = Math.min(sy1, t.y); sx2 = Math.max(sx2, t.x); sy2 = Math.max(sy2, t.y); }
       const W = sx2 - sx1 + 1, H = sy2 - sy1 + 1;
       if (!needs) needs = { w: W, h: H };
-      for (let y = Y1; y + H - 1 <= Y2; y++) for (let x = X1; x + W - 1 <= X2; x++) {
+      // where to look first: given opts.near, the spots whose middle is closest to it (a new line lands where the
+      // Commander is looking), else rows top first, then columns
+      const spots = [];
+      for (let y = Y1; y + H - 1 <= Y2; y++) for (let x = X1; x + W - 1 <= X2; x++) spots.push([x, y, near ? Math.abs(x + W / 2 - near.x) + Math.abs(y + H / 2 - near.y) : 0]);
+      if (near) spots.sort((p, q) => p[2] - q[2] || p[1] - q[1] || p[0] - q[0]);
+      for (const [x, y] of spots) {
         const dx = x - sx1, dy = y - sy1;
         if (!emptyWindow(x, y, W, H)) {
           let ok = true;
@@ -536,5 +607,5 @@
     return routedAny ? { ok: false, error: 'NO_ROOM', needs } : Object.assign({ ok: false, error: 'NO_ROUTE' }, why);
   }
 
-  return { layout, GAP_X, PITCHES, _internals: { analyze, arrange, gridOf, sidesOf, routeLink, routeAll, floorOf, sizeOf } };
+  return { layout, GAP_X, PITCHES, _internals: { analyze, arrange, gridOf, sidesOf, keptOf, routeLink, routeAll, floorOf, sizeOf } };
 });

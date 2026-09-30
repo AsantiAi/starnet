@@ -44,12 +44,36 @@ copyright holder: **Nous Research**.
 
 ## Authored for StarNet
 
-These recipes were written for StarNet and carry no distinct external upstream. (They were
-previously bylined "Hermes Agent" by convention; that byline has been removed.)
+These recipes were written for StarNet and carry no distinct external upstream. (Some were
+previously bylined "Hermes Agent" by convention; that byline has been removed.) They are also
+published as **StarNet Originals** in the Skill Market (`skills-catalog/originals.json`).
 
-`adversarial-review-pass`, `announcement-kit`, `digest-composer`, `feed-watch`,
-`ledger-upkeep`, `price-watch`, `security-sweep`, `source-triangulation`, `study-plan`,
-`translation-pass`.
+`accessibility-audit`, `ad-copy-testing`, `adversarial-review-pass`, `announcement-kit`, `application-tailoring`, `browser-operation`, `commitment-tracking`, `content-calendar`, `contract-review`, `cost-audit`, `dataset-harvest`, `deploy-checklist`, `digest-composer`, `email-sequence`, `exposed-secrets-audit`, `exposure-reduction`, `feed-watch`, `file-curation`, `hard-conversation`, `health-record-prep`, `hiring-screen`, `inbox-triage`, `itinerary-planning`, `landing-copy`, `lead-scouting`, `ledger-upkeep`, `marketing-plan`, `meal-planning`, `negotiation-case`, `opportunity-scan`, `pitch-deck`, `price-watch`, `relationship-log`, `schema-and-access`, `security-sweep`, `short-form-script`, `sop-writing`, `source-triangulation`, `spec-drafting`, `study-plan`, `support-replies`, `translation-pass`, `ugc-brief`, `voice-match`, `website-workflow`, `work-splitting`.
+
+## Skill Market (skills-catalog/)
+
+The Skill Market catalog (`website/skills/`, built by `scripts/build-skill-catalog.mjs`) publishes the
+**StarNet Originals** listed above plus these market-only originals, written for StarNet:
+
+`brand-assets`, `channel-updates`, `crew-handoff`, `deliverable-handoff`, `line-design`, `notebook-gardening`, `project-onboarding`, `routine-craft`, `skill-authoring`, `spend-aware-work`, `station-self-check`, `studio-video`.
+
+and these **community picks**, adapted for StarNet. Each package ships its full license text
+(`skills-catalog/skills/<slug>/LICENSE`) naming the original author, Nous Research and StarNet's modifications.
+
+| Skill | Original author | Upstream | License |
+| --- | --- | --- | --- |
+| `blocked-page-recovery` | Nous Research | [Hermes Agent](https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/web/blocked-page-recovery) (© 2025 Nous Research) | MIT |
+| `code-wiki` | Teknium | [Hermes Agent](https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/software-development/code-wiki) (© 2025 Nous Research) | MIT |
+| `decision-questionnaire` | Matt Pocock | [Hermes Agent](https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/productivity/decision-questionnaire) (© 2025 Nous Research) | MIT |
+| `document-to-action-items` | Ben Barclay | [Hermes Agent](https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/productivity/document-to-action-items) (© 2025 Nous Research) | MIT |
+| `grill-me` | Rafael Zendron, Matt Pocock | [Hermes Agent](https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/software-development/grill-me) (© 2025 Nous Research) | MIT |
+| `llm-wiki` | Nous Research | [Hermes Agent](https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/research/llm-wiki) (© 2025 Nous Research) | MIT |
+| `maps` | Mibayy | [Hermes Agent](https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/productivity/maps) (© 2025 Nous Research) | MIT |
+| `meeting-action-items` | Ben Barclay | [Hermes Agent](https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/productivity/meeting-action-items) (© 2025 Nous Research) | MIT |
+| `notes-vault` | Teknium | [Hermes Agent](https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/note-taking/obsidian) (© 2025 Nous Research) | MIT |
+| `rest-graphql-debug` | eren-karakus0 | [Hermes Agent](https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/software-development/rest-graphql-debug) (© 2025 Nous Research) | MIT |
+| `simple-english` | AminBlg | [Hermes Agent](https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/creative/simple-english) (© 2025 Nous Research) | MIT |
+| `weekly-review` | Ben Barclay | [Hermes Agent](https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/productivity/weekly-review-planning) (© 2025 Nous Research) | MIT |
 
 ## Bundled fonts
 

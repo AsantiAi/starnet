@@ -318,7 +318,8 @@ const { makeSkillExchange } = require('./skills/exchange.js');
 const { makeSkillDocumentFetcher, makeSkillPackageFetcher } = require('./skills/exchange-fetch.js');
 const { makeSkillRegistry } = require('./skills/registry.js');
 const { makeSkillMetrics } = require('./skills/metrics.js');
-const skillReview = require('./skillreview.js');            // background skill maintenance trigger/prompt
+const skillReview = require('./skillreview.js');
+const { makeSkillMarket, DEFAULT_CATALOG_URL: SKILL_MARKET_DEFAULT_URL } = require('./skills/market.js');   // the Skill Market client (curated catalog → station library)            // background skill maintenance trigger/prompt
 const { makeVerdictReview } = require('./verdictreview.js');   // consistency loop: a rated ok/miss run earns a skill review
 const skillCurator = require('./skillcurator.js');          // skill lifecycle/consolidation maintenance
 const slash = require('./slash.js');                       // slash-command catalog + dispatch descriptors
@@ -1553,6 +1554,16 @@ try {
 // enable/disable choices persist append-only (same fsync discipline as skillStore). Injected into each run's
 // system prompt below, gated by requires ⊆ the agent's placed objects (object = capability — the moat).
 const SKILL_LIBRARY = skillsCatalog.loadDir(path.join(__dirname, 'skills', 'library'), fs, path);
+// SKILL MARKET (2026-09-29): curated skills from starnetos.com, installed into the station library. Fetched only when
+// the Commander opens the market. STARNET_SKILL_MARKET_URL overrides the catalog; 'off' (or empty) turns it off.
+const skillMarket = makeSkillMarket({
+  fetchDocument: fetchSkillDocument, fs, path, root: path.join(WORKSPACES, 'skill-market'), guard: skillGuard, now: () => Date.now(),
+  catalogUrl: () => { const v = process.env.STARNET_SKILL_MARKET_URL; return v == null ? SKILL_MARKET_DEFAULT_URL : (String(v).trim().toLowerCase() === 'off' ? '' : String(v).trim()); },
+  loadJson: (file) => loadResilient(file, 'skill market'), saveJson: (file, value) => saveResilient(file, value)
+});
+// the station library every reader uses: the bundled recipes, with market installs merged in (a market copy of a
+// bundled original replaces it for this station)
+function skillLibrary() { try { return skillMarket.mergeLibrary(SKILL_LIBRARY); } catch (_) { return SKILL_LIBRARY; } }
 const SKILL_PREFS_FILE = path.join(WORKSPACES, 'skillprefs.jsonl');
 const skillPrefsIo = {
   readAll() {
@@ -6247,7 +6258,7 @@ async function runScoutCycle(o) {
       }
       const existing = scoutExistingClasses();
       let skillSlugs = [];
-      try { skillSlugs = skillsCatalog.catalog(SKILL_LIBRARY, { overrides: skillPrefs.overrides(), placedTypes: SCOUT_CAP_KEYS }).map(s => s.slug).filter(Boolean); } catch (_) { skillSlugs = []; }
+      try { skillSlugs = skillsCatalog.catalog(skillLibrary(), { overrides: skillPrefs.overrides(), placedTypes: SCOUT_CAP_KEYS }).map(s => s.slug).filter(Boolean); } catch (_) { skillSlugs = []; }
       const cx = scoutState.context || {};
       const directive = ProspectGen.buildDirective({
         dossierBlock: commanderDossier.get(),
@@ -6954,7 +6965,7 @@ async function runNightshiftBeat(opts) {
   // +1 per delivered draft until restart. Place it NOW (a job was selected — work genuinely starts) and settle it
   // on every exit below, exactly like the act/workshop/cron paths do.
   const beatItemId = 'nsbeat-' + crypto.randomUUID();
-  try { placeCronWorkitem(agentId, '✦ night-shift: ' + String(sel.selected.title || 'draft'), beatItemId); } catch (_) {}
+  try { placeCronWorkitem(agentId, '✦ autonomy: ' + String(sel.selected.title || 'draft'), beatItemId); } catch (_) {}
   let beatDelivered = false;
   try {
   // 3) DO — the do directive stays on the declared focus too.
@@ -6979,7 +6990,7 @@ async function runNightshiftBeat(opts) {
   // morning report needs an app-closure absence and the drafts nudge waits for N unseen. 'notify' is a
   // registered bare-string bus event with no other emitter; the station HUD toasts it on arrival. (The
   // built-artifact path needs no twin: workshop.built already fires there and the HUD presents that card.)
-  try { chanEmit('notify', '✦ night shift — drafted “' + entry.title + '” while you were away · review it in the NIGHT SHIFT panel'); } catch (_) {}
+  try { chanEmit('notify', '✦ autonomy — drafted “' + entry.title + '” while you were away · review it in SETTINGS › AUTONOMY'); } catch (_) {}
   beatDelivered = true;
   return { delivered: true, reason: 'delivered', title: deliverable.title, archetype: sel.selected.archetype, verdict: crit.verdict };
   } finally {
@@ -7088,7 +7099,7 @@ async function runNightshiftActShift(opts) {
     target: sel.selected.threadId || targetRoot || '', evidence: [{ id: sel.selected.threadId ? 'thread:' + sel.selected.threadId : (targetRoot ? 'project:' + targetRoot : 'nightshift-grounds'), type: sel.selected.threadId ? 'thread' : (targetRoot ? 'project' : 'context'), quote: sel.selected.grounds || focusHeader || '' }],
     readiness: { ready: rd.tier === 'hot', reasons: rd.tier === 'hot' ? [] : [rd.tier] }, score: sel.selected.score, modelVersion: 'autopilot-v2' }, Date.now()).catch(swallow('recledger.record'));
   const backlogId = 'ns-act-' + runId;
-  const title = String(sel.selected.title || 'Night-shift build').slice(0, 200);
+  const title = String(sel.selected.title || 'Autonomy build').slice(0, 200);
   try { await workshopStore.queue(agentId, { id: backlogId, title, detail: String(sel.selected.spec || ''), source: 'nightshift', grounds: String(sel.selected.grounds || '') }, Date.now()); }
   catch (_) { /* a queue hiccup (e.g. a title the Commander earlier discarded) → stand down honestly */ return { delivered: false, reason: 'queue-refused' }; }
   await workshopStore.claimNext(agentId, runId, isRunLive).catch(swallow('workshop.claim', null));   // stamp buildingRunId (zombie-reap aware)
@@ -7099,7 +7110,7 @@ async function runNightshiftActShift(opts) {
   const sig = signal || (ac && ac.signal);
   if (ac) runs.set(runId, ac);
   runsMeta.set(runId, { agentId, startedAt: Date.now(), source: 'nightshift' });
-  try { placeCronWorkitem(agentId, '✦ night-shift: ' + title, runId); } catch (_) {}
+  try { placeCronWorkitem(agentId, '✦ autonomy: ' + title, runId); } catch (_) {}
   let threw = null;
   try {
     await runOnce({
@@ -10019,6 +10030,9 @@ const ROUTES = [
   { m: 'GET', prefix: '/api/slash/catalog', h: serveSlashCatalog },
   { m: 'POST', exact: '/api/slash/dispatch', h: handleSlashDispatch },
   { m: 'POST', exact: '/api/skills/toggle', h: handleSkillToggle },
+  { m: 'GET', qsplit: '/api/skill-market', h: serveSkillMarket },                // the Skill Market: catalog + this station's install state
+  { m: 'POST', exact: '/api/skill-market/install', h: handleSkillMarketInstall },
+  { m: 'POST', exact: '/api/skill-market/uninstall', h: handleSkillMarketUninstall },
   { m: 'POST', exact: '/api/skill-exchange/inspect', h: handleSkillExchangeInspect },
   { m: 'POST', exact: '/api/skill-exchange/registry', h: handleSkillExchangeRegistry },
   { m: 'POST', exact: '/api/skill-exchange/discover', h: handleSkillExchangeDiscover },
@@ -12960,7 +12974,7 @@ function lifecycleArmedSnapshot(now) {
   const reasons = [];
   if (routines.armed) reasons.push(routines.count === 1 ? '1 routine armed' : (routines.count + ' routines armed'));
   for (const id of channels.connected) reasons.push((id.charAt(0).toUpperCase() + id.slice(1)) + ' connected');
-  if (nsArmedActive) reasons.push('Night shift armed');
+  if (nsArmedActive) reasons.push('Autonomy armed');
   if (terminals.armed) reasons.push(terminals.count === 1 ? '1 terminal running' : (terminals.count + ' terminals running'));
   return { armed: armed, categories: { routines: routines, channels: channels, nightshift: nightshift, terminals: terminals }, reasons: reasons, ts: now };
 }
@@ -14694,7 +14708,7 @@ async function applyNightPatch(agentId, runId, relDir, target, title) {
     return { ok: false, error: 'the patch failed to apply after branching (rolled back, no change kept):\n' + String(ap.stderr).slice(0, 400), branch };
   }
   await runGit(root, ['add', '-A']);
-  const commit = await runGit(root, ['-c', 'user.name=StarNet Night Shift', '-c', 'user.email=nightshift@starnet.local', 'commit', '-m', 'night-shift: ' + String(title || 'patch').slice(0, 80)]);
+  const commit = await runGit(root, ['-c', 'user.name=StarNet Autonomy', '-c', 'user.email=autonomy@starnet.local', 'commit', '-m', 'autonomy: ' + String(title || 'patch').slice(0, 80)]);
   if (!commit.ok) return { ok: false, error: 'applied the patch but could not commit it:\n' + String(commit.stderr).slice(0, 300), branch };
   const head = await runGit(root, ['rev-parse', '--short', 'HEAD']);
   return { ok: true, branch, commit: head.stdout.trim(), root, prevBranch: curBranch };
@@ -15541,7 +15555,7 @@ function placedTypesFrom(v) {
 }
 
 function slashOptions(placedTypes) {
-  const skills = skillsCatalog.catalog(SKILL_LIBRARY, { overrides: skillPrefs.overrides(), placedTypes: placedTypes || [] });
+  const skills = skillsCatalog.catalog(skillLibrary(), { overrides: skillPrefs.overrides(), placedTypes: placedTypes || [] });
   const recipes = (Recipes && Recipes.builtins) ? Recipes.builtins() : [];
   return { skills, recipes, userCommands: userCommandEntries() };
 }
@@ -15832,8 +15846,40 @@ function serveSkills(req, res) {
   try {
     const u = new URL(req.url, 'http://127.0.0.1');
     const placedTypes = String(u.searchParams.get('placed') || '').split(',').map(s => s.trim()).filter(Boolean);
-    json(200, { skills: skillsCatalog.catalog(SKILL_LIBRARY, { overrides: skillPrefs.overrides(), placedTypes: placedTypes }) });
+    json(200, { skills: skillsCatalog.catalog(skillLibrary(), { overrides: skillPrefs.overrides(), placedTypes: placedTypes }) });
   } catch (e) { json(500, readRouteFailure('skills', e)); }   // broken ≠ empty (chat.js already prints "could not load", not "none")
+}
+// GET /api/skill-market?refresh=1&placed=cabinet,dish — the Skill Market catalog with each entry's state on this
+// station (available / installed / bundled / update / tampered) and the gear it still needs. The catalog is fetched
+// here, on demand, and cached for 5 minutes; nothing fetches it in the background.
+async function serveSkillMarket(req, res) {
+  const json = (code, obj) => respondJson(res, code, obj);
+  try {
+    const u = new URL(req.url, 'http://127.0.0.1');
+    const placedTypes = String(u.searchParams.get('placed') || '').split(',').map(s => s.trim()).filter(Boolean);
+    const out = await skillMarket.listing({ refresh: u.searchParams.get('refresh') === '1', bundled: SKILL_LIBRARY, placedTypes });
+    json(200, Object.assign({ ok: true }, out));
+  } catch (e) { json(200, { ok: false, error: (e && e.message) || 'could not reach the skill market' }); }   // offline is a state, not a crash
+}
+// POST /api/skill-market/install { slug } — install (or update) a market skill into the station library and switch
+// it on. The download must reproduce the catalog's pinned digest or nothing is written.
+async function handleSkillMarketInstall(req, res) {
+  const json = (code, obj) => respondJson(res, code, obj);
+  const body = await readJsonBody(req, readBody, 1 << 16, res);
+  if (body === null) return json(400, { ok: false, error: 'bad json' });
+  try {
+    const r = await skillMarket.install({ slug: body.slug });
+    const on = skillPrefs.set(r.slug, true);
+    json(200, Object.assign({}, r, { enabled: !!(on && on.ok && on.enabled) }));
+  } catch (e) { json(400, { ok: false, error: (e && e.message) || 'could not install that skill' }); }
+}
+// POST /api/skill-market/uninstall { slug } — remove a market install; a bundled original falls back to its bundled copy.
+async function handleSkillMarketUninstall(req, res) {
+  const json = (code, obj) => respondJson(res, code, obj);
+  const body = await readJsonBody(req, readBody, 1 << 16, res);
+  if (body === null) return json(400, { ok: false, error: 'bad json' });
+  try { json(200, skillMarket.uninstall({ slug: body.slug })); }
+  catch (e) { json(400, { ok: false, error: (e && e.message) || 'could not remove that skill' }); }
 }
 // POST /api/skills/toggle { slug, enabled } — persist a station-wide enable/disable choice for a library recipe.
 // Station-wide by design: per-AGENT reach stays the capability gate (the placed objects), not a per-agent toggle.
@@ -18623,7 +18669,7 @@ async function runOnceCore(o) {
     // prefs — ADD-only (see catalog.compose). Still gated by the station gear + the budget; package composes first.
     const agentSkills = (rosterIdent && Array.isArray(rosterIdent.skills)) ? rosterIdent.skills : [];
     const recipeOpts = { overrides: skillPrefs.overrides(), placedTypes: skillPlacedTypes, agentSkills: agentSkills };
-    if (isTask) runRecipes = skillsCatalog.live(SKILL_LIBRARY, recipeOpts);
+    if (isTask) runRecipes = skillsCatalog.live(skillLibrary(), recipeOpts);
     // CHAT DIET: recipes are for WORK. A greeting shipped ~12KB of skill bodies (5 library skills are default-on with
     // no gear requirement) to every provider, and a 3B local model spent minutes re-reading them before saying hi.
     // ON DEMAND (2026-09-23): the bodies were also the largest block of every TASK call (~12.4K of ~37K). When
@@ -18632,8 +18678,8 @@ async function runOnceCore(o) {
     // so the index can never point at a tool the model cannot call.
     skillBlock = isTask
       ? (coreNames.indexOf('skill.view') >= 0
-        ? skillsCatalog.composeIndex(SKILL_LIBRARY, recipeOpts)
-        : skillsCatalog.compose(SKILL_LIBRARY, recipeOpts))
+        ? skillsCatalog.composeIndex(skillLibrary(), recipeOpts)
+        : skillsCatalog.compose(skillLibrary(), recipeOpts))
       : '';
   } catch (_) { /* a skill-injection hiccup must never break a run */ }
   // STARNET OPERATOR MANUAL: how the station works, so the agent can guide a stuck Commander. Interactive

@@ -231,6 +231,52 @@ for (const bp of WM.BLUEPRINTS) {
   A.ok(!five.ok && five.error === 'NO_ROUTE' && five.why === 'SIDES' && five.node === 's', 'a SPLITTER with five links cannot seat them — the answer names it and why (' + JSON.stringify(five) + ')');
 }
 
+/* ---------- KEPT BELTS: an edit re-lays only what changed (conveyor-links phase D) ---------- */
+{
+  // a laid line handed back pinned, with every belt it rides, comes back EXACTLY as it was — nothing re-routed
+  const pinAll = (graph, L, keep) => ({ nodes: graph.nodes.map(n => Object.assign({}, n, { pin: { x: L.nodes[n.id].x, y: L.nodes[n.id].y } })),
+    links: graph.links.map(l => { const o = L.links.find(q => q.id === l.id); return keep(l) && o ? Object.assign({}, l, { path: o.path }) : l; }) });
+  let same = 0, all = 0;
+  for (const bp of WM.BLUEPRINTS) {
+    const { graph } = graphOf(bp), L = LL.layout(graph, OPEN);
+    if (!L.ok) continue;
+    all++;
+    const L2 = LL.layout(pinAll(graph, L, () => true), OPEN);
+    if (L2.ok && L2.links.every(l => l.kept) && JSON.stringify(L2.links.map(l => l.path)) === JSON.stringify(L.links.map(l => l.path)) && JSON.stringify(L2.nodes) === JSON.stringify(L.nodes)) same++;
+  }
+  A.ok(all > 0 && same === all, 'every line laid, pinned and handed back with its belts comes back unchanged (' + same + '/' + all + ')');
+
+  // INSERT A STEP: the revision loop gains a RESEARCHER between its INBOX and WRITER — every other belt stays exactly where it
+  // was, the new BAY lands clear of the line, and the line routes INBOX → RESEARCHER → WRITER → …
+  const { geo, graph } = graphOf(WM.BLUEPRINTS.find(b => b.id === 'revision_loop'));
+  const L = LL.layout(graph, OPEN);
+  const I = graph.nodes.find(n => n.t === 'intake').id, first = graph.links.find(l => l.from.node === I);
+  const W = first.to.node;
+  const edited = pinAll(graph, L, l => l !== first);
+  edited.nodes.push({ id: 'new', t: 'bay', w: 2, h: 2 });
+  edited.links = edited.links.filter(l => l !== first && l.id !== first.id)
+    .concat([{ id: 'n1', from: { node: I, port: 'out' }, to: { node: 'new' } }, { id: 'n2', from: { node: 'new', port: 'out' }, to: { node: W } }]);
+  const L3 = LL.layout(edited, OPEN);
+  A.ok(L3.ok, 'a step inserted between two pinned machines lays out' + (L3.ok ? '' : ' — ' + JSON.stringify(L3)));
+  if (L3.ok) {
+    const before = {}; for (const l of L.links) before[l.id] = JSON.stringify(l.path);
+    A.ok(L3.links.filter(l => l.id !== 'n1' && l.id !== 'n2').every(l => l.kept && before[l.id] === JSON.stringify(l.path)), '…every belt it did not touch stays exactly where it was');
+    A.ok(graph.nodes.every(n => L3.nodes[n.id].x === L.nodes[n.id].x && L3.nodes[n.id].y === L.nodes[n.id].y), '…no machine that was there moves');
+    const g3 = { props: crew(geo.props.map(p => Object.assign({}, p, L3.nodes[p.id])).concat([{ id: 'new', t: 'bay', w: 2, h: 2, x: L3.nodes.new.x, y: L3.nodes.new.y }])).map(p => { const o = Object.assign({}, p); delete o.routes; delete o.def; delete o.done; delete o.esc; return o; }),
+      belts: L3.belts.map(b => ({ x: b.x, y: b.y, dir: b.d })), links: L3.links };
+    const plan = P.compileRoutingPlan(g3);
+    const step = d => { const s = P.chainStepDock(plan, d, { tag: 'general', lineId: P.lineOfDock(plan, d) }, () => 0); return s && s.dockId; };
+    A.eq([plan.errors.filter(e => !e.warn).map(e => e.code), (P.resolveDock(plan, { tag: 'general' }) || {}).dockId, step('new')], [[], 'new', W], '…and the line now runs INBOX → the new step → the WRITER');
+    sane('inserted step', { props: geo.props.concat([{ id: 'new', t: 'bay', w: 2, h: 2 }]) }, L3, OPEN);
+  }
+  // a belt that no longer joins its machines (one end moved) is routed afresh, never kept
+  const moved = pinAll(graph, L, () => true);
+  moved.nodes = moved.nodes.map(n => n.id === W ? Object.assign({}, n, { pin: { x: n.pin.x, y: n.pin.y + 6 } }) : n);
+  const L4 = LL.layout(moved, OPEN);
+  A.ok(L4.ok && L4.links.filter(l => l.from.prop === W || l.to.prop === W).every(l => !l.kept) && L4.links.filter(l => l.from.prop !== W && l.to.prop !== W).every(l => l.kept),
+    'a machine moved: only its belts are re-laid, every other belt is kept');
+}
+
 /* ---------- IT FITS: the starter room, or a room grown for it ---------- */
 {
   const grown = [];

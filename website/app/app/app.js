@@ -1926,7 +1926,7 @@ const App = (() => {
       return;
     }
     // the catalog has NO data for this slug — split the honest reasons instead of one vague "custom model slug":
-    if (genesisOffline) { hint.textContent = 'catalog offline — this slug runs as-is (no price/context data here)'; return; }
+    if (genesisOffline) { hint.textContent = 'price and memory size unknown for this model — it will still run'; return; }
     if (genesisModels.some(m => m.id === id)) { hint.textContent = 'custom model — not priced in the catalog'; return; }
     hint.textContent = 'not in the catalog — double-check the slug, or it runs as a custom model';
   }
@@ -3218,12 +3218,19 @@ const App = (() => {
     if (World.setOnTrophyCase) World.setOnTrophyCase(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('trophies'); });   // G3b: click the TROPHY CASE → the TROPHY surface (a projection of real completions, never a gate)
     // a PLUGIN TERMINAL is the plugin's body: a click opens its window. An unbound or turned-off one says so and opens
     // EXTENSIONS, where plugins are approved — never a dead click.
-    if (World.setOnPluginTerminal) World.setOnPluginTerminal((p) => {
+    if (World.setOnPluginTerminal) World.setOnPluginTerminal(async (p) => {
       const pid = p && p.pluginId;
-      if (pid && typeof PluginHost !== 'undefined' && PluginHost.open(pid)) return;
+      const host = typeof PluginHost !== 'undefined' ? PluginHost : null;
+      if (pid && host) { try { await host.refresh(); } catch (_) { /* open() below still uses the last known list */ } }
+      if (pid && host && host.open(pid)) return;
       if (typeof StationUI === 'undefined') return;
-      if (StationUI.notify) StationUI.notify(pid ? 'That plugin is off or has no window. Turn it on in ABILITIES → EXTENSIONS.' : 'This terminal is not bound to a plugin yet. Bind it in REFIT, or create a plugin in ABILITIES → EXTENSIONS.', 'warn');
-      if (StationUI.openTerm) StationUI.openTerm('connectors', 'extensions');
+      const info = pid && host ? host.list().find(x => x.id === pid) : null;
+      const say = !pid ? 'This terminal is not bound to a plugin yet. Bind it in REFIT, or create a plugin in ABILITIES → EXTENSIONS.'
+        : !info ? 'This terminal\'s plugin was removed. Rebind it in REFIT or remove the terminal.'
+        : !info.active ? (info.name || pid) + ' is off' + (info.pending ? ' — it changed since you approved it' : '') + '. Turn it on in ABILITIES → EXTENSIONS.'
+        : (info.name || pid) + ' has no window. Its tools are available to agents in this room.';
+      if (StationUI.notify) StationUI.notify(say, info && info.active ? 'good' : 'warn');
+      if (!(info && info.active) && StationUI.openTerm) StationUI.openTerm('connectors', 'extensions');
     });
     if (World.setOnBayAssign) World.setOnBayAssign(pid => { if (typeof Build !== 'undefined' && Build.openAssign) Build.openAssign(pid); });   // belt legibility: click an unbound BAY's "NO AGENT" nag → REFIT opens straight into its agent picker
     if (World.setOnIntakeFeed) World.setOnIntakeFeed(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('messaging'); });   // belt legibility: click a starved INTAKE's "NO FEED" nag → the CHANNELS panel (wire a real feed)

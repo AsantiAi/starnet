@@ -225,7 +225,7 @@ async function stop(child) {
     const branches = git(repo, ['branch', '--list', 'ns/*']);
     A.ok(branches.indexOf(keep.branch.replace('ns/', '')) >= 0 || branches.length > 0, 'git shows the new ns/ branch exists');
     A.eq(git(repo, ['rev-parse', '--abbrev-ref', 'HEAD']), keep.branch, 'HEAD is now on the ns/ branch (never committed onto ' + beforeBranch + ')');
-    A.ok(/night-shift:/.test(git(repo, ['log', '-1', '--pretty=%s'])), 'the branch tip is the night-shift commit');
+    A.ok(/^autonomy:/.test(git(repo, ['log', '-1', '--pretty=%s'])), 'the branch tip is the autonomy patch commit (one word: autonomy)');
     A.ok(fs.readFileSync(path.join(repo, 'app.js'), 'utf8').indexOf('if (!items || !items.length) return 0;') >= 0, 'the planted bug is actually fixed in the working tree');
     // the original branch was NOT mutated: it still has the seed commit only.
     A.eq(git(repo, ['log', beforeBranch, '--pretty=%s']).split('\n').length, 1, 'the original branch (' + beforeBranch + ') was never touched — still one commit');

@@ -307,6 +307,11 @@
         '</div>' +
       '</details>';
 
+    // FIRST OPEN LANDS ON THE CATALOG (first-hour walk 2026-09-28): a newcomer who came here to connect Gmail met
+    // "capability grants", "ASK mode" and REFRESH AUTHORITY first. With no remembered section yet, land on
+    // DISCOVER › CATALOG ("find a service by name"); every later open returns to the section last used. Tabs and
+    // sections are unchanged — only the first one shown.
+    if (H.consoleSection && !H.consoleSection.connectors) H.consoleSection.connectors = 'catalog';
     const host = mountConsole(body, 'connectors', [
       { id: 'toolsets', label: 'BUILT-IN ABILITIES', glyph: '▤', desc: 'Inspect an agent’s capability grants. Switches apply in ASK mode; Full Access overrides them. Connected services still need working credentials.', build: frag(secToolsets) },
       { id: 'computer', label: 'COMPUTER CONTROL', glyph: '▣', desc: 'Choose how agents interact with native desktop apps. Full Power or a paired remote-owner lease is required.', build: frag(
@@ -329,7 +334,7 @@
       search: true,
       groups: [
         { id: 'installed', label: 'INSTALLED', sections: ['toolsets', 'computer', 'mcp', 'keys', 'agent'] },
-        { id: 'discover', label: 'DISCOVER', sections: ['catalog', 'library'] },
+        { id: 'discover', label: 'DISCOVER', sections: ['catalog', 'market', 'library'] },
         { id: 'advanced', label: 'CREATE / ADVANCED', sections: ['custom', 'extensions', 'exchange'] }
       ],
       searchLabel: 'Search abilities',
@@ -466,7 +471,7 @@
       const host = typeof PluginHost !== 'undefined' ? PluginHost : null;
       const term = host && host.terminalOf ? host.terminalOf(p.id) : null;
       return '<div class="mc-hint">Tools: ' + tools.map(t => '<code>' + esc(t) + '</code>').join(' ') + '<br>' +
-        (term ? 'Its terminal stands in the station: agents in that room can use these (each call asks you first).'
+        (term ? 'Its terminal stands in the station: agents in that room can use these. Each call asks you first unless you choose Always or Full access.'
           : 'No terminal in the station yet, so no agent can use these. <button class="bb xs" data-ext="plugin-place" data-id="' + esc(p.id) + '">PLACE TERMINAL</button>') +
         '</div>';
     }
@@ -656,8 +661,13 @@
             // so "approve" is the only step between writing a tool and the crew being able to use it.
             const pid = openAfter || (kind === 'plugin-allow' ? btn.dataset.id : '');
             const p = pid ? PluginHost.list().find(x => x.id === pid) : null;
-            if (p && p.active && Array.isArray(p.tools) && p.tools.length) {
+            // FIRST TIME ONLY: a terminal the Commander deliberately removed is not put back by a later re-approve
+            // (that would quietly hand the tools back) — the row keeps offering PLACE TERMINAL instead
+            let placedBefore = [];
+            try { placedBefore = JSON.parse(localStorage.getItem('starnet.pluginTerminalsPlaced') || '[]'); } catch (_) { placedBefore = []; }
+            if (p && p.active && Array.isArray(p.tools) && p.tools.length && placedBefore.indexOf(pid) < 0) {
               const r = PluginHost.placeTerminal(pid);
+              if (r && r.ok) { try { localStorage.setItem('starnet.pluginTerminalsPlaced', JSON.stringify(placedBefore.concat([pid]).slice(-200))); } catch (_) { /* per-browser memory only */ } }
               const n = p.tools.length + ' tool' + (p.tools.length === 1 ? '' : 's');
               const note = r && r.ok ? (r.existing ? '' : ' Its terminal now stands in the lead’s room, so the lead can use its ' + n + '.')
                 : ' Its terminal could not be placed (' + ((r && (r.msg || r.error)) || 'unknown') + ') — place a PLUGIN TERMINAL in REFIT.';

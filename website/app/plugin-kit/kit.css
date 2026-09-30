@@ -137,7 +137,7 @@
 
   /* ---- controls: the element-level FLOOR first (no bare white control can exist), then the named skins ---- */
   button, input, select, textarea { font: inherit; color: var(--text); }
-  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="file"]):not([type="image"]), select, textarea {
     background: rgba(0, 0, 0, .3); border: 1px solid var(--gd-edge); border-radius: var(--r-sm); color: var(--ph-bright);
     padding: 4px 8px; font-size: 18px; outline: none;
   }
@@ -151,9 +151,15 @@
   select option { background: var(--panel2); color: var(--text); }
   input[type="checkbox"], input[type="radio"] { accent-color: var(--ph); }
   input[type="range"] { accent-color: var(--ph); }
-  button {
+  /* button-like inputs and the file picker's button wear the same skin as a button (never OS paint) */
+  input[type="color"] { background: rgba(0, 0, 0, .3); border: 1px solid var(--gd-edge); border-radius: var(--r-sm); padding: 2px; height: 28px; }
+  input[type="file"] { color: var(--text); font-size: 16px; }
+  button, input:is([type="submit"], [type="button"], [type="reset"]) {
     background: rgba(0, 0, 0, .22); border: 1px solid var(--gd-edge); border-radius: var(--r-sm); color: var(--ph); cursor: pointer;
   }
+  /* own rule: a pseudo-element an engine does not know would void a whole selector list */
+  ::file-selector-button { font: inherit; background: rgba(0, 0, 0, .22); border: 1px solid var(--gd-edge); border-radius: var(--r-sm); color: var(--ph); cursor: pointer; margin-right: 8px; }
+  ::file-selector-button:hover { color: var(--ph-bright); border-color: var(--ph); }
   /* SMALL BUTTON (.gd-controls button recipe) */
   .sn-btn {
     display: inline-flex; align-items: center; gap: 6px; font: 16px var(--sn-font); letter-spacing: 1px; padding: 4px 11px;
@@ -161,7 +167,9 @@
     cursor: pointer; text-decoration: none; white-space: nowrap;
     transition: color var(--t-fast) var(--ease-soft), background var(--t-fast) var(--ease-soft), border-color var(--t-fast) var(--ease-soft);
   }
-  .sn-btn:hover:not(:disabled), button:hover:not(:disabled) { color: var(--ph-bright); background: var(--gd-hover); border-color: var(--ph); }
+  .sn-btn:hover:not(:disabled) { color: var(--ph-bright); background: var(--gd-hover); border-color: var(--ph); }
+  /* the bare-element hover has ZERO specificity, so a named skin (sn-tab, an author's own class) always wins */
+  :where(button, input[type="submit"], input[type="button"], input[type="reset"]):hover:where(:not(:disabled)) { color: var(--ph-bright); background: var(--gd-hover); border-color: var(--ph); }
   .sn-btn.primary { color: var(--ph-bright); border-color: rgba(var(--ph-rgb), .55); background: var(--gd-hover); }
   .sn-btn.danger { color: var(--bad); border-color: rgba(var(--bad-rgb), .35); }
   .sn-btn.danger:hover:not(:disabled) { color: var(--bad); border-color: var(--bad); background: rgba(var(--bad-rgb), .1); }

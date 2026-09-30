@@ -67,16 +67,16 @@ const NightDraftNudge = (() => {
     stopPolling();
     const n = unseen.length;
     const newestAt = Number(unseen[0] && unseen[0].at) || Date.now();   // the mark to set once it's acknowledged
-    const body = '☾ the night shift left ' + n + ' draft' + (n === 1 ? '' : 's') + ' on your desk while you were away — review?';
+    const body = '◈ while you were away, autonomy left ' + n + ' draft' + (n === 1 ? '' : 's') + ' on your desk — review?';
     Chat.nudge(body, [{ label: 'review', value: 'go' }, { label: 'later', value: 'no', skip: true }], item => {
       // either choice ACKNOWLEDGES these drafts → mark them seen so neither this nudge nor the morning report
       // re-announces the same set. 'review' also opens the NIGHT SHIFT panel where the decision trail + report live.
       markSeen(newestAt);
       if (item && item.value === 'go') {
-        try { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('settings', 'nightshift'); } catch (_) {}
+        try { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('settings', 'autonomy'); } catch (_) {}
       }
     });
-    try { if (typeof World !== 'undefined' && World.say) World.say('☾ left ' + n + ' draft' + (n === 1 ? '' : 's') + ' on your desk'); } catch (_) {}
+    try { if (typeof World !== 'undefined' && World.say) World.say('◈ left ' + n + ' draft' + (n === 1 ? '' : 's') + ' on your desk'); } catch (_) {}
   }
 
   function stopPolling() { if (pollTimer) { try { clearInterval(pollTimer); } catch (_) {} pollTimer = 0; } }
