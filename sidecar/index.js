@@ -14055,7 +14055,8 @@ async function handleCronRun(req, res) {
   // window that asked for it must not cancel it (it stays stoppable through its lease, like a scheduled fire).
   // Without detach:true, Run Now keeps its law: the watcher leaving cancels the run.
   const detached = body.detach === true;
-  res.on('close', () => { if (!detached) ac.abort(); runs.delete(runId); runsMeta.delete(runId); });
+  if (!detached) res.on('close', () => { ac.abort(); runs.delete(runId); runsMeta.delete(runId); });
+  else res.on('close', () => { runs.delete(runId); runsMeta.delete(runId); });   // the watcher left; the run goes on
   const bus = { emit: (name, payload) => { try { res.write(JSON.stringify({ name, payload: redact(payload) }) + '\n'); } catch (_) {} } };
   const emit = wrapEmitDiag(makeEmitter(bus, e => { if (e) console.warn('[event]', e.kind, e.event, (e.errors || []).join(';')); }));
   // tee: stream every event to the watching browser AND capture the outcome so the last-run record is honest.
