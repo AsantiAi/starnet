@@ -5,6 +5,7 @@ description: Confirm a load-bearing claim against multiple independent sources b
 category: Research
 requires: [dish, cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

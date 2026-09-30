@@ -5,6 +5,7 @@ description: Turn a launch into channel-shaped copy that leads with the hook and
 category: Writing
 requires: [dish, cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

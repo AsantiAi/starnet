@@ -1,7 +1,7 @@
 {
   "format": "starnet-skill-registry/v1",
   "name": "StarNet Skill Market",
-  "serial": 1,
+  "serial": 3,
   "skills": [
     {
       "slug": "accessibility-audit",
@@ -29,7 +29,12 @@
           "sha256": "468b148e3ede7a379d5a457b5f8a960d0fbf1391a52ede6324981b08a125b047",
           "bytes": 2491
         }
-      ]
+      ],
+      "download": {
+        "path": "accessibility-audit-1.0.0.zip",
+        "sha256": "31699d5b55c14d01eaeb399efafde227e602033571a585177e1508ca292bc7d2",
+        "bytes": 2645
+      }
     },
     {
       "slug": "ad-copy-testing",
@@ -57,7 +62,12 @@
           "sha256": "7cd7bbabc1ba3d7cc3b87e463b25ec55f0e1901d2d0cbb6dca7b020cc2427cca",
           "bytes": 2370
         }
-      ]
+      ],
+      "download": {
+        "path": "ad-copy-testing-1.0.0.zip",
+        "sha256": "ab9c8d6f23e5a38d909b48594c42412aebcf97939141cc4167e80265834cf8a4",
+        "bytes": 2516
+      }
     },
     {
       "slug": "adversarial-review-pass",
@@ -85,7 +95,12 @@
           "sha256": "3b98b9250946595b21eeec46f20818a548696f6bee18a68585627233c1a0f02d",
           "bytes": 1766
         }
-      ]
+      ],
+      "download": {
+        "path": "adversarial-review-pass-1.0.0.zip",
+        "sha256": "8d6ebd4c23045dff249b7daa941ff405f765ecd3364d6de4d1e99d22936c67ff",
+        "bytes": 1928
+      }
     },
     {
       "slug": "announcement-kit",
@@ -113,7 +128,12 @@
           "sha256": "da50d70786d297aa0b0d588e5ed0d80959d0a236345193e32e4e1d23624ba274",
           "bytes": 1606
         }
-      ]
+      ],
+      "download": {
+        "path": "announcement-kit-1.0.0.zip",
+        "sha256": "8161fa09b6163dadc1cab411bc197dcbafba7174b431c0d54ff12afbf36be4b9",
+        "bytes": 1754
+      }
     },
     {
       "slug": "application-tailoring",
@@ -141,17 +161,22 @@
           "sha256": "bfc6afc899eb7e2f5daf9b2b512334a809798e20feec1d7c816b034aee1ba8a6",
           "bytes": 2239
         }
-      ]
+      ],
+      "download": {
+        "path": "application-tailoring-1.0.0.zip",
+        "sha256": "eeb8a699afffac064ebc70f48ac763b9e301e043ac0bf66acb411870a0bd2050",
+        "bytes": 2397
+      }
     },
     {
       "slug": "brand-assets",
       "name": "Brand Assets",
-      "description": "Make images, covers and transparent cutouts that look like one family: a pinned style sheet, fixed formats, a vision check on every file, and transparency the tool has verified.",
+      "description": "Make images, covers and transparent cutouts that look like one family: a pinned style sheet, fixed formats, every file checked against it, and cutouts confirmed truly transparent.",
       "version": "1.0.0",
       "author": "StarNet",
       "license": "MIT",
       "shelf": "originals",
-      "category": "Creator",
+      "category": "Creative",
       "tags": [
         "images",
         "branding",
@@ -165,15 +190,20 @@
       ],
       "librarySlug": "",
       "sourceUrl": "/skills/brand-assets/1.0.0/SKILL.md",
-      "digest": "20fb67a8d7e96d5c2e5a83006d80d6ba0dca23ba6b2678dd82ea392dacd2fa06",
-      "bytes": 3612,
+      "digest": "c61fbe12a1afc9d10605388f3b01b34e2a570820bc000bf48cbf3d33f88134bc",
+      "bytes": 3720,
       "files": [
         {
           "path": "SKILL.md",
-          "sha256": "4b8dbcfe07ea168082cbba00f0ff6da688fed89b57edd4a5db4f4a7d75f8c83b",
-          "bytes": 3612
+          "sha256": "93cea920683e5de9dc7add3013c4f558069130497367ad54bf0db0784ef2e834",
+          "bytes": 3720
         }
-      ]
+      ],
+      "download": {
+        "path": "brand-assets-1.0.0.zip",
+        "sha256": "f3615ee1e04012879b2172c60924ffb8b0aae6d0cadff55446eaa307ccc84438",
+        "bytes": 3860
+      }
     },
     {
       "slug": "browser-operation",
@@ -201,7 +231,12 @@
           "sha256": "47517b969c30e0632b302d4c7cfeda45ee68b2858fec1cf019c3f73c8bdd5596",
           "bytes": 2322
         }
-      ]
+      ],
+      "download": {
+        "path": "browser-operation-1.0.0.zip",
+        "sha256": "c1fe53927ec9fbebf1eb31416d283e11c6455fc265ca186df96bd399a0b741fb",
+        "bytes": 2472
+      }
     },
     {
       "slug": "channel-updates",
@@ -231,7 +266,12 @@
           "sha256": "6ca849c2551e888106b08c9375679d6e00c1c2ea1be115dd633352cb6296482b",
           "bytes": 3264
         }
-      ]
+      ],
+      "download": {
+        "path": "channel-updates-1.0.0.zip",
+        "sha256": "7c0f6ee081debe3e267df838668eaa895703effbbdec8dcc22fbc56bff2cfeb2",
+        "bytes": 3410
+      }
     },
     {
       "slug": "commitment-tracking",
@@ -258,7 +298,12 @@
           "sha256": "690061cec3971491adaf2371a8e2cfa81fae210210f5b004b5783ebba006e79a",
           "bytes": 2332
         }
-      ]
+      ],
+      "download": {
+        "path": "commitment-tracking-1.0.0.zip",
+        "sha256": "c75cb12e68352e8071537c233bfd734b878419c02324cfc5b41860abc342ceb4",
+        "bytes": 2486
+      }
     },
     {
       "slug": "content-calendar",
@@ -286,7 +331,12 @@
           "sha256": "a4d29d766ea4de03a8a43ced4f05c49eeaad8902058f466bd687ceb5ea285497",
           "bytes": 1788
         }
-      ]
+      ],
+      "download": {
+        "path": "content-calendar-1.0.0.zip",
+        "sha256": "3f873319eed092eb130b395ad919d5577e076433ad547e122617f14b3069bde8",
+        "bytes": 1936
+      }
     },
     {
       "slug": "contract-review",
@@ -314,7 +364,12 @@
           "sha256": "c1bdd3553498af62c71d405fbb00a792f86010cf6571c571ab034c0115629831",
           "bytes": 2525
         }
-      ]
+      ],
+      "download": {
+        "path": "contract-review-1.0.0.zip",
+        "sha256": "134246cd34988b59352f302ede862ae6c2bdc7119b21dcc37ded7e708c7d61c6",
+        "bytes": 2671
+      }
     },
     {
       "slug": "cost-audit",
@@ -324,9 +379,9 @@
       "author": "StarNet",
       "license": "MIT",
       "shelf": "originals",
-      "category": "Finance",
+      "category": "Research",
       "tags": [
-        "finance"
+        "research"
       ],
       "requires": [
         "cabinet",
@@ -334,15 +389,20 @@
       ],
       "librarySlug": "cost-audit",
       "sourceUrl": "/skills/cost-audit/1.0.0/SKILL.md",
-      "digest": "0187e9cb675216332597e1e3a4c80b65124febb8bc65be30c34ff91e79a5c279",
-      "bytes": 1829,
+      "digest": "22e3280d846a41d3be8f762f6dad807a6ff5a5f550ba328c431a46e682c7d042",
+      "bytes": 1830,
       "files": [
         {
           "path": "SKILL.md",
-          "sha256": "b3e51518cd7dc38a7f7be408db7bf32891eb21e8f1f96564bef3d3773ee64bc4",
-          "bytes": 1829
+          "sha256": "84687bc000c5fee58aa297d84d925c39f92241367dffed1ac3ca535f1ae74b24",
+          "bytes": 1830
         }
-      ]
+      ],
+      "download": {
+        "path": "cost-audit-1.0.0.zip",
+        "sha256": "25dab74be290a2657675c5246ad9a0ef317194900809985588450a65a4ca5ec1",
+        "bytes": 1966
+      }
     },
     {
       "slug": "crew-handoff",
@@ -352,7 +412,7 @@
       "author": "StarNet",
       "license": "MIT",
       "shelf": "originals",
-      "category": "Planning",
+      "category": "Station",
       "tags": [
         "delegation",
         "crew",
@@ -364,15 +424,20 @@
       ],
       "librarySlug": "",
       "sourceUrl": "/skills/crew-handoff/1.0.0/SKILL.md",
-      "digest": "9f538235e0185b010c14b0e16e8bc182eeea950fffba1b91d577c5203b7286c5",
-      "bytes": 3924,
+      "digest": "3c313cd1cec395c70c8714c8dd16738fa880d044e9a25baf6e88a0e419bd1a18",
+      "bytes": 3887,
       "files": [
         {
           "path": "SKILL.md",
-          "sha256": "98733e6c2f2546725db64855140b3c10e943036d407d53dac29ea885a63c5653",
-          "bytes": 3924
+          "sha256": "deed41c0736b5139739e6e4029e736a1210b11763f3bce7225db780a0ed1a21f",
+          "bytes": 3887
         }
-      ]
+      ],
+      "download": {
+        "path": "crew-handoff-1.0.0.zip",
+        "sha256": "0ec4b17c66cbb8332d28cbd84e5f805cc148c171f6344582db0ba855149b1c33",
+        "bytes": 4027
+      }
     },
     {
       "slug": "dataset-harvest",
@@ -400,17 +465,22 @@
           "sha256": "8256e0a8f4b7a6a0a37e11d82eadf8228ffce1b0edd5681f75697b2d2f6265ad",
           "bytes": 2406
         }
-      ]
+      ],
+      "download": {
+        "path": "dataset-harvest-1.0.0.zip",
+        "sha256": "ac8416c503eb3ccbe779f1f9515277cfcfd2117f6f80749d148c308871bf1025",
+        "bytes": 2552
+      }
     },
     {
       "slug": "deliverable-handoff",
       "name": "Deliverable Handoff",
-      "description": "Finish work as files the Commander can open: a format that previews, a clear name and place, one deliverable note naming the main file, and a closing message that points to it.",
+      "description": "Finish work as files the Commander can open: a format that previews, a clear name and place, the main file marked in DELIVERABLES, and a closing message that points to it.",
       "version": "1.0.0",
       "author": "StarNet",
       "license": "MIT",
       "shelf": "originals",
-      "category": "Productivity",
+      "category": "Station",
       "tags": [
         "deliverables",
         "files",
@@ -422,15 +492,20 @@
       ],
       "librarySlug": "",
       "sourceUrl": "/skills/deliverable-handoff/1.0.0/SKILL.md",
-      "digest": "86e1a8c41a55c7fd99ab8aec30a36c57eda114e9193233156cd4ef9baafc4eaf",
-      "bytes": 3324,
+      "digest": "4ec049b75bc162937104ea62ca3b1b2c3e2e58615e7c878b9557440dea4c3553",
+      "bytes": 3309,
       "files": [
         {
           "path": "SKILL.md",
-          "sha256": "35f0ce4bdce4a7cfcfdb85508fef21e23042f1a61506cdba2f8498d6385e0b50",
-          "bytes": 3324
+          "sha256": "e7fcc3d88cf4e37499ff4517b5296db399985f5d83d720bad6c4104ccce12182",
+          "bytes": 3309
         }
-      ]
+      ],
+      "download": {
+        "path": "deliverable-handoff-1.0.0.zip",
+        "sha256": "26fc8e7ceb95e9cd5f92774e919783c2cf274ea6f0e32c8d7235731e38d18904",
+        "bytes": 3463
+      }
     },
     {
       "slug": "deploy-checklist",
@@ -458,7 +533,12 @@
           "sha256": "f1927be273153c68111cecc9731c562333896082ad0a4e9b1ebf978d07c3d7dc",
           "bytes": 2546
         }
-      ]
+      ],
+      "download": {
+        "path": "deploy-checklist-1.0.0.zip",
+        "sha256": "2a1cd91fe136ed9d3825ab0e3c13fdef3c51df5ccffa061e402cc982b737afd9",
+        "bytes": 2694
+      }
     },
     {
       "slug": "digest-composer",
@@ -486,7 +566,12 @@
           "sha256": "b21588bbf4560aeb2d090cf6bbe2bc42494d4467accd3be32a6859aef3c87e68",
           "bytes": 1614
         }
-      ]
+      ],
+      "download": {
+        "path": "digest-composer-1.0.0.zip",
+        "sha256": "2742f51de7ff6a96c56f0071d34b70b234bd73bf35c75834acca2b3093f35969",
+        "bytes": 1760
+      }
     },
     {
       "slug": "email-sequence",
@@ -514,7 +599,12 @@
           "sha256": "f98797f3c5a09c938b441678b28b04a2d5930b4751ace699d67c43606c6e1332",
           "bytes": 2364
         }
-      ]
+      ],
+      "download": {
+        "path": "email-sequence-1.0.0.zip",
+        "sha256": "86e8155b7a1aa4e2df4452ee035af9b65ecf44e7ae2e078cc1b7cf56ed60b377",
+        "bytes": 2508
+      }
     },
     {
       "slug": "exposed-secrets-audit",
@@ -542,7 +632,12 @@
           "sha256": "f8883327e7dbcb52832fe162c77df001b6119938a99282afbf5bfce445494eae",
           "bytes": 2710
         }
-      ]
+      ],
+      "download": {
+        "path": "exposed-secrets-audit-1.0.0.zip",
+        "sha256": "89e7c1a68529c9f328ee02cc2f18420acaa704503697db808d83be2dd8d23711",
+        "bytes": 2868
+      }
     },
     {
       "slug": "exposure-reduction",
@@ -570,7 +665,12 @@
           "sha256": "6e07429a062260e8d0e06ccc8415689ee833d056cbae8482d0f8a2bca67e0446",
           "bytes": 2547
         }
-      ]
+      ],
+      "download": {
+        "path": "exposure-reduction-1.0.0.zip",
+        "sha256": "9dd683f0a6682d2ebd902d566db1684d7d2ce9686da930a5c32b47b6e4571b29",
+        "bytes": 2699
+      }
     },
     {
       "slug": "feed-watch",
@@ -597,7 +697,12 @@
           "sha256": "31bde3a34cce1af6584ee72d12da6aa593ff87e1f2d5c45e55226efef579958f",
           "bytes": 1605
         }
-      ]
+      ],
+      "download": {
+        "path": "feed-watch-1.0.0.zip",
+        "sha256": "b9d12dee1d92a03537113f4ba9527b93a236ad590569e95365db7a0baaed1a53",
+        "bytes": 1741
+      }
     },
     {
       "slug": "file-curation",
@@ -625,7 +730,12 @@
           "sha256": "5956bf31b01d289d1c573e6b660eaea633314421b6665b515785a5781a2a891b",
           "bytes": 1938
         }
-      ]
+      ],
+      "download": {
+        "path": "file-curation-1.0.0.zip",
+        "sha256": "5dc63b3c1e5f3ba73e6d6b0f9052c41e05203eac72743d320ca164ebea0324ee",
+        "bytes": 2080
+      }
     },
     {
       "slug": "hard-conversation",
@@ -652,7 +762,12 @@
           "sha256": "83a2f0b6d4c725bcb5a9794c00ded2dbb7086de41bfc860f16a30fb177dab89a",
           "bytes": 2412
         }
-      ]
+      ],
+      "download": {
+        "path": "hard-conversation-1.0.0.zip",
+        "sha256": "3e35513280dc23cd65f62721468e6040fc908c009779fa3d81a55679e7738124",
+        "bytes": 2562
+      }
     },
     {
       "slug": "health-record-prep",
@@ -680,7 +795,12 @@
           "sha256": "969260f919b95aba4c7cdeecfc64770def63796bd9bffca1c4b46828cc135518",
           "bytes": 2721
         }
-      ]
+      ],
+      "download": {
+        "path": "health-record-prep-1.0.0.zip",
+        "sha256": "62821e82c1296838b0155c5c1af8ef0d8d8a3daacbaff864c246843870328174",
+        "bytes": 2873
+      }
     },
     {
       "slug": "hiring-screen",
@@ -708,7 +828,12 @@
           "sha256": "d0c71e05b9086955b22d504a5124bbd64f0cf3dfa1228a09aacb588dba51f873",
           "bytes": 2589
         }
-      ]
+      ],
+      "download": {
+        "path": "hiring-screen-1.0.0.zip",
+        "sha256": "3527bb17f4a3c385ff9216fc98686e61adb98c55624c6663ebdaa87901194592",
+        "bytes": 2731
+      }
     },
     {
       "slug": "inbox-triage",
@@ -718,24 +843,29 @@
       "author": "StarNet",
       "license": "MIT",
       "shelf": "originals",
-      "category": "Comms",
+      "category": "Communication",
       "tags": [
-        "comms"
+        "communication"
       ],
       "requires": [
         "notebook"
       ],
       "librarySlug": "inbox-triage",
       "sourceUrl": "/skills/inbox-triage/1.0.0/SKILL.md",
-      "digest": "2748bd78409dd69880f69f6fd0e297b40a578a67db1bd1c6b856bd0ae5317d03",
-      "bytes": 2090,
+      "digest": "01f3542704db4b85a6f447dec429d43740afa4976650461fc5c07ad2f852d833",
+      "bytes": 2098,
       "files": [
         {
           "path": "SKILL.md",
-          "sha256": "b20979e5a6d7081cbe86a6f1f45c0b2eb77a6b982a12911e041343d332a030ea",
-          "bytes": 2090
+          "sha256": "6e5e09e02598bc9223a0f6ff542873a287dcb67819726fa8c54647a1597835ad",
+          "bytes": 2098
         }
-      ]
+      ],
+      "download": {
+        "path": "inbox-triage-1.0.0.zip",
+        "sha256": "2d09ebd18465d3f6cebfb78ba7b5538da060bdda887e0963a1f0dd55f1bf7504",
+        "bytes": 2238
+      }
     },
     {
       "slug": "itinerary-planning",
@@ -763,7 +893,12 @@
           "sha256": "268709e6c098cf0722ce971c1dc41849f778337c1d860e79f707ac629cb081f3",
           "bytes": 2022
         }
-      ]
+      ],
+      "download": {
+        "path": "itinerary-planning-1.0.0.zip",
+        "sha256": "3bbcad9f200e56d599274d47c6e0f005429da682468d625d2b20343173f8f1e9",
+        "bytes": 2174
+      }
     },
     {
       "slug": "landing-copy",
@@ -791,7 +926,12 @@
           "sha256": "321c5789137e601ccf5f2ed9325428088fb3be52a024f8d21647b83a64374944",
           "bytes": 2368
         }
-      ]
+      ],
+      "download": {
+        "path": "landing-copy-1.0.0.zip",
+        "sha256": "5ab1650cc444c434f7056db316956fb1291719e21149f1b574fde7b271d50413",
+        "bytes": 2508
+      }
     },
     {
       "slug": "lead-scouting",
@@ -819,12 +959,17 @@
           "sha256": "b98ccdcbae1e21382c174e21dc04450a75c14d75c76c116daf22aca5ad7f786c",
           "bytes": 1644
         }
-      ]
+      ],
+      "download": {
+        "path": "lead-scouting-1.0.0.zip",
+        "sha256": "d03c90d093dc131539c613de139f7d9ad662d343dcdee635d9f9f94dd1f2c02c",
+        "bytes": 1786
+      }
     },
     {
       "slug": "website-workflow",
       "name": "Learn a Website Lookup",
-      "description": "Turn a repeated read-only website lookup into a verified reusable API skill by observing the browser's real requests.",
+      "description": "Turn a repeated read-only website lookup into a saved skill that fetches the answer directly, learned from the page's own data requests.",
       "version": "1.0.0",
       "author": "StarNet",
       "license": "MIT",
@@ -840,15 +985,20 @@
       ],
       "librarySlug": "website-workflow",
       "sourceUrl": "/skills/website-workflow/1.0.0/SKILL.md",
-      "digest": "2ba8726ee5e62aff5ce8eb2cadc2441813ff34b1f96d44786c2c0b4caf337ec8",
-      "bytes": 2866,
+      "digest": "0eb31b41d33986e544940d0292b0593bdc65a82f4042ca31d3e47e60113fb0b0",
+      "bytes": 2885,
       "files": [
         {
           "path": "SKILL.md",
-          "sha256": "caa3cc49712e8ab20eec8414280ac0a7cd76e3ad318c65fbb793ee77aa0e2b68",
-          "bytes": 2866
+          "sha256": "c2504613cfeb7f7e692783a22290d43bf3adaab68978f0c6f2d3fd0330e7750b",
+          "bytes": 2885
         }
-      ]
+      ],
+      "download": {
+        "path": "website-workflow-1.0.0.zip",
+        "sha256": "7af2db1a4fdb62e7b9c623b1917827962e86a9af37a068f67a303e67d795c77d",
+        "bytes": 3033
+      }
     },
     {
       "slug": "ledger-upkeep",
@@ -876,7 +1026,12 @@
           "sha256": "b725a933d9b8890288d9838e0fdd1dd8f6fb2f25e78ecd27d0b3d06d8ca92439",
           "bytes": 1699
         }
-      ]
+      ],
+      "download": {
+        "path": "ledger-upkeep-1.0.0.zip",
+        "sha256": "29d3d0977b3debb0f3ef7c6f666123f19dad33eb5d15fad6e16edab1850d132c",
+        "bytes": 1841
+      }
     },
     {
       "slug": "line-design",
@@ -899,15 +1054,20 @@
       ],
       "librarySlug": "",
       "sourceUrl": "/skills/line-design/1.0.0/SKILL.md",
-      "digest": "5e5bfcc7349129530187aa5e6b33e10dbe54d755e5381e46975ba4e1b742a09b",
-      "bytes": 4240,
+      "digest": "95dfcc7b63385de519345bba2ec95a2e4eb9cded5fe99952481be9eeb2040b0f",
+      "bytes": 4279,
       "files": [
         {
           "path": "SKILL.md",
-          "sha256": "5060ea54fca386d8f3d6c1c2e97b1a244bf286f08769a17d54dc20fa9d5a4cdf",
-          "bytes": 4240
+          "sha256": "f2d3fd147a181ce88d113ced67b9ab5f933e23ee54403aaf711ec81178262038",
+          "bytes": 4279
         }
-      ]
+      ],
+      "download": {
+        "path": "line-design-1.0.0.zip",
+        "sha256": "d2a3de1efe530313052c3583533425e8a6db065b616dfd7560097466a8360477",
+        "bytes": 4417
+      }
     },
     {
       "slug": "marketing-plan",
@@ -935,7 +1095,12 @@
           "sha256": "20f0ecc87b63e5de70904f877d6784a9cf5fe8172bba3e629df2ec8b5e2a6001",
           "bytes": 1763
         }
-      ]
+      ],
+      "download": {
+        "path": "marketing-plan-1.0.0.zip",
+        "sha256": "504091c42bb9d9fef296730c695f78267cce49238a47b0689d495287629df858",
+        "bytes": 1907
+      }
     },
     {
       "slug": "meal-planning",
@@ -963,7 +1128,12 @@
           "sha256": "7d77cd197846b25f5e64c2d9a11bade7a9cf9576ddbaf1d1d6bd44468d9b520a",
           "bytes": 2329
         }
-      ]
+      ],
+      "download": {
+        "path": "meal-planning-1.0.0.zip",
+        "sha256": "8ddf2886aaed8826fd7f92553b377f1d350fcf9d84df552058fb274d86a925fa",
+        "bytes": 2471
+      }
     },
     {
       "slug": "negotiation-case",
@@ -991,12 +1161,17 @@
           "sha256": "48f4363cdb14e2b95b17f7551775bcb8c82e610469643c152070f0f19be235f6",
           "bytes": 2384
         }
-      ]
+      ],
+      "download": {
+        "path": "negotiation-case-1.0.0.zip",
+        "sha256": "9441c76d6273baf57efb2b97c632628539fdc92d6fea97ea2b35a275fe0d247b",
+        "bytes": 2532
+      }
     },
     {
       "slug": "notebook-gardening",
       "name": "Notebook Gardening",
-      "description": "Keep the agent's notebook true: find duplicates and contradictions, correct beliefs in place with their source, sink stale ones, and hand the forget list to the Commander.",
+      "description": "Keep the agent's notebook true: find duplicates and contradictions, correct beliefs in place with their source, fade stale ones, and list for the Commander what to delete.",
       "version": "1.0.0",
       "author": "StarNet",
       "license": "MIT",
@@ -1013,20 +1188,25 @@
       ],
       "librarySlug": "",
       "sourceUrl": "/skills/notebook-gardening/1.0.0/SKILL.md",
-      "digest": "6186ee232093f9d8e592b5dc70d3b8e241956f09a4cfe45576c83cd905df3d02",
-      "bytes": 3609,
+      "digest": "2e019336846ad800b4df12a9334235c2ea5f314b6b25f01f79b5b508c3176698",
+      "bytes": 3602,
       "files": [
         {
           "path": "SKILL.md",
-          "sha256": "2c003b279fb45f6a25ab5669e4c6ca7b69fe69be00293109363ef3cb5c6a2aa0",
-          "bytes": 3609
+          "sha256": "3f12ded043610b4839e888dbfe8668db0677d7a4e43619c0e04f2f3dffaabcf3",
+          "bytes": 3602
         }
-      ]
+      ],
+      "download": {
+        "path": "notebook-gardening-1.0.0.zip",
+        "sha256": "0741a285943bc6bfc58d0024b31e25636a76e62750c931d0b23173b1008b34e7",
+        "bytes": 3754
+      }
     },
     {
       "slug": "opportunity-scan",
       "name": "Opportunity Scan",
-      "description": "Hunt monetizable openings matched to the Commander's hand, sized with live demand evidence and ranked honestly.",
+      "description": "Hunt monetizable openings that fit the Commander's skills and resources, sized with live demand evidence and ranked honestly.",
       "version": "1.0.0",
       "author": "StarNet",
       "license": "MIT",
@@ -1041,15 +1221,20 @@
       ],
       "librarySlug": "opportunity-scan",
       "sourceUrl": "/skills/opportunity-scan/1.0.0/SKILL.md",
-      "digest": "369d227a269c3a46aa7a10623c4d6acb62a1e22db953704f78c9d5acaae0a4c5",
-      "bytes": 2197,
+      "digest": "849a70b9c103b8e0a18276fd581ea63a1b77457096b4b0398b05bd7e1e92bec8",
+      "bytes": 2211,
       "files": [
         {
           "path": "SKILL.md",
-          "sha256": "2b150f4ad675d8a0d23d8c7ee8cd15d3abc70ab56533eba43837413020e1f90a",
-          "bytes": 2197
+          "sha256": "d853664f451f30db2a76d1971590e7567f3aca28ecf785639488e2901b295bd9",
+          "bytes": 2211
         }
-      ]
+      ],
+      "download": {
+        "path": "opportunity-scan-1.0.0.zip",
+        "sha256": "a15aadc4473d58545a7482ea4f92a5c4cb783e98452ba853b6caedd2a79fdead",
+        "bytes": 2359
+      }
     },
     {
       "slug": "pitch-deck",
@@ -1077,7 +1262,12 @@
           "sha256": "d5984c48522f5dee7438f365a87eac198cf1bb803540730d3383ff96de471ea6",
           "bytes": 2487
         }
-      ]
+      ],
+      "download": {
+        "path": "pitch-deck-1.0.0.zip",
+        "sha256": "138adfa1e61f9b366a6527cac22a0c97c085212a19d66a11a742344c043635ca",
+        "bytes": 2623
+      }
     },
     {
       "slug": "price-watch",
@@ -1105,7 +1295,12 @@
           "sha256": "cb5e533636886eceaa03dea1e5bfcf0890462d46ecaa1adac795024a76631786",
           "bytes": 1634
         }
-      ]
+      ],
+      "download": {
+        "path": "price-watch-1.0.0.zip",
+        "sha256": "1df89285f8bc54a0551d5e1e30840b1e3356427e056cb72c1f6f5b9630df0065",
+        "bytes": 1772
+      }
     },
     {
       "slug": "project-onboarding",
@@ -1128,15 +1323,20 @@
       ],
       "librarySlug": "",
       "sourceUrl": "/skills/project-onboarding/1.0.0/SKILL.md",
-      "digest": "ab2dd33a01d6f3a941ae2790cbd3ccb082cf44858fd771c0d958c31710d50cbe",
-      "bytes": 3858,
+      "digest": "9978f54954be99c0fe5482f43b2dceef65468499a943269dfcae01e2ad45d699",
+      "bytes": 3853,
       "files": [
         {
           "path": "SKILL.md",
-          "sha256": "53b8d8e1aed0ce590d9cc881e25c0dada109b212cef741cd853cafcba0494340",
-          "bytes": 3858
+          "sha256": "4721847a06f8f39dae7db901d940288a8ab76558901709db9187b3f377dd9077",
+          "bytes": 3853
         }
-      ]
+      ],
+      "download": {
+        "path": "project-onboarding-1.0.0.zip",
+        "sha256": "edd288088fd54af1d8c9e327d8037771a73710f534f2847601b8dcba0c98699c",
+        "bytes": 4005
+      }
     },
     {
       "slug": "relationship-log",
@@ -1164,12 +1364,17 @@
           "sha256": "f92aba6cbcf5955562f477b71ac67c6a1c0beb1b0b477599af22a4606be1225d",
           "bytes": 2297
         }
-      ]
+      ],
+      "download": {
+        "path": "relationship-log-1.0.0.zip",
+        "sha256": "ccf295f84186d47e5618a22c43e306dcec958048caab0777e703136f36dd2fad",
+        "bytes": 2445
+      }
     },
     {
       "slug": "routine-craft",
       "name": "Routine Craft",
-      "description": "Write a routine that runs well with nobody watching: no duplicates, a self-contained prompt, a fitting schedule, stop rules, a silent path, and a known place for results to land.",
+      "description": "Write a routine that runs well with nobody watching: no duplicates, a self-contained prompt, a fitting schedule, stop rules, a quiet \"nothing new\" reply, and a known place for results to land.",
       "version": "1.0.0",
       "author": "StarNet",
       "license": "MIT",
@@ -1186,15 +1391,20 @@
       ],
       "librarySlug": "",
       "sourceUrl": "/skills/routine-craft/1.0.0/SKILL.md",
-      "digest": "8fc3abeb54ea0d527c1862a239d4fcbb4851a280ad0ec33f3d6e50ff384ba7e3",
-      "bytes": 4115,
+      "digest": "e4cabeae53ab3492ad511225c2ebc07a37f9eebe8f4b6ab1ffa442f15262d6bd",
+      "bytes": 4043,
       "files": [
         {
           "path": "SKILL.md",
-          "sha256": "b8b6d557a4585240189a406b6da702823477dfa6983d736fa8fab955ba288646",
-          "bytes": 4115
+          "sha256": "22897198f9ccb22abab494f48d4484e131a143491955fbf7e82560006adca6e1",
+          "bytes": 4043
         }
-      ]
+      ],
+      "download": {
+        "path": "routine-craft-1.0.0.zip",
+        "sha256": "42850f82128049eb321e16b1cfc3eecbbcbc2a309a17651d3a7d8068c6af2a6a",
+        "bytes": 4185
+      }
     },
     {
       "slug": "schema-and-access",
@@ -1222,12 +1432,17 @@
           "sha256": "c2d02afcaaa47da8b691cd981f4754423bba000bb488f5572ed8942c0c7eb798",
           "bytes": 2581
         }
-      ]
+      ],
+      "download": {
+        "path": "schema-and-access-1.0.0.zip",
+        "sha256": "ac2c70c30bfe8cf8aeef9df729f873af5af65ca875ca685408af8fd975ef1238",
+        "bytes": 2731
+      }
     },
     {
       "slug": "security-sweep",
       "name": "Security Sweep",
-      "description": "Sweep a tree for secrets, injection, and authz holes — each finding demonstrated and ranked.",
+      "description": "Sweep a codebase for secrets, injection, and missing permission checks — each finding demonstrated and ranked.",
       "version": "1.0.0",
       "author": "StarNet",
       "license": "MIT",
@@ -1242,15 +1457,20 @@
       ],
       "librarySlug": "security-sweep",
       "sourceUrl": "/skills/security-sweep/1.0.0/SKILL.md",
-      "digest": "a85a7b7d4a31aeb0a89b4fe7283b67cec4bb840c114777de14a0d09fd2bb93f5",
-      "bytes": 1673,
+      "digest": "274049f0afc19879888dbfec3a62718cac5b7ec1682f8fcf51a28ffc3a64a48b",
+      "bytes": 1691,
       "files": [
         {
           "path": "SKILL.md",
-          "sha256": "e1fec7e727cd45e4d6aa1eb722283e813ec82583aa1bebfa460d975a91fdc59d",
-          "bytes": 1673
+          "sha256": "5057b619d9da6506a54275fff5f4f4a8983ca451c9ff13edd427fa6028fc6239",
+          "bytes": 1691
         }
-      ]
+      ],
+      "download": {
+        "path": "security-sweep-1.0.0.zip",
+        "sha256": "1e28fb48557d6cd3e067978f29a755f1590c7db4da4de957426d161ee72f8445",
+        "bytes": 1835
+      }
     },
     {
       "slug": "short-form-script",
@@ -1277,12 +1497,17 @@
           "sha256": "a45effd13796d33a8dfbf5e447e0172e4a5c32427a8b3555341e0b1146461482",
           "bytes": 1547
         }
-      ]
+      ],
+      "download": {
+        "path": "short-form-script-1.0.0.zip",
+        "sha256": "2317fa0b7cb3c48c3d4a01f590602a701d920100e26caaa7c6c91e3cb6229614",
+        "bytes": 1697
+      }
     },
     {
       "slug": "skill-authoring",
       "name": "Skill Authoring",
-      "description": "Decide when a procedure deserves a saved skill, then write one the next run can follow cold — named for its trigger, step by step, ending in verification — and keep the library lean with skill.manage.",
+      "description": "Decide when a procedure deserves a saved skill, then write one the next run can follow cold — named for its trigger, step by step, ending in verification — and keep the skill library lean.",
       "version": "1.0.0",
       "author": "StarNet",
       "license": "MIT",
@@ -1299,15 +1524,20 @@
       ],
       "librarySlug": "",
       "sourceUrl": "/skills/skill-authoring/1.0.0/SKILL.md",
-      "digest": "7df42cc56c77c253b9233f4eb46627d4e967437f6c1059679c6640383d85305c",
-      "bytes": 3829,
+      "digest": "c09c2683bd804d61fa3e7f4e1d8c03f6990ffe636efb78902e4f59a386867c02",
+      "bytes": 3810,
       "files": [
         {
           "path": "SKILL.md",
-          "sha256": "3688ce2038a421f5f09a47322aeae3420f5641e376a7d9772ac28f65cf97327b",
-          "bytes": 3829
+          "sha256": "ebe89ba96c8d7cd2c64e1eccc814fbfb8f5dece65f4234857f9a746300a8a8b0",
+          "bytes": 3810
         }
-      ]
+      ],
+      "download": {
+        "path": "skill-authoring-1.0.0.zip",
+        "sha256": "0bc358c52e631bfc0c8c887df1c90bc7cecce58223ca72f074b4c6f2457bd47c",
+        "bytes": 3956
+      }
     },
     {
       "slug": "sop-writing",
@@ -1335,7 +1565,12 @@
           "sha256": "b854a47a750b3ca1f10730077ff45d11c466eb8373aa3f1a10e75b55a1dbeff5",
           "bytes": 2394
         }
-      ]
+      ],
+      "download": {
+        "path": "sop-writing-1.0.0.zip",
+        "sha256": "1b820b47fa094cfbebc90ebae4c5caf676329dac9fb3720ca0c82672be425163",
+        "bytes": 2532
+      }
     },
     {
       "slug": "source-triangulation",
@@ -1363,7 +1598,12 @@
           "sha256": "1d6f4e1f7565e659f199cd005c85f59ba34d3a917f977fd4b9b1df2571477c64",
           "bytes": 1795
         }
-      ]
+      ],
+      "download": {
+        "path": "source-triangulation-1.0.0.zip",
+        "sha256": "dd0be5e57506cef2d505ca0b87662b23b9d69ef4dc3f02007a4a9447cff0484a",
+        "bytes": 1951
+      }
     },
     {
       "slug": "spec-drafting",
@@ -1390,17 +1630,22 @@
           "sha256": "398149cd04e2a36367651fbdd2ee174d7da6fe02fd5a9698865cb34368dc6d2c",
           "bytes": 2260
         }
-      ]
+      ],
+      "download": {
+        "path": "spec-drafting-1.0.0.zip",
+        "sha256": "df5f04b5e0b94d1964717f239b0bea6a2afa42c46c8cb8c91f0d71f69646bf63",
+        "bytes": 2402
+      }
     },
     {
       "slug": "spend-aware-work",
       "name": "Spend-Aware Work",
-      "description": "Plan work inside the station's budget: know the rails that stop a run, estimate before fanning out, pick the model and tools by the job, and stop to ask before a plan outgrows its money.",
+      "description": "Plan work inside the station's budget: know the spending limits that stop a run, estimate before fanning out, pick the model and tools by the job, and stop to ask before a plan outgrows its money.",
       "version": "1.0.0",
       "author": "StarNet",
       "license": "MIT",
       "shelf": "originals",
-      "category": "Planning",
+      "category": "Station",
       "tags": [
         "budget",
         "cost",
@@ -1412,15 +1657,20 @@
       ],
       "librarySlug": "",
       "sourceUrl": "/skills/spend-aware-work/1.0.0/SKILL.md",
-      "digest": "bf078dbdfd0a20ff79f7490de803ec5de594350efa092d6e6a9325af91133d55",
-      "bytes": 4070,
+      "digest": "01101b82fd645a3b4c65ef5dab1c879e05a48dc01dcd0384f8d69a3cd9f744ac",
+      "bytes": 4128,
       "files": [
         {
           "path": "SKILL.md",
-          "sha256": "0e3df41b6e561b6bf47e1dcdd464e41947211cd03195be4c8ab635bf9fe0c42c",
-          "bytes": 4070
+          "sha256": "1a05b8715d00df35d35b0b5cf8d93e7bf65b2b8d47c47b913f892bb9ddba37c2",
+          "bytes": 4128
         }
-      ]
+      ],
+      "download": {
+        "path": "spend-aware-work-1.0.0.zip",
+        "sha256": "1e7957aad35ee6d2d0de7e624ff6eb15a27c0540b6e343d0636218372aa52c42",
+        "bytes": 4276
+      }
     },
     {
       "slug": "station-self-check",
@@ -1443,15 +1693,20 @@
       ],
       "librarySlug": "",
       "sourceUrl": "/skills/station-self-check/1.0.0/SKILL.md",
-      "digest": "91b988526e9fd88dc13a44fe72ce3a8c635d577b29449b26452115274c6d0077",
-      "bytes": 3521,
+      "digest": "e311c23ad6098f307a89d350be15161b78229c6ccba74f95cad4fc2a7d01acaf",
+      "bytes": 3563,
       "files": [
         {
           "path": "SKILL.md",
-          "sha256": "cb052b18511168ccd23c5623076fa8ffae35983cf849e09cc8305279b29a084e",
-          "bytes": 3521
+          "sha256": "0d63a39f30f75e9c33ccd4fd1cf1fa7ad3a45156f6d2d0a882e2abe3e2023aa1",
+          "bytes": 3563
         }
-      ]
+      ],
+      "download": {
+        "path": "station-self-check-1.0.0.zip",
+        "sha256": "648fd3570ea7e607ef1c04d667ce5bfae0fe34f92782cd38e8d1907766006bc8",
+        "bytes": 3715
+      }
     },
     {
       "slug": "studio-video",
@@ -1461,7 +1716,7 @@
       "author": "StarNet",
       "license": "MIT",
       "shelf": "originals",
-      "category": "Studio",
+      "category": "Creative",
       "tags": [
         "video",
         "voiceover",
@@ -1474,15 +1729,20 @@
       ],
       "librarySlug": "",
       "sourceUrl": "/skills/studio-video/1.0.0/SKILL.md",
-      "digest": "164a32e3a4426fc999fca5d566e1e7fe8f2e0fa663f13a9c37b0c5c397c8e558",
-      "bytes": 3947,
+      "digest": "84929140ca9c98781deabf202e7da574d1d49a9c81531f5ac695f8497d5a82c8",
+      "bytes": 3949,
       "files": [
         {
           "path": "SKILL.md",
-          "sha256": "73dcf14d0670f3b21da0a05dc547f357d4d9e87e478a18cef1ec44699e847ddf",
-          "bytes": 3947
+          "sha256": "5f0ba0ef94e26c9d41b751e58710e887e7b7b07c972b781ac4a85089bc1672c0",
+          "bytes": 3949
         }
-      ]
+      ],
+      "download": {
+        "path": "studio-video-1.0.0.zip",
+        "sha256": "6c9d68e68bf83df2379fb7136a4086ed3d12659c4ab8e3de9834b9523f90a0dc",
+        "bytes": 4089
+      }
     },
     {
       "slug": "study-plan",
@@ -1510,7 +1770,12 @@
           "sha256": "56674abadd3a54c5308b27b50333ca6a15d9e9cc918bc350e21d4a870c5363ea",
           "bytes": 1625
         }
-      ]
+      ],
+      "download": {
+        "path": "study-plan-1.0.0.zip",
+        "sha256": "5211f2aeb0eff3ca9f2ccddf5d306cb0b00b79add9845de9a80fb0486d7c8a1b",
+        "bytes": 1761
+      }
     },
     {
       "slug": "support-replies",
@@ -1538,7 +1803,12 @@
           "sha256": "8885ae66e8578fa55c99c1dfc75547f178ef07f1cbcf152b2c19fb0105f167a5",
           "bytes": 2865
         }
-      ]
+      ],
+      "download": {
+        "path": "support-replies-1.0.0.zip",
+        "sha256": "3dd1aa31d1625cdc32df4ca5c6fd6b86d2332ba3c3e3911b6c3ccab949ae38cd",
+        "bytes": 3011
+      }
     },
     {
       "slug": "translation-pass",
@@ -1565,19 +1835,24 @@
           "sha256": "d11d95d7e6a5d1903b108344951f75bb4fd2d7cb84371347a65650e6ab97965b",
           "bytes": 1648
         }
-      ]
+      ],
+      "download": {
+        "path": "translation-pass-1.0.0.zip",
+        "sha256": "df6dd4827c5853b31f6b0282047226962099ea2149647d3cf8412fd0d93d4104",
+        "bytes": 1796
+      }
     },
     {
       "slug": "ugc-brief",
       "name": "UGC Brief",
-      "description": "Package an idea into a ready-to-shoot UGC/video brief — hooks, timed shot list, caption, cover, repurposing cuts.",
+      "description": "Package an idea into a ready-to-shoot creator video brief — hooks, timed shot list, caption, cover, repurposing cuts.",
       "version": "1.0.0",
       "author": "StarNet",
       "license": "MIT",
       "shelf": "originals",
-      "category": "Creator",
+      "category": "Creative",
       "tags": [
-        "creator"
+        "creative"
       ],
       "requires": [
         "dish",
@@ -1585,15 +1860,20 @@
       ],
       "librarySlug": "ugc-brief",
       "sourceUrl": "/skills/ugc-brief/1.0.0/SKILL.md",
-      "digest": "c5d6fa6a3696e0c0c1fe37573a7fdcaeee175bdaa43bb067df2765cc618ee9e3",
-      "bytes": 1663,
+      "digest": "240d6ccfcc8c6ea71ac7553c0d2169f5a5dce6994666cd74fde9e4a116950c13",
+      "bytes": 1668,
       "files": [
         {
           "path": "SKILL.md",
-          "sha256": "716f583af57bff23e0af8824fbe6d547b9d8ce19596cd1b1400a7a72df2e1d2e",
-          "bytes": 1663
+          "sha256": "513646679ec978f1bea44c51cf329a2e05468fa2da3028e280848c9840ca2ba0",
+          "bytes": 1668
         }
-      ]
+      ],
+      "download": {
+        "path": "ugc-brief-1.0.0.zip",
+        "sha256": "36769d51dbb5b37ea3977628f708c12c9683658a178d5329533925064f8d44aa",
+        "bytes": 1802
+      }
     },
     {
       "slug": "voice-match",
@@ -1621,7 +1901,12 @@
           "sha256": "3fe3fa979d32429c859af7d402d740ba62dcbb1866e93918ebae8e47bd1bd8a5",
           "bytes": 2274
         }
-      ]
+      ],
+      "download": {
+        "path": "voice-match-1.0.0.zip",
+        "sha256": "6ac0b54dd55de5938db4c94ea6912369e6ef5a4e7e195f5902eb405e2a9accb4",
+        "bytes": 2412
+      }
     },
     {
       "slug": "work-splitting",
@@ -1631,29 +1916,34 @@
       "author": "StarNet",
       "license": "MIT",
       "shelf": "originals",
-      "category": "Planning",
+      "category": "Station",
       "tags": [
-        "planning"
+        "station"
       ],
       "requires": [
         "orchestrator"
       ],
       "librarySlug": "work-splitting",
       "sourceUrl": "/skills/work-splitting/1.0.0/SKILL.md",
-      "digest": "a365622fcc819d1ef95e1df47d447485408b6206b6d47aa34072536ecd324434",
-      "bytes": 2207,
+      "digest": "fba5d2fc03d18d420d8c1c00a746a88c8696c90064a6acd1d234305bbdc8d172",
+      "bytes": 2245,
       "files": [
         {
           "path": "SKILL.md",
-          "sha256": "b605800be84284b0dee024694724ff982dc404a13cf76bff134a5000c5d30617",
-          "bytes": 2207
+          "sha256": "b04c1a6ea0dfdd701bc079936cc4be12b996c53dcbd993f1e52c15705dacf8b7",
+          "bytes": 2245
         }
-      ]
+      ],
+      "download": {
+        "path": "work-splitting-1.0.0.zip",
+        "sha256": "f73842771a37f0158eaa2bca121532423ae8bbbf02f4be1a13369e42ba4b1a3a",
+        "bytes": 2389
+      }
     },
     {
       "slug": "blocked-page-recovery",
       "name": "Blocked Page Recovery",
-      "description": "Use when web_fetch cannot read a page (403/429, bot wall, dead or changed page): recover a dated archive copy or the site's own data feed, reject fake successes, and cite it with honest provenance.",
+      "description": "When a page won't load (blocked, rate-limited, moved or gone): recover a dated archive copy or the site's own data feed, reject fake successes, and cite it with honest provenance.",
       "version": "1.0.0",
       "author": "Nous Research",
       "license": "MIT",
@@ -1671,8 +1961,8 @@
       ],
       "librarySlug": "",
       "sourceUrl": "/skills/blocked-page-recovery/1.0.0/SKILL.md",
-      "digest": "fb8608948b5cf6c13cd747042492c9f8aeba618abeac6b1ecf85783d7bebd09e",
-      "bytes": 7654,
+      "digest": "79cfbcd58b04d4ed543f735c17a70f5a68676becd8f83b2eec82119b5b4e58cf",
+      "bytes": 7636,
       "files": [
         {
           "path": "LICENSE",
@@ -1681,14 +1971,19 @@
         },
         {
           "path": "SKILL.md",
-          "sha256": "04185016d5beac7fbdef231a3255905b6a06bdc4a8dfb45f16f7a3ac3689c15b",
-          "bytes": 6543
+          "sha256": "13380c7397ec304e9e0fa5c468441f63d2afe8c217152b4739660a298c36a3a7",
+          "bytes": 6525
         }
       ],
       "upstream": {
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/web/blocked-page-recovery",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "blocked-page-recovery-1.0.0.zip",
+        "sha256": "bc19fb4ebf57b432d1de647ba7ac6b7cd6f6ecd718f3553707b27ed79079cdbf",
+        "bytes": 7928
       }
     },
     {
@@ -1731,6 +2026,11 @@
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/software-development/code-wiki",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "code-wiki-1.0.0.zip",
+        "sha256": "eb7f684b1c1fa61160107b4ad229e11e98f11698c8e2146b1b19155cf63430cd",
+        "bytes": 15305
       }
     },
     {
@@ -1771,12 +2071,17 @@
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/productivity/decision-questionnaire",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "decision-questionnaire-1.0.0.zip",
+        "sha256": "cddc851b6954d4b56b16b238bee4c2690bfa0ea47a25fb1b6021135389944eed",
+        "bytes": 5812
       }
     },
     {
       "slug": "document-to-action-items",
       "name": "Document to Action Items",
-      "description": "Extract cited facts, obligations, deadlines and proposed tasks from contracts, reports, forms and scans, keeping page citations, may/should/must modality and OCR uncertainty visible.",
+      "description": "Extract cited facts, obligations, deadlines and proposed tasks from contracts, reports, forms and scans, keeping page citations, how binding each item is (may/should/must) and unclear scan text visible.",
       "version": "1.0.0",
       "author": "Ben Barclay, Nous Research",
       "license": "MIT",
@@ -1794,8 +2099,8 @@
       ],
       "librarySlug": "",
       "sourceUrl": "/skills/document-to-action-items/1.0.0/SKILL.md",
-      "digest": "859947a1ce87bc4be3be9e5a33984831581510fe2f481b3403d8944ad89dc464",
-      "bytes": 5785,
+      "digest": "6be6b055f48de73d61a58838da8b54a0643bd8eb08d9823856ec7d4f816c2ab9",
+      "bytes": 5998,
       "files": [
         {
           "path": "LICENSE",
@@ -1804,20 +2109,25 @@
         },
         {
           "path": "SKILL.md",
-          "sha256": "696cd776f6ccf0110586ea5546add4453b49330ab3fd83b8d9bf35277e3196b1",
-          "bytes": 4635
+          "sha256": "ec204bac033df459da27951936fafc5e41be08257c7a57829d21c71ef91289ad",
+          "bytes": 4848
         }
       ],
       "upstream": {
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/productivity/document-to-action-items",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "document-to-action-items-1.0.0.zip",
+        "sha256": "e5741fdb64548bd0ac7c009e2ca880126c133902e9c4405e4078c8919ee07832",
+        "bytes": 6302
       }
     },
     {
       "slug": "grill-me",
       "name": "Grill Me",
-      "description": "Stress-test a plan before any code is written: map it as a design tree, interview the Commander in rounds of dependency-ordered questions with recommendations, and confirm alignment.",
+      "description": "Stress-test a plan before any code is written: list the decisions it rests on, then question the Commander on them, foundations first, with a recommendation for each, and confirm alignment.",
       "version": "1.0.0",
       "author": "Rafael Zendron, Matt Pocock, Nous Research",
       "license": "MIT",
@@ -1835,8 +2145,8 @@
       ],
       "librarySlug": "",
       "sourceUrl": "/skills/grill-me/1.0.0/SKILL.md",
-      "digest": "841fa8e9e8a6e6e4f1e89f269bf62294605c5b5ec9e51a366afb96fc5abf8bb8",
-      "bytes": 5903,
+      "digest": "f385bc0708c8d8faece99b97aed26b8550c2db28cb266825517adaa0800397e9",
+      "bytes": 6088,
       "files": [
         {
           "path": "LICENSE",
@@ -1845,20 +2155,25 @@
         },
         {
           "path": "SKILL.md",
-          "sha256": "3054285becf3ffd0a3b023695688b6bd9e99127bcd1cc2835f9c739ea96e8bde",
-          "bytes": 4721
+          "sha256": "6249754d66afced14939fbc1cd64035dee32affa41bd9486f9af74375735ff79",
+          "bytes": 4906
         }
       ],
       "upstream": {
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/software-development/grill-me",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "grill-me-1.0.0.zip",
+        "sha256": "bbabacdf39327df82b00f9bf42a52d6ac648a22803b40b052b1df995ad7f0953",
+        "bytes": 6328
       }
     },
     {
       "slug": "llm-wiki",
       "name": "LLM Wiki",
-      "description": "Build and maintain a persistent, interlinked Markdown knowledge base: ingest sources once, cross-reference and flag contradictions, answer questions from it, and lint it for health.",
+      "description": "Build and maintain a persistent, interlinked Markdown knowledge base: ingest sources once, cross-reference and flag contradictions, answer questions from it, and check it for broken links and gaps.",
       "version": "1.0.0",
       "author": "Nous Research",
       "license": "MIT",
@@ -1877,8 +2192,8 @@
       ],
       "librarySlug": "",
       "sourceUrl": "/skills/llm-wiki/1.0.0/SKILL.md",
-      "digest": "e86ea766bf6de91f322ddfa0268c3325161484d1348005048352b418b698af22",
-      "bytes": 17241,
+      "digest": "c810f7cd4ae1d74dea939b78ab22ec66925f8fbeb1191e2fdc7d372608acf365",
+      "bytes": 17257,
       "files": [
         {
           "path": "LICENSE",
@@ -1887,20 +2202,25 @@
         },
         {
           "path": "SKILL.md",
-          "sha256": "ee01d699a307530b2d71afdc12734e4bf61b3ece02b7894ae93af532bab369d7",
-          "bytes": 16130
+          "sha256": "81ebc990398f2fce8bb5fe49e64e9ccd5fce2ce07a2914f63b7e11374cc77366",
+          "bytes": 16146
         }
       ],
       "upstream": {
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/research/llm-wiki",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "llm-wiki-1.0.0.zip",
+        "sha256": "1977e1d10100818f84ca2173c3ae99e136fd9c9b14ce532539dca2ee184f175e",
+        "bytes": 17497
       }
     },
     {
       "slug": "maps",
       "name": "Maps",
-      "description": "Location answers from free OpenStreetMap services, no API key: geocode places, reverse-geocode coordinates, find nearby places by category, road distance and directions, timezones, and area bounds.",
+      "description": "Location answers from free OpenStreetMap services, no API key: geocode places, name the place at a coordinate, find nearby places by category, road distance and directions, timezones, and an area's outline.",
       "version": "1.0.0",
       "author": "Mibayy, Nous Research",
       "license": "MIT",
@@ -1918,8 +2238,8 @@
       ],
       "librarySlug": "",
       "sourceUrl": "/skills/maps/1.0.0/SKILL.md",
-      "digest": "ba0be3ced05bdd3963cfcd7b56895bb87a336691004bbb3a92d454e9d290c59a",
-      "bytes": 12529,
+      "digest": "2da5e6eef4f6238959fa0bfe23aae1f086e070bfe5e5fb2555b466c283cde463",
+      "bytes": 12538,
       "files": [
         {
           "path": "LICENSE",
@@ -1928,20 +2248,25 @@
         },
         {
           "path": "SKILL.md",
-          "sha256": "6da86e5d142ffde72f59768b55e9762c5302f27e42ce255a60d28f9098c6c3ef",
-          "bytes": 11397
+          "sha256": "008e62460e891eb69921a1488423922d4192cf21bcdbd6fa48e9bc258c72ddea",
+          "bytes": 11406
         }
       ],
       "upstream": {
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/productivity/maps",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "maps-1.0.0.zip",
+        "sha256": "79d1d30097559e19ea95b73d8f8c13633aa7c6c3f4c2d5fd8639100d25ba748c",
+        "bytes": 12762
       }
     },
     {
       "slug": "meeting-action-items",
       "name": "Meeting Action Items",
-      "description": "Turn meeting notes or a transcript into cited decisions, owned action items and a held follow-up package, reconciled against the Commander's existing tasks before anything is created.",
+      "description": "Turn meeting notes or a transcript into cited decisions, owned action items and a follow-up draft held for approval, reconciled against the Commander's existing tasks before anything is created.",
       "version": "1.0.0",
       "author": "Ben Barclay, Nous Research",
       "license": "MIT",
@@ -1958,8 +2283,8 @@
       ],
       "librarySlug": "",
       "sourceUrl": "/skills/meeting-action-items/1.0.0/SKILL.md",
-      "digest": "88b690850233cbbbd6b0e3008340599b4eb35259856bb8a968a98ff67da408c3",
-      "bytes": 5523,
+      "digest": "3ab5263d7c902411d0abbd6c32dcf51ab6135aa2079c1e82648cb07ecea4ec9e",
+      "bytes": 5725,
       "files": [
         {
           "path": "LICENSE",
@@ -1968,14 +2293,19 @@
         },
         {
           "path": "SKILL.md",
-          "sha256": "f3a290833fee90b79b098eabd1d4d0efd31fd149cb7eb52a983d7954c5d88038",
-          "bytes": 4373
+          "sha256": "519f22bf4d1e719577d571ee78efa57738c2ba93ac1b15d2ec59f1a7e5877af1",
+          "bytes": 4575
         }
       ],
       "upstream": {
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/productivity/meeting-action-items",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "meeting-action-items-1.0.0.zip",
+        "sha256": "180cdca972927f7baa67264107c44a1a8138405e4f12f71916b55d0e71315b55",
+        "bytes": 6013
       }
     },
     {
@@ -2016,6 +2346,11 @@
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/note-taking/obsidian",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "notes-vault-1.0.0.zip",
+        "sha256": "32291dd5f54c7ee896b6fe685a4d79a7f3ae1324a06cb54d88759721507398b2",
+        "bytes": 4996
       }
     },
     {
@@ -2040,8 +2375,8 @@
       ],
       "librarySlug": "",
       "sourceUrl": "/skills/rest-graphql-debug/1.0.0/SKILL.md",
-      "digest": "0ca333f4e984d0cce345012c0cee79231bc71d1952a85be3897530dfb34e03bc",
-      "bytes": 14759,
+      "digest": "f4fdc79884240c17e5a3238e2c57bbb48d5d73ab7618aa541fb866429b2b13e8",
+      "bytes": 14937,
       "files": [
         {
           "path": "LICENSE",
@@ -2050,20 +2385,25 @@
         },
         {
           "path": "SKILL.md",
-          "sha256": "152098e4d307150321481e4b3cc71aa2afcb4f09e9d47b9e341a6d298de84bd3",
-          "bytes": 13620
+          "sha256": "35d5805c4a3c78ac01d60207bd119030419eb675c38ae9c8dc733d5f37a8c2ce",
+          "bytes": 13798
         }
       ],
       "upstream": {
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/software-development/rest-graphql-debug",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "rest-graphql-debug-1.0.0.zip",
+        "sha256": "3b254c444515a1a41f1162e0c278e16317c90311cdc7f9d69841b83a82d1a1f0",
+        "bytes": 15217
       }
     },
     {
       "slug": "simple-english",
       "name": "Simple English",
-      "description": "Rewrite or audit technical text with ASD-STE100 Simplified Technical English rules: short sentences, one word per meaning, condition-first instructions. For docs, runbooks, error messages and prompts.",
+      "description": "Rewrite or audit technical text with Simplified Technical English (the ASD-STE100 standard) rules: short sentences, one word per meaning, condition-first instructions. For docs, runbooks, error messages and prompts.",
       "version": "1.0.0",
       "author": "AminBlg, Nous Research",
       "license": "MIT",
@@ -2079,8 +2419,8 @@
       "requires": [],
       "librarySlug": "",
       "sourceUrl": "/skills/simple-english/1.0.0/SKILL.md",
-      "digest": "ead576f67f46e3e556494e58dfa1256a1ce7e6b33ae52e9de49b98b8638e65ce",
-      "bytes": 28511,
+      "digest": "7851c3e4f6903c5547dd1ee69f71fd3fe85b8631a0a475dd9281ae6bd115a091",
+      "bytes": 28526,
       "files": [
         {
           "path": "LICENSE",
@@ -2089,8 +2429,8 @@
         },
         {
           "path": "SKILL.md",
-          "sha256": "bec24237fc046a58d2692ca5f88f144f715e3f19654ca112e82d6235f02f1e5d",
-          "bytes": 20342
+          "sha256": "65a8c0c90cf2915f7da6864ec5668316b0a79f713aa704ef03d401da9693fbc9",
+          "bytes": 20357
         },
         {
           "path": "references/checklist.md",
@@ -2107,12 +2447,17 @@
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/creative/simple-english",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "simple-english-1.0.0.zip",
+        "sha256": "47acbc445c12f6d3c5601e6f245356ed7bba177eba9e2d5c2d1ba1728accae95",
+        "bytes": 29094
       }
     },
     {
       "slug": "weekly-review",
       "name": "Weekly Review",
-      "description": "Weekly reset for the Commander: review last week's calendar and commitments, clear capture inboxes, flag stalled and waiting work, and build a capacity-aware plan for next week.",
+      "description": "Weekly reset for the Commander: review last week's calendar and commitments, empty the places notes pile up, flag stalled and waiting work, and build a plan for next week that fits the time available.",
       "version": "1.0.0",
       "author": "Ben Barclay, Nous Research",
       "license": "MIT",
@@ -2131,8 +2476,8 @@
       ],
       "librarySlug": "",
       "sourceUrl": "/skills/weekly-review/1.0.0/SKILL.md",
-      "digest": "a6b35613b1a51ef21c70a7f5286517b19522001065cb1bf5002c042e28868aa0",
-      "bytes": 6345,
+      "digest": "ee318ff26a05f8d1e0d13dada8bb79fb29fcc845d1494bb7e59055ca1589a62c",
+      "bytes": 6589,
       "files": [
         {
           "path": "LICENSE",
@@ -2141,14 +2486,19 @@
         },
         {
           "path": "SKILL.md",
-          "sha256": "764f653568ccd084f4fb71dc7fa37c2a296553d3d06c62bacbf1dd6b51c566ad",
-          "bytes": 5195
+          "sha256": "0bdf761ad10f8d2bc935d42925a19e85dac2f45964ab63e5830d777f71dcbe6d",
+          "bytes": 5439
         }
       ],
       "upstream": {
         "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/productivity/weekly-review-planning",
         "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
         "license": "MIT"
+      },
+      "download": {
+        "path": "weekly-review-1.0.0.zip",
+        "sha256": "e4eb6bc42b3748d5465181c4f55bcefed398513527076f3a074916d29c655184",
+        "bytes": 6849
       }
     }
   ],

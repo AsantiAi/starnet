@@ -1,6 +1,6 @@
 ---
 name: weekly-review
-description: "Weekly reset for the Commander: review last week's calendar and commitments, clear capture inboxes, flag stalled and waiting work, and build a capacity-aware plan for next week."
+description: "Weekly reset for the Commander: review last week's calendar and commitments, empty the places notes pile up, flag stalled and waiting work, and build a plan for next week that fits the time available."
 license: MIT
 metadata:
   title: "Weekly Review"
@@ -85,3 +85,5 @@ Offer to make this a standing ritual with `routine.create` (for example Friday a
 *Needs the NOTEBOOK (standing preferences and commitments) and the CABINET (notes files). Works best with a calendar and a task source connected.*
 
 Adapted for StarNet from weekly-review-planning (Ben Barclay), MIT.
+
+*Task-board and routine steps (task.create, task.manage, routine.create) need the ORCHESTRATOR, which every run the Commander starts carries. In a scheduled run, list those updates in the report instead of making them.*

@@ -1,6 +1,6 @@
 ---
 name: blocked-page-recovery
-description: "Use when web_fetch cannot read a page (403/429, bot wall, dead or changed page): recover a dated archive copy or the site's own data feed, reject fake successes, and cite it with honest provenance."
+description: "When a page won't load (blocked, rate-limited, moved or gone): recover a dated archive copy or the site's own data feed, reject fake successes, and cite it with honest provenance."
 license: MIT
 metadata:
   title: "Blocked Page Recovery"

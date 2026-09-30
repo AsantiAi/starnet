@@ -1,6 +1,6 @@
 ---
 name: llm-wiki
-description: "Build and maintain a persistent, interlinked Markdown knowledge base: ingest sources once, cross-reference and flag contradictions, answer questions from it, and lint it for health."
+description: "Build and maintain a persistent, interlinked Markdown knowledge base: ingest sources once, cross-reference and flag contradictions, answer questions from it, and check it for broken links and gaps."
 license: MIT
 metadata:
   title: "LLM Wiki"
