@@ -13,7 +13,6 @@
 .ds-screen[data-state="ask"] .ds-lamp { background: var(--gold, #ffc24a); }
 .ds-screen[data-state="done"] .ds-lamp { background: var(--ok, #62ff9e); }
 .ds-screen[data-state="failed"] .ds-lamp { background: var(--bad, #ff4a3d); }
-.ds-name { font-weight: normal; font-size: 18px; letter-spacing: 1.2px; color: var(--ph-bright); text-transform: uppercase; }
 .ds-st { font-size: 14px; letter-spacing: 1.2px; color: var(--ph-dim); }
 .ds-screen[data-state="running"] .ds-st { color: var(--ph); }
 .ds-screen[data-state="ask"] .ds-st { color: var(--gold, #ffc24a); }
