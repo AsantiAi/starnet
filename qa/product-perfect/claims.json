@@ -18,8 +18,8 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "ddba2e204ada605b519dc8882a8da4f4a9a8f11c",
-    "pathSetSha256": "c6f7049e734305ed1e41a2f49eb76bb4df3c1d009c1bc413a312a1394bb5326b",
+    "sourceCommit": "91fc38f8186f35a8312797a175d389aa8e781c12",
+    "pathSetSha256": "59b27a3f7d00c1c1f3aa625921a57b19039aad5c0105c47f5a1a9d6db03da3c5",
     "files": [
       {
         "path": "INSTALL.md",
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 405251,
-        "sha256": "02ab4a0643fbf7f11aec5ac570292602f8b6fae31f41b11fbcbd3ba5a525cdc9"
+        "bytes": 405371,
+        "sha256": "46de83843e6c415e2dce61e48ab9b7e53c926389a7b52b2c2cf57925e30d42bb"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
@@ -977,6 +977,11 @@
         "sha256": "0256dfa6c68af8922da3024c290697c0ba63feb5668f75ab66074713dd269a98"
       },
       {
+        "path": "frontend/app/remotesessions.js",
+        "bytes": 6820,
+        "sha256": "174ceb5d39b2a7aaae728f38c82defd63500c8739208c3d57e04477da6051903"
+      },
+      {
         "path": "frontend/app/resummonstore.js",
         "bytes": 9991,
         "sha256": "a8be763d5b41253326778e552903ba57c98ebdeef27239df0db0ce923b2a6c6d"
@@ -1648,8 +1653,8 @@
       },
       {
         "path": "frontend/index.html",
-        "bytes": 91757,
-        "sha256": "7349756ac436ce4b0e65f762c3360f739b87ffa087a6d7c2022edd1c610ae1cb"
+        "bytes": 92057,
+        "sha256": "c9e5dd5e42f28940042a9841656800942c62ccd43d88eaf05ad97c8365fadc68"
       },
       {
         "path": "frontend/js/arcade.js",
