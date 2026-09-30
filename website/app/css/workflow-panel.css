@@ -322,6 +322,8 @@ textarea.wf-io:focus { outline: none; border-color: var(--ph); box-shadow: var(-
 @media (prefers-reduced-motion: reduce) { .wf-node.working .dot { animation: none; } }
 .wf-job-h { font-size: 16px; letter-spacing: .6px; color: var(--ph-dim); }
 .wf-job-h b { font-weight: normal; color: var(--ok); letter-spacing: 1.2px; }
+.wf-job-h b.warn { color: var(--gold); }
+.wf-step-out .src.warn { color: var(--gold); }
 .wf-job-out { max-height: 320px; }
 .wf-steps { display: grid; gap: 2px; }
 .wf-step-out summary { display: flex; justify-content: space-between; gap: 10px; }
