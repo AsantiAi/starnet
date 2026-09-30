@@ -2489,6 +2489,16 @@ const Chat = (() => {
     const refresh = () => { try { a.href = fileUrl(title, agentId); } catch (_) {} };
     a.addEventListener('click', refresh, true); a.addEventListener('auxclick', refresh, true);
     a.addEventListener('contextmenu', refresh, true); a.addEventListener('focus', refresh, true);
+    // A web page opens RUNNING, in the station's BROWSER window (the window has OPEN OUTSIDE for the OS browser).
+    // /api/file would hand the same .html over as an inert download.
+    if (typeof OutputBrowser !== 'undefined' && OutputBrowser.isHtml && OutputBrowser.isHtml(title)) {
+      a.addEventListener('click', ev => {
+        ev.preventDefault(); ev.stopPropagation();
+        if (window.getSelection && String(window.getSelection())) return;   // a drag-selection release is not an open
+        OutputBrowser.open({ agentId: agentId || 'agent', path: String(title || '') });
+      });
+      return;
+    }
     const core = tauriCore();
     if (core && core.invoke) {
       a.addEventListener('click', ev => {
@@ -3761,6 +3771,11 @@ const Chat = (() => {
       ? ((htmlFiles.find(f => /(^|\/)index\.html?$/i.test(f.path)) || htmlFiles[0]).path)
       : '';
     const openRunTab = (relPath) => {
+      // a web page runs in the station's BROWSER window (same sandboxed /workshop-run/ bytes, OPEN OUTSIDE there)
+      if (typeof OutputBrowser !== 'undefined' && OutputBrowser.isHtml && OutputBrowser.isHtml(relPath)) {
+        OutputBrowser.open({ agentId, runId: m.runId, path: relPath, source: 'workshop' });
+        return;
+      }
       const url = opts.runUrl ? opts.runUrl(relPath) : '';
       const warn = (msg) => { if (typeof StationUI !== 'undefined' && StationUI.notify) StationUI.notify(msg, 'warn'); };
       if (!url) { warn('could not open that — the station may be unreachable'); return; }
@@ -8848,6 +8863,9 @@ const Chat = (() => {
         // along per the frozen event shape so any consumer sees the result's own words, never a bare 'error'.
         onToolResult: ev => { if (!ev.isError) runToolsOk++; const nm = callNames[ev.callId] || 'tool'; Channels.addToolResult(ws.id, { callId: ev.callId, name: nm, summary: ev.summary, isError: ev.isError, ms: ev.ms }); presenceToolResult(ws); if (isActiveWs(ws)) resolveChip(ev, nm); if (typeof U !== 'undefined' && U.bus && ev.callId) U.bus.emit('agent.tool_result', { name: nm, agentId: ws.agentId, runId: ev.runId, callId: ev.callId, ok: !ev.isError, isError: !!ev.isError, summary: ev.summary, ms: ev.ms }); },   // runId rides along: a runId-less copy reset xp.js's per-run buffer (freshRun(undefined)) and wiped buffered memory-reuse credit
         onDeliverable: ev => {
+          // BROWSER window: every write (not just the first per run) — it live-reloads the page on screen and, with
+          // FOLLOW on, shows a new web page as it's made. Before the per-run dedupe on purpose.
+          if (typeof OutputBrowser !== 'undefined' && OutputBrowser.noteOutput) { try { OutputBrowser.noteOutput(ev); } catch (_) {} }
           // Any produced file is an openable product (image_generate emits kind:'image', fs.write emits
           // kind:'file'). How we RENDER it is decided client-side from the EXTENSION (the reference harness's model), not
           // from the backend's kind — so a .mp4/.webm the agent writes becomes an inline player and a .png a
