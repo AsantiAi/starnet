@@ -77,12 +77,12 @@ A.ok(/mach: n\.propId \? n\.mach : null, lamp: n\.ok, name: n\.name, meta: n\.me
 A.ok(/'\\n' \+ \(brief \? '“' \+ brief\.slice\(0, 140\)/.test(node) && /: 'no instructions yet'\) \+ \(t \? '\\n✓ tested' : ''\);/.test(node) && !/<span class="s">|no agent yet<\/span>/.test(node),
   'a step\'s instructions, its missing agent and its test live in the tip — no sentence is printed on a tile');
 A.ok(/meta: f\.outbox\.reached \? 'the result' : f\.outbox\.reachedOnceCrewed \? 'needs crew' : 'not connected'/.test(panel) && /meta: !ip \? 'none yet' : kinds > 1/.test(panel), 'the INBOX and OUTBOX say one short thing each');
-/* the belts are the floor's own conveyor art: still until a job would reach the OUTBOX (the floor's energized rule) */
-A.ok(/strip\.style\.setProperty\('--wf-belt-cold', 'url\(' \+ cold \+ '\)'\); strip\.style\.setProperty\('--wf-belt-live', 'url\(' \+ live \+ '\)'\);/.test(panel), 'the belts wear the floor\'s belt tile');
-A.ok(/strip\.classList\.toggle\('live', !!\(f && f\.trigger\.propId && f\.outbox\.reached\)\);/.test(panel), '…and roll only when a job entering the INBOX would reach the OUTBOX');
-A.ok(/beltStill: live => beltStill\(live\)/.test(build) && /Conveyor\.create\(\)\.drawBelts\(g, 0, T, \[0, 1, 2\]\.map\(x => \(\{ x, y: 0, dir: 'E' \}\)\), live \? null : \{\}\);/.test(build), 'the Build host draws that tile with the floor\'s own conveyor painter (lit or cold)');
-A.ok(/\.wf-strip\.has-belt \.wf-belt \.rail \{[^}]*background: var\(--wf-belt-cold\) repeat-x/.test(css) && /\.wf-strip\.has-belt\.live \.wf-belt \.rail \{ background-image: var\(--wf-belt-live\); animation: wf-belt/.test(css), '…repeated along each belt, rolling only on a live line');
-A.ok(!/rail::after/.test(css) && /\.wf-strip\.live \.wf-arcs path\.chev \{ animation:/.test(css), 'nothing in the diagram moves on a line that cannot run');
+/* the joins are a clean line with a chevron — NEVER the floor's real conveyor art (2026-09-30, Andrew: "ew … that u put the
+   actual conveyor there. terrible") — a shade brighter once a job entering the INBOX would reach the OUTBOX, never moving */
+A.ok(!/beltStill|wf-belt-cold|wf-belt-live|has-belt/.test(panel + build + css) && !/Conveyor\./.test(panel), 'the diagram never draws the real conveyor');
+A.ok(/\.wf-belt \.rail \{ position: relative; width: 100%; height: 2px;/.test(css) && /\.wf-belt \.rail::after \{[^}]*rotate\(45deg\)/.test(css), 'a join is a clean 2px line with a chevron into the next part');
+A.ok(/strip\.classList\.toggle\('live', !!\(f && f\.trigger\.propId && f\.outbox\.reached\)\);/.test(panel) && /\.wf-strip\.live \.wf-belt \.rail \{ background: rgba\(var\(--ph-rgb\),\.5\); \}/.test(css), '…a shade brighter on a line that can run');
+A.ok(!/wf-belt \.rail[^{]*\{[^}]*animation/.test(css) && /\.wf-strip\.live \.wf-arcs path\.chev \{ animation:/.test(css), 'the joins never move; the loop\'s way back moves only on a line that can run');
 A.ok(/card\.classList\.toggle\('glass-tip', !!el\.closest\('\.refit-dock, \.wf-panel'\)\)/.test(rd('app/tooltip.js')), 'the panel\'s tips are the glass card that keeps its lines');
 A.ok(/mach: 'intake'/.test(panel) && /mach: 'outbox'/.test(panel), 'the INBOX and OUTBOX cards name their machines');
 A.ok(/machineStill: type => machineStill\(type\)/.test(build), 'the Build host offers a machine\'s art to the panel');
