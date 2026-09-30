@@ -87,8 +87,13 @@
   });
   const zoom = () => Number.parseFloat(getComputedStyle(document.body).zoom) || 1;
   const rect = el => el && el.getBoundingClientRect();
+  // A bar that is not on screen (HUD mode hides #topbar/#bottombar) measures as a zero rect; seating
+  // against it put sheets at a negative top, off-screen. A hidden bar is no bar; in the HUD the deck is the top edge.
+  const shown = r => (r && r.width > 0 && r.height > 0 ? r : null);
   function band() {
-    const z = zoom(), top = rect(document.querySelector('#topbar')), bottom = rect(document.querySelector('#bottombar'));
+    const z = zoom();
+    const top = shown(rect(document.querySelector('#topbar'))) || shown(rect(document.querySelector('#hud-deck')));
+    const bottom = shown(rect(document.querySelector('#bottombar')));
     const left = rect(document.querySelector('#left')), right = rect(document.querySelector('#chat-panel'));
     let x = left && left.width ? left.right + 10 : 12;
     let end = right && right.width ? right.left - 10 : innerWidth - 12;
