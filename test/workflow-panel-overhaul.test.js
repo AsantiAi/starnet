@@ -79,10 +79,11 @@ A.ok(/overflow-wrap:\s*break-word/.test(rule('.wf-belt .carry')) && /max-width:\
 A.ok(/\.wf-strip-wrap\.pin \{ position: sticky; top: 0; z-index: 3; \}/.test(css), 'a pinned map holds the top of the scroll');
 A.ok(/var\(--panel2\)/.test(rule('.wf-strip-wrap')), '…over an opaque well (the panel\'s own sheet is translucent: text scrolling under it would show through)');
 A.ok(/strip\.parentNode\.classList\.toggle\('pin', !nodes\.some\(n => n\.kind === 'col' && n\.col\.docks\.length > 1\)\);/.test(panel), 'only a one-row diagram is pinned (stacked branches would hold too much of the panel)');
-A.ok(/function toCard\(\) \{\s*const sc = \$\('#wf-scroll'\), head = \$\('#wf-head'\);\s*if \(sc && head && sc\.scrollTop > head\.offsetHeight\) sc\.scrollTop = head\.offsetHeight;\s*\}/.test(panel), 'toCard brings the view back so the map sits at the top with the card under it');
+A.ok(/function toCard\(always\) \{\s*const sc = \$\('#wf-scroll'\), head = \$\('#wf-head'\);\s*if \(sc && head && \(always \|\| sc\.scrollTop > head\.offsetHeight\)\) sc\.scrollTop = head\.offsetHeight;\s*\}/.test(panel), 'toCard brings the view back so the map sits at the top with the card under it');
 A.ok(/S\.sel = propId; S\.insertAt = null; S\.view = 'edit';\s*paint\(true\);\s*toCard\(\);/.test(panel), 'picking a part brings its card under the map');
 A.ok(/if \(newLine\) \{ const sc = \$\('#wf-scroll'\); if \(sc\) sc\.scrollTop = 0; \} else toCard\(\);/.test(panel), 'a floor click does too; a new line starts at its top');
-A.ok(/paintStrip\(flow\(\)\); if \(S\.insertAt != null\) toCard\(\);/.test(panel) && /S\.view = 'test'; paint\(true\); toCard\(\);/.test(panel) && /S\.view = 'edit'; paint\(true\); toCard\(\);/.test(panel), 'the + inserter, TEST and SETUP open in view');
+A.ok(/paintStrip\(flow\(\)\); if \(S\.insertAt != null\) toCard\(\);/.test(panel) && /S\.view = 'edit'; paint\(true\); toCard\(\);/.test(panel), 'the + inserter and SETUP open in view');
+A.ok((panel.match(/S\.view = 'test'; paint\(true\); toCard\(true\);/g) || []).length === 2, 'TEST (the footer key and the top bar\'s) always opens with the map at the top: its modes and RUN key are not pushed under the fold');
 
 /* ---------- the floor: captions are plates ---------- */
 const notes = at(build, '  function drawTestNotes(now, t) {', '  /* A FLOOR CAPTION IS A PLATE');

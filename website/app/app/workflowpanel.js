@@ -169,11 +169,13 @@ const WorkflowPanel = (() => {
   }
   /* THE LINE DIAGRAM IS THE PANEL'S MAP (2026-09-30). It stays pinned at the top of the scroll while a part's editor moves
      under it (CSS: .wf-strip-wrap.pin), so every part of the line is one click away however long its card is. Picking a
-     part — or opening the + inserter, or switching to TEST — brings the view back so the map sits at the top with the
-     card (or the inserter) right under it. A view still showing the header is left alone. */
-  function toCard() {
+     part — or opening the + inserter — brings the view back so the map sits at the top with the card (or the inserter)
+     right under it; a view still showing the header is left alone. Opening TEST always puts the map at the top
+     (`always`): its modes, the test job and its RUN key are what the Commander came for, and the header would push
+     them under the fold. */
+  function toCard(always) {
     const sc = $('#wf-scroll'), head = $('#wf-head');
-    if (sc && head && sc.scrollTop > head.offsetHeight) sc.scrollTop = head.offsetHeight;
+    if (sc && head && (always || sc.scrollTop > head.offsetHeight)) sc.scrollTop = head.offsetHeight;
   }
   // called by build.js after every plan recompile (and on edits) — the card follows the floor
   function refresh() {
@@ -199,11 +201,15 @@ const WorkflowPanel = (() => {
   function paint(force) {
     if (!el || !H) return;
     const f = flow();
+    // a view parked with the map at the top stays parked there when the header above it changes height (a TODAY row
+    // appearing mid-test, a hint going): the header's growth must not slide back in over the map
+    const sc = $('#wf-scroll'), hd = $('#wf-head'), atMap = !!(sc && hd && sc.scrollTop > 0 && Math.abs(sc.scrollTop - hd.offsetHeight) < 2);
     paintHead(f);
     paintStrip(f);
     paintFoot(f);
     if (force || !typing()) { keepDrafts(); paintBody(f); }
     else paintLive(f);
+    if (atMap && sc.scrollTop !== hd.offsetHeight) sc.scrollTop = hd.offsetHeight;
     if (S.session && S.session.state === 'paused') {
       const h = S.session.hops[S.session.paused.afterHop];
       H.pausedMarker(h ? { agentId: h.agentId, dockId: h.dockId || null, label: 'HANDOFF WAITING ▸ ' + ((WL().pausedNext(S.session, nameOf) || {}).label || '') } : null);
@@ -511,7 +517,7 @@ const WorkflowPanel = (() => {
     html += '<button type="button" class="bb sm" id="wf-done">✓ DONE</button>';
     foot.innerHTML = html;
     wireEdits(foot);
-    const b1 = $('#wf-test'); if (b1) b1.onclick = () => { H.sfx('click'); S.view = 'test'; paint(true); toCard(); if (s && s.state === 'paused') refreshPaused(); };
+    const b1 = $('#wf-test'); if (b1) b1.onclick = () => { H.sfx('click'); S.view = 'test'; paint(true); toCard(true); if (s && s.state === 'paused') refreshPaused(); };
     const b2 = $('#wf-back'); if (b2) b2.onclick = () => { H.sfx('click'); S.view = 'edit'; paint(true); toCard(); };
     $('#wf-done').onclick = () => { H.sfx('click'); close(); };
   }
@@ -1479,7 +1485,7 @@ const WorkflowPanel = (() => {
         + (off ? ' aria-disabled="true" data-tip="this station cannot pause a line between steps — RUN ONE REAL JOB runs it end to end"' : '')
         + '><b>' + label + '</b><small>' + esc(sub) + '</small></button>';
     }).join('');
-    const input = '<textarea id="wf-st-in" data-keep="stin" class="wf-io" rows="4" aria-label="Test job" placeholder="What should the line work on?">' + esc(S.testJob[S.lineKey] || '') + '</textarea>';
+    const input = '<textarea id="wf-st-in" data-keep="stin" class="wf-io" rows="3" aria-label="Test job" placeholder="What should the line work on?">' + esc(S.testJob[S.lineKey] || '') + '</textarea>';
     let body;
     if (mode === 'watch') {
       body = '<p class="wf-help">A crate rides the belts and every machine says what it <b>would</b> do: who works it, where it splits, where it waits, where it ships. No agent runs and nothing is spent.</p>'
@@ -1493,20 +1499,21 @@ const WorkflowPanel = (() => {
       const sr = H.sampleState ? H.sampleState() : null, mine = sr && c && sr.key === c.key ? sr : null;   // the server's own verdict on the job, here
       body = '<p class="wf-help">Your test job runs through the line for real, end to end: real agents, real cost, and the result lands in the <b>OUTBOX</b> like any job.</p>'
         + input
-        + (mine && mine.view ? '<div class="wf-sample-res">' + H.sampleHTML(mine.view) + '</div>' : '')
         + '<div class="wf-row"><button type="button" class="bb sm refit-primary" id="wf-real"' + (mine && mine.pending ? ' disabled' : '') + '>'
         + (mine && mine.pending ? (mine.phase === 'post' ? 'POSTING LINE…' : 'THE JOB IS RIDING THE LINE…') : '▶ RUN ONE REAL JOB') + '</button>'
         // ■ STOP (2026-09-29): a real job can be stopped while it rides — THIS job only (the station's E-STOP stops everything)
         + (mine && mine.pending && mine.phase === 'run' && H.stopSample ? '<button type="button" class="bb sm" id="wf-real-stop"' + (mine.stopping ? ' disabled' : '') + ' data-tip="stop this job: the running step is cut off and nothing more runs — what already ran is counted">' + (mine.stopping ? 'STOPPING…' : '■ STOP') + '</button>' : '')
-        + '</div>';
+        + '</div>'
+        // the verdict lands UNDER the keys that asked for it (above them, it pushed RUN down the panel as it arrived)
+        + (mine && mine.view ? '<div class="wf-sample-res">' + H.sampleHTML(mine.view) + '</div>' : '');
     }
-    return '<section class="wf-sec"><h3>' + (s ? 'Test it again' : 'How do you want to test it?') + '</h3>'
+    return '<section class="wf-sec"><h3><span class="n">TEST</span>' + (s ? 'Test it again' : 'How do you want to test it?') + '</h3>'
       + '<div class="wf-modepicks wf-modepicks-3" role="group" aria-label="How to test">' + chips + '</div>' + body + '</section>';
   }
   function showTest(mode) {   // the top bar's TEST opens this view on the panel's line (build.js openTest)
     if (!el) return false;
     if (mode) S.testMode = mode;
-    S.view = 'test'; paint(true);
+    S.view = 'test'; paint(true); toCard(true);
     return true;
   }
   function paintTest(body, f) {
@@ -1534,7 +1541,10 @@ const WorkflowPanel = (() => {
       main = '<section class="wf-sec"><h3><span class="wf-spin"></span>' + (s.running ? thumb(s.running.agentId, 16, 20, 'wf-ithumb') : '') + esc(who) + ' is working…</h3><p class="wf-help">A real run. It pauses when this step hands off.</p>'
         + '<div class="wf-row"><button type="button" class="bb sm" id="wf-st-stop">■ STOP</button></div></section>';
     } else if (s.state === 'paused') main = pausedHTML(s, f);
-    body.innerHTML = '<section class="wf-sec wf-sthead"><h3><span class="n">TEST</span>' + esc(lineName() || 'This line') + '</h3>' + budget + '</section>' + err + log + main;
+    /* (2026-09-30) the view used to open on a second title — TEST · the line's name, which the panel's header already
+       carries — and that pushed the RUN key under the fold. The mode picker's own heading wears the TEST tag now; the
+       only thing kept above it is a session's spend against the line cap, when there is a session. */
+    body.innerHTML = (budget ? '<section class="wf-sec wf-sthead">' + budget + '</section>' : '') + err + log + main;
     // wiring
     $$('[data-tmode]').forEach(b => b.onclick = () => {
       if (b.classList.contains('off')) { H.sfx('bad'); H.flashTip(b.getAttribute('data-tip') || 'not available here', false); return; }
@@ -1596,7 +1606,7 @@ const WorkflowPanel = (() => {
     return '<section class="wf-sec"><h3>' + (deniedLine(h) ? '⚠ ' : '✓ ') + esc(nameOf(h.agentId)) + ' finished' + (h.pass > 1 ? ' (pass ' + h.pass + ')' : '') + '</h3>' + deniedLine(h)
       + '<div class="wf-meta"><span>cost <b>$' + (+h.usd || 0).toFixed(4) + '</b></span><span>' + (Array.isArray(h.tools) ? h.tools.length : (+h.tools || 0)) + ' tool calls</span>' + (h.ms ? '<span>' + Math.round(h.ms / 1000) + 's</span>' : '') + '</div>' + v
       + '<div class="wf-from"><span>' + (toOut ? 'FINAL RESULT · WHAT THE LINE WOULD DELIVER' : nx.kind === 'end' ? 'THE LINE ENDS HERE · ' + esc(nx.label) : 'EXACT TEXT ' + esc(nx.label) + ' WILL GET') + '</span><span class="wf-tag" id="wf-edtag"' + (edited ? '' : ' hidden') + '>EDITED BY YOU</span></div>'
-      + '<textarea id="wf-handoff" class="wf-io' + (edited ? ' edited' : '') + '" rows="7" aria-label="Handoff text">' + esc(S.handoff) + '</textarea>'
+      + '<textarea id="wf-handoff" class="wf-io' + (edited ? ' edited' : '') + '" rows="5" aria-label="Handoff text">' + esc(S.handoff) + '</textarea>'
       + '<div class="wf-row"><button type="button" class="bb sm" id="wf-restore"' + (edited ? '' : ' hidden') + '>UNDO MY EDIT</button></div>'
       + '<div class="wf-row"><button type="button" class="bb sm refit-primary' + (edited ? ' cyan' : '') + '" id="wf-cont"' + (S.busy ? ' disabled' : '') + '>' + (edited ? (toOut ? '▶ FINISH WITH MY EDIT' : '▶ CONTINUE WITH MY EDIT') : (toOut ? '▶ FINISH TEST' : '▶ CONTINUE')) + '</button>'
       + '<button type="button" class="bb sm" id="wf-rerun"' + (S.busy ? ' disabled' : '') + '>↻ RE-RUN STEP</button><button type="button" class="bb sm" id="wf-toend"' + (S.busy ? ' disabled' : '') + '>▶▶ RUN TO END</button><button type="button" class="bb sm" id="wf-st-stop2"' + (S.busy ? ' disabled' : '') + '>■ STOP</button></div>'
