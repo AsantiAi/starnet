@@ -205,6 +205,27 @@
     return facts;
   }
 
-  return { CTX_LADDER, DEFAULT_MAX_CTX, nativeRoot, toNativeMessages, toNativeRequest, estimateTokens, pickNumCtx,
+  /* WHY A LOCAL MODEL WENT SILENT (issue: a run "timed out" after 605s = the loop's two 300s silent attempts).
+     Ollama sends no bytes, not even headers, until its first token, so everything before it is invisible: loading
+     the weights, then reading the prompt. A StarNet task prompt is ~21k tokens; a GPU reads that in seconds, a CPU
+     can take many minutes. /api/ps says where the model actually sits, so the error states that fact instead of
+     "the provider may be down". Pure: psJson is the /api/ps body (or null when it could not be read). */
+  function placementNote(psJson, model, promptTokens) {
+    const id = String(model || '');
+    const row = psJson && Array.isArray(psJson.models) ? psJson.models.find(m => m && (m.name === id || m.model === id)) : null;
+    const prompt = promptTokens > 0 ? ' a ~' + Math.round(promptTokens / 1000) + 'k-token prompt' : ' the prompt';
+    if (!psJson) return 'Ollama on this computer sent nothing back, and its status (/api/ps) could not be read.';
+    if (!row) return 'Ollama on this computer sent nothing back and does not list ' + id + ' as loaded, so it was still loading the model from disk.';
+    const size = Number(row.size) || 0, vram = Number(row.size_vram) || 0;
+    const ctx = Number(row.context_length) || 0;
+    const where = !vram ? 'entirely on the CPU (no part of it is on a GPU)'
+      : (size && vram < size) ? 'only ' + Math.round(vram / size * 100) + '% on the GPU, the rest on the CPU'
+      : 'fully on the GPU';
+    return 'Ollama on this computer had ' + id + ' loaded ' + where + (ctx ? ' at a ' + Math.round(ctx / 1024) + 'k window' : '')
+      + ' and had not finished reading' + prompt + '. '
+      + (!vram || (size && vram < size) ? 'A model running on the CPU reads StarNet task prompts slowly; a smaller model, or one that fits the GPU, answers sooner.' : '');
+  }
+
+  return { CTX_LADDER, DEFAULT_MAX_CTX, placementNote, nativeRoot, toNativeMessages, toNativeRequest, estimateTokens, pickNumCtx,
     exceedFrom, makeChunkTranslator, showFacts };
 });

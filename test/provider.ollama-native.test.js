@@ -201,5 +201,30 @@ module.exports = (async () => {
     } finally { if (prev == null) delete process.env.SKYNET_OLLAMA_NUM_CTX; else process.env.SKYNET_OLLAMA_NUM_CTX = prev; }
   }
 
+  // A silent local model says WHERE it runs (the 605s "stalled" report = two 300s attempts with no bytes).
+  {
+    const ps = (vram) => ({ models: [{ name: 'qwen3:8b', size: 10e9, size_vram: vram, context_length: 32768 }] });
+    A.ok(/entirely on the CPU/.test(N.placementNote(ps(0), 'qwen3:8b', 21000)), 'no VRAM = CPU only');
+    A.ok(/~21k-token prompt/.test(N.placementNote(ps(0), 'qwen3:8b', 21000)), 'names the prompt it was reading');
+    A.ok(/only 40% on the GPU/.test(N.placementNote(ps(4e9), 'qwen3:8b', 21000)), 'a partial offload is stated as a share');
+    A.ok(/fully on the GPU at a 32k window/.test(N.placementNote(ps(10e9), 'qwen3:8b', 21000)), 'a full GPU load is stated too');
+    A.ok(!/smaller model/.test(N.placementNote(ps(10e9), 'qwen3:8b', 21000)), 'and no CPU advice when it is on the GPU');
+    A.ok(/still loading the model/.test(N.placementNote({ models: [] }, 'qwen3:8b', 21000)), 'not listed = still loading');
+    A.ok(/could not be read/.test(N.placementNote(null, 'qwen3:8b', 0)), 'an unreadable status says so, never guesses');
+
+    const fetch = async (url, init) => {
+      if (url.endsWith('/api/show')) return SHOW(40960, ['completion', 'tools']);
+      if (url.endsWith('/api/ps')) return new Response(JSON.stringify(ps(0)), { status: 200 });
+      if (url.endsWith('/api/chat')) return new Promise((_, reject) => { init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true }); });
+      return new Response('{"data":[]}', { status: 200 });
+    };
+    const p = makeOpenAICompatibleProvider({ fetch, baseUrl: 'http://127.0.0.1:11434/v1', nativeOllama: true, connectTimeoutMs: 30 });
+    let err = null;
+    try { await collect(p, { model: 'qwen3:8b', messages: [{ role: 'user', content: 'x' }], preStreamRetries: 0 }); } catch (e) { err = e; }
+    A.ok(err && /timed out/.test(err.message), 'a silent local model still times out');
+    A.ok(err && /entirely on the CPU/.test(err.message), 'and the error says the model runs on the CPU (from /api/ps)');
+    A.eq(errorClass.classifyApiError(err, { model: 'qwen3:8b' }).reason, 'timeout', 'the explanation does not change how it classifies');
+  }
+
   A.report('provider.ollama-native.test');
 })();

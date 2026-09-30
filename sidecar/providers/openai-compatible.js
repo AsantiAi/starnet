@@ -387,6 +387,15 @@
       }
       return modelFacts.get(id);
     }
+    // /api/ps (what is loaded, where, at what window), or null when it cannot be read within 3s.
+    async function ollamaStatus() {
+      const guard = timeouts.connectGuard(null, 3000);
+      try {
+        const res = await doFetch(nativeBase + '/api/ps', { headers: headerBag(key, opts.headers), signal: guard.signal });
+        return res.ok ? await res.json() : null;
+      } catch (_) { return null; }
+      finally { guard.disarm(); }
+    }
     // The window this model actually gets here: a pinned size, else min(its trained maximum, the ceiling).
     function usableWindow(modelMax) {
       if (pinnedCtx) return pinnedCtx;
@@ -659,6 +668,12 @@
           });
         } catch (e) {
           if (isAbort(e, signal)) throw e;
+          // Local Ollama silent past the connect ceiling: say where the model actually runs (one /api/ps read).
+          // Appended, so the message still reads "timed out" and classifies exactly as before.
+          if (native && e && e.timeout && e.phase === 'connect' && !e.ollamaPlacement) {
+            e.ollamaPlacement = true;
+            e.message += ' — ' + ollamaNative.placementNote(await ollamaStatus(), body.model, ollamaNative.estimateTokens(body));
+          }
           // a TLS rejection or a crash in our own request code cannot heal by re-sending: fail fast, unmarked
           if (!classifyApiError(e, { model: body.model }).retryable) throw e;
           if (attempt < retries) { waited += RETRY_DELAYS[attempt]; await delay(RETRY_DELAYS[attempt], signal); continue; }
