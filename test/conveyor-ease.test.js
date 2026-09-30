@@ -29,10 +29,18 @@ A.ok(/'<p class="wf-help wf-adds">' \+ addsOnTopHTML\(p\) \+ '<\/p>'/.test(panel
 const trig = at(panel, '  function paintTrigger(body, f, p) {', '  // LINE BUDGET: one save');
 A.ok(/const sendHTML = '<section class="wf-sec wf-send"><h3><span class="n">INBOX<\/span>Send it a job<\/h3>'/.test(trig) && /body\.innerHTML = sendHTML \+ '<section class="wf-sec"><h3>Or start it automatically<\/h3>'/.test(trig),
   'the INBOX card opens on SEND IT A JOB; the automatic starts follow it');
-A.ok(/'▶ SEND IT DOWN THE LINE'/.test(trig) && /H\.runSample\(cc, \{ text: t, onUpdate: \(\) => paint\(false\) \}\);/.test(trig) && /if \(!t\) \{ H\.sfx\('bad'\); H\.flashTip\('write the job first/.test(trig),
+const sendDyn = at(panel, '  function sendDynHTML(f) {', '  function jobResultHTML(');
+A.ok(/'▶ SEND IT DOWN THE LINE'/.test(sendDyn) && /H\.runSample\(cc, \{ text: t, onUpdate: \(\) => paint\(false\) \}\);/.test(sendDyn) && /if \(!t\) \{ H\.sfx\('bad'\); H\.flashTip\('write the job first/.test(sendDyn),
   '…the same real job as RUN ONE REAL JOB, with the typed text (an empty job is refused with the reason)');
 A.ok(/S\.testJob\[S\.lineKey\] = job\.value; saveTests\(\);/.test(trig) && !/id="wf-job"/.test(panel), '…and the typed job is the line\'s test job (one box, not two)');
-A.ok(/id="wf-send-stop"/.test(trig) && /H\.stopSample\(\)/.test(trig), '…and a job riding the line can be stopped from there');
+A.ok(/id="wf-send-stop"/.test(sendDyn) && /H\.stopSample\(\)/.test(sendDyn), '…and a job riding the line can be stopped from there');
+/* found walking a fresh station: the job ran, and a card whose job box kept the cursor never showed it riding or what came back */
+A.ok(/'<div data-live="send">' \+ sendDynHTML\(f\) \+ '<\/div><\/section>'/.test(trig) && /LIVE\.send = \(f, n\) => \(n\.contains\(document\.activeElement\) \? null : sendDynHTML\(f\)\);/.test(panel),
+  'the SEND box\'s moving parts are a LIVE region: they follow the job whatever has focus, never rebuilt under the cursor');
+A.ok(/const h = fn\(f, n\); if \(h != null\) n\.innerHTML = h;/.test(panel) && /function wireLive\(\) \{[^\n]*wireSend\(\); \}/.test(panel) && /if \(!send \|\| send\._wired\) return;/.test(sendDyn),
+  '…a live region can be left as it is, and a rebuilt one is wired again (once per element)');
+A.ok(/job\.blur\(\);/.test(sendDyn) && /const nrIn = \$\('#wf-nr-in'\); if \(nrIn\) nrIn\.blur\(\);/.test(panel) && /if \(si\) si\.blur\(\);/.test(panel),
+  '…and SEND, SUGGEST FIXES and RUN ONE REAL JOB take the cursor out of their box first (WebKit keeps it there on a click)');
 
 /* ---------- the job, read back ---------- */
 const res = at(panel, '  function jobResultHTML(mine, f) {', '  function testModeNow() {');
@@ -87,6 +95,20 @@ A.ok(/'<span data-tip="' \+ esc\(todayTip\(c\[0\]\)\) \+ '">/.test(panel) && /on
   'each TODAY number has a tip saying what it counts (RUNS are step runs; SHIPPED is proven work — a text answer is delivered, not counted)');
 A.ok(/; it runs when you send it a job\. /.test(read('frontend/app/workflowline.js')) && !/runs when you test it/.test(read('frontend/app/workflowline.js') + panel),
   'a line nothing starts by itself "runs when you send it a job" (the INBOX card sends one), not only "when you test it"');
+/* ---------- the LAST stage is told its reply IS the result (found on a real model: a WRITER asked for three short stories wrote an
+   essay about "the upstream report", because every stage was told to produce output "for the next stage … build on it") ---------- */
+const P = require('../frontend/app/pipeline.js'), Chain = require('../sidecar/routing/chain.js');
+const mid = P.handoffPrompt('3 AI stories, keep it short', 'researcher', 'the notes', 1, 'Write it up.');
+const last = P.handoffPrompt('3 AI stories, keep it short', 'researcher', 'the notes', 1, 'Write it up.', '', true);
+A.ok(/produce the output for the next stage/.test(mid) && !/LAST stage/.test(mid), 'a middle stage keeps its hand-off (and every old caller composes byte-identical turns)');
+A.ok(/You are the LAST stage: your reply is the finished result the requester receives\. Give them exactly what the original request asks for — its format, length and tone/.test(last) && !/next stage|build on it/.test(last),
+  'the stage whose reply leaves the line is told it IS the result: the request\'s format, length and tone, never "for the next stage"');
+A.ok(P.parseHandoff(last) && P.parseHandoff(last).original === '3 AI stories, keep it short', '…and the OUTBOX still reads the original request out of it');
+A.ok(!/LAST stage/.test(P.handoffPrompt('req', 'writer', 'draft', 1, 'be picky', 'YOUR VERDICT DECIDES…', true)), 'a stage a review loop reads keeps its verdict instruction, never the last-stage one');
+const turnAt = lastStage => Chain.hopTurn({ originalText: 'req', from: 'a', upstream: 'up', hop: 1, target: 'w', targetDock: 'd2', lineId: 'L', lastStage });
+A.ok(/LAST stage/.test(turnAt((a, d) => a === 'w' && d === 'd2')) && !/LAST stage/.test(turnAt(() => false)) && !/LAST stage/.test(turnAt(undefined)), 'the chain asks lastStage(target, dock) — no helper, no change');
+A.ok(/lastStage: \(agentId, dockId\) => router\.chainShipsToOutbox\(agentId, dockId\)/.test(sidecar) && /lastStage: \(a, d\) => router\.chainShipsToOutbox\(a, d\)/.test(sidecar),
+  '…and the station answers it for real runs and step tests alike: the dock whose lane ships to the OUTBOX');
 const route = at(sidecar, 'async function handleRoutingFixSuggest(req, res) {', 'async function stepTestRunDock(h) {');
 A.ok(/\{ m: 'POST', exact: '\/api\/routing\/fix-suggest', h: handleRoutingFixSuggest \}/.test(sidecar), 'POST /api/routing/fix-suggest is a route');
 A.ok(route.indexOf('budget.check(null, \'agent\', 0, Date.now(), null)') > 0 && route.indexOf('budget.check(') < route.indexOf('provider.stream('), '…the spending cap is read BEFORE the model call');

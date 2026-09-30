@@ -79,7 +79,7 @@ const nameOf = a => String(a).toUpperCase();
   A.ok(/A2 reviews it and sends it back to A1 until it is approved \(3 tries max\)/.test(txt), 'the loop gate is said in its compiled words');
   A.ok(/the result goes to the OUTBOX\.$/.test(txt), 'and it ends at the OUTBOX');
   const none = W.howItRuns(flow, { nameOf, triggers: { schedules: [], channels: [] } }).map(x => x.s).join('');
-  A.ok(/^Nothing starts it on its own yet/.test(none), 'no trigger is said plainly, never invented');
+  A.ok(/^It runs when you send it a job\. /.test(none), 'no trigger is said plainly, never invented');
   // LINE TRIGGERS (2026-09-23): only server-armed folder/webhook triggers of THIS line join the sentence
   const L = 'line-x';
   const ev = W.lineEventTriggers([

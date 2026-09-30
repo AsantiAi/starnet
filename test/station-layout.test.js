@@ -130,7 +130,7 @@ const detail = async (o, line) => (await layout(o, { line: line || 'draft & revi
     A.eq(r.automation, { scheduler: 'on' }, 'the scheduler state rides along');
     const L = r.lines[0];
     A.eq([L.name, L.status, L.ready], ['CREATIVE · DRAFT & REVIEW', 'READY TO RUN', true], 'name, the panel\'s pill, ready');
-    A.ok(/^Nothing starts it on its own yet .* it runs when you send it a job\. ADA works on it then REX works on it; the result goes to the OUTBOX\.$/.test(L.howItRuns), 'the panel sentence, verbatim: ' + L.howItRuns);
+    A.ok(/^It runs when you send it a job\. ADA works on it then REX works on it; the result goes to the OUTBOX\.$/.test(L.howItRuns), 'the panel sentence, verbatim: ' + L.howItRuns);
     A.eq(L.steps.map(s => [s.step, s.propId, s.agent, s.room]), [[1, bays[0], 'Ada', 'DRAFT & REVIEW'], [2, bays[1], 'Rex', 'DRAFT & REVIEW']], 'compact steps in compiled order');
     A.ok(L.steps.every(s => !('brief' in s) && !('tools' in s)), 'the overview carries no briefs or tool lists (that is what `line` is for)');
     A.eq(L.budget, { maxHops: 6, maxUsdPerMessage: 2, maxUsdPerDay: null }, 'each line carries the runner\'s effective budget');

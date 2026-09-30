@@ -41,7 +41,7 @@ A.ok(/gh\.textContent = MACHINE_GROUPS\[gi\]\[0\];/.test(mp) && !/class="why"/.t
 /* ---------- a line tile: miniature, name, one small line — the purpose is its tip ---------- */
 const lt = at(build, '  function makeLineTile(bp, why) {', '  /* DECK-FIT HONESTY');
 A.ok(/view\.appendChild\(lineSchematic\(bp\)\)/.test(lt) && /nm\.className = 'refit-matname'/.test(lt) && /stat\.className = 'refit-linetile-stat'/.test(lt), 'a line tile is its miniature, its name and one small line');
-A.ok(/docks \+ \(docks === 1 \? ' step' : ' steps'\) \+ ' · ' \+ bp\.w \+ ' × ' \+ bp\.h/.test(lt), '…the small line reads steps · size, from the catalog');
+A.ok(/stat\.textContent = stat\.dataset\.rest = docks \+ \(docks === 1 \? ' step' : ' steps'\);/.test(lt) && !/bp\.w \+ ' × ' \+ bp\.h/.test(lt), '…the small line reads its steps (2026-09-30: the floor size was noise — a line that does not fit says so)');
 A.ok(!/refit-linetile-why|refit-linetile-tag|refit-linetile-nofit/.test(build), 'no purpose sentence, catalog tag or NO ROOM sentence is printed on a line tile');
 A.ok(/b\.dataset\.tip = name /.test(lt) && /b\.setAttribute\('aria-description'/.test(lt), 'the purpose, catalog name and (goal) quote are its tip and accessible description');
 A.ok(!/b\.title = /.test(lt), '…never a native title bubble');

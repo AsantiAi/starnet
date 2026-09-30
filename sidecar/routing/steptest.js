@@ -271,7 +271,7 @@ function makeStepTest(o) {
       if (refused) { s._pending = null; finish(s, 'stopped', 'the test stopped before ' + who(job.agentId) + ' ran: ' + refused + ' (this test has spent $' + (s._spent || 0).toFixed(2) + ', re-runs included)'); return; }
 
       const W = s._w;
-      const turn = job.entry ? String(job.input) : hopTurn({ handoffText: o.handoffPrompt, stageBrief: plan.stageBrief, loopGateAfter: plan.loopGateAfter,
+      const turn = job.entry ? String(job.input) : hopTurn({ handoffText: o.handoffPrompt, stageBrief: plan.stageBrief, loopGateAfter: plan.loopGateAfter, lastStage: plan.lastStage,
         originalText: W.original, from: job.from, upstream: job.input, hop: job.hop, target: job.agentId, targetDock: job.dockId || null, lineId: s.lineId });
       const pass = job.rerun && job.pass ? job.pass : passFor(s, job.agentId, job.dockId || null);
       const ac = new AbortController();

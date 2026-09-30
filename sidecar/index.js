@@ -4676,6 +4676,7 @@ const chainRunner = makeChainRunner({
   entryDockOf: (agentId) => router.entryDockOf(agentId),
   // LOOP VERDICTS (2026-08-22): a dock whose lane meets a verdict-keyed LOOP gate is told to end with the VERDICT line
   loopGateAfter: (agentId, lineId, dockId) => router.loopGateAfter(agentId, lineId, dockId),
+  lastStage: (agentId, dockId) => router.chainShipsToOutbox(agentId, dockId),   // the stage whose reply leaves the line is told it IS the result
   barrierStore: {
     load: () => { try { return loadResilient(path.join(WORKSPACES, 'join.barriers.json'), 'join-barriers'); } catch (_) { return null; } },
     save: (v) => { try { saveResilient(path.join(WORKSPACES, 'join.barriers.json'), v); } catch (e) { failNote('chain.barriers.save', e); } }
@@ -11613,7 +11614,7 @@ async function handleRoutingFixSuggest(req, res) {
   } catch (e) {
     return json(502, { ok: false, error: 'the suggestion call failed — ' + String((e && e.message) || e).slice(0, 200) });
   } finally { clearTimeout(timer); }
-  if (usd) { try { ledger.record({ runId: 'linefix-' + crypto.randomUUID(), agentId: 'station', turns: 0, usd, tokens, model: cfg.model, unmetered: !!((getProviderProfile(providerId) || {}).unmetered) }); } catch (_) {} }
+  if (usd) { try { ledger.record({ runId: 'linefix-' + crypto.randomUUID(), agentId: 'station', turns: 0, usd, tokens, model: cfg.model, unmetered: !!((getProviderProfile(providerId) || {}).unmetered) }); } catch (e) { failNote('linefix.ledger', e); } }
   const parsed = LineFix.parseFixes(out, input);
   if (!parsed.ok) return json(502, { ok: false, error: parsed.error, usd, model: cfg.model });
   return json(200, { ok: true, diagnosis: parsed.diagnosis, fixes: parsed.fixes, usd, model: cfg.model });
@@ -11698,6 +11699,7 @@ function getStepTest() {
       lineOf: (a, d) => router.lineOfAgent(a, d),
       stageBrief: (a, d) => router.stageBrief(a, d),
       loopGateAfter: (a, l, d) => router.loopGateAfter(a, l, d),
+      lastStage: (a, d) => router.chainShipsToOutbox(a, d),
       lineLimits: (l) => router.lineLimits(l),
       shipsToOutbox: (a, d) => router.chainShipsToOutbox(a, d)
     },

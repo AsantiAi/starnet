@@ -63,6 +63,22 @@
     ['Summarize', 'Summarize what you receive in 5 short bullets.', '5 bullets']] };
   const roleInfo = role => ROLE[role] || GENERIC;
   const starters = role => roleInfo(role).starters.map(s => ({ label: s[0], does: s[1], hands: s[2] }));
+  /* A NEW LINE'S STEPS COME WITH INSTRUCTIONS (2026-09-30, found walking a fresh station): a line from the shelf used to land with
+     every BAY blank — "BAY 1 (RESEARCHER) has no instructions" — and a WRITER with no brief, handed research, wrote an essay about
+     "the upstream report" instead of the answer. Each role stamps with a NEUTRAL default (what that step is for, no guesses about the
+     job); the roles whose first starter is job-specific ("a 200-word newsletter blurb") get one written for any job. The Commander
+     edits it on the BAY card like any brief. */
+  const DEFAULT_BRIEF = {
+    RESEARCHER: ['Find credible, recent sources on the job and pull out the key facts. Only include claims you can back with a link.', 'notes with links'],
+    WRITER: ['Write up what you receive as a clear, well-organized answer to the original request. Plain English, no filler, and keep any links.', 'the written answer'],
+    REVIEWER: ['Check the draft against the original request: is it correct, complete and clear? If anything is off, say exactly what to fix.', 'the approved draft'],
+  };
+  function defaultBrief(role) {
+    const d = DEFAULT_BRIEF[role];
+    if (d) return { does: d[0], hands: d[1] };
+    const s = ROLE[role] ? starters(role)[0] : null;
+    return s ? { does: s.does, hands: s.hands } : null;
+  }
 
   const key = (x, y) => x + ',' + y;
 
@@ -378,7 +394,7 @@
     const paused = trig.paused || [];
     if (!flow || !flow.trigger.propId) T('This line has no INBOX yet, so nothing can start it. ');
     else if (!starts.length && paused.length) T('Nothing starts it right now (' + paused.join('; ') + '); it runs when you send it a job. ');
-    else if (!starts.length) T('Nothing starts it on its own yet (no schedule, channel, folder or webhook runs this line); it runs when you send it a job. ');
+    else if (!starts.length) T('It runs when you send it a job. ');   // (2026-09-30: short — the INBOX card lists what could start it by itself)
     else T(cap(joinOr(starts)) + ', ');
     if (!flow || !flow.cols.length) { T('there is no BAY on it yet.'); return segs; }
     const run = flow.cols.filter(c => !c.detached), apart = flow.cols.filter(c => c.detached);
@@ -695,7 +711,7 @@
     if (s && has('schedule')) s.why += '; its INBOX can run it on your schedule';
     return s;
   }
-  return { ROLE, GENERIC, roleInfo, starters, lineFlow, physicalOrder, neighbours, howItRuns, readiness, pillText,
+  return { ROLE, GENERIC, roleInfo, starters, defaultBrief, lineFlow, physicalOrder, neighbours, howItRuns, readiness, pillText,
     costEstimate, channelFeeds, lineRoutines, lineEventTriggers, lineStarts, entryDocksOf, entryAgentsOf, dockAgentsOf, sentenceText,
     triggerSig, rowPatch, testInputFor, pausedNext, hopLabel, isLive, CHAN_LABEL, suggestLineFor };
 });

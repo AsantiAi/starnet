@@ -1515,32 +1515,34 @@ const Build = (() => {
   // stamp centered under the cursor (a 17-tile line hung off the click point reads as a misfire)
   const lineOrigin = (bp, tx, ty) => ({ x: tx - (bp.w >> 1), y: ty - (bp.h >> 1) });
   // one-line purposes for the shelf cards — what each line DOES, in station voice
+  /* PLAIN DESCRIPTIONS (2026-09-30 — "the simplest friendliest UI possible, no confusion"): a line's tip says what it does in
+     everyday words — no lanes, gates or doors */
   const LINE_PURPOSE = {
-    front_desk: 'one agent, door to door — work in, answer out',
-    research_line: 'two agents in a row — one digs, the next writes it up',
-    revision_loop: 'a reviewer sends the draft back round until it passes',
-    sorting_office: 'sorts arriving work by content to the right specialist',
-    triage_desk: 'code, research and the rest each get their own specialist',
-    parallel_crew: 'splits one stream across three agents working at once',
-    swarm_synthesis: 'three agents on the same job, one writes the answer',
-    second_opinion: 'two independent takes on the same job, shipped as one',
-    ship_out: 'one agent, straight to the outbox — the minimal line',
-    assembly_line: 'four agents deep — each stage builds on the last',
+    front_desk: 'one agent does each job, start to finish',
+    research_line: 'one agent digs up sources, the next writes the answer',
+    revision_loop: 'one agent drafts, a reviewer sends it back until it is right',
+    sorting_office: 'sends each request to the right specialist, by what it is about',
+    triage_desk: 'coding, research and everything else each go to their own specialist',
+    parallel_crew: 'shares the incoming work between three agents working at once',
+    swarm_synthesis: 'three agents research the same job, one writes the answer',
+    second_opinion: 'two agents take the same job, and their answers are combined into one',
+    ship_out: 'no INBOX: whatever this agent finishes lands in the OUTBOX',
+    assembly_line: 'four agents in a row, each building on the last',
     build_test: 'a builder makes it, a tester sends it back until it passes',
-    code_foundry: 'code is built and review-looped; the rest takes a side lane',
-    gauntlet: 'two takes, one synthesis, and a reviewer holding the door',
-    crucible: 'two review gates in series — approved, then approved again',
-    mission_control: 'sorted three ways, worked in two stages, shipped by one door',
-    deep_dive: 'a research swarm, one write-up, and a reviewer holding the door',
-    allowance_desk: 'a front desk that can never spend more than $5 a day',
-    two_doors: 'two entrances, one desk — each door keeps its own name & budget',
-    load_balancer: 'jobs alternate between two desks; one door ships it all',
-    fire_escape: 'a third lane on the gate — out-of-passes work drops to a fixer',
+    code_foundry: 'coding requests are built and reviewed until they pass; anything else goes to another agent',
+    gauntlet: 'two agents take the job, one combines their answers, and a reviewer checks it',
+    crucible: 'two reviewers in a row: the work has to pass both',
+    mission_control: 'sorts requests three ways, works each in two steps, and ships them all from one place',
+    deep_dive: 'three researchers dig, one writes it up, and a reviewer checks it',
+    allowance_desk: 'one agent, and the line can never spend more than $5 a day',
+    two_doors: 'two ways in (say, a schedule and a chat app), one agent does the work',
+    load_balancer: 'jobs take turns between two agents',
+    fire_escape: 'if the reviewer still is not happy after its tries, a fixer takes over',
   };
   /* PLAIN NAMES (2026-09-28): a card leads with what the line does in everyday words; the catalog's station name
      (REVISION LOOP …) rides beside it as a small tag, so a Commander who knows the old names still finds them. */
   const LINE_PLAIN = {
-    front_desk: 'One agent', allowance_desk: 'One agent, capped', ship_out: 'Straight to outbox', two_doors: 'Two doors, one agent',
+    front_desk: 'One agent', allowance_desk: 'One agent, $5 a day', ship_out: 'Agent work to OUTBOX', two_doors: 'Two ways in',
     revision_loop: 'Draft + review', crucible: 'Two review rounds', fire_escape: 'Review + a fixer',
     build_test: 'Build + test', code_foundry: 'Build + review',
     research_line: 'Research + write', swarm_synthesis: 'Three researchers', deep_dive: 'Deep dive + review', assembly_line: 'Four-step chain',
@@ -1580,6 +1582,12 @@ const Build = (() => {
     const p = linePrefsOf(bp), o = {};
     if (bp.props.some(x => x.t === 'intake')) o.limits = { maxUsdPerDay: p.cap };
     if (p.tries != null) o.maxIter = p.tries;
+    // every step lands with its role's instructions (WorkflowLine.defaultBrief) — part of the same one-undo stamp
+    if (typeof WorkflowLine !== 'undefined' && WorkflowLine.defaultBrief) {
+      const briefs = {};
+      for (const x of bp.props) if (x.t === 'bay' && x.role && !briefs[x.role]) { const d = WorkflowLine.defaultBrief(x.role); if (d) briefs[x.role] = d; }
+      if (Object.keys(briefs).length) o.briefs = briefs;
+    }
     return o;
   }
   function linePrefsEl(bp) {
@@ -1856,7 +1864,7 @@ const Build = (() => {
     const links = ghostLinks({ props: bp.props.map(p => ({ t: p.t, x: o.x + p.x, y: o.y + p.y, w: p.w, h: p.h })), belts: bp.belts.map(b => ({ x: o.x + b.x, y: o.y + b.y, d: b.d })) });
     const laid = lineLaidFits(bp.id);
     if (laid === undefined && !lineFits(bp.id)) queueLineLaid(bp.id);
-    return { rects, v: station.canPlaceBlueprint(bp.id, o.x, o.y), kind: 'line', label: bp.label, snapped: s.snapped, links, laid: !!(laid && laid.ok) };
+    return { rects, v: station.canPlaceBlueprint(bp.id, o.x, o.y), kind: 'line', label: LINE_PLAIN[bp.id] || bp.label, snapped: s.snapped, links, laid: !!(laid && laid.ok) };
   }
   /* the test job the Workflow panel saved for the line this prop is on (localStorage, per station — the panel's own store),
      plus the line key; read by the live INBOX's COMMS card so ONE REAL JOB runs the Commander's own input (2026-09-27 X1) */
@@ -1911,7 +1919,7 @@ const Build = (() => {
     b.dataset.line = bp.id;
     b.setAttribute('aria-pressed', tool === 'line' && bp.id === lineType ? 'true' : 'false');
     const name = LINE_PLAIN[bp.id] || bp.label, purpose = LINE_PURPOSE[bp.id] || bp.desc || '';
-    b.dataset.tip = name + (LINE_PLAIN[bp.id] ? ' · ' + bp.label : '') + (why ? '\n' + why : '') + (purpose ? '\n' + purpose : '');
+    b.dataset.tip = name + (why ? '\n' + why : '') + (purpose ? '\n' + purpose : '');   // one name per line (2026-09-30): the station name is not a second name to learn
     b.setAttribute('aria-description', (why ? why + ' — ' : '') + purpose);
     const view = document.createElement('span'); view.className = 'refit-linetile-view';
     view.appendChild(lineSchematic(bp));
@@ -1921,7 +1929,7 @@ const Build = (() => {
     // steps + footprint, derived from the catalog (never hand-kept); setLineTileFit swaps in the fit when the drawn shape does not fit
     const docks = bp.props.filter(p => p.t === 'bay').length;
     const stat = document.createElement('span'); stat.className = 'refit-linetile-stat';
-    stat.textContent = stat.dataset.rest = docks + (docks === 1 ? ' step' : ' steps') + ' · ' + bp.w + ' × ' + bp.h;
+    stat.textContent = stat.dataset.rest = docks + (docks === 1 ? ' step' : ' steps');
     b.appendChild(stat);
     b.onclick = () => { lineType = bp.id; selectTool('line'); };
     return b;
@@ -1947,12 +1955,12 @@ const Build = (() => {
     const make = next && next.classList.contains('refit-linetile-makeroom') ? next : null;
     if (drawn) { say(stat ? stat.dataset.rest || '' : ''); if (make) make.remove(); return; }
     if (fits) {   // the drawn shape fits nowhere, but the line does, laid out round what stands here (the ghost invites the click)
-      say('fits laid out');
+      say(stat ? stat.dataset.rest || '' : '');   // (it fits: the tile says its steps, like any other — never the layout engine's words)
       if (make) make.remove();
       return;
     }
     const need = laid && laid.needs ? laid.needs : { w: bp.w, h: bp.h };
-    say(laid === undefined ? 'checking fit…' : 'needs ' + need.w + ' × ' + need.h + ' floor');
+    say(laid === undefined ? (stat ? stat.dataset.rest || '' : '') : 'needs more room');   // (the MAKE ROOM FOR IT key under the tile builds a room the size it needs)
     if (laid === undefined) { if (make) make.remove(); return; }
     if (make) return;
     const mk = document.createElement('button'); mk.type = 'button'; mk.className = 'bb refit-linetile-makeroom';
@@ -2021,7 +2029,7 @@ const Build = (() => {
       // LINE NAMING: a stamp leaves the intake's `label` UNSET (the save carries only what the Commander
       // typed) — but this session remembers which blueprint stamped it, so the intake card's name field
       // can offer the blueprint's name as its placeholder (session-scoped, like lastStampIds).
-      try { for (const id of (res.ids || [])) { const sp = station.propById(id); if (sp && sp.t === 'intake') stampNameOf[id] = bp.label; } } catch (_) {}
+      try { for (const id of (res.ids || [])) { const sp = station.propById(id); if (sp && sp.t === 'intake') stampNameOf[id] = LINE_PLAIN[bp.id] || bp.label; } } catch (_) {}
       if (laidOut) pushFlash((res.ids || []).map(id => station.propById(id)).filter(Boolean).map(p => ({ x1: p.x, y1: p.y, x2: p.x + (p.w || 1) - 1, y2: p.y + (p.h || 1) - 1 })), false);
       else pushFlash(bp.props.map(p => ({ x1: o.x + p.x, y1: o.y + p.y, x2: o.x + p.x + p.w - 1, y2: o.y + p.y + p.h - 1 })), false);
       sfx('chime');
@@ -2036,8 +2044,8 @@ const Build = (() => {
       try { for (const id of (res.ids || [])) { const sp = station.propById(id); if (sp && sp.t === 'bay') { firstBay = sp.id; break; } } } catch (_) {}
       if (firstBay && typeof WorkflowPanel !== 'undefined') {
         try { rebake(); openFlowCard(firstBay); } catch (_) {}
-        flashTip(ev, bp.label + (laidOut ? ' LAID OUT TO FIT HERE' : ' PLACED') + ' — choose who works each BAY in the panel', true);
-      } else flashTip(ev, bp.label + ' STAMPED — now click each BAY to assign an agent', true);
+        flashTip(ev, String(LINE_PLAIN[bp.id] || bp.label).toUpperCase() + (laidOut ? ' LAID OUT TO FIT HERE' : ' PLACED') + ' — pick who works each step in the panel', true);
+      } else flashTip(ev, String(LINE_PLAIN[bp.id] || bp.label).toUpperCase() + ' PLACED — click each step to pick who works it', true);
       if (typeof StationUI !== 'undefined' && StationUI.pokeQuests) { try { StationUI.pokeQuests(); } catch (_) {} }
       // belts just landed — the same first-touch coach a hand-laid run earns (points at ▸ PREVIEW)
       if (typeof Tutorial !== 'undefined' && Tutorial.onBeltPlaced) Tutorial.onBeltPlaced();
@@ -3365,6 +3373,8 @@ const Build = (() => {
     }
     return sendTestBoxes(e);
   }
+  // a floor tile's centre in client px (the same mapping the dev hooks' _tileEvent uses) — where a tip about that tile is said
+  const tileClient = (tx, ty) => { const t = T(), r = cv.getBoundingClientRect(); return { clientX: r.left + ((tx + 0.5) * t * zoom + panX) * (r.width / cv.width), clientY: r.top + ((ty + 0.5) * t * zoom + panY) * (r.height / cv.height) }; };
   function sendTestBoxes(ev, auto, agentId) {
     if (!convey) return false;
     // reach-verified mouth first; the doc-order intake only for a MANUAL test on a floor where
@@ -3377,7 +3387,9 @@ const Build = (() => {
     const sorts = !!(valPlan && valPlan.junctions && Object.keys(valPlan.junctions).some(k => valPlan.junctions[k] && valPlan.junctions[k].kind === 'filter'));
     for (const tag of (sorts ? ['code', 'research', 'general'] : ['general'])) convey.enqueueAt(t.x, t.y, { workitemId: 'test-' + (++_testN), tag, preview: 'test ' + tag, test: true });
     note(t.x, t.y, '① WORK COMES IN HERE', '#e8c860');
-    flashTip(ev, auto ? 'LINE COMPLETE — the first crate rides itself. ' + PREVIEW_LABEL + ' › WATCH IT replays it any time' : 'test work riding — watch the loop', true);
+    // the auto ride's word is said by the line's own door on the floor — never at the last pointer spot (that was over the panel)
+    const at = auto ? tileClient(t.x, t.y) : ev;
+    flashTip(at, auto ? 'LINE READY — a test crate rides it now (free: no agent runs). ' + PREVIEW_LABEL + ' › WATCH IT replays it' : 'test work riding — watch the loop', true);
     sfx('click');
     return true;
   }
@@ -3429,6 +3441,8 @@ const Build = (() => {
     for (const a in now) if (!prev[a]) { rideA = a; break; }   // freshly powered line first
     if (!rideA) for (const a in now) { rideA = a; break; }     // else any provably-reaching one
     if (!rideA || !rideMouthFor(rideA)) return;   // complete = an intake lane reaches a bound bay, entered through ITS OWN mouth
+    // …AND every step of that line has an agent (2026-09-30: it announced LINE COMPLETE over the panel while the WRITER had none)
+    if (!(valComps || []).some(c => c.intakes.length && c.bays.some(b => b.agentId === rideA) && c.bays.every(b => b.agentId))) return;
     rideAgentId = rideA;
     ridePending = true;   // armed — frame() fires it once nothing coach-like is up
   }
@@ -6464,7 +6478,7 @@ const Build = (() => {
     // no — the reason on its own line right under them. (Was a DOM tip trailing into a screen corner.)
     const r0 = g.rects[0], w = r0.x2 - r0.x1 + 1, h = r0.y2 - r0.y1 + 1;
     let dims = g.belt ? ('BELT ' + g.dir + ' · ' + Math.max(w, h) + ' LONG')
-      : g.kind === 'line' ? (String(g.label || '').toUpperCase() + (ok ? ' — CLICK TO STAMP' : g.laid ? ' — CLICK TO LAY IT OUT HERE' : ''))   // a red ghost invites the click only when the line fits laid out (2026-09-27 audit B1; phase E)
+      : g.kind === 'line' ? (String(g.label || '').toUpperCase() + (ok ? ' — CLICK TO PLACE' : g.laid ? ' — CLICK TO LAY IT OUT HERE' : ''))   // a red ghost invites the click only when the line fits laid out (2026-09-27 audit B1; phase E)
       : g.move ? ('MOVE ' + (g.dx >= 0 ? '+' : '') + g.dx + ', ' + (g.dy >= 0 ? '+' : '') + g.dy)
       : (tool === 'hall' ? (Math.max(w, h) + ' LONG × ' + Math.min(w, h) + ' WIDE') : (w + ' × ' + h));
     const lines = [dims];
