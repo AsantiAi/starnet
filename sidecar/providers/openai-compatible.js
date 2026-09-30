@@ -331,7 +331,17 @@
        names the prices.js table to fall back to (null for ollama/custom/perplexity — genuinely unpriced, and
        the run stays honestly 'unpriced' there). Catalog pricing, when an endpoint DOES publish it, still wins. */
     const priceFamily = (typeof opts.priceFamily === 'string' && opts.priceFamily.trim()) ? opts.priceFamily.trim() : null;
-    const listPrices = (prices && typeof prices.priceOf === 'function') ? prices : null;
+    /* RUN ATTRIBUTION (2026-09-29). A profile that names a runIdHeader (only `starnet`: our own proxy) gets the
+       harness run id of the calling run (req.runId) on every chat request, so the cloud ledger can tie each
+       debit to the run that spent it. Off for every other profile: a run id is never sent to a third party. */
+    const runIdHeader = (typeof opts.runIdHeader === 'string' && /^[A-Za-z0-9-]{1,64}$/.test(opts.runIdHeader)) ? opts.runIdHeader : '';
+    function requestHeaders(req) {
+      if (!runIdHeader || !req || req.runId == null) return opts.headers;
+      const runId = String(req.runId).replace(/[^\x21-\x7e]/g, '').slice(0, 128);   // a header value: printable ASCII only
+      if (!runId) return opts.headers;
+      return Object.assign({}, opts.headers || {}, { [runIdHeader]: runId });
+    }
+    const listPrices =(prices && typeof prices.priceOf === 'function') ? prices : null;
     const defaultEffort = String(opts.reasoningEffort || '');
     /* PROFILE-DOCUMENTED LEVELS (registry `reasoningModels`) for endpoints whose catalog publishes none — OpenAI's
        /v1/models carries only id/created/owned_by. First match wins; a model no rule matches stays unknown. A
@@ -537,7 +547,7 @@
         wire = { native: true, modelMax, think, numCtx: ollamaNative.pickNumCtx(need, { pinned: pinnedCtx, ceiling: ctxCeiling, modelMax, floor: ollamaWindow(nativeBase, req.model) }) };
       }
       let res;
-      try { res = await requestWithRetry(body, req.signal, provider.runtime.preStreamRetries(req, RETRY_DELAYS.length), wire); }
+      try { res = await requestWithRetry(body, req.signal, provider.runtime.preStreamRetries(req, RETRY_DELAYS.length), requestHeaders(req), wire); }
       catch (e) { if (isAbort(e, req.signal)) return; throw e; }
       // Native NDJSON is translated into the chat-completions chunk shape, so everything below parses one format.
       const translate = (wire && wire.native) ? ollamaNative.makeChunkTranslator() : null;
@@ -670,7 +680,7 @@
       }
     }
 
-    async function requestWithRetry(body, signal, maxRetries, wire) {
+    async function requestWithRetry(body, signal, maxRetries, wireHeaders, wire) {
       // maxRetries: the loop may LOWER this ladder (req.preStreamRetries = 0 once it owns the pacing — provider.js).
       // `waited` is the backoff actually spent; the exhaustion marker reports it so the loop counts it, not repeats it.
       const retries = (maxRetries == null) ? RETRY_DELAYS.length : maxRetries;
@@ -687,7 +697,7 @@
         try {
           res = await doFetch(native ? nativeBase + '/api/chat' : baseUrl + chatPath, {
             method: 'POST',
-            headers: headerBag(key, opts.headers),
+            headers: headerBag(key, wireHeaders === undefined ? opts.headers : wireHeaders),
             body: JSON.stringify(native ? ollamaNative.toNativeRequest(body, { numCtx: wire.numCtx, think: wire.think }) : body),
             signal: guard.signal
           });

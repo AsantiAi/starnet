@@ -31,12 +31,14 @@ access, adds no markup, and has no way to bill you. Set spending caps in your pr
 and in StarNet's own budget controls; monitor your usage.
 
 **StarNet Credits — optional.** You may instead buy StarNet Credits: a prepaid balance, sold as
-a monthly subscription or as one-off top-ups, that pays for model runs through StarNet's own
+a monthly or yearly subscription or as one-off top-ups, that pays for model runs through StarNet's own
 gateway. On this path StarNet **does** resell model access — you are buying from us, at our
 price, and we pay the underlying provider. Credits are prepaid, denominated in US dollars, and
 the amount deducted for a run is the amount the app shows you for that run. Payments are
-processed by **Stripe**; StarNet never receives or stores your card details. Subscriptions renew
-monthly until you cancel, and you can cancel at any time from the billing portal — cancelling
+processed by **Stripe**; StarNet never receives or stores your card details. Auto-reload is off unless you turn it on in your account; while it is on, each time your balance drops
+below the amount you set, your saved card is charged the top-up amount you chose, never more than the
+monthly limit you set, until you turn it off. Subscriptions renew
+monthly or yearly (whichever you chose) until you cancel, and you can cancel at any time from the billing portal — cancelling
 stops future renewals, and payments already made are non-refundable except where required by
 law. Monthly grants, rollover limits, and the post-cancellation grace period are set out on the
 [pricing page](https://starnetos.com/pricing.html), which forms part of these terms. Credits

@@ -51,7 +51,9 @@
 <link rel="stylesheet" href="css/beat-cards.css"><!-- Transient work cards share glass materials and semantic text sizes. -->
 <link rel="stylesheet" href="css/overseer-setup.css">
 <link rel="stylesheet" href="css/comms-layout.css">
+<link rel="stylesheet" href="css/hudmode.css"><!-- HUD MODE (hudmode.js): the station folded to a small always-on-top panel -->
 <link rel="stylesheet" href="css/project-home.css">
+<link rel="stylesheet" href="css/stepin.css"><!-- STEP-IN: the Commander takes an agent's live browser (app/stepin.js) -->
 
 <link rel="stylesheet" href="css/titlebar.css"><!-- custom window chrome (Windows desktop shell): themed titlebar + MIN/MAX/CLOSE; inert unless body.sn-chrome (titlebar.js) -->
 
@@ -624,7 +626,7 @@
 
   <aside id="chat-panel">
     <div id="comms-resizer" class="col-resizer" title="drag to resize COMMS" role="separator" aria-orientation="vertical" aria-label="Resize COMMS panel"><span class="col-resizer-grip"></span></div>
-    <h3><span id="comms-title">▮ COMMS</span><span class="h3-right"><span class="dim" id="chat-status" role="status" aria-live="polite" aria-atomic="true">offline</span><span class="chat-elapsed" id="chat-elapsed" aria-hidden="true"></span></span></h3>
+    <h3><span id="comms-title">▮ COMMS</span><span class="h3-right"><span class="dim" id="chat-status" role="status" aria-live="polite" aria-atomic="true">offline</span><span class="chat-elapsed" id="chat-elapsed" aria-hidden="true"></span><button id="comms-hud" type="button" hidden aria-label="Open the HUD" title="HUD: fold StarNet into a small panel that stays above your game or video (Ctrl+Shift+H)">HUD</button></span></h3>
     <!-- AGENT LINE (chat.js): pick which roster agent you're talking to + a truthful readout of that agent's
          current model. The <select> options + the model text are filled from the LIVE roster (App.agents),
          never hardcoded — the header is honest about who's on the line and what they run on. -->
@@ -715,11 +717,12 @@
          same Recruitment Bay in different modes — now a single #bb-recruit opens the bay once, and
          the class dossier offers BOTH verbs (summon new / deploy to current). -->
     <div class="bb-group" data-group="crew">
-      <button class="bb-grp" aria-haspopup="menu" aria-expanded="false" title="Your agents — dossiers, recruitment, and your own Commander file"><span class="bb-gi">☻</span>CREW</button>
+      <button class="bb-grp" aria-haspopup="menu" aria-expanded="false" title="Your agents — dossiers, recruitment, and your own Commander file"><span class="bb-gi">☻</span>CREW<span id="bb-crew-stepin-badge" class="bb-grp-badge" aria-label="agents waiting for you in STEP-IN" hidden></span></button>
       <div class="bb-menu" role="menu">
         <button class="bb" data-term="agents"><span class="bb-i">◉</span><span class="bb-tx"><b>AGENTS</b><small>each crew member's dossier — config, memory, record</small></span></button>
         <button class="bb" id="bb-recruit" data-hint="recruit"><span class="bb-i">＋</span><span class="bb-tx"><b>RECRUIT</b><small>grow the crew — summon a class, or re-spec your agent</small></span></button>
         <button class="bb" data-term="commander"><span class="bb-i">◈</span><span class="bb-tx"><b>COMMANDER</b><small>what the station has learned about you</small></span></button>
+        <button class="bb" data-term="stepin"><span class="bb-i">⇆</span><span class="bb-tx"><b>STEP-IN</b><small>take an agent's browser when it needs you to sign in — and your saved sign-ins</small></span><span id="si-badge" class="badge" style="display:none"></span></button>
       </div>
     </div>
     <div class="bb-group" data-group="work">
@@ -945,10 +948,12 @@
 <script src="app/windows/routines.js"></script><!-- ROUTINES lane — scheduled autonomous runs (thin CRUD client over /api/cron) -->
 <script src="app/windows/loops.js"></script><!-- LOOPS lane — standing objectives (thin polling client over /api/loops); needs loop-templates.js above -->
 <script src="app/windows/connectors.js"></script><!-- TOOLSETS & CONNECTORS — toolset kill-switches, MCP manager, catalog + service keys (Spotify flow embedded) -->
-<script src="app/windows/messaging.js"></script><!-- CHANNELS — messaging platforms catalog (Telegram/Discord/Slack/Matrix/Signal cards) -->
+<script src="app/windows/messaging.js"></script><!-- (STEP-IN follows) -->
+<script src="app/stepin.js"></script><!-- STEP-IN — an agent stuck on a sign-in / 2FA / human check hands you its live browser; you drive it, then HAND BACK --><!-- CHANNELS — messaging platforms catalog (Telegram/Discord/Slack/Matrix/Signal cards) -->
 <script src="app/navdock.js"></script>
 <script src="app/emergency-control.js"></script>
 <script src="app/chatresize.js"></script>
+<script src="app/hudmode.js"></script><!-- HUD MODE: compact always-on-top panel (desktop window ops live in src-tauri/src/hud_mode.rs) -->
 <script src="app/leftrail.js"></script><!-- hide/show the CREW rail (◂ in the rail header · ▸ CREW drawer tab on the stage edge); persisted per machine -->
 
 <script src="app/worldmodel.js"></script>
@@ -1036,6 +1041,8 @@
 <script src="app/topbar.js"></script><!-- topbar instrument cluster: read-only STATION-XP + live SPEND-TODAY wiring (after app.js so Harness/Xp/XpStore/U exist) -->
 <script src="app/widgets.js"></script><!-- widget rails: pinnable read-only telemetry instruments (insights/cron polls + run.end/queue.status/cron.fire folds); own localStorage key, never emits -->
 <script src="app/autosessions.js"></script><!-- surface an unattended cron/routine run as a readable SESSION: cron.fire → adopt a 'cron-<runId>' workstream (busy, no focus-steal), cron.result → fold its durable transcript; boot backfill for runs finished while closed. Read-only on U.bus (after app.js so App/Workstreams/Channels/Chat/U exist) -->
+<script src="app/remoteview.js"></script><!-- StarNet Remote: the phone's STATION view. While a paired phone is looking, this page draws a still of the whole station with the real renderer (World.renderStill) and hands it to the sidecar (POST /api/remote/view) -->
+<script src="app/remotesessions.js"></script><!-- StarNet Remote: a conversation held from a phone is a desk SESSION too — adopt phone-started streams (GET /api/remote/recent + /api/runs backfill), show them busy while live, reload the open session when a phone turn lands. Read-only on U.bus -->
 <script src="app/warroom.js"></script>
 <script src="app/worldlab.js"></script>
 <script src="app/glass-demo.js"></script>

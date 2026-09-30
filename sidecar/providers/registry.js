@@ -176,6 +176,9 @@
       supportsTools: null,
       supportsReasoning: null,
       wireReasoningEffort: true,
+      // Our own proxy records which harness run spent each debit (POST /v1/chat/completions reads this header).
+      // ONLY this profile names one: a run id is never sent to a third-party provider.
+      runIdHeader: 'x-starnet-run-id',
       order: 15
     },
     {

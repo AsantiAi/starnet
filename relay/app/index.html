@@ -18,16 +18,16 @@
 <div id="deck">
   <!-- SETUP: shown until this phone is paired with a station -->
   <section id="setup" class="setup" hidden>
-    <h1>STARNET<br>REMOTE</h1>
-    <div id="setup-pairing" class="card" hidden>
+    <div class="brand"><span class="brand-mark">STARNET</span><span class="brand-sub">REMOTE</span></div>
+    <div id="setup-pairing" class="glass pad" hidden>
       <p>Pairing with your station…</p>
       <p class="hint">Check that this code matches the one on your desktop:</p>
       <div class="fp" id="setup-fp">—</div>
       <div class="err-line" id="setup-err" hidden></div>
       <div class="btns"><button class="btn" id="setup-retry" type="button" hidden>Try again</button></div>
     </div>
-    <div id="setup-howto" class="card">
-      <p>Your station runs on your computer. This phone controls it from anywhere.</p>
+    <div id="setup-howto" class="glass pad">
+      <p>Your station runs on your computer. This phone reaches it from anywhere.</p>
       <p>On your desktop open <b>SETTINGS → DEVICES</b>, switch Remote on, and press <b>PAIR A PHONE</b>. Scan the code it shows with this phone's camera.</p>
       <p class="hint">Or paste the pairing link here:</p>
       <input type="text" id="setup-link" placeholder="https://…#pair=…" autocomplete="off" autocapitalize="off" spellcheck="false">
@@ -36,24 +36,46 @@
   </section>
 
   <!-- THE DECK -->
-  <header class="strip" id="bar" hidden>
-    <button class="btn quiet back" id="back" type="button" hidden aria-label="Back">‹</button>
-    <span class="title" id="bar-title">STATION</span>
+  <header class="bar" id="bar" hidden>
+    <button class="icon-btn" id="back" type="button" hidden aria-label="Back"></button>
+    <span class="bar-well" id="bar-well" hidden></span>
+    <span class="bar-text"><span class="bar-title" id="bar-title">STATION</span><span class="bar-sub" id="bar-sub" hidden></span></span>
     <span class="lamp" id="lamp" role="status"><i></i><span>CONNECTING</span></span>
+    <button class="icon-btn" id="gear" type="button" aria-label="Settings"></button>
   </header>
   <main id="view" hidden></main>
   <div class="compose" id="compose" hidden>
-    <span class="to" id="compose-to"></span>
-    <textarea id="compose-text" rows="1" placeholder="Give your crew a task…" enterkeyhint="send"></textarea>
-    <button class="btn" id="compose-send" type="button">Send</button>
+    <button class="to" id="compose-to" type="button" aria-label="Choose who to send to"></button>
+    <div class="compose-row">
+      <textarea id="compose-text" rows="1" placeholder="Give your crew a task…" enterkeyhint="send"></textarea>
+      <button class="send" id="compose-send" type="button" aria-label="Send"></button>
+    </div>
   </div>
   <nav class="tabs" id="tabs" role="tablist" hidden>
-    <button class="tab" role="tab" type="button" data-tab="crew" aria-selected="true">Crew <span class="n" id="n-needs"></span></button>
-    <button class="tab" role="tab" type="button" data-tab="threads" aria-selected="false">Threads</button>
-    <button class="tab" role="tab" type="button" data-tab="files" aria-selected="false">Files</button>
-    <button class="tab" role="tab" type="button" data-tab="more" aria-selected="false">More</button>
+    <button class="tab" role="tab" type="button" data-tab="station" aria-selected="true"><span class="tab-ico" data-ico="station"></span><span>Station</span><span class="n" id="n-needs" hidden></span></button>
+    <button class="tab" role="tab" type="button" data-tab="sessions" aria-selected="false"><span class="tab-ico" data-ico="sessions"></span><span>Sessions</span></button>
+    <button class="tab" role="tab" type="button" data-tab="files" aria-selected="false"><span class="tab-ico" data-ico="files"></span><span>Files</span></button>
   </nav>
 </div>
+
+<!-- the agent picker: a sheet that rises from the bottom, like every station window -->
+<div class="scrim" id="sheet-scrim" hidden></div>
+<section class="sheet" id="sheet" hidden aria-label="Choose an agent">
+  <div class="sheet-grip"></div>
+  <div class="label" id="sheet-title">SEND TO</div>
+  <div class="sheet-body" id="sheet-body"></div>
+</section>
+
+<!-- the station, full screen: pinch to zoom, drag to look around -->
+<section class="viewer" id="viewer" hidden aria-label="Station view">
+  <div class="viewer-stage" id="viewer-stage"></div>
+  <div class="viewer-top">
+    <span class="chip" id="viewer-stamp"></span>
+    <button class="icon-btn" id="viewer-close" type="button" aria-label="Close"></button>
+  </div>
+  <div class="viewer-plate" id="viewer-plate" hidden></div>
+</section>
+
 <div id="toast" role="status" hidden></div>
 <script src="phone-client.js"></script>
 <script src="store.js"></script>

@@ -36,10 +36,13 @@ const HOST = '127.0.0.1';
    library:<slug> name) and the operator manual ~9.3K -> ~6.3K (orientation + every behaviour rule stay inline; the
    navigation / props / troubleshooting reference sections are a TOC served verbatim by manual.read). The +1 tool /
    +695 B is manual.read plus skill.view's description naming installed recipes; the tool budgets above still hold.
-   The system budgets drop to the new measurement + ~6% so the diet cannot silently regrow. */
+   The system budgets drop to the new measurement + ~6% so the diet cannot silently regrow.
+   STEP-IN 2026-09-30: browser.need_human is advertised on every run with a browser (it is the way out of a login /
+   2FA / CAPTCHA wall, so it is never deferred): 84 tools | 64,918 tool bytes. Intended growth; the byte budget moves
+   to 65,300 (measurement + ~0.6%: the earlier headroom is spent, so the next tool owes a diet, not another raise). */
 const BUDGET = {
-  'default-new-install': { systemChars: 24600, tools: 84, toolBytes: 64600 },
-  'fully-granted-floor': { systemChars: 24800, tools: 84, toolBytes: 64600 }
+  'default-new-install': { systemChars: 24600, tools: 84, toolBytes: 65300 },
+  'fully-granted-floor': { systemChars: 24800, tools: 84, toolBytes: 65300 }
 };
 
 (async () => {

@@ -21,6 +21,8 @@
      seen      { runId, promptId }             the phone showed it to a human: one bounded extension
      files     { limit?, query? }    recent deliverables
      fetch     { agentId, path, offset?, length? }   read a file in sealed chunks (≤ 256 KB each)
+     view      { have?, at?, offset?, length? }   the station picture the desk last drew, in sealed chunks
+     portrait  { agentId }           that agent's sprite
      routines                        scheduled routines
      routine   { jobId, enabled }    pause or resume one
      ping                            liveness; the phone's link lamp reads this
@@ -112,6 +114,18 @@ function makeGateway(deps) {
       const length = clampInt(a.length, 1, MAX_CHUNK, MAX_CHUNK);
       const r = await host.fetchFile({ agentId, path: rel, offset, length });
       return r && r.ok === false ? bad(r.error || 'unknown file') : good(r);
+    },
+
+    async view(a) {
+      const stamp = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 0; };
+      return good(await host.view({ have: stamp(a.have), at: stamp(a.at), offset: clampInt(a.offset, 0, Number.MAX_SAFE_INTEGER, 0), length: clampInt(a.length, 1, MAX_CHUNK, MAX_CHUNK) }));
+    },
+
+    async portrait(a) {
+      const agentId = id(a.agentId);
+      if (!agentId) return bad('unknown agent');
+      const r = await host.portrait({ agentId });
+      return r && r.ok === false ? bad(r.error || 'no portrait') : good(r);
     },
 
     async routines() { return good(await host.routines()); },

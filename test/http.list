@@ -62,6 +62,7 @@ test/e2e.connector-readback.test.js
 test/recipe-drift.http.test.js
 test/cron.api.test.js
 test/cron.run-now.e2e.test.js
+test/cron.station-default.e2e.test.js
 test/cron.degraded.e2e.test.js
 test/routing.chain-seam.e2e.test.js
 test/routine-manage.e2e.test.js
@@ -100,6 +101,7 @@ test/shell.test.js
 test/shell.process-tree.test.js
 test/verify.run.test.js
 test/browser.gauntlet.e2e.test.js
+test/browser.stepin.e2e.test.js
 test/servicekeys.http.test.js
 test/servicekeys.shell.e2e.test.js
 test/skills.gate.http.test.js
@@ -120,6 +122,7 @@ test/routing.persist.e2e.test.js
 test/run-recovery.api.test.js
 test/routing.sample.e2e.test.js
 test/routing.sample-provider.e2e.test.js
+test/routing.sample-stop.e2e.test.js
 test/routing.steptest.e2e.test.js
 test/routing.triggers.e2e.test.js
 test/station-template-example.e2e.test.js
@@ -160,6 +163,8 @@ test/workflow-project.e2e.test.js
 test/workflow-project-multibay.e2e.test.js
 test/routing.linestats.e2e.test.js
 test/user-study-loop.http.test.js
+test/starnet-run-id-header.e2e.test.js
+test/model-tiers.http.test.js
 test/remote.e2e.test.js
 test/remote.relay.e2e.test.js
 test/subscription-stacking.e2e.test.js
