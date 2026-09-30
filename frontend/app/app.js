@@ -3268,10 +3268,9 @@ const App = (() => {
     // types ARE tables. The model deliberately never imports the catalog, so this injection is the single
     // seam between the two — installed before the station exists so the very first placement is validated.
     if (typeof PropSprites !== 'undefined' && WorldModel.setPropRules) {
-      WorldModel.setPropRules((t) => {
-        const s = PropSprites.spec(t);
-        return s ? { mount: s.mount || null, stack: !!s.stack, surface: !!s.surface, flat: !!s.flat, footprintMigration:s.footprintMigration } : null;
-      });
+      // ruleFor keeps a player-made prop (user_…) even before its art registers, so a slow boot fetch can never
+      // prune paid work out of the save; retired built-in types still come back null and are dropped.
+      WorldModel.setPropRules((t) => PropSprites.ruleFor(t));
     }
     // STATION IDENTITY: did the save we are loading already carry one? (worldmodel stamps meta.createdAt
     // at create AND backfills it on migrate — a stamp that is never SAVED would re-roll on every reload,
