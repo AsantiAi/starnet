@@ -10355,13 +10355,9 @@ const World = (() => {
     }
     ctx.restore();
   }
-  // one parked amber crate (waiting ore) — matches the riding-box silhouette/palette
+  // one parked amber crate (waiting work) — the SAME crate that rides the belts (Conveyor.drawCrate), so a job is one object
   function drawWaitCrate(cx, cy) {
-    const x = Math.round(cx - 4), y = Math.round(cy - 4);
-    ctx.fillStyle = '#161210'; ctx.fillRect(x - 1, y - 1, 11, 8);   // dark outline
-    ctx.fillStyle = '#8a7330'; ctx.fillRect(x, y + 3, 9, 3);        // shaded front face
-    ctx.fillStyle = '#caa84a'; ctx.fillRect(x, y, 9, 3);           // lit amber top
-    ctx.fillStyle = '#e8c860'; ctx.fillRect(x, y, 9, 1);           // top sheen
+    if (typeof Conveyor !== 'undefined' && Conveyor.drawCrate) Conveyor.drawCrate(ctx, Math.round(cx), Math.round(cy), 'ore');
   }
 
   /* SHIPPED TODAY — the production pride display. Every job completed today stacks a green PRODUCT
@@ -10419,15 +10415,12 @@ const World = (() => {
     ctx.shadowBlur = 0;
     ctx.restore();
   }
-  // one banked PRODUCT crate — the green economy family (same read as the outbound product box)
+  // one banked PRODUCT crate — the SAME green-lidded crate the outbound result rode in on (Conveyor.drawCrate)
   function drawShipCrate(cx, cy, pop) {
     const lift = pop > 0 ? Math.round(pop * 3) : 0;
-    const x = Math.round(cx - 4), y = Math.round(cy - 4) - lift;
-    ctx.fillStyle = '#0e1a12'; ctx.fillRect(x - 1, y - 1, 11, 8);   // dark outline
-    ctx.fillStyle = '#2e6b40'; ctx.fillRect(x, y + 3, 9, 3);        // shaded front face
-    ctx.fillStyle = '#3fa86a'; ctx.fillRect(x, y, 9, 3);            // lit green top
-    ctx.fillStyle = '#7ee2a8'; ctx.fillRect(x, y, 9, 1);            // top sheen
-    if (pop > 0.4) { const a = ctx.globalAlpha; ctx.globalAlpha = a * (pop - 0.4); ctx.fillStyle = '#c9ffe0'; ctx.fillRect(x, y, 9, 7); ctx.globalAlpha = a; }   // arrival glint
+    const x = Math.round(cx), y = Math.round(cy) - lift;
+    if (typeof Conveyor !== 'undefined' && Conveyor.drawCrate) Conveyor.drawCrate(ctx, x, y, 'product');
+    if (pop > 0.4) { const a = ctx.globalAlpha; ctx.globalAlpha = a * (pop - 0.4); ctx.fillStyle = '#c9ffe0'; ctx.fillRect(x - 3, y - 4, 7, 6); ctx.globalAlpha = a; }   // arrival glint
   }
 
 
