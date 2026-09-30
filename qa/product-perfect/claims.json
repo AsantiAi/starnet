@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "3450997b50376e3483d5cdb9669b91093c5bb3ff",
+    "sourceCommit": "02b7579188a80da328d6873e7f9c0fe3d1863181",
     "pathSetSha256": "724fccc3567e8ae1cacc99ecff6010bffab723bd87b2c1606e642fc9e1b02c5d",
     "files": [
       {
@@ -358,8 +358,8 @@
       },
       {
         "path": "frontend/app/codexsignin.js",
-        "bytes": 10352,
-        "sha256": "9a30b8801c585d7370319b4ee850523df2c24204b0c2325da614b70bc7fe2050"
+        "bytes": 14399,
+        "sha256": "971a66473c3b261cdbc4426ac8d88ae389a81023a2e61e2505625b75dc1d5563"
       },
       {
         "path": "frontend/app/confbeats.js",
@@ -1078,8 +1078,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 755393,
-        "sha256": "77621ea7e230da41dadeb4f7ec687946296cc9c8e43c7d86f179ddb50ce24341"
+        "bytes": 771127,
+        "sha256": "7e097517434d965dca1c7e32e9f8e231edf6ed1167bdb39bc698878908182586"
       },
       {
         "path": "frontend/app/study.js",
@@ -1323,8 +1323,8 @@
       },
       {
         "path": "frontend/app/world.js",
-        "bytes": 808426,
-        "sha256": "9a6297abba445ea223efb391280d74742371d1a1d2e93f54f260aed1e44b0fca"
+        "bytes": 808686,
+        "sha256": "69accfc369c14ba710f544ae8d968ab5da9a6c61ffd6f43c056089b962656eea"
       },
       {
         "path": "frontend/app/worldlab.js",
@@ -1518,8 +1518,8 @@
       },
       {
         "path": "frontend/css/settings.css",
-        "bytes": 15967,
-        "sha256": "f20b9dae61f1b9b065e577e4ebf1f597f2c931b68dae966952523b82d893ecda"
+        "bytes": 16889,
+        "sha256": "152f144ba9b48215da23164a4357ac474b479d85e795806b10288e44e455c2dd"
       },
       {
         "path": "frontend/css/style.css",
