@@ -7,7 +7,8 @@
    and one UNDO removes all of it. Then the same for a furnished room kit (station_plan_room) and a restyle
    (station_plan_restyle): the room holds exactly the kit's furniture, the restyle changes only the floor, one UNDO each.
    Last, a whole-station swap (replace: true) is backed up to Build mode's own slot, and its RESTORE PREVIOUS brings the old station back.
-   And the ask understood: the Commander's words pick the line, and "new" recruits a Tester through the page's own summon. Isolated like station-layout.e2e (APPDATA / LOCALAPPDATA / USERPROFILE / HOME /
+   And the ask understood: the Commander's words pick the line, and "new" recruits a Tester through the page's own summon.
+   Last, vibe design: "the left side cozy, the right side a line that builds and tests code" lands exactly so, in one undo. Isolated like station-layout.e2e (APPDATA / LOCALAPPDATA / USERPROFILE / HOME /
    HERMES_HOME to scratch, a fresh Chrome profile, OS-picked ports, a local mock model). Skips LOUDLY with no Chromium. */
 import { spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
@@ -235,7 +236,28 @@ try {
     return { ok: u && u.ok, line: st.props().some(p => p.t === 'bay' && p.role === 'TESTER'), onCrew: App.agents().some(a => a.id === id), crew: App.agents().length }; })()`);
   check('one UNDO takes back the line and the seat; the recruit stays on the crew, as the card said', after6.ok && !after6.line && after6.onCrew && after6.crew === crew0.length + 1, JSON.stringify(after6));
 
-  check('the mock carried every model call (no real provider)', mock.requests.length >= 15, String(mock.requests.length));
+  // 11. vibe design: "a new room, the left side cozy, the right side a line that builds and tests code"
+  mock.planTool = 'station_plan_room';
+  mock.planArgs = { name: 'Den', zones: [{ area: 'left side', style: 'cozy' }, { area: 'right side', line: 'build_test', staff: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'lead' }] }] };
+  at = mock.results.length;
+  const pre7 = await evalJS(cdp, `App.station().rooms().filter(r => r.kind !== 'corridor').map(r => r.name)`);
+  const run7 = await leadRun(base, token, 'make me a new room called den: the left side cozy, the right side a line that builds and tests code');
+  check('the vibe run completes', run7.status === 200);
+  let VP = null, VB = null; try { VP = JSON.parse(mock.results[at] || ''); VB = JSON.parse(mock.results[at + 1] || ''); } catch (_) {}
+  check('the plan says what goes in each part of the room', !!VP && /^DEN, a new \d+ × \d+ room beside HOME: the left half, a cozy corner \(.+\); the right half, Build \+ test \("BUILD \+ TEST"\): Engineer \(.+\) → Tester \(.+\) → Outbox/.test(VP.summary) && /It will be ready to run\./.test(VP.summary), (mock.results[at] || '').slice(0, 400));
+  check('the build answered built, one undo', !!VB && VB.built === true && /one UNDO/.test(VB.undo || ''), (mock.results[at + 1] || '').slice(0, 200));
+  // the zones split where their contents need (not at the middle): every piece of the cozy corner stands left of every machine
+  const den = await evalJS(cdp, `(() => { const st = App.station(), r = st.rooms().find(x => x.name === 'DEN'); if (!r) return null; const hero = App.heroId();
+    const inRoom = st.props().filter(p => st.roomAt(p.x, p.y) === r.id), M = /^(intake|bay|outbox|loop|filter|merger|splitter|joiner)$/;
+    const machines = inRoom.filter(p => M.test(p.t)), furniture = inRoom.filter(p => !M.test(p.t));
+    return { furniture: furniture.length, machines: machines.length, rightmostFurniture: Math.max(...furniture.map(p => p.x + p.w - 1)), leftmostMachine: Math.min(...machines.map(p => p.x)),
+      lamp: furniture.some(p => p.t === 'lavalamp'), staffed: inRoom.filter(p => p.t === 'bay').every(b => b.agentId === hero) }; })()`);
+  check('the cozy corner stands on the left and the line on the right', !!den && den.furniture >= 7 && den.machines >= 4 && den.rightmostFurniture < den.leftmostMachine && den.staffed, JSON.stringify(den));
+  check('the page\'s own rules hold: the lava lamp stands on its side table', !!den && den.lamp, JSON.stringify(den));
+  const undone7 = await evalJS(cdp, `(() => { const st = App.station(); const u = st.undo(); return { ok: u && u.ok, rooms: st.rooms().filter(r => r.kind !== 'corridor').map(r => r.name) }; })()`);
+  check('one UNDO removes the designed room', undone7.ok && JSON.stringify(undone7.rooms) === JSON.stringify(pre7), JSON.stringify(undone7));
+
+  check('the mock carried every model call (no real provider)', mock.requests.length >= 17, String(mock.requests.length));
   check('no page exceptions', diagnostics.exceptions.length === 0, JSON.stringify(diagnostics.exceptions.slice(0, 3)));
 } catch (error) {
   console.log('FAIL harness :: ' + (error && error.stack || error));

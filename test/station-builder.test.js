@@ -12,6 +12,8 @@ const M = require('../frontend/app/worldmodel.js'), P = require('../frontend/app
 const SB = require('../frontend/app/stationbuilder.js'), T = require('../frontend/app/stationtemplates.js'), Sprites = require('../frontend/app/propsprites.js');
 const { makeStationTools, planSummaryFrom } = require('../sidecar/tools/builtin/station.js');
 
+// the page hands the world model the catalog's mount rules at boot (app.js): a lamp stands on a table, a board on a wall
+M.setPropRules(t => { const s = Sprites.spec(t); return s ? { mount: s.mount || null, stack: !!s.stack, surface: !!s.surface, flat: !!s.flat } : null; });
 const crew = [{ id: 'agent', name: 'NOVA' }, { id: 'rex', name: 'REX' }];
 const env = { WorldModel: M, Pipeline: P, WorkflowLine: W, crew, heroId: 'agent' };
 const snap = st => JSON.stringify(st.serialize());
