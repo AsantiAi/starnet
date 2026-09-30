@@ -20,7 +20,10 @@ many of these — they win on any wording conflict.
     ends the run with reason `budget`/`day`, the Budget panel offers one-click RESUME (+$25
     headroom), the value is editable, and saving 0 turns it off. Unmetered (OAuth/subscription)
     runs never touch it. Per-run, per-agent and global caps still default off
-    (`sidecar/budgetcaps.js` SHIPPED_DEFAULTS). Paired with the LOOP stall breaker: a loop whose
+    (`sidecar/budgetcaps.js` SHIPPED_DEFAULTS) — **one exception (Andrew, 2026-09-30, GitHub #53):** a run on
+    StarNet credits with no per-run cap chosen reserves (and may spend) at most $2 (`managedRunCapUsd`,
+    `SKYNET_BUDGET_MANAGED_PER_RUN` overrides it), because one simple prompt drained a $10 wallet. A per-run
+    cap the user saves above 0 always wins; own-key and subscription runs are unaffected. Paired with the LOOP stall breaker: a loop whose
     passes change nothing (no file, no commit, no findings, or the same report again) parks
     itself `paused` after 3 — the ledger decides, never the model's mood. **Confirmed for merge by
     Andrew on 2026-09-23** ("merge the runaway breaker"); per-run loop detection in `sidecar/loop-breaker.js`
