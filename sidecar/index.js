@@ -27,6 +27,7 @@ const { makeCostEngine } = require('./cost.js');
 const { makeLedger } = require('./ledger.js');
 const { makeBudget } = require('./budget.js');
 const { makeCredits } = require('./credits.js');   // managed-credit backend adapter (inert unless STARNET_CREDITS_URL is set)
+const { makeTierList } = require('./tierlist.js');   // editorial model tier list from the linked cloud (picker badges)
 const { makeCreditsLink } = require('./credits-link.js');   // device-pairing client + durable link config (inert unless STARNET_CLOUD_URL is set)
 const budgetCaps = require('./budgetcaps.js');   // pure resolve(env,overrides) + validate patch — SETTINGS→Budget (P0-2)
 const fallbackChain = require('./fallbackchain.js');   // pure resolve(env,saved) + validate patch — SETTINGS→Models fallback chain (P0-3)
@@ -206,6 +207,8 @@ const { parseSlackTokens } = require('./channels/slack.js');                    
 const channelSecretsMod = require('./channels/secrets.js');                        // T1.4: token-vs-config split + keychain migration
 const { makeConnectGateway } = require('./channels/discord.gateway.js');           // P2-E: the real Discord gateway WS client (inbound)
 const { makeSseHub, runTeeView } = require('./channels/sse.js');
+const { makeHandoffHost } = require('./browser-handoff.js');   // STEP-IN: the agent hands its live browser to the Commander
+const { makeHandoffRoutes, makeSigninStore, nudgeLine: handoffNudgeLine } = require('./browser-handoff-routes.js');
 // relayWebhook (the signed-ingress verifier) is composed AFTER the WORKSPACES stores below —
 // its replay-nonce inbox is a durable JSONL sibling of the other ledgers.
 const { makeRouter } = require('./routing/router.js');
@@ -1054,6 +1057,9 @@ const creditsLink = makeCreditsLink({
 // Resolve the credits adapter config. PRECEDENCE (additive, never breaks an env deploy): env CREDITS_* wins
 // (operator override / backward compat); else a linked device from .secrets/credits.json (deviceToken = bearer);
 // else nothing (inert). For a linked device the external "add credits" page is the account page on the cloud.
+// MODEL TIER LIST (2026-09-29): the cloud's editorial S/A/B/C boards, badged in the model picker. Read from the SAME
+// cloud the starnet provider talks to (linked/env credits URL), else the shipped cloud default. Cached 10 min.
+const tierList = makeTierList({ fetch: globalThis.fetch, now: () => Date.now(), baseUrl: () => resolveCreditsConfig().url || CLOUD_URL });
 function resolveCreditsConfig() {
   if (CREDITS_URL) return { url: CREDITS_URL, apiKey: CREDITS_API_KEY, accountId: CREDITS_ACCOUNT, purchaseUrl: CREDITS_PURCHASE_URL };
   const saved = creditsLink.loadSavedSync();
@@ -2240,14 +2246,30 @@ function warnRosterMiss(agentId, where) {
   rosterMissWarned.add(id);
   try { console.warn('[roster] identity fallback: agent ' + id + ' not in roster (' + (where || 'lookup') + ') — run proceeds on the station persona/default model, NOT impersonating it as ' + id); } catch (_) {}
 }
+/* "Follow station default": a specialist with NO model pin runs on the STATION DEFAULT — the Overseer's roster
+   model, provider and effort (what the page's stationDefaultWire resolves for COMMS). ONE resolver for every
+   headless surface: channel hops (channelRunConfigFor) and routines/loops/workshop (cronIdentityFor) both read it,
+   so an unpinned agent can never run on the Overseer's model in one lane and be refused in another (v0.12.5
+   refused every routine on an unpinned agent). Returns the Overseer's roster record, or null when the agent is
+   pinned, IS the Overseer, or the Overseer itself has no model (then there is no station default to follow). */
+function stationDefaultFor(id, ident) {
+  if (!ident || String(id || '') === 'agent' || String(ident.model || '').trim()) return null;
+  const hero = agentRoster.get('agent');
+  return hero && String(hero.model || '').trim() ? hero : null;
+}
 function cronIdentityFor(agentId) {
   const id = String(agentId || 'agent');
   const ident = agentRoster.get(id);
   if (!ident) { warnRosterMiss(id, 'cron'); return null; }
   const system = String(ident.system || '').trim();
+  const hero = stationDefaultFor(id, ident);
   return {
-    model: ident.model || null,
-    provider: ident.provider || null,
+    // an unpinned agent's routine runs on the station default model+provider (the SAME rule a channel hop uses);
+    // its own persona/name still ride the run — following the station changes the model, never who it is.
+    model: (hero ? hero.model : ident.model) || null,
+    provider: (hero ? (hero.provider || ident.provider) : ident.provider) || null,
+    followsStation: !!hero,
+    reasoningEffort: hero ? hero.reasoningEffort : undefined,
     system: system ? withDossier(system + CRON_ROUTINE_NOTE, dossierWithGoals()) : null,
     name: ident.name || id
   };
@@ -2413,8 +2435,8 @@ function channelRunConfigFor(agentId, candidate) {
   // model, provider and effort, exactly what COMMS resolves (frontend app.js stationDefaultWire). Refusing the
   // empty pin here broke workflow line hops, RUN A SAMPLE and chat channels for every unpinned specialist once
   // the empty choice started surviving reloads.
-  const hero = id !== 'agent' && !String(ident.model || '').trim() ? agentRoster.get('agent') : null;
-  const followsStation = !!(hero && String(hero.model || '').trim());
+  const hero = stationDefaultFor(id, ident);
+  const followsStation = !!hero;
   const provider = normalizeProvider(followsStation ? (hero.provider || ident.provider) : ident.provider);
   const model = String((followsStation ? hero.model : ident.model) || '').trim();
   if (!model) return { ok: false, error: 'target agent ' + id + ' has no roster model' + (id !== 'agent' ? ' and the station default (the Overseer) has none' : '') };
@@ -2786,6 +2808,7 @@ async function runReflection(o) {
       { role: 'user', content: prompt }
     ] };
     if (auxEffort) req.reasoningEffort = auxEffort;
+    if (runId) req.runId = runId;   // run attribution (starnet proxy header; other providers ignore it)
     let out = '', usage = null;
     for await (const ev of provider.stream(req)) {
       if (ev && ev.type === 'text') out += ev.delta;
@@ -2882,6 +2905,7 @@ async function runFailureReview(o) {
       { role: 'user', content: prompt }
     ] };
     if (auxEffort) req.reasoningEffort = auxEffort;
+    if (runId) req.runId = runId;   // run attribution (starnet proxy header; other providers ignore it)
     let out = '', usage = null;
     for await (const ev of provider.stream(req)) {
       if (ev && ev.type === 'text') out += ev.delta;
@@ -2990,6 +3014,7 @@ async function runStudy(o) {
       { role: 'user', content: prompt }
     ] };
     if (auxEffort) req.reasoningEffort = auxEffort;
+    if (runId) req.runId = runId;   // run attribution (starnet proxy header; other providers ignore it)
     let out = '', usage = null;
     for await (const ev of provider.stream(req)) {
       if (ev && ev.type === 'text') out += ev.delta;
@@ -3058,6 +3083,7 @@ async function runThreadMine(o) {
       { role: 'user', content: prompt }
     ] };
     if (auxEffort) req.reasoningEffort = auxEffort;
+    if (runId) req.runId = runId;   // run attribution (starnet proxy header; other providers ignore it)
     let out = '', usage = null;
     for await (const ev of provider.stream(req)) {
       if (ev && ev.type === 'text') out += ev.delta;
@@ -4218,6 +4244,41 @@ const stationBridge = makeStationBridge({ emit: (name, payload) => { try { sse.b
 
 const chanEmitValidated = makeEmitter(chanBus, e => console.warn('[channel-event]', e.kind, e.event, (e.errors || []).join(';')));
 const chanEmit = (name, payload) => { try { return chanEmitValidated(name, redact(payload)); } catch (_) {} };
+/* ---- STEP-IN (2026-09-29): the station-wide browser HANDOFF host. An agent that hits a login / 2FA / CAPTCHA calls
+   browser.need_human; its run parks HERE (own id, own 30-minute wait — never the /api/run consent socket) and the
+   station shows the agent's live browser in the STEP-IN window. State changes ride the SAME validated SSE bus as
+   channel/cron telemetry (browser.handoff), so any open page — or later a phone — renders the one truth. See
+   sidecar/browser-handoff.js (state machine) and sidecar/browser-handoff-routes.js (HTTP + remembered sign-ins). */
+const browserSignins = makeSigninStore({
+  dir: BROWSER_PROFILE_DIR, fs, path, now: () => Date.now(),
+  load: (file, tag) => loadResilient(file, tag), save: (file, value) => saveResilient(file, value),
+  isBusy: () => !!browserProfileHolder, anyLive: () => browserHandoffs.list().live.length > 0
+});
+const browserHandoffs = makeHandoffHost({
+  now: () => Date.now(),
+  emit: (name, payload) => chanEmit(name, payload),
+  onSettled: v => { try { browserSignins.note(v); } catch (e) { failNote('stepin.signins.note', e); } },
+  // D4: after 2 minutes unanswered, say so on the channel the Commander already uses — the SAME opt-in gate and chat
+  // map as routine/loop notifications (channelSecrets.notifyAutonomous, default OFF: nobody is messaged who did not ask).
+  onNudge: v => {
+    try {
+      if (!(channelSecrets && channelSecrets.notifyAutonomous)) return;
+      const map = channelStore.loadChatMap();
+      const chats = Object.keys((map && map.chats) || {}).filter(cid => map.chats[cid] && map.chats[cid].agentId === v.agentId)
+        .map(cid => ({ chatId: (map.chats[cid] && map.chats[cid].chatId) || cid, channel: (map.chats[cid] && map.chats[cid].channel) || 'telegram' }));
+      const ident = agentRoster.get(v.agentId);
+      const line = handoffNudgeLine(v, ident && ident.name);
+      for (const c of chats) {
+        const ch = liveChannelFor(c.channel);
+        if (!(ch && ch.adapter)) continue;
+        Promise.resolve(ch.adapter.send(c.chatId, redact(line)))
+          .then(r => { if (r && r.ok === false) console.warn('[step-in] nudge failed:', r.error); })
+          .catch(e => console.warn('[step-in] nudge failed:', (e && e.message) || e));
+      }
+    } catch (e) { failNote('stepin.nudge', e); }
+  }
+});
+const browserHandoffRoutes = makeHandoffRoutes({ host: browserHandoffs, readBody, respondJson, signins: browserSignins });
 
 // H2.2: the SINGLETON background-process manager — persists across runs so a backgrounded dev server survives the
 // run that started it. shell.bg.exit fires AFTER the originating run's NDJSON stream closed, so it rides the
@@ -6174,6 +6235,7 @@ async function runScoutCycle(o) {
   const propose = async (system, prompt) => {
     const req = { model, stream: true, signal: ac.signal, messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }] };
     if (auxEffort) req.reasoningEffort = auxEffort;
+    if (runId) req.runId = runId;   // run attribution (starnet proxy header; other providers ignore it)
     let out = '', usage = null;
     for await (const ev of provider.stream(req)) {
       if (ev && ev.type === 'text') out += ev.delta;
@@ -9849,6 +9911,8 @@ const remoteDevices = require('./remote/devices.js').makeDevices({
 const remoteSessions = require('./remote/session.js').makeSessions({ devices: remoteDevices, crypto: remoteCrypto, now: () => Date.now(), newId: () => crypto.randomUUID() });
 // hoisted on purpose: the approvals registry (defined far above) announces changes through this
 function remoteBroadcast(evt) { try { return remoteSessions.broadcast(evt); } catch (_) { return 0; } }
+const remoteView = require('./remote/view.js').makeRemoteView({ now: () => Date.now() });
+const remotePortraits = require('./remote/portraits.js').makePortraits({ fs, path, frontend: FRONTEND });
 const remoteHost = require('./remote/host.js').makeRemoteHost({
   now: () => Date.now(), newId: () => crypto.randomUUID(), broadcast: remoteBroadcast,
   roster: () => [...agentRoster].map(([agentId, a]) => ({ agentId, name: a.name, model: a.model, provider: a.provider })),
@@ -9875,6 +9939,18 @@ const remoteHost = require('./remote/host.js').makeRemoteHost({
       system: raw ? withDossier(raw + REMOTE_NOTE, dossierWithGoals()) : withDossier(CRON_PERSONA + REMOTE_NOTE, dossierWithGoals()) };
   },
   runOnce: (o) => runOnce(o),
+  view: remoteView,
+  // how each agent looks (the skin the Commander picked), from the station save the page mirrors here
+  crewLooks: () => {
+    const save = saveStore.load('agent') || {}, out = {};
+    const add = (a) => { if (a && typeof a.id === 'string') out[a.id] = { skin: String(a.skin || ''), color: String(a.color || '') }; };
+    add(save.agent); for (const a of Array.isArray(save.agents) ? save.agents : []) add(a);
+    return out;
+  },
+  portrait: (skin) => remotePortraits.forSkin(skin),
+  // the desk's own sessions (title, agent, history) live in the station save the page mirrors here
+  deskSessions: () => { const save = saveStore.load('agent') || {}; return Array.isArray(save.workstreams) ? save.workstreams : []; },
+  classify: (text) => Classify.isTaskDirective(text),   // the SAME task-vs-talk call the desk and the channels make
   askConsent: (o) => channelAskConsent(o),
   stopRun: (runId) => { const ac = runs.get(runId); if (!ac) return false; try { ac.abort(); } catch (e) { failNote('remote.index.ac.abort', e); } return true; },
   deliverables: () => deliverableRows(),
@@ -9981,6 +10057,24 @@ function remoteSnapshot() {
 }
 // GET /api/remote — the desk's DEVICES panel: is Remote on, where does it listen, who is paired, who is connected
 function handleRemoteStatus(req, res) { respondJson(res, 200, remoteSnapshot()); }
+// GET /api/remote/recent — runs a phone started, newest first ({runId, agentId, streamId, title, startedAt, endedAt,
+// live}). The desk reads it to show a phone conversation as one of its own sessions (app/remotesessions.js).
+function handleRemoteRecent(req, res) { respondJson(res, 200, { ok: true, runs: remoteHost.recentRuns() }); }
+// GET /api/remote/view — does a phone want the station picture right now, and when was the last one drawn?
+// The desk page polls this (app/remoteview.js) and draws only while the answer is yes.
+function handleRemoteViewWant(req, res) {
+  const m = remoteView.meta();
+  respondJson(res, 200, { ok: true, enabled: remoteDevices.enabled(), want: remoteDevices.enabled() && remoteView.wanted(), at: m ? m.at : null });
+}
+// POST /api/remote/view { mime, w, h, bodies, data } — the desk page hands over a still it drew of the station
+async function handleRemoteViewPut(req, res) {
+  if (!remoteDevices.enabled()) return respondJson(res, 409, { ok: false, error: 'Remote is off' });
+  let b;
+  try { b = JSON.parse((await readBodyBuffer(req, 3 * 1024 * 1024, res)).toString('utf8') || '{}'); }
+  catch (_) { if (!res.headersSent) respondJson(res, 400, { ok: false, error: 'bad request' }); return; }
+  const r = remoteView.put(b);
+  respondJson(res, r.ok ? 200 : 400, r);
+}
 // POST /api/remote/enable { on } — the switch. Persisted; the LAN door opens or closes with it.
 async function handleRemoteEnable(req, res) {
   let b; try { b = JSON.parse(await readBody(req, 1024)) || {}; } catch (_) { return respondJson(res, 400, { ok: false, error: 'bad request' }); }
@@ -10048,6 +10142,7 @@ const ROUTES = [
   // stt: qsplit == the old (url === '/api/stt' || url.indexOf('/api/stt?') === 0) disjunction, verbatim.
   { m: 'POST', qsplit: '/api/stt', h: media.handleStt, errorPolicy: media.sttFailOpenPolicy },
   { m: 'POST', exact: '/api/cancel', h: handleCancel },
+  ...browserHandoffRoutes.routes,   // STEP-IN: /api/browser/handoff* + /api/browser/signins* (sidecar/browser-handoff-routes.js)
   { m: 'POST', exact: '/api/run/steer', h: handleRunSteer },
   { m: 'GET', exact: '/api/version', h: handleVersion },
   { m: 'GET', exact: '/api/diagnostics', h: handleDiagnostics },   // T3.9 paste-ready bug report
@@ -10150,6 +10245,7 @@ const ROUTES = [
   // job through the armed line. Keeping discovery separate means probing can never spend or dispatch.
   { m: 'GET', exact: '/api/routing/sample', h: handleRoutingSampleStatus },
   { m: 'POST', exact: '/api/routing/sample', h: handleRoutingSample },
+  { m: 'POST', exact: '/api/routing/sample/stop', h: handleRoutingSampleStop },   // ■ STOP on RUN ONE REAL JOB: this station's one sample, nothing else
   // STEP-THROUGH TEST (2026-09-22): GET is the active-or-latest session (the panel's feature probe + poll);
   // POST starts one; /:id answers one session and /:id/<verb> drives it. Every refusal 409, never 404.
   { m: 'GET', qsplit: '/api/routing/steptest', h: handleStepTestLatest },
@@ -10169,6 +10265,9 @@ const ROUTES = [
   { m: 'POST', exact: '/api/credits/link/start', h: handleCreditsLinkStart },   // begin a pairing: returns a STAR-XXXX code + verifyUrl
   { m: 'POST', exact: '/api/credits/link/poll', h: handleCreditsLinkPoll },     // poll once; on confirm persists the token + configures credits live
   { m: 'POST', exact: '/api/credits/unlink', h: handleCreditsUnlink },          // forget the linked device, revert credits to inert
+  { m: 'GET', exact: '/api/remote/recent', h: handleRemoteRecent },   // phone-started runs, for the desk to adopt as sessions
+  { m: 'GET', exact: '/api/remote/view', h: handleRemoteViewWant },   // is a phone looking at the station picture?
+  { m: 'POST', exact: '/api/remote/view', h: handleRemoteViewPut },   // the desk page's still of the station, for phones
   { m: 'GET', exact: '/api/remote', h: handleRemoteStatus },          // STARNET REMOTE: on/off, where it listens, paired + connected phones
   { m: 'POST', exact: '/api/remote/enable', h: handleRemoteEnable },  // the switch (persisted); opens/closes the LAN door
   { m: 'POST', exact: '/api/remote/pair', h: handleRemotePair },      // one-time pairing code for ONE phone (10 min)
@@ -10227,6 +10326,7 @@ const ROUTES = [
   { m: 'POST', exact: '/api/auth/claude-cli/add', h: (req, res) => handleClaudeCliAuth(req, res, 'add') },
   { m: 'POST', exact: '/api/auth/claude-cli/remove', h: (req, res) => handleClaudeCliAuth(req, res, 'remove') },
   { m: 'GET', exact: '/api/providers', h: handleProviders },
+  { m: 'GET', qsplit: '/api/model-tiers', h: handleModelTiers },   // the cloud's editorial tier list (picker badges); {ok:false, reason} when unreachable
   { m: 'POST', exact: '/api/providers/probe', h: handleProviderProbe },
   { m: 'POST', exact: '/api/providers/validate', h: handleProviderValidate },
   // /api/models/openrouter is served by this same prefix (id='openrouter'). handleProviderModels answers 200
@@ -11052,6 +11152,8 @@ async function handleRoutingSample(req, res) {
       return json(409, { ok: false, error: 'no provider/model is configured for headless runs — connect a provider and set a default model first.' });
     }
 
+    // ■ STOP pressed while the line was still being checked (POST /api/routing/sample/stop): nothing runs, nothing is spent
+    if (sampleInFlight.stopRequested) return json(409, { ok: false, stopped: true, error: 'stopped before it started — nothing ran.' });
     const t0 = Date.now();
     const streamId = sampleInFlight.streamId;
     sampleReplies.length = 0;
@@ -11109,12 +11211,15 @@ async function handleRoutingSample(req, res) {
     }
     if (!completed) {
       // `line` is echoed only when it was requested, so a line-less POST's answer stays byte-identical.
+      // A job the Commander STOPPED (POST /api/routing/sample/stop) is named as a stop — never as a line that failed.
+      const stopped = !!sampleInFlight.stopRequested;
       return json(502, Object.assign({
-        ok: false, sample: true, error: !onLine ? 'sample job did not enter through line "' + line + '"'
+        ok: false, sample: true, error: stopped ? 'stopped — you stopped this job before it reached the OUTBOX'
+          : !onLine ? 'sample job did not enter through line "' + line + '"'
           : runs.length ? 'sample job did not complete cleanly' : 'sample job produced no durable run outcome',
         chatId: SAMPLE_CHAT, streamId: streamId, agentId: agentId || null, isTask: isTask,
         workitemId: workitemId || null, replies: sampleReplies.slice(), runs: runs, delivered: null, totalUsd: totalUsd
-      }, line ? { line: line } : null));
+      }, line ? { line: line } : null, stopped ? { stopped: true } : null));
     }
     return json(200, Object.assign({
       ok: true, sample: true, chatId: SAMPLE_CHAT, streamId: streamId,
@@ -11125,6 +11230,24 @@ async function handleRoutingSample(req, res) {
     sampleInFlight = null;
     sampleLineScope = null;
   }
+}
+/* ---- POST /api/routing/sample/stop — ■ STOP for RUN ONE REAL JOB (2026-09-29).
+   The Workflow panel's TEST › RUN ONE REAL JOB had no stop: while the job rode the line the panel showed only a disabled
+   "THE JOB IS RIDING THE LINE…", and the one way out was the station-wide E-STOP. This stops THIS station's one sample
+   and nothing else: the sample hub's live runs (its entry run AND every stage it chains live in its inflight record)
+   die the way E-STOP kills them (sidecar/halt.js killAll marks them superseded + halted, so the chain goes no further
+   and no stale reply is delivered), and the in-flight POST answers stopped:true — the panel says STOPPED from the
+   server's own answer, never on the click alone. A stop that lands before the first run starts is honoured by the POST
+   itself (stopRequested). Same contract as the sample route: behind the launch token, and 409 {ok:false,error} when
+   there is nothing to stop — never 404. */
+function handleRoutingSampleStop(_req, res) {
+  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  if (!sampleInFlight) return json(409, { ok: false, error: 'no sample job is riding the line — nothing to stop.' });
+  sampleInFlight.stopRequested = true;
+  let halted = 0;
+  try { halted = killAll(null, (sampleHub && sampleHub._internals) ? sampleHub._internals.inflight : null); }
+  catch (e) { failNote('routing.sample.stop', e); }
+  return json(200, { ok: true, stopped: true, halted: halted, streamId: sampleInFlight.streamId });
 }
 
 /* ---- LINE TRIGGERS (2026-09-23, owner-approved) — /api/routing/triggers[/:id[/secret]] + POST /api/hooks/:id.
@@ -13769,6 +13892,9 @@ async function handleCronRun(req, res) {
       // identical cron.fire/cron.result events, can fetch the real output via /api/transcript?stream=cron-<runId>.
       // Per-run id keeps the seed empty (index.js reconstructs a stream only when messages<=1) — no behavior drift.
       runId: runId, streamId: 'cron-' + runId, surface: 'autonomous', trigger: 'schedule', provider: provider, broadcast: true,
+      // "Follow station default": same effort rule as the scheduled fire (cron-driver.js) — an unpinned agent with
+      // no explicit routine model runs on the Overseer's effort along with its model.
+      reasoningEffort: (() => { const ri = !(job.model && String(job.model).trim()) ? cronIdentityFor(job.agentId) : null; return ri && ri.followsStation ? ri.reasoningEffort : undefined; })(),
       // LINE WATCH: the row records the bay + line this Run Now's crate named (placeCronWorkitem above)
       lineId: (cronItems.get(runId) || {}).lineId || undefined, dockId: (cronItems.get(runId) || {}).dockId || undefined,
       reflect: true,   // Run Now must match the scheduled fire's posture exactly, memory included (see the reflect note on /api/run)
@@ -16753,6 +16879,9 @@ async function runOnceCore(o) {
   const runStartExtra = {};
   if (o.dockId) runStartExtra.dockId = String(o.dockId);
   if (o.workitemId) runStartExtra.workitemId = String(o.workitemId);
+  // and WHICH stream it runs on (additive, 2026-09-29): a line test's run (a step test's steptest-…, RUN ONE REAL JOB's
+  // sample-…) is real work whose words live in the line's TEST view, not the agent's COMMS — the crew row names it
+  if (o.streamId) runStartExtra.streamId = String(o.streamId);
   const runStartedAt = Date.now();
   let system = rawSystem;
   if (o.workdir) {
@@ -17229,6 +17358,9 @@ async function runOnceCore(o) {
     persistentProfile: browserProfileLeaseFor(runId),
     onProfileWait: waiting => { if (waiting) browserProfileWaiters.add(runId); else browserProfileWaiters.delete(runId); },
     attendedLogin: (surface === 'interactive' && typeof o.loginPrompt === 'function') ? { prompt: o.loginPrompt } : null,
+    // STEP-IN: browser.need_human parks THIS run on the station handoff host. agentId/runId are host facts, never
+    // model args; the run's own signal (inside the tool ctx) ends the handoff if the run stops.
+    handoff: { request: f => browserHandoffs.request(Object.assign({}, f, { agentId, runId })) },
     requireOwnedServer: true,
     ownsLocalUrl: async ({ url, serverId, agentId: owner }) => {
       const st = shellBg.status(String(owner || agentId), String(serverId || ''));
@@ -19772,6 +19904,7 @@ async function runOnceCore(o) {
     if (billed) { try { credits.finishRun({ runId, agentId, usd: 0, reason: 'leak-guard' }); } catch (_) {} }
     // A test browser must die with its run. Besides process hygiene, this guarantees that a
     // broken page cannot retain any browser-level state after the task finishes.
+    try { browserHandoffs.abortRun(runId); } catch (e) { failNote('stepin.abortRun', e); }   // STEP-IN: a handoff never outlives its run
     if (runBrowser) { try { await runBrowser.session.close(); } catch (_) {} }
     if (runComputer?.close) { try { await runComputer.close(); } catch (_) { failNote('computer.run.close', 'Native run cleanup failed'); } }
     computerRuns.delete(runComputer);
@@ -21581,6 +21714,16 @@ function publicModel(m) {
     // why a model's dial is what it is, when a profile documents it (gpt-5.6 on Chat Completions: OFF with tools)
     reasoningNote: (typeof m.reasoningNote === 'string' && m.reasoningNote) ? m.reasoningNote : null
   };
+}
+
+// GET /api/model-tiers[?force=1] — the linked cloud's editorial tier list for the model picker's badges. 200-always:
+// an unreachable/unconfigured cloud answers { ok:false, boards:[], reason } — never an invented list.
+async function handleModelTiers(req, res) {
+  try {
+    const force = new URL(req.url, 'http://127.0.0.1').searchParams.get('force') === '1';
+    return respondJson(res, 200, await tierList.get({ force }));
+  }
+  catch (e) { return respondJson(res, 200, { ok: false, boards: [], updated: '', reason: 'tier list unavailable: ' + String((e && e.message) || e).slice(0, 200) }); }
 }
 
 function handleProviders(req, res) {

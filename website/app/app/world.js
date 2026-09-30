@@ -6427,7 +6427,16 @@ const World = (() => {
        camLerp ran would leave every finite-distance layer a frame behind the station, which is
        exactly the "picture behind a picture" tell the parallax exists to kill. Still screen
        space, still under the identity transform, still first — nothing has drawn yet. */
-    drawBackdrop(now, { panX, panY, scale });
+    drawScene(now, dt);
+  }
+
+  /* THE SCENE PASS — the station drawn once onto whatever {cv, ctx, scale, panX, panY} currently are. The frame
+     loop runs it on the stage every frame; renderStill() runs it once on an offscreen canvas. Everything that
+     belongs to the live stage alone (the backdrop, bloom, the curve, scanlines, the heartbeat pixel, the camera
+     readout) is skipped for a still. */
+  function drawScene(now, dt) {
+    if (stillPass) { ctx.fillStyle = stillPass.fill; ctx.fillRect(0, 0, cv.width, cv.height); }
+    else drawBackdrop(now, { panX, panY, scale });
 
     ctx.setTransform(scale, 0, 0, scale, panX, panY); ctx.imageSmoothingEnabled = false;
 
@@ -6722,6 +6731,7 @@ const World = (() => {
     // FLOOR-STATS OVERLAY REMOVED (2026-07-09 decision): the YIELD/RUNS/CACHE/SLAG/THRU/DWELL box no
     // longer floats over the world sim. The FloorStats engine stays live (event-fed) so any panel or
     // widget consumer keeps honest numbers — only the floating canvas readout is gone.
+    if (stillPass) { if (sceneRenderer) sceneRenderer.finish(); return; }   // a still ends here: no stage chrome, no post-processing
     if (linkStaleDim) drawLinkDown(now);   // E1: honest "the live telemetry is not live" marker in the chrome
     // (station growth headline now lives in the top bar's STATION chip — see xpstore.pushTopbar)
     drawBloom(now); // phosphor bloom: the bright things in the frame haze outward (screen-space, before the warp so it bows with the picture)
@@ -6733,6 +6743,52 @@ const World = (() => {
     updateCameraHud(now);
     if (sceneRenderer) sceneRenderer.finish();
     // NOTE: the next rAF is scheduled by the frame() crash-guard wrapper, BEFORE this body runs — never here.
+  }
+
+  /* A STILL OF THE WHOLE STATION, for a surface that is not this window (StarNet Remote's phone view).
+     It is the same scene pass the stage gets — floor, walls, props, crew where they really stand, light — aimed
+     at an offscreen canvas framed on the full station. It never reads the live stage canvas. Returns
+     { canvas, width, height, bodies:[{ agentId, name, x, y, working }] } with bodies in still pixels, or null
+     when there is no honest picture to give (no bake yet, the awakening is still playing). */
+  let stillPass = null;
+  function renderStill(maxPx) {
+    if (stillPass || !cache || !cv || !ctx || !geo || camAnim || kindleArmed || arrivalScene || wakeDark > 0.002) return null;
+    const W = cache.baseCv.width, H = cache.baseCv.height;
+    if (!(W > 1 && H > 1)) return null;
+    const cap = Math.max(320, Math.min(2400, Number(maxPx) || 1600));
+    const s = Math.max(1, Math.min(6, cap / Math.max(W, H)));   // never draw the pixel art below 1:1 (that crushes it); a big station is shrunk smoothly afterwards
+    const off = document.createElement('canvas');
+    off.width = Math.max(1, Math.round(W * s)); off.height = Math.max(1, Math.round(H * s));
+    const g = off.getContext('2d');
+    if (!g) return null;
+    const keep = { cv, ctx, scale, panX, panY, overlaysOn };
+    const landed = typeof Terrain !== 'undefined' && Terrain.active();
+    let drawn = false;
+    cv = off; ctx = g; scale = s; panX = 0; panY = 0; overlaysOn = false;
+    stillPass = { fill: landed ? Terrain.baseColor() : '#040302' };
+    try { drawScene(fnow || performance.now(), 0); drawn = true; }
+    catch (e) { try { console.error('[world] station still failed:', e); } catch (_) {} }
+    finally {
+      stillPass = null;
+      cv = keep.cv; ctx = keep.ctx; scale = keep.scale; panX = keep.panX; panY = keep.panY; overlaysOn = keep.overlaysOn;
+      if (typeof PropSprites !== 'undefined') PropSprites.setCtx(ctx);
+    }
+    if (!drawn) return null;
+    let out = off, k = 1;
+    if (Math.max(off.width, off.height) > cap) {
+      k = cap / Math.max(off.width, off.height);
+      out = document.createElement('canvas');
+      out.width = Math.max(1, Math.round(off.width * k)); out.height = Math.max(1, Math.round(off.height * k));
+      const og = out.getContext('2d');
+      if (!og) return null;
+      og.imageSmoothingEnabled = true; og.imageSmoothingQuality = 'high';
+      og.drawImage(off, 0, 0, out.width, out.height);
+    }
+    const bodies = [agent, ...crew].filter(b => b && !b.unplaced).map(b => ({
+      agentId: String(b.agentId || b.id || ''), name: String(b.name || ''),
+      x: Math.round(bodyPosX(b) * s * k), y: Math.round(bodyPosY(b) * s * k), working: !!b.working
+    }));
+    return { canvas: out, width: out.width, height: out.height, bodies };
   }
 
   // ---- CRT SCANLINES + FADE (screen-space, drawn last, OVER the curved feed) --------
@@ -10372,13 +10428,9 @@ const World = (() => {
     }
     ctx.restore();
   }
-  // one parked amber crate (waiting ore) — matches the riding-box silhouette/palette
+  // one parked amber crate (waiting work) — the SAME crate that rides the belts (Conveyor.drawCrate), so a job is one object
   function drawWaitCrate(cx, cy) {
-    const x = Math.round(cx - 4), y = Math.round(cy - 4);
-    ctx.fillStyle = '#161210'; ctx.fillRect(x - 1, y - 1, 11, 8);   // dark outline
-    ctx.fillStyle = '#8a7330'; ctx.fillRect(x, y + 3, 9, 3);        // shaded front face
-    ctx.fillStyle = '#caa84a'; ctx.fillRect(x, y, 9, 3);           // lit amber top
-    ctx.fillStyle = '#e8c860'; ctx.fillRect(x, y, 9, 1);           // top sheen
+    if (typeof Conveyor !== 'undefined' && Conveyor.drawCrate) Conveyor.drawCrate(ctx, Math.round(cx), Math.round(cy), 'ore');
   }
 
   /* SHIPPED TODAY — the production pride display. Every job completed today stacks a green PRODUCT
@@ -10436,15 +10488,12 @@ const World = (() => {
     ctx.shadowBlur = 0;
     ctx.restore();
   }
-  // one banked PRODUCT crate — the green economy family (same read as the outbound product box)
+  // one banked PRODUCT crate — the SAME green-lidded crate the outbound result rode in on (Conveyor.drawCrate)
   function drawShipCrate(cx, cy, pop) {
     const lift = pop > 0 ? Math.round(pop * 3) : 0;
-    const x = Math.round(cx - 4), y = Math.round(cy - 4) - lift;
-    ctx.fillStyle = '#0e1a12'; ctx.fillRect(x - 1, y - 1, 11, 8);   // dark outline
-    ctx.fillStyle = '#2e6b40'; ctx.fillRect(x, y + 3, 9, 3);        // shaded front face
-    ctx.fillStyle = '#3fa86a'; ctx.fillRect(x, y, 9, 3);            // lit green top
-    ctx.fillStyle = '#7ee2a8'; ctx.fillRect(x, y, 9, 1);            // top sheen
-    if (pop > 0.4) { const a = ctx.globalAlpha; ctx.globalAlpha = a * (pop - 0.4); ctx.fillStyle = '#c9ffe0'; ctx.fillRect(x, y, 9, 7); ctx.globalAlpha = a; }   // arrival glint
+    const x = Math.round(cx), y = Math.round(cy) - lift;
+    if (typeof Conveyor !== 'undefined' && Conveyor.drawCrate) Conveyor.drawCrate(ctx, x, y, 'product');
+    if (pop > 0.4) { const a = ctx.globalAlpha; ctx.globalAlpha = a * (pop - 0.4); ctx.fillStyle = '#c9ffe0'; ctx.fillRect(x - 3, y - 4, 7, 6); ctx.globalAlpha = a; }   // arrival glint
   }
 
 
@@ -10617,7 +10666,7 @@ const World = (() => {
     pollFeed: () => pollFeedState(),
     pollShip: () => pollShipStats()
   });
-  return { init, rebake, frameReviewRoom, crt: CRT, slagLog: () => (slaglog ? slaglog.recent() : []),
+  return { init, rebake, frameReviewRoom, renderStill, crt: CRT, slagLog: () => (slaglog ? slaglog.recent() : []),
     // LINE WATCH: the Workflow panel pushes the step-test session it polls; reads today's numbers for a line
     noteStepTest, lineStatsFor: id => (lineStats.known ? (lineStats.byLine[id] || null) : null), pollLineStats,
     _dbgLineWatch: () => ({ setDraw: on => { lwDrawOff = !on; return !lwDrawOff; }, watch: watch ? watch.snapshot() : null, stats: lineStats, status: id => (watch ? watch.status(id, lwNow()) : null),

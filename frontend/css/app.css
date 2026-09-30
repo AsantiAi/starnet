@@ -1611,6 +1611,16 @@ body.no-curve #stage-wrap::before { background: none; box-shadow: none; }
 }
 .model-dock-row-effort {
   min-width: 38px; text-align: right; font-size: 10px;}
+/* Tier badges (the cloud's editorial tier list): a matte tag between the name and the effort. */
+.model-dock-row:has(.model-dock-row-tiers) { grid-template-columns: minmax(0, 1fr) auto auto; }
+.model-dock-row-tiers { display: inline-flex; align-items: center; gap: 4px; }
+.model-dock-row-tier {
+  display: inline-flex; align-items: center; height: 18px; padding: 0 5px; white-space: nowrap;
+  font-size: var(--sn-type-meta, 14px); line-height: 1; letter-spacing: .3px;
+  color: var(--ph); background: rgba(0,0,0,.22); border: 1px solid rgba(var(--ph-rgb),.24); border-radius: 3px;
+}
+.model-dock-row-tier[data-tier="S"] { color: var(--ph-bright); border-color: rgba(var(--ph-rgb),.5); }
+.model-dock-row.sel .model-dock-row-tier { color: var(--ink); background: transparent; border-color: currentColor; }
 .model-dock-empty {   /* dim grade + size via the grouped empty rule (motion.css) */
   padding: 18px 6px; text-align: center;
 }
@@ -4139,35 +4149,41 @@ body.crew-rail-off #screen-game.active {
    hover language (.refit-proptile), not a private green. The intro stays THE ONE SENTENCE and
    doubles as the belt palette's idle state. */
 .refit-lineintro {
-  width: 100%; margin: 2px 0 4px; font-size: 12px; line-height: 1.35; letter-spacing: .6px;
+  width: 100%; margin: 2px 0 4px; font-size: 15px; line-height: 1.35; letter-spacing: .4px;
   color: var(--ph-dim); text-shadow: 0 0 5px var(--ph-glow2);
 }
 .refit-linegrid { display: flex; flex-direction: column; gap: 7px; width: 100%; }
 /* START FROM INTENT (2026-09-28): the line with the shape of the Commander's goal, marked apart from the library below it */
 .refit-goalgrid .refit-linetile { border-color: var(--gold); }
 /* THE MACHINES SHELF (Conveyors tab): single workflow machines as a first-class palette — the same
-   matte card language as the line cards, a small live thumbnail + name + one-line purpose per row */
+   matte card language as the line cards, a small live thumbnail + name + one-line purpose per row.
+   READABLE TYPE (2026-09-30, Andrew: "users will not be able to read this"): every sentence on this tab used to sit
+   at 10–12px VT323 — a tall, narrow pixel face that needs far more — beside a Workflow panel that speaks at 15px.
+   The tab is on the panel's scale now: sentences 15px, names and headings 16–17px, stat chips 13px. Nothing a
+   Commander has to READ on this tab goes under 13px again. */
 .refit-machines { display: flex; flex-direction: column; gap: 5px; width: 100%; margin-bottom: 6px; }
 .refit-palsection { margin-top: 2px; }
 .refit-machines .refit-palsection { border-top: 0; padding-top: 0; margin-top: 0; }
 .refit-machinegrid { display: grid; grid-template-columns: 1fr; gap: 4px; width: 100%; }
 .refit-machinetile {
-  display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0;
-  padding: 4px 6px; cursor: pointer; border-radius: 5px; font-family: inherit; text-align: left;
+  /* thumbnail | NAME …… wiring diagram
+               | the description, the tile's full width   (the text wrapper is display:contents, so its two lines are grid items) */
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 10px; row-gap: 3px; align-items: center; width: 100%; min-width: 0;
+  padding: 7px 8px; cursor: pointer; border-radius: 5px; font-family: inherit; text-align: left;
   background: rgba(0,0,0,.34); border: 1.5px solid var(--ph-faint); color: var(--ph);
 }
 .refit-machinetile:hover { border-color: var(--ph); color: var(--ph-bright); background: var(--ph-faint); }
 .refit-machinetile.active { border-color: var(--ph-bright); color: var(--ph-bright); box-shadow: 0 0 10px var(--ph-glow), inset 0 0 14px rgba(0,0,0,.55); }
-.refit-machinetile-cv { flex: 0 0 auto; display: block; border-radius: 3px; background: #0b0f0e; pointer-events: none; }
-.refit-machinetile-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.refit-machinetile-nm { font-size: 12px; letter-spacing: 1.2px; color: inherit; }
-.refit-machinetile-why { font-size: 10.5px; line-height: 1.25; letter-spacing: .3px; color: var(--ph-dim); white-space: normal; overflow-wrap: break-word; }
+.refit-machinetile-cv { grid-column: 1; grid-row: 1 / span 2; align-self: start; display: block; border-radius: 3px; background: #0b0f0e; pointer-events: none; }
+.refit-machinetile-txt { display: contents; }
+.refit-machinetile-nm { grid-column: 2; grid-row: 1; min-width: 0; font-size: 17px; line-height: 1.1; letter-spacing: 1.2px; color: inherit; }
+.refit-machinetile-why { grid-column: 2 / span 2; grid-row: 2; min-width: 0; font-size: 15px; line-height: 1.3; letter-spacing: .3px; color: var(--ph-dim); white-space: normal; overflow-wrap: break-word; }
 /* the shelf in plain groups (2026-09-27 audit P2): THE LINE · BRANCH & COMBINE · REPEAT — a small rule + name + how-to line */
-.refit-machinegroup { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; margin: 6px 2px 1px; }
-.refit-machinegroup .nm { font-size: 10.5px; letter-spacing: 1.6px; color: var(--ph); }
-.refit-machinegroup .why { font-size: 10px; letter-spacing: .3px; color: var(--ph-dim); }
+.refit-machinegroup { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; margin: 10px 2px 2px; }
+.refit-machinegroup .nm { font-size: 15px; letter-spacing: 1.6px; color: var(--ph); }
+.refit-machinegroup .why { font-size: 14px; letter-spacing: .3px; color: var(--ph-dim); }
 /* each machine's wiring as a tiny in→out diagram (fork / wait-bar / funnel / three-way / back arrow) — theme stroke, no fill */
-.refit-machinediagram { flex: 0 0 auto; width: 40px; height: 24px; margin-left: auto; color: var(--ph-dim); fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; opacity: .9; pointer-events: none; }
+.refit-machinediagram { grid-column: 3; grid-row: 1; flex: 0 0 auto; width: 40px; height: 24px; margin-left: auto; color: var(--ph-dim); fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; opacity: .9; pointer-events: none; }
 .refit-machinediagram .md-fill { fill: currentColor; stroke: none; }
 .refit-machinetile:hover .refit-machinediagram, .refit-machinetile.active .refit-machinediagram { color: var(--ph-bright); }
 /* the LINE LIBRARY's section headers — a rule line + name + one-line blurb, matte phosphor */
@@ -4177,10 +4193,10 @@ body.crew-rail-off #screen-game.active {
 }
 .refit-linegrid .refit-linegroup:first-child { margin-top: 0; border-top: 0; padding-top: 0; }
 .refit-linegroup-nm {
-  font-size: 12px; letter-spacing: 1.6px; color: var(--ph-bright); text-shadow: 0 0 6px var(--ph-glow2);
+  font-size: 17px; letter-spacing: 1.6px; color: var(--ph-bright); text-shadow: 0 0 6px var(--ph-glow2);
 }
 .refit-linegroup-why {
-  font-size: 11px; line-height: 1.3; letter-spacing: .5px; color: var(--ph-dim);
+  font-size: 15px; line-height: 1.3; letter-spacing: .4px; color: var(--ph-dim);
   white-space: normal; overflow-wrap: break-word;
 }
 .refit-linetile {
@@ -4199,30 +4215,30 @@ body.crew-rail-off #screen-game.active {
   border-radius: 3px; background: #0b0f0e; box-shadow: inset 0 0 0 1px rgba(0,0,0,.55);
 }
 .refit-linetile-cv { display: block; max-width: 100%; image-rendering: pixelated; pointer-events: none; }
-.refit-linetile-hd { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; }
-.refit-linetile .refit-matname { font-size: 12px; letter-spacing: 1.1px; text-align: left; }
+.refit-linetile-hd { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 3px 6px; width: 100%; }
+.refit-linetile .refit-matname { font-size: 16px; line-height: 1.2; letter-spacing: 1.1px; text-align: left; white-space: normal; overflow: visible; text-overflow: clip; }
 /* PLAIN NAMES (2026-09-28): the card leads with what the line does; the catalog name is a small tag beside it */
-.refit-linetile .refit-matname { flex: 1 1 auto; min-width: 0; }
-.refit-linetile-tag { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9.5px; letter-spacing: 1px; color: var(--ph-dim); opacity: .8; }
+.refit-linetile .refit-matname { flex: 1 1 100%; min-width: 0; }   /* the whole first row: the name is what the Commander reads */
+.refit-linetile-tag { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; letter-spacing: 1px; color: var(--ph-dim); opacity: .8; }
 /* SET UP BEFORE YOU PLACE: the armed card's cap + review tries, stacked right under it */
 .refit-lineprefs { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--ph-faint); border-radius: 4px; background: rgba(0,0,0,.25); }
-.refit-lineprefs-hd { font-size: 10.5px; letter-spacing: 1.2px; color: var(--ph); }
+.refit-lineprefs-hd { font-size: 14px; letter-spacing: 1.2px; color: var(--ph); }
 .refit-lineprefs-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
-.refit-lineprefs-k { flex: 0 0 96px; font-size: 10.5px; letter-spacing: 1px; color: var(--ph-dim); }
+.refit-lineprefs-k { flex: 0 0 118px; font-size: 14px; letter-spacing: 1px; color: var(--ph-dim); }
 .refit-lineprefs .bb.sm { min-width: 30px; padding: 2px 7px; }
 .refit-lineprefs .bb.sm[aria-pressed="true"] { border-color: var(--ph); color: var(--ph-bright); background: rgba(var(--ph-rgb),.14); }
-.refit-lineprefs-note { font-size: 11px; line-height: 1.3; color: var(--ph-dim); }
+.refit-lineprefs-note { font-size: 14px; line-height: 1.3; color: var(--ph-dim); }
 /* the stat chip mixes VT323 with fallback-font glyphs ('×' '·') — BOX-centred, never padded by
    font metrics (the symbol-glyph law) */
 .refit-linetile-stat {
   flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
   padding: 1px 5px; border: 1px solid var(--ph-faint); border-radius: 3px;
-  font-size: 10.5px; letter-spacing: 1px; line-height: 1.4;
+  font-size: 13px; letter-spacing: 1px; line-height: 1.4;
   color: var(--ph-dim); background: rgba(0,0,0,.3); white-space: nowrap;
 }
 /* one line of WHAT IT DOES; 2-line floor keeps every card the same height when a purpose wraps */
 .refit-linetile-why {
-  font-size: 11px; line-height: 1.3; letter-spacing: .4px; min-height: 29px;
+  font-size: 15px; line-height: 1.3; letter-spacing: .3px; min-height: 39px;
   color: var(--ph-dim); opacity: .9;
 }
 /* DECK-FIT HONESTY: a blueprint the current floor has nowhere to put. The card stays armable
@@ -4234,18 +4250,18 @@ body.crew-rail-off #screen-game.active {
 .refit-linetile.nofit .refit-linetile-view { opacity: .5; }
 .refit-linetile-nofit {
   width: 100%; margin-top: 1px; font-family: 'VT323', monospace;
-  font-size: 10.5px; letter-spacing: 1px; line-height: 1.3;
+  font-size: 14px; letter-spacing: 1px; line-height: 1.3;
   color: var(--warn); opacity: .9;
 }
 /* MAKE ROOM (2026-09-27 audit B1): the way out of NO ROOM, tucked under its card — a quiet phosphor control, not a CTA */
-.refit-linetile-makeroom { width: 100%; margin-top: -4px; justify-content: center; font-size: 11px; letter-spacing: 1.2px; border-style: dashed; }
+.refit-linetile-makeroom { width: 100%; margin-top: -4px; justify-content: center; font-size: 14px; letter-spacing: 1.2px; border-style: dashed; }
 .refit-linetile-makeroom:hover { border-style: solid; }
 /* the operational footing sits INSIDE the shelf, directly under the cards */
 /* BUILD YOUR OWN LINE (conveyor-links phase D): one plain button under the Conveyors intro */
 .refit-ownline { display: block; width: 100%; margin: 4px 0 8px; text-align: left; }
 .refit-linenote {
   width: 100%; margin-top: 2px; padding-top: 5px; border-top: 1px solid var(--ph-faint);
-  font-size: 10.5px; letter-spacing: 1.2px; line-height: 1.3;
+  font-size: 14px; letter-spacing: 1px; line-height: 1.3;
   font-family: 'VT323', monospace; color: var(--ph-dim); opacity: .85;
 }
 /* the guide card's lead — THE ONE SENTENCE above the three beats */
