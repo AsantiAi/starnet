@@ -15137,8 +15137,8 @@ async function serveWorkspaceView(req, res) {
   if (req.method === 'HEAD') { headers['Content-Length'] = st.size; res.writeHead(200, headers); return res.end(); }
   res.writeHead(200, headers);
   const stream = fs.createReadStream(abs);
-  stream.on('error', () => { try { res.destroy(); } catch (_) {} });
-  req.on('close', () => { try { stream.destroy(); } catch (_) {} });
+  stream.on('error', () => { try { res.destroy(); } catch (e) { failNote('view.res-destroy', e); } });
+  req.on('close', () => { try { stream.destroy(); } catch (e) { failNote('view.stream-destroy', e); } });
   stream.pipe(res);
 }
 
