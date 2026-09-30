@@ -585,10 +585,20 @@
   function worldStop() { try { if (typeof World !== 'undefined' && World.stop) World.stop(); } catch (_) {} }
 
   // Point the station's camera at an agent (its own follow-lock: the same one a CREW click makes).
+  const WIDGET_ZOOM = 4.5;   // the agent fills the small picture; the station's own lock is 3
   function follow(id) {
     if (!id || S.followId === id) return;
     S.followId = id;
-    try { if (typeof World !== 'undefined' && World.lockBody) World.lockBody(id); } catch (_) {}
+    try {
+      if (typeof World === 'undefined' || !World.lockBody) return;
+      if (S.stationZoom == null) { const d = World.cameraDbg && World.cameraDbg(); S.stationZoom = d && d.scale > 0 ? d.scale : 0; }
+      World.lockBody(id, WIDGET_ZOOM);
+    } catch (_) {}
+  }
+  // leaving the HUD: the camera keeps watching the same agent, at the zoom the station had
+  function unfollow() {
+    try { if (S.followId && S.stationZoom > 0 && typeof World !== 'undefined' && World.lockBody) World.lockBody(S.followId, S.stationZoom); } catch (_) {}
+    S.stationZoom = null;
   }
 
   function buildWidget() {
@@ -903,6 +913,7 @@
           S.els.h3.removeAttribute('data-tauri-drag-region');
           if (S.els.title) S.els.title.removeAttribute('data-tauri-drag-region');
         }
+        unfollow();
         S.followId = S.followPinned = '';
         if (inGame()) worldStart(false);   // the full station always gets its world back, uncapped
         announceLayout();
