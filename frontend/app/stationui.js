@@ -3378,8 +3378,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     if (!d || !d.ok) {
       const err = String((d && d.error) || 'no answer');
       // a catalog that failed its signature or serial check was reached but REFUSED — say that, not "couldn't reach"
-      host.innerHTML = (/was not trusted/.test(err)
-        ? '<p class="mc-hint" style="color:var(--gold)">StarNet refused the skill market\'s answer: ' + esc(err.replace(/^the skill market /, '')) + '. Nothing from it was used, and skills you already installed keep working.</p>'
+      const refused = /^the skill market (.+?) was not trusted: (.+)$/.exec(err);
+      host.innerHTML = (refused
+        ? '<p class="mc-hint" style="color:var(--gold)">StarNet refused the skill market\'s ' + esc(refused[1]) + ': ' + esc(refused[2]) + '. Nothing from it was used, and skills you already installed keep working.</p>'
         : '<p class="mc-hint">Couldn\'t reach the skill market: ' + esc(err) + '. Skills you already installed keep working.</p>') +
         '<button class="bb xs" type="button" data-skm-act="retry">TRY AGAIN</button>';
       return;
