@@ -247,6 +247,7 @@ A.eq([H.fmtAgo(10_000), H.fmtAgo(5 * 60_000), H.fmtAgo(2 * 3_600_000)], ['just n
       'each piece of work is a 10px glass card with a housed status lamp');
     A.ok(!/font(-size)?: 1[0-3]px/.test(glass), 'nothing in the new glass reads under 14px');
     A.ok(glass.includes(':is(#chat-status, #chat-elapsed) { display: none !important; }'), 'the HUD header never squeezes its keys out of the window');
+    A.ok(js.includes("el('button', 'btn', 'AGENT CAM')") && !js.includes("'btn', 'SMALL')"), 'the key that shrinks the HUD says where it goes: AGENT CAM (Andrew 09-30: not SMALL)');
   }
   const side = read('sidecar/index.js');
   A.ok(has(side, "source: 'interactive', streamId: streamId || '', internal: internal }", 'if (meta && meta.internal) row.internal = true;') && has(js, 'r.internal || workerRuns.has'),
