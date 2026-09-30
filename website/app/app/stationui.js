@@ -5847,6 +5847,17 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
           badge.hidden = false;
         }
       });
+      // Issue #53: "0 = no cap" is not the whole truth on StarNet credits — a managed run with PER RUN at 0 stops
+      // at the default the sidecar reports (null when no managed credits are wired: then say nothing).
+      const managedHint = body.querySelector('#bg-managed-hint');
+      if (managedHint) {
+        const md = st && st.managedRunDefaultUsd;
+        const showManaged = typeof md === 'number' && Number.isFinite(md) && md > 0;
+        managedHint.textContent = showManaged
+          ? 'On StarNet credits, a run with PER RUN at 0 still stops at ' + fmtUsd(md) + ', so one prompt can’t use up your balance. Set a per-run cap above 0 to use your own limit instead.'
+          : '';
+        managedHint.hidden = !showManaged;
+      }
       const anySaved = BG_KEYS.some(k => Object.prototype.hasOwnProperty.call(saved, k));
       if (resetBtn) resetBtn.style.display = anySaved ? '' : 'none';
       if (spendEl && st.accounting && (!st.accounting.complete || !st.accounting.durable)) {
@@ -6530,6 +6541,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       '<div class="mc-form" id="budget-form">' +
         '<div class="set-row"><label for="bg-perRun">PER RUN <span class="src-badge" id="bg-src-perRun" hidden></span></label><input id="bg-perRun" class="key-input bg-cap" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" placeholder="blank or 0 = no cap"></div>' +
         '<div class="mc-hint">Hard ceiling for a single agent run. The run stops the moment it would exceed this.</div>' +
+        '<div class="mc-hint" id="bg-managed-hint" hidden></div>' +   // #53: the StarNet-credit default, painted from /api/budget/status
         '<div class="set-row"><label for="bg-perAgent">PER AGENT <span class="src-badge" id="bg-src-perAgent" hidden></span></label><input id="bg-perAgent" class="key-input bg-cap" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" placeholder="blank or 0 = no cap"></div>' +
         '<div class="mc-hint">Lifetime cap on any one agent’s total spend across all its runs.</div>' +
         '<div class="set-row"><label for="bg-perDay">PER DAY <span class="src-badge" id="bg-src-perDay" hidden></span></label><input id="bg-perDay" class="key-input bg-cap" type="number" min="0" step="0.01" inputmode="decimal" autocomplete="off" placeholder="blank or 0 = no cap"></div>' +
