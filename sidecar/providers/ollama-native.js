@@ -118,12 +118,14 @@
     return req;
   }
 
+  // A body that cannot be serialized (a cycle) cannot be sent either; counting it as 0 only means the first window
+  // is the smallest step, and the send itself surfaces the real failure.
+  function jsonChars(value) {
+    try { return JSON.stringify(value || []).length; } catch (_) { return 0; }
+  }
   function estimateTokens(body) {
     const b = body || {};
-    let chars = 0;
-    try { chars += JSON.stringify(b.messages || []).length; } catch (_) {}
-    try { chars += JSON.stringify(b.tools || []).length; } catch (_) {}
-    return Math.ceil(chars / CHARS_PER_TOKEN);
+    return Math.ceil((jsonChars(b.messages) + jsonChars(b.tools)) / CHARS_PER_TOKEN);
   }
 
   // Smallest ladder step holding `need`, never below `floor` (the largest window this model already ran at in this
