@@ -2003,40 +2003,61 @@
        Frames go to the handoff host (sidecar/browser-handoff.js) and from there only to the station page; nothing
        here ever returns page pixels or keystrokes to a tool result. Input is CDP Input.* on the page session, the
        same synthetic path browser.test_input uses: it never touches the operating system's real cursor or keyboard.
-       Page.startScreencast sends a frame only when the page repaints, so a still page costs nothing; every frame is
-       acked on the session it came from (an un-acked screencast stalls after a few frames). */
-    let castOn = false, castHandler = null, castWired = false;
+
+       WHY A CAPTURE LOOP AND NOT Page.startScreencast (measured 2026-09-29): in headless=new the screencast mixes
+       frames of the EMULATED 1440x900 viewport with frames of the hidden window's real content area (1424x749),
+       each labelled with its own size — so a click mapped off one frame lands somewhere else on the next.
+       Page.captureScreenshot always renders the emulated viewport, i.e. the exact CSS space Input.* coordinates
+       live in. The loop is fast right after the Commander acts and backs off when the page is still, and an
+       unchanged picture is never re-sent. */
+    const CAST_FAST_MS = 140, CAST_IDLE_MS = 700, CAST_IDLE_AFTER = 12;
+    let castOn = false, castHandler = null, castGen = 0, castKick = null, castSame = 0;
+    async function castSize(c) {
+      try {
+        const m = await c.send('Page.getLayoutMetrics', {});
+        const v = (m && (m.cssVisualViewport || m.visualViewport)) || {};
+        if (v.clientWidth > 0 && v.clientHeight > 0) return { width: Math.round(v.clientWidth), height: Math.round(v.clientHeight) };
+      } catch (_) {}
+      return { width: stationMetrics.width, height: stationMetrics.height };
+    }
     async function streamStart(onFrame) {
       const c = await page();
       castHandler = typeof onFrame === 'function' ? onFrame : null;
-      if (!castWired) {
-        castWired = true;
-        c.on('Page.screencastFrame', (p, sid) => {
-          try { const ack = cdp && cdp.send('Page.screencastFrameAck', { sessionId: p.sessionId }, sid); if (ack && ack.catch) ack.catch(() => {}); } catch (_) {}
-          if (!castOn || !castHandler) return;
-          const md = p.metadata || {};
-          try { castHandler({ data: p.data, mime: 'image/jpeg', width: Math.round(md.deviceWidth || stationMetrics.width), height: Math.round(md.deviceHeight || stationMetrics.height) }); } catch (_) {}
-        });
-      }
-      castOn = true;
-      await c.send('Page.startScreencast', { format: 'jpeg', quality: 72, maxWidth: stationMetrics.width, maxHeight: stationMetrics.height, everyNthFrame: 1 });
-      // Headless paints lazily: seed one frame now so the window never opens on a blank screen.
-      try {
+      castOn = true; castSame = 0;
+      const gen = ++castGen;
+      let last = '';
+      // the first frame is taken before we return, so the window never opens on a blank screen
+      const shoot = async () => {
+        const size = await castSize(c);
         const r = await c.send('Page.captureScreenshot', { format: 'jpeg', quality: 72, captureBeyondViewport: false });
-        if (r && r.data && castOn && castHandler) castHandler({ data: r.data, mime: 'image/jpeg', width: stationMetrics.width, height: stationMetrics.height });
-      } catch (_) {}
+        if (!r || !r.data || !castOn || gen !== castGen) return;
+        if (r.data === last) { castSame++; return; }
+        last = r.data; castSame = 0;
+        try { if (castHandler) castHandler({ data: r.data, mime: 'image/jpeg', width: size.width, height: size.height }); } catch (_) {}
+      };
+      await shoot();
+      (async () => {
+        while (castOn && gen === castGen) {
+          await new Promise(resolve => { const t = setTimeout(resolve, castSame >= CAST_IDLE_AFTER ? CAST_IDLE_MS : CAST_FAST_MS); castKick = () => { clearTimeout(t); resolve(); }; });
+          castKick = null;
+          if (!castOn || gen !== castGen || !cdp) break;
+          try { await shoot(); } catch (_) { await sleep(CAST_IDLE_MS); }
+        }
+      })();
       return true;
     }
     async function streamStop() {
-      castOn = false; castHandler = null;
-      if (!cdp) return false;
-      try { const c = await page(); await c.send('Page.stopScreencast', {}); } catch (_) {}
+      castOn = false; castHandler = null; castGen++;
+      if (castKick) { try { castKick(); } catch (_) {} }
       return true;
     }
     // One sanitized event from the handoff host (browser-handoff.js sanitizeInput owns the vocabulary).
     async function humanInput(ev) {
       const c = await page();
       ev = ev || {};
+      // the Commander just acted: show the result at the fast cadence, starting now
+      castSame = 0;
+      if (castKick && !(ev.type === 'mouse' && ev.action === 'move')) { const k = castKick; castKick = null; setTimeout(k, 60); }
       if (ev.type === 'mouse') {
         const type = ev.action === 'move' ? 'mouseMoved' : ev.action === 'down' ? 'mousePressed' : 'mouseReleased';
         const button = ev.action === 'move' ? (ev.button || 'none') : (ev.button || 'left');
