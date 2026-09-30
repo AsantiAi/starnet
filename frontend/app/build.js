@@ -133,7 +133,6 @@ const Build = (() => {
   const esc = s => U.esc(s == null ? '' : s);   // one complete impl (escapes & < > " ' — value="…" attrs here stay injection-safe)
   // THE ONE SENTENCE (2026-08-04 onramp): every self-introduction of the belt system leads with this.
   // It also leads the INBOX catalog desc (propsprites.js) and the first-run guide card — keep them aligned.
-  const LINE_SENTENCE = 'Your floor is a flowchart — work arrives at the INBOX, every BAY is an agent doing one step, and the belts you draw are the order the work flows.';
 
   // camera: screen = world*zoom + pan   (world = bake-pixel space, 1 tile = TILE px)
   let zoom = 2, panX = 0, panY = 0;
@@ -1063,13 +1062,13 @@ const Build = (() => {
       });
       pal.appendChild(hueGrid);
     } else if (tool === 'belt') {
-      /* THE ONE SENTENCE (belt-tool idle state): this palette used to be empty, so the first time a
-         user armed the BELT tool the system introduced itself with nothing. Lead with the model. */
+      /* the BELT tool's idle state, in the other tabs' voice — a title and one line, like Rooms' "Make space" (2026-09-30: the
+         paragraph that sat here went; the whole gesture is spelled out in the tool help under the palette) */
       paletteLabel = 'THE LINE';
-      const intro = document.createElement('div');
-      intro.className = 'refit-lineintro';
-      intro.textContent = LINE_SENTENCE;
-      pal.appendChild(intro);
+      const note = document.createElement('div');
+      note.className = 'refit-selectnote';
+      note.innerHTML = '<b>Connect machines</b><span>Click where work starts, then where it goes next.</span>';
+      pal.appendChild(note);
     } else if (tool === 'line' || ((tool === 'select' || tool === 'prop') && buildGroup === 'workflow')) {
       /* THE LINE LIBRARY (v3, 2026-08-30) — one-click whole layouts, now a browsable library.
          Cards keep the v2 anatomy (schematic MINIATURE in the floor's own colour economy, NAME +
@@ -1080,71 +1079,56 @@ const Build = (() => {
          never hand-kept here; an ungrouped blueprint falls into the last section rather than
          vanishing (a card the catalog ships must always be stampable). */
       paletteLabel = 'THE LINE LIBRARY';
-      const intro = document.createElement('div');
-      intro.className = 'refit-lineintro';
-      intro.textContent = LINE_SENTENCE + ' Place single machines, or a whole line, then make it yours.';
-      pal.appendChild(intro);
-      /* BUILD YOUR OWN (conveyor-links phase D): an INBOX, one step and an OUTBOX laid on clear floor in view, with its Workflow
-         panel open — where steps, branches, review loops and sorters are added, every change one UNDO */
-      if (typeof LineEdit !== 'undefined') {
-        const own = document.createElement('button'); own.type = 'button'; own.className = 'bb sm refit-ownline';
-        own.textContent = '▸ BUILD YOUR OWN LINE';
-        own.dataset.tip = 'an INBOX, one step and an OUTBOX, placed in view — then add steps, branches and review loops from its Workflow panel';
-        own.onclick = () => {
-          const r = lineEditRun('newLine', null, {});
-          if (r && r.ok) { sfx('chime'); flashTip(null, 'a new line: INBOX → a step → OUTBOX · UNDO removes it', true); openWorkflowPanel(r.focus); }
-          else { sfx('bad'); flashTip(null, (r && r.msg) || 'there is no clear floor for a new line here', false); }
-        };
-        pal.appendChild(own);
+      /* THE CONVEYORS TAB IN THE LIBRARY'S OWN LOOK (2026-09-30 — Andrew: "the long sentences underneath each machine … I hate it
+         … stop resorting back to the old ugly UI"). Laid out like the Props tab beside it: two section keys (the FURNITURE ·
+         EQUIPMENT · ABILITIES row's look), then a grid of big glass tiles — a line's miniature or a machine's own art, its name,
+         one small line. Every sentence that used to sit under a tile is now its hover tip and its accessible description
+         (simplify = organization: nothing a tile said is gone). */
+      if (tool === 'line') convSection = 'lines';   // an armed line always shows its card and its SET UP row
+      else if (tool === 'prop' && workflowMachines().some(c => c.id === propType)) convSection = 'machines';   // …and an armed machine its tile
+      const secs = document.createElement('nav'); secs.className = 'refit-prop-sections refit-conv-sections'; secs.setAttribute('aria-label', 'Conveyors');
+      for (const [id, label, n] of [['lines', LINES_LABEL, blueprints().length], ['machines', MACHINES_LABEL, workflowMachines().length]]) {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'bb refit-prop-section' + (convSection === id ? ' active' : '');
+        b.dataset.convSection = id; b.setAttribute('aria-pressed', String(convSection === id));
+        b.innerHTML = esc(label) + ' <small>' + n + '</small>';
+        b.onclick = () => { if (convSection === id) return; convSection = id; sfx('click'); if (tool === 'line') selectTool('select', { silent: true }); else renderPalette(); };
+        secs.appendChild(b);
       }
-      /* START FROM INTENT (2026-09-28): the ready-made line with the SHAPE of the Commander's own goal leads the tab — their
-         words quoted, so it is clear why — one click arms it (MAKE ROOM FOR IT when the deck is too small). */
-      const goal = goalLine();
-      if (goal) {
-        const gh = document.createElement('div'); gh.className = 'refit-linegroup refit-palsection refit-goalhd';
-        gh.innerHTML = '<span class="refit-linegroup-nm">FOR YOUR GOAL</span><span class="refit-linegroup-why"></span>';
-        gh.querySelector('.refit-linegroup-why').textContent = '“' + goal.quote + '” — ' + goal.why;
-        pal.appendChild(gh);
-        const gg = document.createElement('div'); gg.className = 'refit-linegrid refit-goalgrid'; gg.setAttribute('aria-label', 'Suggested for your goal');
-        const gb = makeLineTile(goal.bp); gg.appendChild(gb); setLineTileFit(gb, goal.bp);
-        if (tool === 'line' && goal.bp.id === lineType) gg.appendChild(linePrefsEl(goal.bp));
-        pal.appendChild(gg);
-      }
-      pal.appendChild(machinePalette());
-      const lhd = document.createElement('div'); lhd.className = 'refit-linegroup refit-palsection';
-      lhd.innerHTML = '<span class="refit-linegroup-nm">CONVEYOR LINES · ' + blueprints().length + '</span><span class="refit-linegroup-why">whole layouts, pre-wired — stamp one, then assign its bays</span>';
-      pal.appendChild(lhd);
-      const grid = document.createElement('div'); grid.className = 'refit-linegrid';
-      grid.setAttribute('aria-label', 'Line library');
-      const groups = {};
-      const lastWork = LINE_WORK_GROUPS[LINE_WORK_GROUPS.length - 1].id;
-      for (const bp of blueprints()) { const k = LINE_WORK_GROUPS.some(g => g.id === LINE_WORK[bp.id]) ? LINE_WORK[bp.id] : lastWork; (groups[k] = groups[k] || []).push(bp); }
-      const ordered = [];
-      for (const g of LINE_WORK_GROUPS) {
-        if (!groups[g.id] || !groups[g.id].length) continue;
-        ordered.push({ hd: g });
-        for (const bp of groups[g.id]) ordered.push({ bp });
-      }
-      for (const row of ordered) {
-        if (row.hd) {
-          const hd = document.createElement('div'); hd.className = 'refit-linegroup';
-          const nm = document.createElement('span'); nm.className = 'refit-linegroup-nm'; nm.textContent = row.hd.label;
-          const why = document.createElement('span'); why.className = 'refit-linegroup-why'; why.textContent = row.hd.blurb;
-          hd.appendChild(nm); hd.appendChild(why);
-          grid.appendChild(hd);
-          continue;
+      pal.appendChild(secs);
+      if (convSection === 'machines') pal.appendChild(machinePalette());
+      else {
+        /* BUILD YOUR OWN (conveyor-links phase D): an INBOX, one step and an OUTBOX laid on clear floor in view, with its Workflow
+           panel open — where steps, branches, review loops and sorters are added, every change one UNDO */
+        if (typeof LineEdit !== 'undefined') {
+          const own = document.createElement('button'); own.type = 'button'; own.className = 'bb refit-ownline';
+          own.textContent = '＋ BUILD YOUR OWN LINE';
+          own.dataset.tip = 'an INBOX, one step and an OUTBOX, placed in view — then add steps, branches and review loops from its Workflow panel';
+          own.onclick = () => {
+            const r = lineEditRun('newLine', null, {});
+            if (r && r.ok) { sfx('chime'); flashTip(null, 'a new line: INBOX → a step → OUTBOX · UNDO removes it', true); openWorkflowPanel(r.focus); }
+            else { sfx('bad'); flashTip(null, (r && r.msg) || 'there is no clear floor for a new line here', false); }
+          };
+          pal.appendChild(own);
         }
-        const bp = row.bp;
-        const b = makeLineTile(bp);
-        grid.appendChild(b);
-        setLineTileFit(b, bp);   // DECK-FIT HONESTY — and kept current as the floor changes (see setLineTileFit)
-        if (tool === 'line' && bp.id === lineType) grid.appendChild(linePrefsEl(bp));   // the armed card's settings, right under it
+        const grid = document.createElement('div'); grid.className = 'refit-linegrid';
+        grid.setAttribute('aria-label', 'Line library');
+        /* START FROM INTENT (2026-09-28): the ready-made line with the SHAPE of the Commander's own goal leads the shelf; its tip
+           quotes their words so it is clear why — one click arms it (MAKE ROOM FOR IT when the deck is too small) */
+        const goal = goalLine();
+        if (goal) {
+          grid.appendChild(lineGroupHd('FOR YOUR GOAL', 'refit-goalhd'));
+          addLineCell(grid, goal.bp, '“' + goal.quote + '” — ' + goal.why, true);
+        }
+        const groups = {};
+        const lastWork = LINE_WORK_GROUPS[LINE_WORK_GROUPS.length - 1].id;
+        for (const bp of blueprints()) { const k = LINE_WORK_GROUPS.some(g => g.id === LINE_WORK[bp.id]) ? LINE_WORK[bp.id] : lastWork; (groups[k] = groups[k] || []).push(bp); }
+        for (const g of LINE_WORK_GROUPS) {
+          if (!groups[g.id] || !groups[g.id].length) continue;
+          grid.appendChild(lineGroupHd(g.label));
+          for (const bp of groups[g.id]) addLineCell(grid, bp);
+        }
+        pal.appendChild(grid);
       }
-      pal.appendChild(grid);
-      const note = document.createElement('div');
-      note.className = 'refit-linenote';
-      note.textContent = 'Assign agents when you want to run this workflow. One Undo removes a placed layout.';
-      pal.appendChild(note);
     }
     if (pal.querySelector('.refit-linegrid')) pal.scrollTop = propShelfScroll.get('workflow-layouts') || 0;
     /* NAME THE ARMED TOOL IN THE OPTIONS HEADER. The two zones of this dock — the tool you picked
@@ -1225,6 +1209,8 @@ const Build = (() => {
      live art and its one-line purpose (PALETTE_PURPOSE). A pick arms the ordinary PROP placement for
      that machine while the Conveyors tab stays up. */
   const MACHINES_LABEL = 'MACHINES';   // the Conveyors tab's single-machine shelf — the guide + Field Manual name it by this
+  const LINES_LABEL = 'LINES';         // …and its ready-made lines, the section key beside it
+  let convSection = 'lines';           // the Conveyors section up now: 'lines' (BUILD YOUR OWN + the ready-made shelf) or 'machines'
   const MACHINE_ORDER = ['intake', 'bay', 'outbox', 'splitter', 'joiner', 'merger', 'filter', 'loop'];   // JOINER beside MERGER: the pair people confuse
   function workflowMachines() {
     const all = catalog().filter(c => c && c.cat === 'workflow');
@@ -1234,9 +1220,6 @@ const Build = (() => {
   function machinePalette() {
     const wrap = document.createElement('div'); wrap.className = 'refit-machines';
     const ms = workflowMachines();
-    const hd = document.createElement('div'); hd.className = 'refit-linegroup refit-palsection';
-    hd.innerHTML = '<span class="refit-linegroup-nm">' + MACHINES_LABEL + ' · ' + ms.length + '</span><span class="refit-linegroup-why">one piece at a time — place it, then connect it with BELT</span>';
-    wrap.appendChild(hd);
     // grouped the way work meets them (every catalog machine lands in a group; an unknown one joins the last)
     const groupOf = id => { const g = MACHINE_GROUPS.findIndex(x => x[2].indexOf(id) >= 0); return g < 0 ? MACHINE_GROUPS.length - 1 : g; };
     let grid = null, curGroup = -1;
@@ -1245,7 +1228,7 @@ const Build = (() => {
       if (gi !== curGroup) {
         curGroup = gi;
         const gh = document.createElement('div'); gh.className = 'refit-machinegroup';
-        gh.innerHTML = '<span class="nm">' + esc(MACHINE_GROUPS[gi][0]) + '</span><span class="why">' + esc(MACHINE_GROUPS[gi][1]) + '</span>';
+        gh.textContent = MACHINE_GROUPS[gi][0];   // the group's name only (its how-to line rides each tile's tip)
         wrap.appendChild(gh);
         grid = document.createElement('div'); grid.className = 'refit-machinegrid'; grid.setAttribute('aria-label', MACHINE_GROUPS[gi][0] + ' machines');
         wrap.appendChild(grid);
@@ -1254,20 +1237,23 @@ const Build = (() => {
       const on = tool === 'prop' && propType === c.id;
       b.className = 'refit-machinetile' + (on ? ' active' : ''); b.dataset.machine = c.id; b.dataset.prop = c.id;
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
-      const purpose = PALETTE_PURPOSE[c.id] || '';
-      b.setAttribute('aria-label', c.label + (purpose ? ' — ' + purpose : ''));
-      const DW = 44, DH = 34, SS = Math.max(2, Math.min(3, window.devicePixelRatio || 1));
+      const purpose = PALETTE_PURPOSE[c.id] || '', how = MACHINE_GROUPS[gi][1] || '';
+      /* THE TILE IS THE PROPS TAB'S TILE (2026-09-30): the machine's own art, big, its name, and its wiring drawn small under it.
+         The sentence that used to sit under the name is the tile's hover tip (the station tooltip) and its accessible
+         description, with its group's how-to ("drop these ON a belt") beside it. */
+      b.setAttribute('aria-label', c.label);
+      b.setAttribute('aria-description', purpose + (how ? ' — ' + how : ''));
+      b.dataset.tip = c.label + (purpose ? '\n' + purpose : '') + (how ? '\n' + how : '');
+      const DW = 76, DH = 50, SS = Math.max(2, Math.min(3, window.devicePixelRatio || 1)), PAD = 3;   // the prop tile's art well; a tight halo so a small machine still fills it
       const cvEl = document.createElement('canvas'); cvEl.className = 'refit-machinetile-cv';
       cvEl.style.width = DW + 'px'; cvEl.style.height = DH + 'px'; cvEl.width = Math.round(DW * SS); cvEl.height = Math.round(DH * SS);
       const tile = (typeof PropSprites !== 'undefined') ? PropSprites.TILE : 12;
-      const nativeW = c.w * tile + THUMB_PAD * 2, nativeH = c.h * tile + THUMB_PAD * 2;
+      const nativeW = c.w * tile + PAD * 2, nativeH = c.h * tile + PAD * 2;
       const density = typeof PropRemaster !== 'undefined' && PropRemaster.isProjection() ? 4 : 1;
       const off = document.createElement('canvas'); off.width = nativeW * density; off.height = nativeH * density;
-      propThumbs.push({ id: c.id, w: c.w, h: c.h, off, octx: off.getContext('2d'), dctx: cvEl.getContext('2d'), nativeW, nativeH, density, bw: cvEl.width, bh: cvEl.height });
-      const txt = document.createElement('span'); txt.className = 'refit-machinetile-txt';
+      propThumbs.push({ id: c.id, w: c.w, h: c.h, off, octx: off.getContext('2d'), dctx: cvEl.getContext('2d'), nativeW, nativeH, density, bw: cvEl.width, bh: cvEl.height, pad: PAD });
       const nm = document.createElement('span'); nm.className = 'refit-machinetile-nm'; nm.textContent = c.label;
-      const why = document.createElement('span'); why.className = 'refit-machinetile-why'; why.textContent = purpose;
-      txt.append(nm, why); b.append(cvEl, txt);
+      b.append(cvEl, nm);
       if (MACHINE_DIAGRAM[c.id]) b.insertAdjacentHTML('beforeend', machineDiagramSVG(c.id));
       b.onclick = () => {
         propType = c.id;
@@ -1437,7 +1423,7 @@ const Build = (() => {
       o.clearRect(0, 0, th.off.width, th.off.height);
       o.scale(th.density||1,th.density||1);
       o.imageSmoothingEnabled = false;
-      o.translate(THUMB_PAD, THUMB_PAD);
+      o.translate(th.pad != null ? th.pad : THUMB_PAD, th.pad != null ? th.pad : THUMB_PAD);
       PropSprites.setCtx(o); PropSprites.setNow(now);
       PropSprites.draw({ t: th.id, x: 0, y: 0, w: th.w, h: th.h }, true);   // work=true → screens read alive in the preview
       const d = th.dctx, s = Math.min(th.bw / th.nativeW, th.bh / th.nativeH);
@@ -1604,8 +1590,7 @@ const Build = (() => {
       + opts.map(([v, t]) => '<button type="button" class="bb sm" data-pref="' + key + '" data-val="' + (v == null ? '' : v) + '" aria-pressed="' + (v === cur) + '">' + esc(t) + '</button>').join('') + '</div>';
     el.innerHTML = '<div class="refit-lineprefs-hd">SET UP BEFORE YOU PLACE</div>'
       + (hasIn ? row('DAILY CAP', LINE_CAPS, p.cap, 'cap') : '')
-      + (p.tries != null ? row('REVIEW TRIES', [1, 2, 3, 4, 5].map(n => [n, String(n)]), p.tries, 'tries') : '')
-      + '<div class="refit-lineprefs-note">Then click the floor to place it. Who works each step comes next, in the panel.</div>';
+      + (p.tries != null ? row('REVIEW TRIES', [1, 2, 3, 4, 5].map(n => [n, String(n)]), p.tries, 'tries') : '');
     el.querySelectorAll('[data-pref]').forEach(b => b.onclick = ev => {
       ev.stopPropagation();
       const v = b.dataset.val === '' ? null : +b.dataset.val;
@@ -1681,7 +1666,7 @@ const Build = (() => {
   }
   function lineSchematic(bp) {
     // per-blueprint tile scale: fill the card's fixed viewport without ever scaling the canvas
-    const S = Math.max(4, Math.min(14, Math.floor(236 / bp.w), Math.floor(64 / bp.h)));
+    const S = Math.max(4, Math.min(12, Math.floor(160 / bp.w), Math.floor(56 / bp.h)));   // (a two-across tile of the line shelf)
     const PAD = 2, u = S >= 12 ? 2 : 1;
     const c = document.createElement('canvas');
     c.className = 'refit-linetile-cv';
@@ -1900,31 +1885,44 @@ const Build = (() => {
     }
     return null;
   }
-  /* one ready-made line's card (the line library AND the FOR YOUR GOAL card) — its fit is set by setLineTileFit once it is in a grid */
-  function makeLineTile(bp) {
+  /* a shelf section's name, across its grid row — the Props tab's "FURNITURE / 128 ITEMS" voice: a name, never a blurb */
+  function lineGroupHd(label, cls) {
+    const hd = document.createElement('div'); hd.className = 'refit-linegroup' + (cls ? ' ' + cls : '');
+    hd.textContent = label;
+    return hd;
+  }
+  /* one ready-made line in its grid cell: the tile, and under it (only when the deck cannot hold the line) MAKE ROOM FOR IT; the
+     armed line's SET UP row follows across the whole grid */
+  function addLineCell(grid, bp, why, goal) {
+    const cell = document.createElement('div'); cell.className = 'refit-linecell' + (goal ? ' refit-goalcell' : '');
+    const b = makeLineTile(bp, why);
+    cell.appendChild(b); grid.appendChild(cell);
+    setLineTileFit(b, bp);   // DECK-FIT HONESTY — and kept current as the floor changes (see setLineTileFit)
+    if (tool === 'line' && bp.id === lineType) grid.appendChild(linePrefsEl(bp));   // the armed card's settings, right under it
+    return b;
+  }
+  /* one ready-made line's tile (the shelf AND the FOR YOUR GOAL tile) — the line's miniature, its plain name, one small line (its
+     steps and size, or what its fit is: setLineTileFit). What the line is for, the catalog name it ships under and (for the goal
+     tile) the Commander's own words are its hover tip and its accessible description. */
+  function makeLineTile(bp, why) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'refit-linetile' + (tool === 'line' && bp.id === lineType ? ' active' : '');
     b.dataset.line = bp.id;
     b.setAttribute('aria-pressed', tool === 'line' && bp.id === lineType ? 'true' : 'false');
-    b.title = bp.desc;   // adopted by tooltip.js into the station card (never the OS bubble)
+    const name = LINE_PLAIN[bp.id] || bp.label, purpose = LINE_PURPOSE[bp.id] || bp.desc || '';
+    b.dataset.tip = name + (LINE_PLAIN[bp.id] ? ' · ' + bp.label : '') + (why ? '\n' + why : '') + (purpose ? '\n' + purpose : '');
+    b.setAttribute('aria-description', (why ? why + ' — ' : '') + purpose);
     const view = document.createElement('span'); view.className = 'refit-linetile-view';
     view.appendChild(lineSchematic(bp));
     b.appendChild(view);
-    const hd = document.createElement('span'); hd.className = 'refit-linetile-hd';
-    const nm = document.createElement('span'); nm.className = 'refit-matname'; nm.textContent = LINE_PLAIN[bp.id] || bp.label;
-    hd.appendChild(nm);
-    if (LINE_PLAIN[bp.id]) { const tg = document.createElement('span'); tg.className = 'refit-linetile-tag'; tg.textContent = bp.label; hd.appendChild(tg); }
-    // footprint + dock count, derived from the catalog (never hand-kept). Mixed VT323 glyphs
-    // ('×', '·') fall back fonts, so the chip is BOX-centred in CSS — never padded by font math.
+    const nm = document.createElement('span'); nm.className = 'refit-matname'; nm.textContent = name;
+    b.appendChild(nm);
+    // steps + footprint, derived from the catalog (never hand-kept); setLineTileFit swaps in the fit when the drawn shape does not fit
     const docks = bp.props.filter(p => p.t === 'bay').length;
     const stat = document.createElement('span'); stat.className = 'refit-linetile-stat';
-    stat.textContent = bp.w + '×' + bp.h + ' · ' + docks + (docks === 1 ? ' DOCK' : ' DOCKS');
-    hd.appendChild(stat);
-    b.appendChild(hd);
-    const why = document.createElement('span'); why.className = 'refit-linetile-why';
-    why.textContent = LINE_PURPOSE[bp.id] || '';
-    b.appendChild(why);
+    stat.textContent = stat.dataset.rest = docks + (docks === 1 ? ' step' : ' steps') + ' · ' + bp.w + ' × ' + bp.h;
+    b.appendChild(stat);
     b.onclick = () => { lineType = bp.id; selectTool('line'); };
     return b;
   }
@@ -1943,21 +1941,21 @@ const Build = (() => {
     const fits = drawn || !!(laid && laid.ok);
     b.classList.toggle('nofit', !fits);
     b.classList.toggle('laidfit', !drawn && fits);
-    let nf = b.querySelector('.refit-linetile-nofit');
+    // (2026-09-30) the fit is said on the tile's own small line — it used to be a sentence under the tile
+    const stat = b.querySelector('.refit-linetile-stat'), say = t => { if (stat) stat.textContent = t; };
     const next = b.nextElementSibling;
     const make = next && next.classList.contains('refit-linetile-makeroom') ? next : null;
-    if (drawn) { if (nf) nf.remove(); if (make) make.remove(); return; }
-    if (!nf) { nf = document.createElement('span'); nf.className = 'refit-linetile-nofit'; b.appendChild(nf); }
-    if (fits) {   // the drawn shape fits nowhere, but the line does, laid out round what stands here
-      nf.textContent = 'FITS LAID OUT — CLICK THE FLOOR WHERE YOU WANT IT';
+    if (drawn) { say(stat ? stat.dataset.rest || '' : ''); if (make) make.remove(); return; }
+    if (fits) {   // the drawn shape fits nowhere, but the line does, laid out round what stands here (the ghost invites the click)
+      say('fits laid out');
       if (make) make.remove();
       return;
     }
     const need = laid && laid.needs ? laid.needs : { w: bp.w, h: bp.h };
-    nf.textContent = laid === undefined ? 'CHECKING WHERE IT FITS…' : 'NO ROOM ON THIS DECK — NEEDS ' + need.w + '×' + need.h + ' OF CLEAR FLOOR';
+    say(laid === undefined ? 'checking fit…' : 'needs ' + need.w + ' × ' + need.h + ' floor');
     if (laid === undefined) { if (make) make.remove(); return; }
     if (make) return;
-    const mk = document.createElement('button'); mk.type = 'button'; mk.className = 'bb sm refit-linetile-makeroom';
+    const mk = document.createElement('button'); mk.type = 'button'; mk.className = 'bb refit-linetile-makeroom';
     mk.textContent = '＋ MAKE ROOM FOR IT'; mk.setAttribute('aria-label', 'Build a room big enough for ' + bp.label);
     mk.onclick = e => makeRoomFor(bp.id, e);
     b.after(mk);
@@ -2139,7 +2137,7 @@ const Build = (() => {
         move: 'Drag a room or prop to its new position. Furniture moves with its room.',
         dupe: 'Click the room or prop you want to copy, then click a clear space to place the copy.',
         reclaim: 'Click a room, prop or belt to remove it. Undo brings it back.',
-        belt: 'Click the machine where work starts, then the one it goes to next, and the belt lays itself. Or drag across the floor to lay belt by hand; work flows the way you drag.',
+        belt: 'Click a machine, then the next one: the belt lays itself. Or drag to lay belt by hand.',
         line: 'Choose a conveyor line, then click clear floor to place it. Assign agents after placing.'
       };
       help.querySelector('span').textContent = msg || guidance[tool] || verb;
