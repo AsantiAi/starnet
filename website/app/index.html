@@ -749,6 +749,14 @@
         <button class="bb" data-term="messaging" data-hint="channel"><span class="bb-i">✉</span><span class="bb-tx"><b>CHANNELS</b><small>your way in — talk to agents from Telegram, Slack, Discord</small></span></button>
       </div>
     </div>
+    <div class="bb-group" data-group="apps">
+      <button class="bb-grp" data-hint="apps" aria-haspopup="menu" aria-expanded="false" title="Your apps — describe one and your crew builds it"><span class="bb-gi">▦</span>APPS</button>
+      <div class="bb-menu" role="menu">
+        <!-- APPS (2026-09-29): describe an app, your crew builds it in its own window (frontend/app/apps.js) -->
+        <button class="bb" id="bb-newapp" data-hint="app"><span class="bb-i">＋</span><span class="bb-tx"><b>NEW APP</b><small>describe it — a dashboard, a daily brief, a tracker — and your crew builds it</small></span></button>
+        <button class="bb" data-term="apps" data-hint="app"><span class="bb-i">▦</span><span class="bb-tx"><b>MY APPS</b><small>open, refresh or change the apps your crew built for you</small></span></button>
+      </div>
+    </div>
     <div class="bb-group" data-group="system">
       <button class="bb-grp" data-hint="system" aria-haspopup="menu" aria-expanded="false" title="Station systems — manual, settings, updates, notifications"><span class="bb-gi">▣</span>SYSTEM<span id="bb-sys-badge" class="bb-grp-badge" aria-label="unread notifications" hidden></span></button>
       <div class="bb-menu" role="menu">
@@ -943,7 +951,8 @@
 <script src="app/windows/loops.js"></script><!-- LOOPS lane — standing objectives (thin polling client over /api/loops); needs loop-templates.js above -->
 <script src="app/windows/connectors.js"></script><!-- TOOLSETS & CONNECTORS — toolset kill-switches, MCP manager, catalog + service keys (Spotify flow embedded) -->
 <script src="app/windows/messaging.js"></script><!-- CHANNELS — messaging platforms catalog (Telegram/Discord/Slack/Matrix/Signal cards) -->
-<script src="app/pluginhost.js"></script><!-- PLUGIN WINDOWS: an approved plugin's screens as real station windows, a sandboxed frame + the starnet bridge (needs stationui.js + apiticket.js above) -->
+<script src="app/pluginhost.js"></script>
+<script src="app/apps.js"></script><!-- APPS: describe it, get it — the APPS window, the bar under each app window, the build/change hand-off to COMMS --><!-- PLUGIN WINDOWS: an approved plugin's screens as real station windows, a sandboxed frame + the starnet bridge (needs stationui.js + apiticket.js above) -->
 <script src="app/navdock.js"></script>
 <script src="app/emergency-control.js"></script>
 <script src="app/chatresize.js"></script>

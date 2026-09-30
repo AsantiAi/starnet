@@ -357,6 +357,15 @@ const StationCommands = (() => {
   const VERBS = {
     /* A crew-written plugin DRAFT's window, previewed (plugin.preview tool): sandboxed, a throwaway store, no backend.
        The sidecar names the draft, its digest and its screens; PluginHost opens (or reloads) the DRAFT window. */
+    // APPS: the crew rewrote an app's page, or published new data into it — the open window follows at once
+    'app.reload': (a) => {
+      if (typeof AppsUI === 'undefined' || !AppsUI.onReload) throw new Error('apps are not loaded on this page');
+      return AppsUI.onReload(String((a && a.id) || ''), a && a.digest);
+    },
+    'app.data': (a) => {
+      if (typeof AppsUI === 'undefined' || !AppsUI.onData) throw new Error('apps are not loaded on this page');
+      return AppsUI.onData(String((a && a.id) || ''));
+    },
     'plugin.preview': (a) => {
       if (typeof PluginHost === 'undefined' || !PluginHost.preview) throw new Error('plugin windows are not loaded on this page');
       return PluginHost.preview(a || {});

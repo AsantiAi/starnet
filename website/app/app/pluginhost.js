@@ -44,6 +44,10 @@
   // DRAFT previews (phase 4): a crew-written plugin shown before it is installed. Same window, same sandbox, a DRAFT
   // plate, a THROWAWAY in-memory store (a draft never writes to the station) and no backend (its code never runs).
   const DRAFT_PREFIX = 'plugindraft.';
+  // APPS (frontend/app/apps.js owns the APPS window): an app is a network-less page the crew writes, its data, and an
+  // optional schedule. Same frame, bridge and kit as a plugin window; an APP plate; a host-drawn bar underneath
+  // (describe a change · refresh · honest status). The app never gets a backend.
+  const APP_PREFIX = 'app.';
   const draftStores = new Map();   // draft id -> Map(key -> JSON text)
   const plainTitle = (s) => String(s == null ? '' : s).replace(/[&<>"'`\u0000-\u001f\u007f]/g, '').trim().slice(0, 40) || 'PLUGIN';
   const keyOf = (pluginId, screenId, draft) => (draft ? DRAFT_PREFIX : KEY_PREFIX) + pluginId + '.' + screenId;
@@ -116,7 +120,7 @@
       if (op === 'delete') { m.delete(key); return null; }
       throw new Error('unknown store operation');
     }
-    const r = await fetch('/api/plugins/store', {
+    const r = await fetch(entry.app ? '/api/apps/store' : '/api/plugins/store', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: entry.plugin.id, op, key: a && a.key, value: a && a.value })
     });
@@ -140,6 +144,7 @@
     // the plugin's OWN backend (api.handle in its main), run in its own process by the sidecar
     'backend.call': async (entry, a) => {
       if (entry.draft) throw new Error('a draft preview has no backend — its code runs only after it is installed and approved');
+      if (entry.app) throw new Error('an app has no backend — its data arrives with app.publish (read it with starnet.store.get)');
       const r = await fetch('/api/plugins/call', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: entry.plugin.id, fn: String((a && a.fn) || ''), args: a && a.args })
@@ -203,15 +208,16 @@
     body.classList.add('plugin-body');
     const w = body.closest && body.closest('.term');
     if (w && def && def.draft) w.classList.add('plugin-draft-win');   // one class token per add (the window manager adds className whole)
+    if (w && def && def.app) w.classList.add('plugin-app-win');
     if (w && !w.querySelector('.plugin-plate')) {
       const title = w.querySelector('.term-title');
       if (title) {
         const plate = document.createElement('span');
-        const draft = !!(def && def.draft);
-        plate.className = 'plugin-plate' + (draft ? ' draft' : '');
-        plate.textContent = draft ? 'DRAFT' : 'PLUGIN';
+        const draft = !!(def && def.draft), isApp = !!(def && def.app);
+        plate.className = 'plugin-plate' + (draft ? ' draft' : '') + (isApp ? ' app' : '');
+        plate.textContent = draft ? 'DRAFT' : (isApp ? 'APP' : 'PLUGIN');
         plate.setAttribute('data-tip', draft ? 'A plugin draft your crew wrote — not installed; its code does not run and nothing it saves is kept'
-          : 'Drawn by a plugin you approved, not by StarNet');
+          : (isApp ? 'An app your crew built for you. It can only draw — its content comes from your crew' : 'Drawn by a plugin you approved, not by StarNet'));
         title.insertAdjacentElement('afterend', plate);
       }
     }
@@ -229,22 +235,24 @@
       return;
     }
     const url = (typeof ApiTicket === 'undefined') ? ''
-      : (def.draft ? (ApiTicket.draftUrl ? ApiTicket.draftUrl(def.plugin.id, def.plugin.digest, def.screen.entry) : '')
+      : (def.app ? (ApiTicket.appUrl ? ApiTicket.appUrl(def.plugin.id, def.plugin.digest, def.screen.entry) : '')
+        : def.draft ? (ApiTicket.draftUrl ? ApiTicket.draftUrl(def.plugin.id, def.plugin.digest, def.screen.entry) : '')
         : (ApiTicket.pluginUrl ? ApiTicket.pluginUrl(def.plugin.id, def.plugin.digest, def.screen.entry) : ''));
     if (!url) { body.innerHTML = '<div class="plugin-gone">The station could not open this window (no session).</div>'; return; }
     const iframe = document.createElement('iframe');
     iframe.className = 'plugin-frame';
-    iframe.setAttribute('sandbox', def.draft ? DRAFT_SANDBOX : SANDBOX);
+    iframe.setAttribute('sandbox', (def.draft || def.app) ? DRAFT_SANDBOX : SANDBOX);
     iframe.setAttribute('referrerpolicy', 'no-referrer');
     iframe.setAttribute('allow', '');
     iframe.setAttribute('aria-label', def.plugin.name + ' — ' + def.screen.title);
     iframe.dataset.digest = def.plugin.digest;
     iframe.dataset.plugin = def.plugin.id;
     iframe.style.height = '240px';
-    const entry = { key, iframe, plugin: def.plugin, screen: def.screen, draft: !!def.draft, nonce: nonce() };
+    const entry = { key, iframe, plugin: def.plugin, screen: def.screen, draft: !!def.draft, app: !!def.app, nonce: nonce() };
     frames.add(entry);
     iframe.src = url + '#sn=' + entry.nonce;
     body.appendChild(iframe);
+    if (def.app && typeof AppsUI !== 'undefined' && AppsUI.mountBar) AppsUI.mountBar(body, def.plugin.id);
   }
 
   // A closed window's frame must stop being answered.
@@ -279,8 +287,9 @@
     }
     // A plugin turned off or edited: its registry entry goes; any open window re-renders into the honest notice
     // (off) or the newly approved code (edited). Never leave old code looking live.
-    for (const key of Array.from(screens.keys())) if (!live.has(key) && key.indexOf(DRAFT_PREFIX) !== 0) screens.delete(key);
+    for (const key of Array.from(screens.keys())) if (!live.has(key) && key.indexOf(DRAFT_PREFIX) !== 0 && key.indexOf(APP_PREFIX) !== 0) screens.delete(key);
     for (const f of Array.from(frames)) {
+      if (f.app) continue;   // apps follow their own reload signal (app.reload), not the plugin list
       const def = screens.get(f.key);
       if (!def || def.plugin.digest !== f.iframe.dataset.digest) { if (ui && ui.rerender) ui.rerender(f.key); }
     }
@@ -347,6 +356,45 @@
     return r;
   }
 
+  /* ---- apps ---------------------------------------------------------------------------------------------------- */
+  // registerApp(a) — a described app ({ id, name, digest }) becomes an openable window (idempotent).
+  function registerApp(a) {
+    const ui = UI();
+    if (!a || !a.id || !a.digest || !ui || !ui.registerWindow) return null;
+    const key = APP_PREFIX + a.id;
+    screens.set(key, { plugin: { id: a.id, name: a.name || a.id, version: 'app', digest: a.digest }, screen: { id: 'main', title: a.name || a.id, entry: 'index.html', size: 'panel' }, app: true });
+    keyPlugin.set(key, a.id);
+    ui.registerWindow(key, plainTitle(a.name || a.id), (body) => build(key, body), { className: 'plugin-win' });
+    return key;
+  }
+  function openApp(a) {
+    const key = registerApp(a);
+    if (!key) return false;
+    const ui = UI(); if (ui && ui.openTerm) ui.openTerm(key);
+    return true;
+  }
+  // the crew rewrote the page: move every open window of it onto the new code (a new digest = a new page URL)
+  function appReload(id, digest) {
+    const key = APP_PREFIX + id, def = screens.get(key);
+    if (!def) return false;
+    if (digest) def.plugin.digest = digest;
+    const ui = UI();
+    for (const f of Array.from(frames)) if (f.key === key && ui && ui.rerender) ui.rerender(key);
+    return true;
+  }
+  // the crew published data: tell the page (starnet.onData) and refresh the bar's status line
+  function appData(id) {
+    const key = APP_PREFIX + id;
+    for (const f of frames) if (f.key === key) post(f, { ev: 'data' });
+    if (typeof AppsUI !== 'undefined' && AppsUI.refreshBar) AppsUI.refreshBar(id);
+    return true;
+  }
+  function renameApp(id, name) {
+    const key = APP_PREFIX + id, def = screens.get(key);
+    if (def) { def.plugin.name = name; def.screen.title = name; registerApp({ id, name, digest: def.plugin.digest }); }
+    for (const f of frames) if (f.key === key) { const t = f.iframe.closest('.term') && f.iframe.closest('.term').querySelector('.term-title'); if (t) t.textContent = plainTitle(name); }
+  }
+
   function init() {
     root.addEventListener('message', onMessage);
     try { reaper.observe(document.getElementById('terms') || document.body, { childList: true, subtree: true }); } catch (_) {}
@@ -360,7 +408,7 @@
   }
 
   const api = {
-    refresh, open, preview, placeTerminal, terminalOf,
+    refresh, open, preview, placeTerminal, terminalOf, registerApp, openApp, appReload, appData, renameApp,
     list: () => plugins.slice(),
     _test: { frames, screens, themeVars, METHODS, get lastError() { return lastError; } }
   };

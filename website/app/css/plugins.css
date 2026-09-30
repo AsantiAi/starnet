@@ -19,3 +19,23 @@
 .term.plugin-win .plugin-gone { padding: var(--s-4) var(--s-4); color: var(--ph-bright); letter-spacing: .5px; }
 /* A crew-written DRAFT: gold plate, so an unapproved preview can never be mistaken for an installed plugin. */
 .term.plugin-win .plugin-plate.draft { color: var(--gold); border-color: rgba(var(--gold-rgb), .45); }
+
+/* APPS — the bar under an app window (StarNet's chrome, not the app's): describe a change · refresh · honest status */
+.term.plugin-app-win .app-bar {
+  flex: none; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px 9px;
+  border-top: 1px solid var(--gd-edge, rgba(var(--ph-rgb), .24));
+  background: linear-gradient(180deg, rgba(var(--ph-rgb), .06), rgba(var(--ph-rgb), .015));
+}
+.term.plugin-app-win .app-bar-row { display: flex; gap: 6px; align-items: center; }
+/* .bb sets its own display, which beats the [hidden] attribute: a button the bar hides must really be gone */
+.term.plugin-app-win .app-bar [hidden], .term.apps-win [hidden] { display: none !important; }
+.term.plugin-app-win .app-change { flex: 1 1 auto; min-width: 0; }
+.term.plugin-app-win .app-bar-status { display: flex; gap: 8px; align-items: center; font-size: 13px; letter-spacing: .5px; color: var(--ph-dim); min-height: 18px; }
+.term.plugin-app-win .app-status { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.term.plugin-win .plugin-plate.app { color: var(--ok); border-color: rgba(var(--ok-rgb), .4); }
+/* the APPS window */
+.term.apps-win .apps-h { font-size: 15px; letter-spacing: 2px; color: var(--ph-bright); margin: 6px 0 8px; }
+.term.apps-win .apps-new { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.term.apps-win .apps-what { resize: vertical; min-height: 64px; }
+.term.apps-win .apps-examples { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.term.apps-win .apps-list { display: flex; flex-direction: column; gap: 8px; }

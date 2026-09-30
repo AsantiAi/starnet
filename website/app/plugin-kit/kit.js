@@ -15,6 +15,7 @@
      starnet.ui.openLink(url)                                           an https:// link in the real browser
      starnet.ui.setHeight(px) / starnet.ui.autoHeight(true|false)       the window follows content by default
      starnet.theme.vars / starnet.theme.onChange(fn)                   the station's live look (already applied)
+     starnet.onData(fn)                                                 an APP: the crew just published new data
 
    Every call returns a Promise; a refused call rejects with an Error whose message says why. */
 (function () {
@@ -26,6 +27,7 @@
   let resolveReady;
   const ready = new Promise((r) => { resolveReady = r; });
   const themeListeners = [];
+  const dataListeners = [];   // an APP: the crew published new data (app.publish) — re-read and re-render
   const theme = { vars: {} };
   // The host gave THIS page a nonce (in the URL fragment); every call carries it, so the station only ever answers
   // the page it loaded — never whatever a link might navigate this frame to.
@@ -64,6 +66,7 @@
     const d = ev.data;
     if (!d || d.__sn !== 1) return;
     if (d.ev === 'theme') { applyTheme(d.vars); return; }
+    if (d.ev === 'data') { for (const fn of dataListeners.slice()) { try { fn(); } catch (_) {} } return; }
     if (d.re != null && pending.has(d.re)) {
       const p = pending.get(d.re); pending.delete(d.re);
       if (d.ok) p.resolve(d.v); else p.reject(new Error(String(d.err || 'refused')));
@@ -111,6 +114,7 @@
     __kit: 1,
     ready,
     call,
+    onData(fn) { if (typeof fn === 'function') dataListeners.push(fn); return () => { const i = dataListeners.indexOf(fn); if (i >= 0) dataListeners.splice(i, 1); }; },
     theme: {
       get vars() { return theme.vars; },
       onChange(fn) { if (typeof fn === 'function') themeListeners.push(fn); return () => { const i = themeListeners.indexOf(fn); if (i >= 0) themeListeners.splice(i, 1); }; }
