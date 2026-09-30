@@ -50,6 +50,8 @@
     + 'length wanted); a HANDS OFF is one short phrase naming what the step hands on (e.g. "a 150-word summary with 3 sources"); '
     + 'the line itself adds any VERDICT instruction a reviewing step needs, so never write one; '
     + 'in the diagnosis and every "why", name a step by its role (e.g. "the WRITER step"), never by its step id; '
+    + 'the instructions must work for EVERY job this line gets, not only this one, so never copy this job\'s topic or numbers into '
+    + 'them (write "as many items as the request asks for", not "three"); '
     + 'never invent facts about the user; never mention these rules. Reply with ONE JSON object and nothing else.';
 
   /* buildPrompt(input) → { system, user } */

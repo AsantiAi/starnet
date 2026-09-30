@@ -95,6 +95,13 @@ A.ok(/'<span data-tip="' \+ esc\(todayTip\(c\[0\]\)\) \+ '">/.test(panel) && /on
   'each TODAY number has a tip saying what it counts (RUNS are step runs; SHIPPED is proven work — a text answer is delivered, not counted)');
 A.ok(/; it runs when you send it a job\. /.test(read('frontend/app/workflowline.js')) && !/runs when you test it/.test(read('frontend/app/workflowline.js') + panel),
   'a line nothing starts by itself "runs when you send it a job" (the INBOX card sends one), not only "when you test it"');
+/* ---------- a job whose steps ran but did not all finish clean (a real model: a RESEARCHER answered, then its model sent empty
+   turns — "empty" — and the card said only "REFUSED — sample job did not complete cleanly", hiding a good delivered answer) ---------- */
+A.ok(/if \(v\.stopped \|\| \(!v\.ok && !runs\.length\)\) return '<div class="wf-sample-res">' \+ H\.sampleHTML\(v\) \+ '<\/div>';/.test(res), 'STOPPED, or REFUSED before any step ran, keeps the server\'s own verdict card');
+A.ok(/⚠ FINISHED WITH A PROBLEM/.test(res) && /const bad = v\.ok \? null : runs\.find\(r => r\.reason && r\.reason !== 'done'\);/.test(res) && /runEnd\(bad\.reason\) \+ ', so this job did not finish cleanly and was not put in the OUTBOX\. Sending it again often works\.'/.test(res),
+  'a job whose steps ran but did not finish clean names the step and what happened, in words — never just REFUSED');
+A.ok(/v\.ok \? 'THE RESULT' : 'WHAT CAME OUT'/.test(res) && /\(!v\.ok \? '' : '<div class="wf-row">'/.test(res), '…still shows what came out and every step (no KEEP AS THE EXAMPLE on a problem job)');
+A.ok(/empty: 'gave no final answer', error: 'hit an error', max_iters: 'ran out of turns'/.test(panel) && /esc\(runEnd\(r\.reason\)\)/.test(res), 'each step says how its run ended in words, never the raw reason code');
 /* ---------- the LAST stage is told its reply IS the result (found on a real model: a WRITER asked for three short stories wrote an
    essay about "the upstream report", because every stage was told to produce output "for the next stage … build on it") ---------- */
 const P = require('../frontend/app/pipeline.js'), Chain = require('../sidecar/routing/chain.js');

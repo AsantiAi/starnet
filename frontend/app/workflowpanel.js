@@ -1579,7 +1579,7 @@ const WorkflowPanel = (() => {
   }
   function readJobSteps() {
     const sr = H.sampleState ? H.sampleState() : null, c = comp();
-    if (sr && c && sr.key === c.key && sr.view && sr.view.ok) (sr.runs || []).forEach(r => readStep(r, sr.streamId));
+    if (sr && c && sr.key === c.key && sr.view && (sr.runs || []).length) (sr.runs || []).forEach(r => readStep(r, sr.streamId));
   }
   /* THE LOOP'S NOTE, IN WORDS (2026-09-30): a review loop that ran out of tries staples its machine note to the result
      ("[LOOP — exhausted: 3 passes round the gate at 19,10 without VERDICT: approved — leaving on DONE unapproved]"). The card
@@ -1659,10 +1659,15 @@ const WorkflowPanel = (() => {
     const sr = H.sampleState ? H.sampleState() : null, c = comp();
     if (sr && c && sr.key === c.key && sr.pending) startLive();   // (a job already out when the card opens: the read-out picks it up)
   }
+  // a run's recorded end, in words (the step list and the problem line say it this way — never the raw reason code)
+  const RUN_END = { empty: 'gave no final answer', error: 'hit an error', max_iters: 'ran out of turns', budget: 'hit the spending cap',
+    refusal: 'refused the work', interrupted: 'was interrupted', stopped: 'was stopped', 'interrupted-resumable': 'was interrupted' };
+  const runEnd = r => RUN_END[r] || String(r || 'did not finish').replace(/_/g, ' ');
   function jobResultHTML(mine, f) {
     const v = mine && mine.view; if (!v) return '';
-    if (v.stopped || !v.ok) return '<div class="wf-sample-res">' + H.sampleHTML(v) + '</div>';
     const runs = (mine.runs || []).slice().reverse();   // line order (the server lists the newest first)
+    // STOPPED by the Commander, or REFUSED before any step ran: the server's own verdict card, as before
+    if (v.stopped || (!v.ok && !runs.length)) return '<div class="wf-sample-res">' + H.sampleHTML(v) + '</div>';
     const P = typeof Pipeline !== 'undefined' ? Pipeline : null, out = String(mine.output || '');
     const ln = loopNotes(P && P.stripVerdictLine ? P.stripVerdictLine(out) : out), shown = ln.rest;   // a reviewer's VERDICT line and the loop's note steer the line; they are not the work
     const prev = S.prevJob && S.prevJob.stamp !== mine.stamp && S.prevJob.text === mine.text ? S.prevJob : null;
@@ -1670,15 +1675,23 @@ const WorkflowPanel = (() => {
     const steps = runs.map((r, i) => {
       const pr = r.dockId ? prop(r.dockId) : null, role = (pr && pr.role) || null, k = r.dockId || r.agentId, pass = passes[k] = (passes[k] || 0) + 1;
       return '<details class="wf-more wf-step-out" data-run="' + esc(r.runId) + '"><summary><span>' + (i + 1) + ' · ' + esc((role ? role + ' · ' : '') + String(nameOf(r.agentId)).toUpperCase() + (pass > 1 ? ' · pass ' + pass : '')) + '</span>'
-        + '<span class="src">' + (r.reason && r.reason !== 'done' ? esc(r.reason) + ' · ' : '') + '$' + (+r.usd || 0).toFixed(4) + '</span></summary>'
+        + '<span class="src' + (r.reason && r.reason !== 'done' ? ' warn' : '') + '">' + (r.reason && r.reason !== 'done' ? esc(runEnd(r.reason)) + ' · ' : '') + '$' + (+r.usd || 0).toFixed(4) + '</span></summary>'
         + '<div class="wf-io">' + esc(stepText(stepOut[r.runId])) + '</div></details>';
     }).join('');
-    return '<div class="wf-job">'
-      + '<div class="wf-job-h"><b>✓ DELIVERED</b> · ' + runs.length + ' step' + (runs.length === 1 ? '' : 's') + (v.usd != null ? ' · $' + v.usd.toFixed(4) : '') + (mine.folded ? ' · in the OUTBOX' : '') + '</div>'
+    /* A JOB WHOSE STEPS RAN BUT DID NOT ALL FINISH CLEAN (2026-09-30, real model: a RESEARCHER answered, then its model sent empty
+       turns — the run ended "empty", the WRITER still wrote a good answer, and the card said only "REFUSED — sample job did not
+       complete cleanly"). It is said as FINISHED WITH A PROBLEM: which step, what happened, in words; what came out, and every step. */
+    const bad = v.ok ? null : runs.find(r => r.reason && r.reason !== 'done');
+    const badLine = v.ok ? '' : bad
+      ? (() => { const pr = bad.dockId ? prop(bad.dockId) : null; return 'The ' + ((pr && pr.role) || 'a') + ' step (' + String(nameOf(bad.agentId)).toUpperCase() + ') ' + runEnd(bad.reason) + ', so this job did not finish cleanly and was not put in the OUTBOX. Sending it again often works.'; })()
+      : String(v.reason || 'the job did not finish cleanly');
+    return '<div class="wf-job' + (v.ok ? '' : ' problem') + '">'
+      + (v.ok ? '<div class="wf-job-h"><b>✓ DELIVERED</b> · ' + runs.length + ' step' + (runs.length === 1 ? '' : 's') + (v.usd != null ? ' · $' + v.usd.toFixed(4) : '') + (mine.folded ? ' · in the OUTBOX' : '') + '</div>'
+        : '<div class="wf-job-h"><b class="warn">⚠ FINISHED WITH A PROBLEM</b> · ' + runs.length + ' step' + (runs.length === 1 ? '' : 's') + (v.usd != null ? ' · $' + v.usd.toFixed(4) : '') + '</div><div class="wf-warnline">' + esc(badLine) + '</div>')
       + ln.notes.map(t => '<div class="wf-warnline">⚠ ' + esc(t) + '</div>').join('')
-      + '<div class="wf-from"><span>THE RESULT</span></div><div class="wf-io out wf-job-out">' + esc(shown.trim() || '(the line delivered an empty reply)') + '</div>'
-      + '<div class="wf-row">' + (S.exampleStamp === mine.stamp && exampleKept(mine) ? '<span class="wf-tag">★ THE LINE’S EXAMPLE</span>'
-        : '<button type="button" class="bb sm" id="wf-keep-ex" data-tip="The step that wrote this result will match its format, length and tone every time: the result is added to that step’s instructions as its example. UNDO takes it back.">★ KEEP AS THE EXAMPLE</button>') + '</div>'
+      + (v.ok || shown.trim() ? '<div class="wf-from"><span>' + (v.ok ? 'THE RESULT' : 'WHAT CAME OUT') + '</span></div><div class="wf-io out wf-job-out">' + esc(shown.trim() || '(the line delivered an empty reply)') + '</div>' : '')
+      + (!v.ok ? '' : '<div class="wf-row">' + (S.exampleStamp === mine.stamp && exampleKept(mine) ? '<span class="wf-tag">★ THE LINE’S EXAMPLE</span>'
+        : '<button type="button" class="bb sm" id="wf-keep-ex" data-tip="The step that wrote this result will match its format, length and tone every time: the result is added to that step’s instructions as its example. UNDO takes it back.">★ KEEP AS THE EXAMPLE</button>') + '</div>')
       // the same job run again after a fix: what it gave LAST time stays one click away, to see the change
       + (prev ? '<details class="wf-more wf-lasttime"><summary>Last time, before your fix</summary><div class="wf-io">' + esc(loopNotes(P && P.stripVerdictLine ? P.stripVerdictLine(prev.output) : prev.output).rest.trim() || '(empty)') + '</div></details>' : '')
       + (runs.length ? '<div class="wf-from"><span>HOW EACH STEP DID IT</span><span class="src">open a step to read its reply</span></div><div class="wf-steps">' + steps + '</div>' : '')
@@ -1773,7 +1786,7 @@ const WorkflowPanel = (() => {
   function wireJob() {
     readJobSteps();
     const sr = H.sampleState ? H.sampleState() : null, c = comp();
-    const mine = sr && c && sr.key === c.key && sr.view && sr.view.ok ? sr : null;
+    const mine = sr && c && sr.key === c.key && sr.view && !sr.view.stopped && (sr.view.ok || (sr.runs || []).length) ? sr : null;
     if (!mine) return;
     const inp = $('#wf-nr-in'), go = $('#wf-nr-go');
     if (inp) inp.addEventListener('input', () => { if (S.fix && S.fix.stamp === mine.stamp) S.fix.complaint = inp.value; else S.fixDraft = inp.value; });
