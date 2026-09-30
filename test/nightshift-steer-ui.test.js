@@ -1,4 +1,4 @@
-/* node test/nightshift-steer-ui.test.js — the machine assertion the SETTINGS › NIGHT SHIFT steer input +
+/* node test/nightshift-steer-ui.test.js — the machine assertion the SETTINGS › AUTONOMY focus steer +
    LAST REPORT button (ui/system/ns-steer,ns-steer-set,ns-report-btn, finding bec0f139) were missing. The
    route contract (POST/GET/DELETE /api/nightshift/focus) is already proven by nightshift-focus.e2e.test.js;
    what had no committed guard was the DOM half: that #ns-steer's value drives the POST body, that the readout
@@ -32,23 +32,26 @@ A.ok(acted && acted.hasReport === true && typeof acted.headline === 'string' && 
 /* ---- 2. SOURCE-LOCK the DOM→fetch steer + report wiring ---- */
 const src = fs.readFileSync(path.join(__dirname, '../frontend/app/stationui.js'), 'utf8');
 
-// the controls render with accessible ids
-A.ok(/id="ns-steer"/.test(src), 'the NIGHT SHIFT panel renders the #ns-steer text input');
-A.ok(/id="ns-steer-set"/.test(src) && /id="ns-steer-clear"/.test(src), 'the panel renders STEER + CLEAR buttons');
-A.ok(/id="ns-report-btn"/.test(src) && /id="ns-report"/.test(src), 'the panel renders the LAST REPORT button + its container');
+// ONE WORD: AUTONOMY (2026-09-29): the away status lives INSIDE Settings › AUTONOMY, and the focus steer exists ONCE —
+// the DIRECTION control (#auto-steer). The old NIGHT SHIFT section carried a second, identical steer box (#ns-steer)
+// on the same route; it is gone, and this locks that the surviving control keeps the full contract.
+A.ok(!/id="ns-steer"/.test(src) && (src.match(/>SET FOCUS</g) || []).length === 1, 'exactly ONE focus steer renders (the duplicate NIGHT SHIFT box is gone)');
+A.ok(/id="auto-steer"/.test(src) && /id="auto-steer-set"/.test(src) && /id="auto-steer-clear"/.test(src), 'the AUTONOMY DIRECTION block renders the steer input + SET FOCUS + CLEAR');
+A.ok(/id="ns-report-btn"/.test(src) && /id="ns-report"/.test(src), 'the away block renders the LAST REPORT button + its container');
+A.ok(src.includes("build: frag(secAutonomy + secAwayActivity)") && !src.includes("id: 'nightshift', label:"), 'the away block renders inside the AUTONOMY section; no separate NIGHT SHIFT section');
+A.ok(src.includes("section === 'nightshift') section = 'autonomy'"), 'an old settings › nightshift link lands on AUTONOMY');
 
-// STEER: #ns-steer.value → POST /api/nightshift/focus body, kinds parsed, readout from the ROUTE
-A.ok(/nsSteer\s*=\s*host\.querySelector\('#ns-steer'\)/.test(src), '#ns-steer is bound as a live handle');
-A.ok(/const raw = nsSteer \? String\(nsSteer\.value\)\.trim\(\) : ''/.test(src), 'STEER reads the input value (the DOM→body link)');
-A.ok(/raw\.toLowerCase\(\) === 'goal'[\s\S]{0,40}kind = 'goal'/.test(src), 'the literal "goal" selects the goal kind');
-A.ok(/\^thread:[\s\S]{0,60}kind = 'thread'/.test(src), '"thread:<id>" selects the thread kind and strips the prefix');
-A.ok(/fetch\('\/api\/nightshift\/focus', \{ method: 'POST'[\s\S]{0,140}JSON\.stringify\(kind \? \{ ref, kind \} : \{ ref \}\)/.test(src),
-  'the steer POSTs /api/nightshift/focus with { ref } (or { ref, kind }) — the value drives the request body');
-A.ok(/if \(!ok \|\| !j \|\| j\.ok === false\)[\s\S]{0,80}steerMsg/.test(src), 'a rejected steer surfaces the ROUTE\'s error (never an optimistic success)');
-A.ok(/refreshPanel\(\);\s*\/\/ repaint FOCUS from the status route/.test(src) || /sfx\('click'\); refreshPanel\(\);/.test(src), 'a successful steer repaints the FOCUS readout from the status route (server truth)');
-
+// STEER: #auto-steer.value → POST /api/nightshift/focus body, kinds parsed, readout from the ROUTE
+A.ok(src.includes("dSteer = host.querySelector('#auto-steer')"), '#auto-steer is bound as a live handle');
+A.ok(src.includes("const raw = dSteer ? String(dSteer.value).trim() : ''"), 'STEER reads the input value (the DOM→body link)');
+A.ok(src.includes("if (raw.toLowerCase() === 'goal') return { ref: 'goal', kind: 'goal' };"), 'the literal "goal" selects the goal kind');
+A.ok(src.includes("if (/^thread:/i.test(raw)) return { ref: raw.slice(7).trim(), kind: 'thread' };"), '"thread:<id>" selects the thread kind and strips the prefix');
+A.ok(src.includes("Harness.api.post('/api/nightshift/focus', parseRef(raw))"), 'the steer POSTs /api/nightshift/focus with the parsed { ref, kind? } — the value drives the request body');
+A.ok(src.includes("if (!ok || !j || j.ok === false) { dMsg((j && j.error) || 'could not steer'); sfx('bad'); return; }"), 'a rejected steer surfaces the route error (never an optimistic success)');
+A.ok(src.includes("if (dSteer) dSteer.value = '';") && src.includes("sfx('click'); refreshDirection();"), 'a successful steer repaints the FOCUS readout from the route (server truth)');
 // CLEAR: DELETE the steer
-A.ok(/nsSteerClear[\s\S]{0,200}fetch\('\/api\/nightshift\/focus', \{ method: 'DELETE' \}\)/.test(src), 'CLEAR DELETEs /api/nightshift/focus');
+{ const clr = src.slice(src.indexOf('if (dSteerClear) dSteerClear.addEventListener'), src.indexOf('if (dSteerClear) dSteerClear.addEventListener') + 400);
+  A.ok(clr.includes("Harness.api.del('/api/nightshift/focus')"), 'CLEAR DELETEs /api/nightshift/focus'); }
 
 // LAST REPORT: fetch the three truthful surfaces + compose (not a cached copy)
 A.ok(/nsReportBtn\.addEventListener\('click', \(\) => \{ renderLastReport\(\)/.test(src), 'the LAST REPORT button triggers renderLastReport');

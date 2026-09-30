@@ -17,7 +17,7 @@ global.fetch=async(url,opts)=>{
 };
 (async()=>{
   mem[key]=JSON.stringify({initiative:'free',reach:'reach',leashPerDay:12});
-  await S.init();assert.equal(S.get().initiative,'wait');assert.ok(calls.every(x=>x===null),'boot is read-only');
+  await S.init();assert.equal(S.get().initiative,'propose','a new station reads the server default: propose, never act');assert.ok(calls.every(x=>x===null),'boot is read-only');
   assert.equal((await S.applyPreset('build')).ok,true);assert.equal(S.get().initiative,'leash');assert.equal(calls.at(-1).resumeHalt,true);
   assert.equal(JSON.parse(mem[key]).initiative,'leash');
   fail=true;assert.equal((await S.setInitiative('wait')).ok,false);assert.equal(S.get().initiative,'leash');assert.match(S.status().error,/disk full/);
@@ -37,6 +37,6 @@ global.fetch=async(url,opts)=>{
   global.fetch=original;await S.refresh();assert.equal(S.status().loaded,true);assert.equal(S.status().error,'');
   let emitted=0;global.U={bus:{emit:()=>emitted++}};await S.setLeash(12);assert.equal(emitted,0);
   fail=true;assert.equal((await S.reset()).ok,false);assert.equal(S.get().initiative,server.initiative);
-  fail=false;await S.reset();assert.equal(mem[key],undefined);assert.equal(S.get().initiative,'wait');assert.equal(server.initiative,'wait');assert.equal(calls.at(-1).resumeHalt,false);
+  fail=false;await S.reset();assert.equal(mem[key],undefined);assert.equal(S.get().initiative,'propose');assert.equal(server.initiative,'propose','reset returns to the new-station default');assert.equal(calls.at(-1).resumeHalt,false);
   console.log('autonomystore.test: PASS (confirmed writes, failures, serialization, lost ack, reload, recovery)');
 })().catch(e=>{console.error(e);process.exitCode=1;});

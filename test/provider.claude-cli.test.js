@@ -141,7 +141,13 @@ const result = (extra) => Object.assign({ type: 'result', subtype: 'success', is
   // I. listModels is gated on `claude auth status`.
   {
     const ok = make(call => ({ lines: call.args.indexOf('auth') >= 0 ? [{ loggedIn: true, authMethod: 'claude.ai' }] : [] })).p;
-    A.eq((await ok.listModels()).map(m => m.id), ['sonnet', 'opus', 'haiku'], 'signed-in CLI lists its model aliases');
+    const listed = await ok.listModels();
+    const ids = listed.map(m => m.id);
+    A.eq(ids.slice(0, 7), ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-4-5-20251001', 'claude-opus-5-5[1m]', 'claude-sonnet-5-5[1m]', 'claude-opus-4-8', 'claude-sonnet-4-6'], 'signed-in CLI lists the named models first');
+    A.ok(['opus', 'sonnet', 'haiku'].every(a => ids.indexOf(a) >= 0), 'the aliases stay listed, so a station already pinned to one keeps its model');
+    A.ok(!ids.some(id => /fable/i.test(id)), 'Fable is not listed (an account without it is silently served Opus 4.8)');
+    A.eq([listed.find(m => m.id === 'claude-opus-5-5[1m]').context_length, listed.find(m => m.id === 'claude-opus-5-5').context_length], [1000000, 200000], 'the 1M variants carry their real context window');
+    A.eq([ok.contextLimit('claude-sonnet-5-5[1m]'), ok.contextLimit('sonnet'), ok.contextLimit('custom-m')], [1000000, 200000, 200000], 'contextLimit follows the model (and only a real [1m] suffix means 1M)');
     const out = make(call => ({ lines: [{ loggedIn: false }], code: 1 })).p;
     let err = null; try { await out.listModels(); } catch (e) { err = e; }
     A.ok(err && /not signed in/.test(err.message) && err.code === 'provider_not_configured', 'signed-out CLI lists nothing and says why');
@@ -168,6 +174,28 @@ const result = (extra) => Object.assign({ type: 'result', subtype: 'success', is
     const childEnv = calls[0].opts.env;
     A.ok(childEnv && !Object.keys(childEnv).some(k => /^(STARNET|SKYNET)_/i.test(k)), 'no STARNET_/SKYNET_ variable reaches the CLI');
     A.eq([childEnv.CLAUDECODE, childEnv.HOME, childEnv.CLAUDE_CODE_DISABLE_AUTO_MEMORY], [undefined, '/h', '1'], 'not a nested session; user env kept; auto-memory off');
+  }
+
+  // L. subscription stacking: an extra account runs as its own CLI identity; the default sign-in sets nothing.
+  {
+    const { p, calls } = make({ lines: [init('none'), result({ result: 'ok' })] }, { configDir: '/ws/.secrets/accounts/claude-cli/abc12345' });
+    await collect(p, { model: 'sonnet', messages: [{ role: 'user', content: 'x' }] });
+    A.eq(calls[0].opts.env.CLAUDE_CONFIG_DIR, '/ws/.secrets/accounts/claude-cli/abc12345', 'an extra account points the CLI at its own config dir');
+    const d = make({ lines: [init('none'), result({ result: 'ok' })] }, { env: { PATH: '', CLAUDE_CONFIG_DIR: '/user/own' } });
+    await collect(d.p, { model: 'sonnet', messages: [{ role: 'user', content: 'x' }] });
+    A.eq(d.calls[0].opts.env.CLAUDE_CONFIG_DIR, '/user/own', 'the primary keeps whatever CLI identity the user already runs');
+    const tagged = factory.selectProvider({ provider: 'claude-cli', configDir: '/acct' });
+    A.eq(typeof tagged.stream, 'function', 'factory builds an account-bound adapter');
+  }
+
+  // M. a spent subscription (the CLI's real `error:"rate_limit"` line) is quota_exhausted: rotate, never retry it.
+  {
+    const spent = { type: 'assistant', error: 'rate_limit', message: { content: [{ type: 'text', text: "You've hit your limit · resets 5pm (America/Los_Angeles)" }] } };
+    const { p } = make({ lines: [init('none'), spent, result({ is_error: true, subtype: 'success', result: "You've hit your limit · resets 5pm (America/Los_Angeles)" })] });
+    let err = null; try { await collect(p, { model: 'sonnet', messages: [{ role: 'user', content: 'x' }] }); } catch (e) { err = e; }
+    A.ok(err && err.status === 429 && /hit your limit/.test(err.message), 'a spent window throws a 429 carrying the CLI text');
+    const cls = require('../sidecar/providers/errorClass.js').classifyApiError(err, {});
+    A.eq([cls.reason, cls.retryable, cls.shouldRotateCredential], ['quota_exhausted', false, true], 'errorClass rotates to the next account instead of retrying');
   }
 
   A.report('provider.claude-cli.test');

@@ -13,11 +13,15 @@ const DEFAULT_MAX_FILES = 64;
 const DEFAULT_MAX_FILE_BYTES = 256000;
 const DEFAULT_MAX_PACKAGE_BYTES = 1024 * 1024;
 
+// A license or notice file at the package root travels with the skill: MIT and Apache-2.0 both require the notice
+// to go wherever the work goes, and dropping it made a faithful redistribution impossible.
+const ROOT_FILES = /^(?:LICENSE|NOTICE|COPYING)(?:\.(?:md|txt))?$/;
+
 function str(v) { return v == null ? '' : String(v); }
 function safePath(raw) {
   let p = str(raw).trim().replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+/g, '/');
   if (!p || p.length > 240 || /^[A-Za-z]:/.test(p) || p.split('/').includes('..') || /[\x00-\x1F]/.test(p)) return null;
-  if (p === 'SKILL.md') return p;
+  if (p === 'SKILL.md' || ROOT_FILES.test(p)) return p;
   const root = p.split('/')[0];
   return SUPPORT_DIRS.has(root) && p !== root ? p : null;
 }

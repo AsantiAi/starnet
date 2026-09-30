@@ -1,0 +1,65 @@
+/* website/market.css — the public Skill Market page (market.html). Built from the site's own vocabulary
+   (styles.css tokens, .card/.chip/.btn language); nothing here is loaded by any other page. */
+
+.sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+
+/* ---------- tools: shelf toggles + search ---------- */
+.mk-tools{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:14px; margin-bottom:18px; }
+.mk-shelves{ display:flex; flex-wrap:wrap; gap:10px; }
+.mk-shelf{
+  cursor:pointer; font-family:'VT323',monospace; font-size:17px; letter-spacing:1.5px;
+  color:var(--ink-d); background:var(--panel); border:1px solid var(--line); padding:7px 14px;
+  transition:border-color .15s, color .15s, background .15s;
+}
+.mk-shelf:hover{ border-color:var(--amber-d); color:var(--amber-b); }
+.mk-shelf.on{ border-color:var(--amber); color:var(--amber-b); background:rgba(255,157,47,.12); }
+.mk-shelf:focus-visible, .mk-search input:focus-visible, .mk-read summary:focus-visible{ outline:1px solid var(--amber-b); outline-offset:2px; }
+.mk-search{ flex:1 1 240px; max-width:340px; }
+.mk-search input{
+  appearance:none; width:100%; font-family:'VT323',monospace; font-size:18px; letter-spacing:.5px;
+  color:var(--ink); background:rgba(0,0,0,.25); border:1px solid var(--line); padding:8px 12px;
+  caret-color:var(--amber-b);
+}
+.mk-search input::placeholder{ color:var(--ink-d); }
+.mk-status{ margin:0 0 18px; font-size:16px; letter-spacing:.5px; color:var(--ink-d); }
+.mk-status.mk-err{ color:var(--amber-b); }
+
+/* ---------- shelves + cards ---------- */
+.mk-group{ margin-bottom:34px; }
+.mk-group[hidden]{ display:none; }
+.mk-group-head{ display:flex; align-items:baseline; gap:12px; margin:0 0 6px; }
+.mk-group-head h3{ margin:0; font-weight:400; font-size:23px; letter-spacing:2px; color:var(--amber-b); text-shadow:0 0 8px rgba(255,157,47,.3); }
+.mk-group-head span{ font-size:16px; color:var(--amber-d); }
+.mk-group-note{ margin:0 0 14px; font-size:17px; line-height:1.5; color:var(--ink-d); }
+.mk-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+@media (max-width:960px){ .mk-grid{ grid-template-columns:repeat(2,1fr); } }
+@media (max-width:620px){ .mk-grid{ grid-template-columns:1fr; } }
+
+.mk-card{
+  border:1px solid var(--line); background:var(--panel); padding:16px 16px 14px;
+  display:flex; flex-direction:column; gap:9px; min-width:0;
+  transition:border-color .15s, box-shadow .15s;
+}
+.mk-card:hover{ border-color:var(--amber-d); box-shadow:0 0 22px rgba(255,140,30,.12); }
+.mk-card[hidden]{ display:none; }
+.mk-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.mk-card h4{ margin:0; font-weight:400; font-size:21px; line-height:1.15; letter-spacing:1.2px; color:var(--amber-b); text-shadow:0 0 8px rgba(255,157,47,.3); }
+.mk-cat{ flex:none; font-size:14px; letter-spacing:1px; color:var(--amber-d); border:1px solid var(--line); padding:1px 7px; white-space:nowrap; }
+.mk-desc{ margin:0; font-size:17px; line-height:1.45; color:var(--ink-d); }
+.mk-meta, .mk-gear{ margin:0; font-size:15px; line-height:1.45; letter-spacing:.4px; color:rgba(236,224,207,.5); }
+.mk-meta b, .mk-gear b{ font-weight:400; color:var(--amber-b); }
+.mk-meta a{ color:var(--amber-b); }
+
+/* read the skill: the real SKILL.md, fetched on open */
+.mk-read{ margin-top:auto; border-top:1px solid var(--line); padding-top:8px; }
+.mk-read summary{ cursor:pointer; list-style:none; font-size:16px; letter-spacing:1px; color:var(--amber-b); }
+.mk-read summary::-webkit-details-marker{ display:none; }
+.mk-read summary::before{ content:'> '; color:var(--amber-d); }
+.mk-read[open] summary::before{ content:'v '; }
+.mk-md{
+  margin:10px 0 2px; max-height:340px; overflow:auto; white-space:pre-wrap; word-break:break-word;
+  font-family:'VT323',monospace; font-size:16px; line-height:1.4; color:var(--ink);
+  background:rgba(0,0,0,.28); border:1px solid var(--line); padding:10px 12px;
+}
+.mk-empty{ font-size:17px; color:var(--ink-d); }
+.mk-cta{ justify-content:flex-start; }

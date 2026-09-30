@@ -64,6 +64,89 @@ doc.links = [{ id: 'l3', from: { prop: 'p10', port: 'out' }, to: { prop: 'p11', 
   click (`previewBelt`), names a belt's link or says it is loose, and dry-runs a placement on a probe copy
   (`connectionPreview` → `linkedPreview`) to say what it would connect.
 
+### Layout engine — `LineLayout.layout(graph, floor)` (linelayout.js, conveyor-links phase C)
+
+Pure, deterministic. Takes one line as a graph (`nodes: [{ id, t, w, h, pin? }]`, `links: [{ from: { node, port, tags?, else? }, to: { node } }]`)
+and the floor (`rects` deck, `blocked` props, `belts` already laid, optional `junctions`) and answers `{ nodes: { id: { x, y } }, links, belts }`
+— or `{ ok: false, error: 'NO_ROOM', needs: { w, h } }` (MAKE ROOM adds a tile of walking room round that), or
+`{ ok: false, error: 'NO_ROUTE', link | why: 'SIDES' (a junction cannot seat its links), node }`.
+
+- **Columns** = longest forward path from the start; a LOOP's way back (any link closing a cycle) never pushes a step right.
+- **Lanes**: a SPLITTER/FILTER spreads its outputs round its own lane — in the compiler's E, S, W, N lane order, so a
+  split's turn order and a filter's fallback lane survive the layout; a LOOP keeps done on its lane, escape below; a
+  JOINER/MERGER sits on the middle of the lanes feeding it. Lane spacing tries 2, 3, then 4 rows (tightest that routes).
+- **Junction sides** are settled before any belt: each link gets its own side — the one it wants (above = N, below = S,
+  same lane = E out / W in, a way back N) where that side is free — and the order the compiler reads (E, S, W, N) is
+  kept, so a machine or wall against a junction re-sides its lanes but never changes a split's turns or a filter's
+  fallback. A layout that would reorder them is refused (`orderKept`), never returned.
+- **Belts**: A* per link on flat arrays (a bend costs 2, a tile beside a third machine 1; of two equally cheap belts
+  the shorter wins); the BELT tool's rules hold (arrival tile a BAY's alone, never beside a junction it does not
+  serve). Main run first, ways back last; a link walled in by earlier belts is laid first on the next try.
+- **Placement**: pinned nodes never move — the line forms round the first pin, each other machine keeping its place
+  relative to the machine feeding it (a branch moves as one), stepping to the nearest clear lane or spot if taken;
+  unpinned, the line is routed on an empty floor of its own and that shape goes to the first clear spot (rows top
+  first) where no old belt runs into it and none of its belts sits beside another line's junction.
+- Locked by test/line-layout.test.js: every blueprint, laid out fresh, routes EXACTLY as the stamped original; as many
+  fit a fresh starter room as-is as the hand-drawn ones do (12 of 20 on 09-29; the rest in a room grown for them) and every machine
+  and belt passes the station's own placement checks; on cluttered decks (free and pinned) every line it lays still
+  routes the same; a junction pinned against a wall keeps its lane order or answers NO_ROUTE.
+- Speed (measured 09-29): ~2 ms on average for a line on a cluttered 60×36 deck (worst seen 45 ms); 9–21 ms on a
+  cluttered 160×100 one, pins far apart included. It runs on an edit, never per frame.
+
+### Line edits — the Workflow panel builds the line (lineedit.js, conveyor-links phase D)
+
+Every change to a line's SHAPE is one edit of its graph: `LineEdit.run(station, propId, op, args, { near, sizes })` reads the line
+(`station.lineGraph(id)` — every machine pinned where it stands, every link with its belt, and the floor without the line),
+applies the op, lays it out with the engine and writes it back in ONE undo slot (`station.applyLineLayout`). Ops: `insertStep`
+(the + on a belt, by role) · `appendStep` · `addBranch` (around a step or on a belt; COPY TO EACH = SPLITTER + JOINER, TAKE
+TURNS = SPLITTER + MERGER; a partner round a step is named like it) · `addLoop` (a REVIEWER + a LOOP gate: back until approved,
+3 passes) · `addSorter` (a FILTER: CODE → ENGINEER, RESEARCH → RESEARCHER, everything else on) · `removeStep` (a split left
+with one way folds away; a sorter's route step takes its route with it — that type then goes with everything else — and a
+sorter left sorting nothing folds away) · `removeLoop` · `moveStep` (swap along a plain run) · `addOutbox` · `wrapLine` (a
+lone BAY becomes INBOX → it → OUTBOX) · `tidy` (TIDY LINE: the whole line re-laid from its INBOX) · `newLine` (BUILD YOUR OWN
+LINE: INBOX → a step → OUTBOX near the middle of the view) · `addArm` (another branch on a SPLITTER, up to three; the JOINER then
+waits for it too) · `removeArm` (a whole branch out — every step on it; a split left with one way folds away, round a branch of
+several steps too) · `addRoute` (a FILTER's step for CODE or RESEARCH when that type has no route, handing on to where
+everything else goes) · `removeSorter` (the FILTER and every route step it sorts to, as one piece).
+
+- ONLY WHAT CHANGED MOVES (the plan's decision 2): a belt the edit does not touch keeps its exact path (the engine's KEPT links);
+  a new machine keeps its place relative to the machine feeding it and, when that spot is taken, tries a few clear spots. When
+  that leaves the change no way through, the belts spread in rings — the lanes the edit names (a split's or a sorter's own,
+  `e.loose`), then every belt of a machine the edit touched, then every belt of the line — and the result says so (`relaid`).
+  Machines never move but by TIDY. A new branch / route lane may read in any place among its junction's lanes (`e.alts`: turns
+  go round every branch, routes are named by their links), each tried at each ring. A new link is numbered after every link
+  the floor held — an old link always keeps its id.
+- NO ROOM WHERE THE LINE STANDS, but the edit fits with the line laid out afresh: the first click changes nothing
+  (`NEEDS_TIDY`, `canTidy`) and the panel's button ARMS in place — ⌗ TIDY LINE TO FIT IT? — a second click within 4 s runs
+  the edit with `opts.tidy` (the line laid out afresh round it, its INBOX fixed, one undo). Never a silent whole-line move.
+- The floor shows the change: new machines flash, a machine an edit MOVED glides an outline from the footprint it left to the
+  one it stands on (`drawMoves`, 760 ms), one it took out flashes red where it was.
+- A refusal changes nothing and says what would help: TIDY LINE only when the same edit fits with the line re-laid, else a
+  bigger room. `LineEdit.check` answers without laying anything, so the panel shows an impossible edit OFF with its reason.
+- In the panel: the + on a belt (a step by role, a BRANCH either way, a SORTER in front of a step or the OUTBOX), a BAY's
+  ROLE chips (`station.setPropRole`) and SHAPE THE LINE (earlier / later / a review / second opinion / share the load / remove),
+  REMOVE THE REVIEW on a LOOP gate, a SPLITTER's ADD A BRANCH and ✕ per branch, a FILTER's + A STEP FOR CODE / RESEARCH (a
+  type it has no route for) and REMOVE THE SORTER, MAKE IT A LINE on a lone BAY, + OUTBOX where a line that ends on a step has
+  none, TIDY LINE in the footer. The Conveyors tab has BUILD YOUR OWN LINE. Locked by test/line-edit.test.js (every op on a real
+  station, the audit's newsletter line built from edits alone, one undo each) and test/line-edit-panel.test.js.
+
+### Ready-made lines, laid out to fit (conveyor-links phase E)
+
+A shelf line is also a GRAPH: `station.blueprintGraph(id, { limits, maxIter })` — its machines with everything a stamp gives
+them (roles, an INBOX's name and budget, junction routes / passes / verdict, the card's SET UP BEFORE YOU PLACE cap and tries)
+and the links its drawn belts make. Where the DRAWN tile map fits at the click, Build mode stamps it as drawn
+(`stampBlueprint` — presets keep using this, at their fixed spots). Where it does not, `LineEdit.placeBlueprint(station, id,
+near, { stamp })` lays the same line out near the click: its tidy engine shape where a clear rectangle holds it, else anchored
+on its INBOX (aimed half the line's length west of the click, so it lands centred) with every other machine stepping round
+what stands there — one undo, routing exactly as the drawn line.
+
+- A card whose drawn shape fits nowhere asks `LineEdit.canPlaceBlueprint` in the background (one line at a time, forgotten on
+  every floor change) and says CHECKING WHERE IT FITS… then FITS LAID OUT — CLICK THE FLOOR WHERE YOU WANT IT, or NO ROOM with
+  the size the engine needs; MAKE ROOM FOR IT builds the smaller of the drawn and the laid-out size. The red ghost of a line
+  that fits laid out invites CLICK TO LAY IT OUT HERE.
+- Every one of the 20 ready-made lines lands in a fresh starter room this way (the drawn tile maps: 12). Locked by
+  test/line-place.test.js (each one routes exactly as the stamped original with the card's settings, one undo).
+
 ## Runtime (conveyor.js) — `Conveyor.create()`
 
 A self-contained transport sim + renderer. Frame-agnostic: it's handed a belt map in whatever

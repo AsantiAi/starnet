@@ -1,0 +1,2156 @@
+{
+  "format": "starnet-skill-registry/v1",
+  "name": "StarNet Skill Market",
+  "serial": 1,
+  "skills": [
+    {
+      "slug": "accessibility-audit",
+      "name": "Accessibility Audit",
+      "description": "Check a live page against the barriers that actually lock people out — keyboard, contrast, labels, focus — each with the fix.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Engineering",
+      "tags": [
+        "engineering"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "accessibility-audit",
+      "sourceUrl": "/skills/accessibility-audit/1.0.0/SKILL.md",
+      "digest": "dc9ac37df3e1b64f07a9cda4ba96d99bd7560e140e1c35f0f8cdca6ccc31e74c",
+      "bytes": 2491,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "468b148e3ede7a379d5a457b5f8a960d0fbf1391a52ede6324981b08a125b047",
+          "bytes": 2491
+        }
+      ]
+    },
+    {
+      "slug": "ad-copy-testing",
+      "name": "Ad Copy Testing",
+      "description": "Write paid-ad variants that test one lever at a time, grounded in ads actually running, with an honest read on what won.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Marketing",
+      "tags": [
+        "marketing"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "ad-copy-testing",
+      "sourceUrl": "/skills/ad-copy-testing/1.0.0/SKILL.md",
+      "digest": "f388ba5d49b5c98564287a9f14b1d9bef473c3a31e7ce7ad35ec4b36bd3a7d26",
+      "bytes": 2370,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "7cd7bbabc1ba3d7cc3b87e463b25ec55f0e1901d2d0cbb6dca7b020cc2427cca",
+          "bytes": 2370
+        }
+      ]
+    },
+    {
+      "slug": "adversarial-review-pass",
+      "name": "Adversarial Review Pass",
+      "description": "Try to break the work, then try to refute your own finding, before reporting anything.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Engineering",
+      "tags": [
+        "engineering"
+      ],
+      "requires": [
+        "cabinet",
+        "workbench"
+      ],
+      "librarySlug": "adversarial-review-pass",
+      "sourceUrl": "/skills/adversarial-review-pass/1.0.0/SKILL.md",
+      "digest": "60f868b38a3622897a191a763d87387059cc252528081da1d36c639343fb986a",
+      "bytes": 1766,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "3b98b9250946595b21eeec46f20818a548696f6bee18a68585627233c1a0f02d",
+          "bytes": 1766
+        }
+      ]
+    },
+    {
+      "slug": "announcement-kit",
+      "name": "Announcement Kit",
+      "description": "Turn a launch into channel-shaped copy that leads with the hook and gets the facts right.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Writing",
+      "tags": [
+        "writing"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "announcement-kit",
+      "sourceUrl": "/skills/announcement-kit/1.0.0/SKILL.md",
+      "digest": "0bc6e363e3211e8e3fdef99ccbdb3ba88880a29371eae380b7aa4d9c235f76c9",
+      "bytes": 1606,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "da50d70786d297aa0b0d588e5ed0d80959d0a236345193e32e4e1d23624ba274",
+          "bytes": 1606
+        }
+      ]
+    },
+    {
+      "slug": "application-tailoring",
+      "name": "Application Tailoring",
+      "description": "Read the actual posting, map the Commander's real history onto its own language, and draft an application that survives the interview.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Writing",
+      "tags": [
+        "writing"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "application-tailoring",
+      "sourceUrl": "/skills/application-tailoring/1.0.0/SKILL.md",
+      "digest": "c15cac791cb253093a23e8ff29f4da383aac02d210e5d13b8fcda6fe1085a78a",
+      "bytes": 2239,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "bfc6afc899eb7e2f5daf9b2b512334a809798e20feec1d7c816b034aee1ba8a6",
+          "bytes": 2239
+        }
+      ]
+    },
+    {
+      "slug": "brand-assets",
+      "name": "Brand Assets",
+      "description": "Make images, covers and transparent cutouts that look like one family: a pinned style sheet, fixed formats, a vision check on every file, and transparency the tool has verified.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Creator",
+      "tags": [
+        "images",
+        "branding",
+        "transparent",
+        "design",
+        "consistency"
+      ],
+      "requires": [
+        "studio",
+        "notebook"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/brand-assets/1.0.0/SKILL.md",
+      "digest": "20fb67a8d7e96d5c2e5a83006d80d6ba0dca23ba6b2678dd82ea392dacd2fa06",
+      "bytes": 3612,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "4b8dbcfe07ea168082cbba00f0ff6da688fed89b57edd4a5db4f4a7d75f8c83b",
+          "bytes": 3612
+        }
+      ]
+    },
+    {
+      "slug": "browser-operation",
+      "name": "Browser Operation",
+      "description": "Drive a real website end to end — read the live page before every click, narrate each step, and stop at anything irreversible.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Productivity",
+      "tags": [
+        "productivity"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "browser-operation",
+      "sourceUrl": "/skills/browser-operation/1.0.0/SKILL.md",
+      "digest": "b85e6991966a8eb44e2041b069c6fec34df3b17fb301c26bd1d6368f486e08a6",
+      "bytes": 2322,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "47517b969c30e0632b302d4c7cfeda45ee68b2858fec1cf019c3f73c8bdd5596",
+          "bytes": 2322
+        }
+      ]
+    },
+    {
+      "slug": "channel-updates",
+      "name": "Channel Updates",
+      "description": "Send short, phone-first updates to the Commander on Telegram, Discord, Slack, Matrix or Signal — and know when a message should not be sent at all.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Communication",
+      "tags": [
+        "telegram",
+        "notifications",
+        "messaging",
+        "updates"
+      ],
+      "requires": [
+        "dish"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/channel-updates/1.0.0/SKILL.md",
+      "digest": "f8168219de26122ff85406b4e3dd67b726bf6f47abba26dad8179b17819dbcdb",
+      "bytes": 3264,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "6ca849c2551e888106b08c9375679d6e00c1c2ea1be115dd633352cb6296482b",
+          "bytes": 3264
+        }
+      ]
+    },
+    {
+      "slug": "commitment-tracking",
+      "name": "Commitment Tracking",
+      "description": "Hold the Commander to what they actually said they would do — durable commitments, honest slippage, and one next action.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Productivity",
+      "tags": [
+        "productivity"
+      ],
+      "requires": [
+        "notebook"
+      ],
+      "librarySlug": "commitment-tracking",
+      "sourceUrl": "/skills/commitment-tracking/1.0.0/SKILL.md",
+      "digest": "93234b9f2b84873e557c6396329a0908b2307269c6f35948c743b3f2ffe0a26c",
+      "bytes": 2332,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "690061cec3971491adaf2371a8e2cfa81fae210210f5b004b5783ebba006e79a",
+          "bytes": 2332
+        }
+      ]
+    },
+    {
+      "slug": "content-calendar",
+      "name": "Content Calendar",
+      "description": "Keep a living publish calendar — what ships where and when, adapted per platform, checked before staging.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Marketing",
+      "tags": [
+        "marketing"
+      ],
+      "requires": [
+        "notebook",
+        "cabinet"
+      ],
+      "librarySlug": "content-calendar",
+      "sourceUrl": "/skills/content-calendar/1.0.0/SKILL.md",
+      "digest": "8595a4f5501582a119a99a8452fc85e66d435b31bdba84e3d130add9c3cee68c",
+      "bytes": 1788,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "a4d29d766ea4de03a8a43ced4f05c49eeaad8902058f466bd687ceb5ea285497",
+          "bytes": 1788
+        }
+      ]
+    },
+    {
+      "slug": "contract-review",
+      "name": "Contract Review",
+      "description": "Read a contract, ToS, lease, or policy closely and surface the clauses that carry real exposure — quoted exactly and ranked by cost.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Research",
+      "tags": [
+        "research"
+      ],
+      "requires": [
+        "cabinet",
+        "dish"
+      ],
+      "librarySlug": "contract-review",
+      "sourceUrl": "/skills/contract-review/1.0.0/SKILL.md",
+      "digest": "b769198f0ba209fd643e1597414986c1f9bf44b3222d63223dadafd021a41c80",
+      "bytes": 2525,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "c1bdd3553498af62c71d405fbb00a792f86010cf6571c571ab034c0115629831",
+          "bytes": 2525
+        }
+      ]
+    },
+    {
+      "slug": "cost-audit",
+      "name": "Cost Audit",
+      "description": "Sweep real spend line by line, verify cheaper alternatives against live prices, and rank the savings.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Finance",
+      "tags": [
+        "finance"
+      ],
+      "requires": [
+        "cabinet",
+        "dish"
+      ],
+      "librarySlug": "cost-audit",
+      "sourceUrl": "/skills/cost-audit/1.0.0/SKILL.md",
+      "digest": "0187e9cb675216332597e1e3a4c80b65124febb8bc65be30c34ff91e79a5c279",
+      "bytes": 1829,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "b3e51518cd7dc38a7f7be408db7bf32891eb21e8f1f96564bef3d3773ee64bc4",
+          "bytes": 1829
+        }
+      ]
+    },
+    {
+      "slug": "crew-handoff",
+      "name": "Crew Handoff",
+      "description": "Hand one job to a crewmate with a brief they can finish without asking back: the right agent, settled context, a checkable definition of done, a return shape, and proof of what came back.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Planning",
+      "tags": [
+        "delegation",
+        "crew",
+        "briefs",
+        "team"
+      ],
+      "requires": [
+        "orchestrator"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/crew-handoff/1.0.0/SKILL.md",
+      "digest": "9f538235e0185b010c14b0e16e8bc182eeea950fffba1b91d577c5203b7286c5",
+      "bytes": 3924,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "98733e6c2f2546725db64855140b3c10e943036d407d53dac29ea885a63c5653",
+          "bytes": 3924
+        }
+      ]
+    },
+    {
+      "slug": "dataset-harvest",
+      "name": "Dataset Harvest",
+      "description": "Turn scattered live pages into one structured dataset the Commander owns — schema first, every row traceable to the page it came from.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Research",
+      "tags": [
+        "research"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "dataset-harvest",
+      "sourceUrl": "/skills/dataset-harvest/1.0.0/SKILL.md",
+      "digest": "50ea2e4ddca687d5c009c125ac561934b35edbd358d0e91ec764805931dca950",
+      "bytes": 2406,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "8256e0a8f4b7a6a0a37e11d82eadf8228ffce1b0edd5681f75697b2d2f6265ad",
+          "bytes": 2406
+        }
+      ]
+    },
+    {
+      "slug": "deliverable-handoff",
+      "name": "Deliverable Handoff",
+      "description": "Finish work as files the Commander can open: a format that previews, a clear name and place, one deliverable note naming the main file, and a closing message that points to it.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Productivity",
+      "tags": [
+        "deliverables",
+        "files",
+        "handoff",
+        "reporting"
+      ],
+      "requires": [
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/deliverable-handoff/1.0.0/SKILL.md",
+      "digest": "86e1a8c41a55c7fd99ab8aec30a36c57eda114e9193233156cd4ef9baafc4eaf",
+      "bytes": 3324,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "35f0ce4bdce4a7cfcfdb85508fef21e23042f1a61506cdba2f8498d6385e0b50",
+          "bytes": 3324
+        }
+      ]
+    },
+    {
+      "slug": "deploy-checklist",
+      "name": "Deploy Checklist",
+      "description": "Get an app from \"works on my machine\" to actually live — reproduce the build, fix the real error, and verify the deployed thing responds.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Engineering",
+      "tags": [
+        "engineering"
+      ],
+      "requires": [
+        "workbench",
+        "cabinet"
+      ],
+      "librarySlug": "deploy-checklist",
+      "sourceUrl": "/skills/deploy-checklist/1.0.0/SKILL.md",
+      "digest": "ea64b8ba4c6d3b0f80d37b9f333aa9f58a76ee63763f8ab6ea8d2e98d4b387e7",
+      "bytes": 2546,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "f1927be273153c68111cecc9731c562333896082ad0a4e9b1ebf978d07c3d7dc",
+          "bytes": 2546
+        }
+      ]
+    },
+    {
+      "slug": "digest-composer",
+      "name": "Digest Composer",
+      "description": "Compose a recurring digest — gather the period's items, distill to signal, cite every claim.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Research",
+      "tags": [
+        "research"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "digest-composer",
+      "sourceUrl": "/skills/digest-composer/1.0.0/SKILL.md",
+      "digest": "85aa4cc8f835f7771a489971560a30a179bbc931f8af3bd36fdaf9482862f2fa",
+      "bytes": 1614,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "b21588bbf4560aeb2d090cf6bbe2bc42494d4467accd3be32a6859aef3c87e68",
+          "bytes": 1614
+        }
+      ]
+    },
+    {
+      "slug": "email-sequence",
+      "name": "Email Sequence",
+      "description": "Write email that gets opened and answered — one job per send, subject lines worth testing, and a sequence with a reason to exist.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Marketing",
+      "tags": [
+        "marketing"
+      ],
+      "requires": [
+        "cabinet",
+        "dish"
+      ],
+      "librarySlug": "email-sequence",
+      "sourceUrl": "/skills/email-sequence/1.0.0/SKILL.md",
+      "digest": "9d03c9f1b4850578df48a388a01a5b2dc857527d1fa38e85cd3b5cf76bc6d1f4",
+      "bytes": 2364,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "f98797f3c5a09c938b441678b28b04a2d5930b4751ace699d67c43606c6e1332",
+          "bytes": 2364
+        }
+      ]
+    },
+    {
+      "slug": "exposed-secrets-audit",
+      "name": "Exposed Secrets Audit",
+      "description": "Hunt the ways an AI-built app leaks — keys shipped to the browser, open database rules, unprotected routes, public buckets.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Engineering",
+      "tags": [
+        "engineering"
+      ],
+      "requires": [
+        "cabinet",
+        "workbench"
+      ],
+      "librarySlug": "exposed-secrets-audit",
+      "sourceUrl": "/skills/exposed-secrets-audit/1.0.0/SKILL.md",
+      "digest": "cc63159b08a428585324a54989f8d1a4c0e199fb64501198fe629402860ac8c6",
+      "bytes": 2710,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "f8883327e7dbcb52832fe162c77df001b6119938a99282afbf5bfce445494eae",
+          "bytes": 2710
+        }
+      ]
+    },
+    {
+      "slug": "exposure-reduction",
+      "name": "Exposure Reduction",
+      "description": "Find what is publicly exposed about the Commander, rank it by what it actually enables, and give the exact removal steps.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Research",
+      "tags": [
+        "research"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "exposure-reduction",
+      "sourceUrl": "/skills/exposure-reduction/1.0.0/SKILL.md",
+      "digest": "5744cb4276118231a4b7b780aec66d791a08c9fac778c3901f8a8bb4ae0ed06f",
+      "bytes": 2547,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "6e07429a062260e8d0e06ccc8415689ee833d056cbae8482d0f8a2bca67e0446",
+          "bytes": 2547
+        }
+      ]
+    },
+    {
+      "slug": "feed-watch",
+      "name": "Feed Watch",
+      "description": "Watch a source for change against a baseline and alert only when it crosses the bar.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Research",
+      "tags": [
+        "research"
+      ],
+      "requires": [
+        "dish"
+      ],
+      "librarySlug": "feed-watch",
+      "sourceUrl": "/skills/feed-watch/1.0.0/SKILL.md",
+      "digest": "cf8f90ee489603ccf3c7d2ec58fad20030a099958a853a12051325b74bb002f7",
+      "bytes": 1605,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "31bde3a34cce1af6584ee72d12da6aa593ff87e1f2d5c45e55226efef579958f",
+          "bytes": 1605
+        }
+      ]
+    },
+    {
+      "slug": "file-curation",
+      "name": "File Curation",
+      "description": "Inventory, sort, rename, and de-duplicate files without ever destroying data.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Productivity",
+      "tags": [
+        "productivity"
+      ],
+      "requires": [
+        "cabinet",
+        "workbench"
+      ],
+      "librarySlug": "file-curation",
+      "sourceUrl": "/skills/file-curation/1.0.0/SKILL.md",
+      "digest": "be397061c5cbe08a4e83d194b5b350829f6d1576e545ebae90ae3dbe1167f3ab",
+      "bytes": 1938,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "5956bf31b01d289d1c573e6b660eaea633314421b6665b515785a5781a2a891b",
+          "bytes": 1938
+        }
+      ]
+    },
+    {
+      "slug": "hard-conversation",
+      "name": "Hard Conversation",
+      "description": "Draft the message the Commander is avoiding — the boundary, the apology, the bad news — clear, kind, and free of the lines they would regret.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Communication",
+      "tags": [
+        "communication"
+      ],
+      "requires": [
+        "cabinet"
+      ],
+      "librarySlug": "hard-conversation",
+      "sourceUrl": "/skills/hard-conversation/1.0.0/SKILL.md",
+      "digest": "fe715c8e3102a97e57c4b0f4db58d1a98bd83e5276ba9482d1761623396e425f",
+      "bytes": 2412,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "83a2f0b6d4c725bcb5a9794c00ded2dbb7086de41bfc860f16a30fb177dab89a",
+          "bytes": 2412
+        }
+      ]
+    },
+    {
+      "slug": "health-record-prep",
+      "name": "Health Record Prep",
+      "description": "Organize health records, track symptoms factually, and build the questions for an appointment — never a diagnosis, never a dose.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Productivity",
+      "tags": [
+        "productivity"
+      ],
+      "requires": [
+        "cabinet",
+        "dish"
+      ],
+      "librarySlug": "health-record-prep",
+      "sourceUrl": "/skills/health-record-prep/1.0.0/SKILL.md",
+      "digest": "5a7d357ab545f24a086794c8320d4d08abc3bd19a8c4d57cd833fc64d9205c03",
+      "bytes": 2721,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "969260f919b95aba4c7cdeecfc64770def63796bd9bffca1c4b46828cc135518",
+          "bytes": 2721
+        }
+      ]
+    },
+    {
+      "slug": "hiring-screen",
+      "name": "Hiring Screen",
+      "description": "Write the role honestly, screen against stated criteria set in advance, and interview for evidence instead of vibes.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Planning",
+      "tags": [
+        "planning"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "hiring-screen",
+      "sourceUrl": "/skills/hiring-screen/1.0.0/SKILL.md",
+      "digest": "693ab62d9e34f45efa78287ecb0234d943f55999aaf333627a5525d8cb5b7c52",
+      "bytes": 2589,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "d0c71e05b9086955b22d504a5124bbd64f0cf3dfa1228a09aacb588dba51f873",
+          "bytes": 2589
+        }
+      ]
+    },
+    {
+      "slug": "inbox-triage",
+      "name": "Inbox Triage",
+      "description": "Triage every inbox into one board — urgent to noise — with held draft replies, never auto-sent.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Comms",
+      "tags": [
+        "comms"
+      ],
+      "requires": [
+        "notebook"
+      ],
+      "librarySlug": "inbox-triage",
+      "sourceUrl": "/skills/inbox-triage/1.0.0/SKILL.md",
+      "digest": "2748bd78409dd69880f69f6fd0e297b40a578a67db1bd1c6b856bd0ae5317d03",
+      "bytes": 2090,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "b20979e5a6d7081cbe86a6f1f45c0b2eb77a6b982a12911e041343d332a030ea",
+          "bytes": 2090
+        }
+      ]
+    },
+    {
+      "slug": "itinerary-planning",
+      "name": "Itinerary Planning",
+      "description": "Turn a trip or outing into a verified, day-by-day itinerary with real prices and times.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Planning",
+      "tags": [
+        "planning"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "itinerary-planning",
+      "sourceUrl": "/skills/itinerary-planning/1.0.0/SKILL.md",
+      "digest": "e0f97e4b79dd6990bcd59577f4016164233d6908ea4c4544f0adab8173fdce01",
+      "bytes": 2022,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "268709e6c098cf0722ce971c1dc41849f778337c1d860e79f707ac629cb081f3",
+          "bytes": 2022
+        }
+      ]
+    },
+    {
+      "slug": "landing-copy",
+      "name": "Landing Copy",
+      "description": "Write the page that converts — one audience, one promise above the fold, objections answered in the order they arise.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Marketing",
+      "tags": [
+        "marketing"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "landing-copy",
+      "sourceUrl": "/skills/landing-copy/1.0.0/SKILL.md",
+      "digest": "ff4653d472d37797b2938b7befa6ebedf81e2e74e3287ec19cec0fa0fb4d8811",
+      "bytes": 2368,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "321c5789137e601ccf5f2ed9325428088fb3be52a024f8d21647b83a64374944",
+          "bytes": 2368
+        }
+      ]
+    },
+    {
+      "slug": "lead-scouting",
+      "name": "Lead Scouting",
+      "description": "Find where ideal customers gather and build qualified, evidence-backed lead lists from public sources.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Research",
+      "tags": [
+        "research"
+      ],
+      "requires": [
+        "dish",
+        "notebook"
+      ],
+      "librarySlug": "lead-scouting",
+      "sourceUrl": "/skills/lead-scouting/1.0.0/SKILL.md",
+      "digest": "e84893b512ff6ba77cc8660204ad82b4cf88b4322dfce21f5398cc86c886deea",
+      "bytes": 1644,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "b98ccdcbae1e21382c174e21dc04450a75c14d75c76c116daf22aca5ad7f786c",
+          "bytes": 1644
+        }
+      ]
+    },
+    {
+      "slug": "website-workflow",
+      "name": "Learn a Website Lookup",
+      "description": "Turn a repeated read-only website lookup into a verified reusable API skill by observing the browser's real requests.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Productivity",
+      "tags": [
+        "productivity"
+      ],
+      "requires": [
+        "dish",
+        "cabinet",
+        "workbench"
+      ],
+      "librarySlug": "website-workflow",
+      "sourceUrl": "/skills/website-workflow/1.0.0/SKILL.md",
+      "digest": "2ba8726ee5e62aff5ce8eb2cadc2441813ff34b1f96d44786c2c0b4caf337ec8",
+      "bytes": 2866,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "caa3cc49712e8ab20eec8414280ac0a7cd76e3ad318c65fbb793ee77aa0e2b68",
+          "bytes": 2866
+        }
+      ]
+    },
+    {
+      "slug": "ledger-upkeep",
+      "name": "Ledger Upkeep",
+      "description": "Log entries and reconcile a ledger with computed totals — never eyeball, never force a balance.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Planning",
+      "tags": [
+        "planning"
+      ],
+      "requires": [
+        "cabinet",
+        "workbench"
+      ],
+      "librarySlug": "ledger-upkeep",
+      "sourceUrl": "/skills/ledger-upkeep/1.0.0/SKILL.md",
+      "digest": "79cec9089778904c5d9ef3982144cbf1f2049ebb3cbde0549a13978bc6647511",
+      "bytes": 1699,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "b725a933d9b8890288d9838e0fdd1dd8f6fb2f25e78ecd27d0b3d06d8ca92439",
+          "bytes": 1699
+        }
+      ]
+    },
+    {
+      "slug": "line-design",
+      "name": "Line Design",
+      "description": "Design a conveyor line for a recurring job: stages as bays, named handoffs, briefs each bay can follow, and a step test before the schedule is turned on.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Station",
+      "tags": [
+        "lines",
+        "conveyor",
+        "workflow",
+        "automation",
+        "testing"
+      ],
+      "requires": [
+        "orchestrator"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/line-design/1.0.0/SKILL.md",
+      "digest": "5e5bfcc7349129530187aa5e6b33e10dbe54d755e5381e46975ba4e1b742a09b",
+      "bytes": 4240,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "5060ea54fca386d8f3d6c1c2e97b1a244bf286f08769a17d54dc20fa9d5a4cdf",
+          "bytes": 4240
+        }
+      ]
+    },
+    {
+      "slug": "marketing-plan",
+      "name": "Marketing Plan",
+      "description": "Build a channel-and-campaign plan grounded in live audience research, with a measurable goal per play.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Marketing",
+      "tags": [
+        "marketing"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "marketing-plan",
+      "sourceUrl": "/skills/marketing-plan/1.0.0/SKILL.md",
+      "digest": "944d3d0b7a2c6ca25ab5ec47dc96c5abf671b518a2197d703d4bc99f08389010",
+      "bytes": 1763,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "20f0ecc87b63e5de70904f877d6784a9cf5fe8172bba3e629df2ec8b5e2a6001",
+          "bytes": 1763
+        }
+      ]
+    },
+    {
+      "slug": "meal-planning",
+      "name": "Meal Planning",
+      "description": "Build a week of meals around what the Commander already has, actually cooks, and will realistically make on a weeknight.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Planning",
+      "tags": [
+        "planning"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "meal-planning",
+      "sourceUrl": "/skills/meal-planning/1.0.0/SKILL.md",
+      "digest": "1e49091f54ab1c8339b2972b0314cce4d62084093ea02a182a00f7cebdcc7fe4",
+      "bytes": 2329,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "7d77cd197846b25f5e64c2d9a11bade7a9cf9576ddbaf1d1d6bd44468d9b520a",
+          "bytes": 2329
+        }
+      ]
+    },
+    {
+      "slug": "negotiation-case",
+      "name": "Negotiation Case",
+      "description": "Build a checkable evidence case for a better price, refund, or rate — then draft the opening, the rebuttals, and the walk-away.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Communication",
+      "tags": [
+        "communication"
+      ],
+      "requires": [
+        "cabinet",
+        "dish"
+      ],
+      "librarySlug": "negotiation-case",
+      "sourceUrl": "/skills/negotiation-case/1.0.0/SKILL.md",
+      "digest": "fb1aee9fdfbd8db28d425f77e104f71cd5b58f7b17718bd77a6f703f2988e87d",
+      "bytes": 2384,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "48f4363cdb14e2b95b17f7551775bcb8c82e610469643c152070f0f19be235f6",
+          "bytes": 2384
+        }
+      ]
+    },
+    {
+      "slug": "notebook-gardening",
+      "name": "Notebook Gardening",
+      "description": "Keep the agent's notebook true: find duplicates and contradictions, correct beliefs in place with their source, sink stale ones, and hand the forget list to the Commander.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Station",
+      "tags": [
+        "memory",
+        "notebook",
+        "maintenance",
+        "sources"
+      ],
+      "requires": [
+        "notebook"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/notebook-gardening/1.0.0/SKILL.md",
+      "digest": "6186ee232093f9d8e592b5dc70d3b8e241956f09a4cfe45576c83cd905df3d02",
+      "bytes": 3609,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "2c003b279fb45f6a25ab5669e4c6ca7b69fe69be00293109363ef3cb5c6a2aa0",
+          "bytes": 3609
+        }
+      ]
+    },
+    {
+      "slug": "opportunity-scan",
+      "name": "Opportunity Scan",
+      "description": "Hunt monetizable openings matched to the Commander's hand, sized with live demand evidence and ranked honestly.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Research",
+      "tags": [
+        "research"
+      ],
+      "requires": [
+        "dish",
+        "notebook"
+      ],
+      "librarySlug": "opportunity-scan",
+      "sourceUrl": "/skills/opportunity-scan/1.0.0/SKILL.md",
+      "digest": "369d227a269c3a46aa7a10623c4d6acb62a1e22db953704f78c9d5acaae0a4c5",
+      "bytes": 2197,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "2b150f4ad675d8a0d23d8c7ee8cd15d3abc70ab56533eba43837413020e1f90a",
+          "bytes": 2197
+        }
+      ]
+    },
+    {
+      "slug": "pitch-deck",
+      "name": "Pitch Deck",
+      "description": "Build the narrative a deck has to carry — problem, why now, why you — with every number sourced and the weak slide named.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Planning",
+      "tags": [
+        "planning"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "pitch-deck",
+      "sourceUrl": "/skills/pitch-deck/1.0.0/SKILL.md",
+      "digest": "9f59f7b0950f1f2de4cab3986319689a2cd08634e8abcb2b4e17ba676e2d89e9",
+      "bytes": 2487,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "d5984c48522f5dee7438f365a87eac198cf1bb803540730d3383ff96de471ea6",
+          "bytes": 2487
+        }
+      ]
+    },
+    {
+      "slug": "price-watch",
+      "name": "Price Watch",
+      "description": "Fetch live like-for-like prices, compare the true total, and say buy or wait.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Research",
+      "tags": [
+        "research"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "price-watch",
+      "sourceUrl": "/skills/price-watch/1.0.0/SKILL.md",
+      "digest": "8b1daffd3ee2ac177501806cee1471b043b344e2596d5fd7596c8a460ffe4dc9",
+      "bytes": 1634,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "cb5e533636886eceaa03dea1e5bfcf0890462d46ecaa1adac795024a76631786",
+          "bytes": 1634
+        }
+      ]
+    },
+    {
+      "slug": "project-onboarding",
+      "name": "Project Onboarding",
+      "description": "Learn a new project folder before touching it: get the folder trusted, read its house rules and layout, find how it builds and tests, and save a short, sourced map to the notebook.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Engineering",
+      "tags": [
+        "projects",
+        "codebase",
+        "onboarding",
+        "notebook"
+      ],
+      "requires": [
+        "cabinet",
+        "notebook"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/project-onboarding/1.0.0/SKILL.md",
+      "digest": "ab2dd33a01d6f3a941ae2790cbd3ccb082cf44858fd771c0d958c31710d50cbe",
+      "bytes": 3858,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "53b8d8e1aed0ce590d9cc881e25c0dada109b212cef741cd853cafcba0494340",
+          "bytes": 3858
+        }
+      ]
+    },
+    {
+      "slug": "relationship-log",
+      "name": "Relationship Log",
+      "description": "Keep a durable record of the people the Commander deals with — what matters to them, what was promised, and what is owed next.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Productivity",
+      "tags": [
+        "productivity"
+      ],
+      "requires": [
+        "notebook",
+        "cabinet"
+      ],
+      "librarySlug": "relationship-log",
+      "sourceUrl": "/skills/relationship-log/1.0.0/SKILL.md",
+      "digest": "efc5cbe8a05e9511064bb5dc8e9509d20e38b188ea54f54572edf657f5c51925",
+      "bytes": 2297,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "f92aba6cbcf5955562f477b71ac67c6a1c0beb1b0b477599af22a4606be1225d",
+          "bytes": 2297
+        }
+      ]
+    },
+    {
+      "slug": "routine-craft",
+      "name": "Routine Craft",
+      "description": "Write a routine that runs well with nobody watching: no duplicates, a self-contained prompt, a fitting schedule, stop rules, a silent path, and a known place for results to land.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Station",
+      "tags": [
+        "routines",
+        "scheduling",
+        "automation",
+        "unattended"
+      ],
+      "requires": [
+        "orchestrator"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/routine-craft/1.0.0/SKILL.md",
+      "digest": "8fc3abeb54ea0d527c1862a239d4fcbb4851a280ad0ec33f3d6e50ff384ba7e3",
+      "bytes": 4115,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "b8b6d557a4585240189a406b6da702823477dfa6983d736fa8fab955ba288646",
+          "bytes": 4115
+        }
+      ]
+    },
+    {
+      "slug": "schema-and-access",
+      "name": "Schema and Access",
+      "description": "Design a data model that will not need rewriting, and the access rules that keep one user's data out of another user's hands.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Engineering",
+      "tags": [
+        "engineering"
+      ],
+      "requires": [
+        "cabinet",
+        "workbench"
+      ],
+      "librarySlug": "schema-and-access",
+      "sourceUrl": "/skills/schema-and-access/1.0.0/SKILL.md",
+      "digest": "1ea3f7ca4b6572c7c3a21e6ee45132b8fcdda9d8a72c4e087fb64bbf7cbe96e2",
+      "bytes": 2581,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "c2d02afcaaa47da8b691cd981f4754423bba000bb488f5572ed8942c0c7eb798",
+          "bytes": 2581
+        }
+      ]
+    },
+    {
+      "slug": "security-sweep",
+      "name": "Security Sweep",
+      "description": "Sweep a tree for secrets, injection, and authz holes — each finding demonstrated and ranked.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Engineering",
+      "tags": [
+        "engineering"
+      ],
+      "requires": [
+        "cabinet",
+        "workbench"
+      ],
+      "librarySlug": "security-sweep",
+      "sourceUrl": "/skills/security-sweep/1.0.0/SKILL.md",
+      "digest": "a85a7b7d4a31aeb0a89b4fe7283b67cec4bb840c114777de14a0d09fd2bb93f5",
+      "bytes": 1673,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "e1fec7e727cd45e4d6aa1eb722283e813ec82583aa1bebfa460d975a91fdc59d",
+          "bytes": 1673
+        }
+      ]
+    },
+    {
+      "slug": "short-form-script",
+      "name": "Short-Form Script",
+      "description": "Write beat-marked, timed scripts built for retention, in a spoken voice that survives being read aloud.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Writing",
+      "tags": [
+        "writing"
+      ],
+      "requires": [
+        "cabinet"
+      ],
+      "librarySlug": "short-form-script",
+      "sourceUrl": "/skills/short-form-script/1.0.0/SKILL.md",
+      "digest": "5a784384f19722f6d2245e6cd37a8aebf66924ab62b8c93ff78361e3f32ec7de",
+      "bytes": 1547,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "a45effd13796d33a8dfbf5e447e0172e4a5c32427a8b3555341e0b1146461482",
+          "bytes": 1547
+        }
+      ]
+    },
+    {
+      "slug": "skill-authoring",
+      "name": "Skill Authoring",
+      "description": "Decide when a procedure deserves a saved skill, then write one the next run can follow cold — named for its trigger, step by step, ending in verification — and keep the library lean with skill.manage.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Station",
+      "tags": [
+        "skills",
+        "procedures",
+        "learning",
+        "documentation"
+      ],
+      "requires": [
+        "notebook"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/skill-authoring/1.0.0/SKILL.md",
+      "digest": "7df42cc56c77c253b9233f4eb46627d4e967437f6c1059679c6640383d85305c",
+      "bytes": 3829,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "3688ce2038a421f5f09a47322aeae3420f5641e376a7d9772ac28f65cf97327b",
+          "bytes": 3829
+        }
+      ]
+    },
+    {
+      "slug": "sop-writing",
+      "name": "SOP Writing",
+      "description": "Turn how the Commander actually does something into a procedure another person could follow without asking a single question.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Productivity",
+      "tags": [
+        "productivity"
+      ],
+      "requires": [
+        "cabinet",
+        "notebook"
+      ],
+      "librarySlug": "sop-writing",
+      "sourceUrl": "/skills/sop-writing/1.0.0/SKILL.md",
+      "digest": "8be9cf952b26b2e61c1b3d78c7ec7808b1d6302c62067f46427622fcca95a4e6",
+      "bytes": 2394,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "b854a47a750b3ca1f10730077ff45d11c466eb8373aa3f1a10e75b55a1dbeff5",
+          "bytes": 2394
+        }
+      ]
+    },
+    {
+      "slug": "source-triangulation",
+      "name": "Source Triangulation",
+      "description": "Confirm a load-bearing claim against multiple independent sources before you assert it.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Research",
+      "tags": [
+        "research"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "source-triangulation",
+      "sourceUrl": "/skills/source-triangulation/1.0.0/SKILL.md",
+      "digest": "5c7c75f7b7f05d231ede710d731b457c419110788a3e9fa87efb90dac6615876",
+      "bytes": 1795,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "1d6f4e1f7565e659f199cd005c85f59ba34d3a917f977fd4b9b1df2571477c64",
+          "bytes": 1795
+        }
+      ]
+    },
+    {
+      "slug": "spec-drafting",
+      "name": "Spec Drafting",
+      "description": "Turn a fuzzy idea into something buildable — the smallest version that is genuinely useful, with acceptance criteria and the cuts named.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Planning",
+      "tags": [
+        "planning"
+      ],
+      "requires": [
+        "cabinet"
+      ],
+      "librarySlug": "spec-drafting",
+      "sourceUrl": "/skills/spec-drafting/1.0.0/SKILL.md",
+      "digest": "6dc23e32b96a511418721f236365c8e3ae607b7fdb031c8c809920b3e8be252a",
+      "bytes": 2260,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "398149cd04e2a36367651fbdd2ee174d7da6fe02fd5a9698865cb34368dc6d2c",
+          "bytes": 2260
+        }
+      ]
+    },
+    {
+      "slug": "spend-aware-work",
+      "name": "Spend-Aware Work",
+      "description": "Plan work inside the station's budget: know the rails that stop a run, estimate before fanning out, pick the model and tools by the job, and stop to ask before a plan outgrows its money.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Planning",
+      "tags": [
+        "budget",
+        "cost",
+        "models",
+        "planning"
+      ],
+      "requires": [
+        "orchestrator"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/spend-aware-work/1.0.0/SKILL.md",
+      "digest": "bf078dbdfd0a20ff79f7490de803ec5de594350efa092d6e6a9325af91133d55",
+      "bytes": 4070,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "0e3df41b6e561b6bf47e1dcdd464e41947211cd03195be4c8ab635bf9fe0c42c",
+          "bytes": 4070
+        }
+      ]
+    },
+    {
+      "slug": "station-self-check",
+      "name": "Station Self-Check",
+      "description": "Read the station's own health from its tools — scheduler, failing routines, stuck loops, blocked lines, idle bays, stale or withheld skills — and report only what the tools show, with one fix for each finding.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Station",
+      "tags": [
+        "health",
+        "diagnostics",
+        "routines",
+        "maintenance"
+      ],
+      "requires": [
+        "orchestrator",
+        "notebook"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/station-self-check/1.0.0/SKILL.md",
+      "digest": "91b988526e9fd88dc13a44fe72ce3a8c635d577b29449b26452115274c6d0077",
+      "bytes": 3521,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "cb052b18511168ccd23c5623076fa8ffae35983cf849e09cc8305279b29a084e",
+          "bytes": 3521
+        }
+      ]
+    },
+    {
+      "slug": "studio-video",
+      "name": "Studio Video",
+      "description": "Turn a script into a narrated video edit: voiceover takes, matching stills, and a DaVinci Resolve timeline the Commander can open — by import in free Resolve, or live in Resolve Studio.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Studio",
+      "tags": [
+        "video",
+        "voiceover",
+        "davinci-resolve",
+        "editing",
+        "images"
+      ],
+      "requires": [
+        "studio"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/studio-video/1.0.0/SKILL.md",
+      "digest": "164a32e3a4426fc999fca5d566e1e7fe8f2e0fa663f13a9c37b0c5c397c8e558",
+      "bytes": 3947,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "73dcf14d0670f3b21da0a05dc547f357d4d9e87e478a18cef1ec44699e847ddf",
+          "bytes": 3947
+        }
+      ]
+    },
+    {
+      "slug": "study-plan",
+      "name": "Study Plan",
+      "description": "Build a milestone study plan from the learner's real level to a concrete goal.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Planning",
+      "tags": [
+        "planning"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "study-plan",
+      "sourceUrl": "/skills/study-plan/1.0.0/SKILL.md",
+      "digest": "dc05eff5ed2e1f359a0c666919f5ac8961c033c6725619898e2b1ef5bb7d18b3",
+      "bytes": 1625,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "56674abadd3a54c5308b27b50333ca6a15d9e9cc918bc350e21d4a870c5363ea",
+          "bytes": 1625
+        }
+      ]
+    },
+    {
+      "slug": "support-replies",
+      "name": "Support Replies",
+      "description": "Answer customer questions in the company's voice, and turn the repeats into help docs so the same question stops arriving.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Communication",
+      "tags": [
+        "communication"
+      ],
+      "requires": [
+        "cabinet",
+        "notebook"
+      ],
+      "librarySlug": "support-replies",
+      "sourceUrl": "/skills/support-replies/1.0.0/SKILL.md",
+      "digest": "b3a5199539987f06f1446c77a528c2891ac5fe6ba31e39db8b7204bac2d563b3",
+      "bytes": 2865,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "8885ae66e8578fa55c99c1dfc75547f178ef07f1cbcf152b2c19fb0105f167a5",
+          "bytes": 2865
+        }
+      ]
+    },
+    {
+      "slug": "translation-pass",
+      "name": "Translation Pass",
+      "description": "Translate a document for meaning and register, localize idiom, keep terminology consistent.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Writing",
+      "tags": [
+        "writing"
+      ],
+      "requires": [
+        "cabinet"
+      ],
+      "librarySlug": "translation-pass",
+      "sourceUrl": "/skills/translation-pass/1.0.0/SKILL.md",
+      "digest": "ef849132afbc3a7fe8647e947890c9371957e3a33d5e262758b2968cc04706a5",
+      "bytes": 1648,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "d11d95d7e6a5d1903b108344951f75bb4fd2d7cb84371347a65650e6ab97965b",
+          "bytes": 1648
+        }
+      ]
+    },
+    {
+      "slug": "ugc-brief",
+      "name": "UGC Brief",
+      "description": "Package an idea into a ready-to-shoot UGC/video brief — hooks, timed shot list, caption, cover, repurposing cuts.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Creator",
+      "tags": [
+        "creator"
+      ],
+      "requires": [
+        "dish",
+        "cabinet"
+      ],
+      "librarySlug": "ugc-brief",
+      "sourceUrl": "/skills/ugc-brief/1.0.0/SKILL.md",
+      "digest": "c5d6fa6a3696e0c0c1fe37573a7fdcaeee175bdaa43bb067df2765cc618ee9e3",
+      "bytes": 1663,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "716f583af57bff23e0af8824fbe6d547b9d8ce19596cd1b1400a7a72df2e1d2e",
+          "bytes": 1663
+        }
+      ]
+    },
+    {
+      "slug": "voice-match",
+      "name": "Voice Match",
+      "description": "Study what the Commander actually wrote, name their voice explicitly, then draft in it — including the words they never use.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Writing",
+      "tags": [
+        "writing"
+      ],
+      "requires": [
+        "cabinet",
+        "notebook"
+      ],
+      "librarySlug": "voice-match",
+      "sourceUrl": "/skills/voice-match/1.0.0/SKILL.md",
+      "digest": "7d3a376ad4ecb33452912eb96c58fd4b89075183c5bcf7a8ef22686f9beb6aad",
+      "bytes": 2274,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "3fe3fa979d32429c859af7d402d740ba62dcbb1866e93918ebae8e47bd1bd8a5",
+          "bytes": 2274
+        }
+      ]
+    },
+    {
+      "slug": "work-splitting",
+      "name": "Work Splitting",
+      "description": "Cut a job too big for one agent into genuinely parallel pieces, dispatch each to the right class, and merge the results into one answer.",
+      "version": "1.0.0",
+      "author": "StarNet",
+      "license": "MIT",
+      "shelf": "originals",
+      "category": "Planning",
+      "tags": [
+        "planning"
+      ],
+      "requires": [
+        "orchestrator"
+      ],
+      "librarySlug": "work-splitting",
+      "sourceUrl": "/skills/work-splitting/1.0.0/SKILL.md",
+      "digest": "a365622fcc819d1ef95e1df47d447485408b6206b6d47aa34072536ecd324434",
+      "bytes": 2207,
+      "files": [
+        {
+          "path": "SKILL.md",
+          "sha256": "b605800be84284b0dee024694724ff982dc404a13cf76bff134a5000c5d30617",
+          "bytes": 2207
+        }
+      ]
+    },
+    {
+      "slug": "blocked-page-recovery",
+      "name": "Blocked Page Recovery",
+      "description": "Use when web_fetch cannot read a page (403/429, bot wall, dead or changed page): recover a dated archive copy or the site's own data feed, reject fake successes, and cite it with honest provenance.",
+      "version": "1.0.0",
+      "author": "Nous Research",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Research",
+      "tags": [
+        "research",
+        "archives",
+        "web",
+        "fallback",
+        "citations"
+      ],
+      "requires": [
+        "dish"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/blocked-page-recovery/1.0.0/SKILL.md",
+      "digest": "fb8608948b5cf6c13cd747042492c9f8aeba618abeac6b1ecf85783d7bebd09e",
+      "bytes": 7654,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "e06b5349fc7d64e22f8ea78259ada31fb18825ceec897824cace6e176b0077a3",
+          "bytes": 1111
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "04185016d5beac7fbdef231a3255905b6a06bdc4a8dfb45f16f7a3ac3689c15b",
+          "bytes": 6543
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/web/blocked-page-recovery",
+        "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
+        "license": "MIT"
+      }
+    },
+    {
+      "slug": "code-wiki",
+      "name": "Codebase Wiki",
+      "description": "Generate a reference wiki for a codebase: overview, architecture, per-module deep dives, and Mermaid class and sequence diagrams, grounded in files you actually read. Works on local or cloned repos.",
+      "version": "1.0.0",
+      "author": "Teknium, Nous Research",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Engineering",
+      "tags": [
+        "documentation",
+        "mermaid",
+        "architecture",
+        "diagrams",
+        "wiki"
+      ],
+      "requires": [
+        "cabinet",
+        "workbench"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/code-wiki/1.0.0/SKILL.md",
+      "digest": "39e1ff53f8ad55b2f1beb7046d6189e9d64b97e6b0adc44202949a16b4d97219",
+      "bytes": 15061,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "61d836e641136d4a23a2710b26e519e95ea694fdca47bee5658106c2f1a97fc9",
+          "bytes": 1144
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "abc34dc64333654a8b05924c15cb4bd521df99f7c371a5ce1836c58895515ecc",
+          "bytes": 13917
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/software-development/code-wiki",
+        "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
+        "license": "MIT"
+      }
+    },
+    {
+      "slug": "decision-questionnaire",
+      "name": "Decision Questionnaire",
+      "description": "Turn a decision the Commander cannot answer alone into a focused questionnaire document for the person who holds the missing knowledge, to fill in async or together in a meeting.",
+      "version": "1.0.0",
+      "author": "Matt Pocock, Nous Research",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Communication",
+      "tags": [
+        "questionnaire",
+        "decision",
+        "async",
+        "stakeholder"
+      ],
+      "requires": [
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/decision-questionnaire/1.0.0/SKILL.md",
+      "digest": "21eedc3fff6392c255ad651bd7c61d2a3a59f7187ad9067157ded2ab39c87eac",
+      "bytes": 5516,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "42dfbf7a305227b62b9ab1b54d5ac4cc22c3a840ca5bd2a818fdf4a290e747d0",
+          "bytes": 1142
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "2d9c76df5870f33e753e84034c9f01843a4988fa49bd000ec09ce8e33cd85bf3",
+          "bytes": 4374
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/productivity/decision-questionnaire",
+        "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
+        "license": "MIT"
+      }
+    },
+    {
+      "slug": "document-to-action-items",
+      "name": "Document to Action Items",
+      "description": "Extract cited facts, obligations, deadlines and proposed tasks from contracts, reports, forms and scans, keeping page citations, may/should/must modality and OCR uncertainty visible.",
+      "version": "1.0.0",
+      "author": "Ben Barclay, Nous Research",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Productivity",
+      "tags": [
+        "documents",
+        "extraction",
+        "deadlines",
+        "action-items",
+        "ocr"
+      ],
+      "requires": [
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/document-to-action-items/1.0.0/SKILL.md",
+      "digest": "859947a1ce87bc4be3be9e5a33984831581510fe2f481b3403d8944ad89dc464",
+      "bytes": 5785,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "81e2221a1e1f1026724c0c57d0aeed366f1f369e2fcea5d8af2a808878ffe9be",
+          "bytes": 1150
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "696cd776f6ccf0110586ea5546add4453b49330ab3fd83b8d9bf35277e3196b1",
+          "bytes": 4635
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/productivity/document-to-action-items",
+        "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
+        "license": "MIT"
+      }
+    },
+    {
+      "slug": "grill-me",
+      "name": "Grill Me",
+      "description": "Stress-test a plan before any code is written: map it as a design tree, interview the Commander in rounds of dependency-ordered questions with recommendations, and confirm alignment.",
+      "version": "1.0.0",
+      "author": "Rafael Zendron, Matt Pocock, Nous Research",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Engineering",
+      "tags": [
+        "planning",
+        "interview",
+        "review",
+        "alignment",
+        "decisions"
+      ],
+      "requires": [
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/grill-me/1.0.0/SKILL.md",
+      "digest": "841fa8e9e8a6e6e4f1e89f269bf62294605c5b5ec9e51a366afb96fc5abf8bb8",
+      "bytes": 5903,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "dcb29a9ef6e8e3d500a9daffbac2298d58a85d3502ed6c38d85eeca10de5bc01",
+          "bytes": 1182
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "3054285becf3ffd0a3b023695688b6bd9e99127bcd1cc2835f9c739ea96e8bde",
+          "bytes": 4721
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/software-development/grill-me",
+        "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
+        "license": "MIT"
+      }
+    },
+    {
+      "slug": "llm-wiki",
+      "name": "LLM Wiki",
+      "description": "Build and maintain a persistent, interlinked Markdown knowledge base: ingest sources once, cross-reference and flag contradictions, answer questions from it, and lint it for health.",
+      "version": "1.0.0",
+      "author": "Nous Research",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Research",
+      "tags": [
+        "wiki",
+        "knowledge-base",
+        "research",
+        "markdown",
+        "notes"
+      ],
+      "requires": [
+        "cabinet",
+        "dish"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/llm-wiki/1.0.0/SKILL.md",
+      "digest": "e86ea766bf6de91f322ddfa0268c3325161484d1348005048352b418b698af22",
+      "bytes": 17241,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "e06b5349fc7d64e22f8ea78259ada31fb18825ceec897824cace6e176b0077a3",
+          "bytes": 1111
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "ee01d699a307530b2d71afdc12734e4bf61b3ece02b7894ae93af532bab369d7",
+          "bytes": 16130
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/research/llm-wiki",
+        "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
+        "license": "MIT"
+      }
+    },
+    {
+      "slug": "maps",
+      "name": "Maps",
+      "description": "Location answers from free OpenStreetMap services, no API key: geocode places, reverse-geocode coordinates, find nearby places by category, road distance and directions, timezones, and area bounds.",
+      "version": "1.0.0",
+      "author": "Mibayy, Nous Research",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Productivity",
+      "tags": [
+        "maps",
+        "geocoding",
+        "places",
+        "routing",
+        "openstreetmap"
+      ],
+      "requires": [
+        "dish"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/maps/1.0.0/SKILL.md",
+      "digest": "ba0be3ced05bdd3963cfcd7b56895bb87a336691004bbb3a92d454e9d290c59a",
+      "bytes": 12529,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "34586b36db59613e3d17749ad190d655e4940a491dc6ea377cee31b8e2a5f737",
+          "bytes": 1132
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "6da86e5d142ffde72f59768b55e9762c5302f27e42ce255a60d28f9098c6c3ef",
+          "bytes": 11397
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/productivity/maps",
+        "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
+        "license": "MIT"
+      }
+    },
+    {
+      "slug": "meeting-action-items",
+      "name": "Meeting Action Items",
+      "description": "Turn meeting notes or a transcript into cited decisions, owned action items and a held follow-up package, reconciled against the Commander's existing tasks before anything is created.",
+      "version": "1.0.0",
+      "author": "Ben Barclay, Nous Research",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Productivity",
+      "tags": [
+        "meetings",
+        "action-items",
+        "follow-up",
+        "minutes"
+      ],
+      "requires": [
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/meeting-action-items/1.0.0/SKILL.md",
+      "digest": "88b690850233cbbbd6b0e3008340599b4eb35259856bb8a968a98ff67da408c3",
+      "bytes": 5523,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "81e2221a1e1f1026724c0c57d0aeed366f1f369e2fcea5d8af2a808878ffe9be",
+          "bytes": 1150
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "f3a290833fee90b79b098eabd1d4d0efd31fd149cb7eb52a983d7954c5d88038",
+          "bytes": 4373
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/productivity/meeting-action-items",
+        "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
+        "license": "MIT"
+      }
+    },
+    {
+      "slug": "notes-vault",
+      "name": "Notes Vault",
+      "description": "Read, search, create and edit notes in the Commander's local Markdown notes vault (for example an Obsidian vault) with the station's file tools, linking notes with [[wikilinks]].",
+      "version": "1.0.0",
+      "author": "Teknium, Nous Research",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Productivity",
+      "tags": [
+        "notes",
+        "markdown",
+        "vault",
+        "wikilinks"
+      ],
+      "requires": [
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/notes-vault/1.0.0/SKILL.md",
+      "digest": "4ece1a80a910000a9dffd19de4e23f608a1154466fe987d4eff476a002f5d2b6",
+      "bytes": 4744,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "61d836e641136d4a23a2710b26e519e95ea694fdca47bee5658106c2f1a97fc9",
+          "bytes": 1144
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "f35b40abb22fc09e884f0492036e57756d31fc9bd3c7ebe7c992f475ce62261a",
+          "bytes": 3600
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/note-taking/obsidian",
+        "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
+        "license": "MIT"
+      }
+    },
+    {
+      "slug": "rest-graphql-debug",
+      "name": "REST & GraphQL API Debugging",
+      "description": "Debug REST and GraphQL APIs layer by layer: connectivity, timeouts, TLS, auth, request format, parsing and semantics, with a status-code playbook and a clean repro for every finding.",
+      "version": "1.0.0",
+      "author": "eren-karakus0, Nous Research",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Engineering",
+      "tags": [
+        "api",
+        "rest",
+        "graphql",
+        "http",
+        "debugging"
+      ],
+      "requires": [
+        "dish",
+        "workbench"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/rest-graphql-debug/1.0.0/SKILL.md",
+      "digest": "0ca333f4e984d0cce345012c0cee79231bc71d1952a85be3897530dfb34e03bc",
+      "bytes": 14759,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "0f909280da712ba8a6f403d80274553037b3d8747fd607840c243f5fcc61d244",
+          "bytes": 1139
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "152098e4d307150321481e4b3cc71aa2afcb4f09e9d47b9e341a6d298de84bd3",
+          "bytes": 13620
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/software-development/rest-graphql-debug",
+        "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
+        "license": "MIT"
+      }
+    },
+    {
+      "slug": "simple-english",
+      "name": "Simple English",
+      "description": "Rewrite or audit technical text with ASD-STE100 Simplified Technical English rules: short sentences, one word per meaning, condition-first instructions. For docs, runbooks, error messages and prompts.",
+      "version": "1.0.0",
+      "author": "AminBlg, Nous Research",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Writing",
+      "tags": [
+        "writing",
+        "technical-writing",
+        "documentation",
+        "editing",
+        "plain-language"
+      ],
+      "requires": [],
+      "librarySlug": "",
+      "sourceUrl": "/skills/simple-english/1.0.0/SKILL.md",
+      "digest": "ead576f67f46e3e556494e58dfa1256a1ce7e6b33ae52e9de49b98b8638e65ce",
+      "bytes": 28511,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "58704642315560cc9f5341de03d55b8039b3cf1c3c7fec67a76b03ebe412764e",
+          "bytes": 1138
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "bec24237fc046a58d2692ca5f88f144f715e3f19654ca112e82d6235f02f1e5d",
+          "bytes": 20342
+        },
+        {
+          "path": "references/checklist.md",
+          "sha256": "b8ccd40394a4e6082cf61f9e7eff053362540417b7e70ea9dcfaee0374aac053",
+          "bytes": 2978
+        },
+        {
+          "path": "references/use-cases.md",
+          "sha256": "a875819fe39687282b893d92d9d5f91c89685a01e21ffed0579d8873d4de6a68",
+          "bytes": 4053
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/creative/simple-english",
+        "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
+        "license": "MIT"
+      }
+    },
+    {
+      "slug": "weekly-review",
+      "name": "Weekly Review",
+      "description": "Weekly reset for the Commander: review last week's calendar and commitments, clear capture inboxes, flag stalled and waiting work, and build a capacity-aware plan for next week.",
+      "version": "1.0.0",
+      "author": "Ben Barclay, Nous Research",
+      "license": "MIT",
+      "shelf": "community",
+      "category": "Planning",
+      "tags": [
+        "weekly-review",
+        "planning",
+        "calendar",
+        "tasks",
+        "productivity"
+      ],
+      "requires": [
+        "notebook",
+        "cabinet"
+      ],
+      "librarySlug": "",
+      "sourceUrl": "/skills/weekly-review/1.0.0/SKILL.md",
+      "digest": "a6b35613b1a51ef21c70a7f5286517b19522001065cb1bf5002c042e28868aa0",
+      "bytes": 6345,
+      "files": [
+        {
+          "path": "LICENSE",
+          "sha256": "81e2221a1e1f1026724c0c57d0aeed366f1f369e2fcea5d8af2a808878ffe9be",
+          "bytes": 1150
+        },
+        {
+          "path": "SKILL.md",
+          "sha256": "764f653568ccd084f4fb71dc7fa37c2a296553d3d06c62bacbf1dd6b51c566ad",
+          "bytes": 5195
+        }
+      ],
+      "upstream": {
+        "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/productivity/weekly-review-planning",
+        "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
+        "license": "MIT"
+      }
+    }
+  ],
+  "revoked": []
+}

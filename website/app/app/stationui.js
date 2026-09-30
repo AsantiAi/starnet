@@ -1204,6 +1204,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     body.innerHTML = '';
     // pick the section to land on: remembered > first. A stale remembered id (section removed) falls back.
     let activeId = consoleSection[key];
+    if (key === 'settings' && activeId === 'nightshift') activeId = 'autonomy';   // folded into AUTONOMY (ONE WORD: AUTONOMY)
     if (!sections.some(s => s.id === activeId)) activeId = sections[0] && sections[0].id;
 
     // ---- left: optional rail-top slot (e.g. the dossier roster) + optional search + the section rail (role=tablist) ----
@@ -2103,7 +2104,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
      can arrive from a routine, a night shift, or a messaging channel — and "the agent believes this about me" and
      "someone said this in a group chat" are different claims. 'commander' renders NO chip: the ordinary case must
      stay quiet, or the label becomes noise nobody reads. */
-  const ORIGIN_LABEL = { schedule: '⏱ routine', nightshift: '☾ night shift', api: '⇄ external app' };
+  const ORIGIN_LABEL = { schedule: '⏱ routine', nightshift: '◈ autonomy', api: '⇄ external app' };
   function originChip(origin) {
     const o = String(origin || 'commander');
     if (o === 'commander') return null;
@@ -3210,6 +3211,15 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
      console is height:auto AND CSS-centred, so every tab whose content is a different length re-centres the whole
      window: measured live, the tab strip you just clicked moved between y=236 (CONFIG) and y=387 (RESTORE) — up to
      151px out from under the cursor, on the control you are actively using. The pane scrolls; the chrome holds still. */
+  // DESK SCREEN (deskscreen.js registers the 'desk' window): select THIS agent, then open the window from the dock —
+  // or, when it is already open, restore it and switch it to this agent (a per-agent window, like the dossier)
+  function openDesk(agentId) {
+    const i = present.findIndex(x => x && x.id === agentId);
+    if (i < 0 || !BUILDERS.desk) return false;
+    sel = i;
+    if (open.desk) { if (minimized.desk) restoreTerm('desk'); rerender('desk'); } else openTerm('desk');
+    return true;
+  }
   function openAgent(i) { sel = i; if (open.agents) { if (minimized.agents) restoreTerm('agents'); rerender('agents'); } else toggleTerm('agents', 'AGENT DOSSIER', buildAgents, { console: true, className: 'dossier' }); }
 
   /* ============== SKILLS — capability readout (mirrors the sidecar CAP_REGISTRY) ==============
@@ -3272,13 +3282,29 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
        offering choices that would do nothing, and the note about WHEN a change takes effect is shown
        because a live session cannot switch voice mid-call. */
 
+    // SKILL MARKET (2026-09-29): the curated StarNet catalog, browsed as the same glass card grid the connectors
+    // CATALOG uses. The catalog is fetched when this section loads, never in the background.
+    const secMarket =
+      '<p class="set-about"><b>Add skills to your whole crew.</b> StarNet Originals are written and tested by StarNet; community picks are credited to their authors. Installing adds the skill to your SKILL LIBRARY and switches it on.</p>' +
+      '<div class="cc-filters" id="skm-filters" role="group" aria-label="Filter the skill market">' +
+        '<button type="button" class="cc-filter active" data-skm-filter="all" aria-pressed="true">ALL</button>' +
+        '<button type="button" class="cc-filter" data-skm-filter="originals" aria-pressed="false">STARNET ORIGINALS</button>' +
+        '<button type="button" class="cc-filter" data-skm-filter="community" aria-pressed="false">COMMUNITY</button>' +
+        '<button type="button" class="cc-filter cc-f-on" data-skm-filter="installed" aria-pressed="false">INSTALLED</button>' +
+        '<button type="button" class="cc-filter" data-skm-filter="update" aria-pressed="false">UPDATES</button>' +
+      '</div>' +
+      '<div id="skm-list" class="cc-list"><span class="loading pulse">loading the skill market…</span></div>' +
+      '<div id="skm-msg" class="msg" role="status" aria-live="polite"></div>';
+
     const frag = html => (el => { el.innerHTML = html; });
     const sections = [
+      { id: 'market', label: 'SKILL MARKET', glyph: '▦', desc: 'Browse StarNet Originals and credited community skills, and install one for the whole crew in one click.', build: frag(secMarket) },
       { id: 'library', label: 'SKILL LIBRARY', glyph: '▤', desc: 'Pre-installed procedures your agents follow when a task matches, grouped by kind.', build: frag(secLibrary) },
       { id: 'agent', label: 'AGENT SKILLS', glyph: '✎', desc: 'Procedures this agent created or learned itself.', build: frag(secAgent) },
       { id: 'exchange', label: 'SKILL EXCHANGE', glyph: '⇩', desc: 'Inspect and install open SKILL.md procedures with provenance and guard review.', build: frag(secExchange) }
     ];
     function wire() {
+      loadSkillMarket(agentId);
       loadSkillLibrary(agentId);
       loadAgentSkills(agentId);
       wireSkillExchange(agentId);
@@ -3288,6 +3314,135 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   }
   window.AbilityLanes = window.AbilityLanes || [];
   window.AbilityLanes.push(abilitySkillsLane);
+
+  /* SKILL MARKET — the curated StarNet catalog as a card grid (the connectors CATALOG's cc-card glass cards, reused
+     so the two catalogs look and behave the same, search included). Every status a card shows comes from the
+     sidecar's /api/skill-market listing: available, installed, built in (our bundled copy IS the published
+     version), update, or tampered (its files changed on disk, so agents are not given it). */
+  const SKM_GEAR = { cabinet: 'FILE CABINET', dish: 'DISH', workbench: 'WORKBENCH', notebook: 'NOTEBOOK', studio: 'STUDIO', orchestrator: 'LEAD CONSOLE', computer: 'COMPUTER' };
+  let skmFilter = 'all';
+  // the gear a skill can use for this agent — the SAME reading loadSkillLibrary makes (room objects, shared station
+  // gear, profile / Full Access grants from /api/toolsets), so a market card never calls gear "missing" that the
+  // library would count as present
+  async function skillPlacedTypes(agentId) {
+    let placed = [];
+    try { placed = (typeof World !== 'undefined' && World.heroCaps) ? World.heroCaps(agentId).map(c => c.objectType) : []; } catch (e) {}
+    const shared = (() => { try { return typeof World !== 'undefined' && World.stationCaps ? World.stationCaps().map(c => c.objectType) : []; } catch (_) { return []; } })();
+    let granted = [];
+    try {
+      const view = await Harness.api.get('/api/toolsets?agent=' + encodeURIComponent(agentId) + '&placed=' + encodeURIComponent(placed.join(',')));
+      if (view && view.authority && Array.isArray(view.toolsets)) granted = view.toolsets.filter(r => r.object && (r.placed || r.profileGranted || view.authority.unrestricted)).map(r => r.object);
+    } catch (_) {}
+    return [...new Set(placed.concat(shared, granted))];
+  }
+  function skmCard(e, i) {
+    const on = e.status === 'installed';
+    const gear = (e.missingGear || []).map(g => SKM_GEAR[g] || g.toUpperCase());
+    const origin = e.shelf === 'originals'
+      ? '<span class="cc-badge cc-official">STARNET ORIGINAL</span>'
+      : '<span class="cc-badge cc-community">community · ' + esc(e.author || 'credited') + '</span>';
+    let action, hint;
+    if (e.status === 'installed') { action = '<button class="bb xs" data-skm-act="uninstall" data-slug="' + esc(e.slug) + '">REMOVE</button>'; hint = 'Installed · v' + esc(e.version) + (gear.length ? ' · needs ' + esc(gear.join(', ')) + ' placed to be used' : ''); }
+    else if (e.status === 'bundled') { action = '<button class="bb xs" disabled>BUILT IN</button>'; hint = 'Built into StarNet and up to date (v' + esc(e.version) + '). Switch it on or off in SKILL LIBRARY.'; }
+    else if (e.status === 'update') { action = '<button class="bb xs" data-skm-act="install" data-slug="' + esc(e.slug) + '">UPDATE</button>'; hint = (e.installedVersion ? 'v' + esc(e.installedVersion) + ' → ' : 'A newer version than your built-in copy: ') + 'v' + esc(e.version); }
+    else if (e.status === 'tampered') { action = '<button class="bb xs" data-skm-act="install" data-slug="' + esc(e.slug) + '">REINSTALL</button>'; hint = 'Its files changed on disk after install, so agents are not given it. Reinstall to restore it.'; }
+    else if (e.status === 'pulled') { action = '<button class="bb xs" data-skm-act="uninstall" data-slug="' + esc(e.slug) + '">REMOVE</button>'; hint = 'PULLED from the market: ' + esc(e.pulledReason || 'no reason given') + '. It is switched off and agents are not given it.'; }
+    else { action = '<button class="bb sm" data-skm-act="install" data-slug="' + esc(e.slug) + '">+ INSTALL</button>'; hint = gear.length ? 'Needs ' + esc(gear.join(', ')) + ' placed to be used.' : 'Ready to use as soon as it is installed.'; }
+    const files = (e.files || []).map(f => '<li><code>' + esc(f.path) + '</code> <span class="dim">' + esc(String(f.bytes)) + ' B</span></li>').join('');
+    const upstream = e.upstream && /^https:\/\//.test(String(e.upstream.url || ''))
+      ? '<div class="mc-hint">Adapted from <a class="dim" href="' + esc(e.upstream.url) + '" target="_blank" rel="noopener">the original ↗</a> (' + esc(e.upstream.license || e.license) + ')</div>' : '';
+    const search = [e.category, e.author, e.shelf === 'originals' ? 'starnet original' : 'community'].concat(e.tags || []).join(' ');
+    return '<div class="cc-card' + (on ? ' cc-on' : '') + '" data-skm="' + esc(e.slug) + '" data-shelf="' + esc(e.shelf) + '" data-status="' + esc(e.status) + '" data-search="' + esc(search) + '" style="--ci:' + (i || 0) + '">' +
+      '<div class="cc-head"><span class="cc-brand" aria-hidden="true">' + esc(String(e.name || e.slug).slice(0, 2).toUpperCase()) + '</span>' +
+        '<div class="cc-identity"><b>' + esc(e.name) + '</b><span class="cc-chip">' + esc(e.category) + '</span></div></div>' +
+      '<div class="cc-blurb dim">' + esc(e.description) + '</div>' +
+      '<details class="cc-details"><summary>Skill details</summary><div class="cc-details-body">' + origin +
+        '<div class="mc-hint">v' + esc(e.version) + ' · ' + esc(e.license || 'no license') + (e.requires && e.requires.length ? ' · uses ' + esc(e.requires.map(g => SKM_GEAR[g] || g).join(', ')) : '') + '</div>' +
+        upstream + (files ? '<ul class="skm-files">' + files + '</ul>' : '') + '</div></details>' +
+      '<div class="mc-hint cc-setup-hint"' + (e.status === 'tampered' || e.status === 'pulled' ? ' style="color:var(--gold)"' : '') + '>' + hint + '</div>' +
+      '<div class="cc-acts">' + action + '</div></div>';
+  }
+  function skmApplyFilter(list) {
+    if (!list) return;
+    list.querySelectorAll('.cc-group').forEach(g => {
+      let vis = 0;
+      g.querySelectorAll('.cc-card').forEach(c => {
+        const hit = skmFilter === 'all' ? true
+          : skmFilter === 'installed' ? (c.dataset.status === 'installed' || c.dataset.status === 'bundled' || c.dataset.status === 'pulled')
+          : skmFilter === 'update' ? (c.dataset.status === 'update' || c.dataset.status === 'tampered' || c.dataset.status === 'pulled')
+          : c.dataset.shelf === skmFilter;
+        c.hidden = !hit; if (hit) vis++;
+      });
+      g.hidden = vis === 0;
+      const tag = g.querySelector('.sec-tag'); if (tag) tag.textContent = String(vis);
+    });
+    let none = list.querySelector('.cc-nores');
+    const shown = list.querySelectorAll('.cc-card:not([hidden])').length;
+    if (!shown) {
+      if (!none) { none = document.createElement('p'); none.className = 'mc-hint cc-nores'; list.appendChild(none); }
+      none.textContent = skmFilter === 'update' ? 'Everything you have is up to date.' : skmFilter === 'installed' ? 'No market skills installed yet.' : 'Nothing on this shelf yet.';
+    } else if (none) none.remove();
+  }
+  function renderSkillMarket(host, d, agentId) {
+    if (!d || !d.ok) {
+      const err = String((d && d.error) || 'no answer');
+      // a catalog that failed its signature or serial check was reached but REFUSED — say that, not "couldn't reach"
+      const refused = /^the skill market (.+?) was not trusted: (.+)$/.exec(err);
+      host.innerHTML = (refused
+        ? '<p class="mc-hint" style="color:var(--gold)">StarNet refused the skill market\'s ' + esc(refused[1]) + ': ' + esc(refused[2]) + '. Nothing from it was used, and skills you already installed keep working.</p>'
+        : '<p class="mc-hint">Couldn\'t reach the skill market: ' + esc(err) + '. Skills you already installed keep working.</p>') +
+        '<button class="bb xs" type="button" data-skm-act="retry">TRY AGAIN</button>';
+      return;
+    }
+    const shelves = [['originals', 'StarNet Originals', 'Written and tested by StarNet for your station\'s gear and tools.'], ['community', 'Community picks', 'Open skills by other authors, adapted for StarNet and credited.']];
+    const html = shelves.map(([id, label, note]) => {
+      const rows = d.entries.filter(e => e.shelf === id);
+      if (!rows.length) return '';
+      return '<div class="cc-group"><div class="sec"><span class="sec-l">' + esc(label) + '</span><span class="sec-tag">' + rows.length + '</span><span class="sec-r"></span><span class="sec-nd"></span></div>' +
+        '<p class="mc-hint">' + esc(note) + '</p><div class="cc-grid">' + rows.map(skmCard).join('') + '</div></div>';
+    }).join('');
+    const pulled = d.entries.filter(e => e.status === 'pulled');
+    const banner = pulled.length
+      ? '<p class="mc-hint skm-pulled" style="color:var(--gold)">' + (pulled.length === 1 ? esc(pulled[0].name) + ' was' : pulled.length + ' skills you installed were') +
+        ' pulled from the market and switched off. Agents are no longer given ' + (pulled.length === 1 ? 'it' : 'them') + '; REMOVE clears ' + (pulled.length === 1 ? 'it' : 'them') + ' from this station.</p>'
+      : '';
+    host.innerHTML = html ? banner + html : '<p class="mc-hint">The skill market is empty right now.</p>';
+    skmApplyFilter(host);
+  }
+  function loadSkillMarket(agentId, refresh) {
+    const host = $('#skm-list'); if (!host) return;
+    skillPlacedTypes(agentId)
+      .then(placed => Harness.api.get('/api/skill-market?placed=' + encodeURIComponent(placed.join(',')) + (refresh ? '&refresh=1' : '')))
+      .then(d => { if ($('#skm-list') === host) { renderSkillMarket(host, d, agentId); const search = host.closest('.term-body')?.querySelector('.con-search-in'); if (search && search.value.trim()) search.dispatchEvent(new Event('input', { bubbles: true })); } })
+      .catch(e => { if ($('#skm-list') === host) renderSkillMarket(host, { ok: false, error: e && e.message }, agentId); });
+    if (host.dataset.wired) return;
+    host.dataset.wired = '1';
+    const filters = $('#skm-filters');
+    if (filters) filters.addEventListener('click', ev => {
+      const b = ev.target.closest('[data-skm-filter]'); if (!b) return;
+      skmFilter = b.dataset.skmFilter;
+      filters.querySelectorAll('[data-skm-filter]').forEach(x => { const on = x === b; x.classList.toggle('active', on); x.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+      skmApplyFilter($('#skm-list'));
+    });
+    host.addEventListener('click', async ev => {
+      const b = ev.target.closest('[data-skm-act]'); if (!b || b.disabled) return;
+      const act = b.dataset.skmAct;
+      if (act === 'retry') { loadSkillMarket(agentId, true); return; }
+      const msg = $('#skm-msg');
+      const card = b.closest('[data-skm]');
+      const name = card ? (card.querySelector('.cc-identity b') || {}).textContent : b.dataset.slug;
+      b.disabled = true; const label = b.textContent; b.textContent = act === 'install' ? 'INSTALLING…' : 'REMOVING…';
+      try {
+        const r = await Harness.api.post('/api/skill-market/' + (act === 'install' ? 'install' : 'uninstall'), { slug: b.dataset.slug });
+        if (!r.ok || !r.j || r.j.ok === false) throw new Error((r.j && r.j.error) || 'the station refused');
+        if (msg) { msg.className = 'msg ok'; msg.textContent = act === 'install' ? (r.j.action === 'update' ? 'Updated ' : 'Installed ') + name + ' for the whole crew.' : 'Removed ' + name + '.'; }
+        loadSkillMarket(agentId); loadSkillLibrary(agentId);
+      } catch (e) {
+        b.disabled = false; b.textContent = label;
+        if (msg) { msg.className = 'msg'; msg.textContent = (e && e.message) || 'That did not work.'; }
+      }
+    });
+  }
 
   // async: fetch the bundled recipe catalog (with THIS agent's placed objects, so the active/locked readout is
   // truthful) and render it into #sk-lib. Mirrors loadMemoryCore — re-query the host after the await so a panel
@@ -4330,10 +4485,34 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
      yet, null = the station couldn't answer. The card never says SIGNED IN from anything else. */
   let claudeCliSt;
   let claudeCliStPending = false;
+  // The card's in-flight sign-in (ClaudeCliSignIn owns the flow): its last message, the fallback page, and whether
+  // the last attempt failed. Painted from here on every render, so a repaint never strands a running sign-in.
+  // `account` = which sign-in the flow/message belongs to: '' the default one, an id for an extra account, '+' for an
+  // ADD whose account the sidecar has not named yet.
+  const claudeCard = { msg: '', url: '', failed: false, account: '' };
+  /* SUBSCRIPTION STACKING: the extra Claude sign-ins (/api/auth/claude-cli/accounts — each one's own `claude auth
+     status` plus the station's cooldown for it). null = not loaded; claudeCliSt stays the DEFAULT sign-in (account 1). */
+  let claudeAccounts = null;
+  let claudeAccountsMax = 8;
+  // a run just hopped between connected sign-ins: the card's cooldown line is stale — re-ask (keeps the old paint meanwhile)
+  if (typeof U !== 'undefined' && U.bus && U.bus.on) U.bus.on('provider.fallback', p => { if (p && p.toAccount) refreshClaudeCliCard(true); });
+  function paintClaudeCard() {
+    const st = document.getElementById('prov-claude-status');
+    if (st) st.textContent = claudeCard.msg;
+    const open = document.getElementById('prov-claude-open');
+    if (open) open.style.display = claudeCard.url ? '' : 'none';   // .bb sets display, which beats [hidden]
+  }
   function refreshClaudeCliCard(force) {
     if (typeof ClaudeCliSignIn === 'undefined' || claudeCliStPending || (!force && claudeCliSt !== undefined)) return;
     claudeCliStPending = true;
-    ClaudeCliSignIn.status().then(st => { claudeCliSt = st; }).catch(() => { claudeCliSt = null; })
+    ClaudeCliSignIn.accounts()
+      .then(j => {
+        if (!j || !j.accounts.length) { claudeCliSt = null; claudeAccounts = null; return; }
+        claudeCliSt = j.accounts[0];
+        claudeAccounts = j.accounts.slice(1);
+        if (j.max > 0) claudeAccountsMax = j.max;
+      })
+      .catch(() => { claudeCliSt = null; claudeAccounts = null; })
       .finally(() => { claudeCliStPending = false; scheduleSettingsRepaint(); });
   }
   function claudeCliPlan(st) {
@@ -4341,9 +4520,115 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     if (st.authMethod === 'api_key' || st.authMethod === 'apiKey') return ' · API KEY';
     return st.subscription ? ' · ' + String(st.subscription).toUpperCase() : '';
   }
+  // The sign-in box (open page · cancel · paste a code). ONE flow runs at a time, so ONE box is ever on the page:
+  // under the card for the default sign-in, inside the accounts block for an extra account.
+  function claudeFlowBoxHtml(flowing, show, dismissable) {
+    return '<div class="key-edit codex-inline prov-oauth-inline prov-claude-inline" id="prov-claude-inline"' + (show ? '' : ' hidden') + '>' +
+      '<span class="dim" id="prov-claude-status">' + esc(claudeCard.msg) + '</span>' +
+      (!flowing && dismissable ? '<button class="bb sm" id="prov-claude-dismiss">✕ DISMISS</button>' : '') +
+      (flowing
+        ? '<button class="bb sm" id="prov-claude-open"' + (claudeCard.url ? '' : ' style="display:none"') + '>↗ OPEN SIGN-IN PAGE</button>' +
+          '<button class="bb sm" id="prov-claude-cancel">✕ CANCEL</button>' +
+          '<input type="text" class="key-input" id="prov-claude-code" placeholder="page showed a code? paste it here" autocomplete="off" spellcheck="false">' +
+          '<button class="bb sm" id="prov-claude-code-go">SUBMIT</button>'
+        : '') +
+      '</div>';
+  }
+  /* SUBSCRIPTION STACKING on the ChatGPT / Grok / Kimi cards: the same accounts block as CLAUDE CODE, driven by the
+     device-code engine (OAuthAccounts.for). The list is backend truth (/api/auth/<pid>/accounts: stored tokens, a
+     recorded dead sign-in, the station's cooldown) and is re-read at most every 5s while Settings repaints, so a
+     DISCONNECT or RE-SIGN-IN of the primary elsewhere on this page shows up without its own wiring. */
+  const STACKABLE_OAUTH = ['codex', 'grok', 'kimi'];
+  const oauthAccts = {};   // pid -> { list: undefined|null|{accounts,max}, at, pending, box: null|{ account, msg, code, uri, openUri } }
+  function oauthAcctState(pid) { return (oauthAccts[pid] = oauthAccts[pid] || { list: undefined, at: 0, pending: false, box: null }); }
+  function refreshOAuthAccounts(pid, force) {
+    if (typeof OAuthAccounts === 'undefined' || STACKABLE_OAUTH.indexOf(pid) < 0) return;
+    const st = oauthAcctState(pid);
+    if (st.pending || (!force && st.list !== undefined && Date.now() - st.at < 5000)) return;
+    st.pending = true;
+    OAuthAccounts.for(pid).accounts().then(j => { st.list = j; }).catch(() => { st.list = null; })
+      .finally(() => { st.pending = false; st.at = Date.now(); scheduleSettingsRepaint(); });
+  }
+  if (typeof U !== 'undefined' && U.bus && U.bus.on) U.bus.on('provider.fallback', p => { if (p && p.toAccount) STACKABLE_OAUTH.forEach(pid => refreshOAuthAccounts(pid, true)); });
+  function stackClock(ms) { try { return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch (_) { return ''; } }
+  // ONE account row (both blocks): label + email, what the provider proved, the station's cooldown, a same-account
+  // warning (two rows with one email add no usage), and the extra account's own actions.
+  function stackRowHtml(a, i, all, o) {
+    const label = String((a && a.label) || ('account ' + (i + 1))).toUpperCase();
+    const dupAt = o.signedIn && a.email ? all.findIndex(x => x && x.email === a.email && o.isIn(x)) : -1;
+    const state = !o.signedIn ? '<span class="key-stat bad">' + (o.outLabel || '○ NOT SIGNED IN') + '</span>'
+      : a.coolingUntil > Date.now() ? '<span class="key-stat">◐ HIT A LIMIT · NEXT TRY AFTER ' + esc(stackClock(a.coolingUntil)) + '</span>'
+      : '<span class="key-stat on">● SIGNED IN</span>';
+    return '<div class="key-row prov-acct' + (o.signedIn ? '' : ' expired') + '" data-account="' + esc((a && a.account) || '') + '">' +
+      '<span class="conn-dot"></span>' +
+      '<div class="key-main">' +
+        '<div class="key-top"><span class="key-prov">' + esc(label) + (i === 0 ? ' · DEFAULT' : '') + '</span>' +
+        '<code class="key-mask">' + esc(o.signedIn ? (a.email || 'signed in') : (o.outMask || 'not signed in')) + '</code></div>' +
+        '<div class="key-meta">' + state + (o.plan ? '<span class="key-stat">' + esc(o.plan) + '</span>' : '') +
+          (dupAt >= 0 && dupAt < i ? '<span class="key-stat bad">⚠ SAME ACCOUNT AS ' + esc(String(all[dupAt].label || '').toUpperCase()) + ' — ADDS NO USAGE</span>' : '') +
+        '</div>' +
+      '</div>' +
+      (i === 0 ? '' : '<div class="key-acts">' +
+        (!o.signedIn ? '<button class="bb sm" data-act="' + o.signInAct + '" aria-label="Sign in ' + esc(label) + '">⏼ SIGN IN</button>' : '') +
+        '<button class="bb sm danger" data-act="' + o.removeAct + '" aria-label="Remove ' + esc(label) + '">✕ REMOVE</button>' +
+      '</div>') +
+    '</div>';
+  }
+  function oauthAccountsHtml(pid) {
+    const st = oauthAcctState(pid);
+    const j = st.list;
+    if (!j || !j.accounts.length) return '';
+    const all = j.accounts, extras = all.slice(1);
+    if (!all[0].connected && !extras.length && !st.box) return '';   // nothing signed in yet: the card's own ⏼ SIGN IN is the door
+    const isIn = x => !!x.connected;
+    const rows = extras.length ? all.map((a, i) => stackRowHtml(a, i, all, {
+      signedIn: isIn(a), isIn, outLabel: a.expired ? '⚠ SIGN-IN EXPIRED' : '○ NOT SIGNED IN', outMask: a.expired ? 'sign in again' : '',
+      signInAct: 'prov-oauth-acct-signin', removeAct: 'prov-oauth-acct-remove' })).join('') : '';
+    const flowing = OAuthAccounts.for(pid).active();
+    const b = st.box;
+    const box = b ? '<div class="key-edit codex-inline prov-oauth-inline" id="prov-oauth-acct-box-' + esc(pid) + '">' +
+        '<span class="dim">' + esc(b.msg) + '</span>' +
+        (b.code ? '<code class="key-mask">' + esc(b.code) + '</code>' : '') +
+        (b.openUri && flowing ? '<button class="bb sm" data-act="prov-oauth-acct-open">↗ OPEN PAGE</button>' : '') +
+        '<button class="bb sm" data-act="prov-oauth-acct-cancel">' + (flowing ? '✕ CANCEL' : '✕ DISMISS') + '</button>' +
+      '</div>' : '';
+    const canAdd = !flowing && all.length < (j.max || 8);
+    return '<div class="prov-accounts">' + rows + box +
+      '<div class="prov-accounts-add">' +
+        (canAdd ? '<button class="bb sm" data-act="prov-oauth-acct-add" title="sign in another ' + esc(provName(pid)) + ' account">＋ ADD ACCOUNT</button>' : '') +
+        '<span class="dim">' + (extras.length
+          ? 'runs start on the first ready account; when it hits its usage limit they continue on the next'
+          : 'connect more ' + esc(provName(pid)) + ' accounts — when one hits its usage limit, runs continue on the next') + '</span>' +
+      '</div>' +
+    '</div>';
+  }
+  /* SUBSCRIPTION STACKING on the CLAUDE CODE card: every connected sign-in with what its own CLI proved (email, plan,
+     signed in or not) and what the station is doing with it (a cooldown after a limit is REAL credPool state), plus
+     ＋ ADD ACCOUNT. Two rows with one email are the same Claude account: it adds no usage, and the row says so. */
+  function claudeAccountsHtml() {
+    const extras = claudeAccounts || [];
+    const all = [claudeCliSt].concat(extras);
+    const isIn = x => !!(x && x.loggedIn);
+    const row = (a, i) => stackRowHtml(a, i, all, { signedIn: isIn(a), isIn, plan: isIn(a) ? claudeCliPlan(a).replace(/^ · /, '') : '',
+      signInAct: 'prov-claude-acct-signin', removeAct: 'prov-claude-acct-remove' });
+    const flowing = !!claudeCard.account && typeof ClaudeCliSignIn !== 'undefined' && ClaudeCliSignIn.active();
+    const box = claudeCard.account ? claudeFlowBoxHtml(flowing, flowing || !!claudeCard.msg, true) : '';
+    const canAdd = !flowing && 1 + extras.length < claudeAccountsMax;
+    return '<div class="prov-accounts">' +
+      (extras.length ? all.map(row).join('') : '') +
+      box +
+      '<div class="prov-accounts-add">' +
+        (canAdd ? '<button class="bb sm" data-act="prov-claude-add" title="sign in another Claude account — Claude Code keeps each sign-in, StarNet never sees them">＋ ADD ACCOUNT</button>' : '') +
+        '<span class="dim">' + (extras.length
+          ? 'runs start on the first ready account; when it hits its usage limit they continue on the next'
+          : 'connect more Claude accounts — when one hits its usage limit, runs continue on the next') + '</span>' +
+      '</div>' +
+    '</div>';
+  }
   function queueProviderHealthRefresh() {
     const h = H(); if (!h) return;
     refreshClaudeCliCard(false);
+    STACKABLE_OAUTH.forEach(pid => refreshOAuthAccounts(pid, false));
     for (const p of PROVIDERS) {
       const credentialSaved = !!(h.hasStoredCredential && h.hasStoredCredential(p.id));
       const endpointConfigured = p.id === 'ollama' || p.id === 'claude-cli' || (p.id === 'custom' && !!(h.getBaseUrl && h.getBaseUrl(p.id)));
@@ -4461,6 +4746,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       const wantsOAuthSignin = p.live && isOAuthProvider(p.id) && !credentialSaved && !codexDead;
       const wantsClaudeSignin = p.id === 'claude-cli' && !!(claudeCliSt && claudeCliSt.installed && !claudeCliSt.loggedIn);
       const wantsClaudeInstall = p.id === 'claude-cli' && !!(claudeCliSt && !claudeCliSt.installed);
+      const claudeFlowing = wantsClaudeSignin && !claudeCard.account && typeof ClaudeCliSignIn !== 'undefined' && ClaudeCliSignIn.active();
+      const claudeBox = wantsClaudeSignin && (claudeFlowing || (claudeCard.failed && !!claudeCard.msg));
       return '<div class="prov-card ' + cls + '" data-provider="' + esc(p.id) + '" role="group" aria-label="' + esc(p.name) + ' provider" style="--ci:' + pi + '">' +
         '<button class="prov-select" data-act="prov-select" aria-label="Select ' + esc(p.name) + ' provider">' +
           providerLogoHtml(p.id) +
@@ -4471,7 +4758,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         '</button>' +
           '<span class="prov-stat"><span class="prov-stat-t">' + stat + (credentialSaved && !isOAuthProvider(p.id) ? '<i>' + n + (n === 1 ? ' key' : ' keys') + '</i>' : '') + '</span></span>' +
         (wantsInline ? '<button class="bb sm prov-addkey" data-act="prov-add-toggle" data-provider="' + esc(p.id) + '" aria-label="Add a ' + esc(p.name) + ' key" title="paste a ' + esc(p.name) + ' key without leaving this card">＋ ADD KEY</button>' : '') +
-        (wantsClaudeSignin ? '<button class="bb sm prov-addkey" data-act="prov-claude-signin" aria-label="Sign in with Claude" title="opens Claude in your browser — Claude Code keeps the sign-in, StarNet never sees it">⏼ SIGN IN</button>' : '') +
+        (wantsClaudeSignin && !claudeFlowing && !(typeof ClaudeCliSignIn !== 'undefined' && ClaudeCliSignIn.active()) ? '<button class="bb sm prov-addkey" data-act="prov-claude-signin" aria-label="Sign in with Claude" title="opens Claude in your browser — Claude Code keeps the sign-in, StarNet never sees it">' + (claudeCard.failed ? '⏼ TRY AGAIN' : '⏼ SIGN IN') + '</button>' : '') +
         (wantsClaudeInstall ? '<button class="bb sm prov-addkey" data-act="prov-claude-install" aria-label="Get Claude Code" title="Claude Code needs a Pro, Max, Team or Enterprise plan">↗ GET CLAUDE CODE</button>' : '') +
         (wantsOAuthSignin ? '<button class="bb sm prov-addkey" data-act="prov-oauth-signin" data-provider="' + esc(p.id) + '" aria-label="Sign in to ' + esc(p.name) + '" title="device-code sign-in — no API key needed">⏼ SIGN IN</button>' : '') +
         (wantsInline
@@ -4480,15 +4767,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
             '<button class="bb sm" data-act="prov-add-save" data-provider="' + esc(p.id) + '">SAVE</button>' +
             '</div>'
           : '') +
-        (wantsClaudeSignin
-          ? '<div class="key-edit codex-inline prov-oauth-inline prov-claude-inline" id="prov-claude-inline" hidden>' +
-            '<span class="dim" id="prov-claude-status"></span>' +
-            '<button class="bb sm" id="prov-claude-open" hidden>↗ OPEN SIGN-IN PAGE</button>' +
-            '<button class="bb sm" id="prov-claude-cancel">✕ CANCEL</button>' +
-            '<input type="text" class="key-input" id="prov-claude-code" placeholder="page showed a code? paste it here" autocomplete="off" spellcheck="false">' +
-            '<button class="bb sm" id="prov-claude-code-go">SUBMIT</button>' +
-            '</div>'
-          : '') +
+        (wantsClaudeSignin && !claudeCard.account ? claudeFlowBoxHtml(claudeFlowing, claudeBox) : '') +
+        (isClaude && claudeCliSt && claudeCliSt.installed ? claudeAccountsHtml() : '') +
+        (STACKABLE_OAUTH.indexOf(p.id) >= 0 ? oauthAccountsHtml(p.id) : '') +
         (wantsOAuthSignin
           ? '<div class="key-edit codex-inline prov-oauth-inline" id="prov-oauth-inline-' + esc(p.id) + '" hidden>' +
             '<span class="dim" id="prov-oauth-status-' + esc(p.id) + '"></span>' +
@@ -4955,46 +5236,158 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // CLAUDE CODE: SIGN IN WITH CLAUDE right on the card (the ClaudeCliSignIn engine — the CLI's own login, the
       // browser does the rest) and a way to get Claude Code when it isn't installed. stopPropagation: a card click selects.
       const claudeSignin = card.querySelector('[data-act="prov-claude-signin"]');
-      if (claudeSignin && typeof ClaudeCliSignIn !== 'undefined') claudeSignin.addEventListener('click', ev => {
-        ev.stopPropagation();
+      const claudeBoxEl = card.querySelector('#prov-claude-inline');
+      if (claudeBoxEl) claudeBoxEl.addEventListener('click', e2 => e2.stopPropagation());
+      const claudeCodeIn = card.querySelector('#prov-claude-code');
+      const claudeSubmit = async () => {
+        const code = claudeCodeIn ? claudeCodeIn.value.trim() : '';
+        if (!code) return;
         sfx('click');
-        const box = card.querySelector('#prov-claude-inline');
-        const st = card.querySelector('#prov-claude-status');
-        const open = card.querySelector('#prov-claude-open');
-        const cancel = card.querySelector('#prov-claude-cancel');
-        const codeIn = card.querySelector('#prov-claude-code');
-        const codeGo = card.querySelector('#prov-claude-code-go');
-        if (box) { box.hidden = false; box.addEventListener('click', e2 => e2.stopPropagation()); }
-        claudeSignin.style.display = 'none';   // .prov-addkey sets display, which beats [hidden]
-        const done = ok => { if (!ok) claudeCliSt = undefined; refreshClaudeCliCard(true); invalidateProviderHealth('claude-cli'); if (!ok) rerender('settings'); };
-        const submit = async () => {
-          const code = codeIn ? codeIn.value.trim() : '';
-          if (!code) return;
-          sfx('click');
-          const r = await ClaudeCliSignIn.submitCode(code);
-          if (r.ok) { if (codeIn) codeIn.value = ''; if (st) st.textContent = 'checking the code with Claude…'; }
-          else if (st) st.textContent = r.error;
-        };
-        if (cancel) cancel.onclick = async e2 => { e2.stopPropagation(); sfx('click'); await ClaudeCliSignIn.cancel(); done(false); };
-        if (codeGo) codeGo.onclick = e2 => { e2.stopPropagation(); submit(); };
-        if (codeIn) codeIn.onkeydown = e2 => { if (e2.key === 'Enter' && !e2.isComposing) { e2.preventDefault(); submit(); } };
-        ClaudeCliSignIn.start({
-          onStarting: () => { if (st) st.textContent = 'starting Claude sign-in…'; },
+        const r = await ClaudeCliSignIn.submitCode(code);
+        if (r.ok && claudeCodeIn) claudeCodeIn.value = '';
+        claudeCard.msg = r.ok ? 'checking the code with Claude…' : r.error;
+        paintClaudeCard();
+      };
+      const claudeCancel = card.querySelector('#prov-claude-cancel');
+      if (claudeCancel) claudeCancel.onclick = async e2 => {
+        e2.stopPropagation(); sfx('click');
+        await ClaudeCliSignIn.cancel();
+        claudeCard.msg = ''; claudeCard.url = ''; claudeCard.failed = false; claudeCard.account = '';
+        claudeCliSt = undefined; refreshClaudeCliCard(true); rerender('settings');
+      };
+      const claudeDismiss = card.querySelector('#prov-claude-dismiss');
+      if (claudeDismiss) claudeDismiss.onclick = e2 => {
+        e2.stopPropagation(); sfx('click');
+        claudeCard.msg = ''; claudeCard.url = ''; claudeCard.failed = false; claudeCard.account = '';
+        rerender('settings');
+      };
+      const claudeGo = card.querySelector('#prov-claude-code-go');
+      if (claudeGo) claudeGo.onclick = e2 => { e2.stopPropagation(); claudeSubmit(); };
+      if (claudeCodeIn) claudeCodeIn.onkeydown = e2 => { if (e2.key === 'Enter' && !e2.isComposing) { e2.preventDefault(); claudeSubmit(); } };
+      const claudeOpen = card.querySelector('#prov-claude-open');
+      if (claudeOpen) claudeOpen.onclick = e2 => { e2.stopPropagation(); sfx('click'); if (claudeCard.url) openExternal(claudeCard.url); };
+      /* ONE starter for every Claude sign-in on this card: the default one (⏼ SIGN IN), a NEW account
+         (＋ ADD ACCOUNT → opts.add) and an extra account that is signed out (its row's ⏼ SIGN IN → opts.account). */
+      const startClaudeFlow = (btn, opts) => {
+        opts = opts || {};
+        claudeCard.msg = 'starting Claude sign-in…'; claudeCard.url = ''; claudeCard.failed = false;
+        claudeCard.account = opts.add ? '+' : String(opts.account || '');
+        const started = ClaudeCliSignIn.start({
           onPending: pend => {
-            if (st) st.textContent = 'finish signing in in the browser window Claude Code just opened…';
-            if (open && pend.url) { open.hidden = false; open.onclick = e2 => { e2.stopPropagation(); sfx('click'); openExternal(pend.url); }; }
+            if (opts.add || opts.account) claudeCard.account = pend.account || claudeCard.account;
+            claudeCard.msg = opts.add || opts.account
+              ? 'in the browser window Claude Code just opened, sign in with a DIFFERENT Claude account — if it goes straight through, switch accounts on claude.ai first'
+              : 'finish signing in in the browser window Claude Code just opened…';
+            claudeCard.url = pend.url || '';
+            rerender('settings');   // the box (CANCEL, paste-a-code) renders from the now-active flow
           },
-          onError: msg => { if (st) st.textContent = msg; sfx('bad'); },
+          onError: msg => {
+            claudeCard.msg = msg; claudeCard.url = ''; claudeCard.failed = true;
+            if (claudeCard.account === '+') claudeCard.account = '-';   // an ADD that failed: its message stays in the accounts block
+            sfx('bad'); refreshClaudeCliCard(true); rerender('settings');
+          },
           onConnected: res => {
-            claudeCliSt = Object.assign({ installed: true, loggedIn: true }, res);
-            notify(activeProv() === 'claude-cli'
-              ? '✓ signed in to Claude — your agents can run on your subscription'
-              : '✓ signed in to Claude — click the CLAUDE CODE card to make it your active brain', 'good');
+            const extra = !!(res && res.account);
+            claudeCard.msg = ''; claudeCard.url = ''; claudeCard.failed = false; claudeCard.account = '';
+            if (!extra) claudeCliSt = Object.assign({ installed: true, loggedIn: true }, res);
+            notify(extra
+              ? '✓ another Claude account connected' + (res.email ? ' (' + res.email + ')' : '') + ' — runs continue on it when an account hits its limit'
+              : activeProv() === 'claude-cli'
+                ? '✓ signed in to Claude — your agents can run on your subscription'
+                : '✓ signed in to Claude — click the CLAUDE CODE card to make it your active brain', 'good');
             if (typeof ModelDock !== 'undefined' && ModelDock.reflect) ModelDock.reflect();
-            done(true);
+            refreshClaudeCliCard(true); invalidateProviderHealth('claude-cli'); rerender('settings');
+          }
+        }, opts);
+        // until the sidecar answers, the button itself says what is happening (a double press would restart the flow)
+        if (btn) { btn.disabled = true; btn.textContent = '◐ STARTING…'; }
+        Promise.resolve(started).catch(() => {});
+      };
+      if (claudeSignin && typeof ClaudeCliSignIn !== 'undefined') claudeSignin.addEventListener('click', ev => {
+        ev.stopPropagation(); sfx('click');
+        startClaudeFlow(claudeSignin, {});
+      });
+      const claudeAcctsEl = card.querySelector('.prov-accounts');
+      if (claudeAcctsEl && typeof ClaudeCliSignIn !== 'undefined') {
+        claudeAcctsEl.addEventListener('click', e2 => e2.stopPropagation());   // a card click selects the provider
+        const addBtn = claudeAcctsEl.querySelector('[data-act="prov-claude-add"]');
+        if (addBtn) addBtn.onclick = () => { sfx('click'); startClaudeFlow(addBtn, { add: true }); };
+        claudeAcctsEl.querySelectorAll('.prov-acct').forEach(rowEl => {
+          const id = rowEl.dataset.account;
+          if (!id) return;
+          const label = (rowEl.querySelector('.key-prov') || {}).textContent || 'account';
+          const inBtn = rowEl.querySelector('[data-act="prov-claude-acct-signin"]');
+          if (inBtn) inBtn.onclick = () => { sfx('click'); startClaudeFlow(inBtn, { account: id }); };
+          const rmBtn = rowEl.querySelector('[data-act="prov-claude-acct-remove"]');
+          if (rmBtn && typeof ArmConfirm !== 'undefined' && ArmConfirm.wire) {
+            ArmConfirm.wire(rmBtn, {
+              armedLabel: '✕ REMOVE — sure?', timeoutMs: 4000,
+              onArm: () => sfx('bad'),
+              onConfirm: async () => {
+                rmBtn.disabled = true; rmBtn.textContent = '◐ SIGNING OUT…';
+                const r = await ClaudeCliSignIn.remove(id);
+                notify(r.ok ? '✓ ' + label.toLowerCase() + ' signed out and removed' : 'couldn’t remove ' + label.toLowerCase() + ' — try again', r.ok ? 'good' : 'bad');
+                refreshClaudeCliCard(true); rerender('settings');
+              }
+            });
           }
         });
-      });
+      }
+      // SUBSCRIPTION STACKING on a ChatGPT / Grok / Kimi card: ＋ ADD ACCOUNT, an extra account's ⏼ SIGN IN and ✕ REMOVE,
+      // all through the device-code engine (OAuthAccounts.for). The box state lives in oauthAccts, so a repaint keeps it.
+      const acctPid = card.dataset.provider;
+      const oauthAcctsEl = STACKABLE_OAUTH.indexOf(acctPid) >= 0 ? card.querySelector('.prov-accounts') : null;
+      if (oauthAcctsEl && typeof OAuthAccounts !== 'undefined') {
+        oauthAcctsEl.addEventListener('click', e2 => e2.stopPropagation());   // a card click selects the provider
+        const eng = OAuthAccounts.for(acctPid);
+        const st = oauthAcctState(acctPid);
+        const flow = (btn, account) => {
+          st.box = { account: account || '+', msg: 'requesting a sign-in code…', code: '', openUri: '' };
+          if (btn) { btn.disabled = true; btn.textContent = '◐ STARTING…'; }
+          const cb = {
+            onError: msg => { st.box = { account: '', msg, code: '', openUri: '' }; sfx('bad'); rerender('settings'); },
+            onTimeout: () => { st.box = { account: '', msg: 'sign-in timed out — start it again', code: '', openUri: '' }; rerender('settings'); },
+            onCode: c => {
+              st.box = { account: account || '+', code: c.user_code, openUri: c.open_uri || c.verification_uri,
+                msg: 'enter this code at ' + c.verification_uri + ' — sign in with a DIFFERENT ' + provName(acctPid) + ' account' };
+              openExternal(c.open_uri || c.verification_uri);
+              rerender('settings');
+            },
+            onConnected: () => {
+              st.box = null;
+              notify('✓ another ' + provName(acctPid) + ' account connected — runs continue on it when an account hits its limit', 'good');
+              refreshOAuthAccounts(acctPid, true); rerender('settings');
+            }
+          };
+          Promise.resolve(account ? eng.signIn(account, cb) : eng.add(cb)).catch(() => {});
+        };
+        const addBtn = oauthAcctsEl.querySelector('[data-act="prov-oauth-acct-add"]');
+        if (addBtn) addBtn.onclick = () => { sfx('click'); flow(addBtn, ''); };
+        const openBtn = oauthAcctsEl.querySelector('[data-act="prov-oauth-acct-open"]');
+        if (openBtn) openBtn.onclick = () => { sfx('click'); if (st.box && st.box.openUri) openExternal(st.box.openUri); };
+        const cancelBtn = oauthAcctsEl.querySelector('[data-act="prov-oauth-acct-cancel"]');
+        if (cancelBtn) cancelBtn.onclick = () => { sfx('click'); eng.cancel(); st.box = null; rerender('settings'); };
+        oauthAcctsEl.querySelectorAll('.prov-acct').forEach(rowEl => {
+          const id = rowEl.dataset.account;
+          if (!id) return;
+          const label = (rowEl.querySelector('.key-prov') || {}).textContent || 'account';
+          const inBtn = rowEl.querySelector('[data-act="prov-oauth-acct-signin"]');
+          if (inBtn) inBtn.onclick = () => { sfx('click'); flow(inBtn, id); };
+          const rmBtn = rowEl.querySelector('[data-act="prov-oauth-acct-remove"]');
+          if (rmBtn && typeof ArmConfirm !== 'undefined' && ArmConfirm.wire) {
+            ArmConfirm.wire(rmBtn, {
+              armedLabel: '✕ REMOVE — sure?', timeoutMs: 4000,
+              onArm: () => sfx('bad'),
+              onConfirm: async () => {
+                rmBtn.disabled = true;
+                const r = await eng.remove(id);
+                notify(r.ok ? '✓ ' + label.toLowerCase() + ' removed' : 'couldn’t remove ' + label.toLowerCase() + ' — try again', r.ok ? 'good' : 'bad');
+                refreshOAuthAccounts(acctPid, true); rerender('settings');
+              }
+            });
+          }
+        });
+      }
       const claudeInstall = card.querySelector('[data-act="prov-claude-install"]');
       if (claudeInstall) claudeInstall.addEventListener('click', ev => { ev.stopPropagation(); sfx('click'); openExternal('https://code.claude.com/docs/en/setup'); });
       // FIRST sign-in for a keyless device-code provider (grok/kimi) — the card-local twin of the key-row's
@@ -6002,7 +6395,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         '<button class="set-theme" data-pace="12" title="as much as it&#39;s allowed — up to 12 jobs a day">MAX</button>' +
       '</div>' +
       // DIRECTION (autonomy-tuning 2026-07-17) — the dial says HOW MUCH it may run on its own; this block says
-      // WHERE that work should go. Same server truth the Night Shift panel reads (GET/POST/DELETE
+      // WHERE that work should go. Same server truth the away status below reads (GET/POST/DELETE
       // /api/nightshift/focus + POST/DELETE /api/nightshift/avoid) — one directive, surfaced where the user tunes
       // autonomy, so "tune it" and "aim it" live together. Every line maps to a route field; the cold states are
       // honest, never an invented priority or a fake learned profile.
@@ -6021,7 +6414,12 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // before this row a runaway helper could not be stopped from anywhere in the UI.
       '<div class="set-sub"><span class="set-sub-k">LIVE HELPERS</span><span class="set-sub-d">background sub-agents running now</span></div>' +
       '<div class="key-list" id="auto-helpers"><p class="set-about">reading helpers…</p></div>';
-    const secNightShift =
+    /* ONE WORD: AUTONOMY (2026-09-29, Andrew: "should simply be autonomy"). What the Commander saw as two things —
+       the AUTONOMY dial and a separate NIGHT SHIFT section — is one thing: the dial, and what it did while they were
+       away. This block (status, decision trail, last report) now renders INSIDE the AUTONOMY section, under the dial
+       it reports on. "Night shift" stays only as the internal name of the server-side driver (routes, ids, files). */
+    const secAwayActivity =
+      '<h4 class="ms-h">WHILE YOU’RE AWAY <span class="dim">— what autonomy did, and why</span></h4>' +
       // NIGHT SHIFT — the honest live status of the server-owned night shift (NS-4). Every line maps to a field of
       // GET /api/nightshift/status + /api/autonomy/ledger; painted live from the routes (never invented). The
       // decision trail is the scrollable recent act/decline log. Loading/error states are honest, never fake-zero.
@@ -6050,14 +6448,10 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       '</div>' +
       '<p class="set-about ns-note" id="ns-why"></p>' +
       '<p class="set-about ns-note" id="ns-readiness"></p>' +
-      // FOCUS (NS-5b) — what the night will chase, and the STEER that lets the Commander redirect it. The readout
-      // maps to status.focus (server truth); the steer rides GET/POST/DELETE /api/nightshift/focus. A steer only
-      // re-ranks the night's ONE priority — it grants nothing and reaches nothing new (route-enforced).
-      '<h4 class="ms-h">FOCUS</h4>' +
-      '<div class="set-row ns-focus-row"><span id="ns-focus" class="dim">…</span></div>' +
-      '<div class="set-row ns-steer"><input id="ns-steer" class="key-input" type="text" autocomplete="off" placeholder="point it at a project folder, or type what to focus on"><button class="bb xs" id="ns-steer-set">SET FOCUS</button><button class="bb xs" id="ns-steer-clear" style="display:none">CLEAR</button></div>' +
-      '<div class="mc-hint">a steer outranks learned evidence (~7 days, or until cleared). It only redirects the night’s one priority — no new access.</div>' +
-      '<h4 class="ms-h">RECENT DECISIONS</h4>' +
+      // FOCUS lives ONCE, in DIRECTION above (same GET/POST/DELETE /api/nightshift/focus route, same status.focus
+      // truth) — the second SET FOCUS box this section used to carry was the same control twice. The ns-focus /
+      // ns-steer wiring below is null-guarded, so it simply finds nothing to paint.
+      '<div class="set-sub"><span class="set-sub-k">RECENT DECISIONS</span><span class="set-sub-d">each time it acted or held back</span></div>' +
       '<div class="key-list" id="ns-trail"><p class="set-about">reading the decision trail…</p></div>' +
       // LAST REPORT (NS visibility 2026-07-13) — the morning-report beat is one-shot (fired=true spends it even on
       // dismiss, and vanish() loses the digest). This re-composes the most recent night's digest ON DEMAND from the
@@ -6449,8 +6843,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
 
     const sections = [
       { id: 'providers', label: 'PROVIDERS', glyph: '⌁', desc: 'Connect an AI service and manage its saved credentials.', build: frag(secProviders) },
-      { id: 'autonomy', label: 'AUTONOMY', glyph: '◈', desc: 'Choose when agents start work, what they can do, and how often.', build: frag(secAutonomy) },
-      { id: 'nightshift', label: 'NIGHT SHIFT', glyph: '☾', desc: 'See unattended activity, its current focus, and recent decisions.', build: frag(secNightShift) },
+      // ONE WORD: AUTONOMY — the dial and what it did while you were away are one section (the old NIGHT SHIFT
+      // section folded in; openTerm maps its id here so an old deep link still lands).
+      { id: 'autonomy', label: 'AUTONOMY', glyph: '◈', desc: 'Choose when agents work on their own, where that work goes, and see what they did while you were away.', build: frag(secAutonomy + secAwayActivity) },
       { id: 'permissions', label: 'PERMISSIONS', glyph: '⊘', desc: 'Set access and approval rules for the station or individual agents.', build: frag(secPermissions) },
       { id: 'budget', label: 'SPENDING LIMITS', glyph: '$', desc: 'Set spending limits and review recorded usage.', build: frag(secBudget) },
       { id: 'models', label: 'MODEL DEFAULTS', glyph: '⇄', desc: 'Choose backup models and defaults for new agents.', build: frag(secModels) },
@@ -6463,6 +6858,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // preferences — same word, two doors), and a 'SYSTEM' section inside SETTINGS inside the SYSTEM
       // dock read as a loop.
       { id: 'notifs', label: 'ALERTS', glyph: '◔', desc: 'What pings you while you work, and whether it chimes.', build: frag(secNotifs) },
+      // STARNET REMOTE: pair a phone and drive the station from anywhere (app/remote-devices.js owns the pane)
+      { id: 'remote', label: 'REMOTE', glyph: '▯', desc: 'Pair your phone and control this station from anywhere.', build: el => { if (typeof RemoteDevices !== 'undefined') RemoteDevices.mount(el, arrangeSettingsPane); else el.textContent = 'Remote is not available in this build.'; } },
       { id: 'system', label: 'APP & BACKUP', glyph: '⚙', desc: 'Startup, runtime limits, backups, updates, and troubleshooting.', build: frag(secSystem) }
     ];
     const host = mountConsole(body, 'settings', sections, { search: true, searchPlaceholder: 'search settings…' });
@@ -6666,7 +7063,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
             const why = (v.reasons && v.reasons.length) ? v.reasons.join(', ') : 'armed background work';
             lifeDesc.textContent = 'Right now, closing the window KEEPS the station running in the background (' + why + '). Quit fully from the tray icon. Otherwise closing would fully quit.';
           } else {
-            lifeDesc.textContent = 'Right now, nothing is armed — closing the window fully quits StarNet (no background process). Arm a routine, connect a channel, or turn on the night shift to keep it running while closed.';
+            lifeDesc.textContent = 'Right now, nothing is armed — closing the window fully quits StarNet (no background process). Arm a routine, connect a channel, or set autonomy to BUILD or FREE to keep it running while closed.';
           }
         }).catch(() => { lifeDesc.textContent = 'Closing the window keeps the station running only when armed work needs it — otherwise it fully quits.'; });
       };
@@ -6766,16 +7163,15 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       paintAuto();
     }
     // DIRECTION (autonomy-tuning) — focus/steer/off-limits/learned-interests, every value painted from a route's
-    // response (server truth, never an optimistic local flip). Shares the Night Shift panel's directive routes so
-    // both surfaces always tell the SAME story; interests ride GET /api/scout (evidence-cited or honestly empty).
+    // response (server truth, never an optimistic local flip). Rides the away driver's directive routes — the ONE
+    // focus/off-limits control (the old NIGHT SHIFT section's duplicate steer is gone); interests ride GET /api/scout (evidence-cited or honestly empty).
     {
       const dFocus = host.querySelector('#auto-focus'), dSteer = host.querySelector('#auto-steer'),
             dSteerSet = host.querySelector('#auto-steer-set'), dSteerClear = host.querySelector('#auto-steer-clear'),
             dAvoid = host.querySelector('#auto-avoid'), dAvoidRef = host.querySelector('#auto-avoid-ref'),
             dAvoidAdd = host.querySelector('#auto-avoid-add'), dInterests = host.querySelector('#auto-interests');
       const dMsg = (t) => { if (dFocus) dFocus.textContent = t; };
-      // "thread:<id>" and the literal "goal" select their kinds; anything else is a project path (the same grammar
-      // as the Night Shift steer box, so the two inputs never disagree).
+      // "thread:<id>" and the literal "goal" select their kinds; anything else is a project path.
       const parseRef = (raw) => {
         if (raw.toLowerCase() === 'goal') return { ref: 'goal', kind: 'goal' };
         if (/^thread:/i.test(raw)) return { ref: raw.slice(7).trim(), kind: 'thread' };
@@ -6971,9 +7367,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       const nsAwayRule = host.querySelector('#ns-awayrule'),
             nsState = host.querySelector('#ns-state'), nsWhy = host.querySelector('#ns-why'), nsLeash = host.querySelector('#ns-leash'),
             nsLast = host.querySelector('#ns-last'), nsNext = host.querySelector('#ns-next'), nsTrail = host.querySelector('#ns-trail'),
-            nsMode = host.querySelector('#ns-mode'), nsReadiness = host.querySelector('#ns-readiness'),
-            nsFocus = host.querySelector('#ns-focus'), nsSteer = host.querySelector('#ns-steer'),
-            nsSteerSet = host.querySelector('#ns-steer-set'), nsSteerClear = host.querySelector('#ns-steer-clear');
+            nsMode = host.querySelector('#ns-mode'), nsReadiness = host.querySelector('#ns-readiness');   // FOCUS + its steer live once, in DIRECTION above (ONE WORD: AUTONOMY)
       const tz = () => { try { return -new Date().getTimezoneOffset(); } catch (_) { return 0; } };
       const setDim = (el, txt) => { if (el) el.textContent = txt; };
       const paintPanel = (status) => {
@@ -6985,7 +7379,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         if (!m.reachable) {
           setDim(nsState, m.stateText);        // "station telemetry unreachable" — never a fake 0/3
           setDim(nsAwayRule, ''); setDim(nsWhy, ''); setDim(nsLeash, '—'); setDim(nsLast, '—'); setDim(nsNext, '—');
-          setDim(nsMode, '—'); setDim(nsReadiness, ''); setDim(nsFocus, '—');
+          setDim(nsMode, '—'); setDim(nsReadiness, '');
           return;
         }
         setDim(nsAwayRule, m.awayRuleText || '');
@@ -6999,60 +7393,14 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         setDim(nsLeash, m.leashText + ' · ' + m.presence);
         setDim(nsLast, m.lastBeatText);
         setDim(nsNext, m.nextEligibleText);
-        paintFocus(status);
       };
-      // FOCUS readout + steer visibility — every claim maps to status.focus (nightFocusView: {ref,label,why,source,
-      // steered} or null). Null renders the honest cold state, never an invented priority.
-      const paintFocus = (status) => {
-        if (!nsFocus) return;
-        const f = status && status.focus;
-        // f.steered is the LIVE steer bit (a durable steer is currently set); f.source is only the focus's
-        // provenance — after a CLEAR the focus record lingers with source:'steer' until the next re-resolve,
-        // so claiming "you steered this" (or offering CLEAR) off source alone overstates the live state.
-        if (f && (f.label || f.ref)) {
-          const why = Array.isArray(f.why) ? f.why.filter(Boolean).join('; ') : '';
-          nsFocus.textContent = String(f.label || f.ref) + (f.steered ? ' · you steered this' : '') + (why ? ' — ' + why : '');
-        } else {
-          nsFocus.textContent = 'none declared — the night improvises from evidence';
-        }
-        if (nsSteerClear) nsSteerClear.style.display = (f && f.steered) ? '' : 'none';
-      };
-      // STEER — POST/DELETE /api/nightshift/focus; the readout repaints from the ROUTE's response (server truth,
-      // never an optimistic local flip). "thread:<id>" and the literal "goal" select their kinds; else project.
-      const steerMsg = (t) => { if (nsFocus) nsFocus.textContent = t; };
-      if (nsSteerSet) nsSteerSet.addEventListener('click', () => {
-        const raw = nsSteer ? String(nsSteer.value).trim() : '';
-        if (!raw) { steerMsg('enter a blessed project path, thread:<id>, or goal'); sfx('bad'); return; }
-        let ref = raw, kind;
-        if (raw.toLowerCase() === 'goal') { kind = 'goal'; }
-        else if (/^thread:/i.test(raw)) { kind = 'thread'; ref = raw.slice(7).trim(); }
-        steerMsg('steering…');
-        fetch('/api/nightshift/focus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(kind ? { ref, kind } : { ref }) })
-          .then(r => r.json().then(j => ({ ok: r.ok, j })))
-          .then(({ ok, j }) => {
-            if (!ok || !j || j.ok === false) { steerMsg((j && j.error) || 'could not steer'); sfx('bad'); return; }
-            if (nsSteer) nsSteer.value = '';
-            sfx('click'); refreshPanel();   // repaint FOCUS from the status route's truth
-          })
-          .catch(() => { steerMsg('could not reach the sidecar'); sfx('bad'); });
-      });
-      if (nsSteerClear) nsSteerClear.addEventListener('click', () => {
-        steerMsg('clearing…');
-        fetch('/api/nightshift/focus', { method: 'DELETE' })
-          .then(r => r.json().then(j => ({ ok: r.ok, j })))
-          .then(({ ok, j }) => {
-            if (!ok || !j || j.ok === false) { steerMsg((j && j.error) || 'could not clear the steer'); sfx('bad'); return; }
-            sfx('click'); refreshPanel();
-          })
-          .catch(() => { steerMsg('could not reach the sidecar'); sfx('bad'); });
-      });
       const paintTrail = (entries) => {
         if (!nsTrail) return;
         // COLLAPSED trail (clarity fix 2026-07-15): the driver records one decision per ~minute, so raw rows were
         // twelve identical "declined · you were here" lines — pure noise. trailLines groups consecutive same-reason
         // rows into "4:26–4:37 PM · declined ×12 · …" (every row still derives from real ledger entries).
         const lines = NightReport.trailLines(Array.isArray(entries) ? entries : [], tz()).slice(0, 12);
-        if (!lines.length) { nsTrail.innerHTML = '<p class="set-about">no night-shift decisions yet — nothing has run unattended.</p>'; return; }
+        if (!lines.length) { nsTrail.innerHTML = '<p class="set-about">no autonomy decisions yet — nothing has run unattended.</p>'; return; }
         nsTrail.innerHTML = lines.map(t => '<div class="set-row"><span class="dim">' + esc(t) + '</span></div>').join('');
       };
       // paint honest "reading…" first, then replace with the live truth (or an honest unreachable/error state).
@@ -7085,7 +7433,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
           const drafts = (draftsRes && Array.isArray(draftsRes.drafts)) ? draftsRes.drafts : [];
           let rep; try { rep = NightReport.compose({ status, ledger, drafts, awaySince, nowMs: now, tzOffsetMin: tzMin() }); } catch (_) { rep = null; }
           if (!rep || !rep.hasReport) {
-            nsReport.innerHTML = '<p class="set-about">no report to show — the night shift recorded no acts or declines in the last 24h.</p>';
+            nsReport.innerHTML = '<p class="set-about">no report to show — autonomy recorded no acts or declines in the last 24h.</p>';
             return;
           }
           const lines = [];
@@ -8264,7 +8612,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const foot = mkEl('div', 'cd-brief-foot');
     const flows = mkEl('div', 'cd-flows',
       '<span class="cd-flow" title="composeSystemPrompt folds this block into the system prompt of every agent on the station — including a freshly-summoned one">▸ every agent’s briefing</span>' +
-      '<span class="cd-flow" title="mirrored to the sidecar so autonomous scheduled runs (cron, night shift) that compose their own persona still know who they serve">▸ autonomous &amp; scheduled runs</span>' +
+      '<span class="cd-flow" title="mirrored to the sidecar so autonomous scheduled runs (routines, autonomy) that compose their own persona still know who they serve">▸ autonomous &amp; scheduled runs</span>' +
       '<span class="cd-flow" title="the pitch engine and recruitment matcher read your goals, pain points and ambitions to propose work and crew">▸ pitches &amp; recruitment</span>' +
       '<span class="cd-flow" title="the quest board turns still-blank dimensions into get-to-know-you quests">▸ quest board</span>');
     foot.appendChild(flows);
@@ -8494,6 +8842,11 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
      duplicate build). The composer is PREFILLED, never sent — the Commander's words stay theirs to edit, and
      no turn is fabricated on their behalf (the OUTBOX ⊕ NEW SESSION precedent). Returns false honestly when
      the workstream seam is unavailable, so the caller can say so instead of dead-clicking. */
+  /* USER-STUDY LOOP (2026-09-28, Andrew's call): START QUEST on a quest the AGENT executes now STARTS the work —
+     the Commander's click on START is the instruction, exactly like "Start this step" on a goal milestone
+     (GoalStore.acceptMilestone → launchDirective). It sends once, only into the quest's brand-new session and
+     only when COMMS is free; a return visit, a busy COMMS, or a quest the Commander performs (commander /
+     together → "HELP ME PREPARE") keeps the prefill-and-edit path, so nothing is ever sent twice or behind their back. */
   function questSessionTitle(q) { return ('quest: ' + String((q && q.title) || 'a quest')).slice(0, 80); }
   function questOpenSession(q) {
     const w = WS();
@@ -8512,13 +8865,20 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     if (!sid) return false;
     if (typeof App !== 'undefined' && App.openWorkstream) App.openWorkstream(sid);
     // The ask names the quest and the honest completion condition, so the agent starts on the real objective
-    // rather than a title fragment. Left in the composer for the Commander to edit or send.
-    if (typeof Chat !== 'undefined' && Chat.prefill) {
+    // rather than a title fragment.
+    if (typeof Chat !== 'undefined') {
       const cw = questCompletesWhen(q);
-      Chat.prefill('Help me with this quest: ' + String(q.title || '').trim()
+      const ask = 'Help me with this quest: ' + String(q.title || '').trim()
         + (q.desc ? ' — ' + String(q.desc).trim() : '')
-        + (cw ? '\n\nIt counts as done when: ' + cw : '') + '\n\n');
-      notify('Conversation prepared. Edit and send it when you are ready.', 'good');
+        + (cw ? '\n\nIt counts as done when: ' + cw : '');
+      const startsWork = !existing && q.executionMode === 'agent' && Chat.send && !(Chat.isBusy && Chat.isBusy());
+      if (startsWork) {
+        Chat.send(ask);
+        notify('Quest started — the work is running in its own session.', 'good');
+      } else if (Chat.prefill) {
+        Chat.prefill(ask + '\n\n');
+        notify('Conversation prepared. Edit and send it when you are ready.', 'good');
+      }
     }
     return true;
   }
@@ -8753,7 +9113,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     }
     // LAST OUTCOME — the most recent honest attempt (minted/none/rejected/skipped/error) the refresher recorded.
     const last = s && s.ledger && s.ledger.length ? s.ledger[s.ledger.length - 1] : null;
-    const OUTCOME_LABEL = { minted: 'added a quest', none: 'nothing new needed', rejected: 'nothing passed', skipped: 'skipped', error: 'error' };
+    const OUTCOME_LABEL = { minted: 'added a quest', advanced: 'step finished', none: 'nothing new needed', rejected: 'nothing passed', skipped: 'skipped', error: 'error' };
     // The engine's own reason is kept verbatim on the row; these say what it MEANS for the Commander. A
     // rejected cycle is the confusing one — it reads as a failure when it is the station refusing to invent
     // a quest it cannot ground, so it says that outright rather than leaving "rejected" to be guessed at.
@@ -9806,6 +10166,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const al = TERM_ALIAS[key];
     if (al) { section = (section && al.map[section]) || al.section; key = al.term; }
     const def = BUILDERS[key]; if (!def) return;
+    // the old NIGHT SHIFT settings section is part of AUTONOMY now (ONE WORD: AUTONOMY) — an old link still lands.
+    if (key === 'settings' && section === 'nightshift') section = 'autonomy';
     // optional section arg (Lane A error-door routing): land the console rail on a specific section — same
     // mechanism as the dossier's "jump to CONFIG" (consoleSection is what mountConsole reads at render).
     if (section) consoleSection[key] = section;
@@ -9950,7 +10312,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   // GROWTH Tier 3: repaint the Settings AUTONOMY panel's EARNED badge if it is open (no-op otherwise — the paint fn
   // queries its own (possibly detached) host nodes, so a closed panel costs nothing). Called after a trust accept.
   const repaintAutonomy = () => { try { if (repaintAutonomyDial) repaintAutonomyDial(); } catch (_) {} };
-  return { init, enter, setRoster, leave, clearRunning, runningCount: () => runningAgents.size, isAgentRunning: (id) => agentLive(id), notify, flashSave, openAgent, openArcade, toggleTerm, openTerm, closeTerm, rerender, refreshBoard: refreshBoardLive, pokeQuests, setTheme, getTheme, repaintAutonomy, registerWindow, h };
+  return { init, enter, setRoster, leave, clearRunning, runningCount: () => runningAgents.size, isAgentRunning: (id) => agentLive(id), notify, flashSave, openAgent, openArcade, toggleTerm, openTerm, openDesk, closeTerm, rerender, refreshBoard: refreshBoardLive, pokeQuests, setTheme, getTheme, repaintAutonomy, registerWindow, h };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { visibleTerminalRect, clampTerminalSize };

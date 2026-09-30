@@ -211,3 +211,5 @@ sidecar/mcp/google-client.json
 /.local/google-review/
 
 src-tauri/frontend-embed/
+# user-study-loop live proof scratch (seeded workspace + chrome profile). Never committed.
+dev/.scratch-workspace-usl-proof/

@@ -19,7 +19,14 @@
 
    STOP. Aborting req.signal kills the child's whole process tree (taskkill /T on Windows) before returning.
 
-   makeClaudeCliProvider({ spawn?, bin?, env?, platform?, fs?, os?, idleMs?, statusTtlMs? })
+   ACCOUNTS. `configDir` points the CLI at one extra sign-in (subscription stacking): the child runs with
+   CLAUDE_CONFIG_DIR=<configDir>, a separate CLI identity whose credential the CLI keeps in that folder (proven:
+   an empty folder answers `auth status` signed out while ~/.claude stays signed in). No configDir = the CLI's
+   own default sign-in. A spent subscription (the CLI's `error:"rate_limit"` line, "You've hit your limit") is
+   thrown as a 429 `usage_limit_reached`, which errorClass files as quota_exhausted: the loop rotates to the next
+   account instead of retrying this one.
+
+   makeClaudeCliProvider({ spawn?, bin?, env?, configDir?, platform?, fs?, os?, idleMs?, statusTtlMs? })
      -> { stream, listModels, contextLimit, priceOf, supportsTools, reasoningEfforts } */
 'use strict';
 (function (root, factory) {
@@ -32,13 +39,26 @@
   // failopen.note — the tagged SYNC swallow (per-tag count + throttled warn): a fail-open catch must never be invisible.
   const { note: failNote } = (typeof require === 'function') ? require('../failopen.js') : { note: function (tag, e) { console.warn('[failopen] ' + tag + ':', (e && e.message) || e); } };
   const DEFAULT_CONTEXT = 200000;
-  // The CLI's own model aliases: they always resolve to the newest model of each family the account can use,
-  // and they cannot collide with the Anthropic API provider's dated model ids.
+  /* What `claude --model` runs on a subscription sign-in — every id here was proven live 2026-09-29 (a one-line call
+     each; the CLI answered on exactly that model). Named models first; the `[1m]` ids are the CLI's own 1M-context
+     variants. The bare aliases come last: they always follow the newest model of each family, and they stay listed
+     because a station pinned to one (every claude-cli station before this list) must keep a model the catalog
+     proves — ModelDock clears a pin the live catalog no longer carries. Fable is left out on purpose: the CLI
+     accepts it but an account without Fable is silently served Opus 4.8, so listing it would name a model the run
+     did not use. */
   const MODELS = [
-    { id: 'sonnet', name: 'Claude Sonnet (latest) · CLI' },
-    { id: 'opus', name: 'Claude Opus (latest) · CLI' },
-    { id: 'haiku', name: 'Claude Haiku (latest) · CLI' }
+    { id: 'claude-opus-5-5', name: 'Claude Opus 5.5' },
+    { id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5' },
+    { id: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5' },
+    { id: 'claude-opus-5-5[1m]', name: 'Claude Opus 5.5 · 1M context', context: 1000000 },
+    { id: 'claude-sonnet-5-5[1m]', name: 'Claude Sonnet 5.5 · 1M context', context: 1000000 },
+    { id: 'claude-opus-4-8', name: 'Claude Opus 4.8' },
+    { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6' },
+    { id: 'opus', name: 'Latest Claude Opus · follows new releases' },
+    { id: 'sonnet', name: 'Latest Claude Sonnet · follows new releases' },
+    { id: 'haiku', name: 'Latest Claude Haiku · follows new releases' }
   ];
+  const contextOf = id => { const m = MODELS.find(x => x.id === String(id || '')); return (m && m.context) || (/\[1m\]$/i.test(String(id || '')) ? 1000000 : DEFAULT_CONTEXT); };
   const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
   const CALL_OPEN = '<tool_call>';
   const CALL_CLOSE = '</tool_call>';
@@ -234,6 +254,7 @@
       delete out.CLAUDECODE;               // a sidecar started from inside a Claude Code session is not a nested session
       delete out.CLAUDE_CODE_ENTRYPOINT;
       out.CLAUDE_CODE_DISABLE_AUTO_MEMORY = '1';
+      if (opts.configDir) out.CLAUDE_CONFIG_DIR = String(opts.configDir);   // an extra account's own CLI identity
       return out;
     }
     function killDirect(child) {
@@ -277,7 +298,23 @@
         });
       });
     }
-    return { spawn, fs, os, path, env, platform, isFile, command, notInstalled, notSignedIn, childEnv, killTree, authStatus };
+    /* `claude auth logout` for this identity: the CLI clears its own credential (on macOS that is a keychain entry
+       outside the config folder, so deleting the folder alone would strand it). Resolves { ok }, never throws. */
+    function logout() {
+      return new Promise(resolve => {
+        const cmd = command();
+        if (!cmd) return resolve({ ok: false });
+        let settled = false, child;
+        const finish = (ok) => { if (settled) return; settled = true; clearTimeout(timer); resolve({ ok }); };
+        const timer = setTimeout(() => { killTree(child); finish(false); }, 15000);
+        try {
+          child = spawn(cmd.file, cmd.pre.concat(['auth', 'logout']), { env: childEnv(), cwd: os.tmpdir(), windowsHide: true, stdio: ['ignore', 'ignore', 'ignore'] });
+        } catch (_) { return finish(false); }
+        child.on('error', () => finish(false));
+        child.on('close', code => finish(code === 0));
+      });
+    }
+    return { spawn, fs, os, path, env, platform, isFile, command, notInstalled, notSignedIn, childEnv, killTree, authStatus, logout };
   }
 
   function makeClaudeCliProvider(opts) {
@@ -312,7 +349,7 @@
       const st = await probeStatus();
       if (!st.ok) throw st.error;
       return MODELS.map(m => ({
-        id: m.id, name: m.name, context_length: DEFAULT_CONTEXT, max_completion_tokens: null, pricing: null,
+        id: m.id, name: m.name, context_length: m.context || DEFAULT_CONTEXT, max_completion_tokens: null, pricing: null,
         supportsTools: true, supportsReasoning: true, supported_parameters: ['tools', 'reasoning'], reasoningEfforts: EFFORTS.slice()
       }));
     }
@@ -421,6 +458,13 @@
             e.status = 401; e.code = 'provider_not_configured';
             throw e;
           }
+          // A spent subscription window ("You've hit your limit · resets 5pm …"): a 429 usage_limit_reached is
+          // quota_exhausted — no retry on this sign-in, rotate to the next connected account (or fall back).
+          if (apiError === 'rate_limit') {
+            const e = new Error('Claude Code usage limit reached: ' + String(result.result || 'rate limited').slice(0, 300));
+            e.status = 429; e.code = 'usage_limit_reached';
+            throw e;
+          }
           throw new Error('Claude Code error: ' + String(result.result || result.subtype || 'unknown error').slice(0, 400));
         }
         if (!sawText && callIndex === 0 && typeof result.result === 'string') yield* emitSplit(splitter.push(result.result));
@@ -455,7 +499,7 @@
     return {
       stream,
       listModels,
-      contextLimit() { return DEFAULT_CONTEXT; },
+      contextLimit(id) { return contextOf(id); },
       // The CLI reports its own billed cost per turn (see COST TRUTH above); there is no list-rate table here.
       priceOf() { return null; },
       supportsTools() { return true; },

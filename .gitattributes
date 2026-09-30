@@ -1,0 +1,3 @@
+# Skill Market publish files are signed / sha256-pinned byte for byte: never let git rewrite their line endings.
+website/.well-known/** -text
+website/skills/** -text

@@ -215,4 +215,14 @@ A.ok(pd.includes('Completed work does not prove the life goal happened'), 'plann
 const boundGoal = { id: 'g', text: 'Find a job', milestoneId: 'm1', next: 'Apply', done: 0, total: 3 };
 A.eq(R.goalBinding(boundGoal), R.goalBinding({ ...boundGoal, pct: 99 }), 'nonbinding display percentage does not invalidate planning');
 for (const change of [{ id: 'new' }, { text: 'Learn music' }, { milestoneId: 'm2' }, { next: 'Interview' }]) A.ok(R.goalBinding(boundGoal) !== R.goalBinding({ ...boundGoal, ...change }), 'goal and milestone changes invalidate planning');
+
+// SWEEP 2026-09-29 — a poll must never spend a model turn: an EMPTY slate whose context has not moved since the last
+// cycle stays quiet until the daily cadence (it used to re-fire every hour, forever, on every idle open station).
+{
+  const H = 3600000, t0 = 5e12;
+  const idle = R.stampCycle(R.fresh(), { now: t0, contextKey: 'same' });
+  for (const h of [1.01, 6, 23.9]) A.eq(R.decide(idle, { now: t0 + h * H, openCount: 0, contextKey: 'same' }).fire, false, 'idle + unchanged + empty slate does not re-plan at ' + h + 'h');
+  A.eq(R.decide(idle, { now: t0 + 24.01 * H, openCount: 0, contextKey: 'same' }).why, 'daily', 'the daily cadence still refreshes an idle station once a day');
+  A.eq(R.decide(idle, { now: t0 + 0.2 * H, openCount: 0, contextKey: 'moved' }).fire, true, 'real progress (the context moved) still earns a cycle');
+}
 A.report();

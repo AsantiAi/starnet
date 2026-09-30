@@ -1,0 +1,10 @@
+{
+  "slug": "station-self-check",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Station",
+  "tags": ["health", "diagnostics", "routines", "maintenance"],
+  "requires": ["orchestrator", "notebook"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}
