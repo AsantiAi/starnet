@@ -44,7 +44,7 @@ const { makeRegistry, outputBudgetFor, outputWindowFor } = require('./tools/regi
 const { makeOutputArtifacts } = require('./output-artifacts.js');
 const { makeWebTools, makePoliteScheduler } = require('./tools/builtin/web.js');
 const { makeWebReader } = require('./tools/builtin/webreader.js');
-const { makeBrowserTools } = require('./tools/builtin/browser.js');
+const { makeBrowserTools, _internals: browserInternals } = require('./tools/builtin/browser.js');
 // ONE reader for the whole sidecar (lazy: no Chrome until the first bot-walled fetch actually needs
 // it; idle self-teardown). Per-run construction would pay the Chrome cold start on every run.
 const stationWebReader = makeWebReader({ env: process.env });
@@ -208,6 +208,7 @@ const { makeConnectGateway } = require('./channels/discord.gateway.js');        
 const { makeSseHub, runTeeView } = require('./channels/sse.js');
 const { makeHandoffHost } = require('./browser-handoff.js');   // STEP-IN: the agent hands its live browser to the Commander
 const { makeHandoffRoutes, makeSigninStore, nudgeLine: handoffNudgeLine } = require('./browser-handoff-routes.js');
+const { makeBrowserViews, makeViewRoutes } = require('./browser-view.js');   // BROWSER window: watch a run's browser, browse yourself
 // relayWebhook (the signed-ingress verifier) is composed AFTER the WORKSPACES stores below —
 // its replay-nonce inbox is a durable JSONL sibling of the other ledgers.
 const { makeRouter } = require('./routing/router.js');
@@ -4254,6 +4255,24 @@ const browserHandoffs = makeHandoffHost({
   }
 });
 const browserHandoffRoutes = makeHandoffRoutes({ host: browserHandoffs, readBody, respondJson, signins: browserSignins });
+/* BROWSER window (sidecar/browser-view.js): the Commander WATCHES a run's browser (frames only; the wheel stays
+   STEP-IN's) and browses on a station-owned session of their own. That session is headless, streamed, synthetic-input
+   only — the same host authority every run gets. It runs on a TEMPORARY profile on purpose: the durable station profile
+   is a single-owner lease, and a run that cannot get it errors after 8s — a window the Commander left open must never be
+   the reason an agent cannot browse. Signing in for the agents stays STEP-IN's job. */
+const COMMANDER_BROWSER_ID = 'commander-view';
+const browserViews = makeBrowserViews({
+  now: () => Date.now(),
+  handoffLive: runId => browserHandoffs.isLive(runId),
+  makeCommanderSession: () => browserInternals.makeBrowserSession({
+    ledger: procLedger,
+    allowVisible: false, forceHeadless: true, syntheticInputOnly: true,
+    cdpPort: 0,
+    profileDir: path.join(os.tmpdir(), 'starnet-browser-' + process.pid + '-' + COMMANDER_BROWSER_ID),
+    cleanupProfile: true
+  })
+});
+const browserViewRoutes = makeViewRoutes({ views: browserViews, readBody, respondJson });
 
 // H2.2: the SINGLETON background-process manager — persists across runs so a backgrounded dev server survives the
 // run that started it. shell.bg.exit fires AFTER the originating run's NDJSON stream closed, so it rides the
@@ -10084,6 +10103,7 @@ const ROUTES = [
   // stt: qsplit == the old (url === '/api/stt' || url.indexOf('/api/stt?') === 0) disjunction, verbatim.
   { m: 'POST', qsplit: '/api/stt', h: media.handleStt, errorPolicy: media.sttFailOpenPolicy },
   { m: 'POST', exact: '/api/cancel', h: handleCancel },
+  ...browserViewRoutes.routes,      // BROWSER window: /api/browser/view* (sidecar/browser-view.js)
   ...browserHandoffRoutes.routes,   // STEP-IN: /api/browser/handoff* + /api/browser/signins* (sidecar/browser-handoff-routes.js)
   { m: 'POST', exact: '/api/run/steer', h: handleRunSteer },
   { m: 'GET', exact: '/api/version', h: handleVersion },
@@ -17310,6 +17330,7 @@ async function runOnceCore(o) {
     }
   });
   runBrowser.register(registry);   // browser.* + isolated browser.test_* automation
+  browserViews.registerRun({ agentId, runId, session: runBrowser.session });   // BROWSER window: the Commander may watch this run's page
   makeDesktopTools({ allowRemoteDesktop: DESKTOP_SHELL }).register(registry);
   // NS-5: bind the per-run path-trust guard — the ONE way an fs call may reach outside the jail, mediated
   // against the station's blessed project roots. surface + pathPrompt are per-run: an autonomous run passes
@@ -19844,6 +19865,7 @@ async function runOnceCore(o) {
     // A test browser must die with its run. Besides process hygiene, this guarantees that a
     // broken page cannot retain any browser-level state after the task finishes.
     try { browserHandoffs.abortRun(runId); } catch (e) { failNote('stepin.abort-run', e); }   // STEP-IN: a handoff never outlives its run
+    try { browserViews.unregisterRun(runId); } catch (e) { failNote('browser-view.unregister', e); }   // before close: never capture a closing browser
     if (runBrowser) { try { await runBrowser.session.close(); } catch (_) {} }
     if (runComputer?.close) { try { await runComputer.close(); } catch (_) { failNote('computer.run.close', 'Native run cleanup failed'); } }
     computerRuns.delete(runComputer);
