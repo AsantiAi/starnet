@@ -1,6 +1,6 @@
 ---
 name: skill-authoring
-description: "Decide when a procedure deserves a saved skill, then write one the next run can follow cold — named for its trigger, step by step, ending in verification — and keep the library lean with skill.manage."
+description: "Decide when a procedure deserves a saved skill, then write one the next run can follow cold — named for its trigger, step by step, ending in verification — and keep the skill library lean."
 license: MIT
 metadata:
   title: "Skill Authoring"
@@ -44,4 +44,4 @@ The skill loads with skill.view, a run with no context could follow every step, 
 ## Output
 The skill name and summary, whether it was created or patched, what triggered saving it, and anything merged or archived.
 
-*Needs the NOTEBOOK object (skill.list / skill.view / skill.manage).*
+*Needs the NOTEBOOK (skill.list / skill.view / skill.manage).*

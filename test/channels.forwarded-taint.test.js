@@ -3,7 +3,7 @@
    Telegram delivers a forward under the FORWARDER's from.id, so owner admission sees the Commander. Before this
    fix the stranger's text ran as the owner's own directive (ownerTrusted, no taint), which kept shell.exec and
    connectors on the table. Now: telegram.normalize flags the forward, and the hub (a) begins the run tainted
-   and (b) never parses forwarded text as a control command. */
+   and (b) never parses forwarded text as a control command — built-in or Commander-defined. */
 'use strict';
 const A = require('./_assert.js');
 const TG = require('../sidecar/channels/telegram.js');
@@ -27,7 +27,7 @@ const update = (extra) => ({ update_id: 1, message: Object.assign({ message_id: 
 }
 
 // ---- 2. hub: forwarded text begins the run tainted; ordinary owner text does not ----
-function harness() {
+function harness(extra) {
   const runs = [], sends = [], hist = new Map();
   const store = {
     loadHistory(a) { return (hist.get(a) || []).slice(); },
@@ -45,7 +45,8 @@ function harness() {
     store, send: (chatId, text) => { sends.push(text); return Promise.resolve({ ok: true }); },
     secrets: () => ({ key: 'k', model: 'm' }), classify: () => false,
     ownerTrusted: (msg) => msg.chatType === 'dm' && String(msg.userId) === String(OWNER),
-    newId: () => 'run' + (++n)
+    newId: () => 'run' + (++n),
+    ...(extra || {})
   });
   return { hub, runs, sends };
 }
@@ -70,6 +71,20 @@ const dm = (text, extra) => Object.assign({ channel: 'telegram', chatId: String(
     await h.hub.onInbound(dm('/new', { forwarded: true }));
     A.eq(h.runs.length, 1, 'a forwarded "/new" is not intercepted as a command — it goes to the (tainted) run as text');
     A.eq(h.runs[0].initialTaint, 'forwarded message', 'and that run is tainted');
+  }
+
+  // ---- 4. a forwarded COMMANDER-DEFINED command is data too, never run as the owner's own command ----
+  {
+    const slashCalls = [];
+    const h = harness({ runSlash: async (text) => { slashCalls.push(text); return { text: 'alias ran' }; }, userCommandNames: () => ['standup'] });
+    await h.hub.onInbound(dm('/standup', { forwarded: true }));
+    await h.hub.onInbound(dm('/standup', { replyTo: { text: 'x', forwarded: true } }));
+    A.eq(slashCalls.length, 0, 'a forwarded (or forward-quoting) custom command never reaches the slash registry');
+    A.eq(h.runs.length, 2, 'both reach the agent as ordinary text');
+    A.ok(h.runs.every(r => r.initialTaint === 'forwarded message'), 'and both runs are tainted');
+    await h.hub.onInbound(dm('/standup'));
+    A.eq(slashCalls.length, 1, 'the owner typing their own custom command still runs it');
+    A.eq(h.runs.length, 2, 'without spending a model run');
   }
 
   A.report('channels.forwarded-taint.test');

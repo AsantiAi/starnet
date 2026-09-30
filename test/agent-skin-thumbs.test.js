@@ -48,9 +48,9 @@ A.ok(/thumbs\.has\(key\)/.test(ap) && /crops\.has\(bk\)/.test(ap), 'thumbs and n
 // ---- no letter avatar in the Workflow panel ----
 const panel = rd('app/workflowpanel.js'), code = panel.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/.*/g, ' ');
 A.ok(!/\)\[0\][^;\n]{0,40}toUpperCase\(\)/.test(code), 'no first-letter avatar');
-A.ok(/thumb\(a\.id, 34, 42, 'av'\)/.test(code), 'Who works here? shows each agent by skin');
+A.ok(/thumb\(a\.id, 42, 52, 'av'\)/.test(code), 'Who works here? shows each agent by skin');   // (42×52 since the 2026-09-30 readable panel)
 A.ok(/<span class="av">\+<\/span><span class="nm">RECRUIT<\/span>/.test(code), 'the RECRUIT card keeps its "+"');
-A.ok(/thumb\(d\.agentId, 22, 28, 'wf-nthumb'\)/.test(code), 'the strip shows each bay\'s crew by skin');
+A.ok(/thumb\(d\.agentId, 26, 32, 'wf-nthumb'\)/.test(code), 'the strip shows each bay\'s crew by skin');
 A.ok(/fires at ' \+ thumb\(r\.agentId/.test(code) && /thumb\(h\.agentId, 16, 20/.test(code), 'trigger rows and the run log show the skin');
 A.ok(/const agentOf = aid => \(aid && \(H\.agents\(\) \|\| \[\]\)\.find/.test(code), 'an unknown id gets the silhouette, not a guessed skin');
 A.ok(/agents: \(\) => liveAgents\(\)\.map\(a => \(\{ id: a\.id, name: a\.name, color: a\.color, model: a\.model, skin: a\.skin/.test(rd('app/app.js')), 'the REFIT roster carries each agent\'s skin');

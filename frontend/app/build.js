@@ -1284,6 +1284,38 @@ const Build = (() => {
     return wrap;
   }
   const THUMB_PAD = 7;   // native-px halo so art that overflows the footprint (monitors, masts, shadows) isn't clipped
+  /* A MACHINE'S OWN FLOOR ART, AS A STILL (2026-09-30). The Workflow panel's line diagram shows every part as the machine it is
+     on the floor: the same PropSprites draw the MACHINES shelf tiles and the selected-prop preview use, rendered once per
+     machine at the art's own density and kept as a data URL (an <img> survives the diagram's repaints; a canvas would not).
+     One still per machine, re-made when the remaster's revision moves (a still made before the authored art finished
+     loading is made again after). */
+  const STILL_PAD = 4;
+  const machineStills = {};
+  function machineStill(type) {
+    if (typeof PropSprites === 'undefined' || typeof document === 'undefined') return '';
+    const remaster = typeof PropRemaster !== 'undefined' ? PropRemaster : null;
+    const density = remaster && remaster.isProjection() ? 4 : 1;
+    const key = type + '@' + density, rev = remaster && remaster.revision ? remaster.revision() : 0;
+    const had = machineStills[key];
+    if (had && had.rev === rev) return had.url;
+    let url = '';
+    try {
+      const c = catalog().find(x => x && x.id === type);
+      if (c) {
+        const tile = PropSprites.TILE || 12, nativeW = c.w * tile + STILL_PAD * 2, nativeH = c.h * tile + STILL_PAD * 2;
+        const px = density > 1 ? density : 3;   // pixel-native art is drawn 3x, so the card's 36px image stays crisp
+        const off = document.createElement('canvas'); off.width = nativeW * px; off.height = nativeH * px;
+        const o = off.getContext('2d');
+        o.scale(px, px); o.imageSmoothingEnabled = false; o.translate(STILL_PAD, STILL_PAD);
+        PropSprites.setCtx(o); PropSprites.setNow(0);
+        PropSprites.draw({ t: c.id, x: 0, y: 0, w: c.w, h: c.h }, true);
+        url = off.toDataURL('image/png');
+      }
+    } catch (e) { url = ''; /* no art: the diagram shows the part by name alone */ }
+    finally { if (ctx) PropSprites.setCtx(ctx); }   // the sprite module's draw context goes back to the floor's own canvas
+    machineStills[key] = { rev, url };
+    return url;
+  }
   function setLibraryPlacement(placing) {
     tool = placing ? 'prop' : 'select';
     root.dataset.tool = tool; hideTip(); setCursor();
@@ -2649,6 +2681,7 @@ const Build = (() => {
       stepPositionOf,
       api: finApi, planGate: c => finPlanGate(c),
       runSample: (c, o) => finRunSample(c, o), sampleState: () => finSampleRes, sampleHTML: v => finSampleHTML(v),
+      stopSample: () => finStopSample(),   // ■ STOP on RUN ONE REAL JOB: this job only (E-STOP stops the station)
       feedState: () => (opts && opts.world && opts.world.feedState) ? opts.world.feedState() : { known: false, fed: false },
       pollFeed: () => { try { return Promise.resolve(opts && opts.world && opts.world.pollFeed && opts.world.pollFeed()); } catch (e) { return Promise.resolve(); } },
       human: d => { const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return ''; } })();
@@ -2687,6 +2720,7 @@ const Build = (() => {
           return { dir: d, dock: ex.dock || null, label: plain(ex.label) || ('the ' + ({ N: 'north', S: 'south', E: 'east', W: 'west' }[d] || d) + ' belt') }; }) };
       },
       machineDiagram: id => machineDiagramSVG(id),
+      machineStill: type => machineStill(type),          // a part's own floor art, for the panel's line diagram
       preview: () => sendTestBoxes(null),               // the TEST view's WATCH IT: the free walkthrough on the floor
       splitModeInfo: id => splitModeInfo(id),            // { mode: 'copy'|'turns', toCopy, toTurns } — the SPLITTER switch
       setSplitMode: (id, mode) => setSplitMode(id, mode), // swaps the JOINER/MERGER where the branches meet (one undo)
@@ -2800,15 +2834,12 @@ const Build = (() => {
     ctx.strokeStyle = 'rgba(95,216,255,' + (0.45 + 0.5 * k).toFixed(2) + ')'; ctx.lineWidth = 2 / zoom;
     const pad = (2 + 2 * k) / zoom * 2;
     ctx.strokeRect(x - pad, y - pad, t + pad * 2, t + pad * 2);
-    ctx.fillStyle = 'rgba(95,216,255,' + (0.18 + 0.2 * k).toFixed(2) + ')'; ctx.fillRect(x + t * 0.2, y + t * 0.2, t * 0.6, t * 0.6);
+    // what waits here is the step's RESULT: the same crate that rides the belts, parked on the tile it ships from
+    if (typeof Conveyor !== 'undefined' && Conveyor.drawCrate) Conveyor.drawCrate(ctx, Math.round(x + t / 2), Math.round(y + t / 2) + 1, 'product');
     ctx.restore();
-    const label = wfPaused.label || 'HANDOFF WAITING', fs = Math.max(9, 11 / zoom);
-    ctx.save(); ctx.font = VAL_FONT(); const tw = ctx.measureText(label).width; ctx.restore();
-    const lx = x + t / 2, ly = y + t + fs + 4 / zoom;   // under the tile: the dock's nameplate owns the space above
-    voiceSay('activeFlow', { x, y, w: t, h: t }, { x: lx - tw / 2, y: ly - fs, w: tw, h: fs }, c => {
-      c.save(); c.font = VAL_FONT(); c.textAlign = 'center'; c.textBaseline = 'bottom';
-      c.shadowBlur = 3; c.shadowColor = '#5fd8ff'; c.fillStyle = '#5fd8ff'; c.fillText(label, lx, ly); c.restore();
-    });
+    const label = wfPaused.label || 'HANDOFF WAITING';
+    const box = captionBox(label, x + t / 2, 0, y + t + 6 / zoom);   // under the tile: the dock's nameplate owns the space above
+    voiceSay('activeFlow', { x, y, w: t, h: t }, box, c => captionPlate(c, label, box, '#5fd8ff'));
   }
 
   /* ---------- WORKSTATION agent-picker  /* ---------- WORKSTATION agent-picker: the desk/PC version of the BAY picker. A workstation carries an
@@ -2977,7 +3008,8 @@ const Build = (() => {
     const reply = clean.length > 80 ? clean.slice(0, 80) + '…' : clean;
     const ok = !!r.ok && !!r.delivered;
     const reason = ok ? null : (r.error ? String(r.error) : ('sample refused (HTTP ' + (status == null ? '?' : status) + ')'));
-    return { ok: ok, stages: stages, usd: usd, reply: reply, reason: reason };
+    // stopped: the SERVER's word that the Commander stopped this job (POST /api/routing/sample/stop) — never the click's
+    return { ok: ok, stages: stages, usd: usd, reply: reply, reason: reason, stopped: !ok && r.stopped === true };
   }
   /* REFIT-JUNCTION-PURE-END */
   function openFlowCard(propId) {
@@ -3408,29 +3440,54 @@ const Build = (() => {
     // under it, keeps the one shot (the next compile re-arms via maybeFirstRide).
     rideTimer = setTimeout(() => { rideTimer = 0; if (running && convey && sendTestBoxes(null, true, rideAgentId)) markRide(); }, 700);
   }
-  // render the stage captions: VT323 phosphor, brief rise + fade, world coords (drawn after the boxes)
+  // render the stage captions: a plate over the tile each speaks about, a brief rise, world coords (drawn after the boxes)
   function drawTestNotes(now, t) {
     if (!testNotes.length) return;
     // ride captions register on the activeFlow layer (a running ▸ PREVIEW is a live gesture — it
     // outranks hover/nags, and the arbiter keeps overlapping captions from garbling each other)
-    ctx.save();
-    ctx.font = VAL_FONT();
     for (let i = testNotes.length - 1; i >= 0; i--) {
       const n = testNotes[i], k = (now - n.t0) / NOTE_MS;
       if (k >= 1) { testNotes.splice(i, 1); continue; }
-      const rise = Math.min(1, k * 4) * 4 + k * 3;
-      const fs = Math.max(9, 11 / zoom), tw = ctx.measureText(n.text).width;
-      const lx = (n.x + 0.5) * t, ly = n.y * t - 3 - rise;
-      voiceSay('activeFlow', { x: n.x * t, y: n.y * t, w: t, h: t }, { x: lx - tw / 2, y: ly - fs, w: tw, h: fs }, (c) => {
-        c.save();
-        c.font = VAL_FONT(); c.textAlign = 'center'; c.textBaseline = 'bottom';
-        c.globalAlpha = k < 0.12 ? k / 0.12 : (1 - k) / 0.88;
-        c.shadowBlur = 3; c.shadowColor = n.col; c.fillStyle = n.col;
-        c.fillText(n.text, lx, ly);
-        c.restore();
-      });
+      const rise = Math.min(1, k * 4) * 6 / zoom;
+      const box = captionBox(n.text, (n.x + 0.5) * t, n.y * t - 5 / zoom - rise);
+      // fully lit while it is read: in fast, out over the last quarter (it used to fade from the moment it appeared)
+      const alpha = k < 0.12 ? k / 0.12 : k > 0.75 ? (1 - k) / 0.25 : 1;
+      voiceSay('activeFlow', { x: n.x * t, y: n.y * t, w: t, h: t }, box, c => captionPlate(c, n.text, box, n.col, alpha));
     }
+  }
+  /* A FLOOR CAPTION IS A PLATE (2026-09-30 — "the system viewer … should look better"). The ride's captions and the paused
+     hand-off's label were bare phosphor text with a glow, laid straight over machines and belts and running on under the
+     docked panel. They wear the gesture badge's plate now (ghostBadge: a dark field, a hairline in the caption's own colour,
+     plain text, no glow), and a plate is kept on the visible glass.
+     A caption is set at the panel's own reading size ON SCREEN (17px, times the display's pixel ratio and the TEXT SIZE
+     zoom), whatever the camera zoom: the shared label size is 9 WORLD px, which at a working zoom printed captions twice
+     that tall — a plate that size covers the machines it is talking about.
+     captionBox answers the plate's rect in world px, centred on cx with its bottom edge at bottomY (or its top at topY).
+     captionFit slides any caption rect sideways onto the glass. */
+  const capFs = () => 17 * (dpr || 1) * ((typeof U !== 'undefined' && U.uiZoom && U.uiZoom()) || 1) / zoom;
+  const CAP_FONT = () => capFs() + "px 'VT323','Courier New',monospace";
+  function captionFit(box) {
+    const ins = viewInsetsFrame(), m = 4 / zoom;
+    const left = (ins.l - panX) / zoom + m, right = (cv.width - (ins.r || 0) - panX) / zoom - m;
+    box.x = clamp(box.x, left, Math.max(left, right - box.w));
+    return box;
+  }
+  function captionBox(text, cx, bottomY, topY) {
+    const fs = capFs(), padX = fs * 0.5, padY = fs * 0.2;
+    ctx.save(); ctx.font = CAP_FONT();
+    const w = ctx.measureText(text).width + padX * 2, h = fs + padY * 2;
     ctx.restore();
+    return captionFit({ x: cx - w / 2, y: topY != null ? topY : bottomY - h, w, h, fs });
+  }
+  function captionPlate(c, text, box, col, alpha) {
+    c.save();
+    c.globalAlpha = alpha == null ? 1 : alpha;
+    c.fillStyle = 'rgba(4,6,8,0.86)'; c.fillRect(box.x, box.y, box.w, box.h);
+    c.strokeStyle = col; c.lineWidth = 1 / zoom;
+    c.strokeRect(box.x + 0.5 / zoom, box.y + 0.5 / zoom, box.w - 1 / zoom, box.h - 1 / zoom);
+    c.font = CAP_FONT(); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = col;
+    c.fillText(text, box.x + box.w / 2, box.y + box.h / 2 + box.fs * 0.06);
+    c.restore();
   }
 
   /* ---------- FINISH THE LINE (guided workflows Phase 2, 2026-08-05) ----------
@@ -3672,6 +3729,10 @@ const Build = (() => {
   let finSampleRes = null;   // { key, stamp, pending } | { key, stamp, view }
   function finSampleHTML(v) {
     if (!v) return '';
+    // a STOPPED job is the Commander's own act, not a refusal: it says so, with what already ran and what it cost
+    if (v.stopped) return '<div class="fl-result stopped"><div><span class="fl-result-k">STOPPED</span> ' + esc(String(v.reason || '').replace(/^stopped\s*[—-]\s*/i, '') || 'you stopped this job') + '</div>'
+      + (v.stages.length ? '<div><span class="fl-result-k">RAN</span> ' + esc(v.stages.join(' ▸ ')) + '</div>' : '')
+      + (v.usd != null ? '<div><span class="fl-result-k">COST</span> $' + esc(v.usd.toFixed(4)) + '</div>' : '') + '</div>';
     if (!v.ok) return '<div class="fl-result bad"><span class="fl-result-k">REFUSED</span> ' + esc(v.reason || 'no reason given') + '</div>';
     return '<div class="fl-result">'
       + '<div><span class="fl-result-k">RAN</span> ' + esc(v.stages.length ? v.stages.join(' ▸ ') : '(no stage recorded)') + '</div>'
@@ -3718,6 +3779,18 @@ const Build = (() => {
           .catch(() => settle(bad('sample failed — sidecar unreachable')));
       } catch (e) { settle(bad('sample failed — sidecar unreachable')); }
     });
+  }
+  /* ■ STOP (2026-09-29): RUN ONE REAL JOB could not be stopped short of the station-wide E-STOP. The sidecar kills THIS job's
+     runs (POST /api/routing/sample/stop — the E-STOP kill scoped to the sample hub) and the in-flight POST settles with the
+     server's stopped verdict, so the readout says STOPPED from the server's answer, never on the click alone. Until it
+     settles the button reads STOPPING… */
+  function finStopSample() {
+    if (!finSampleRes || !finSampleRes.pending || finSampleRes.phase !== 'run') return Promise.resolve({ ok: false, error: 'no job is riding the line' });
+    finSampleRes.stopping = true; finSig = ''; if (running) renderFinCard();
+    const undo = j => { if (finSampleRes && finSampleRes.pending) { finSampleRes.stopping = false; finSig = ''; if (running) renderFinCard(); } return j; };
+    return fetch(finApi('/api/routing/sample/stop'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
+      .then(r => r.json().catch(() => null).then(j => (j && j.ok) ? j : undo(j || { ok: false, error: 'the stop was not accepted (HTTP ' + r.status + ')' })))
+      .catch(() => undo({ ok: false, error: 'sidecar unreachable — the job may still be running (E-STOP stops everything)' }));
   }
   // per-frame: hide while anything coach-like is up (same gate family as the first ride), else pin
   // the card beside the line's bounding box in screen space (the flashTip/clientX coordinate basis).
@@ -5581,7 +5654,7 @@ const Build = (() => {
     convey.drawBoxes(ctx, now, t); drawTestNotes(now, t);
     // projection + WOULD-captions over the real layer — captions go THROUGH the arbiter
     // (ghostCaption layer: mutes whenever any other voice speaks or the pointer rides the floor)
-    if (ghost && buildGroup === 'workflow') ghost.draw(ctx, now, t, Math.max(9, 11 / zoom), (box, paint) => voiceSay('ghostCaption', box, box, paint));
+    if (ghost && buildGroup === 'workflow') ghost.draw(ctx, now, t, capFs(), (box, paint) => voiceSay('ghostCaption', box, box, paint), captionFit);
   }
 
   /* THE GUIDANCE LIVES WHERE THE HANDS ARE (2026-07-05 playtest): callouts render INSIDE build mode, in

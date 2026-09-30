@@ -61,7 +61,10 @@ many of these — they win on any wording conflict.
   mis-signed or older-serial documents. The market can PULL a skill (skills-catalog/revoked.json):
   stations with market skills installed re-read the signed pulled list every few minutes and switch
   it off. Market packages are text only — SKILL.md, a license, plain-text references/ — and the app
-  enforces that rule itself, not just the build.
+  enforces that rule itself, not just the build. Serials are tracked per catalog, the app ships a
+  minimum official serial (market-floor.json, pinned after each catalog deploy), and bundled
+  originals carry their own `version:` so the newer of built-in and market copy is the one used.
+  Every skill also downloads from starnetos.com/market.html as a standard Agent Skills .zip.
 - **Connectors OUT > channels IN** (two-axis framing, 2026-07-06). Google Workspace is a
   connector, not a messaging channel. Curated one-click MCP catalog is the chosen path for
   "more connectors"; paste-a-key tier is bearer-only-honest; OAuth 2.1 generic client is live.

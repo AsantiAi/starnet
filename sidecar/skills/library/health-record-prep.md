@@ -5,6 +5,7 @@ description: Organize health records, track symptoms factually, and build the qu
 category: Productivity
 requires: [cabinet, dish]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

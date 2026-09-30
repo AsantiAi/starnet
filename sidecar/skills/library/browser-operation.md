@@ -5,6 +5,7 @@ description: Drive a real website end to end — read the live page before every
 category: Productivity
 requires: [dish, cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

@@ -106,6 +106,11 @@ function wsClose(url) {
     A.eq(decided, ['once'], 'the waiter got it');
     done();
 
+    // the station drops the session (idle expiry, restart) while the socket stays up: the client recovers by itself
+    for (const s of sessions.list()) sessions.end(s.id);
+    const again = await c.call('status');
+    A.eq(again.ok && again.data.station, 'TEST STATION', 'a dropped station session is re-established transparently');
+
     // parallel calls resolve to the right replies
     const [a1, a2, a3] = await Promise.all([c.call('ping'), c.call('status'), c.call('approvals')]);
     A.ok(a1.ok && a2.data.station === 'TEST STATION' && Array.isArray(a3.data), 'concurrent calls are matched to their own replies');

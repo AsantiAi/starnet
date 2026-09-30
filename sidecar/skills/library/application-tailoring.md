@@ -5,6 +5,7 @@ description: Read the actual posting, map the Commander's real history onto its 
 category: Writing
 requires: [dish, cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

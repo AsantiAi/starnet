@@ -120,11 +120,12 @@ const WorkflowPanel = (() => {
     S.sel = propId; S.insertAt = null;
     if (!el) mount();
     if (newLine) { S.drafts = {}; S.trgOpen = false; S.trgMsg = null; S.ltForm = null; S.ltMsg = null; S.ltReveal = null; S.hop = null; if (!S.session || S.session.lineId !== S.lineKey) S.view = 'edit'; refreshServerFacts(); refreshToday(); }
-    if (!todayTimer) todayTimer = setInterval(() => { if (el) paintToday(); }, 60000);
+    if (!todayTimer) todayTimer = setInterval(() => { if (el) parked(paintToday); }, 60000);
     probeSeam();
     // line triggers change on their own (a file lands, a webhook is called): re-read them while the INBOX is open
     if (!S.ltTimer) S.ltTimer = setInterval(() => { const sp = el && S.sel ? prop(S.sel) : null; if (sp && sp.t === 'intake') ltRefresh(); }, 5000);
     paint(true);
+    if (newLine) { const sc = $('#wf-scroll'), bd = $('#wf-body'); if (bd) bd.style.minHeight = ''; if (sc) sc.scrollTop = 0; } else toCard();
     H.highlight(propId);
     // the panel may have just docked over the line: a newly shown line is framed in the visible floor; a part
     // picked in the panel is centred; a floor click leaves the camera alone unless the part went under the panel
@@ -136,7 +137,7 @@ const WorkflowPanel = (() => {
     el.className = 'wf-panel';
     el.setAttribute('role', 'region');
     el.setAttribute('aria-label', 'Workflow');
-    el.innerHTML = '<div class="wf-scroll" id="wf-scroll"><header class="wf-head" id="wf-head"></header><div class="wf-strip-wrap"><div class="wf-strip" id="wf-strip"></div></div><div class="wf-ins" id="wf-ins"></div>'
+    el.innerHTML = '<div class="wf-scroll" id="wf-scroll"><header class="wf-head" id="wf-head"></header><div class="wf-strip-wrap" id="wf-map"><div class="wf-strip" id="wf-strip"></div></div><div class="wf-ins" id="wf-ins"></div>'
       + '<div class="wf-body" id="wf-body"></div></div><footer class="wf-foot" id="wf-foot"></footer>';
     H.root().appendChild(el);
     el.addEventListener('keydown', e => { if (e.key === 'Escape' && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) { e.stopPropagation(); close(); } });
@@ -163,7 +164,25 @@ const WorkflowPanel = (() => {
     saveOpenFields();
     S.sel = propId; S.insertAt = null; S.view = 'edit';
     paint(true);
+    toCard();
     H.highlight(propId); H.focusProp(propId);
+  }
+  /* THE LINE DIAGRAM IS THE PANEL'S MAP (2026-09-30). It stays pinned at the top of the scroll while a part's editor moves
+     under it (CSS: .wf-strip-wrap.pin), so every part of the line is one click away however long its card is. Picking a
+     part — or opening the + inserter — brings the view back so the map sits at the top with the card (or the inserter)
+     right under it; a view still showing the header is left alone. Opening TEST always puts the map at the top
+     (`always`): its modes, the test job and its RUN key are what the Commander came for, and the header would push
+     them under the fold. */
+  function toCard(always) {
+    const sc = $('#wf-scroll'), head = $('#wf-head'), body = $('#wf-body');
+    if (!sc || !head) return;
+    if (body) body.style.minHeight = '';
+    if (!always && sc.scrollTop <= head.offsetHeight) return;
+    // a short card (WATCH IT is three lines) cannot scroll the header away: hold the room open under it, so the map sits at
+    // the top instead of stopping half-way up the header
+    const lack = head.offsetHeight - (sc.scrollHeight - sc.clientHeight);
+    if (always && lack > 0 && body) body.style.minHeight = (body.offsetHeight + lack) + 'px';
+    sc.scrollTop = head.offsetHeight;
   }
   // called by build.js after every plan recompile (and on edits) — the card follows the floor
   function refresh() {
@@ -186,8 +205,20 @@ const WorkflowPanel = (() => {
   // a draft is only what the Commander TYPED: a field painted empty (e.g. before the INBOX had a test job) must
   // never be remembered as an empty draft and later clobber the real default it now has
   function keepDrafts() { for (const n of $$('[data-keep]')) if (n.dataset.typed === '1') S.drafts[n.dataset.keep] = n.value; }
+  /* A VIEW PARKED WITH THE MAP AT THE TOP STAYS PARKED when the header above it changes height — a TODAY row arriving a
+     second after TEST opened, a hint going. Every repaint that can resize the header runs through here: without it the
+     header's growth slid its last lines back in over the map. */
+  function parked(fn) {
+    const sc = $('#wf-scroll'), hd = $('#wf-head');
+    const atMap = !!(sc && hd && sc.scrollTop > 0 && Math.abs(sc.scrollTop - hd.offsetHeight) < 2);
+    fn();
+    if (atMap && Math.abs(sc.scrollTop - hd.offsetHeight) >= 1) sc.scrollTop = hd.offsetHeight;
+  }
   function paint(force) {
     if (!el || !H) return;
+    parked(() => paintAll(force));
+  }
+  function paintAll(force) {
     const f = flow();
     paintHead(f);
     paintStrip(f);
@@ -207,15 +238,17 @@ const WorkflowPanel = (() => {
     const row = $('#wf-today'); if (!row) return;
     const st = (S.lineKey && typeof World !== 'undefined' && World.lineStatsFor) ? World.lineStatsFor(S.lineKey) : null;
     const cells = (st && typeof LineWatch !== 'undefined') ? LineWatch.statsRow(st) : null;
-    row.hidden = !cells;
-    if (!cells) { row.innerHTML = ''; return; }
+    // a line that has done nothing today has no TODAY to show: six zeros were the tallest noise in the header (2026-09-30)
+    const quiet = !!st && !(st.runs | 0) && !(st.tests | 0) && !(+st.usdToday > 0);
+    row.hidden = !cells || quiet;
+    if (!cells || quiet) { row.innerHTML = ''; return; }
     row.innerHTML = '<span class="wf-today-l">TODAY</span>' + cells.map(c => '<span><span class="k">' + esc(c[0]) + '</span> <b' + (c[0] === 'FAILED' && c[1] !== '0' ? ' class="bad"' : '') + '>' + esc(c[1]) + '</b></span>').join('');
   }
   let todayTimer = 0;
   function refreshToday() {
     if (typeof World === 'undefined' || !World.pollLineStats) return;
     World.pollLineStats();
-    setTimeout(() => { if (el) paintToday(); }, 1500);   // the answer lands in the floor's cache; repaint from it
+    setTimeout(() => { if (el) parked(paintToday); }, 1500);   // the answer lands in the floor's cache; repaint from it
   }
   function paintHead(f) {
     const head = $('#wf-head'); if (!head) return;
@@ -225,8 +258,9 @@ const WorkflowPanel = (() => {
       briefOf: pid => { const p = prop(pid); return p && (p.brief || p.hands); }, triggers: tr }) : null;
     const est = f ? W.costEstimate(f, testsMap()) : null;
     const nSteps = f ? f.order.length : 1;
-    if (!head.dataset.line || head.dataset.line !== String(S.lineKey || S.lone)) {
-      head.dataset.line = String(S.lineKey || S.lone);
+    const headKey = (S.lineKey ? 'line:' + S.lineKey : 'lone:' + S.lone) + (intake ? '|' + intake.id : '');   // (a line's key can BE its first machine's id: tell a lone part from its line, and a line that gained its INBOX)
+    if (!head.dataset.line || head.dataset.line !== headKey) {
+      head.dataset.line = headKey;
       head.innerHTML = '<div class="wf-head-row"><span class="wf-kick" id="wf-kick"></span><button type="button" class="bb sm wf-x" id="wf-close" aria-label="Close workflow panel">✕</button></div>'
         + '<div class="wf-name">' + (intake
           ? '<input id="wf-name" class="wf-name-in" type="text" maxlength="48" aria-label="Workflow name" placeholder="' + esc(H.stampName(intake.id) || 'Name this workflow') + '" value="' + esc(intake.label || '') + '" />'
@@ -245,23 +279,28 @@ const WorkflowPanel = (() => {
         el._saveName = save;
       } else el._saveName = null;
     }
-    $('#wf-kick').textContent = 'WORKFLOW · ' + nSteps + ' STEP' + (nSteps === 1 ? '' : 'S') + ' · BUILD MODE';
+    $('#wf-kick').textContent = 'WORKFLOW · ' + nSteps + ' STEP' + (nSteps === 1 ? '' : 'S');
     const pill = $('#wf-pill');
     if (r) { pill.textContent = W.pillText(r); pill.className = 'wf-pill' + (r.ready ? ' ok' : ''); pill.dataset.go = r.ready ? '' : (r.blocking[0].propId || ''); }
     else { pill.textContent = 'CONNECT IT TO A LINE'; pill.className = 'wf-pill'; pill.dataset.go = ''; }
     pill.onclick = () => { if (pill.dataset.go) select(pill.dataset.go); };
-    $('#wf-est').textContent = est ? est.text : '';
+    $('#wf-est').textContent = est && est.tested ? est.text : '';   // a real number only: "test a step to see its cost" is an instruction, and the TEST key is right below
     paintToday();
     const sent = $('#wf-sentence');
     if (f && c) {
       const segs = W.howItRuns(f, { nameOf, handsOf: pid => { const p = prop(pid); return p && p.hands; }, triggers: tr });
-      sent.innerHTML = segs.map(s => s.t === 'agent' ? '<b class="wf-ag" data-go="' + esc(s.propId) + '">' + esc(s.s) + '</b>'
+      // (the first clause is what starts the line: it opens the INBOX, where that is set up)
+      sent.innerHTML = segs.map((s, i) => s.t === 'agent' ? '<b class="wf-ag" data-go="' + esc(s.propId) + '">' + esc(s.s) + '</b>'
         : s.t === 'miss' ? '<button type="button" class="wf-miss" data-go="' + esc(s.propId || '') + '">' + esc(s.s) + '</button>'
-        : s.t === 'loop' ? '<span class="wf-lp">' + esc(s.s) + '</span>' : esc(s.s)).join('');
+        : s.t === 'loop' ? '<span class="wf-lp">' + esc(s.s) + '</span>'
+        : (i === 0 && intake) ? '<span class="wf-st" data-go="' + esc(intake.id) + '">' + esc(s.s) + '</span>' : esc(s.s)).join('');
       sent.querySelectorAll('[data-go]').forEach(n => { n.onclick = () => { if (n.dataset.go) select(n.dataset.go); }; });
     } else sent.textContent = 'This BAY is not on a belt line. Work addressed to its agent arrives here directly; use the BELT tool to connect it to an INBOX and an OUTBOX.';
     const hints = $('#wf-hints');
-    hints.innerHTML = r ? r.blocking.slice(1).concat(r.hints).slice(0, 4).map(h => '<li><button type="button" class="wf-hint" data-go="' + esc(h.propId || '') + '">' + esc(h.what) + '</button></li>').join('') : '';
+    // the sentence above already says what starts the line, or that nothing does: that one is never said twice
+    const tips = r ? r.blocking.slice(1).concat(r.hints.filter(h => !/^nothing starts it/.test(h.what))).slice(0, 4) : [];
+    hints.innerHTML = tips.map(h => '<li><button type="button" class="wf-hint" data-go="' + esc(h.propId || '') + '">' + esc(h.what) + '</button></li>').join('');
+    hints.hidden = !tips.length;
     hints.querySelectorAll('[data-go]').forEach(n => { n.onclick = () => { if (n.dataset.go) select(n.dataset.go); }; });
   }
 
@@ -275,17 +314,17 @@ const WorkflowPanel = (() => {
       const ip = f.trigger.propId;
       const sch = tr.schedules.length, ch = tr.channels.length, ev = tr.events.length, off = (tr.offSchedules || []).length;
       const kinds = (sch ? 1 : 0) + (ch ? 1 : 0) + (ev ? 1 : 0);
-      nodes.push({ kind: 'trigger', propId: ip, cls: 'wf-term' + (ip ? '' : ' none'), ok: !!ip && (sch + ch + ev) > 0,
-        html: '<span class="k">INBOX</span><span class="t">' + (ip ? (kinds > 1 ? 'AUTO' : sch ? 'SCHEDULE' : ch ? 'CHANNEL' : ev ? 'TRIGGER' : off ? 'SCHEDULE · OFF' : 'MANUAL') : 'NO INBOX') + '</span>'
-          + '<span class="a">' + esc(ip ? (tr.channels.concat(tr.schedules.slice(0, 1), tr.events.length ? [tr.events.length === 1 ? tr.events[0].replace(/^when /, '') : tr.events.length + ' events'] : []).join(' · ') || (off ? tr.offSchedules[0] + ' · scheduling is off' : 'no trigger yet')) : 'add one on the floor') + '</span>' });
+      nodes.push({ kind: 'trigger', propId: ip, mach: 'intake', cls: 'wf-term' + (ip ? '' : ' none'), ok: !!ip && (sch + ch + ev) > 0, k: 'INBOX',
+        t: ip ? (kinds > 1 ? 'AUTO' : sch ? 'SCHEDULE' : ch ? 'CHANNEL' : ev ? 'TRIGGER' : off ? 'SCHEDULE · OFF' : 'MANUAL') : 'NO INBOX',
+        a: esc(ip ? (tr.channels.concat(tr.schedules.slice(0, 1), tr.events.length ? [tr.events.length === 1 ? tr.events[0].replace(/^when /, '') : tr.events.length + ' events'] : []).join(' · ') || (off ? tr.offSchedules[0] + ' · scheduling is off' : 'no trigger yet')) : 'add one on the floor') });
       f.cols.forEach(col => {
         nodes.push({ kind: 'col', col, ok: col.docks.every(d => d.agentId && H.hasCompute(d.agentId, d.propId)) });
         if (col.gate) nodes.push({ kind: 'gate', gate: col.gate, propId: col.gate.propId });
       });
       const lastCol = f.cols[f.cols.length - 1];
       const endId = lastCol ? (lastCol.gate ? lastCol.gate.propId : lastCol.docks.length === 1 ? lastCol.docks[0].propId : null) : null;
-      nodes.push({ kind: 'outbox', propId: f.outbox.propId, addAfter: !f.outbox.propId && endId && H.lineEdit ? endId : null, cls: 'wf-term', ok: f.outbox.reached,
-        html: '<span class="k">OUTBOX</span><span class="t">RESULT</span><span class="a">' + (f.outbox.reached ? 'the line ends here' : f.outbox.propId ? (f.outbox.reachedOnceCrewed ? 'connected · waiting on agents' : 'not connected yet') : 'no OUTBOX') + '</span>' });
+      nodes.push({ kind: 'outbox', propId: f.outbox.propId, mach: 'outbox', addAfter: !f.outbox.propId && endId && H.lineEdit ? endId : null, cls: 'wf-term', ok: f.outbox.reached, k: 'OUTBOX', t: 'RESULT',
+        a: f.outbox.reached ? 'the line ends here' : f.outbox.propId ? (f.outbox.reachedOnceCrewed ? 'connected · waiting on agents' : 'not connected yet') : 'no OUTBOX' });
     } else if (S.lone) {
       nodes.push({ kind: 'col', col: { docks: [{ propId: S.lone, agentId: (prop(S.lone) || {}).agentId || null, role: (prop(S.lone) || {}).role || null, routed: false }], mode: 'single' }, ok: false });
     }
@@ -314,15 +353,23 @@ const WorkflowPanel = (() => {
     ins.hidden = !open;
     if (open) open.classList.add('on');
     strip.querySelectorAll('[data-node]').forEach(b => { b.onclick = () => { if (b.dataset.node) { H.sfx('click'); select(b.dataset.node); } }; });
-    strip.querySelectorAll('.wf-plus').forEach(b => { b.onclick = e => { e.stopPropagation(); if (b.dataset.plusOff) { H.sfx('bad'); H.flashTip(b.dataset.plusOff, false); return; } S.insertAt = S.insertAt === +b.dataset.plus ? null : +b.dataset.plus; paintStrip(flow()); }; });
+    strip.querySelectorAll('.wf-plus').forEach(b => { b.onclick = e => { e.stopPropagation(); if (b.dataset.plusOff) { H.sfx('bad'); H.flashTip(b.dataset.plusOff, false); return; } S.insertAt = S.insertAt === +b.dataset.plus ? null : +b.dataset.plus; paintStrip(flow()); if (S.insertAt != null) toCard(); }; });
     ins.querySelectorAll('[data-ins-role]').forEach(b => { b.onclick = e => { e.stopPropagation(); insertStep(open.dataset.from, open.dataset.to, b.dataset.insRole); }; });
     wireEdits(ins);
     wireEdits(strip);   // (an OUTBOX the line still needs is added from its place on the strip)
     const cx = ins.querySelector('[data-ins-close]'); if (cx) cx.onclick = () => { S.insertAt = null; paintStrip(flow()); };
+    strip.classList.toggle('has-arcs', !!(f && f.gates && f.gates.some(g => g.kind === 'loop' && g.backTo)));   // room under the cards only when a loop's way back is drawn there
+    strip.parentNode.classList.toggle('pin', !nodes.some(n => n.kind === 'col' && n.col.docks.length > 1));   // (a one-row diagram stays pinned as the panel's map; stacked branches would hold too much of it)
     drawArcs(strip, f);
     const selN = strip.querySelector('.wf-node.sel');
     if (selN) { const wrap = strip.parentNode, l = selN.offsetLeft, r = l + selN.offsetWidth; if (l < wrap.scrollLeft || r > wrap.scrollLeft + wrap.clientWidth) wrap.scrollLeft = Math.max(0, l - (wrap.clientWidth - selN.offsetWidth) / 2); }
   }
+  /* EVERY PART IS SHOWN AS THE MACHINE IT IS (2026-09-30: "the system viewer or wireframe view should look better"). A strip card
+     leads with the part's own floor art — the still the Build host renders from the same sprite the floor draws — beside its
+     name and lamp, so the diagram reads as this line's machines and not as boxes. No art (an older host, a part that is
+     not placed yet) → the name alone. */
+  const mthumb = t => { const u = (t && H.machineStill) ? H.machineStill(t) : ''; return u ? '<img class="wf-mthumb" src="' + u + '" alt="" aria-hidden="true" draggable="false">' : ''; };
+  const partHead = (mach, k, lamp, t) => { const art = mthumb(mach); return '<span class="hd' + (art ? ' art' : '') + '">' + art + '<span class="k">' + k + lamp + '</span>' + (t ? '<span class="t">' + t + '</span>' : '') + '</span>'; };
   // the roles a step can take, in the order the inserter and a BAY's ROLE chips offer them
   const STEP_ROLES = ['RESEARCHER', 'WRITER', 'REVIEWER', 'ENGINEER', 'TESTER', 'ANALYST', 'SHIPPER', 'GENERALIST'];
   function inserterHTML(from, to, f) {
@@ -347,21 +394,21 @@ const WorkflowPanel = (() => {
     if (n.kind === 'outbox' && n.addAfter) return editBtn('addOutbox', n.addAfter, { after: n.addAfter }, '+ OUTBOX', 'an OUTBOX after the last step — where finished work lands', 'wf-node wf-term wf-addend');
     if (n.kind === 'trigger' || n.kind === 'outbox') {
       return '<button type="button" class="wf-node ' + n.cls + sel(n.propId) + '" data-node="' + esc(n.propId || '') + '"' + (n.propId ? '' : ' disabled') + '>'
-        + n.html.replace('</span>', dot(n.ok) + '</span>') + '</button>';
+        + partHead(n.propId ? n.mach : null, n.k, dot(n.ok), n.t) + '<span class="a">' + n.a + '</span></button>';
     }
     if (n.kind === 'gate') {
       const g = n.gate, back = g.backTo && f.docks[g.backTo];
       const txt = g.kind === 'loop' ? '⟲ back to ' + (back ? (back.agentId ? nameOf(back.agentId) : back.role || 'BAY') : '?') + ' · up to ' + (g.max || 5) + '×' : 'waits for every part';
       return '<button type="button" class="wf-node gate ' + g.kind + sel(g.propId) + '" data-node="' + esc(g.propId || '') + '" data-gate="' + esc(g.key) + '">'
-        + '<span class="k">' + (g.kind === 'loop' ? 'LOOP GATE' : 'JOINER') + '</span><span class="a">' + esc(txt) + '</span></button>';
+        + partHead(g.kind === 'loop' ? 'loop' : 'joiner', g.kind === 'loop' ? 'LOOP GATE' : 'JOINER', '', '') + '<span class="a">' + esc(txt) + '</span></button>';
     }
     const col = n.col;
     const inner = col.docks.map(d => {
       const p = prop(d.propId) || {}, t = testOf(d.propId), i = f ? f.order.indexOf(d.propId) + 1 : 1;
       const ok = !!(d.agentId && H.hasCompute(d.agentId, d.propId));
       return '<button type="button" class="wf-node dock' + sel(d.propId) + '" data-node="' + esc(d.propId) + '">'
-        + '<span class="k">BAY ' + i + dot(ok) + '</span><span class="t">' + esc(d.role || 'STEP') + '</span>'
-        + '<span class="a' + (d.agentId ? '' : ' none') + '">' + (d.agentId ? thumb(d.agentId, 22, 28, 'wf-nthumb') : '') + '<span class="an">' + esc(d.agentId ? nameOf(d.agentId) : 'no agent yet') + '</span></span>'
+        + partHead('bay', 'BAY ' + i, dot(ok), esc(d.role || 'STEP'))
+        + '<span class="a' + (d.agentId ? '' : ' none') + '">' + (d.agentId ? thumb(d.agentId, 26, 32, 'wf-nthumb') : '') + '<span class="an">' + esc(d.agentId ? nameOf(d.agentId) : 'no agent yet') + '</span></span>'
         + '<span class="s">' + (p.brief ? esc(String(p.brief).slice(0, 90)) : '<i>no instructions yet</i>') + '</span>'
         + (d.agentId && !d.routed ? '<span class="warn">not routed yet</span>' : '')
         + (t ? '<span class="badge">✓ TESTED</span>' : '') + '</button>';
@@ -485,8 +532,8 @@ const WorkflowPanel = (() => {
     html += '<button type="button" class="bb sm" id="wf-done">✓ DONE</button>';
     foot.innerHTML = html;
     wireEdits(foot);
-    const b1 = $('#wf-test'); if (b1) b1.onclick = () => { H.sfx('click'); S.view = 'test'; paint(true); if (s && s.state === 'paused') refreshPaused(); };
-    const b2 = $('#wf-back'); if (b2) b2.onclick = () => { H.sfx('click'); S.view = 'edit'; paint(true); };
+    const b1 = $('#wf-test'); if (b1) b1.onclick = () => { H.sfx('click'); S.view = 'test'; paint(true); toCard(true); if (s && s.state === 'paused') refreshPaused(); };
+    const b2 = $('#wf-back'); if (b2) b2.onclick = () => { H.sfx('click'); S.view = 'edit'; paint(true); toCard(); };
     $('#wf-done').onclick = () => { H.sfx('click'); close(); };
   }
 
@@ -587,7 +634,7 @@ const WorkflowPanel = (() => {
     const rows = agents.map(a => {
       const st = a.id === cur ? { busy: false, txt: 'works this bay' } : agentStatus(a.id, p.id);
       return '<button type="button" class="wf-agent' + (a.id === cur ? ' on' : '') + (st.also ? ' also' : '') + '" data-aid="' + esc(a.id) + '" aria-pressed="' + (a.id === cur) + '">'
-        + thumb(a.id, 34, 42, 'av')
+        + thumb(a.id, 42, 52, 'av')
         + '<span class="nm">' + esc(String(a.name || a.id).toUpperCase()) + '</span><span class="st' + (st.txt === 'free' ? ' free' : '') + '">' + esc(st.txt) + '</span></button>';
     }).join('') + (canSummon ? '<button type="button" class="wf-agent recruit" id="wf-recruit"><span class="av">+</span><span class="nm">RECRUIT</span><span class="st">a new ' + esc(p.role.toLowerCase()) + '</span></button>' : '');
     const pos = H.stepPositionOf(cur, p.id);   // THIS bay's position (multi-bay: the agent may crew another)
@@ -750,8 +797,7 @@ const WorkflowPanel = (() => {
     const trgAgent = () => { const d = docks.find(x => x.propId === S.trgDock); return d ? d.agentId : null; };
     const armed = !!(S.cron && S.cron.enabled && !S.cron.halted);
     const routines = tr.routines;
-    const rtRows = !S.cron ? '<div class="wf-help dim">reading routines…</div>'
-      : !routines.length ? '<div class="wf-help dim">No routines target this line’s docks yet.</div>'
+    const rtRows = (!S.cron || !routines.length) ? ''
       : routines.map(r => {
         const said = H.human(r.display);
         return '<div class="trg-row"><span class="trg-state' + (r.enabled && armed ? ' on' : '') + '">' + (r.enabled ? (armed ? '●' : '◍') : '○') + '</span> <b>' + esc(r.name) + '</b>'
@@ -770,8 +816,7 @@ const WorkflowPanel = (() => {
       }).catch(() => { H.sfx('bad'); S.trgMsg = { t: 'sidecar unreachable — scheduling was not changed', bad: true }; paint(true); });
     }; };
     setTimeout(wireArm, 0);
-    const chanRows = !S.chans ? '<div class="wf-help dim">checking channels…</div>'
-      : !tr.chanRows.length ? '<div class="wf-help dim">No channel is connected yet.</div>'
+    const chanRows = (!S.chans || !tr.chanRows.length) ? ''
       : tr.chanRows.map(r => '<div class="trg-row"><span class="trg-state' + (r.connected ? ' on' : '') + '">' + (r.connected ? '●' : '○') + '</span> <b>' + esc(r.label) + '</b>'
         + '<div class="trg-row-meta">' + (r.answersAs ? 'answers as ' + esc(String(r.answersAs).toUpperCase()) : 'no fixed agent') + ' · '
         + (r.feeds === true ? '<b class="wf-okc">a message runs this whole line</b>' : r.feeds === false ? 'not this line’s first step — a message runs only that agent' : 'the floor routes it')
@@ -792,11 +837,12 @@ const WorkflowPanel = (() => {
     const limField = (id, k, label, ph, step) => '<label class="refit-field lb-field" for="' + id + '">' + label
       + '<input id="' + id + '" class="refit-num lb-num" type="number" min="0" step="' + step + '" data-k="' + k + '" placeholder="' + esc(ph) + '" value="' + esc(limVal(k)) + '" /></label>';
     body.innerHTML = '<section class="wf-sec"><h3><span class="n">INBOX</span>What starts this line?</h3>'
-      + '<p class="wf-help">A schedule, a message on a connected channel, a file landing in a watched folder, or a webhook call runs the <b>whole line</b>. A direct COMMS message only runs the agent you message.</p>'
-      + '<h4>Schedules</h4><div class="trg-list" id="wf-routines">' + rtRows + '</div>'
+      + '<p class="wf-help">Any of these runs the <b>whole line</b>. A direct COMMS message only runs the agent you message.</p>'
+      + startHead('A schedule', !S.cron ? 'reading…' : routines.length ? '' : 'none yet', 'rt',
+        '<button type="button" class="bb sm' + (S.trgOpen ? ' active' : '') + '" id="trg-new" aria-expanded="' + S.trgOpen + '" aria-controls="trg-form">⊕ ADD A SCHEDULE</button><button type="button" class="bb sm" id="trg-auto">MANAGE</button>')
+      + '<div class="trg-list" id="wf-routines">' + rtRows + '</div>'
       + (S.cron && !armed && routines.some(r => r.startsLine && r.enabled !== false)
         ? '<div class="wf-warnline trg-armline">Scheduling is ' + (S.cron.halted ? 'STOPPED' : 'OFF') + ' for the whole station, so ' + (routines.filter(r => r.startsLine).length === 1 ? 'this schedule' : 'these schedules') + ' will not run. <button type="button" class="bb sm refit-primary" id="trg-arm">▶ TURN SCHEDULING ON</button></div>' : '')
-      + '<div class="wf-row"><button type="button" class="bb sm' + (S.trgOpen ? ' active' : '') + '" id="trg-new" aria-expanded="' + S.trgOpen + '" aria-controls="trg-form">⊕ ADD A SCHEDULE</button><button type="button" class="bb sm" id="trg-auto">MANAGE SCHEDULES</button></div>'
       + '<div id="trg-form" class="trg-form"' + (S.trgOpen ? '' : ' hidden') + '>'
         + '<label class="trg-form-k" for="trg-prompt">What task should start each run?</label>'
         + '<textarea id="trg-prompt" data-keep="trgprompt:' + esc(p.id) + '" class="refit-input refit-brief" maxlength="2000" rows="3" placeholder="e.g. Find this week’s AI news and summarize the three biggest stories."></textarea>'
@@ -813,9 +859,9 @@ const WorkflowPanel = (() => {
           ? '<div class="wf-row"><button type="button" class="bb sm refit-primary" id="trg-create" data-arm="1"' + (docks.length ? '' : ' disabled') + '>▸ SAVE · TURN SCHEDULING ON</button><button type="button" class="bb sm" id="trg-create-only"' + (docks.length ? '' : ' disabled') + '>SAVE ONLY</button><button type="button" class="bb sm" id="trg-cancel">CANCEL</button></div>'
             + '<div class="wf-help dim">Scheduling is off for the whole station. Turning it on lets every saved schedule run at its time.</div>'
           : '<div class="wf-row"><button type="button" class="bb sm refit-primary" id="trg-create"' + (docks.length ? '' : ' disabled') + '>▸ SAVE SCHEDULE</button><button type="button" class="bb sm" id="trg-cancel">CANCEL</button></div>')
-        + '</div><div class="wf-help trg-msg' + (S.trgMsg && S.trgMsg.bad ? ' bad' : '') + '" id="trg-msg"' + (S.trgMsg ? '' : ' hidden') + '>' + esc(S.trgMsg ? S.trgMsg.t : '') + '</div>'
-      + '<h4>Channels</h4><div class="trg-list" id="wf-chans">' + chanRows + '</div>'
-      + '<div class="wf-row"><button type="button" class="bb sm" id="trg-chan">CONNECT A CHANNEL ▸</button></div>'
+        + '</div><div class="wf-help trg-msg' + (S.trgMsg && S.trgMsg.bad ? ' bad' : '') + '" id="trg-msg"' + (S.trgMsg ? '' : ' hidden') + '>' + esc(S.trgMsg ? S.trgMsg.t : '') + '</div></div>'
+      + startHead('A channel message', !S.chans ? 'checking…' : tr.chanRows.length ? '' : 'none connected', 'ch', '<button type="button" class="bb sm" id="trg-chan">CONNECT A CHANNEL ▸</button>')
+      + '<div class="trg-list" id="wf-chans">' + chanRows + '</div></div>'
       + (S.lineKey ? ltSectionHtml() : '')
       + '<p class="wf-help dim" id="trg-feed">' + esc(feedTxt) + '</p></section>'
       + projectSectionHtml(p)
@@ -925,10 +971,16 @@ const WorkflowPanel = (() => {
   }
   const ltRowSig = t => WL().triggerSig(t, S.ltReveal && S.ltReveal.id === t.id ? 'reveal' : null);
   function ltListHtml(kind) {
-    if (!S.lt) return '<div class="wf-help dim">reading triggers…</div>';
-    const list = ltMine().filter(t => t.kind === kind);
-    return list.length ? list.map(ltRowHtml).join('') : '<div class="wf-help dim">' + (kind === 'folder' ? 'No folder is watched for this line.' : 'No webhook starts this line.') + '</div>';
+    return S.lt ? ltMine().filter(t => t.kind === kind).map(ltRowHtml).join('') : '';
   }
+  // what a block's header says when its list is empty (the list itself then shows nothing)
+  const ltNote = kind => !S.lt ? 'reading…' : ltMine().some(t => t.kind === kind) ? '' : kind === 'folder' ? 'none watched' : 'none yet';
+  /* WHAT STARTS THE LINE, ONE BLOCK EACH (2026-09-30). A schedule, a channel, a watched folder, a webhook: each is a block
+     whose header row carries its name, what it has ("none yet") and the key that adds one — four headings each with an
+     empty-state sentence and a button under it ran this card to three screens. Rows and the add form open under the header.
+     The opening <div class="wf-start"> is closed by the caller, after the block's rows. */
+  const startHead = (name, note, id, keys) => '<div class="wf-start"><div class="wf-start-h"><h4>' + name + '</h4><span class="wf-start-n" id="wf-start-n-' + id + '">' + esc(note) + '</span>'
+    + (keys ? '<span class="wf-row">' + keys + '</span>' : '') + '</div>';
   function ltPatch() {
     if (!el || !H) return;
     const f = flow();
@@ -938,6 +990,7 @@ const WorkflowPanel = (() => {
       const list = ltMine().filter(t => t.kind === rowKind);
       const prev = Array.from(box.children).filter(n => n.classList.contains('lt-row')).map(n => [n.dataset.lt, n.dataset.sig]);
       const plan = WL().rowPatch(prev, list.map(t => [t.id, ltRowSig(t)]));
+      const noteEl = $('#wf-start-n-' + (rowKind === 'folder' ? 'fo' : 'wh')); if (noteEl) noteEl.textContent = ltNote(rowKind);
       if (plan.all) { box.innerHTML = ltListHtml(rowKind); wireLtRows(box); continue; }
       for (const id of plan.changed) {
         const old = Array.from(box.children).find(n => n.dataset.lt === id), t = list.find(x => x.id === id);
@@ -1001,11 +1054,14 @@ const WorkflowPanel = (() => {
     const F = S.ltForm;
     const rows = ltListHtml;
     const port = (S.lt && /:(\d+)\//.exec(S.lt.hookBase || '')) ? /:(\d+)\//.exec(S.lt.hookBase)[1] : '';
-    return '<h4>When a file lands in a folder</h4><div class="trg-list" id="lt-folders">' + rows('folder') + '</div>'
-      + (F && F.kind === 'folder' ? ltFormHtml('folder') : '<div class="wf-row"><button type="button" class="bb sm" id="lt-new-folder">⊕ WATCH A FOLDER</button></div>')
-      + '<h4>When a webhook is called</h4><div class="trg-list" id="lt-hooks">' + rows('webhook') + '</div>'
-      + (F && F.kind === 'webhook' ? ltFormHtml('webhook') : '<div class="wf-row"><button type="button" class="bb sm" id="lt-new-hook">⊕ ADD A WEBHOOK</button></div>')
-      + '<p class="wf-help dim">A webhook address lives on this computer (127.0.0.1' + (port ? ':' + port : '') + '). Nothing outside this machine can reach it unless you set up a tunnel yourself (for example cloudflared or ngrok) pointed at that port.</p>'
+    // where a webhook can be reached from is said where a webhook IS: with one on the line, or while one is being made
+    const hooked = (F && F.kind === 'webhook') || ltMine().some(t => t.kind === 'webhook');
+    return startHead('A file lands in a folder', ltNote('folder'), 'fo', F && F.kind === 'folder' ? '' : '<button type="button" class="bb sm" id="lt-new-folder">⊕ WATCH A FOLDER</button>')
+      + '<div class="trg-list" id="lt-folders">' + rows('folder') + '</div>' + (F && F.kind === 'folder' ? ltFormHtml('folder') : '') + '</div>'
+      + startHead('A webhook is called', ltNote('webhook'), 'wh', F && F.kind === 'webhook' ? '' : '<button type="button" class="bb sm" id="lt-new-hook">⊕ ADD A WEBHOOK</button>')
+      + '<div class="trg-list" id="lt-hooks">' + rows('webhook') + '</div>' + (F && F.kind === 'webhook' ? ltFormHtml('webhook') : '')
+      + (hooked ? '<p class="wf-help dim">A webhook address lives on this computer (127.0.0.1' + (port ? ':' + port : '') + '). Nothing outside this machine can reach it unless you set up a tunnel yourself (for example cloudflared or ngrok) pointed at that port.</p>' : '')
+      + '</div>'
       + '<div class="wf-help trg-msg' + (S.ltMsg && S.ltMsg.bad ? ' bad' : '') + '" id="lt-msg"' + (S.ltMsg ? '' : ' hidden') + '>' + esc(S.ltMsg ? S.ltMsg.t : '') + '</div>';
   }
   const ltSay = (t, bad) => { S.ltMsg = { t, bad: !!bad }; const m = $('#lt-msg'); if (m) { m.hidden = false; m.classList.toggle('bad', !!bad); m.textContent = t; } };
@@ -1444,7 +1500,7 @@ const WorkflowPanel = (() => {
         + (off ? ' aria-disabled="true" data-tip="this station cannot pause a line between steps — RUN ONE REAL JOB runs it end to end"' : '')
         + '><b>' + label + '</b><small>' + esc(sub) + '</small></button>';
     }).join('');
-    const input = '<textarea id="wf-st-in" data-keep="stin" class="wf-io" rows="4" aria-label="Test job" placeholder="What should the line work on?">' + esc(S.testJob[S.lineKey] || '') + '</textarea>';
+    const input = '<textarea id="wf-st-in" data-keep="stin" class="wf-io" rows="3" aria-label="Test job" placeholder="What should the line work on?">' + esc(S.testJob[S.lineKey] || '') + '</textarea>';
     let body;
     if (mode === 'watch') {
       body = '<p class="wf-help">A crate rides the belts and every machine says what it <b>would</b> do: who works it, where it splits, where it waits, where it ships. No agent runs and nothing is spent.</p>'
@@ -1458,17 +1514,21 @@ const WorkflowPanel = (() => {
       const sr = H.sampleState ? H.sampleState() : null, mine = sr && c && sr.key === c.key ? sr : null;   // the server's own verdict on the job, here
       body = '<p class="wf-help">Your test job runs through the line for real, end to end: real agents, real cost, and the result lands in the <b>OUTBOX</b> like any job.</p>'
         + input
-        + (mine && mine.view ? '<div class="wf-sample-res">' + H.sampleHTML(mine.view) + '</div>' : '')
         + '<div class="wf-row"><button type="button" class="bb sm refit-primary" id="wf-real"' + (mine && mine.pending ? ' disabled' : '') + '>'
-        + (mine && mine.pending ? (mine.phase === 'post' ? 'POSTING LINE…' : 'THE JOB IS RIDING THE LINE…') : '▶ RUN ONE REAL JOB') + '</button></div>';
+        + (mine && mine.pending ? (mine.phase === 'post' ? 'POSTING LINE…' : 'THE JOB IS RIDING THE LINE…') : '▶ RUN ONE REAL JOB') + '</button>'
+        // ■ STOP (2026-09-29): a real job can be stopped while it rides — THIS job only (the station's E-STOP stops everything)
+        + (mine && mine.pending && mine.phase === 'run' && H.stopSample ? '<button type="button" class="bb sm" id="wf-real-stop"' + (mine.stopping ? ' disabled' : '') + ' data-tip="stop this job: the running step is cut off and nothing more runs — what already ran is counted">' + (mine.stopping ? 'STOPPING…' : '■ STOP') + '</button>' : '')
+        + '</div>'
+        // the verdict lands UNDER the keys that asked for it (above them, it pushed RUN down the panel as it arrived)
+        + (mine && mine.view ? '<div class="wf-sample-res">' + H.sampleHTML(mine.view) + '</div>' : '');
     }
-    return '<section class="wf-sec"><h3>' + (s ? 'Test it again' : 'How do you want to test it?') + '</h3>'
+    return '<section class="wf-sec"><h3><span class="n">TEST</span>' + (s ? 'Test it again' : 'How do you want to test it?') + '</h3>'
       + '<div class="wf-modepicks wf-modepicks-3" role="group" aria-label="How to test">' + chips + '</div>' + body + '</section>';
   }
   function showTest(mode) {   // the top bar's TEST opens this view on the panel's line (build.js openTest)
     if (!el) return false;
     if (mode) S.testMode = mode;
-    S.view = 'test'; paint(true);
+    S.view = 'test'; paint(true); toCard(true);
     return true;
   }
   function paintTest(body, f) {
@@ -1496,7 +1556,10 @@ const WorkflowPanel = (() => {
       main = '<section class="wf-sec"><h3><span class="wf-spin"></span>' + (s.running ? thumb(s.running.agentId, 16, 20, 'wf-ithumb') : '') + esc(who) + ' is working…</h3><p class="wf-help">A real run. It pauses when this step hands off.</p>'
         + '<div class="wf-row"><button type="button" class="bb sm" id="wf-st-stop">■ STOP</button></div></section>';
     } else if (s.state === 'paused') main = pausedHTML(s, f);
-    body.innerHTML = '<section class="wf-sec wf-sthead"><h3><span class="n">TEST</span>' + esc(lineName() || 'This line') + '</h3>' + budget + '</section>' + err + log + main;
+    /* (2026-09-30) the view used to open on a second title — TEST · the line's name, which the panel's header already
+       carries — and that pushed the RUN key under the fold. The mode picker's own heading wears the TEST tag now; the
+       only thing kept above it is a session's spend against the line cap, when there is a session. */
+    body.innerHTML = (budget ? '<section class="wf-sec wf-sthead">' + budget + '</section>' : '') + err + log + main;
     // wiring
     $$('[data-tmode]').forEach(b => b.onclick = () => {
       if (b.classList.contains('off')) { H.sfx('bad'); H.flashTip(b.getAttribute('data-tip') || 'not available here', false); return; }
@@ -1509,6 +1572,15 @@ const WorkflowPanel = (() => {
       const t = (($('#wf-st-in') || {}).value || '').trim();
       S.testJob[S.lineKey] = t;
       H.runSample(c, { text: t || undefined, onUpdate: () => paint(false) });
+    };
+    const realStop = $('#wf-real-stop'); if (realStop) realStop.onclick = () => {
+      H.sfx('click');
+      H.stopSample().then(r => {
+        if (!r || !r.ok) { H.sfx('bad'); H.flashTip('✕ ' + ((r && r.error) || 'could not stop the job'), false); }
+        else H.flashTip('stopping — the running step is cut off and nothing more runs', true);
+        paint(false);
+      });
+      paint(false);
     };
     $$('[data-hop]').forEach(b => b.onclick = () => { S.hop = S.hop === +b.dataset.hop ? null : +b.dataset.hop; paint(true); });
     $$('[data-pause]').forEach(b => b.onclick = () => { S.pauseMode = b.dataset.pause; $$('[data-pause]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
@@ -1549,7 +1621,7 @@ const WorkflowPanel = (() => {
     return '<section class="wf-sec"><h3>' + (deniedLine(h) ? '⚠ ' : '✓ ') + esc(nameOf(h.agentId)) + ' finished' + (h.pass > 1 ? ' (pass ' + h.pass + ')' : '') + '</h3>' + deniedLine(h)
       + '<div class="wf-meta"><span>cost <b>$' + (+h.usd || 0).toFixed(4) + '</b></span><span>' + (Array.isArray(h.tools) ? h.tools.length : (+h.tools || 0)) + ' tool calls</span>' + (h.ms ? '<span>' + Math.round(h.ms / 1000) + 's</span>' : '') + '</div>' + v
       + '<div class="wf-from"><span>' + (toOut ? 'FINAL RESULT · WHAT THE LINE WOULD DELIVER' : nx.kind === 'end' ? 'THE LINE ENDS HERE · ' + esc(nx.label) : 'EXACT TEXT ' + esc(nx.label) + ' WILL GET') + '</span><span class="wf-tag" id="wf-edtag"' + (edited ? '' : ' hidden') + '>EDITED BY YOU</span></div>'
-      + '<textarea id="wf-handoff" class="wf-io' + (edited ? ' edited' : '') + '" rows="7" aria-label="Handoff text">' + esc(S.handoff) + '</textarea>'
+      + '<textarea id="wf-handoff" class="wf-io' + (edited ? ' edited' : '') + '" rows="5" aria-label="Handoff text">' + esc(S.handoff) + '</textarea>'
       + '<div class="wf-row"><button type="button" class="bb sm" id="wf-restore"' + (edited ? '' : ' hidden') + '>UNDO MY EDIT</button></div>'
       + '<div class="wf-row"><button type="button" class="bb sm refit-primary' + (edited ? ' cyan' : '') + '" id="wf-cont"' + (S.busy ? ' disabled' : '') + '>' + (edited ? (toOut ? '▶ FINISH WITH MY EDIT' : '▶ CONTINUE WITH MY EDIT') : (toOut ? '▶ FINISH TEST' : '▶ CONTINUE')) + '</button>'
       + '<button type="button" class="bb sm" id="wf-rerun"' + (S.busy ? ' disabled' : '') + '>↻ RE-RUN STEP</button><button type="button" class="bb sm" id="wf-toend"' + (S.busy ? ' disabled' : '') + '>▶▶ RUN TO END</button><button type="button" class="bb sm" id="wf-st-stop2"' + (S.busy ? ' disabled' : '') + '>■ STOP</button></div>'

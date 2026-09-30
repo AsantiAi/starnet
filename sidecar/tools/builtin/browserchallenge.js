@@ -31,4 +31,15 @@ function detectChallenge(page) {
   return { challenged: false, signal: null };
 }
 
-module.exports = { CHALLENGE_TITLES, CHALLENGE_TEXT, looksChallenged, looksBlockedText, detectChallenge };
+/* STEP-IN (2026-09-29): a sign-in or one-time-code field is NOT a challenge — the page is real content and plenty
+   of public pages carry a login box in the header. It is only a HINT: the tool tells the agent the page wants a
+   human and names browser.need_human, and the agent decides whether the task needs that account. Inputs are the
+   page probe's booleans (visible password field / visible one-time-code field), never field values. */
+function detectAuthWall(page) {
+  page = page || {};
+  if (page.otp === true) return { wall: '2fa', signal: 'a one-time-code field' };
+  if (page.password === true) return { wall: 'login', signal: 'a password field' };
+  return { wall: null, signal: null };
+}
+
+module.exports = { CHALLENGE_TITLES, CHALLENGE_TEXT, looksChallenged, looksBlockedText, detectChallenge, detectAuthWall };

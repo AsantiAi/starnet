@@ -5,6 +5,7 @@ description: Turn a fuzzy idea into something buildable — the smallest version
 category: Planning
 requires: [cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

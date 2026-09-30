@@ -302,7 +302,25 @@
       }
     }
 
+    // The station forgets an idle session after ten minutes (and any session when it restarts) while the socket to
+    // the relay can stay up. That answers 'no session'. Shake hands again on a fresh socket and send the call once
+    // more, so the person never sees it.
+    function reopen() {
+      const ws = st.ws;
+      st.ws = null; st.sid = null; st.keys = null; st.opening = null;
+      failAll(new Error('reconnecting'));
+      if (ws) { ws.onclose = null; ws.onmessage = null; try { ws.close(); } catch (_) {} }
+      return open();
+    }
     async function call(verb, args, timeoutMs) {
+      try { return await callOnce(verb, args, timeoutMs); }
+      catch (e) {
+        if (!/no session|stale frame|bad frame/.test(String(e && e.message))) throw e;
+        await reopen();
+        return callOnce(verb, args, timeoutMs);
+      }
+    }
+    async function callOnce(verb, args, timeoutMs) {
       await open();
       const id = st.nextId++;
       st.seq += 1;

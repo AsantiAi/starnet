@@ -139,8 +139,12 @@
      leader first raced that discovery — taskkill reported "process not found" while the command and its
      grandchildren kept running, holding workspace file locks after every shell.exec timeout/abort (this
      module is the production path: index.js wires environment.execute ahead of shell.js's runCommand).
-     child.kill() is now only the fallback when taskkill itself fails. */
-  function killTree(spawn, child, isWin) {
+     child.kill() is now only the fallback when taskkill itself fails.
+     POSIX (macOS/Linux): runProcess spawns the child detached — the leader of its OWN process group — so `group`
+     is true and one SIGKILL to -pid reaches the whole tree. Killing only the /bin/sh wrapper orphaned everything
+     the command started (still running, still holding ports/files and the stdout pipe, so the call did not even
+     settle until they exited). A group that can't be signalled falls back to the leader, as before. */
+  function killTree(spawn, child, isWin, group) {
     if (isWin && child.pid) {
       let fellBack = false;
       const fallback = () => {
@@ -170,6 +174,10 @@
         return;
       }
     }
+    // pid > 1 always: process.kill(-1) would signal EVERY process this user owns
+    if (group && typeof process !== 'undefined' && Number.isInteger(child.pid) && child.pid > 1) {
+      try { process.kill(-child.pid, 'SIGKILL'); return; } catch (e) { envFailNote('environment.killTree.group', e); }   // no group -> leader fallback below
+    }
     try { child.kill(); } catch (_) {}
     try {
       if (child.pid && typeof process !== 'undefined') process.kill(child.pid, 'SIGKILL');
@@ -177,12 +185,20 @@
   }
 
   function runProcess(opts) {
-    const spawn = opts.spawn, file = opts.file, args = opts.args, spawnOptions = opts.spawnOptions || {};
+    const spawn = opts.spawn, file = opts.file, args = opts.args;
     const timeoutMs = clamp(opts.timeoutMs, 1000, opts.maxTimeoutMs || 600000);
     const maxBytes = opts.maxBytes || 64000;
     const now = (opts.clock && typeof opts.clock.now === 'function') ? opts.clock.now : function () { return 0; };
     const sig = opts.signal;
     const isWin = opts.isWin != null ? opts.isWin : WIN;
+    /* POSIX: every runProcess child leads its own process group (detached) unless the caller decided otherwise,
+       so a timeout/abort kills the command's whole tree, not just its wrapper. Only on a REAL POSIX host: a test
+       injecting isWin:false on Windows must not get detached (a new console window there). Stdio is untouched and
+       the child is never unref'd — its 'close' is still awaited. */
+    const realPosix = !isWin && typeof process !== 'undefined' && process.platform !== 'win32';
+    const baseSpawnOptions = opts.spawnOptions || {};
+    const group = realPosix && baseSpawnOptions.detached !== false;
+    const spawnOptions = (group && baseSpawnOptions.detached !== true) ? Object.assign({}, baseSpawnOptions, { detached: true }) : baseSpawnOptions;
 
     return new Promise(function (resolve, reject) {
       let child;
@@ -201,7 +217,7 @@
           if (typeof child.stdin.write === 'function') child.stdin.write(String(opts.input));
           if (typeof child.stdin.end === 'function') child.stdin.end();
         } catch (e) {
-          try { killTree(spawn, child, isWin); } catch (_) {}
+          try { killTree(spawn, child, isWin, group); } catch (_) {}
           // the child is being torn down: keep its receipt until it has really closed
           if (child && typeof child.on === 'function') child.on('close', function () { receipt.done(); });
           return reject(new Error('could not write environment process input: ' + ((e && e.message) || e)));
@@ -230,8 +246,8 @@
       if (child.stdout && child.stdout.on) child.stdout.on('data', mkDecoded());
       if (child.stderr && child.stderr.on) child.stderr.on('data', mkDecoded());
 
-      const timer = setTimeout(function () { timedOut = true; killTree(spawn, child, isWin); }, timeoutMs);
-      const onAbort = function () { aborted = true; killTree(spawn, child, isWin); };
+      const timer = setTimeout(function () { timedOut = true; killTree(spawn, child, isWin, group); }, timeoutMs);
+      const onAbort = function () { aborted = true; killTree(spawn, child, isWin, group); };
       if (sig) {
         if (sig.aborted) onAbort();
         else { try { sig.addEventListener('abort', onAbort, { once: true }); } catch (_) {} }

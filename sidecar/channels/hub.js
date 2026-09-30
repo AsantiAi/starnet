@@ -1515,7 +1515,9 @@
       // Match only against the names the sidecar actually reports, so an ordinary message that happens to start
       // with a slash (a path, say) still reaches the agent untouched. The registry itself decides what a given
       // command may do here: an alias resolves and runs, a shell exec is refused off-desktop.
-      const userNamed = /^\/([A-Za-z0-9_-]+)/.exec(String(msg.text || ''));
+      // Same provenance rule as the built-in table above: forwarded / forward-quoting text is a third party's words,
+      // never the Commander's command — it flows on to the (tainted) run as ordinary text.
+      const userNamed = carriesThirdPartyText(msg) ? null : /^\/([A-Za-z0-9_-]+)/.exec(String(msg.text || ''));
       if (userNamed && runSlashFn && userCommandNames().indexOf(userNamed[1].toLowerCase()) !== -1) {
         // the Commander's own commands run the Commander's own aliases — owner-only, same gate as the table above
         if (!senderIsOwner) { await deliver(chatId, ownerOnlyReply('/' + userNamed[1]), '', 'command'); return; }
