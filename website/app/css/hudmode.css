@@ -179,3 +179,169 @@ html body.hud-mode.hud-view-widget #hud-widget .hud-wmore { border-top: 1px soli
 /* the HUD's own header controls exist only while the HUD is on: back in the full station the COMMS header is
    exactly as designed (they are appended once, on first entry, and stay in the DOM) */
 body:not(.hud-mode) #chat-panel .hud-ctl { display: none !important; }
+
+/* ==== THE NEW GLASS (Andrew 09-30: "use inspo from the gorgeous new glass style … u keep making it look like the
+   ugly older version") ====
+   The HUD wears the station's NEWEST material — the Workflow panel / Build Library sheet (workflow-panel.css,
+   refit-polish.css) — not the older 5px gd panel with its striped header, 3px keys and 13px text:
+   a 12px frosted sheet (the refit glass over the refit sheet, blur 18px, one hairline, a lifted shadow), a plain
+   header with a hairline under it, 8px glass keys read at 15-16px, 10px cards, 17px reading text, nothing under
+   14px, and housed lamps (dark ring, top light). State stays an EDGE / FILL / RAIL change — never a glow.
+   The refit tokens live on .refit-overlay; the HUD restates the same values for itself. COMMS's own transcript,
+   composer and identity bar are untouched (it is already designed): only the HUD's frame, header and its own
+   surfaces (ACTIVITY, the widget) change. */
+html body.hud-mode {
+  --hud-glass: linear-gradient(125deg, rgba(var(--ph-bright-rgb), .09), rgba(var(--ph-rgb), .045) 48%, rgba(var(--ph-rgb), .015));
+  --hud-sheet-fill: color-mix(in srgb, var(--panel) 92%, transparent);
+  --hud-edge: rgba(var(--ph-rgb), .2);
+  --hud-light: inset 0 1px 0 rgba(var(--ph-bright-rgb), .07);
+  --hud-hover: rgba(var(--ph-rgb), .1);
+  --hud-on: rgba(var(--ph-rgb), .13);
+  --hud-card: linear-gradient(165deg, rgba(var(--ph-rgb), .075), transparent 46%), color-mix(in srgb, var(--panel2) 88%, transparent);
+  --hud-lift: 0 12px 36px rgba(0, 0, 0, .4), inset 0 1px rgba(var(--ph-rgb), .08);
+  --hud-lamp: 0 0 0 1px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .3);
+}
+html body.hud-mode #screen-game.active { padding: 6px; }
+
+/* ---- the sheet ---- */
+html body.hud-mode #chat-panel {
+  border: 1px solid var(--hud-edge); border-radius: 12px; overflow: hidden;
+  background: var(--hud-glass), var(--hud-sheet-fill);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  box-shadow: var(--hud-lift);
+}
+/* no scanline film, and no bracket corners: those are the older CRT panel's marks */
+html body.hud-mode #chat-panel::before, html body.hud-mode #chat-panel::after { display: none; }
+html body.hud-mode.hud-asking #chat-panel { border-color: var(--gold, #e9c46a); }
+
+/* ---- the header: a plain title over a hairline (the Workflow panel's head), not a striped strip ---- */
+html body.hud-mode #chat-panel > h3 {
+  min-height: 52px; box-sizing: border-box; padding: 8px 10px 8px 16px; margin: 0;
+  display: flex; align-items: center; gap: 10px;
+  background: none; border: 0; border-bottom: 1px solid var(--hud-edge); border-radius: 0; box-shadow: none;
+  font-size: 17px; letter-spacing: 1.4px; color: var(--ph-bright); text-shadow: none;
+}
+html body.hud-mode #chat-panel > h3::before, html body.hud-mode #chat-panel > h3::after { display: none; }
+html body.hud-mode #chat-panel .hud-ctl { gap: 6px; align-items: center; flex: 0 0 auto; }
+html body.hud-mode #chat-panel > h3 .h3-right { flex: 1 1 auto; min-width: 0; justify-content: flex-end; align-items: center; gap: 8px; }
+/* the run's state and clock are on its WORKING row in the transcript (and the ACTIVITY key counts the work);
+   in a HUD-wide header they only squeezed the title and pushed the keys out of the window */
+html body.hud-mode #chat-panel > h3 :is(#chat-status, #chat-elapsed) { display: none !important; }
+html body.hud-mode #chat-panel > h3 #comms-title { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the HUD's keys: the Build Library's glass key */
+html body.hud-mode #chat-panel .hud-ctl .btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 34px; padding: 5px 11px; font: 15px/1.1 'VT323', monospace; letter-spacing: .6px;
+  color: var(--ph); border: 1px solid var(--hud-edge); border-radius: 8px;
+  background: var(--hud-glass); box-shadow: var(--hud-light); text-shadow: none;
+  transition: background-color var(--t-fast) var(--ease-soft), border-color var(--t-fast) var(--ease-soft), color var(--t-fast) var(--ease-soft);
+}
+html body.hud-mode #chat-panel .hud-ctl .btn:is(:hover, :focus-visible) { color: var(--ph-bright); border-color: rgba(var(--ph-rgb), .45); background: var(--hud-hover); box-shadow: var(--hud-light); }
+html body.hud-mode #chat-panel .hud-ctl .btn:active { box-shadow: inset 0 2px 4px rgba(0, 0, 0, .35); }
+html body.hud-mode #chat-panel .hud-ctl .btn[aria-pressed="true"] { color: var(--ph-bright); border-color: var(--ph); background: var(--hud-on); box-shadow: var(--hud-light), inset 0 -2px 0 rgba(var(--ph-rgb), .65); }
+html body.hud-mode #chat-panel .hud-ctl .btn:focus-visible { outline: 2px solid var(--ph-bright); outline-offset: 2px; }
+
+/* ---- ACTIVITY: each piece of work is a glass card (the Workflow panel's card) ---- */
+html body.hud-mode #hud-activity { padding: 12px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--ph-dim) transparent; }
+html body.hud-mode #hud-activity :is(.ph-empty, .ph-notice) { margin: 6px 4px 12px; font-size: 16px; line-height: 1.45; opacity: 1; color: var(--ph-dim); }
+html body.hud-mode #hud-activity .ph-notice { color: var(--warn, var(--gold)); }
+html body.hud-mode #hud-activity .ph-card {
+  margin: 0 0 10px; overflow: hidden;
+  border: 1px solid var(--hud-edge); border-radius: 10px;
+  background: var(--hud-card); box-shadow: var(--hud-light), 0 2px 6px rgba(0, 0, 0, .25);
+  transition: border-color var(--t-fast) var(--ease-soft);
+}
+html body.hud-mode #hud-activity .ph-card:hover { border-color: rgba(var(--ph-rgb), .45); }
+html body.hud-mode #hud-activity .ph-card > summary {
+  grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 12px;
+  padding: 12px 14px; border-radius: 0; list-style: none;
+}
+html body.hud-mode #hud-activity .ph-card > summary::-webkit-details-marker { display: none; }
+html body.hud-mode #hud-activity .ph-card > summary:is(:hover, :focus-visible) { background: var(--hud-hover); }
+html body.hud-mode #hud-activity .ph-card > summary:focus-visible { outline: 2px solid var(--ph-bright); outline-offset: -2px; }
+html body.hud-mode #hud-activity .ph-card[open] > summary { border-bottom: 1px solid var(--hud-edge); }
+/* the agent, with its housed lamp: lit while it works, gold when it needs you, red on a fault, calm when done */
+html body.hud-mode #hud-activity .ph-agent {
+  display: inline-flex; align-items: center; gap: 9px; min-width: 0;
+  font-size: 17px; letter-spacing: .8px; color: var(--ph-bright); opacity: 1;
+}
+html body.hud-mode #hud-activity .ph-agent::before {
+  content: ""; flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--ph-dim); box-shadow: var(--hud-lamp);
+}
+html body.hud-mode #hud-activity .ph-card[data-state="live"] .ph-agent::before { background-color: var(--ph); box-shadow: var(--hud-lamp), 0 0 4px rgba(var(--ph-rgb), .3); }
+html body.hud-mode #hud-activity .ph-card[data-state="ask"] .ph-agent::before { background: var(--gold, #e9c46a); box-shadow: var(--hud-lamp), 0 0 4px rgba(var(--gold-rgb, 233, 196, 106), .3); }
+html body.hud-mode #hud-activity .ph-card[data-state="fault"] .ph-agent::before { background: var(--bad, #ff4a3d); }
+html body.hud-mode #hud-activity .ph-card[data-state="done"] .ph-agent::before { background: var(--ok, #62ff9e); }
+html body.hud-mode #hud-activity .ph-status { font-size: 15px; letter-spacing: .4px; color: var(--ph-dim); opacity: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+html body.hud-mode #hud-activity .ph-task { font-size: 17px; line-height: 1.4; color: var(--text); }
+html body.hud-mode #hud-activity .ph-task::before { color: var(--ph-dim); }
+html body.hud-mode #hud-activity .ph-card-body { padding: 12px 14px 14px; }
+html body.hud-mode #hud-activity .ph-card-body > p:first-child { opacity: 1; }
+html body.hud-mode #hud-activity .ph-result { margin: 0 0 10px; font: 16px/1.45 'VT323', monospace; color: var(--text); }
+html body.hud-mode #hud-activity :is(.ph-tools, .ph-directions, .ph-receipt) { margin: 0 0 8px; font-size: 15px; line-height: 1.4; color: var(--ph-dim); opacity: 1; }
+/* steer: a recessed field (the Build Library field), then the keys in one row */
+html body.hud-mode #hud-activity .ph-controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+html body.hud-mode #hud-activity .ph-controls textarea {
+  flex: 1 0 100%; box-sizing: border-box; min-height: 64px; margin: 0; padding: 10px 12px;
+  font: 16px/1.4 'VT323', monospace; color: var(--ph-bright);
+  border: 1px solid var(--hud-edge); border-radius: 8px; background: rgba(0, 0, 0, .18);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, .15); text-shadow: none; outline: none;
+}
+html body.hud-mode #hud-activity .ph-controls textarea::placeholder { color: var(--ph-dim); opacity: .8; }
+html body.hud-mode #hud-activity .ph-controls textarea:focus { border-color: var(--ph); box-shadow: inset 0 1px 3px rgba(0, 0, 0, .15), 0 0 0 2px rgba(var(--ph-rgb), .1); }
+html body.hud-mode #hud-activity .ph-controls .btn {
+  margin: 0; min-height: 36px; padding: 7px 14px; font: 16px/1.15 'VT323', monospace; letter-spacing: .6px;
+  color: var(--ph); border: 1px solid var(--hud-edge); border-radius: 8px;
+  background: var(--hud-glass); box-shadow: var(--hud-light); text-shadow: none;
+}
+html body.hud-mode #hud-activity .ph-controls .btn:is(:hover, :focus-visible):not(:disabled) { color: var(--ph-bright); border-color: rgba(var(--ph-rgb), .45); background: var(--hud-hover); }
+html body.hud-mode #hud-activity .ph-controls .btn:active:not(:disabled) { box-shadow: inset 0 2px 4px rgba(0, 0, 0, .35); }
+html body.hud-mode #hud-activity .ph-controls .btn:disabled { opacity: .4; cursor: default; }
+/* SEND DIRECTION is the card's primary key: lit glass, not a slab */
+html body.hud-mode #hud-activity .ph-controls:not(.hud-card-nav) .btn:first-of-type { color: var(--ph-bright); background: rgba(var(--ph-rgb), .16); border-color: var(--ph); }
+html body.hud-mode #hud-activity .ph-controls:not(.hud-card-nav) .btn:first-of-type:is(:hover, :focus-visible):not(:disabled) { background: rgba(var(--ph-rgb), .24); }
+/* STOP WORK turns red only under the hand */
+html body.hud-mode #hud-activity .ph-controls:not(.hud-card-nav) .btn + .btn:is(:hover, :focus-visible):not(:disabled) { color: var(--bad, #ff4a3d); border-color: var(--bad, #ff4a3d); background: color-mix(in srgb, var(--bad, #ff4a3d) 8%, transparent); }
+html body.hud-mode #hud-activity .hud-card-nav { margin: 4px 0 0; }
+
+/* ---- WIDGET: one frosted sheet — the station view on top, the caption under it ---- */
+html body.hud-mode.hud-view-widget #screen-game.active > #stage-wrap {
+  border: 1px solid var(--hud-edge); border-bottom: 0; border-radius: 12px 12px 0 0; overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb), .07);
+}
+html body.hud-mode.hud-view-widget .hud-wview { border-radius: 12px 12px 0 0; }
+html body.hud-mode.hud-view-widget.hud-asking #stage-wrap { outline: 0; border-color: var(--gold, #e9c46a); }
+html body.hud-mode.hud-view-widget #hud-widget {
+  padding: 5px; gap: 2px;
+  border: 1px solid var(--hud-edge); border-radius: 0 0 12px 12px;
+  background: var(--hud-glass), var(--hud-sheet-fill);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  box-shadow: var(--hud-lift);
+}
+html body.hud-mode.hud-view-widget.hud-asking #hud-widget { border-color: var(--gold, #e9c46a); }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrows { gap: 2px; }
+/* a row: lamp · NAME · step ........ clock — a plate that lights under the hand, like a Build Library tile */
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow {
+  grid-template-columns: 10px auto minmax(0, 1fr) auto; column-gap: 10px;
+  padding: 7px 10px; border: 1px solid transparent; border-radius: 8px; background: transparent; box-shadow: none;
+}
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow + .hud-wrow { border-top: 1px solid transparent; }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow:is(:hover, :focus-visible) { background: var(--hud-hover); border-color: rgba(var(--ph-rgb), .45); box-shadow: var(--hud-light); }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow:focus-visible { outline: 2px solid var(--ph-bright); outline-offset: -2px; }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow.on:not(:only-child) { background: var(--hud-on); border-color: var(--hud-edge); box-shadow: var(--hud-light), inset 0 -2px 0 rgba(var(--ph-rgb), .65); }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow[data-state="ask"],
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow[data-state="ask"]:only-child { border-color: color-mix(in srgb, var(--gold, #e9c46a) 60%, transparent); background: rgba(var(--gold-rgb, 233, 196, 106), .06); box-shadow: var(--hud-light); }
+/* the housed lamp (the Workflow panel's status lamp) in place of the station's small pulsing dot */
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow > .dot {
+  width: 10px; height: 10px; border-radius: 50%; animation: none; opacity: 1;
+  background-color: var(--ph); box-shadow: var(--hud-lamp), 0 0 4px rgba(var(--ph-rgb), .3);
+}
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow[data-state="idle"] > .dot { background: var(--ph-dim); box-shadow: var(--hud-lamp); }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow[data-state="ask"] > .dot { background: var(--gold, #e9c46a); box-shadow: var(--hud-lamp), 0 0 4px rgba(var(--gold-rgb, 233, 196, 106), .3); }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wname { font-size: 17px; letter-spacing: .8px; }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wstep { font-size: 15px; color: var(--text); opacity: .7; }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wclock { font-size: 20px; letter-spacing: .6px; }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow[data-state="idle"] .hud-wclock { font-size: 14px; letter-spacing: 1.2px; }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wmore { padding: 6px 10px; font-size: 15px; border: 1px solid transparent; border-radius: 8px; }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wmore:is(:hover, :focus-visible) { color: var(--ph-bright); background: var(--hud-hover); border-color: rgba(var(--ph-rgb), .45); }
