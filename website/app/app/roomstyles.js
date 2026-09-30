@@ -15,73 +15,73 @@
   'use strict';
 
   const STYLES = {
-    cozy: { name: 'a cozy corner', about: 'a couch on a rug, a beanbag, a side table, a lamp and plants', words: ['comfy', 'chill', 'relax', 'relaxing', 'hangout', 'warm', 'snug'],
+    cozy: { name: 'a cozy corner', about: 'a TV, bookshelves, a couch and beanbags on a rug, lamps, a guitar, a radio', about: 'a couch on a rug, a beanbag, a side table, a lamp and plants', words: ['comfy', 'chill', 'relax', 'relaxing', 'hangout', 'warm', 'snug'],
       sets: [
         { w: 8, h: 6, pieces: [['bookshelf', 0, 0], ['tallplant', 7, 0], ['rug', 2, 1], ['beanbag', 7, 2], ['couch', 1, 4], ['sidetable', 6, 4], ['lavalamp', 6, 4], ['plant', 7, 5]] },
         { w: 6, h: 4, pieces: [['rug_small', 1, 0], ['plant', 0, 0], ['couch', 0, 3], ['sidetable', 5, 3]] },
       ] },
-    lounge: { name: 'a lounge', about: 'a TV, a couch, recliners and a side table', words: ['tv', 'movie', 'movies', 'living', 'sofa', 'couch'],
+    lounge: { name: 'a lounge', about: 'a TV, a couch on a big rug, recliners, lamps, a fish tank, a fridge, beanbags', about: 'a TV, a couch, recliners and a side table', words: ['tv', 'movie', 'movies', 'living', 'sofa', 'couch'],
       sets: [
         { w: 8, h: 6, pieces: [['tv', 2, 0], ['plant', 0, 0], ['plant', 7, 0], ['rug', 2, 1], ['recliner', 1, 2, 3], ['recliner_r', 6, 2, 1], ['couch', 1, 4], ['sidetable', 6, 4]] },
         { w: 6, h: 4, pieces: [['tv', 1, 0], ['rug_small', 1, 1], ['couch', 0, 3], ['plant', 5, 3]] },
       ] },
-    library: { name: 'a reading nook', about: 'bookshelves, a recliner on a rug, a side table and a book stack', words: ['reading', 'books', 'book', 'study', 'quiet'],
+    library: { name: 'a reading nook', about: 'walls of bookshelves, a reading nook with recliners, a study table, a telescope', about: 'bookshelves, a recliner on a rug, a side table and a book stack', words: ['reading', 'books', 'book', 'study', 'quiet'],
       sets: [
         { w: 8, h: 5, pieces: [['bookshelf', 0, 0], ['bookshelf', 2, 0], ['bookshelf', 4, 0], ['tallplant', 7, 0], ['rug_small', 2, 2], ['recliner', 1, 3, 3], ['sidetable', 6, 3], ['bookstack', 7, 4]] },
         { w: 6, h: 4, pieces: [['bookshelf', 0, 0], ['bookshelf', 2, 0], ['plant', 5, 0], ['recliner', 1, 2, 3], ['sidetable', 3, 2], ['bookstack', 4, 3]] },
       ] },
-    desks: { name: 'work desks', about: 'desks with chairs and lamps', words: ['desk', 'office', 'workspace', 'work', 'workstations', 'computers'],
+    desks: { name: 'work desks', about: 'desks with chairs and lamps, a whiteboard, bookshelves, a rack', about: 'desks with chairs and lamps', words: ['desk', 'office', 'workspace', 'work', 'workstations', 'computers'],
       sets: [
         // spaced for either desk: the classic one is 2 tiles wide, the remastered one 3
         { w: 12, h: 3, pieces: [['desk', 0, 0], ['desklamp', 3, 0], ['desk', 4, 0], ['desklamp', 7, 0], ['desk', 8, 0], ['plant', 11, 0], ['chair', 1, 1], ['chair', 5, 1], ['chair', 9, 1]] },
         { w: 7, h: 3, pieces: [['desk', 0, 0], ['desklamp', 3, 0], ['desk', 4, 0], ['chair', 1, 1], ['chair', 5, 1]] },
       ] },
-    meeting: { name: 'a meeting table', about: 'a long table with chairs and a whiteboard', words: ['meeting', 'meetings', 'conference', 'planning', 'standup', 'huddle'],
+    meeting: { name: 'a meeting table', about: 'a long table with chairs, a big screen, coffee', about: 'a long table with chairs and a whiteboard', words: ['meeting', 'meetings', 'conference', 'planning', 'standup', 'huddle'],
       sets: [
         { w: 7, h: 5, pieces: [['whiteboard', 1, 0], ['plant', 6, 0], ['chair', 2, 1], ['chair', 4, 1], ['chair', 1, 2, 3], ['longtable', 2, 2], ['chair', 5, 2, 1], ['chair', 3, 3]] },
         { w: 5, h: 3, pieces: [['chair', 0, 1, 3], ['longtable', 1, 1], ['chair', 4, 1, 1], ['plant', 4, 0]] },
       ] },
-    cafe: { name: 'a café corner', about: 'a bar with stools, coffee, a fridge and a table', words: ['coffee', 'kitchen', 'bar', 'snacks', 'food', 'break', 'breakroom', 'cafe'],
+    cafe: { name: 'a café corner', about: 'a bar, coffee, a fridge, vending machines, diner tables and chairs', about: 'a bar with stools, coffee, a fridge and a table', words: ['coffee', 'kitchen', 'bar', 'snacks', 'food', 'break', 'breakroom', 'cafe'],
       sets: [
         { w: 8, h: 5, pieces: [['quarters_minifridge', 0, 0], ['bar', 1, 0], ['coffee', 5, 0], ['quarters_vending', 7, 0], ['stool', 1, 1], ['stool', 3, 1], ['dinerchair', 1, 3, 3], ['dinertable', 2, 3], ['dinerchair', 5, 3, 1]] },
         { w: 6, h: 3, pieces: [['bar', 0, 0], ['coffee', 4, 0], ['quarters_minifridge', 5, 0], ['stool', 0, 1], ['stool', 2, 1]] },
       ] },
-    games: { name: 'a games corner', about: 'a pool table, arcade cabinets and a pinball', words: ['game', 'arcade', 'fun', 'play', 'pool', 'gaming'],
+    games: { name: 'a games corner', about: 'arcade cabinets, pinballs, a jukebox, a pool table, a vending machine, speakers', about: 'a pool table, arcade cabinets and a pinball', words: ['game', 'arcade', 'fun', 'play', 'pool', 'gaming'],
       sets: [
         { w: 8, h: 5, pieces: [['arcade', 0, 0], ['arcade2', 1, 0], ['pinball', 2, 0], ['gachapon', 7, 0], ['quarters_pooltable', 2, 3], ['stool', 7, 4]] },
         { w: 5, h: 4, pieces: [['arcade', 0, 0], ['arcade2', 1, 0], ['pinball', 2, 0], ['beanbag', 4, 3]] },
       ] },
-    garden: { name: 'a garden', about: 'planters, tall plants, a terrarium and a bench', words: ['plants', 'green', 'nature', 'calm', 'zen', 'greenhouse'],
+    garden: { name: 'a garden', about: 'planters, tall plants, monsteras, terrariums, benches, a fish tank, a turf floor', about: 'planters, tall plants, a terrarium and a bench', words: ['plants', 'green', 'nature', 'calm', 'zen', 'greenhouse'],
       sets: [
         { w: 8, h: 5, pieces: [['tallplant', 0, 0], ['industrial_planter', 1, 0], ['monstera', 3, 0], ['industrial_planter', 4, 0], ['tallplant', 7, 0], ['terrarium', 0, 2], ['industrial_bench', 3, 3], ['plant', 7, 3], ['monstera', 0, 4]] },
         { w: 5, h: 3, pieces: [['tallplant', 0, 0], ['industrial_planter', 1, 0], ['monstera', 4, 0], ['industrial_bench', 1, 2]] },
       ] },
-    quarters: { name: 'sleeping quarters', about: 'beds, lockers, a side table and a lamp', words: ['sleep', 'bed', 'beds', 'bedroom', 'bunks', 'rest', 'dorm'],
+    quarters: { name: 'sleeping quarters', about: 'four beds, a locker bank, bedside tables and lamps, a cryopod', about: 'beds, lockers, a side table and a lamp', words: ['sleep', 'bed', 'beds', 'bedroom', 'bunks', 'rest', 'dorm'],
       sets: [
         { w: 8, h: 5, pieces: [['bunk', 0, 0], ['sidetable', 2, 0], ['lavalamp', 2, 0], ['bunk', 3, 0], ['quarters_lockerbank', 5, 0], ['rug_small', 0, 2], ['plant', 7, 4]] },
         { w: 5, h: 3, pieces: [['bunk', 0, 0], ['sidetable', 2, 0], ['quarters_lockerbank', 2, 2]] },
       ] },
-    storage: { name: 'storage', about: 'crates, boxes, lockers and a drawer bank', words: ['stock', 'supplies', 'inventory', 'crates', 'warehouse', 'boxes'],
+    storage: { name: 'storage', about: 'lockers, racks, a shelf, stacks of crates and boxes', about: 'crates, boxes, lockers and a drawer bank', words: ['stock', 'supplies', 'inventory', 'crates', 'warehouse', 'boxes'],
       sets: [
         { w: 8, h: 4, pieces: [['industrial_locker', 0, 0], ['industrial_drawerbank', 2, 0], ['rackV', 6, 0], ['crate', 0, 2], ['boxes', 3, 3], ['crate', 6, 3]] },
         { w: 5, h: 3, pieces: [['industrial_locker', 0, 0], ['crate', 3, 0], ['boxes', 0, 2]] },
       ] },
-    gym: { name: 'a gym', about: 'a heavy bag, a bench press and a locker', words: ['workout', 'fitness', 'exercise', 'training'],
+    gym: { name: 'a gym', about: 'heavy bags, bench presses on a mat, a weapon rack, lockers', about: 'a heavy bag, a bench press and a locker', words: ['workout', 'fitness', 'exercise', 'training'],
       sets: [
         { w: 7, h: 4, pieces: [['punchbag', 0, 0], ['industrial_locker', 2, 0], ['tallplant', 6, 0], ['benchpress', 2, 3]] },
         { w: 5, h: 3, pieces: [['punchbag', 0, 0], ['benchpress', 2, 2]] },
       ] },
-    lab: { name: 'a lab bench', about: 'a desk, a sample cart, a core lens and research papers', words: ['science', 'research', 'experiments', 'laboratory', 'analysis'],
+    lab: { name: 'a lab bench', about: 'a vat, specimen tubes, incubators, core lenses, a lab desk and a sample cart', about: 'a desk, a sample cart, a core lens and research papers', words: ['science', 'research', 'experiments', 'laboratory', 'analysis'],
       sets: [
         { w: 8, h: 4, pieces: [['research_corelens', 0, 0], ['desk', 2, 0], ['research_samplecart', 5, 0], ['plant', 7, 0], ['chair', 2, 1], ['research_papers', 4, 3], ['tube', 0, 3]] },
         { w: 5, h: 3, pieces: [['desk', 0, 0], ['research_samplecart', 3, 0], ['chair', 0, 1]] },
       ] },
-    comms: { name: 'a comms desk', about: 'a console, screens and a comms dish', words: ['communications', 'radio', 'signal', 'network', 'web', 'internet'],
+    comms: { name: 'a comms desk', about: 'a comms wall, screens, consoles, a rack, a comms dish', about: 'a console, screens and a comms dish', words: ['communications', 'radio', 'signal', 'network', 'web', 'internet'],
       sets: [
         { w: 8, h: 4, pieces: [['screens', 0, 0], ['consoleL', 2, 0], ['comms_dish', 6, 0], ['chair', 3, 1], ['plant', 0, 3]] },
         { w: 6, h: 3, pieces: [['consoleL', 0, 0], ['screens', 4, 0], ['chair', 1, 1]] },
       ] },
-    workshop: { name: 'a workshop', about: 'a workbench, a fabricator, a toolbox and crates', words: ['maker', 'tools', 'build', 'fabrication', 'engineering', 'garage'],
+    workshop: { name: 'a workshop', about: 'a workbench, a fabricator, a tool bench, drawers, crates', about: 'a workbench, a fabricator, a toolbox and crates', words: ['maker', 'tools', 'build', 'fabrication', 'engineering', 'garage'],
       sets: [
         { w: 8, h: 4, pieces: [['workbench', 0, 0], ['toolbox', 2, 0], ['fabricator', 4, 0], ['industrial_toolcaddy', 7, 0], ['crate', 0, 3], ['boxes', 6, 3]] },
         { w: 5, h: 3, pieces: [['workbench', 0, 0], ['toolbox', 2, 0], ['crate', 3, 2]] },
@@ -120,7 +120,7 @@
         { w: 7, h: 4, pieces: [['rug_small', 2, 0], ['couch', 1, 3], ['sidetable', 0, 3], ['lavalamp', 0, 3], ['recliner', 6, 1, 1]] }],
       corners: ['tallplant', 'monstera', 'plant', 'plant'], sides: ['quarters_minifridge', 'beanbag', 'coffee', 'beanbag'] },
     cozy: { name: 'a cozy den', kind: 'quarters', deck: { style: 'oak', mat: 'plank' }, walls: { mat: 'wainscot' },
-      feature: { left: ['bookshelf', 'bookshelf'], centre: ['fishtank'], right: ['bookshelf'] },
+      feature: { left: ['bookshelf', 'bookshelf'], centre: ['tv'], right: ['fishtank'] },
       centre: [
         { w: 9, h: 5, pieces: [['rug_large', 2, 0], ['beanbag', 3, 1], ['beanbag', 5, 1], ['couch', 2, 4], ['sidetable', 1, 4], ['lavalamp', 1, 4], ['sidetable', 7, 4], ['plasmaglobe', 7, 4], ['recliner', 0, 2, 3]] },
         { w: 6, h: 4, pieces: [['rug_small', 1, 0], ['couch', 0, 3], ['sidetable', 5, 3], ['lavalamp', 5, 3]] }],
@@ -199,7 +199,7 @@
         { w: 5, h: 3, pieces: [['benchpress', 1, 1]] }],
       corners: ['tallplant', 'plant', 'plant', 'tallplant'], sides: ['punchbag', 'industrial_locker', 'coffee'] },
     // a hall for workflow lines: its floor is kept for the belts; the walls get crates, racks and cable
-    works: { name: 'a conveyor hall', kind: 'factory', deck: { style: 'rust', mat: 'treadway' }, walls: { mat: 'pipework' },
+    works: { name: 'a conveyor hall', about: 'its floor kept for workflow lines, crates and racks at the walls', kind: 'factory', deck: { style: 'rust', mat: 'treadway' }, walls: { mat: 'pipework' },
       feature: { left: [], right: [] }, centre: [],
       corners: ['crate', 'boxes', 'crate', 'boxes'], sides: ['rackV', 'rackV', 'industrial_toolcaddy', 'industrial_supplycart'] },
   };
@@ -220,7 +220,7 @@
     const z = resolve(raw);
     return z && ROOMS[z] ? z : null;
   }
-  const roomMenu = () => ROOM_ORDER.map(id => ({ id, name: ROOMS[id].name }));
+  const roomMenu = () => ROOM_ORDER.map(id => ({ id, name: ROOMS[id].name, about: ROOMS[id].about }));
 
   return { STYLES, ORDER, NAMES, resolve, menu, ROOMS, ROOM_ORDER, resolveRoom, roomMenu };
 });
