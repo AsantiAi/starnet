@@ -9,7 +9,8 @@
      · GET /api/remote/view says whether Remote is on and whether a phone is looking right now.
      · Remote off: nothing is drawn; it looks again once a minute.
      · Remote on: one picture when the floor is up (so a phone that opens later has something, stamped with its
-       age), then a fresh one every few seconds only while a phone is looking.
+       age), then a fresh one every few seconds only while a phone is looking. A station that is slow to draw
+       is drawn less often, so the phone's picture never makes the desk stutter.
 
    TRUTH RULE: the picture is whatever the real renderer drew at that moment, stamped by the sidecar with the
    time it arrived. Nothing is staged for the phone, and the phone shows the picture's age.
@@ -20,6 +21,7 @@ const RemoteView = (() => {
   const IDLE_MS = 60000;      // Remote is off: look again this often
   const WATCH_MS = 6000;      // Remote is on, nobody looking
   const LIVE_MS = 3000;       // a phone is looking: redraw this often
+  const SLOWEST_MS = 20000;   // …and never slower than this, however heavy the station
   const MAX_PX = 1600;        // longest side of the still
   let timer = null, busy = false, sentOnce = false, started = false;
 
@@ -70,8 +72,10 @@ const RemoteView = (() => {
   async function step() {
     const s = await getJson('/api/remote/view');
     if (!s || !s.enabled) { sentOnce = false; return IDLE_MS; }
-    if (s.want || !sentOnce || !s.at) { if (await draw()) sentOnce = true; }
-    return s.want ? LIVE_MS : WATCH_MS;
+    let cost = 0;
+    if (s.want || !sentOnce || !s.at) { const t0 = performance.now(); if (await draw()) sentOnce = true; cost = performance.now() - t0; }
+    // a big station takes longer to draw: never spend more than about a fifteenth of the desk's time on the phone's picture
+    return s.want ? Math.max(LIVE_MS, Math.min(SLOWEST_MS, Math.round(cost * 15))) : WATCH_MS;
   }
 
   function schedule(ms) { if (timer) clearTimeout(timer); timer = setTimeout(tick, ms); }
