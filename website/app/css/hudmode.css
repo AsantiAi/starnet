@@ -62,60 +62,70 @@ html body.hud-mode #hud-activity .ph-controls > [hidden] { display: none; }
 html body.hud-mode #hud-activity .hud-card-nav { margin-top: 6px; }
 html body.hud-mode #hud-activity .ph-result:empty { display: none; }
 
-/* ---- WIDGET (where the HUD opens): the agents at work, smallest form ----
-   A glass panel (the #left / #chat-panel material). Each tile: the agent at its desk in a portrait
-   well (.crew-portrait recipe), its name, a big run clock, the step. Crew-row glass hover; a tile
-   waiting on the Commander takes the gold edge. */
-#hud-widget { display: none; }
+/* ---- WIDGET (where the HUD opens): the real station, small, and who is working ----
+   The station's own view (#stage-wrap: the world canvas and its camera frame) comes back inside the
+   HUD at widget size; the rows under it are crew-row glass: lamp (the station .dot), name, run clock,
+   step. The row being watched takes the selected glass state; waiting on the Commander, the gold edge. */
+#hud-widget, .hud-wview { display: none; }
 html body.hud-mode.hud-view-widget #screen-game.active {
-  grid-template-rows: auto; grid-template-areas: "hud";
+  grid-template-columns: 300px;
+  grid-template-rows: 190px auto;
+  grid-template-areas: "view" "hud";
   align-content: start; justify-content: start;
+  gap: 4px;
 }
 html body.hud-mode.hud-view-widget #chat-panel { display: none !important; }
+html body.hud-mode.hud-view-widget #screen-game.active > #stage-wrap {
+  display: block !important; grid-area: view; position: relative;
+  width: 300px; height: 190px; min-width: 0; min-height: 0;
+}
+/* only the world and its camera frame: the station's own buttons and toasts stay with the station */
+html body.hud-mode.hud-view-widget #stage-wrap > :not(#stage):not(.cam-hud) { display: none !important; }
+html body.hud-mode.hud-view-widget #stage-wrap .cam-cine { display: none !important; }
+html body.hud-mode.hud-view-widget .hud-wview {
+  display: block; grid-area: view; position: relative; z-index: 5;
+  width: 300px; height: 190px; margin: 0; padding: 0;
+  background: transparent; border: 0; border-radius: 5px; box-shadow: none; cursor: pointer;
+}
+html body.hud-mode.hud-view-widget .hud-wview:focus-visible { outline: 1px solid var(--ph); outline-offset: -2px; }
+html body.hud-mode.hud-view-widget.hud-asking #stage-wrap { outline: 1px solid var(--gold, #e9c46a); outline-offset: -1px; }
 html body.hud-mode.hud-view-widget #hud-widget {
   grid-area: hud;
-  display: inline-flex; align-items: stretch; gap: 4px; width: max-content;
-  padding: 5px;
+  display: flex; flex-direction: column; gap: 2px;
+  width: 300px; box-sizing: border-box; padding: 4px;
   background: var(--gd-face, var(--panel));
   border: 1px solid var(--gd-edge, var(--ph-dim)); border-radius: 5px;
   box-shadow: var(--gd-shadow, none);
   font-family: 'VT323', 'Courier New', monospace; color: var(--text);
   user-select: none; -webkit-user-select: none;
 }
-html body.hud-mode.hud-view-widget.hud-asking #hud-widget { border-color: var(--gold, #e9c46a); }
-#hud-widget .hud-wtiles { display: flex; gap: 4px; }
-#hud-widget .hud-wtile {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
-  width: 158px; margin: 0; padding: 6px 6px 7px;
+#hud-widget .hud-wrows { display: flex; flex-direction: column; gap: 2px; }
+#hud-widget .hud-wrow {
+  position: relative; display: grid; grid-template-columns: 8px minmax(0, auto) 1fr auto; align-items: baseline; column-gap: 7px;
+  margin: 0; padding: 5px 8px;
   font: inherit; color: var(--text); text-align: left;
   background: transparent; border: 1px solid transparent; border-radius: 4px; box-shadow: none;
   cursor: pointer;
   transition: background var(--t-fast) var(--ease-soft), border-color var(--t-fast) var(--ease-soft), box-shadow var(--t-fast) var(--ease-soft);
 }
-#hud-widget .hud-wtile:is(:hover, :focus-visible) {
+#hud-widget .hud-wrow:is(:hover, :focus-visible, .on) {
   background: var(--gd-hover, var(--ph-faint)); border-color: var(--gd-edge, var(--ph-dim));
-  box-shadow: inset 0 1px 0 var(--gd-light, transparent), 0 2px 8px rgba(0, 0, 0, .2);
+  box-shadow: inset 0 1px 0 var(--gd-light, transparent);
 }
-#hud-widget .hud-wtile:focus-visible { outline: 1px solid var(--ph); outline-offset: -2px; }
-#hud-widget .hud-wtile[data-state="ask"] { border-color: var(--gold, #e9c46a); }
-#hud-widget .hud-wscene {
-  display: block; width: 144px; height: 108px; margin-bottom: 5px;
-  background: rgba(0, 0, 0, .25); border: 1px solid var(--gd-edge, var(--ph-dim)); border-radius: 3px;
-  box-shadow: inset 0 1px 6px rgba(0, 0, 0, .5);
-  image-rendering: pixelated;
-}
-#hud-widget .hud-noscene .hud-wscene { display: none; }
-#hud-widget .hud-wname { font-size: 15px; letter-spacing: 1px; line-height: 1.1; color: var(--ph-bright); max-width: 144px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#hud-widget .hud-wclock { font-size: 26px; line-height: 1; letter-spacing: 1px; color: var(--ph-bright); font-variant-numeric: tabular-nums; }
-#hud-widget .hud-wtile[data-state="idle"] .hud-wclock { font-size: 16px; line-height: 1.3; color: var(--ph-dim); letter-spacing: 1.5px; }
-#hud-widget .hud-wstep { font-size: 13px; line-height: 1.2; color: var(--text); opacity: .75; max-width: 144px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#hud-widget .hud-wtile[data-state="ask"] .hud-wstep { color: var(--gold, #e9c46a); opacity: 1; }
+#hud-widget .hud-wrow:focus-visible { outline: 1px solid var(--ph); outline-offset: -2px; }
+#hud-widget .hud-wrow[data-state="ask"] { border-color: var(--gold, #e9c46a); }
+#hud-widget .hud-wrow > .dot { width: 6px; height: 6px; margin: 0; align-self: center; }
+#hud-widget .hud-wrow[data-state="idle"] > .dot { animation: none; opacity: .64; }
+#hud-widget .hud-wname { font-size: 16px; letter-spacing: 1px; color: var(--ph-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#hud-widget .hud-wstep { grid-column: 2 / 4; grid-row: 2; font-size: 13px; line-height: 1.2; opacity: .75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#hud-widget .hud-wclock { grid-column: 4; grid-row: 1 / 3; align-self: center; font-size: 24px; line-height: 1; letter-spacing: 1px; color: var(--ph-bright); font-variant-numeric: tabular-nums; }
+#hud-widget .hud-wrow[data-state="idle"] .hud-wclock { font-size: 15px; color: var(--ph-dim); letter-spacing: 1.5px; }
+#hud-widget .hud-wrow[data-state="ask"] .hud-wstep { color: var(--gold, #e9c46a); opacity: 1; }
 #hud-widget .hud-wmore {
-  align-self: center; min-width: 34px; height: 30px; padding: 0 8px; cursor: pointer;
-  font: 14px/1 'VT323', monospace; letter-spacing: .5px;
-  color: var(--ph); background: rgba(0, 0, 0, .22);
-  border: 1px solid var(--gd-edge, var(--ph-dim)); border-radius: 3px;
+  margin: 0; padding: 4px 8px; cursor: pointer; text-align: left;
+  font: 13px/1.2 'VT323', monospace; letter-spacing: .5px;
+  color: var(--ph-dim); background: transparent; border: 1px solid transparent; border-radius: 4px;
 }
 #hud-widget .hud-wmore[hidden] { display: none; }
-#hud-widget .hud-wmore:is(:hover, :focus-visible) { color: var(--ph-bright); background: var(--gd-hover, var(--ph-faint)); border-color: var(--ph); }
-@media (prefers-reduced-motion: reduce) { #hud-widget .hud-wtile { transition: none; } }
+#hud-widget .hud-wmore:is(:hover, :focus-visible) { color: var(--ph-bright); background: var(--gd-hover, var(--ph-faint)); border-color: var(--gd-edge, var(--ph-dim)); }
+@media (prefers-reduced-motion: reduce) { #hud-widget .hud-wrow { transition: none; } #hud-widget .hud-wrow > .dot { animation: none; } }

@@ -420,10 +420,10 @@
 
   const doc = root && root.document;
   const S = {
-    active: false, view: 'activity', pinned: true, desktop: false, busy: false, worldStopped: false,
+    active: false, view: 'activity', pinned: true, desktop: false, busy: false,
     pollT: 0, histT: 0, tickT: 0, histSoon: 0, feed: createFeed(), workers: [], finished: [], histOk: null,
     els: null, cards: new Map(), bound: false, fetching: false, fetchingHist: false, titleWas: null, foldedH: 0,
-    widget: null, frameT: 0, widgetFit: null
+    widget: null, frameT: 0, widgetFit: null, followId: '', followPinned: ''
   };
 
   const now = () => Date.now();
@@ -536,17 +536,18 @@
   }
 
   /* ---------------- WIDGET: the HUD at its smallest ----------------
-     One tile per agent with work under way: that agent drawn at its desk by the station's own renderers
-     (IndustrialTextures floor, the desk + chair props, SPRITES.drawBody seated and working, the same clock
-     the floor animates on), its name, how long the run has been going, and the step it is on. Nothing
-     under way: the agent on the line at its desk, idle, and ALL QUIET. A click opens ACTIVITY. */
+     The REAL station, small: the world renderer keeps running into the station's own view (#stage-wrap,
+     its camera frame included) and its camera follows the agent a glance most needs, so what the widget
+     shows is what the station is doing — at the desk when it works, walking the floor when it is idle.
+     Under it, one row per agent with work under way: its lamp, name, run clock, step. A click on the view
+     opens ACTIVITY; a click on a row points the camera at that agent. The world stops again whenever the
+     widget is not on screen (ACTIVITY / CHAT), so the HUD costs nothing it does not show. */
 
-  const TILE_MAX = 3;
-  const SCENE_W = 4, SCENE_H = 3, TILE_PX = 12, SCENE_SCALE = 3;   // world tiles, world px per tile, css px per world px
-  const FRAME_MS = 150;                                             // ~7 fps while anyone works: alive, never a GPU cost
+  const ROW_MAX = 3;
 
-  /** The widget's tiles from the feed's items: one per agent with live or asking work (needs your OK
-      first, then the longest-running), at most TILE_MAX with the rest counted. */
+  /** The widget's rows from the feed's items: one per agent with live or asking work (needs your OK
+      first, then the longest-running), at most ROW_MAX with the rest counted. Nothing under way: the
+      agent on the line, idle, with its last finish. */
   function widgetTiles(items, onLine, agents) {
     const busy = new Map();
     for (const it of arr(items)) {
@@ -556,7 +557,7 @@
     }
     const list = Array.from(busy.values()).sort((a, b) => (a.state === b.state ? a.sortAt - b.sortAt : a.state === 'ask' ? -1 : 1));
     if (list.length) {
-      return { tiles: list.slice(0, TILE_MAX).map(it => ({ agentId: it.agentId, name: it.name, color: it.color, working: true, state: it.state, startedAt: it.sortAt, step: it.status })), more: Math.max(0, list.length - TILE_MAX) };
+      return { tiles: list.slice(0, ROW_MAX).map(it => ({ agentId: it.agentId, name: it.name, color: it.color, working: true, state: it.state, startedAt: it.sortAt, step: it.status })), more: Math.max(0, list.length - ROW_MAX) };
     }
     const a = arr(agents).find(x => x && x.id === onLine) || arr(agents)[0];
     if (!a) return { tiles: [], more: 0 };
@@ -572,61 +573,48 @@
     return h ? h + ':' + String(m).padStart(2, '0') + ':' + String(r).padStart(2, '0') : m + ':' + String(r).padStart(2, '0');
   }
 
-  // The agent at its desk, drawn the way the floor draws a seated worker: floor plates, the desk, the seat
-  // chair on the tile in front of it, the body on the chair facing the screen. Returns false when the
-  // station's renderers are not ready (the tile then shows its words only).
-  function drawScene(cv, agent, working, t) {
-    if (typeof SPRITES === 'undefined' || !SPRITES.ready || typeof PropSprites === 'undefined') return false;
-    const g = cv.getContext('2d'); if (!g) return false;
-    const T = TILE_PX, k = cv.width / (SCENE_W * T);
-    g.setTransform(1, 0, 0, 1, 0, 0);
-    g.clearRect(0, 0, cv.width, cv.height);
-    g.imageSmoothingEnabled = false;
-    g.save();
-    g.scale(k, k);
-    try {
-      if (typeof IndustrialTextures !== 'undefined' && IndustrialTextures.floor) {
-        for (let y = 0; y < SCENE_H; y++) for (let x = 0; x < SCENE_W; x++) IndustrialTextures.floor(g, x * T, y * T, T, x, y, 'plate');
-      }
-      PropSprites.setCtx(g); PropSprites.setNow(t);
-      // row 0 is headroom: a desk's art stands taller than its one-tile footprint
-      const desk = { id: 'hud-desk-' + agent.id, t: 'desk', x: 1, y: 1, w: 2, h: 1, r: 0 };
-      PropSprites.draw(desk, working, { heat: 0, prog: null, occupied: true, still: !working });
-      const seatT = PropSprites.has && PropSprites.has('seatchair') ? 'seatchair' : (PropSprites.has && PropSprites.has('chair') ? 'chair' : null);
-      const remaster = typeof IndustrialTextures !== 'undefined' && IndustrialTextures.isRemaster && IndustrialTextures.isRemaster();
-      if (seatT) PropSprites.draw(Object.assign({ id: 'hud-seat-' + agent.id, t: seatT, x: 1.5, y: 2, w: 1, h: 1 }, remaster ? { r: 2 } : {}), false, { still: true });
-      const body = { id: agent.id, skin: agent.skin, color: agent.color, px: 2 * T, py: 3 * T - 1, dir: 'north', state: 'idle',
-        seated: true, sitting: true, seatPx: 2 * T, seatPy: 3 * T - 1, working: !!working, phase: 0, noShadow: true };
-      SPRITES.drawBody(g, body, t, { skipGroundShadow: true, reducedMotion: !working });
-    } catch (_) { g.restore(); return false; }
-    g.restore();
-    return true;
+  // The widget's world is drawn ~20 times a second (World.setFrameCap): alive to a glance, a fraction of the
+  // full station's cost while a game has the GPU. 48ms stays under the world's 64ms step clamp, so bodies
+  // still move at their true speed. The full station always gets its uncapped loop back.
+  const WIDGET_FRAME_MS = 48;
+  function worldStart(capped) {
+    try { if (typeof World !== 'undefined') { if (World.setFrameCap) World.setFrameCap(capped ? WIDGET_FRAME_MS : 0); if (World.start) World.start(); } } catch (_) {}
+  }
+  function worldStop() { try { if (typeof World !== 'undefined' && World.stop) World.stop(); } catch (_) {} }
+
+  // Point the station's camera at an agent (its own follow-lock: the same one a CREW click makes).
+  function follow(id) {
+    if (!id || S.followId === id) return;
+    S.followId = id;
+    try { if (typeof World !== 'undefined' && World.lockBody) World.lockBody(id); } catch (_) {}
   }
 
   function buildWidget() {
     if (S.widget) return S.widget;
     const g = gameScreen(); if (!g) return null;
+    // the view: a click-catcher over the station view (a click on the world would otherwise open a dossier)
+    const open = el('button', 'hud-wview'); open.type = 'button';
+    open.setAttribute('aria-label', 'Open activity'); open.title = 'Open activity';
     const box = el('section', 'hud-widget');
     box.id = 'hud-widget';
     box.setAttribute('aria-label', 'StarNet HUD: your agents at work');
     box.setAttribute('data-tauri-drag-region', '');
-    const tiles = el('div', 'hud-wtiles'); tiles.setAttribute('data-tauri-drag-region', '');
+    const rows = el('div', 'hud-wrows'); rows.setAttribute('data-tauri-drag-region', '');
     const more = el('button', 'hud-wmore'); more.type = 'button'; more.hidden = true;
-    box.append(tiles, more);
+    box.append(rows, more);
     g.insertBefore(box, g.firstChild);
-    const open = e => {
-      const tile = e.target && e.target.closest && e.target.closest('[data-agent],.hud-wmore');
-      if (!tile) return;
-      const id = tile.getAttribute('data-agent');
-      setView('activity').then(() => {
-        // open that agent's newest live card so the Commander lands on the work they clicked
-        if (!id) return;
-        for (const c of S.cards.values()) if (c.item && c.item.agentId === id && (c.item.state === 'live' || c.item.state === 'ask')) { c.node.open = true; break; }
-      });
-    };
-    tiles.addEventListener('click', open);
-    more.addEventListener('click', open);
-    S.widget = { box, tiles, more, map: new Map() };
+    g.insertBefore(open, g.firstChild);
+    open.addEventListener('click', () => { setView('activity'); });
+    more.addEventListener('click', () => { setView('activity'); });
+    rows.addEventListener('click', e => {
+      const row = e.target && e.target.closest && e.target.closest('[data-agent]');
+      if (!row) return;
+      S.followPinned = row.getAttribute('data-agent');   // the Commander chose who to watch
+      S.followId = '';
+      follow(S.followPinned);
+      renderWidget();
+    });
+    S.widget = { box, rows, more, open, map: new Map() };
     return S.widget;
   }
 
@@ -635,53 +623,51 @@
     const t = now();
     const agents = roster();
     const plan = widgetTiles(S.lastItems || [], onLineId(), agents);
+    // whom the camera watches: the Commander's pick while that agent is still listed, else the top row
+    if (S.followPinned && !plan.tiles.some(x => x.agentId === S.followPinned)) S.followPinned = '';
+    const watch = S.followPinned || (plan.tiles[0] && plan.tiles[0].agentId) || '';
+    follow(watch);
     const keep = new Set();
     let prev = null;
     for (const tile of plan.tiles) {
       keep.add(tile.agentId);
       let v = w.map.get(tile.agentId);
       if (!v) {
-        const node = el('button', 'hud-wtile'); node.type = 'button';
-        const cv = el('canvas', 'hud-wscene');
-        const name = el('span', 'hud-wname'), clock = el('span', 'hud-wclock'), step = el('span', 'hud-wstep');
-        node.append(cv, name, clock, step);
-        v = { node, cv, name, clock, step };
+        const node = el('button', 'hud-wrow'); node.type = 'button';
+        const dot = el('span', 'dot'), name = el('span', 'hud-wname'), clock = el('span', 'hud-wclock'), step = el('span', 'hud-wstep');
+        dot.setAttribute('aria-hidden', 'true');
+        node.append(dot, name, clock, step);
+        v = { node, dot, name, clock, step };
         w.map.set(tile.agentId, v);
       }
-      // the canvas backing store is the tile in DEVICE px, so the sprite is never resampled by the browser
-      const dpr = Math.max(1, Math.round((root.devicePixelRatio || 1) * 2) / 2);
-      const bw = Math.round(SCENE_W * TILE_PX * SCENE_SCALE * dpr), bh = Math.round(SCENE_H * TILE_PX * SCENE_SCALE * dpr);
-      if (v.cv.width !== bw || v.cv.height !== bh) { v.cv.width = bw; v.cv.height = bh; }
       v.node.setAttribute('data-agent', tile.agentId);
       v.node.dataset.state = tile.state;
+      v.node.classList.toggle('on', tile.agentId === watch);
+      v.dot.className = 'dot' + (tile.state === 'ask' ? ' alert' : '');
       setText(v.name, tile.name);
       if (tile.color) v.name.style.color = tile.color; else v.name.style.removeProperty('color');
       setText(v.clock, tile.working ? fmtClock(t - tile.startedAt) : 'ALL QUIET');
       setText(v.step, tile.step);
-      const words = tile.name + (tile.working ? ' · ' + tile.step + ' · running ' + fmtClock(t - tile.startedAt) : ' · all quiet');
-      v.node.setAttribute('aria-label', words + '. Open activity');
-      v.node.title = 'Open activity';
-      const a = agents.find(x => x && x.id === tile.agentId) || { id: tile.agentId, color: tile.color };
-      v.node.classList.toggle('hud-noscene', !drawScene(v.cv, a, tile.working, t));
-      const want = prev ? prev.nextSibling : w.tiles.firstChild;
-      if (want !== v.node) w.tiles.insertBefore(v.node, want);
+      v.node.setAttribute('aria-label', tile.name + (tile.working ? ' · ' + tile.step + ' · running ' + fmtClock(t - tile.startedAt) : ' · all quiet · ' + tile.step) + '. Watch');
+      v.node.title = 'Watch ' + tile.name;
+      const want = prev ? prev.nextSibling : w.rows.firstChild;
+      if (want !== v.node) w.rows.insertBefore(v.node, want);
       prev = v.node;
     }
     for (const [id, v] of w.map) if (!keep.has(id)) { v.node.remove(); w.map.delete(id); }
     w.more.hidden = !plan.more;
-    if (plan.more) { setText(w.more, '+' + plan.more); w.more.setAttribute('aria-label', plan.more + ' more agents working. Open activity'); w.more.title = plan.more + ' more working'; }
-    // the frame loop runs only while someone is working and the widget is on screen
-    const animate = plan.tiles.some(x => x.working);
-    if (animate && !S.frameT) S.frameT = root.setInterval(renderWidget, FRAME_MS);
-    else if (!animate && S.frameT) { root.clearInterval(S.frameT); S.frameT = 0; }
+    if (plan.more) { setText(w.more, '+' + plan.more + ' MORE WORKING'); w.more.setAttribute('aria-label', plan.more + ' more agents working. Open activity'); }
     fitWidget();
   }
 
-  function stopWidgetFrames() { if (S.frameT) { root.clearInterval(S.frameT); S.frameT = 0; } }
+  function stopWidgetFrames() {}
 
-  // the window hugs the widget, width and height
+  // the window hugs the widget (the view + its rows), width and height
   function widgetSize() {
-    try { const r = S.widget.box.getBoundingClientRect(); return { w: Math.ceil(r.right + 4), h: Math.ceil(r.bottom + 4) }; } catch (_) { return null; }
+    try {
+      const a = S.widget.box.getBoundingClientRect(), s = $('stage-wrap').getBoundingClientRect();
+      return { w: Math.ceil(Math.max(a.right, s.right) + 4), h: Math.ceil(Math.max(a.bottom, s.bottom) + 4) };
+    } catch (_) { return null; }
   }
   function fitWidget() {
     if (!S.active || S.view !== 'widget' || !S.desktop) return;
@@ -842,7 +828,8 @@
     doc.body.classList.toggle('hud-view-activity', act);
     doc.body.classList.toggle('hud-view-widget', small);
     doc.body.classList.toggle('hud-folded', act || small);
-    if (!small) stopWidgetFrames();
+    // the world renders only while the widget shows it: ACTIVITY and CHAT cost no GPU
+    if (small) worldStart(true); else { worldStop(); S.followId = ''; }
     if (S.els && S.els.title) {
       if (act) { if (S.titleWas == null) S.titleWas = S.els.title.textContent; }
       else if (S.titleWas != null) { S.els.title.textContent = S.titleWas; S.titleWas = null; }
@@ -881,9 +868,6 @@
     // the COMMS header is the HUD's drag handle
     S.els.h3.setAttribute('data-tauri-drag-region', '');
     if (S.els.title) S.els.title.setAttribute('data-tauri-drag-region', '');
-    // The station is not on screen: stop the world renderer so a game in the foreground gets the GPU.
-    // (World.start() on exit resumes the same floor; nothing about the station's state lives in frames.)
-    try { if (typeof World !== 'undefined' && World.stop) { World.stop(); S.worldStopped = true; } } catch (_) {}
     render();
     poll(); pollHistory();
     S.pollT = root.setInterval(poll, POLL_MS);
@@ -917,10 +901,8 @@
           S.els.h3.removeAttribute('data-tauri-drag-region');
           if (S.els.title) S.els.title.removeAttribute('data-tauri-drag-region');
         }
-        if (S.worldStopped) {
-          S.worldStopped = false;
-          try { if (inGame() && typeof World !== 'undefined' && World.start) World.start(); } catch (_) {}
-        }
+        S.followId = S.followPinned = '';
+        if (inGame()) worldStart(false);   // the full station always gets its world back, uncapped
         announceLayout();
         S.busy = false;
       });
