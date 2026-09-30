@@ -64,16 +64,33 @@ A.ok(/display:\s*flex/.test(rule('.wf-start-h')) && /border-radius:\s*10px/.test
 /* ---------- the map: real machines, the + on the belt, pinned ---------- */
 A.ok(/<div class="wf-strip-wrap" id="wf-map">/.test(panel), 'the diagram\'s well is the panel\'s map');
 A.ok(/const mthumb = t => \{ const u = \(t && H\.machineStill\) \? H\.machineStill\(t\) : '';/.test(panel) && /<img class="wf-mthumb" src="' \+ u \+ '" alt="" aria-hidden="true" draggable="false">/.test(panel), 'a part\'s card leads with the machine\'s own floor art (no art: the name alone)');
+/* THE MACHINES AS TILES (2026-09-30 — Andrew on the diagram: "make this look way better"): the Build Library's glass tile — the
+   machine's art big in a lit well (a BAY's agent stands at it), its name, one short line; the sentences are the tile's tip */
+const tile = at(panel, '  function tileHTML(o) {', '  // the roles a step can take');
+A.ok(/'<span class="wf-nart">' \+ mthumb\(o\.mach\) \+ \(o\.agent \|\| ''\) \+ '<\/span>'/.test(tile) && /'<span class="wf-nname">' \+ esc\(o\.name\) \+ '<\/span>'/.test(tile)
+  && /'<span class="wf-nmeta' \+ \(o\.warn \? ' warn' : ''\) \+ '">' \+ esc\(o\.meta\) \+ '<\/span><\/button>'/.test(tile), 'a tile is the machine\'s art (with its agent), its name and one short line');
+A.ok(/data-tip="' \+ esc\(o\.tip\) \+ '"/.test(tile) && /\(o\.lamp != null \? '<span class="dot' \+ \(o\.lamp \? ' ok' : ''\) \+ '"><\/span>' : ''\)/.test(tile), '…with its lamp, and its whole story as its hover tip');
 const node = at(panel, '  function nodeHTML(n, f) {', '  function drawArcs(');
-A.ok(/partHead\(n\.propId \? n\.mach : null, n\.k, dot\(n\.ok\), n\.t\)/.test(node) && /partHead\(g\.kind === 'loop' \? 'loop' : 'joiner',/.test(node) && /partHead\('bay', 'BAY ' \+ i, dot\(ok\), esc\(d\.role \|\| 'STEP'\)\)/.test(node),
+A.ok(/mach: n\.propId \? n\.mach : null, lamp: n\.ok, name: n\.name, meta: n\.meta/.test(node) && /mach: loop \? 'loop' : 'joiner'/.test(node)
+  && /mach: 'bay', agent: d\.agentId \? thumb\(d\.agentId, 26, 32, 'wf-nthumb'\) : '', lamp: ok, name: role, meta: who \|\| 'needs an agent', warn: !who/.test(node),
   'the INBOX, every BAY, a gate and the OUTBOX are all shown as their machine, with their lamp');
+A.ok(/'\\n' \+ \(brief \? '“' \+ brief\.slice\(0, 140\)/.test(node) && /: 'no instructions yet'\) \+ \(t \? '\\n✓ tested' : ''\);/.test(node) && !/<span class="s">|no agent yet<\/span>/.test(node),
+  'a step\'s instructions, its missing agent and its test live in the tip — no sentence is printed on a tile');
+A.ok(/meta: f\.outbox\.reached \? 'the result' : f\.outbox\.reachedOnceCrewed \? 'needs crew' : 'not connected'/.test(panel) && /meta: !ip \? 'none yet' : kinds > 1/.test(panel), 'the INBOX and OUTBOX say one short thing each');
+/* the belts are the floor's own conveyor art: still until a job would reach the OUTBOX (the floor's energized rule) */
+A.ok(/strip\.style\.setProperty\('--wf-belt-cold', 'url\(' \+ cold \+ '\)'\); strip\.style\.setProperty\('--wf-belt-live', 'url\(' \+ live \+ '\)'\);/.test(panel), 'the belts wear the floor\'s belt tile');
+A.ok(/strip\.classList\.toggle\('live', !!\(f && f\.trigger\.propId && f\.outbox\.reached\)\);/.test(panel), '…and roll only when a job entering the INBOX would reach the OUTBOX');
+A.ok(/beltStill: live => beltStill\(live\)/.test(build) && /Conveyor\.create\(\)\.drawBelts\(g, 0, T, \[0, 1, 2\]\.map\(x => \(\{ x, y: 0, dir: 'E' \}\)\), live \? null : \{\}\);/.test(build), 'the Build host draws that tile with the floor\'s own conveyor painter (lit or cold)');
+A.ok(/\.wf-strip\.has-belt \.wf-belt \.rail \{[^}]*background: var\(--wf-belt-cold\) repeat-x/.test(css) && /\.wf-strip\.has-belt\.live \.wf-belt \.rail \{ background-image: var\(--wf-belt-live\); animation: wf-belt/.test(css), '…repeated along each belt, rolling only on a live line');
+A.ok(!/rail::after/.test(css) && /\.wf-strip\.live \.wf-arcs path\.chev \{ animation:/.test(css), 'nothing in the diagram moves on a line that cannot run');
+A.ok(/card\.classList\.toggle\('glass-tip', !!el\.closest\('\.refit-dock, \.wf-panel'\)\)/.test(rd('app/tooltip.js')), 'the panel\'s tips are the glass card that keeps its lines');
 A.ok(/mach: 'intake'/.test(panel) && /mach: 'outbox'/.test(panel), 'the INBOX and OUTBOX cards name their machines');
 A.ok(/machineStill: type => machineStill\(type\)/.test(build), 'the Build host offers a machine\'s art to the panel');
 const still = at(build, '  function machineStill(type) {', '  function setLibraryPlacement(');
 A.ok(/PropSprites\.draw\(\{ t: c\.id, x: 0, y: 0, w: c\.w, h: c\.h \}, true\)/.test(still) && /off\.toDataURL\('image\/png'\)/.test(still), '…drawn by the same sprite the floor draws, kept as a still');
 A.ok(/if \(had && had\.rev === rev\) return had\.url;/.test(still) && /machineStills\[key\] = \{ rev, url \};/.test(still), '…one per machine, made again when the authored art finishes loading');
 A.ok(/finally \{ if \(ctx\) PropSprites\.setCtx\(ctx\); \}/.test(still), '…and the sprite module\'s draw context goes back to the floor\'s canvas');
-A.ok(/grid-template-columns:\s*36px minmax\(0,1fr\)/.test(rule('.wf-node .hd.art')) && /width:\s*36px;\s*height:\s*36px/.test(rule('.wf-node .wf-mthumb')), 'the art sits beside the part\'s name at 36px');
+A.ok(/width:\s*96px;\s*height:\s*62px/.test(rule('.wf-nart')) && /width:\s*80px;\s*height:\s*62px/.test(rule('.wf-nart .wf-mthumb')) && /width:\s*124px/.test(rule('.wf-node')), 'the machine is drawn big, in a lit well, on a 124px tile');
 A.ok(/\.wf-belt :is\(\.rail,\.wf-plus\) \{ grid-row: 2; grid-column: 1; \}/.test(css), 'the + sits ON its belt');
 A.ok(/overflow-wrap:\s*break-word/.test(rule('.wf-belt .carry')) && /max-width:\s*112px/.test(rule('.wf-belt')), 'what a belt carries wraps between words, never inside one');
 A.ok(/\.wf-strip-wrap\.pin \{ position: sticky; top: 0; z-index: 3; \}/.test(css), 'a pinned map holds the top of the scroll');

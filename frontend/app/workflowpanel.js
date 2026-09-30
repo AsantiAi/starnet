@@ -314,17 +314,19 @@ const WorkflowPanel = (() => {
       const ip = f.trigger.propId;
       const sch = tr.schedules.length, ch = tr.channels.length, ev = tr.events.length, off = (tr.offSchedules || []).length;
       const kinds = (sch ? 1 : 0) + (ch ? 1 : 0) + (ev ? 1 : 0);
-      nodes.push({ kind: 'trigger', propId: ip, mach: 'intake', cls: 'wf-term' + (ip ? '' : ' none'), ok: !!ip && (sch + ch + ev) > 0, k: 'INBOX',
-        t: ip ? (kinds > 1 ? 'AUTO' : sch ? 'SCHEDULE' : ch ? 'CHANNEL' : ev ? 'TRIGGER' : off ? 'SCHEDULE · OFF' : 'MANUAL') : 'NO INBOX',
-        a: esc(ip ? (tr.channels.concat(tr.schedules.slice(0, 1), tr.events.length ? [tr.events.length === 1 ? tr.events[0].replace(/^when /, '') : tr.events.length + ' events'] : []).join(' · ') || (off ? tr.offSchedules[0] + ' · scheduling is off' : 'no trigger yet')) : 'add one on the floor') });
+      nodes.push({ kind: 'trigger', propId: ip, mach: 'intake', cls: 'wf-term' + (ip ? '' : ' none'), ok: !!ip && (sch + ch + ev) > 0, name: 'INBOX', warn: !ip,
+        meta: !ip ? 'none yet' : kinds > 1 ? (sch + ch + ev) + ' ways in' : sch ? tr.schedules[0] : ch ? tr.channels[0] : ev ? (tr.events.length === 1 ? tr.events[0].replace(/^when /, '') : tr.events.length + ' events') : off ? 'schedule off' : 'manual',
+        tip: 'INBOX · ' + (ip ? (kinds > 1 ? 'AUTO' : sch ? 'SCHEDULE' : ch ? 'CHANNEL' : ev ? 'TRIGGER' : off ? 'SCHEDULE · OFF' : 'MANUAL') : 'NO INBOX') + '\n'
+          + (ip ? (tr.channels.concat(tr.schedules, tr.events).join('\n') || (off ? tr.offSchedules[0] + ' · scheduling is off' : 'no trigger yet: it runs when you test it')) : 'add one on the floor') });
       f.cols.forEach(col => {
         nodes.push({ kind: 'col', col, ok: col.docks.every(d => d.agentId && H.hasCompute(d.agentId, d.propId)) });
         if (col.gate) nodes.push({ kind: 'gate', gate: col.gate, propId: col.gate.propId });
       });
       const lastCol = f.cols[f.cols.length - 1];
       const endId = lastCol ? (lastCol.gate ? lastCol.gate.propId : lastCol.docks.length === 1 ? lastCol.docks[0].propId : null) : null;
-      nodes.push({ kind: 'outbox', propId: f.outbox.propId, mach: 'outbox', addAfter: !f.outbox.propId && endId && H.lineEdit ? endId : null, cls: 'wf-term', ok: f.outbox.reached, k: 'OUTBOX', t: 'RESULT',
-        a: f.outbox.reached ? 'the line ends here' : f.outbox.propId ? (f.outbox.reachedOnceCrewed ? 'connected · waiting on agents' : 'not connected yet') : 'no OUTBOX' });
+      nodes.push({ kind: 'outbox', propId: f.outbox.propId, mach: 'outbox', addAfter: !f.outbox.propId && endId && H.lineEdit ? endId : null, cls: 'wf-term', ok: f.outbox.reached, name: 'OUTBOX',
+        meta: f.outbox.reached ? 'the result' : f.outbox.reachedOnceCrewed ? 'needs crew' : 'not connected', warn: !f.outbox.reached && !f.outbox.reachedOnceCrewed,
+        tip: 'OUTBOX\n' + (f.outbox.reached ? 'the line ends here' : f.outbox.propId ? (f.outbox.reachedOnceCrewed ? 'connected · waiting on agents' : 'not connected yet') : 'no OUTBOX') });
     } else if (S.lone) {
       nodes.push({ kind: 'col', col: { docks: [{ propId: S.lone, agentId: (prop(S.lone) || {}).agentId || null, role: (prop(S.lone) || {}).role || null, routed: false }], mode: 'single' }, ok: false });
     }
@@ -334,12 +336,13 @@ const WorkflowPanel = (() => {
       if (i > 0 && n.kind === 'col' && n.col.detached) html += '<div class="wf-belt gap"><span class="carry">not connected</span></div>';
       else if (i > 0) {
         const prev = nodes[i - 1], a = machineOf(prev), b = machineOf(n);
-        const carry = n.kind === 'col' && n.col.escalation ? escCarry(n.col.escalation) : prev.kind === 'trigger' ? 'the job' : prev.kind === 'col' && prev.col.docks.length === 1 ? ((prop(prev.col.docks[0].propId) || {}).hands || '…') : prev.kind === 'gate' ? (prev.gate.kind === 'loop' ? 'on DONE' : 'as one') : '…';
+        const carry = n.kind === 'col' && n.col.escalation ? escCarry(n.col.escalation) : prev.kind === 'trigger' ? 'the job' : prev.kind === 'col' && prev.col.docks.length === 1 ? ((prop(prev.col.docks[0].propId) || {}).hands || '') : prev.kind === 'gate' ? (prev.gate.kind === 'loop' ? 'on DONE' : 'as one') : '';
+        const mid = (prev.kind === 'col' && prev.col.docks.length > 1) || (n.kind === 'col' && n.col.docks.length > 1);
         const canPlus = !!(a && b && S.lineKey);
         // a + that can only refuse is shown OFF with its reason (2026-09-27 audit B3) — never a role picker that ends in an error
         const lined = canPlus && H.lineEdit ? canEdit('insertStep', a, { from: a, to: b }) : null;
         const chk = lined && lined.ok ? lined : canPlus && H.canInsertBay ? (H.canInsertBay(a, b) || { ok: true }) : { ok: true };
-        html += '<div class="wf-belt"><span class="carry">' + esc(carry) + '</span><span class="rail"></span>'
+        html += '<div class="wf-belt' + (mid ? ' mid' : '') + '">' + (carry ? '<span class="carry">' + esc(carry) + '</span>' : '') + '<span class="rail"></span>'
           + (canPlus ? (chk.ok
             ? '<button type="button" class="wf-plus" data-plus="' + i + '" data-from="' + esc(a) + '" data-to="' + esc(b) + '" aria-label="Add a step here" data-tip="Add a step here">+</button>'
             : '<button type="button" class="wf-plus off" aria-disabled="true" data-plus-off="' + esc(chk.msg || 'a step cannot be added here') + '" aria-label="Adding a step here is not possible" data-tip="' + esc(chk.msg || 'a step cannot be added here') + '">+</button>') : '')
@@ -359,17 +362,34 @@ const WorkflowPanel = (() => {
     wireEdits(strip);   // (an OUTBOX the line still needs is added from its place on the strip)
     const cx = ins.querySelector('[data-ins-close]'); if (cx) cx.onclick = () => { S.insertAt = null; paintStrip(flow()); };
     strip.classList.toggle('has-arcs', !!(f && f.gates && f.gates.some(g => g.kind === 'loop' && g.backTo)));   // room under the cards only when a loop's way back is drawn there
+    /* THE BELTS ARE THE FLOOR'S (2026-09-30): one tile of the floor's own conveyor art (the Build host renders it) repeated along
+       each belt — still while the line cannot run, rolling once a job entering its INBOX would reach its OUTBOX: the same rule the
+       floor uses to energize a route, so a moving belt here is never a decoration */
+    if (!strip.dataset.belt && H.beltStill) {
+      const cold = H.beltStill(false), live = H.beltStill(true);
+      if (cold && live) { strip.style.setProperty('--wf-belt-cold', 'url(' + cold + ')'); strip.style.setProperty('--wf-belt-live', 'url(' + live + ')'); strip.dataset.belt = '1'; strip.classList.add('has-belt'); }
+    }
+    strip.classList.toggle('live', !!(f && f.trigger.propId && f.outbox.reached));
     strip.parentNode.classList.toggle('pin', !nodes.some(n => n.kind === 'col' && n.col.docks.length > 1));   // (a one-row diagram stays pinned as the panel's map; stacked branches would hold too much of it)
     drawArcs(strip, f);
     const selN = strip.querySelector('.wf-node.sel');
     if (selN) { const wrap = strip.parentNode, l = selN.offsetLeft, r = l + selN.offsetWidth; if (l < wrap.scrollLeft || r > wrap.scrollLeft + wrap.clientWidth) wrap.scrollLeft = Math.max(0, l - (wrap.clientWidth - selN.offsetWidth) / 2); }
   }
-  /* EVERY PART IS SHOWN AS THE MACHINE IT IS (2026-09-30: "the system viewer or wireframe view should look better"). A strip card
-     leads with the part's own floor art — the still the Build host renders from the same sprite the floor draws — beside its
-     name and lamp, so the diagram reads as this line's machines and not as boxes. No art (an older host, a part that is
-     not placed yet) → the name alone. */
+  /* THE LINE'S MACHINES AS TILES (2026-09-30 — Andrew on this diagram: "make this look way better"). Each part is a glass tile in
+     the Build Library's language: the machine's own floor art big in a lit well (the still the Build host renders from the sprite
+     the floor draws; a BAY's agent stands at its machine), its name, and one short line — how work gets in, who works the step,
+     where the result goes. The lamp keeps the part's state and a BAY's number sits in its corner. Everything the old card spelled
+     out in sentences ("no trigger yet", "no instructions yet", "connected · waiting on agents") is the tile's hover tip, name
+     first. No art (an older host, a part not placed yet) → the name alone. */
   const mthumb = t => { const u = (t && H.machineStill) ? H.machineStill(t) : ''; return u ? '<img class="wf-mthumb" src="' + u + '" alt="" aria-hidden="true" draggable="false">' : ''; };
-  const partHead = (mach, k, lamp, t) => { const art = mthumb(mach); return '<span class="hd' + (art ? ' art' : '') + '">' + art + '<span class="k">' + k + lamp + '</span>' + (t ? '<span class="t">' + t + '</span>' : '') + '</span>'; };
+  function tileHTML(o) {
+    return '<button type="button" class="wf-node ' + o.cls + (o.sel ? ' sel' : '') + '"' + o.attrs + ' data-tip="' + esc(o.tip) + '" aria-label="' + esc(o.label) + '">'
+      + (o.badge ? '<span class="wf-nbadge' + (o.badgeOk ? ' ok' : '') + '">' + esc(o.badge) + '</span>' : '')
+      + (o.lamp != null ? '<span class="dot' + (o.lamp ? ' ok' : '') + '"></span>' : '')
+      + '<span class="wf-nart">' + mthumb(o.mach) + (o.agent || '') + '</span>'
+      + '<span class="wf-nname">' + esc(o.name) + '</span>'
+      + '<span class="wf-nmeta' + (o.warn ? ' warn' : '') + '">' + esc(o.meta) + '</span></button>';
+  }
   // the roles a step can take, in the order the inserter and a BAY's ROLE chips offer them
   const STEP_ROLES = ['RESEARCHER', 'WRITER', 'REVIEWER', 'ENGINEER', 'TESTER', 'ANALYST', 'SHIPPER', 'GENERALIST'];
   function inserterHTML(from, to, f) {
@@ -389,29 +409,31 @@ const WorkflowPanel = (() => {
         : 'A real BAY is placed on the floor near this belt and the belts re-route through it — one UNDO takes it all back. If there is no room, nothing changes.') + '</span></div>';
   }
   function nodeHTML(n, f) {
-    const sel = id => (id && id === S.sel ? ' sel' : '');
-    const dot = ok => '<span class="dot' + (ok ? ' ok' : '') + '"></span>';
+    const isSel = id => !!id && id === S.sel;
     if (n.kind === 'outbox' && n.addAfter) return editBtn('addOutbox', n.addAfter, { after: n.addAfter }, '+ OUTBOX', 'an OUTBOX after the last step — where finished work lands', 'wf-node wf-term wf-addend');
     if (n.kind === 'trigger' || n.kind === 'outbox') {
-      return '<button type="button" class="wf-node ' + n.cls + sel(n.propId) + '" data-node="' + esc(n.propId || '') + '"' + (n.propId ? '' : ' disabled') + '>'
-        + partHead(n.propId ? n.mach : null, n.k, dot(n.ok), n.t) + '<span class="a">' + n.a + '</span></button>';
+      return tileHTML({ cls: n.cls, sel: isSel(n.propId), attrs: ' data-node="' + esc(n.propId || '') + '"' + (n.propId ? '' : ' disabled'),
+        mach: n.propId ? n.mach : null, lamp: n.ok, name: n.name, meta: n.meta, warn: n.warn, tip: n.tip, label: n.name + ', ' + n.meta });
     }
     if (n.kind === 'gate') {
-      const g = n.gate, back = g.backTo && f.docks[g.backTo];
-      const txt = g.kind === 'loop' ? '⟲ back to ' + (back ? (back.agentId ? nameOf(back.agentId) : back.role || 'BAY') : '?') + ' · up to ' + (g.max || 5) + '×' : 'waits for every part';
-      return '<button type="button" class="wf-node gate ' + g.kind + sel(g.propId) + '" data-node="' + esc(g.propId || '') + '" data-gate="' + esc(g.key) + '">'
-        + partHead(g.kind === 'loop' ? 'loop' : 'joiner', g.kind === 'loop' ? 'LOOP GATE' : 'JOINER', '', '') + '<span class="a">' + esc(txt) + '</span></button>';
+      const g = n.gate, back = g.backTo && f.docks[g.backTo], loop = g.kind === 'loop';
+      const who = back ? (back.agentId ? nameOf(back.agentId) : back.role || 'BAY') : '?';
+      const txt = loop ? '⟲ back to ' + who + ' · up to ' + (g.max || 5) + '×' : 'waits for every part';
+      return tileHTML({ cls: 'gate ' + g.kind, sel: isSel(g.propId), attrs: ' data-node="' + esc(g.propId || '') + '" data-gate="' + esc(g.key) + '"',
+        mach: loop ? 'loop' : 'joiner', lamp: null, name: loop ? 'LOOP' : 'JOINER', meta: loop ? 'back to ' + who + ' · ' + (g.max || 5) + '×' : 'waits for all',
+        tip: (loop ? 'LOOP GATE' : 'JOINER') + '\n' + txt, label: (loop ? 'LOOP, ' : 'JOINER, ') + txt });
     }
     const col = n.col;
     const inner = col.docks.map(d => {
       const p = prop(d.propId) || {}, t = testOf(d.propId), i = f ? f.order.indexOf(d.propId) + 1 : 1;
-      const ok = !!(d.agentId && H.hasCompute(d.agentId, d.propId));
-      return '<button type="button" class="wf-node dock' + sel(d.propId) + '" data-node="' + esc(d.propId) + '">'
-        + partHead('bay', 'BAY ' + i, dot(ok), esc(d.role || 'STEP'))
-        + '<span class="a' + (d.agentId ? '' : ' none') + '">' + (d.agentId ? thumb(d.agentId, 26, 32, 'wf-nthumb') : '') + '<span class="an">' + esc(d.agentId ? nameOf(d.agentId) : 'no agent yet') + '</span></span>'
-        + '<span class="s">' + (p.brief ? esc(String(p.brief).slice(0, 90)) : '<i>no instructions yet</i>') + '</span>'
-        + (d.agentId && !d.routed ? '<span class="warn">not routed yet</span>' : '')
-        + (t ? '<span class="badge">✓ TESTED</span>' : '') + '</button>';
+      const ok = !!(d.agentId && H.hasCompute(d.agentId, d.propId)), who = d.agentId ? nameOf(d.agentId) : null, role = d.role || 'STEP';
+      const brief = p.brief ? String(p.brief) : '';
+      const tip = 'BAY ' + i + ' · ' + role + '\n' + (who ? who + ' works this step' : 'no agent yet')
+        + (who && !ok ? '\nneeds a workstation' : '') + (d.agentId && !d.routed ? '\nnot routed yet' : '')
+        + '\n' + (brief ? '“' + brief.slice(0, 140) + (brief.length > 140 ? '…' : '') + '”' : 'no instructions yet') + (t ? '\n✓ tested' : '');
+      return tileHTML({ cls: 'dock', sel: isSel(d.propId), attrs: ' data-node="' + esc(d.propId) + '"', badge: String(i) + (t ? ' ✓' : ''), badgeOk: !!t,
+        mach: 'bay', agent: d.agentId ? thumb(d.agentId, 26, 32, 'wf-nthumb') : '', lamp: ok, name: role, meta: who || 'needs an agent', warn: !who,
+        tip, label: 'BAY ' + i + ', ' + role + ', ' + (who || 'no agent yet') });
     }).join('');
     if (col.docks.length === 1) return inner;
     return '<div class="wf-colgroup ' + col.mode + '"><span class="wf-colmode">' + (col.detached ? 'NOT CONNECTED' : col.mode === 'all' ? 'ALL RUN' : col.mode === 'turns' ? 'TAKE TURNS' : 'ONE BY CONTENT') + '</span>' + inner + '</div>';
@@ -431,7 +453,7 @@ const WorkflowPanel = (() => {
       const d = 'M' + ax + ' ' + (a.offsetTop + a.offsetHeight) + ' L' + ax + ' ' + y1 + ' L' + bx + ' ' + y1 + ' L' + bx + ' ' + (b.offsetTop + b.offsetHeight);
       for (const c of ['', 'chev']) { const p = document.createElementNS(NS, 'path'); p.setAttribute('d', d); if (c) p.setAttribute('class', c); svg.appendChild(p); }
       const t = document.createElementNS(NS, 'text'); t.setAttribute('x', (ax + bx) / 2); t.setAttribute('y', y1 + 15); t.setAttribute('text-anchor', 'middle');
-      t.textContent = '⟲ BACK ' + (g.when === 'approved' || g.when === 'revise' ? 'UNTIL ' + g.when.toUpperCase() : g.when ? 'WHILE ' + String(g.when).toUpperCase() : 'EVERY PASS') + ' · UP TO ' + (g.max || 5) + '×';
+      t.textContent = '⟲ ' + (g.when === 'approved' || g.when === 'revise' ? 'UNTIL ' + g.when.toUpperCase() : g.when ? 'WHILE ' + String(g.when).toUpperCase() : 'EVERY PASS') + ' · ' + (g.max || 5) + '×';
       svg.appendChild(t);
     }
     strip.appendChild(svg);
