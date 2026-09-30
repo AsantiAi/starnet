@@ -2,7 +2,7 @@
 
    The unit test (browser.need-human.test.js) pins the tool/frozen/host contract with an injected driver. This one
    proves the driver half is real: the agent's own headless Chrome reaches a real login wall, the auth probe sees
-   the password field, browser.need_human parks the run, the screencast yields real JPEG frames, the Commander's
+   the password field, browser.need_human parks the run, the stream (a capture loop on the same page session) yields real JPEG frames, the Commander's
    pointer + keys (CDP Input.*, never the OS) sign in, HAND BACK resumes the agent, and the agent reads the
    signed-in page — while every agent read during the handoff was refused.
 
