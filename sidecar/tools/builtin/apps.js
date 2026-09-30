@@ -18,7 +18,7 @@ const GUIDE = [
   '- TIME: your own sense of today\'s date is WRONG (it is your training era). app.read states the station\'s real date — anything current (news, prices, "today") is searched for THAT date, and every item you publish is from it.',
   '- The page has NO network: it never fetches anything. Its content is DATA you publish with app.publish(app, key, value) — any JSON (e.g. key "brief": { date, items:[{title, summary, source, url}] }).',
   '- In the page: const data = await starnet.store.get("brief"); render it; and re-render when new data lands: starnet.onData(async () => { … }). Show an empty state (sn-empty) until the first data arrives, and a small "updated <time>" line (data._meta is kept by the station: await starnet.store.get("_meta") → { updatedAt }).',
-  '- Links: <a> cannot open from the sandbox — use a button/row that calls starnet.ui.openLink("https://…").',
+  '- Links: a plain <a href="https://…"> opens in the Commander\'s browser (the station catches the click) — just link. Never put a URL inside an inline onclick="…" attribute (its quotes break the attribute); for a whole clickable row, wrap it in the <a>.',
   '- If it should update by itself (daily, hourly…), call app.schedule with `every` and the `task` each refresh performs (e.g. "search the web for today\'s top AI news and publish a brief with app.publish key brief"). Then do the FIRST refresh yourself now (do the task, app.publish) so the Commander sees real content immediately.',
   '- Build order: app.read → app.write index.html → app.check → app.publish sample/real data → app.schedule. Tell the Commander in one or two sentences what the app does and when it refreshes.'
 ].join('\n');
@@ -98,7 +98,7 @@ function makeAppTools(deps) {
             if (/background(?:-color)?\s*:\s*(?:#fff\b|#ffffff\b|white\b)/i.test(text)) warnings.push(f.path + ': a white background — leave the page transparent');
             if (!/class="[^"]*\bsn-/.test(text)) warnings.push(f.path + ': no kit classes (sn-*) — it will not look like StarNet');
             if (/\bfetch\s*\(|XMLHttpRequest|new WebSocket/.test(text)) warnings.push(f.path + ': the page tries to use the network — it has none; publish data with app.publish instead');
-            if (/<a\s[^>]*href=["']https?:/i.test(text) && !/openLink/.test(text)) warnings.push(f.path + ': plain links cannot open from the app — use starnet.ui.openLink(url)');
+            if (/onclick\s*=\s*"[^"]*\$\{\s*JSON\.stringify/i.test(text)) warnings.push(f.path + ': JSON.stringify inside an onclick="…" attribute — its quotes end the attribute and the handler never runs; use a plain <a href> (the station opens links) or addEventListener');
           }
         }
         return { content: (problems.length ? 'PROBLEMS:\n- ' + problems.join('\n- ') : 'OK — no problems.') + (warnings.length ? '\nLook warnings:\n- ' + warnings.join('\n- ') : ''), summary: problems.length ? 'app check: ' + problems.length + ' problem(s)' : 'app check ok' };

@@ -132,6 +132,8 @@ const throwsMsg = async (fn) => { try { await fn(); return ''; } catch (e) { ret
     await run('app.write', { app: a.id, path: 'index.html', content: '<body style="background:#fff"><script>fetch("https://x"); (</script></body>' });
     const c = (await run('app.check', { app: a.id })).content;
     A.ok(/PROBLEMS/.test(c) && /white background/.test(c) && /no kit classes/.test(c) && /network/.test(c), 'check reports a broken script and the look/network warnings');
+    await run('app.write', { app: a.id, path: 'index.html', content: '<div class="sn-card"></div><script>const h = (u) => `<a href="${u}" onclick="starnet.ui.openLink(${JSON.stringify(u)})">x</a>`;</script>' });
+    A.ok(/JSON\.stringify inside an onclick/.test((await run('app.check', { app: a.id })).content), 'check flags a URL quoted into an inline onclick (the bug that framed a news site)');
     const made = await run('app.create', { name: 'Reading List' });
     A.ok(/id: reading-list/.test(made.content), 'app.create (from chat) makes a new app');
   } finally {
