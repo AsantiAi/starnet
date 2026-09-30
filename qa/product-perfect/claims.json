@@ -18,13 +18,13 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "ddba2e204ada605b519dc8882a8da4f4a9a8f11c",
+    "sourceCommit": "a244ccfb655f1aafb08214ac621ca1c3669dc9b2",
     "pathSetSha256": "c6f7049e734305ed1e41a2f49eb76bb4df3c1d009c1bc413a312a1394bb5326b",
     "files": [
       {
         "path": "INSTALL.md",
-        "bytes": 5355,
-        "sha256": "278a132e68b1c5a96402787ebad7d8a94360c58e03dee8fa1a6b63a7301f2593"
+        "bytes": 5566,
+        "sha256": "3df002c0ca26021b943ef41d75015e780e23358fd5ca95b920c09a595d08c21e"
       },
       {
         "path": "PRIVACY.md",
@@ -33,8 +33,8 @@
       },
       {
         "path": "README.md",
-        "bytes": 8928,
-        "sha256": "4b8dd90437e07ea1324203f6c4e0b62204413cb827d90f7fd195308a5fe7dd92"
+        "bytes": 9137,
+        "sha256": "852d188fc1f59877d7bc0f7dbeeb0bd90351d8690f062ffee246c3121e387016"
       },
       {
         "path": "RELEASE_NOTES.md",
@@ -154,7 +154,7 @@
       {
         "path": "frontend/agent-station-demo.html",
         "bytes": 86406,
-        "sha256": "deee00c17e80c6e2a5226d282f7119da5e02b0045deafc2c8582758c645f3b2d"
+        "sha256": "48cc9c2dcf83e1081580bff13f17391189c53b44a1e7bdf6a52d2cee84877aab"
       },
       {
         "path": "frontend/app/agentid.js",
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 405251,
-        "sha256": "02ab4a0643fbf7f11aec5ac570292602f8b6fae31f41b11fbcbd3ba5a525cdc9"
+        "bytes": 405831,
+        "sha256": "92304ab851920126b7d5102669aad8f28298f84b81623537c3403bfd4891dd5b"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
@@ -1649,7 +1649,7 @@
       {
         "path": "frontend/index.html",
         "bytes": 91757,
-        "sha256": "7349756ac436ce4b0e65f762c3360f739b87ffa087a6d7c2022edd1c610ae1cb"
+        "sha256": "6d64d708e320a517fa5fd9daa0d4ba5c39b0f0b63f2c7b570d1650b029c81d99"
       },
       {
         "path": "frontend/js/arcade.js",
