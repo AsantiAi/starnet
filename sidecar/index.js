@@ -316,6 +316,7 @@ const { makeSkillRegistry } = require('./skills/registry.js');
 const { makeSkillMetrics } = require('./skills/metrics.js');
 const skillReview = require('./skillreview.js');
 const { makeSkillMarket, DEFAULT_CATALOG_URL: SKILL_MARKET_DEFAULT_URL } = require('./skills/market.js');   // the Skill Market client (curated catalog → station library)            // background skill maintenance trigger/prompt
+const skillMarketSigning = require('./skills/market-signing.js');   // the Skill Market's trusted signing keys
 const { makeVerdictReview } = require('./verdictreview.js');   // consistency loop: a rated ok/miss run earns a skill review
 const skillCurator = require('./skillcurator.js');          // skill lifecycle/consolidation maintenance
 const slash = require('./slash.js');                       // slash-command catalog + dispatch descriptors
@@ -1550,13 +1551,35 @@ try {
 // enable/disable choices persist append-only (same fsync discipline as skillStore). Injected into each run's
 // system prompt below, gated by requires ⊆ the agent's placed objects (object = capability — the moat).
 const SKILL_LIBRARY = skillsCatalog.loadDir(path.join(__dirname, 'skills', 'library'), fs, path);
-// SKILL MARKET (2026-09-29): curated skills from starnetos.com, installed into the station library. Fetched only when
-// the Commander opens the market. STARNET_SKILL_MARKET_URL overrides the catalog; 'off' (or empty) turns it off.
+// SKILL MARKET (2026-09-29): curated skills from starnetos.com, installed into the station library. The catalog is
+// fetched when the Commander opens the market; the catalog and the pulled-skills list are signed and verified against
+// the app's built-in keys (skills/market-signing.js). STARNET_SKILL_MARKET_URL overrides the catalog ('off' or empty
+// turns the market off); STARNET_SKILL_MARKET_KEYS adds the public key of a catalog you run yourself.
 const skillMarket = makeSkillMarket({
   fetchDocument: fetchSkillDocument, fs, path, root: path.join(WORKSPACES, 'skill-market'), guard: skillGuard, now: () => Date.now(),
   catalogUrl: () => { const v = process.env.STARNET_SKILL_MARKET_URL; return v == null ? SKILL_MARKET_DEFAULT_URL : (String(v).trim().toLowerCase() === 'off' ? '' : String(v).trim()); },
+  trustedKeys: skillMarketSigning.TRUSTED_KEYS.concat(skillMarketSigning.keysFromEnv(process.env.STARNET_SKILL_MARKET_KEYS)),
   loadJson: (file) => loadResilient(file, 'skill market'), saveJson: (file, value) => saveResilient(file, value)
 });
+// THE MARKET'S KILL SWITCH: while at least one market skill is installed, re-read the small signed pulled-skills list
+// shortly after boot and every few minutes, and switch off anything the market has pulled. A station with no market
+// skills installed never makes this request. SKYNET_SKILL_MARKET_PULL_MS tunes the interval (0 turns the check off).
+const SKILL_MARKET_PULL_MS = (() => { const v = Number(process.env.SKYNET_SKILL_MARKET_PULL_MS); return Number.isFinite(v) && v >= 0 ? v : 5 * 60 * 1000; })();
+let skillMarketPullBusy = false;
+function checkSkillMarketPulls() {
+  if (skillMarketPullBusy) return;
+  let installed = 0; try { installed = Object.keys(skillMarket.installed()).length; } catch (_) { installed = 0; }
+  if (!installed) return;
+  skillMarketPullBusy = true;
+  skillMarket.checkRevocations()
+    .then(r => { if (r.pulled.length) console.warn('[skill-market] pulled from the market and switched off: ' + r.pulled.join(', ')); })
+    .catch(e => failNote('skill-market.pull-check', e))   // offline or refused: the next tick retries; the failure stays counted and visible
+    .finally(() => { skillMarketPullBusy = false; });
+}
+if (SKILL_MARKET_PULL_MS > 0) {
+  const first = setTimeout(checkSkillMarketPulls, Math.min(20000, SKILL_MARKET_PULL_MS)); if (first.unref) first.unref();
+  const every = setInterval(checkSkillMarketPulls, SKILL_MARKET_PULL_MS); if (every.unref) every.unref();
+}
 // the station library every reader uses: the bundled recipes, with market installs merged in (a market copy of a
 // bundled original replaces it for this station)
 function skillLibrary() { try { return skillMarket.mergeLibrary(SKILL_LIBRARY); } catch (_) { return SKILL_LIBRARY; } }

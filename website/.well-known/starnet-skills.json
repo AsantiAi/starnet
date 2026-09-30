@@ -1,6 +1,7 @@
 {
   "format": "starnet-skill-registry/v1",
   "name": "StarNet Skill Market",
+  "serial": 1,
   "skills": [
     {
       "slug": "accessibility-audit",
@@ -2150,5 +2151,6 @@
         "license": "MIT"
       }
     }
-  ]
+  ],
+  "revoked": []
 }
