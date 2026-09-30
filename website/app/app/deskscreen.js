@@ -1,13 +1,11 @@
 /* STARNET — deskscreen.js : the DESK SCREEN (2026-09-29, Andrew: "click the computer, see the work from your agent").
 
    Click an agent's workstation on the live floor (world.js deskAt → onDesk) and the DESK SCREEN window opens on
-   THAT agent's work:
-     • WORKING — the task, every tool step as it happens (what it touched, ✓/✗, how long), the words it is writing,
-       what it has made, the run's reconciled cost and clock — plus hands: tell it something mid-run (POST
-       /api/run/steer), STOP (POST /api/cancel, two-step), open its chat, open its record.
-     • NEEDS YOUR OK — a permission prompt is waiting on this agent (the approval card lives in COMMS).
-     • IDLE — its last job from the server's run ledger (GET /api/runs): title, outcome, steps with their result
-       summaries, the reply, the files it made (one click to the files), and the few jobs before it.
+   THAT agent's computer: the app its current step is working in, rendered from the run transcript — the file it is
+   writing (editor), the diff of an edit, the command and what it printed (terminal), the search results or page it
+   is reading (web / browser), its reply as it writes it. ‹ › flips back through this job's earlier screens. At rest
+   the screen holds the last job's last screen. Hands: a mid-run note (POST /api/run/steer), two-step STOP
+   (POST /api/cancel), OPEN CHAT. The activity feed is COMMS — this window never repeats it.
 
    TRUTH (the product's core law): every row is either a real bus event this page observed (agent.run.start /
    tool_call / tool_result / token / cost / run.end / permission.* / deliverable) or a server row. Liveness is
@@ -36,7 +34,7 @@ const DeskScreen = (() => {
   }
   function mk(p, partial, now) {
     const rec = { runId: p.runId, agentId: p.agentId, trigger: p.trigger || '', model: p.model || '', startedAt: now, lastAt: now,
-      partial: !!partial, steps: [], dropped: 0, text: '', usd: 0, ended: false, reason: '', endedAt: 0, error: '', made: [], task: '', wsId: '' };
+      partial: !!partial, steps: [], dropped: 0, text: '', usd: 0, ended: false, reason: '', endedAt: 0, error: '', made: [], task: '', wsId: '', streamId: String(p.streamId || '') };
     runs.set(p.runId, rec); remember(p.agentId, p.runId);
     return rec;
   }
@@ -59,7 +57,7 @@ const DeskScreen = (() => {
     let rec = runs.get(p.runId);
     if (name === 'agent.run.start') {
       if (!rec) rec = mk(p, false, now);
-      else { rec.partial = false; rec.trigger = p.trigger || rec.trigger; rec.model = p.model || rec.model; }
+      else { rec.partial = false; rec.trigger = p.trigger || rec.trigger; rec.model = p.model || rec.model; if (p.streamId) rec.streamId = String(p.streamId); }
       rec.lastAt = now; return;
     }
     // a tool step proves real work even when this page never saw the start (reload mid-run, or the SSE bridge
@@ -128,7 +126,6 @@ const DeskScreen = (() => {
     return clip(raw, 60);
   }
   const dur = ms => { ms = Math.max(0, ms | 0); const s = Math.floor(ms / 1000); if (s < 60) return s + 's'; const m = Math.floor(s / 60); if (m < 60) return m + 'm ' + String(s % 60).padStart(2, '0') + 's'; return Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm'; };
-  const stepMs = ms => ms == null ? '' : ms < 1000 ? ms + 'ms' : (ms / 1000).toFixed(ms < 10000 ? 1 : 0) + 's';
   function ago(ts, now) {
     if (!ts) return '';
     const d = Math.max(0, now - ts);
@@ -140,7 +137,6 @@ const DeskScreen = (() => {
   const OUTCOME = { done: 'DONE', cancelled: 'STOPPED', error: 'FAILED', budget: 'HIT ITS BUDGET', max_iters: 'HIT ITS STEP LIMIT', refusal: 'REFUSED', empty: 'EMPTY REPLY', clarifying: 'ASKED YOU A QUESTION' };
   const outcomeState = r => r === 'done' ? 'done' : (r === 'error' || r === 'refusal' || r === 'empty') ? 'failed' : 'idle';
   const TRIGGER = { schedule: 'A scheduled routine', event: 'An incoming event', loop: 'A loop iteration', nightshift: 'Autonomy' };   // 'nightshift' stays the internal trigger id; the user-facing name is Autonomy
-  const base = p => String(p || '').split(/[\\/]/).filter(Boolean).pop() || String(p || '');
 
   // the task this run is working: the Commander's own words when this page launched it (the workstream whose live
   // run IS this run — Channels.runIdOf), else an honest label for what started it. Never a guess.
@@ -160,30 +156,73 @@ const DeskScreen = (() => {
     return { text: (TRIGGER[rec.trigger] || 'Started outside this window') + ' — the task text lands in the record when the run ends', known: false };
   }
 
-  // the run's final words: the server's delivery text when it kept one, else the COMMS row this page stamped with the
-  // run's id (chat.js persists the reply with sourceRunId) — never a neighbouring turn
-  function replyOf(row) {
-    if (row.deliveryText) return String(row.deliveryText);
-    try {
-      if (typeof Workstreams === 'undefined' || !row.runId) return '';
-      const w = (row.streamId && Workstreams.get(row.streamId)) || null;
-      for (const s of (w ? [w] : Workstreams.all())) {
-        const h = Array.isArray(s.history) ? s.history : [];
-        for (let i = h.length - 1; i >= 0; i--) if (h[i] && h[i].role === 'assistant' && h[i].sourceRunId === row.runId && h[i].content) return String(h[i].content);
+  /* ---------------- the agent's screen ----------------
+     Every tool step is an app on the agent's computer. The run transcript holds each step's FULL arguments (the
+     assistant tool-call turn is checkpointed BEFORE the tool runs) and its full result (checkpointed after), so the
+     screen shows the real thing: the file as it is being written, the diff of an edit, the command and what it
+     printed, the search results or page text the agent is reading. Nothing is synthesised: a step whose content the
+     station has not written yet shows the bus-level name + argument digest and says it is working. */
+  const APPS = [
+    [/^fs[._](write|append)$/, 'EDITOR'], [/^fs[._](edit|patch)$/, 'EDITOR'], [/^fs[._]read$/, 'EDITOR'],
+    [/^fs[._](list|search)$/, 'FILES'], [/^(shell[._]|code[._]run)/, 'TERMINAL'],
+    [/^web[._]search$/, 'WEB'], [/^web[._](fetch|request)$/, 'WEB'], [/^browser[._]/, 'BROWSER'],
+    [/^(skill|brief|memory)[._]/, 'NOTES']
+  ];
+  const appOf = name => { const n = String(name || ''); for (const [re, app] of APPS) if (re.test(n)) return app; return 'APP'; };
+  const argsObj = a => { if (a && typeof a === 'object') return a; try { const j = JSON.parse(String(a || '')); return j && typeof j === 'object' ? j : {}; } catch (_) { return {}; } };
+  const pick = (o, keys) => { for (const k of keys) if (o[k] != null && String(o[k]).trim()) return String(o[k]); return ''; };
+  const CAP = 60000;
+  const capText = s => { s = String(s == null ? '' : s); return s.length > CAP ? s.slice(0, CAP) + '\n… (' + (s.length - CAP) + ' more characters in the RECORD)' : s; };
+
+  // rows (GET /api/transcript?runId=) → the run's screens in order: [{ callId, name, args, result, isError, done }]
+  function parseScreens(rows) {
+    const out = [], byId = new Map();
+    for (const r of Array.isArray(rows) ? rows : []) {
+      if (!r) continue;
+      if (r.role === 'assistant' && r.toolCalls) {
+        let tc = []; try { tc = JSON.parse(r.toolCalls); } catch (_) { tc = []; }
+        for (const c of Array.isArray(tc) ? tc : []) {
+          if (!c || !c.id) continue;
+          const f = c.function || {};
+          const s = { callId: String(c.id), name: String(f.name || c.name || 'tool'), args: argsObj(f.arguments != null ? f.arguments : c.arguments), result: null, isError: false, done: false };
+          byId.set(s.callId, s); out.push(s);
+        }
+      } else if (r.role === 'tool' && r.toolCallId) {
+        const s = byId.get(String(r.toolCallId)); if (!s) continue;
+        const body = String(r.content == null ? '' : r.content);
+        s.done = true; s.isError = /^ERROR: /.test(body); s.result = s.isError ? body.slice(7) : body;
       }
-    } catch (_) { /* store mid-reload */ }
-    return '';
+    }
+    return out;
+  }
+
+  // one step → what its screen shows: { app, target, kind: 'code'|'diff'|'term'|'text', body, note }
+  function screenOf(s) {
+    const a = s.args || {}, app = appOf(s.name), n = String(s.name || '').replace(/_/g, '.');
+    const res = s.result == null ? '' : String(s.result);
+    const waiting = !s.done ? 'working…' : '';
+    if (/^fs\.(write|append)$/.test(n)) return { app, target: pick(a, ['path', 'file', 'filename']), kind: 'code', body: capText(pick(a, ['content', 'text', 'data'])), note: n === 'fs.append' ? 'appending' + (waiting ? ' · ' + waiting : '') : (waiting ? 'writing…' : (s.isError ? 'not written: ' + clip(res, 160) : clip(res, 160))) };
+    if (n === 'fs.edit') return { app, target: pick(a, ['path', 'file']), kind: 'diff', body: capText(String(a.find || '').split('\n').map(l => '- ' + l).join('\n') + '\n' + String(a.replace || '').split('\n').map(l => '+ ' + l).join('\n')), note: waiting || clip(res, 160) };
+    if (n === 'fs.patch') return { app, target: 'patch', kind: 'diff', body: capText(pick(a, ['patch'])), note: waiting || clip(res, 160) };
+    if (n === 'fs.read') return { app, target: pick(a, ['path', 'file']), kind: 'code', body: capText(res), note: waiting ? 'opening…' : '' };
+    if (app === 'TERMINAL') return { app, target: pick(a, ['command', 'cmd', 'code', 'id']) ? clip(pick(a, ['command', 'cmd', 'id']) || 'code', 90) : n, kind: 'term', body: capText((pick(a, ['command', 'cmd']) ? '$ ' + pick(a, ['command', 'cmd']) : pick(a, ['code']) ? pick(a, ['code']) : '$ ' + n) + '\n' + (s.done ? res : '')), note: waiting ? 'running…' : '' };
+    if (app === 'WEB') return { app, target: pick(a, ['query', 'q', 'url']), kind: 'text', body: capText(res), note: waiting ? (a.query || a.q ? 'searching…' : 'loading…') : '' };
+    if (app === 'BROWSER') return { app, target: pick(a, ['url', 'selector', 'text', 'ref']) || n.replace(/^browser\./, ''), kind: 'text', body: capText(res), note: waiting || n.replace(/^browser\./, '') };
+    if (app === 'FILES') return { app, target: pick(a, ['path', 'pattern', 'query']) || '.', kind: 'text', body: capText(res), note: waiting };
+    return { app, target: toolName(s.name), kind: 'text', body: capText((Object.keys(a).length ? JSON.stringify(a, null, 2) + '\n\n' : '') + res), note: waiting };
   }
 
   /* ---------------- the window ----------------
      A registered station window ('desk'): it rises from the bottom dock between CREW and COMMS, resizes and
-     minimizes like every other window, and switches agents with the shared roster switcher. The term system owns
-     the chrome; this owns the body. The body is built once per agent and repainted in place each second (the
-     mid-run note field is never rebuilt under the Commander's cursor). */
-  let doors = {};                                              // openChat / openRecord / openFiles (app.js)
+     minimizes like every other window, and switches agents with the shared roster switcher. The activity feed is
+     COMMS; this window is only the agent's screen. Built once per agent, repainted in place each second (the note
+     field is never rebuilt under the Commander's cursor). */
+  let doors = {};                                              // openChat (app.js)
   let cur = null, timer = 0;                                   // cur = { agentId, name, body }
   let snap = null, snapAt = 0, snapBusy = false;               // /api/state/snapshot: this agent's server-proven live runs
   let hist = null, histFor = '', histAt = 0, histBusy = false; // /api/runs rows for this agent
+  let scr = { key: '', list: [], at: 0, busy: false, sig: '' };// the viewed run's screens (from its transcript)
+  let pos = -1;                                                // -1 = follow the newest screen; else a pinned index
   let steerNote = '', stopNote = '', stopAt = 0, wasLive = false;
 
   function getJson(u) { return fetch(u, { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).catch(() => null); }
@@ -206,15 +245,30 @@ const DeskScreen = (() => {
     if (!cur || histBusy) return;
     if (!force && histFor === cur.agentId && clock() - histAt < 15000) return;
     histBusy = true; const want = cur;
-    getJson('/api/runs?agent=' + encodeURIComponent(want.agentId) + '&limit=12').then(j => {
+    getJson('/api/runs?agent=' + encodeURIComponent(want.agentId) + '&limit=6').then(j => {
       histBusy = false; if (cur !== want) return;
       histAt = clock(); histFor = want.agentId;
       hist = j && Array.isArray(j.runs) ? j.runs.filter(r => r && r.agentId === want.agentId && !r.internal && !r.stepTest) : null;
       paint();
     });
   }
+  // the viewed run's transcript → its screens. sig = what the bus has told us about the run, so a new step or result
+  // refetches at once; a live run is also re-read every 3 s (a checkpoint can land after its bus event).
+  function pollScreens(src, sig) {
+    if (!cur || !src || !src.runId || !src.stream) return;
+    const key = src.runId;
+    if (scr.busy) return;
+    if (scr.key === key && scr.sig === sig && clock() - scr.at < (src.live ? 3000 : 60000)) return;
+    scr.busy = true; const want = cur;
+    getJson('/api/transcript?agent=' + encodeURIComponent(want.agentId) + '&stream=' + encodeURIComponent(src.stream) + '&runId=' + encodeURIComponent(key) + '&limit=80').then(j => {
+      scr.busy = false; if (cur !== want) return;
+      if (scr.key !== key) pos = -1;
+      scr = { key, list: j && Array.isArray(j.turns) ? parseScreens(j.turns) : scr.key === key ? scr.list : [], at: clock(), busy: false, sig };
+      paint();
+    });
+  }
 
-  // what the window shows right now, resolved from the fold + the two server reads
+  // what the window shows right now, resolved from the fold + the server reads
   function view() {
     const now = clock(), aid = cur.agentId;
     let live = currentOf(aid, now);
@@ -222,92 +276,96 @@ const DeskScreen = (() => {
     // the snapshot outranks a fold record that never saw its end: not listed + quiet for 10 s = not asserted live
     if (live && serverLive && serverLive.indexOf(live.runId) < 0 && now - live.lastAt > 10000 && snapAt > live.lastAt) live = null;
     const unseen = !live && serverLive && serverLive.length ? snap[0] : null;   // live on the server, no event seen here yet
-    return { now, aid, name: cur.name, live, unseen, ask: asks.get(aid) || null, last: hist && hist.length ? hist[0] : null, ended: lastEndedOf(aid) };
+    const last = hist && hist.length ? hist[0] : null;
+    let src = null;
+    if (live) { taskOf(live); src = { runId: live.runId, stream: live.streamId || live.wsId || '', live: true }; }
+    else if (last && last.runId && last.streamId) src = { runId: last.runId, stream: last.streamId, live: false };
+    return { now, aid, name: cur.name, live, unseen, ask: asks.get(aid) || null, last, src };
   }
 
-  const sec = t => '<div class="sec"><span class="sec-l">' + esc(t) + '</span><span class="sec-r"></span><span class="sec-nd"></span></div>';
-  const kv = rows => '<dl class="ds-kv">' + rows.filter(Boolean).map(r => '<dt>' + esc(r[0]) + '</dt><dd' + (r[2] ? ' class="' + r[2] + '"' : '') + '>' + esc(r[1]) + '</dd>').join('') + '</dl>';
-  function stepsHtml(steps, bridged) {
-    return '<ol class="ds-steps">' + steps.map(s => {
-      const st = !s.done ? 'run' : s.ok === true ? 'ok' : s.ok === false ? 'bad' : 'end';
-      const g = st === 'run' ? '▸' : st === 'ok' ? '✓' : st === 'bad' ? '✗' : '·';
-      const arg = argDigest(s.args);
-      return '<li class="ds-step" data-s="' + st + '"><span class="ds-g">' + g + '</span><span class="ds-n">' + esc(toolName(s.name)) + '</span>'
-        + (arg ? '<span class="ds-a">' + esc(arg) + '</span>' : '') + '<span class="ds-ms">' + esc(st === 'run' ? 'working…' : stepMs(s.ms)) + '</span>'
-        + (s.summary ? '<span class="ds-sum">' + esc(clip(s.summary, 200)) + '</span>' : '') + '</li>';
-    }).join('') + '</ol>' + (bridged ? '<p class="ds-dim">This run was started outside this window, so the station only reports each tool\'s name and result here. The full detail is in the RECORD.</p>' : '');
+  // the screens to show: the transcript's, with any bus-seen step the transcript hasn't caught up to appended
+  function screensFor(v) {
+    const list = (v.src && scr.key === v.src.runId) ? scr.list.slice() : [];
+    if (v.live) {
+      const have = new Set(list.map(s => s.callId));
+      for (const st of v.live.steps) {
+        if (have.has(st.callId)) { const s = list.find(x => x.callId === st.callId); if (s && !s.done && st.done) { s.done = true; s.isError = st.ok === false; if (s.result == null) s.result = st.summary || ''; } continue; }
+        list.push({ callId: st.callId, name: st.name, args: argsObj(st.args), result: st.done ? (st.summary || '') : null, isError: st.ok === false, done: st.done, partial: true });
+      }
+    }
+    return list;
+  }
+
+  function screenHtml(s, idx, total, v) {
+    const sc = screenOf(s);
+    const body = sc.kind === 'code'
+      ? '<ol class="ds-code">' + (sc.body ? sc.body.split('\n').map(l => '<li>' + (esc(l) || ' ') + '</li>').join('') : '<li class="ds-dim">(empty)</li>') + '</ol>'
+      : sc.kind === 'diff'
+        ? '<pre class="ds-diff">' + sc.body.split('\n').map(l => '<span class="' + (/^\+/.test(l) ? 'ds-add' : /^-/.test(l) ? 'ds-del' : /^@@/.test(l) ? 'ds-hunk' : '') + '">' + (esc(l) || ' ') + '</span>').join('\n') + '</pre>'
+        : '<pre class="ds-' + (sc.kind === 'term' ? 'term' : 'page') + '">' + (esc(sc.body) || '<span class="ds-dim">' + (s.done ? '(nothing came back)' : '…') + '</span>') + '</pre>';
+    const partial = s.partial && !(s.args && Object.keys(s.args).length)
+      ? '<p class="ds-dim ds-partial">' + (v.src && v.src.stream ? 'Loading this step…' : 'This run was started outside this window, so its full screen is available once it ends. For now the station reports only the tool name.') + '</p>' : '';
+    return '<div class="ds-app" data-app="' + sc.app.toLowerCase() + '" data-s="' + (!s.done ? 'run' : s.isError ? 'bad' : 'ok') + '">'
+      + '<div class="ds-bar"><span class="ds-appname">' + esc(sc.app) + '</span><span class="ds-target">' + esc(clip(sc.target, 120)) + '</span>'
+      + '<span class="ds-pager"><button type="button" class="bb xs" data-a="prev"' + (idx <= 0 ? ' disabled' : '') + ' aria-label="Previous screen">‹</button>'
+      + '<span class="ds-pos">' + (idx + 1) + '/' + total + '</span>'
+      + '<button type="button" class="bb xs" data-a="next"' + (idx >= total - 1 ? ' disabled' : '') + ' aria-label="Next screen">›</button></span></div>'
+      + (sc.note ? '<div class="ds-status">' + esc(sc.note) + '</div>' : '')
+      + partial + '<div class="ds-view">' + body + '</div></div>';
   }
 
   function paint() {
     const body = cur && cur.body;
     if (!body || !body.isConnected) return;
     const v = view(), strip = body.querySelector('.ds-strip'), main = body.querySelector('.ds-main');
-    let state, label, html = '';
+    let state, label, html;
+    const list = screensFor(v);
+    if (v.src) pollScreens(v.src, v.live ? v.live.steps.length + ':' + v.live.steps.filter(s => s.done).length : 'end');
+    const idx = !list.length ? -1 : (pos < 0 || pos >= list.length) ? list.length - 1 : pos;
     if (v.live) {
-      const r = v.live, t = taskOf(r);
       state = v.ask ? 'ask' : 'running';
-      label = (v.ask ? 'NEEDS YOUR OK' : 'WORKING') + ' · ' + dur(v.now - r.startedAt);
-      html += kv([['TASK', clip(t.text, 400), t.known ? 'ds-task' : 'ds-task ds-dim'],
-        r.usd > 0 ? ['SPENT', money(r.usd) + (r.model ? ' · ' + clip(String(r.model).split('/').pop(), 32) : '')] : null]);
-      if (v.ask) html += '<p class="ds-ask">Waiting for your approval' + (v.ask.tool ? ' to use ' + esc(toolName(v.ask.tool)) : '') + '. Answer it in COMMS.</p>';
-      if (r.partial) html += '<p class="ds-dim">Joined mid-run: steps from before this page was watching aren\'t shown here.</p>';
-      html += sec('STEPS' + (r.steps.length ? ' · ' + (r.steps.length + r.dropped) : ''));
-      html += r.steps.length ? stepsHtml(r.steps, !r.steps.some(s => s.args || s.summary) && !t.known) : '<p class="ds-dim">No tool steps yet. It\'s thinking.</p>';
-      if (r.text.trim()) html += sec('WRITING') + '<p class="ds-text">' + esc(r.text.length >= TEXT_TAIL ? '…' + r.text.trim() : r.text.trim()) + '</p>';
-      if (r.made.length) html += sec('MADE') + '<ul class="ds-made">' + r.made.map(m => '<li>' + esc(clip(m.title, 90)) + '</li>').join('') + '</ul>';
+      label = (v.ask ? 'NEEDS YOUR OK' : 'WORKING') + ' · ' + dur(v.now - v.live.startedAt) + (v.live.usd > 0 ? ' · ' + money(v.live.usd) : '');
+      const writingNow = v.live.text.trim() && (!list.length || list[list.length - 1].done) && pos < 0;
+      if (writingNow) html = '<div class="ds-app" data-app="writing" data-s="run"><div class="ds-bar"><span class="ds-appname">WRITING</span><span class="ds-target">its reply</span></div><pre class="ds-page">' + esc(v.live.text.trim()) + '</pre></div>';
+      else if (idx >= 0) html = screenHtml(list[idx], idx, list.length, v);
+      else html = '<div class="ds-off"><span>Thinking…</span><small>Nothing is open on its screen yet.</small></div>';
+      if (v.ask) html = '<p class="ds-ask">Waiting for your approval' + (v.ask.tool ? ' to use ' + esc(toolName(v.ask.tool)) : '') + '. Answer it in COMMS.</p>' + html;
+      if (v.live.partial) html = '<p class="ds-dim">Joined mid-run: screens from before this page was watching aren\'t shown.</p>' + html;
       if (stopNote && v.now - stopAt > 12000) stopNote = 'The station hasn\'t confirmed the stop yet. It is still running.';
     } else if (v.unseen) {
       state = 'running';
       label = 'WORKING' + (v.unseen.startedAt ? ' · ' + dur(v.now - v.unseen.startedAt) : '');
-      html += '<p class="ds-dim">' + esc(v.name) + ' is on a run that started before this page was watching. Its steps show here as they happen, and the whole run lands in the RECORD when it ends.</p>';
+      html = '<div class="ds-off"><span>Working</span><small>This run started before this page was watching. Its screen appears with its next step.</small></div>';
     } else {
-      const row = v.last, ended = v.ended;
-      // a stop this window sent resolves only on the run's own end: 'Stopped.' when it ended cancelled, else the note clears
+      const ended = lastEndedOf(v.aid);
       if (stopAt && stopNote && stopNote !== 'Stopped.') stopNote = ended && ended.reason === 'cancelled' && ended.endedAt >= stopAt ? 'Stopped.' : '';
-      if (row) {
-        state = outcomeState(row.reason);
-        label = (row.reason === 'done' ? 'IDLE' : (OUTCOME[row.reason] || 'IDLE')) + ' · last job ' + ago(row.endedAt || row.ts, v.now);
-        html += kv([['LAST JOB', clip(row.title || 'Untitled run', 300), 'ds-task'],
-          ['OUTCOME', [OUTCOME[row.reason] || String(row.reason || 'done').toUpperCase(), row.durationMs ? dur(row.durationMs) : '', row.usd > 0 ? money(row.usd) : ''].filter(Boolean).join(' · ')]]);
-        const trace = Array.isArray(row.toolTrace) ? row.toolTrace : [];
-        if (trace.length) {
-          const shown = trace.slice(-20).map(s => ({ name: s.name, args: '', done: true, ok: s.isError ? false : s.ok !== false, ms: typeof s.ms === 'number' ? s.ms : null, summary: s.summary || '' }));
-          html += sec('WHAT IT DID · ' + trace.length + ' step' + (trace.length === 1 ? '' : 's')) + stepsHtml(shown, false);
-        }
-        const reply = replyOf(row);
-        if (reply) html += sec('ITS REPLY') + '<p class="ds-text">' + esc(clip(reply, 900)) + '</p>';
-        const arts = Array.isArray(row.artifacts) ? row.artifacts : [];
-        if (arts.length) html += sec('MADE') + '<ul class="ds-made">' + arts.slice(0, 8).map(a => '<li>' + esc(base(a.path || a.target)) + '</li>').join('') + (arts.length > 8 ? '<li class="ds-dim">+' + (arts.length - 8) + ' more</li>' : '') + '</ul>';
-        const earlier = hist.slice(1, 5);
-        if (earlier.length) html += sec('BEFORE THAT') + '<ul class="ds-earlier">' + earlier.map(e => '<li><span>' + esc(clip(e.title || 'Untitled run', 80)) + '</span><span class="ds-ms">' + esc((OUTCOME[e.reason] || 'DONE') + ' · ' + ago(e.endedAt || e.ts, v.now)) + '</span></li>').join('') + '</ul>';
-      } else if (ended) {
-        // it just finished here and the server's row hasn't landed yet
-        state = outcomeState(ended.reason);
-        label = (OUTCOME[ended.reason] || 'DONE') + ' · ' + ago(ended.endedAt, v.now);
-        html += '<p class="ds-dim">Just finished. Writing the record…</p>' + (ended.steps.length ? stepsHtml(ended.steps, false) : '');
+      if (v.last) {
+        state = outcomeState(v.last.reason);
+        label = (v.last.reason === 'done' ? 'IDLE' : (OUTCOME[v.last.reason] || 'IDLE')) + ' · last screen ' + ago(v.last.endedAt || v.last.ts, v.now);
+        html = '<p class="ds-job">Last job: ' + esc(clip(v.last.title || 'Untitled run', 160)) + '</p>'
+          + (idx >= 0 ? screenHtml(list[idx], idx, list.length, v)
+            : '<div class="ds-off"><span>' + (scr.key === (v.src && v.src.runId) ? 'Screen off' : 'Loading…') + '</span><small>' + (scr.key === (v.src && v.src.runId) ? 'That job used no tools. Its reply is in COMMS.' : '') + '</small></div>');
       } else if (hist) {
         state = 'idle'; label = 'IDLE';
-        html += '<p class="ds-dim">No work recorded at this desk yet. Give ' + esc(v.name) + ' a task and you\'ll watch it happen here.</p>';
-      } else {
-        state = 'idle'; label = 'IDLE';
-        html += '<p class="ds-dim">Reading the record…</p>';
-      }
+        html = '<div class="ds-off"><span>Screen off</span><small>' + esc(v.name) + ' hasn\'t worked at this desk yet. Give it a task and you\'ll see its screen here.</small></div>';
+      } else { state = 'idle'; label = 'IDLE'; html = '<div class="ds-off"><span>Loading…</span></div>'; }
     }
     body.querySelector('.ds-screen').setAttribute('data-state', state);
     const stripHtml = '<span class="ds-lamp" aria-hidden="true"></span><b class="ds-name">' + esc(v.name) + '</b><span class="ds-st">' + esc(label) + '</span>';
     if (strip.__html !== stripHtml) { strip.innerHTML = stripHtml; strip.__html = stripHtml; }
-    // keep the reader's place: stay pinned to the newest step only if they were already at the bottom
     if (main.__html !== html) {
-      const pinned = body.scrollTop + body.clientHeight >= body.scrollHeight - 4, top = body.scrollTop;   // the window body is the scroller
-      main.innerHTML = html; main.__html = html;
-      body.scrollTop = (v.live && pinned) ? body.scrollHeight : top;
+      // keep the reader's place inside the screen: follow new output only when they were already at the bottom
+      const prev = main.querySelector('.ds-view, .ds-page'), atEnd = !prev || prev.scrollTop + prev.clientHeight >= prev.scrollHeight - 4, top = prev ? prev.scrollTop : 0;
+      const sameScreen = main.__screen === (idx + ':' + (v.src && v.src.runId));
+      main.innerHTML = html; main.__html = html; main.__screen = idx + ':' + (v.src && v.src.runId);
+      const nv = main.querySelector('.ds-view, .ds-page');
+      if (nv) nv.scrollTop = sameScreen ? (atEnd && v.live ? nv.scrollHeight : top) : (v.live ? nv.scrollHeight : 0);
     }
     const liveRid = v.live && v.live.runId;
     body.querySelector('.ds-steer').hidden = !liveRid;
     body.querySelector('.ds-in').placeholder = 'Tell ' + v.name + ' something mid-run…';
     body.querySelector('.ds-stop').hidden = !liveRid;
     body.querySelector('[data-a="chat"]').textContent = v.live || v.unseen ? 'OPEN CHAT' : 'GIVE IT A TASK';
-    body.querySelector('[data-a="files"]').hidden = !(!v.live && v.last && Array.isArray(v.last.artifacts) && v.last.artifacts.length && doors.openFiles);
     const note = [stopNote, steerNote].filter(Boolean).join(' ');
     const n = body.querySelector('.ds-note'); if (n.textContent !== note) n.textContent = note;
   }
@@ -318,7 +376,7 @@ const DeskScreen = (() => {
       timer = 0;
       if (!cur || !cur.body || !cur.body.isConnected) { cur = null; return; }   // the window closed: stop polling
       const live = !!currentOf(cur.agentId);
-      if (wasLive && !live) { pollHist(true); steerNote = ''; }   // a run just ended here: fetch its row; its steer receipt is history
+      if (wasLive && !live) { pollHist(true); steerNote = ''; pos = -1; }   // a run just ended here: fetch its row; its steer receipt is history
       wasLive = live;
       pollSnap(false); if (!live) pollHist(false);
       paint(); tick();
@@ -331,7 +389,7 @@ const DeskScreen = (() => {
     if (!a) { body.innerHTML = '<p class="ds-dim">No agent selected.</p>'; return; }
     const same = cur && cur.agentId === a.id;
     cur = { agentId: a.id, name: a.name || a.id, body };
-    if (!same) { snap = null; hist = null; histFor = ''; steerNote = stopNote = ''; }
+    if (!same) { snap = null; hist = null; histFor = ''; steerNote = stopNote = ''; scr = { key: '', list: [], at: 0, busy: false, sig: '' }; pos = -1; }
     wasLive = !!currentOf(a.id);
     body.innerHTML = H.rosterSwitchHtml(a.id)
       + '<div class="ds-screen" data-state="idle">'
@@ -341,17 +399,20 @@ const DeskScreen = (() => {
       + '<button type="submit" class="bb sm">SEND</button></form><p class="ds-note" role="status"></p>'
       + '<div class="ds-foot">'
       + '<button type="button" class="bb sm ds-stop" data-a="stop" hidden>STOP</button>'
-      + '<button type="button" class="bb sm" data-a="chat">OPEN CHAT</button>'
-      + '<button type="button" class="bb sm" data-a="files" hidden>FILES</button>'
-      + '<button type="button" class="bb sm" data-a="record">RECORD</button></div></div>';
+      + '<button type="button" class="bb sm" data-a="chat">OPEN CHAT</button></div></div>';
     H.wireRosterSwitch(body, 'desk');
     const aid = a.id;
-    body.querySelector('.ds-foot').addEventListener('click', e => {
+    body.querySelector('.ds-main').addEventListener('click', e => {
       const b = e.target.closest('button[data-a]'); if (!b) return;
-      const act = b.getAttribute('data-a');
-      if (act === 'chat') { const v = view(); if (doors.openChat) doors.openChat(aid, v.live && v.live.wsId); }
-      else if (act === 'record') { if (doors.openRecord) doors.openRecord(aid); }
-      else if (act === 'files') { const v = view(); if (v.last && v.last.runId && doors.openFiles) doors.openFiles(v.last.runId, v.last.title || 'Last job'); }
+      const v = view(), n = screensFor(v).length; if (!n) return;
+      const at = (pos < 0 || pos >= n) ? n - 1 : pos;
+      const next = b.getAttribute('data-a') === 'prev' ? Math.max(0, at - 1) : Math.min(n - 1, at + 1);
+      pos = next >= n - 1 ? -1 : next;   // stepping onto the newest screen resumes following it
+      paint();
+    });
+    body.querySelector('.ds-foot').addEventListener('click', e => {
+      const b = e.target.closest('button[data-a]'); if (!b || b.getAttribute('data-a') !== 'chat') return;
+      const v = view(); if (doors.openChat) doors.openChat(aid, v.live && v.live.wsId);
     });
     const stop = body.querySelector('.ds-stop');
     const doStop = () => {
@@ -377,7 +438,7 @@ const DeskScreen = (() => {
     paint(); pollSnap(true); pollHist(true); tick();
   }
 
-  // open THIS agent's desk window (the StationUI core selects the agent, then opens or re-renders the window)
+  // open THIS agent's desk window (the StationUI core selects the agent, then opens or re-targets the window)
   function open(agentId) {
     if (!agentId || typeof StationUI === 'undefined' || !StationUI.openDesk) return false;
     return StationUI.openDesk(agentId);
@@ -400,6 +461,7 @@ const DeskScreen = (() => {
   const agentOfOpen = () => (isOpen() ? cur.agentId : null);
   return { init, open, isOpen, text, agentOfOpen,
     _fold: fold, _currentOf: currentOf, _lastEndedOf: lastEndedOf, _argDigest: argDigest, _taskOf: taskOf,
+    _parseScreens: parseScreens, _screenOf: screenOf,
     _reset: () => { runs.clear(); byAgent.clear(); asks.clear(); } };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = DeskScreen;
