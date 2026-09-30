@@ -2,7 +2,7 @@
   "slug": "spend-aware-work",
   "version": "1.0.0",
   "shelf": "originals",
-  "category": "Planning",
+  "category": "Station",
   "tags": ["budget", "cost", "models", "planning"],
   "requires": ["orchestrator"],
   "license": "MIT",

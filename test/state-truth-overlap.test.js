@@ -21,11 +21,11 @@ A.ok(/const selectedLive = !!\(selected && agentLive\(selected\.id\)\)[\s\S]{0,5
 // Three concurrent agents include one pending approval; a fourth agent is idle.
 const crewIds = ['hero', 'worker', 'approval', 'idle'];
 const crewRows = Object.fromEntries(crewIds.map(id => [id, { hidden: false, classList: { toggle() {} } }]));
-const crewLabels = Object.fromEntries(crewIds.map(id => [id, { textContent: '', closest: () => crewRows[id] }]));
+const crewLabels = Object.fromEntries(crewIds.map(id => [id, { textContent: '', closest: () => crewRows[id], getAttribute: () => null, setAttribute() {}, removeAttribute() {} }]));
 const crewContext = vm.createContext({
   present: crewIds.map(id => ({ id })), runningAgents: new Map(), runSeenAt: new Map(),
   activity: () => 'talk', App: { currentAgent: () => ({ id: 'hero' }) },
-  agentLive: id => id !== 'idle', crewQuery: '',
+  agentLive: id => id !== 'idle', crewQuery: '', lineTestOnly: () => false, LINE_TEST_TIP: '',
   Channels: { pendingIds: () => ['approval-session'] },
   Workstreams: { get: () => ({ agentId: 'approval' }) },
   $: selector => selector.startsWith('#cs-') ? crewLabels[selector.slice(4)] : null

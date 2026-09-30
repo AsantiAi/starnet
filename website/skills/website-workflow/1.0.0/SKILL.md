@@ -1,6 +1,6 @@
 ---
 name: website-workflow
-description: "Turn a repeated read-only website lookup into a verified reusable API skill by observing the browser's real requests."
+description: "Turn a repeated read-only website lookup into a saved skill that fetches the answer directly, learned from the page's own data requests."
 license: "MIT"
 metadata:
   title: "Learn a Website Lookup"

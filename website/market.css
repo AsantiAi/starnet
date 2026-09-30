@@ -51,7 +51,13 @@
 .mk-meta a{ color:var(--amber-b); }
 
 /* read the skill: the real SKILL.md, fetched on open */
+/* Download + Read sit together at the bottom of the card */
+.mk-dl-row{ margin:auto 0 0; font-size:15px; letter-spacing:.4px; color:rgba(236,224,207,.5); }
+.mk-dl{ color:var(--amber-b); letter-spacing:1px; }
+.mk-dl:hover{ color:var(--amber); }
+.mk-dl:focus-visible{ outline:1px solid var(--amber-b); outline-offset:2px; }
 .mk-read{ margin-top:auto; border-top:1px solid var(--line); padding-top:8px; }
+.mk-dl-row + .mk-read{ margin-top:8px; }
 .mk-read summary{ cursor:pointer; list-style:none; font-size:16px; letter-spacing:1px; color:var(--amber-b); }
 .mk-read summary::-webkit-details-marker{ display:none; }
 .mk-read summary::before{ content:'> '; color:var(--amber-d); }

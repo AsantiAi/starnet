@@ -112,7 +112,7 @@ installed. You can stop automatic checks by turning off **AUTO-CHECK FOR UPDATES
 
 ### 7. The Skill Market — when you open it, and while you use its skills
 
-When you open **ABILITIES › SKILL MARKET**, the app downloads the public skill catalog from
+When you open **ABILITIES › DISCOVER › SKILL MARKET**, the app downloads the public skill catalog from
 `https://starnetos.com/.well-known/starnet-skills.json`, and when you install a skill it downloads
 that skill's files from `https://starnetos.com/skills/`. These are plain `GET`s for static files:
 **no user data, no identifier and no telemetry are sent.** While at least one skill you installed from the

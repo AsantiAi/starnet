@@ -533,14 +533,47 @@ A.eq(Conveyor.weightForUsd(0.004), 0.004, 'a sub-cent run reads as a near-weight
   A.ok(JSON.stringify(drawing(line('E'), 0)) !== JSON.stringify(drawing(line('E'), 45)), 'an energized route animates its rollers');
 }
 
-/* Reference remaster keeps payload housings proportional to the twelve-pixel lane. */
+/* THE CRATE (2026-09-30 — "the crate is ugly": blackened steel on a blackened belt read as a smudge under a tag). A crate is a
+   pale container that keeps the 9×8 stance on the twelve-pixel lane, drawn in WHOLE pixels (one art pixel = one world pixel),
+   and its LID is the role's colour — amber = work coming in, green = a result, red = wasted. No floating tag repeats it. */
 {
+ const SHADOW='#05080a';
+ const drawn=(payload,dir)=>{
+  const marks=[],ctx={globalAlpha:1,fillStyle:'',fillRect(x,y,w,h){marks.push({x,y,w,h,c:this.fillStyle,a:this.globalAlpha});}};
+  const c=Conveyor.create(),belts=[{x:0,y:0,dir:dir||'E'}];
+  c.enqueueAt(0,0,payload);c.tick(16,0,belts);c.drawBoxes(ctx,400,12);
+  return marks;
+ };
+ const art=marks=>marks.filter(r=>r.c!==SHADOW);
+ const span=rs=>[Math.max(...rs.map(r=>r.x+r.w))-Math.min(...rs.map(r=>r.x)),Math.max(...rs.map(r=>r.y+r.h))-Math.min(...rs.map(r=>r.y))];
+ const has=(marks,colour)=>marks.some(r=>r.c===colour&&r.a===1);
+ const LID={ore:'#e0aa40',product:'#57bd8b',slag:'#d2684c'};
  for(const dir of ['E','W','N','S'])for(const role of ['ore','product','slag',null]){
-  const marks=[],ctx={globalAlpha:1,fillStyle:'',fillRect(x,y,w,h){marks.push({x,y,w,h,c:this.fillStyle});}};
-  const c=Conveyor.create(),belts=[{x:0,y:0,dir}];
-  c.enqueueAt(0,0,{workitemId:'size-'+dir+'-'+role,box:role,weight:1});c.tick(16,0,belts);c.drawBoxes(ctx,400,12);
-  const housing=marks.find(r=>r.c==='#090c0c');
-  A.eq(housing&&[housing.w,housing.h],[9,8],dir+' '+(role||'data')+' cargo retains the handled 9x8 chassis');
+  const m=art(drawn({workitemId:'size-'+dir+'-'+role,box:role,weight:1},dir));
+  A.eq(span(m),[9,8],dir+' '+(role||'work')+' crate keeps the 9x8 stance');
+  A.ok(m.every(r=>[r.x,r.y,r.w,r.h].every(Number.isInteger)),dir+' '+(role||'work')+' crate is drawn in whole pixels');
+  A.ok(has(m,LID[role||'ore']),dir+' '+(role||'work')+' crate wears its role on the lid');
  }
+ // pale: the front face is a light warm grey, the outline a dark tint of it (never the old near-black housing)
+ const ore=art(drawn({workitemId:'pale',box:'ore'}));
+ A.ok(has(ore,'#b8b2a0')&&has(ore,'#2b261f')&&!ore.some(r=>r.c==='#090c0c'),'the crate is a pale container with its own dark-tint outline');
+ // a work-item with no role reads by its direction: outbound is a result, anything else is work coming in
+ A.ok(has(drawn({workitemId:'in'}),LID.ore)&&has(drawn({workitemId:'out',outbound:true}),LID.product),'an untyped work-item wears amber inbound, green outbound');
+ // the lid says the role, so nothing floats over the crate: every fill sits inside the 9x8 stance (plus the contact shadow)
+ const all=drawn({workitemId:'tag',box:'ore'});
+ A.eq(span(art(all)),[9,8],'no tag floats over the crate');
+ A.ok(all.some(r=>r.c===SHADOW),'a real crate still casts its contact shadow');
+ // seal pips express only reconciled spend: none on a weightless result, two on a full-mass one
+ const pips=w=>art(drawn({workitemId:'w'+w,box:'product',weight:w})).filter(r=>r.c==='#eafff3').length;
+ A.eq([pips(0),pips(0.5),pips(1)],[0,1,2],'a result crate wears 0 to 2 seal pips by its reconciled cost');
+ // the projection is a hologram of the crate: the same stance, nothing opaque, no shadow
+ const ghost=drawn({workitemId:'g',ghost:true});
+ A.eq(span(ghost),[9,8],'the ghost crate keeps the crate\'s stance');
+ A.ok(ghost.every(r=>r.a<1)&&!ghost.some(r=>r.c===SHADOW)&&new Set(ghost.map(r=>r.c)).size===1,'…drawn see-through in the one projection colour, with no shadow');
+ // the same crate is offered to callers that park one off the belt (the waiting jam, the shipped pallet, a paused hand-off)
+ const parked=[],pctx={globalAlpha:1,fillStyle:'',fillRect(x,y,w,h){parked.push({x,y,w,h,c:this.fillStyle,a:this.globalAlpha});}};
+ Conveyor.drawCrate(pctx,20,20,'product');
+ A.eq(span(parked),[9,8],'Conveyor.drawCrate parks the same 9x8 crate');
+ A.ok(has(parked,LID.product)&&Math.min(...parked.map(r=>r.x))===16&&Math.min(...parked.map(r=>r.y))===15,'…at the point a riding box is drawn at');
 }
 A.report('conveyor');

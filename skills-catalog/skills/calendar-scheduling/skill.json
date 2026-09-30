@@ -1,0 +1,10 @@
+{
+  "slug": "calendar-scheduling",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Productivity",
+  "tags": ["calendar", "scheduling", "meetings", "time-zones", "invites"],
+  "requires": ["notebook"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}

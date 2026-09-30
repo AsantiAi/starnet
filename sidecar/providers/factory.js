@@ -169,7 +169,9 @@
         maxTokens: resolveMaxOutputTokens(profile),
         maxChatTokens: resolveMaxOutputTokens(profile, 'maxChatOutputTokens'),
         defaultContext: opts.defaultContext,
-        headers: mergedHeaders
+        headers: mergedHeaders,
+        // run attribution header (starnet only — the profile names it; see openai-compatible requestHeaders)
+        runIdHeader: typeof profile.runIdHeader === 'string' ? profile.runIdHeader : undefined
       });
     }
     if (profile.adapter === 'anthropic') {

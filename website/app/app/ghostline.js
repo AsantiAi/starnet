@@ -258,33 +258,43 @@ const GhostLine = (() => {
        `say` (optional) is the caller's label arbiter: when provided, each live caption is OFFERED as
        say(box, paint) — box = the label's rect in the caller's pixel frame, paint = a callback that
        draws it — instead of painted directly, so the caller's one-voice law can mute the projection
-       while any higher layer speaks. Omitted (world.js, tests) → the classic direct paint. */
-    function draw(ctx, nowMs, T, fontPx, say) {
+       while any higher layer speaks. Omitted (world.js, tests) → the classic direct paint.
+       A CAPTION IS A PLATE (2026-09-30): it was bare cyan text with a glow, laid over machines and belts — hard to read and
+       easy to lose. It is a small dark plate now, edged with a DASHED hairline in the projection's cyan (dashed = projected,
+       the same way the ghost crate is a hologram), holding plain text; it is fully lit for most of its life and fades at the
+       end. `fit` (optional) lets the caller keep a plate on its visible glass: fit(box) answers the box to use. */
+    function draw(ctx, nowMs, T, fontPx, say, fit) {
       if (!engine) return;
       engine.drawBoxes(ctx, nowMs, T);
       if (!notes.length) return;
       const fs = fontPx || 8;
       const font = fs + "px 'VT323','Courier New',monospace";
-      // the caption's BASELINE: above the tile (rising), or under it (a dock caption — its plate owns the space above)
-      const baseY = (n, rise) => (n.below ? (n.y + 1) * T + 3 + fs + rise : n.y * T - 3 - rise);
-      const paintNote = (n, k) => {
-        const rise = Math.min(1, k * 4) * 3 + k * 2;
+      const padX = fs * 0.45, padY = fs * 0.18, ph = fs + padY * 2;
+      // the plate: above the tile (rising as it appears), or under it (a dock caption — its nameplate owns the space above)
+      const boxOf = (n, rise) => {
+        ctx.save(); ctx.font = font;
+        const w = ctx.measureText(n.text).width + padX * 2;
+        ctx.restore();
+        const b = { x: (n.x + 0.5) * T - w / 2, y: n.below ? (n.y + 1) * T + 3 : n.y * T - 3 - rise - ph, w, h: ph };
+        return (fit && fit(b)) || b;
+      };
+      const paintNote = (n, k, b) => {
+        const tf = ctx.getTransform ? ctx.getTransform() : null, px1 = 1 / ((tf && tf.a) || 1);   // one screen pixel, in the caller's frame
         ctx.save();
-        ctx.font = font; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-        ctx.globalAlpha = (k < 0.12 ? k / 0.12 : (1 - k) / 0.88) * 0.85;
-        ctx.shadowBlur = 3; ctx.shadowColor = GHOST_COL; ctx.fillStyle = GHOST_COL;
-        ctx.fillText(n.text, (n.x + 0.5) * T, baseY(n, n.below ? 0 : rise));
+        ctx.globalAlpha = k < 0.12 ? k / 0.12 : k > 0.75 ? (1 - k) / 0.25 : 1;
+        ctx.fillStyle = 'rgba(4,6,8,0.86)'; ctx.fillRect(b.x, b.y, b.w, b.h);
+        ctx.strokeStyle = GHOST_COL; ctx.lineWidth = px1;
+        if (ctx.setLineDash) ctx.setLineDash([3 * px1, 2 * px1]);
+        ctx.strokeRect(b.x + px1 / 2, b.y + px1 / 2, b.w - px1, b.h - px1);
+        ctx.font = font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = GHOST_COL;
+        ctx.fillText(n.text, b.x + b.w / 2, b.y + b.h / 2 + fs * 0.06);
         ctx.restore();
       };
       for (let i = notes.length - 1; i >= 0; i--) {
         const n = notes[i], k = (nowMs - n.t0) / NOTE_MS;
         if (k >= 1 || k < 0) { notes.splice(i, 1); continue; }
-        if (say) {
-          ctx.save(); ctx.font = font;
-          const w = ctx.measureText(n.text).width;
-          ctx.restore();
-          say({ x: (n.x + 0.5) * T - w / 2, y: baseY(n, 0) - fs, w, h: fs }, paintNote.bind(null, n, k));
-        } else paintNote(n, k);
+        const b = boxOf(n, n.below ? 0 : Math.min(1, k * 4) * 3);
+        if (say) say(b, paintNote.bind(null, n, k, b)); else paintNote(n, k, b);
       }
     }
 
