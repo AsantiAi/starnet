@@ -138,12 +138,13 @@ pub fn fit_rect(rect: HudRect, area: WorkArea) -> HudRect {
 }
 
 /// The physical height a folded HUD should take for a page-measured deck height (logical px).
-/// A folded width: the page's measured logical width (the widget), never wider than the HUD it folds
-/// from; no width asked = that full width.
+/// A folded width: the page's logical width for the widget (its default, or the size the Commander dragged it
+/// to — which may be WIDER than the HUD it folds from), within the HUD's sane bounds; no width asked = the
+/// full width it folds from.
 pub fn folded_width(logical: Option<f64>, scale: f64, full: u32) -> u32 {
     let s = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
     match logical.filter(|v| v.is_finite() && *v > 0.0) {
-        Some(w) => ((w.clamp(HUD_WIDGET_MIN_W, HUD_SANE_MAX_W) * s).round() as u32).min(full),
+        Some(w) => (w.clamp(HUD_WIDGET_MIN_W, HUD_SANE_MAX_W) * s).round() as u32,
         None => full,
     }
 }
@@ -471,11 +472,12 @@ mod tests {
     }
 
     #[test]
-    fn folded_width_fits_the_widget_but_never_widens() {
+    fn folded_width_fits_the_widget_within_sane_bounds() {
         assert_eq!(folded_width(Some(250.0), 1.0, 400), 250);
         assert_eq!(folded_width(Some(250.0), 1.5, 600), 375);
         assert_eq!(folded_width(Some(40.0), 1.0, 400), 160);
-        assert_eq!(folded_width(Some(900.0), 1.0, 400), 400);
+        assert_eq!(folded_width(Some(593.0), 1.0, 400), 593); // a widget dragged wider than the HUD keeps its width
+        assert_eq!(folded_width(Some(900.0), 1.0, 400), 720); // never past the sane HUD width
         assert_eq!(folded_width(None, 1.0, 400), 400);
         assert_eq!(folded_width(Some(f64::NAN), 2.0, 800), 800);
     }

@@ -713,8 +713,11 @@
     if (S.widgetFit && Math.abs(z.w - S.widgetFit.w) < 3 && Math.abs(z.h - S.widgetFit.h) < 3) return;
     askWidgetSize(z);
   }
-  // a resize we did not ask for, while the widget shows, is the Commander sizing it: keep and remember that size
-  function onWindowResize() {
+  // a resize we did not ask for, while the widget shows, is the Commander sizing it: keep and remember that size.
+  // Only a REAL window resize counts: the synthetic 'resize' the HUD dispatches after every view change (so the
+  // layout reflows) is untrusted, and the moments around a view change or an entry are quiet.
+  function onWindowResize(e) {
+    if (e && e.isTrusted === false) return;
     if (!S.active || S.view !== 'widget' || !S.desktop || S.busy || now() < (S.fitQuietUntil || 0)) return;
     const w = Math.round(root.innerWidth), h = Math.round(root.innerHeight);
     if (!(w > 0 && h > 0)) return;
@@ -887,6 +890,7 @@
     if (!S.active) return Promise.resolve(false);
     S.view = next === 'chat' ? 'chat' : next === 'widget' ? 'widget' : 'activity';
     if (S.view === 'widget') S.widgetFit = null;
+    S.fitQuietUntil = now() + 900;   // the window is about to change size for this view: that is ours
     applyView();
     render();
     announceLayout();
@@ -907,6 +911,7 @@
     const prefs = readPrefs(root.localStorage);
     S.pinned = prefs.pinned;
     S.widgetUser = prefs.widget || null;   // the size the Commander last gave the widget, if they ever did
+    S.fitQuietUntil = now() + 3000;        // entering reshapes the window several times: none of that is the Commander
     S.view = 'widget';                       // the HUD opens SMALL: the agents at work, a click from everything else
     S.desktop = !!tauriCore(root);
     S.active = true;
