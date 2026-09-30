@@ -19,7 +19,14 @@
 
    STOP. Aborting req.signal kills the child's whole process tree (taskkill /T on Windows) before returning.
 
-   makeClaudeCliProvider({ spawn?, bin?, env?, platform?, fs?, os?, idleMs?, statusTtlMs? })
+   ACCOUNTS. `configDir` points the CLI at one extra sign-in (subscription stacking): the child runs with
+   CLAUDE_CONFIG_DIR=<configDir>, a separate CLI identity whose credential the CLI keeps in that folder (proven:
+   an empty folder answers `auth status` signed out while ~/.claude stays signed in). No configDir = the CLI's
+   own default sign-in. A spent subscription (the CLI's `error:"rate_limit"` line, "You've hit your limit") is
+   thrown as a 429 `usage_limit_reached`, which errorClass files as quota_exhausted: the loop rotates to the next
+   account instead of retrying this one.
+
+   makeClaudeCliProvider({ spawn?, bin?, env?, configDir?, platform?, fs?, os?, idleMs?, statusTtlMs? })
      -> { stream, listModels, contextLimit, priceOf, supportsTools, reasoningEfforts } */
 'use strict';
 (function (root, factory) {
@@ -247,6 +254,7 @@
       delete out.CLAUDECODE;               // a sidecar started from inside a Claude Code session is not a nested session
       delete out.CLAUDE_CODE_ENTRYPOINT;
       out.CLAUDE_CODE_DISABLE_AUTO_MEMORY = '1';
+      if (opts.configDir) out.CLAUDE_CONFIG_DIR = String(opts.configDir);   // an extra account's own CLI identity
       return out;
     }
     function killDirect(child) {
@@ -290,7 +298,23 @@
         });
       });
     }
-    return { spawn, fs, os, path, env, platform, isFile, command, notInstalled, notSignedIn, childEnv, killTree, authStatus };
+    /* `claude auth logout` for this identity: the CLI clears its own credential (on macOS that is a keychain entry
+       outside the config folder, so deleting the folder alone would strand it). Resolves { ok }, never throws. */
+    function logout() {
+      return new Promise(resolve => {
+        const cmd = command();
+        if (!cmd) return resolve({ ok: false });
+        let settled = false, child;
+        const finish = (ok) => { if (settled) return; settled = true; clearTimeout(timer); resolve({ ok }); };
+        const timer = setTimeout(() => { killTree(child); finish(false); }, 15000);
+        try {
+          child = spawn(cmd.file, cmd.pre.concat(['auth', 'logout']), { env: childEnv(), cwd: os.tmpdir(), windowsHide: true, stdio: ['ignore', 'ignore', 'ignore'] });
+        } catch (_) { return finish(false); }
+        child.on('error', () => finish(false));
+        child.on('close', code => finish(code === 0));
+      });
+    }
+    return { spawn, fs, os, path, env, platform, isFile, command, notInstalled, notSignedIn, childEnv, killTree, authStatus, logout };
   }
 
   function makeClaudeCliProvider(opts) {
@@ -432,6 +456,13 @@
           if (apiError === 'authentication_failed') {
             const e = new Error('Claude Code is not signed in (' + String(result.result || 'authentication failed').slice(0, 200) + ') — press SIGN IN on the CLAUDE CODE card (Settings → PROVIDERS), then retry');
             e.status = 401; e.code = 'provider_not_configured';
+            throw e;
+          }
+          // A spent subscription window ("You've hit your limit · resets 5pm …"): a 429 usage_limit_reached is
+          // quota_exhausted — no retry on this sign-in, rotate to the next connected account (or fall back).
+          if (apiError === 'rate_limit') {
+            const e = new Error('Claude Code usage limit reached: ' + String(result.result || 'rate limited').slice(0, 300));
+            e.status = 429; e.code = 'usage_limit_reached';
             throw e;
           }
           throw new Error('Claude Code error: ' + String(result.result || result.subtype || 'unknown error').slice(0, 400));
