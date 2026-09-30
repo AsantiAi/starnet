@@ -573,7 +573,13 @@
     return h ? h + ':' + String(m).padStart(2, '0') + ':' + String(r).padStart(2, '0') : m + ':' + String(r).padStart(2, '0');
   }
 
-  function worldStart() { try { if (typeof World !== 'undefined' && World.start) World.start(); } catch (_) {} }
+  // The widget's world is drawn ~20 times a second (World.setFrameCap): alive to a glance, a fraction of the
+  // full station's cost while a game has the GPU. 48ms stays under the world's 64ms step clamp, so bodies
+  // still move at their true speed. The full station always gets its uncapped loop back.
+  const WIDGET_FRAME_MS = 48;
+  function worldStart(capped) {
+    try { if (typeof World !== 'undefined') { if (World.setFrameCap) World.setFrameCap(capped ? WIDGET_FRAME_MS : 0); if (World.start) World.start(); } } catch (_) {}
+  }
   function worldStop() { try { if (typeof World !== 'undefined' && World.stop) World.stop(); } catch (_) {} }
 
   // Point the station's camera at an agent (its own follow-lock: the same one a CREW click makes).
@@ -823,7 +829,7 @@
     doc.body.classList.toggle('hud-view-widget', small);
     doc.body.classList.toggle('hud-folded', act || small);
     // the world renders only while the widget shows it: ACTIVITY and CHAT cost no GPU
-    if (small) worldStart(); else { worldStop(); S.followId = ''; }
+    if (small) worldStart(true); else { worldStop(); S.followId = ''; }
     if (S.els && S.els.title) {
       if (act) { if (S.titleWas == null) S.titleWas = S.els.title.textContent; }
       else if (S.titleWas != null) { S.els.title.textContent = S.titleWas; S.titleWas = null; }
@@ -896,7 +902,7 @@
           if (S.els.title) S.els.title.removeAttribute('data-tauri-drag-region');
         }
         S.followId = S.followPinned = '';
-        if (inGame()) worldStart();   // the full station always gets its world back
+        if (inGame()) worldStart(false);   // the full station always gets its world back, uncapped
         announceLayout();
         S.busy = false;
       });

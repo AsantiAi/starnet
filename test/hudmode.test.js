@@ -212,7 +212,7 @@ A.eq([H.fmtAgo(10_000), H.fmtAgo(5 * 60_000), H.fmtAgo(2 * 3_600_000)], ['just n
     'every card can be steered and stopped through the routes the station already has');
   A.ok(has(js, 'App.openWorkstream(mine[0].id)', 'Workstreams.get(sid)'), 'OPEN CONVERSATION goes to the conversation that owns the work, else the agent\'s own (never rebinds the blank thread on screen)');
   A.ok(has(js, "S.view = 'widget';", "classList.toggle('hud-view-widget', small)", "setView('activity')"), 'the HUD opens SMALL on the widget, and a click opens ACTIVITY');
-  A.ok(has(js, 'World.lockBody(id)', 'if (small) worldStart(); else { worldStop();') && !js.includes('SPRITES.drawBody'),
+  A.ok(has(js, 'World.lockBody(id)', 'if (small) worldStart(true); else { worldStop();', 'World.setFrameCap(capped ? WIDGET_FRAME_MS : 0)') && !js.includes('SPRITES.drawBody'),
     'the widget is the REAL station (the world renderer, its camera following the agent), never a staged scene; the world runs only while the widget shows it');
   A.ok(css.includes('#screen-game.active > #stage-wrap {') && css.includes('.cam-cine { display: none !important; }'), 'the widget shows the station view and its camera frame, not the station\'s own controls');
   A.ok(has(read('src-tauri/src/hud_mode.rs'), 'width: Option<f64>', 'fn folded_width', 'keep_right'), 'the desktop window hugs the widget in width too, keeping its corner');
