@@ -1579,24 +1579,41 @@ const WorkflowPanel = (() => {
     const sr = H.sampleState ? H.sampleState() : null, c = comp();
     if (sr && c && sr.key === c.key && sr.view && sr.view.ok) (sr.runs || []).forEach(r => readStep(r, sr.streamId));
   }
+  /* THE LOOP'S NOTE, IN WORDS (2026-09-30): a review loop that ran out of tries staples its machine note to the result
+     ("[LOOP — exhausted: 3 passes round the gate at 19,10 without VERDICT: approved — leaving on DONE unapproved]"). The card
+     lifts it out of the result and says what it means; the result box shows the work alone. */
+  const LOOP_NOTE = /^\[LOOP — (exhausted|escalated): (\d+) pass(?:es)? round the gate[^\n]*\]\s*/gm;
+  function loopNotes(text) {
+    const notes = [];
+    const rest = String(text || '').replace(LOOP_NOTE, (m, kind, n) => {
+      notes.push(kind === 'escalated' ? 'The review loop used all ' + n + ' tries without an approval, so the work went on to the escalation step.'
+        : 'The review loop used all ' + n + ' tries without an approval, so the last version shipped as it was.');
+      return '';
+    });
+    return { notes, rest };
+  }
   function jobResultHTML(mine, f) {
     const v = mine && mine.view; if (!v) return '';
     if (v.stopped || !v.ok) return '<div class="wf-sample-res">' + H.sampleHTML(v) + '</div>';
     const runs = (mine.runs || []).slice().reverse();   // line order (the server lists the newest first)
     const P = typeof Pipeline !== 'undefined' ? Pipeline : null, out = String(mine.output || '');
-    const shown = P && P.stripVerdictLine ? P.stripVerdictLine(out) : out;   // a reviewer's VERDICT line steers the loop; it is not the work
+    const ln = loopNotes(P && P.stripVerdictLine ? P.stripVerdictLine(out) : out), shown = ln.rest;   // a reviewer's VERDICT line and the loop's note steer the line; they are not the work
     const prev = S.prevJob && S.prevJob.stamp !== mine.stamp && S.prevJob.text === mine.text ? S.prevJob : null;
+    const passes = {};   // a looping line runs a BAY more than once: its later runs say which pass they were
     const steps = runs.map((r, i) => {
-      const pr = r.dockId ? prop(r.dockId) : null, role = (pr && pr.role) || null;
-      return '<details class="wf-more wf-step-out" data-run="' + esc(r.runId) + '"><summary><span>' + (i + 1) + ' · ' + esc((role ? role + ' · ' : '') + String(nameOf(r.agentId)).toUpperCase()) + '</span>'
+      const pr = r.dockId ? prop(r.dockId) : null, role = (pr && pr.role) || null, k = r.dockId || r.agentId, pass = passes[k] = (passes[k] || 0) + 1;
+      return '<details class="wf-more wf-step-out" data-run="' + esc(r.runId) + '"><summary><span>' + (i + 1) + ' · ' + esc((role ? role + ' · ' : '') + String(nameOf(r.agentId)).toUpperCase() + (pass > 1 ? ' · pass ' + pass : '')) + '</span>'
         + '<span class="src">' + (r.reason && r.reason !== 'done' ? esc(r.reason) + ' · ' : '') + '$' + (+r.usd || 0).toFixed(4) + '</span></summary>'
         + '<div class="wf-io">' + esc(stepText(stepOut[r.runId])) + '</div></details>';
     }).join('');
     return '<div class="wf-job">'
       + '<div class="wf-job-h"><b>✓ DELIVERED</b> · ' + runs.length + ' step' + (runs.length === 1 ? '' : 's') + (v.usd != null ? ' · $' + v.usd.toFixed(4) : '') + (mine.folded ? ' · in the OUTBOX' : '') + '</div>'
+      + ln.notes.map(t => '<div class="wf-warnline">⚠ ' + esc(t) + '</div>').join('')
       + '<div class="wf-from"><span>THE RESULT</span></div><div class="wf-io out wf-job-out">' + esc(shown.trim() || '(the line delivered an empty reply)') + '</div>'
+      + '<div class="wf-row">' + (S.exampleStamp === mine.stamp ? '<span class="wf-tag">★ THE LINE’S EXAMPLE</span>'
+        : '<button type="button" class="bb sm" id="wf-keep-ex" data-tip="The step that wrote this result will match its format, length and tone every time: the result is added to that step’s instructions as its example. UNDO takes it back.">★ KEEP AS THE EXAMPLE</button>') + '</div>'
       // the same job run again after a fix: what it gave LAST time stays one click away, to see the change
-      + (prev ? '<details class="wf-more wf-lasttime"><summary>Last time, before your fix</summary><div class="wf-io">' + esc((P && P.stripVerdictLine ? P.stripVerdictLine(prev.output) : prev.output).trim() || '(empty)') + '</div></details>' : '')
+      + (prev ? '<details class="wf-more wf-lasttime"><summary>Last time, before your fix</summary><div class="wf-io">' + esc(loopNotes(P && P.stripVerdictLine ? P.stripVerdictLine(prev.output) : prev.output).rest.trim() || '(empty)') + '</div></details>' : '')
       + (runs.length ? '<div class="wf-from"><span>HOW EACH STEP DID IT</span><span class="src">open a step to read its reply</span></div><div class="wf-steps">' + steps + '</div>' : '')
       + notRightHTML(mine, f) + '</div>';
   }
@@ -1657,6 +1674,29 @@ const WorkflowPanel = (() => {
     x.applied = true; H.sfx('chime'); H.flashTip('step instructions changed · UNDO takes it back', true);
     paint(false);
   }
+  /* ★ KEEP AS THE EXAMPLE (2026-09-30 — "if the output is … not consistent"): a result the Commander likes becomes the model the
+     line's LAST step (the one whose reply ships — the delivered run, runs[0]) matches every time. It is written INTO that step's
+     DOES as one marked block — visible and editable on the BAY card, one UNDO, replacing any earlier example — so it rides the
+     step's standing brief like every other instruction (router.stageBrief): no hidden state. */
+  const EX_HEAD = 'MATCH THIS EXAMPLE of a good result — its format, length and tone, not its facts:';
+  function exampleBrief(does, example) {
+    const base = String(does || '').replace(/\n*MATCH THIS EXAMPLE of a good result[\s\S]*$/, '').trim();
+    const room = 2000 - base.length - EX_HEAD.length - 12;
+    if (room < 300) return null;
+    return (base ? base + '\n\n' : '') + EX_HEAD + '\n"""\n' + String(example).trim().slice(0, Math.min(1200, room)) + '\n"""';
+  }
+  function keepExample(mine) {
+    const last = (mine.runs || [])[0], dockId = last && last.dockId, p = dockId ? prop(dockId) : null;
+    if (!p || p.t !== 'bay') { H.sfx('bad'); H.flashTip('the step that made this result is not on the floor any more', false); return; }
+    const P = typeof Pipeline !== 'undefined' ? Pipeline : null, text = loopNotes(String((P && P.stripVerdictLine ? P.stripVerdictLine(mine.output || '') : mine.output) || '')).rest.trim();
+    if (!text) { H.sfx('bad'); H.flashTip('this result is empty — there is nothing to keep', false); return; }
+    const next = exampleBrief(p.brief, text);
+    if (!next) { H.sfx('bad'); H.flashTip('this step’s instructions are too long to hold an example — shorten them first', false); return; }
+    const r = H.station().setPropBrief(dockId, next);
+    if (!r || !r.ok) { H.sfx('bad'); H.flashTip('the example could not be saved', false); return; }
+    S.exampleStamp = mine.stamp; H.sfx('chime'); H.flashTip((p.role || 'the last step') + ' will match this example · UNDO takes it back', true);
+    paint(false);
+  }
   // after a job's card is painted: read each step's reply, and wire NOT RIGHT?
   function wireJob() {
     readJobSteps();
@@ -1667,6 +1707,7 @@ const WorkflowPanel = (() => {
     if (inp) inp.addEventListener('input', () => { if (S.fix && S.fix.stamp === mine.stamp) S.fix.complaint = inp.value; else S.fixDraft = inp.value; });
     if (go) go.onclick = () => askFixes(mine, ((inp && inp.value) || '').trim());
     $$('[data-fix-use]').forEach(b => { b.onclick = () => useFix(+b.dataset.fixUse); });
+    const kx = $('#wf-keep-ex'); if (kx) kx.onclick = () => keepExample(mine);
     const again = $('#wf-nr-again');
     if (again) again.onclick = () => { const cc = comp(); if (!cc) return; H.sfx('click'); S.fixDraft = ''; S.prevJob = { text: mine.text, output: mine.output, stamp: mine.stamp }; H.runSample(cc, { text: mine.text || (S.testJob[S.lineKey] || '').trim() || undefined, onUpdate: () => paint(false) }); };
   }

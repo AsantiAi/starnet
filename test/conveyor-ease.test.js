@@ -38,7 +38,7 @@ A.ok(/id="wf-send-stop"/.test(trig) && /H\.stopSample\(\)/.test(trig), '…and a
 const res = at(panel, '  function jobResultHTML(mine, f) {', '  function testModeNow() {');
 A.ok(/const runs = \(mine\.runs \|\| \[\]\)\.slice\(\)\.reverse\(\);/.test(res) && /THE RESULT/.test(res) && /HOW EACH STEP DID IT/.test(res), 'a job comes back as the whole result, then how each step did it, in line order');
 A.ok(/P\.stripVerdictLine\(out\)/.test(res) && !/slice\(0, 80\)/.test(res), '…the whole result (a reviewer\'s VERDICT line is the loop\'s signal, not the work) — never cut to 80 characters');
-A.ok(/const pr = r\.dockId \? prop\(r\.dockId\) : null, role = \(pr && pr\.role\) \|\| null;/.test(res), '…each step named by the BAY it ran at');
+A.ok(/const pr = r\.dockId \? prop\(r\.dockId\) : null, role = \(pr && pr\.role\) \|\| null,/.test(res), '…each step named by the BAY it ran at');
 const rd = at(panel, '  function readStep(r, streamId) {', '  function jobResultHTML(');
 A.ok(/api\('\/api\/transcript\?stream=' \+ encodeURIComponent\(streamId \|\| r\.streamId \|\| ''\) \+ '&agent=' \+ encodeURIComponent\(r\.agentId \|\| 'agent'\) \+ '&runId=' \+ encodeURIComponent\(r\.runId\) \+ '&limit=50'\)/.test(rd),
   'each step\'s reply is read from its own run (the transcript by runId — the OUTBOX window\'s read)');
@@ -54,6 +54,19 @@ A.ok(/const r = st\.setPropBrief\(x\.dockId, x\.does\);/.test(nr) && /st\.setPro
 A.ok(/↻ RUN THE SAME JOB AGAIN/.test(nr) && /S\.prevJob = \{ text: mine\.text, output: mine\.output, stamp: mine\.stamp \};/.test(nr) && /H\.runSample\(cc, \{ text: mine\.text/.test(nr), '…then the same job runs again');
 A.ok(/const prev = S\.prevJob && S\.prevJob\.stamp !== mine\.stamp && S\.prevJob\.text === mine\.text \? S\.prevJob : null;/.test(res) && /Last time, before your fix/.test(res), '…and what it gave last time stays one click away beside the new result');
 A.ok(/Suggested by ' \+ esc\(fx\.model/.test(nr) && /\$' \+ \(\+fx\.usd\)\.toFixed\(4\)/.test(nr), 'the suggestion says which model made it and what it cost');
+/* ---------- ★ KEEP AS THE EXAMPLE — consistency: the last step matches a result the Commander liked ---------- */
+const ex = at(panel, '  const EX_HEAD = ', '  // after a job\'s card is painted');
+A.ok(/const last = \(mine\.runs \|\| \[\]\)\[0\], dockId = last && last\.dockId/.test(ex) && /H\.station\(\)\.setPropBrief\(dockId, next\)/.test(ex),
+  'KEEP AS THE EXAMPLE writes the result into the instructions of the step whose reply shipped (the delivered run), one UNDO');
+A.ok(/replace\(\/\\n\*MATCH THIS EXAMPLE of a good result\[\\s\\S\]\*\$\/, ''\)/.test(ex) && /Math\.min\(1200, room\)/.test(ex) && /if \(room < 300\) return null;/.test(ex),
+  '…as one marked block that replaces any earlier example, bounded to fit the 2000-character brief');
+A.ok(/★ KEEP AS THE EXAMPLE/.test(res) && /★ THE LINE’S EXAMPLE/.test(res), '…a key under the result, then a tag saying it is the line\'s example');
+/* ---------- the loop's machine note, in words ---------- */
+const ln = at(panel, '  const LOOP_NOTE = ', '  function jobResultHTML(');
+A.ok(/The review loop used all ' \+ n \+ ' tries without an approval, so the last version shipped as it was\./.test(ln) && /const ln = loopNotes\(/.test(res) && /ln\.notes\.map\(t => '<div class="wf-warnline">⚠ '/.test(res),
+  'a loop that ran out of tries is said in words over the result, and lifted out of the result box');
+A.ok(/text = loopNotes\(/.test(ex), '…and never becomes part of a kept example');
+A.ok(/\(pass > 1 \? ' · pass ' \+ pass : ''\)/.test(res), 'a looping line\'s repeated steps say which pass they were');
 const route = at(sidecar, 'async function handleRoutingFixSuggest(req, res) {', 'async function stepTestRunDock(h) {');
 A.ok(/\{ m: 'POST', exact: '\/api\/routing\/fix-suggest', h: handleRoutingFixSuggest \}/.test(sidecar), 'POST /api/routing/fix-suggest is a route');
 A.ok(route.indexOf('budget.check(null, \'agent\', 0, Date.now(), null)') > 0 && route.indexOf('budget.check(') < route.indexOf('provider.stream('), '…the spending cap is read BEFORE the model call');
