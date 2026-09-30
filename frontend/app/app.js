@@ -3217,13 +3217,11 @@ const App = (() => {
     if (World.setOnMissionBoard) World.setOnMissionBoard(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('quests'); });   // G1b: click the MISSION BOARD → the QUEST LOG (the board is a projection, never a gate)
     if (World.setOnTrophyCase) World.setOnTrophyCase(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('trophies'); });   // G3b: click the TROPHY CASE → the TROPHY surface (a projection of real completions, never a gate)
     // DESK SCREEN: click an agent's workstation → the DESK SCREEN window (docked from the bottom like every window) on
-    // that agent's work. The fold starts here so a desk opened mid-run already holds every step this page has seen.
+    // that agent's computer. The fold starts here so a desk opened mid-run already holds every step this page has seen.
     if (typeof DeskScreen !== 'undefined' && World.setOnDesk) {
       DeskScreen.init({
         // the run's own conversation when this page launched it, else the agent's (selectAgent never rebinds a thread with content)
-        openChat: (aid, wsId) => { if (wsId && Workstreams.get(wsId)) openWorkstream(wsId); else selectAgent(aid); },
-        openRecord: aid => { openWorldAgent(aid); if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('logbook'); },
-        openFiles: (runId, label) => { if (typeof StationUI !== 'undefined' && StationUI.openRunOutputs) StationUI.openRunOutputs(runId, label); }
+        openChat: (aid, wsId) => { if (wsId && Workstreams.get(wsId)) openWorkstream(wsId); else selectAgent(aid); }
       });
       World.setOnDesk(o => DeskScreen.open(o.agentId));
     }

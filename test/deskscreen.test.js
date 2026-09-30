@@ -81,4 +81,29 @@ const t = D._taskOf({ runId: 'zz', trigger: 'schedule', task: '' });
 A.eq(t.known, false, 'a routine run with no local conversation has no known task text');
 A.ok(/scheduled routine/i.test(t.text), 'it says what started it instead');
 
+// ---- the agent's screen: transcript rows → screens (full args before the tool runs, full result after) ----
+const rows = [
+  { role: 'user', content: 'do it' },
+  { role: 'assistant', content: '', toolCalls: JSON.stringify([{ id: 'c1', type: 'function', function: { name: 'fs_write', arguments: JSON.stringify({ path: 'notes.md', content: '# Notes\nline two' }) } }]) },
+  { role: 'tool', toolCallId: 'c1', content: 'wrote notes.md (18 B)' },
+  { role: 'assistant', content: '', toolCalls: JSON.stringify([{ id: 'c2', type: 'function', function: { name: 'shell_exec', arguments: JSON.stringify({ command: 'echo hi' }) } }]) },
+  { role: 'tool', toolCallId: 'c2', content: 'ERROR: exit 1' },
+  { role: 'assistant', content: '', toolCalls: JSON.stringify([{ id: 'c3', type: 'function', function: { name: 'fs_edit', arguments: JSON.stringify({ path: 'a.js', find: 'old', replace: 'new' }) } }]) }
+];
+const scr = D._parseScreens(rows);
+A.eq(scr.map(x => x.callId), ['c1', 'c2', 'c3'], 'one screen per tool call, in order');
+A.eq(scr[0].done, true, 'a call with its result row is done');
+A.eq(scr[2].done, false, 'a call whose result has not been checkpointed yet is still working');
+A.eq(scr[1].isError, true, 'an ERROR: result is a failed step');
+A.eq(scr[1].result, 'exit 1', '…with the prefix stripped');
+const ed = D._screenOf(scr[0]);
+A.eq([ed.app, ed.target, ed.kind, ed.body], ['EDITOR', 'notes.md', 'code', '# Notes\nline two'], 'fs.write → the editor showing the FULL file it wrote');
+const term = D._screenOf(scr[1]);
+A.eq([term.app, term.kind], ['TERMINAL', 'term'], 'shell → the terminal');
+A.ok(term.body.startsWith('$ echo hi\n'), 'the terminal shows the command it ran');
+const diff = D._screenOf(scr[2]);
+A.eq([diff.app, diff.kind, diff.body, diff.note], ['EDITOR', 'diff', '- old\n+ new', 'working…'], 'fs.edit → a diff, marked working until its result lands');
+A.eq(D._parseScreens([{ role: 'tool', toolCallId: 'zz', content: 'orphan' }]).length, 0, 'a result with no call is never shown as a screen');
+A.eq(D._screenOf({ name: 'web_search', args: { query: 'otters' }, result: '1. Otters', done: true }).target, 'otters', 'web search → the query + its results');
+
 A.report();
