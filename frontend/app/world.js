@@ -1835,11 +1835,15 @@ const World = (() => {
   // stays for programmatic reframes (boot restore, delete-fallback) — lockBody is only armed by a USER selection.
   // zoom (optional, 2026-09-30): the lock's scale for a surface that frames one agent closer (the HUD widget);
   // omitted = the station's own rule (at least 3, never zooming out), byte-identical.
-  function lockBody(id, zoom) {
+  // opts.seatAt (optional): where a SEATED body's feet sit in the frame (0..1 of its height). A seated worker
+  // faces its desk, which stands ABOVE it on screen; a small frame that keeps the default 0.56 cuts the desk
+  // and its screen off. Omitted = 0.56 for every body, byte-identical.
+  function lockBody(id, zoom, opts) {
     const b = bodyForAgent(id) || agent;
     if (!b || b.unplaced || !cache || camAnim || awakeFrozen) return;   // nothing to frame yet / the scripted awakening camera owns the transform
     camLerp = null;
     camLock = { id: (b.agentId || b.id), sc: clampz(zoom > 0 ? zoom : Math.max(scale, 3), MINZ, MAXZ), source: 'session' };
+    if (opts && opts.seatAt > 0 && opts.seatAt < 1) camLock.seatAt = +opts.seatAt;
   }
   /* ---------- IDLE CINECAM — the security-feed auto-director ----------
      After cineIdleMs of true hands-off the camera starts hunting the floor's own life: it follow-locks a
@@ -6410,7 +6414,8 @@ const World = (() => {
       const lb = bodyForAgent(camLock.id);
       if (!lb || lb.unplaced) camLock = null;   // subject despawned / off-floor → release (the director re-casts next frame if it owns the camera)
       else {
-        const ts = camLock.sc, lx = cv.width / 2 - bodyPosX(lb) * ts, ly = cv.height * 0.56 - bodyPosY(lb) * ts;
+        const fy = (camLock.seatAt && (lb.seated || lb.sitting)) ? camLock.seatAt : 0.56;   // desk = `sitting`, couch/bench = `seated`
+        const ts = camLock.sc, lx = cv.width / 2 - bodyPosX(lb) * ts, ly = cv.height * fy - bodyPosY(lb) * ts;
         const k = 0.08;   // softer than the one-shot focus ease (0.16): a trailing, cinematic follow of a moving body
         scale += (ts - scale) * k; panX += (lx - panX) * k; panY += (ly - panY) * k;
       }
