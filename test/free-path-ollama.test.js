@@ -101,6 +101,11 @@ global.App.currentAgent = () => ({ name: 'NOVA', onboarded: true });
   ok(/const isOllama = pickedProvider === 'ollama';/.test(app) && /el\('ollama-block'\)[\s\S]{0,80}toggle\('hidden', !isOllama\)/.test(app), 'selectProviderUI shows the ollama block only while OLLAMA is picked');
   ok(/ollama detected on this machine/.test(app) && /ollama not detected yet/.test(app), 'loadModels paints the ollama status from the live catalog');
   ok(/if \(p === 'ollama' && pickedProvider === 'ollama'\)/.test(app), 'the ollama status is written only for the ollama catalog of the current pick');
+  // The seed slug ('llama3.1') is not an installed model unless that exact tag was pulled: with a live local catalog
+  // the default is an installed model, preferring one Ollama says can call tools (live-proven 2026-09-30: a machine
+  // with llama3.1:8b + qwen3:8b prefilled 'llama3.1' before this).
+  ok(/if \(p === 'ollama' && list\.length && !list\.some\(m => m && m\.id === defId\)\)/.test(app)
+    && /list\.find\(m => m && m\.supportsTools !== false\) \|\| list\[0\]/.test(app), 'an Ollama default is an installed, tool-capable model from the live catalog');
 
   for (const f of ['README.md', 'INSTALL.md']) {
     const doc = read(f);
