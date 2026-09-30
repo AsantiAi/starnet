@@ -1,0 +1,15 @@
+{
+  "slug": "competitor-news-monitor",
+  "version": "1.0.0",
+  "shelf": "community",
+  "category": "Research",
+  "tags": ["competitors", "news", "market-research", "monitoring", "digest"],
+  "requires": ["dish", "cabinet"],
+  "license": "MIT",
+  "authors": ["Ben Barclay", "Nous Research"],
+  "upstream": {
+    "url": "https://github.com/NousResearch/hermes-agent/tree/abd83ab560327c58f17f8e2ecd9be0307d5c9cf9/skills/research/competitor-news-monitor",
+    "commit": "abd83ab560327c58f17f8e2ecd9be0307d5c9cf9",
+    "license": "MIT"
+  }
+}
