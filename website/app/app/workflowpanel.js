@@ -906,7 +906,8 @@ const WorkflowPanel = (() => {
         ? '<div class="wf-warnline trg-armline">Scheduling is ' + (S.cron.halted ? 'STOPPED' : 'OFF') + ' for the whole station, so ' + (routines.filter(r => r.startsLine).length === 1 ? 'this schedule' : 'these schedules') + ' will not run. <button type="button" class="bb sm refit-primary" id="trg-arm">▶ TURN SCHEDULING ON</button></div>' : '')
       + '<div id="trg-form" class="trg-form"' + (S.trgOpen ? '' : ' hidden') + '>'
         + '<label class="trg-form-k" for="trg-prompt">What task should start each run?</label>'
-        + '<textarea id="trg-prompt" data-keep="trgprompt:' + esc(p.id) + '" class="refit-input refit-brief" maxlength="2000" rows="3" placeholder="e.g. Find this week’s AI news and summarize the three biggest stories."></textarea>'
+        // (2026-09-30) a schedule's task starts as the job this line was last sent — "do that every morning" is one click
+        + '<textarea id="trg-prompt" data-keep="trgprompt:' + esc(p.id) + '" class="refit-input refit-brief" maxlength="2000" rows="3" placeholder="e.g. Find this week’s AI news and summarize the three biggest stories.">' + esc(S.testJob[S.lineKey] || '') + '</textarea>'
         + '<div class="rt-when trg-when" id="trg-when"><div class="trg-form-k">WHEN SHOULD IT RUN?</div>'
         + (typeof SchedPicker !== 'undefined' ? SchedPicker.html({ inputId: 'trg-sched' }) : '<input id="trg-sched" class="refit-input" type="text" maxlength="80" placeholder="schedule — every 30m · 0 9 * * * · in 2h" />')
         + '</div><div class="trg-preview" id="trg-preview"></div>'
