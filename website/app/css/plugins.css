@@ -31,7 +31,10 @@
 .term.plugin-app-win .app-bar [hidden], .term.apps-win [hidden] { display: none !important; }
 .term.plugin-app-win .app-change { flex: 1 1 auto; min-width: 0; }
 .term.plugin-app-win .app-bar-status { display: flex; gap: 8px; align-items: center; font-size: 13px; letter-spacing: .5px; color: var(--ph-dim); min-height: 18px; }
-.term.plugin-app-win .app-status { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the status line WRAPS: its tail ("routines are OFF", "last refresh failed") is the part that must never be cut */
+.term.plugin-app-win .app-status { flex: 1 1 auto; min-width: 0; line-height: 1.35; overflow-wrap: anywhere; }
+.term.plugin-app-win .app-bar-status { align-items: flex-start; }
+.term.plugin-app-win .app-arm { flex: none; }
 .term.plugin-win .plugin-plate.app { color: var(--ok); border-color: rgba(var(--ok-rgb), .4); }
 /* the APPS window */
 .term.apps-win .apps-h { font-size: 15px; letter-spacing: 2px; color: var(--ph-bright); margin: 6px 0 8px; }
@@ -39,3 +42,11 @@
 .term.apps-win .apps-what { resize: vertical; min-height: 64px; }
 .term.apps-win .apps-examples { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .term.apps-win .apps-list { display: flex; flex-direction: column; gap: 8px; }
+/* the APPS dock: hidden until the first app exists (a dock group sets its own display, which beats [hidden]) */
+#bottombar .bb-group[data-group="apps"][hidden] { display: none !important; }
+#bottombar .bb-apps-items { display: contents; }
+#bottombar .bb-apps-items .bb small { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.term.apps-win .app-ready { color: var(--ok); }
+.term.apps-win .app-unbuilt { color: var(--ph-dim); }
+.term.apps-win .app-rename-in { flex: 1 1 auto; min-width: 0; margin-right: 8px; }
+.term.apps-win .app-row-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }

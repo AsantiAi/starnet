@@ -95,16 +95,17 @@
   // and the page would lose its window). Caught here, in capture, so it works for a plain <a href> and even when
   // the page's own click handler is broken.
   document.addEventListener('click', (ev) => {
-    const a = ev.target && ev.target.closest ? ev.target.closest('a[href]') : null;
+    // <a>, <area>, and an SVG <a> (whose link may be xlink:href)
+    const a = ev.target && ev.target.closest ? ev.target.closest('a, area') : null;
     if (!a) return;
-    const raw = a.getAttribute('href') || '';
+    const raw = a.getAttribute('href') || a.getAttribute('xlink:href') || '';
     if (!raw || raw.charAt(0) === '#' || /^javascript:/i.test(raw)) return;
     let u;
     try { u = new URL(raw, location.href); } catch (_) { return; }
     // this plugin's own files: http://host/plugin-ui/~t/<ticket>/<id>/<digest>/… (or /plugin-draft/…) — same 8 parts
     const prefix = location.href.split('#')[0].split('/').slice(0, 8).join('/') + '/';
     if (u.href.indexOf(prefix) === 0) {
-      if (NONCE && !u.hash) { u.hash = 'sn=' + NONCE; a.setAttribute('href', u.href); }
+      if (NONCE && !/(?:^#|&)sn=/.test(u.hash)) { u.hash = u.hash ? u.hash + '&sn=' + NONCE : 'sn=' + NONCE; a.setAttribute(a.hasAttribute('href') ? 'href' : 'xlink:href', u.href); }
       return;
     }
     ev.preventDefault();
