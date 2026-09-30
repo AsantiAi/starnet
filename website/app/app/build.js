@@ -1302,6 +1302,29 @@ const Build = (() => {
     machineStills[key] = { rev, url };
     return url;
   }
+  /* ONE TILE OF THE FLOOR'S BELT, AS A STILL (2026-09-30): the Workflow panel's diagram draws its belts with the floor's own
+     conveyor art. Three straight tiles are drawn by Conveyor (the floor's painter) at twice the floor's scale per device pixel and
+     the middle one is kept (no feeder collar, no chute), so it repeats seamlessly; lit = an energized route, cold = one that cannot
+     run yet. */
+  const beltStills = {};
+  function beltStill(live) {
+    const key = (live ? 'live' : 'cold') + '@' + ((typeof window !== 'undefined' && window.devicePixelRatio) || 1);
+    if (beltStills[key] !== undefined) return beltStills[key];
+    let url = '';
+    try {
+      if (typeof Conveyor !== 'undefined' && typeof document !== 'undefined') {
+        const T = 12, S = 2 * Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+        const full = document.createElement('canvas'); full.width = 3 * T * S; full.height = T * S;
+        const g = full.getContext('2d'); g.imageSmoothingEnabled = false; g.scale(S, S);
+        Conveyor.create().drawBelts(g, 0, T, [0, 1, 2].map(x => ({ x, y: 0, dir: 'E' })), live ? null : {});
+        const one = document.createElement('canvas'); one.width = T * S; one.height = T * S;
+        one.getContext('2d').drawImage(full, T * S, 0, T * S, T * S, 0, 0, T * S, T * S);
+        url = one.toDataURL('image/png');
+      }
+    } catch (e) { url = ''; /* no belt art: the diagram keeps its plain rail */ }
+    beltStills[key] = url;
+    return url;
+  }
   function setLibraryPlacement(placing) {
     tool = placing ? 'prop' : 'select';
     root.dataset.tool = tool; hideTip(); setCursor();
@@ -2719,6 +2742,7 @@ const Build = (() => {
       },
       machineDiagram: id => machineDiagramSVG(id),
       machineStill: type => machineStill(type),          // a part's own floor art, for the panel's line diagram
+      beltStill: live => beltStill(live),                // …and one tile of the floor's belt for the belts between them
       preview: () => sendTestBoxes(null),               // the TEST view's WATCH IT: the free walkthrough on the floor
       splitModeInfo: id => splitModeInfo(id),            // { mode: 'copy'|'turns', toCopy, toTurns } — the SPLITTER switch
       setSplitMode: (id, mode) => setSplitMode(id, mode), // swaps the JOINER/MERGER where the branches meet (one undo)
