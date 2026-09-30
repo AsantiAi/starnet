@@ -117,4 +117,6 @@ A.eq(D._handoffOf('mira') && D._handoffOf('mira').id, 'ho_1', 'an older handoff 
 D._fold('browser.handoff', { id: 'ho_1', agentId: 'mira', runId: 'm1', state: 'returned' }, 7300);
 A.eq(D._handoffOf('mira'), null, 'HAND BACK clears it');
 
+A.eq(D._deskTitle('nova'), "NOVA'S DESK", 'the window is titled by whose desk it is');
+A.eq(D._deskTitle(''), "AGENT'S DESK", '…never blank');
 A.report();

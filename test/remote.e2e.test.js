@@ -15,7 +15,9 @@
         title and history; a phone turn sent into it runs WITH that history and lands under the same session id;
         phone-started runs are listed for the desk to adopt (GET /api/remote/recent).
     10. THE STATION PICTURE: the desk page hands over a still (POST /api/remote/view); the phone reads it with the
-        `view` verb, which is also what tells the desk a phone is looking; each agent's portrait is its own sprite. */
+        `view` verb, which is also what tells the desk a phone is looking; each agent's portrait is its own sprite.
+    11. NOTIFICATIONS: the phone reads the station's push key, subscribes, and a push it cannot deliver is reported
+        as not sent (never as sent). */
 'use strict';
 const A = require('./_assert.js');
 const http = require('http');
@@ -259,6 +261,20 @@ function startMockModel() {
     A.ok(face.ok && face.data.mime === 'image/png' && Buffer.from(face.data.data, 'base64').toString('latin1', 1, 4) === 'PNG', 'the portrait of an agent is a real sprite from the shipped art');
     const stl = await client.call('status');
     A.ok(stl.data.agents.every(a => typeof a.skin === 'string'), 'status says how each agent looks');
+
+    // 11. notifications
+    const pk = await client.call('pushKey');
+    A.ok(pk.ok && /^[A-Za-z0-9_-]{80,90}$/.test(pk.data.key) && pk.data.on === false, 'the phone reads the station push key; not subscribed yet');
+    const nodeCrypto = require('crypto');
+    const ecdh = nodeCrypto.createECDH('prime256v1'); ecdh.generateKeys();
+    const bsub = { endpoint: 'https://127.0.0.1:9/push/abc', keys: { p256dh: ecdh.getPublicKey().toString('base64url'), auth: nodeCrypto.randomBytes(16).toString('base64url') } };
+    A.eq((await client.call('pushOn', { endpoint: 'http://127.0.0.1:9/x', keys: bsub.keys })).ok, false, 'a plain-http push address is refused');
+    A.eq((await client.call('pushOn', bsub)).ok, true, 'the phone subscribes');
+    A.eq((await client.call('pushKey')).data.on, true, 'and the station says so');
+    const tp = await client.call('pushTest');
+    A.eq(tp.ok, false, 'a push that cannot be delivered is reported as not sent: ' + JSON.stringify(tp).slice(0, 120));
+    A.eq((await client.call('pushOff')).ok, true, 'the phone unsubscribes');
+    A.eq((await client.call('pushKey')).data.on, false, 'and it is off');
 
     // 7. the LAN door is not the API; revoke cuts a phone off
     A.eq((await fetch(lan + '/api/remote')).status, 404, 'the LAN door serves no /api route');

@@ -1589,7 +1589,7 @@ const App = (() => {
     fireworks: ['accounts/fireworks/models/deepseek-v3p1', 'accounts/fireworks/models/kimi-k2p5', 'accounts/fireworks/models/llama-v3p3-70b-instruct'],
     perplexity: ['sonar-pro', 'sonar', 'sonar-reasoning-pro'],
     cerebras: ['llama-4-scout-17b-16e-instruct', 'llama3.1-8b', 'qwen-3-coder-480b'],
-    ollama: ['llama3.1', 'qwen2.5-coder', 'mistral'],
+    ollama: ['qwen3:8b', 'llama3.1', 'qwen2.5-coder', 'mistral'],
     'claude-cli': ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-4-5-20251001'],   // [0] = the default pick; the live catalog adds the rest
     openrouter: ['gpt-5.5', 'anthropic/claude-sonnet-4.6', 'anthropic/claude-opus-4.8', 'openai/gpt-5', 'google/gemini-2.5-pro']
   });
@@ -1609,7 +1609,14 @@ const App = (() => {
     // drifted onto stale slugs while the right answer sat one inch below in the picks). defaultModelFor() covers
     // providers without a curated pick (custom / ollama).
     const picks = MODEL_PICKS[p];
-    const defId = (picks && picks[0] && picks[0].id) || defaultModelFor(p);
+    let defId = (picks && picks[0] && picks[0].id) || defaultModelFor(p);
+    // A LOCAL catalog is exactly what is installed. The seed slug ('llama3.1') is only a name Ollama resolves if that
+    // exact tag was pulled; prefilling it over a machine that has only qwen3:8b woke the agent on a model that does not
+    // exist and failed its first run. Default to an installed model instead — one Ollama says can call tools.
+    if (p === 'ollama' && list.length && !list.some(m => m && m.id === defId)) {
+      const usable = list.find(m => m && m.supportsTools !== false) || list[0];
+      if (usable && usable.id) defId = usable.id;
+    }
     if (list.length) {
       genesisModels = list; genesisOffline = false;
       countEl.textContent = '(' + list.length + ' in catalog)';
