@@ -1302,29 +1302,6 @@ const Build = (() => {
     machineStills[key] = { rev, url };
     return url;
   }
-  /* ONE TILE OF THE FLOOR'S BELT, AS A STILL (2026-09-30): the Workflow panel's diagram draws its belts with the floor's own
-     conveyor art. Three straight tiles are drawn by Conveyor (the floor's painter) at twice the floor's scale per device pixel and
-     the middle one is kept (no feeder collar, no chute), so it repeats seamlessly; lit = an energized route, cold = one that cannot
-     run yet. */
-  const beltStills = {};
-  function beltStill(live) {
-    const key = (live ? 'live' : 'cold') + '@' + ((typeof window !== 'undefined' && window.devicePixelRatio) || 1);
-    if (beltStills[key] !== undefined) return beltStills[key];
-    let url = '';
-    try {
-      if (typeof Conveyor !== 'undefined' && typeof document !== 'undefined') {
-        const T = 12, S = 2 * Math.max(1, Math.min(3, window.devicePixelRatio || 1));
-        const full = document.createElement('canvas'); full.width = 3 * T * S; full.height = T * S;
-        const g = full.getContext('2d'); g.imageSmoothingEnabled = false; g.scale(S, S);
-        Conveyor.create().drawBelts(g, 0, T, [0, 1, 2].map(x => ({ x, y: 0, dir: 'E' })), live ? null : {});
-        const one = document.createElement('canvas'); one.width = T * S; one.height = T * S;
-        one.getContext('2d').drawImage(full, T * S, 0, T * S, T * S, 0, 0, T * S, T * S);
-        url = one.toDataURL('image/png');
-      }
-    } catch (e) { url = ''; /* no belt art: the diagram keeps its plain rail */ }
-    beltStills[key] = url;
-    return url;
-  }
   function setLibraryPlacement(placing) {
     tool = placing ? 'prop' : 'select';
     root.dataset.tool = tool; hideTip(); setCursor();
@@ -2686,6 +2663,7 @@ const Build = (() => {
   // the machines a line is made of — clicking one on the floor opens/selects it in the panel
   const WF_PART = { bay: 1, intake: 1, outbox: 1, loop: 1, joiner: 1, merger: 1, splitter: 1 };
   let wfHighlightId = null, wfPaused = null, wfHostMemo = null, wfKitAuto = false;   // wfKitAuto: the panel minimized the Build Library (and owes it back)
+  let wfArtRev = -1, wfArtAt = 0;   // the authored-art revision the panel's tiles were last painted at (frame(): repaint when it moves)
   /* the HOST the panel is handed: live reads of THIS editor's state (station, compiled plan, camera) and the
      seams it already owns (sample, plan gate, flash/sfx). Lazy getters — the panel never caches a plan. */
   function wfHost() {
@@ -2742,7 +2720,6 @@ const Build = (() => {
       },
       machineDiagram: id => machineDiagramSVG(id),
       machineStill: type => machineStill(type),          // a part's own floor art, for the panel's line diagram
-      beltStill: live => beltStill(live),                // …and one tile of the floor's belt for the belts between them
       preview: () => sendTestBoxes(null),               // the TEST view's WATCH IT: the free walkthrough on the floor
       splitModeInfo: id => splitModeInfo(id),            // { mode: 'copy'|'turns', toCopy, toTurns } — the SPLITTER switch
       setSplitMode: (id, mode) => setSplitMode(id, mode), // swaps the JOINER/MERGER where the branches meet (one undo)
@@ -5208,6 +5185,11 @@ const Build = (() => {
     if (ridePending && !tutorialCoaching() && !(root && root.querySelector('.refit-firstrun, .refit-preset-example, .refit-station-builds'))) fireFirstRide();
     // finish-the-line card: slow re-derive (feed truth changes on the world's poll, not on edits) + per-frame pin
     if (finCardEl && now - finPollTs > 2000) { finPollTs = now; renderFinCard(); }
+    // the authored prop art landed after the Workflow panel painted its tiles: repaint it once the loading settles, so a tile never
+    // keeps the fallback sprite (the machine stills are re-made per remaster revision)
+    const artRev = (typeof PropRemaster !== 'undefined' && PropRemaster.revision) ? PropRemaster.revision() : 0;
+    if (artRev !== wfArtRev) { wfArtRev = artRev; wfArtAt = now; }
+    else if (wfArtAt && now - wfArtAt > 250) { wfArtAt = 0; if (typeof WorkflowPanel !== 'undefined' && WorkflowPanel.isOpen()) WorkflowPanel.refresh(); }
     const hT0 = perfAcc ? performance.now() : 0;
     positionFinCard();
     if (perfAcc) perfAdd('~finCard', performance.now() - hT0);

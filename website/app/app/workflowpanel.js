@@ -362,13 +362,9 @@ const WorkflowPanel = (() => {
     wireEdits(strip);   // (an OUTBOX the line still needs is added from its place on the strip)
     const cx = ins.querySelector('[data-ins-close]'); if (cx) cx.onclick = () => { S.insertAt = null; paintStrip(flow()); };
     strip.classList.toggle('has-arcs', !!(f && f.gates && f.gates.some(g => g.kind === 'loop' && g.backTo)));   // room under the cards only when a loop's way back is drawn there
-    /* THE BELTS ARE THE FLOOR'S (2026-09-30): one tile of the floor's own conveyor art (the Build host renders it) repeated along
-       each belt — still while the line cannot run, rolling once a job entering its INBOX would reach its OUTBOX: the same rule the
-       floor uses to energize a route, so a moving belt here is never a decoration */
-    if (!strip.dataset.belt && H.beltStill) {
-      const cold = H.beltStill(false), live = H.beltStill(true);
-      if (cold && live) { strip.style.setProperty('--wf-belt-cold', 'url(' + cold + ')'); strip.style.setProperty('--wf-belt-live', 'url(' + live + ')'); strip.dataset.belt = '1'; strip.classList.add('has-belt'); }
-    }
+    /* A LINE THAT CAN RUN (a job entering its INBOX would reach its OUTBOX — the rule the floor energizes a route by) draws its
+       joins a shade brighter; nothing in the diagram moves on a line that cannot run. (2026-09-30: the joins are a clean line —
+       the floor's own conveyor art drawn here was rejected outright: never put the real belt in the diagram.) */
     strip.classList.toggle('live', !!(f && f.trigger.propId && f.outbox.reached));
     strip.parentNode.classList.toggle('pin', !nodes.some(n => n.kind === 'col' && n.col.docks.length > 1));   // (a one-row diagram stays pinned as the panel's map; stacked branches would hold too much of it)
     drawArcs(strip, f);
