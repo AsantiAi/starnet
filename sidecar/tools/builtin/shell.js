@@ -27,6 +27,7 @@
   const AID_RE = /^[A-Za-z0-9_-]{1,40}$/;
   // foreground receipts for the boot orphan sweep (procledger.js trackChild); inert when no ledger is injected
   const trackChild = (typeof require === 'function') ? require('../../procledger.js').trackChild : function () { return { exited: function () {}, done: function () {} }; };
+  const shellFailNote = (typeof require === 'function') ? require('../../failopen.js').note : function () {};
   function safeAgentId(id) { if (!AID_RE.test(id || '')) throw new Error('bad agentId'); return id; }
   function clip(s, n) { s = String(s == null ? '' : s); n = n || 200; return s.length > n ? s.slice(0, n) + '…' : s; }
   function clamp(n, lo, hi) { n = Number(n); if (!isFinite(n)) return lo; return Math.max(lo, Math.min(hi, n)); }
@@ -700,7 +701,7 @@
     }
     // pid > 1 always: process.kill(-1) would signal EVERY process this user owns
     if (group && Number.isInteger(child.pid) && child.pid > 1) {
-      try { process.kill(-child.pid, 'SIGKILL'); return; } catch (_) {}
+      try { process.kill(-child.pid, 'SIGKILL'); return; } catch (e) { shellFailNote('shell.killTree.group', e); }
     }
     try { child.kill(); } catch (_) {}
     try {

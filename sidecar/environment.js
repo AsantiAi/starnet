@@ -176,7 +176,7 @@
     }
     // pid > 1 always: process.kill(-1) would signal EVERY process this user owns
     if (group && typeof process !== 'undefined' && Number.isInteger(child.pid) && child.pid > 1) {
-      try { process.kill(-child.pid, 'SIGKILL'); return; } catch (_) {}
+      try { process.kill(-child.pid, 'SIGKILL'); return; } catch (e) { envFailNote('environment.killTree.group', e); }   // no group -> leader fallback below
     }
     try { child.kill(); } catch (_) {}
     try {
