@@ -194,6 +194,7 @@
     }
     const s = st.stampBlueprint(bp.id, spec.ox, spec.oy, spec.opts || {});
     if (!s || !s.ok) return refuse('the line could not be placed there' + (s && s.msg ? ' (' + s.msg + ')' : ''));
+    for (const d of spec.desks || []) { const r = st.addProp({ t: d.t, x: d.x, y: d.y, w: d.w, h: d.h, r: 0, block: true }); if (!r || !r.ok) return refuse('a desk could not be placed by the line'); }
     let intakeId = null;
     for (let i = 0; i < s.ids.length; i++) if (bp.props[i].t === 'intake') {
       intakeId = intakeId || s.ids[i];
@@ -405,17 +406,28 @@
     });
     const staffed = staffSteps(stepsOut, reqSteps, env, purpose); if (!staffed.ok) return staffed;
     const recruits = stepsOut.filter(x => x.recruit).map(x => ({ propIndex: x.propIndex, role: x.role }));
+    if (recruits.length > MAX_RECRUITS) return refuse('That plan recruits ' + recruits.length + ' new agents. Recruit only when the Commander asks for new crew, and at most ' + MAX_RECRUITS + ' in one plan: staff the other steps with "lead" or a crew member, or leave agent out (the card then lists them as still to do).');
     spec = Object.assign({}, spec, { steps: stepsOut.map(x => ({ propIndex: x.propIndex, brief: x.brief, agentId: x.agentId })), recruits });
 
-    // the whole build on one more probe: its fingerprint is what apply() must reproduce exactly
-    const finalProbe = WM.create(clone(doc));
-    const fb = buildInto(finalProbe, spec, WM);
+    // the whole build on one more probe: its fingerprint is what apply() must reproduce exactly (the recruits' desks, a
+    // tidy row by the line, found on a first build and laid by the second)
+    let finalProbe = WM.create(clone(doc));
+    let fb = buildInto(finalProbe, spec, WM);
     if (!fb.ok) return fb;
+    if (recruits.length) {
+      const lineRoom = finalProbe.roomAt(finalProbe.propById(fb.ids[recruits[0].propIndex]).x, finalProbe.propById(fb.ids[recruits[0].propIndex]).y);
+      const desks = desksFor(WM.create(clone(finalProbe.serialize())), env, lineRoom, recruits.length);
+      recruits.forEach((rc, k) => { rc.desk = desks[k] ? { x: desks[k].x, y: desks[k].y } : null; });
+      spec = Object.assign({}, spec, { desks });
+      finalProbe = WM.create(clone(doc)); fb = buildInto(finalProbe, spec, WM);
+      if (!fb.ok) return fb;
+    }
     const crewIds = (env.crew || []).map(a => a && a.id).filter(Boolean);
     // readiness counts the recruits: on a copy, each gets the desk its summon seeds (ensureWorkstation) and its step
     const rp = WM.create(clone(finalProbe.serialize())), deskRooms = [];
     recruits.forEach((rc, i) => {
-      const id = '__sb_recruit_' + i, d = rp.ensureWorkstation(id);
+      const id = '__sb_recruit_' + i, slot = rc.desk ? rp.propAt(rc.desk.x, rc.desk.y) : null;
+      const d = slot ? Object.assign(rp.assignPropAgent(slot, id) || {}, { roomId: rp.roomAt(rc.desk.x, rc.desk.y) }) : rp.ensureWorkstation(id);
       if (d && d.ok && d.roomId) { const rm = rp.roomById ? rp.roomById(d.roomId) : null; if (rm && deskRooms.indexOf(rm.name) < 0) deskRooms.push(rm.name); }
       rp.assignPropAgent(fb.ids[rc.propIndex], id); crewIds.push(id);
     });
@@ -988,6 +1000,59 @@
     return refuse('hallway is true (a short hallway joins the rooms), false (the rooms touch, open plan), or a length from 2 to 8.');
   }
 
+  /* A RECRUIT'S DESK stands in the room of the line it works: a tidy row along the room's back wall (then its front wall),
+     a clear tile between desks, the seat tile in front of each free, off every doorway's lane, on no belt, every one
+     reachable. The desks are laid on `probe` unbound; station.build seats each recruit at its own. Answers the spots it
+     could find (fewer than asked when the room is full: those recruits get the usual desk in the main room). */
+  const MAX_RECRUITS = 3;
+  function recruitDesks(probe, env, roomId, n) {
+    const S = env.PropSprites, sp = S && S.spec('desk'); if (!sp || n < 1) return [];
+    const rm = probe.rooms().find(r => r.id === roomId); if (!rm) return [];
+    const R = rm.rects[0], g = probe.projectGeometry(), belts = probe.serialize().belts || {}, lane = new Set();
+    for (const d of doorTiles(probe, g, roomId)) for (let k = 0; k < 3; k++) lane.add((d.x + d.dx * k) + ',' + (d.y + d.dy * k));
+    const solidAt = (x, y) => probe.props().some(p => { const s2 = S.spec(p.t); return !(s2 && s2.flat) && x >= p.x && x < p.x + (p.w || 1) && y >= p.y && y < p.y + (p.h || 1); });
+    const clear = (x, y) => probe.roomAt(x, y) === roomId && !belts[x + ',' + y] && !lane.has(x + ',' + y) && !solidAt(x, y);
+    const out = [];
+    for (const y of [R.y1, R.y2 - 1]) {
+      for (let x = R.x1 + 1; x + sp.w - 1 <= R.x2 - 1 && out.length < n; x++) {
+        let ok = true;
+        for (let k = -1; k <= sp.w && ok; k++) for (const yy of [y, y + 1]) if (!clear(x + k, yy)) { ok = false; break; }   // the desk, its seat row, a tile each side
+        if (!ok) continue;
+        const a = probe.addProp({ t: 'desk', x, y, w: sp.w, h: sp.h, r: 0, block: true });
+        if (!a || !a.ok) continue;
+        const g2 = probe.projectGeometry();
+        if (!sideReachable(g2, spawnTile(probe.serialize(), g2), { x, y, w: sp.w, h: sp.h })) { probe.removeProp(a.id); continue; }
+        out.push({ t: 'desk', x, y, w: sp.w, h: sp.h, r: 0, block: true });
+        x += sp.w + 1;
+      }
+      if (out.length >= n) break;
+    }
+    return out;
+  }
+  // desks for n recruits: in the line's room first, then a tidy row in the main room, then the other rooms in turn
+  function desksFor(probe, env, lineRoomId, n) {
+    const main = mainRoom(probe), order = [lineRoomId, main && main.id].concat(probe.rooms().filter(r => r.kind !== 'corridor').map(r => r.id));
+    const out = [], tried = new Set();
+    for (const id of order) {
+      if (!id || tried.has(id) || out.length >= n) continue;
+      tried.add(id);
+      out.push(...recruitDesks(probe, env, id, n - out.length));
+    }
+    return out;
+  }
+  // a plan's recruits, capped, each with its desk (by its line where it fits): the desks join the part that holds the line
+  function seatRecruits(probe, env, spec, roomOfPart) {
+    const recruits = spec.recruits || [];
+    if (recruits.length > MAX_RECRUITS) return refuse('That plan recruits ' + recruits.length + ' new agents. Recruit only when the Commander asks for new crew, and at most ' + MAX_RECRUITS + ' in one plan: staff the other steps with "lead" or a crew member, or leave agent out (the card then lists them as still to do).');
+    const byPart = new Map();
+    for (const rc of recruits) { if (!byPart.has(rc.part)) byPart.set(rc.part, []); byPart.get(rc.part).push(rc); }
+    for (const [pi, list] of byPart) {
+      const desks = desksFor(probe, env, roomOfPart(pi), list.length);
+      list.forEach((rc, k) => { const d = desks[k]; rc.desk = d ? { x: d.x, y: d.y } : null; if (d) spec.parts[pi].props.push(d); });
+    }
+    return { ok: true };
+  }
+
   /* What a new opening in a room's wall would run into. A HALLWAY's doorway (`door`): a solid piece on the tile just inside
      that wall. Any opening in a NORTH wall (the only wall boards and screens hang on): a piece that hangs there, which would
      be left hanging on nothing. `hangs` is the catalog's rule (type -> true when it mounts on a wall); without it every
@@ -1495,6 +1560,8 @@
       spec.parts.push({ hall: hb.rect, room: null, roomId: null, lines: [], props: [] });
       halls.push({ from: A.room.name, to: B.room.name, len: Math.max(hb.rect.x2 - hb.rect.x1, hb.rect.y2 - hb.rect.y1) + 1 });
     }
+    const sr = seatRecruits(probe, env, spec, pi => { const p = spec.parts[pi]; return p.roomId || (p.room ? probe.roomAt(p.room.rect.x1, p.room.rect.y1) : null); });
+    if (!sr.ok) return sr;
     const t = tryBuild(doc, spec, env, before);
     if (!t.ok) return t;
 
@@ -1502,7 +1569,8 @@
     const fp = t.probe, built = t.built, crewIds = (env.crew || []).map(a => a && a.id).filter(Boolean);
     const rp = WM.create(clone(fp.serialize())), deskRooms = [];
     spec.recruits.forEach((rc, i) => {
-      const id = '__sb_recruit_' + i, d = rp.ensureWorkstation(id);
+      const id = '__sb_recruit_' + i, slot = rc.desk ? rp.propAt(rc.desk.x, rc.desk.y) : null;
+      const d = slot ? Object.assign(rp.assignPropAgent(slot, id) || {}, { roomId: rp.roomAt(rc.desk.x, rc.desk.y) }) : rp.ensureWorkstation(id);
       if (d && d.ok && d.roomId) { const rm = rp.roomById ? rp.roomById(d.roomId) : null; if (rm && deskRooms.indexOf(rm.name) < 0) deskRooms.push(rm.name); }
       rp.assignPropAgent(built.parts[rc.part].lines[rc.line].idOf[rc.node], id); crewIds.push(id);
     });
@@ -2025,6 +2093,8 @@
     for (const p of parts) if (p.dress !== undefined) { const d = dressHall(probe, env, p.hallId, p.dress); p.props = d.props; }
     for (const p of parts) { delete p.dress; delete p.hallId; }
     const spec = { kind: 'build', parts, recruits };
+    const sr = seatRecruits(probe, env, spec, pi => { const p = parts[pi]; return p.room ? probe.roomAt(p.room.rect.x1, p.room.rect.y1) : null; });
+    if (!sr.ok) return sr;
     const t = tryBuild(base, spec, env, before);
     if (!t.ok) return refuse('The layout did not pass its checks (' + t.error + '), so nothing would be built. Try fewer or smaller rooms, or the other pattern.');
     const fp = t.probe;
@@ -2138,9 +2208,19 @@
       // and its seat on the step are floor edits UNDO takes back; the agent itself is not (DELETE AGENT in its Dossier)
       for (const rc of recruits) {
         let a = null;
+        const before = new Set(st.props().map(p => p.id));
         try { a = env.recruit(rc.role); } catch (_) { a = null; }
         if (!a || !a.id) return refuse('StarNet could not recruit a ' + rc.role + ', so nothing was built.');
         recruited.push({ id: a.id, name: a.name || a.id, role: rc.role });
+        if (rc.desk) {
+          const slot = st.propAt(rc.desk.x, rc.desk.y), sp = slot ? st.propById(slot) : null;
+          if (sp && sp.t === 'desk' && !sp.agentId) {
+            const own = st.props().find(p => p.agentId === a.id && p.id !== slot && !before.has(p.id) && /^(desk|desk2)$/.test(p.t));
+            const kept = st.props().find(p => p.agentId === a.id && p.id !== slot && before.has(p.id));
+            if (kept) st.removeProp(slot);   // it adopted a desk that already stood: that one is its own, the new one goes
+            else { if (own) st.removeProp(own.id); const d = st.assignPropAgent(slot, a.id); if (!d || !d.ok) return refuse('The new ' + rc.role + ' could not be given its desk by the line, so nothing was built.'); }
+          }
+        }
         const pid = rc.propIndex != null ? b.ids[rc.propIndex] : (((((b.parts || [])[rc.part] || {}).lines || [])[rc.line] || {}).idOf || {})[rc.node];
         const s = st.assignPropAgent(pid, a.id);
         if (!s || !s.ok) return refuse('The new ' + rc.role + ' could not be seated at its step, so nothing was built.');
