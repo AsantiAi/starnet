@@ -841,9 +841,12 @@
 
   /* a style set's pieces at (x0, y0), as arranged or mirrored left to right (a chair facing east then faces west). Sizes come
      from the page's own catalog (the remastered desk is a tile wider than the classic one), so a FLAT decor piece that would
-     then overlap another piece (a lamp beside a desk) is left out, and a set whose SOLID pieces would collide is not used. */
+     then overlap another piece (a lamp beside a desk) is left out, and a set whose SOLID pieces would collide is not used.
+     The catalog's mount rules hold (the page hands them to the world model): a piece that may stand on a table (stack, or
+     mount 'surface') stands on the set's own table where the set puts it there, and one that MUST (a lava lamp) is left out
+     when no table is under it. Tables are laid first, so what stands on them is placed after them. */
   function setProps(env, set, x0, y0, mirror) {
-    const S = env.PropSprites, out = [], taken = new Set();
+    const S = env.PropSprites, out = [], taken = new Map();
     const pieces = set.pieces.map(([t0, x, y, facing = 0]) => {
       let t = t0;
       if (mirror) t = /_r$/.test(t0) ? t0.slice(0, -2) : (S.spec(t0 + '_r') ? t0 + '_r' : t0);
@@ -856,10 +859,13 @@
       if (solid !== pass) continue;
       const px = x0 + (mirror ? set.w - p.x - p.spec.w : p.x), py = y0 + p.y, tiles = [];
       for (let yy = py; yy < py + p.spec.h; yy++) for (let xx = px; xx < px + p.spec.w; xx++) tiles.push(xx + ',' + yy);
-      if (tiles.some(k => taken.has(k))) { if (solid) return null; continue; }
-      tiles.forEach(k => taken.add(k));
+      const onTop = !!(p.spec.stack || p.spec.mount === 'surface'), under = tiles.map(k => taken.get(k));
+      const onTable = onTop && under.length > 0 && under.every(u => u && u.spec.surface);
+      if (p.spec.mount === 'surface' && !onTable) continue;   // it has no business on bare deck
+      if (!onTable && under.some(Boolean)) { if (solid) return null; continue; }
+      if (!onTable) tiles.forEach(k => taken.set(k, p));
       const r = mirror ? (p.facing === 1 ? 3 : p.facing === 3 ? 1 : p.facing) : p.facing;
-      out.push({ t: p.t, x: px, y: py, w: p.spec.w, h: p.spec.h, r, block: solid, order: set.pieces.indexOf(set.pieces[pieces.indexOf(p)]) });
+      out.push({ t: p.t, x: px, y: py, w: p.spec.w, h: p.spec.h, r, block: solid, order: pieces.indexOf(p) + (onTable ? 1000 : 0) });
     }
     return out.sort((q, w) => q.order - w.order).map(({ order, ...p }) => p);
   }

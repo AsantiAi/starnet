@@ -17,7 +17,7 @@
   const STYLES = {
     cozy: { name: 'a cozy corner', about: 'a couch on a rug, a beanbag, a side table, a lamp and plants', words: ['comfy', 'chill', 'relax', 'relaxing', 'hangout', 'warm', 'snug'],
       sets: [
-        { w: 8, h: 6, pieces: [['bookshelf', 0, 0], ['tallplant', 7, 0], ['rug', 2, 1], ['beanbag', 7, 2], ['lavalamp', 0, 4], ['couch', 1, 4], ['sidetable', 6, 4], ['plant', 7, 5]] },
+        { w: 8, h: 6, pieces: [['bookshelf', 0, 0], ['tallplant', 7, 0], ['rug', 2, 1], ['beanbag', 7, 2], ['couch', 1, 4], ['sidetable', 6, 4], ['lavalamp', 6, 4], ['plant', 7, 5]] },
         { w: 6, h: 4, pieces: [['rug_small', 1, 0], ['plant', 0, 0], ['couch', 0, 3], ['sidetable', 5, 3]] },
       ] },
     lounge: { name: 'a lounge', about: 'a TV, a couch, recliners and a side table', words: ['tv', 'movie', 'movies', 'living', 'sofa', 'couch'],
@@ -58,7 +58,7 @@
       ] },
     quarters: { name: 'sleeping quarters', about: 'beds, lockers, a side table and a lamp', words: ['sleep', 'bed', 'beds', 'bedroom', 'bunks', 'rest', 'dorm'],
       sets: [
-        { w: 8, h: 5, pieces: [['bunk', 0, 0], ['sidetable', 2, 0], ['bunk', 3, 0], ['quarters_lockerbank', 5, 0], ['lavalamp', 2, 1], ['rug_small', 0, 2], ['plant', 7, 4]] },
+        { w: 8, h: 5, pieces: [['bunk', 0, 0], ['sidetable', 2, 0], ['lavalamp', 2, 0], ['bunk', 3, 0], ['quarters_lockerbank', 5, 0], ['rug_small', 0, 2], ['plant', 7, 4]] },
         { w: 5, h: 3, pieces: [['bunk', 0, 0], ['sidetable', 2, 0], ['quarters_lockerbank', 2, 2]] },
       ] },
     storage: { name: 'storage', about: 'crates, boxes, lockers and a drawer bank', words: ['stock', 'supplies', 'inventory', 'crates', 'warehouse', 'boxes'],
