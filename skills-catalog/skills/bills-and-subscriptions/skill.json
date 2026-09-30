@@ -1,0 +1,10 @@
+{
+  "slug": "bills-and-subscriptions",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Planning",
+  "tags": ["bills", "subscriptions", "budget", "renewals", "money"],
+  "requires": ["cabinet"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}

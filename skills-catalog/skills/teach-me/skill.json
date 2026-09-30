@@ -1,0 +1,15 @@
+{
+  "slug": "teach-me",
+  "version": "1.0.0",
+  "shelf": "community",
+  "category": "Planning",
+  "tags": ["learning", "tutoring", "lessons", "study", "teaching"],
+  "requires": ["cabinet"],
+  "license": "MIT",
+  "authors": ["Matt Pocock"],
+  "upstream": {
+    "url": "https://github.com/mattpocock/skills/tree/321658273cb1d20b76026717d027d505790106d4/skills/productivity/teach",
+    "commit": "321658273cb1d20b76026717d027d505790106d4",
+    "license": "MIT"
+  }
+}

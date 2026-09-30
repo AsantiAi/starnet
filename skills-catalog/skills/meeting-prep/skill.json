@@ -1,0 +1,10 @@
+{
+  "slug": "meeting-prep",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Productivity",
+  "tags": ["meetings", "preparation", "briefing", "people", "agenda"],
+  "requires": ["dish", "cabinet", "notebook"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}

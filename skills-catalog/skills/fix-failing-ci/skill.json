@@ -1,0 +1,10 @@
+{
+  "slug": "fix-failing-ci",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Engineering",
+  "tags": ["github", "ci", "tests", "debugging", "pull-requests"],
+  "requires": ["cabinet", "workbench"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}
