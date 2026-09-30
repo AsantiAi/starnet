@@ -176,5 +176,27 @@ const result = (extra) => Object.assign({ type: 'result', subtype: 'success', is
     A.eq([childEnv.CLAUDECODE, childEnv.HOME, childEnv.CLAUDE_CODE_DISABLE_AUTO_MEMORY], [undefined, '/h', '1'], 'not a nested session; user env kept; auto-memory off');
   }
 
+  // L. subscription stacking: an extra account runs as its own CLI identity; the default sign-in sets nothing.
+  {
+    const { p, calls } = make({ lines: [init('none'), result({ result: 'ok' })] }, { configDir: '/ws/.secrets/accounts/claude-cli/abc12345' });
+    await collect(p, { model: 'sonnet', messages: [{ role: 'user', content: 'x' }] });
+    A.eq(calls[0].opts.env.CLAUDE_CONFIG_DIR, '/ws/.secrets/accounts/claude-cli/abc12345', 'an extra account points the CLI at its own config dir');
+    const d = make({ lines: [init('none'), result({ result: 'ok' })] }, { env: { PATH: '', CLAUDE_CONFIG_DIR: '/user/own' } });
+    await collect(d.p, { model: 'sonnet', messages: [{ role: 'user', content: 'x' }] });
+    A.eq(d.calls[0].opts.env.CLAUDE_CONFIG_DIR, '/user/own', 'the primary keeps whatever CLI identity the user already runs');
+    const tagged = factory.selectProvider({ provider: 'claude-cli', configDir: '/acct' });
+    A.eq(typeof tagged.stream, 'function', 'factory builds an account-bound adapter');
+  }
+
+  // M. a spent subscription (the CLI's real `error:"rate_limit"` line) is quota_exhausted: rotate, never retry it.
+  {
+    const spent = { type: 'assistant', error: 'rate_limit', message: { content: [{ type: 'text', text: "You've hit your limit · resets 5pm (America/Los_Angeles)" }] } };
+    const { p } = make({ lines: [init('none'), spent, result({ is_error: true, subtype: 'success', result: "You've hit your limit · resets 5pm (America/Los_Angeles)" })] });
+    let err = null; try { await collect(p, { model: 'sonnet', messages: [{ role: 'user', content: 'x' }] }); } catch (e) { err = e; }
+    A.ok(err && err.status === 429 && /hit your limit/.test(err.message), 'a spent window throws a 429 carrying the CLI text');
+    const cls = require('../sidecar/providers/errorClass.js').classifyApiError(err, {});
+    A.eq([cls.reason, cls.retryable, cls.shouldRotateCredential], ['quota_exhausted', false, true], 'errorClass rotates to the next account instead of retrying');
+  }
+
   A.report('provider.claude-cli.test');
 })().catch(e => { console.log('FAIL: provider.claude-cli.test threw -- ' + (e && e.stack || e)); process.exit(1); });

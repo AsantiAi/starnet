@@ -13,6 +13,7 @@ function region(source, marker, closing) {
 let models = [], failure = null;
 const sandbox = {
   ensureCodexAccessToken: async () => { if (failure) throw failure; return 'fixture-token'; },
+  extraAccountProviderFor: () => null,   // subscription stacking: no extra sign-in here, the primary serves the catalog
   forceRefreshCodexAccessToken: async () => 'fixture-token',
   ensureOAuthAccessToken: async () => { if (failure) throw failure; return 'fixture-token'; },
   selectProvider: () => ({ listModels: async () => models }),

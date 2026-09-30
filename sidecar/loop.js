@@ -1740,6 +1740,7 @@
             }
             const fbPayload = { agentId, runId, fromModel: model, toModel: (fb.model || model), reason: decision.reason === 'provider_stalled' ? 'provider_stalled' : cls.reason, rotate: !!cls.shouldRotateCredential };
             if (reasoningDropped) fbPayload.reasoningDropped = reasoningDropped;   // additive; schema declares no additionalProperties
+            if (fb.account) fbPayload.toAccount = String(fb.account);   // subscription stacking: which connected sign-in took over ("account 2")
             emit('provider.fallback', fbPayload);
             if (fb.credKey != null) activeCredKey = fb.credKey;   // the entry we switch TO becomes the live credential
             if (fb.cost) cost = fb.cost;                          // cross-provider: price subsequent turns by the new provider's catalog

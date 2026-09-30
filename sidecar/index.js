@@ -317,6 +317,7 @@ const { makeSkillRegistry } = require('./skills/registry.js');
 const { makeSkillMetrics } = require('./skills/metrics.js');
 const skillReview = require('./skillreview.js');
 const { makeSkillMarket, DEFAULT_CATALOG_URL: SKILL_MARKET_DEFAULT_URL } = require('./skills/market.js');   // the Skill Market client (curated catalog → station library)            // background skill maintenance trigger/prompt
+const skillMarketSigning = require('./skills/market-signing.js');   // the Skill Market's trusted signing keys
 const { makeVerdictReview } = require('./verdictreview.js');   // consistency loop: a rated ok/miss run earns a skill review
 const skillCurator = require('./skillcurator.js');          // skill lifecycle/consolidation maintenance
 const slash = require('./slash.js');                       // slash-command catalog + dispatch descriptors
@@ -1554,13 +1555,35 @@ try {
 // enable/disable choices persist append-only (same fsync discipline as skillStore). Injected into each run's
 // system prompt below, gated by requires ⊆ the agent's placed objects (object = capability — the moat).
 const SKILL_LIBRARY = skillsCatalog.loadDir(path.join(__dirname, 'skills', 'library'), fs, path);
-// SKILL MARKET (2026-09-29): curated skills from starnetos.com, installed into the station library. Fetched only when
-// the Commander opens the market. STARNET_SKILL_MARKET_URL overrides the catalog; 'off' (or empty) turns it off.
+// SKILL MARKET (2026-09-29): curated skills from starnetos.com, installed into the station library. The catalog is
+// fetched when the Commander opens the market; the catalog and the pulled-skills list are signed and verified against
+// the app's built-in keys (skills/market-signing.js). STARNET_SKILL_MARKET_URL overrides the catalog ('off' or empty
+// turns the market off); STARNET_SKILL_MARKET_KEYS adds the public key of a catalog you run yourself.
 const skillMarket = makeSkillMarket({
   fetchDocument: fetchSkillDocument, fs, path, root: path.join(WORKSPACES, 'skill-market'), guard: skillGuard, now: () => Date.now(),
   catalogUrl: () => { const v = process.env.STARNET_SKILL_MARKET_URL; return v == null ? SKILL_MARKET_DEFAULT_URL : (String(v).trim().toLowerCase() === 'off' ? '' : String(v).trim()); },
+  trustedKeys: skillMarketSigning.TRUSTED_KEYS.concat(skillMarketSigning.keysFromEnv(process.env.STARNET_SKILL_MARKET_KEYS)),
   loadJson: (file) => loadResilient(file, 'skill market'), saveJson: (file, value) => saveResilient(file, value)
 });
+// THE MARKET'S KILL SWITCH: while at least one market skill is installed, re-read the small signed pulled-skills list
+// shortly after boot and every few minutes, and switch off anything the market has pulled. A station with no market
+// skills installed never makes this request. SKYNET_SKILL_MARKET_PULL_MS tunes the interval (0 turns the check off).
+const SKILL_MARKET_PULL_MS = (() => { const v = Number(process.env.SKYNET_SKILL_MARKET_PULL_MS); return Number.isFinite(v) && v >= 0 ? v : 5 * 60 * 1000; })();
+let skillMarketPullBusy = false;
+function checkSkillMarketPulls() {
+  if (skillMarketPullBusy) return;
+  let installed = 0; try { installed = Object.keys(skillMarket.installed()).length; } catch (_) { installed = 0; }
+  if (!installed) return;
+  skillMarketPullBusy = true;
+  skillMarket.checkRevocations()
+    .then(r => { if (r.pulled.length) console.warn('[skill-market] pulled from the market and switched off: ' + r.pulled.join(', ')); })
+    .catch(e => failNote('skill-market.pull-check', e))   // offline or refused: the next tick retries; the failure stays counted and visible
+    .finally(() => { skillMarketPullBusy = false; });
+}
+if (SKILL_MARKET_PULL_MS > 0) {
+  const first = setTimeout(checkSkillMarketPulls, Math.min(20000, SKILL_MARKET_PULL_MS)); if (first.unref) first.unref();
+  const every = setInterval(checkSkillMarketPulls, SKILL_MARKET_PULL_MS); if (every.unref) every.unref();
+}
 // the station library every reader uses: the bundled recipes, with market installs merged in (a market copy of a
 // bundled original replaces it for this station)
 function skillLibrary() { try { return skillMarket.mergeLibrary(SKILL_LIBRARY); } catch (_) { return SKILL_LIBRARY; } }
@@ -1593,6 +1616,14 @@ try {
 // rotate-reason failure (rate_limit/auth/billing) so it isn't retried first next run. In-memory only; never
 // logged/persisted. Singleton so the cooldown survives across runs within a sidecar process.
 const credPool = makeCredPool({ clock: { now: () => Date.now() } });
+
+// SUBSCRIPTION STACKING: extra sign-in accounts per subscription provider (provider-accounts.js), one folder each
+// under WORKSPACES/.secrets/accounts/. A run on a stacked provider starts on the first account that is not cooling
+// and rotates to the next when one hits its usage limit (credPool cools the spent one; see accountChain). The
+// sign-in cache holds only the last PROVEN verdict per account ('<provider>:<id|primary>' -> { loggedIn, email?,
+// subscription? }) from a real status probe — a run skips an account proven signed out, never one merely unknown.
+const providerAccounts = require('./provider-accounts.js').makeProviderAccounts({ root: path.join(WORKSPACES, '.secrets', 'accounts') });
+const accountAuthSeen = new Map();
 
 const runs = new Map();          // runId -> AbortController (the kill path)
 // RECONCILIATION snapshot metadata: runId -> { agentId, startedAt, source }. Populated alongside every runs.set
@@ -2294,19 +2325,29 @@ function providerRuntimeBaseUrl(provider, explicitBaseUrl) {
 }
 function providerHasCredential(provider, key, baseUrl) {
   const id = normalizeProvider(provider);
-  if (registryProviderUsesCodex(id)) return !!(codexTokens && codexTokens.access_token);
-  if (registryProviderUsesDeviceOAuth(id)) { const e = oauthProviders[id]; return !!(e && e.tokens && e.tokens.access_token); }
+  if (registryProviderUsesCodex(id)) return !!(codexTokens && codexTokens.access_token) || anyExtraAccountLive(id);
+  if (registryProviderUsesDeviceOAuth(id)) { const e = oauthProviders[id]; return !!(e && e.tokens && e.tokens.access_token) || anyExtraAccountLive(id); }
   if (providerRequiresBaseUrl(id) && !String(baseUrl || '').trim()) return false;
   if (providerRequiresKey(id) && !String(key || '').trim()) return false;
   return true;
 }
 
+// subscription stacking: an extra connected sign-in also makes an OAuth subscription runnable (before the account
+// keeper has initialised at boot, nothing is stacked yet — the TDZ throw reads as "none").
+function anyExtraAccountLive(id) {
+  try { return providerAccounts.list(id).some(a => accountLive(id, a.id)); } catch (_) { return false; }
+}
 /* ONE BEARER RESOLVER FOR EVERY PROVIDER. Whatever the Commander connected IS the credential — an API key,
    a ChatGPT subscription, or a device-OAuth subscription (Grok, Kimi). Nothing here names a provider: the
    registry says how each one authenticates, so a new provider is a registry row, not a branch. Async because
    an OAuth access token may need a refresh round-trip first. */
 async function resolveProviderCredential(provider) {
   const id = normalizeProvider(provider);
+  // subscription stacking: when the chain does not open on the primary, the bearer is the first live extra account's
+  if (registryProviderUsesCodex(id) || registryProviderUsesDeviceOAuth(id)) {
+    const first = orderedAccountChain(id)[0];
+    if (first && first.id) return await ensureAccountAccessToken(oauthAccountEntry(id, first.id));
+  }
   if (registryProviderUsesCodex(id)) return await ensureCodexAccessToken();
   if (registryProviderUsesDeviceOAuth(id)) {
     const entry = oauthProviders[id];
@@ -2410,8 +2451,9 @@ async function probeChannelRunConfig(config, timeoutMs) {
   const timer = setTimeout(() => ctrl.abort(), Number.isFinite(timeoutMs) ? Math.max(1000, timeoutMs) : 30000);
   if (timer && timer.unref) timer.unref();
   try {
-    let provider;
-    if (providerUsesCodex(providerId)) {
+    let provider = extraAccountProviderFor(providerId, c.baseUrl, reasoningEffort);   // subscription stacking
+    if (provider) { /* an extra sign-in carries the probe */ }
+    else if (providerUsesCodex(providerId)) {
       provider = selectProvider({ provider: providerId, fetch: globalThis.fetch, token: await ensureCodexAccessToken(), renewToken: forceRefreshCodexAccessToken, baseUrl: c.baseUrl, reasoningEffort });
     } else if (providerUsesDeviceOAuth(providerId)) {
       provider = selectProvider({ provider: providerId, fetch: globalThis.fetch, token: await ensureOAuthAccessToken(providerId), headers: oauthInferenceHeaders(providerId), baseUrl: c.baseUrl, reasoningEffort });
@@ -3431,6 +3473,14 @@ const pendingSummonByRun = new Map();      // runId -> Map(requestId -> resolve(
    would surface prompts through GET /api/state/snapshot that the app is structurally unable to answer — a card
    that lies about being actionable. A Telegram prompt is answered on Telegram (or it fail-closes). */
 const channelPendingByRun = new Map();     // runId -> Map(promptId -> finish(decision)); live CHANNEL consent prompts
+/* STARNET REMOTE (phase 1): every open approval on the station, indexed in ONE registry so a paired phone can
+   see and answer it (sidecar/remote/approvals.js). It is a read-side index: the waiters above keep their
+   fail-closed timing, and a phone answer calls the SAME finisher the original surface would have. The two maps
+   stay separate for the reason given above; the registry is what lets a phone reach both. */
+const remoteApprovals = require('./remote/approvals.js').makeApprovals({
+  now: () => Date.now(),
+  onChange: (kind, row) => { try { if (typeof remoteBroadcast === 'function') remoteBroadcast(kind === 'opened' ? { type: 'approval.opened', approval: row } : { type: 'approval.closed', runId: row.runId, promptId: row.promptId }); } catch (e) { failNote('remote.index.approvalBroadcast', e); } }
+});
 function channelAskConsent(o) {
   const runId = String((o && o.runId) || '');
   let pend = channelPendingByRun.get(runId);
@@ -3441,14 +3491,19 @@ function channelAskConsent(o) {
     scope: (o.tool && o.tool.scope) || 'write',
     argsSummary: consentSummary(o.call)
   };
+  let untrack = null;
   return makeConsentWait({
     pending: pend, signal: o.signal, timeoutMs: CONSENT_TIMEOUT_MS, extendMs: CONSENT_ACK_EXTEND_MS,
     uuid: () => crypto.randomUUID(),
     // onPrompt is the hub's cue to render the keyboard. It is called synchronously while the deny timer is
     // already armed, so a throw from the renderer must never escape into the waiter (it would leave the run
     // paused with no timer owner) — hence the guard.
-    emitPrompt: (promptId) => { try { if (typeof o.onPrompt === 'function') o.onPrompt(promptId, fields); } catch (_) {} }
+    emitPrompt: (promptId) => {
+      try { untrack = remoteApprovals.add(Object.assign({ runId, promptId, agentId: o.agentId, surface: o.surface === 'remote' ? 'remote' : 'channel', finish: pend.get(promptId) }, fields)); } catch (e) { failNote('remote.index.trackChannelPrompt', e); }
+      try { if (typeof o.onPrompt === 'function') o.onPrompt(promptId, fields); } catch (e) { failNote('channels.consent.onPrompt', e); }
+    }
   }).ask().then((decision) => {
+    if (untrack) untrack();
     // makeConsentWait removes its own promptId; drop the run's bucket once the last prompt settles so a long
     // -lived channel can't accumulate one empty Map per run forever.
     if (pend.size === 0) channelPendingByRun.delete(runId);
@@ -4071,6 +4126,87 @@ async function refreshOAuthTokensOnce(id, entry) {
   saveOAuthTokens(id, entry.tokens);
   return entry.tokens.access_token;
 }
+/* ---- SUBSCRIPTION STACKING for the OAuth subscriptions (ChatGPT/Codex, Grok, Kimi): EXTRA sign-in accounts ----
+   The primary sign-in keeps its own hardened store above (codexTokens / oauthProviders[id]) untouched. Each extra
+   account is one folder from provider-accounts.js holding ITS tokens.json, with the same guarantees the primary
+   has: verified persist (write, read back, retry once), a single-flight refresh (the issuer rotates the refresh
+   token — two racing refreshes false-expire a live sign-in), and a durable dead marker on a relogin-class refresh
+   failure. Tokens never leave this file's entries: routes answer booleans/labels, and credPool keys an account by
+   an opaque 'account:<provider>:<id>' handle.
+   An ADD does not create a folder until its device sign-in completes (accountLogins maps the device login to the
+   provider, and to the account for a re-sign-in), so an abandoned add leaves nothing behind. */
+const oauthAccountEntries = new Map();   // '<pid>:<account id>' -> entry
+const accountLogins = new Map();         // device_auth_id / login_id -> { pid, account ('' = a new one), device_code?, interval, at }
+function oauthAccountEntry(pid, acctId) {
+  const key = pid + ':' + acctId;
+  if (oauthAccountEntries.has(key)) return oauthAccountEntries.get(key);
+  const acct = providerAccounts.list(pid).find(a => a.id === String(acctId || ''));
+  if (!acct) return null;
+  const file = path.join(acct.dir, 'tokens.json');
+  let tokens = null;
+  try { tokens = oauthTokenStore.loadTokens({ file, load: (f, t) => loadResilient(f, t), tag: pid + '-account' }); } catch (_) { tokens = null; }
+  const entry = { pid, id: acct.id, file, tokens: (tokens && typeof tokens === 'object') ? tokens : null,
+    authDead: codexAuthState.deadFromTokens(tokens), persistError: '', refreshInFlight: null };
+  if (pid !== 'codex') {
+    entry.deviceId = (tokens && typeof tokens.device_id === 'string' && tokens.device_id) ? tokens.device_id : crypto.randomUUID();
+    entry.auth = oauthDevice.makeDeviceOAuth(oauthDeviceConfig(pid, entry.deviceId));
+  }
+  oauthAccountEntries.set(key, entry);
+  return entry;
+}
+function saveAccountTokens(entry, obj) {
+  if (entry.deviceId && obj && typeof obj === 'object' && !obj.device_id) obj.device_id = entry.deviceId;
+  const r = oauthTokenStore.persistTokensVerified({ tokens: obj, save: (o) => saveResilient(entry.file, o), load: () => loadResilient(entry.file, entry.pid + '-account') });
+  entry.persistError = r.ok ? '' : (r.error || 'token could not be persisted to disk');
+  if (!r.ok) console.error('[' + entry.pid + ' account] token persist UNVERIFIED after retry (' + entry.persistError + ') — kept in memory for this session.');
+  return r.ok;
+}
+// A fresh access token for one extra account (force = the server said the token is dead: refresh regardless).
+async function ensureAccountAccessToken(entry, force, staleToken) {
+  if (!entry.tokens || !entry.tokens.access_token) {
+    const e = new Error('This ' + oauthLabel(entry.pid) + ' account is not signed in — sign it in again in Settings → PROVIDERS.');
+    e.code = entry.pid + '_not_connected'; e.reloginRequired = true; throw e;
+  }
+  if (staleToken && entry.tokens.access_token !== staleToken) return entry.tokens.access_token;
+  const expiring = entry.pid === 'codex'
+    ? codexAuth.accessTokenIsExpiring(entry.tokens.access_token, codexAuth.REFRESH_SKEW_SECONDS, Date.now())
+    : entry.auth.accessTokenIsExpiring(entry.tokens, Date.now());
+  if (!force && !expiring) return entry.tokens.access_token;
+  if (entry.refreshInFlight) return entry.refreshInFlight;
+  entry.refreshInFlight = (async () => {
+    let next;
+    try {
+      next = entry.pid === 'codex'
+        ? await codexAuth.refreshTokens({ fetch: globalThis.fetch, refresh_token: entry.tokens.refresh_token, now: Date.now() })
+        : await entry.auth.refreshTokens({ fetch: globalThis.fetch, refresh_token: entry.tokens.refresh_token, now: Date.now() });
+    } catch (e) {
+      const marker = codexAuthState.deadMarkerFromError(e, new Date().toISOString());
+      if (marker) { entry.authDead = marker; entry.tokens = codexAuthState.withDeadMarker(entry.tokens, marker); saveAccountTokens(entry, entry.tokens); }
+      throw e;
+    }
+    entry.tokens = codexAuthState.withoutDeadMarker(Object.assign({}, entry.tokens, next));
+    entry.authDead = null;
+    saveAccountTokens(entry, entry.tokens);
+    return entry.tokens.access_token;
+  })().finally(() => { entry.refreshInFlight = null; });
+  return entry.refreshInFlight;
+}
+// The account's email when its token names one (ChatGPT puts it in the profile claim) — shown in Settings only,
+// so the Commander can tell accounts apart and spot the same account signed in twice. Never on the bus.
+function accountEmailOf(tokens) {
+  try {
+    const c = codexAuth.decodeJwtClaims(String((tokens && (tokens.id_token || tokens.access_token)) || '')) || {};
+    const p = c['https://api.openai.com/profile'] || {};
+    const email = typeof c.email === 'string' ? c.email : (typeof p.email === 'string' ? p.email : '');
+    return email.slice(0, 200);
+  } catch (_) { return ''; }
+}
+function oauthPrimaryStatus(pid) {
+  if (pid === 'codex') return { tokens: codexTokens, dead: codexAuthDead, persistError: codexPersistError };
+  const e = oauthProviders[pid] || {};
+  return { tokens: e.tokens, dead: e.authDead, persistError: e.persistError };
+}
+
 // channel.* / workitem.* / queue.* telemetry: validated + redacted, logged to the sidecar console AND
 // forwarded to open browser EventSources (the station HUD). The bot token / OR key are NEVER placed on a
 // payload — nothing to leak here — and redact() runs before validate() as a second backstop.
@@ -8399,8 +8535,9 @@ async function runQuestRefreshCycle(why) {
       return;
     }
     // evidence exists → NOW pay for the provider (codex token fetch is a network hop; never spend it on a cold save).
-    let provider;
-    if (usingCodex) { const token = await ensureCodexAccessToken(); provider = selectProvider({ provider: providerId, fetch: globalThis.fetch, token, renewToken: forceRefreshCodexAccessToken, baseUrl }); }
+    let provider = extraAccountProviderFor(providerId, baseUrl);   // subscription stacking: first live sign-in
+    if (provider) { /* an extra sign-in carries the refresh */ }
+    else if (usingCodex) { const token = await ensureCodexAccessToken(); provider = selectProvider({ provider: providerId, fetch: globalThis.fetch, token, renewToken: forceRefreshCodexAccessToken, baseUrl }); }
     else if (usingDeviceOAuth) { const token = await ensureOAuthAccessToken(providerId); provider = selectProvider({ provider: providerId, fetch: globalThis.fetch, token, headers: oauthInferenceHeaders(providerId), baseUrl }); }
     else provider = selectProvider({ provider: providerId, fetch: globalThis.fetch, key, baseUrl });
     const cost = makeCostEngine({ priceOf: provider.priceOf });
@@ -9703,6 +9840,190 @@ async function handleGroups(req, res) {
     respondJson(res, 200, { ok: true, result: out });
   } catch (e) { if (!res.headersSent) respondJson(res, e.status || 400, { ok: false, error: redact(String(e.message || e)) }); }
 }
+/* ======================================================================================================================
+   STARNET REMOTE (phase 1) — a paired phone drives this station from anywhere on the home network.
+   The pieces live in sidecar/remote/ (crypto, devices, session, approvals, gateway, lan, host). This block only wires
+   them to the SAME in-process functions the desktop and channels already use. OFF by default: nothing listens on the
+   LAN until the Commander switches Remote on at the desk. The main sidecar port stays loopback-only either way.
+   ==================================================================================================================== */
+const REMOTE_NOTE = '\n\n[REMOTE] The Commander sent this from their phone through StarNet Remote. Work exactly as you normally '
+  + 'would. They will read your reply on a small screen, so lead with the result.';
+const remoteCrypto = require('./remote/crypto.js');
+const remoteDevices = require('./remote/devices.js').makeDevices({
+  fs, path, crypto: remoteCrypto, file: path.join(WORKSPACES, '.secrets', 'remote.json'),
+  now: () => Date.now(), newId: () => crypto.randomUUID(),
+  tighten: () => { if (process.platform !== 'win32') { try { fs.chmodSync(path.join(WORKSPACES, '.secrets', 'remote.json'), 0o600); } catch (e) { failNote('remote.index.fs.chmodSync', e); } } }
+});
+const remoteSessions = require('./remote/session.js').makeSessions({ devices: remoteDevices, crypto: remoteCrypto, now: () => Date.now(), newId: () => crypto.randomUUID() });
+// hoisted on purpose: the approvals registry (defined far above) announces changes through this
+function remoteBroadcast(evt) { try { return remoteSessions.broadcast(evt); } catch (_) { return 0; } }
+const remoteHost = require('./remote/host.js').makeRemoteHost({
+  now: () => Date.now(), newId: () => crypto.randomUUID(), broadcast: remoteBroadcast,
+  roster: () => [...agentRoster].map(([agentId, a]) => ({ agentId, name: a.name, model: a.model, provider: a.provider })),
+  liveRuns: () => {
+    const out = [];
+    for (const [runId, m] of runsMeta) out.push({ runId, agentId: m.agentId, startedAt: m.startedAt, source: m.source || 'interactive' });
+    for (const [runId, m] of hostLiveRuns) if (!out.some(r => r.runId === runId)) out.push({ runId, agentId: m.agentId, startedAt: m.startedAt, source: m.source || 'host' });
+    return out;
+  },
+  transcript: {
+    streams: (o) => transcriptStore.streams(o),
+    history: (sid, o) => transcriptStore.history(sid, o),
+    reconstruct: (sid, o) => transcriptStore.reconstruct(sid, o)
+  },
+  // the same resolution a scheduled routine uses (roster model/provider, runtime key), minus the routine note
+  credentials: (agentId) => {
+    const job = { agentId };
+    const model = cronModelFor(job), provider = cronProviderFor(job), key = cronKeyFor(provider);
+    if (!model) return { ok: false, error: 'choose a model for this agent at the desk first' };
+    if (!cronHasCredential(provider, key)) return { ok: false, error: providerCredentialError(provider) + ' to run tasks from your phone' };
+    const ident = agentRoster.get(agentId) || {};
+    const raw = String(ident.system || '').trim();
+    return { ok: true, model, provider, key, baseUrl: providerRuntimeBaseUrl(provider, ''), reasoningEffort: resolveReasoningEffort(provider, ident.reasoningEffort),
+      system: raw ? withDossier(raw + REMOTE_NOTE, dossierWithGoals()) : withDossier(CRON_PERSONA + REMOTE_NOTE, dossierWithGoals()) };
+  },
+  runOnce: (o) => runOnce(o),
+  askConsent: (o) => channelAskConsent(o),
+  stopRun: (runId) => { const ac = runs.get(runId); if (!ac) return false; try { ac.abort(); } catch (e) { failNote('remote.index.ac.abort', e); } return true; },
+  deliverables: () => deliverableRows(),
+  readFile: async (agentId, rel, offset, length) => {
+    let abs;
+    try { ({ abs } = await fsJail.resolveInside(agentId, rel)); } catch (_) { return { ok: false, error: 'unknown file' }; }
+    let st; try { st = await fsp.stat(abs); } catch (_) { return { ok: false, error: 'unknown file' }; }
+    if (!st.isFile()) return { ok: false, error: 'unknown file' };
+    const start = Math.min(offset, st.size);
+    const want = Math.max(0, Math.min(length, st.size - start));
+    const buf = Buffer.alloc(want);
+    let n = 0;
+    if (want) { const fh = await fsp.open(abs, 'r'); try { ({ bytesRead: n } = await fh.read(buf, 0, want, start)); } finally { await fh.close(); } }
+    const ext = path.extname(abs).toLowerCase();
+    return { path: rel, size: st.size, offset: start, bytes: n, eof: start + n >= st.size,
+      mime: MIME[ext] || 'application/octet-stream', active: isActiveDeliverable(abs), name: safeDownloadName(abs), data: buf.subarray(0, n).toString('base64') };
+  },
+  routines: () => cronStateSnapshot(Date.now()).jobs,
+  setRoutine: async (jobId, enabled) => {
+    if (!cronStore.getJob(cronJobs, jobId)) return { ok: false, error: 'no such routine' };
+    try {
+      await withCronWrite(jobs => enabled
+        ? cronStore.resumeJob(jobs, jobId, { now: Date.now(), defaultTz: CRON_HOST_TZ })
+        : cronStore.pauseJob(jobs, jobId));
+    } catch (e) { return { ok: false, error: 'could not save: ' + ((e && e.message) || e) }; }
+    // pause means stop unattended work now (the same rule as the ROUTINES panel's pause)
+    if (!enabled) { const lease = cronDriver.leases.get(jobId); if (lease && lease.ac) { try { lease.ac.abort(); } catch (e) { failNote('remote.index.lease.ac.abort', e); } } }
+    return { ok: true, enabled: !!enabled };
+  }
+});
+const remoteGateway = require('./remote/gateway.js').makeGateway({ host: remoteHost, approvals: remoteApprovals, now: () => Date.now() });
+const remoteLan = require('./remote/lan.js').makeLanListener({
+  sessions: remoteSessions, devices: remoteDevices, gateway: remoteGateway, crypto: remoteCrypto, now: () => Date.now(),
+  onPaired: () => { if (remoteRelay) remoteRelay.syncTokens(); },
+  log: (m) => console.log('  · remote: ' + m)
+});
+// The station floor's own redacted feed, teed to phones. Only parsed when a phone is actually listening.
+sse.add({
+  writableLength: 0,
+  write(line) {
+    if (!remoteSessions.list().some(s => s.sink)) return true;
+    const i = String(line).indexOf('data: ');
+    if (i < 0) return true;
+    let m; try { m = JSON.parse(String(line).slice(i + 6)); } catch (_) { return true; }
+    if (m && m.name && m.name !== 'station.command') remoteBroadcast({ type: 'station', name: m.name, payload: m.payload });
+    return true;
+  }
+});
+/* THE RELAY (the product path). The station dials OUT to it (sidecar/remote/relay-client.js, Node's built-in
+   WebSocket), so a phone reaches this station from anywhere with no port forwarding. REMOTE_RELAY_LIVE flips on
+   when the public relay is deployed; until then only an explicit STARNET_REMOTE_RELAY address is used (tests,
+   self-hosted relays). With no relay the desk says so plainly instead of pretending phones can connect. */
+const REMOTE_RELAY_LIVE = false;
+const REMOTE_RELAY_DEFAULT = 'https://remote.starnetos.com';
+const REMOTE_RELAY_URL = String(ENV('REMOTE_RELAY') || (REMOTE_RELAY_LIVE ? REMOTE_RELAY_DEFAULT : '')).trim().replace(/\/+$/, '');
+const remoteRelay = REMOTE_RELAY_URL ? require('./remote/relay-client.js').makeRelayClient({
+  url: REMOTE_RELAY_URL, devices: remoteDevices, sessions: remoteSessions, gateway: remoteGateway, crypto: remoteCrypto, now: () => Date.now(),
+  log: (m) => console.log('  · remote relay: ' + m)
+}) : null;
+// The LAN door is a developer/test transport: a phone browser can't use WebCrypto on a plain-http LAN page,
+// so real phones go through the relay. It opens only when asked for (STARNET_REMOTE_LAN=1).
+const REMOTE_LAN_ON = /^(1|true|yes|on)$/i.test(String(ENV('REMOTE_LAN') || '').trim());
+const REMOTE_PORT = Number(ENV('REMOTE_PORT')) || 8797;
+function remoteLanUrls() {
+  const info = remoteLan.info();
+  if (!info.listening) return [];
+  const out = [];
+  let ifs = {}; try { ifs = os.networkInterfaces() || {}; } catch (e) { failNote('remote.index.networkInterfaces', e); }
+  for (const name of Object.keys(ifs)) for (const a of ifs[name] || []) {
+    if (a && a.family === 'IPv4' && !a.internal) out.push('http://' + a.address + ':' + info.port);
+  }
+  return out;
+}
+// Opens whatever doors this build has: the relay link (product) and, only when asked for, the LAN test door.
+async function remoteStartDoors() {
+  if (remoteRelay) remoteRelay.start();
+  if (REMOTE_LAN_ON) return remoteStartLan();
+  return remoteLan.info();
+}
+async function remoteStopDoors() {
+  for (const s of remoteSessions.list()) remoteSessions.end(s.id);
+  if (remoteRelay) remoteRelay.stop();
+  await remoteLan.stop();
+}
+async function remoteStartLan() {
+  if (remoteLan.info().listening) return remoteLan.info();
+  try { return await remoteLan.start({ host: '0.0.0.0', port: REMOTE_PORT }); }
+  catch (e) {
+    if (e && e.code === 'EADDRINUSE') { console.warn('[remote] port ' + REMOTE_PORT + ' is busy — using a free port instead'); return remoteLan.start({ host: '0.0.0.0', port: 0 }); }
+    throw e;
+  }
+}
+function remoteSnapshot() {
+  let station = null;
+  try { const s = remoteDevices.stationKeys(); station = { id: s.id, fingerprint: remoteCrypto.fingerprint(s.publicRaw) }; } catch (e) { failNote('remote.index.stationKeys', e); }
+  const info = remoteLan.info();
+  return { ok: true, enabled: remoteDevices.enabled(), listening: !!info.listening, port: info.port || null, urls: remoteLanUrls(),
+    relay: remoteRelay ? remoteRelay.info() : null,
+    station, devices: remoteDevices.list(), connected: remoteSessions.list().map(s => ({ deviceId: s.deviceId, since: s.createdAt, lastAt: s.lastAt, live: !!s.sink })),
+    approvals: remoteApprovals.size() };
+}
+// GET /api/remote — the desk's DEVICES panel: is Remote on, where does it listen, who is paired, who is connected
+function handleRemoteStatus(req, res) { respondJson(res, 200, remoteSnapshot()); }
+// POST /api/remote/enable { on } — the switch. Persisted; the LAN door opens or closes with it.
+async function handleRemoteEnable(req, res) {
+  let b; try { b = JSON.parse(await readBody(req, 1024)) || {}; } catch (_) { return respondJson(res, 400, { ok: false, error: 'bad request' }); }
+  const on = b.on === true;
+  const saved = remoteDevices.setEnabled(on);
+  if (!saved.ok) return respondJson(res, 500, { ok: false, error: 'could not save the Remote switch (' + saved.error + ')' });
+  try {
+    if (on) await remoteStartDoors();
+    else await remoteStopDoors();
+  } catch (e) { return respondJson(res, 500, Object.assign(remoteSnapshot(), { ok: false, error: 'Remote is on but the network door could not open: ' + ((e && e.message) || e) })); }
+  respondJson(res, 200, remoteSnapshot());
+}
+// POST /api/remote/pair { name? } — a one-time code for ONE phone, valid 10 minutes
+async function handleRemotePair(req, res) {
+  let b; try { b = JSON.parse(await readBody(req, 1024)) || {}; } catch (_) { b = {}; }
+  if (!remoteDevices.enabled()) return respondJson(res, 409, { ok: false, error: 'switch Remote on first' });
+  if (!remoteRelay && !remoteLan.info().listening) return respondJson(res, 409, { ok: false, error: 'this build has no relay set up yet, so a phone has no way to reach this station' });
+  let p; try { p = remoteDevices.startPairing({ name: b.name }); } catch (e) { return respondJson(res, 500, { ok: false, error: (e && e.message) || String(e) }); }
+  const urls = remoteLanUrls();
+  // what the phone needs, in one blob; carried in a URL FRAGMENT so it never reaches a server log. The relay URL
+  // rides along only when it isn't the page's own origin (a self-hosted or test relay).
+  const blob = remoteCrypto.b64u(Buffer.from(JSON.stringify(Object.assign({ v: remoteCrypto.VERSION, i: p.stationId, s: p.stationPub, p: p.pairingId, c: p.code },
+    remoteRelay ? { r: REMOTE_RELAY_URL } : { u: urls }))));
+  const pairUrl = remoteRelay ? REMOTE_RELAY_URL + '/#pair=' + blob : (urls.length ? urls[0] + '/remote/app/#pair=' + blob : null);
+  respondJson(res, 200, { ok: true, pairingId: p.pairingId, code: p.code, stationId: p.stationId, stationPub: p.stationPub, fingerprint: p.fingerprint,
+    expiresAt: p.expiresAt, urls, relay: remoteRelay ? REMOTE_RELAY_URL : null, pairBlob: blob, pairUrl });
+}
+// POST /api/remote/revoke { deviceId } — forget a phone; its live sessions end at once
+async function handleRemoteRevoke(req, res) {
+  let b; try { b = JSON.parse(await readBody(req, 1024)) || {}; } catch (_) { return respondJson(res, 400, { ok: false, error: 'bad request' }); }
+  const id = String(b.deviceId || '');
+  const r = remoteDevices.revoke(id);
+  remoteSessions.endDevice(id);
+  if (remoteRelay) remoteRelay.kickDevice(id);
+  if (!r.ok) return respondJson(res, r.error === 'no such device' ? 404 : 500, { ok: false, error: r.error });
+  respondJson(res, 200, remoteSnapshot());
+}
+
 const ROUTES = [
   { m: 'GET', qsplit: '/api/groups', h: handleGroups },
   { m: 'POST', exact: '/api/groups', h: handleGroups },
@@ -9853,6 +10174,10 @@ const ROUTES = [
   { m: 'POST', exact: '/api/credits/link/start', h: handleCreditsLinkStart },   // begin a pairing: returns a STAR-XXXX code + verifyUrl
   { m: 'POST', exact: '/api/credits/link/poll', h: handleCreditsLinkPoll },     // poll once; on confirm persists the token + configures credits live
   { m: 'POST', exact: '/api/credits/unlink', h: handleCreditsUnlink },          // forget the linked device, revert credits to inert
+  { m: 'GET', exact: '/api/remote', h: handleRemoteStatus },          // STARNET REMOTE: on/off, where it listens, paired + connected phones
+  { m: 'POST', exact: '/api/remote/enable', h: handleRemoteEnable },  // the switch (persisted); opens/closes the LAN door
+  { m: 'POST', exact: '/api/remote/pair', h: handleRemotePair },      // one-time pairing code for ONE phone (10 min)
+  { m: 'POST', exact: '/api/remote/revoke', h: handleRemoteRevoke },  // forget a phone; its sessions end at once
   { m: 'POST', exact: '/api/budget/caps', h: handleBudgetCaps },
   { m: 'POST', exact: '/api/budget/resume', h: handleBudgetResume },
   { m: 'GET', exact: '/api/fallback/chain', h: handleFallbackStatus },
@@ -9881,11 +10206,31 @@ const ROUTES = [
   { m: 'GET', exact: '/api/auth/kimi/status', h: (req, res) => handleOAuthStatus(req, res, 'kimi') },
   { m: 'GET', exact: '/api/auth/kimi/models', h: (req, res) => handleOAuthModels(req, res, 'kimi') },
   { m: 'POST', exact: '/api/auth/kimi/logout', h: (req, res) => handleOAuthLogout(req, res, 'kimi') },
+  // subscription stacking: extra sign-in accounts beside each OAuth subscription (handleOAuthAccounts)
+  { m: 'GET', exact: '/api/auth/codex/accounts', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'accounts') },
+  { m: 'POST', exact: '/api/auth/codex/add', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'add') },
+  { m: 'POST', exact: '/api/auth/codex/account-start', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'account-start') },
+  { m: 'POST', exact: '/api/auth/codex/account-poll', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'account-poll') },
+  { m: 'POST', exact: '/api/auth/codex/remove', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'remove') },
+  { m: 'GET', exact: '/api/auth/grok/accounts', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'accounts') },
+  { m: 'POST', exact: '/api/auth/grok/add', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'add') },
+  { m: 'POST', exact: '/api/auth/grok/account-start', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'account-start') },
+  { m: 'POST', exact: '/api/auth/grok/account-poll', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'account-poll') },
+  { m: 'POST', exact: '/api/auth/grok/remove', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'remove') },
+  { m: 'GET', exact: '/api/auth/kimi/accounts', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'accounts') },
+  { m: 'POST', exact: '/api/auth/kimi/add', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'add') },
+  { m: 'POST', exact: '/api/auth/kimi/account-start', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'account-start') },
+  { m: 'POST', exact: '/api/auth/kimi/account-poll', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'account-poll') },
+  { m: 'POST', exact: '/api/auth/kimi/remove', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'remove') },
   { m: 'GET', exact: '/api/auth/claude-cli/status', h: (req, res) => handleClaudeCliAuth(req, res, 'status') },
   { m: 'POST', exact: '/api/auth/claude-cli/start', h: (req, res) => handleClaudeCliAuth(req, res, 'start') },
   { m: 'POST', exact: '/api/auth/claude-cli/poll', h: (req, res) => handleClaudeCliAuth(req, res, 'poll') },
   { m: 'POST', exact: '/api/auth/claude-cli/code', h: (req, res) => handleClaudeCliAuth(req, res, 'code') },
   { m: 'POST', exact: '/api/auth/claude-cli/cancel', h: (req, res) => handleClaudeCliAuth(req, res, 'cancel') },
+  // subscription stacking: every connected Claude Code sign-in, add one (straight into its sign-in), remove one
+  { m: 'GET', exact: '/api/auth/claude-cli/accounts', h: (req, res) => handleClaudeCliAuth(req, res, 'accounts') },
+  { m: 'POST', exact: '/api/auth/claude-cli/add', h: (req, res) => handleClaudeCliAuth(req, res, 'add') },
+  { m: 'POST', exact: '/api/auth/claude-cli/remove', h: (req, res) => handleClaudeCliAuth(req, res, 'remove') },
   { m: 'GET', exact: '/api/providers', h: handleProviders },
   { m: 'GET', qsplit: '/api/model-tiers', h: handleModelTiers },   // the cloud's editorial tier list (picker badges); {ok:false, reason} when unreachable
   { m: 'POST', exact: '/api/providers/probe', h: handleProviderProbe },
@@ -10223,6 +10568,12 @@ server.listen(PORT, '127.0.0.1', () => {
   if (DEV_MODE) console.log('     ⚡ DEV SEED MODE — onboarding auto-skipped; the page resumes the seeded agent.');
   console.log(bar + '\n');
   try { openaiCompat.announce(); } catch (_) {}   // one honest boot line: is the /v1 external-harness API live?
+  // STARNET REMOTE: reopen the phone door only if the Commander left Remote switched on
+  try {
+    if (remoteDevices.enabled()) remoteStartDoors().then(
+      (i) => console.log('  · remote: on (' + remoteDevices.list().length + ' paired' + (remoteRelay ? ', relay ' + REMOTE_RELAY_URL : ', no relay in this build') + (i && i.listening ? ', LAN test door on port ' + i.port : '') + ')'),
+      (e) => console.warn('[remote] could not open the network door: ' + ((e && e.message) || e)));
+  } catch (e) { console.warn('[remote] ' + ((e && e.message) || e)); }
   // Interrupted runs -> run history (background, chunked; see scanInterruptedRuns). The list was captured at
   // module load, before this process could begin a run, so every file in it belongs to a process that is gone.
   scanInterruptedRuns(bootRunJournalFiles);
@@ -10427,7 +10778,7 @@ function gracefulShutdown(signal) {
   try { if (typeof lspManager !== 'undefined' && lspManager && lspManager.closeAll) Promise.resolve(lspManager.closeAll()).catch(() => {}); } catch (_) {}   // reap detected language-server children
   try { if (typeof subagents !== 'undefined' && subagents && subagents.interruptAll) subagents.interruptAll(); } catch (_) {}   // stop watchable background workers
   try { if (typeof connectors !== 'undefined' && connectors && connectors.close) Promise.resolve(connectors.close()).catch(() => {}); } catch (_) {}   // close MCP connectors (stdio children get taskkill/SIGTERM)
-  try { if (_claudeCliLogin) _claudeCliLogin.shutdown(); } catch (e) { failNote('claudecli.login.shutdown', e); }   // a half-finished `claude auth login` never outlives the station
+  try { shutdownClaudeCliLogins(); } catch (e) { failNote('claudecli.login.shutdown', e); }   // a half-finished `claude auth login` never outlives the station
   try { stopTelegram(); } catch (_) {}   // disconnect the Telegram long-poll adapter
   try { stopAllTelegramBots(); } catch (_) {}   // …and every agent-bound bot's poller
   try { stopDiscord(); } catch (_) {}    // disconnect the Discord gateway socket
@@ -16061,11 +16412,24 @@ async function handleRun(req, res) {
   // unit-tested waiter (consentwait.js) — same fail-closed contract, plus the one-shot CONSENT_ACK_EXTEND_MS
   // extension the browser earns via POST /api/consent/ack once the prompt is provably rendered to a human.
   function askHuman(fields) {
+    let untrack = null;
     return makeConsentWait({
       pending, signal: ac.signal, timeoutMs: CONSENT_TIMEOUT_MS, extendMs: CONSENT_ACK_EXTEND_MS,
       uuid: () => crypto.randomUUID(),
-      emitPrompt: (promptId) => emit('permission.prompt', { promptId, agentId, tool: (fields && fields.tool) || 'tool', scope: (fields && fields.scope) || 'write', argsSummary: (fields && fields.argsSummary) || '' })
-    }).ask();
+      emitPrompt: (promptId) => {
+        const row = { promptId, agentId, tool: (fields && fields.tool) || 'tool', scope: (fields && fields.scope) || 'write', argsSummary: (fields && fields.argsSummary) || '' };
+        emit('permission.prompt', row);
+        // STARNET REMOTE: index the prompt so a paired phone can answer it too. A phone answer resolves the same
+        // finisher and then tells this run's page (permission.response on its own stream), so the floor stops
+        // waiting on a question somebody already answered elsewhere.
+        const orig = pending.get(promptId);
+        if (orig) {
+          const viaRemote = (d) => { orig(d); if (typeof d === 'string') { try { emit('permission.response', { promptId, decision: d === 'once' || d === 'session' ? d : 'deny' }); } catch (e) { failNote('remote.index.deskPermissionResponse', e); } } };
+          viaRemote.extend = orig.extend;
+          try { untrack = remoteApprovals.add(Object.assign({ runId, surface: 'desk', finish: viaRemote }, row)); } catch (e) { failNote('remote.index.trackDeskPrompt', e); }
+        }
+      }
+    }).ask().then((v) => { if (untrack) untrack(); return v; });
   }
   function promptConsent(call, tool) {
     return askHuman({ tool: call.name, scope: (tool && tool.scope) || 'write', argsSummary: consentSummary(call) });
@@ -17611,7 +17975,13 @@ async function runOnceCore(o) {
   // an API key. A dead/missing token surfaces as a clean run.error so the UI can prompt a re-sign-in; everything
   // downstream of the provider seam (loop, cost, gauge) is identical to the OpenRouter path.
   let provider;
-  if (usingCodex) {
+  // SUBSCRIPTION STACKING (ChatGPT / Grok / Kimi): the run opens on the first connected sign-in credPool is not
+  // cooling. On the primary, the path below is unchanged; on an extra account, that account's own token keeper.
+  const oauthAccounts = (usingCodex || usingDeviceOAuth) ? orderedAccountChain(providerId) : null;
+  const openOnExtra = !!(oauthAccounts && oauthAccounts[0].id);
+  if (openOnExtra) {
+    provider = oauthAccountProvider(providerId, oauthAccounts[0], baseUrl, reasoningEffort);
+  } else if (usingCodex) {
     let codexToken;
     try { codexToken = await ensureCodexAccessToken(); }
     catch (e) {
@@ -17706,6 +18076,23 @@ async function runOnceCore(o) {
       providerId, model, credKey: rk
     }));
   }
+  // SUBSCRIPTION STACKING (Claude Code): every connected sign-in is its own CLI identity (a CLAUDE_CONFIG_DIR). The
+  // run starts on the first account credPool does not have cooling and rotates through the rest when one hits its
+  // usage limit — the same rotation slot and cooldown the API-key pool uses, keyed by an opaque account handle.
+  if (primaryProfile && primaryProfile.adapter === 'claude-cli') {
+    const chain = accountChain(providerId);
+    const byKey = new Map(chain.map(a => [a.credKey, a]));
+    const ordered = credPool.order(chain.map(a => a.credKey));
+    const onAccount = a => a.id ? selectProvider({ provider: providerId, configDir: a.dir, reasoningEffort }) : selectProvider({ provider: providerId, reasoningEffort });
+    const first = byKey.get(ordered[0]);
+    activePrimaryKey = first.credKey;
+    if (first.id) { provider = onAccount(first); auxVisionProvider = provider; }
+    rotationFallbacks = ordered.slice(1).map(k => { const a = byKey.get(k); return { provider: onAccount(a), providerId, model, credKey: k, account: a.label }; });
+  }
+  if (oauthAccounts && oauthAccounts.length > 1) {
+    activePrimaryKey = oauthAccounts[0].credKey;
+    rotationFallbacks = oauthAccounts.slice(1).map(a => ({ provider: oauthAccountProvider(providerId, a, baseUrl, reasoningEffort), providerId, model, credKey: a.credKey, account: a.label }));
+  } else if (oauthAccounts) activePrimaryKey = oauthAccounts[0].credKey;
   const providerFallbacks = [];
   const rawProviderFallbacks = savedProviderFallbacks.concat(Array.isArray(o.fallbackProviders) ? o.fallbackProviders : []);
   for (const fb of rawProviderFallbacks) {
@@ -18940,8 +19327,8 @@ async function runOnceCore(o) {
       // so a rate-limit/auth/billing key gets a cooldown (credPool) and isn't tried first next run.
       // activePrimaryKey, NOT runKey: when the run's own key was still cooling we STARTED on a warm pool key,
       // and penalizing the key we never called would cool the wrong credential.
-      credKey: providerUnmetered ? null : activePrimaryKey,
-      onFallback: ({ rotate, credKey, retryAfterMs, resetAtMs, next }) => {
+      credKey: (providerUnmetered && !oauthAccounts) ? null : activePrimaryKey,
+      onFallback: ({ reason, rotate, credKey, retryAfterMs, resetAtMs, next }) => {
         if (next) {
           provider = next.provider;
           activeProviderId = next.providerId || activeProviderId;
@@ -18957,6 +19344,9 @@ async function runOnceCore(o) {
         let ttlMs;
         if (typeof retryAfterMs === 'number' && retryAfterMs >= 0) ttlMs = retryAfterMs;
         else if (typeof resetAtMs === 'number') { const d = resetAtMs - Date.now(); if (d > 0) ttlMs = d; }
+        // A SPENT allowance with no stated reset (Claude Code's "resets 5pm" names no epoch) is hours away, not
+        // minutes: cool it for credPool's ceiling so the next runs open on a fresh account instead of re-hitting it.
+        if (ttlMs === undefined && reason === 'quota_exhausted') ttlMs = 60 * 60 * 1000;
         credPool.penalize(credKey, ttlMs);
       },
       todoNote: () => Todo.formatForInjection(notebookStore, agentId),   // re-inject the active task plan after a compaction
@@ -20304,8 +20694,9 @@ async function handleLiveDoctor(req, res) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 30000); if (timer && timer.unref) timer.unref();
     try {
-      let provider;
-      if (providerUsesCodex(providerId)) {
+      let provider = extraAccountProviderFor(providerId, baseUrl, reasoningEffort);   // subscription stacking
+      if (provider) { /* an extra sign-in carries the check */ }
+      else if (providerUsesCodex(providerId)) {
         provider = selectProvider({ provider: providerId, fetch: globalThis.fetch, token: await ensureCodexAccessToken(), renewToken: forceRefreshCodexAccessToken, baseUrl, reasoningEffort });
       } else if (providerUsesDeviceOAuth(providerId)) {
         provider = selectProvider({ provider: providerId, fetch: globalThis.fetch, token: await ensureOAuthAccessToken(providerId), headers: oauthInferenceHeaders(providerId), baseUrl, reasoningEffort });
@@ -21283,8 +21674,9 @@ async function listModelsForProvider(providerId, opts) {
     err.code = 'provider_not_configured';
     throw err;
   }
-  let provider;
-  if (providerUsesCodex(id)) {
+  let provider = extraAccountProviderFor(id, baseUrl);   // subscription stacking: list through the first live sign-in
+  if (provider) { /* an extra sign-in lists the catalog */ }
+  else if (providerUsesCodex(id)) {
     const token = await ensureCodexAccessToken();
     provider = selectProvider({ provider: id, fetch: globalThis.fetch, token, renewToken: forceRefreshCodexAccessToken, baseUrl });
   } else if (providerUsesDeviceOAuth(id)) {
@@ -21320,8 +21712,8 @@ async function handleProviderModels(req, res) {
 async function handleCodexModels(req, res) {
   const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
   try {
-    const token = await ensureCodexAccessToken();
-    const provider = selectProvider({ provider: 'codex', fetch: globalThis.fetch, token, renewToken: forceRefreshCodexAccessToken });
+    const provider = extraAccountProviderFor('codex', '') ||   // subscription stacking: the first live sign-in
+      selectProvider({ provider: 'codex', fetch: globalThis.fetch, token: await ensureCodexAccessToken(), renewToken: forceRefreshCodexAccessToken });
     const models = await provider.listModels();
     // Rich objects now (id + display/reasoning metadata) so the model dock can render per-model chips.
     // The bare `id` is still present on every entry, so older consumers that read m.id keep working.
@@ -21440,6 +21832,105 @@ function handleOAuthLogout(req, res, id) {
   json(200, { connected: false });
 }
 
+/* -------------------- SUBSCRIPTION STACKING — extra OAuth sign-ins (codex / grok / kimi) --------------------
+   The primary sign-in keeps its own routes above. These add accounts beside it, in the SAME browser vocabulary the
+   one shared device-code engine (codexsignin.js makeOAuthSignIn) already speaks:
+     GET  /api/auth/<pid>/accounts                    -> { accounts: [{ account, label, primary, connected, expired, email?, coolingUntil }], max }
+     POST /api/auth/<pid>/add                         -> a device code for a NEW account (its folder is created only when it connects)
+     POST /api/auth/<pid>/account-start { account }   -> a device code to sign an existing extra account in again
+     POST /api/auth/<pid>/account-poll { device_auth_id|login_id } -> { status:'pending'|'connected'|'error' }
+     POST /api/auth/<pid>/remove { account }          -> forgets that account's tokens and deletes its folder
+   Device handles (codex's user_code/PKCE exchange, RFC 8628's device_code) stay server-side in accountLogins — only a
+   login id reaches the browser. No payload ever carries a token. */
+async function handleOAuthAccounts(req, res, pid, verb) {
+  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  const label = oauthLabel(pid);
+  try {
+    if (verb === 'accounts') {
+      const prim = oauthPrimaryStatus(pid);
+      const rows = [Object.assign({ account: '', primary: true, email: accountEmailOf(prim.tokens) }, codexAuthState.statusPayload(prim))];
+      for (const a of providerAccounts.list(pid)) {
+        const e = oauthAccountEntry(pid, a.id);
+        if (!e) continue;
+        rows.push(Object.assign({ account: a.id, primary: false, email: accountEmailOf(e.tokens) },
+          codexAuthState.statusPayload({ tokens: e.tokens, dead: e.authDead, persistError: e.persistError })));
+      }
+      const accounts = rows.map((r, i) => {
+        noteAccountAuth(pid, r.account, { installed: true, loggedIn: !!r.connected });
+        return Object.assign(r, { label: 'account ' + (i + 1), coolingUntil: credPool.coolingUntil('account:' + pid + ':' + (r.account || 'primary')) || 0 });
+      });
+      return json(200, { accounts, max: 1 + providerAccounts.MAX });
+    }
+    let body; try { body = JSON.parse((await readBody(req, 1 << 16)) || '{}') || {}; } catch (e) { return json(400, { status: 'error', error: 'bad json' }); }
+    const now = Date.now();
+    for (const [k, v] of accountLogins) { if (!v || now - (v.at || 0) > OAUTH_PENDING_TTL_MS) accountLogins.delete(k); }
+
+    if (verb === 'add' || verb === 'account-start') {
+      // the shared browser engine POSTs its start with no body, so an account may also ride the query string
+      const account = verb === 'add' ? '' : String(body.account || new URL(req.url, 'http://local').searchParams.get('account') || '');
+      if (account && !oauthAccountEntry(pid, account)) return json(404, { error: 'no such ' + label + ' account', code: 'account_not_found' });
+      if (!account && providerAccounts.list(pid).length >= providerAccounts.MAX) return json(400, { error: 'at most ' + (1 + providerAccounts.MAX) + ' ' + label + ' sign-ins', code: 'account_limit' });
+      if (pid === 'codex') {
+        const d = await codexAuth.startDeviceLogin({ fetch: globalThis.fetch });
+        accountLogins.set(d.device_auth_id, { pid, account, user_code: d.user_code, at: now });
+        return json(200, { account, user_code: d.user_code, verification_uri: d.verification_uri, device_auth_id: d.device_auth_id, interval: d.interval, expires_in: d.expires_in });
+      }
+      // grok / kimi: a new account gets its own stable device id from the first request (kimi signs every call with it)
+      const existing = account ? oauthAccountEntry(pid, account) : null;
+      const deviceId = existing ? existing.deviceId : crypto.randomUUID();
+      const auth = existing ? existing.auth : oauthDevice.makeDeviceOAuth(oauthDeviceConfig(pid, deviceId));
+      const d = await auth.startDeviceLogin({ fetch: globalThis.fetch });
+      const login_id = crypto.randomUUID();
+      accountLogins.set(login_id, { pid, account, device_code: d.device_code, interval: d.interval, deviceId, auth, at: now });
+      return json(200, { account, login_id, device_auth_id: login_id, user_code: d.user_code, verification_uri: d.verification_uri, verification_uri_complete: d.verification_uri_complete, interval: d.interval, expires_in: d.expires_in });
+    }
+
+    if (verb === 'account-poll') {
+      const id = String(body.login_id || body.device_auth_id || '');
+      const p = id && accountLogins.get(id);
+      if (!p || p.pid !== pid) return json(400, { status: 'error', error: 'unknown or expired sign-in — start again', code: 'login_not_found' });
+      let tokens;
+      try {
+        if (pid === 'codex') {
+          const poll = await codexAuth.pollDeviceLogin({ fetch: globalThis.fetch, device_auth_id: id, user_code: p.user_code });
+          if (poll.pending) return json(200, { status: 'pending' });
+          const creds = await codexAuth.exchangeCode({ fetch: globalThis.fetch, authorization_code: poll.authorization_code, code_verifier: poll.code_verifier, now: Date.now() });
+          tokens = { access_token: creds.access_token, refresh_token: creds.refresh_token, last_refresh: creds.last_refresh, auth_mode: creds.auth_mode };
+        } else {
+          const poll = await p.auth.pollDeviceLogin({ fetch: globalThis.fetch, device_code: p.device_code, interval: p.interval, now: Date.now() });
+          if (poll && poll.pending) { if (poll.interval) p.interval = poll.interval; return json(200, { status: 'pending', interval: p.interval }); }
+          tokens = Object.assign({}, poll, { device_id: p.deviceId });
+        }
+      } catch (e) {
+        accountLogins.delete(id);
+        return json(502, { status: 'error', error: (e && e.message) || (label + ' sign-in failed'), code: (e && e.code) || 'device_code_poll_error' });
+      }
+      accountLogins.delete(id);
+      // only NOW does a new account get its folder: a sign-in that never finished leaves nothing behind
+      const acctId = p.account || providerAccounts.add(pid).id;
+      const entry = oauthAccountEntry(pid, acctId);
+      if (!entry) return json(404, { status: 'error', error: 'that ' + label + ' account was removed while it was signing in', code: 'account_not_found' });
+      if (p.deviceId && pid !== 'codex') { entry.deviceId = p.deviceId; entry.auth = p.auth; }
+      entry.tokens = tokens; entry.authDead = null;
+      saveAccountTokens(entry, entry.tokens);
+      noteAccountAuth(pid, acctId, { installed: true, loggedIn: true });
+      console.log('  · another ' + label + ' subscription account connected — runs continue on it when an account hits its limit');
+      return json(200, { status: 'connected', account: acctId });
+    }
+
+    if (verb === 'remove') {
+      const id = String(body.account || '');
+      if (!id || !oauthAccountEntry(pid, id)) return json(404, { ok: false, error: 'no such ' + label + ' account', code: 'account_not_found' });
+      oauthAccountEntries.delete(pid + ':' + id);
+      accountAuthSeen.delete(pid + ':' + id);
+      return json(200, { ok: providerAccounts.remove(pid, id) });
+    }
+    json(404, { error: 'unknown verb' });
+  } catch (e) {
+    json(502, { status: 'error', error: (e && e.message) || (label + ' sign-in failed'), code: (e && e.code) || 'account_auth_error' });
+  }
+}
+
 /* -------------------- Claude CLI — SIGN IN WITH CLAUDE --------------------
    Not an OAuth client: the sidecar runs the user's own `claude auth login`, which owns the browser handshake and
    the token (claude-cli-login.js). These routes only start/watch/cancel that child and relay a pasted one-time
@@ -21450,18 +21941,142 @@ function handleOAuthLogout(req, res, id) {
      POST /code   { login_id, code }  -> { ok, error? }
      POST /cancel { login_id }        -> { ok } */
 let _claudeCliLogin = null;
-function claudeCliLogin() {
-  if (!_claudeCliLogin) _claudeCliLogin = require('./providers/claude-cli-login.js').makeClaudeCliLogin();
-  return _claudeCliLogin;
+const _claudeCliAccountLogins = new Map();   // extra account id -> a login driver bound to that account's CLI identity
+function claudeCliLogin(accountId) {
+  if (!accountId) {
+    if (!_claudeCliLogin) _claudeCliLogin = require('./providers/claude-cli-login.js').makeClaudeCliLogin();
+    return _claudeCliLogin;
+  }
+  const acct = providerAccounts.list('claude-cli').find(a => a.id === String(accountId));
+  if (!acct) return null;
+  let login = _claudeCliAccountLogins.get(acct.id);
+  if (!login) {
+    login = require('./providers/claude-cli-login.js').makeClaudeCliLogin({ configDir: acct.dir });
+    _claudeCliAccountLogins.set(acct.id, login);
+  }
+  return login;
+}
+function shutdownClaudeCliLogins() {
+  if (_claudeCliLogin) _claudeCliLogin.shutdown();
+  for (const l of _claudeCliAccountLogins.values()) { try { l.shutdown(); } catch (e) { failNote('claudecli.login.shutdown', e); } }
+}
+// Record a PROVEN sign-in verdict (an installed CLI answered) so a run skips an account that is signed out.
+function noteAccountAuth(providerId, accountId, st) {
+  if (!st || st.installed === false || typeof st.loggedIn !== 'boolean') return;
+  const seen = { loggedIn: st.loggedIn };
+  if (st.loggedIn && st.email) seen.email = st.email;
+  if (st.loggedIn && st.subscription) seen.subscription = st.subscription;
+  accountAuthSeen.set(providerId + ':' + (accountId || 'primary'), seen);
+}
+/* SUBSCRIPTION STACKING — the ordered sign-ins a run on `providerId` may use: the primary (the provider's own
+   store) first, then every extra account oldest-first, minus any a real probe PROVED signed out (unless that leaves
+   none — the run then fails on the primary with the honest not-signed-in error). Each entry is { id ('' = primary),
+   credKey (credPool's opaque handle, never a credential), label, dir }. The label is 'account N' on purpose: it
+   rides provider.fallback, and events can reach channels — the email stays in Settings. Settings numbers the
+   accounts the same way (primary = account 1, extras in list order). */
+function accountChain(providerId) {
+  const all = [{ id: '', credKey: 'account:' + providerId + ':primary', label: 'account 1', dir: '' }]
+    .concat(providerAccounts.list(providerId).map((a, i) => ({ id: a.id, credKey: 'account:' + providerId + ':' + a.id, label: 'account ' + (i + 2), dir: a.dir })));
+  const live = all.filter(a => accountLive(providerId, a.id));
+  return live.length ? live : all.slice(0, 1);
+}
+// OAuth subscriptions: proven from the stored tokens (present and not recorded dead). Claude Code: the last real
+// `claude auth status` verdict — an account never probed counts as live, one proven signed out does not.
+function accountLive(providerId, id) {
+  if (providerId === 'codex' || OAUTH_PROVIDER_IDS.indexOf(providerId) >= 0) {
+    if (!id) {
+      const p = oauthPrimaryStatus(providerId);
+      return !!(p.tokens && p.tokens.access_token && !p.dead);
+    }
+    const e = oauthAccountEntry(providerId, id);
+    return !!(e && e.tokens && e.tokens.access_token && !e.authDead);
+  }
+  const s = accountAuthSeen.get(providerId + ':' + (id || 'primary'));
+  return !(s && s.loggedIn === false);
+}
+// Outside a run (model lists, probes, the live doctor, aux passes): an adapter on an EXTRA sign-in when the chain
+// does not open on the primary (it is signed out, dead or cooling). null = keep the primary's own path.
+function extraAccountProviderFor(providerId, baseUrl, reasoningEffort) {
+  if (!providerUsesCodex(providerId) && !providerUsesDeviceOAuth(providerId)) return null;
+  const first = orderedAccountChain(providerId)[0];
+  return (first && first.id) ? oauthAccountProvider(providerId, first, baseUrl, reasoningEffort) : null;
+}
+// accountChain in credPool order: available accounts first, a cooling (spent) one sinks to the back.
+function orderedAccountChain(providerId) {
+  const chain = accountChain(providerId);
+  const byKey = new Map(chain.map(a => [a.credKey, a]));
+  return credPool.order(chain.map(a => a.credKey)).map(k => byKey.get(k));
+}
+// An adapter bound to one OAuth sign-in: the primary through its own hardened keeper, an extra through its entry.
+function oauthAccountProvider(providerId, acct, baseUrl, reasoningEffort) {
+  const codex = providerUsesCodex(providerId);
+  if (!acct.id) {
+    return codex
+      ? selectProvider({ provider: providerId, fetch: globalThis.fetch, tokenProvider: ensureCodexAccessToken, renewToken: forceRefreshCodexAccessToken, baseUrl, reasoningEffort })
+      : selectProvider({ provider: providerId, fetch: globalThis.fetch, tokenProvider: () => ensureOAuthAccessToken(providerId), headersProvider: () => oauthInferenceHeaders(providerId), baseUrl, reasoningEffort });
+  }
+  const e = oauthAccountEntry(providerId, acct.id);
+  return selectProvider({ provider: providerId, fetch: globalThis.fetch, tokenProvider: () => ensureAccountAccessToken(e),
+    renewToken: codex ? (stale) => ensureAccountAccessToken(e, true, stale) : undefined,
+    headersProvider: providerId === 'kimi' ? () => kimiMshHeaders(e.deviceId) : undefined, baseUrl, reasoningEffort });
 }
 async function handleClaudeCliAuth(req, res, verb) {
   const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
-  const login = claudeCliLogin();
   try {
-    if (verb === 'status') return json(200, await login.status());
+    if (verb === 'status' || verb === 'accounts') {
+      const q = new URL(req.url, 'http://local').searchParams;
+      if (verb === 'status') {
+        const account = String(q.get('account') || '');
+        const login = claudeCliLogin(account);
+        if (!login) return json(404, { error: 'no such Claude Code account', code: 'account_not_found' });
+        const st = await login.status();
+        noteAccountAuth('claude-cli', account, st);
+        return json(200, st);
+      }
+      // every connected sign-in, primary first — each one's own `claude auth status` (booleans/labels, no token)
+      const chain = [{ id: '' }].concat(providerAccounts.list('claude-cli'));
+      const accounts = await Promise.all(chain.map(async (a, i) => {
+        const st = await claudeCliLogin(a.id).status();
+        noteAccountAuth('claude-cli', a.id, st);
+        const cooling = credPool.coolingUntil('account:claude-cli:' + (a.id || 'primary'));
+        return Object.assign({ account: a.id, label: 'account ' + (i + 1), primary: !a.id, coolingUntil: cooling || 0 }, st);
+      }));
+      return json(200, { accounts, max: 1 + providerAccounts.MAX });
+    }
+    let body; try { body = JSON.parse((await readBody(req, 1 << 12)) || '{}') || {}; } catch (e) { return json(400, { status: 'error', error: 'bad json' }); }
+    if (verb === 'add') {
+      // a new, empty CLI identity, then straight into its sign-in (the card shows it signed out until that lands)
+      let acct;
+      try { acct = providerAccounts.add('claude-cli'); } catch (e) { return json(200, { status: 'error', error: (e && e.message) || 'could not add an account', code: 'account_add_failed' }); }
+      const r = await claudeCliLogin(acct.id).start();
+      if (r && r.status === 'error' && r.code === 'not_installed') {   // nothing could ever sign it in: leave nothing behind
+        _claudeCliAccountLogins.delete(acct.id);
+        providerAccounts.remove('claude-cli', acct.id);
+        return json(200, r);
+      }
+      if (r && r.status === 'connected') noteAccountAuth('claude-cli', acct.id, Object.assign({ installed: true }, r));
+      return json(200, Object.assign({ account: acct.id }, r));
+    }
+    if (verb === 'remove') {
+      const id = String(body.account || '');
+      const login = id ? claudeCliLogin(id) : null;
+      if (!login) return json(404, { ok: false, error: 'no such Claude Code account', code: 'account_not_found' });
+      login.cancel();
+      // sign that identity out through the CLI first (macOS keeps the credential in the keychain, outside the folder)
+      const out = await require('./providers/claude-cli.js').makeCliHost({ configDir: providerAccounts.dir('claude-cli', id) }).logout();
+      _claudeCliAccountLogins.delete(id);
+      accountAuthSeen.delete('claude-cli:' + id);
+      const removed = providerAccounts.remove('claude-cli', id);
+      return json(200, { ok: removed, signedOut: !!out.ok });
+    }
+    const login = claudeCliLogin(String(body.account || ''));
+    if (!login) return json(404, { status: 'error', error: 'no such Claude Code account', code: 'account_not_found' });
     if (verb === 'start') return json(200, await login.start());
-    let body; try { body = JSON.parse(await readBody(req, 1 << 12)) || {}; } catch (e) { return json(400, { status: 'error', error: 'bad json' }); }
-    if (verb === 'poll') return json(200, await login.poll(body.login_id));
+    if (verb === 'poll') {
+      const r = await login.poll(body.login_id);
+      if (r && r.status === 'connected') noteAccountAuth('claude-cli', String(body.account || ''), Object.assign({ installed: true }, r));
+      return json(200, r);
+    }
     if (verb === 'code') return json(200, login.submitCode(body.login_id, body.code));
     if (verb === 'cancel') return json(200, login.cancel(body.login_id));
     json(404, { error: 'unknown verb' });
