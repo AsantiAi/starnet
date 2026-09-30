@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "1acead537d57db2331b547d1e4171be59d6c2de4",
+    "sourceCommit": "d2a38ea863de23193f5ba58d58eeb8ba697ac41d",
     "pathSetSha256": "05e95dafeb91f7b67a770405b6de2f31dd9eed0b7943cbe350a8596931f9c682",
     "files": [
       {
@@ -1013,8 +1013,8 @@
       },
       {
         "path": "frontend/app/roomstyles.js",
-        "bytes": 20973,
-        "sha256": "0c42e370f3f95d5cf77ef46efe01ce3c652742683acb8ae126f349372187735e"
+        "bytes": 22137,
+        "sha256": "ccab8105ee46d7332cf61c6c07d6b612db2568be5ea4137a9284803df9b6eecd"
       },
       {
         "path": "frontend/app/routinenudgestore.js",
