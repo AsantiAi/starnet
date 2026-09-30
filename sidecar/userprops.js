@@ -146,14 +146,14 @@ function makeUserProps(deps) {
             const res = job.result;
             if (job.status === 'done' && res && res.size && typeof res.sketch === 'string') {
               const png = Buffer.from(res.sketch, 'base64');
-              if (isPng(png) && png.length < MAX_PNG_BYTES) pv.result = { label: String(res.label || '').slice(0, 24), size: { fp: String(res.size.fp || ''), height: Number(res.size.height) || 0, like: String(res.size.like || '').slice(0, 80), symmetric: res.size.symmetric === true }, sketch: res.sketch };
+              if (isPng(png) && png.length < MAX_PNG_BYTES) pv.result = { label: String(res.label || '').slice(0, 24), size: { fp: String(res.size.fp || ''), height: Number(res.size.height) || 0, like: String(res.size.like || '').slice(0, 80), symmetric: res.size.symmetric === true, profile: res.size.profile === true }, sketch: res.sketch };
               else pv.job = { ...pv.job, status: 'failed', error: { code: 'bad_result', message: 'StarNet returned a preview this station could not use.' } };
             }
           }
         } catch (e) { note('userprops.preview.poll', e); }   // offline: the page asks again
       }
     }
-    return { ok: true, job: { ...pv.job, noun: pv.noun }, preview: pv.result ? { label: pv.result.label, footprint: pv.result.size.fp, height: pv.result.size.height, like: pv.result.size.like, symmetric: pv.result.size.symmetric, sketch: 'data:image/png;base64,' + pv.result.sketch } : null };
+    return { ok: true, job: { ...pv.job, noun: pv.noun }, preview: pv.result ? { label: pv.result.label, footprint: pv.result.size.fp, height: pv.result.size.height, like: pv.result.size.like, symmetric: pv.result.size.symmetric, profile: pv.result.size.profile, sketch: 'data:image/png;base64,' + pv.result.sketch } : null };
   }
   async function start(rawNoun, previewId) {
     const noun = String(rawNoun == null ? '' : rawNoun).replace(/\s+/g, ' ').trim();
@@ -194,7 +194,7 @@ function makeUserProps(deps) {
       const id = 'user_' + slugOf(noun) + '_' + jobId.slice(-6).toLowerCase().replace(/[^a-z0-9]/g, '0');
       ensureDir();
       writeDurable({ fs, path }, path.join(dir, id + '.png'), png);
-      const entry = { id, jobId, noun, label: String(result.label).slice(0, 24), like: String(result.like || '').slice(0, 80), symmetric: result.symmetric === true,
+      const entry = { id, jobId, noun, label: String(result.label).slice(0, 24), like: String(result.like || '').slice(0, 80), symmetric: result.symmetric === true, profile: result.profile === true,
         footprint: { w: result.footprint.w, h: result.footprint.h }, bounds: { x: result.bounds.x, y: result.bounds.y, width: result.bounds.width, height: result.bounds.height },
         sourceWidth: result.sourceWidth, sourceHeight: result.sourceHeight, costUsd: Number(costUsd) || 0, createdAt: now() };
       const props = list().concat([entry]);
@@ -216,7 +216,7 @@ function makeUserProps(deps) {
     let png;
     try { png = fs.readFileSync(imageFile(propId)); } catch (_) { return { ok: false, code: 'missing_art', message: 'This prop\u2019s front view is missing on disk.' }; }
     let r;
-    try { r = await request('POST', c.url + '/v1/props/side', c.token, { noun: entry.noun, front: { png: png.toString('base64'), footprint: entry.footprint, bounds: { height: entry.bounds.height } } }, START_TIMEOUT_MS); }
+    try { r = await request('POST', c.url + '/v1/props/side', c.token, { noun: entry.noun, front: { png: png.toString('base64'), footprint: entry.footprint, bounds: { height: entry.bounds.height }, profile: entry.profile === true } }, START_TIMEOUT_MS); }
     catch (_) { return { ok: false, code: 'unreachable', message: 'StarNet could not be reached. Check your connection and try again.' }; }
     const cloudMsg = r.j && r.j.error && r.j.error.message ? String(r.j.error.message).slice(0, 200) : '';
     if (r.status === 402) return { ok: false, code: 'insufficient_credits', message: 'Out of StarNet credits. Top up under SETTINGS \u2192 PROVIDERS.' };

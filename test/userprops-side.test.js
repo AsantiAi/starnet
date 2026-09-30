@@ -52,6 +52,7 @@ const SIDE = (over = {}) => ({ view: 'w', noun: 'a jukebox', footprint: { w: 2, 
     const sent = cloud.state.calls.find((c) => /\/v1\/props\/side$/.test(c.url)).body;
     A.eq(sent.front.png, fs.readFileSync(path.join(dir, prop.id + '.png')).toString('base64'), 'the accepted front PNG on disk is what gets turned');
     A.eq([sent.noun, sent.front.footprint, sent.front.bounds], ['a jukebox', { w: 1, h: 2 }, { height: 27 }], 'with its noun, footprint and height');
+    A.eq([prop.profile, sent.front.profile], [false, false], 'a front-shown prop is not profile');
     A.eq((await up.startSide(prop.id)).code, 'busy', 'a second side request while one runs is refused');
 
     // restart mid-job: a fresh instance still owns the paid side job
@@ -134,10 +135,18 @@ const SIDE = (over = {}) => ({ view: 'w', noun: 'a jukebox', footprint: { w: 2, 
     const madeP = await up2.start('a crane', pvStart.job.id);
     const sentBody = cloud.state.calls.filter((c) => /\/v1\/props\/generate$/.test(c.url)).pop().body;
     A.ok(madeP.ok, 'making the previewed prop starts');
-    A.eq(sentBody.preview && sentBody.preview.size, { fp: '3x2', height: 40, like: 'bunk', symmetric: false }, 'the approved sizing is forwarded');
+    A.eq(sentBody.preview && sentBody.preview.size, { fp: '3x2', height: 40, like: 'bunk', symmetric: false, profile: false }, 'the approved sizing is forwarded');
     A.eq(sentBody.preview && sentBody.preview.sketch, sketch, 'and the approved sketch');
     await up2.start('a different thing', pvStart.job.id);
     A.eq(cloud.state.calls.filter((c) => /\/v1\/props\/generate$/.test(c.url)).pop().body.preview, undefined, 'a preview is never attached to a different noun');
+
+    // a PROFILE prop (vehicle/animal, drawn side-on) keeps the flag, and its side request says so (the cloud turns it head-on)
+    Object.assign(cloud.state.jobs.get(madeP.job.id), { status: 'done', costUsd: 0.34, result: { ...FRONT, noun: 'a crane', label: 'CRANE', footprint: { w: 3, h: 2 }, profile: true } });
+    await up2.pollOnce();
+    const crane = up2.list().find((p) => p.noun === 'a crane');
+    A.eq(crane && crane.profile, true, 'the profile flag lands on the entry');
+    await up2.startSide(crane.id);
+    A.eq(cloud.state.calls.filter((c) => /\/v1\/props\/side$/.test(c.url)).pop().body.front.profile, true, 'and rides the side request');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
   A.report();
 })();
