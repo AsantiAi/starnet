@@ -18,8 +18,8 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "2827f15b4f2c076dbb6c5bedb0c04a29f095ad68",
-    "pathSetSha256": "c6f7049e734305ed1e41a2f49eb76bb4df3c1d009c1bc413a312a1394bb5326b",
+    "sourceCommit": "f367ffcdcf8fd59bde15f3029f9ef283642dc33e",
+    "pathSetSha256": "80471a1b2b5c53bcaa73a80c4087e3c7165d8f35b57bb9c25d6d64d5f4a7297c",
     "files": [
       {
         "path": "INSTALL.md",
@@ -413,8 +413,8 @@
       },
       {
         "path": "frontend/app/deskscreen.js",
-        "bytes": 35767,
-        "sha256": "be9a119a1f0f31a0f3505f076bacb1e7c7419d8cefb7e946fa4c9d782ca3581c"
+        "bytes": 35860,
+        "sha256": "46c605550b9263bb8ced5de8064d1ab734044cdc7214d51e8e9bac6dda6e5780"
       },
       {
         "path": "frontend/app/diagnostics.js",
@@ -1102,6 +1102,11 @@
         "sha256": "33d2a8ba7afc47048f757126ffadcdc2a7cb9308c9050c19be0038ce58051058"
       },
       {
+        "path": "frontend/app/stepin.js",
+        "bytes": 23980,
+        "sha256": "125dd1a40f52d82231600923076cd3244134dbba4939072b4c01f5f7c0966a80"
+      },
+      {
         "path": "frontend/app/study.js",
         "bytes": 21705,
         "sha256": "1c5681529eaef1e59b73db85d98adf819fd1f9a303f059894c512c72beec40bd"
@@ -1547,6 +1552,11 @@
         "sha256": "e57248fccb9503e8748947a65fa6b3714f57c1c64839b27577966c687fb91222"
       },
       {
+        "path": "frontend/css/stepin.css",
+        "bytes": 5389,
+        "sha256": "6517f4d85ce382258c0683a824130dd45999921aa566d4c40a9717afd80e362e"
+      },
+      {
         "path": "frontend/css/style.css",
         "bytes": 104241,
         "sha256": "3e70c29845935e0473b3b053d27ab24b019b2f60668f2dc65a2068ea6ff514d7"
@@ -1648,8 +1658,8 @@
       },
       {
         "path": "frontend/index.html",
-        "bytes": 91757,
-        "sha256": "7349756ac436ce4b0e65f762c3360f739b87ffa087a6d7c2022edd1c610ae1cb"
+        "bytes": 92466,
+        "sha256": "645142c1ac5cb22f5ccc7817066422b09d45b4ee0fb51532e3e291e1069228cc"
       },
       {
         "path": "frontend/js/arcade.js",
