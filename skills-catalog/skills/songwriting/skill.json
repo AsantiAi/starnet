@@ -1,0 +1,15 @@
+{
+  "slug": "songwriting",
+  "version": "1.0.0",
+  "shelf": "community",
+  "category": "Creative",
+  "tags": ["songwriting", "lyrics", "music", "suno", "parody"],
+  "requires": [],
+  "license": "MIT",
+  "authors": ["Teknium", "Nous Research"],
+  "upstream": {
+    "url": "https://github.com/NousResearch/hermes-agent/tree/1c9433897c7b8a3b2754a84875e8f86d0a42991a/skills/creative/songwriting-and-ai-music",
+    "commit": "1c9433897c7b8a3b2754a84875e8f86d0a42991a",
+    "license": "MIT"
+  }
+}

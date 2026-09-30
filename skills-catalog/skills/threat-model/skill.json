@@ -1,0 +1,15 @@
+{
+  "slug": "threat-model",
+  "version": "1.0.0",
+  "shelf": "community",
+  "category": "Engineering",
+  "tags": ["security", "threat-modeling", "appsec", "risk", "architecture"],
+  "requires": ["cabinet"],
+  "license": "Apache-2.0",
+  "authors": ["OpenAI"],
+  "upstream": {
+    "url": "https://github.com/openai/skills/tree/5c8f1e26803bcfaffeceef1e7accbcf7e388417a/skills/.curated/security-threat-model",
+    "commit": "5c8f1e26803bcfaffeceef1e7accbcf7e388417a",
+    "license": "Apache-2.0"
+  }
+}

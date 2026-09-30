@@ -49,8 +49,10 @@ ok(/ORCH_WORKER_MAX_ITERS\s*=\s*num\(ENV\('WORKER_MAX_ITERS'\), 0\)/.test(src), 
 ok(/maxConcurrent:\s*\(\)\s*=>\s*num\(ENV\('V1_MAX_CONCURRENT'\), 0\)/.test(src), 'P1-9: the external API concurrency ceiling defaults off');
 ok(/CRON_MAX_PARALLEL\s*=\s*num\(ENV\('CRON_MAX_PARALLEL'\), 0\)/.test(src), 'P1-9: scheduled-work concurrency defaults to unlimited');
 ok(/LOOP_MAX_PARALLEL\s*=\s*num\(ENV\('LOOP_MAX_PARALLEL'\), 0\)/.test(src), 'P1-9: standing-loop concurrency defaults to unlimited');
-// ---- managed credits stay functional with no opt-in cap: an uncapped run reserves the WALLET, never refuses ----
-ok(/runCapUsd = \(isFinite\(avail\) && avail > 0\) \? avail : 0;/.test(src), 'managed credits: an uncapped run reserves the full available balance (wallet is the only ceiling)');
+// ---- managed credits stay functional with no opt-in cap: an uncapped run reserves min(managed default, wallet),
+// never refuses a funded wallet — and never the WHOLE wallet (issue #53: one prompt drained a $10 top-up) ----
+ok(/runCapUsd = budgetCaps\.managedRunCapUsd\(0, avail, MANAGED_PER_RUN_DEFAULT\);/.test(src), 'managed credits: an uncapped run reserves the managed per-run default, clamped to the available balance');
+ok(require('../sidecar/budgetcaps.js').managedRunCapUsd(0, 0.5, 2) === 0.5, 'managed credits: a wallet below the default still runs (clamped, not refused)');
 ok(!/Managed credits need a per-run budget cap/.test(src), 'managed credits: the set-an-env-var refusal is gone — no cap is required to run');
 ok(/if \(!\(runCapUsd > 0\)\) \{[\s\S]{0,1200}return;[\s\S]{0,300}const adm = credits\.beginRun\(\{ runId, agentId, capUsd: runCapUsd \}\);/.test(src), 'managed credits: an unknown/empty balance still fails CLOSED before any reservation (never spends against an unknown wallet)');
 ok(/resolveKnob\('CONSENT_TIMEOUT_MS', 'consentTimeoutMs', 120000\)/.test(src), 'P1-9: consent timeout is now env>saved>default (was hardcoded)');

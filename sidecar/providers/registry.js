@@ -571,6 +571,13 @@
       // A greeting gets a smaller ceiling; task and auxiliary requests keep the full allowance.
       maxChatOutputTokens: 512,
       maxChatOutputTokensEnv: 'SKYNET_OLLAMA_MAX_CHAT_TOKENS',
+      // Chat rides Ollama's own /api/chat (ollama-native.js): /v1 runs every model at the server's default window
+      // (4k under 24 GB VRAM), ignores any request for more, and silently cuts a ~21k-token task prompt to its tail.
+      // The window is sized per request on a ladder up to min(the model's trained max, maxCtx).
+      nativeOllama: true,
+      maxCtx: 65536,
+      maxCtxEnv: 'SKYNET_OLLAMA_MAX_CTX',
+      numCtxEnv: 'SKYNET_OLLAMA_NUM_CTX',   // pins one exact window (no ladder)
       order: 60
     },
     {

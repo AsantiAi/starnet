@@ -1,0 +1,15 @@
+{
+  "slug": "publish-site",
+  "version": "1.0.0",
+  "shelf": "community",
+  "category": "Engineering",
+  "tags": ["deploy", "hosting", "static-site", "github-pages", "cloudflare-pages", "netlify"],
+  "requires": ["workbench", "dish"],
+  "license": "MIT",
+  "authors": ["Nous Research"],
+  "upstream": {
+    "url": "https://github.com/NousResearch/hermes-agent/tree/034c6ac77ba4b911a121f60cb53245b66c3a4fc9/optional-skills/web-development/publish-site",
+    "commit": "034c6ac77ba4b911a121f60cb53245b66c3a4fc9",
+    "license": "MIT"
+  }
+}
