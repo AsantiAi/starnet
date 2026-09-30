@@ -13,7 +13,7 @@
    Pure-ish: fetch, the unpacker and the clock are injected (test/browser-install.test.js). */
 const fs = require('fs');
 const path = require('path');
-const CP = require('child_process');
+const CP = require('./child-env.js').guardChildProcess(require('child_process'));   // tar / ditto / unzip never inherit station secrets
 const { note: failNote } = require('./failopen.js');
 
 const VERSIONS_URL = 'https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json';

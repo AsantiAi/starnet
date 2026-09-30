@@ -957,7 +957,14 @@
       try {
         if (process.platform === 'win32') CP.execFileSync('taskkill', ['/T', '/F', '/PID', String(pid)], { stdio: 'ignore', timeout: 10000, windowsHide: true });
         else process.kill(pid, 'SIGKILL');
-      } catch (e) { if (!(e && (e.status === 128 || e.code === 'ESRCH'))) failNote('browser.kill-tree', e); }   // 128/ESRCH: already gone
+      } catch (e) {
+        if (e && (e.status === 128 || e.code === 'ESRCH')) return;   // 128/ESRCH: already gone
+        failNote('browser.kill-tree', e);
+        /* Measured 2026-09-30: `taskkill /T /F` can fail part-way through Chromium's tree (a helper exiting under it) and
+           leave the BROWSER process itself running — the profile stays locked and close() reports a stuck browser.
+           End the browser process directly; its helpers exit with it. */
+        try { process.kill(pid, 'SIGKILL'); } catch (e2) { if (!(e2 && e2.code === 'ESRCH')) failNote('browser.kill-tree.direct', e2); }
+      }
     }
     function killProfileOrphans(dir) {
       if (spawn !== CP.spawn || !dir) return;   // a test rig's fake spawn owns no real processes
@@ -2351,7 +2358,9 @@
       if (owned && !exited) { if (process.platform === 'win32' && owned.pid && spawn === CP.spawn) killTree(owned.pid); else { try { owned.kill('SIGKILL'); } catch (e) { failNote('browser.close.kill', e); } } }
       cdp = null; proc = null;
       if (owned && waitForClose && !exited) {
-        exited = await exitedWithin(3000);
+        // a force-killed process can take seconds to leave on a busy Windows box (antivirus holding a freshly unpacked
+        // browser's files, measured 2026-09-30): wait long enough before calling it stuck
+        exited = await exitedWithin(8000);
         if (!exited) throw new Error('owned Chromium did not exit after synthetic test session closed');
       }
       if (networkProxy) { const proxy = networkProxy; networkProxy = null; await proxy.close(); }
