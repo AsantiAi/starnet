@@ -1624,7 +1624,10 @@ const App = (() => {
       const FALLBACK = FALLBACK_MODELS[p] || FALLBACK_MODELS.openrouter;
       genesisModels = FALLBACK.map(id => ({ id, name: id, fallback: true }));
       genesisOffline = true;
-      countEl.textContent = '(catalog offline — type or pick a slug)';
+      // #39: a stale-token 403 after a sidecar restart is NOT an offline catalog — say the one thing that fixes it.
+      countEl.textContent = (Harness.sessionStale && Harness.sessionStale())
+        ? '(the station restarted — reload this page to load the catalog)'
+        : '(catalog offline — type or pick a slug)';
       if (!inp.value) inp.value = defId || FALLBACK[0];   // default-fill even offline so WAKE works; the Commander can overtype
       inp.placeholder = 'type a model slug — e.g. ' + (defId || 'gpt-5.5');
     }
@@ -2925,7 +2928,9 @@ const App = (() => {
       if (!entered) { waking = false; wakeBtnBusy(false); }   // validation bounce (absent/edited key or model) — release so the user can retry
     } catch (e) {
       waking = false; wakeBtnBusy(false);
-      const msg = el('connect-msg'); if (msg) { msg.className = 'msg bad'; msg.textContent = 'could not start — ' + ((e && e.message) || 'try again'); }
+      // #39: after a sidecar restart the refusal surfaced as "Failed to fetch", which reads like the user's own network.
+      const stale = !!(Harness.sessionStale && Harness.sessionStale());
+      const msg = el('connect-msg'); if (msg) { msg.className = 'msg bad'; msg.textContent = 'could not start — ' + (stale ? 'the station restarted; reload this page' : ((e && e.message) || 'try again')); }
     }
   }
   // THE WIRE PREFLIGHT — one real reason-only round-trip through the exact path the awakening will use
@@ -5265,6 +5270,9 @@ const App = (() => {
         const timer = setInterval(async () => {
           try {
             const probe = await fetch('/api/save?agent=agent', { cache: 'no-store' });
+            // #39: a 403 that survives Harness's in-place token recovery means only a reload can reconnect — and the
+            // recovery itself is already done. Reload once (the timer dies here, so it can never loop).
+            if (probe.status === 403) { clearInterval(timer); location.reload(); return; }
             const body = probe.ok ? await probe.json() : null;
             if (body && body.save && body.save.agent) { clearInterval(timer); location.reload(); }
           } catch (_) {}
@@ -5280,7 +5288,7 @@ const App = (() => {
       if (status) status.textContent = '＋ preparing redacted recovery report…';
       try {
         const response = await fetch('/api/lineage/report', { cache: 'no-store' });
-        if (!response.ok) throw new Error('report unavailable');
+        if (!response.ok) throw new Error((Harness.sessionStale && Harness.sessionStale()) ? 'the station restarted; reload this page' : 'report unavailable');
         const blob = await response.blob();
         const url = URL.createObjectURL(blob), a = document.createElement('a');
         a.href = url; a.download = 'starnet-recovery-report.json'; a.style.display = 'none';
@@ -5291,7 +5299,27 @@ const App = (() => {
       } finally { report.disabled = false; }
     };
     const retry = el('btn-lineage-retry');
-    if (retry) retry.onclick = () => { SFX.click && SFX.click(); try { location.reload(); } catch (_) {} };
+    // RETRY re-runs the gate. With nothing recoverable a bare reload lands on this same screen and reads as a dead
+    // button (#39 minor), so ask the sidecar first and only reload when its answer changed; otherwise SAY so.
+    if (retry) retry.onclick = async () => {
+      SFX.click && SFX.click();
+      if (validCandidates.length) { try { location.reload(); } catch (_) {} return; }
+      retry.disabled = true;
+      if (status) status.textContent = '＋ checking again…';
+      try {
+        const response = await fetch('/api/lineage', { cache: 'no-store' });
+        const body = response.ok ? await response.json().catch(() => null) : null;
+        const next = body && body.lineage;
+        const nextRec = next && next.recovery && Array.isArray(next.recovery.candidates) ? next.recovery.candidates : [];
+        if (next && (next.priorInstallEvidence === false || nextRec.some(row => row && row.recoverable))) { location.reload(); return; }
+        if (status) status.textContent = next
+          ? '＋ checked again — still nothing recoverable here. START FRESH sets the leftovers aside; RESTORE BACKUP loads a backup file.'
+          : '＋ could not check again — ' + ((Harness.sessionStale && Harness.sessionStale()) ? 'the station restarted; reload this page' : 'the station service did not answer');
+      } catch (_) {
+        if (status) status.textContent = '＋ could not check again — the station service did not answer';
+      }
+      retry.disabled = false;
+    };
     const restore = el('btn-lineage-restore');
     if (restore) restore.onclick = () => {
       SFX.click && SFX.click();
@@ -5330,6 +5358,11 @@ const App = (() => {
           const timer = setInterval(async () => {
             try {
               const probe = await fetch('/api/lineage', { cache: 'no-store' });
+              // #39: this poll used to swallow a 403 as "not ready yet" — but START FRESH's own restart mints a new token,
+              // so the poll could never answer and the button greyed out forever after a SUCCESS. Harness now re-reads
+              // the token and replays; a 403 that still gets here means only a reload can reconnect, and the work is
+              // already done — reload once (the timer dies here, so it can never loop).
+              if (probe.status === 403) { clearInterval(timer); location.reload(); return; }
               const body = probe.ok ? await probe.json() : null;
               if (body && body.lineage && body.lineage.priorInstallEvidence === false) { clearInterval(timer); location.reload(); }
             } catch (_) {}
