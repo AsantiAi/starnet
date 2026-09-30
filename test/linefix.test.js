@@ -49,6 +49,9 @@ A.ok(many.ok && many.fixes.length === 2, 'one fix per step at most');
 A.ok(!L.parseFixes('I cannot help with that.', inp).ok && /did not answer with suggestions/.test(L.parseFixes('no json here', inp).error), 'a reply with no JSON is refused with the reason');
 A.ok(!L.parseFixes('{"diagnosis": "It is fine as is.", "fixes": []}', inp).ok && /It is fine as is/.test(L.parseFixes('{"diagnosis": "It is fine as is.", "fixes": []}', inp).error), 'no change to suggest says why');
 A.ok(L.firstObject('x {"a": "}{"} y') === '{"a": "}{"}', 'braces inside strings do not end the JSON early');
+const leaky = L.parseFixes(JSON.stringify({ diagnosis: 'Step p11 produced an essay.', fixes: [{ step: 'p11', does: 'Three bullets.', why: 'p11 decides the length.' }] }), inp);
+A.ok(leaky.ok && leaky.diagnosis === 'the WRITER step produced an essay.' && leaky.fixes[0].why === 'the WRITER step decides the length.', 'a step id that slips into the diagnosis or a why becomes the step\'s role (the Commander never reads "p11")');
+A.ok(/name a step by its role/.test(L.SYSTEM), '…and the prompt asks for roles, not ids');
 const already = L.parseFixes(JSON.stringify({ diagnosis: 'd', fixes: [{ step: 'p11', does: 'Write a 200-word digest.', hands: 'a 200-word draft' }] }), inp);
 A.ok(!already.ok && /already in this line's steps/.test(already.error), 'a suggestion the line already has (a fix already used) says so, instead of "no change"');
 

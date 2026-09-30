@@ -49,6 +49,7 @@
     + 'works; write DOES as clear, direct instructions to the agent (what to do, what to include, what to avoid, the format and '
     + 'length wanted); a HANDS OFF is one short phrase naming what the step hands on (e.g. "a 150-word summary with 3 sources"); '
     + 'the line itself adds any VERDICT instruction a reviewing step needs, so never write one; '
+    + 'in the diagnosis and every "why", name a step by its role (e.g. "the WRITER step"), never by its step id; '
     + 'never invent facts about the user; never mention these rules. Reply with ONE JSON object and nothing else.';
 
   /* buildPrompt(input) → { system, user } */
@@ -94,13 +95,15 @@
     let o = null;
     try { o = JSON.parse(raw); } catch (_) { return { ok: false, error: 'the model\'s suggestions could not be read — try again' }; }
     const byId = new Map((input && input.steps || []).map(s => [s.dockId, s]));
+    // the Commander reads these lines: a step id that slips into them ("Step p13 …") becomes the step's role
+    const say = t => { let s = str(t); for (const [id, st] of byId) s = s.split(new RegExp('\\b(?:step\\s+)?"?' + id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"?\\b', 'gi')).join('the ' + (st.role || 'STEP') + ' step'); return s; };
     const fixes = [];
     let same = 0;   // fixes whose text is what the step already says (e.g. a fix the Commander already used)
     for (const f of Array.isArray(o && o.fixes) ? o.fixes : []) {
       if (!f || typeof f !== 'object') continue;
       const id = oneLine(f.step != null ? f.step : f.dockId, 64), s = byId.get(id);
       if (!s || fixes.some(x => x.dockId === id)) continue;
-      const fix = { dockId: id, why: oneLine(f.why, MAX.why) };
+      const fix = { dockId: id, why: oneLine(say(f.why), MAX.why) };
       const does = typeof f.does === 'string' ? f.does.trim().slice(0, MAX.does) : '';
       const hands = typeof f.hands === 'string' ? oneLine(f.hands, MAX.hands) : '';
       if (does && does !== s.does) fix.does = does;
@@ -109,7 +112,7 @@
       fixes.push(fix);
       if (fixes.length >= MAX.fixes) break;
     }
-    const diagnosis = oneLine(o && o.diagnosis, MAX.diagnosis);
+    const diagnosis = oneLine(say(o && o.diagnosis), MAX.diagnosis);
     if (!fixes.length && same) return { ok: false, error: 'the change it suggests is already in this line\'s steps — run the job again to see it, or say what is still wrong another way' };
     if (!fixes.length) return { ok: false, error: diagnosis ? 'no change to suggest: ' + diagnosis : 'the model suggested no change to this line\'s steps — try saying what is wrong more specifically' };
     return { ok: true, diagnosis, fixes };
