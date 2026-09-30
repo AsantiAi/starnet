@@ -2242,14 +2242,30 @@ function warnRosterMiss(agentId, where) {
   rosterMissWarned.add(id);
   try { console.warn('[roster] identity fallback: agent ' + id + ' not in roster (' + (where || 'lookup') + ') — run proceeds on the station persona/default model, NOT impersonating it as ' + id); } catch (_) {}
 }
+/* "Follow station default": a specialist with NO model pin runs on the STATION DEFAULT — the Overseer's roster
+   model, provider and effort (what the page's stationDefaultWire resolves for COMMS). ONE resolver for every
+   headless surface: channel hops (channelRunConfigFor) and routines/loops/workshop (cronIdentityFor) both read it,
+   so an unpinned agent can never run on the Overseer's model in one lane and be refused in another (v0.12.5
+   refused every routine on an unpinned agent). Returns the Overseer's roster record, or null when the agent is
+   pinned, IS the Overseer, or the Overseer itself has no model (then there is no station default to follow). */
+function stationDefaultFor(id, ident) {
+  if (!ident || String(id || '') === 'agent' || String(ident.model || '').trim()) return null;
+  const hero = agentRoster.get('agent');
+  return hero && String(hero.model || '').trim() ? hero : null;
+}
 function cronIdentityFor(agentId) {
   const id = String(agentId || 'agent');
   const ident = agentRoster.get(id);
   if (!ident) { warnRosterMiss(id, 'cron'); return null; }
   const system = String(ident.system || '').trim();
+  const hero = stationDefaultFor(id, ident);
   return {
-    model: ident.model || null,
-    provider: ident.provider || null,
+    // an unpinned agent's routine runs on the station default model+provider (the SAME rule a channel hop uses);
+    // its own persona/name still ride the run — following the station changes the model, never who it is.
+    model: (hero ? hero.model : ident.model) || null,
+    provider: (hero ? (hero.provider || ident.provider) : ident.provider) || null,
+    followsStation: !!hero,
+    reasoningEffort: hero ? hero.reasoningEffort : undefined,
     system: system ? withDossier(system + CRON_ROUTINE_NOTE, dossierWithGoals()) : null,
     name: ident.name || id
   };
@@ -2415,8 +2431,8 @@ function channelRunConfigFor(agentId, candidate) {
   // model, provider and effort, exactly what COMMS resolves (frontend app.js stationDefaultWire). Refusing the
   // empty pin here broke workflow line hops, RUN A SAMPLE and chat channels for every unpinned specialist once
   // the empty choice started surviving reloads.
-  const hero = id !== 'agent' && !String(ident.model || '').trim() ? agentRoster.get('agent') : null;
-  const followsStation = !!(hero && String(hero.model || '').trim());
+  const hero = stationDefaultFor(id, ident);
+  const followsStation = !!hero;
   const provider = normalizeProvider(followsStation ? (hero.provider || ident.provider) : ident.provider);
   const model = String((followsStation ? hero.model : ident.model) || '').trim();
   if (!model) return { ok: false, error: 'target agent ' + id + ' has no roster model' + (id !== 'agent' ? ' and the station default (the Overseer) has none' : '') };
@@ -13807,6 +13823,9 @@ async function handleCronRun(req, res) {
       // identical cron.fire/cron.result events, can fetch the real output via /api/transcript?stream=cron-<runId>.
       // Per-run id keeps the seed empty (index.js reconstructs a stream only when messages<=1) — no behavior drift.
       runId: runId, streamId: 'cron-' + runId, surface: 'autonomous', trigger: 'schedule', provider: provider, broadcast: true,
+      // "Follow station default": same effort rule as the scheduled fire (cron-driver.js) — an unpinned agent with
+      // no explicit routine model runs on the Overseer's effort along with its model.
+      reasoningEffort: (() => { const ri = !(job.model && String(job.model).trim()) ? cronIdentityFor(job.agentId) : null; return ri && ri.followsStation ? ri.reasoningEffort : undefined; })(),
       // LINE WATCH: the row records the bay + line this Run Now's crate named (placeCronWorkitem above)
       lineId: (cronItems.get(runId) || {}).lineId || undefined, dockId: (cronItems.get(runId) || {}).dockId || undefined,
       reflect: true,   // Run Now must match the scheduled fire's posture exactly, memory included (see the reflect note on /api/run)
