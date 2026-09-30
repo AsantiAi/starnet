@@ -274,3 +274,9 @@ input[type=search]::-webkit-search-cancel-button { display: none; }
 .file-chip { font-size: 15px; letter-spacing: .4px; color: var(--ph-bright); padding: 4px 9px; border: 1px solid var(--gd-edge); border-radius: 4px;
   background: rgba(var(--ph-rgb), .04); box-shadow: inset 0 1px 0 var(--gd-light); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-chip:active { background: var(--gd-hover); border-color: var(--ph-dim); }
+
+/* the compact notifications prompt under the station picture: one line and a key */
+.push-card.compact { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; }
+.push-card.compact .push-h { font-size: 16px; letter-spacing: .8px; flex: 1; min-width: 0; }
+.push-card.compact .btns { flex: none; flex-wrap: nowrap; gap: 4px; }
+.push-card.compact .btn { min-height: 36px; padding: 6px 12px; font-size: 15px; }

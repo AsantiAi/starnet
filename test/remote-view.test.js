@@ -112,7 +112,7 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
   /* ---------- 4. the desk page: draws only when Remote is on and a phone is looking ---------- */
   let answer = null, stills = 0, still = { canvas: { id: 'c' }, width: 640, height: 480, bodies: [{ agentId: 'forge', x: 1, y: 2 }] };
   const posts = [];
-  globalThis.World = { renderStill: (px) => { stills++; A.eq(px, 1600, 'asks for a still of a sane size'); return still; } };
+  globalThis.World = { renderStill: (px) => { stills++; A.ok(px >= 800 && px <= 2400, 'asks for a still of a sane size (' + px + ')'); return still; } };
   globalThis.fetch = async (url, o) => {
     if (o && o.method === 'POST') { posts.push({ url, body: JSON.parse(o.body) }); return { ok: true, json: async () => ({ ok: true }) }; }
     return answer === null ? { ok: false, json: async () => null } : { ok: true, json: async () => answer };

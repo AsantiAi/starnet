@@ -20,13 +20,13 @@
 const RemoteView = (() => {
   const IDLE_MS = 60000;      // Remote is off: look again this often
   const WATCH_MS = 6000;      // Remote is on, nobody looking
-  const LIVE_MS = 8000;       // a phone is looking: redraw the room this often (the crew move on their own stream)
+  const LIVE_MS = 12000;      // a phone is looking: redraw the room this often (the crew move on their own stream)
   const CREW_MS = 200;        // a phone is looking: where the crew are, this often
   const CREW_KEEPALIVE_MS = 2000;
   const SLOWEST_MS = 20000;   // …and never slower than this, however heavy the station
-  const MAX_PX = 1600;        // longest side of the still
+  const MAX_PX = 2200;        // longest side of the still (sharp enough to zoom into on a phone)
   let timer = null, busy = false, sentOnce = false, started = false;
-  let stillScale = 0, crewTimer = null, crewUntil = 0, crewBusy = false, lastCrew = '', lastCrewAt = 0;
+  let lastData = '', stillScale = 0, crewTimer = null, crewUntil = 0, crewBusy = false, lastCrew = '', lastCrewAt = 0;
 
   const hasWorld = () => typeof World !== 'undefined' && World && typeof World.renderStill === 'function';
 
@@ -65,10 +65,12 @@ const RemoteView = (() => {
     if (!still || !still.canvas) return false;
     const enc = await api._internals.encode(still.canvas);
     if (!enc) return false;
+    // the same room as last time: nothing to send (the phone keeps the picture it has, and nothing is re-downloaded)
+    if (enc.data === lastData && stillScale) return true;
     try {
       const r = await fetch('/api/remote/view', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mime: enc.mime, w: still.width, h: still.height, bodies: still.bodies || [], crewFree: true, data: enc.data }) });
-      if (r && r.ok) stillScale = Number(still.scale) || 0;
+        body: JSON.stringify({ mime: enc.mime, w: still.width, h: still.height, scale: Number(still.scale) || 0, bodies: still.bodies || [], crewFree: true, data: enc.data }) });
+      if (r && r.ok) { stillScale = Number(still.scale) || 0; lastData = enc.data; }
       return !!(r && r.ok);
     } catch (_) { return false; }
   }
@@ -131,7 +133,7 @@ const RemoteView = (() => {
     started = true;
     schedule(4000);   // after the floor is up and the first frames have drawn
   }
-  function reset() { started = false; sentOnce = false; stillScale = 0; if (timer) { clearTimeout(timer); timer = null; } if (crewTimer) { clearInterval(crewTimer); crewTimer = null; } }
+  function reset() { started = false; sentOnce = false; stillScale = 0; lastData = ''; if (timer) { clearTimeout(timer); timer = null; } if (crewTimer) { clearInterval(crewTimer); crewTimer = null; } }
 
   const api = { init, reset, _internals: { step, draw, encode, crewNow, sendCrew, IDLE_MS, WATCH_MS, LIVE_MS, CREW_MS } };
   return api;

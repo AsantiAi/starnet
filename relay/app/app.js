@@ -33,6 +33,7 @@
     status: null, approvals: [], threads: [], files: [], routines: [],
     tab: 'station', page: null, thread: null, file: null, target: null, query: '',
     live: new Map(),            // runId -> { streamId, agentId, text, steps:[], ended }
+    stepOf: new Map(),           // runId -> the tool it is using right now (from the station's feed)
     view: null, viewNone: false, viewBusy: false,   // the station picture: { at, w, h, bodies, url, age0, seenAt }
     portraits: new Map(), portraitBusy: false,      // skin -> image URL (null = none)
     scroll: {}, seen: new Set(), retryMs: 1000, retryTimer: null, arrivedAt: new Map()
@@ -40,6 +41,8 @@
   const LIVE_VIEW_MS = 15000;   // a picture younger than this is "live"
 
   /* ---------- helpers ---------- */
+  const TARGET_KEY = 'starnet.remote.target';
+  function setTarget(id) { S.target = id; try { localStorage.setItem(TARGET_KEY, id); } catch (_) {} }
   function ago(ms) {
     const s = Math.max(0, Math.round(ms / 1000));
     if (s < 60) return s + 's';
@@ -187,6 +190,7 @@
   async function refreshRoutines() { try { const r = await call('routines'); if (r.ok) S.routines = r.data; } catch (_) {} }
   async function refreshAll() {
     await refreshStatus(); await refreshApprovals();
+    if (!S.target) { try { S.target = localStorage.getItem(TARGET_KEY) || null; } catch (_) {} }
     if ((!S.target || !agentOf(S.target)) && agents().length) S.target = agents()[0].agentId;
     render(true);
     refreshView(); ensurePortraits(); refreshPush().then(() => render(true));
@@ -221,6 +225,12 @@
       return;
     }
     if (e.type === 'view.crew') { if (S.view) applyCrew(e.bodies); return; }
+    if (e.type === 'station' && e.name === 'agent.tool_call' && e.payload && e.payload.runId && e.payload.name) {
+      S.stepOf.set(String(e.payload.runId), String(e.payload.name));
+      if (S.stepOf.size > 200) S.stepOf.delete(S.stepOf.keys().next().value);
+      if (S.tab === 'activity') { const n = document.querySelector('[data-step="' + CSS.escape(String(e.payload.runId)) + '"]'); if (n) n.textContent = stepLine(e.payload.name); }
+      return;
+    }
     if (e.type === 'station' && (e.name === 'agent.run.start' || e.name === 'agent.run.end')) { statusSoonish(); if (S.tab === 'activity') activitySoonish(); }
   }
 
@@ -291,19 +301,62 @@
       if (t && t.frames && t.frames.length) g.drawImage(frameOf(c, t, now), r.x, r.y, r.w, r.h);
     }
   }
+  /* FRAMING. A small station fits the card whole. A big one (a picture spanning far more floor than a phone card
+     can show legibly) is framed on where the crew are, and the frame drifts gently after them. */
+  const HERO_ASPECT = 4 / 3;
+  function bigStation() { return !!(S.view && S.view.scale && S.view.w / S.view.scale > 560); }
+  /* The camera follows ONE crew member: whoever is working (the one who started first), otherwise the one you are
+     talking to. Tap a portrait in CREW and the card turns to them. */
+  function focusAgent() {
+    const working = agents().filter(isWorking).sort((p, q) => (p.since || 0) - (q.since || 0));
+    for (const a of working) if (scene.crew.has(a.agentId)) return a.agentId;
+    if (S.target && scene.crew.has(S.target)) return S.target;
+    const first = agents().find(a => scene.crew.has(a.agentId));
+    return first ? first.agentId : null;
+  }
+  function cropTarget() {
+    const v = S.view, full = { x: 0, y: 0, w: v.w, h: v.h };
+    if (!bigStation() || !v.crewFree || !scene.crew.size) return full;
+    const id = focusAgent(), c = id && scene.crew.get(id);
+    if (!c) return full;
+    const r = rectAt(c, performance.now()), k = v.scale;
+    const w = Math.min(v.w, 330 * k), h = Math.min(v.h, w / HERO_ASPECT);   // about a room and its doorways
+    const cx = r.x + r.w / 2, cy = r.y + r.h * 0.6;
+    return { x: Math.max(0, Math.min(v.w - w, cx - w / 2)), y: Math.max(0, Math.min(v.h - h, cy - h / 2)), w, h };
+  }
+  function heroCrop() {
+    const t = cropTarget(), c = scene.crop;
+    if (!c || !bigStation()) { scene.crop = t; return t; }
+    const e = 0.08, d = Math.abs(t.x - c.x) + Math.abs(t.y - c.y) + Math.abs(t.w - c.w);
+    scene.cropMoving = d > 0.5;
+    if (scene.cropMoving) scene.crop = { x: c.x + (t.x - c.x) * e, y: c.y + (t.y - c.y) * e, w: c.w + (t.w - c.w) * e, h: c.h + (t.h - c.h) * e };
+    return scene.crop;
+  }
+  // is anything on the picture moving? (a glide in progress, a walking/typing crew member, a drifting frame, a finger)
+  function animating(now) {
+    if (scene.cropMoving || viewer.pts.size) return 33;
+    let need = 0;
+    for (const c of scene.crew.values()) {
+      if (now - c.t0 < c.dur) return 33;
+      const fps = TRACK_FPS[String(c.key).split('.')[1]];
+      if (fps) need = Math.max(need, fps);
+    }
+    return need ? Math.max(33, Math.round(1000 / need)) : 0;
+  }
   function loop(ts) {
     scene.raf = 0;
     const viewOn = !$('viewer').hidden && S.view && scene.base;
     const heroOn = !viewOn && S.view && scene.base && hero.root.isConnected && !hero.frame.hidden;
     if (!viewOn && !heroOn) return;
-    if (document.visibilityState === 'visible' && ts - scene.last >= 30) {   // ~30 fps is all a picture this size needs
-      scene.last = ts;
+    const every = animating(performance.now());
+    if (document.visibilityState === 'visible' && (scene.dirty || ts - scene.last >= (every || 33))) {
+      scene.last = ts; scene.dirty = false;
       if (viewOn) { viewerClamp(); paintCanvas(viewer.cv, window.innerWidth, window.innerHeight, viewer.k, viewer.x, viewer.y); }
-      else { const w = hero.frame.clientWidth; paintCanvas(hero.cv, w, hero.frame.clientHeight, w / S.view.w, 0, 0); }
+      else { const c = heroCrop(), w = hero.frame.clientWidth, k = w / c.w; paintCanvas(hero.cv, w, hero.frame.clientHeight, k, -c.x * k, -c.y * k); }
     }
-    scene.raf = requestAnimationFrame(loop);
+    if (every || scene.dirty) scene.raf = requestAnimationFrame(loop);   // nothing moving: stop until something changes
   }
-  function kick() { if (!scene.raf) scene.raf = requestAnimationFrame(loop); }
+  function kick() { scene.dirty = true; if (!scene.raf) scene.raf = requestAnimationFrame(loop); }
 
   const hero = (() => {
     const root = el('div', 'hero'), frame = el('div', 'hero-frame'), cv = el('canvas'), chip = el('span', 'chip'), dot = el('i'), chipText = el('span');
@@ -327,7 +380,7 @@
       else { hero.eb.textContent = 'STATION OFFLINE'; hero.es.textContent = 'The picture appears when your station is reachable.'; }
       return;
     }
-    hero.frame.style.aspectRatio = v.w + ' / ' + v.h;
+    hero.frame.style.aspectRatio = bigStation() && v.crewFree ? '4 / 3' : v.w + ' / ' + v.h;
     const live = viewLive();
     hero.root.classList.toggle('stale', !live);
     hero.chip.className = 'chip' + (live ? ' live' : ''); hero.chipText.textContent = stampText();
@@ -356,7 +409,8 @@
       const pre = new Image(); pre.src = url;
       try { await pre.decode(); } catch (_) { URL.revokeObjectURL(url); return; }
       const old = S.view && S.view.url;
-      S.view = { at: first.at, w: first.w, h: first.h, bodies: first.bodies || [], crewFree: !!first.crewFree, url, age0: Math.max(0, first.now - first.at), seenAt: Date.now() };
+      if (!S.view || S.view.w !== first.w || S.view.h !== first.h) scene.crop = null;
+      S.view = { at: first.at, w: first.w, h: first.h, scale: Number(first.scale) || 0, bodies: first.bodies || [], crewFree: !!first.crewFree, url, age0: Math.max(0, first.now - first.at), seenAt: Date.now() };
       scene.base = pre;
       if (first.crew && Array.isArray(first.crew.bodies) && !scene.crew.size) applyCrew(first.crew.bodies);
       paintHero();
@@ -377,9 +431,9 @@
   }
   hero.root.addEventListener('click', (ev) => {
     if (!S.view) return;
-    const r = hero.frame.getBoundingClientRect(), k = S.view.w / r.width;
-    const b = ev.target.closest('.expand') ? null : bodyNear((ev.clientX - r.left) * k, (ev.clientY - r.top) * k, 26 * k);
-    if (b) { S.target = b.agentId; toast('Talking to ' + agentName(b.agentId)); render(); return; }
+    const r = hero.frame.getBoundingClientRect(), c = scene.crop || { x: 0, y: 0, w: S.view.w, h: S.view.h }, k = c.w / r.width;
+    const b = ev.target.closest('.expand') ? null : bodyNear(c.x + (ev.clientX - r.left) * k, c.y + (ev.clientY - r.top) * k, 26 * k);
+    if (b) { setTarget(b.agentId); toast('Talking to ' + agentName(b.agentId)); render(); return; }
     openViewer();
   });
 
@@ -420,7 +474,16 @@
     }
     kick();
   }
-  function openViewer() { if (!S.view) return; viewer.sel = null; $('viewer-plate').dataset.key = ''; $('viewer').hidden = false; viewerFit(); paintViewer(); refreshView(); }
+  function openViewer() {
+    if (!S.view) return;
+    viewer.sel = null; $('viewer-plate').dataset.key = ''; $('viewer').hidden = false; viewerFit();
+    const c = scene.crop;
+    if (c && c.w < S.view.w * 0.95) {   // a framed big station: open on the same framing, then pan and zoom from there
+      const W = window.innerWidth, H = window.innerHeight;
+      viewer.k = Math.min(W / c.w, H / c.h); viewer.x = W / 2 - (c.x + c.w / 2) * viewer.k; viewer.y = H / 2 - (c.y + c.h / 2) * viewer.k;
+    }
+    paintViewer(); refreshView();
+  }
   function closeViewer() { $('viewer').hidden = true; viewer.pts.clear(); viewer.pinch = null; kick(); }
   (function wireViewer() {
     const v = $('viewer');
@@ -531,6 +594,7 @@
       row.appendChild(b);
       if (compact && !S.push.on) { const x = el('button', 'btn quiet', 'Not now'); x.type = 'button'; x.onclick = () => { try { localStorage.setItem(nudgeKey, '1'); } catch (_) {} render(); }; row.appendChild(x); }
       box.appendChild(row);
+      if (compact) { box.classList.add('compact'); box.replaceChildren(el('div', 'push-h', 'Get a tap when your crew needs you'), row); }
     }
     return box;
   }
@@ -676,7 +740,9 @@
     row.appendChild(well(t.agentId, 'sm'));
     const tt = el('span', 't');
     tt.appendChild(el('b', null, plain(t.title) || plain(t.preview) || agentName(t.agentId)));
-    tt.appendChild(el('span', null, agentName(t.agentId) + (t.title && t.preview ? ' · ' + plain(t.preview) : '')));
+    // the last thing you said, unless it is just the title again (a session titled with its first message)
+    const pv = plain(t.preview), same = !pv || !t.title || plain(t.title).slice(0, 40) === pv.slice(0, 40);
+    tt.appendChild(el('span', null, agentName(t.agentId) + (same ? '' : ' · ' + pv)));
     row.appendChild(tt);
     const live = streamLive(t.streamId) && S.linkState === 'open';
     row.appendChild(el('span', 'd' + (live ? ' work' : ''), live ? 'WORKING' : t.lastAt ? ago(Date.now() - t.lastAt) : ''));
@@ -700,14 +766,16 @@
     if (!list.length) cs.appendChild(el('div', 'empty', S.linkState === 'open' ? 'No agents on this station yet.' : 'Waiting for the station…'));
     else {
       const strip = el('div', 'crew');
-      for (const a of list) {
+      for (const a of list.slice().sort((p, q) => (isWorking(q) ? 1 : 0) - (isWorking(p) ? 1 : 0))) {
         const w = isWorking(a);
         const m = el('button', 'mate' + (S.target === a.agentId ? ' sel' : '') + (w ? ' work' : '')); m.type = 'button';
         const pw = well(a.agentId); if (w) pw.appendChild(el('i', 'dot work'));
         m.appendChild(pw);
         m.appendChild(el('b', null, a.name || a.agentId));
-        m.appendChild(el('em', null, S.linkState !== 'open' ? (a.state || 'idle') : w ? (a.since ? clock(Date.now() - a.since) : 'working') : 'idle'));
-        m.onclick = () => { S.target = a.agentId; render(); };
+        const em = el('em', null, S.linkState !== 'open' ? (a.state || 'idle') : w ? (a.since ? clock(Date.now() - a.since) : 'working') : 'idle');
+        if (w && a.since && S.linkState === 'open') em.dataset.since = a.since;
+        m.appendChild(em);
+        m.onclick = () => { setTarget(a.agentId); render(); kick(); };
         strip.appendChild(m);
       }
       cs.appendChild(strip);
@@ -794,6 +862,7 @@
   let activityTimer = null;
   function activitySoonish() { clearTimeout(activityTimer); activityTimer = setTimeout(() => refreshActivity().then(() => render(true)), 500); }
   const SOURCE = { remote: 'from your phone', interactive: 'at the desk', cron: 'routine', channel: 'from a channel', host: 'autonomy', overseer: 'review' };
+  const stepLine = (name) => 'using ' + String(name || '').replace(/[._]+/g, ' ').trim();
   function activityRow(w, live) {
     const box = el('div', 'act' + (live ? ' live' : ''));
     const row = el(w.streamId ? 'button' : 'div', 'row'); if (w.streamId) row.type = 'button';
@@ -802,9 +871,17 @@
     t.appendChild(el('b', null, plain(w.title) || (live ? agentName(w.agentId) + ' is working' : 'Work by ' + agentName(w.agentId))));
     const line = live ? agentName(w.agentId) + (SOURCE[w.source] ? ' · ' + SOURCE[w.source] : '')
       : w.state === 'done' ? (plain(w.result) || agentName(w.agentId) + ' finished') : w.state === 'stopped' ? 'Stopped' : 'Did not finish' + (w.error ? ' · ' + w.error : '');
-    t.appendChild(el('span', live ? null : 'why ' + w.state, line));
+    const sub = el('span', live ? null : 'why ' + w.state, line);
+    if (live) {
+      const L = S.live.get(w.runId), last = L && L.steps.length ? L.steps[L.steps.length - 1].name : S.stepOf.get(w.runId);
+      if (last) sub.textContent = stepLine(last);
+      sub.dataset.step = w.runId;
+    }
+    t.appendChild(sub);
     row.appendChild(t);
-    row.appendChild(el('span', 'd' + (live ? ' work' : ''), live ? (w.startedAt ? clock(Date.now() - w.startedAt) : 'NOW') : (w.endedAt ? ago(Date.now() - w.endedAt) : '')));
+    const dd = el('span', 'd' + (live ? ' work' : ''), live ? (w.startedAt ? clock(Date.now() - w.startedAt) : 'NOW') : (w.endedAt ? ago(Date.now() - w.endedAt) : ''));
+    if (live && w.startedAt) dd.dataset.since = w.startedAt;
+    row.appendChild(dd);
     if (w.streamId) row.onclick = () => openThread(w.streamId, w.agentId);
     box.appendChild(row);
     if (w.files && w.files.length) {
@@ -923,7 +1000,7 @@
       const t = el('span', 't'); t.appendChild(el('b', null, a.name || a.agentId));
       t.appendChild(el('span', null, isWorking(a) ? 'working' : 'idle' + (a.model ? ' · ' + a.model : '')));
       row.appendChild(t);
-      row.onclick = () => { S.target = a.agentId; closeSheet(); render(); };
+      row.onclick = () => { setTarget(a.agentId); closeSheet(); render(); };
       l.appendChild(row);
     }
     body.replaceChildren(l);
@@ -984,6 +1061,7 @@
     if (openHash) { history.replaceState(null, '', location.pathname); setTimeout(() => openFromPush(openHash), 2500); }
     if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open') openFromPush(e.data.url); });
     setInterval(ping, 20000);
+    setInterval(() => { if (document.visibilityState !== 'visible') return; for (const n of document.querySelectorAll('[data-since]')) n.textContent = clock(Date.now() - Number(n.dataset.since)); }, 1000);
     setInterval(() => { if (looking()) refreshStatus().then(() => { if (S.tab === 'activity' && !S.thread && !S.file && !S.page) return refreshActivity(); }).then(() => { render(true); ensurePortraits(); }); paintLamp(); }, 10000);
     // the station picture: asked for only while it is on screen, which is also what keeps the desk drawing it
     setInterval(() => {

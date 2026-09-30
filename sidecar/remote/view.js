@@ -65,13 +65,14 @@ function makeRemoteView(deps) {
       if (x < 0 || y < 0 || x > w || y > h) continue;
       bodies.push({ agentId, x, y });
     }
-    still = { buf, mime, w, h, at: now(), bodies, crewFree: o.crewFree === true };
+    const sc = Number(o.scale);
+    still = { buf, mime, w, h, at: now(), bodies, crewFree: o.crewFree === true, scale: Number.isFinite(sc) && sc > 0.01 && sc < 20 ? sc : 0 };
     return { ok: true, at: still.at, bytes: buf.length };
   }
 
   function want() { wantAt = now(); }
   function wanted() { return wantAt > 0 && now() - wantAt < WANT_MS; }
-  function meta() { return still ? { at: still.at, w: still.w, h: still.h, mime: still.mime, size: still.buf.length, bodies: still.bodies, crewFree: still.crewFree } : null; }
+  function meta() { return still ? { at: still.at, w: still.w, h: still.h, mime: still.mime, size: still.buf.length, bodies: still.bodies, crewFree: still.crewFree, scale: still.scale } : null; }
 
   const num = (v, lo, hi) => { const n = Number(v); return Number.isFinite(n) && n >= lo && n <= hi ? Math.round(n * 10) / 10 : null; };
   function putCrew(list) {

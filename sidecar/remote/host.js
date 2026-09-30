@@ -212,7 +212,7 @@ function makeRemoteHost(d) {
     if (o.offset && o.at !== m.at) return { at: m.at, now: now(), changed: true };   // the desk drew a newer one mid-read: start over
     const buf = d.view.read(o.offset, o.length);
     const out = { at: m.at, now: now(), w: m.w, h: m.h, mime: m.mime, size: m.size, offset: o.offset, bytes: buf.length, eof: o.offset + buf.length >= m.size, data: buf.toString('base64') };
-    if (!o.offset) { out.bodies = m.bodies; out.crewFree = !!m.crewFree; out.crew = d.view.crew ? d.view.crew() : null; }
+    if (!o.offset) { out.bodies = m.bodies; out.crewFree = !!m.crewFree; out.scale = m.scale || 0; out.crew = d.view.crew ? d.view.crew() : null; }
     return out;
   }
 
