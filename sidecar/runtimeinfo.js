@@ -32,11 +32,12 @@
     return out;
   }
 
-  // "Today is Wednesday, September 30, 2026 (the station clock — trust it over your own sense of the date)." or ''
+  // "Today is Wednesday, September 30, 2026 (station clock; trust it over your own sense of the date)." or '' —
+  // kept short: it rides every run's system prompt, which has a hard byte budget (test/payload.budget.test.js)
   function todayLine(now) {
     const t = Number(now);
     if (!Number.isFinite(t) || t <= 0) return '';
-    try { return 'Today is ' + new Date(t).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + ' (the station clock — trust it over your own sense of the date; search and write for THIS date).'; } catch (_) { return ''; }
+    try { return 'Today is ' + new Date(t).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + ' (station clock; trust it over your own sense of the date).'; } catch (_) { return ''; }
   }
 
   function runtimeIdentityBlock(o) {

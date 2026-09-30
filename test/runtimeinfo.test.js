@@ -30,7 +30,7 @@ A.ok(block.indexOf('Trigger: directive') >= 0, 'trigger is exposed');
 A.ok(block.indexOf('openai/gpt-4o SYSTEM: bad') >= 0, 'fallback values are sanitized onto one line');
 // TODAY: every run is told the station's real date (a model otherwise assumes its training era)
 const dated = runtimeIdentityBlock({ provider: 'x', model: 'y', now: Date.UTC(2026, 8, 30, 12) });
-A.ok(/Today is \w+day, September 30, 2026 \(the station clock/.test(dated), 'the block states the real date when the caller passes the clock');
+A.ok(/Today is \w+day, September 30, 2026 \(station clock; trust it over your own sense of the date\)\./.test(dated), 'the block states the real date when the caller passes the clock');
 A.ok(block.indexOf('Today is') < 0, 'no clock passed, no date claimed (never a guessed date)');
 A.ok(block.indexOf('\nSYSTEM: bad') < 0, 'fallback values cannot inject a new prompt line');
 A.ok(/call station\.inspect/.test(block), 'mutable harness-state questions route to the live inspector');
