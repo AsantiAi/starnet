@@ -15737,8 +15737,9 @@ function placedTypesFrom(v) {
 }
 
 /* The gear a skill can use for this agent: what the browser reports placed (its room + shared station gear) PLUS what
-   the agent's execution profile or Full Access grants — the SAME reading SKILL LIBRARY and the Skill Market make
-   through /api/toolsets — so "/" offers exactly the skills the library calls READY. */
+   the agent's execution profile or Full Access grants, plus the ORCHESTRATOR every Commander-started run carries
+   (runtimeGranted; it is not a prop) — the SAME reading SKILL LIBRARY and the Skill Market make through
+   /api/toolsets — so "/" offers exactly the skills the library calls READY. */
 function skillGearFor(agentId, placedTypes) {
   const id = agentRoster.has(agentId) ? agentId : 'agent';
   try {
@@ -15746,7 +15747,7 @@ function skillGearFor(agentId, placedTypes) {
       registry: CAP_REGISTRY, agentId: id, agent: agentRoster.get(id), placed: placedTypes, lead: true, disabled: toolsetDisabled,
       fullAccess: FULL_ACCESS, masterBypass: masterBypassOn(), backendId: executionEnvironment.backendIdFor(id)
     });
-    const granted = view.toolsets.filter(r => r.object && (r.placed || r.profileGranted || view.authority.unrestricted)).map(r => r.object);
+    const granted = view.toolsets.filter(r => r.object && (r.placed || r.profileGranted || r.runtimeGranted || view.authority.unrestricted)).map(r => r.object);
     return [...new Set(placedTypes.concat(granted))];
   } catch (e) { failNote('slash.skill-gear', e); return placedTypes; }
 }

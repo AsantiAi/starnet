@@ -2,7 +2,7 @@
 name: Work Splitting
 slug: work-splitting
 description: Cut a job too big for one agent into genuinely parallel pieces, dispatch each to the right class, and merge the results into one answer.
-category: Planning
+category: Station
 requires: [orchestrator]
 license: MIT
 version: 1.0.0
@@ -28,4 +28,4 @@ Parallelism is only a win when the pieces do not need each other. Splitting on t
 ## Output
 The split you chose and why those were real seams, who ran what, the merged deliverable, then any piece that failed, came back thin, or conflicted with another.
 
-*Needs the ORCHESTRATOR object (the crew dispatch table).*
+*Needs the ORCHESTRATOR (the crew dispatch table), which every run the Commander starts carries.*

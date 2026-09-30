@@ -36,4 +36,4 @@ station.layout shows the line with no blockers and a last run on every step, the
 ## Output
 The build sheet, each bay's test result and cost, what changed after testing, and anything still blocking.
 
-*Needs the ORCHESTRATOR object (station.layout). The Commander builds, tests and schedules the line in REFIT.*
+*Needs the ORCHESTRATOR (station.layout), which every run the Commander starts carries. The Commander builds, tests and schedules the line in REFIT.*

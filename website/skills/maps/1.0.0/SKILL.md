@@ -1,6 +1,6 @@
 ---
 name: maps
-description: "Location answers from free OpenStreetMap services, no API key: geocode places, reverse-geocode coordinates, find nearby places by category, road distance and directions, timezones, and area bounds."
+description: "Location answers from free OpenStreetMap services, no API key: geocode places, name the place at a coordinate, find nearby places by category, road distance and directions, timezones, and an area's outline."
 license: MIT
 metadata:
   title: "Maps"

@@ -2,7 +2,7 @@
   "slug": "brand-assets",
   "version": "1.0.0",
   "shelf": "originals",
-  "category": "Creator",
+  "category": "Creative",
   "tags": ["images", "branding", "transparent", "design", "consistency"],
   "requires": ["studio", "notebook"],
   "license": "MIT",

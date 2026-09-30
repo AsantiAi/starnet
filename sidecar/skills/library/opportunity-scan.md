@@ -1,7 +1,7 @@
 ---
 name: Opportunity Scan
 slug: opportunity-scan
-description: Hunt monetizable openings matched to the Commander's hand, sized with live demand evidence and ranked honestly.
+description: Hunt monetizable openings that fit the Commander's skills and resources, sized with live demand evidence and ranked honestly.
 category: Research
 requires: [dish, notebook]
 license: MIT

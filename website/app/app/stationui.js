@@ -3279,7 +3279,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     // SKILL MARKET (2026-09-29): the curated StarNet catalog, browsed as the same glass card grid the connectors
     // CATALOG uses. The catalog is fetched when this section loads, never in the background.
     const secMarket =
-      '<p class="set-about"><b>Add skills to your whole crew.</b> StarNet Originals are written and tested by StarNet; community picks are credited to their authors. Installing adds the skill to your SKILL LIBRARY and switches it on.</p>' +
+      '<p class="set-about"><b>Add skills to your whole crew.</b> StarNet Originals are written by StarNet for your station; community picks are credited to their authors. Installing adds the skill to your SKILL LIBRARY and switches it on.</p>' +
       '<div class="cc-filters" id="skm-filters" role="group" aria-label="Filter the skill market">' +
         '<button type="button" class="cc-filter active" data-skm-filter="all" aria-pressed="true">ALL</button>' +
         '<button type="button" class="cc-filter" data-skm-filter="originals" aria-pressed="false">STARNET ORIGINALS</button>' +
@@ -3333,7 +3333,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     let granted = [];
     try {
       const view = await Harness.api.get('/api/toolsets?agent=' + encodeURIComponent(agentId) + '&placed=' + encodeURIComponent(placed.join(',')));
-      if (view && view.authority && Array.isArray(view.toolsets)) granted = view.toolsets.filter(r => r.object && (r.placed || r.profileGranted || view.authority.unrestricted)).map(r => r.object);
+      if (view && view.authority && Array.isArray(view.toolsets)) granted = view.toolsets.filter(r => r.object && (r.placed || r.profileGranted || r.runtimeGranted || view.authority.unrestricted)).map(r => r.object);
     } catch (_) {}
     return [...new Set(placed.concat(shared, granted))];
   }
@@ -3379,9 +3379,11 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       action = btn('install', '+ INSTALL', 'sm');
       hint = gear.length ? 'Needs ' + esc(gear.join(', ')) + ' placed to be used.' : 'Ready to use as soon as it is installed.';
     }
-    // gear an installed or installable skill still needs: the SAME → PLACE shortcut SKILL LIBRARY offers
-    const place = missing.length && (e.status === 'available' || e.status === 'installed' || e.status === 'update')
-      ? '<div class="sk-place-row">' + missing.map(g => '<button class="sk-place" type="button" data-place="' + esc(g) + '" title="Open REFIT to place ' + skArt(skmGear(g)) + esc(skmGear(g)) + '">→ PLACE ' + esc(skmGear(g)) + '</button>').join('') + '</div>' : '';
+    // gear an installed or installable skill still needs: the SAME → PLACE shortcut SKILL LIBRARY offers. The
+    // ORCHESTRATOR is not a prop — every run the Commander starts carries it (runtimeGranted) — so it never gets one.
+    const placeable = missing.filter(g => g !== 'orchestrator');
+    const place = placeable.length && (e.status === 'available' || e.status === 'installed' || e.status === 'update')
+      ? '<div class="sk-place-row">' + placeable.map(g => '<button class="sk-place" type="button" data-place="' + esc(g) + '" title="Open REFIT to place ' + skArt(skmGear(g)) + esc(skmGear(g)) + '">→ PLACE ' + esc(skmGear(g)) + '</button>').join('') + '</div>' : '';
     const result = skmResult && skmResult.slug === e.slug
       ? '<div class="mc-hint skm-result' + (skmResult.ok ? '' : ' skm-result-bad') + '">' + esc(skmResult.text) + '</div>' : '';
     const files = (e.files || []).map(f => '<li><code>' + esc(f.path) + '</code> <span class="dim">' + esc(String(f.bytes)) + ' B</span></li>').join('');
@@ -3440,7 +3442,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         '<button class="bb xs" type="button" data-skm-act="retry">TRY AGAIN</button>';
       return;
     }
-    const shelves = [['originals', 'StarNet Originals', 'Written and tested by StarNet for your station\'s gear and tools.'], ['community', 'Community picks', 'Open skills by other authors, adapted for StarNet and credited.']];
+    const shelves = [['originals', 'StarNet Originals', 'Written by StarNet for your station\'s gear and tools.'], ['community', 'Community picks', 'Open skills by other authors, adapted for StarNet and credited.']];
     const html = shelves.map(([id, label, note]) => {
       const rows = d.entries.filter(e => e.shelf === id);
       if (!rows.length) return '';
@@ -3531,7 +3533,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         // Match runOnce's skill context: room objects plus profile/Full Access projection and shared station gear.
         // This only explains instruction availability; it does not grant any tools or change skill preferences.
         const shared = typeof World !== 'undefined' && World.stationCaps ? World.stationCaps().map(c => c.objectType) : [];
-        placed = [...new Set(placed.concat(shared, view.toolsets.filter(r => r.object && (r.placed || r.profileGranted || view.authority.unrestricted)).map(r => r.object)))];
+        placed = [...new Set(placed.concat(shared, view.toolsets.filter(r => r.object && (r.placed || r.profileGranted || r.runtimeGranted || view.authority.unrestricted)).map(r => r.object)))];
         return fetch('/api/skills?placed=' + encodeURIComponent(placed.join(',')));
       })
       .then(r => { if (!r.ok) throw Error('Skill library unavailable'); return r.json(); })

@@ -2,7 +2,7 @@
 name: Inbox Triage
 slug: inbox-triage
 description: Triage every inbox into one board — urgent to noise — with held draft replies, never auto-sent.
-category: Comms
+category: Communication
 requires: [notebook]
 license: MIT
 version: 1.0.0

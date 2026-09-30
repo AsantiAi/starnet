@@ -4,7 +4,7 @@ description: "Hand one job to a crewmate with a brief they can finish without as
 license: MIT
 metadata:
   title: "Crew Handoff"
-  category: "Planning"
+  category: "Station"
   author: "StarNet"
 ---
 
@@ -12,7 +12,7 @@ A delegated worker runs its own loop on your brief and nothing else. It cannot s
 
 ## Method
 1. **Pick the crewmate by what they own (team.config).** Read the candidate's Dossier — purpose and standing orders — and give the job to the specialist whose desk it is, not whoever is idle. If nobody fits, team.summon can add a specialist; the Commander confirms it in APPROVAL mode.
-2. **Check their gear.** A worker has only the tools its room's props grant: no DISH, no web; no INTEL CAB, no files; no WORKBENCH, no shell. station.layout shows rooms and workstations. If the job needs gear they lack, pick someone else or tell the Commander what to place.
+2. **Know what a worker can do.** A dispatched worker runs unattended with web, files, memory and studio tools, but never the shell: keep shell work for yourself. station.layout shows who sits where.
 3. **Write the prompt as the job, finished.** One paragraph: the deliverable, who it is for, the scope boundary (what NOT to touch), and done stated as something checkable — "three options under $50, with links and the date checked", not "look into pricing".
 4. **Put what you already know in `context`.** File paths, findings, decisions, constraints, the Commander's stated preferences. It arrives as settled starting knowledge, so the worker does not re-derive it. Do not restate the task there.
 5. **Pre-answer the questions they would ask.** Walk the brief as the worker would: which source wins on conflict? what format? what if the data is missing? Answer each, or name the default to take and ask them to flag it.
@@ -35,4 +35,4 @@ The worker's result meets the definition of done you wrote, the artifacts list n
 ## Output
 Who got the job and why, the brief as sent (short), the result against the definition of done, the files by workspace, and anything that came back thin.
 
-*Needs the ORCHESTRATOR object (team.dispatch and the crew tools).*
+*Needs the ORCHESTRATOR (team.dispatch and the crew tools), which every run the Commander starts carries.*

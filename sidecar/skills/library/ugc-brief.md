@@ -1,8 +1,8 @@
 ---
 name: UGC Brief
 slug: ugc-brief
-description: Package an idea into a ready-to-shoot UGC/video brief — hooks, timed shot list, caption, cover, repurposing cuts.
-category: Creator
+description: Package an idea into a ready-to-shoot creator video brief — hooks, timed shot list, caption, cover, repurposing cuts.
+category: Creative
 requires: [dish, cabinet]
 license: MIT
 version: 1.0.0
