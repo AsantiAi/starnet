@@ -1,6 +1,6 @@
 ---
 name: document-to-action-items
-description: "Extract cited facts, obligations, deadlines and proposed tasks from contracts, reports, forms and scans, keeping page citations, may/should/must modality and OCR uncertainty visible."
+description: "Extract cited facts, obligations, deadlines and proposed tasks from contracts, reports, forms and scans, keeping page citations, how binding each item is (may/should/must) and unclear scan text visible."
 license: MIT
 metadata:
   title: "Document to Action Items"
@@ -87,3 +87,5 @@ Use the destination the Commander approved: the station task board (`task.create
 *Needs the CABINET to read documents. Local PDFs and scans also need the WORKBENCH for extraction.*
 
 Adapted for StarNet from document-to-action-items (Ben Barclay), MIT.
+
+*Task-board steps (task.create, task.manage) need the ORCHESTRATOR, which every run the Commander starts carries. In a scheduled run, list those updates in the report instead of making them.*

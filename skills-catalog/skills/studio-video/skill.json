@@ -2,7 +2,7 @@
   "slug": "studio-video",
   "version": "1.0.0",
   "shelf": "originals",
-  "category": "Studio",
+  "category": "Creative",
   "tags": ["video", "voiceover", "davinci-resolve", "editing", "images"],
   "requires": ["studio"],
   "license": "MIT",

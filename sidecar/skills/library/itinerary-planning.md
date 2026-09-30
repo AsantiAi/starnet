@@ -5,6 +5,7 @@ description: Turn a trip or outing into a verified, day-by-day itinerary with re
 category: Planning
 requires: [dish, cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

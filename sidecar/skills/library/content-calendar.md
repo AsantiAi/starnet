@@ -5,6 +5,7 @@ description: Keep a living publish calendar — what ships where and when, adapt
 category: Marketing
 requires: [notebook, cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

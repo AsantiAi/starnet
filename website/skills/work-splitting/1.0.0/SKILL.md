@@ -4,7 +4,7 @@ description: "Cut a job too big for one agent into genuinely parallel pieces, di
 license: "MIT"
 metadata:
   title: "Work Splitting"
-  category: "Planning"
+  category: "Station"
   author: "StarNet"
   version: "1.0.0"
 ---
@@ -28,4 +28,4 @@ Parallelism is only a win when the pieces do not need each other. Splitting on t
 ## Output
 The split you chose and why those were real seams, who ran what, the merged deliverable, then any piece that failed, came back thin, or conflicted with another.
 
-*Needs the ORCHESTRATOR object (the crew dispatch table).*
+*Needs the ORCHESTRATOR (the crew dispatch table), which every run the Commander starts carries.*

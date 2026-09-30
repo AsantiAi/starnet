@@ -5,6 +5,7 @@ description: Build the narrative a deck has to carry — problem, why now, why y
 category: Planning
 requires: [dish, cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

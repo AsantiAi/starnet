@@ -1411,10 +1411,13 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
           // 48 connectable platforms were rendered on screen and indexed by zero of them ("google" → 0 hits
           // while a Google Workspace card was visible). A search box a user types a platform name into must
           // index the platforms. Locked by test/connectors-ui.test.js.
+          // A hint INSIDE a card is part of that card's row, not a row of its own: matched separately it was marked a
+          // miss and hidden (display:none !important) while its card matched — a pulled skill showed REMOVE with no reason.
           const rows = pane.querySelectorAll('.con-sec-body .set-row, .con-sec-body label.set-row, .con-sec-body .prov-card, .con-sec-body .key-row, .con-sec-body .set-about, .con-sec-body .ms-h, .con-sec-body .perk, .con-sec-body .sk-card, .con-sec-body .mc-hint, .con-sec-body .mc-row, .con-sec-body .ts-row, .con-sec-body .cc-card');
+          const ownRows = Array.from(rows).filter(r => !(r.parentElement && r.parentElement.closest('.cc-card, .sk-card')));
           let hits = 0;
           const headingMatch = sec.label.toLowerCase().includes(q);
-          rows.forEach(r => {
+          ownRows.forEach(r => {
             // `data-search` carries ALIASES that are deliberately not on screen (a Google Workspace card says
             // "Gmail, Calendar, Drive…" in its blurb but never "gdrive"/"g suite"). Searching a name the user
             // actually types must not depend on that name happening to appear in marketing copy.
@@ -3285,21 +3288,22 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     // SKILL MARKET (2026-09-29): the curated StarNet catalog, browsed as the same glass card grid the connectors
     // CATALOG uses. The catalog is fetched when this section loads, never in the background.
     const secMarket =
-      '<p class="set-about"><b>Add skills to your whole crew.</b> StarNet Originals are written and tested by StarNet; community picks are credited to their authors. Installing adds the skill to your SKILL LIBRARY and switches it on.</p>' +
+      '<p class="set-about"><b>Add skills to your whole crew.</b> StarNet Originals are written by StarNet for your station; community picks are credited to their authors. Installing adds the skill to your SKILL LIBRARY and switches it on.</p>' +
       '<div class="cc-filters" id="skm-filters" role="group" aria-label="Filter the skill market">' +
         '<button type="button" class="cc-filter active" data-skm-filter="all" aria-pressed="true">ALL</button>' +
         '<button type="button" class="cc-filter" data-skm-filter="originals" aria-pressed="false">STARNET ORIGINALS</button>' +
         '<button type="button" class="cc-filter" data-skm-filter="community" aria-pressed="false">COMMUNITY</button>' +
-        '<button type="button" class="cc-filter cc-f-on" data-skm-filter="installed" aria-pressed="false">INSTALLED</button>' +
+        '<button type="button" class="cc-filter" data-skm-filter="installed" aria-pressed="false">INSTALLED</button>' +
         '<button type="button" class="cc-filter" data-skm-filter="update" aria-pressed="false">UPDATES</button>' +
       '</div>' +
-      '<div id="skm-list" class="cc-list"><span class="loading pulse">loading the skill market…</span></div>' +
-      '<div id="skm-msg" class="msg" role="status" aria-live="polite"></div>';
+      // the result of the last install/remove, read out once — the card itself also shows it next to its button
+      '<div id="skm-msg" class="sr-only" role="status" aria-live="polite"></div>' +
+      '<div id="skm-list" class="cc-list"><span class="loading pulse">loading the skill market…</span></div>';
 
     const frag = html => (el => { el.innerHTML = html; });
     const sections = [
       { id: 'market', label: 'SKILL MARKET', glyph: '▦', desc: 'Browse StarNet Originals and credited community skills, and install one for the whole crew in one click.', build: frag(secMarket) },
-      { id: 'library', label: 'SKILL LIBRARY', glyph: '▤', desc: 'Pre-installed procedures your agents follow when a task matches, grouped by kind.', build: frag(secLibrary) },
+      { id: 'library', label: 'SKILL LIBRARY', glyph: '▤', desc: 'The procedures your agents follow when a task matches: the ones built into StarNet and the ones you installed from the market.', build: frag(secLibrary) },
       { id: 'agent', label: 'AGENT SKILLS', glyph: '✎', desc: 'Procedures this agent created or learned itself.', build: frag(secAgent) },
       { id: 'exchange', label: 'SKILL EXCHANGE', glyph: '⇩', desc: 'Inspect and install open SKILL.md procedures with provenance and guard review.', build: frag(secExchange) }
     ];
@@ -3319,8 +3323,15 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
      so the two catalogs look and behave the same, search included). Every status a card shows comes from the
      sidecar's /api/skill-market listing: available, installed, built in (our bundled copy IS the published
      version), update, or tampered (its files changed on disk, so agents are not given it). */
-  const SKM_GEAR = { cabinet: 'FILE CABINET', dish: 'DISH', workbench: 'WORKBENCH', notebook: 'NOTEBOOK', studio: 'STUDIO', orchestrator: 'LEAD CONSOLE', computer: 'COMPUTER' };
+  // gear is named with the REFIT palette's own labels (SK_OBJ_NAME, shared with SKILL LIBRARY), so a card never
+  // names an object the Commander can't find
+  const skmGear = g => SK_OBJ_NAME[g] || String(g).toUpperCase();
   let skmFilter = 'all';
+  const skmBusy = new Map();   // slug -> 'install' | 'uninstall' while a request is in flight (survives re-renders)
+  let skmResult = null;        // { slug, text, ok } — the last install/remove result, shown on that card
+  let skmFocus = '';           // slug whose action button takes focus after the next render
+  // tell the rest of the app the station's skills changed (the chat's "/" palette re-reads its list)
+  const skillsChanged = () => { try { window.dispatchEvent(new CustomEvent('starnet:skills-changed')); } catch (_) {} };
   // the gear a skill can use for this agent — the SAME reading loadSkillLibrary makes (room objects, shared station
   // gear, profile / Full Access grants from /api/toolsets), so a market card never calls gear "missing" that the
   // library would count as present
@@ -3331,45 +3342,83 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     let granted = [];
     try {
       const view = await Harness.api.get('/api/toolsets?agent=' + encodeURIComponent(agentId) + '&placed=' + encodeURIComponent(placed.join(',')));
-      if (view && view.authority && Array.isArray(view.toolsets)) granted = view.toolsets.filter(r => r.object && (r.placed || r.profileGranted || view.authority.unrestricted)).map(r => r.object);
+      if (view && view.authority && Array.isArray(view.toolsets)) granted = view.toolsets.filter(r => r.object && (r.placed || r.profileGranted || r.runtimeGranted || view.authority.unrestricted)).map(r => r.object);
     } catch (_) {}
     return [...new Set(placed.concat(shared, granted))];
   }
   function skmCard(e, i) {
-    const on = e.status === 'installed';
-    const gear = (e.missingGear || []).map(g => SKM_GEAR[g] || g.toUpperCase());
+    const on = e.status === 'installed' && !e.superseded;
+    const missing = (e.missingGear || []);
+    const gear = missing.map(skmGear);
+    const slug = esc(e.slug);
     const origin = e.shelf === 'originals'
       ? '<span class="cc-badge cc-official">STARNET ORIGINAL</span>'
       : '<span class="cc-badge cc-community">community · ' + esc(e.author || 'credited') + '</span>';
-    let action, hint;
-    if (e.status === 'installed') { action = '<button class="bb xs" data-skm-act="uninstall" data-slug="' + esc(e.slug) + '">REMOVE</button>'; hint = 'Installed · v' + esc(e.version) + (gear.length ? ' · needs ' + esc(gear.join(', ')) + ' placed to be used' : ''); }
-    else if (e.status === 'bundled') { action = '<button class="bb xs" disabled>BUILT IN</button>'; hint = 'Built into StarNet and up to date (v' + esc(e.version) + '). Switch it on or off in SKILL LIBRARY.'; }
-    else if (e.status === 'update') { action = '<button class="bb xs" data-skm-act="install" data-slug="' + esc(e.slug) + '">UPDATE</button>'; hint = (e.installedVersion ? 'v' + esc(e.installedVersion) + ' → ' : 'A newer version than your built-in copy: ') + 'v' + esc(e.version); }
-    else if (e.status === 'tampered') { action = '<button class="bb xs" data-skm-act="install" data-slug="' + esc(e.slug) + '">REINSTALL</button>'; hint = 'Its files changed on disk after install, so agents are not given it. Reinstall to restore it.'; }
-    else if (e.status === 'pulled') { action = '<button class="bb xs" data-skm-act="uninstall" data-slug="' + esc(e.slug) + '">REMOVE</button>'; hint = 'PULLED from the market: ' + esc(e.pulledReason || 'no reason given') + '. It is switched off and agents are not given it.'; }
-    else { action = '<button class="bb sm" data-skm-act="install" data-slug="' + esc(e.slug) + '">+ INSTALL</button>'; hint = gear.length ? 'Needs ' + esc(gear.join(', ')) + ' placed to be used.' : 'Ready to use as soon as it is installed.'; }
+    const btn = (act, text, cls) => {
+      const busy = skmBusy.get(e.slug);
+      return busy ? '<button class="bb ' + (cls || 'xs') + '" disabled>' + (busy === 'install' ? 'INSTALLING…' : 'REMOVING…') + '</button>'
+        : '<button class="bb ' + (cls || 'xs') + '" data-skm-act="' + act + '" data-slug="' + slug + '">' + text + '</button>';
+    };
+    const needs = gear.length ? ' Needs ' + esc(gear.join(', ')) + ' placed to be used.' : '';
+    let action, hint, warn = false;
+    if (e.status === 'installed' && e.superseded) {
+      action = btn('uninstall', 'REMOVE');
+      hint = 'Your built-in copy (v' + esc(e.builtInVersion) + ') is newer, so it is the one agents use. REMOVE clears this older market copy (v' + esc(e.installedVersion) + ').';
+    } else if (e.status === 'installed') {
+      action = btn('uninstall', 'REMOVE'); hint = 'Installed · v' + esc(e.installedVersion || e.version) + '.' + needs;
+    } else if (e.status === 'bundled') {
+      action = '<span class="cc-badge cc-official">BUILT IN</span>';
+      hint = 'Came with StarNet (v' + esc(e.builtInVersion || e.version) + '). Switch it on or off in SKILL LIBRARY.';
+    } else if (e.status === 'update') {
+      action = btn('install', 'UPDATE');
+      hint = e.builtIn && !e.delisted && e.installedVersion === e.builtInVersion
+        ? 'A newer version than the one built into StarNet: v' + esc(e.builtInVersion) + ' → v' + esc(e.version) + '.'
+        : 'v' + esc(e.installedVersion) + ' → v' + esc(e.version) + '.';
+    } else if (e.status === 'tampered') {
+      action = btn('install', 'REINSTALL'); warn = true;
+      hint = 'Its files changed on disk after install, so agents are not given it. Reinstall to restore it.';
+    } else if (e.status === 'pulled') {
+      warn = true;
+      action = (e.fixVersion ? btn('install', 'UPDATE TO v' + esc(e.fixVersion)) + ' ' : '') + btn('uninstall', 'REMOVE');
+      hint = 'PULLED from the market: ' + esc(e.pulledReason || 'no reason given') + '. ' +
+        (e.fallback === 'bundled' ? 'The version you installed is off; agents use your built-in copy instead.'
+          : e.fixVersion ? 'The version you installed is off; v' + esc(e.fixVersion) + ' replaces it.'
+            : 'It is switched off and agents are not given it.');
+    } else {
+      action = btn('install', '+ INSTALL', 'sm');
+      hint = gear.length ? 'Needs ' + esc(gear.join(', ')) + ' placed to be used.' : 'Ready to use as soon as it is installed.';
+    }
+    // gear an installed or installable skill still needs: the SAME → PLACE shortcut SKILL LIBRARY offers. The
+    // ORCHESTRATOR is not a prop — every run the Commander starts carries it (runtimeGranted) — so it never gets one.
+    const placeable = missing.filter(g => g !== 'orchestrator');
+    const place = placeable.length && (e.status === 'available' || e.status === 'installed' || e.status === 'update')
+      ? '<div class="sk-place-row">' + placeable.map(g => '<button class="sk-place" type="button" data-place="' + esc(g) + '" title="Open REFIT to place ' + skArt(skmGear(g)) + esc(skmGear(g)) + '">→ PLACE ' + esc(skmGear(g)) + '</button>').join('') + '</div>' : '';
+    const result = skmResult && skmResult.slug === e.slug
+      ? '<div class="mc-hint skm-result' + (skmResult.ok ? '' : ' skm-result-bad') + '">' + esc(skmResult.text) + '</div>' : '';
     const files = (e.files || []).map(f => '<li><code>' + esc(f.path) + '</code> <span class="dim">' + esc(String(f.bytes)) + ' B</span></li>').join('');
     const upstream = e.upstream && /^https:\/\//.test(String(e.upstream.url || ''))
       ? '<div class="mc-hint">Adapted from <a class="dim" href="' + esc(e.upstream.url) + '" target="_blank" rel="noopener">the original ↗</a> (' + esc(e.upstream.license || e.license) + ')</div>' : '';
     const search = [e.category, e.author, e.shelf === 'originals' ? 'starnet original' : 'community'].concat(e.tags || []).join(' ');
-    return '<div class="cc-card' + (on ? ' cc-on' : '') + '" data-skm="' + esc(e.slug) + '" data-shelf="' + esc(e.shelf) + '" data-status="' + esc(e.status) + '" data-search="' + esc(search) + '" style="--ci:' + (i || 0) + '">' +
+    return '<div class="cc-card' + (on ? ' cc-on' : '') + '" data-skm="' + slug + '" data-shelf="' + esc(e.shelf) + '" data-status="' + esc(e.status) + '" data-installed="' + (e.installedVersion && e.status !== 'available' ? '1' : '') + '" data-search="' + esc(search) + '" style="--ci:' + (i || 0) + '">' +
       '<div class="cc-head"><span class="cc-brand" aria-hidden="true">' + esc(String(e.name || e.slug).slice(0, 2).toUpperCase()) + '</span>' +
         '<div class="cc-identity"><b>' + esc(e.name) + '</b><span class="cc-chip">' + esc(e.category) + '</span></div></div>' +
-      '<div class="cc-blurb dim">' + esc(e.description) + '</div>' +
-      '<details class="cc-details"><summary>Skill details</summary><div class="cc-details-body">' + origin +
-        '<div class="mc-hint">v' + esc(e.version) + ' · ' + esc(e.license || 'no license') + (e.requires && e.requires.length ? ' · uses ' + esc(e.requires.map(g => SKM_GEAR[g] || g).join(', ')) : '') + '</div>' +
+      (e.description ? '<div class="cc-blurb dim">' + esc(e.description) + '</div>' : '') +
+      '<details class="cc-details"><summary aria-label="Details for ' + esc(e.name) + '">Skill details</summary><div class="cc-details-body">' + origin +
+        '<div class="mc-hint">v' + esc(e.version) + ' · ' + esc(e.license || 'no license') + (e.requires && e.requires.length ? ' · uses ' + esc(e.requires.map(skmGear).join(', ')) : '') + '</div>' +
         upstream + (files ? '<ul class="skm-files">' + files + '</ul>' : '') + '</div></details>' +
-      '<div class="mc-hint cc-setup-hint"' + (e.status === 'tampered' || e.status === 'pulled' ? ' style="color:var(--gold)"' : '') + '>' + hint + '</div>' +
+      '<div class="mc-hint cc-setup-hint' + (warn ? ' skm-warn' : '') + '">' + hint + '</div>' + place + result +
       '<div class="cc-acts">' + action + '</div></div>';
   }
+  // INSTALLED = everything this station has (built in or from the market, whatever its state); UPDATES = only the
+  // ones with a newer version waiting. A pulled or tampered skill shows under INSTALLED with its warning.
   function skmApplyFilter(list) {
-    if (!list) return;
+    if (!list || list.dataset.skmOk !== '1') return;   // a failed/refused load has no cards: no filter claims about it
     list.querySelectorAll('.cc-group').forEach(g => {
       let vis = 0;
       g.querySelectorAll('.cc-card').forEach(c => {
         const hit = skmFilter === 'all' ? true
-          : skmFilter === 'installed' ? (c.dataset.status === 'installed' || c.dataset.status === 'bundled' || c.dataset.status === 'pulled')
-          : skmFilter === 'update' ? (c.dataset.status === 'update' || c.dataset.status === 'tampered' || c.dataset.status === 'pulled')
+          : skmFilter === 'installed' ? (c.dataset.installed === '1' || c.dataset.status === 'bundled')
+          : skmFilter === 'update' ? c.dataset.status === 'update'
           : c.dataset.shelf === skmFilter;
         c.hidden = !hit; if (hit) vis++;
       });
@@ -3380,21 +3429,29 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const shown = list.querySelectorAll('.cc-card:not([hidden])').length;
     if (!shown) {
       if (!none) { none = document.createElement('p'); none.className = 'mc-hint cc-nores'; list.appendChild(none); }
-      none.textContent = skmFilter === 'update' ? 'Everything you have is up to date.' : skmFilter === 'installed' ? 'No market skills installed yet.' : 'Nothing on this shelf yet.';
+      none.textContent = skmFilter === 'update' ? 'Everything you have is up to date.' : skmFilter === 'installed' ? 'No skills installed yet.' : 'Nothing on this shelf yet.';
     } else if (none) none.remove();
   }
   function renderSkillMarket(host, d, agentId) {
     if (!d || !d.ok) {
-      const err = String((d && d.error) || 'no answer');
+      host.dataset.skmOk = '';
+      const err = String((d && d.error) || 'no answer').replace(/[.\s]+$/, '');
+      if (/turned off on this station/.test(err)) {
+        host.innerHTML = '<p class="mc-notice"><b>The skill market is turned off</b>This station was started with the market switched off (STARNET_SKILL_MARKET_URL=off). Skills you already installed keep working.</p>';
+        return;
+      }
       // a catalog that failed its signature or serial check was reached but REFUSED — say that, not "couldn't reach"
       const refused = /^the skill market (.+?) was not trusted: (.+)$/.exec(err);
+      // "http 403" / "took too long" come from THIS app talking to its own station, not from the market
+      const local = /^http \d{3}$/i.test(err) ? 'your station didn\'t answer the request (' + err.toUpperCase() + '); reload StarNet and try again'
+        : /took too long/i.test(err) ? 'your station took too long to answer' : '';
       host.innerHTML = (refused
-        ? '<p class="mc-hint" style="color:var(--gold)">StarNet refused the skill market\'s ' + esc(refused[1]) + ': ' + esc(refused[2]) + '. Nothing from it was used, and skills you already installed keep working.</p>'
-        : '<p class="mc-hint">Couldn\'t reach the skill market: ' + esc(err) + '. Skills you already installed keep working.</p>') +
+        ? '<p class="mc-notice"><b>StarNet refused the skill market\'s ' + esc(refused[1]) + '</b>' + esc(refused[2]) + '. Nothing from it was used, and skills you already installed keep working.</p>'
+        : '<p class="mc-hint">' + (local ? 'Couldn\'t load the skill market: ' + esc(local) : 'Couldn\'t reach the skill market: ' + esc(err)) + '. Skills you already installed keep working.</p>') +
         '<button class="bb xs" type="button" data-skm-act="retry">TRY AGAIN</button>';
       return;
     }
-    const shelves = [['originals', 'StarNet Originals', 'Written and tested by StarNet for your station\'s gear and tools.'], ['community', 'Community picks', 'Open skills by other authors, adapted for StarNet and credited.']];
+    const shelves = [['originals', 'StarNet Originals', 'Written by StarNet for your station\'s gear and tools.'], ['community', 'Community picks', 'Open skills by other authors, adapted for StarNet and credited.']];
     const html = shelves.map(([id, label, note]) => {
       const rows = d.entries.filter(e => e.shelf === id);
       if (!rows.length) return '';
@@ -3403,14 +3460,26 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     }).join('');
     const pulled = d.entries.filter(e => e.status === 'pulled');
     const banner = pulled.length
-      ? '<p class="mc-hint skm-pulled" style="color:var(--gold)">' + (pulled.length === 1 ? esc(pulled[0].name) + ' was' : pulled.length + ' skills you installed were') +
-        ' pulled from the market and switched off. Agents are no longer given ' + (pulled.length === 1 ? 'it' : 'them') + '; REMOVE clears ' + (pulled.length === 1 ? 'it' : 'them') + ' from this station.</p>'
+      ? '<p class="mc-notice skm-pulled"><b>' + (pulled.length === 1 ? esc(pulled[0].name) + ' was pulled from the market' : pulled.length + ' of your skills were pulled from the market') + '</b>' +
+        (pulled.length === 1 ? 'It is' : 'They are') + ' switched off; ' + (pulled.length === 1 ? 'its card says' : 'each card says') + ' why and what to do. Find ' + (pulled.length === 1 ? 'it' : 'them') + ' under INSTALLED.</p>'
       : '';
+    host.dataset.skmOk = html ? '1' : '';
     host.innerHTML = html ? banner + html : '<p class="mc-hint">The skill market is empty right now.</p>';
     skmApplyFilter(host);
+    if (skmFocus) {
+      const f = host.querySelector('[data-skm="' + CSS.escape(skmFocus) + '"] .cc-acts button:not([disabled])') || host.querySelector('[data-skm="' + CSS.escape(skmFocus) + '"] .cc-acts');
+      skmFocus = '';
+      if (f && f.focus) { if (!f.matches('button')) f.setAttribute('tabindex', '-1'); f.focus({ preventScroll: false }); }
+    }
   }
   function loadSkillMarket(agentId, refresh) {
     const host = $('#skm-list'); if (!host) return;
+    if (!host.dataset.wired) {
+      // a fresh panel starts on ALL, matching its chips (the filter used to survive a reopen while the chips reset)
+      skmFilter = 'all';
+      const f = $('#skm-filters');
+      if (f) f.querySelectorAll('[data-skm-filter]').forEach(x => { const on = x.dataset.skmFilter === 'all'; x.classList.toggle('active', on); x.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+    }
     skillPlacedTypes(agentId)
       .then(placed => Harness.api.get('/api/skill-market?placed=' + encodeURIComponent(placed.join(',')) + (refresh ? '&refresh=1' : '')))
       .then(d => { if ($('#skm-list') === host) { renderSkillMarket(host, d, agentId); const search = host.closest('.term-body')?.querySelector('.con-search-in'); if (search && search.value.trim()) search.dispatchEvent(new Event('input', { bubbles: true })); } })
@@ -3425,21 +3494,37 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       skmApplyFilter($('#skm-list'));
     });
     host.addEventListener('click', async ev => {
+      const place = ev.target.closest('[data-place]');
+      if (place) { sfx('click'); placeGearForSkill(place.dataset.place, (typeof App !== 'undefined' && App.agentName) ? App.agentName(agentId) : ''); return; }
       const b = ev.target.closest('[data-skm-act]'); if (!b || b.disabled) return;
-      const act = b.dataset.skmAct;
-      if (act === 'retry') { loadSkillMarket(agentId, true); return; }
+      const act = b.dataset.skmAct, slug = b.dataset.slug;
+      if (act === 'retry') { host.innerHTML = '<span class="loading pulse">loading the skill market…</span>'; loadSkillMarket(agentId, true); return; }
+      if (skmBusy.has(slug)) return;
       const msg = $('#skm-msg');
       const card = b.closest('[data-skm]');
-      const name = card ? (card.querySelector('.cc-identity b') || {}).textContent : b.dataset.slug;
-      b.disabled = true; const label = b.textContent; b.textContent = act === 'install' ? 'INSTALLING…' : 'REMOVING…';
+      const name = card ? (card.querySelector('.cc-identity b') || {}).textContent : slug;
+      const verb = b.textContent.trim();   // + INSTALL · UPDATE · UPDATE TO vX · REINSTALL · REMOVE — what the Commander clicked
+      skmBusy.set(slug, act === 'install' ? 'install' : 'uninstall');
+      b.disabled = true; b.textContent = act === 'install' ? 'INSTALLING…' : 'REMOVING…';
       try {
-        const r = await Harness.api.post('/api/skill-market/' + (act === 'install' ? 'install' : 'uninstall'), { slug: b.dataset.slug });
+        const r = await Harness.api.post('/api/skill-market/' + (act === 'install' ? 'install' : 'uninstall'), { slug });
         if (!r.ok || !r.j || r.j.ok === false) throw new Error((r.j && r.j.error) || 'the station refused');
-        if (msg) { msg.className = 'msg ok'; msg.textContent = act === 'install' ? (r.j.action === 'update' ? 'Updated ' : 'Installed ') + name + ' for the whole crew.' : 'Removed ' + name + '.'; }
-        loadSkillMarket(agentId); loadSkillLibrary(agentId);
+        const text = act !== 'install' ? 'Removed ' + name + '.'
+          : /^REINSTALL/.test(verb) ? 'Reinstalled ' + name + '.'
+            : /^UPDATE/.test(verb) ? 'Updated ' + name + ' to v' + (r.j.version || '') + '.'
+              : 'Installed ' + name + ' for the whole crew.';
+        skmResult = { slug, text, ok: true };
+        if (msg) msg.textContent = text;
+        skillsChanged();
       } catch (e) {
-        b.disabled = false; b.textContent = label;
-        if (msg) { msg.className = 'msg'; msg.textContent = (e && e.message) || 'That did not work.'; }
+        const text = String((e && e.message) || 'That did not work').replace(/[.\s]+$/, '') + '.';
+        skmResult = { slug, text, ok: false };
+        if (msg) msg.textContent = text;
+      } finally {
+        // always re-read: even a timed-out request may have finished on the station
+        skmBusy.delete(slug);
+        skmFocus = slug;
+        loadSkillMarket(agentId); loadSkillLibrary(agentId);
       }
     });
   }
@@ -3457,7 +3542,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         // Match runOnce's skill context: room objects plus profile/Full Access projection and shared station gear.
         // This only explains instruction availability; it does not grant any tools or change skill preferences.
         const shared = typeof World !== 'undefined' && World.stationCaps ? World.stationCaps().map(c => c.objectType) : [];
-        placed = [...new Set(placed.concat(shared, view.toolsets.filter(r => r.object && (r.placed || r.profileGranted || view.authority.unrestricted)).map(r => r.object)))];
+        placed = [...new Set(placed.concat(shared, view.toolsets.filter(r => r.object && (r.placed || r.profileGranted || r.runtimeGranted || view.authority.unrestricted)).map(r => r.object)))];
         return fetch('/api/skills?placed=' + encodeURIComponent(placed.join(',')));
       })
       .then(r => { if (!r.ok) throw Error('Skill library unavailable'); return r.json(); })
@@ -3593,7 +3678,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
           '</div>' +
           '<div class="sk-card-actions"><button class="sk-expand" data-expand="' + esc(s.slug) + '" aria-expanded="false" aria-label="Read instructions for ' + esc(s.name) + '">Read instructions</button>' + switchHTML(s) + '</div>' +
           '<div class="sk-body"><div class="sk-detail-label">Required gear</div><div class="sk-reqs">' + reqBadges(s) + '</div><div class="sk-detail-label">Instructions</div><div class="sk-instructions">' + (typeof Deliverables !== 'undefined' && Deliverables.safeMarkdown ? Deliverables.safeMarkdown(s.body || '') : '<pre>' + esc(s.body || '') + '</pre>') + '</div>' +
-            (s.author ? '<div class="sk-attr">Ported from ' + esc(s.author) + (s.license ? ' · ' + esc(s.license) : '') + '</div>' : '') +
+            (s.market ? '<div class="sk-attr">' + (s.shelf === 'originals' ? 'StarNet Original, installed from the Skill Market' : 'From the Skill Market' + (s.author ? ' · by ' + esc(s.author) : '')) + (s.license ? ' · ' + esc(s.license) : '') + '</div>'
+              : s.author ? '<div class="sk-attr">Ported from ' + esc(s.author) + (s.license ? ' · ' + esc(s.license) : '') + '</div>' : '') +
           '</div>' +
         '</div>';
     };
@@ -3608,7 +3694,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       const slug = btn.dataset.toggle, next = btn.dataset.enabled !== 'true';
       btn.classList.add('busy');
       Harness.api.post('/api/skills/toggle', { slug: slug, enabled: next })
-        .then(({ ok, j: res }) => { if (ok && res && res.ok) { sfx('click'); loadSkillLibrary(agentId); } else { btn.classList.remove('busy'); } })
+        .then(({ ok, j: res }) => { if (ok && res && res.ok) { sfx('click'); loadSkillLibrary(agentId); skillsChanged(); } else { btn.classList.remove('busy'); } })
         .catch(() => btn.classList.remove('busy'));
     }));
     host.querySelectorAll('[data-place]').forEach(btn => btn.addEventListener('click', () => {

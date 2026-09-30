@@ -1,6 +1,6 @@
 ---
 name: opportunity-scan
-description: "Hunt monetizable openings matched to the Commander's hand, sized with live demand evidence and ranked honestly."
+description: "Hunt monetizable openings that fit the Commander's skills and resources, sized with live demand evidence and ranked honestly."
 license: "MIT"
 metadata:
   title: "Opportunity Scan"
