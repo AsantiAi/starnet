@@ -368,16 +368,26 @@
     const presetMenu = typeof deps.presetMenu === 'function' ? deps.presetMenu : () => [];
     const kitText = () => { try { return (kitMenu() || []).map(k => k.name + ' (' + k.about + ')').join('; '); } catch (_) { return ''; } };
     const presetText = () => { try { return (presetMenu() || []).join(', '); } catch (_) { return ''; } };
+    const styleMenu = typeof deps.styleMenu === 'function' ? deps.styleMenu : () => [];
+    const styleText = () => { try { return (styleMenu() || []).map(s => s.id + ' (' + s.name + ': ' + s.about + ')').join('; '); } catch (_) { return ''; } };
     const planRoomTool = {
       name: 'station.plan_room', capability: 'orchestrator', scope: 'read', requiresConsent: false,
       get description() {
-        return 'Plan adding a furnished room to the station when the Commander asks (a lounge, a library, a build room, "build me a research station"). '
-          + 'You never place anything yourself: pick a hand-designed room kit, or a preset whose rooms are all added beside the station, and StarNet places every piece, checks it on a copy of the station, and keeps doorways clear. '
-          + 'Fields: kit (one room) OR preset (every room of that preset, added beside the station), replace (true only when the Commander asks to REPLACE or switch their whole station for a preset: it swaps every room, prop and conveyor, backs the old layout up for RESTORE PREVIOUS, and keeps agents and conversations), where ("new room", or an existing room\'s name to furnish it when it has clear floor), name (for a single new room), type (a room type\'s floor: HAB, BRIDGE, LAB, FOUNDRY, QUARTERS, STORAGE), floorStyle, floorMat. '
+        return 'Plan a room the way the Commander describes it ("a new room, the left side cozy, the right side a line that builds and tests code"), or add a furnished room or a preset\'s rooms. '
+          + 'You never place anything yourself: you name what goes in each part of the room and StarNet places every piece and every machine, checks it on a copy of the station, and keeps doorways clear. '
+          + 'ZONES (the usual way): zones is a list of 1 to 4 parts of the room, each { area, style } or { area, line | purpose | shape, name, staff, dailyCap, tries }. '
+          + 'area: left, right, back, front, back-left, back-right, front-left, front-right, or whole (top means back, bottom means front). '
+          + 'style: ' + styleText() + '. '
+          + 'A line zone holds one workflow line: line (an id or plain name from station.plan_line\'s menu), or purpose (the Commander\'s own words; StarNet picks the line), or shape (a custom line: a list of stages in order, each a role like "RESEARCHER", { "together": [roles] }, { "turns": [roles] }, { "sort": { "code": role, "research": role } }, or { "review": true, "tries": 3 }). '
+          + 'staff is a list of { step, agent, instructions } for that line (agent: a crew name, "lead", or "new" to recruit). With zones, also: where ("new room", sized for the zones, or an existing room\'s name to split it), name (a new room\'s name), type, floorStyle, floorMat. '
+          + 'AS DESIGNED: kit (one room) OR preset (every room of that preset, added beside the station), replace (true only when the Commander asks to REPLACE or switch their whole station for a preset: it swaps every room, prop and conveyor, backs the old layout up for RESTORE PREVIOUS, and keeps agents and conversations), where ("new room", or an existing room\'s name to furnish it when it has clear floor), name (for a single new room), type (a room type\'s floor: HAB, BRIDGE, LAB, FOUNDRY, QUARTERS, STORAGE), floorStyle, floorMat. '
           + 'Nothing is built yet: it returns a planId and a plain summary, including any equipment the room brings (a desk is a computer). Tell the Commander the summary, then call station.build with the planId. '
           + 'If it refuses, it says why and lists the valid choices. Requires an open station page with Build mode closed. KITS: ' + kitText() + '. PRESETS: ' + presetText() + '.';
       },
-      schema: { type: 'object', properties: { kit: { type: 'string' }, preset: { type: 'string' }, replace: { type: 'boolean' }, where: { type: 'string' }, name: { type: 'string' }, type: { type: 'string' }, floorStyle: { type: 'string' }, floorMat: { type: 'string' } } },
+      schema: { type: 'object', properties: {
+        zones: { type: 'array', items: { type: 'object', properties: { area: { type: 'string' }, style: { type: 'string' }, line: { type: 'string' }, purpose: { type: 'string' }, shape: { type: 'array' }, name: { type: 'string' },
+          staff: { type: 'array', items: { type: 'object', properties: { step: { type: 'integer' }, role: { type: 'string' }, instructions: { type: 'string' }, agent: { type: 'string' } } } }, dailyCap: {}, tries: { type: 'integer' } } } },
+        kit: { type: 'string' }, preset: { type: 'string' }, replace: { type: 'boolean' }, where: { type: 'string' }, name: { type: 'string' }, type: { type: 'string' }, floorStyle: { type: 'string' }, floorMat: { type: 'string' } } },
       run: async (args) => {
         const out = await ask('station.plan_room', { request: args || {} });
         if (!out.ok) return refuse(out.error);

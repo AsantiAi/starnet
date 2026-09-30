@@ -461,6 +461,198 @@ for (const c of T.catalog) {
   A.ok(!late.ok && /changed since this plan/.test(late.error), 'a plan made before a link was removed is refused');
 }
 
+/* ---- 12. VIBE DESIGN: the Commander describes the room part by part; StarNet places every piece and machine ---- */
+{
+  const RS = require('../frontend/app/roomstyles.js'), LL = require('../frontend/app/linelayout.js'), LE = require('../frontend/app/lineedit.js');
+  // the page's catalog is the REMASTERED one (a desk is 3 tiles, not 2): every design runs under both
+  const vm = require('node:vm'), remasterCtx = { module: { exports: {} }, IndustrialTextures: { enabled: () => true, ready: { then: fn => fn() } } };
+  vm.runInNewContext(fs.readFileSync(require.resolve('../frontend/app/propsprites.js'), 'utf8'), remasterCtx);
+  const catalogs = [['classic', Sprites], ['remastered', remasterCtx.module.exports]];
+  const denv = S => Object.assign({}, env, { StationTemplates: T, PropSprites: S, EquipmentHelp: require('../frontend/app/equipmenthelp.js'), RoomStyles: RS, LineLayout: LL, LineEdit: LE });
+  const inside = (p, r) => p.x >= r.x1 && p.y >= r.y1 && p.x + p.w - 1 <= r.x2 && p.y + p.h - 1 <= r.y2;
+  A.ok(remasterCtx.module.exports.spec('desk').w !== Sprites.spec('desk').w, 'fixture: the two catalogs really differ (the desk)');
+
+  // areas, in the Commander's words
+  for (const [w, a] of [['left side', 'left'], ['the right half', 'right'], ['top', 'back'], ['bottom', 'front'], ['back wall', 'back'], ['top right corner', 'back right'], ['bottom-left', 'front left'],
+    ['left back', 'back left'], ['whole room', 'whole'], ['everything', 'whole'], ['front right', 'front right']]) A.eq(SB.areaOf(w), a, '"' + w + '" is ' + a);
+  A.eq([SB.areaOf('ceiling'), SB.areaOf(''), SB.areaOf(null), SB.areaOf('left right')], [null, null, null, null], 'an area that is not one is not guessed');
+
+  for (const [cat, S] of catalogs) {
+    const E = denv(S);
+    // every style, in a half of a new room beside a working line: furnished, reachable, one undo
+    for (const id of RS.ORDER) {
+      const st = busy(), before = snap(st), oldProps = new Set(st.props().map(p => JSON.stringify(p))), was = routed(st);
+      const r = SB.planRoom(st.serialize(), { zones: [{ area: 'left side', style: id }, { area: 'right side', style: 'garden' }] }, E);
+      A.ok(r.ok, cat + ' ' + id + ': a design plans (' + (r.error || '') + ')');
+      if (!r.ok) continue;
+      A.eq(snap(st), before, cat + ' ' + id + ': planning changes nothing');
+      A.ok(new RegExp('^' + id.toUpperCase() + ', a new \\d+ × \\d+ room beside ').test(r.plan.summary) && r.plan.summary.indexOf('the left half, ' + RS.STYLES[id].name + ' (') > 0, cat + ' ' + id + ': the card says where the room goes and what is in each part: ' + r.plan.summary.slice(0, 120));
+      const a = SB.apply(st, r.plan, E);
+      A.ok(a.ok && a.kind === 'design', cat + ' ' + id + ': builds (' + (a.error || '') + ')');
+      if (!a.ok) continue;
+      const room = st.rooms().find(x => x.id === a.roomIds[0]), zl = r.plan.preview.zones[0].rect;
+      const mine = st.props().filter(p => !oldProps.has(JSON.stringify(p)) && st.roomAt(p.x, p.y) === room.id);
+      A.ok(mine.length > 3 && mine.every(p => st.roomAt(p.x, p.y) === room.id), cat + ' ' + id + ': the furniture stands in the new room');
+      const left = mine.filter(p => inside(p, zl));
+      A.eq(r.plan.summary.indexOf('the left half, ' + RS.STYLES[id].name + ' (' + '') > 0, true, cat + ' ' + id + ': named');
+      A.ok(left.length >= 3, cat + ' ' + id + ': its pieces stand in the left half (' + left.length + ')');
+      A.ok([...oldProps].every(p => st.props().some(q => JSON.stringify(q) === p)), cat + ' ' + id + ': nothing already there moved or changed');
+      const now = routed(st);
+      A.ok(Object.keys(was.chains).every(d => JSON.stringify(now.chains[d]) === JSON.stringify(was.chains[d])) && now.errs.length === 0, cat + ' ' + id + ': the existing line routes as before, no routing error');
+      A.ok(st.undo().ok); A.eq(snap(st), before, cat + ' ' + id + ': ONE undo removes the room and everything in it');
+    }
+    // line zones: a shelf line, one picked from the words, and custom shapes of every stage kind, each inside its zone
+    for (const [what, zone, ready] of [
+      ['a shelf line', { line: 'build_test', staff: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'rex' }] }, true],
+      ['a purpose', { purpose: 'fix bugs in my repo and test them', staff: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'lead' }] }, true],
+      ['a chain', { shape: ['RESEARCHER', 'WRITER', 'REVIEWER'], name: 'Newsletter', staff: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'lead' }, { step: 3, agent: 'rex' }] }, true],
+      ['a review loop', { shape: ['WRITER', { review: true, tries: 2 }], dailyCap: 5 }, false],
+      ['a copy branch', { shape: ['RESEARCHER', { together: ['WRITER', 'ANALYST'] }] }, false],
+      ['taking turns', { shape: [{ turns: ['ENGINEER', 'ENGINEER', 'ENGINEER'] }] }, false],
+      ['a sort', { shape: [{ sort: { code: 'ENGINEER', research: 'RESEARCHER' } }, 'WRITER'] }, false],
+    ]) {
+      const st = fresh(), before = snap(st);
+      const r = SB.planRoom(st.serialize(), { zones: [{ area: 'left', style: 'cozy' }, Object.assign({ area: 'right' }, zone)] }, E);
+      A.ok(r.ok, cat + ' ' + what + ': a line zone plans (' + (r.error || '') + ')');
+      if (!r.ok) continue;
+      const a = SB.apply(st, r.plan, E);
+      A.ok(a.ok && a.lines.length === 1, cat + ' ' + what + ': builds (' + (a.error || '') + ')');
+      if (!a.ok) continue;
+      const zr = r.plan.preview.zones[1].rect, machines = st.props().filter(p => /^(intake|bay|outbox|filter|merger|splitter|joiner|loop)$/.test(p.t));
+      A.ok(machines.length >= 3 && machines.every(p => inside(p, zr)), cat + ' ' + what + ': every machine of the line stands in its zone');
+      A.eq(routed(st).errs.length, 0, cat + ' ' + what + ': no routing error');
+      A.eq(a.lines[0].ready, ready, cat + ' ' + what + ': ready exactly when every step is staffed (' + a.lines[0].blocking.join('; ') + ')');
+      A.ok(a.lines[0].blocking.every(b => /needs an agent/.test(b)), cat + ' ' + what + ': nothing but staffing is missing (no false "connect the OUTBOX")');
+      if (zone.dailyCap) A.eq(st.props().find(p => p.t === 'intake').limits.maxUsdPerDay, 5, cat + ' ' + what + ': the daily cap is on its Inbox');
+      A.ok(st.undo().ok); A.eq(snap(st), before, cat + ' ' + what + ': one undo');
+    }
+  }
+  const E = denv(Sprites);
+  // four parts of one room, and a whole-room style
+  {
+    const st = fresh(), before = snap(st);
+    const r = SB.planRoom(st.serialize(), { name: 'Rec deck', zones: [{ area: 'back-left', style: 'cafe' }, { area: 'back-right', style: 'games' }, { area: 'front-left', style: 'lounge' }, { area: 'front-right', style: 'garden' }] }, E);
+    A.ok(r.ok && /^REC DECK, a new/.test(r.plan.summary) && r.plan.preview.zones.length === 4, 'four corners plan into one named room: ' + (r.error || r.plan.summary.slice(0, 100)));
+    const a = SB.apply(st, r.plan, E); A.ok(a.ok); st.undo(); A.eq(snap(st), before, 'one undo');
+    const w = SB.planRoom(st.serialize(), { zones: [{ area: 'whole', style: 'library' }] }, E);
+    A.ok(w.ok && /the whole room, a reading nook/.test(w.plan.summary), 'a whole-room style');
+  }
+  // furnishing an existing room part by part, around what already stands there
+  {
+    const st = fresh(), z = st.rooms()[0].rects[0];
+    A.ok(st.addRoom({ kind: 'hab', name: 'SPARE', rect: { x1: z.x2 + 1, y1: z.y1, x2: z.x2 + 24, y2: z.y1 + 11 } }).ok, 'fixture: an empty spare room');
+    const spareId = st.rooms().find(x => x.name === 'SPARE').id, before = snap(st), rooms = st.rooms().length;
+    const r = SB.planRoom(st.serialize(), { where: 'spare', zones: [{ area: 'left', style: 'desks' }, { area: 'right', style: 'lounge' }] }, E);
+    A.ok(r.ok && /^SPARE \(24 × 12\): the left half, work desks/.test(r.plan.summary), 'an existing room is split down the middle: ' + (r.error || r.plan.summary.slice(0, 90)));
+    A.ok(r.plan.preview.rooms.some(x => x.mine), 'the card lights the room it furnishes');
+    A.ok(SB.apply(st, r.plan, E).ok && st.rooms().length === rooms, 'no new room');
+    A.ok(st.props().filter(p => st.roomAt(p.x, p.y) === spareId).length > 6, 'the spare room is furnished');
+    st.undo(); A.eq(snap(st), before, 'undo');
+    const tight = SB.planRoom(st.serialize(), { where: 'HOME', zones: [{ area: 'back-left', line: 'deep_dive' }] }, E);
+    A.ok(!tight.ok && /^the back-left corner of HOME is \d+ × \d+; Deep dive \+ review needs \d+ × \d+\.$/.test(tight.error), 'a zone too small for its line says both sizes: ' + tight.error);
+    const named = SB.planRoom(st.serialize(), { where: 'spare', name: 'X', zones: [{ area: 'left', style: 'desks' }] }, E);
+    A.ok(!named.ok && /name names a NEW room/.test(named.error), 'an existing room keeps its name');
+  }
+  // the card's drawing: the station, the new room lit, its zones, what will stand there
+  {
+    const st = fresh(), r = SB.planRoom(st.serialize(), { zones: [{ area: 'left', style: 'cozy' }, { area: 'right', line: 'build_test' }] }, E), pv = r.plan.preview;
+    A.ok(pv.rooms.filter(x => x.mine).length === 1 && pv.rooms.length === st.rooms().length + 1, 'the preview holds every room, the new one lit');
+    A.eq(pv.zones.map(z => z.where + ': ' + z.label), ['left half: a cozy corner', 'right half: BUILD + TEST'], 'the preview names each zone');
+    const a = SB.apply(st, r.plan, E), added = st.props().length - M.create(M.starterDoc()).props().length;
+    A.ok(a.ok && pv.props.length > 8 && pv.belts.length > 5, 'the preview holds what will stand there and its belts');
+    A.ok(pv.props.some(p => p.machine) && pv.props.some(p => !p.machine), 'machines and furniture are drawn apart');
+    for (const plan of [SB.plan(fresh().serialize(), { line: 'build_test' }, E), SB.planRoom(fresh().serialize(), { kit: 'LIBRARY' }, E), SB.planRestyle(fresh().serialize(), { room: 'HOME', floorStyle: 'teal' }, E)])
+      A.ok(plan.ok && plan.plan.preview && plan.plan.preview.rooms.some(x => x.mine), 'every kind of plan carries its drawing, its room lit');
+  }
+  // recruiting inside a zone line: listed on the card, seated by the build, one undo for the floor
+  {
+    const st = fresh(), before = snap(st), made = [];
+    const R = Object.assign({}, E, { canRecruit: true, recruit: role => { const id = 'zr' + (made.length + 1); if (!st.ensureWorkstation(id).ok) return null; made.push(id); return { id, name: role }; } });
+    const r = SB.planRoom(st.serialize(), { zones: [{ area: 'left', style: 'desks' }, { area: 'right', line: 'build_test', staff: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'new' }] }] }, R);
+    A.ok(r.ok && /It will be ready to run\. It adds 1 crew member: TESTER, with a desk in HOME\. UNDO does not remove agents/.test(r.plan.summary) && made.length === 0, 'a zone line recruits on the card, nobody yet: ' + (r.error || r.plan.summary.slice(-160)));
+    const a = SB.apply(st, r.plan, R);
+    A.ok(a.ok && a.recruited.length === 1 && a.lines[0].ready, 'the build recruits the Tester and the line is ready');
+    A.ok(st.undo().ok); A.eq(snap(st), before, 'one undo takes back the room, the line, the desk and the seat');
+  }
+  // refusals, in plain words, changing nothing
+  {
+    const st = fresh(), before = snap(st);
+    for (const [req, re] of [
+      [{ zones: [] }, /^zones is a list of 1 to 4 parts of the room/],
+      [{ zones: [{ area: 'left', style: 'cozy' }, { area: 'left side', style: 'lounge' }] }, /the left half overlaps the left half\. Give each part of the room one thing\./],
+      [{ zones: [{ area: 'left', style: 'cozy' }, { area: 'back', style: 'lounge' }] }, /the back half overlaps the left half/],
+      [{ zones: [{ area: 'left', style: 'cozy', line: 'build_test' }] }, /needs exactly one of style, or line \/ purpose \/ shape/],
+      [{ zones: [{ area: 'left' }] }, /needs exactly one of style/],
+      [{ zones: [{ area: 'left', style: 'disco' }] }, /There is no style called "disco"\. Styles: cozy \(a cozy corner:/],
+      [{ zones: [{ area: 'ceiling', style: 'cozy' }] }, /There is no area called "ceiling"\. Areas: left, right, back/],
+      [{ zones: [{ style: 'cozy' }] }, /Each zone needs an area/],
+      [{ zones: [{ area: 'left', style: 'cozy', x: 3 }] }, /A zone only takes: area, style, line/],
+      [{ zones: [{ area: 'left', style: 'cozy', name: 'X' }] }, /belong to a line zone/],
+      [{ zones: [{ area: 'left', style: 'cozy' }], x: 1 }, /not accepted with zones: x/],
+      [{ zones: [{ area: 'left', style: 'cozy' }], kit: 'LIBRARY' }, /Use one or the other/],
+      [{ zones: [1, 2, 3, 4, 5] }, /1 to 4 parts/],
+      [{ zones: [{ area: 'left', line: 'teleporter' }] }, /There is no line called "teleporter"/],
+      [{ zones: [{ area: 'left', purpose: 'help me' }] }, /names no such shape\. Choose a line: .*, or give the zone a shape of its own\./],
+      [{ zones: [{ area: 'left', shape: ['PILOT'] }] }, /"PILOT" is not a step\. shape is a list of 1 to 6 stages/],
+      [{ zones: [{ area: 'left', shape: [{ review: true }] }] }, /A review goes right after one step/],
+      [{ zones: [{ area: 'left', shape: ['WRITER', { together: ['WRITER', 'ANALYST'] }, { review: true }] }] }, /A review goes right after one step/],
+      [{ zones: [{ area: 'left', shape: [{ sort: { code: 'ENGINEER' } }, { together: ['WRITER', 'ANALYST'] }] }] }, /After a sort comes one step/],
+      [{ zones: [{ area: 'left', shape: [{ sort: { design: 'WRITER' } }] }] }, /sort sends "code" and\/or "research" work/],
+      [{ zones: [{ area: 'left', shape: [{ together: ['WRITER'] }] }] }, /together and turns take 2 or 3 roles/],
+      [{ zones: [{ area: 'left', shape: ['WRITER', 'WRITER', 'WRITER', 'WRITER', 'WRITER', 'WRITER', 'WRITER'] }] }, /1 to 6 stages/],
+      [{ zones: [{ area: 'left', shape: ['WRITER', { review: true, tries: 9 }] }] }, /tries must be a whole number from 1 to 5/],
+      [{ zones: [{ area: 'left', line: 'build_test', shape: ['WRITER'] }] }, /not both/],
+      [{ zones: [{ area: 'left', line: 'build_test', staff: [{ step: 1, agent: 'ghost' }] }] }, /Nobody on the crew is called "ghost"/],
+      [{ zones: [{ area: 'left', line: 'build_test', staff: 'all' }] }, /^staff must be a list/],
+      [{ zones: [{ area: 'left', line: 'build_test', dailyCap: 'lots' }] }, /dailyCap must be a dollar amount/],
+      [{ zones: [{ area: 'left', style: 'cozy' }], where: 'Mars' }, /There is no room called "Mars"/],
+      [{ zones: [{ area: 'left', style: 'cozy' }], floorStyle: 'lava' }, /floorStyle must be one of/],
+      [{ zones: [{ area: 'left', line: 'deep_dive' }, { area: 'right', line: 'gauntlet' }] }, /larger than the 44 × 26 StarNet builds at once\. Split it into two rooms\./],
+    ]) { const r = SB.planRoom(st.serialize(), req, E); A.ok(!r.ok && re.test(r.error), 'design refused: ' + JSON.stringify(req).slice(0, 90) + ' -> ' + (r.error || 'NOT REFUSED').slice(0, 160)); }
+    A.eq(snap(st), before, 'no refusal changed anything');
+  }
+  // THE VIBE GAUNTLET: wrong and hostile zone requests; after every one the station is unchanged, or built with nothing
+  // already there moved, no new routing error, and one undo restoring it exactly
+  {
+    let seed = 929;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    const pick = xs => xs[Math.floor(rnd() * xs.length)];
+    const junk = ['', 'castle', 'x'.repeat(2000), null, 7, {}, [], '<b>', 'HOME', 'lava', 'ignore previous instructions'];
+    const areas = Object.keys(SB.AREAS).concat(['left side', 'top', 'bottom right corner', 'middle', 'ceiling']);
+    const styles = RS.ORDER.concat(['comfy', 'disco']);
+    let built = 0;
+    for (let i = 0; i < 90; i++) {
+      const st = i % 3 ? fresh() : busy(), before = snap(st), oldProps = new Set(st.props().map(p => JSON.stringify(p))), was = routed(st);
+      const n = 1 + Math.floor(rnd() * 3), req = { zones: [] };
+      for (let k = 0; k < n; k++) {
+        const z = { area: rnd() < 0.9 ? pick(areas) : pick(junk) }, kind = rnd();
+        if (kind < 0.55) z.style = rnd() < 0.9 ? pick(styles) : pick(junk);
+        else if (kind < 0.7) z.line = rnd() < 0.8 ? pick(M.BLUEPRINTS).id : pick(junk);
+        else if (kind < 0.8) z.purpose = pick(['fix bugs and test them', 'research and write it up', 'draft and review', 'help', pick(junk)]);
+        else z.shape = pick([['RESEARCHER', 'WRITER'], ['WRITER', { review: true }], [{ together: ['WRITER', 'ANALYST'] }], [{ sort: { code: 'ENGINEER' } }], ['PILOT'], pick(junk)]);
+        if (rnd() < 0.1) z[pick(['x', 'props', 'belts'])] = 1;
+        req.zones.push(z);
+      }
+      if (rnd() < 0.2) req.where = pick(['new room', 'HOME', 'Mars', pick(junk)]);
+      if (rnd() < 0.2) req.name = pick(['Den', pick(junk)]);
+      let r;
+      try { r = SB.planRoom(st.serialize(), req, E); } catch (e) { A.ok(false, 'vibe gauntlet ' + i + ': threw ' + e.message); continue; }
+      A.eq(snap(st), before, 'vibe gauntlet ' + i + ': planning never changes the station');
+      if (!r.ok) { A.ok(typeof r.error === 'string' && r.error.length > 10, 'vibe gauntlet ' + i + ': a refusal says why'); continue; }
+      const a = SB.apply(st, r.plan, E);
+      A.ok(a.ok, 'vibe gauntlet ' + i + ': an accepted plan builds (' + (a.error || '') + ')');
+      if (!a.ok) continue;
+      built++;
+      const keep = new Set(st.props().map(p => JSON.stringify(p)));
+      A.ok([...oldProps].every(p => keep.has(p)), 'vibe gauntlet ' + i + ': nothing already there moved or changed');
+      const now = routed(st);
+      A.ok(Object.keys(was.chains).every(d => JSON.stringify(now.chains[d]) === JSON.stringify(was.chains[d])), 'vibe gauntlet ' + i + ': every existing line routes as before');
+      A.ok(st.undo().ok); A.eq(snap(st), before, 'vibe gauntlet ' + i + ': one undo restores the station exactly');
+    }
+    A.ok(built > 15, 'the vibe gauntlet built some (' + built + ')');
+  }
+}
+
 /* ---- 9. the sidecar tools: the memo the approval card reads, the lock, honest refusals ---- */
 (async () => {
   const calls = [], used = new Set();   // the page uses a plan once (builderPlans.delete)
@@ -490,7 +682,9 @@ for (const c of T.catalog) {
   // the sidecar's approval card reads the memo, never the model's words
   const idx = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
   A.ok(/if \(\/\^station\[\._\]build\$\/\.test\(String\(call && call\.name \|\| ''\)\)\) return stationPlanSummary\(stationPlanMemo, a\.planId\)/.test(idx), 'consentSummary reads the station.build card from the plan memo');
-  A.ok(/The floor changes you can make are ADDING a ready-made line \(station\.plan_line\), ADDING a furnished room/.test(idx), 'the lead\'s team note names the floor changes it may make');
+  A.ok(/The floor changes you can make are ADDING a ready-made line \(station\.plan_line\), ADDING a room the Commander describes part by part \(station\.plan_room with zones/.test(idx), 'the lead\'s team note names the floor changes it may make');
+  const vibe = makeStationTools({ station: bridge, styleMenu: () => require('../frontend/app/roomstyles.js').menu() }).planRoomTool;
+  A.ok(/ZONES \(the usual way\)/.test(vibe.description) && /style: cozy \(a cozy corner: /.test(vibe.description) && vibe.schema.properties.zones.type === 'array', 'the room tool leads with zones and lists every style');
   A.eq([tools.planRoomTool.scope, tools.planRoomTool.requiresConsent, tools.planRestyleTool.scope, tools.planRestyleTool.requiresConsent], ['read', false, 'read', false], 'the room and restyle plans change nothing');
   A.ok(/Build exactly what a station\.plan_line, station\.plan_room or station\.plan_restyle call planned/.test(buildT.description), 'one build tool builds any plan');
   const rp = await tools.planRoomTool.run({ kit: 'LIBRARY' }, {});

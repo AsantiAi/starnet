@@ -366,6 +366,12 @@ const StationCommands = (() => {
     builderPlans.set(planId, { plan: r.plan, at: now });
     return { planId, plan: r.plan };
   }
+  // the card's drawing for a build card: the newest parked plan with that summary (the card shows the plan's own words)
+  function previewFor(summary) {
+    let best = null;
+    for (const e of builderPlans.values()) if (e.plan && e.plan.summary === summary && e.plan.preview && Date.now() - e.at <= PLAN_TTL_MS && (!best || e.at >= best.at)) best = e;
+    return best ? best.plan.preview : null;
+  }
   function builderReady() {
     const st = typeof App !== 'undefined' && App.station ? App.station() : null;
     if (!st || !st.serialize || !st.transact || !st.roomSpots) throw new Error('the station is not ready yet');
@@ -375,6 +381,8 @@ const StationCommands = (() => {
     const crew = (App.agents ? App.agents() : []).map(x => ({ id: x.id, name: x.name }));
     return { st, env: { WorldModel, Pipeline, WorkflowLine, crew, heroId: App.heroId ? App.heroId() : null,
       StationTemplates: typeof StationTemplates !== 'undefined' ? StationTemplates : null, PropSprites: typeof PropSprites !== 'undefined' ? PropSprites : null,
+      // vibe design: the zone styles, and the Workflow panel's own layout engine and graph edits for a zone's line
+      RoomStyles: typeof RoomStyles !== 'undefined' ? RoomStyles : null, LineLayout: typeof LineLayout !== 'undefined' ? LineLayout : null, LineEdit: typeof LineEdit !== 'undefined' ? LineEdit : null,
       EquipmentHelp: typeof EquipmentHelp !== 'undefined' ? EquipmentHelp : null,
       // a step marked "new" recruits that role's specialist exactly as the setup guide's RECRUIT does (Build.summonForRole: its desk comes with it)
       canRecruit: typeof Build !== 'undefined' && typeof Build.summonForRole === 'function' && !!App.summonAgent,
@@ -410,7 +418,7 @@ const StationCommands = (() => {
     'station.plan_room': (a) => {
       const { st, env } = builderReady();
       const p = park(StationBuilder.planRoom(st.serialize(), (a && a.request) || {}, env));
-      return { planId: p.planId, summary: p.plan.summary, rooms: p.plan.rooms, steps: p.plan.steps, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
+      return { planId: p.planId, summary: p.plan.summary, rooms: p.plan.rooms, lines: p.plan.lines, steps: p.plan.steps, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
     },
     // the one cosmetic change: a room's floor, material or name
     'station.plan_restyle': (a) => {
@@ -766,7 +774,7 @@ const StationCommands = (() => {
     });
   }
 
-  return { init, run, reconcile, verbs: () => Object.keys(VERBS) };
+  return { init, run, reconcile, previewFor, verbs: () => Object.keys(VERBS) };
 })();
 
 document.addEventListener('DOMContentLoaded', () => StationCommands.init());
