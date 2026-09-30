@@ -64,6 +64,7 @@ A.ok(/if \(o\.streamId\) runStartExtra\.streamId = String\(o\.streamId\);/.test(
 }
 const html = fnBody(build, '  function finSampleHTML(v) {');
 A.ok(/if \(v\.stopped\) return '<div class="fl-result stopped"><div><span class="fl-result-k">STOPPED<\/span>/.test(html), 'the readout says STOPPED (not REFUSED), with RAN and COST');
+A.ok(/replace\(\/\^stopped\\s\*\[—-\]\\s\*\/i, ''\)/.test(html), '…without saying "stopped" twice (the server\'s "stopped — " lead is the label\'s job)');
 const stopHost = fnBody(build, '  function finStopSample() {');
 A.ok(/fetch\(finApi\('\/api\/routing\/sample\/stop'\), \{ method: 'POST'/.test(stopHost) && /finSampleRes\.phase !== 'run'/.test(stopHost), 'the host stops only a job that is riding the line, through the sidecar route');
 A.ok(/finSampleRes\.stopping = true;/.test(stopHost) && /undo\(/.test(stopHost), '…says STOPPING… until the POST settles, and takes that back if the stop was refused');
