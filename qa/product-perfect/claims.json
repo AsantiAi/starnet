@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "2827f15b4f2c076dbb6c5bedb0c04a29f095ad68",
+    "sourceCommit": "6cd168f9c928ff8f3bc90c82d0999360a1c695e1",
     "pathSetSha256": "c6f7049e734305ed1e41a2f49eb76bb4df3c1d009c1bc413a312a1394bb5326b",
     "files": [
       {
@@ -43,8 +43,8 @@
       },
       {
         "path": "TERMS.md",
-        "bytes": 5309,
-        "sha256": "4ec233df27b6781838559005fcef2e7a214e21431b9cd0ef0cb5768a78eee24c"
+        "bytes": 5602,
+        "sha256": "190867dde79e12d400af4b62c489640077e1ae2d69cae4ec0e2fe1dde3946fc1"
       },
       {
         "path": "docs/DOWNLOAD_PAGE.md",
@@ -658,8 +658,8 @@
       },
       {
         "path": "frontend/app/modeldock.js",
-        "bytes": 48449,
-        "sha256": "c63fc82e11fd656fdf5d94b7359944591d00691ec89fcebad3ff5ba86ea6c936"
+        "bytes": 51721,
+        "sha256": "7d92920fe4639683b3533b5ab569959a5dd34947b8b1f1f4c6abb2d91f130fef"
       },
       {
         "path": "frontend/app/modelpicker.js",
@@ -1418,8 +1418,8 @@
       },
       {
         "path": "frontend/css/app.css",
-        "bytes": 406348,
-        "sha256": "dd33e55d6a68aec8038f0e8b3a0d29c3d75d2bbf9743fc1d32c45103702a3817"
+        "bytes": 407152,
+        "sha256": "6c40b8aa4729ccf6a0eb829502eb7e46b1a1fd42863ed51fb7583aa90a8c8811"
       },
       {
         "path": "frontend/css/asciifx.css",
@@ -1458,8 +1458,8 @@
       },
       {
         "path": "frontend/css/glass-comms.css",
-        "bytes": 24916,
-        "sha256": "b7cec05b4d62e5b985b4d086217ffa2a3b33d5c76510abb92b3c2666bdb53650"
+        "bytes": 25241,
+        "sha256": "c121f4d4bbceaa61d90fcb5d5e4da4df1500b19a4a646f9af18d7d8cde1056e7"
       },
       {
         "path": "frontend/css/glass-demo.css",
