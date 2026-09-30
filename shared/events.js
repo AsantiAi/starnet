@@ -260,6 +260,16 @@
        that only the page can do — open a session, switch agent, delegate. `id` correlates the page's reply on
        POST /api/station/ack. Carries no result: this is the REQUEST half only. */
     'station.command': obj(['id', 'verb'], { id: str, verb: str, args: any }),
+    // ADDITIVE (STEP-IN, 2026-09-29): a browser HANDOFF changed state — the agent paused on a login/2FA/CAPTCHA and
+    // asked the Commander to take its live browser (sidecar/browser-handoff.js). State-carrying and replayable: the
+    // station renders exactly this record. `id` is the handoff's OWN id (never a consent promptId). `where` is
+    // host + path only (no query string). Rides the station SSE bridge, not the /api/run socket.
+    'browser.handoff': obj(['id', 'agentId', 'runId', 'state'], {
+      id: str, agentId: str, runId: str,
+      state: { enum: ['waiting', 'taken', 'returned', 'cancelled', 'expired', 'aborted'] },
+      reason: { enum: ['login', '2fa', 'captcha', 'payment', 'other'] }, note: str, host: str, where: str, title: str,
+      remembered: bool, requestedAt: num, takenAt: any, endedAt: any, expiresAt: num
+    }),
 
     // ---- reserved (P3 mutation API) ----
     'worldChange': obj(['seq'], { seq: int, dirtyTiles: { type: 'array' } }),

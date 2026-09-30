@@ -22,6 +22,7 @@
   const { swallow } = require('../../failopen.js');
   const Challenge = require('./browserchallenge.js');
   const { deriveReadClient } = require('./browser-workflow.js');
+  const HandoffReasons = require('../../browser-handoff.js').REASONS.slice();   // STEP-IN: browser.need_human's closed reason list
   // UNTRUSTED-CONTENT FENCE (2026-07-25): page text, snapshots, console rows and dialog messages are all
   // authored by the SITE, not the Commander. web_* has fenced since the web lane; these reads did not, so
   // the most direct "read a hostile page" path arrived raw. Same marker pair as web — one model contract.
@@ -1893,12 +1894,21 @@
       return parts.join('').trim();
     }
     async function challengeStatus() {
-      const pageState = await evalJS(`(() => ({
-        title: String(document.title || '').slice(0, 300),
-        text: String(document.body && (document.body.innerText || document.body.textContent) || '').trim().slice(0, 1200)
-      }))()`);
+      // password/otp: does a VISIBLE sign-in or one-time-code field sit on this page? (STEP-IN hint only — booleans,
+      // never a field value.)
+      const pageState = await evalJS(`(() => {
+        const vis = el => { try { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; } catch (e) { return false; } };
+        const any = sel => { try { return Array.prototype.some.call(document.querySelectorAll(sel), vis); } catch (e) { return false; } };
+        return {
+          title: String(document.title || '').slice(0, 300),
+          text: String(document.body && (document.body.innerText || document.body.textContent) || '').trim().slice(0, 1200),
+          password: any('input[type=password]'),
+          otp: any('input[autocomplete="one-time-code"],input[name*="otp" i],input[id*="otp" i],input[name*="totp" i],input[name*="2fa" i]')
+        };
+      })()`);
       const detected = Challenge.detectChallenge(pageState || {});
-      return Object.assign({ title: pageState && pageState.title || '' }, detected);
+      const auth = Challenge.detectAuthWall(pageState || {});
+      return Object.assign({ title: pageState && pageState.title || '', authWall: auth.wall, authSignal: auth.signal }, detected);
     }
     async function readConsoleLog() {
       const c = await page();
@@ -1988,6 +1998,97 @@
       const r = await c.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
       return r.data || '';
     }
+    /* STEP-IN SURFACE (2026-09-29). While the Commander holds the wheel, THIS browser — same process, same page,
+       same profile — is streamed into a docked station window and driven by the Commander's own pointer and keys.
+       Frames go to the handoff host (sidecar/browser-handoff.js) and from there only to the station page; nothing
+       here ever returns page pixels or keystrokes to a tool result. Input is CDP Input.* on the page session, the
+       same synthetic path browser.test_input uses: it never touches the operating system's real cursor or keyboard.
+
+       WHY A CAPTURE LOOP AND NOT Page.startScreencast (measured 2026-09-29): in headless=new the screencast mixes
+       frames of the EMULATED 1440x900 viewport with frames of the hidden window's real content area (1424x749),
+       each labelled with its own size — so a click mapped off one frame lands somewhere else on the next.
+       Page.captureScreenshot always renders the emulated viewport, i.e. the exact CSS space Input.* coordinates
+       live in. The loop is fast right after the Commander acts and backs off when the page is still, and an
+       unchanged picture is never re-sent. */
+    const CAST_FAST_MS = 140, CAST_IDLE_MS = 700, CAST_IDLE_AFTER = 12;
+    let castOn = false, castHandler = null, castGen = 0, castKick = null, castSame = 0;
+    async function castSize(c) {
+      try {
+        const m = await c.send('Page.getLayoutMetrics', {});
+        const v = (m && (m.cssVisualViewport || m.visualViewport)) || {};
+        if (v.clientWidth > 0 && v.clientHeight > 0) return { width: Math.round(v.clientWidth), height: Math.round(v.clientHeight) };
+      } catch (e) { swallow('stepin.castSize')(e); }
+      return { width: stationMetrics.width, height: stationMetrics.height };
+    }
+    async function streamStart(onFrame) {
+      const c = await page();
+      castHandler = typeof onFrame === 'function' ? onFrame : null;
+      castOn = true; castSame = 0;
+      const gen = ++castGen;
+      let last = '';
+      // the first frame is taken before we return, so the window never opens on a blank screen
+      const shoot = async () => {
+        const size = await castSize(c);
+        const r = await c.send('Page.captureScreenshot', { format: 'jpeg', quality: 72, captureBeyondViewport: false });
+        if (!r || !r.data || !castOn || gen !== castGen) return;
+        if (r.data === last) { castSame++; return; }
+        last = r.data; castSame = 0;
+        try { if (castHandler) castHandler({ data: r.data, mime: 'image/jpeg', width: size.width, height: size.height }); } catch (e) { swallow('stepin.castFrame')(e); }
+      };
+      await shoot();
+      (async () => {
+        while (castOn && gen === castGen) {
+          await new Promise(resolve => { const t = setTimeout(resolve, castSame >= CAST_IDLE_AFTER ? CAST_IDLE_MS : CAST_FAST_MS); castKick = () => { clearTimeout(t); resolve(); }; });
+          castKick = null;
+          if (!castOn || gen !== castGen || !cdp) break;
+          try { await shoot(); } catch (_) { await sleep(CAST_IDLE_MS); }
+        }
+      })();
+      return true;
+    }
+    async function streamStop() {
+      castOn = false; castHandler = null; castGen++;
+      if (castKick) { try { castKick(); } catch (e) { swallow('stepin.castKick')(e); } }
+      return true;
+    }
+    // One sanitized event from the handoff host (browser-handoff.js sanitizeInput owns the vocabulary).
+    async function humanInput(ev) {
+      const c = await page();
+      ev = ev || {};
+      // the Commander just acted: show the result at the fast cadence, starting now
+      castSame = 0;
+      if (castKick && !(ev.type === 'mouse' && ev.action === 'move')) { const k = castKick; castKick = null; setTimeout(k, 60); }
+      if (ev.type === 'mouse') {
+        const type = ev.action === 'move' ? 'mouseMoved' : ev.action === 'down' ? 'mousePressed' : 'mouseReleased';
+        const button = ev.action === 'move' ? (ev.button || 'none') : (ev.button || 'left');
+        const buttons = button === 'left' ? 1 : button === 'right' ? 2 : button === 'middle' ? 4 : 0;
+        await c.send('Input.dispatchMouseEvent', { type, x: ev.x, y: ev.y, button, buttons: ev.action === 'up' ? 0 : buttons, clickCount: ev.clickCount || 0, modifiers: ev.modifiers || 0 });
+        return true;
+      }
+      if (ev.type === 'wheel') {
+        await c.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: ev.x, y: ev.y, deltaX: ev.dx || 0, deltaY: ev.dy || 0, modifiers: ev.modifiers || 0 });
+        return true;
+      }
+      if (ev.type === 'key') {
+        const base = { key: ev.key, code: ev.code, windowsVirtualKeyCode: ev.keyCode || 0, nativeVirtualKeyCode: ev.keyCode || 0, modifiers: ev.modifiers || 0 };
+        if (ev.action === 'up') await c.send('Input.dispatchKeyEvent', Object.assign({ type: 'keyUp' }, base));
+        else if (ev.text) await c.send('Input.dispatchKeyEvent', Object.assign({ type: 'keyDown', text: ev.text, unmodifiedText: ev.text }, base));
+        else await c.send('Input.dispatchKeyEvent', Object.assign({ type: 'rawKeyDown' }, base));
+        return true;
+      }
+      if (ev.type === 'text') { await c.send('Input.insertText', { text: String(ev.text || '') }); return true; }
+      throw new Error('unsupported handoff input');
+    }
+    // Where the page is, for the handoff header and the agent's resume line — browser history, not page script.
+    async function pageInfo() {
+      const c = await page();
+      try {
+        const h = await c.send('Page.getNavigationHistory', {});
+        const cur = h && Array.isArray(h.entries) ? h.entries[h.currentIndex] : null;
+        if (cur) return { url: String(cur.url || ''), title: String(cur.title || '') };
+      } catch (e) { swallow('stepin.pageInfo')(e); }
+      return { url: '', title: '' };
+    }
     async function close() {
       const owned = proc, waitForClose = procClosePromise;
       async function exitedWithin(ms) {
@@ -2020,7 +2121,7 @@
     // actually on the user's screen. Headless mode, or a headless-only binary fallback in
     // a headed request, both read as not visible.
     function visible() { return headed; }
-    return { navigate, snapshot, click, type, press, hover, drag, selectOption, viewport, forward, upload, tabs, waitForTabCount, selectTab, closeTab, inspect, evalPublic, waitFor, pdf, intercept, emulate, usingPersistentProfile: () => !!deps.profileIsPersistent, testInput, testEval, testState, scroll, back, getText, challengeStatus, handleDialog, screenshot, close, consoleLog: readConsoleLog, networkLog: () => netLog.map(r => Object.assign({}, r)), lastDialog: () => dialog, lastResponse: () => lastResponse, visible, headed, headlessFallback: wantHeaded && binIsHeadlessOnly, attachedPort: () => attachedPort, allowLocal, profileDir };
+    return { navigate, snapshot, click, type, press, hover, drag, selectOption, viewport, forward, upload, tabs, waitForTabCount, selectTab, closeTab, inspect, evalPublic, waitFor, pdf, intercept, emulate, usingPersistentProfile: () => !!deps.profileIsPersistent, testInput, testEval, testState, scroll, back, getText, challengeStatus, handleDialog, screenshot, streamStart, streamStop, humanInput, pageInfo, close, consoleLog: readConsoleLog, networkLog: () => netLog.map(r => Object.assign({}, r)), lastDialog: () => dialog, lastResponse: () => lastResponse, visible, headed, headlessFallback: wantHeaded && binIsHeadlessOnly, attachedPort: () => attachedPort, allowLocal, profileDir };
   }
 
   function makeBrowserSession(deps) {
@@ -2540,6 +2641,36 @@
       await relaunch({ headed: false });
       return { status: done ? 'done' : 'unconfirmed', host, url: finalUrl || u.href };
     }
+    /* STEP-IN: hand THIS browser — same process, same page, same profile — to the Commander.
+       handoffSurface() is what the handoff host drives (stream frames out, human input in). It never relaunches:
+       the Commander must land on exactly the page the agent was stuck on, with whatever state it had.
+       freeze()/thaw() bracket the handoff. While frozen the agent's browser tools are refused (makeBrowserTools'
+       wrapper reads frozen()), so the agent cannot snapshot, read text, screenshot or read the console while a
+       human is typing a password into the page. thaw() kills every ref: the human changed the page. */
+    let frozenBy = null;
+    function handoffSurface() {
+      const d = driver;
+      if (!d) throw new Error('no browser page is open — navigate to the page that needs the Commander first');
+      for (const fn of ['streamStart', 'streamStop', 'humanInput', 'pageInfo']) {
+        if (typeof d[fn] !== 'function') throw new Error('this browser cannot be handed to the Commander (driver has no ' + fn + ')');
+      }
+      // A sign-in lasts past this run only on the durable station profile (the leased one) — say which, truthfully.
+      const remembered = !attachedToUserBrowser && (leaseHeld || (typeof d.usingPersistentProfile === 'function' && d.usingPersistentProfile() === true));
+      return {
+        startStream: onFrame => d.streamStart(onFrame),
+        stopStream: () => d.streamStop(),
+        input: ev => d.humanInput(ev),
+        pageInfo: () => d.pageInfo(),
+        remembered
+      };
+    }
+    function freeze(id) { frozenBy = String(id || 'handoff'); }
+    function thaw() {
+      if (frozenBy === null) return;
+      frozenBy = null;
+      version++; navEpoch++;   // the Commander drove the page: refs minted before the handoff point at a page that may be gone
+    }
+    function frozen() { return frozenBy; }
     async function close() {
       try { if (driver && driver.close) await driver.close(); }
       finally { releasePersistent(); }
@@ -2558,7 +2689,7 @@
       const d = driver || null;
       return d && typeof d.attachedPort === 'function' ? d.attachedPort() : null;
     }
-    return { waitForProfile, navigate, snapshot, click, type, press, hover, drag, select: selectOption, viewport, forward, upload, tabs, selectTab, closeTab, inspect, evalPublic, evalAllowed, wait, find, pdf, intercept, emulate, attach, detach, attachedToUser: () => attachedToUserBrowser, testInput, testEval, testState, testSnapshot, scroll, back, getText, challengeStatus, consoleLog, networkLog, dialog, vision, screenshot, login, close, visible, headlessFallback, attachedPort, lastResponse, _internals: { refs, version: () => version, navEpoch: () => navEpoch, localMode: () => localMode, localOrigin: () => localOrigin, leaseHeld: () => leaseHeld } };
+    return { waitForProfile, navigate, snapshot, click, type, press, hover, drag, select: selectOption, viewport, forward, upload, tabs, selectTab, closeTab, inspect, evalPublic, evalAllowed, wait, find, pdf, intercept, emulate, attach, detach, attachedToUser: () => attachedToUserBrowser, testInput, testEval, testState, testSnapshot, scroll, back, getText, challengeStatus, consoleLog, networkLog, dialog, vision, screenshot, login, handoffSurface, freeze, thaw, frozen, close, visible, headlessFallback, attachedPort, lastResponse, _internals: { refs, version: () => version, navEpoch: () => navEpoch, localMode: () => localMode, localOrigin: () => localOrigin, leaseHeld: () => leaseHeld } };
   }
 
   function makeBrowserTools(deps) {
@@ -2623,6 +2754,17 @@
     // ~30s to commit, and the tool budget must sit ABOVE that so the driver's own timeout fires first and
     // gets to run its Page.stopLoading recovery. An outer abort here would strand the stalled navigation.
     const NAV_TOOL_TIMEOUT_MS = 45000;
+    /* STEP-IN hints. A wall or a sign-in form names browser.need_human ONLY when this run can actually hand the
+       browser over (a handoff host is wired) — advertising a door that is not there would be the lie. The hint
+       never decides for the agent: a login box in a page header is not a reason to stop a research task. */
+    const canHandOff = !!(deps.handoff && typeof deps.handoff.request === 'function');
+    function stepInHint(reason) {
+      return canHandOff ? ' STEP-IN: you may not solve this yourself - call browser.need_human {reason:"' + reason + '"} to hand this browser to the Commander, and continue when they hand it back.' : '';
+    }
+    function authHint(status) {
+      if (!canHandOff || !status || !status.authWall) return '';
+      return ' This page shows ' + (status.authSignal || 'a sign-in field') + '. You never type the Commander\'s credentials or codes: if the task needs this account, call browser.need_human {reason:"' + status.authWall + '"} so they can do it in this same browser; otherwise carry on without signing in.';
+    }
     const tools = [
       Object.assign(read('browser.navigate', 'Navigate the AGENT-CONTROLLED browser to a public http(s) URL. HEADLESS in ordinary agent runs: it never opens a window or uses the user\'s input. Private, loopback, intranet, and unsafe redirects remain refused; use browser.test_navigate for a local dev server.', { type: 'object', required: ['url'], properties: navProps },
         async a => {
@@ -2634,7 +2776,7 @@
             try { host = new URL(url).host; } catch (_) {}
             const http = describeResponse(session.lastResponse && session.lastResponse());
             return {
-              content: 'Browser reached a human-verification wall at ' + host + http.text + '. This is not page content. If the Commander is available, use browser.attach for their own Chrome or browser.login when sign-in is required; otherwise report the wall plainly.',
+              content: 'Browser reached a human-verification wall at ' + host + http.text + '. This is not page content. If the Commander is available, use browser.attach for their own Chrome or browser.login when sign-in is required; otherwise report the wall plainly.' + stepInHint('captcha'),
               summary: 'verification wall' + http.summary
             };
           }
@@ -2648,7 +2790,7 @@
           // HONEST STATUS. Without this the agent cannot tell a 403/404 from a page that simply
           // rendered nothing, and will happily read an error page back as the answer.
           const http = describeResponse(session.lastResponse && session.lastResponse());
-          return { content: 'Browser navigated to ' + url + http.text + suffix, summary: 'navigated' + http.summary };
+          return { content: 'Browser navigated to ' + url + http.text + suffix + authHint(challenge), summary: 'navigated' + http.summary };
         }), { timeoutMs: NAV_TOOL_TIMEOUT_MS }),
       testRead('browser.test_navigate', 'Open an agent-owned local dev URL (127.0.0.1/localhost/::1 only) in the HEADLESS CDP browser for UI/game testing. In normal runs serverId must name this agent\'s running shell background server. Physical pointer/keyboard locks are emulated inside the page, so they never reach Windows.', { type: 'object', required: localNavRequired, properties: { url: { type: 'string' }, serverId: { type: 'string' } } },
         async (a, ctx) => {
@@ -2849,7 +2991,7 @@
           const challenge = await session.challengeStatus();
           if (challenge && challenge.challenged) {
             return {
-              content: 'The current page is a human-verification wall, not readable page content. Use browser.attach for the Commander\'s own Chrome or browser.login when sign-in is required; otherwise report the wall plainly.',
+              content: 'The current page is a human-verification wall, not readable page content. Use browser.attach for the Commander\'s own Chrome or browser.login when sign-in is required; otherwise report the wall plainly.' + stepInHint('captcha'),
               summary: 'verification wall'
             };
           }
@@ -2868,6 +3010,53 @@
           if (r.status === 'declined') return { content: 'Commander declined to open a login window for ' + r.host + '. Continue without authentication and say what is blocked.', summary: 'login declined' };
           if (r.status === 'unconfirmed') return { content: 'Login window for ' + r.host + ' closed without a Done confirmation. Any cookies the site set were saved to the station profile; verify with browser.navigate whether you are signed in before relying on it.', summary: 'login unconfirmed' };
           return { content: 'Commander finished logging in at ' + r.host + '. The browser is back in headless research mode. Done is a human confirmation, not authentication proof: use browser.navigate to verify the account and access before continuing.', summary: 'login done' };
+        }
+      },
+      /* STEP-IN (2026-09-29): the agent hands its OWN live browser to the Commander and waits. Scope 'read' is the
+         truth about the agent's effect — it pauses; it changes nothing itself — and it keeps a stuck agent from
+         needing a settled Task Brief just to ask for help. The wait is the handoff host's (own id, 30 minutes,
+         restarted when the Commander takes the wheel), never the consent channel's auto-deny. The tool budget sits
+         above the longest legal handoff (30 min waiting + 30 min held) so the host, not a tool timeout, ends it. */
+      {
+        name: 'browser.need_human', capability: 'web', impact: 'synthetic-browser', scope: 'read', requiresConsent: false, timeoutMs: 61 * 60 * 1000,
+        description: 'STEP-IN: hand your live browser to the Commander when the page needs a human - a sign-in, a 2FA code, a CAPTCHA, a payment confirmation. Your run pauses; the Commander drives THIS same browser from the station, then hands it back and you continue on the page they left. You never see or type their credentials and you never solve CAPTCHAs yourself. Open the page that needs them first. Waits up to 30 minutes.',
+        schema: { type: 'object', required: ['reason', 'note'], properties: {
+          reason: { type: 'string', enum: HandoffReasons },
+          note: { type: 'string', description: 'one plain line for the Commander, e.g. "Sign in to GitHub so I can open the PR"' }
+        } },
+        run: async (a, ctx) => {
+          const host = deps.handoff;
+          if (!host || typeof host.request !== 'function') {
+            return { content: 'STEP-IN is not available in this run, so the Commander cannot take this browser. Report plainly what the page needs from them (sign-in, verification) and what you could not do.', summary: 'no handoff host' };
+          }
+          const surface = session.handoffSurface();
+          const at = await surface.pageInfo();
+          if (!at.url || /^about:/i.test(at.url)) throw new Error('no page is open to hand over - navigate to the page that needs the Commander first');
+          const handle = host.request({ reason: a && a.reason, note: a && a.note, url: at.url, title: at.title, remembered: surface.remembered, surface, signal: ctx && ctx.signal });
+          session.freeze(handle.id);
+          let outcome;
+          try { outcome = await handle.done; }
+          finally { session.thaw(); }
+          if (outcome.state === 'returned') {
+            let now = { url: '', title: '' };
+            try { now = await surface.pageInfo(); } catch (e) { swallow('stepin.handoff.pageInfo')(e); }
+            const kept = surface.remembered
+              ? ' Their sign-in is kept in the station browser profile, so later runs start signed in.'
+              : ' This run uses a temporary browser profile, so the sign-in lasts only for this run.';
+            return {
+              content: 'The Commander finished and handed the browser back (handoff ' + outcome.id + '). It is now at ' + (now.url || 'an unknown page') + '.'
+                + (now.title ? ' ' + fenceExternal('Page title: ' + now.title, 'page title from the controlled browser') : '')
+                + ' Every element ref from before the handoff is gone: take a fresh browser.snapshot (browser.test_snapshot on a local test page) before acting. Handing back is a human confirmation, not proof of authentication - check the page shows the signed-in account.' + kept,
+              summary: 'handed back'
+            };
+          }
+          if (outcome.state === 'cancelled') {
+            return { content: 'The Commander could not complete this step (they pressed CAN\'T DO IT on handoff ' + outcome.id + '). Do not retry the same wall. Take another route, or report exactly what is blocked.', summary: 'human could not' };
+          }
+          if (outcome.state === 'expired') {
+            return { content: 'Nobody took the browser within 30 minutes, so handoff ' + outcome.id + ' expired. Do not try to get around the wall. Report plainly that the page needs the Commander and what you could not finish.', summary: 'handoff expired' };
+          }
+          return { content: 'The run was stopped while waiting on handoff ' + outcome.id + '.', summary: 'handoff ' + outcome.state };
         }
       },
       read('browser.vision', 'Capture the current viewport and answer a question about what is on screen (vision rides the session\'s own model when no dedicated vision key exists — never ask the user for an API key). If no vision route is available this returns a clear "unavailable" result — it never fabricates a description.', { type: 'object', properties: { question: { type: 'string' } } },
@@ -2966,10 +3155,23 @@
     // Reserve before driver creation, within the tool's existing abort/timeout budget. Local test tools
     // and explicit attach/detach retain their separate lifecycle; login keeps its human-consent boundary.
     for (const tool of tools) {
-      if (/^browser\.(test_|attach$|detach$|login$)/.test(tool.name)) continue;
+      if (/^browser\.(test_|attach$|detach$|login$|need_human$)/.test(tool.name)) continue;
       const run = tool.run;
       tool.run = async (args, ctx) => {
         if (typeof session.waitForProfile === 'function') await session.waitForProfile(ctx && ctx.signal);
+        return run(args, ctx);
+      };
+    }
+    /* STEP-IN FROZEN RULE. While the Commander holds this browser (a browser.need_human handoff is live) the agent
+       may not touch it: no snapshot, no get_text, no screenshot/vision, no console, no clicks. A parallel tool call
+       in the same turn as need_human is the real path to this — refuse it BEFORE the tool runs, so nothing is read
+       off a page a human is typing a password into. browser.need_human itself is exempt (it is the wait). */
+    for (const tool of tools) {
+      if (tool.name === 'browser.need_human') continue;
+      const run = tool.run;
+      tool.run = async (args, ctx) => {
+        const held = typeof session.frozen === 'function' ? session.frozen() : null;
+        if (held) throw new Error('FROZEN: the Commander holds this browser (STEP-IN handoff ' + held + '). No browser tool may read or drive the page until they hand it back; browser.need_human returns when they do.');
         return run(args, ctx);
       };
     }
