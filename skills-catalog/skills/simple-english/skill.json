@@ -1,0 +1,15 @@
+{
+  "slug": "simple-english",
+  "version": "1.0.0",
+  "shelf": "community",
+  "category": "Writing",
+  "tags": ["writing", "technical-writing", "documentation", "editing", "plain-language"],
+  "requires": [],
+  "license": "MIT",
+  "authors": ["AminBlg", "Nous Research"],
+  "upstream": {
+    "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/optional-skills/creative/simple-english",
+    "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
+    "license": "MIT"
+  }
+}

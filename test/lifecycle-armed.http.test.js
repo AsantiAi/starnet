@@ -152,7 +152,7 @@ function boot(port, workspaces, attemptsLeft, extraEnv) {
     A.eq(posture.status, 200, 'POST /api/autonomy/posture (initiative:leash) -> 200');
     const nsOn = await j('GET', '/api/lifecycle/armed');
     A.eq(nsOn.body.categories.nightshift.armed, true, 'raised dial: nightshift.armed:true (timer live)');
-    A.ok(nsOn.body.reasons.some(r => /Night shift/i.test(r)), 'a "Night shift armed" reason is surfaced');
+    A.ok(nsOn.body.reasons.some(r => /^Autonomy armed$/.test(r)), 'an "Autonomy armed" reason is surfaced (one word for the away driver)');
     // …then E-STOP. The durable NS halt freezes beats while the timer stays armed — the aggregate must NOT
     // count a frozen shift as armed work. (The same POST also durably halts cron — asserted in the next phase.)
     const halt = await j('POST', '/api/halt', {});

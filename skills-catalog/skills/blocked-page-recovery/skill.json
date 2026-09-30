@@ -1,0 +1,15 @@
+{
+  "slug": "blocked-page-recovery",
+  "version": "1.0.0",
+  "shelf": "community",
+  "category": "Research",
+  "tags": ["research", "archives", "web", "fallback", "citations"],
+  "requires": ["dish"],
+  "license": "MIT",
+  "authors": ["Nous Research"],
+  "upstream": {
+    "url": "https://github.com/NousResearch/hermes-agent/tree/e85706cba780382ef91ba7a38a20ebe95207a795/skills/web/blocked-page-recovery",
+    "commit": "e85706cba780382ef91ba7a38a20ebe95207a795",
+    "license": "MIT"
+  }
+}

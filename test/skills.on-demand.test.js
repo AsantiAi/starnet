@@ -153,9 +153,9 @@ function makeStore() {
 {
   const idx = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
   const once = (needle, label) => A.eq(idx.split(needle).length - 1, 1, label + ' (exactly one occurrence)');
-  once("? (coreNames.indexOf('skill.view') >= 0\n        ? skillsCatalog.composeIndex(SKILL_LIBRARY, recipeOpts)\n        : skillsCatalog.compose(SKILL_LIBRARY, recipeOpts))",
+  once("? (coreNames.indexOf('skill.view') >= 0\n        ? skillsCatalog.composeIndex(skillLibrary(), recipeOpts)\n        : skillsCatalog.compose(skillLibrary(), recipeOpts))",
     'index.js composes the recipe INDEX only when skill.view is advertised on this run, else the bodies stay inline');
-  once('if (isTask) runRecipes = skillsCatalog.live(SKILL_LIBRARY, recipeOpts);', 'the run records exactly the recipes its prompt offered');
+  once('if (isTask) runRecipes = skillsCatalog.live(skillLibrary(), recipeOpts);', 'the run records exactly the recipes its prompt offered');
   once('const recipe = skillsCatalog.find(runRecipes, name);', 'the per-run skill.view resolves recipes against that same list');
   const seam = idx.slice(idx.indexOf('const sRoom = station.rooms'), idx.indexOf('const sRoom = station.rooms') + 2600);
   A.ok(/skillBlock = isTask/.test(seam), 'the recipe block stays gated on isTask (chat diet)');

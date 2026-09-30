@@ -156,6 +156,11 @@ does not itself revoke StarNet's authorization in your Google account. Manage or
 separately through <a href="https://myaccount.google.com/connections" target="_blank" rel="noopener">your Google account's third-party connections</a>.
 Revocation stops future authorized access; it does not erase copies already saved locally or sent to
 a model provider. Delete those separately using the relevant app or provider controls.</p>
+<h3>8. The Skill Market — only when you open it</h3>
+<p>When you open <strong>ABILITIES › SKILL MARKET</strong>, the app downloads the public skill catalog from
+<code>https://starnetos.com/.well-known/starnet-skills.json</code>, and when you install a skill it downloads that
+skill's files from <code>https://starnetos.com/skills/</code>. These are plain <code>GET</code>s for static files:
+<strong>no user data, no identifier and no telemetry are sent.</strong> Nothing is fetched in the background.</p>
 <h2>What StarNet stores on your machine (and how)</h2>
 <p>Everything below lives under your per-user app-data directory (see the paths in "The short
 version" above for Windows/macOS/Linux). It never leaves your machine except as described

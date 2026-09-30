@@ -54,8 +54,12 @@ const QuestStateStore = (() => {
   // (notification diet, 2026-08-18): the sting + gold row flash + broadcast carry the moment; the bell doesn't.
   function celebrate(q) {
     flourish[q.id] = Date.now() + FLOURISH_MS;
-    try { if (typeof SFX === 'object' && SFX.quest) SFX.quest(); } catch (_) {}
+    // A MILESTONE quest is the trophy of the same name (quests.js 'ms:<id>'): the trophy already stung and announced
+    // it, so the quest only flashes in its log (first-hour walk 2026-09-28: QUEST COMPLETE ×3 repeated TROPHY EARNED ×3).
+    const mirrorsTrophy = q && (q.kind === 'milestone' || /^ms:/.test(String(q.id || '')));
+    if (!mirrorsTrophy) { try { if (typeof SFX === 'object' && SFX.quest) SFX.quest(); } catch (_) {} }
     if (typeof StationUI !== 'undefined' && StationUI.rerender) StationUI.rerender('quests', false);   // if the log is open, the row flashes gold NOW (rerender is a no-op when closed)
+    if (mirrorsTrophy) return;
     // COMMS: the terse quest-complete broadcast — an ambient system line, not a beat-slot card (coalesced +
     // in-game-gated inside Chat.broadcast, so it never competes with the post-run ask chain).
     if (typeof Chat !== 'undefined' && Chat.broadcast) {

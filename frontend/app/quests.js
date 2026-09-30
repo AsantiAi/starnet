@@ -114,11 +114,11 @@
     const st = input.station;
     if (st && typeof st === 'object') {
       const arc = [
-        { id: 'st:crew', done: (st.crew || 0) >= 2, title: 'Recruit your first specialist', doing: 'summon a second mind — it takes a station of its own and your lead starts delegating.', reward: 'a crew your lead can point' },
+        { id: 'st:crew', done: (st.crew || 0) >= 2, title: 'Add a second agent', doing: 'summon a second mind — it takes a station of its own and your lead starts delegating.', reward: 'a crew your lead can point' },
         // completes on a LIVE ROUTE (intake → belt → agent-bound bay, the same energized set the floor
         // draws) — never on bare belts-laid, which rewarded a cold dead line and taught the wrong model.
-        { id: 'st:belt', done: (st.liveRoute || 0) >= 1, title: 'Wire work to an agent', doing: 'in REFIT: place an INBOX, drag a BELT (7) to a BAY, and click the bay to assign an agent — the line lights up when the route is complete.', reward: 'a live work route' },
-        { id: 'st:connector', done: (st.connectors || 0) >= 1, title: 'Bind a live tool portal', doing: 'place a connector portal in REFIT and bind a tool server — its powers land in real hands.', reward: 'new real capabilities' }
+        { id: 'st:belt', done: (st.liveRoute || 0) >= 1, title: 'Send work to an agent automatically', doing: 'in REFIT: place an INBOX, drag a BELT (7) to a BAY, and click the bay to assign an agent — the line lights up when the route is complete.', reward: 'a live work route' },
+        { id: 'st:connector', done: (st.connectors || 0) >= 1, title: 'Place your first service portal', doing: 'in REFIT, place a connector portal, then connect a service to it in ABILITIES — its tools land in real hands.', reward: 'new real capabilities' }
       ];
       for (const a of arc) {
         const q = { id: a.id, kind: 'station', title: a.title, desc: a.done ? 'done — it’s live on your floor.' : a.doing, reward: a.reward, status: a.done ? 'done' : 'open' };
