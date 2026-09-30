@@ -507,8 +507,7 @@
     b.type = 'button'; b.id = 'comms-browser'; b.className = 'comms-browser';
     b.innerHTML = icon('globe') + '<span class="cb-lamp" aria-hidden="true"></span>';
     b.addEventListener('click', () => { openFor(lineAgent()); });
-    const add = doc.getElementById('gc-add-agents');
-    if (add && add.parentNode === bar) bar.insertBefore(b, add); else bar.appendChild(b);
+    bar.appendChild(b);   // after the + (add agents): CSS `order` keeps + then globe whichever mounts first
     const sel = doc.getElementById('comms-agent-select');
     if (sel) sel.addEventListener('change', paintDoor);
     paintDoor();

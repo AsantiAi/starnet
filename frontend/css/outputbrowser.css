@@ -72,8 +72,11 @@
 
 .ob-note { flex: none; margin: 0; font-size: 13px; color: var(--ph-dim); min-height: 1em; }
 
-/* THE COMMS DOOR — the ADD AGENTS button's recipe (glass-comms.css #gc-add-agents), icon-only so the header still
-   fits at COMMS's 300px minimum. The lamp is drawn geometry on the corner, lit only on station truth. */
+/* THE COMMS DOOR — the twin of the + (add agents) button (glass-comms.css #gc-add-agents): two icon doors in the
+   header's top right, + then the globe, whichever script mounts first. The lamp is drawn geometry on the corner,
+   lit only on station truth. */
+#chat-panel #gc-add-agents { order: 1; }
+#chat-panel .comms-browser { order: 2; }
 #chat-panel .comms-browser {
   position: relative; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
   width: 28px; min-height: 28px; padding: 4px; margin: 0; cursor: pointer; font: 14px/1 'VT323', monospace;
