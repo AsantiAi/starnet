@@ -7101,7 +7101,9 @@ const Chat = (() => {
       : scope === 'day' ? 'hit the ' + cap + 'daily spend cap'
       : scope === 'global' ? 'hit the ' + cap + 'all-time spend cap'
       : 'hit a spend cap';
-    return what + ' — raise or remove it in MISSION CONTROL → BUDGET';
+    // A per-RUN stop says "raise", never "remove": a StarNet-credit run with PER RUN at 0 still stops at the
+    // managed default (issue #53), so "remove it" would be an instruction that does nothing there.
+    return what + (scope === 'run' ? ' — raise it' : ' — raise or remove it') + ' in MISSION CONTROL → BUDGET';
   }
   // the budget stop's door: open SETTINGS straight on the BUDGET section (the same openTerm(key, section)
   // mechanism friendlyerror's doors use), with retry alongside for after the user has raised the cap.
