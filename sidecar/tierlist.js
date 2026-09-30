@@ -65,7 +65,7 @@ function makeTierList(deps) {
   async function fetchOnce(base) {
     if (!doFetch) throw new Error('no fetch available');
     const ac = new AbortController();
-    const timer = setTimeout(() => { try { ac.abort(); } catch (_) {} }, timeoutMs);
+    const timer = setTimeout(() => ac.abort(), timeoutMs);
     try {
       const res = await doFetch(base + '/v1/tierlist', { headers: { Accept: 'application/json' }, signal: ac.signal });
       if (!res || !res.ok) throw new Error('cloud answered http ' + (res ? res.status : '?'));

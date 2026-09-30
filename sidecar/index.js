@@ -21178,9 +21178,10 @@ function publicModel(m) {
 // GET /api/model-tiers[?force=1] — the linked cloud's editorial tier list for the model picker's badges. 200-always:
 // an unreachable/unconfigured cloud answers { ok:false, boards:[], reason } — never an invented list.
 async function handleModelTiers(req, res) {
-  let force = false;
-  try { force = new URL(req.url, 'http://127.0.0.1').searchParams.get('force') === '1'; } catch (_) {}
-  try { return respondJson(res, 200, await tierList.get({ force })); }
+  try {
+    const force = new URL(req.url, 'http://127.0.0.1').searchParams.get('force') === '1';
+    return respondJson(res, 200, await tierList.get({ force }));
+  }
   catch (e) { return respondJson(res, 200, { ok: false, boards: [], updated: '', reason: 'tier list unavailable: ' + String((e && e.message) || e).slice(0, 200) }); }
 }
 
