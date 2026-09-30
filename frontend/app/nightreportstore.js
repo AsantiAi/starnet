@@ -108,7 +108,7 @@ const NightReportStore = (() => {
     const reveal = () => {
       if (typeof Chat === 'undefined' || typeof Chat.localLine !== 'function') return;
       const ds = (hasNight && report.drafts) || [];
-      if (!ds.length) { Chat.localLine('(the night shift left no draft bodies — the acts above are the record)'); return; }
+      if (!ds.length) { Chat.localLine('(autonomy left no draft bodies — the acts above are the record)'); return; }
       for (const d of ds) {
         if (!d || !d.title) continue;
         Chat.localLine('▤ ' + String(d.title).trim());
@@ -126,7 +126,7 @@ const NightReportStore = (() => {
         try { if (typeof App !== 'undefined' && App.openWorkstream) App.openWorkstream('workshop-' + String(pendingBuilds[0].runId)); } catch (_) {}
       }
     });
-    if (typeof World !== 'undefined' && World.say) { try { World.say((hasNight && report.actCount) || pendingBuilds.length ? '✦ there’s finished work waiting for you' : '✦ nothing to report from the night'); } catch (_) {} }
+    if (typeof World !== 'undefined' && World.say) { try { World.say((hasNight && report.actCount) || pendingBuilds.length ? '✦ there’s finished work waiting for you' : '✦ nothing to report from while you were away'); } catch (_) {} }
   }
 
   /* init({ enabled, agentId }) — called from enterGame, AFTER ReturnStore.init (so lastSeen() is the previous

@@ -21,28 +21,149 @@
   const SLUG_RE = /[^a-z0-9]+/g;
   function slugify(s) { return String(s || '').toLowerCase().replace(SLUG_RE, '-').replace(/^-+|-+$/g, '').slice(0, 60); }
 
-  // minimal, dependency-free frontmatter: a leading ---\n ... \n---\n block. Supports scalars, booleans, and inline
-  // [a, b] arrays. (Our own ported skill files are authored flat -- no nested YAML -- so this is all we ever parse.)
+  /* FRONTMATTER: a dependency-free YAML SUBSET (2026-09-29). Our own recipes are authored flat, but a standard
+     SKILL.md (the Agent Skills spec, Anthropic's and Hermes' skills, skills.sh) also uses block scalars
+     (`description: >-`), nested maps (`metadata:` with author/version) and dash lists. The old flat reader turned
+     `description: >-` into the literal text '>-' and silently dropped every nested map. Supported: plain,
+     "double" (JSON escapes) and 'single' quoted scalars, multi-line plain/quoted continuations, | and > block
+     scalars with - / + chomping, nested maps, dash lists, [flow, lists], true/false, and # comments. Anything
+     else stays a string: this reads metadata, it never executes or resolves anything (no anchors, no tags). */
+  function unquote(v) {
+    if (v.length >= 2 && v[0] === '"' && v[v.length - 1] === '"') {
+      try { return JSON.parse(v); } catch (_) { return v.slice(1, -1); }
+    }
+    if (v.length >= 2 && v[0] === "'" && v[v.length - 1] === "'") return v.slice(1, -1).replace(/''/g, "'");
+    return null;
+  }
+  function splitFlow(inner) {
+    const items = []; let cur = '', q = '';
+    for (const ch of inner) {
+      if (q) { cur += ch; if (ch === q) q = ''; continue; }
+      if (ch === '"' || ch === "'") { q = ch; cur += ch; continue; }
+      if (ch === ',') { items.push(cur); cur = ''; continue; }
+      cur += ch;
+    }
+    items.push(cur);
+    return items.map(x => x.trim()).filter(Boolean).map(x => { const u = unquote(x); return u !== null ? u : x; });
+  }
   function parseValue(raw) {
     let v = String(raw == null ? '' : raw).trim();
     if (v === '') return '';
+    const q = unquote(v);
+    if (q !== null) return q;
+    const hash = v.search(/\s#/);   // a plain scalar ends at ' #' (YAML comment)
+    if (hash >= 0) v = v.slice(0, hash).trim();
     if (v === 'true') return true;
     if (v === 'false') return false;
-    if (v[0] === '[' && v[v.length - 1] === ']') {
-      return v.slice(1, -1).split(',').map(x => x.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
+    if (v[0] === '[' && v[v.length - 1] === ']') return splitFlow(v.slice(1, -1));
+    return v;
+  }
+  function indentOf(line) { return line.length - line.replace(/^ +/, '').length; }
+  function isBlank(line) { return /^\s*(?:#.*)?$/.test(line); }
+  const KEY_RE = /^([^\s#:'"\-][^:]*?|-[^\s:][^:]*?)\s*:(?:[ \t]+(.*))?$/;
+  function openQuote(v) {
+    if (v[0] !== '"' && v[0] !== "'") return false;
+    return unquote(v) === null || (v[0] === '"' && /\\"$/.test(v) && !/\\\\"$/.test(v));
+  }
+  function readBlockScalar(lines, i, parentIndent, header) {
+    const style = header[0];
+    const chomp = (header.match(/[+-]/) || [''])[0];
+    const buf = [];
+    let blockIndent = -1;
+    while (i < lines.length) {
+      const l = lines[i];
+      if (/^\s*$/.test(l)) { buf.push(''); i++; continue; }
+      const li = indentOf(l);
+      if (li <= parentIndent || (blockIndent >= 0 && li < blockIndent)) break;
+      if (blockIndent < 0) blockIndent = li;
+      buf.push(l.slice(blockIndent)); i++;
     }
-    return v.replace(/^["']|["']$/g, '');
+    let trailing = 0;
+    while (buf.length && buf[buf.length - 1] === '') { buf.pop(); trailing++; }
+    let text;
+    if (style === '|') text = buf.join('\n');
+    else {
+      // folded: single newlines become spaces, blank lines stay newlines, more-indented lines keep their breaks
+      text = '';
+      for (let k = 0; k < buf.length; k++) {
+        const line = buf[k];
+        if (k === 0) { text = line; continue; }
+        const prev = buf[k - 1];
+        if (line === '') { text += '\n'; continue; }
+        if (prev === '' || /^\s/.test(line) || /^\s/.test(prev)) text += (prev === '' ? '' : '\n') + line;
+        else text += ' ' + line;
+      }
+    }
+    if (chomp === '+') text += '\n'.repeat(trailing + 1);
+    else if (chomp !== '-' && text) text += '\n';
+    return { value: text, next: i };
+  }
+  function parseList(lines, i, indent) {
+    const out = [];
+    while (i < lines.length) {
+      const line = lines[i];
+      if (isBlank(line)) { i++; continue; }
+      const ind = indentOf(line);
+      if (ind < indent || !/^-(?:\s|$)/.test(line.slice(ind))) break;
+      if (ind > indent) { i++; continue; }
+      const item = line.slice(ind + 1).replace(/^\s+/, '');
+      if (KEY_RE.test(item)) {
+        // "- key: value" opens a map item; re-read it with the dash as indentation
+        const inner = ind + 1 + (line.slice(ind + 1).length - item.length);
+        const copy = lines.slice(); copy[i] = ' '.repeat(inner) + item;
+        const r = parseMap(copy, i, inner);
+        out.push(r.value); i = r.next; continue;
+      }
+      out.push(parseValue(item)); i++;
+    }
+    return { value: out, next: i };
+  }
+  function parseMap(lines, i, indent) {
+    const out = {};
+    while (i < lines.length) {
+      const line = lines[i];
+      if (isBlank(line)) { i++; continue; }
+      const ind = indentOf(line);
+      if (ind < indent) break;
+      if (ind > indent) { i++; continue; }            // tolerant: a stray over-indented line is skipped
+      const m = line.slice(ind).match(KEY_RE);
+      if (!m) { if (/^-(?:\s|$)/.test(line.slice(ind))) break; i++; continue; }
+      const key = m[1].trim().replace(/^["']|["']$/g, '');
+      let rest = (m[2] || '').trim();
+      i++;
+      if (/^[|>][+-]?\d*\s*(?:#.*)?$/.test(rest)) {
+        const r = readBlockScalar(lines, i, ind, rest);
+        out[key] = r.value; i = r.next; continue;
+      }
+      if (rest === '' || /^#/.test(rest)) {
+        let j = i; while (j < lines.length && isBlank(lines[j])) j++;
+        const next = j < lines.length ? lines[j] : '';
+        const ni = next ? indentOf(next) : -1;
+        const isItem = next && /^-(?:\s|$)/.test(next.slice(ni));
+        if (next && (ni > ind || (ni === ind && isItem))) {
+          const r = isItem ? parseList(lines, j, ni) : parseMap(lines, j, ni);
+          out[key] = r.value; i = r.next;
+        } else out[key] = '';
+        continue;
+      }
+      // a plain or quoted scalar may continue on more-indented lines (and a quote until it closes)
+      // (continuations are always MORE indented than the key, so an unclosed quote can never swallow the next key)
+      while (i < lines.length && lines[i].trim() !== '' && indentOf(lines[i]) > ind) {
+        if (!openQuote(rest) && KEY_RE.test(lines[i].trim())) break;
+        rest += ' ' + lines[i].trim(); i++;
+      }
+      out[key] = parseValue(rest);
+    }
+    return { value: out, next: i };
   }
   function parseFrontmatter(text) {
     let t = String(text == null ? '' : text);
     if (t.charCodeAt(0) === 0xFEFF) t = t.slice(1);   // strip a leading BOM if a skill file happens to have one
     const m = t.match(/^---\s*\r?\n([\s\S]*?)\r?\n---\s*\r?\n?([\s\S]*)$/);
     if (!m) return { meta: {}, body: t };
-    const meta = {};
-    for (const line of m[1].split(/\r?\n/)) {
-      const mm = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/);
-      if (mm) meta[mm[1]] = parseValue(mm[2]);
-    }
+    const lines = m[1].replace(/\t/g, '  ').split(/\r?\n/);
+    let meta = {};
+    try { meta = parseMap(lines, 0, 0).value; } catch (_) { meta = {}; }
     return { meta: meta, body: m[2].trim() };
   }
 
@@ -111,6 +232,7 @@
       slug: s.slug, name: s.name, description: s.description, category: s.category,
       requires: (s.requires || []).slice(), author: s.author, license: s.license, version: s.version,
       default: s.default, body: s.body,
+      market: !!s.market, shelf: s.shelf || '',   // installed from the Skill Market (skills/market.js), not bundled
       enabled: isEnabled(s, opts.overrides),
       available: isAvailable(s, placed)
     }));

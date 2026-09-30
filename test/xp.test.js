@@ -256,9 +256,15 @@ let ms = Xp.fresh();
 for (let i = 0; i < 10; i++) ms = Xp.applyEvent(ms, { name: 'memory.write', payload: { agentId: 'a', runId: 'r', id: 'm' + i, kind: 'fact' } }).stats;
 A.eq(ms.xp, 0, 'memory writes do not mint xp');
 A.ok(ms.milestones.indexOf('archivist') !== -1, 'archivist at 10 memory writes (a real write IS proof — committed immediately)');
-const nightShift = Xp.applyEvent(Xp.fresh(), delivered());
+// NIGHT SHIFT = work delivered OUT through a channel. A COMMS work item is not that (first-hour walk 2026-09-28: it
+// fired in the same beat as FIRST LIGHT for listings pasted into chat).
+const chatOnly = Xp.applyEvent(Xp.fresh(), delivered());
+A.eq(chatOnly.awards.milestones.indexOf('night_shift'), -1, 'a COMMS delivery alone does NOT earn night_shift');
+const failedSend = Xp.applyEvent(Xp.fresh(), { name: 'channel.delivery', payload: { channel: 'telegram', chatId: '1', runId: 'r', ok: false, chunks: 0, reason: 'redelivery-delayed' } });
+A.eq(failedSend.awards.milestones.indexOf('night_shift'), -1, 'a failed or delayed channel send earns nothing');
+const nightShift = Xp.applyEvent(Xp.fresh(), { name: 'channel.delivery', payload: { channel: 'telegram', chatId: '1', runId: 'r', ok: true, chunks: 1 } });
 A.eq(nightShift.stats.xp, 0, 'delivery milestone does not mint xp');
-A.ok(nightShift.awards.milestones.indexOf('night_shift') !== -1, 'night_shift on first external delivery (a real delivery IS proof — immediate)');
+A.ok(nightShift.awards.milestones.indexOf('night_shift') !== -1, 'night_shift on the first confirmed channel delivery (a real delivery IS proof — immediate)');
 const near = { xp: 2249, level: 9, lifetimeXp: 2249, confidence: 50, samples: 0, counters: {}, milestones: [], run: { id: null, toolXp: 0 } };
 const vr = Xp.applyEvent(near, keep());
 A.eq(vr.stats.level, 10, 'positive feedback crossing 2250 xp -> level 10');

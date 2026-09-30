@@ -1,0 +1,10 @@
+{
+  "slug": "line-design",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Station",
+  "tags": ["lines", "conveyor", "workflow", "automation", "testing"],
+  "requires": ["orchestrator"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}

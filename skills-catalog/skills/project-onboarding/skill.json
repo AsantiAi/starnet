@@ -1,0 +1,10 @@
+{
+  "slug": "project-onboarding",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Engineering",
+  "tags": ["projects", "codebase", "onboarding", "notebook"],
+  "requires": ["cabinet", "notebook"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}

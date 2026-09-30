@@ -9813,7 +9813,7 @@ const World = (() => {
     U.bus.on('agent.run.start', p => {
       if (!p || !p.agentId) return;
       const trig = String(p.trigger || '').toLowerCase();
-      const tag = (trig === 'schedule') ? ' · ROUTINE' : (trig === 'event') ? ' · EVENT' : (trig === 'nightshift') ? ' · NIGHT SHIFT' : '';
+      const tag = (trig === 'schedule') ? ' · ROUTINE' : (trig === 'event') ? ' · EVENT' : (trig === 'nightshift') ? ' · AUTONOMY' : '';
       pushTicker(tickerName(p.agentId) + ' ▸ RUN INITIATED' + tag, '', tickerSuit(p.agentId));
     });
     U.bus.on('agent.tool_call', p => {

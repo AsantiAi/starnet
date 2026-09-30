@@ -73,5 +73,9 @@ S1 closes the dangerous architectural gap and raises the distribution subsystem 
 - Installing never grants missing tools or gear. A procedure and a capability are separate truths.
 - No grind, level, or XP gate controls skill access.
 - No registry badge substitutes for StarNet's own scan and exact-content review.
+  **Amended 2026-09-29 (Andrew, Skill Market D2):** the first-party StarNet catalog is the one exception.
+  Its skills are reviewed by us and pinned by package digest, so an install whose bytes reproduce the pin
+  runs at the curated (`trusted`) tier in one click. StarNet's own scan still runs on every install and a
+  dangerous finding is still refused; every other registry stays community.
 - A failed fetch, scan, persistence write, or update check is unknown/refused — never “safe,” “installed,”
   or “up to date.”
