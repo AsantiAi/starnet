@@ -18,8 +18,8 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "91fc38f8186f35a8312797a175d389aa8e781c12",
-    "pathSetSha256": "59b27a3f7d00c1c1f3aa625921a57b19039aad5c0105c47f5a1a9d6db03da3c5",
+    "sourceCommit": "af167ca14aca6a93fd72c6aa71f8d1b7a02364fd",
+    "pathSetSha256": "5d021607980dd97503bfa3c5d9c0e9d708ddf004817e612a7d0835d10be10972",
     "files": [
       {
         "path": "INSTALL.md",
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 405371,
-        "sha256": "46de83843e6c415e2dce61e48ab9b7e53c926389a7b52b2c2cf57925e30d42bb"
+        "bytes": 405251,
+        "sha256": "02ab4a0643fbf7f11aec5ac570292602f8b6fae31f41b11fbcbd3ba5a525cdc9"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
@@ -503,8 +503,8 @@
       },
       {
         "path": "frontend/app/glass-demo.js",
-        "bytes": 11464,
-        "sha256": "99f4f32fb63028383ee76b6cc8cebab9c5565b37adf45d62d2c0597a6f0a8669"
+        "bytes": 11839,
+        "sha256": "68b724a0a639f8664964ea675098a9ece4e7a2a614e23626bbb73259e1320825"
       },
       {
         "path": "frontend/app/glossary.js",
@@ -540,6 +540,11 @@
         "path": "frontend/app/hint.js",
         "bytes": 8259,
         "sha256": "616da3009c0cc1be260dbf0d2ab28e758ac83cb8e672b8254a8751222a2c2e96"
+      },
+      {
+        "path": "frontend/app/hudmode.js",
+        "bytes": 51169,
+        "sha256": "f0ecdd8e0610a478b452c48d76567e25bd906c5bfbac0a4df345f70204ffe54d"
       },
       {
         "path": "frontend/app/industrialtextures.js",
@@ -977,11 +982,6 @@
         "sha256": "0256dfa6c68af8922da3024c290697c0ba63feb5668f75ab66074713dd269a98"
       },
       {
-        "path": "frontend/app/remotesessions.js",
-        "bytes": 6820,
-        "sha256": "174ceb5d39b2a7aaae728f38c82defd63500c8739208c3d57e04477da6051903"
-      },
-      {
         "path": "frontend/app/resummonstore.js",
         "bytes": 9991,
         "sha256": "a8be763d5b41253326778e552903ba57c98ebdeef27239df0db0ce923b2a6c6d"
@@ -1348,8 +1348,8 @@
       },
       {
         "path": "frontend/app/world.js",
-        "bytes": 811238,
-        "sha256": "f68d6c2e78a22936311f4005476ad7c2e7f0fee9e74f9ea0765fc26c27707b37"
+        "bytes": 812555,
+        "sha256": "a6c4bac4f7819fa2ffd210db53c362ef16a55ce5e7b9aaea51747655c3e41d76"
       },
       {
         "path": "frontend/app/worldlab.js",
@@ -1470,6 +1470,11 @@
         "path": "frontend/css/glass-demo.css",
         "bytes": 34758,
         "sha256": "19b015391ca052709a179eba4b6c3e28b6611c84af067ac5871e355d77b96a35"
+      },
+      {
+        "path": "frontend/css/hudmode.css",
+        "bytes": 13105,
+        "sha256": "94a4484c3d542e394435db105f0dec1e64435321cbc324a66b515d1c400663b9"
       },
       {
         "path": "frontend/css/interface.css",
@@ -1653,8 +1658,8 @@
       },
       {
         "path": "frontend/index.html",
-        "bytes": 92057,
-        "sha256": "c9e5dd5e42f28940042a9841656800942c62ccd43d88eaf05ad97c8365fadc68"
+        "bytes": 92203,
+        "sha256": "31a70fe2763dcd84f6815ca7a2fd5c9f38ec6e829d6d2daff524b0ef1f94f4f8"
       },
       {
         "path": "frontend/js/arcade.js",
