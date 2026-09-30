@@ -46,23 +46,75 @@ function makeRemoteHost(d) {
     return { station: d.stationName ? d.stationName() : 'StarNet', at: now(), agents, runs: live.map(r => ({ runId: r.runId, agentId: r.agentId, startedAt: r.startedAt, source: r.source || null })) };
   }
 
+  /* SESSIONS. The desk keeps its sessions (title, agent, history) in the station save; the transcript store holds
+     what runs wrote. A phone must see the SAME sessions the desk shows and continue them under the same id, so:
+       · the list = the desk's sessions (save.workstreams) ∪ any transcript stream the desk has not adopted yet
+       · a thread = the desk's history for that session, plus any newer turns the station recorded that the desk
+         page has not merged yet (a phone turn sent while the desk was closed)
+     The desk reconciles the other way on its own: opening a session merges the station's transcript into it. */
+  const isProse = (m) => m && (m.role === 'user' || m.role === 'assistant') && !m.sys && typeof m.content === 'string' && m.content.trim();
+  function deskSessions() {
+    let list = [];
+    try { list = (d.deskSessions && d.deskSessions()) || []; } catch (e) { note('remote.host.deskSessions', e); list = []; }
+    return Array.isArray(list) ? list.filter(w => w && typeof w.id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(w.id) && !w.archived && w.conversationMode !== 'group') : [];
+  }
+  function stationTurns(streamId, limit) {
+    try { return (d.transcript.history(streamId, { limit: limit || 200 }) || []).filter(isProse); }
+    catch (e) { note('remote.host.stationTurns', e); return []; }
+  }
+  // desk history first (it is the longer memory), then station turns the desk has not merged yet
+  function mergedTurns(streamId, limit) {
+    const w = deskSessions().find(x => x.id === streamId);
+    const base = w && Array.isArray(w.history) ? w.history.filter(isProse) : [];
+    const st = stationTurns(streamId, 200);
+    if (!base.length) return st.slice(-(limit || 200));
+    const seen = new Set(base.map(m => m.rowId).filter(x => x != null));
+    const lastTs = base.reduce((t, m) => Math.max(t, Number(m.ts) || 0), 0);
+    const tail = base.slice(-4).map(m => m.role + '\u0000' + m.content);
+    const extra = st.filter(m => !(m.rowId != null && seen.has(m.rowId)) && (Number(m.ts) || 0) > lastTs && tail.indexOf(m.role + '\u0000' + m.content) < 0);
+    return base.concat(extra).slice(-(limit || 200));
+  }
+  const lastUserLine = (turns) => { for (let i = turns.length - 1; i >= 0; i--) if (turns[i].role === 'user') return clip(turns[i].content.replace(/\s+/g, ' ').trim(), 140); return ''; };
+
   async function threads(o) {
+    const out = [], seen = new Set();
+    for (const w of deskSessions()) {
+      const agentId = String(w.agentId || 'agent');
+      const hist = Array.isArray(w.history) ? w.history.filter(isProse) : [];
+      seen.add(w.id);
+      if (o.agentId && agentId !== o.agentId) continue;
+      if (!hist.length && !w.title) continue;   // an untouched blank session is noise on a phone
+      out.push({ streamId: w.id, agentId, title: w.title ? clip(w.title, 80) : '', turns: hist.length, lastAt: Number(w.lastActiveAt) || 0, preview: lastUserLine(hist), source: 'desk' });
+    }
     const rows = d.transcript.streams({ limit: 100, previewChars: 140 }) || [];
-    const out = [];
     for (const r of rows) {
+      if (seen.has(r.streamId)) {   // the station may have newer turns than the desk save: surface the later time
+        const row = out.find(x => x.streamId === r.streamId);
+        if (row && Number(r.lastAt) > row.lastAt) { row.lastAt = Number(r.lastAt); if (r.preview) row.preview = r.preview; }
+        continue;
+      }
+      if (r.streamId === 'global' || /^(cron|nightshift|workshop)-/.test(r.streamId)) continue;   // background work has its own surfaces
       let agentId = r.agentId || '';
       if (!agentId) { try { const h = d.transcript.history(r.streamId, { limit: 1 }); agentId = (h[0] && h[0].agentId) || ''; } catch (e) { note('remote.host.threadAgent', e); } }
       if (o.agentId && agentId !== o.agentId) continue;
-      out.push({ streamId: r.streamId, agentId, turns: r.turns, lastAt: r.lastAt, preview: r.preview || '' });
-      if (out.length >= o.limit) break;
+      out.push({ streamId: r.streamId, agentId, title: '', turns: r.turns, lastAt: r.lastAt, preview: r.preview || '', source: /^remote_/.test(r.streamId) ? 'phone' : 'station' });
     }
-    return out;
+    out.sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0));
+    return out.slice(0, o.limit);
   }
 
   async function thread(o) {
-    const rows = d.transcript.history(o.streamId, { limit: o.limit }) || [];
-    return rows.map(r => ({ role: r.role, agentId: r.agentId || null, ts: r.ts, content: typeof r.content === 'string' ? clip(r.content, 20000) : clip(JSON.stringify(r.content), 20000) }));
+    return mergedTurns(o.streamId, o.limit).map(r => ({ role: r.role, agentId: r.agentId || null, ts: r.ts || null, content: clip(r.content, 20000) }));
   }
+
+  // what the desk needs to show a phone conversation as one of its own sessions (GET /api/remote/recent)
+  const recent = [];   // newest last, bounded
+  function noteRecent(row) {
+    const i = recent.findIndex(x => x.runId === row.runId);
+    if (i >= 0) recent[i] = Object.assign(recent[i], row); else recent.push(row);
+    while (recent.length > 60) recent.shift();
+  }
+  function recentRuns() { return recent.slice().reverse(); }
 
   async function send(o) {
     const who = agentsList().find(a => a.agentId === o.agentId);
@@ -75,9 +127,11 @@ function makeRemoteHost(d) {
     const rec = { ac, agentId: o.agentId, streamId, deviceId: o.deviceId || '', startedAt: now() };
     remoteRuns.set(runId, rec);
 
-    let history = [];
-    try { history = d.transcript.reconstruct(streamId, { limit: 100 }) || []; } catch (_) { history = []; }
-    const messages = history.concat([{ role: 'user', content: o.text }]);
+    // the conversation so far: the desk's memory of this session plus anything the station recorded since
+    const messages = mergedTurns(streamId, 100).map(m => ({ role: m.role, content: m.content })).concat([{ role: 'user', content: o.text }]);
+    let isTask = true;
+    try { if (typeof d.classify === 'function') isTask = !!d.classify(o.text); } catch (e) { note('remote.host.classify', e); }
+    noteRecent({ runId, agentId: o.agentId, streamId, title: clip(o.text.replace(/\s+/g, ' ').trim(), 80), startedAt: rec.startedAt, endedAt: null, live: true });
 
     // the reply, coalesced: a phone on cellular gets a few frames a second, not one per token
     let buf = '', timer = null, errMsg = null, reason = null, usd = 0;
@@ -93,9 +147,11 @@ function makeRemoteHost(d) {
     const prompt = (call, tool) => d.askConsent({ agentId: o.agentId, runId, signal: ac.signal, call, tool, surface: 'remote', onPrompt: () => {} });
 
     broadcast({ type: 'run.started', runId, agentId: o.agentId, streamId });
-    Promise.resolve().then(() => d.runOnce({
+    // setImmediate, not a microtask: runOnce does a second or more of synchronous set-up before its first await,
+    // and the phone's "accepted" reply must leave first (measured: the ack took 1.3 s behind a microtask start).
+    new Promise((resolve) => setImmediate(resolve)).then(() => d.runOnce({
       key: cred.key, model: cred.model, provider: cred.provider, baseUrl: cred.baseUrl || '', reasoningEffort: cred.reasoningEffort,
-      system: cred.system, messages, agentId: o.agentId, isTask: true,
+      system: cred.system, messages, agentId: o.agentId, isTask,
       emit, signal: ac.signal, runId, streamId, trigger: 'event',
       surface: 'interactive', prompt, ownerTrusted: true, floorless: true, broadcast: true, reflect: true,
       taskKey: 'remote:' + (o.deviceId || 'phone'), taskSource: 'remote'
@@ -103,6 +159,7 @@ function makeRemoteHost(d) {
       .finally(() => {
         if (timer) { clearTimeout(timer); flush(); }
         remoteRuns.delete(runId);
+        noteRecent({ runId, endedAt: now(), live: false, ok: !errMsg });
         broadcast({ type: 'run.ended', runId, agentId: o.agentId, streamId, reason: reason || (ac.signal.aborted ? 'stopped' : (errMsg ? 'error' : 'done')), usd, error: errMsg });
       });
     return { runId, streamId };
@@ -140,7 +197,7 @@ function makeRemoteHost(d) {
 
   function liveRemoteRuns() { return Array.from(remoteRuns, ([runId, r]) => ({ runId, agentId: r.agentId, startedAt: r.startedAt, source: 'remote' })); }
 
-  return { status, threads, thread, send, stop, files, fetchFile, routines, setRoutine, liveRemoteRuns, _remoteRuns: remoteRuns };
+  return { status, threads, thread, send, stop, files, fetchFile, routines, setRoutine, liveRemoteRuns, recentRuns, _remoteRuns: remoteRuns };
 }
 
 module.exports = { makeRemoteHost };

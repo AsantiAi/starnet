@@ -9875,6 +9875,9 @@ const remoteHost = require('./remote/host.js').makeRemoteHost({
       system: raw ? withDossier(raw + REMOTE_NOTE, dossierWithGoals()) : withDossier(CRON_PERSONA + REMOTE_NOTE, dossierWithGoals()) };
   },
   runOnce: (o) => runOnce(o),
+  // the desk's own sessions (title, agent, history) live in the station save the page mirrors here
+  deskSessions: () => { const save = saveStore.load('agent') || {}; return Array.isArray(save.workstreams) ? save.workstreams : []; },
+  classify: (text) => Classify.isTaskDirective(text),   // the SAME task-vs-talk call the desk and the channels make
   askConsent: (o) => channelAskConsent(o),
   stopRun: (runId) => { const ac = runs.get(runId); if (!ac) return false; try { ac.abort(); } catch (e) { failNote('remote.index.ac.abort', e); } return true; },
   deliverables: () => deliverableRows(),
@@ -9981,6 +9984,9 @@ function remoteSnapshot() {
 }
 // GET /api/remote — the desk's DEVICES panel: is Remote on, where does it listen, who is paired, who is connected
 function handleRemoteStatus(req, res) { respondJson(res, 200, remoteSnapshot()); }
+// GET /api/remote/recent — runs a phone started, newest first ({runId, agentId, streamId, title, startedAt, endedAt,
+// live}). The desk reads it to show a phone conversation as one of its own sessions (app/remotesessions.js).
+function handleRemoteRecent(req, res) { respondJson(res, 200, { ok: true, runs: remoteHost.recentRuns() }); }
 // POST /api/remote/enable { on } — the switch. Persisted; the LAN door opens or closes with it.
 async function handleRemoteEnable(req, res) {
   let b; try { b = JSON.parse(await readBody(req, 1024)) || {}; } catch (_) { return respondJson(res, 400, { ok: false, error: 'bad request' }); }
@@ -10169,6 +10175,7 @@ const ROUTES = [
   { m: 'POST', exact: '/api/credits/link/start', h: handleCreditsLinkStart },   // begin a pairing: returns a STAR-XXXX code + verifyUrl
   { m: 'POST', exact: '/api/credits/link/poll', h: handleCreditsLinkPoll },     // poll once; on confirm persists the token + configures credits live
   { m: 'POST', exact: '/api/credits/unlink', h: handleCreditsUnlink },          // forget the linked device, revert credits to inert
+  { m: 'GET', exact: '/api/remote/recent', h: handleRemoteRecent },   // phone-started runs, for the desk to adopt as sessions
   { m: 'GET', exact: '/api/remote', h: handleRemoteStatus },          // STARNET REMOTE: on/off, where it listens, paired + connected phones
   { m: 'POST', exact: '/api/remote/enable', h: handleRemoteEnable },  // the switch (persisted); opens/closes the LAN door
   { m: 'POST', exact: '/api/remote/pair', h: handleRemotePair },      // one-time pairing code for ONE phone (10 min)

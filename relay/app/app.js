@@ -84,7 +84,7 @@
 
   async function refreshStatus() { try { const r = await call('status'); if (r.ok) S.status = r.data; } catch (_) {} }
   async function refreshApprovals() { try { const r = await call('approvals'); if (r.ok) { S.approvals = r.data; for (const a of S.approvals) if (!S.arrivedAt.has(a.promptId)) S.arrivedAt.set(a.promptId, Date.now()); } } catch (_) {} }
-  async function refreshThreads() { try { const r = await call('threads', { limit: 30 }); if (r.ok) S.threads = r.data; } catch (_) {} }
+  async function refreshThreads() { try { const r = await call('threads', { limit: 50 }); if (r.ok) S.threads = r.data; } catch (_) {} }
   async function refreshFiles() { try { const r = await call('files', { limit: 40 }); if (r.ok) S.files = r.data; } catch (_) {} }
   async function refreshRoutines() { try { const r = await call('routines'); if (r.ok) S.routines = r.data; } catch (_) {} }
   async function refreshAll() {
@@ -137,7 +137,8 @@
     const needs = S.approvals.length;
     $('n-needs').textContent = needs ? '· ' + needs : '';
     $('back').hidden = !(S.thread || S.file);
-    $('bar-title').textContent = S.thread ? agentName(S.thread.agentId) : S.file ? (S.file.name || 'FILE') : ((S.status && S.status.station) || 'STATION');
+    const openRow = S.thread && S.threads.find(x => x.streamId === S.thread.streamId);
+    $('bar-title').textContent = S.thread ? ((openRow && openRow.title) || agentName(S.thread.agentId)) : S.file ? (S.file.name || 'FILE') : ((S.status && S.status.station) || 'STATION');
     $('compose').hidden = !(S.tab === 'crew' || S.thread) || S.file != null || S.linkState === 'removed';
     const target = S.thread ? S.thread.agentId : S.target;
     $('compose-to').textContent = target ? 'TO ' + agentName(target).toUpperCase() : '';
@@ -278,12 +279,15 @@
 
   function renderThreads(v) {
     staleNote(v);
-    const { s, p } = section('Conversations');
+    const { s, p } = section('Sessions' + (S.threads.length ? ' · ' + S.threads.length : ''));
     if (!S.threads.length) p.appendChild(el('div', 'empty', 'No conversations yet. Send a task from CREW.'));
     for (const t of S.threads) {
       const row = el('button', 'row'); row.type = 'button';
       row.appendChild(el('span', 'well', (agentName(t.agentId) || '?').slice(0, 1).toUpperCase()));
-      const tt = el('span', 't'); tt.appendChild(el('b', null, agentName(t.agentId).toUpperCase())); tt.appendChild(el('span', null, t.preview || '(no preview)'));
+      // the desk's own session title when it has one; the agent and the last thing you said underneath
+      const tt = el('span', 't');
+      tt.appendChild(el('b', null, (t.title || t.preview || agentName(t.agentId)).toUpperCase()));
+      tt.appendChild(el('span', null, agentName(t.agentId) + (t.title && t.preview ? ' · ' + t.preview : '') + (t.source === 'phone' ? ' · started here' : '')));
       row.appendChild(tt);
       row.appendChild(el('span', 'd', t.lastAt ? ago(Date.now() - t.lastAt) : ''));
       row.onclick = () => openThread(t.streamId, t.agentId);

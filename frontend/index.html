@@ -1034,6 +1034,7 @@
 <script src="app/topbar.js"></script><!-- topbar instrument cluster: read-only STATION-XP + live SPEND-TODAY wiring (after app.js so Harness/Xp/XpStore/U exist) -->
 <script src="app/widgets.js"></script><!-- widget rails: pinnable read-only telemetry instruments (insights/cron polls + run.end/queue.status/cron.fire folds); own localStorage key, never emits -->
 <script src="app/autosessions.js"></script><!-- surface an unattended cron/routine run as a readable SESSION: cron.fire → adopt a 'cron-<runId>' workstream (busy, no focus-steal), cron.result → fold its durable transcript; boot backfill for runs finished while closed. Read-only on U.bus (after app.js so App/Workstreams/Channels/Chat/U exist) -->
+<script src="app/remotesessions.js"></script><!-- StarNet Remote: a conversation held from a phone is a desk SESSION too — adopt phone-started streams (GET /api/remote/recent + /api/runs backfill), show them busy while live, reload the open session when a phone turn lands. Read-only on U.bus -->
 <script src="app/warroom.js"></script>
 <script src="app/worldlab.js"></script>
 <script src="app/glass-demo.js"></script>
