@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "6c728597fd1c9357a8a88dd31c0887fcf507de87",
+    "sourceCommit": "5d609402aee42465174b5c583d7a5ccce367905c",
     "pathSetSha256": "8bbb1097af843bfb2aa36f55bfe9583a546994f457a3b8b27396b3224788691b",
     "files": [
       {
@@ -318,8 +318,8 @@
       },
       {
         "path": "frontend/app/build.js",
-        "bytes": 479538,
-        "sha256": "7b00820158a4d19646ab7f6a26f376b86fcaa19bf120bd420541c480dceff396"
+        "bytes": 480101,
+        "sha256": "a2bb33a3c7f5eff7b353951f2d7382d474cec19ed0e9a0a4c51696e53f900391"
       },
       {
         "path": "frontend/app/channels.js",
@@ -1168,8 +1168,8 @@
       },
       {
         "path": "frontend/app/tooltip.js",
-        "bytes": 8661,
-        "sha256": "66a6eeff4d283c6b20e37343e76b7908857bced70285389346e5a7af28d8a84c"
+        "bytes": 8857,
+        "sha256": "5eda27d1c44594afb6ab893e64d04dafd1ffc3afa9f4d5fc5486613c34f1f52e"
       },
       {
         "path": "frontend/app/topbar.js",
@@ -1363,8 +1363,8 @@
       },
       {
         "path": "frontend/app/world.js",
-        "bytes": 815591,
-        "sha256": "9c58bda311dd10d9efb9731f4ad6d5151f6c5d82de583690e1b5b8595b8a7d1b"
+        "bytes": 815998,
+        "sha256": "4beaca3cf68aee6a5f2c63977a230721cdaaf7152b483bd10c54e387923cbf85"
       },
       {
         "path": "frontend/app/worldlab.js",
@@ -1438,8 +1438,8 @@
       },
       {
         "path": "frontend/css/app.css",
-        "bytes": 408648,
-        "sha256": "d2e0ea84b81e800635bb8b0b8215f2a847cea57e3f8cd913b3ada0d84d6e289c"
+        "bytes": 405502,
+        "sha256": "43d874f896cb62ee196ae150b386abd3e57c530f6c1ec2aa01db20c6575a48f4"
       },
       {
         "path": "frontend/css/asciifx.css",
@@ -1543,8 +1543,8 @@
       },
       {
         "path": "frontend/css/readability.css",
-        "bytes": 11010,
-        "sha256": "7a18169e2659124580d9adb54c29a0379e0073c8b33efe7d5eef3ccbfdb3ebc5"
+        "bytes": 11164,
+        "sha256": "6379713408b302ec61d358641740149a918229b204152acadb9c904648855ad7"
       },
       {
         "path": "frontend/css/refit-kit.css",
@@ -1553,8 +1553,8 @@
       },
       {
         "path": "frontend/css/refit-polish.css",
-        "bytes": 30433,
-        "sha256": "bb3aa118eead08906d8362096960f153aab6fd4f724e59529ca8e86dd3e0f471"
+        "bytes": 31721,
+        "sha256": "96be36b9442811463443a55ca09c800dbd678eb6deee2eb071b3bcc134fc3c4d"
       },
       {
         "path": "frontend/css/refit.css",
