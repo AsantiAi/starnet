@@ -104,9 +104,9 @@ const UserProps = (() => {
     })().finally(() => { loading = null; });
     return loading;
   }
-  async function generate(noun) {
+  async function generate(noun, previewId) {
     try {
-      const r = await apiFetch('/api/userprops/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ noun }) });
+      const r = await apiFetch('/api/userprops/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(previewId ? { noun, previewId } : { noun }) });
       return await r.json();
     } catch (_) { return { ok: false, code: 'unreachable', message: 'The station did not answer. Try again.' }; }
   }
@@ -161,6 +161,29 @@ const UserProps = (() => {
       return j;
     } catch (_) { return { ok: false, code: 'unreachable', message: 'The station did not answer. Try again.' }; }
   }
+  async function startPreview(noun) {
+    try {
+      const r = await apiFetch('/api/userprops/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ noun }) });
+      return await r.json();
+    } catch (_) { return { ok: false, code: 'unreachable', message: 'The station did not answer. Try again.' }; }
+  }
+  // poll one preview until it settles; onUpdate(job) on every change; resolves with { job, preview }
+  function watchPreview(id, onUpdate) {
+    return new Promise((resolve) => {
+      let last = '';
+      const tick = async () => {
+        let r = null;
+        try { r = await (await apiFetch('/api/userprops/preview?id=' + encodeURIComponent(id))).json(); } catch (_) { r = null; }
+        if (r && r.ok) {
+          const sig = JSON.stringify(r.job);
+          if (sig !== last) { last = sig; try { onUpdate && onUpdate(r.job); } catch (_) {} }
+          if (r.job.status === 'failed' || r.preview) { resolve(r); return; }
+        } else if (r && !r.ok) { resolve(r); return; }
+        setTimeout(tick, 1500);
+      };
+      tick();
+    });
+  }
   async function job(id) {
     try { const r = await apiFetch('/api/userprops/job?id=' + encodeURIComponent(id)); return await r.json(); }
     catch (_) { return { ok: false, code: 'unreachable' }; }
@@ -185,6 +208,6 @@ const UserProps = (() => {
   const list = () => props.slice();
   if (typeof window !== 'undefined') setTimeout(() => { load(); }, 0);
   const get = (id) => props.find((p) => p.id === id) || null;
-  return { load, list, get, generate, makeSide, remove, setScale, geometry, SCALES, job, watch };
+  return { load, list, get, generate, startPreview, watchPreview, makeSide, remove, setScale, geometry, SCALES, job, watch };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = UserProps;

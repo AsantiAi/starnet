@@ -586,7 +586,7 @@ const Build = (() => {
   const MAKE_STEP = { queued: 'Queued', waiting: 'Working', sizing: 'Sizing it against the catalog', drawing: 'Drawing', retrying: 'Redrawing', checking: 'Checking it matches the station' };
   function makeStatusText() {
     if (makeMsg) return makeMsg;
-    if (!makeJob) return { text: 'Uses StarNet credits \u00b7 about $0.35 a prop, $0.30 a side view (a retry adds about that again)', tone: '' };
+    if (!makeJob) return { text: 'StarNet credits \u00b7 preview a sketch first (about 5\u00a2), then make it (about $0.35; a side view about $0.30)', tone: '' };
     const j = makeJob, spent = j.costUsd > 0 ? ' \u00b7 $' + j.costUsd.toFixed(2) + ' so far' : '';
     if (j.status === 'done' && j.kind === 'side') return { text: 'Side view made \u00b7 cost $' + (Number(j.costUsd) || 0).toFixed(2) + (j.costPending ? ' (final cost settling)' : '') + ' \u00b7 press R to turn it', tone: 'ok' };
     if (j.status === 'done') return { text: 'Made ' + (j.label || j.noun) + ' \u00b7 cost $' + (Number(j.costUsd) || 0).toFixed(2) + (j.costPending ? ' (final cost settling)' : '') + ' \u00b7 in MADE BY YOU', tone: 'ok' };
@@ -630,8 +630,8 @@ const Build = (() => {
       side.textContent = made ? '\u21bb MAKE SIDE VIEW \u00b7 ' + (made.label || 'this prop') : '\u21bb MAKE SIDE VIEW';
     }
   }
-  async function startMakeSide() {
-    const made = typeof UserProps !== 'undefined' && UserProps.get ? UserProps.get(propType) : null;
+  async function startMakeSide(targetId) {
+    const made = typeof UserProps !== 'undefined' && UserProps.get ? UserProps.get(targetId || propType) : null;
     if (!made || made.side) return;
     makeMsg = { text: 'Starting the side view\u2026', tone: 'busy' }; paintMakeStatus();
     const r = await UserProps.makeSide(made.id);
@@ -658,11 +658,51 @@ const Build = (() => {
       sfx(j.status === 'done' ? 'confirm' : 'click');
     });
   }
-  async function startMakeProp(noun) {
+  // PREVIEW before paying: a few-cent sketch + the size it will be, then MAKE IT (the real drawing reuses that sizing
+  // and draws from the approved sketch) or ANOTHER. The card says plainly the sketch is not the final art.
+  // drawn height -> real height: 12px per metre (the crew's 1.75 m is 22px), less the ~3px visible top band
+  const previewMetres = (h) => { const m = Math.max(0.5, Math.round(((Number(h) || 0) - 3) / 12 * 2) / 2); return m + ' m'; };
+  let makePreview = null;   // { id, noun, preview:{label, footprint, height, like, symmetric, sketch}, costUsd } | null
+  function paintPreviewCard() {
+    const card = root && root.querySelector('#refit-makeprop-preview');
+    if (!card) return;
+    if (!makePreview || !makePreview.preview) { card.hidden = true; card.replaceChildren(); return; }
+    const p = makePreview.preview, fp = String(p.footprint || '').split('x');
+    card.hidden = false;
+    card.innerHTML = '<img alt="Preview sketch of ' + esc(p.label || makePreview.noun) + '" src="' + esc(p.sketch) + '">' +
+      '<div class="refit-makeprop-previewtxt"><b>' + esc(p.label || makePreview.noun) + '</b>' +
+      '<span>About ' + esc(fp[0] || '?') + '\u00d7' + esc(fp[1] || '?') + ' tiles, ' + previewMetres(p.height) + ' tall' + (p.profile ? ' \u00b7 shown side-on' : '') + (p.symmetric ? ' \u00b7 turns freely' : '') + '</span>' +
+      '<small>Sketch only: the final is drawn in the station\u2019s style. Preview cost $' + (Number(makePreview.costUsd) || 0).toFixed(2) + '.</small>' +
+      '<div class="refit-makeprop-previewbtns"><button type="button" class="bb sm" id="refit-makeprop-makeit">MAKE IT \u00b7 ~$0.35</button><button type="button" class="bb sm" id="refit-makeprop-again">ANOTHER \u00b7 ~5\u00a2</button><button type="button" class="bb sm" id="refit-makeprop-drop" aria-label="Discard preview">\u2715</button></div></div>';
+    card.querySelector('#refit-makeprop-makeit').onclick = () => { const pv = makePreview; makePreview = null; paintPreviewCard(); startMakeProp(pv.noun, pv.id); sfx('click'); };
+    card.querySelector('#refit-makeprop-again').onclick = () => { const n = makePreview.noun; makePreview = null; paintPreviewCard(); startPreviewProp(n); sfx('click'); };
+    card.querySelector('#refit-makeprop-drop').onclick = () => { makePreview = null; makeMsg = null; paintPreviewCard(); paintMakeStatus(); sfx('click'); };
+  }
+  async function startPreviewProp(noun) {
+    noun = String(noun || '').trim();
+    if (!noun || typeof UserProps === 'undefined') return;
+    makePreview = null; paintPreviewCard();
+    makeJob = null; makeMsg = { text: 'Previewing\u2026', tone: 'busy' }; paintMakeStatus();
+    const r = await UserProps.startPreview(noun);
+    if (!r || !r.ok || !r.job) {
+      makeMsg = { text: (r && r.message) || 'That preview could not be started.', tone: 'bad', door: r && (r.code === 'not_linked' || r.code === 'insufficient_credits') };
+      paintMakeStatus(); return;
+    }
+    const PSTEP = { queued: 'Queued', sizing: 'Sizing it against the catalog', sketching: 'Sketching a preview' };
+    const res = await UserProps.watchPreview(r.job.id, (j) => { makeMsg = { text: (PSTEP[j.step] || 'Previewing') + '\u2026', tone: 'busy' }; paintMakeStatus(); });
+    if (res && res.ok && res.preview) {
+      makePreview = { id: r.job.id, noun, preview: res.preview, costUsd: res.job && res.job.costUsd };
+      makeMsg = { text: 'Preview ready \u00b7 make it, or try another', tone: 'ok' };
+    } else {
+      makeMsg = { text: ((res && res.job && res.job.error && res.job.error.message) || (res && res.message) || 'That preview could not be made.') + (res && res.job && res.job.costUsd > 0 ? ' Spent $' + res.job.costUsd.toFixed(2) + '.' : ''), tone: 'bad' };
+    }
+    paintPreviewCard(); paintMakeStatus();
+  }
+  async function startMakeProp(noun, previewId) {
     noun = String(noun || '').trim();
     if (!noun || typeof UserProps === 'undefined') return;
     makeMsg = { text: 'Starting\u2026', tone: 'busy' }; paintMakeStatus();
-    const r = await UserProps.generate(noun);
+    const r = await UserProps.generate(noun, previewId);
     if (r && r.ok && r.job) { watchMakeJob(r.job); return; }
     const code = r && r.code;
     makeJob = null;
@@ -678,8 +718,8 @@ const Build = (() => {
   }
   // SIZE a made prop (library-wide, free): the art re-registers at the new size and this floor's copies are
   // re-laid at the new box as ONE undo. A copy that no longer fits aborts the whole resize and says so.
-  async function sizeMadeProp(dir) {
-    const made = typeof UserProps !== 'undefined' && UserProps.get ? UserProps.get(propType) : null;
+  async function sizeMadeProp(dir, targetId) {
+    const made = typeof UserProps !== 'undefined' && UserProps.get ? UserProps.get(targetId || propType) : null;
     if (!made) return;
     const steps = UserProps.SCALES, cur = steps.includes(made.scale) ? made.scale : 1;
     const next = steps[Math.max(0, Math.min(steps.length - 1, steps.indexOf(cur) + dir))];
@@ -701,7 +741,12 @@ const Build = (() => {
     if (!r || !r.ok) { if (copies.length && station.undo) station.undo(); makeJob = null; makeMsg = { text: (r && r.message) || 'That size could not be saved.', tone: 'bad' }; paintMakeStatus(); return; }
     makeJob = null;
     makeMsg = { text: (made.label || 'Prop') + ' size ' + Math.round(next * 100) + '% \u00b7 ' + g.front.footprint.w + '\u00d7' + g.front.footprint.h + ' tiles' + (copies.length ? ' \u00b7 ' + copies.length + ' placed ' + (copies.length === 1 ? 'copy' : 'copies') + ' resized' : ''), tone: 'ok' };
-    if (root) renderPalette();
+    if (selectedPropId && station) {   // the selected copy was re-laid under a new id: keep it selected
+      const sel = copies.find((p) => p.id === selectedPropId);
+      if (sel) { const now2 = station.props().find((p) => p.t === made.id && p.x === sel.x && p.y === sel.y); selectedPropId = now2 ? now2.id : null; }
+      setHint(makeMsg.text);
+    }
+    if (root) { renderPalette(); renderSelection(); }
     paintMakeStatus();
   }
   // DELETE a made prop: the station deletes it first (files, index, tombstone); only then are its placed copies on
@@ -724,16 +769,17 @@ const Build = (() => {
     const box = document.createElement('section'); box.className = 'refit-makeprop'; box.setAttribute('aria-label', 'Make a prop');
     box.innerHTML = '<div class="refit-makeprop-head"><b>MAKE A PROP</b><small>Type any object. StarNet draws it in the station\u2019s style.</small></div>' +
       '<div class="refit-makeprop-row"><input type="text" class="refit-input refit-searchfield" id="refit-makeprop-input" maxlength="60" spellcheck="false" autocomplete="off" aria-label="Object to make" placeholder="e.g. a grandfather clock">' +
-      '<button type="button" class="bb sm" id="refit-makeprop-go">MAKE</button></div>' +
+      '<button type="button" class="bb sm" id="refit-makeprop-go">PREVIEW</button></div>' +
+      '<div class="refit-makeprop-preview" id="refit-makeprop-preview" hidden></div>' +
       '<div class="refit-makeprop-foot"><span class="refit-makeprop-status" id="refit-makeprop-status" role="status" aria-live="polite"></span>' +
       '<button type="button" class="bb sm" id="refit-makeprop-door" hidden>\u25b8 OPEN PROVIDERS</button></div>' +
       '<div class="refit-makeprop-size" id="refit-makeprop-size" hidden><span class="refit-makeprop-sizelbl">SIZE</span><button type="button" class="bb sm" data-size="-1" aria-label="Smaller">\u2212</button><b class="refit-makeprop-sizeval">100%</b><button type="button" class="bb sm" data-size="1" aria-label="Bigger">+</button></div>' +
       '<div class="refit-makeprop-actions"><button type="button" class="bb sm refit-makeprop-sidebtn" id="refit-makeprop-side" hidden>\u21bb MAKE SIDE VIEW</button>' +
       '<button type="button" class="bb sm" id="refit-makeprop-del" hidden>\u2715 DELETE</button></div>';
     const inp = box.querySelector('#refit-makeprop-input'), go = box.querySelector('#refit-makeprop-go');
-    go.onclick = () => { startMakeProp(inp.value); sfx('click'); };
+    go.onclick = () => { startPreviewProp(inp.value); sfx('click'); };
     inp.onkeydown = (ev) => {
-      if (ev.key === 'Enter') { ev.preventDefault(); startMakeProp(inp.value); return; }
+      if (ev.key === 'Enter') { ev.preventDefault(); startPreviewProp(inp.value); return; }
       if (ev.key !== 'Escape') return;
       ev.stopPropagation();   // like the search field: Escape leaves the field, never closes REFIT behind it
       inp.blur();
@@ -746,7 +792,7 @@ const Build = (() => {
       const door = typeof FriendlyError !== 'undefined' && FriendlyError.actionButton && FriendlyError.actionButton({ action: 'store' });
       if (door && door.run) door.run();
     };
-    setTimeout(() => { paintMakeStatus(); resumeMakeJob(); }, 0);
+    setTimeout(() => { paintMakeStatus(); paintPreviewCard(); resumeMakeJob(); }, 0);
     return box;
   }
 
@@ -1080,6 +1126,12 @@ const Build = (() => {
       };
       browser.append(search, sections);
       if (propSection === 'decoration' && typeof UserProps !== 'undefined') browser.append(makePropPanel());
+      else if (typeof UserProps !== 'undefined') {   // the door to MAKE A PROP from the other shelves: one click to FURNITURE with the field focused
+        const door = document.createElement('button'); door.type = 'button'; door.className = 'bb sm refit-makeprop-door';
+        door.textContent = '\u2726 MAKE A PROP \u00b7 type any object \u25b8';
+        door.onclick = () => { chooseLibrarySection('decoration'); setTimeout(() => { const f = root && root.querySelector('#refit-makeprop-input'); if (f) f.focus(); }, 0); sfx('click'); };
+        browser.append(door);
+      }
       browser.append(renderAbilityOverview());
       const shelves = document.createElement('div'); shelves.className = 'refit-shelves';
       const categoryMenu = document.createElement('details'); categoryMenu.className = 'refit-category-menu';
@@ -4513,6 +4565,14 @@ const Build = (() => {
     if(canTurn(p.t))add('ROTATE',()=>{const nr=nextFace(p.t,p.r|0,1);feedback(station.faceProp(p.id,nr,propBox(p.t,nr,p)),orientEv(),'turned');renderSelection();});
     if(canFlip(p.t))add('FLIP',()=>{feedback(station.mirrorProp(p.id),orientEv(),'flipped');renderSelection();});
     add('COPY',()=>{selectTool('dupe');pickupDupe({tx:p.x,ty:p.y},orientEv(),p.id);});
+    // a MADE prop carries its library controls right here: SIZE (free) and its side view, like the MAKE A PROP panel
+    const made=(typeof UserProps!=='undefined'&&UserProps.get&&typeof PropSprites!=='undefined'&&PropSprites.isUserProp&&PropSprites.isUserProp(p.t))?UserProps.get(p.t):null;
+    if(made){
+      const k=UserProps.SCALES.includes(made.scale)?made.scale:1;
+      if(k>UserProps.SCALES[0])add('SIZE \u2212',()=>sizeMadeProp(-1,p.t));
+      if(k<UserProps.SCALES[UserProps.SCALES.length-1])add('SIZE + ('+Math.round(k*100)+'%)',()=>sizeMadeProp(1,p.t));
+      if(!made.side&&!made.symmetric)add('\u21bb SIDE VIEW',()=>{setHint('Making a side view of '+(made.label||'this prop')+' \u00b7 about $0.30 \u00b7 watch the MAKE A PROP panel');startMakeSide(p.t);});
+    }
     if(isEditableProp(p.t))add('CONFIGURE',()=>configureProp(p,orientEv()));
     add('DELETE',()=>{const had=linkedFloor()&&isWorkflowType(p.t)&&(station.links()||[]).some(l=>l.from.prop===p.id||l.to.prop===p.id);feedback(station.removeProp(p.id),orientEv(),had?'removed · its belts stay, loose — nothing rides them until a machine stands where they end · Undo restores it':'removed · Undo restores it');selectedPropId=null;movingPropId=null;renderSelection();setHint();});
     add('DESELECT',()=>{selectedPropId=null;renderSelection();setHint();});
