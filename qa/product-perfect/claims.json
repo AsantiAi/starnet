@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "bb0cc31660216c007f45b1318f9b1280f501f30a",
+    "sourceCommit": "74e3d64a262c2f3628a48470fce28c126172a540",
     "pathSetSha256": "d208b530ebf640e2fa520c2d157593c6ee2e74b85483317e129967112d6ed60a",
     "files": [
       {
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 404598,
-        "sha256": "da7003f96852cff0b2e1c2ddf4522688427407b909135f8a17c40a272d338a03"
+        "bytes": 404985,
+        "sha256": "ea8ba615f50b52aaffba895b2245561c9128254e1d03429b248a7e7e74832153"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
@@ -1093,8 +1093,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 772877,
-        "sha256": "fb7c7a89cccc7b30c7a4366090a6dceacfa403211e6b0afc4abdb863313b4aed"
+        "bytes": 773036,
+        "sha256": "514f2acd43f2d7fd548c424182f7fcbdb83105304afd84ad6482bef1df4ca1d0"
       },
       {
         "path": "frontend/app/study.js",
