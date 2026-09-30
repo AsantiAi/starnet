@@ -9522,7 +9522,7 @@ function rejectProcessFaultRequest(req, res) {
   const diagnosticRead = method === 'GET' && (pathname === '/api/health' || pathname === '/api/diagnostics');
   const staticRead = (method === 'GET' || method === 'HEAD') &&
     pathname.indexOf('/api') !== 0 && pathname.indexOf('/v1') !== 0 && pathname !== '/health' &&
-    pathname.indexOf('/workshop-run/') !== 0;
+    pathname.indexOf('/workshop-run/') !== 0 && pathname.indexOf('/view/') !== 0;
   if (diagnosticRead || staticRead) return false;
   if (pathname.indexOf('/api') === 0) {
     try { applyApiCors(req, res); } catch (e) { failNote('process-fault.reply-cors', e); }
@@ -10212,6 +10212,9 @@ const ROUTES = [
   //   form /workshop-run/~t/<ticket>/<agentId>/<runId>/<path...> (a run-scoped capability, never the master token).
   //   This is NOT under /api/ so it never touches the /api CORS/token gate above — the handler enforces its own auth.
   { m: ['GET', 'HEAD'], qprefix: '/workshop-run/', h: serveWorkshopRun },
+  //   GET/HEAD /view/~t/<ticket>/<agentId>/<dir>/<path...> — the BROWSER window's in-app render of a workspace web
+  //   page (same opaque-origin sandbox as /workshop-run/; ticket-only, folder-scoped — see serveWorkspaceView).
+  { m: ['GET', 'HEAD'], qprefix: '/view/', h: serveWorkspaceView },
   // ADDITIVE (Lane B / ux-run-truth): read-only stat of a user-chosen KEEP destination folder, so the return
   // card can validate the typed path inline instead of failing silently on Keep. Strictly less powerful than
   // the existing keep copy (which already writes to an arbitrary destPath) — this only reports exists/isDir.
@@ -15079,6 +15082,57 @@ async function serveWorkshopRun(req, res) {
     // to STOP them running; here scripts must run, so we sandbox the ORIGIN instead of killing the scripts.
     'Content-Security-Policy': 'sandbox allow-scripts',
     'Referrer-Policy': 'no-referrer'   // the ticketed URL must not ride a Referer to anything the tool links/loads
+  };
+  if (req.method === 'HEAD') { headers['Content-Length'] = st.size; res.writeHead(200, headers); return res.end(); }
+  res.writeHead(200, headers);
+  const stream = fs.createReadStream(abs);
+  stream.on('error', () => { try { res.destroy(); } catch (_) {} });
+  req.on('close', () => { try { stream.destroy(); } catch (_) {} });
+  stream.pipe(res);
+}
+
+/* GET/HEAD /view/~t/<ticket>/<agentId>/<dir>/<path...> — the BROWSER window (frontend/app/outputbrowser.js) shows a
+   web page an agent wrote into its WORKSPACE, in the app, the way /workshop-run/ serves an away-built tool. /api/file
+   deliberately serves the same .html as an inert download (scripts dead), which is right for a link but can never
+   RENDER a page. This route renders it, under the identical opaque-origin sandbox as /workshop-run/:
+     · the ticket is REQUIRED (no master-token or header form) and covers ONE folder — <dir> is a single encoded
+       segment ('~' = workspace root) the verifier derives the scope from, so the page's relative assets load and a
+       '../' out of the folder fails the MAC;
+     · the tail may not climb ('.'/'..'), and no dot-file/dot-folder is ever served (.env, .git …) — a page needs
+       none of them and a workspace can hold them;
+     · fsJail.resolveInside is the final wall (absolute / symlink / bad agentId escapes all throw). */
+async function serveWorkspaceView(req, res) {
+  const reqPath = String(req.url || '').split('?')[0];
+  const ticketed = apitickets.splitViewTicket(reqPath);
+  if (!ticketed) { res.writeHead(403); return res.end('forbidden'); }
+  let abs;
+  try {
+    const segs = ticketed.rest.split('/');
+    if (segs.length < 3) { res.writeHead(404); return res.end('not found'); }
+    const agentId = decodeURIComponent(segs[0]);
+    const dirSeg = decodeURIComponent(segs[1]);
+    const dir = dirSeg === '~' ? '' : dirSeg;
+    const tail = segs.slice(2).map(decodeURIComponent);
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(agentId)) { res.writeHead(403); return res.end('forbidden'); }
+    const parts = (dir ? dir.split('/') : []).concat(tail.join('/').split('/'));
+    if (parts.some(s => !s || s.charAt(0) === '.' || s.indexOf('\\') >= 0)) { res.writeHead(403); return res.end('forbidden'); }
+    const v = apitickets.verify(API_TOKEN, ticketed.ticket, 'view', apitickets.scopeView(agentId, dir), { now: Date.now() });
+    if (!v.ok) { res.writeHead(403); return res.end('forbidden ticket'); }
+    ({ abs } = await fsJail.resolveInside(agentId, parts.join('/')));
+  } catch (e) {
+    const msg = (e && e.message) || '';
+    if (/escape|illegal|bad agentId|URI/.test(msg)) { res.writeHead(403); return res.end('forbidden'); }
+    res.writeHead(404); return res.end('not found');
+  }
+  let st;
+  try { st = await fsp.stat(abs); } catch (_) { res.writeHead(404); return res.end('not found'); }
+  if (!st.isFile()) { res.writeHead(404); return res.end('not found'); }
+  const headers = {
+    'Content-Type': MIME[path.extname(abs).toLowerCase()] || 'application/octet-stream',
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'Content-Security-Policy': 'sandbox allow-scripts',   // opaque origin: scripts run, the app token/API stay out of reach
+    'Referrer-Policy': 'no-referrer'
   };
   if (req.method === 'HEAD') { headers['Content-Length'] = st.size; res.writeHead(200, headers); return res.end(); }
   res.writeHead(200, headers);

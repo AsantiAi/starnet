@@ -32,6 +32,7 @@ const SKEW_MS = 30 * 1000;   // same machine, but page and sidecar read the cloc
 const KINDS = Object.freeze({
   file: Object.freeze({ method: 'GET', maxTtlMs: 5 * 60 * 1000, once: false }),    // link/tab open of ONE workspace file
   run: Object.freeze({ method: 'GET', maxTtlMs: 10 * 60 * 1000, once: false }),    // ONE workshop run dir (page + its relative assets)
+  view: Object.freeze({ method: 'GET', maxTtlMs: 10 * 60 * 1000, once: false }),   // ONE workspace folder rendered in the BROWSER window (page + its relative assets)
   sse: Object.freeze({ method: 'GET', maxTtlMs: 2 * 60 * 1000, once: true }),      // one EventSource CONNECT (a live stream outlives it)
   save: Object.freeze({ method: 'POST', maxTtlMs: 2 * 60 * 1000, once: true })     // one unload beacon
 });
@@ -39,6 +40,7 @@ const KINDS = Object.freeze({
 function b64url(buf) { return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
 function scopeFile(agent, relPath) { return 'file\n' + String(agent || 'agent') + '\n' + String(relPath || ''); }
 function scopeRun(agent, runId) { return 'run\n' + String(agent || '') + '\n' + String(runId || ''); }
+function scopeView(agent, dir) { return 'view\n' + String(agent || '') + '\n' + String(dir || ''); }
 const SCOPE_SSE = 'sse\n/api/channels/events';
 const SCOPE_SAVE = 'save\n/api/save';
 
@@ -141,7 +143,22 @@ function splitRunTicket(rawPath) {
   return { ticket: tail.slice(0, slash), rest: tail.slice(slash + 1) };
 }
 
+/* /view/~t/<ticket>/<agentId>/<dir>/<path...> — the BROWSER window's in-app view of a workspace web page. <dir> is
+   ONE percent-encoded segment naming the folder the ticket covers ('~' = the workspace root), so the page's
+   relative assets (./style.css, img/a.png) stay under the same ticketed prefix, while a '../' out of the folder
+   changes <dir> and fails the MAC. Returns { ticket, rest } (rest = '<agentId>/<dir>/<path...>', still encoded)
+   or null when the url is not a ticketed view url — a view url has NO unticketed form. */
+const VIEW_PREFIX = '/view/';
+function splitViewTicket(rawPath) {
+  const p = String(rawPath || '');
+  if (p.indexOf(VIEW_PREFIX + '~t/') !== 0) return null;
+  const tail = p.slice(VIEW_PREFIX.length + 3);
+  const slash = tail.indexOf('/');
+  if (slash <= 0) return null;
+  return { ticket: tail.slice(0, slash), rest: tail.slice(slash + 1) };
+}
+
 module.exports = {
-  KINDS, SKEW_MS, mint, verify, parse, replayGuard, apiTicketClaim, splitRunTicket,
-  scopeFile, scopeRun, SCOPE_SSE, SCOPE_SAVE, message
+  KINDS, SKEW_MS, mint, verify, parse, replayGuard, apiTicketClaim, splitRunTicket, splitViewTicket,
+  scopeFile, scopeRun, scopeView, SCOPE_SSE, SCOPE_SAVE, message
 };

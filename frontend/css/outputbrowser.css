@@ -1,0 +1,53 @@
+/* BROWSER (2026-09-29) — frontend/app/outputbrowser.js. An agent-made web page, running in the station. A normal
+   station window (StationUI 'browser', WIDE shell): the term system owns the glass chrome, the dock rise and the
+   resize grip; this file lays out the body — address strip, recent strip, the page, a status line. Matte, glass
+   recipes (--gd-*), theme tokens only. */
+.term.browser-win { height: min(var(--term-band, calc(88vh * var(--sn-unzoom, 1))), 860px); }
+.term.browser-win .term-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.ob { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+
+/* the address strip: lamp · AGENT · path · [RELOAD] [FOLLOW] [OPEN OUTSIDE] */
+.ob-bar { display: flex; align-items: center; gap: 6px; flex: none; }
+.ob-lamp { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--ph-dim); box-shadow: inset 0 0 0 1px rgba(0,0,0,.4); }
+.ob[data-state="live"] .ob-lamp { background: var(--ok, #62ff9e); }
+.ob[data-state="loading"] .ob-lamp { background: var(--ph); }
+.ob[data-state="missing"] .ob-lamp { background: var(--bad, #ff4a3d); }
+.ob-addr {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 6px; overflow: hidden; white-space: nowrap;
+  padding: 3px 8px; font-size: 15px; line-height: 1.2; color: var(--text);
+  background: rgba(0,0,0,.28); border: 1px solid var(--gd-edge, rgba(var(--ph-rgb),.24)); border-radius: 4px;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.3);
+}
+.ob-addr b { font-weight: normal; color: var(--ph-bright); letter-spacing: 1.2px; flex: none; }
+.ob-sep { color: var(--ph-dim); flex: none; }
+.ob-path { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ob-tag { flex: none; margin-left: auto; font-size: 12px; letter-spacing: 1.2px; color: var(--ph-dim); }
+.ob-bar .bb { flex: none; }
+.ob-bar .ob-follow.on { color: var(--ph-bright); border-color: var(--ph); background: var(--gd-hover, rgba(var(--ph-rgb),.12)); }
+
+/* RECENT: the other pages made this session, one tap back */
+.ob-recent { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; flex: none; }
+.ob-recent[hidden] { display: none; }
+.ob-rlab { font-size: 12px; letter-spacing: 1.3px; color: var(--ph-dim); margin-right: 2px; }
+.ob-recent .ob-chip {
+  font: 13px/1.2 'VT323', monospace; color: var(--ph); padding: 2px 8px; cursor: pointer; max-width: 220px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: rgba(0,0,0,.22); border: 1px solid var(--gd-edge, rgba(var(--ph-rgb),.24)); border-radius: 3px;
+}
+.ob-recent .ob-chip:hover { color: var(--ph-bright); border-color: var(--ph); background: var(--gd-hover, rgba(var(--ph-rgb),.12)); }
+
+/* the page. A browser tab paints white under a page that sets no background, so the frame does too — otherwise
+   an unstyled page would render dark text on the station's dark glass. */
+.ob-stage {
+  position: relative; flex: 1 1 auto; min-height: 220px; overflow: hidden;
+  border: 1px solid var(--gd-edge, rgba(var(--ph-rgb),.24)); border-radius: 4px; background: rgba(0,0,0,.25);
+}
+.ob-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; }
+.ob-frame[hidden] { display: none; }
+.ob-empty { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; padding: 16px; text-align: center; }
+.ob-empty[hidden] { display: none; }
+.ob-empty p { margin: 0; max-width: 520px; font-size: 16px; line-height: 1.3; color: var(--text); }
+.ob-empty .ob-dim, .ob-dim { color: var(--ph-dim); font-size: 14px; }
+.ob-empty b { font-weight: normal; color: var(--ph); }
+
+.ob-note { flex: none; margin: 0; font-size: 13px; color: var(--ph-dim); min-height: 1em; }
