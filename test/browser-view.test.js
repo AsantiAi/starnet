@@ -36,6 +36,7 @@ function fakeSession() {
     },
     handTo: async info => { s.hands.push(info); },
     waitForProfile: async () => {},
+    tabs: async () => { s.warmed = (s.warmed || 0) + 1; s.open = true; return []; },
     navigate: async (url, opts) => { if (/blocked/.test(url)) throw new Error('refusing private address'); s.navs.push([url, !!(opts && opts.local)]); s.open = true; s.url = url; return url; },
     back: async () => { s.navs.push(['back']); },
     forward: async () => { s.navs.push(['forward']); },
@@ -237,6 +238,21 @@ function rig(extra) {
     A.eq(run.stops, stops, 'an ending run is forgotten WITHOUT reaching into its closing browser');
     A.eq((await views.frame('run:p1', 0, 0)).code, 'ended', 'an ended run has no picture');
     A.eq(run.inputs.length, 0, 'a private run\'s browser never received Commander input');
+  }
+
+  // ---- WARM: opening the window starts the browser in the background, once ----
+  {
+    const { made, views } = rig();
+    const w1 = views.warm();
+    A.ok(w1.ok && w1.warming, 'opening the window starts the station browser in the background');
+    views.warm();
+    await tick();
+    A.eq(made.length, 1, 'one browser');
+    A.eq(made[0].warmed, 1, 'started once, however often the window is opened');
+    A.eq(made[0].navs.length, 0, 'nothing is navigated by warming');
+    A.ok(views.warm().open, 'once started, warm says it is open');
+    await views.sessionForRun({ agentId: 'nova', runId: 'r1', interactive: true }).forward();
+    A.ok(views.warm().ok && made[0].warmed === 1, 'a browser a run is driving is left alone');
   }
 
   // ---- a station with no browser of its own ----

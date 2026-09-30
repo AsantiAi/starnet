@@ -4258,9 +4258,9 @@ const browserHandoffs = makeHandoffHost({
 });
 const browserHandoffRoutes = makeHandoffRoutes({ host: browserHandoffs, readBody, respondJson, signins: browserSignins });
 /* THE STATION BROWSER (sidecar/browser-view.js): ONE built-in browser the Commander and the agents share. An
-   interactive (COMMS) run's browser.* tools are bound to it (runOnce asks sessionForRun), the BROWSER window streams
-   it live, and between runs the Commander drives it — a typed address, clicks, keys. Same host authority as every run
-   browser (headless, synthetic input only, the pinned network proxy), and it holds the durable station profile under
+   interactive (COMMS) run's browser.* tools are bound to it (runOnce asks sessionForRun). It is a real Chrome WINDOW
+   the Commander uses directly; the BROWSER window mirrors and controls it. Agent input stays synthetic and every
+   request still rides the pinned network proxy, and it holds the durable station profile under
    its own lease id, so a sign-in either of you makes is there next time. It never gives the profile up to another run
    (that would close the browser in front of the Commander): a run that loses to it browses on a temporary profile
    (browserProfileLeaseFor → fallback). */
@@ -4274,7 +4274,11 @@ const browserViews = makeBrowserViews({
   downloadDirFor: agentId => /^[A-Za-z0-9_-]{1,40}$/.test(String(agentId || '')) ? path.join(WORKSPACES, String(agentId), 'downloads') : null,
   makeStationSession: () => browserInternals.makeBrowserSession({
     ledger: procLedger,
-    allowVisible: false, forceHeadless: true, syntheticInputOnly: true,
+    // A REAL WINDOW on the Commander's screen (Andrew: it must work like Claude Code / Codex / Hermes): they use it
+    // natively — typing, sign-in popups, full speed — and watch the agent drive it. Input from the AGENT stays
+    // synthetic (CDP events; the shim keeps pointer lock logical, so a page can never capture the real mouse).
+    // STARNET_BROWSER_HEADLESS=1 still pins it headless (CI, gates, soak rigs). It never attaches to another Chrome.
+    allowVisible: true, forceHeadless: false, preferVisible: true, noAttach: true, syntheticInputOnly: true,
     cdpPort: 0,
     profileDir: path.join(os.tmpdir(), 'starnet-browser-' + process.pid + '-' + STATION_BROWSER_ID),
     cleanupProfile: true,

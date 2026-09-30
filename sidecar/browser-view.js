@@ -7,7 +7,9 @@
    people expect (Claude Code's browser pane, Codex's in-app browser) is ONE browser:
 
      · the agent DRIVES it — an interactive (COMMS) run's browser.* tools are bound to this session, not a private one;
-     · the Commander WATCHES it live in the BROWSER window, during the run and after it (it stays open);
+     · it is a REAL Chrome window on the Commander's screen (index.js: preferVisible) — they use it natively, and the
+       BROWSER window in the station mirrors and controls it (a live picture, an address bar, bring-to-front);
+     · the Commander WATCHES the agent drive it, during the run and after it (it stays open);
      · the Commander USES it between runs — a typed address, clicks and keys go to the same page the agent will see;
      · it holds the ONE durable station profile, so a sign-in made here — by either of you — is there next time.
 
@@ -18,8 +20,10 @@
 
    THE PROFILE LEASE. The durable profile is a single-owner lease. The station browser holds it while open and NEVER
    gives it up to another run (Andrew: it "constantly closes" — a browser closing under you is the bug): a run that
-   loses to it browses on a temporary profile instead (index.js browserProfileLeaseFor → fallback). It closes only
-   after half an hour with nobody driving or watching it.
+   loses to it browses on a temporary profile instead (index.js browserProfileLeaseFor → fallback). A VISIBLE station
+   browser never idles out (the Commander may be using the window directly, which the station cannot see): it closes
+   when they close it. Only a headless one (STARNET_BROWSER_HEADLESS) closes after half an hour unused. If the window
+   is closed or Chrome dies, the next use starts it again on the same profile (browser.js reviveIfDead).
 
    LAWS
      · Truthful telemetry: `open` means the session really has a browser; `driver` is the run bound right now;
@@ -114,6 +118,8 @@ function makeBrowserViews(deps) {
     station.idleTimer = setT(() => {
       if (!station || station.driver) return;
       if (now() - station.lastPollAt < VIEWER_RECENT_MS) return touchStation();   // somebody is looking at it
+      const sf = surfaceOf(station.session);
+      if (sf && sf.visible) return touchStation();   // a real window: the Commander may be using it directly
       closeStation().catch(swallow('view.station-idle-close'));
     }, stationIdleMs);
     if (station.idleTimer && typeof station.idleTimer.unref === 'function') station.idleTimer.unref();
@@ -212,7 +218,8 @@ function makeBrowserViews(deps) {
     if (station !== st) return { ok: false, error: 'the browser was closed' };
     const s = surfaceOf(st.session);
     const ch = chans.get('station'); if (ch) ch.pageAt = 0;
-    return { ok: true, url: finalUrl || addr.url, search: !!addr.search, remembered: !!(s && s.remembered) };
+    if (s && s.visible && typeof s.front === 'function') { try { await s.front(); } catch (e) { failNote('view.front', e); } }   // they typed it: show it
+    return { ok: true, url: finalUrl || addr.url, search: !!addr.search, remembered: !!(s && s.remembered), visible: !!(s && s.visible) };
   }
   async function nav(action) {
     const busy = driving(); if (busy) return busy;
@@ -243,6 +250,26 @@ function makeBrowserViews(deps) {
     touchStation();
     await s.input(clean);
     const ch = chans.get('station'); if (ch) ch.pageAt = 0;   // the Commander acted: re-read where the page is
+    return { ok: true };
+  }
+
+  /* WARM: the Commander opened the BROWSER window — start Chromium now, in the background, so it is ready by the
+     time they have typed an address (a real window can take many seconds to start on a busy machine). Nothing is
+     navigated; a browser already open, or one a run is driving, is left alone. */
+  function warm() {
+    if (!makeSession) return { ok: false, error: 'this station cannot open a browser of its own' };
+    if (station && station.driver) return { ok: true, open: true };
+    const st = ensureStation();
+    touchStation();
+    if (surfaceOf(st.session)) return { ok: true, open: true };
+    if (!st.warming) st.warming = Promise.resolve().then(() => st.session.tabs()).catch(e => failNote('view.warm', e)).then(() => { st.warming = null; });
+    return { ok: true, warming: true };
+  }
+  async function front() {
+    const s = station ? surfaceOf(station.session) : null;
+    if (!s) return { ok: false, code: 'closed', error: 'the browser is not open' };
+    if (!s.visible || typeof s.front !== 'function') return { ok: false, error: 'the browser is running hidden on this station (STARNET_BROWSER_HEADLESS)' };
+    try { await s.front(); } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
     return { ok: true };
   }
 
@@ -331,14 +358,14 @@ function makeBrowserViews(deps) {
     const st = station;
     const s = st ? surfaceOf(st.session) : null;
     const d = st && st.driver ? { agentId: st.driver.agentId, runId: st.driver.runId } : null;
-    return { agents, station: { available: !!makeSession, open: !!s, driver: d, handoff: !!(d && handoffLive(d.runId)), remembered: !!(s && s.remembered) } };
+    return { agents, station: { available: !!makeSession, open: !!s, visible: !!(s && s.visible), driver: d, handoff: !!(d && handoffLive(d.runId)), remembered: !!(s && s.remembered) } };
   }
   async function closeAll() {
     for (const k of Array.from(chans.keys())) dropChan(k, k !== 'station');
     if (station) { station.driver = null; await closeStation(); }
   }
 
-  return { sessionForRun, releaseRun, registerRun, unregisterRun, open, nav, input, frame, list, close: closeStation, closeAll,
+  return { sessionForRun, releaseRun, registerRun, unregisterRun, open, nav, input, front, warm, frame, list, close: closeStation, closeAll,
     _internals: { runs, chans, station: () => station } };
 }
 
@@ -358,6 +385,8 @@ function makeViewRoutes(deps) {
     respondJson(res, r.ok ? 200 : 409, r);
   }
   async function close(req, res) { const r = await views.close(); respondJson(res, r.ok ? 200 : 409, r); }
+  async function front(req, res) { const r = await views.front(); respondJson(res, r.ok ? 200 : 409, r); }
+  async function warm(req, res) { const r = views.warm(); respondJson(res, r.ok ? 200 : 409, r); }
   async function frame(req, res) {
     const u = new URL(req.url, 'http://x');
     const r = await views.frame(String(u.searchParams.get('target') || '').slice(0, 120), Number(u.searchParams.get('after')) || 0, VIEW_POLL_MS);
@@ -384,6 +413,8 @@ function makeViewRoutes(deps) {
       { m: 'POST', exact: '/api/browser/view/open', h: open },
       { m: 'POST', exact: '/api/browser/view/nav', h: nav },
       { m: 'POST', exact: '/api/browser/view/close', h: close },
+      { m: 'POST', exact: '/api/browser/view/front', h: front },
+      { m: 'POST', exact: '/api/browser/view/warm', h: warm },
       { m: 'GET', qsplit: '/api/browser/view/frame', h: frame },
       { m: 'POST', exact: '/api/browser/view/input', h: input }
     ]

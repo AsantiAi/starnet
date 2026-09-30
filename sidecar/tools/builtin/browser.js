@@ -622,6 +622,18 @@
       this.id = 0;
       this.pending = new Map();
       this.handlers = new Map();
+      /* A DEAD BROWSER ANSWERS NOTHING. When Chromium exits (the station window closed, a crash) its socket closes,
+         and every command in flight used to sit out its whole timeout — and every later command went into a dead
+         socket and did the same (measured: 15 s per call after the station window was closed). Now the close fails
+         them at once, and `closed` lets the driver report itself dead so the session starts a fresh browser. */
+      this.closed = false;
+      const gone = () => {
+        if (this.closed) return;
+        this.closed = true;
+        for (const [id, p] of this.pending) { this.pending.delete(id); if (p.timer) clearTimeout(p.timer); p.reject(new Error('CDP connection closed: the browser went away')); }
+      };
+      ws.addEventListener('close', gone);
+      ws.addEventListener('error', gone);
       ws.addEventListener('message', e => {
         let m; try { m = JSON.parse(e.data); } catch (_) { return; }
         if (m.id && this.pending.has(m.id)) {
@@ -643,12 +655,14 @@
       const id = ++this.id;
       const budget = timeoutMs || this.timeoutMs;
       return new Promise((resolve, reject) => {
+        if (this.closed) { reject(new Error('CDP connection closed: the browser went away')); return; }
         const timer = setTimeout(() => { if (this.pending.has(id)) { this.pending.delete(id); reject(new Error('CDP timeout: ' + method)); } }, budget);
         if (timer && typeof timer.unref === 'function') timer.unref();
         this.pending.set(id, { resolve, reject, timer });
         const message = { id, method, params: params || {} };
         if (sessionId) message.sessionId = sessionId;
-        this.ws.send(JSON.stringify(message));
+        try { this.ws.send(JSON.stringify(message)); }
+        catch (e) { this.pending.delete(id); clearTimeout(timer); reject(new Error('CDP connection closed: ' + ((e && e.message) || e))); }
       });
     }
     on(method, fn) {
@@ -903,7 +917,87 @@
       if (attachPort !== null || headed) return Promise.resolve();
       return cdp.send('Emulation.setDeviceMetricsOverride', stationMetrics, sessionId);
     }
-    async function connect() {
+    /* LAUNCH RETRY. Chromium exiting before we own its DevTools endpoint is almost always transient: a profile
+       still being released by the previous process, or a start that lost a race on a loaded machine. One failed
+       spawn used to fail the whole call (the agent then went hunting for other browsers). Two more tries, spaced
+       out, before the error is real. Attach mode never retries: that browser is not ours to start. */
+    /* CLEAN START. After a Chromium on this profile ended hard (the Commander closed the station window, a crash, a
+       killed sidecar), the next launch RESTORED its old tabs beside ours and was slow to report them: the driver's
+       first command then waited out whole CDP timeouts (measured: 2 of 3 relaunches stalled 15 s, one 46 s). The
+       browser we launch always starts on one blank tab, so forget the crashed session and mark the last exit clean.
+       Cookies, logins and site data live in other files and are untouched. */
+    /* ORPHANS ON OUR PROFILE. A Chromium that died at startup (measured on a starved machine: 100% CPU, <1 GB free)
+       can leave a helper process holding the profile's files, and every retry then exits at once against that lock
+       (EBUSY on Default/Sessions). Before a retry, end whatever still runs with THIS profile directory on its command
+       line. The directory is unique to this station/run (the proc ledger uses it as the same identity token), so
+       nothing else — never the Commander's own Chrome — can match. Only ever called for a browser we launched. */
+    let reclaimed = false;
+    // End a Chromium WE started together with its helper processes — instant, no process-table scan (that scan took
+    // >15 s on a starved machine). Windows needs /T for the tree; elsewhere the group dies with the browser.
+    function killTree(pid) {
+      if (!pid) return;
+      try {
+        if (process.platform === 'win32') CP.execFileSync('taskkill', ['/T', '/F', '/PID', String(pid)], { stdio: 'ignore', timeout: 10000, windowsHide: true });
+        else process.kill(pid, 'SIGKILL');
+      } catch (e) { if (!(e && (e.status === 128 || e.code === 'ESRCH'))) failNote('browser.kill-tree', e); }   // 128/ESRCH: already gone
+    }
+    function killProfileOrphans(dir) {
+      if (spawn !== CP.spawn || !dir) return;   // a test rig's fake spawn owns no real processes
+      const needle = String(dir).replace(/\\/g, '/');
+      try {
+        if (process.platform === 'win32') {
+          const esc = needle.replace(/'/g, "''");
+          const ps = "Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.Replace('\\','/') -like '*--user-data-dir=" + esc + "*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }";
+          CP.execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { stdio: 'ignore', timeout: 15000, windowsHide: true });
+        } else {
+          CP.execFileSync('pkill', ['-f', '--', '--user-data-dir=' + needle], { stdio: 'ignore', timeout: 5000 });
+        }
+      } catch (e) { if (!(e && e.status === 1)) failNote('browser.launch-retry.orphans', e); }   // pkill exits 1 when nothing matched
+    }
+    function cleanStart(dir) {
+      const d = P.join(dir, 'Default');
+      for (const name of ['Sessions', 'Current Session', 'Current Tabs', 'Last Session', 'Last Tabs']) {
+        try { FS.rmSync(P.join(d, name), { recursive: true, force: true }); } catch (e) { failNote('browser.clean-start.rm', e); }
+      }
+      const pf = P.join(d, 'Preferences');
+      try {
+        if (!FS.existsSync(pf)) return;
+        const j = JSON.parse(FS.readFileSync(pf, 'utf8'));
+        if (j && j.profile && (j.profile.exit_type !== 'Normal' || j.profile.exited_cleanly !== true)) {
+          j.profile.exit_type = 'Normal'; j.profile.exited_cleanly = true;
+          FS.writeFileSync(pf, JSON.stringify(j));
+        }
+      } catch (e) { failNote('browser.clean-start.prefs', e); }
+    }
+    /* SINGLE-FLIGHT. Two callers reaching connect() together (the BROWSER window's picture poll and a navigation, or
+       the window's warm-up and a typed address) each launched their OWN Chromium on the same profile; the second
+       handed off to the first and exited — "spawned Chromium exited before CDP ownership" while a browser we started
+       held the profile — and the retries collided with it. One launch at a time: every concurrent caller awaits it. */
+    let connecting = null;
+    function connect() {
+      if (cdp) return Promise.resolve(cdp);
+      if (!connecting) connecting = connectWithRetry().finally(() => { connecting = null; });
+      return connecting;
+    }
+    async function connectWithRetry() {
+      if (cdp) return cdp;
+      let lastErr = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try { return await connectOnce(); }
+        catch (e) {
+          lastErr = e;
+          if (attachPort !== null || !/exited before CDP ownership|could not attach to Chromium/.test(String((e && e.message) || ''))) throw e;
+          failNote('browser.launch-retry', e);
+          // our own attempt: its whole tree (a stuck one still holds the profile); a vanished one: sweep its orphans
+          if (proc && !procExited) killTree(proc.pid); else if (spawn === CP.spawn) killProfileOrphans(profileDir);
+          proc = null; procExited = false; procError = null; procClosePromise = null;
+          if (networkProxy) { const px = networkProxy; networkProxy = null; try { await px.close(); } catch (e2) { failNote('browser.launch-retry.proxy', e2); } }
+          await sleep(700 * (attempt + 1));
+        }
+      }
+      throw lastErr;
+    }
+    async function connectOnce() {
       if (cdp) return cdp;
       /* ATTACH: no spawn, no profile dir, no proc ledger entry. `proc` deliberately stays null, which is
          what makes close() safe — it kills `owned`, and a browser we did not start is not ours to kill.
@@ -920,6 +1014,16 @@
       } else {
       try { FS.mkdirSync(profileDir, { recursive: true }); } catch (_) {}
       if (privatePort) { try { FS.rmSync(activePortFile, { force: true }); } catch (_) {} }
+      /* A REVIVED browser (the station window was closed, or Chromium died): whatever still runs on this profile is
+         the old one. Measured: after a normal window close the old Chromium lingered >10 s holding the profile, and a
+         relaunch waited on it forever; after a crash the first relaunch exited at once against the lock. Clear it
+         first, then start one clean browser. */
+      if (deps.reclaimProfile === true && !reclaimed) {
+        reclaimed = true;
+        if (deps.reclaimPid) killTree(deps.reclaimPid); else killProfileOrphans(profileDir);
+        await sleep(600);
+      }
+      cleanStart(profileDir);
       // Allocated here, not by Chromium, so the launch carries no automation flag. Chromium still
       // writes the bound port into this profile's DevToolsActivePort, which stays the readiness proof.
       launchPort = privatePort ? await allocateEphemeralPort() : cdpPort;
@@ -937,8 +1041,11 @@
         '--proxy-bypass-list=<-loopback>');
       args.push('--lang=' + hostBrowserLocale(deps));
       if (headed) {
-        // Visible window the user can watch (and hear — no --mute-audio in headed mode).
-        args.push('--new-window');
+        // Visible window the user can watch (and hear — no --mute-audio in headed mode). No --new-window: on a profile
+        // whose last Chrome did not exit cleanly (the window was closed hard, or it crashed) it made Chrome open a second
+        // tab beside its startup one, and the driver could bind to the tab that then went away — its first command hung
+        // for a full CDP timeout (measured: 2 of 3 relaunches stalled 15 s). Only a crash bubble is disabled on top.
+        args.push('--hide-crash-restore-bubble');
       } else {
         args.push('--headless=new', '--hide-scrollbars', '--mute-audio');
       }
@@ -960,7 +1067,9 @@
         }
       } catch (_) {}
       }
-      for (let i = 0; i < 40; i++) {
+      // A real window starts much slower than headless on a loaded machine (measured >10 s at 100% CPU): ~30 s for it.
+      const readyTries = (headed && attachPort === null) ? 120 : 40;
+      for (let i = 0; i < readyTries; i++) {
         if (attachPort === null && procExited) throw new Error('spawned Chromium exited before CDP ownership was established' + (procError ? ': ' + procError : ''));
         try {
           // We chose launchPort ourselves, so it IS the endpoint — no DevToolsActivePort read-back.
@@ -1027,6 +1136,12 @@
                     // The original tab. Its setup is finished by connect() below, which needs to
                     // await it; recording the session is all that happens here.
                     adoptOpenerSession(sid, info.targetId);
+                    /* …unless Chromium created it AFTER setAutoAttach: then it arrives PAUSED (waitForDebuggerOnStart),
+                       and a paused page never acknowledges Page.* — connect()'s very first Page.enable waited out the
+                       whole CDP timeout. Measured on relaunches of the station window after it was closed (a slower
+                       start): 2 of 4 stalled 15 s, and a snapshot 46 s. It is still the launch about:blank — nothing to
+                       protect yet, and connect() installs the shim before any navigation — so resume it now. */
+                    if (p.waitingForDebugger) Promise.resolve(cdp.send('Runtime.runIfWaitingForDebugger', {}, sid)).catch(e => failNote('browser.opener-resume', e));
                     return;
                   }
                   /* ADOPT, don't kill. A target=_blank link or a popup used to be closed outright
@@ -2105,7 +2220,12 @@
       } catch (e) { failNote('browser.page-info', e); }
       return { url: '', title: '' };
     }
-    async function close() {
+    // False once the Chromium WE started has exited (the Commander closed the station browser window, or it crashed).
+    function alive() { return !(proc && procExited) && !(cdp && cdp.closed); }
+    function ownedPid() { return proc && proc.pid ? proc.pid : null; }
+    // Raise the station browser's window (the Commander asked to see it).
+    async function bringToFront() { const c = await page(); await c.send('Page.bringToFront'); return true; }
+    async function close(opts) {
       const owned = proc, waitForClose = procClosePromise;
       async function exitedWithin(ms) {
         if (!waitForClose) return false;
@@ -2131,13 +2251,14 @@
         if (!exited) throw new Error('owned Chromium did not exit after synthetic test session closed');
       }
       if (networkProxy) { const proxy = networkProxy; networkProxy = null; await proxy.close(); }
-      if (deps.cleanupProfile === true) { try { FS.rmSync(profileDir, { recursive: true, force: true }); } catch (_) {} }
+      // keepProfile: a dead browser being replaced — its successor is about to start on this same directory
+      if (deps.cleanupProfile === true && !(opts && opts.keepProfile)) { try { FS.rmSync(profileDir, { recursive: true, force: true }); } catch (_) {} }
     }
     // visible() is the TRUTH the model reports: true only if the controlled window is
     // actually on the user's screen. Headless mode, or a headless-only binary fallback in
     // a headed request, both read as not visible.
     function visible() { return headed; }
-    return { navigate, snapshot, click, type, press, hover, drag, selectOption, viewport, forward, upload, tabs, waitForTabCount, selectTab, closeTab, inspect, evalPublic, waitFor, pdf, intercept, emulate, usingPersistentProfile: () => !!deps.profileIsPersistent, testInput, testEval, testState, scroll, back, getText, challengeStatus, handleDialog, screenshot, streamStart, streamStop, humanInput, pageInfo, setDownloadDir, close, consoleLog: readConsoleLog, networkLog: () => netLog.map(r => Object.assign({}, r)), lastDialog: () => dialog, lastResponse: () => lastResponse, visible, headed, headlessFallback: wantHeaded && binIsHeadlessOnly, attachedPort: () => attachedPort, allowLocal, profileDir };
+    return { navigate, snapshot, click, type, press, hover, drag, selectOption, viewport, forward, upload, tabs, waitForTabCount, selectTab, closeTab, inspect, evalPublic, waitFor, pdf, intercept, emulate, usingPersistentProfile: () => !!deps.profileIsPersistent, testInput, testEval, testState, scroll, back, getText, challengeStatus, handleDialog, screenshot, streamStart, streamStop, humanInput, pageInfo, setDownloadDir, alive, ownedPid, bringToFront, close, consoleLog: readConsoleLog, networkLog: () => netLog.map(r => Object.assign({}, r)), lastDialog: () => dialog, lastResponse: () => lastResponse, visible, headed, headlessFallback: wantHeaded && binIsHeadlessOnly, attachedPort: () => attachedPort, allowLocal, profileDir };
   }
 
   function makeBrowserSession(deps) {
@@ -2219,12 +2340,26 @@
                        profile dir (cookies/logins survive the swap). Headless is the default; a visible
                        window exists only while the Commander asked for one. */
     function wantedHeaded(wantVisible) {
+      // THE STATION BROWSER (browser-view.js) is a real window the Commander uses, whatever an individual call asks
+      // (a local test page, a visible:false navigate): only a headless pin (CI/soak env, legacy rigs) keeps it hidden.
+      if (deps.preferVisible === true && deps.forceHeadless !== true) return !headlessRequested(deps.env) && deps.headless !== true;
       return deps.forceHeadless === true ? false
         : (wantVisible === undefined ? (driverHeaded === null ? false : driverHeaded)
           : (!!wantVisible && !headlessRequested(deps.env) && deps.headless !== true));
     }
+    /* The window was closed or Chromium died: forget that driver so the next call starts a fresh one on the same
+       profile (sign-ins intact), instead of failing every call against a dead socket. Refs die with the page. */
+    let reviveNext = false, revivePid = null;
+    function reviveIfDead() {
+      if (!driver || injected || attachedToUserBrowser || typeof driver.alive !== 'function' || driver.alive()) return false;
+      const dead = driver; driver = null; driverHeaded = null; version++; navEpoch++; reviveNext = true;
+      revivePid = typeof dead.ownedPid === 'function' ? dead.ownedPid() : null;
+      Promise.resolve().then(() => dead.close({ keepProfile: true })).catch(e => failNote('browser.dead-driver.close', e));
+      return true;
+    }
     function ensureDriver(wantVisible) {
       if (teardownFailure) throw teardownFailure;
+      reviveIfDead();
       const headed = wantedHeaded(wantVisible);
       if (driver) {
         /* An ATTACHED session never mode-switches. The relaunch below rebuilds the driver WITHOUT
@@ -2237,7 +2372,8 @@
         // Callers with an explicit mode must use ensureDriverMode(), which awaits that teardown.
         throw new Error('browser mode switch requires awaited teardown');
       }
-      driver = makeDriver(Object.assign({}, deps, profileDeps(), { headed }));
+      driver = makeDriver(Object.assign({}, deps, profileDeps(), { headed }, reviveNext ? { reclaimProfile: true, reclaimPid: revivePid } : {}));
+      reviveNext = false; revivePid = null;
       driverHeaded = headed;
       return driver;
     }
@@ -2268,6 +2404,7 @@
       return driver;
     }
     async function ensureDriverMode(wantVisible) {
+      reviveIfDead();
       const headed = wantedHeaded(wantVisible);
       if (!driver) return ensureDriver(wantVisible);
       if (attachedToUserBrowser || injected || driverHeaded === headed) return driver;
@@ -2346,9 +2483,19 @@
       const u = validate(url);
       if (!local) await assertResolvedSafe(u, doLookup);   // refuse names that RESOLVE private (rebinding)
       const wantedMode = local ? false : ('visible' in opts ? !!opts.visible : undefined);
-      const d = wantedMode === undefined ? ensureDriver() : await ensureDriverMode(wantedMode);
+      let d = wantedMode === undefined ? ensureDriver() : await ensureDriverMode(wantedMode);
       if (local && typeof d.allowLocal === 'function') d.allowLocal(u.href);
-      const finalUrl = await d.navigate(u.href);
+      let finalUrl;
+      try { finalUrl = await d.navigate(u.href); }
+      catch (e) {
+        // The browser died under this call (the station window was closed, Chromium crashed): start a fresh one on the
+        // same profile and go there ONCE. Opening an address is safe to repeat; a click or a submit never is, so only
+        // navigate does this — every other call reports the loss and the next one starts the fresh browser.
+        if (!/CDP connection closed/.test(String((e && e.message) || '')) || !reviveIfDead()) throw e;
+        d = wantedMode === undefined ? ensureDriver() : await ensureDriverMode(wantedMode);
+        if (local && typeof d.allowLocal === 'function') d.allowLocal(u.href);
+        finalUrl = await d.navigate(u.href);
+      }
       if (finalUrl) {
         try {
           validate(finalUrl);
@@ -2479,6 +2626,9 @@
        WHAT IT COSTS, STATED PLAINLY: every login the Commander has. That is why eval is refused above,
        why the tool requires consent, and why we never kill the process on close. */
     async function attach(port) {
+      // The station browser is the one the Commander and the agents share: it never becomes some other Chrome
+      // (an agent once attached it to a debugging port it found on the machine — another tool's browser).
+      if (deps.noAttach === true) throw new Error('browser.attach is not available here: this is the station browser you share with the Commander. Use browser.navigate in it instead.');
       const p = Number(port);
       if (!Number.isInteger(p) || p < 1 || p > 65535) throw new Error('browser.attach: port must be an integer 1-65535');
       // Probing BEFORE the relaunch means a wrong port reports "nothing is listening" while the run still
@@ -2654,13 +2804,13 @@
         if (!vis) throw new Error('no full Chrome found — only a headless-shell binary, so a visible login window is impossible; install Chrome or set STARNET_CHROME');
       } catch (e) {
         // restore the shimmed headless posture before surfacing the failure
-        await relaunch({ headed: false });
+        await relaunch({ headed: deps.preferVisible === true ? wantedHeaded(undefined) : false });
         throw e;
       }
       const done = approved(await attended.prompt({ tool: 'browser.login.done', scope: 'execute', argsSummary: host }));
       // Done or cancelled, the window closes and research mode resumes on the SAME profile — any cookies the
       // site set during the attempt are already durable.
-      await relaunch({ headed: false });
+      await relaunch({ headed: deps.preferVisible === true ? wantedHeaded(undefined) : false });
       return { status: done ? 'done' : 'unconfirmed', host, url: finalUrl || u.href };
     }
     /* STEP-IN: hand THIS browser — same process, same page, same profile — to the Commander.
@@ -2672,7 +2822,7 @@
     let frozenBy = null;
     function handoffSurface() {
       const d = driver;
-      if (!d) throw new Error('no browser page is open — navigate to the page that needs the Commander first');
+      if (!d || (typeof d.alive === 'function' && !d.alive())) throw new Error('no browser page is open — navigate to the page that needs the Commander first');
       for (const fn of ['streamStart', 'streamStop', 'humanInput', 'pageInfo']) {
         if (typeof d[fn] !== 'function') throw new Error('this browser cannot be handed to the Commander (driver has no ' + fn + ')');
       }
@@ -2683,6 +2833,8 @@
         stopStream: () => d.streamStop(),
         input: ev => d.humanInput(ev),
         pageInfo: () => d.pageInfo(),
+        front: typeof d.bringToFront === 'function' ? () => d.bringToFront() : null,
+        visible: driverHeaded === true,
         remembered
       };
     }
@@ -3215,5 +3367,5 @@
     return { tools, session, register(reg) { tools.forEach(t => reg.register(t)); return reg; }, _internals: { assertSafeUrl, assertLoopbackUrl, assertResolvedSafe, isPrivateV4, isPrivateV6, makeBrowserSession, makeCdpDriver, makeDownloadLedger, findChrome, resolveChrome, headlessRequested, SYNTHETIC_INPUT_BOOTSTRAP, CHROME_CANDIDATES } };
   }
 
-  return { makeBrowserTools, _internals: { assertSafeUrl, assertLoopbackUrl, assertResolvedSafe, isPrivateV4, isPrivateV6, makeBrowserSession, makeCdpDriver, makeDownloadLedger, findChrome, resolveChrome, headlessRequested, SYNTHETIC_INPUT_BOOTSTRAP, SETTLE_BOOTSTRAP, SETTLE_PROBE, SETTLE_QUIET_POLLS, describeResponse, jsLiteral, normalizeBrowserLocale, detectBrowserVersion, makeLaunchIdentity, browserVersionFrom, cleanBrandRows, makeCdpIdentity, CHROME_CANDIDATES } };
+  return { makeBrowserTools, _internals: { CdpClient, assertSafeUrl, assertLoopbackUrl, assertResolvedSafe, isPrivateV4, isPrivateV6, makeBrowserSession, makeCdpDriver, makeDownloadLedger, findChrome, resolveChrome, headlessRequested, SYNTHETIC_INPUT_BOOTSTRAP, SETTLE_BOOTSTRAP, SETTLE_PROBE, SETTLE_QUIET_POLLS, describeResponse, jsLiteral, normalizeBrowserLocale, detectBrowserVersion, makeLaunchIdentity, browserVersionFrom, cleanBrandRows, makeCdpIdentity, CHROME_CANDIDATES } };
 });
