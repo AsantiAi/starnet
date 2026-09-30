@@ -2,9 +2,10 @@
 name: Cost Audit
 slug: cost-audit
 description: Sweep real spend line by line, verify cheaper alternatives against live prices, and rank the savings.
-category: Finance
+category: Research
 requires: [cabinet, dish]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

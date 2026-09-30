@@ -98,6 +98,7 @@ test/desktop-voice-bundle.test.js
 test/transcript.compaction.e2e.test.js
 test/provider.anthropic.test.js
 test/provider.claude-cli.test.js
+test/provider-accounts.test.js
 test/claude-cli-login.test.js
 test/claude-cli-signin-engine.test.js
 test/prices.live.test.js
@@ -314,6 +315,7 @@ test/qa-product-perfect-claims.test.js
 test/qa-claims-streaming.test.js
 test/website-pricing-hold.test.js
 test/website-docs-navigation.test.js
+test/website-skill-market.test.js
 test/genesis-starnet-link.test.js
 test/qa-product-perfect-provenance.test.js
 test/qa-cartographer.test.js
@@ -971,6 +973,7 @@ test/openai-waiting-keepalive.test.js
 test/comms-wait-line.test.js
 test/line-stats.test.js
 test/linewatch.test.js
+test/deskscreen.test.js
 test/agent-skin-thumbs.test.js
 test/estop-sample-hub.test.js
 test/trigger-sweep.test.js

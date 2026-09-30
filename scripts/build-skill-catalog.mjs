@@ -3,6 +3,7 @@
 
    Sources:
      sidecar/skills/library/<slug>.md    StarNet Originals already bundled with the app, listed in skills-catalog/originals.json
+                                         (each carries its own `version:` line; bump it when its text changes)
      skills-catalog/skills/<slug>/       market-only skills: skill.json + SKILL.md (+ LICENSE, references/)
      skills-catalog/revoked.json         skills the market has PULLED: { "revoked": [{ slug, digest?, reason, at }] }
    Output (served by starnetos.com, Cloudflare Pages):
@@ -27,12 +28,16 @@
 
    node scripts/build-skill-catalog.mjs          write (and sign) the catalog
    node scripts/build-skill-catalog.mjs --check  exit 1 if website/ does not match the sources or a signature does
-                                                 not verify (the gate runs this) */
+                                                 not verify (the gate runs this)
+   node scripts/build-skill-catalog.mjs --pin-floor   after a catalog DEPLOY: raise the app's minimum accepted serial
+                                                      (sidecar/skills/market-floor.json) to the serial now live */
 import { createRequire } from 'node:module';
 import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { zipStore } from './lib/zip-store.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -46,6 +51,7 @@ const SRC = join(ROOT, 'skills-catalog');
 const OUT = join(ROOT, 'website');
 const INDEX = join(OUT, '.well-known', 'starnet-skills.json');
 const REVOKED = join(OUT, '.well-known', 'starnet-skills-revoked.json');
+const FLOOR = join(ROOT, 'sidecar', 'skills', 'market-floor.json');
 const SIGNING_KEY = process.env.STARNET_SKILL_MARKET_KEY || join(homedir(), '.starnet-keys', 'skill-market.key');
 
 function lf(s) { return String(s).replace(/\r\n/g, '\n'); }
@@ -72,7 +78,10 @@ export function buildCatalog() {
   for (const slug of Object.keys(originals.skills || {}).sort()) {
     const recipe = bySlug.get(slug);
     if (!recipe) throw new Error('originals.json lists "' + slug + '" but sidecar/skills/library has no such recipe');
-    const version = originals.skills[slug].version;
+    // the version lives in the recipe itself, so the app knows which copy is newer (a built-in recipe at a higher
+    // version than an installed market copy wins); editing a recipe means bumping its `version:` line
+    const version = recipe.version;
+    if (!version) throw new Error('sidecar/skills/library/' + slug + '.md is published to the Skill Market, so it needs a `version:` line in its frontmatter');
     sources.push({
       slug, version, shelf: 'originals', category: recipe.category, requires: recipe.requires,
       tags: [recipe.category.toLowerCase()].concat(originals.skills[slug].tags || []), license: recipe.license || 'MIT',
@@ -120,7 +129,13 @@ export function buildCatalog() {
   for (const { entry } of built) {
     if (market.revokedMatch(revoked, entry.slug, entry.digest)) throw new Error(entry.slug + '@' + entry.version + ' is pulled in skills-catalog/revoked.json but still published; remove it from the sources or bump it to a fixed version');
   }
-  // 5. the serial: unchanged content keeps the published serial, any change bumps it (stations refuse a lower one)
+  // 5. a downloadable .zip of each package (a standard Agent Skills folder: <slug>/SKILL.md, LICENSE, references/),
+  //    pinned by sha256 in the signed index. Stations never use it; the website's Download button does.
+  for (const b of built) {
+    b.zip = zipStore(b.pkg.files.map(f => ({ name: b.entry.slug + '/' + f.path, data: Buffer.from(f.content, 'base64') })));
+    b.entry.download = { path: b.entry.slug + '-' + b.entry.version + '.zip', sha256: createHash('sha256').update(b.zip).digest('hex'), bytes: b.zip.length };
+  }
+  // 6. the serial: unchanged content keeps the published serial, any change bumps it (stations refuse a lower one)
   const entries = built.map(b => b.entry);
   const prior = existsSync(INDEX) ? JSON.parse(readFileSync(INDEX, 'utf8')) : null;
   const priorSerial = market.serialOf(prior);
@@ -135,10 +150,11 @@ function jsonBytes(doc) { return Buffer.from(JSON.stringify(doc, null, 2) + '\n'
 
 function planWrites(result) {
   const writes = [];
-  for (const { entry, pkg } of result.packages) {
+  for (const { entry, pkg, zip } of result.packages) {
     for (const f of pkg.files) {
       writes.push({ path: join(OUT, 'skills', entry.slug, entry.version, ...f.path.split('/')), bytes: Buffer.from(f.content, 'base64'), immutable: true, label: entry.slug + '@' + entry.version + '/' + f.path });
     }
+    writes.push({ path: join(OUT, 'skills', entry.slug, entry.version, entry.download.path), bytes: zip, immutable: true, label: entry.slug + '@' + entry.version + '/' + entry.download.path });
   }
   for (const [file, doc, label] of [[INDEX, result.index, '.well-known/starnet-skills.json'], [REVOKED, result.revocations, '.well-known/starnet-skills-revoked.json']]) {
     const bytes = jsonBytes(doc);
@@ -183,6 +199,17 @@ function main() {
     if (check) { problems.push(w.label + (exists ? ' is out of date' : ' is missing')); continue; }
     mkdirSync(dirname(w.path), { recursive: true });
     writeFileSync(w.path, w.bytes);
+  }
+  // THE FLOOR: sidecar/skills/market-floor.json ships in the app; stations refuse an official catalog older than it.
+  // It may never be above the serial being published (every station would refuse the live catalog), and it is only
+  // raised on purpose, after a deploy: --pin-floor sets it to the serial that is now live.
+  const floor = JSON.parse(readFileSync(FLOOR, 'utf8'));
+  if (!Number.isSafeInteger(floor.serial) || floor.serial < 0) problems.push('sidecar/skills/market-floor.json needs a whole-number serial');
+  else if (floor.serial > result.index.serial) problems.push('sidecar/skills/market-floor.json pins serial ' + floor.serial + ', above the catalog\'s ' + result.index.serial + ': every station would refuse it');
+  if (process.argv.includes('--pin-floor') && !problems.length && !check) {
+    floor.serial = result.index.serial;
+    writeFileSync(FLOOR, JSON.stringify(floor, null, 2) + '\n');
+    console.log('build-skill-catalog: pinned the app\'s minimum catalog serial to ' + floor.serial + ' (sidecar/skills/market-floor.json) — it ships with the next app build');
   }
   const n = result.index.skills.length;
   const byShelf = result.index.skills.reduce((m, s) => (m[s.shelf] = (m[s.shelf] || 0) + 1, m), {});

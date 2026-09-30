@@ -27,20 +27,23 @@ function makeSkillDocumentFetcher(deps) {
     if (assertResolvedSafe) await assertResolvedSafe(u, lookup);
     return u;
   }
-  async function bodyBytes(response) {
+  // limit/label: a caller fetching something other than a SKILL.md (the Skill Market's catalog index) passes its own
+  // cap and name, so an oversized document is refused under its real name instead of being called a SKILL.md
+  async function bodyBytes(response, limit, label) {
+    const tooBig = () => new Error(label ? label + ' is larger than ' + Math.round(limit / 1000) + ' KB' : 'SKILL.md is larger than 256 KB');
     const declared = Number(response && response.headers && response.headers.get('content-length')) || 0;
-    if (declared > MAX_BYTES) throw new Error('SKILL.md is larger than 256 KB');
+    if (declared > limit) throw tooBig();
     if (response.body && response.body[Symbol.asyncIterator]) {
       const chunks = []; let total = 0;
       for await (const chunk of response.body) {
         const buf = Buffer.from(chunk); total += buf.length;
-        if (total > MAX_BYTES) throw new Error('SKILL.md is larger than 256 KB');
+        if (total > limit) throw tooBig();
         chunks.push(buf);
       }
       return Buffer.concat(chunks);
     }
     const bytes = response.arrayBuffer ? Buffer.from(await response.arrayBuffer()) : Buffer.from(await response.text(), 'utf8');
-    if (bytes.length > MAX_BYTES) throw new Error('skill package file is larger than 256 KB');
+    if (bytes.length > limit) throw (label ? tooBig() : new Error('skill package file is larger than 256 KB'));
     return bytes;
   }
   async function fetchDocument(raw, requestOpts) {
@@ -69,7 +72,8 @@ function makeSkillDocumentFetcher(deps) {
         continue;
       }
       if (!response.ok) throw new Error('skill source returned HTTP ' + response.status);
-      const bytes = await bodyBytes(response);
+      const limit = Number(requestOpts.maxBytes) > 0 ? Math.min(Number(requestOpts.maxBytes), 4000000) : MAX_BYTES;
+      const bytes = await bodyBytes(response, limit, requestOpts.maxBytes ? String(requestOpts.label || 'the download') : '');
       return { url: u.href, bytes, text: bytes.toString('utf8') };
     }
     throw new Error('skill source redirected too many times');

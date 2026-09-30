@@ -1,6 +1,6 @@
 ---
 name: simple-english
-description: "Rewrite or audit technical text with ASD-STE100 Simplified Technical English rules: short sentences, one word per meaning, condition-first instructions. For docs, runbooks, error messages and prompts."
+description: "Rewrite or audit technical text with Simplified Technical English (the ASD-STE100 standard) rules: short sentences, one word per meaning, condition-first instructions. For docs, runbooks, error messages and prompts."
 license: MIT
 metadata:
   title: "Simple English"

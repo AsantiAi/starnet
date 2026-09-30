@@ -1,6 +1,6 @@
 ---
 name: grill-me
-description: "Stress-test a plan before any code is written: map it as a design tree, interview the Commander in rounds of dependency-ordered questions with recommendations, and confirm alignment."
+description: "Stress-test a plan before any code is written: list the decisions it rests on, then question the Commander on them, foundations first, with a recommendation for each, and confirm alignment."
 license: MIT
 metadata:
   title: "Grill Me"
@@ -89,3 +89,5 @@ Do not act on the plan until the Commander confirms the shared understanding.
 *Uses the CABINET to read the codebase for facts; the WORKBENCH helps for git history.*
 
 Adapted for StarNet from grill-me (Rafael Zendron, with the frontier-rounds mechanic from Matt Pocock's `grilling` in mattpocock/skills), MIT.
+
+*Sub-agent steps (team.spawn) need the ORCHESTRATOR, which every run the Commander starts carries. In a scheduled run, list those updates in the report instead of making them.*

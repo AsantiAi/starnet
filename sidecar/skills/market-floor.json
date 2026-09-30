@@ -1,0 +1,4 @@
+{
+  "note": "The lowest official Skill Market catalog serial this app build accepts. Pin it AFTER a catalog deploy with: node scripts/build-skill-catalog.mjs --pin-floor",
+  "serial": 0
+}
