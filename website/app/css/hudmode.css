@@ -129,3 +129,26 @@ html body.hud-mode.hud-view-widget #hud-widget {
 #hud-widget .hud-wmore[hidden] { display: none; }
 #hud-widget .hud-wmore:is(:hover, :focus-visible) { color: var(--ph-bright); background: var(--gd-hover, var(--ph-faint)); border-color: var(--gd-edge, var(--ph-dim)); }
 @media (prefers-reduced-motion: reduce) { #hud-widget .hud-wrow { transition: none; } #hud-widget .hud-wrow > .dot { animation: none; } }
+
+/* ---- WIDGET, cleaner: one panel, the picture, the rows ----
+   The camera's words (label, LIVE, TRACKING, FEED and the identity strip behind them) belong to the big
+   station; at widget size the row under the picture already names who is watched and what it is doing,
+   so only the station's corner marks stay. The view and its rows join into one glass panel: the view takes
+   the top corners, the rows the bottom, the view's own hairline is the seam. */
+html body.hud-mode.hud-view-widget #screen-game.active { gap: 0; }
+html body.hud-mode.hud-view-widget #stage-wrap :is(.cam-label, .cam-rec, .cam-feed, .cam-mode) { display: none !important; }
+html body.hud-mode.hud-view-widget #stage-wrap .cam-hud::before { content: none; display: none; }
+html body.hud-mode.hud-view-widget #stage-wrap .cam-c { font-size: 16px; opacity: .6; }
+html body.hud-mode.hud-view-widget #stage-wrap .cam-tl { top: 5px; left: 7px; }
+html body.hud-mode.hud-view-widget #stage-wrap .cam-tr { top: 5px; right: 7px; }
+html body.hud-mode.hud-view-widget #stage-wrap .cam-bl { bottom: 5px; left: 7px; }
+html body.hud-mode.hud-view-widget #stage-wrap .cam-br { bottom: 5px; right: 7px; }
+html body.hud-mode.hud-view-widget #screen-game.active > #stage-wrap { border-radius: 5px 5px 0 0; }
+html body.hud-mode.hud-view-widget .hud-wview { border-radius: 5px 5px 0 0; }
+html body.hud-mode.hud-view-widget #hud-widget { border-top: 0; border-radius: 0 0 5px 5px; padding: 3px 4px 4px; }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow { padding: 4px 7px; }
+/* the "watched" row marks a choice; with one agent there is nothing to choose between, so no inner box */
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow.on:only-child:not(:hover):not(:focus-visible) {
+  background: transparent; border-color: transparent; box-shadow: none;
+}
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow[data-state="ask"]:only-child { border-color: var(--gold, #e9c46a); }
