@@ -1,0 +1,10 @@
+{
+  "slug": "changelog-writing",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Engineering",
+  "tags": ["github", "changelog", "release-notes", "git", "releases"],
+  "requires": ["cabinet"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}

@@ -3135,6 +3135,28 @@ const Chat = (() => {
       mk('Deny', 'deny', 'deny', '✕ denied', true);
     }
     r.body.appendChild(btns);
+    // STARNET REMOTE: a paired phone can answer this same prompt. The sidecar then puts permission.response on
+    // this run's own stream (harness re-emits it on U.bus). Settle the card to what actually happened, so the
+    // desk never keeps live buttons on a question that was already answered elsewhere. The desk's own answer
+    // also emits permission.response, but by then `decided` is set and this listener just unsubscribes.
+    if (typeof U !== 'undefined' && U.bus && U.bus.on && U.bus.off) {
+      const onElsewhere = (resp) => {
+        if (!resp || resp.promptId !== p.promptId) return;
+        U.bus.off('permission.response', onElsewhere);
+        if (decided) return;
+        decided = true;
+        const denied = resp.decision === 'deny';
+        if (ws && typeof Channels !== 'undefined') Channels.clearPending(ws.id, Date.now());
+        if (isActiveWs(ws)) renderPresence();
+        btns.remove();
+        const tag = document.createElement('span');
+        tag.className = 'consent-result' + (denied ? ' err' : '');
+        tag.textContent = denied ? '✕ denied from your phone' : (resp.decision === 'session' ? '✓ approved for this session from your phone' : '✓ approved once from your phone');
+        r.body.appendChild(tag);
+        syncStatus();
+      };
+      U.bus.on('permission.response', onElsewhere);
+    }
     // a blocking, run-pausing prompt: make it keyboard-operable. Esc on the focused CONTAINER = Deny (the row,
     // not a button — so a reflexive Enter never lands on Approve and greenlights a write the user didn't read).
     r.d.tabIndex = -1;
@@ -7099,7 +7121,9 @@ const Chat = (() => {
       : scope === 'day' ? 'hit the ' + cap + 'daily spend cap'
       : scope === 'global' ? 'hit the ' + cap + 'all-time spend cap'
       : 'hit a spend cap';
-    return what + ' — raise or remove it in MISSION CONTROL → BUDGET';
+    // A per-RUN stop says "raise", never "remove": a StarNet-credit run with PER RUN at 0 still stops at the
+    // managed default (issue #53), so "remove it" would be an instruction that does nothing there.
+    return what + (scope === 'run' ? ' — raise it' : ' — raise or remove it') + ' in MISSION CONTROL → BUDGET';
   }
   // the budget stop's door: open SETTINGS straight on the BUDGET section (the same openTerm(key, section)
   // mechanism friendlyerror's doors use), with retry alongside for after the user has raised the cap.
@@ -8130,7 +8154,10 @@ const Chat = (() => {
   function slashPlacedTypes() {
     try {
       if (typeof World === 'undefined' || !World.heroCaps) return [];
-      const caps = World.heroCaps((activeWs && activeWs.agentId) || 'agent') || [];
+      // the agent's own room PLUS shared station gear — the same reading SKILL LIBRARY makes, so a skill that
+      // library shows READY is also offered here (profile / Full Access grants still need /api/toolsets)
+      const caps = (World.heroCaps((activeWs && activeWs.agentId) || 'agent') || [])
+        .concat(World.stationCaps ? (World.stationCaps() || []) : []);
       const out = [], seen = {};
       for (const c of caps) {
         const t = String((c && c.objectType) || c || '').trim();
@@ -8144,12 +8171,15 @@ const Chat = (() => {
   function slashCatalogKey() {
     return slashPlacedTypes().join(',');
   }
+  // the palette's list depends on the gear AND the agent (its profile / Full Access grants count as gear server-side)
+  function slashAgentId() { return (activeWs && activeWs.agentId) || 'agent'; }
   function warmSlashCatalog() {
-    const key = slashCatalogKey();
+    const placedKey = slashCatalogKey();
+    const key = slashAgentId() + '|' + placedKey;
     if (slashCatalogLoaded === key) return;
     if (slashCatalogLoading === key || typeof fetch === 'undefined') return;
     slashCatalogLoading = key;
-    fetch('/api/slash/catalog?placed=' + encodeURIComponent(key), { cache: 'no-store' })
+    fetch('/api/slash/catalog?placed=' + encodeURIComponent(placedKey) + '&agent=' + encodeURIComponent(slashAgentId()), { cache: 'no-store' })
       .then(r => r.ok ? r.json() : null)
       .then(j => {
         slashServerCommands = (j && Array.isArray(j.commands)) ? j.commands : null;
@@ -8380,7 +8410,10 @@ const Chat = (() => {
     const directive = String(text || '');
     input.value = directive; input.focus();
     if (select === 'first-placeholder') {
-      const m = /\{[^}]+\}/.exec(directive);
+      // a skill draft ends "Task: {task}" AFTER the recipe body, and a recipe body can contain braces of its own
+      // (a JSON example); select the draft's own {task} slot so typing never overwrites the recipe
+      const task = directive.lastIndexOf('{task}');
+      const m = task >= 0 ? { index: task, 0: '{task}' } : /\{[^}]+\}/.exec(directive);
       try { if (m) input.setSelectionRange(m.index, m.index + m[0].length); else input.setSelectionRange(directive.length, directive.length); } catch (_) {}
     }
     autoGrowInput();   // COMPOSER: match the box to the inserted directive's height
@@ -8420,9 +8453,17 @@ const Chat = (() => {
         })
       });
       const j = await r.json().catch(() => null);
+      // the station ANSWERED no (a skill that was removed or pulled, gear not placed): remember its words, so the
+      // caller reports what the station said instead of blaming the connection
+      slashDispatchRefusal = (!r.ok || !j || !j.ok) && j && j.error ? { status: r.status, error: String(j.error) } : null;
       return !!(r.ok && j && j.ok && applySlashDirective(j.directive));
-    } catch (_) { return false; }
+    } catch (_) { slashDispatchRefusal = null; return false; }
   }
+  let slashDispatchRefusal = null;
+  // the palette's command list is cached per gear set; installing, removing or switching a skill changes it, so the
+  // ABILITIES window announces the change and the next "/" re-reads the station
+  function invalidateSlashCatalog() { slashServerCommands = null; slashCatalogLoaded = null; slashCatalogLoading = null; }
+  try { window.addEventListener('starnet:skills-changed', () => { invalidateSlashCatalog(); warmSlashCatalog(); }); } catch (_) {}
   async function runSlash(item) {
     if (!item) { closeSlash(); return; }
     const rawInput = input ? input.value : '';
@@ -8434,6 +8475,15 @@ const Chat = (() => {
     // having asked the station, which is a claim the browser cannot make honestly.
     const needsServer = item.serverBacked || typeof item.run !== 'function';
     if (needsServer && await dispatchSlash(item, rawInput)) return;
+    if (needsServer && slashDispatchRefusal && item.source === 'skill') {
+      // a skill command the station no longer offers: it was removed, pulled, or its gear isn't placed. Say that,
+      // give the typed text back, and refresh the palette so the stale entry disappears.
+      const why = slashDispatchRefusal.status === 409 ? 'its gear isn\'t placed for this agent right now' : 'that skill is no longer installed on this station';
+      localLine('/' + item.name + ' can\'t be used: ' + why + '. Type "/" to see the skills you have.');
+      if (input && rawInput) { input.value = rawInput; autoGrowInput(); }
+      invalidateSlashCatalog(); warmSlashCatalog();
+      return;
+    }
     // FALLBACK path (command not resolved by the server dispatcher): parse the trailing text off the raw
     // "/name rest…" input and hand it to the local action, so an arg-taking builtin still gets its argument
     // even when the server slash catalog doesn't know it. Arg-less actions ignore it.

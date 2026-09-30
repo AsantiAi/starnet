@@ -5,6 +5,7 @@ description: Inventory, sort, rename, and de-duplicate files without ever destro
 category: Productivity
 requires: [cabinet, workbench]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

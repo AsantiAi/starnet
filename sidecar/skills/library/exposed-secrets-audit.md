@@ -5,6 +5,7 @@ description: Hunt the ways an AI-built app leaks — keys shipped to the browser
 category: Engineering
 requires: [cabinet, workbench]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

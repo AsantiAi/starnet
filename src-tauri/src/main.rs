@@ -14,6 +14,7 @@
 mod credentials;
 mod desktop_assets;
 mod fresh_start;
+mod hud_mode;
 mod lifecycle_preferences;
 mod sidecar_startup;
 mod webview_recovery;
@@ -3276,7 +3277,16 @@ fn update_lifecycle_preferences(
 /// a multi-second drain there would freeze the app (review m1).
 fn on_tray_menu(app: &AppHandle, id: &str) {
     match id {
-        "lifecycle_open" => show_main_window(app),
+        // Open StarNet means the full station: a HUD that is up hands the window back first.
+        "lifecycle_open" => {
+            hud_mode::request(app, false);
+            show_main_window(app);
+        }
+        // HUD Mode: reveal the window and ask the page to fold into the always-on-top HUD.
+        "lifecycle_hud" => {
+            show_main_window(app);
+            hud_mode::request(app, true);
+        }
         "lifecycle_pause" => {
             let app2 = app.clone();
             std::thread::spawn(move || {
@@ -4113,6 +4123,11 @@ static FS_RESTORE_MAXIMIZE: AtomicBool = AtomicBool::new(false);
 /// Toggle the main StarNet desktop window between windowed and fullscreen mode.
 #[tauri::command]
 fn starnet_toggle_fullscreen(app: AppHandle) -> Result<bool, String> {
+    // HUD mode owns the window as a pinned corner panel; F11 there would blow the HUD up over the
+    // game it floats above. The window is not fullscreen, so that is the honest answer.
+    if hud_mode::is_active(&app) {
+        return Ok(false);
+    }
     let win = app
         .get_webview_window("main")
         .ok_or_else(|| "main window unavailable".to_string())?;
@@ -4706,7 +4721,11 @@ fn main() {
             starnet_restart_sidecar,
             starnet_start_fresh,
             starnet_set_start_minimized,
-            starnet_set_close_to_tray
+            starnet_set_close_to_tray,
+            hud_mode::starnet_hud_status,
+            hud_mode::starnet_hud_set,
+            hud_mode::starnet_hud_pin,
+            hud_mode::starnet_hud_fold
         ])
         .setup(move |app| {
             let root = project_root(app.handle());
@@ -4785,6 +4804,7 @@ fn main() {
             }
             app.manage(state);
             app.manage(PendingUpdate(Mutex::new(None)));
+            app.manage(hud_mode::HudState::default());
 
             // Respawn the sidecar if it crashes while the window is open (see spawn_guardian).
             spawn_guardian(app.handle().clone());
@@ -4796,6 +4816,7 @@ fn main() {
             // and exits. Built here so it exists before the window, so a close-to-tray has somewhere to live.
             {
                 let open_item = MenuItem::with_id(app, "lifecycle_open", "Open StarNet", true, None::<&str>)?;
+                let hud_item = MenuItem::with_id(app, "lifecycle_hud", "HUD Mode", true, None::<&str>)?;
                 let status_item = MenuItem::with_id(
                     app,
                     "lifecycle_status",
@@ -4808,7 +4829,7 @@ fn main() {
                 let pause_item = MenuItem::with_id(app, "lifecycle_pause", "Pause Automation (E-STOP)", true, None::<&str>)?;
                 let quit_item = MenuItem::with_id(app, "lifecycle_quit", "Quit StarNet", true, None::<&str>)?;
                 let sep = PredefinedMenuItem::separator(app)?;
-                let menu = Menu::with_items(app, &[&open_item, &status_item, &sep, &pause_item, &quit_item])?;
+                let menu = Menu::with_items(app, &[&open_item, &hud_item, &status_item, &sep, &pause_item, &quit_item])?;
                 let mut tray_builder = TrayIconBuilder::with_id("starnet-tray")
                     .tooltip("StarNet")
                     .menu(&menu)

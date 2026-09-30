@@ -356,7 +356,10 @@ function makeLoopbackListenerProbe(opts) {
       args = ['-c', script, 'starnet-listener-probe', String(port), String(rootPid)];
     } else return false;
     return new Promise(resolve => {
-      try { run(exe, args, { windowsHide: true, timeout: 5000 }, err => resolve(!err)); }
+      // 12s, not 5s (measured 2026-09-29 on the Windows dev box: this PowerShell CIM + NetTCP walk took 2.4–4.6s
+      // idle, and past 5s under a busy sidecar — so browser.test_navigate refused the agent's OWN dev server as
+      // "not proven" on every try). Still well inside browser.test_navigate's 20s tool budget.
+      try { run(exe, args, { windowsHide: true, timeout: 12000 }, err => resolve(!err)); }
       catch (_) { resolve(false); }
     });
   };

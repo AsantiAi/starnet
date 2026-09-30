@@ -5,6 +5,7 @@ description: Write beat-marked, timed scripts built for retention, in a spoken v
 category: Writing
 requires: [cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

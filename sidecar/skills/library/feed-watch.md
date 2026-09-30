@@ -5,6 +5,7 @@ description: Watch a source for change against a baseline and alert only when it
 category: Research
 requires: [dish]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

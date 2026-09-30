@@ -5,6 +5,7 @@ description: Build a checkable evidence case for a better price, refund, or rate
 category: Communication
 requires: [cabinet, dish]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

@@ -1,10 +1,10 @@
 ---
 name: ugc-brief
-description: "Package an idea into a ready-to-shoot UGC/video brief — hooks, timed shot list, caption, cover, repurposing cuts."
+description: "Package an idea into a ready-to-shoot creator video brief — hooks, timed shot list, caption, cover, repurposing cuts."
 license: "MIT"
 metadata:
   title: "UGC Brief"
-  category: "Creator"
+  category: "Creative"
   author: "StarNet"
   version: "1.0.0"
 ---

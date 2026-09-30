@@ -5,6 +5,7 @@ description: Fetch live like-for-like prices, compare the true total, and say bu
 category: Research
 requires: [dish, cabinet]
 license: MIT
+version: 1.0.0
 default: false
 ---
 

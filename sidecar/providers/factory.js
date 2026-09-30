@@ -169,7 +169,9 @@
         maxTokens: resolveMaxOutputTokens(profile),
         maxChatTokens: resolveMaxOutputTokens(profile, 'maxChatOutputTokens'),
         defaultContext: opts.defaultContext,
-        headers: mergedHeaders
+        headers: mergedHeaders,
+        // run attribution header (starnet only — the profile names it; see openai-compatible requestHeaders)
+        runIdHeader: typeof profile.runIdHeader === 'string' ? profile.runIdHeader : undefined
       });
     }
     if (profile.adapter === 'anthropic') {
@@ -192,7 +194,8 @@
     }
     if (profile.adapter === 'claude-cli') {
       // A local child process, not HTTP: no fetch/key/baseUrl — the CLI's own sign-in is the credential.
-      return claudeCli.makeClaudeCliProvider({ clock: opts.clock });
+      // configDir = an extra connected account (subscription stacking); absent = the CLI's default sign-in.
+      return claudeCli.makeClaudeCliProvider({ clock: opts.clock, configDir: opts.configDir || undefined });
     }
     throw new Error('provider adapter is not wired: ' + profile.adapter);
   }

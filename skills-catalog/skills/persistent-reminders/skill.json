@@ -1,0 +1,10 @@
+{
+  "slug": "persistent-reminders",
+  "version": "1.0.0",
+  "shelf": "originals",
+  "category": "Productivity",
+  "tags": ["reminders", "follow-up", "recurring", "bills", "chores", "routine"],
+  "requires": ["cabinet", "orchestrator"],
+  "license": "MIT",
+  "authors": ["StarNet"]
+}

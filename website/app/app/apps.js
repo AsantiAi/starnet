@@ -350,9 +350,10 @@
     if (!listEl || !listEl.isConnected) return;
     if (loadError && !list.length) { listEl.innerHTML = '<div class="ext-empty">Could not load your apps — the station did not answer. <button class="apps-btn" type="button" data-app-retry>RETRY</button></div>'; return; }
     if (!list.length) { listEl.innerHTML = '<div class="ext-empty">No apps yet. Describe one above — your crew builds it in its own window.</div>'; return; }
-    listEl.innerHTML = list.map((a) => '<div class="mc-row ext-row app-row" data-app="' + esc(a.id) + '">' +
+    // a card = NAME + ONE short status line + its keys; the description is the hover tip (no sentences under tiles)
+    listEl.innerHTML = list.map((a) => '<div class="mc-row ext-row app-row" data-app="' + esc(a.id) + '"' +
+      (a.description ? ' data-tip="' + esc(a.description) + '" aria-description="' + esc(a.description) + '"' : '') + '>' +
       '<div class="mc-top"><b class="app-row-name">' + esc(a.name) + '</b><span class="mc-state ' + (built(a) ? 'app-ready' : 'app-unbuilt') + '">' + (built(a) ? '● ready' : '○ not built yet') + '</span></div>' +
-      (a.description ? '<div class="mc-hint app-row-desc">' + esc(a.description) + '</div>' : '') +
       '<div class="mc-hint app-row-status">' + esc(statusOf(a)) + '</div>' +
       '<div class="mc-acts"><button class="apps-btn" type="button" data-app-open="' + esc(a.id) + '">OPEN</button>' +
       (a.schedule && a.schedule.jobId && !a.schedule.missing ? '<button class="apps-btn" type="button" data-app-refresh="' + esc(a.id) + '"' + (refreshing.has(a.id) ? ' disabled' : '') + '>' + (refreshing.has(a.id) ? '⟳ REFRESHING…' : '⟳ REFRESH NOW') + '</button>' : '') +

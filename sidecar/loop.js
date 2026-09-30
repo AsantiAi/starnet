@@ -1595,6 +1595,7 @@
         try {
           const req = { model, messages: wireMessages(), tools, signal, stream: true };   // stale screen captures -> placeholders
           if (typeof o.isTask === 'boolean') req.isTask = o.isTask;
+          if (o.runId) req.runId = o.runId;   // run attribution: only a profile that names a runIdHeader sends it (starnet)
           if (o.cacheSystemPrefix) req.cacheSystemPrefix = o.cacheSystemPrefix;
           if (outputCapTokens > 0) req.maxTokens = outputCapTokens;   // the ceiling a provider named (output_cap)
           if (retriesUsed > 0) req.preStreamRetries = 0;              // the ladder owns pacing: one request per rung
@@ -1739,6 +1740,7 @@
             }
             const fbPayload = { agentId, runId, fromModel: model, toModel: (fb.model || model), reason: decision.reason === 'provider_stalled' ? 'provider_stalled' : cls.reason, rotate: !!cls.shouldRotateCredential };
             if (reasoningDropped) fbPayload.reasoningDropped = reasoningDropped;   // additive; schema declares no additionalProperties
+            if (fb.account) fbPayload.toAccount = String(fb.account);   // subscription stacking: which connected sign-in took over ("account 2")
             emit('provider.fallback', fbPayload);
             if (fb.credKey != null) activeCredKey = fb.credKey;   // the entry we switch TO becomes the live credential
             if (fb.cost) cost = fb.cost;                          // cross-provider: price subsequent turns by the new provider's catalog

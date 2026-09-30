@@ -150,4 +150,33 @@ const ENV = { perRun: 3, perAgent: 5, perDay: 40, global: 100 };   // a fully-go
   A.ok(/environment default/.test(station), 'the panel badges an unsaved cap as the default, so $25 never reads as something the user set');
 }
 
+// ---- issue #53: a StarNet-credit run never reserves the whole wallet by default ------------------------------
+// Before: no per-run cap in force -> admission reserved the ENTIRE balance, which is also the loop's per-run
+// ceiling, so one prompt could spend a fresh $10 top-up. Now: min(managed default, balance); a positive cap the
+// user (or a delegating caller) chose is honoured verbatim. The live proof is test/managed-run-cap.e2e.test.js.
+{
+  const D = bc.DEFAULT_MANAGED_PER_RUN_USD;
+  A.eq(D, 2, 'the managed per-run default is $2 (a fifth of the $10 minimum top-up)');
+  A.ok(D < bc.DEFAULT_PER_DAY_USD, 'it sits well under the $25/day rail, so the day rail stays the backstop');
+  A.eq(bc.managedRunCapUsd(0, 10, D), 2, 'no cap chosen + $10 wallet -> reserve $2, not $10');
+  A.eq(bc.managedRunCapUsd(Infinity, 10, D), 2, 'an "ungoverned" (Infinity) run cap is treated as no cap chosen');
+  A.eq(bc.managedRunCapUsd(0, 1.2, D), 1.2, 'a wallet under the default is clamped, never refused for a cap nobody chose');
+  A.eq(bc.managedRunCapUsd(5, 10, D), 5, 'a user\'s higher per-run cap wins');
+  A.eq(bc.managedRunCapUsd(0.5, 10, D), 0.5, 'a user\'s lower per-run cap wins');
+  A.eq(bc.managedRunCapUsd(50, 10, D), 50, 'a cap above the balance is passed through unchanged (admission decides, as before)');
+  A.eq(bc.managedRunCapUsd(0, 0, D), 0, 'an empty wallet -> 0 (the host fails closed: out of credit)');
+  A.eq(bc.managedRunCapUsd(0, NaN, D), 0, 'an unknown wallet -> 0 (fail closed: credits unavailable)');
+  A.eq(bc.managedRunCapUsd(0, 10, 0), 10, 'an operator default of 0 restores the old wallet-is-the-ceiling behaviour');
+  // the host really uses it (a pure helper nobody calls fixes nothing — injected-deps-hide-wiring-bugs)
+  const idx = require('fs').readFileSync(require('path').join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
+  A.ok(/runCapUsd = budgetCaps\.managedRunCapUsd\(0, avail, MANAGED_PER_RUN_DEFAULT\)/.test(idx), 'managed admission reserves through managedRunCapUsd');
+  A.ok(!/runCapUsd = \(isFinite\(avail\) && avail > 0\) \? avail : 0/.test(idx), 'the reserve-the-whole-wallet line is gone');
+  A.ok(/MANAGED_PER_RUN_DEFAULT = num\(ENV\('BUDGET_MANAGED_PER_RUN'\), budgetCaps\.DEFAULT_MANAGED_PER_RUN_USD\)/.test(idx), 'the default is env-tunable (SKYNET_BUDGET_MANAGED_PER_RUN)');
+  // truthful UI: "0 = no cap" must not be the whole story on StarNet credits, and a run stop never says "remove"
+  const station = require('fs').readFileSync(require('path').join(__dirname, '..', 'frontend', 'app', 'stationui.js'), 'utf8');
+  A.ok(/id="bg-managed-hint"/.test(station) && /st\.managedRunDefaultUsd/.test(station), 'the Budget panel paints the managed default from /api/budget/status');
+  const chat = require('fs').readFileSync(require('path').join(__dirname, '..', 'frontend', 'app', 'chat.js'), 'utf8');
+  A.ok(/scope === 'run' \? ' — raise it' : ' — raise or remove it'/.test(chat), 'a per-run budget stop says "raise it", never a "remove" that would do nothing on credits');
+}
+
 A.report('budget-caps');

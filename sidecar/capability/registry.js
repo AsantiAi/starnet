@@ -163,6 +163,10 @@
       // requiresConsent:false is NOT a free pass — browser.login runs its OWN two-phase live consent
       // (open-window ask + done-wait) inside the tool; the generic broker card would double-prompt.
       { capId: 'web', tool: 'browser.login', scope: 'execute', requiresConsent: false, network: true, deferred: true },
+      /* STEP-IN (2026-09-29): NOT deferred. A stuck agent that cannot see the door does not go looking for it — it
+         reports "I can't log in" (or worse, tries to get round the wall). The navigate/get_text results name it, and
+         a named tool must be callable. scope 'read': the agent pauses and hands over; it changes nothing itself. */
+      { capId: 'web', tool: 'browser.need_human', scope: 'read', requiresConsent: false, network: true },
       { capId: 'web', tool: 'browser.click', scope: 'execute', requiresConsent: true, network: true },
       { capId: 'web', tool: 'browser.type', scope: 'execute', requiresConsent: true, network: true },
       { capId: 'web', tool: 'browser.press', scope: 'execute', requiresConsent: true, network: true },
