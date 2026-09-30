@@ -80,8 +80,21 @@ A.ok(/meta: f\.outbox\.reached \? 'the result' : f\.outbox\.reachedOnceCrewed \?
 /* the joins are a clean line with a chevron — NEVER the floor's real conveyor art (2026-09-30, Andrew: "ew … that u put the
    actual conveyor there. terrible") — a shade brighter once a job entering the INBOX would reach the OUTBOX, never moving */
 A.ok(!/beltStill|wf-belt-cold|wf-belt-live|has-belt/.test(panel + build + css) && !/Conveyor\./.test(panel), 'the diagram never draws the real conveyor');
-A.ok(/\.wf-belt \.rail \{ position: relative; width: 100%; height: 2px;/.test(css) && /\.wf-belt \.rail::after \{[^}]*rotate\(45deg\)/.test(css), 'a join is a clean 2px line with a chevron into the next part');
-A.ok(/strip\.classList\.toggle\('live', !!\(f && f\.trigger\.propId && f\.outbox\.reached\)\);/.test(panel) && /\.wf-strip\.live \.wf-belt \.rail \{ background: rgba\(var\(--ph-rgb\),\.5\); \}/.test(css), '…a shade brighter on a line that can run');
+A.ok(/\.wf-belt \.rail \{ position: relative; width: 100%; height: 10px;/.test(css) && /clip-path: polygon\(0 4px, calc\(100% - 9px\) 4px, calc\(100% - 9px\) 0, 100% 5px, calc\(100% - 9px\) 10px, calc\(100% - 9px\) 6px, 0 6px\)/.test(rule('.wf-belt .rail'))
+  && !/\.wf-belt \.rail::(after|before)/.test(css), 'a join is ONE clean shape: a 2px line into a solid arrowhead that touches the next part');
+A.ok(/strip\.classList\.toggle\('live', !!\(f && f\.trigger\.propId && f\.outbox\.reached\)\);/.test(panel) && /\.wf-strip\.live \.wf-belt \.rail \{ background: rgba\(var\(--ph-rgb\),\.55\); \}/.test(css), '…a shade brighter on a line that can run');
+/* THE ARROW SITS ON THE TILES' MIDDLE (2026-09-30, Andrew: "CENTER THE ARROW IN THE MIDDLE NOT ON THE TOP"): the strip centres
+   every part and join, and a join's line is its own centre row (what it carries above, an equal empty row below) */
+A.ok(/align-items:\s*center/.test(rule('.wf-strip')) && !/flex-start/.test(rule('.wf-strip')), 'every part and join sits on the line\'s middle');
+A.ok(/align-self:\s*center/.test(rule('.wf-belt')) && /grid-template-rows:\s*27px 28px 27px/.test(rule('.wf-belt')) && !/\.wf-belt\.mid/.test(css) && !/' mid'/.test(panel),
+  '…a join\'s line is its centre row, so the arrow meets each tile at its middle (never up at the art)');
+A.ok(/grid-row: 2; align-self: center;/.test(rule('.wf-belt.gap .carry')), '…and a break in the line says so where the line would run');
+const arcs = at(panel, '  function drawArcs(strip, f) {', '  function insertStep(');
+A.ok(/for \(const el of strip\.children\) if \(el\.offsetLeft < Math\.max\(ax, bx\) && el\.offsetLeft \+ el\.offsetWidth > Math\.min\(ax, bx\)\) y0 = Math\.max\(y0, el\.offsetTop \+ el\.offsetHeight\);/.test(arcs),
+  'a loop\'s way back runs under everything between its ends (a branch group between them hangs lower)');
+A.ok(/head\.setAttribute\('class', 'head'\);/.test(arcs) && /\['stem', stem\]/.test(arcs) && /\.wf-arcs \.head \{ fill: var\(--wf-cyan\);/.test(css) && /\.wf-arcs path\.stem \{ stroke: var\(--wf-cyan\); stroke-width: 2;/.test(css),
+  '…and ends in the joins\' arrowhead on a solid stem, up into the part it goes back to');
+A.ok(/meta: loop \? 'back to ' \+ who : 'waits for all'/.test(panel), 'the LOOP tile\'s one line fits the tile (the count is on the way back\'s label)');
 A.ok(!/wf-belt \.rail[^{]*\{[^}]*animation/.test(css) && /\.wf-strip\.live \.wf-arcs path\.chev \{ animation:/.test(css), 'the joins never move; the loop\'s way back moves only on a line that can run');
 A.ok(/card\.classList\.toggle\('glass-tip', !!el\.closest\('\.refit-dock, \.wf-panel'\)\)/.test(rd('app/tooltip.js')), 'the panel\'s tips are the glass card that keeps its lines');
 A.ok(/mach: 'intake'/.test(panel) && /mach: 'outbox'/.test(panel), 'the INBOX and OUTBOX cards name their machines');
