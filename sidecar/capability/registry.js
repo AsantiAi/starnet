@@ -73,18 +73,9 @@
       // The plan itself still persists through the notebook STORE — this grant is about tool AVAILABILITY,
       // not where the bytes live. (see tools/builtin/todo.js)
       { capId: 'taskplan', tool: 'todo', scope: 'write', requiresConsent: false, network: false },
-      // PLUGIN AUTHORING (plugin extensions phase 4): the crew writes the Commander's plugins. Rides `computer`
-      // because the whole flow is INERT until the Commander approves it — drafts live in their own folder and never
-      // run, preview is a sandboxed page with no backend, and submit installs the plugin OFF (it switches on only
-      // through the hash-locked approval in EXTENSIONS). submit alone asks first. Deferred: niche, found through
-      // tool.search (the plugin-author skill says how).
-      { capId: 'pluginauthor', tool: 'plugin.draft_start', scope: 'write', requiresConsent: false, network: false, deferred: true },
-      { capId: 'pluginauthor', tool: 'plugin.draft_from_installed', scope: 'write', requiresConsent: true, network: false, deferred: true },
-      { capId: 'pluginauthor', tool: 'plugin.draft_read', scope: 'read', requiresConsent: false, network: false, deferred: true },
-      { capId: 'pluginauthor', tool: 'plugin.draft_write', scope: 'write', requiresConsent: false, network: false, deferred: true },
-      { capId: 'pluginauthor', tool: 'plugin.check', scope: 'read', requiresConsent: false, network: false, deferred: true },
-      { capId: 'pluginauthor', tool: 'plugin.preview', scope: 'read', requiresConsent: false, network: false, deferred: true },
-      { capId: 'pluginauthor', tool: 'plugin.submit', scope: 'execute', requiresConsent: true, network: false, deferred: true },
+      // PLUGIN AUTHORING (sidecar/tools/builtin/plugin-author.js) is deliberately NOT granted (Andrew 2026-09-30): what
+      // the Commander asks the crew for is an APP (below) — describe it, get it — never a plugin to review and approve.
+      // Plugins stay a power-user path the Commander takes himself in ABILITIES → CREATE / ADVANCED.
       // APPS: the crew builds and fills the Commander's apps (sidecar/apps.js). Inert by construction — an app page is a
       // network-less sandbox and its data is whatever a crew run publishes — so nothing here asks first. Deferred.
       { capId: 'apps', tool: 'app.create', scope: 'write', requiresConsent: false, network: false, deferred: true },

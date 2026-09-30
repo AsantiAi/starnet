@@ -551,11 +551,15 @@ const Build = (() => {
   const isSearching = () => (typeof PropSearch !== 'undefined') && PropSearch.active(propQuery);
 
   // what the gallery is showing right now: matches across the WHOLE catalog, or the chosen tab
+  // Props the STATION places for you (a plugin's terminal appears when an approved plugin brings tools) are never
+  // offered in the picker: a Commander placing one by hand would get a terminal bound to nothing.
+  const STATION_PLACED = new Set(['plugin_terminal']);
+  const pickable = (list) => list.filter(c => !STATION_PLACED.has(c.id));
   function propsForGrid() {
-    if (isSearching()) return PropSearch.matchProps(catalog(), propQuery, searchOpts());
-    if (propSection === 'abilities') return propAbility
-      ? catalog().filter(c => capOf(c) === propAbility) : starterProps();
-    const list = catalog().filter(c => sectionOf(c) === propSection && (propCat === 'all' || c.cat === propCat));
+    if (isSearching()) return pickable(PropSearch.matchProps(catalog(), propQuery, searchOpts()));
+    if (propSection === 'abilities') return pickable(propAbility
+      ? catalog().filter(c => capOf(c) === propAbility) : starterProps());
+    const list = pickable(catalog().filter(c => sectionOf(c) === propSection && (propCat === 'all' || c.cat === propCat)));
     if (propSection === 'decoration' && propCat === 'all') {
       const familiar = ['couch','industrial_roundtable','dinerchair','plant','rug','tv','bookshelf','coffee','bunk','easel'];
       const rank = c => { const i = familiar.indexOf(c.id); return i < 0 ? familiar.length : i; };

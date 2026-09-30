@@ -40,8 +40,7 @@ async function throwsMsg(fn) { try { await fn(); return ''; } catch (e) { return
     A.eq(author.defs.filter(d => d.requiresConsent).map(d => d.name).sort(), ['plugin.draft_from_installed', 'plugin.submit'], 'only submit and reading an installed plugin ask first');
     A.eq(tool('plugin.submit').scope, 'execute', 'submit is EXECUTE scope (never carried by a cached Always or an unattended run)');
     const granted = CAP_REGISTRY.computer.filter(g => g.capId === 'pluginauthor').map(g => g.tool).sort();
-    A.eq(granted, toolNames().slice().sort(), 'every authoring tool is granted (computer object, deferred)');
-    A.ok(CAP_REGISTRY.computer.filter(g => g.capId === 'pluginauthor').every(g => g.deferred === true), '…and deferred (found through tool.search)');
+    A.eq(granted, [], 'no authoring tool is granted: the crew builds APPS for the Commander, never plugins to approve (Andrew 2026-09-30)');
 
     // ---- start ----
     const s = await run('plugin.draft_start', { id: 'pr-radar', name: 'PR Radar', description: 'Open PRs' });

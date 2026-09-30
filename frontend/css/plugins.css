@@ -56,7 +56,6 @@ body.glass-demo #screen-game #bottombar .bb-menu .bb.bb-app { min-height: 50px; 
 .term.apps-win .app-ready { color: var(--ok); }
 .term.apps-win .app-unbuilt { color: var(--ph-dim); }
 .term.apps-win .app-rename-in { flex: 1 1 auto; min-width: 0; margin-right: 8px; }
-.term.apps-win .app-row-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
 /* APPS — the station's CURRENT keys and fields, copied from the Build Library / workflow panel (refit-polish.css,
    workflow-panel.css): 8px glass keys 36px tall read at 16px, lit-glass primary, 8px fields at 17px, a 16-17px body.

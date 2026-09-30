@@ -32,6 +32,13 @@
     return out;
   }
 
+  // "Today is Wednesday, September 30, 2026 (the station clock — trust it over your own sense of the date)." or ''
+  function todayLine(now) {
+    const t = Number(now);
+    if (!Number.isFinite(t) || t <= 0) return '';
+    try { return 'Today is ' + new Date(t).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + ' (the station clock — trust it over your own sense of the date; search and write for THIS date).'; } catch (_) { return ''; }
+  }
+
   function runtimeIdentityBlock(o) {
     o = o || {};
     const provider = oneLine(o.provider, 'unknown', 80);
@@ -55,9 +62,13 @@
       'Trigger: ' + trigger
     ];
     if (fallbacks.length) lines.push('Possible fallback models: ' + fallbacks.join(', '));
+    // TODAY (2026-09-30): a model's own sense of the date is its training era — asked for "today's news" it searched a
+    // year-old month. The station's clock is the truth; `now` is injected by the caller (this file never reads a clock).
+    const today = todayLine(o.now);
+    if (today) lines.push(today);
     lines.push('If the Commander asks what StarNet build, model, provider, run, surface, or session you are using, answer from this block. For mutable harness state such as scheduler health, routines, connectors, or errors, call station.inspect. Do not guess or invent a CLI command.');
     return '\n\n' + lines.join('\n');
   }
 
-  return { oneLine, runtimeIdentityBlock };
+  return { oneLine, runtimeIdentityBlock, todayLine };
 });

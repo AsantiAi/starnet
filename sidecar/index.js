@@ -17059,7 +17059,7 @@ async function runOnceCore(o) {
     inspect: () => harnessSnapshotForRun({ provider: providerId, model, agentId, runId, surface, trigger })
   }).register(registry);
   makeManualReadTool().register(registry);   // same always-present COMPUTER grant: the manual's reference sections, verbatim
-  pluginAuthor.register(registry);   // PLUGIN AUTHORING (computer grant, deferred): drafts + preview + submit — inert until the Commander approves
+  // PLUGIN AUTHORING is not offered to runs (no grant — see capability/registry.js): the crew builds APPS, not plugins
   makeAppTools({ apps, now: () => Date.now(), compile: (source, file) => { try { new (require('node:vm').Script)('(function (exports, require, module, __filename, __dirname) {' + source + '\n})', { filename: file }); return ''; } catch (e) { return String((e && e.message) || e); } } }).register(registry);   // APPS (computer grant, deferred): create / write / publish / schedule
   // STUDIO media tools, built up-front so browser.vision can borrow its multimodal analyze path
   // (one provider seam, no duplication). Registered below; here we only need its vision callback.
@@ -18804,7 +18804,7 @@ async function runOnceCore(o) {
   // whole manual stays inline. Both forms are constants, so the cached prefix is as stable as before.
   const manualBlock = (isTask && surface === 'interactive') ? (coreNames.indexOf('manual.read') >= 0 ? starnetManualIndex() : starnetManual()) : '';
   const runtimeVersion = computeVersionSurface();
-  const runtimeBlock = runtimeIdentityBlock({ provider: providerId, model, agentId, runId, surface, trigger, fallbackModels, harness: runtimeVersion.harness, app: runtimeVersion.app });
+  const runtimeBlock = runtimeIdentityBlock({ provider: providerId, model, agentId, runId, surface, trigger, fallbackModels, harness: runtimeVersion.harness, app: runtimeVersion.app, now: Date.now() });
   // RUNTIME SKILL LIBRARY (skill-builder-gap): index the agent's own authored skills + preload any it invokes,
   // riding the same skill.view/skill.manage capability gate. Never breaks a run.
   try {
