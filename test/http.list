@@ -100,6 +100,7 @@ test/shell.test.js
 test/shell.process-tree.test.js
 test/verify.run.test.js
 test/browser.gauntlet.e2e.test.js
+test/browser.stepin.e2e.test.js
 test/servicekeys.http.test.js
 test/servicekeys.shell.e2e.test.js
 test/skills.gate.http.test.js

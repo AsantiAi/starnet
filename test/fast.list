@@ -352,6 +352,7 @@ test/browser.download-receipt.test.js
 test/browser.attach.test.js
 test/browser.pie.test.js
 test/browser-handoff.test.js
+test/browser.need-human.test.js
 test/desktop.test.js
 test/computer.test.js
 test/cua-computer.test.js
