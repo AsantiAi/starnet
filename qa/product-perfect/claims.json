@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "80fbd034c666cf3fcc68646783e7fb868d7da8cc",
+    "sourceCommit": "044259f2f2ee8212fa83372d7374ca73e3e3a30d",
     "pathSetSha256": "40161224e42ea48c023e2ee93222c94841e2d6d5419933ceb6ea21c21014096b",
     "files": [
       {
@@ -183,8 +183,8 @@
       },
       {
         "path": "frontend/app/apps.js",
-        "bytes": 26999,
-        "sha256": "952e9603a277dc43e60c8763954b74af3a773172ea675671a962c15797ce15cb"
+        "bytes": 27045,
+        "sha256": "4e2c5aee201018becb9cd01986c365b79c392865f5cee675ccc71cea6893e269"
       },
       {
         "path": "frontend/app/armconfirm.js",
@@ -1498,8 +1498,8 @@
       },
       {
         "path": "frontend/css/plugins.css",
-        "bytes": 4184,
-        "sha256": "a513cbff9577b5ac1f2dd96de0bf04ab5196658bbdd25748c096948087975971"
+        "bytes": 7309,
+        "sha256": "f53273652cca15cf2374ce4f5d16f2d1b16fae9c01d164ff96bf54ae530d3060"
       },
       {
         "path": "frontend/css/project-home.css",
@@ -1673,8 +1673,8 @@
       },
       {
         "path": "frontend/plugin-kit/kit.css",
-        "bytes": 14937,
-        "sha256": "018b056477a0b62ab3dd267a51219c4cd06199e39a320f0977a01add279c1500"
+        "bytes": 15028,
+        "sha256": "3163c51ae4cad0250bb7d610fef4ff072528ccb4798f6fac2513da91392fd342"
       },
       {
         "path": "frontend/plugin-kit/kit.js",
