@@ -17,7 +17,7 @@
 
    The fold (every agent, from boot) is always on and bounded. The view is a registered station WINDOW ('desk'): it
    rises from the bottom dock between CREW and COMMS, resizes and minimizes like every other window, and switches
-   agents with the shared roster switcher. Never a popover beside the desk. */
+   agents by clicking another agent's desk (no roster selector — Andrew 2026-09-30). Never a popover beside the desk. */
 'use strict';
 
 const DeskScreen = (() => {
@@ -223,7 +223,7 @@ const DeskScreen = (() => {
 
   /* ---------------- the window ----------------
      A registered station window ('desk'): it rises from the bottom dock between CREW and COMMS, resizes and
-     minimizes like every other window, and switches agents with the shared roster switcher. The activity feed is
+     minimizes like every other window; another agent's desk re-targets it (no roster selector). The activity feed is
      COMMS; this window is only the agent's screen. Built once per agent, repainted in place each second (the note
      field is never rebuilt under the Commander's cursor). */
   let doors = {};                                              // openChat (app.js)
@@ -416,7 +416,7 @@ const DeskScreen = (() => {
     }, 1000);
   }
 
-  // the window builder (StationUI calls it on open and on every roster switch / rerender)
+  // the window builder (StationUI calls it on open, and again when another desk re-targets it)
   function build(body) {
     const H = StationUI.h, a = H.present[H.sel] || null;
     if (!a) { body.innerHTML = '<p class="ds-dim">No agent selected.</p>'; return; }
@@ -424,8 +424,7 @@ const DeskScreen = (() => {
     cur = { agentId: a.id, name: a.name || a.id, body };
     if (!same) { snap = null; hist = null; histFor = ''; steerNote = stopNote = ''; scr = { key: '', list: [], at: 0, busy: false, sig: '' }; pos = -1; }
     wasLive = !!currentOf(a.id);
-    body.innerHTML = H.rosterSwitchHtml(a.id)
-      + '<div class="ds-screen" data-state="idle">'
+    body.innerHTML = '<div class="ds-screen" data-state="idle">'
       + '<div class="ds-strip"></div>'
       + '<div class="ds-main"></div>'
       + '<form class="ds-steer" hidden><input class="ds-in" type="text" maxlength="2000" autocomplete="off" aria-label="Tell this agent something mid-run">'
@@ -433,7 +432,6 @@ const DeskScreen = (() => {
       + '<div class="ds-foot">'
       + '<button type="button" class="bb sm ds-stop" data-a="stop" hidden>STOP</button>'
       + '<button type="button" class="bb sm" data-a="chat">OPEN CHAT</button></div></div>';
-    H.wireRosterSwitch(body, 'desk');
     const aid = a.id;
     body.querySelector('.ds-main').addEventListener('click', e => {
       const b = e.target.closest('button[data-a]'); if (!b) return;
