@@ -273,7 +273,8 @@
     const belts = [];
     for (const k in (plan.belts || {})) { const p = k.split(','); belts.push({ x: +p[0], y: +p[1], dir: plan.belts[k] }); }
     let probe = null;
-    try { probe = P.compileRoutingPlan({ props: props.map(p => set[p.id] ? Object.assign({}, p, { agentId: '__probe_' + p.id }) : p), belts }); } catch (e) { probe = null; }
+    // a LINKED floor re-compiles with its links (a line the layout engine laid can have belts no ring rule would join)
+    try { probe = P.compileRoutingPlan({ props: props.map(p => set[p.id] ? Object.assign({}, p, { agentId: '__probe_' + p.id }) : p), belts, links: plan.links || undefined }); } catch (e) { probe = null; }
     if (probeMemo) probeMemo.set(plan, { sig, props, probe });
     return probe;
   }
