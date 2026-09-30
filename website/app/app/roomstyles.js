@@ -106,5 +106,121 @@
   }
   const menu = () => ORDER.map(id => ({ id, name: STYLES[id].name, about: STYLES[id].about }));
 
-  return { STYLES, ORDER, NAMES, resolve, menu };
+  /* WHOLE-ROOM STYLES (2026-09-30): a room furnished from wall to wall the way the hand-built showcase stations were —
+     its own floor and walls, a FEATURE WALL lined with its signature pieces, a CENTREPIECE cluster, plants in the corners,
+     accents along the side walls. StationLayouts.dressRoom places them: the feature wall is the one opposite the door, the
+     centrepiece faces it, a lane from every door stays clear, and a piece that cannot be walked up to is left out.
+     feature / front: { left, centre, right } lists of piece types lined along that wall. centre: clusters, largest first,
+     [type, x, y, facing?] as in the zone sets (y grows away from the feature wall). */
+  const ROOMS = {
+    lounge: { name: 'a lounge', kind: 'quarters', deck: { style: 'walnut', mat: 'plank' }, walls: { mat: 'wainscot' },
+      feature: { left: ['bookshelf'], centre: ['tv'], right: ['fishtank'] },
+      centre: [
+        { w: 11, h: 5, pieces: [['rug_large', 3, 0], ['lowtable', 4, 2], ['couch', 3, 4], ['recliner', 1, 1, 3], ['recliner_r', 9, 1, 1], ['sidetable', 1, 3], ['lavalamp', 1, 3], ['sidetable', 9, 3], ['plasmaglobe', 9, 3]] },
+        { w: 7, h: 4, pieces: [['rug_small', 2, 0], ['couch', 1, 3], ['sidetable', 0, 3], ['lavalamp', 0, 3], ['recliner', 6, 1, 1]] }],
+      corners: ['tallplant', 'monstera', 'plant', 'plant'], sides: ['quarters_minifridge', 'beanbag', 'coffee', 'beanbag'] },
+    cozy: { name: 'a cozy den', kind: 'quarters', deck: { style: 'oak', mat: 'plank' }, walls: { mat: 'wainscot' },
+      feature: { left: ['bookshelf', 'bookshelf'], centre: ['fishtank'], right: ['bookshelf'] },
+      centre: [
+        { w: 9, h: 5, pieces: [['rug_large', 2, 0], ['beanbag', 3, 1], ['beanbag', 5, 1], ['couch', 2, 4], ['sidetable', 1, 4], ['lavalamp', 1, 4], ['sidetable', 7, 4], ['plasmaglobe', 7, 4], ['recliner', 0, 2, 3]] },
+        { w: 6, h: 4, pieces: [['rug_small', 1, 0], ['couch', 0, 3], ['sidetable', 5, 3], ['lavalamp', 5, 3]] }],
+      corners: ['tallplant', 'monstera', 'plant', 'terrarium'], sides: ['beanbag', 'guitar', 'coffee', 'radio'] },
+    games: { name: 'an arcade', kind: 'hab', deck: { style: 'violet', mat: 'hex' }, walls: { mat: 'acoustic' },
+      feature: { left: ['arcade', 'arcade2', 'arcade', 'arcade2'], right: ['pinball', 'pinball', 'gachapon', 'jukebox'] },
+      centre: [
+        { w: 8, h: 5, pieces: [['rug_large', 1, 0], ['quarters_pooltable', 1, 1], ['stool', 7, 1], ['stool', 7, 3], ['stool', 0, 4]] },
+        { w: 5, h: 3, pieces: [['quarters_pooltable', 0, 0], ['stool', 4, 2]] }],
+      corners: ['speaker', 'speaker', 'plant', 'plant'], sides: ['quarters_vending', 'booth', 'holopet', 'stool'] },
+    library: { name: 'a library', kind: 'quarters', deck: { style: 'oak', mat: 'parquet' }, walls: { mat: 'panelled' },
+      feature: { left: ['bookshelf', 'bookshelf', 'bookshelf'], right: ['bookshelf', 'bookshelf', 'bookshelf'] },
+      centre: [
+        { w: 12, h: 3, pieces: [['rug', 0, 0], ['recliner', 0, 1, 3], ['sidetable', 1, 1], ['desklamp', 1, 1], ['recliner_r', 3, 1, 1], ['industrial_roundtable', 8, 1], ['dinerchair', 7, 1, 3], ['dinerchair', 10, 1, 1], ['bookstack', 9, 0]] },
+        { w: 6, h: 3, pieces: [['rug_small', 0, 0], ['recliner', 1, 1, 3], ['sidetable', 2, 1], ['bookstack', 5, 1]] }],
+      corners: ['tallplant', 'monstera', 'terrarium', 'plant'], sides: ['telescope', 'bookstack', 'terrarium', 'plant'] },
+    quarters: { name: 'sleeping quarters', kind: 'quarters', deck: { style: 'verdant', mat: 'soft' }, walls: { mat: 'wainscot' },
+      feature: { left: ['bunk', 'bunk'], centre: ['quarters_lockerbank'], right: ['bunk', 'bunk'] },
+      centre: [
+        { w: 9, h: 3, pieces: [['sidetable', 0, 1], ['lavalamp', 0, 1], ['rug_small', 3, 0], ['sidetable', 8, 1], ['radio', 8, 1]] },
+        { w: 3, h: 3, pieces: [['rug_small', 0, 0]] }],
+      corners: ['tallplant', 'plant', 'plant', 'tallplant'], sides: ['cryopod', 'guitar', 'industrial_locker', 'plant'] },
+    garden: { name: 'a garden', kind: 'quarters', deck: { style: 'fern', mat: 'turf' }, walls: { mat: 'hedge' },
+      feature: { left: ['industrial_planter', 'industrial_planter'], centre: ['tallplant'], right: ['industrial_planter', 'industrial_planter'] },
+      front: { left: ['industrial_planter'], right: ['industrial_planter'] },
+      centre: [
+        { w: 10, h: 7, pieces: [['industrial_bench', 3, 0], ['arc_floorlight', 9, 0], ['monstera', 0, 2], ['terrarium', 1, 4], ['fishtank', 4, 3], ['terrarium', 8, 2], ['monstera', 9, 5], ['industrial_bench', 4, 6], ['arc_floorlight', 0, 6]] },
+        { w: 6, h: 4, pieces: [['industrial_bench', 1, 0], ['monstera', 0, 2], ['terrarium', 5, 2], ['plant', 2, 3]] }],
+      corners: ['tallplant', 'tallplant', 'tallplant', 'tallplant'], sides: ['monstera', 'monstera', 'plant', 'plant'] },
+    cafe: { name: 'a café', kind: 'hab', deck: { style: 'amber', mat: 'ceramic' }, walls: { mat: 'wainscot' },
+      feature: { left: ['bar'], centre: ['coffee', 'quarters_minifridge'], right: ['quarters_vending', 'quarters_vending'] },
+      centre: [
+        { w: 11, h: 2, pieces: [['dinerchair', 0, 0, 3], ['dinertable', 1, 0], ['dinerchair', 4, 0, 1], ['dinerchair', 6, 0, 3], ['dinertable', 7, 0], ['dinerchair', 10, 0, 1]] },
+        { w: 5, h: 2, pieces: [['dinerchair', 0, 0, 3], ['dinertable', 1, 0], ['dinerchair', 4, 0, 1]] }],
+      corners: ['plant', 'tallplant', 'plant', 'plant'], sides: ['stool', 'stool', 'booth', 'plant'] },
+    desks: { name: 'an office', kind: 'hab', deck: { style: 'ash', mat: 'resin' }, walls: { mat: 'panelled' },
+      feature: { left: ['bookshelf'], centre: ['whiteboard'], right: ['industrial_drawerbank'] },
+      centre: [
+        { w: 12, h: 3, pieces: [['desk', 0, 0], ['desklamp', 3, 0], ['desk', 4, 0], ['desklamp', 7, 0], ['desk', 8, 0], ['chair', 1, 1], ['chair', 5, 1], ['chair', 9, 1]] },
+        { w: 7, h: 3, pieces: [['desk', 0, 0], ['desklamp', 3, 0], ['desk', 4, 0], ['chair', 1, 1], ['chair', 5, 1]] }],
+      corners: ['tallplant', 'plant', 'plant', 'monstera'], sides: ['rack', 'coffee', 'plant', 'bookstack'] },
+    meeting: { name: 'a meeting room', kind: 'hab', deck: { style: 'indigo', mat: 'panel' }, walls: { mat: 'panelled' },
+      feature: { left: ['plant'], centre: ['bigscreen'], right: ['plant'] },
+      centre: [
+        { w: 9, h: 4, pieces: [['chair', 1, 0], ['chair', 4, 0], ['chair', 7, 0], ['longtable', 0, 1], ['longtable', 3, 1], ['longtable', 6, 1], ['chair', 1, 2], ['chair', 4, 2], ['chair', 7, 2]] },
+        { w: 5, h: 3, pieces: [['chair', 0, 1, 3], ['longtable', 1, 1], ['chair', 4, 1, 1]] }],
+      corners: ['tallplant', 'tallplant', 'plant', 'plant'], sides: ['coffee', 'screens', 'whiteboard'] },
+    lab: { name: 'a lab', kind: 'lab', deck: { style: 'sterile', mat: 'tile' }, walls: { mat: 'service' },
+      feature: { left: ['vat', 'tube'], centre: ['research_corelens', 'research_trendpillar', 'research_corelens'], right: ['incubator', 'incubator'] },
+      centre: [
+        { w: 9, h: 3, pieces: [['desk', 0, 0], ['chair', 1, 1], ['research_samplecart', 4, 0], ['research_papers', 7, 0]] },
+        { w: 5, h: 3, pieces: [['desk', 0, 0], ['research_samplecart', 3, 0], ['chair', 0, 1]] }],
+      corners: ['plant', 'tallplant', 'plant', 'plant'], sides: ['telescope', 'research_samplecart', 'tube'] },
+    workshop: { name: 'a workshop', kind: 'factory', deck: { style: 'hull', mat: 'tread' }, walls: { mat: 'pipework' },
+      feature: { left: ['workbench', 'toolbox'], centre: ['fabricator'], right: ['industrial_drawerbank'] },
+      centre: [
+        { w: 8, h: 3, pieces: [['bench', 0, 0], ['industrial_toolcaddy', 5, 0], ['industrial_supplycart', 6, 2]] },
+        { w: 4, h: 1, pieces: [['bench', 0, 0]] }],
+      corners: ['crate', 'boxes', 'plant', 'crate'], sides: ['rackV', 'industrial_toolcaddy', 'rackV'] },
+    comms: { name: 'a comms room', kind: 'bridge', deck: { style: 'hull', mat: 'resin' }, walls: { mat: 'service' },
+      feature: { left: ['screens'], centre: ['commswall'], right: ['rack'] },
+      centre: [
+        { w: 8, h: 2, pieces: [['consoleL', 0, 0], ['chair', 1, 1], ['consoleL', 5, 0], ['chair', 6, 1]] },
+        { w: 3, h: 2, pieces: [['consoleL', 0, 0], ['chair', 1, 1]] }],
+      corners: ['plant', 'plant', 'plant', 'tallplant'], sides: ['comms_dish', 'screens', 'plant'] },
+    storage: { name: 'a store room', kind: 'storage', deck: { style: 'rust', mat: 'cargo' }, walls: { mat: 'utility' },
+      feature: { left: ['industrial_locker', 'industrial_locker'], centre: ['shelf'], right: ['rackV', 'rackV'] },
+      centre: [
+        { w: 7, h: 4, pieces: [['crate', 0, 0], ['boxes', 3, 0], ['crate', 5, 0], ['goldcrate', 1, 3], ['boxes', 4, 3]] },
+        { w: 4, h: 2, pieces: [['crate', 0, 0], ['boxes', 2, 1]] }],
+      corners: ['goldcrate', 'crate', 'boxes', 'crate'], sides: ['industrial_drawerbank', 'rackV'] },
+    gym: { name: 'a gym', kind: 'hab', deck: { style: 'crimson', mat: 'rubber' }, walls: { mat: 'ribbed' },
+      feature: { left: ['punchbag', 'punchbag'], centre: ['weaponrack'], right: ['industrial_locker'] },
+      centre: [
+        { w: 9, h: 5, pieces: [['rug_large', 2, 0], ['benchpress', 3, 1], ['benchpress', 3, 3]] },
+        { w: 5, h: 3, pieces: [['benchpress', 1, 1]] }],
+      corners: ['tallplant', 'plant', 'plant', 'tallplant'], sides: ['punchbag', 'industrial_locker', 'coffee'] },
+    // a hall for workflow lines: its floor is kept for the belts; the walls get crates, racks and cable
+    works: { name: 'a conveyor hall', kind: 'factory', deck: { style: 'rust', mat: 'treadway' }, walls: { mat: 'pipework' },
+      feature: { left: [], right: [] }, centre: [],
+      corners: ['crate', 'boxes', 'crate', 'boxes'], sides: ['rackV', 'rackV', 'industrial_toolcaddy', 'industrial_supplycart'] },
+  };
+  const ROOM_ORDER = ['lounge', 'cozy', 'games', 'library', 'quarters', 'garden', 'cafe', 'desks', 'meeting', 'lab', 'workshop', 'comms', 'storage', 'gym', 'works'];
+  const ROOM_WORDS = { arcade: 'games', game: 'games', gaming: 'games', 'game room': 'games', rec: 'games', 'rec room': 'games', den: 'cozy', living: 'lounge', tv: 'lounge',
+    office: 'desks', study: 'library', books: 'library', reading: 'library', bedroom: 'quarters', bunks: 'quarters', dorm: 'quarters', sleep: 'quarters',
+    greenhouse: 'garden', atrium: 'garden', park: 'garden', kitchen: 'cafe', coffee: 'cafe', canteen: 'cafe', mess: 'cafe', 'break room': 'cafe',
+    conference: 'meeting', boardroom: 'meeting', science: 'lab', research: 'lab', maker: 'workshop', engineering: 'workshop', garage: 'workshop',
+    radio: 'comms', signals: 'comms', stores: 'storage', warehouse: 'storage', fitness: 'gym', training: 'gym',
+    conveyor: 'works', conveyors: 'works', factory: 'works', foundry: 'works', workflow: 'works', workflows: 'works', lines: 'works', production: 'works', assembly: 'works' };
+  // a whole-room style by its id or a word for it ("arcade", "conveyor hall") — null when nothing matches
+  function resolveRoom(raw) {
+    const n = norm(raw).replace(/ (room|hall|area|space|bay|deck)$/, '');
+    if (!n) return null;
+    if (ROOMS[n]) return n;
+    if (ROOM_WORDS[n]) return ROOM_WORDS[n];
+    for (const w of n.split(' ')) { if (ROOMS[w]) return w; if (ROOM_WORDS[w]) return ROOM_WORDS[w]; }
+    const z = resolve(raw);
+    return z && ROOMS[z] ? z : null;
+  }
+  const roomMenu = () => ROOM_ORDER.map(id => ({ id, name: ROOMS[id].name }));
+
+  return { STYLES, ORDER, NAMES, resolve, menu, ROOMS, ROOM_ORDER, resolveRoom, roomMenu };
 });

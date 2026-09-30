@@ -450,7 +450,7 @@ const StationCommands = (() => {
       if (!e || Date.now() - e.at > PLAN_TTL_MS) { builderPlans.delete(planId); throw new Error('There is no plan "' + planId.slice(0, 40) + '" (plans last ten minutes and are used once). Plan it again.'); }
       // a swap backs the current layout up to Build mode's own slot first, so RESTORE PREVIOUS in Build → Presets brings it back
       let backup = null;
-      if (e.plan.spec && e.plan.spec.kind === 'swap') {
+      if (e.plan.spec && (e.plan.spec.kind === 'swap' || e.plan.spec.kind === 'relayout')) {
         const key = 'starnet.layoutBackup.' + st.doc().meta.createdAt;
         try { backup = { key, old: localStorage.getItem(key) }; localStorage.setItem(key, JSON.stringify(st.serialize())); }
         catch (_) { throw new Error('Your current layout could not be backed up, so nothing was changed.'); }
