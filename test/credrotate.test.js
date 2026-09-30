@@ -189,7 +189,8 @@ function okProvider(text) {
     A.ok(/credPool\.coolingUntil\(runKey\)/.test(seg), 'the run asks whether its OWN primary key is cooling');
     A.ok(/activePrimaryKey = warm/.test(seg), 'and starts on a WARM pool key when it is');
     A.ok(/ordered\.push\(runKey\)/.test(seg), 'demoting the cooling primary to the back rather than dropping it');
-    A.ok(/credKey: providerUnmetered \? null : activePrimaryKey/.test(src),
+    // subscription stacking: an unmetered OAuth subscription still names its ACCOUNT handle, so a spent account cools too
+    A.ok(/credKey: \(providerUnmetered && !oauthAccounts\) \? null : activePrimaryKey/.test(src),
       'and the loop is told the key actually in use, so a failure cools the right credential');
   }
 
