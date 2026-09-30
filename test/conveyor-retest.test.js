@@ -154,8 +154,9 @@ A.ok(/const RING_DOCK_T = \{ bay: 1, intake: 1, outbox: 1 \}/.test(build) && /'C
 
 /* ---------- captions + the FINISH card keep off what the builder needs to see ---------- */
 {
-  A.ok(/note\(x, y, '◇ ' \+ who \+ ' WOULD RUN IT', true\)/.test(ghost) && /n\.below \? \(n\.y \+ 1\) \* T \+ 3 \+ fs \+ rise : n\.y \* T - 3 - rise/.test(ghost), 'a dock caption hangs under its tile (the nameplate owns the space above)');
-  A.ok(/say\(\{ x: \(n\.x \+ 0\.5\) \* T - w \/ 2, y: baseY\(n, 0\) - fs, w, h: fs \}/.test(ghost), '…and the arbiter is told where it really is');
+  // (2026-09-30: a caption is a PLATE — the same rect is offered to the arbiter and painted)
+  A.ok(/note\(x, y, '◇ ' \+ who \+ ' WOULD RUN IT', true\)/.test(ghost) && /y: n\.below \? \(n\.y \+ 1\) \* T \+ 3 : n\.y \* T - 3 - rise - ph/.test(ghost), 'a dock caption hangs under its tile (the nameplate owns the space above)');
+  A.ok(/if \(say\) say\(b, paintNote\.bind\(null, n, k, b\)\); else paintNote\(n, k, b\);/.test(ghost), '…and the arbiter is told where it really is');
   A.ok(/ghost\.draw\(ctx, now, T, 8, plates\.length \? \(bx, paint\) => \{ if \(!onPlate\(bx\)\) paint\(\); \} : null\)/.test(world), 'on the live floor a caption never prints over a line plate');
   const pos = build.slice(build.indexOf('  function positionFinCard() {'), build.indexOf('  /* the delivery-retirement hook'));
   A.ok(/const FIN_AVOID = \{ intake: 1, bay: 1, outbox: 1, filter: 1, splitter: 1, merger: 1, joiner: 1, loop: 1 \}/.test(pos) && /spots\.find\(clear\) \|\| spots\[0\]/.test(pos), 'the FINISH card takes the first spot that covers no workflow machine');

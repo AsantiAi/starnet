@@ -68,6 +68,18 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   let present = [];          // agent objects currently on the station
   const runningAgents = new Map();   // agentId -> live-run COUNT (concurrent streams can share an agentId, e.g. 'agent')
   const runSeenAt = new Map();       // agentId -> performance.now() of the last counted run.start (agentLive's veto grace)
+  /* LINE TEST (2026-09-29, handed over by the steptest-stuck investigation): a run on a line test's OWN stream — a step
+     test's steptest-…, RUN ONE REAL JOB's sample-… (agent.run.start carries streamId) — is real work, but its words live in
+     the line's TEST view, not in the agent's COMMS: a Commander who opened COMMS saw nothing and read the row as stuck. The
+     crew row names it LINE TEST and its tip says where it shows and how it stops. */
+  const testRunIds = new Map();      // runId -> agentId, for the live runs that are line tests
+  const isLineTestStream = s => /^(steptest|sample)-/.test(String(s || ''));
+  function lineTestOnly(id) {        // every live run of this agent is a line test (a mix reads WORKING)
+    let n = 0; for (const a of testRunIds.values()) if (a === id) n++;
+    return n > 0 && n >= (runningAgents.get(id) || 0);
+  }
+  function dropTestRuns(id) { for (const [r, a] of Array.from(testRunIds)) if (a === id) testRunIds.delete(r); }
+  const LINE_TEST_TIP = 'working on a line test — its steps show in BUILD › the line’s TEST view, not in COMMS; ■ STOP there ends it';
   let crewLiveWired = false;         // the crew-status live listener is registered exactly once
   let repaintAutonomyDial = null;    // GROWTH Tier 3: the open Settings AUTONOMY panel's paint fn (null when closed) — lets an accepted trust offer repaint the EARNED badge live
   // Same idiom for the open Settings PERMISSIONS panel's per-agent APPROVAL list. The list is painted from
@@ -1530,8 +1542,10 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       if (live) working++;
       const e = $('#cs-' + a.id);
       if (e) {
-        const status = live ? (a.id === focusedId && act === 'talk' ? 'IN CONVERSATION' : 'WORKING') : 'IDLE';
+        const status = live ? (a.id === focusedId && act === 'talk' ? 'IN CONVERSATION' : lineTestOnly(a.id) ? 'LINE TEST' : 'WORKING') : 'IDLE';
         if (e.textContent !== status) e.textContent = status;
+        const tip = status === 'LINE TEST' ? LINE_TEST_TIP : '';
+        if ((e.getAttribute('data-tip') || '') !== tip) { if (tip) e.setAttribute('data-tip', tip); else e.removeAttribute('data-tip'); }
         const row = e.closest('.crew-row');
         row.classList.toggle('selected', a.id === focusedId);
         const hide = !!crewQuery && !String(a.name || a.id).toLowerCase().includes(crewQuery) && !String(a.id).toLowerCase().includes(crewQuery);
@@ -1559,7 +1573,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   // one finishing doesn't prematurely flip the pill to IDLE while the other is still live. Deleted at 0 so
   // crewTick's agentLive(id) stays a clean "is this agent working?" test.
   function incRun(id) { runningAgents.set(id, (runningAgents.get(id) || 0) + 1); runSeenAt.set(id, performance.now()); }
-  function decRun(id) { const n = (runningAgents.get(id) || 0) - 1; if (n > 0) runningAgents.set(id, n); else { runningAgents.delete(id); runSeenAt.delete(id); } }
+  function decRun(id) { const n = (runningAgents.get(id) || 0) - 1; if (n > 0) runningAgents.set(id, n); else { runningAgents.delete(id); runSeenAt.delete(id); dropTestRuns(id); } }
   // THE one "is this agent working?" predicate (crew list, warroom dots, dossier roster). The local count is
   // event-fed only, so a LOST agent.run.end (dropped SSE frame, stream that closed without the end event,
   // sidecar restart) would assert "working at the terminal" forever while the world correctly stands the
@@ -1573,7 +1587,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     try { if (typeof World !== 'undefined' && World.agentRunsLive) worldN = World.agentRunsLive(id); } catch (_) { worldN = -1; }
     if (!runningAgents.has(id)) return worldN > 0;
     if (worldN === 0 && performance.now() - (runSeenAt.get(id) || 0) > 8000) {
-      runningAgents.delete(id); runSeenAt.delete(id);   // self-heal: the world PROVES no live run — drop the stale count
+      runningAgents.delete(id); runSeenAt.delete(id); dropTestRuns(id);   // self-heal: the world PROVES no live run — drop the stale count
       return false;
     }
     return true;
@@ -1582,8 +1596,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   function wireCrewLive() {
     if (crewLiveWired || typeof U === 'undefined' || !U.bus) return;
     crewLiveWired = true;
-    U.bus.on('agent.run.start', p => { if (p && p.agentId) { incRun(p.agentId); crewTick(); } });
-    U.bus.on('agent.run.end', p => { if (p && p.agentId) { decRun(p.agentId); crewTick(); } });
+    U.bus.on('agent.run.start', p => { if (p && p.agentId) { if (p.runId && isLineTestStream(p.streamId)) testRunIds.set(p.runId, p.agentId); incRun(p.agentId); crewTick(); } });
+    U.bus.on('agent.run.end', p => { if (p && p.agentId) { if (p.runId) testRunIds.delete(p.runId); decRun(p.agentId); crewTick(); } });
   }
   // Called from chat.js's run-teardown ONLY on the abort/throw path, where agent.run.end is LOST (E-STOP /
   // cancel / disconnect / network drop) and would otherwise leave the count stuck >0. Normal completions
