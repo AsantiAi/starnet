@@ -29,7 +29,8 @@ const { sanitizeInput } = require('./browser-handoff.js');
 const FRAME_POLL_MAX_MS = 12000;
 const STREAM_IDLE_MS = 6000;               // nobody polled a picture for this long → stop capturing it
 const COMMANDER_IDLE_MS = 10 * 60 * 1000;  // the Commander's session (a whole Chrome) closes after this long unused
-const PAGE_INFO_EVERY_MS = 1000;
+const PAGE_INFO_EVERY_MS = 300;
+const VIEW_POLL_MS = 2500;                 // a still page answers this often, so the address shown is never long stale
 const SEARCH_URL = 'https://duckduckgo.com/?q=';
 
 /* What the Commander typed → the address to open. A scheme is kept; a bare host gets https (http for loopback —
@@ -77,7 +78,7 @@ function makeBrowserViews(deps) {
   }
   function chan(key) {
     let c = chans.get(key);
-    if (!c) { c = { key, surface: null, streaming: false, frame: null, seq: 0, waiters: new Set(), idle: null, page: null, pageAt: 0 }; chans.set(key, c); }
+    if (!c) { c = { key, surface: null, streaming: false, frame: null, seq: 0, waiters: new Set(), idle: null, polls: 0, page: null, pageAt: 0 }; chans.set(key, c); }
     return c;
   }
   function wake(c) { for (const w of Array.from(c.waiters)) { try { w(); } catch (e) { failNote('view.wake', e); } } c.waiters.clear(); }
@@ -173,6 +174,7 @@ function makeBrowserViews(deps) {
     try { clean = sanitizeInput(ev); } catch (e) { return { ok: false, error: e.message }; }
     touchCommander();
     await s.input(clean);
+    const ch = chans.get('commander'); if (ch) ch.pageAt = 0;   // the Commander acted: re-read where the page is
     return { ok: true };
   }
 
@@ -221,7 +223,14 @@ function makeBrowserViews(deps) {
         });
       } catch (e) { stopStream(c, true); return { ok: false, code: 'closed', error: String((e && e.message) || e) }; }
     }
-    armIdle(c, () => { if (handoffLive(String(r.key).slice(4))) dropChan(r.key, true); else stopStream(c); });
+    // "Nobody is watching" is measured from the END of the last poll: a long-poll on a still page is somebody
+    // watching, and the idle clock must not run underneath it.
+    if (c.idle) { clearT(c.idle); c.idle = null; }
+    c.polls++;
+    const release = () => {
+      c.polls = Math.max(0, c.polls - 1);
+      if (c.polls === 0 && c.streaming && chans.get(r.key) === c) armIdle(c, () => { if (handoffLive(String(r.key).slice(4))) dropChan(r.key, true); else stopStream(c); });
+    };
     const since = Number(after) || 0;
     if (!(c.frame && c.frame.seq > since)) {
       const wait = Math.max(0, Math.min(FRAME_POLL_MAX_MS, Number(budgetMs) >= 0 ? Number(budgetMs) : FRAME_POLL_MAX_MS));
@@ -231,6 +240,7 @@ function makeBrowserViews(deps) {
         c.waiters.add(done);
       });
     }
+    release();
     if (chans.get(r.key) !== c || !c.streaming) {
       const again = resolveTarget(target);
       return { ok: false, code: again.error || 'closed', error: again.message || 'the picture stopped' };
@@ -276,7 +286,7 @@ function makeViewRoutes(deps) {
   async function close(req, res) { respondJson(res, 200, await views.close()); }
   async function frame(req, res) {
     const u = new URL(req.url, 'http://x');
-    const r = await views.frame(String(u.searchParams.get('target') || '').slice(0, 120), Number(u.searchParams.get('after')) || 0, FRAME_POLL_MAX_MS);
+    const r = await views.frame(String(u.searchParams.get('target') || '').slice(0, 120), Number(u.searchParams.get('after')) || 0, VIEW_POLL_MS);
     if (!r.ok) return respondJson(res, 409, r);
     respondJson(res, 200, { ok: true, page: r.page || null, frame: r.frame ? { seq: r.frame.seq, mime: r.frame.mime, width: r.frame.width, height: r.frame.height, data: r.frame.data } : null });
   }

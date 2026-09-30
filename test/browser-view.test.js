@@ -94,6 +94,17 @@ function fakeSession() {
     A.ok((await views.frame('run:r1', 0, 0)).ok, 'after the handoff the picture comes back');
     A.eq(run.starts, 2, 'on a fresh stream');
 
+    // a long-poll on a still page IS somebody watching: the idle clock must not run underneath it
+    {
+      const stopsNow = run.stops;
+      const pending = views.frame('run:r1', 99, 12000);   // nothing newer than seq 99 will arrive
+      await new Promise(r => setImmediate(r));
+      clk.advance(7000);                                   // past the idle window, mid-poll
+      A.eq(run.stops, stopsNow, 'a still page being long-polled keeps its stream');
+      clk.advance(6000);                                   // the poll's own 12s budget runs out
+      const late = await pending;
+      A.ok(late.ok && late.frame === null, '…and the poll ends empty-handed, not with "closed"');
+    }
     // nobody watching → the capture stops
     clk.advance(7000);
     A.eq(run.stops, stopsBefore + 1, 'an unwatched stream stops itself');
