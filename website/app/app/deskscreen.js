@@ -6,6 +6,8 @@
    is reading (web / browser), its reply as it writes it. ‹ › flips back through this job's earlier screens. At rest
    the screen holds the last job's last screen. Hands: a mid-run note (POST /api/run/steer), two-step STOP
    (POST /api/cancel), OPEN CHAT. The activity feed is COMMS — this window never repeats it.
+   Connected, when those windows exist: a web page it wrote opens in the BROWSER window (OPEN PAGE), and when it asks
+   for a human in its browser (STEP-IN: login / 2FA / CAPTCHA) the screen says so with a STEP IN door.
 
    TRUTH (the product's core law): every row is either a real bus event this page observed (agent.run.start /
    tool_call / tool_result / token / cost / run.end / permission.* / deliverable) or a server row. Liveness is
@@ -23,6 +25,7 @@ const DeskScreen = (() => {
   const runs = new Map();       // runId -> rec
   const byAgent = new Map();    // agentId -> [runId…] newest last (bounded)
   const asks = new Map();       // agentId -> { promptId, tool, at }
+  const handoffs = new Map();   // agentId -> the live STEP-IN handoff record (browser.handoff: waiting | taken)
   const clock = () => Date.now();
 
   /* ---------------- the fold (pure over its maps; exported for tests) ---------------- */
@@ -48,6 +51,12 @@ const DeskScreen = (() => {
     now = now || clock();
     if (name === 'permission.prompt') { if (p.agentId && p.promptId) asks.set(p.agentId, { promptId: p.promptId, tool: p.tool || '', at: now }); return; }
     if (name === 'permission.response') { for (const [aid, a] of asks) if (a.promptId === p.promptId) asks.delete(aid); return; }
+    if (name === 'browser.handoff') {
+      if (!p.id || !p.agentId) return;
+      if (p.state === 'waiting' || p.state === 'taken') handoffs.set(p.agentId, { id: String(p.id), state: p.state, reason: p.reason || '', note: p.note || '', where: p.where || p.host || '' });
+      else { const h = handoffs.get(p.agentId); if (h && h.id === String(p.id)) handoffs.delete(p.agentId); }
+      return;
+    }
     if (name === 'deliverable') {
       const r = p.agentId && liveRecOf(p.agentId);
       if (r && r.made.length < 20) r.made.push({ title: String(p.title || p.kind || 'deliverable') });
@@ -307,11 +316,33 @@ const DeskScreen = (() => {
       ? '<p class="ds-dim ds-partial">' + (v.src && v.src.stream ? 'Loading this step…' : 'This run was started outside this window, so its full screen is available once it ends. For now the station reports only the tool name.') + '</p>' : '';
     return '<div class="ds-app" data-app="' + sc.app.toLowerCase() + '" data-s="' + (!s.done ? 'run' : s.isError ? 'bad' : 'ok') + '">'
       + '<div class="ds-bar"><span class="ds-appname">' + esc(sc.app) + '</span><span class="ds-target">' + esc(clip(sc.target, 120)) + '</span>'
+      + (canOpenPage(s, sc) ? '<button type="button" class="bb xs ds-openpage" data-a="page" data-path="' + esc(sc.target) + '">OPEN PAGE</button>' : '')
       + '<span class="ds-pager"><button type="button" class="bb xs" data-a="prev"' + (idx <= 0 ? ' disabled' : '') + ' aria-label="Previous screen">‹</button>'
       + '<span class="ds-pos">' + (idx + 1) + '/' + total + '</span>'
       + '<button type="button" class="bb xs" data-a="next"' + (idx >= total - 1 ? ' disabled' : '') + ' aria-label="Next screen">›</button></span></div>'
       + (sc.note ? '<div class="ds-status">' + esc(sc.note) + '</div>' : '')
       + partial + '<div class="ds-view">' + body + '</div></div>';
+  }
+
+  // CONNECTED WINDOWS (feature-detected, so this file stands alone): the BROWSER window renders a page the agent
+  // wrote; the STEP-IN window is where you take the agent's browser when it asks for a human (login, 2FA, CAPTCHA).
+  const HTML_RE = /\.html?$/i;
+  function canOpenPage(s, sc) {
+    return sc.app === 'EDITOR' && sc.kind === 'code' && s.done && !s.isError && HTML_RE.test(sc.target || '')
+      && typeof OutputBrowser !== 'undefined' && typeof OutputBrowser.open === 'function';
+  }
+  function handoffOf(aid) {
+    let h = handoffs.get(aid) || null;
+    if (!h && typeof StepIn !== 'undefined' && StepIn._state) {   // a handoff raised before this page loaded: STEP-IN's own sidecar read
+      try { const r = (StepIn._state().live || []).find(x => x && x.agentId === aid && (x.state === 'waiting' || x.state === 'taken')); if (r) h = { id: String(r.id), state: r.state, reason: r.reason || '', note: r.note || '', where: r.where || r.host || '' }; } catch (_) {}
+    }
+    return h;
+  }
+  function handoffHtml(h, name) {
+    const canOpen = typeof StepIn !== 'undefined' && typeof StepIn.open === 'function';
+    return '<div class="ds-ask ds-handoff"><span>' + esc(name) + (h.state === 'taken' ? ' handed you its browser' : ' needs you in its browser')
+      + (h.where ? ' · ' + esc(clip(h.where, 60)) : '') + (h.note ? '<small>' + esc(clip(h.note, 200)) + '</small>' : '') + '</span>'
+      + (canOpen ? '<button type="button" class="bb sm" data-a="stepin" data-id="' + esc(h.id) + '">' + (h.state === 'taken' ? 'OPEN STEP-IN' : 'STEP IN') + '</button>' : '') + '</div>';
   }
 
   function paint() {
@@ -329,6 +360,8 @@ const DeskScreen = (() => {
       if (writingNow) html = '<div class="ds-app" data-app="writing" data-s="run"><div class="ds-bar"><span class="ds-appname">WRITING</span><span class="ds-target">its reply</span></div><pre class="ds-page">' + esc(v.live.text.trim()) + '</pre></div>';
       else if (idx >= 0) html = screenHtml(list[idx], idx, list.length, v);
       else html = '<div class="ds-off"><span>Thinking…</span><small>Nothing is open on its screen yet.</small></div>';
+      const ho = handoffOf(v.aid);
+      if (ho) { state = 'ask'; label = (ho.state === 'taken' ? 'YOU HAVE ITS BROWSER' : 'NEEDS YOU') + ' · ' + dur(v.now - v.live.startedAt); html = handoffHtml(ho, v.name) + html; }
       if (v.ask) html = '<p class="ds-ask">Waiting for your approval' + (v.ask.tool ? ' to use ' + esc(toolName(v.ask.tool)) : '') + '. Answer it in COMMS.</p>' + html;
       if (v.live.partial) html = '<p class="ds-dim">Joined mid-run: screens from before this page was watching aren\'t shown.</p>' + html;
       if (stopNote && v.now - stopAt > 12000) stopNote = 'The station hasn\'t confirmed the stop yet. It is still running.';
@@ -404,6 +437,9 @@ const DeskScreen = (() => {
     const aid = a.id;
     body.querySelector('.ds-main').addEventListener('click', e => {
       const b = e.target.closest('button[data-a]'); if (!b) return;
+      const act = b.getAttribute('data-a');
+      if (act === 'page') { if (typeof OutputBrowser !== 'undefined') OutputBrowser.open({ agentId: aid, path: b.getAttribute('data-path') || '' }); return; }
+      if (act === 'stepin') { if (typeof StepIn !== 'undefined') StepIn.open(b.getAttribute('data-id') || ''); return; }
       const v = view(), n = screensFor(v).length; if (!n) return;
       const at = (pos < 0 || pos >= n) ? n - 1 : pos;
       const next = b.getAttribute('data-a') === 'prev' ? Math.max(0, at - 1) : Math.min(n - 1, at + 1);
@@ -451,7 +487,7 @@ const DeskScreen = (() => {
     if (typeof StationUI !== 'undefined' && StationUI.registerWindow) StationUI.registerWindow('desk', 'DESK SCREEN', build, { className: 'desk-win' });
     if (wired || typeof U === 'undefined' || !U.bus) return;
     wired = true;
-    for (const n of ['agent.run.start', 'agent.tool_call', 'agent.tool_result', 'agent.token', 'agent.cost', 'agent.run.error', 'agent.run.end', 'permission.prompt', 'permission.response', 'deliverable']) {
+    for (const n of ['agent.run.start', 'agent.tool_call', 'agent.tool_result', 'agent.token', 'agent.cost', 'agent.run.error', 'agent.run.end', 'permission.prompt', 'permission.response', 'deliverable', 'browser.handoff']) {
       U.bus.on(n, p => { try { fold(n, p); } catch (_) { /* a malformed event never breaks the bus */ } });
     }
   }
@@ -462,6 +498,7 @@ const DeskScreen = (() => {
   return { init, open, isOpen, text, agentOfOpen,
     _fold: fold, _currentOf: currentOf, _lastEndedOf: lastEndedOf, _argDigest: argDigest, _taskOf: taskOf,
     _parseScreens: parseScreens, _screenOf: screenOf,
-    _reset: () => { runs.clear(); byAgent.clear(); asks.clear(); } };
+    _handoffOf: aid => handoffs.get(aid) || null,
+    _reset: () => { runs.clear(); byAgent.clear(); asks.clear(); handoffs.clear(); } };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = DeskScreen;
