@@ -9836,7 +9836,7 @@ const World = (() => {
     U.bus.on('agent.run.start', p => {
       if (!p || !p.agentId) return;
       const trig = String(p.trigger || '').toLowerCase();
-      const tag = (trig === 'schedule') ? ' · ROUTINE' : (trig === 'event') ? ' · EVENT' : (trig === 'nightshift') ? ' · NIGHT SHIFT' : '';
+      const tag = (trig === 'schedule') ? ' · ROUTINE' : (trig === 'event') ? ' · EVENT' : (trig === 'nightshift') ? ' · AUTONOMY' : '';
       pushTicker(tickerName(p.agentId) + ' ▸ RUN INITIATED' + tag, '', tickerSuit(p.agentId));
     });
     U.bus.on('agent.tool_call', p => {
@@ -9933,7 +9933,10 @@ const World = (() => {
       if (floor) floor.onEvent('provider.fallback', p, Date.now());
       if (p && typeof StationUI !== 'undefined' && StationUI.notify) {
         const how = p.rotate ? 'rotated credential' : 'switched model';
-        StationUI.notify('⤳ failover (' + (p.reason || 'error') + ') · ' + how + ': ' + (p.fromModel || '?') + ' → ' + (p.toModel || '?'), 'warn');
+        // subscription stacking: a hop between connected sign-ins keeps the model — name the account it moved to
+        StationUI.notify(p.toAccount
+          ? '⤳ failover (' + (p.reason || 'error') + ') · continued on ' + p.toAccount + ' · ' + (p.toModel || '?')
+          : '⤳ failover (' + (p.reason || 'error') + ') · ' + how + ': ' + (p.fromModel || '?') + ' → ' + (p.toModel || '?'), 'warn');
       }
     });
     // THROUGHPUT + DWELL: pair each work-item's placement with its delivery (a reliable Date.now() clock,

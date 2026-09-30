@@ -78,8 +78,21 @@
   }
 
   // strip the marker line from the rendered reply (the chips replace it; the raw FORK: line never shows).
+  // EVERY marker line, not the first: a model that asks twice left the second one printed raw (first-hour walk).
+  const LINE_ALL = new RegExp(LINE.source, 'gm');
   function strip(text) {
-    return String(text == null ? '' : text).replace(LINE, '').replace(/\n{3,}/g, '\n\n').trim();
+    return String(text == null ? '' : text).replace(LINE_ALL, '').replace(/\n{3,}/g, '\n\n').trim();
+  }
+  /* Both choice markers — FORK: and TASK_QUESTION: — are machine lines for the chip row, never prose. The chat
+     rendered them raw in three places (first-hour walk 2026-09-28): every FORK line live (nothing called strip),
+     a second TASK_QUESTION line, and all of them again whenever history re-rendered from the server transcript.
+     One remover for display, used by the live reply, the saved history row and the history render. */
+  const ANY_MARKER = /^[ \t]*(?:FORK|TASK_QUESTION)[ \t]*:[^\n]*\|\|[^\n]*(?:\n|$)/gm;
+  function stripMarkers(text) {
+    const s = String(text == null ? '' : text);
+    const out = s.replace(ANY_MARKER, '');
+    if (out === s) return s;   // no marker line: byte-identical (prose that merely says "FORK:" included)
+    return out.replace(/\n{3,}/g, '\n\n').trim();
   }
 
   // the dossier belief a pick banks: the Commander's answer, with the question kept as context so the
@@ -157,8 +170,9 @@
       : m[2].split('|').map(x => taskClean(x, TASK_OPT_CHARS)).filter(Boolean).slice(0, TASK_MAX_OPTS);
     return question && options.length >= 2 ? { question, options } : null;
   }
+  const TASK_LINE_ALL = new RegExp(TASK_LINE.source, 'gmi');
   function taskStrip(text) {
-    return String(text == null ? '' : text).replace(TASK_LINE, '').replace(/\n{3,}/g, '\n\n').trim();
+    return String(text == null ? '' : text).replace(TASK_LINE_ALL, '').replace(/\n{3,}/g, '\n\n').trim();
   }
   function taskDirective(contextBlock) {
     const lines = [
@@ -206,5 +220,5 @@
     maxOptionsFor: (multiSelect) => (multiSelect === true ? TASK_MAX_OPTS_MULTI : TASK_MAX_OPTS)
   };
 
-  return { shouldOffer, directive, parse, strip, beliefText, CONF_FLOOR, MAX_OPTS, TaskIntent };
+  return { shouldOffer, directive, parse, strip, stripMarkers, beliefText, CONF_FLOOR, MAX_OPTS, TaskIntent };
 });

@@ -47,6 +47,21 @@ many of these — they win on any wording conflict.
   Never build per-agent prop kits.
 - **Skills = HOW, Recipes = WHAT, Routines = WHEN.** Marketplace framing; meter compute, not
   recipes (open-core).
+- **The Skill Market is curated, hosted on starnetos.com, originals first** (2026-09-29, Andrew: "all
+  recommended"). D1 the catalog is static files on starnetos.com (Cloudflare Pages), never the
+  starnet-cloud money server; D2 a catalog skill whose downloaded bytes reproduce the catalog's
+  pinned digest installs in ONE click at the curated (`trusted`) tier — the local guard scan still
+  runs and a dangerous finding is still refused; D3 installs land in the station SKILL LIBRARY, not
+  one agent; D4 StarNet Originals lead the catalog, then credited community picks; D5 the bundled
+  library stays, the market is its update channel and the only home for new skills. Community
+  publishing waits for a review queue. Plan: https://claude.ai/artifact/HuPtbuXdPrQC3xBVKVf79f
+  **Trust (2026-09-29, Andrew: "go for it"):** the catalog and the pulled-skills list are signed
+  with an Ed25519 key that lives only on the publisher's machine (never the website, never the
+  repo); the app ships the public keys (a working key + an offline backup) and refuses unsigned,
+  mis-signed or older-serial documents. The market can PULL a skill (skills-catalog/revoked.json):
+  stations with market skills installed re-read the signed pulled list every few minutes and switch
+  it off. Market packages are text only — SKILL.md, a license, plain-text references/ — and the app
+  enforces that rule itself, not just the build.
 - **Connectors OUT > channels IN** (two-axis framing, 2026-07-06). Google Workspace is a
   connector, not a messaging channel. Curated one-click MCP catalog is the chosen path for
   "more connectors"; paste-a-key tier is bearer-only-honest; OAuth 2.1 generic client is live.

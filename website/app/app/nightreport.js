@@ -80,7 +80,7 @@
     const ms = status && Number(status.awayAfterMs);
     const mins = (Number.isFinite(ms) && ms > 0) ? Math.round(ms / 60000) : 0;
     const span = mins > 0 ? (mins + ' min without clicks or keys') : 'a stretch without clicks or keys';
-    return 'Leave the app running — “away” just means ' + span + '. The night shift starts by itself once you stop using the station, and stands down the moment you’re back.';
+    return 'Leave the app running — “away” just means ' + span + '. Autonomy starts by itself once you stop using the station, and stands down the moment you’re back.';
   }
 
   // ---- report composition ----------------------------------------------------------------------------------------
@@ -211,7 +211,7 @@
         away: away,
         halted: true,
         stateText: '⛔ HALTED — E-STOP engaged',
-        why: 'the night shift is stopped and will not run until you re-set the autonomy dial — press any LEVEL or dial button above to lift the halt',
+        why: 'autonomy is stopped and will not run until you re-set the autonomy dial — press any LEVEL or dial button above to lift the halt',
         presence: away ? 'you’re away' : 'you’re present',
         awayRuleText: awayRuleText(s),
         leashText: leashText,
@@ -249,7 +249,7 @@
     if (!s || (s.buildMode !== 'build' && s.buildMode !== 'draft')) return '';
     if (s.buildMode === 'build') return 'beats BUILD real deliverables — each arrives as a new ⚒ session in your rail';
     if (s.draftReason === 'no-workshop-grant') return 'drafts only — the away-workshop grant is off, so beats can’t build for real';
-    return 'drafts only — raise REACH to sandbox to let beats build for real';
+    return 'drafts only — to build real things while you’re away, raise REACH (how far I may act on my own) to sandbox in SETTINGS › AUTONOMY';
   }
 
   // the cold-start explanation behind a 'readiness' stand-down: how far the station is from EITHER hot bar
