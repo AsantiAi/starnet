@@ -21,13 +21,17 @@ const build = read('frontend/app/build.js'), panel = read('frontend/app/workflow
 /* B1 — the way out of NO ROOM */
 // (the card's fit lives in setLineTileFit since the 2026-09-28 retest — kept current as the floor changes; conveyor-retest.test.js)
 const tiles = build.slice(build.indexOf('  function setLineTileFit(b, bp) {'), build.indexOf('  function makeRoomFor(bpId, ev) {'));
-A.ok(/const fits = lineFits\(bp\.id\)/.test(tiles) && /MAKE ROOM FOR IT/.test(tiles) && /mk\.onclick = e => makeRoomFor\(bp\.id, e\)/.test(tiles), 'a card with NO ROOM carries MAKE ROOM FOR IT');
+// (phase E, 2026-09-29: a card fits when its drawn shape fits OR the engine can lay the line out on this floor — NO ROOM is
+// only what neither can place, and it still carries MAKE ROOM FOR IT)
+A.ok(/const drawn = lineFits\(bp\.id\)/.test(tiles) && /const fits = drawn \|\| !!\(laid && laid\.ok\)/.test(tiles) && /MAKE ROOM FOR IT/.test(tiles) && /mk\.onclick = e => makeRoomFor\(bp\.id, e\)/.test(tiles), 'a card with NO ROOM carries MAKE ROOM FOR IT');
 A.ok(/b\.after\(mk\)/.test(tiles), '…as a sibling button (never a button inside the card button)');
 const mr = build.slice(build.indexOf('  function makeRoomFor(bpId, ev) {'), build.indexOf('  function stampLine(w, ev) {'));
-A.ok(/const W = bp\.w \+ 2, H = bp\.h \+ 2;/.test(mr), 'the room is the line plus a tile of walking room');
+// (phase E: the line's size is the smaller of the drawn footprint and the engine's laid-out one)
+A.ok(/const W = Math\.min\(bp\.w, need\.w\) \+ 2, H = Math\.min\(bp\.h, need\.h\) \+ 2;/.test(mr), 'the room is the line plus a tile of walking room');
 A.ok(/touches\(c\.x, c\.y\)/.test(mr) && /station\.addRoom\(\{ kind: 'hab'/.test(mr), 'it only builds a room that touches the station (auto-doors join it)');
 A.ok(/lineType = bp\.id; selectTool\('line'\)/.test(mr) && /UNDO removes the room/.test(mr), 'then arms the line over it and says how to take it back');
-A.ok(/\(ok \? ' — CLICK TO STAMP' : ''\)/.test(build), 'a red line ghost never says CLICK TO STAMP');
+// (phase E: a red ghost of a line that fits LAID OUT invites that click instead — never CLICK TO STAMP)
+A.ok(/\(ok \? ' — CLICK TO STAMP' : g\.laid \? ' — CLICK TO LAY IT OUT HERE' : ''\)/.test(build), 'a red line ghost never says CLICK TO STAMP');
 // the real model agrees: a room that touches the starter room is accepted and the blueprint then fits
 {
   const s = WM.create(), z = s.rooms()[0].rects[0];
