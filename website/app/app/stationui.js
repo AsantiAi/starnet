@@ -3210,6 +3210,15 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
      console is height:auto AND CSS-centred, so every tab whose content is a different length re-centres the whole
      window: measured live, the tab strip you just clicked moved between y=236 (CONFIG) and y=387 (RESTORE) — up to
      151px out from under the cursor, on the control you are actively using. The pane scrolls; the chrome holds still. */
+  // DESK SCREEN (deskscreen.js registers the 'desk' window): select THIS agent, then open the window from the dock —
+  // or, when it is already open, restore it and switch it to this agent (a per-agent window, like the dossier)
+  function openDesk(agentId) {
+    const i = present.findIndex(x => x && x.id === agentId);
+    if (i < 0 || !BUILDERS.desk) return false;
+    sel = i;
+    if (open.desk) { if (minimized.desk) restoreTerm('desk'); rerender('desk'); } else openTerm('desk');
+    return true;
+  }
   function openAgent(i) { sel = i; if (open.agents) { if (minimized.agents) restoreTerm('agents'); rerender('agents'); } else toggleTerm('agents', 'AGENT DOSSIER', buildAgents, { console: true, className: 'dossier' }); }
 
   /* ============== SKILLS — capability readout (mirrors the sidecar CAP_REGISTRY) ==============
@@ -9984,7 +9993,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   // GROWTH Tier 3: repaint the Settings AUTONOMY panel's EARNED badge if it is open (no-op otherwise — the paint fn
   // queries its own (possibly detached) host nodes, so a closed panel costs nothing). Called after a trust accept.
   const repaintAutonomy = () => { try { if (repaintAutonomyDial) repaintAutonomyDial(); } catch (_) {} };
-  return { init, enter, setRoster, leave, clearRunning, runningCount: () => runningAgents.size, isAgentRunning: (id) => agentLive(id), notify, flashSave, openAgent, openArcade, toggleTerm, openTerm, openRunOutputs: questOpenOutputs, closeTerm, rerender, refreshBoard: refreshBoardLive, pokeQuests, setTheme, getTheme, repaintAutonomy, registerWindow, h };
+  return { init, enter, setRoster, leave, clearRunning, runningCount: () => runningAgents.size, isAgentRunning: (id) => agentLive(id), notify, flashSave, openAgent, openArcade, toggleTerm, openTerm, openDesk, openRunOutputs: questOpenOutputs, closeTerm, rerender, refreshBoard: refreshBoardLive, pokeQuests, setTheme, getTheme, repaintAutonomy, registerWindow, h };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { visibleTerminalRect, clampTerminalSize };

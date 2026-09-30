@@ -1,7 +1,7 @@
 /* STARNET — deskscreen.js : the DESK SCREEN (2026-09-29, Andrew: "click the computer, see the work from your agent").
 
-   Click an agent's workstation on the live floor (world.js deskAt → onDesk) and this station card opens beside it,
-   showing THAT agent's work:
+   Click an agent's workstation on the live floor (world.js deskAt → onDesk) and the DESK SCREEN window opens on
+   THAT agent's work:
      • WORKING — the task, every tool step as it happens (what it touched, ✓/✗, how long), the words it is writing,
        what it has made, the run's reconciled cost and clock — plus hands: tell it something mid-run (POST
        /api/run/steer), STOP (POST /api/cancel, two-step), open its chat, open its record.
@@ -11,12 +11,13 @@
 
    TRUTH (the product's core law): every row is either a real bus event this page observed (agent.run.start /
    tool_call / tool_result / token / cost / run.end / permission.* / deliverable) or a server row. Liveness is
-   cross-checked against GET /api/state/snapshot while the card is open. Where this page cannot know something it
+   cross-checked against GET /api/state/snapshot while the window is open. Where this page cannot know something it
    says so instead of guessing: a run joined mid-way says its earlier steps are not on this screen; a routine or
    channel run's tool arguments are not carried by the station's event bridge, so only the tool name shows.
 
-   The fold (every agent, from boot) is always on and bounded; the card is a body-child popover in the crate card's
-   glass (.lw-card), one at a time, closed by ✕ / ESC / a press elsewhere. Positioned by the uiZoom law. */
+   The fold (every agent, from boot) is always on and bounded. The view is a registered station WINDOW ('desk'): it
+   rises from the bottom dock between CREW and COMMS, resizes and minimizes like every other window, and switches
+   agents with the shared roster switcher. Never a popover beside the desk. */
 'use strict';
 
 const DeskScreen = (() => {
@@ -107,8 +108,7 @@ const DeskScreen = (() => {
   /* ---------------- display helpers ---------------- */
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const clip = (s, n) => { s = String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
-  const zoom = () => ((typeof U !== 'undefined' && U.uiZoom) ? U.uiZoom() : 1);
-  const money = v => (typeof U !== 'undefined' && U.usd) ? U.usd(v) : '$' + (+v || 0).toFixed(4);
+    const money = v => (typeof U !== 'undefined' && U.usd) ? U.usd(v) : '$' + (+v || 0).toFixed(4);
   const toolName = n => String(n || 'tool').replace(/^mcp__/, '').replace(/__/g, '.').replace(/_/g, '.');
   // the SALIENT argument (the file, the query, the url) — the COMMS chip's scan-don't-parse digest: argsSummary is a
   // capped JSON prefix, so only COMPLETE "key": value pairs are read; an unrecognised shape shows clipped raw text.
@@ -175,16 +175,20 @@ const DeskScreen = (() => {
     return '';
   }
 
-  /* ---------------- the card ---------------- */
-  let el = null, cur = null, timer = 0, keysBound = false;
-  let snap = null, snapAt = 0, snapBusy = false;            // /api/state/snapshot: this agent's server-proven live runs
-  let hist = null, histFor = '', histAt = 0, histBusy = false;   // /api/runs rows for this agent
-  let steerNote = '', stopNote = '', stopAt = 0;
+  /* ---------------- the window ----------------
+     A registered station window ('desk'): it rises from the bottom dock between CREW and COMMS, resizes and
+     minimizes like every other window, and switches agents with the shared roster switcher. The term system owns
+     the chrome; this owns the body. The body is built once per agent and repainted in place each second (the
+     mid-run note field is never rebuilt under the Commander's cursor). */
+  let doors = {};                                              // openChat / openRecord / openFiles (app.js)
+  let cur = null, timer = 0;                                   // cur = { agentId, name, body }
+  let snap = null, snapAt = 0, snapBusy = false;               // /api/state/snapshot: this agent's server-proven live runs
+  let hist = null, histFor = '', histAt = 0, histBusy = false; // /api/runs rows for this agent
+  let steerNote = '', stopNote = '', stopAt = 0, wasLive = false;
 
-  const api = u => (cur && cur.api ? cur.api(u) : u);
-  function getJson(u) { return fetch(api(u), { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).catch(() => null); }
+  function getJson(u) { return fetch(u, { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).catch(() => null); }
   function postJson(u, body) {
-    return fetch(api(u), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    return fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       .then(async r => { let j = null; try { j = await r.json(); } catch (_) {} return { status: r.status, ok: r.ok, body: j }; })
       .catch(() => ({ status: 0, ok: false, body: null }));
   }
@@ -210,98 +214,19 @@ const DeskScreen = (() => {
     });
   }
 
-  function close() {
-    if (timer) { clearTimeout(timer); timer = 0; }
-    cur = null; snap = null; hist = null; histFor = ''; steerNote = stopNote = '';
-    if (el) { el.remove(); el = null; }
-  }
-  function bindKeys() {
-    if (keysBound || typeof document === 'undefined') return;
-    keysBound = true;
-    document.addEventListener('keydown', e => { if (el && e.key === 'Escape') { e.stopPropagation(); close(); } }, true);
-    document.addEventListener('pointerdown', e => { if (el && !el.contains(e.target)) close(); }, true);
-  }
-  // doors open after this click finishes dispatching (the CrateCard rule: a surface opened mid-click would take the
-  // same click as its own first input)
-  function door(fn) { const d = cur; close(); setTimeout(() => { try { fn(d); } catch (_) { /* a failed door leaves the floor as it was */ } }, 0); }
-
-  function mount() {
-    el = document.createElement('aside');
-    el.className = 'lw-card ds-card';
-    el.setAttribute('role', 'dialog');
-    el.setAttribute('aria-label', 'Desk screen');
-    el.innerHTML = '<header class="lw-head ds-head"></header><div class="ds-body"></div>'
-      + '<form class="ds-steer" hidden><input class="ds-in" type="text" maxlength="2000" autocomplete="off" aria-label="Tell this agent something mid-run">'
-      + '<button type="submit" class="bb sm">SEND</button></form><p class="ds-note" role="status"></p>'
-      + '<footer class="lw-foot ds-foot">'
-      + '<button type="button" class="bb sm ds-stop" data-a="stop" hidden>■ STOP</button>'
-      + '<button type="button" class="bb sm" data-a="chat">▸ OPEN CHAT</button>'
-      + '<button type="button" class="bb sm" data-a="files" hidden>▸ FILES</button>'
-      + '<button type="button" class="bb sm" data-a="record">▸ RECORD</button></footer>';
-    document.body.appendChild(el);
-    el.addEventListener('click', e => {
-      const b = e.target.closest('button[data-a]'); if (!b || !cur) return;
-      const a = b.getAttribute('data-a');
-      if (a === 'x') close();
-      else if (a === 'chat') { const v = view(); door(d => d.openChat && d.openChat(d.agentId, v.live && v.live.wsId)); }
-      else if (a === 'record') door(d => d.openRecord && d.openRecord(d.agentId));
-      else if (a === 'files') { const v = view(); const row = v.last; if (row && row.runId) door(d => d.openFiles && d.openFiles(row.runId, row.title || 'Last job')); }
-    });
-    const stop = el.querySelector('.ds-stop');
-    const doStop = () => {
-      const v = view(); const rid = v.live && v.live.runId; if (!rid) return;
-      stopAt = clock(); stopNote = 'Stop sent — waiting for the station to confirm…'; paint();
-      postJson('/api/cancel', { runId: rid }).then(r => { if (!r.ok) { stopNote = 'The station refused the stop (http ' + r.status + ').'; paint(); } });
-    };
-    if (typeof ArmConfirm !== 'undefined' && ArmConfirm.wire) ArmConfirm.wire(stop, { armedLabel: '■ CONFIRM STOP', onConfirm: doStop });
-    else stop.addEventListener('click', doStop);
-    el.querySelector('.ds-steer').addEventListener('submit', e => {
-      e.preventDefault();
-      const inp = el.querySelector('.ds-in'), text = inp.value.trim(), v = view(), rid = v.live && v.live.runId;
-      if (!text || !rid) return;
-      steerNote = 'Sending…'; paint();
-      postJson('/api/run/steer', { runId: rid, text }).then(r => {
-        if (!el) return;
-        if (r.ok) { steerNote = 'Sent. ' + v.name + ' reads it before its next step.'; if (inp.value.trim() === text) inp.value = ''; }
-        else if (r.status === 404 || r.status === 409) steerNote = 'That run already finished — use OPEN CHAT to give it a new task.';
-        else if (r.status === 429) steerNote = 'It already has notes waiting — give it a moment.';
-        else steerNote = 'Not sent (http ' + r.status + ').';
-        paint();
-      });
-    });
-  }
-  // beside the desk, INSIDE the station view when one is given (the card must not bury COMMS or the crew rail):
-  // right of the desk → left of it → below it → above it, then clamped. All rects are VISUAL px; style px divide once.
-  function place(cx, cy) {
-    if (!el) return;
-    const z = zoom(), r = el.getBoundingClientRect(), w = r.width, h = r.height, gap = 18, pad = 8;
-    let b = cur && cur.bounds ? cur.bounds() : null;
-    if (!b || !(b.width > w + 2 * pad)) b = { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
-    const L = b.left + pad, T = b.top + pad, R = b.right - pad, B = b.bottom - pad;
-    const clampY = y => Math.max(T, Math.min(B - h, y)), clampX = x => Math.max(L, Math.min(R - w, x));
-    let x, y;
-    if (cx + gap + w <= R) { x = cx + gap; y = clampY(cy - h / 2); }
-    else if (cx - gap - w >= L) { x = cx - gap - w; y = clampY(cy - h / 2); }
-    else if (cy + gap + h <= B) { x = clampX(cx - w / 2); y = cy + gap; }
-    else if (cy - gap - h >= T) { x = clampX(cx - w / 2); y = cy - gap - h; }
-    else { x = clampX(cx - w / 2); y = clampY(cy - h / 2); }
-    el.style.left = (x / z) + 'px'; el.style.top = (y / z) + 'px';
-  }
-
-  // what the card shows right now, resolved from the fold + the two server reads
+  // what the window shows right now, resolved from the fold + the two server reads
   function view() {
     const now = clock(), aid = cur.agentId;
-    const name = (cur.nameOf && cur.nameOf(aid)) || aid;
     let live = currentOf(aid, now);
     const serverLive = snap ? snap.map(r => r.runId) : null;
     // the snapshot outranks a fold record that never saw its end: not listed + quiet for 10 s = not asserted live
     if (live && serverLive && serverLive.indexOf(live.runId) < 0 && now - live.lastAt > 10000 && snapAt > live.lastAt) live = null;
     const unseen = !live && serverLive && serverLive.length ? snap[0] : null;   // live on the server, no event seen here yet
-    const ask = asks.get(aid) || null;
-    const last = hist && hist.length ? hist[0] : null;
-    return { now, aid, name, live, unseen, ask, last, ended: lastEndedOf(aid) };
+    return { now, aid, name: cur.name, live, unseen, ask: asks.get(aid) || null, last: hist && hist.length ? hist[0] : null, ended: lastEndedOf(aid) };
   }
 
+  const sec = t => '<div class="sec"><span class="sec-l">' + esc(t) + '</span><span class="sec-r"></span><span class="sec-nd"></span></div>';
+  const kv = rows => '<dl class="ds-kv">' + rows.filter(Boolean).map(r => '<dt>' + esc(r[0]) + '</dt><dd' + (r[2] ? ' class="' + r[2] + '"' : '') + '>' + esc(r[1]) + '</dd>').join('') + '</dl>';
   function stepsHtml(steps, bridged) {
     return '<ol class="ds-steps">' + steps.map(s => {
       const st = !s.done ? 'run' : s.ok === true ? 'ok' : s.ok === false ? 'bad' : 'end';
@@ -309,60 +234,57 @@ const DeskScreen = (() => {
       const arg = argDigest(s.args);
       return '<li class="ds-step" data-s="' + st + '"><span class="ds-g">' + g + '</span><span class="ds-n">' + esc(toolName(s.name)) + '</span>'
         + (arg ? '<span class="ds-a">' + esc(arg) + '</span>' : '') + '<span class="ds-ms">' + esc(st === 'run' ? 'working…' : stepMs(s.ms)) + '</span>'
-        + (s.summary ? '<span class="ds-sum">' + esc(clip(s.summary, 160)) + '</span>' : '') + '</li>';
-    }).join('') + '</ol>' + (bridged ? '<p class="ds-dim">This run was started outside this window, so the station only reports each tool\'s name and result here — the full detail is in the RECORD.</p>' : '');
+        + (s.summary ? '<span class="ds-sum">' + esc(clip(s.summary, 200)) + '</span>' : '') + '</li>';
+    }).join('') + '</ol>' + (bridged ? '<p class="ds-dim">This run was started outside this window, so the station only reports each tool\'s name and result here. The full detail is in the RECORD.</p>' : '');
   }
 
   function paint() {
-    if (!el || !cur) return;
-    const v = view(), head = el.querySelector('.ds-head'), body = el.querySelector('.ds-body');
-    const who = cur.agentOf ? cur.agentOf(v.aid) : null;
-    const skin = who && typeof AgentPortraits !== 'undefined' && AgentPortraits.thumbHTML ? AgentPortraits.thumbHTML(who, 22, 28, 'lw-thumb') : '';
+    const body = cur && cur.body;
+    if (!body || !body.isConnected) return;
+    const v = view(), strip = body.querySelector('.ds-strip'), main = body.querySelector('.ds-main');
     let state, label, html = '';
     if (v.live) {
       const r = v.live, t = taskOf(r);
       state = v.ask ? 'ask' : 'running';
       label = (v.ask ? 'NEEDS YOUR OK' : 'WORKING') + ' · ' + dur(v.now - r.startedAt);
-      html += '<dl class="lw-rows"><div class="lw-row"><dt>TASK</dt><dd class="ds-task' + (t.known ? '' : ' ds-dim') + '">' + esc(clip(t.text, 280)) + '</dd></div>'
-        + (r.usd > 0 ? '<div class="lw-row"><dt>SPENT</dt><dd>' + esc(money(r.usd)) + (r.model ? ' · ' + esc(clip(String(r.model).split('/').pop(), 28)) : '') + '</dd></div>' : '')
-        + '</dl>';
-      if (v.ask) html += '<p class="ds-ask">Waiting for your approval' + (v.ask.tool ? ' to use ' + esc(toolName(v.ask.tool)) : '') + ' — answer it in COMMS.</p>';
-      if (r.partial) html += '<p class="ds-dim">Joined mid-run: steps before this page was watching aren\'t shown here.</p>';
-      html += '<div class="ds-sec">STEPS' + (r.steps.length ? ' · ' + (r.steps.length + r.dropped) : '') + '</div>';
-      html += r.steps.length ? stepsHtml(r.steps, !r.steps.some(s => s.args || s.summary) && !t.known) : '<p class="ds-dim">No tool steps yet — it\'s thinking.</p>';
-      if (r.text.trim()) html += '<div class="ds-sec">WRITING</div><p class="ds-text">' + esc(r.text.length >= TEXT_TAIL ? '…' + r.text.trim() : r.text.trim()) + '</p>';
-      if (r.made.length) html += '<div class="ds-sec">MADE</div><ul class="ds-made">' + r.made.map(m => '<li>' + esc(clip(m.title, 70)) + '</li>').join('') + '</ul>';
-      if (stopNote && v.now - stopAt > 12000) stopNote = 'The station hasn\'t confirmed the stop yet — it is still running.';
+      html += kv([['TASK', clip(t.text, 400), t.known ? 'ds-task' : 'ds-task ds-dim'],
+        r.usd > 0 ? ['SPENT', money(r.usd) + (r.model ? ' · ' + clip(String(r.model).split('/').pop(), 32) : '')] : null]);
+      if (v.ask) html += '<p class="ds-ask">Waiting for your approval' + (v.ask.tool ? ' to use ' + esc(toolName(v.ask.tool)) : '') + '. Answer it in COMMS.</p>';
+      if (r.partial) html += '<p class="ds-dim">Joined mid-run: steps from before this page was watching aren\'t shown here.</p>';
+      html += sec('STEPS' + (r.steps.length ? ' · ' + (r.steps.length + r.dropped) : ''));
+      html += r.steps.length ? stepsHtml(r.steps, !r.steps.some(s => s.args || s.summary) && !t.known) : '<p class="ds-dim">No tool steps yet. It\'s thinking.</p>';
+      if (r.text.trim()) html += sec('WRITING') + '<p class="ds-text">' + esc(r.text.length >= TEXT_TAIL ? '…' + r.text.trim() : r.text.trim()) + '</p>';
+      if (r.made.length) html += sec('MADE') + '<ul class="ds-made">' + r.made.map(m => '<li>' + esc(clip(m.title, 90)) + '</li>').join('') + '</ul>';
+      if (stopNote && v.now - stopAt > 12000) stopNote = 'The station hasn\'t confirmed the stop yet. It is still running.';
     } else if (v.unseen) {
       state = 'running';
       label = 'WORKING' + (v.unseen.startedAt ? ' · ' + dur(v.now - v.unseen.startedAt) : '');
-      html += '<p class="ds-dim">' + esc(v.name) + ' is on a run that started before this page was watching — its steps will show here as they happen, and the whole run lands in the RECORD when it ends.</p>';
+      html += '<p class="ds-dim">' + esc(v.name) + ' is on a run that started before this page was watching. Its steps show here as they happen, and the whole run lands in the RECORD when it ends.</p>';
     } else {
       const row = v.last, ended = v.ended;
-      // a stop this card sent resolves only on the run's own end: 'Stopped.' when it ended cancelled, else the note clears
+      // a stop this window sent resolves only on the run's own end: 'Stopped.' when it ended cancelled, else the note clears
       if (stopAt && stopNote && stopNote !== 'Stopped.') stopNote = ended && ended.reason === 'cancelled' && ended.endedAt >= stopAt ? 'Stopped.' : '';
       if (row) {
         state = outcomeState(row.reason);
         label = (row.reason === 'done' ? 'IDLE' : (OUTCOME[row.reason] || 'IDLE')) + ' · last job ' + ago(row.endedAt || row.ts, v.now);
-        const secs = row.durationMs ? dur(row.durationMs) : '';
-        html += '<dl class="lw-rows"><div class="lw-row"><dt>LAST JOB</dt><dd class="ds-task">' + esc(clip(row.title || 'Untitled run', 220)) + '</dd></div>'
-          + '<div class="lw-row"><dt>OUTCOME</dt><dd>' + esc([OUTCOME[row.reason] || String(row.reason || 'done').toUpperCase(), secs, row.usd > 0 ? money(row.usd) : ''].filter(Boolean).join(' · ')) + '</dd></div></dl>';
+        html += kv([['LAST JOB', clip(row.title || 'Untitled run', 300), 'ds-task'],
+          ['OUTCOME', [OUTCOME[row.reason] || String(row.reason || 'done').toUpperCase(), row.durationMs ? dur(row.durationMs) : '', row.usd > 0 ? money(row.usd) : ''].filter(Boolean).join(' · ')]]);
         const trace = Array.isArray(row.toolTrace) ? row.toolTrace : [];
         if (trace.length) {
-          const shown = trace.slice(-12).map(s => ({ name: s.name, args: '', done: true, ok: s.isError ? false : s.ok !== false, ms: typeof s.ms === 'number' ? s.ms : null, summary: s.summary || '' }));
-          html += '<div class="ds-sec">WHAT IT DID · ' + trace.length + ' step' + (trace.length === 1 ? '' : 's') + '</div>' + stepsHtml(shown, false);
+          const shown = trace.slice(-20).map(s => ({ name: s.name, args: '', done: true, ok: s.isError ? false : s.ok !== false, ms: typeof s.ms === 'number' ? s.ms : null, summary: s.summary || '' }));
+          html += sec('WHAT IT DID · ' + trace.length + ' step' + (trace.length === 1 ? '' : 's')) + stepsHtml(shown, false);
         }
         const reply = replyOf(row);
-        if (reply) html += '<div class="ds-sec">ITS REPLY</div><p class="ds-text">' + esc(clip(reply, 420)) + '</p>';
+        if (reply) html += sec('ITS REPLY') + '<p class="ds-text">' + esc(clip(reply, 900)) + '</p>';
         const arts = Array.isArray(row.artifacts) ? row.artifacts : [];
-        if (arts.length) html += '<div class="ds-sec">MADE</div><ul class="ds-made">' + arts.slice(0, 6).map(a => '<li>' + esc(base(a.path || a.target)) + '</li>').join('') + (arts.length > 6 ? '<li class="ds-dim">+' + (arts.length - 6) + ' more</li>' : '') + '</ul>';
-        const earlier = hist.slice(1, 4);
-        if (earlier.length) html += '<div class="ds-sec">BEFORE THAT</div><ul class="ds-earlier">' + earlier.map(e => '<li><span>' + esc(clip(e.title || 'Untitled run', 60)) + '</span><span class="ds-ms">' + esc((OUTCOME[e.reason] || 'DONE') + ' · ' + ago(e.endedAt || e.ts, v.now)) + '</span></li>').join('') + '</ul>';
+        if (arts.length) html += sec('MADE') + '<ul class="ds-made">' + arts.slice(0, 8).map(a => '<li>' + esc(base(a.path || a.target)) + '</li>').join('') + (arts.length > 8 ? '<li class="ds-dim">+' + (arts.length - 8) + ' more</li>' : '') + '</ul>';
+        const earlier = hist.slice(1, 5);
+        if (earlier.length) html += sec('BEFORE THAT') + '<ul class="ds-earlier">' + earlier.map(e => '<li><span>' + esc(clip(e.title || 'Untitled run', 80)) + '</span><span class="ds-ms">' + esc((OUTCOME[e.reason] || 'DONE') + ' · ' + ago(e.endedAt || e.ts, v.now)) + '</span></li>').join('') + '</ul>';
       } else if (ended) {
         // it just finished here and the server's row hasn't landed yet
         state = outcomeState(ended.reason);
         label = (OUTCOME[ended.reason] || 'DONE') + ' · ' + ago(ended.endedAt, v.now);
-        html += '<p class="ds-dim">Just finished — writing the record…</p>' + (ended.steps.length ? stepsHtml(ended.steps, false) : '');
+        html += '<p class="ds-dim">Just finished. Writing the record…</p>' + (ended.steps.length ? stepsHtml(ended.steps, false) : '');
       } else if (hist) {
         state = 'idle'; label = 'IDLE';
         html += '<p class="ds-dim">No work recorded at this desk yet. Give ' + esc(v.name) + ' a task and you\'ll watch it happen here.</p>';
@@ -371,33 +293,30 @@ const DeskScreen = (() => {
         html += '<p class="ds-dim">Reading the record…</p>';
       }
     }
-    el.setAttribute('data-state', state);
-    head.innerHTML = (skin ? '<span class="ds-who">' + skin + '</span>' : '') + '<span class="lw-kind">' + esc(clip(v.name, 18).toUpperCase()) + '</span><span class="lw-st">' + esc(label) + '</span>'
-      + '<button type="button" class="bb xs lw-x" data-a="x" aria-label="Close">✕</button>';
+    body.querySelector('.ds-screen').setAttribute('data-state', state);
+    const stripHtml = '<span class="ds-lamp" aria-hidden="true"></span><b class="ds-name">' + esc(v.name) + '</b><span class="ds-st">' + esc(label) + '</span>';
+    if (strip.__html !== stripHtml) { strip.innerHTML = stripHtml; strip.__html = stripHtml; }
     // keep the reader's place: stay pinned to the newest step only if they were already at the bottom
-    const prevList = body.querySelector('.ds-steps');
-    const pinned = !prevList || prevList.scrollTop + prevList.clientHeight >= prevList.scrollHeight - 4;
-    const prevTop = prevList ? prevList.scrollTop : 0;
-    if (body.__html !== html) {
-      body.innerHTML = html; body.__html = html;
-      const list = body.querySelector('.ds-steps');
-      if (list) list.scrollTop = pinned ? list.scrollHeight : prevTop;
+    if (main.__html !== html) {
+      const pinned = body.scrollTop + body.clientHeight >= body.scrollHeight - 4, top = body.scrollTop;   // the window body is the scroller
+      main.innerHTML = html; main.__html = html;
+      body.scrollTop = (v.live && pinned) ? body.scrollHeight : top;
     }
     const liveRid = v.live && v.live.runId;
-    el.querySelector('.ds-steer').hidden = !liveRid;
-    el.querySelector('.ds-in').placeholder = 'Tell ' + v.name + ' something mid-run…';
-    el.querySelector('.ds-stop').hidden = !liveRid;
-    el.querySelector('[data-a="chat"]').textContent = v.live || v.unseen ? '▸ OPEN CHAT' : '▸ GIVE IT A TASK';
-    el.querySelector('[data-a="files"]').hidden = !(!v.live && v.last && Array.isArray(v.last.artifacts) && v.last.artifacts.length && cur.openFiles);
+    body.querySelector('.ds-steer').hidden = !liveRid;
+    body.querySelector('.ds-in').placeholder = 'Tell ' + v.name + ' something mid-run…';
+    body.querySelector('.ds-stop').hidden = !liveRid;
+    body.querySelector('[data-a="chat"]').textContent = v.live || v.unseen ? 'OPEN CHAT' : 'GIVE IT A TASK';
+    body.querySelector('[data-a="files"]').hidden = !(!v.live && v.last && Array.isArray(v.last.artifacts) && v.last.artifacts.length && doors.openFiles);
     const note = [stopNote, steerNote].filter(Boolean).join(' ');
-    const n = el.querySelector('.ds-note'); if (n.textContent !== note) n.textContent = note;
+    const n = body.querySelector('.ds-note'); if (n.textContent !== note) n.textContent = note;
   }
 
-  let wasLive = false;
   function tick() {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
-      timer = 0; if (!cur) return;
+      timer = 0;
+      if (!cur || !cur.body || !cur.body.isConnected) { cur = null; return; }   // the window closed: stop polling
       const live = !!currentOf(cur.agentId);
       if (wasLive && !live) { pollHist(true); steerNote = ''; }   // a run just ended here: fetch its row; its steer receipt is history
       wasLive = live;
@@ -406,19 +325,69 @@ const DeskScreen = (() => {
     }, 1000);
   }
 
-  /* open({ agentId, clientX, clientY, bounds()?, api?, agentOf(aid)?, nameOf(aid)?, openChat(aid, wsId)?, openRecord(aid)?, openFiles(runId,label)? }) */
-  function open(o) {
-    if (!o || !o.agentId || typeof document === 'undefined') return false;
-    close(); bindKeys();
-    cur = o; steerNote = stopNote = ''; wasLive = !!currentOf(o.agentId);
-    mount(); paint(); place(o.clientX || 0, o.clientY || 0);
-    pollSnap(true); pollHist(true); tick();
-    return true;
+  // the window builder (StationUI calls it on open and on every roster switch / rerender)
+  function build(body) {
+    const H = StationUI.h, a = H.present[H.sel] || null;
+    if (!a) { body.innerHTML = '<p class="ds-dim">No agent selected.</p>'; return; }
+    const same = cur && cur.agentId === a.id;
+    cur = { agentId: a.id, name: a.name || a.id, body };
+    if (!same) { snap = null; hist = null; histFor = ''; steerNote = stopNote = ''; }
+    wasLive = !!currentOf(a.id);
+    body.innerHTML = H.rosterSwitchHtml(a.id)
+      + '<div class="ds-screen" data-state="idle">'
+      + '<div class="ds-strip"></div>'
+      + '<div class="ds-main"></div>'
+      + '<form class="ds-steer" hidden><input class="ds-in" type="text" maxlength="2000" autocomplete="off" aria-label="Tell this agent something mid-run">'
+      + '<button type="submit" class="bb sm">SEND</button></form><p class="ds-note" role="status"></p>'
+      + '<div class="ds-foot">'
+      + '<button type="button" class="bb sm ds-stop" data-a="stop" hidden>STOP</button>'
+      + '<button type="button" class="bb sm" data-a="chat">OPEN CHAT</button>'
+      + '<button type="button" class="bb sm" data-a="files" hidden>FILES</button>'
+      + '<button type="button" class="bb sm" data-a="record">RECORD</button></div></div>';
+    H.wireRosterSwitch(body, 'desk');
+    const aid = a.id;
+    body.querySelector('.ds-foot').addEventListener('click', e => {
+      const b = e.target.closest('button[data-a]'); if (!b) return;
+      const act = b.getAttribute('data-a');
+      if (act === 'chat') { const v = view(); if (doors.openChat) doors.openChat(aid, v.live && v.live.wsId); }
+      else if (act === 'record') { if (doors.openRecord) doors.openRecord(aid); }
+      else if (act === 'files') { const v = view(); if (v.last && v.last.runId && doors.openFiles) doors.openFiles(v.last.runId, v.last.title || 'Last job'); }
+    });
+    const stop = body.querySelector('.ds-stop');
+    const doStop = () => {
+      const v = view(); const rid = v.live && v.live.runId; if (!rid) return;
+      stopAt = clock(); stopNote = 'Stop sent. Waiting for the station to confirm…'; paint();
+      postJson('/api/cancel', { runId: rid }).then(r => { if (!r.ok) { stopNote = 'The station refused the stop (http ' + r.status + ').'; paint(); } });
+    };
+    if (typeof ArmConfirm !== 'undefined' && ArmConfirm.wire) ArmConfirm.wire(stop, { armedLabel: 'CONFIRM STOP', onConfirm: doStop });
+    else stop.addEventListener('click', doStop);
+    body.querySelector('.ds-steer').addEventListener('submit', e => {
+      e.preventDefault();
+      const inp = body.querySelector('.ds-in'), text = inp.value.trim(), v = view(), rid = v.live && v.live.runId;
+      if (!text || !rid) return;
+      steerNote = 'Sending…'; paint();
+      postJson('/api/run/steer', { runId: rid, text }).then(r => {
+        if (r.ok) { steerNote = 'Sent. ' + v.name + ' reads it before its next step.'; if (inp.value.trim() === text) inp.value = ''; }
+        else if (r.status === 404 || r.status === 409) steerNote = 'That run already finished. Use OPEN CHAT to give it a new task.';
+        else if (r.status === 429) steerNote = 'It already has notes waiting. Give it a moment.';
+        else steerNote = 'Not sent (http ' + r.status + ').';
+        paint();
+      });
+    });
+    paint(); pollSnap(true); pollHist(true); tick();
+  }
+
+  // open THIS agent's desk window (the StationUI core selects the agent, then opens or re-renders the window)
+  function open(agentId) {
+    if (!agentId || typeof StationUI === 'undefined' || !StationUI.openDesk) return false;
+    return StationUI.openDesk(agentId);
   }
 
   // the fold listens from boot, so a desk opened mid-run already holds every step this page has seen
   let wired = false;
-  function init() {
+  function init(o) {
+    if (o) doors = o;
+    if (typeof StationUI !== 'undefined' && StationUI.registerWindow) StationUI.registerWindow('desk', 'DESK SCREEN', build, { className: 'desk-win' });
     if (wired || typeof U === 'undefined' || !U.bus) return;
     wired = true;
     for (const n of ['agent.run.start', 'agent.tool_call', 'agent.tool_result', 'agent.token', 'agent.cost', 'agent.run.error', 'agent.run.end', 'permission.prompt', 'permission.response', 'deliverable']) {
@@ -426,10 +395,10 @@ const DeskScreen = (() => {
     }
   }
 
-  const isOpen = () => !!el;
-  const text = () => (el ? el.innerText : null);
-  const agentOfOpen = () => (cur ? cur.agentId : null);
-  return { init, open, close, isOpen, text, agentOfOpen,
+  const isOpen = () => !!(cur && cur.body && cur.body.isConnected);
+  const text = () => (isOpen() ? cur.body.innerText : null);
+  const agentOfOpen = () => (isOpen() ? cur.agentId : null);
+  return { init, open, isOpen, text, agentOfOpen,
     _fold: fold, _currentOf: currentOf, _lastEndedOf: lastEndedOf, _argDigest: argDigest, _taskOf: taskOf,
     _reset: () => { runs.clear(); byAgent.clear(); asks.clear(); } };
 })();
