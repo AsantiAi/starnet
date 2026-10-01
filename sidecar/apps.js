@@ -241,7 +241,8 @@ function makeApps(deps) {
       'Do what the task says. New or current INFORMATION goes in with app.publish (find it with tool.search "app publish"): app "' + id + '", ' +
       'using the SAME key and data shape the app\'s page reads (check with app.read { app: "' + id + '" }). ' +
       'If the task asks the app ITSELF to change — its look, layout, what it shows or how it works — rewrite the page: app.read { app: "' + id + '", path: "index.html" }, then app.write the whole new file, then app.check it; keep everything that already works. ' +
-      'An update that neither publishes nor writes did nothing — the Commander sees only what you publish or write.';
+      'For this routine THE APP IS THE DELIVERY: an update that neither publishes nor writes did nothing — the Commander sees only what you publish or write, so never put the result in your reply instead. ' +
+      'Your final reply is one short line saying what changed in the app.';
     const name = 'App: ' + meta.name;
     let out;
     if (old && cron.get(old) && typeof cron.update === 'function') {
