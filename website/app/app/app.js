@@ -3231,6 +3231,22 @@ const App = (() => {
     if (World.setOnOutbox) World.setOnOutbox(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('outbox'); });
     if (World.setOnMissionBoard) World.setOnMissionBoard(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('quests'); });   // G1b: click the MISSION BOARD → the QUEST LOG (the board is a projection, never a gate)
     if (World.setOnTrophyCase) World.setOnTrophyCase(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('trophies'); });   // G3b: click the TROPHY CASE → the TROPHY surface (a projection of real completions, never a gate)
+    // a PLUGIN TERMINAL is the plugin's body: a click opens its window. An unbound or turned-off one says so and opens
+    // EXTENSIONS, where plugins are approved — never a dead click.
+    if (World.setOnPluginTerminal) World.setOnPluginTerminal(async (p) => {
+      const pid = p && p.pluginId;
+      const host = typeof PluginHost !== 'undefined' ? PluginHost : null;
+      if (pid && host) { try { await host.refresh(); } catch (_) { /* open() below still uses the last known list */ } }
+      if (pid && host && host.open(pid)) return;
+      if (typeof StationUI === 'undefined') return;
+      const info = pid && host ? host.list().find(x => x.id === pid) : null;
+      const say = !pid ? 'This terminal is not bound to a plugin yet. Bind it in REFIT, or create a plugin in ABILITIES → EXTENSIONS.'
+        : !info ? 'This terminal\'s plugin was removed. Rebind it in REFIT or remove the terminal.'
+        : !info.active ? (info.name || pid) + ' is off' + (info.pending ? ' — it changed since you approved it' : '') + '. Turn it on in ABILITIES → EXTENSIONS.'
+        : (info.name || pid) + ' has no window. Its tools are available to agents in this room.';
+      if (StationUI.notify) StationUI.notify(say, info && info.active ? 'good' : 'warn');
+      if (!(info && info.active) && StationUI.openTerm) StationUI.openTerm('connectors', 'extensions');
+    });
     // DESK SCREEN: click an agent's workstation → the DESK SCREEN window (docked from the bottom like every window) on
     // that agent's computer. The fold starts here so a desk opened mid-run already holds every step this page has seen.
     if (typeof DeskScreen !== 'undefined' && World.setOnDesk) {
