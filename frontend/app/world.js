@@ -1838,6 +1838,23 @@ const World = (() => {
   // opts.seatAt (optional): where a SEATED body's feet sit in the frame (0..1 of its height). A seated worker
   // faces its desk, which stands ABOVE it on screen; a small frame that keeps the default 0.56 cuts the desk
   // and its screen off. Omitted = 0.56 for every body, byte-identical.
+  /* A BORROWED CAMERA, HANDED BACK (HUD mode, 2026-09-30): cameraState() is what drives the view right now — a
+     session lock (whom, at what zoom) or a free transform, kept as the zoom and the WORLD point at the canvas centre
+     (a canvas resize re-anchors on its centre, so that point survives the window changing size in between);
+     restoreCamera(state) puts exactly that back: the lock, or the free view (the cinecam re-casts on its own). */
+  function cameraState() {
+    const w = cv ? cv.width : 0, h = cv ? cv.height : 0;
+    return { lockId: camLock && camLock.source === 'session' ? camLock.id : null, lockSc: camLock ? camLock.sc : 0, seatAt: camLock && camLock.seatAt ? camLock.seatAt : 0,
+      scale, cx: scale > 0 ? (w / 2 - panX) / scale : 0, cy: scale > 0 ? (h / 2 - panY) / scale : 0 };
+  }
+  function restoreCamera(st) {
+    if (!st || !(st.scale > 0) || camAnim || awakeFrozen) return false;   // the scripted awakening camera owns the transform
+    camLerp = null; camLock = null;
+    if (st.lockId) { lockBody(st.lockId, st.lockSc, st.seatAt ? { seatAt: st.seatAt } : null); if (camLock) return true; }
+    scale = clampz(st.scale, MINZ, MAXZ);
+    if (cv) { panX = cv.width / 2 - st.cx * scale; panY = cv.height / 2 - st.cy * scale; }
+    return true;
+  }
   function lockBody(id, zoom, opts) {
     const b = bodyForAgent(id) || agent;
     if (!b || b.unplaced || !cache || camAnim || awakeFrozen) return;   // nothing to frame yet / the scripted awakening camera owns the transform
@@ -10711,7 +10728,7 @@ const World = (() => {
        floor to the router. `station: false` = no floor loaded (nothing is known). */
     planStatus: () => Object.assign({ station: !!station, pending: !!(station && (geoDirty || !geo)),
       errors: (routingPlan && routingPlan.errors ? routingPlan.errors : []).filter(e => !e.warn), hash: routingPlan ? routingPlan.hash : null }, planPoster.state()),
-    loadStation, spawn, spawnAgent, despawnAgent, setSkin, relabel, setActivityFor, agentRunsLive, dropRun: noteRunEnd, focusBody, lockBody, cameraMode, setFrameCap, setOverlays, setCinecamIdle, setChatFocus, chatFocusPing, start, stop, setActivity, wakeIn, beginAwakening, playArrival, cancelArrival, setWakeProgress, igniteSpark, armKindle, kindleHold, camPushIn, camCreep, camPunch, camPullBack, awakenTurn, truthPulse, beginFlood, collapseFlood, endAwakening, releaseAwakening, say, focusAgent, getActivity: () => activity, getUse: () => (agent ? agent.usingProp : null), setOnClick, setOnArcade, setOnOutbox, setOnMissionBoard, setOnTrophyCase, setOnDesk, setOnBayAssign, setOnIntakeFeed, setOnIntakeSample, refit, pauseBridge, resumeBridge, linkState, _dbgSeedRun, _dbgAgeRun, _dbgReconcile, _dbgSweep, _dbgLinkState, _dbgDropBridge, _dbgCurveState, _dbgLoseCurveContext, _dbgLoseCanvases, _dbgCanvasLoss, _dbgKillStageContext, _dbgStageState, _dbgBeltLegibility, _dbgPropClientPoint, _dbgDeskClientPoint, _dbgSleep, _dbgUseProp, _dbgArrive, _dbgLeisure,
+    loadStation, spawn, spawnAgent, despawnAgent, setSkin, relabel, setActivityFor, agentRunsLive, dropRun: noteRunEnd, focusBody, lockBody, cameraMode, cameraState, restoreCamera, setFrameCap, setOverlays, setCinecamIdle, setChatFocus, chatFocusPing, start, stop, setActivity, wakeIn, beginAwakening, playArrival, cancelArrival, setWakeProgress, igniteSpark, armKindle, kindleHold, camPushIn, camCreep, camPunch, camPullBack, awakenTurn, truthPulse, beginFlood, collapseFlood, endAwakening, releaseAwakening, say, focusAgent, getActivity: () => activity, getUse: () => (agent ? agent.usingProp : null), setOnClick, setOnArcade, setOnOutbox, setOnMissionBoard, setOnTrophyCase, setOnDesk, setOnBayAssign, setOnIntakeFeed, setOnIntakeSample, refit, pauseBridge, resumeBridge, linkState, _dbgSeedRun, _dbgAgeRun, _dbgReconcile, _dbgSweep, _dbgLinkState, _dbgDropBridge, _dbgCurveState, _dbgLoseCurveContext, _dbgLoseCanvases, _dbgCanvasLoss, _dbgKillStageContext, _dbgStageState, _dbgBeltLegibility, _dbgPropClientPoint, _dbgDeskClientPoint, _dbgSleep, _dbgUseProp, _dbgArrive, _dbgLeisure,
     // AGENT GROWTH: XpStore pushes pre-computed Xp.compute() snapshots here; pulseLevelUp fires
     // the addressed body's gold ring. The colony headline is the top-bar STATION chip.
     setXp: (agentId, a) => {
