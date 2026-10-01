@@ -1479,6 +1479,6 @@ for (const c of T.catalog) {
   // the sidecar's approval card reads the memo, never the model's words; the lead's note says how to reach the builder
   const idx = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
   A.ok(/if \(\/\^station\[\._\]build\$\/\.test\(String\(call && call\.name \|\| ''\)\)\) return stationPlanSummary\(stationPlanMemo, a\.planId\)/.test(idx), 'consentSummary reads the station.build card from the plan memo');
-  A.ok(/To build \(a whole station layout, rooms, hallways, lines, furniture\) when the Commander asks, tool_search "station builder" and follow station\.plan; never claim a floor change station\.build did not report\./.test(idx), 'the lead\'s note says how to reach the builder, and never to claim what it did not report');
+  A.ok(/to change the floor, tool_search "station builder" and claim only what station\.build reports\./.test(idx), 'the lead\'s note says how to reach the builder, and never to claim what it did not report');
   A.report('station-builder');
 })();
