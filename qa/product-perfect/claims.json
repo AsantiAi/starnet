@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "d02c9ca03a312b517d39b8540b38f83e56d3dc1a",
+    "sourceCommit": "ab7ce2772a42ad38f3a4212de183deb1e4ecc513",
     "pathSetSha256": "1f21b60c842df940e631e96e62f4cd8a2d43075cb32a87ba99707c6a3f435683",
     "files": [
       {
@@ -1113,8 +1113,8 @@
       },
       {
         "path": "frontend/app/stationbuilder.js",
-        "bytes": 250852,
-        "sha256": "47ca7368105f770fb28c0a8e928ca5f28bbeabfcc159d4d0721fb9599e5d05d8"
+        "bytes": 255487,
+        "sha256": "81e7bb94750c179914a291b9f3b5fca00ae46de368723929cddd4a6cf6f090fa"
       },
       {
         "path": "frontend/app/stationcommands.js",
