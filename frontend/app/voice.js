@@ -1835,6 +1835,12 @@ const Voice = (() => {
 
   // let other code (or a future hotkey) retarget the active voice when the workstream's agent changes.
   function setAgent(name) { if (name) activeVoiceId = name; }
+  // A personality change on the FOCUSED agent re-keys the words, never the session: init() tore down the reply,
+  // dropped hands-free and the forced-speaker bookkeeping, so editing a persona mid-call killed the call.
+  function setPersona(personaId, name) {
+    if (name) activeVoiceId = name;
+    if (personaId && personaId !== activePersonaId) { activePersonaId = personaId; prewarmedFor = null; }
+  }
 
   // is the agent going to SPEAK this reply? true when the speaker toggle is on and this environment can
   // play neural audio (Audio + fetch) — NOT gated on speechSynthesis anymore. chat.js uses this to decide
@@ -1844,7 +1850,7 @@ const Voice = (() => {
   return {
     recordSpeechEvent, speechDiagnostics: () => speechDiagnostics.map(event => Object.assign({}, event)),
     replyToken: () => speakSeq, isReplyPending: () => draining,
-    init, speak, speakChunk, endReply, mutter, ambientLine, setAgent, isOn, setSpeakReplies,
+    init, speak, speakChunk, endReply, mutter, ambientLine, setAgent, setPersona, isOn, setSpeakReplies,
     startListening, stopListening, toggleListen, stopSpeaking,
     toggleVoiceMode, stopConvo, onTurnEnd,
     canListen, canSpeak, startCoordinator, stopCoordinator, pauseCoordinator, resumeCoordinator, attachCoordinator, detachCoordinator,
