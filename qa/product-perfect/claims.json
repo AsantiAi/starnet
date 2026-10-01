@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "b9e71bdca6782616e0da37afa8f359245cfe4ad3",
+    "sourceCommit": "1aa85f35cd448e69cbbb009e9a2f4013d343741d",
     "pathSetSha256": "47c82f3db437ca3fc8d3179d1780f900dcf72d0e3b2ea1a92df4ae2d304ef720",
     "files": [
       {
@@ -1123,8 +1123,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 795987,
-        "sha256": "45f63a1b875b209a92bab41d686c900568cc7dceda9745a1cbc1ce8ab58e7d88"
+        "bytes": 796169,
+        "sha256": "5df78694a4b180538ae2c3645a59e76e8fa2f17f9595f0f033844c6a5926c320"
       },
       {
         "path": "frontend/app/stepin.js",
@@ -1298,8 +1298,8 @@
       },
       {
         "path": "frontend/app/windows/loops.js",
-        "bytes": 49629,
-        "sha256": "30b7cffc784a621df1db9dce7e89d3ba0a65693e751ee3f8e376eb0f2ec37b47"
+        "bytes": 49778,
+        "sha256": "d067c1b8fdb712352ece67b61a63c80f58be59c5bc85bf0b858e44709ca6b116"
       },
       {
         "path": "frontend/app/windows/messaging.js",
