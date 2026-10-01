@@ -429,6 +429,116 @@
     return null;
   }
 
+  /* ---- PLAIN-ENGLISH SCHEDULES (routine reliability, 2026-10-01) -------------------------------------------
+     Models (and people typing into CUSTOM) say "every day at 7am", "weekdays at 9", "mondays and thursdays at
+     8pm", "the 1st of every month at 8am", "tomorrow at 9am". The parser used to accept only intervals, ISO and
+     5-field cron, so those were refused and a live run burned three failed routine.create calls before retrying
+     in cron. englishSchedule() turns the common shapes into the SAME stored forms (a cron expression, an
+     interval, or a one-shot instant) — nothing new is stored, and anything it cannot read exactly still
+     returns null (refused loudly), never a guessed time. Pure: `now` + tz are injected. */
+  const DOW_WORDS = [
+    [/\bsun(?:day)?s?\b/, 0], [/\bmon(?:day)?s?\b/, 1], [/\btue(?:s(?:day)?)?s?\b/, 2], [/\bwed(?:nesday)?s?\b/, 3],
+    [/\bthu(?:r(?:s(?:day)?)?)?s?\b/, 4], [/\bfri(?:day)?s?\b/, 5], [/\bsat(?:urday)?s?\b/, 6]
+  ];
+  const ORD_WORDS = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, tenth: 10, fifteenth: 15, twentieth: 20 };
+  const PART_OF_DAY = { morning: 9, afternoon: 14, evening: 18, night: 21, tonight: 21 };
+  function englishTimes(s, partOfDay) {
+    // every "at <time>" / "<time>am|pm" / "HH:MM" in order; "noon"/"midnight" already normalised upstream.
+    const out = [];
+    const re = /(?:\bat\s+|\b)(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/g;
+    let m;
+    while ((m = re.exec(s))) {
+      const hasAt = /\bat\s+$/.test(s.slice(0, m.index + m[0].indexOf(m[1])));
+      if (!m[3] && !m[2] && !hasAt) continue;               // a bare number ("every 2 hours", "15th") is not a time
+      let h = parseInt(m[1], 10); const min = m[2] ? parseInt(m[2], 10) : 0;
+      if (h > 23 || min > 59) return null;
+      if (m[3] === 'pm' && h < 12) h += 12;
+      else if (m[3] === 'am' && h === 12) h = 0;
+      else if (!m[3] && h >= 1 && h <= 11 && partOfDay != null && partOfDay >= 14) h += 12;   // "every evening at 7"
+      out.push({ h: h, m: min });
+    }
+    return out;
+  }
+  function englishSchedule(raw) {
+    let s = ' ' + String(raw || '').toLowerCase().replace(/[.,;!]+(\s|$)/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+    s = s.replace(/\ba\.m\.?/g, 'am').replace(/\bp\.m\.?/g, 'pm').replace(/(\d)\s+(am|pm)\b/g, '$1$2')
+      .replace(/\bo'?clock\b/g, '').replace(/\bnoon\b/g, '12:00pm').replace(/\bmidnight\b/g, '12:00am')
+      .replace(/\beach\b/g, 'every').replace(/\beveryday\b/g, 'every day').replace(/\s+/g, ' ');
+    const pod = (s.match(/\b(morning|afternoon|evening|night|tonight)s?\b/) || [])[1];
+    const partOfDay = pod != null ? PART_OF_DAY[pod] : null;
+
+    // "every N minutes|hours between A and B" (optionally on weekdays) -> a stepped cron window
+    let m = s.match(/\bevery (\d+) ?(minutes?|mins?|hours?|hrs?)\b.*?\b(?:between|from) (\d{1,2})(?::00)? ?(am|pm)? (?:and|to|-|until) (\d{1,2})(?::00)? ?(am|pm)?/);
+    if (m) {
+      const n = parseInt(m[1], 10), unitH = /^h/.test(m[2]);
+      let a = parseInt(m[3], 10), b = parseInt(m[5], 10);
+      if (m[4] === 'pm' && a < 12) a += 12; if (m[6] === 'pm' && b < 12) b += 12;
+      if (!m[6] && b < a && b < 12) b += 12;                 // "between 9 and 5" -> 9..17
+      if (!(n > 0) || a > 23 || b > 23 || b < a) return null;
+      const dow = /\bweekdays?\b/.test(s) ? '1-5' : /\bweekends?\b/.test(s) ? '0,6' : '*';
+      if (unitH) return { cron: '0 ' + a + '-' + b + '/' + n + ' * * ' + dow };
+      if (n >= 60 || 60 % n !== 0) return null;
+      return { cron: '*/' + n + ' ' + a + '-' + Math.max(a, b - 1) + ' * * ' + dow };
+    }
+    if (/^ ?(hourly|every hour)\s*$/.test(s)) return { interval: 60 };
+    if (/\bevery (\d+ )?(minutes?|mins?|hours?|hrs?|days?)\b/.test(s) && !/\bat\b|am\b|pm\b/.test(s)) return null;   // plain intervals are step 1's job
+
+    const times = englishTimes(s, partOfDay);
+    if (times == null) return null;
+    if (times.length > 1 && times.some(t => t.m !== times[0].m)) return null;   // "9:15 and 5:40" is not one cron line
+    const hour = times.length ? times.map(t => t.h).join(',') : String(partOfDay != null ? partOfDay : 9);
+    const minute = times.length ? String(times[0].m) : '0';
+
+    // one-shots: tomorrow / today / tonight / next <day> / on <day> (singular, no "every")
+    const every = /\bevery\b|\bdaily\b|\bweekly\b|\bmonthly\b|\bweekdays\b|\bweekends\b|\b(mon|tues|wednes|thurs|fri|satur|sun)days\b/.test(s);
+    if (!every) {
+      if (/\btomorrow\b/.test(s)) return { onceDayOffset: 1, hour: parseInt(hour, 10), minute: parseInt(minute, 10), single: times.length <= 1 };
+      if (/\b(today|tonight|this (morning|afternoon|evening))\b/.test(s)) return { onceDayOffset: 0, hour: parseInt(hour, 10), minute: parseInt(minute, 10), single: times.length <= 1, strictToday: true };
+      for (const [re, d] of DOW_WORDS) if (re.test(s) && /\b(next|on|this)\b/.test(s)) return { onceDow: d, hour: parseInt(hour, 10), minute: parseInt(minute, 10), single: times.length <= 1 };
+      if (times.length === 1 && /^ ?(at )?\d/.test(s)) return { onceDayOffset: 0, hour: times[0].h, minute: times[0].m, single: true, rollToTomorrow: true };
+    }
+
+    // monthly: "1st of every month", "on the 15th of the month", "first day of each month", "monthly on the 3rd"
+    m = s.match(/\b(?:on )?(?:the )?(\d{1,2})(?:st|nd|rd|th)?(?: day)? of (?:every|the|each) month\b/) ||
+      s.match(/\bmonthly on the (\d{1,2})(?:st|nd|rd|th)?\b/) || s.match(/\bevery month on the (\d{1,2})(?:st|nd|rd|th)?\b/);
+    const ordWord = s.match(/\b(first|second|third|fourth|fifth|tenth|fifteenth|twentieth)(?: day)? of (?:every|the|each) month\b/);
+    if (m || ordWord || /\bmonthly\b|\bevery month\b/.test(s)) {
+      if (/\blast day\b/.test(s)) return null;               // cron has no "last day of month"; refuse, never guess
+      const dom = m ? parseInt(m[1], 10) : ordWord ? ORD_WORDS[ordWord[1]] : 1;
+      if (!(dom >= 1 && dom <= 31)) return null;
+      return { cron: minute + ' ' + hour + ' ' + dom + ' * *' };
+    }
+
+    // weekly shapes
+    let dows = [];
+    if (/\bweekdays?\b|\bmonday (?:to|through|-) friday\b|\bmon-fri\b/.test(s)) dows = [1, 2, 3, 4, 5];
+    else if (/\bweekends?\b/.test(s)) dows = [0, 6];
+    else for (const [re, d] of DOW_WORDS) if (re.test(s)) dows.push(d);
+    if (dows.length) return { cron: minute + ' ' + hour + ' * * ' + dows.join(',') };
+    if (/\bweekly\b|\bevery week\b/.test(s)) return { cron: minute + ' ' + hour + ' * * 1' };
+    if (/\bevery (day|morning|afternoon|evening|night)\b|\bdaily\b|\bnightly\b|\bevery \d+(?::\d\d)? ?(am|pm)\b/.test(s)) return { cron: minute + ' ' + hour + ' * * *' };
+    if (times.length && /\bevery\b/.test(s) && !/\bevery (\d+ )?(minutes?|hours?|weeks?|months?)\b/.test(s)) return { cron: minute + ' ' + hour + ' * * *' };
+    return null;
+  }
+  // a one-shot "tomorrow at 9" / "next friday at 3pm" -> the absolute instant on that local wall-clock date.
+  function englishOnceAt(e, now, zone) {
+    if (!e.single) return null;
+    let offset = e.onceDayOffset;
+    if (e.onceDow != null) {
+      const today = localDow(now, zone);
+      offset = (e.onceDow - today + 7) % 7 || 7;              // "next/on friday" never means today
+    }
+    for (let tries = 0; tries < 2; tries++) {
+      const lf = localFieldsOf(now + offset * DAY, zone);
+      const spec = parseCronExpression(e.minute + ' ' + e.hour + ' ' + lf.day + ' ' + lf.month + ' *');
+      const at = spec ? nextCronFireAt(spec, now, zone) : null;
+      if (at != null && at - now <= (offset + 1) * DAY + HOUR) return at;
+      if (!e.rollToTomorrow || tries) return null;           // "today at 5pm" after 5pm is refused, not moved
+      offset = 1;
+    }
+    return null;
+  }
+
   /* parseSchedule(str, now, opts?) — turn a human string into a tagged schedule, or null if unparseable.
      `now` is used ONLY to resolve a relative duration ("in 2h") into an absolute runAt; it is a
      parameter so the result is reproducible. Match order: interval -> once-duration -> ISO -> cron.
@@ -446,6 +556,8 @@
 
     // 1. INTERVAL — "every <N> <unit>" (N optional => 1, e.g. "every hour"). Minute-granular: m/h/d only.
     let m = lower.match(/^every\s+(?:(\d+)\s*)?([a-z]+)$/);
+    // a non-unit word ("every friday", "every morning") is not an interval — it falls through to step 5
+    if (m && !m[1] && !normalizeUnit(m[2])) m = null;
     if (m) {
       const n = m[1] ? parseInt(m[1], 10) : 1;
       const u = normalizeUnit(m[2]);
@@ -476,6 +588,22 @@
     if (cron) {
       if (tz != null) cron.tz = tz;                         // attach the (already-validated) IANA tz
       if (nextCronFireAt(cron, now, tzFor(cron, null)) != null) return cron;
+    }
+
+    // 5. PLAIN ENGLISH — "every day at 7am", "weekdays at 9", "tomorrow at 9am" (see englishSchedule above).
+    //    opts.defaultTz is the host zone a one-shot wall-clock time is read in when no tz was given.
+    const e = englishSchedule(raw);
+    if (e) {
+      if (e.interval) return { kind: 'interval', minutes: e.interval, display: 'every ' + humanDuration(e.interval * MIN) };
+      if (e.cron) {
+        const c = parseCronExpression(e.cron);
+        if (!c) return null;
+        if (tz != null) c.tz = tz;
+        return nextCronFireAt(c, now, tzFor(c, null)) != null ? c : null;
+      }
+      const zone = tz || (opts.defaultTz && isValidTz(opts.defaultTz) ? String(opts.defaultTz) : 'UTC');
+      const at = englishOnceAt(e, now, zone);
+      if (at != null && at > now) return { kind: 'once', runAt: at, display: 'once at ' + iso(at) };
     }
 
     return null;
@@ -689,6 +817,7 @@
       iso: iso,
       dueAtOf: dueAtOf,
       parseCronExpression: parseCronExpression,
+      englishSchedule: englishSchedule,
       nextCronFireAt: nextCronFireAt,
       isValidTz: isValidTz,
       localFieldsOf: localFieldsOf,

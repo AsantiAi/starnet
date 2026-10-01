@@ -13673,12 +13673,12 @@ async function handleSpotifyDisconnect(req, res) {
 // unparseable string (including impossible cron dates, AND an invalid IANA tz) before it can be persisted —
 // a typo'd tz fails the parse rather than silently firing on UTC (G4.1).
 function parseCronScheduleOr400(str, now, tz) {
-  const opts = (tz != null && tz !== '') ? { tz: String(tz) } : undefined;
+  const opts = (tz != null && tz !== '') ? { tz: String(tz), defaultTz: CRON_HOST_TZ } : { defaultTz: CRON_HOST_TZ };
   const sched = cron.parseSchedule(String(str == null ? '' : str), now, opts);
   if (!sched) {
-    const why = (opts && !cron.isValidTz(opts.tz))
+    const why = (opts && opts.tz != null && !cron.isValidTz(opts.tz))
       ? ('unknown timezone "' + opts.tz + '" — use an IANA zone like America/New_York')
-      : "couldn't read that schedule — try \"every 30m\", \"in 2h\", \"0 9 * * *\", or an ISO timestamp like 2026-07-01T09:00";
+      : "couldn't read that schedule — try \"every day at 9am\", \"weekdays at 8:30am\", \"mondays at 6pm\", \"tomorrow at 9am\", \"every 30m\", \"in 2h\" or a cron like \"0 9 * * *\"";
     const e = new Error(why); e.code = 400; throw e;
   }
   return sched;
