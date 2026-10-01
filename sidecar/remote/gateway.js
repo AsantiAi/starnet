@@ -23,6 +23,8 @@
      fetch     { agentId, path, offset?, length? }   read a file in sealed chunks (≤ 256 KB each)
      view      { have?, at?, offset?, length? }   the station picture the desk last drew, in sealed chunks
      portrait  { agentId }           that agent's sprite
+     sprite    { key }               every drawing of one sprite track ("<set>.<track>.<facing>"), for the live crew
+     activity  { limit? }            what is running now and what finished, newest first
      pushKey                         the station's push key + whether THIS phone is subscribed
      pushOn    { endpoint, keys }    subscribe this phone to the station's notifications
      pushOff                         unsubscribe this phone
@@ -124,6 +126,15 @@ function makeGateway(deps) {
       const stamp = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 0; };
       return good(await host.view({ have: stamp(a.have), at: stamp(a.at), offset: clampInt(a.offset, 0, Number.MAX_SAFE_INTEGER, 0), length: clampInt(a.length, 1, MAX_CHUNK, MAX_CHUNK) }));
     },
+
+    async sprite(a) {
+      const key = String(a.key || '');
+      if (!/^[A-Za-z0-9_]{1,40}\.[a-z_]{1,20}\.[a-z-]{1,20}$/.test(key)) return bad('unknown sprite');
+      const r = await host.sprite({ key });
+      return r && r.ok === false ? bad(r.error || 'unknown sprite') : good(r);
+    },
+
+    async activity(a) { return good(await host.activity({ limit: clampInt(a.limit, 1, 60, 30) })); },
 
     async portrait(a) {
       const agentId = id(a.agentId);
