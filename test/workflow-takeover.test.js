@@ -116,7 +116,7 @@ console.log('workflow-takeover: repeat sense (paraphrase, guards, notice, cadenc
   for (const t of ['summarize this automation article', 'what is cron?', 'how do routines work?', 'write me a tweet about our launch', 'research soy wax suppliers'])
     assert.ok(!CC.automationIntent(t), 'not an automation ask: ' + t);
   const block = CC.compose({ automationAsk: true });
-  assert.match(block, /<automation_request/); assert.match(block, /routine_create now/); assert.match(block, /Never wait on a connection/);
+  assert.match(block, /<automation_request/); assert.match(block, /brief_proceed/); assert.match(block, /routine_create in the same turn/); assert.match(block, /Never wait on a connection/);
   assert.equal(CC.compose({ automationAsk: false }), '', 'no ask -> no block');
   console.log('workflow-takeover: automation-ask playbook passed');
 }
