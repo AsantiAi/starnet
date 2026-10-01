@@ -2936,7 +2936,9 @@ const Chat = (() => {
     if (t === 'brief.ask') return 'ask you a quick question about the task';   // clarify card renders its own body
     // THE STATION BUILDER (2026-09-29): the card IS the plan — what gets built, where, who works each step. The sidecar
     // sends the plan's own summary (its dry run on a copy of the station), never the model's words.
-    if (/^station[._]build$/.test(t)) return 'build this on your station: ' + (String(ev.argsSummary || '').split('\n')[0] || 'a planned change') + ' One UNDO in Build mode takes it back.';
+    if (/^station[._]build$/.test(t)) { const plan = String(ev.argsSummary || '').split('\n')[0] || 'a planned change'; return 'build this on your station: ' + plan + (/\bUNDO\b/.test(plan) ? '' : ' One UNDO in Build mode takes it back.'); }
+    // MAKE A PROP (2026-10-01): the card names the object and what it costs in StarNet credits (the sidecar's own words)
+    if (/^station[._]make_prop$/.test(t)) return 'make a new prop: ' + (String(ev.argsSummary || '').split('\n')[0] || 'a new prop');
     return t.replace(/_/g, '.') + (ev.argsSummary ? ' ' + ev.argsSummary : '');
   }
 
