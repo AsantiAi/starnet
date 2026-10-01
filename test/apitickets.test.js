@@ -37,6 +37,9 @@ A.eq(P._test.mintWith(KEY, 'file', T.scopeFile('ag', 'dir/ä b+c&d.md'), NOW, no
   T.mint(KEY, 'file', T.scopeFile('ag', 'dir/ä b+c&d.md'), { now: NOW, nonce }), 'page and sidecar mint byte-identical tickets (unicode + URL-special path)');
 A.eq(P._test.KINDS.file.ttl, T.KINDS.file.maxTtlMs, 'page file lifetime == server cap');
 A.eq(P._test.KINDS.run.ttl, T.KINDS.run.maxTtlMs, 'page run lifetime == server cap');
+A.eq(P._test.KINDS.view.ttl, T.KINDS.view.maxTtlMs, 'page view lifetime == server cap');
+A.eq(P._test.mintWith(KEY, 'view', T.scopeView('ag', 'site/ä b'), NOW, nonce),
+  T.mint(KEY, 'view', T.scopeView('ag', 'site/ä b'), { now: NOW, nonce }), 'page and sidecar mint byte-identical VIEW tickets');
 A.eq(P._test.KINDS.sse.ttl, T.KINDS.sse.maxTtlMs, 'page sse lifetime == server cap');
 A.eq(P._test.KINDS.save.ttl, T.KINDS.save.maxTtlMs, 'page save lifetime == server cap');
 

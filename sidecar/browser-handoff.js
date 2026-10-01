@@ -24,7 +24,6 @@
    (test/browser-handoff.test.js). The browser side is a `surface` object supplied by the session:
      { startStream(onFrame) -> Promise, stopStream() -> Promise, input(ev) -> Promise, pageInfo() -> Promise<{url,title}> } */
 'use strict';
-
 const { swallow, note: failNote } = require('./failopen.js');
 
 const WAIT_MS = 30 * 60 * 1000;
@@ -84,7 +83,8 @@ function sanitizeInput(ev) {
 
 function makeHandoffHost(deps) {
   deps = deps || {};
-  const now = typeof deps.now === 'function' ? deps.now : () => 0;
+  if (typeof deps.now !== 'function') throw new Error('browser-handoff requires deps.now (the composition root injects the clock)');
+  const now = deps.now;
   const uuid = typeof deps.uuid === 'function' ? deps.uuid : () => require('node:crypto').randomUUID();
   const setT = deps.setTimeout || setTimeout;
   const clearT = deps.clearTimeout || clearTimeout;
@@ -103,7 +103,7 @@ function makeHandoffHost(deps) {
       requestedAt: rec.requestedAt, takenAt: rec.takenAt, endedAt: rec.endedAt, expiresAt: rec.expiresAt
     };
   }
-  function publish(rec) { try { emit('browser.handoff', view(rec)); } catch (e) { failNote('stepin.emit', e); } }
+  function publish(rec) { try { emit('browser.handoff', view(rec)); } catch (e) { failNote('handoff.publish', e); } }
   function unref(t) { if (t && typeof t.unref === 'function') t.unref(); return t; }
   function arm(entry) {
     if (entry.timer) clearT(entry.timer);
@@ -138,7 +138,7 @@ function makeHandoffHost(deps) {
     if (nudgeMs && onNudge) {
       entry.nudge = unref(setT(() => {
         entry.nudge = null;
-        if (live.get(rec.id) === entry && entry.rec.state === 'waiting') { try { onNudge(view(rec)); } catch (e) { failNote('stepin.nudge', e); } }
+        if (live.get(rec.id) === entry && entry.rec.state === 'waiting') { try { onNudge(view(rec)); } catch (e) { failNote('handoff.nudge', e); } }
       }, nudgeMs));
     }
     if (entry.signal && typeof entry.signal.addEventListener === 'function') {
@@ -149,7 +149,7 @@ function makeHandoffHost(deps) {
     return { id: rec.id, view: view(rec), done };
   }
 
-  function wake(entry) { for (const w of Array.from(entry.waiters)) { try { w(); } catch (e) { failNote('stepin.waiter', e); } } entry.waiters.clear(); }
+  function wake(entry) { for (const w of Array.from(entry.waiters)) { try { w(); } catch (e) { failNote('handoff.wake', e); } } entry.waiters.clear(); }
 
   async function take(id) {
     const entry = live.get(String(id || ''));
@@ -180,17 +180,17 @@ function makeHandoffHost(deps) {
     live.delete(entry.rec.id);
     if (entry.timer) clearT(entry.timer);
     if (entry.nudge) clearT(entry.nudge);
-    if (entry.signal && entry.onAbort) { try { entry.signal.removeEventListener('abort', entry.onAbort); } catch (e) { failNote('stepin.abortListener', e); } }
+    if (entry.signal && entry.onAbort) { try { entry.signal.removeEventListener('abort', entry.onAbort); } catch (e) { failNote('handoff.unlisten', e); } }
     entry.rec.state = state;
     entry.rec.endedAt = now();
     entry.frame = null;
     wake(entry);
-    try { const p = entry.surface.stopStream(); if (p && typeof p.catch === 'function') p.catch(swallow('stepin.stopStream')); } catch (e) { failNote('stepin.stopStream', e); }
+    try { const p = entry.surface.stopStream(); if (p && typeof p.catch === 'function') p.catch(swallow('handoff.stop-stream')); } catch (e) { failNote('handoff.stop-stream', e); }
     const v = view(entry.rec);
     recent.push(v);
     while (recent.length > KEEP_RECENT) recent.shift();
     publish(entry.rec);
-    if (onSettled) { try { onSettled(v); } catch (e) { failNote('stepin.settled', e); } }
+    if (onSettled) { try { onSettled(v); } catch (e) { failNote('handoff.settled', e); } }
     entry.resolve(v);
     return v;
   }
