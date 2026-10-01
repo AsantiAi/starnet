@@ -152,6 +152,24 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
   await I.step();
   A.eq(posts.length, 4, 'a station that lost its picture (restart) gets a new one without a phone asking');
 
+  // an unchanged room says "same" — but a sidecar that no longer HOLDS the picture (restart) answers 409, and the page
+  // must then send the full still instead of re-posting "same" forever (sweep 2026-10-01)
+  {
+    const realFetch = globalThis.fetch; let held = true; const sent = [];
+    globalThis.fetch = async (url, o) => {
+      if (o && o.method === 'POST') { const b = JSON.parse(o.body); sent.push(b.same ? 'same' : 'full'); return { ok: !b.same || held, json: async () => ({ ok: !b.same || held }) }; }
+      return { ok: true, json: async () => ({ ok: true, enabled: true, want: true, at: 1 }) };
+    };
+    still = { canvas: {}, width: 2, height: 2, scale: 1, bodies: [] };
+    I.encode = async () => ({ mime: 'image/webp', data: 'U0FNRQ==' });
+    await I.step(); await I.step();
+    A.eq(sent, ['full', 'same'], 'an unchanged room is only confirmed as the same');
+    held = false; sent.length = 0;
+    await I.step();
+    A.eq(sent, ['same', 'full'], 'a station that lost the picture (409 on "same") gets the full still right away');
+    globalThis.fetch = realFetch;
+  }
+
   answer = null;
   A.eq(await I.step(), I.IDLE_MS, 'an unreachable station: nothing drawn, nothing thrown');
   A.eq(posts.length, 4, 'and nothing sent');
