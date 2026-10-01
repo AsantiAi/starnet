@@ -42,7 +42,7 @@ function effectiveToolsets({ registry, agentId, agent, placed = [], disabled = {
 const AVAILABILITY_SIGNALS = [
   { id: 'media-route', fact: 'mediaRoute', tools: ['image_generate'], label: 'image_generate', announce: true,
     why: 'no image-generation connection is configured for this station',
-    enable: 'the Commander signs in to ChatGPT, connects an OpenAI or OpenRouter API key in SETTINGS, or links this station to a StarNet account' },
+    enable: 'the Commander signs in to ChatGPT, or connects an OpenAI or OpenRouter key or a StarNet account in SETTINGS' },
   { id: 'voice-route', fact: 'voiceRoute', tools: ['voice_generate'], label: 'voice_generate', announce: true,
     why: 'no voice route exists: no OpenRouter, Gemini or OpenAI key is connected and the free Edge voice is switched off',
     enable: 'the Commander connects one of those keys in SETTINGS, or removes STARNET_EDGE_TTS=0 from the launch environment' },
