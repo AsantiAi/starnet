@@ -366,8 +366,11 @@ const StepIn = (() => {
       // Paste arrives as its own event with the text; the chord itself must not also paste the headless clipboard.
       if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) return;
       e.preventDefault();
-      const printable = e.key && e.key.length === 1 && !e.ctrlKey && !e.metaKey;
-      const ev = { type: 'key', action: 'down', key: e.key, code: e.code, keyCode: e.keyCode || 0, modifiers: mods(e) };
+      // AltGr (@ { € on German/French keyboards) arrives as Ctrl+Alt on Windows: it is text, not a shortcut
+      // macOS Option makes characters too (Option+L = @ on a German Mac): composed characters are text, not shortcuts
+      const ag = !!(e.getModifierState && e.getModifierState('AltGraph')) || !!(e.altKey && !e.metaKey && e.key && e.key.length === 1 && !/^[a-z0-9]$/i.test(e.key));
+      const printable = e.key && e.key.length === 1 && (ag || (!e.ctrlKey && !e.metaKey));
+      const ev = { type: 'key', action: 'down', key: e.key, code: e.code, keyCode: e.keyCode || 0, modifiers: ag ? (mods(e) & ~3) : mods(e) };
       if (printable) ev.text = e.key;
       else if (e.key === 'Enter') ev.text = '\r';
       send(v, ev);
@@ -406,6 +409,8 @@ const StepIn = (() => {
     else refresh();
   }
 
-  return { mount, unmount, open, refresh, _state: () => ({ live: live.slice(), recent: recent.slice(), signins, focusId, streaming: !!(view && view.streamId), seq: view ? view.seq : 0 }) };
+  // live(): the handoffs waiting on / held by the Commander right now (a copy) — the public read other windows use
+  // (the DESK SCREEN banner), so nobody has to reach into _state().
+  return { mount, unmount, open, refresh, live: () => live.slice(), _state: () => ({ live: live.slice(), recent: recent.slice(), signins, focusId, streaming: !!(view && view.streamId), seq: view ? view.seq : 0 }) };
 })();
 if (typeof window !== 'undefined') window.StepIn = StepIn;

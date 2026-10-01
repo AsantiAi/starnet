@@ -1136,7 +1136,10 @@ const VoiceLive = (() => {
       queuedAudio = []; utterance = []; preRoll = []; utteranceSamples = speechFrames = silenceMs = 0;
       utteranceSeq++;
       if (dictation && typeof Voice !== 'undefined' && Voice.pauseCoordinator) Voice.pauseCoordinator();
-    } else if (dictation && typeof Voice !== 'undefined' && Voice.resumeCoordinator) Voice.resumeCoordinator();
+    } else {
+      setError('');   // a resume is a fresh attempt — a paused-for-errors reason must not linger over it
+      if (dictation && typeof Voice !== 'undefined' && Voice.resumeCoordinator) Voice.resumeCoordinator();
+    }
     if (stream) stream.getAudioTracks().forEach(track => { track.enabled = !paused; });
     if (tapStream) tapStream.getAudioTracks().forEach(track => { track.enabled = !paused; });
     resetLevel();
@@ -1640,7 +1643,17 @@ const VoiceLive = (() => {
          the identity bug Andrew heard. */
       if (Voice.setLocalTts) Voice.setLocalTts(true);
       if (Voice.startCoordinator) Voice.startCoordinator({ onState, onAssistant, onOutputLevel, onTiming, onTranscript: handleTranscript,
-        onInterim: text => { if (!paused && text) { caption('user', text); setState('hearing'); } } });
+        onInterim: text => { if (!paused && text) { caption('user', text); setState('hearing'); } },
+        // the dictation engine failed repeatedly and Voice stopped re-arming it — the panel must stop saying
+        // "listening" and name the problem (it used to stay on LISTENING over a dead loop).
+        // Voice already paused its mic loop (the reply still speaks); show the panel's real PAUSED state so
+        // RESUME MIC retries, and every later state change keeps reading PAUSED instead of LISTENING.
+        onFatal: value => {
+          if (!active) return;
+          if (!paused) togglePause();
+          setError(value && value.message || 'Voice input paused.');
+          caption('user', 'Microphone paused — the speech engine kept failing.');
+        } });
     }
     if (!active || seq !== sessionSeq) return;
     // The meter is real on this leg too (see openMeterTap): the tap arrives whenever the permission

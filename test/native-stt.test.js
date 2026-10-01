@@ -89,6 +89,14 @@ const win = (stdout, env) => makeNativeStt({
   assert.equal(noisy.dropped, 'below-threshold');
   assert.deepEqual(await win('').recognize(), { ok: true, text: '' }, 'a completed quiet audio file is silence, not a native-engine failure');
 
+  // A two-click take is read phrase by phrase (one Recognize() stops at the first pause — the second sentence of
+  // "Open the report. Then summarize it." was lost). Every phrase is gated on its own: a cough between two real
+  // sentences costs neither of them.
+  assert.match(WINDOWS_WAV_SCRIPT, /while\(\$n -lt 40 -and \$null -ne \(\$x=\$r\.Recognize\(\)\)\)/, 'the WAV take is read until the file is spent');
+  const multi = await win('805|Open the research report\r\n990|Mm.\r\n802|then summarize the findings\r\n').recognize();
+  assert.deepEqual(multi, { ok: true, text: 'Open the research report then summarize the findings', confidence: 0.802 },
+    'every real phrase of a take survives; the noise phrase between them is dropped');
+
   const unsure = await win('120|maybe words\r\n').recognize();
   assert.equal(unsure.text, '', 'a low-confidence transcript never becomes a run');
   assert.equal(unsure.error, undefined);

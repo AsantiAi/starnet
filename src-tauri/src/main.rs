@@ -2737,13 +2737,59 @@ fn post_sidecar_halt(state: &AppState, timeout: Duration) {
     }
 }
 
-/// Bounded drain, then kill: flip `shutting_down` so the guardian never respawns, ask the sidecar to halt all
-/// in-flight work (bounded), then terminate the child. The halt gives unattended runs a clean stop before the
-/// process dies; the kill guarantees no orphan sidecar outlives an explicit Quit.
+/// POST /api/lifecycle/quit: ask the sidecar to run its own graceful shutdown. On Windows `kill_sidecar` ends the
+/// child with TerminateProcess, which no handler in the sidecar can see — so the STATION browser (a real Chrome
+/// window the sidecar started) was left running with its network proxy dead, still holding the durable profile
+/// (2026-09-30 release review). Best-effort and bounded like the halt: a dead sidecar is simply already gone.
+fn post_sidecar_quit(state: &AppState, timeout: Duration) {
+    use std::io::{Read, Write};
+    let body = "{}";
+    let head = format!(
+        "POST /api/lifecycle/quit HTTP/1.1\r\nHost: 127.0.0.1\r\nX-StarNet-Token: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        state.api_token,
+        body.len()
+    );
+    if let Ok(mut s) = TcpStream::connect(("127.0.0.1", state.port)) {
+        let _ = s.set_read_timeout(Some(timeout));
+        let _ = s.set_write_timeout(Some(timeout));
+        let _ = s.write_all(head.as_bytes());
+        let _ = s.write_all(body.as_bytes());
+        let _ = s.flush();
+        let mut buf = [0u8; 64];
+        let _ = s.read(&mut buf);
+    }
+}
+
+/// Ask the sidecar to shut down cleanly (it closes the station browser, flushing its sign-ins, and exits), wait a
+/// bounded moment for it to leave, then `kill_sidecar` ends whatever is left. The kill still guarantees no orphan.
+fn stop_sidecar_gracefully(state: &AppState) {
+    post_sidecar_quit(state, Duration::from_secs(2));
+    let deadline = Instant::now() + Duration::from_millis(3500);
+    while Instant::now() < deadline {
+        let exited = state
+            .sidecar
+            .lock()
+            .ok()
+            .map(|mut guard| match guard.as_mut() {
+                Some(child) => matches!(child.try_wait(), Ok(Some(_))),
+                None => true,
+            })
+            .unwrap_or(true);
+        if exited {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    state.kill_sidecar();
+}
+
+/// Bounded drain, then stop: flip `shutting_down` so the guardian never respawns, ask the sidecar to halt all
+/// in-flight work (bounded), let it shut down cleanly, then terminate the child. The halt gives unattended runs a
+/// clean stop before the process dies; the kill guarantees no orphan sidecar outlives an explicit Quit.
 fn drain_and_kill_sidecar(state: &AppState) {
     state.shutting_down.store(true, Ordering::SeqCst);
     post_sidecar_halt(state, Duration::from_secs(3));
-    state.kill_sidecar();
+    stop_sidecar_gracefully(state);
 }
 
 /// Finish a close decision whose outcome is "keep the supervised process alive in the tray".
@@ -2808,9 +2854,9 @@ fn build_main_window(
     app: &AppHandle,
     restore: Option<MainWindowRestore>,
 ) -> tauri::Result<tauri::WebviewWindow> {
-    let init = {
+    let (init, sidecar_port) = {
         let st = app.state::<AppState>();
-        webview_init_script(st.port, &st.api_token)
+        (webview_init_script(st.port, &st.api_token), st.port)
     };
     // A rebuilt window reveals itself after its first load only when the window it replaces was
     // showing — a crash while parked in the tray must not pop the app open.
@@ -2831,7 +2877,7 @@ fn build_main_window(
         // disabled (above), WebView2 would otherwise navigate this frameless window to a link the user
         // drags onto it — a full-window page with no URL bar. External links already leave through
         // open_external_url (the system browser).
-        .on_navigation(|url| is_app_navigation(url))
+        .on_navigation(move |url| is_app_navigation(url, sidecar_port))
         .center()
         .visible(false)
         // Page-load hooks fire for Started AND Finished. Reveal only once,
@@ -3965,20 +4011,43 @@ mod artifact_open_tests {
 /// The main window may only navigate within the bundled app origin: `tauri://localhost` (macOS/Linux)
 /// or `http(s)://tauri.localhost` (Windows WebView2). Everything else — a dragged-in link, a stray
 /// `location = …` — is refused, so no foreign page ever runs in the token-bearing window.
-fn is_app_navigation(url: &tauri::Url) -> bool {
+///
+/// ONE exception, for FRAMES: the BROWSER window shows pages an agent made inside a sandboxed iframe served
+/// by this app's own sidecar (`http://127.0.0.1:<sidecar port>/view/…` and `/workshop-run/…`). WebKit on
+/// macOS and WebKitGTK on Linux ask this guard about EVERY frame's navigation (WebView2 asks only about the
+/// main frame), so without the exception those pages never load there (2026-09-30 release review). The
+/// exception is exactly that loopback origin and the sidecar's SANDBOXED page routes — the BROWSER window's
+/// /view/ and /workshop-run/, and the APPS / plugin windows' /plugin-ui/, /plugin-draft/ and /app-ui/ (read from
+/// wry 0.55.1 wkwebview/navigation.rs 2026-10-01: navigation_policy has NO main-frame filter, so on macOS those
+/// windows were cancelled too). Every one is served with a CSP `sandbox` header (opaque origin, no token, no top
+/// navigation), so even a main-frame load of one could not reach the app's privileges.
+fn is_app_navigation(url: &tauri::Url, sidecar_port: u16) -> bool {
     match url.scheme() {
         "tauri" => true,
-        "http" | "https" => url.host_str() == Some("tauri.localhost"),
+        "http" | "https" if url.host_str() == Some("tauri.localhost") => true,
+        "http" => is_sidecar_page(url, sidecar_port),
         _ => false,
     }
 }
+
+fn is_sidecar_page(url: &tauri::Url, sidecar_port: u16) -> bool {
+    sidecar_port != 0
+        && url.host_str() == Some("127.0.0.1")
+        && url.port() == Some(sidecar_port)
+        && url.username().is_empty()
+        && url.password().is_none()
+        && SIDECAR_PAGE_ROUTES.iter().any(|route| url.path().starts_with(route))
+}
+
+/// The sidecar's sandboxed page routes a frame of the main window may load (see is_app_navigation).
+const SIDECAR_PAGE_ROUTES: [&str; 5] = ["/view/", "/workshop-run/", "/plugin-ui/", "/plugin-draft/", "/app-ui/"];
 
 #[cfg(test)]
 mod navigation_guard_tests {
     use super::is_app_navigation;
 
     fn ok(s: &str) -> bool {
-        is_app_navigation(&tauri::Url::parse(s).expect("valid url"))
+        is_app_navigation(&tauri::Url::parse(s).expect("valid url"), 8787)
     }
 
     #[test]
@@ -3996,6 +4065,28 @@ mod navigation_guard_tests {
         assert!(!ok("file:///C:/Users/x/page.html"));
         assert!(!ok("javascript:alert(1)"));
         assert!(!ok("data:text/html,hi"));
+    }
+
+    #[test]
+    fn agent_pages_from_this_sidecar_load_in_the_browser_window() {
+        // macOS / Linux ask the guard about every frame: the BROWSER window's sandboxed iframe must pass
+        assert!(ok("http://127.0.0.1:8787/view/~t/st1.abc/nova/site/index.html"));
+        assert!(ok("http://127.0.0.1:8787/workshop-run/~t/st1.abc/nova/r1/index.html"));
+        // …and the APPS / plugin windows, which frame the same way (macOS asks about their frames too)
+        assert!(ok("http://127.0.0.1:8787/plugin-ui/~t/st1.abc/weather/0123abcd/index.html"));
+        assert!(ok("http://127.0.0.1:8787/plugin-draft/~t/st1.abc/weather/0123abcd/index.html"));
+        assert!(ok("http://127.0.0.1:8787/app-ui/~t/st1.abc/notes/0123abcd/index.html"));
+        assert!(!ok("http://127.0.0.1:9999/app-ui/~t/st1.abc/notes/0123abcd/index.html"));
+        assert!(!ok("http://127.0.0.1:8787/app-uix/x"));
+        // …and nothing wider: the API, another port, another host, https, credentials, look-alike paths
+        assert!(!ok("http://127.0.0.1:8787/api/file?agent=a&path=x"));
+        assert!(!ok("http://127.0.0.1:8787/"));
+        assert!(!ok("http://127.0.0.1:9999/view/~t/x/nova/a.html"));
+        assert!(!ok("http://localhost:8787/view/~t/x/nova/a.html"));
+        assert!(!ok("https://127.0.0.1:8787/view/~t/x/nova/a.html"));
+        assert!(!ok("http://user:pw@127.0.0.1:8787/view/~t/x/nova/a.html"));
+        assert!(!ok("http://127.0.0.1:8787/viewer/x"));
+        assert!(!is_app_navigation(&tauri::Url::parse("http://127.0.0.1:0/view/x").unwrap(), 0));
     }
 }
 
@@ -4936,9 +5027,9 @@ fn main() {
                     return;
                 }
                 if let Some(state) = app.try_state::<AppState>() {
-                    // Stop the guardian from respawning before we kill the child.
+                    // Stop the guardian from respawning before we stop the child.
                     state.shutting_down.store(true, Ordering::SeqCst);
-                    state.kill_sidecar();
+                    stop_sidecar_gracefully(state.inner());
                 }
             }
         });

@@ -40,8 +40,13 @@ const WINDOWS_WAV_SCRIPT = [
   '$r=New-Object System.Speech.Recognition.SpeechRecognitionEngine',
   '$r.LoadGrammar((New-Object System.Speech.Recognition.DictationGrammar))',
   '$r.SetInputToWaveFile($env:STARNET_NATIVE_STT_WAV)',
-  '$x=$r.Recognize()',
-  "if($null -ne $x){Write-Output ('{0}|{1}' -f [int]($x.Confidence*1000),$x.Text)}",
+  // ONE Recognize() returns ONE phrase (it ends at a pause), so a two-click take "Open the report. Then
+  // summarize it." kept only its first sentence. Read phrase after phrase until Recognize() returns null — at the
+  // end of the file, or (System.Speech's own rule) on a stretch it rejects outright; measured with 1.5s of white
+  // noise between two sentences it still returned both. The cap bounds a pathological stream. One "conf|text"
+  // line per phrase.
+  '$n=0',
+  "while($n -lt 40 -and $null -ne ($x=$r.Recognize())){$n++;Write-Output ('{0}|{1}' -f [int]($x.Confidence*1000),$x.Text)}",
   '$r.Dispose()'
 ].join(';');
 
@@ -102,20 +107,26 @@ function makeNativeStt(opts) {
     };
   }
 
-  function runRecognition(script, signal, audioPath) {
+  function runRecognition(script, signal, audioPath, audioMs) {
     return new Promise(resolve => {
       const options = {
         windowsHide: true,
-        timeout: 20000,
+        // A long take is read phrase by phrase: allow for its own length, never less than the old 20s.
+        timeout: Math.max(20000, Math.round((audioMs || 0) * 1.5) + 10000),
         maxBuffer: 1 << 16,
         encoding: 'utf8'
       };
       if (signal) options.signal = signal;
       if (audioPath) options.env = Object.assign({}, processEnv, { STARNET_NATIVE_STT_WAV: audioPath });
       execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], options, (error, stdout) => {
-        const heard = parseRecognition(stdout);
-        const kept = gateTranscript(heard.text, heard.confidence, floor);
-        if (kept) return resolve({ ok: true, text: kept, confidence: heard.confidence });
+        // Each phrase is gated on its own: a cough between two real sentences must not cost either of them.
+        const phrases = String(stdout || '').split(/\r?\n/).filter(line => line.trim()).map(parseRecognition);
+        const keptPhrases = phrases.filter(ph => gateTranscript(ph.text, ph.confidence, floor));
+        const heard = { text: phrases.map(ph => ph.text).join(' ').trim(),
+          confidence: phrases.reduce((low, ph) => ph.confidence == null ? low : (low == null ? ph.confidence : Math.min(low, ph.confidence)), null) };
+        const kept = keptPhrases.map(ph => gateTranscript(ph.text, ph.confidence, floor)).join(' ').trim();
+        const keptConfidence = keptPhrases.reduce((low, ph) => ph.confidence == null ? low : (low == null ? ph.confidence : Math.min(low, ph.confidence)), null);
+        if (kept) return resolve({ ok: true, text: kept.slice(0, 4000), confidence: keptConfidence });
         // Heard SOMETHING, but not enough to act on. `ok:true` with an empty text and NO `error` field is the
         // contract the caller reads as "silence — listen again": setting `error` here would surface a red
         // failure in the panel for what is really just a quiet room.
@@ -136,7 +147,8 @@ function makeNativeStt(opts) {
     const tempPath = path.join(tempDir, 'starnet-stt-' + randomUUID() + '.wav');
     try {
       await fsp.writeFile(tempPath, wav);
-      return await runRecognition(WINDOWS_WAV_SCRIPT, params.signal, tempPath);
+      // 16 kHz mono PCM16 (float32PcmToWav) → 32 bytes per millisecond after the 44-byte header.
+      return await runRecognition(WINDOWS_WAV_SCRIPT, params.signal, tempPath, Math.max(0, wav.length - 44) / 32);
     } catch (_) {
       return { ok: false, text: '', error: 'native speech failed' };
     } finally {

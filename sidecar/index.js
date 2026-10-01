@@ -45,7 +45,7 @@ const { makeRegistry, outputBudgetFor, outputWindowFor } = require('./tools/regi
 const { makeOutputArtifacts } = require('./output-artifacts.js');
 const { makeWebTools, makePoliteScheduler } = require('./tools/builtin/web.js');
 const { makeWebReader } = require('./tools/builtin/webreader.js');
-const { makeBrowserTools } = require('./tools/builtin/browser.js');
+const { makeBrowserTools, _internals: browserInternals } = require('./tools/builtin/browser.js');
 // ONE reader for the whole sidecar (lazy: no Chrome until the first bot-walled fetch actually needs
 // it; idle self-teardown). Per-run construction would pay the Chrome cold start on every run.
 const stationWebReader = makeWebReader({ env: process.env });
@@ -215,6 +215,7 @@ const { makeConnectGateway } = require('./channels/discord.gateway.js');        
 const { makeSseHub, runTeeView } = require('./channels/sse.js');
 const { makeHandoffHost } = require('./browser-handoff.js');   // STEP-IN: the agent hands its live browser to the Commander
 const { makeHandoffRoutes, makeSigninStore, nudgeLine: handoffNudgeLine } = require('./browser-handoff-routes.js');
+const { makeBrowserViews, makeViewRoutes } = require('./browser-view.js');   // BROWSER window: watch a run's browser, browse yourself
 // relayWebhook (the signed-ingress verifier) is composed AFTER the WORKSPACES stores below —
 // its replay-nonce inbox is a durable JSONL sibling of the other ledgers.
 const { makeRouter } = require('./routing/router.js');
@@ -263,6 +264,13 @@ const Interests = require('./interests.js');               // SCOUT lane 1: pure
 const Scout = require('./scout.js');                        // SCOUT lane 2: pure drafting gates + recipe parse + the honest mint ledger
 const Discovery = require('./discovery.js');                // ENVIRONMENT DISCOVERY: blessed-root scan findings with verbatim citations (pure half)
 const Outcomes = require('./outcomes.js');                  // OUTCOME LEARNING: the run history folded into a support-gated track record (pure)
+// THE STATION BUILDER (2026-09-29): the lead's line menu, read from the same pure catalog the page builds from, and the
+// plans it has made (planId -> { summary, steps, at }) so the approval card for station.build shows the PLAN's words
+let stationLineMenu = () => [], stationKitMenu = () => [], stationPresetMenu = () => [], stationStyleMenu = () => [], stationRoomMenu = () => [];
+try { const RStyles = require('../frontend/app/roomstyles.js'); stationStyleMenu = () => RStyles.menu(); stationRoomMenu = () => RStyles.roomMenu(); } catch (_) { stationStyleMenu = () => []; stationRoomMenu = () => []; }
+try { const WMenu = require('../frontend/app/worldmodel.js'), SBuilder = require('../frontend/app/stationbuilder.js'); stationLineMenu = () => SBuilder.catalog(WMenu); } catch (_) { stationLineMenu = () => []; }
+try { const STpl = require('../frontend/app/stationtemplates.js'); stationKitMenu = () => STpl.kits().map(k => ({ name: k.name, about: k.about })); stationPresetMenu = () => STpl.catalog.filter(c => STpl.presetKits(c.id).length).map(c => c.name); } catch (_) { stationKitMenu = () => []; stationPresetMenu = () => []; }
+const stationPlanMemo = new Map();
 const ProspectGen = require('../frontend/app/prospect.js'); // SCOUT: the pure prospect generator — REUSED server-side (same directive + hard validation)
 const SharedSpecialties = require('../shared/specialties.js');           // SCOUT: builtin class catalog (prospect dedup + context)
 const RecipeCatalogAll = require('../frontend/app/recipe-catalog/index.js'); // SCOUT: builtin recipe catalog (draft dedup + context)
@@ -352,7 +360,7 @@ const { foldInsights } = require('./insights.js');                  // H3.3: usa
 const { makeVerifyTool } = require('./tools/builtin/verify.js');    // the workbench verify.run check-runner
 const { makeLspManager } = require('./lsp-manager.js');             // lazy installed-language-server edit diagnostics
 const { makeOrchestrationTools } = require('./tools/builtin/orchestration.js');   // Stage 2: team.dispatch (lead->worker delegation)
-const { makeStationTools } = require('./tools/builtin/station.js');               // session verbs (list/create/focus) over the station bridge
+const { makeStationTools, planSummaryFrom: stationPlanSummary } = require('./tools/builtin/station.js');               // session verbs (list/create/focus) over the station bridge
 const { makeRoutineTools } = require('./tools/builtin/routines.js'); // ROUTINES: agent-created StarNet cron jobs
 const { makeLoopTools } = require('./tools/builtin/loops.js');       // LOOPS: model-facing durable standing-objective controls
 const { makeCommsTools } = require('./tools/builtin/comms.js');      // COMMS: outbound reach — an agent messages a connected chat
@@ -651,6 +659,8 @@ function browserProfileLeaseFor(runId) {
   return {
     dir: BROWSER_PROFILE_DIR,
     acquire: () => { if (browserProfileHolder && browserProfileHolder !== runId) return false; browserProfileHolder = runId; return true; },
+    // lost to the STATION's shared browser (open for the Commander): browse on a temporary profile, never close theirs
+    fallback: () => browserProfileHolder === 'station-browser' && runId !== 'station-browser',
     release: () => { if (browserProfileHolder === runId) browserProfileHolder = null; }
   };
 }
@@ -4492,6 +4502,73 @@ const browserHandoffs = makeHandoffHost({
   }
 });
 const browserHandoffRoutes = makeHandoffRoutes({ host: browserHandoffs, readBody, respondJson, signins: browserSignins });
+/* THE STATION BROWSER (sidecar/browser-view.js): ONE built-in browser the Commander and the agents share. An
+   interactive (COMMS) run's browser.* tools are bound to it (runOnce asks sessionForRun). It is a real Chrome WINDOW
+   the Commander uses directly; the BROWSER window mirrors and controls it. Agent input stays synthetic and every
+   request still rides the pinned network proxy, and it holds the durable station profile under
+   its own lease id, so a sign-in either of you makes is there next time. It never gives the profile up to another run
+   (that would close the browser in front of the Commander): a run that loses to it browses on a temporary profile
+   (browserProfileLeaseFor → fallback). */
+const STATION_BROWSER_ID = 'station-browser';
+// A computer with no Chrome, Edge or Chromium gets Chrome for Testing downloaded on first use (sidecar/browser-install.js)
+const chromiumInstaller = require('./browser-install.js').makeChromiumInstaller({ root: path.join(WORKSPACES, '.browsers'), now: () => Date.now() });
+browserInternals.setExtraChrome(() => chromiumInstaller.find());
+// Hermes installs its browser at setup; StarNet starts that download shortly after launch — only on a computer with no
+// browser at all, never for a headless-pinned rig (CI, gates) and never when STARNET_BROWSER_DOWNLOAD=0.
+{
+  const t = setTimeout(() => {
+    if (browserInternals.headlessRequested(process.env) || /^(0|false|no|off)$/i.test(String(process.env.STARNET_BROWSER_DOWNLOAD || ''))) return;
+    if (browserInternals.resolveChrome(false) || !chromiumInstaller.platformKey) return;
+    chromiumInstaller.ensure().catch(e => failNote('browser-install.startup', e));
+  }, 5000);
+  if (t && typeof t.unref === 'function') t.unref();
+}
+const stationBrowserLogin = { prompt: undefined };   // browser.login's consent channel: the DRIVING run's prompt, set per run
+// Settings → Browser: where the station browser lives (sidecar/browser-view.js BROWSER_MODES). Default: a Chrome window.
+const BROWSER_SETTINGS_FILE = path.join(WORKSPACES, 'browser.settings.json');
+function readBrowserMode() { try { const v = fs.existsSync(BROWSER_SETTINGS_FILE) ? loadResilient(BROWSER_SETTINGS_FILE, 'browser-settings') : null; return (v && typeof v.mode === 'string') ? v.mode : 'window'; } catch (e) { failNote('browser-settings.read', e); return 'window'; } }
+function writeBrowserMode(mode) { saveResilient(BROWSER_SETTINGS_FILE, { mode: String(mode) }); }
+const browserViews = makeBrowserViews({
+  now: () => Date.now(),
+  readMode: readBrowserMode,
+  writeMode: writeBrowserMode,
+  chromeAvailable: () => false,   // YOUR CHROME needs the StarNet extension (its own lane): until then a window
+  // a Chrome window needs a screen and a real installed Chromium-family browser; otherwise the station browses built-in
+  windowAvailable: () => {
+    if (browserInternals.headlessRequested(process.env)) return false;
+    if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) return false;
+    const r = browserInternals.resolveChrome(true);
+    if (r) return !r.headless;
+    return !!chromiumInstaller.platformKey;   // none installed: one is downloaded on first use
+  },
+  browserSetup: () => chromiumInstaller.status(),
+  handoffLive: runId => browserHandoffs.isLive(runId),
+  attended: stationBrowserLogin,
+  // the driving agent's own jail: a download must land where that agent can read it back
+  downloadDirFor: agentId => /^[A-Za-z0-9_-]{1,40}$/.test(String(agentId || '')) ? path.join(WORKSPACES, String(agentId), 'downloads') : null,
+  // …and when the run lets go, the Commander's own downloads go to their Downloads folder again
+  commanderDownloadDir: () => path.join(os.homedir() || '.', 'Downloads'),
+  makeStationSession: mode => browserInternals.makeBrowserSession({
+    ledger: procLedger,
+    // A REAL WINDOW on the Commander's screen (Andrew: it must work like Claude Code / Codex / Hermes): they use it
+    // natively — typing, sign-in popups, full speed — and watch the agent drive it. Input from the AGENT stays
+    // synthetic (CDP events; the shim keeps pointer lock logical, so a page can never capture the real mouse).
+    // STARNET_BROWSER_HEADLESS=1 still pins it headless (CI, gates, soak rigs). It never attaches to another Chrome.
+    // built-in: headless — the BROWSER window IS the browser. window: a real Chrome window on the desktop.
+    allowVisible: mode === 'window', forceHeadless: mode !== 'window', preferVisible: mode === 'window', noAttach: true, syntheticInputOnly: true,
+    ensureChromium: () => chromiumInstaller.ensure(),
+    // browser.login opens the page IN this browser (no relaunch); a Chrome window is raised for the Commander
+    stationLogin: true,
+    onLoginOpen: v => { browserViews.signInOpen(v); return browserViews.front().catch(e => failNote('browser-view.login-front', e)); },
+    onLoginClose: () => browserViews.signInClose(),
+    cdpPort: 0,
+    profileDir: path.join(os.tmpdir(), 'starnet-browser-' + process.pid + '-' + STATION_BROWSER_ID),
+    cleanupProfile: true,
+    persistentProfile: browserProfileLeaseFor(STATION_BROWSER_ID),
+    attendedLogin: stationBrowserLogin
+  })
+});
+const browserViewRoutes = makeViewRoutes({ views: browserViews, readBody, respondJson });
 
 // H2.2: the SINGLETON background-process manager — persists across runs so a backgrounded dev server survives the
 // run that started it. shell.bg.exit fires AFTER the originating run's NDJSON stream closed, so it rides the
@@ -9900,7 +9977,7 @@ function rejectProcessFaultRequest(req, res) {
   const diagnosticRead = method === 'GET' && (pathname === '/api/health' || pathname === '/api/diagnostics');
   const staticRead = (method === 'GET' || method === 'HEAD') &&
     pathname.indexOf('/api') !== 0 && pathname.indexOf('/v1') !== 0 && pathname !== '/health' &&
-    pathname.indexOf('/workshop-run/') !== 0 && pathname.indexOf('/plugin-ui/') !== 0 && pathname.indexOf('/plugin-draft/') !== 0 && pathname.indexOf('/app-ui/') !== 0;
+    pathname.indexOf('/workshop-run/') !== 0 && pathname.indexOf('/view/') !== 0 && pathname.indexOf('/plugin-ui/') !== 0 && pathname.indexOf('/plugin-draft/') !== 0 && pathname.indexOf('/app-ui/') !== 0;
   if (diagnosticRead || staticRead) return false;
   if (pathname.indexOf('/api') === 0) {
     try { applyApiCors(req, res); } catch (e) { failNote('process-fault.reply-cors', e); }
@@ -10427,6 +10504,7 @@ const ROUTES = [
   // stt: qsplit == the old (url === '/api/stt' || url.indexOf('/api/stt?') === 0) disjunction, verbatim.
   { m: 'POST', qsplit: '/api/stt', h: media.handleStt, errorPolicy: media.sttFailOpenPolicy },
   { m: 'POST', exact: '/api/cancel', h: handleCancel },
+  ...browserViewRoutes.routes,      // BROWSER window: /api/browser/view* (sidecar/browser-view.js)
   ...browserHandoffRoutes.routes,   // STEP-IN: /api/browser/handoff* + /api/browser/signins* (sidecar/browser-handoff-routes.js)
   { m: 'POST', exact: '/api/run/steer', h: handleRunSteer },
   { m: 'GET', exact: '/api/version', h: handleVersion },
@@ -10688,6 +10766,7 @@ const ROUTES = [
   { m: 'GET', exact: '/api/state/snapshot', h: handleStateSnapshot },   // reconnect reconciliation (frontend lane consumes it)
   { m: 'GET', exact: '/api/agents/affinity', h: handleAgentAffinity },   // idle-life: the PROVEN social graph the world biases its social beats with
   { m: 'GET', exact: '/api/lifecycle/armed', h: handleLifecycleArmed },   // Lane 4D: tray supervisor's close-decision truth
+  { m: 'POST', exact: '/api/lifecycle/quit', h: handleLifecycleQuit },    // the desktop shell's Quit: shut down cleanly before it kills
   { m: 'GET', exact: '/api/cron', h: handleCronList },
   { m: 'POST', exact: '/api/cron', h: handleCronCreate },
   { m: 'POST', exact: '/api/cron/update', h: handleCronUpdate },
@@ -10738,6 +10817,9 @@ const ROUTES = [
   //   form /workshop-run/~t/<ticket>/<agentId>/<runId>/<path...> (a run-scoped capability, never the master token).
   //   This is NOT under /api/ so it never touches the /api CORS/token gate above — the handler enforces its own auth.
   { m: ['GET', 'HEAD'], qprefix: '/workshop-run/', h: serveWorkshopRun },
+  //   GET/HEAD /view/~t/<ticket>/<agentId>/<dir>/<path...> — the BROWSER window's in-app render of a workspace web
+  //   page (same opaque-origin sandbox as /workshop-run/; ticket-only, folder-scoped — see serveWorkspaceView).
+  { m: ['GET', 'HEAD'], qprefix: '/view/', h: serveWorkspaceView },
   //   GET/HEAD /plugin-ui/~t/<ticket>/<pluginId>/<digest>/<path...> — an APPROVED plugin's window files, sandboxed to
   //   an opaque origin, the kit injected into every page (sidecar/plugin-surface.js).
   { m: ['GET', 'HEAD'], qprefix: '/plugin-ui/', h: servePluginUi },
@@ -11196,13 +11278,17 @@ function gracefulShutdown(signal) {
   try { for (const ac of runs.values()) { try { ac.abort(); } catch (_) {} } } catch (_) {}   // abort any in-flight run so it stops spending
   try { if (typeof cronLock !== 'undefined' && cronLock && cronLock.release) cronLock.release(); } catch (_) {}   // drop cron.lock so the next boot's tick isn't wedged
   try { workspaceOwner.release(); } catch (_) {}   // drop the process-wide WORKSPACES owner claim on catchable shutdown
-  // BROWSER/CDP: the per-run browser session is created fresh per run and not retained at module scope (see the
-  // registry build in runOnce), so there is no persistent CDP handle to close here. A Chrome launched by an
-  // in-flight run is aborted via runs.abort() above; a detached window the user is watching is intentionally left
-  // to the user. (If a module-level browser-session registry is added later, close it here.)
+  // BROWSER/CDP: per-run browsers die with their runs (runs.abort() above). The STATION browser (sidecar/browser-view.js)
+  // outlives runs, so it is closed here (release review 2026-09-30: it was left running — a real Chrome window whose
+  // network proxy had died with the sidecar, so every page failed, still holding the durable profile). Browser.close
+  // flushes the profile, so sign-ins made just before quitting are kept; the shutdown deadline still bounds it.
+  let browserClosing = Promise.resolve();
+  try { browserClosing = Promise.resolve(browserViews.closeAll()).catch(e => failNote('shutdown.station-browser', e)); }
+  catch (e) { failNote('shutdown.station-browser', e); }
+  const afterBrowser = fn => Promise.race([browserClosing, new Promise(r => { const t = setTimeout(r, 2500); if (t.unref) t.unref(); })]).then(fn, fn);
   try {
     if (typeof server !== 'undefined' && server && server.close) {
-      server.close(() => { clearTimeout(deadline); process.exit(0); });   // stop accepting; exit once connections drain
+      server.close(() => afterBrowser(() => { clearTimeout(deadline); process.exit(0); }));   // stop accepting; exit once connections drain + the browser closed
       // don't wait on lingering keep-alive sockets — force them closed so close()'s callback fires promptly.
       if (typeof server.closeAllConnections === 'function') { try { server.closeAllConnections(); } catch (_) {} }
     } else { clearTimeout(deadline); process.exit(0); }
@@ -12260,18 +12346,21 @@ function handleCreditsLinkable(req, res) {
   creditsJson(res, 200, { available: available, cloud: creditsLink.configured(), reason: revoked ? 'link_revoked' : '' });
 }
 
-// ---- player-made props (200-always media contract: failures are {ok:false, code, message}) ----
+// ---- player-made props (200-always JSON contract: failures are {ok:false, code, message}) ----
+// `recent` = jobs settled in the last 24h, so the page can report a failure that happened while REFIT was closed.
 function handleUserPropsList(req, res) {
-  let props = [], jobs = [], deleted = [];
-  try { props = userProps.list(); jobs = userProps.activeJobs(); deleted = userProps.deleted(); } catch (e) { failNote('userprops.list', e); }
-  return respondJson(res, 200, { props, jobs, deleted });
+  let props = [], jobs = [], deleted = [], recent = [];
+  try { props = userProps.list(); jobs = userProps.activeJobs(); deleted = userProps.deleted(); recent = userProps.recentJobs(); } catch (e) { failNote('userprops.list', e); }
+  return respondJson(res, 200, { props, jobs, deleted, recent });
 }
+// The ONE exception to the 200-always contract: this route serves image bytes to a blob fetch, so a bad id is a
+// real 400 and a missing file a real 404 (a 200 JSON body would be decoded as a broken PNG).
 function handleUserPropImage(req, res) {
   const q = new URL(req.url, 'http://x').searchParams;
   const file = userProps.imageFile(q.get('id') || '', q.get('view') || undefined);
   if (!file) return respondJson(res, 400, { error: 'bad prop id' });
   let buf;
-  try { buf = fs.readFileSync(file); } catch (_) { return respondJson(res, 404, { error: 'no such prop' }); }
+  try { buf = fs.readFileSync(file); } catch (e) { if (!(e && e.code === 'ENOENT')) failNote('userprops.image', e); return respondJson(res, 404, { error: 'no such prop' }); }
   res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Length': buf.length });
   return res.end(buf);
 }
@@ -12280,7 +12369,7 @@ async function handleUserPropGenerate(req, res) {
   if (body == null) return respondJson(res, 200, { ok: false, code: 'bad_request', message: 'Could not read that request.' });
   let r;
   try { r = await userProps.start(body.noun, body.previewId); }
-  catch (e) { r = { ok: false, code: 'internal', message: 'The station could not start that prop.' }; }
+  catch (e) { failNote('userprops.generate', e); r = { ok: false, code: 'internal', message: 'The station could not start that prop.' }; }
   return respondJson(res, 200, r);
 }
 async function handleUserPropSide(req, res) {
@@ -13870,6 +13959,17 @@ function handleLifecycleArmed(req, res) {
   // parseable by every shipped shell parser.
   res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Content-Length': Buffer.byteLength(body) });
   res.end(body);
+}
+
+/* POST /api/lifecycle/quit — the desktop shell is quitting. On Windows the shell ends the sidecar with TerminateProcess
+   (no signal reaches gracefulShutdown), which left the STATION browser running: a real Chrome window whose network proxy
+   had died with the sidecar, every page failing, still holding the durable profile (release review 2026-09-30). The
+   shell now asks first; this answers at once and runs the same gracefulShutdown a SIGTERM would (bounded by its 3 s
+   deadline), and the shell still kills whatever is left after its own wait. Token-gated like every /api route. */
+function handleLifecycleQuit(req, res) {
+  const body = JSON.stringify({ ok: true, shuttingDown: true });
+  res.writeHead(202, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Content-Length': Buffer.byteLength(body) });
+  res.end(body, () => setImmediate(() => gracefulShutdown('desktop-quit')));
 }
 
 /* GET /api/state/snapshot — a RECONNECTION snapshot for the frontend (Lane E). After the SSE bridge drops and
@@ -15887,6 +15987,57 @@ async function serveWorkshopRun(req, res) {
   stream.pipe(res);
 }
 
+/* GET/HEAD /view/~t/<ticket>/<agentId>/<dir>/<path...> — the BROWSER window (frontend/app/outputbrowser.js) shows a
+   web page an agent wrote into its WORKSPACE, in the app, the way /workshop-run/ serves an away-built tool. /api/file
+   deliberately serves the same .html as an inert download (scripts dead), which is right for a link but can never
+   RENDER a page. This route renders it, under the identical opaque-origin sandbox as /workshop-run/:
+     · the ticket is REQUIRED (no master-token or header form) and covers ONE folder — <dir> is a single encoded
+       segment ('~' = workspace root) the verifier derives the scope from, so the page's relative assets load and a
+       '../' out of the folder fails the MAC;
+     · the tail may not climb ('.'/'..'), and no dot-file/dot-folder is ever served (.env, .git …) — a page needs
+       none of them and a workspace can hold them;
+     · fsJail.resolveInside is the final wall (absolute / symlink / bad agentId escapes all throw). */
+async function serveWorkspaceView(req, res) {
+  const reqPath = String(req.url || '').split('?')[0];
+  const ticketed = apitickets.splitViewTicket(reqPath);
+  if (!ticketed) { res.writeHead(403); return res.end('forbidden'); }
+  let abs;
+  try {
+    const segs = ticketed.rest.split('/');
+    if (segs.length < 3) { res.writeHead(404); return res.end('not found'); }
+    const agentId = decodeURIComponent(segs[0]);
+    const dirSeg = decodeURIComponent(segs[1]);
+    const dir = dirSeg === '~' ? '' : dirSeg;
+    const tail = segs.slice(2).map(decodeURIComponent);
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(agentId)) { res.writeHead(403); return res.end('forbidden'); }
+    const parts = (dir ? dir.split('/') : []).concat(tail.join('/').split('/'));
+    if (parts.some(s => !s || s.charAt(0) === '.' || s.indexOf('\\') >= 0)) { res.writeHead(403); return res.end('forbidden'); }
+    const v = apitickets.verify(API_TOKEN, ticketed.ticket, 'view', apitickets.scopeView(agentId, dir), { now: Date.now() });
+    if (!v.ok) { res.writeHead(403); return res.end('forbidden ticket'); }
+    ({ abs } = await fsJail.resolveInside(agentId, parts.join('/')));
+  } catch (e) {
+    const msg = (e && e.message) || '';
+    if (/escape|illegal|bad agentId|URI/.test(msg)) { res.writeHead(403); return res.end('forbidden'); }
+    res.writeHead(404); return res.end('not found');
+  }
+  let st;
+  try { st = await fsp.stat(abs); } catch (_) { res.writeHead(404); return res.end('not found'); }
+  if (!st.isFile()) { res.writeHead(404); return res.end('not found'); }
+  const headers = {
+    'Content-Type': MIME[path.extname(abs).toLowerCase()] || 'application/octet-stream',
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'Content-Security-Policy': 'sandbox allow-scripts',   // opaque origin: scripts run, the app token/API stay out of reach
+    'Referrer-Policy': 'no-referrer'
+  };
+  if (req.method === 'HEAD') { headers['Content-Length'] = st.size; res.writeHead(200, headers); return res.end(); }
+  res.writeHead(200, headers);
+  const stream = fs.createReadStream(abs);
+  stream.on('error', () => { try { res.destroy(); } catch (e) { failNote('view.res-destroy', e); } });
+  req.on('close', () => { try { stream.destroy(); } catch (e) { failNote('view.stream-destroy', e); } });
+  stream.pipe(res);
+}
+
 // POST /api/workshop/open is an inert compatibility response. API possession is
 // not proof of a fresh human gesture and can never launch a desktop application.
 async function handleWorkshopOpen(req, res) {
@@ -17300,6 +17451,8 @@ async function handleRun(req, res) {
       retryUserRunId: body && body.retryUserRunId,
       surface: 'interactive', prompt: promptConsent, pathPrompt: promptPathTrust, summon: summonRequest,   // team.summon → live summonAgent() round-trip; pathPrompt → NS-5 "work in <root>?" bless
       loginPrompt: askHuman,   // attended browser login: browser.login's two consent asks ride the same fail-closed permission.prompt channel
+      // the Commander is AT the station (COMMS): this run may drive the shared, signed-in station browser
+      stationBrowser: true,
       idempotencyScope: connectorContinuationScope,
       parentRunId: connectorContinuationScope ? body.connectorContinuationOf : undefined,
       askCommander,            // in-turn clarify: brief.ask blocks + resumes the SAME turn on this watched surface
@@ -17479,6 +17632,13 @@ async function runOnce(o) {
    (past the stream's queue) until it returns; the snapshot merges it. Only real in-flight LINE runs — never a guess. */
 const hostLiveRuns = new Map();   // runId -> { agentId, startedAt, source }
 async function runOnceTracked(o) {
+  // BELT for the station browser: whatever way a run leaves (a throw before its own cleanup included), it must not
+  // stay the browser's "driver" — that would lock the Commander out of their own browser. releaseRun is a no-op for
+  // a run that never drove it.
+  try { return await runOnceTrackedInner(o); }
+  finally { if (o && o.runId) { try { browserViews.releaseRun(String(o.runId)); } catch (e) { failNote('browser-view.release-belt', e); } } }
+}
+async function runOnceTrackedInner(o) {
   const rid = o && o.runId ? String(o.runId) : '';
   // LINE work only (a run the host stamped with its line or bay): harness self-talk and plain chats keep their own
   // registries — this map exists so a bay lamp is never stood down while its run is really working
@@ -17750,6 +17910,7 @@ async function runOnceCore(o) {
   // Per-run headless CDP session. Kept outside the try so the outer finally always closes it,
   // including provider refusal, abort, timeout, and thrown-tool paths.
   let runBrowser = null;
+  let runStationBrowser = null;   // the station's shared browser, when THIS run drives it (else a private per-run one)
   let runComputer = null;
   // Only user-facing callers with a stable conversation key receive the intent layer. Unattended cron/night-shift
   // work has nobody present to answer and therefore remains byte-for-byte on its existing execution path.
@@ -17875,13 +18036,16 @@ async function runOnceCore(o) {
   let runRecipes = [];
   const openrouterToolKey = providerId === 'openrouter' ? runKey : runtimeKey;
   const studioRoute = ImageTask.resolveRoute({
-    providerId, runKey, providerBaseUrl: baseUrl,
+    providerId: providerUsesCodex(providerId) ? 'codex' : providerId, runKey, providerBaseUrl: baseUrl,
     managedKey: providerRuntimeKey('starnet', ''),
     managedBaseUrl: providerRuntimeBaseUrl('starnet', ''),
     stationOpenRouterKey: runtimeKey,
     stationOpenRouterBaseUrl: providerRuntimeBaseUrl('openrouter', ''),
     stationOpenAIKey: providerRuntimeKey('openai', ''),
-    stationOpenAIBaseUrl: providerRuntimeBaseUrl('openai', '')
+    stationOpenAIBaseUrl: providerRuntimeBaseUrl('openai', ''),
+    // the station's ChatGPT sign-in renders gpt-image-2 on the plan (image.js codex-responses); a known-dead
+    // sign-in is not a route, so the blocker names the real fix instead of a 401 mid-run
+    codexSignedIn: !!(codexTokens && codexTokens.access_token) && !codexAuthDead
   });
   // web_search/web_fetch (DDG/Jina, OR fallback) + web_request. `accessSurface` is host authority: it comes
   // from the run host, never from tool args. An authenticated owner DM has the same stored-key reach as the
@@ -17964,10 +18128,19 @@ async function runOnceCore(o) {
       return out;
     } finally { clearTimeout(t); }
   };
-  const imageTools = makeImageTools({ openrouter: studioRoute.ok ? { apiKey: studioRoute.key, model, baseUrl: studioRoute.baseUrl, provider: studioRoute.provider, protocol: studioRoute.protocol } : null, fsp, pathMod: path, root: WORKSPACES, imageModel: String(ENV('IMAGE_MODEL') || '').trim() || undefined, auxVision: auxVisionCall, signal, onUsage: recordMediaUsage });
+  const imageTools = makeImageTools({ openrouter: studioRoute.ok ? { apiKey: studioRoute.key, model, baseUrl: studioRoute.baseUrl, provider: studioRoute.provider, protocol: studioRoute.protocol,
+    getToken: studioRoute.protocol === 'codex-responses' ? ensureCodexAccessToken : undefined,
+    renewToken: studioRoute.protocol === 'codex-responses' ? forceRefreshCodexAccessToken : undefined } : null, fsp, pathMod: path, root: WORKSPACES, imageModel: String(ENV('IMAGE_MODEL') || '').trim() || undefined, auxVision: auxVisionCall, signal, onUsage: recordMediaUsage });
   // browser.vision uses the SAME vision model as image_analyze when a key exists; with no key it
   // reports "unavailable" honestly (never a success-shaped stub). Pass the dep only when usable.
-  runBrowser = makeBrowserTools({
+  // An interactive run drives the STATION browser — the one the Commander sees and uses — when it is free. Anything
+  // else (unattended runs, or a second run while another is driving) gets a private per-run browser as before.
+  /* PRIVACY (release review 2026-09-30): 'interactive' is also the surface of Telegram/Discord chats with approvals on
+     (including allowed group chats), STARNET REMOTE phone runs and group sessions — none of which is the Commander
+     sitting at this desktop. The shared station browser carries their sign-ins and open tabs, so only a run started
+     from COMMS (the stationBrowser flag) may drive it; every other run browses in a private browser, as before. */
+  const runBrowserDeps = {
+    ensureChromium: () => chromiumInstaller.ensure(),
     vision: imageTools.hasVision ? imageTools.browserVision : null,
     ledger: procLedger,
     // The workspace jail, so browser.screenshot can SAVE a frame and emit it as a deliverable
@@ -18005,8 +18178,13 @@ async function runOnceCore(o) {
       // fall back to a different port when the requested one belongs to another process.
       return backgroundOwnsLocalUrl(st, url, loopbackListenerProbe);
     }
-  });
+  };
+  runStationBrowser = await browserViews.sessionForRun({ agentId, runId, interactive: surface === 'interactive' && o.stationBrowser === true, loginPrompt: o.loginPrompt,
+    // the station browser is busy with another run: this run browses in a private browser built exactly as below
+    makePrivate: () => browserInternals.makeBrowserSession(runBrowserDeps) });
+  runBrowser = makeBrowserTools(Object.assign({ session: runStationBrowser || undefined }, runBrowserDeps));
   runBrowser.register(registry);   // browser.* + isolated browser.test_* automation
+  if (!runStationBrowser) browserViews.registerRun({ agentId, runId, session: runBrowser.session });   // a private browser: the Commander may still watch it
   makeDesktopTools({ allowRemoteDesktop: DESKTOP_SHELL }).register(registry);
   // NS-5: bind the per-run path-trust guard — the ONE way an fs call may reach outside the jail, mediated
   // against the station's blessed project roots. surface + pathPrompt are per-run: an autonomous run passes
@@ -18143,6 +18321,8 @@ async function runOnceCore(o) {
   // worker can never open or steal the Commander's sessions. Only visual actions require a live page.
   makeStationTools({ station: require('./overseer.js').isCoordinatorRun({ ...o, agentId, surface })
     ? overseerStation(o.streamId, runId) : stationBridge, scanText: t => cronGuard.scanRoutinePrompt(t), now: () => Date.now(),
+    planMemo: stationPlanMemo, lineMenu: stationLineMenu, kitMenu: stationKitMenu, presetMenu: stationPresetMenu, styleMenu: stationStyleMenu, roomMenu: stationRoomMenu,
+    userProps,   // MAKE A PROP: the station's own prop maker (StarNet credits), for station.make_prop
     // station.layout's HARNESS facts (audit 2026-09-28): the plan the router actually holds, each line's effective
     // budget (the runner's own effectiveLimits), and today's numbers since local midnight (the line plate's window)
     layoutFacts: {
@@ -19643,7 +19823,7 @@ async function runOnceCore(o) {
     teamNote += '\n• CREW CONFIGURATION: use team.config to read Dossier documents, then team.configure to edit the requested agent by exact ID. '
       + 'A notebook entry does not update another agent\'s Purpose or standing orders. Report a change only after the tool confirms it was saved. '
       + 'Dossier Purpose and standing orders describe the ongoing role; Bay briefs add the workflow-stage job. '
-      + 'Bay assignment, briefs, and assembly-line layout are configured in the station UI; do not claim to change them with a Dossier or notebook edit. '
+      + 'A Dossier or notebook edit changes no Bay, brief or floor; to change the floor, tool_search "station builder" and claim only what station.build reports. '
       + 'To explain or troubleshoot Bays and assembly lines (what runs, in what order, what starts a line, why a step is not running), read station.layout first and quote its status; never answer from memory.';
     /* SESSIONS (2026-07-30): the lead can also RUN the station's sessions — and the peek rule exists because
        of a live failure: asked "what did the researcher do?", a lead with no way to read the other session
@@ -20573,8 +20753,11 @@ async function runOnceCore(o) {
     if (billed) { try { credits.finishRun({ runId, agentId, usd: 0, reason: 'leak-guard' }); } catch (_) {} }
     // A test browser must die with its run. Besides process hygiene, this guarantees that a
     // broken page cannot retain any browser-level state after the task finishes.
-    try { browserHandoffs.abortRun(runId); } catch (e) { failNote('stepin.abortRun', e); }   // STEP-IN: a handoff never outlives its run
-    if (runBrowser) { try { await runBrowser.session.close(); } catch (_) {} }
+    try { browserHandoffs.abortRun(runId); } catch (e) { failNote('stepin.abort-run', e); }   // STEP-IN: a handoff never outlives its run
+    try { browserViews.unregisterRun(runId); } catch (e) { failNote('browser-view.unregister', e); }   // before close: never capture a closing browser
+    // The station browser OUTLIVES the run: the page stays for the Commander (and the next run). Only a private one closes.
+    if (runStationBrowser) { try { browserViews.releaseRun(runId); } catch (e) { failNote('browser-view.release', e); } }
+    else if (runBrowser) { try { await runBrowser.session.close(); } catch (_) {} }
     if (runComputer?.close) { try { await runComputer.close(); } catch (_) { failNote('computer.run.close', 'Native run cleanup failed'); } }
     computerRuns.delete(runComputer);
     concurrencyGate.leave(agentId);   // release the admission slot on EVERY exit (normal, early-return, or throw)
@@ -22916,6 +23099,9 @@ function consentSummary(call) {
   if (/^fs[._](?:write|append|edit|patch)$/.test(String(call && call.name || ''))) {
     try { return JSON.stringify(redact(a), null, 2); } catch (_) { return '[mutation payload unavailable]'; }
   }
+  // the station builder: the card shows what the dry run found (the plan's summary + every step's instructions), never the model's words
+  if (/^station[._]build$/.test(String(call && call.name || ''))) return stationPlanSummary(stationPlanMemo, a.planId) || 'an unknown or expired plan: it will be refused, and nothing will be built';
+  if (/^station[._]make_prop$/.test(String(call && call.name || ''))) return '"' + String(a.describe || '').replace(/\s+/g, ' ').trim().slice(0, 60) + '", drawn with your StarNet credits (about $0.35' + (a.sideView ? ', and about $0.30 more for its side view' : '') + '). It joins your MADE BY YOU library; nothing is placed until a plan says so.';
   if (typeof a.path === 'string' && a.path) return a.path;
   try { const s = JSON.stringify(a); return s.length > 80 ? s.slice(0, 77) + '…' : s; } catch (_) { return ''; }
 }

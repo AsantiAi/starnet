@@ -1,7 +1,9 @@
 /* sidecar/tools/builtin/image.js — the STUDIO capability: image_generate(prompt) + image_analyze(image).
 
-   Generation rides the media route resolved by the host: OpenRouter-compatible chat completions or
-   OpenAI's dedicated Images API. Credentials remain paired with their provider endpoint.
+   Generation rides the media route resolved by the host: OpenRouter-compatible chat completions,
+   OpenAI's dedicated Images API, or the ChatGPT plan (gpt-image-2 through the Codex Responses
+   image_generation tool, authorized by the station's ChatGPT sign-in, no API key). Credentials remain
+   paired with their provider endpoint.
 
      image_generate  : POST /chat/completions with modalities:['image','text']. The model returns a
                        base64 data-URL PNG in choices[0].message.images[]; we decode it and save it into
@@ -36,6 +38,17 @@
   const DEFAULT_OR_URL = 'https://openrouter.ai/api/v1/chat/completions';
   const DEFAULT_OPENAI_IMAGE_URL = 'https://api.openai.com/v1/images/generations';
   const OPENAI_IMAGE_MODEL = 'gpt-image-2';
+  /* 2026-10-01 ChatGPT-plan images (the reference harness's openai-codex image backend): the Codex backend has no
+     Images endpoint, but its Responses wire hosts the image_generation tool, so a chat model is asked to call it and
+     the rendered PNG comes back as an image_generation_call result. Live probe on a Pro sign-in: 200, a PNG in 18s at
+     low quality; background:'transparent' returned a real RGBA PNG. Two wire facts the reference learned the hard way:
+     tool_choice must be OMITTED (the backend looks hosted tools up as function names and 400s every forcing shape),
+     and originator:codex_cli_rs is required past the Cloudflare layer. The host chat model is fixed: the run's own
+     model may be a slug the image tool does not ride. */
+  const DEFAULT_CODEX_URL = 'https://chatgpt.com/backend-api/codex';
+  const CODEX_HOST_MODEL = 'gpt-5.5';
+  const CODEX_IMAGE_QUALITY = 'medium';   // the reference default: ~40s; 'high' runs ~2 minutes, past this tool's timeout
+  const CODEX_INSTRUCTIONS = 'You are an assistant that must fulfill image generation and image editing requests by using the image_generation tool when provided.';
   // 2026-07-07 image-quality escape: the old default (gemini-2.5-flash-image, "Nano Banana 1") is the OLDEST
   // image model in the live OpenRouter catalog — garbled text on UI mockups/marketing assets was its signature.
   // Default = current-gen fast (Nano Banana 2); PREMIUM = Nano Banana Pro (built for legible text / hero art);
@@ -162,6 +175,37 @@
     if (item.b64_json) return 'data:image/png;base64,' + item.b64_json;
     return String(item.url || '');
   }
+  // The Codex Responses SSE stream -> { image (base64 PNG), text, failed }. The FINAL image_generation_call result
+  // wins; a partial frame is kept only as a fallback. Liberal on event shape: the backend ships image events newer
+  // than any SDK knows.
+  function parseCodexImageStream(raw) {
+    let finalB64 = '', partialB64 = '', text = '', failed = '';
+    for (const block of String(raw || '').split(/\r?\n\r?\n/)) {
+      const data = block.split(/\r?\n/).filter(l => l.startsWith('data:')).map(l => l.slice(5).trim()).join('\n');
+      if (!data || data === '[DONE]') continue;
+      let ev; try { ev = JSON.parse(data); } catch (_) { continue; }
+      if (!ev || typeof ev !== 'object') continue;
+      if (typeof ev.partial_image_b64 === 'string' && ev.partial_image_b64) partialB64 = ev.partial_image_b64;
+      const items = [];
+      if (ev.item) items.push(ev.item);
+      if (ev.response && Array.isArray(ev.response.output)) items.push(...ev.response.output);
+      for (const it of items) if (it && it.type === 'image_generation_call' && typeof it.result === 'string' && it.result) finalB64 = it.result;
+      if (ev.type === 'response.output_text.done' && typeof ev.text === 'string') text = ev.text;
+      if (ev.type === 'response.failed' || ev.type === 'error') {
+        const er = (ev.response && ev.response.error) || ev.error || ev;
+        failed = String((er && (er.message || er.code)) || 'the response failed');
+      }
+    }
+    return { image: finalB64 || partialB64, text: text.trim(), failed };
+  }
+  // ChatGPT-Account-ID rides the OAuth JWT's own claim (codex-rs auth.rs); a malformed token just omits the header.
+  function jwtAccountId(token) {
+    try {
+      const claims = JSON.parse(Buffer.from(String(token).split('.')[1] || '', 'base64url').toString('utf8'));
+      const id = claims && claims['https://api.openai.com/auth'] && claims['https://api.openai.com/auth'].chatgpt_account_id;
+      return typeof id === 'string' ? id : '';
+    } catch (_) { return ''; }
+  }
   function openAIImageSize(shape) {
     if (!shape || !shape.ratio) return '1024x1024';
     const parts = String(shape.ratio).split(':').map(Number);
@@ -283,17 +327,25 @@
     const or = deps.openrouter || {};
     const apiKey = or.apiKey || deps.apiKey || '';
     const protocol = or.protocol || 'openrouter-chat';
-    const providerLabel = or.provider === 'starnet' ? 'StarNet' : (or.provider === 'openai' ? 'OpenAI' : 'OpenRouter');
+    // The ChatGPT plan renders the same gpt-image models as the OpenAI Images API, so model choice, transparency and
+    // sizing follow one rule set; only the transport differs.
+    const isCodex = protocol === 'codex-responses';
+    const gptImageRoute = protocol === 'openai-images' || isCodex;
+    const providerLabel = or.provider === 'starnet' ? 'StarNet' : (or.provider === 'openai' ? 'OpenAI' : (isCodex ? 'ChatGPT' : 'OpenRouter'));
+    const getCodexToken = typeof or.getToken === 'function' ? or.getToken : null;
+    const renewCodexToken = typeof or.renewToken === 'function' ? or.renewToken : null;
     const orBaseUrl = String(or.baseUrl || deps.baseUrl || '').trim().replace(/\/+$/, '');
     const orUrl = orBaseUrl ? orBaseUrl + '/chat/completions' : DEFAULT_OR_URL;
     const openAIImageUrl = orBaseUrl ? orBaseUrl + '/images/generations' : DEFAULT_OPENAI_IMAGE_URL;
+    const codexUrl = (isCodex && orBaseUrl ? orBaseUrl : DEFAULT_CODEX_URL) + '/responses';
     const fsp = deps.fsp, P = deps.pathMod, ROOT = deps.root;
     if (!fsp || !P || !ROOT) throw new Error('image.js requires { fsp, pathMod, root }');
     const doFetch = deps.fetchImpl || (typeof fetch !== 'undefined' ? fetch : null);
     if (!doFetch) throw new Error('image.js requires global fetch (Node 18+) or deps.fetchImpl');
     const configuredImageModel = String(deps.imageModel || '').trim();
-    const IMAGE_MODEL  = protocol === 'openai-images'
-      ? (/^(?:gpt-image-|dall-e-)/i.test(configuredImageModel) ? configuredImageModel : OPENAI_IMAGE_MODEL)
+    const gptImageSlug = isCodex ? /^gpt-image-/i : /^(?:gpt-image-|dall-e-)/i;   // the hosted tool takes no DALL-E
+    const IMAGE_MODEL  = gptImageRoute
+      ? (gptImageSlug.test(configuredImageModel) ? configuredImageModel : OPENAI_IMAGE_MODEL)
       : (configuredImageModel || DEFAULT_IMAGE_MODEL);
     const VISION_MODEL = deps.visionModel || or.model || DEFAULT_VISION_MODEL;
     // Auxiliary vision route: a one-shot text answer from the RUN's own provider/model (injected by the run
@@ -354,19 +406,56 @@
       return res.json || {};
     }
 
+    // One image_generation call on the ChatGPT plan. Returns the Images-API response shape ({ data:[{ b64_json }] }) so
+    // the publish path below stays one path. No usage is booked: the plan is flat-rate, and the host chat model's
+    // token counts would otherwise be priced at API rates the user never pays.
+    async function codexImagePost(tool, prompt, timeoutMs, parentSignal) {
+      checkCancelled(parentSignal);
+      if (!getCodexToken) throw new Error('STUDIO image generation is unavailable: the ChatGPT sign-in is not connected. Open SETTINGS and sign in to ChatGPT, or connect an OpenAI or OpenRouter API key, then retry; no image was produced.');
+      const body = {
+        model: CODEX_HOST_MODEL, store: false, stream: true, instructions: CODEX_INSTRUCTIONS,
+        input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: prompt }] }],
+        tools: [Object.assign({ type: 'image_generation', output_format: 'png', partial_images: 1 }, tool)]
+        // no tool_choice: see DEFAULT_CODEX_URL above
+      };
+      const send = (token) => {
+        const headers = {
+          'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', 'Accept': 'text/event-stream',
+          'originator': 'codex_cli_rs', 'User-Agent': 'codex_cli_rs/0.0.0 (StarNet)'
+        };
+        const account = jwtAccountId(token);
+        if (account) headers['ChatGPT-Account-ID'] = account;
+        return withTimeout(signal => doFetch(codexUrl, { method: 'POST', headers, body: JSON.stringify(body), signal })
+          .then(async r => ({ status: r.status, text: await r.text() })), timeoutMs, parentSignal || deps.signal);
+      };
+      let token = await getCodexToken();
+      let res = await send(token);
+      // The server is the authority on expiry (codex.js renewToken law): one renew + retry on a 401.
+      if (res.status === 401 && renewCodexToken) { checkCancelled(parentSignal); token = await renewCodexToken(token); res = await send(token); }
+      if (res.status < 200 || res.status >= 300) {
+        let errMsg = 'http ' + res.status;
+        try { const j = JSON.parse(res.text); errMsg = (j && j.error && (j.error.message || j.error.code)) || (j && j.detail) || errMsg; }
+        catch (_) { if (res.text) errMsg = String(res.text).slice(0, 300); }
+        throw new Error('ChatGPT ' + res.status + ': ' + (typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg)));
+      }
+      const out = parseCodexImageStream(res.text);
+      if (!out.image && out.failed) throw new Error('ChatGPT image generation failed: ' + out.failed);
+      return { data: out.image ? [{ b64_json: out.image }] : [], choices: out.text ? [{ message: { content: out.text } }] : [] };
+    }
+
     // ---------------- image_generate ----------------
     const generateTool = {
       name: 'image_generate', capability: 'studio', scope: 'write', requiresConsent: true, timeoutMs: GEN_TIMEOUT_MS + 15000,
       description: 'Generate an image from a text prompt and SAVE it into your workspace (returns the saved path + a viewer URL). ' +
         'Use for any "draw / create / generate an image of …" request. Optional "model" picks the image model: ' +
-        (protocol === 'openai-images'
-          ? 'default ' + OPENAI_IMAGE_MODEL + ' through the connected OpenAI Images API. Optional "path" sets the output filename. '
+        (gptImageRoute
+          ? 'default ' + OPENAI_IMAGE_MODEL + (isCodex ? ' through the signed-in ChatGPT plan (no API key; about 40s per image). ' : ' through the connected OpenAI Images API. ') + 'Optional "path" sets the output filename. '
           : 'default ' + DEFAULT_IMAGE_MODEL + ' (fast, current-gen). For HERO/MARKETING assets or ANY image that must show ' +
             'READABLE TEXT (UI mockups, landing pages, posters, infographics, product concepts), pass model:"' + PREMIUM_IMAGE_MODEL + '" ' +
             '— it renders legible text; the fast tier garbles it. Optional "path" sets the output filename. ') +
         'For a TRANSPARENT background (logos, stickers, icons, print-on-demand art) set "transparent":true: ' +
-        (protocol === 'openai-images'
-          ? 'it asks the Images API for a real alpha channel '
+        (gptImageRoute
+          ? 'it asks ' + (isCodex ? 'gpt-image' : 'the Images API') + ' for a real alpha channel '
           : 'Gemini image models cannot make one (they paint a checkerboard), so it switches to ' + TRANSPARENT_IMAGE_MODEL + ' ') +
         'and verifies the saved file, and the result says plainly if the image came back opaque. ' +
         'Optional "aspect_ratio" sets the image shape — ANY ratio or size works: "16:9", "4:3", "1920x1080", "1.5", ' +
@@ -393,14 +482,14 @@
         const transparent = args.transparent === true || (args.transparent !== false && TRANSPARENT_ASK.test(prompt));
         const explicitModel = String(args.model || '').trim();
         const requestedModel = String(explicitModel || IMAGE_MODEL).trim();
-        let model = protocol === 'openai-images' && !/^(?:gpt-image-|dall-e-)/i.test(requestedModel)
+        let model = gptImageRoute && !gptImageSlug.test(requestedModel)
           ? IMAGE_MODEL : requestedModel;
         // A transparent render leaves any model that cannot output alpha: the default or knob model when it is not
         // alpha-capable, and an explicit Gemini choice. An explicit model of unknown ability is kept, and the
         // verdict below reads its bytes. On the Images API only DALL-E lacks the background parameter.
         let switchNote = '';
         if (transparent) {
-          const to = protocol === 'openai-images'
+          const to = gptImageRoute
             ? (/^dall-e-/i.test(model) ? OPENAI_IMAGE_MODEL : '')
             : ((ALPHA_MODEL.test(model) || (explicitModel && !OPAQUE_MODEL.test(model))) ? '' : TRANSPARENT_IMAGE_MODEL);
           if (to) { switchNote = model + ' cannot output transparency, so ' + to + ' rendered this'; model = to; }
@@ -418,7 +507,11 @@
         const baseBody = { messages: [{ role: 'user', content: genPrompt }], modalities: ['image', 'text'] };
         if (aspect) baseBody.image_config = { aspect_ratio: aspect };
         let data;
-        if (protocol === 'openai-images') {
+        if (isCodex) {
+          // the hosted tool takes the Images API's own parameters; quality is pinned (see CODEX_IMAGE_QUALITY)
+          data = await codexImagePost({ model, size: openAIImageSize(shape), quality: CODEX_IMAGE_QUALITY, background: transparent ? 'transparent' : 'opaque' },
+            genPrompt, GEN_TIMEOUT_MS, signal);
+        } else if (protocol === 'openai-images') {
           const body = { model, prompt: genPrompt, size: openAIImageSize(shape) };
           // gpt-image models take transparency as a parameter (gpt-image-2: preview since 2026-08-20). Alpha needs
           // a format that can carry it, so the output format is pinned to PNG.
@@ -440,7 +533,7 @@
           data = await orPost(Object.assign({ model }, baseBody), GEN_TIMEOUT_MS, signal);
         }
         checkCancelled(signal);
-        const url = protocol === 'openai-images' ? parseOpenAIImageResponse(data) : parseImageFromResponse(data);
+        const url = gptImageRoute ? parseOpenAIImageResponse(data) : parseImageFromResponse(data);
         if (!url) {
           const txt = textFromResponse(data);
           throw new Error('model returned no image' + (txt ? ' (' + txt.slice(0, 200) + ')' : '') + ' — is "' + model + '" an image-output model?');
@@ -483,7 +576,7 @@
             alphaNote = '\nTransparent background verified in the saved file: ' + cov.clearPct + '% of pixels are see-through.';
           } else if (cov.state === 'opaque') {
             alphaNote = '\nNOT TRANSPARENT: ' + cov.why + '. A checkerboard in the picture is painted, not transparency, so do not ' +
-              'describe this image as transparent. ' + (protocol !== 'openai-images' && !ALPHA_MODEL.test(model)
+              'describe this image as transparent. ' + (!gptImageRoute && !ALPHA_MODEL.test(model)
                 ? 'Retry with transparent:true and no model override, which uses a model that outputs alpha.'
                 : 'The model ignored the request: retry once, and if it is still opaque tell the user plainly.');
           } else {
@@ -620,7 +713,7 @@
 
     return {
       generateTool, analyzeTool, analyzeImageUrl, browserVision, hasVision,
-      _internals: { parseImageFromResponse, parseOpenAIImageResponse, openAIImageSize, textFromResponse, dataUrlToBuffer, imageUrlFromPart, imageToUrl, analyzeImageUrl, resolveShape, fitToSize, alphaCoverage, TRANSPARENT_ASK, TRANSPARENT_IMAGE_MODEL },
+      _internals: { parseImageFromResponse, parseOpenAIImageResponse, parseCodexImageStream, jwtAccountId, openAIImageSize, textFromResponse, dataUrlToBuffer, imageUrlFromPart, imageToUrl, analyzeImageUrl, resolveShape, fitToSize, alphaCoverage, TRANSPARENT_ASK, TRANSPARENT_IMAGE_MODEL },
       register(reg) { reg.register(generateTool); reg.register(analyzeTool); return reg; }
     };
   }
