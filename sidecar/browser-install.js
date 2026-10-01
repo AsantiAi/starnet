@@ -33,17 +33,24 @@ function exeInside(key) {
 }
 
 // Unpack a zip with the tool every supported OS already has (tar.exe ships with Windows 10+; ditto with macOS).
-function unzipWithSystem(zipFile, dest, platform) {
-  const run = (cmd, args) => CP.execFileSync(cmd, args, { stdio: 'ignore', windowsHide: true, timeout: 10 * 60 * 1000 });
+// ASYNCHRONOUS (release review 2026-09-30): unpacking ~400 MB takes tens of seconds, and a synchronous child call
+// would freeze the whole station — every request, every stream — for all of it, right during first-run setup.
+function runTool(cmd, args) {
+  return new Promise((resolve, reject) => {
+    CP.execFile(cmd, args, { windowsHide: true, timeout: 10 * 60 * 1000, maxBuffer: 1024 * 1024 }, err => (err ? reject(err) : resolve()));
+  });
+}
+async function unzipWithSystem(zipFile, dest, platform) {
+  const run = runTool;
   if (platform === 'win32') {
     const tar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
     return run(fs.existsSync(tar) ? tar : 'tar', ['-xf', zipFile, '-C', dest]);
   }
   if (platform === 'darwin') return run('ditto', ['-x', '-k', zipFile, dest]);
-  try { return run('unzip', ['-q', '-o', zipFile, '-d', dest]); }
+  try { return await run('unzip', ['-q', '-o', zipFile, '-d', dest]); }
   catch (e) {
     failNote('browser-install.unzip', e);
-    run('python3', ['-m', 'zipfile', '-e', zipFile, dest]);
+    await run('python3', ['-m', 'zipfile', '-e', zipFile, dest]);
     // python's zipfile drops the executable bit
     const dir = fs.readdirSync(dest).map(d => path.join(dest, d)).find(d => /chrome-linux/.test(d));
     for (const f of ['chrome', 'chrome_crashpad_handler', 'chrome-wrapper', 'chrome_sandbox']) {
