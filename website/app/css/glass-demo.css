@@ -29,6 +29,14 @@ body.glass-demo #left #workstreams .ws-row:is(:hover,:focus-visible,:focus-withi
   background: var(--gd-hover); border-color: var(--gd-edge);
   box-shadow: inset 0 1px 0 var(--gd-light), 0 2px 8px rgba(0,0,0,.2); transform: none;
 }
+/* while the rail is narrowed, the narrowed row is the ONLY lit one — the COMMS head already names who is on the line */
+body.glass-demo #crew:has(.crew-row.filtering) .crew-row.selected:not(.filtering):not(:hover):not(:focus-visible) {
+  background: transparent; border-color: transparent; box-shadow: none;
+}
+body.glass-demo #crew .crew-row.filtering {
+  background: var(--gd-hover); border-color: var(--ph-dim);
+  box-shadow: inset 3px 0 0 var(--ph), inset 0 1px 0 var(--gd-light), 0 2px 8px rgba(0,0,0,.2);
+}
 body.glass-demo #crew .crew-row:focus-visible,
 body.glass-demo #left #workstreams .ws-row:focus-visible { outline: 1px solid var(--ph); outline-offset: -2px; }
 .glass-demo :is(.crew-portrait,.comms-portrait) {

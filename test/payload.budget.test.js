@@ -43,10 +43,14 @@ const HOST = '127.0.0.1';
    STATION BUILDER 2026-09-30: the lead's one-line pointer to the deferred builder ("to change the floor, tool_search
    \"station builder\" and claim only what station.build reports") replaces the old "configured in the station UI"
    sentence, and the three deferred builder tools are named in the deferred index: 24,606 / 24,827 system chars on the
-   APPS trunk (7854c4241). Intended growth; the system budgets move by 50 (measurement + ~0.2%). */
+   APPS trunk (7854c4241). Intended growth; the system budgets move by 50 (measurement + ~0.2%).
+   STATION BUILDER 2026-10-01: station.test_line (the lead sends a test job down a line it built) and station.start_line
+   (it sets what starts a line) join the deferred index: ", station_test_line, station_start_line" = +39. Note what else moves this number: the prompt carries the harness build id
+   (git describe), whose length changes as other lanes add tags. It took trunk from 24,795 to 24,833 on the floor
+   with no prompt change (038a62983). Measured 24,612 + 39 / 24,833 + 39; the system budgets move by 50 again. */
 const BUDGET = {
-  'default-new-install': { systemChars: 24650, tools: 84, toolBytes: 65300 },
-  'fully-granted-floor': { systemChars: 24850, tools: 84, toolBytes: 65300 }
+  'default-new-install': { systemChars: 24700, tools: 84, toolBytes: 65300 },
+  'fully-granted-floor': { systemChars: 24900, tools: 84, toolBytes: 65300 }
 };
 
 (async () => {

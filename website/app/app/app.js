@@ -3867,6 +3867,47 @@ const App = (() => {
   let railFocusId = null;         // roving-tabindex cursor: one rail stop regardless of session count
   let railAttentionOnly = false;
   let railAttentionKey = '';
+  // PER-AGENT THREADS: a crew-row click narrows the rail to that agent's sessions — the streams bound to it
+  // plus every group chat it sits in (so a group lists under each member). The SESSIONS tab, the chip's ✕,
+  // or the same crew row again clears it. View state only: never persisted, never touches a stream.
+  let railAgentFilter = null;
+  function railHasAgent(w, id) {
+    return Workstreams.hasAgent(w, id, typeof GroupChat !== 'undefined' ? GroupChat.membersOf : null);
+  }
+  function setRailAgentFilter(id) {
+    id = id && agents.has(String(id)) ? String(id) : null;
+    if (id && id === railAgentFilter) id = null;   // the same crew row again = back to every session
+    railAgentFilter = id;
+    if (id && railView !== 'sessions') setRailView('sessions', { keepAgentFilter: true });
+    if (id) railAttentionOnly = false;
+    renderSessionSearch();   // a typed search re-scopes to (or back out of) the chosen agent
+    renderRail();
+    if (typeof StationUI !== 'undefined' && StationUI.refreshCrew) StationUI.refreshCrew();
+    return railAgentFilter;
+  }
+  // the chip under the rail head names whose sessions are showing; clicking it shows every session again
+  function syncRailAgentChip(count) {
+    let chip = el('ws-agent-filter');
+    if (!chip) {
+      const anchor = el('ws-attention'); if (!anchor) return;
+      chip = document.createElement('button');
+      chip.id = 'ws-agent-filter'; chip.type = 'button'; chip.className = 'ws-agent-filter';
+      chip.onclick = () => { SFX.click(); setRailAgentFilter(null); };
+      anchor.parentNode.insertBefore(chip, anchor);
+    }
+    const a = railAgentFilter && agents.get(railAgentFilter);
+    const hide = !a || railView !== 'sessions';
+    if (chip.hidden !== hide) chip.hidden = hide;
+    if (!a) return;
+    const name = a.name || a.id, key = railAgentFilter + '|' + name + '|' + count;
+    if (chip.dataset.key === key) return;
+    chip.dataset.key = key;
+    const thumb = typeof AgentPortraits !== 'undefined' && AgentPortraits.thumbHTML ? AgentPortraits.thumbHTML(a, 18, 22, 'waf-thumb') : '';
+    chip.innerHTML = thumb + '<span class="waf-name" style="color:' + U.esc(a.color || '') + '">' + U.esc(name) + '</span>'
+      + '<span class="waf-count">' + count + '</span><span class="waf-clear" aria-hidden="true">✕</span>';
+    chip.setAttribute('aria-label', 'Showing ' + name + "'s " + count + ' session' + (count === 1 ? '' : 's') + '. Show all sessions');
+    chip.setAttribute('data-tip', 'Showing only ' + name + "'s sessions — click to show all");
+  }
   // Pending consent belongs to a session. Multiple sessions on one agent remain distinct;
   // deleted/orphaned channels cannot contribute a count with nowhere to open.
   function railPendingIds() {
@@ -3952,6 +3993,12 @@ const App = (() => {
      no re-render, no lost rail focus/scroll, and updateRailLive keeps working untouched.
      Every value is a read of state that already exists; nothing here is derived or guessed. */
   function railAgentName(w) {
+    // a group row names everyone in it (lead first), since the per-agent view lists it under each of them
+    const members = w.conversationMode === 'group' && typeof GroupChat !== 'undefined' && GroupChat.membersOf ? GroupChat.membersOf(w.id) : null;
+    if (members && members.length > 1) {
+      const ids = [w.agentId].concat(members.filter(id => id !== w.agentId)).filter(id => members.includes(id));
+      return ids.map(id => { const m = agents.get(id); return (m && m.name) || id; }).join(' + ');
+    }
     const a = agents.get(w.agentId);                      // the live registry, same one the world reads
     return (a && a.name) ? a.name : (w.agentId || 'AGENT');
   }
@@ -4000,8 +4047,11 @@ const App = (() => {
     if (oldFocus && oldFocus.dataset.id) railFocusId = oldFocus.dataset.id;
     const pending = railPendingIds();
     syncRailAttention(pending);
+    if (railAgentFilter && !agents.has(railAgentFilter)) railAgentFilter = null;   // that agent left the station
     const allRows = Workstreams.list({ includeArchived: true }).filter(w =>
-      railAttentionOnly ? pending.has(w.id) : (!w.archived || railShowArchived || pending.has(w.id)));
+      (!railAgentFilter || railHasAgent(w, railAgentFilter))
+      && (railAttentionOnly ? pending.has(w.id) : (!w.archived || railShowArchived || pending.has(w.id))));
+    syncRailAgentChip(allRows.length);
     const grouped = railAttentionOnly ? allRows.map(w => ({ type: 'session', w })) : Workstreams.railGroups(allRows, { view: railKind, activeId, expanded: [...railExpanded], urgent: allRows.filter(w => railRowState(w).busy || pending.has(w.id)).map(w => w.id) });
     const headers = new Map();
     const rows = grouped.flatMap(item => {
@@ -4034,7 +4084,13 @@ const App = (() => {
         '<button class="ws-kebab" tabindex="-1" aria-label="session actions" title="session actions">⋯</button>' +
         '</li>';
     }).join('');
-    if (!rows.length && railKind === 'automated' && !railAttentionOnly) {
+    if (!rows.length && railAgentFilter && !railAttentionOnly) {
+      const a = agents.get(railAgentFilter), name = U.esc((a && (a.name || a.id)) || railAgentFilter);
+      ul.innerHTML = '<li class="proj-empty ws-agent-empty" role="presentation"><span role="status">No '
+        + (railKind === 'automated' ? 'automation ' : '') + 'sessions with ' + name + ' yet.</span>'
+        + '<button type="button" class="btn ws-agent-start">START ONE</button></li>';
+      const start = ul.querySelector('.ws-agent-start'); if (start) start.onclick = () => newWorkstream();
+    } else if (!rows.length && railKind === 'automated' && !railAttentionOnly) {
       ul.innerHTML = '<li class="proj-empty" role="presentation"><span role="status">No automation sessions yet.</span></li>';
     }
     ul.querySelectorAll('[data-ws-group]').forEach(button => {
@@ -4146,7 +4202,14 @@ const App = (() => {
   }
   function openWorkstream(id) { switchWorkstream(id); }
   function newWorkstream() {
-    const ws = Workstreams.startSession();
+    let ws = Workstreams.startSession();
+    // + NEW while the rail shows one agent's sessions starts a session WITH that agent: a blank line is
+    // rebound (no transcript to corrupt); the General home stream never is, so that case mints a fresh one.
+    const f = railAgentFilter && agents.has(railAgentFilter) ? railAgentFilter : null;
+    if (f && ws && (ws.agentId || 'agent') !== f && (ws.id === Workstreams.generalId() || !Workstreams.setAgent(ws.id, f))) {
+      ws = Workstreams.create(null, { agentId: f });
+    }
+    if (f && ws) { focusAgent(f); if (typeof World !== 'undefined' && World.lockBody) World.lockBody(f); }
     SFX.open(); Chat.load(ws); refreshUsage(); renderRail(); persist();
   }
   /* Rail search + per-session export — what survived the SESSION TOOLS window (retired 2026-07-17).
@@ -4176,7 +4239,8 @@ const App = (() => {
     // matches" while unrelated sessions stayed selectable directly underneath it.
     if (sessions) sessions.hidden = railView !== 'sessions' || !!q;
     if (!q) return;
-    const hits = Workstreams.search(q);
+    // narrowed to one agent, search stays inside that agent's sessions (the chip above still names it)
+    const hits = Workstreams.search(q).filter(hit => { if (!railAgentFilter) return true; const w = Workstreams.get(hit.id); return !!(w && railHasAgent(w, railAgentFilter)); });
     for (const hit of hits) {
       const li = document.createElement('li'); li.className = 'ws-search-hit'; li.tabIndex = 0; li.dataset.id = hit.id;
       const title = document.createElement('b'); title.textContent = hit.title || 'General';
@@ -4456,8 +4520,15 @@ const App = (() => {
       b.title = 'bless a folder as a trusted project';
     }
   }
-  function setRailView(view) {
+  function setRailView(view, opts) {
     view = (view === 'projects') ? 'projects' : 'sessions';
+    // the SESSIONS tab is also the way back from one agent's sessions to the full list
+    if (railAgentFilter && !(opts && opts.keepAgentFilter)) {
+      railAgentFilter = null;
+      if (typeof StationUI !== 'undefined' && StationUI.refreshCrew) StationUI.refreshCrew();
+      if (view === railView) { SFX.click(); renderRail(); renderSessionSearch(); return; }
+      syncRailAgentChip(0);
+    }
     if (view === railView) return;
     railView = view;
     syncRailAttention(railPendingIds());
@@ -5557,6 +5628,9 @@ const App = (() => {
     currentAgent: () => agent,
     agents: () => liveAgents().map(serializeAgentLite),
     selectAgent: selectAgent,   // COMMS top-bar agent selector: switch to (or mint) a workstream bound to agentId
+    // PER-AGENT THREADS: the CREW roster narrows the SESSIONS rail to one agent (same id again / null = all)
+    filterRailByAgent: setRailAgentFilter,
+    railAgentFilter: () => railAgentFilter,
     // THE POST-SUMMON DESK STEP, owned by the session (chat.js maybeDeskPrompt): the read that decides whether a
     // stream still owes its agent a workstation, and the door its chip opens (REFIT, armed on WORKSTATIONS).
     needsWorkstation: needsWorkstation,

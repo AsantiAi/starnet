@@ -225,6 +225,51 @@ crowded the new doorway, refitted both, and looked again.
 rooms removed at once 8 → 60, a hallway 40 → 160 tiles (200 round a corner), a designed room 44 × 26 → 96 × 60. The
 bound left is the world model's own: a station spans at most 240 tiles.
 
+## Conveyor lines: set up, tested, started
+
+Added 2026-10-01 (Andrew: "and what about for conveyor systems, and then also setting up the conveyor systems?"). The
+lead could already build any line (machines, belts, branches, loops, sorters, staff, roles, instructions). It now sets one
+up, tests it and decides what starts it, as a person does in the Workflow panel.
+
+**Set up (REFIT edits)**, each the Workflow panel's own setter:
+
+| Edit | Sets | World-model call |
+| --- | --- | --- |
+| `hands` { prop: a bay, text } | what that step hands on | `setPropHands` |
+| `budget` { prop: any machine on the line, stages, perJob, perDay } | the line's whole budget (`cap` still sets the day) | `setPropLimits` on the line's INBOX |
+| `loop` { prop, passes, until, done, escalate } | max passes; until approved / revise (the reviewer's VERDICT) or code / research / general; the exit and escalation sides | `configureJunction` |
+| `wait` { prop: a joiner, minutes } | how long a JOINER waits for every branch | `configureJunction` |
+| `swap` { prop: a joiner or merger } | JOINER (the splitter copies to each, waits for all) ↔ MERGER (the branches take turns) | `swapJoinerMerger` |
+| `routes` { prop: a filter, routes, def } | what kind of work leaves which side | `configureJunction` |
+| `folder` { prop, project } | the working folder: only a trusted project | `setPropProject` on every INBOX of the line |
+| `bind` { prop: a connector portal or plugin terminal, connector / plugin } | which service's tools its room's agents get | `bindConnector`, `bindPlugin` |
+
+A junction edit changes only what it names (`jcfg` keeps the rest). Before 10-01, `routes` or `tries` replaced the
+junction's whole config, so setting a loop's tries wiped its wait or escalation lane. `folder` and `bind` are resolved
+when the plan is made, against what the page reads from the sidecar (`/api/projects` blessed roots, `/api/connectors`,
+the plugins that are on), and the resolved root or id rides in the plan (`spec.res`), so the build replays exactly what
+the card showed. The model never supplies a raw path or service id. `station.map { room }` reads every one of these
+settings back per piece.
+
+**Test: `station.test_line { line, job, room? }`.** One real job down the line through `runSampleJob`, the core of
+`POST /api/routing/sample`. That route is the Workflow panel's TEST and WORKFLOWS' SEND A JOB, and both now call the
+core. So it has the same one-per-station lock, the same refusals, and the same job record in the OUTBOX.
+- It answers each step in the order it ran (role, agent, how it ended, cost), whether the job reached the OUTBOX, and
+  says plainly when a review loop ran out of passes without an approval.
+- What the line delivered comes back fenced as untrusted data.
+- It asks first: it runs the line's agents and spends what they spend. A line nobody works is refused before anything is
+  sent.
+
+**Start: `station.start_line`.** Each start goes through the core the panel's form posts to. It asks first: from then on
+the line runs unattended, within its budget.
+
+| Call | Creates |
+| --- | --- |
+| `{ line, schedule, tz?, job }` | a `runsLine` routine fired at the line's entry step (`createCronJobFromSpec` + arm on create). The routine's own tripwire scans the job's words. |
+| `{ line, folder, job }` | a folder trigger (the folder jail + baseline). |
+| `{ line, webhook: true, job }` | a webhook trigger. Its key is minted, hashed and dropped: the lead never sees one, and the Commander takes a key from the line's Workflow panel (NEW KEY). |
+| `{ line, off: a trigger id }` | turns a trigger off. A schedule is a routine, and `routine.manage` pauses it. |
+
 ## Making new props (StarNet credits)
 
 Added 2026-10-01 ("if the user has StarNet credits… the agent should be able to use that and create props on its own
