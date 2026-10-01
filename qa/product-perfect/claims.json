@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "72c46bfba2d97dd624bd826d2c3004183b222ee6",
+    "sourceCommit": "22a088de36a1353d7bc3c93cb54c6ad05ac7b389",
     "pathSetSha256": "c218737e8fb339c74f073e42d11f580a04bde46b042e931855728791613abf73",
     "files": [
       {
@@ -318,8 +318,8 @@
       },
       {
         "path": "frontend/app/build.js",
-        "bytes": 501821,
-        "sha256": "dbfbc997576d8984b32e1b79767c6749955bba3eaf70112927979ef337a7eb60"
+        "bytes": 507059,
+        "sha256": "6d077bc3493c2a6a1c82d8e293315309c8ef2d6cc857ce7c713fd445c9275672"
       },
       {
         "path": "frontend/app/channels.js",
@@ -1223,8 +1223,8 @@
       },
       {
         "path": "frontend/app/userprops.js",
-        "bytes": 12819,
-        "sha256": "ddc2b3b540d25533b97244843a77196f9fdcfd41bd7894fb2fb9d0bbddd3d132"
+        "bytes": 13651,
+        "sha256": "b41c5b5ab8424a4f04853907c44d279930be005a603445b7dc666f9743eb0a36"
       },
       {
         "path": "frontend/app/verdictfollowup.js",
@@ -1383,8 +1383,8 @@
       },
       {
         "path": "frontend/app/worldmodel.js",
-        "bytes": 226007,
-        "sha256": "00ed59b36a6051c71ad36290b1168bbf4c3080ab693e02d2c6a6c80d57ae8175"
+        "bytes": 226274,
+        "sha256": "ab37314848710e0feffbf36703c1ae4bdd52eb409689ae1138aca4275dd43ac8"
       },
       {
         "path": "frontend/app/worldrenderer.js",
