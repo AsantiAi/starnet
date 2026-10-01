@@ -159,10 +159,17 @@
     }
     return buildLine(st, spec, WM);
   }
+  // a hallway's corridor deck and its planters and lights (a grid room's hallway, as a layout's)
+  function trimHall(st, hallId, spec) {
+    if (!hallId || (!spec.hallDeck && !(spec.hallProps || []).length)) return { ok: true };
+    if (spec.hallDeck) { const d = st.setDeck(hallId, spec.hallDeck); if (!d || !d.ok) return refuse('the hallway floor could not be laid'); }
+    for (const p of spec.hallProps || []) { const r = st.addProp({ t: p.t, x: p.x, y: p.y, w: p.w, h: p.h, r: p.r || 0, block: p.block }); if (!r || !r.ok) return refuse('the hallway could not be dressed'); }
+    return { ok: true };
+  }
   function buildKit(st, part, WM) {
     const ids = [];
-    let roomId = part.roomId || null;
-    if (part.hall) { const h = st.placeHallway({ rect: part.hall }); if (!h || !h.ok) return refuse('the hallway could not be laid there' + (h && h.msg ? ' (' + h.msg + ')' : '')); }
+    let roomId = part.roomId || null, hallId = null;
+    if (part.hall) { const h = st.placeHallway({ rect: part.hall }); if (!h || !h.ok) return refuse('the hallway could not be laid there' + (h && h.msg ? ' (' + h.msg + ')' : '')); hallId = h.id; }
     if (part.room) {
       const before = new Set(st.rooms().map(r => r.id));
       const r = st.addRoom({ kind: part.room.kind, name: part.room.name, floorStyle: part.room.floorStyle, floorMat: part.room.floorMat, rect: part.room.rect });
@@ -180,6 +187,7 @@
       if (!line.ok) return line;
       ids.push(...line.ids);
     }
+    const th = trimHall(st, hallId, part); if (!th.ok) return th;
     return { ok: true, ids, roomId, lineIds: line ? line.ids : [], intakeId: line ? line.intakeId : null };
   }
   function restyleInto(st, spec) {
@@ -191,7 +199,8 @@
   function buildLine(st, spec, WM) {
     const bp = (WM.BLUEPRINTS || []).find(x => x.id === spec.bpId);
     if (!bp) return refuse('unknown line');
-    if (spec.hall) { const h = st.placeHallway({ rect: spec.hall }); if (!h || !h.ok) return refuse('the hallway could not be laid there' + (h && h.msg ? ' (' + h.msg + ')' : '')); }
+    let hallId = null;
+    if (spec.hall) { const h = st.placeHallway({ rect: spec.hall }); if (!h || !h.ok) return refuse('the hallway could not be laid there' + (h && h.msg ? ' (' + h.msg + ')' : '')); hallId = h.id; }
     if (spec.room) {
       const r = st.addRoom({ kind: spec.room.kind, name: spec.room.name, rect: spec.room.rect });
       if (!r || !r.ok) return refuse('the room could not be added there' + (r && r.msg ? ' (' + r.msg + ')' : ''));
@@ -210,6 +219,7 @@
       if (step.brief) { const r = st.setPropBrief(pid, step.brief); if (!r || !r.ok) return refuse('a step\'s instructions could not be saved'); }
       if (step.agentId) { const r = st.assignPropAgent(pid, step.agentId); if (!r || !r.ok) return refuse('a step\'s agent could not be assigned'); }
     }
+    const th = trimHall(st, hallId, spec); if (!th.ok) return th;
     return { ok: true, ids: s.ids, intakeId };
   }
 
@@ -381,7 +391,7 @@
         for (const cand of grid.concat(pl.ok ? pl.list : [])) {
           const rect = cand.rect, rw = rect.x2 - rect.x1 + 1, rh = rect.y2 - rect.y1 + 1;
           const s = Object.assign({}, base, { hall: cand.hall, placed: { side: cand.side, target: cand.target, len: cand.len }, room: { kind: 'hab', name: label.toUpperCase().slice(0, 24), rect },
-            ox: rect.x1 + ((rw - bp.w) >> 1), oy: rect.y1 + ((rh - bp.h) >> 1) });
+            ox: rect.x1 + ((rw - bp.w) >> 1), oy: rect.y1 + ((rh - bp.h) >> 1) }, gridHallTrim(WM, env, live, cand, 'hab'));
           const t = tryPlacement(doc, bp, s, env, before);
           if (t.ok) { placed = t; spec = s; break; }
         }
@@ -715,6 +725,7 @@
           const rect = cand.rect, props = kitProps(env, kit, rect.x1, rect.y1, mirror); if (!props) return refuse('this page is missing the furniture for ' + kit.name);
           const part = { hall: cand.hall, room: { kind: kit.kind, name: roomName, floorStyle: style.floorStyle || kit.floorStyle, floorMat: style.floorMat || kit.floorMat, rect },
             props, line: kitLine(env, kit, rect.x1, rect.y1), meta: { kit: kit.id, name: roomName, about: kit.about, existing: false, placed: { side: cand.side, target: cand.target, len: cand.len } } };
+          Object.assign(part, gridHallTrim(env.WorldModel, env, sofar, cand, kit.kind));
           if (tryKit(doc, { kind: 'rooms', parts: parts.concat([part]) }, env, before).ok) { found = part; break outer; }
         }
         if (!found) return refuse('There is no clear space ' + (besideRoom ? 'beside ' + besideRoom.name : 'beside the station') + ' for an 18 × 11 ' + kit.name + '. Try another side or another room (station.map shows what is free).');
@@ -1426,6 +1437,7 @@
       if (part.hall) {
         const r = st.placeHallway({ rect: part.hall }); if (!r || !r.ok) return refuse('the hallway could not be laid there' + (r && r.msg ? ' (' + r.msg + ')' : '')); hallId = r.id;
         if (part.hallDeck) { const d = st.setDeck(hallId, part.hallDeck); if (!d || !d.ok) return refuse('the hallway floor could not be laid'); }
+        for (const p of part.hallProps || []) { const r = st.addProp({ t: p.t, x: p.x, y: p.y, w: p.w, h: p.h, r: p.r || 0, block: p.block }); if (!r || !r.ok) return refuse('the hallway could not be dressed'); }
       }
       if (part.room) {
         const r = st.addRoom({ kind: part.room.kind, name: part.room.name, floorStyle: part.room.floorStyle, floorMat: part.room.floorMat, rect: part.room.rect });
@@ -1601,7 +1613,7 @@
         const dr = rec ? dressRoom(cp, env, a.id, rstyle) : null;
         if (dr && !dr.ok) { why = why || dr; continue; }
         const acc = accentsFor(cp, env, a.id, zones, rec);
-        const part = { hall: cand.hall, room: Object.assign({}, roomSpec, { rect: cand.rect }), roomId: null, lines: f.lines, props: f.props.concat(dr ? dr.props : [], acc || []) };
+        const part = Object.assign({ hall: cand.hall, room: Object.assign({}, roomSpec, { rect: cand.rect }), roomId: null, lines: f.lines, props: f.props.concat(dr ? dr.props : [], acc || []) }, gridHallTrim(WM, env, probe, cand, kind));
         const t = tryBuild(doc, { kind: 'build', parts: spec.parts.concat([part]) }, env, before);
         if (!t.ok) { why = why || t; continue; }
         got = { cand, f, part, cp, dr, acc }; break;
@@ -1738,10 +1750,10 @@
      the middle facing it; plants take the corners; accents stand along the side walls. Every doorway keeps a clear lane
      three tiles deep, nothing lands on a belt, and a piece nobody could walk up to is taken back out. Answers the pieces
      placed, in the order they were placed (a lamp after its table), for the build to lay again exactly. */
-  // corner plants for a room of styled zones (it has no whole-room recipe of its own)
+  // corner plants for a room made only of styled zones (no whole-room recipe, no line: a line's half keeps its floor)
   const ACCENTS = { corners: ['tallplant', 'plant', 'plant', 'tallplant'] };
   function accentsFor(st, env, roomId, zones, rec) {
-    if (rec || !zones.some(z => z.kind === 'style')) return null;
+    if (rec || !zones.length || !zones.every(z => z.kind === 'style')) return null;
     const d = dressRoom(st, env, roomId, ACCENTS);
     return d.ok && d.props.length ? d.props : null;
   }
@@ -2002,6 +2014,18 @@
     if (!g || !g.ok || !g.rooms.length || !g.halls.length) return [];
     const hall = g.halls[g.halls.length - 1].rect, len = Math.max(hall.x2 - hall.x1, hall.y2 - hall.y1) + 1;
     return [{ rect: g.rooms[0].rect, hall, side: g.rooms[0].side, target: main.name, targetId: main.id, len, grid: true }];
+  }
+  // a grid room's hallway trimmed like a layout's: the corridor deck, and dressHall's planters and lights
+  function gridHallTrim(WM, env, st, cand, kind) {
+    if (!cand || !cand.grid || !cand.hall) return {};
+    try {
+      const cp = WM.create(clone(st.serialize()));
+      const h = cp.placeHallway({ rect: cand.hall }); if (!h || !h.ok) return {};
+      const r = cp.addRoom({ kind: kind || 'hab', name: '__trim__', rect: cand.rect }); if (!r || !r.ok) return {};
+      if (!cp.setDeck(h.id, CORRIDOR_DECK).ok) return {};
+      const d = dressHall(cp, env, h.id, null);
+      return { hallDeck: CORRIDOR_DECK, hallProps: (d && d.props) || [] };
+    } catch (_) { return {}; }
   }
   // the station's conveyor halls (a works room, a foundry named for lines), largest clear floor first
   function worksHalls(st) {
