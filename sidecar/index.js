@@ -18564,7 +18564,7 @@ async function runOnceCore(o) {
       if (mine && signal) {
         const stopMine = () => { if (sampleInFlight === mine) stopSampleJob(); };
         if (signal.aborted) stopMine(); else signal.addEventListener('abort', stopMine, { once: true });
-        p.finally(() => signal.removeEventListener('abort', stopMine)).catch(() => {});
+        p.finally(() => signal.removeEventListener('abort', stopMine)).catch(swallow('station.test_line.unwire'));
       }
       return p;
     },
