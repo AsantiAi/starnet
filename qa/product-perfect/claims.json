@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "e938db1d0b93d2dcdb9a03438c4147f4488600b4",
+    "sourceCommit": "057ec294767b5836d55d8db50f626b573fb4ec72",
     "pathSetSha256": "c6aba28c9ab0146eef8aebbc12d196bf006714b580b24b33d1fc748bcaabc126",
     "files": [
       {
@@ -1103,8 +1103,8 @@
       },
       {
         "path": "frontend/app/stationcommands.js",
-        "bytes": 49486,
-        "sha256": "71c46ab8902f63834fd750a5046da4a6b119dab46f44aaf239e718d779dbffa9"
+        "bytes": 49615,
+        "sha256": "7f0bf36f5104f8ad4dabb22043e80b2f4ae6289b2db9aa90573e1a46023cc4a0"
       },
       {
         "path": "frontend/app/stationquests.js",
@@ -1278,8 +1278,8 @@
       },
       {
         "path": "frontend/app/windows/automation.js",
-        "bytes": 7222,
-        "sha256": "9c69dab9fc1d40df7533aba0553e5c0d29dc426e216ff43dc76cb6fbb68da51d"
+        "bytes": 8007,
+        "sha256": "cc1b4cfdb0b4d7bcc70f9bd1e1802a51c5fa9b3aac12890fef90ca0b12462ef4"
       },
       {
         "path": "frontend/app/windows/connectors.js",
@@ -1313,8 +1313,8 @@
       },
       {
         "path": "frontend/app/windows/routines.js",
-        "bytes": 62109,
-        "sha256": "aa902d9e42761c8136287b0ff59008b05c30d7258280cf69d7f8924a4091b1cb"
+        "bytes": 65185,
+        "sha256": "1858bf2584cf41d1e89a23903d2581ebee058046345a76a5a809f0e6586f424c"
       },
       {
         "path": "frontend/app/windows/trophies.js",
@@ -1338,8 +1338,8 @@
       },
       {
         "path": "frontend/app/workflowtakeoverstore.js",
-        "bytes": 3819,
-        "sha256": "88adf8fb083dd371b2b19f682021a1789f8a7ff81e0ee5a9400cf86953227775"
+        "bytes": 3906,
+        "sha256": "b8c7533eb37ed81df567427c8f7ba7a0c72dcc1a8dcc6fd60f2f0f14ca49c7e7"
       },
       {
         "path": "frontend/app/workhub.js",
