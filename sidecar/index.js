@@ -11680,7 +11680,8 @@ async function runSampleJob(readArgs) {
       runs = (runStore.list(null, { streamId: streamId, limit: 200 }) || [])   // THIS sample's rows, not the station's newest 50
         .filter(r => r && String(r.streamId || '') === streamId)
         .map(r => ({ runId: r.runId, agentId: r.agentId, reason: r.reason, usd: r.usd, ts: r.ts, title: r.title, streamId: r.streamId, turns: r.turns,
-          dockId: r.dockId || null, lineId: r.lineId || null }));   // (the BAY each stage ran at: the panel names each step's work by it)
+          dockId: r.dockId || null, lineId: r.lineId || null,
+          taintedBy: r.taintedBy || null }));   // (a stage that read untrusted content: whoever reads this job's text inherits it — station.test_line relays it)   // (the BAY each stage ran at: the panel names each step's work by it)
     } catch (_) { runs = []; }
     // Outbound warning text is not delivery evidence. The proof succeeds only when every durable stage
     // outcome is clean, including every hop after the routed entry dock.
@@ -11900,6 +11901,9 @@ async function startLineFor(spec) {
     return r.ok ? { ok: true, kind: 'off', id: cur.id, was: cur.kind } : { ok: false, error: r.error };
   }
   if (!job) return { ok: false, error: 'a start needs the job it sends down the line each time' };
+  // the routine tripwire, for EVERY start (a schedule meets it again in createCronJobFromSpec; a trigger's task is the same
+  // standing words): an override or exfil payload is refused before anything is saved
+  { const scan = cronGuard.scanRoutinePrompt(job); if (!scan.ok) return { ok: false, error: scan.error }; }
   if (s.kind === 'schedule') {
     const docks = crewedDocksOnLine(plan, lineId);
     if (!docks.length) return { ok: false, error: 'nobody works the first step of ' + name + ': give it an agent first' };
