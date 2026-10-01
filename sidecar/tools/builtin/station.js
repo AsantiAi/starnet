@@ -449,11 +449,11 @@
     const userProps = deps.userProps && typeof deps.userProps.start === 'function' ? deps.userProps : null;
     const pause = (ms, signal) => new Promise(res => { const t = setTimeout(res, ms); if (signal && signal.addEventListener) signal.addEventListener('abort', () => { clearTimeout(t); res(); }, { once: true }); });
     async function waitJob(id, signal) {
-      const until = Date.now() + PROP_WAIT_MS;
-      for (;;) {
+      // counted in ticks, not wall-clock time (tools never read the clock: lint-determinism)
+      for (let tick = 0; ; tick++) {
         const j = userProps.job(id);
         if (j && (j.status === 'done' || j.status === 'failed')) return j;
-        if ((signal && signal.aborted) || Date.now() > until) return j || { id, status: 'running' };
+        if ((signal && signal.aborted) || tick >= PROP_WAIT_MS / PROP_TICK_MS) return j || { id, status: 'running' };
         await pause(PROP_TICK_MS, signal);
       }
     }
