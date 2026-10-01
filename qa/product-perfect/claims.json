@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "db646130febf8de244fc4989f7b1a1b7e6fad5f2",
+    "sourceCommit": "246d8be41b1be8fae80ee4d1e2012fd614b25d2a",
     "pathSetSha256": "5e692c5f0c56bc6565c363fb4eb622af3093a911f55496ecdf16c95cad03c8af",
     "files": [
       {
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 692515,
-        "sha256": "e247571357a148ebdcba7c7a99f02bbba2ec2df039352c26f60aae4b1f9b222d"
+        "bytes": 691883,
+        "sha256": "8206ff9988b2a0916efb8146dfe1b744c47c01592aaaae378d26e46ff5d4af6b"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -353,8 +353,8 @@
       },
       {
         "path": "frontend/app/classify.js",
-        "bytes": 7978,
-        "sha256": "1b1d9c18fb9451980632b16c9dd2fdbdc467e602592725cf318ac33e0bcd2931"
+        "bytes": 6267,
+        "sha256": "e745e7e0cc274131a3fce19a6c391ca4fd3fa13d1a5a6815b889d28cec76fc02"
       },
       {
         "path": "frontend/app/cloudsave.js",
@@ -1123,13 +1123,13 @@
       },
       {
         "path": "frontend/app/stationbuilder.js",
-        "bytes": 281378,
-        "sha256": "1370db6b14ab05e11bf98cd7d2667bfacc98840dea0cbdbd0444d7df2c2d472c"
+        "bytes": 282049,
+        "sha256": "2a1f13d42dc8142de4dbbda641069494eb6731833a63ae2bab30d1038cc614d2"
       },
       {
         "path": "frontend/app/stationcommands.js",
-        "bytes": 61832,
-        "sha256": "993b72b41b9b3f22d7074f8102e4e40b5346ed878d7ec20b7299e35f7503c1ed"
+        "bytes": 64689,
+        "sha256": "9daacb87233ca10003bf0ab741ec50fea15fbe952492e37ad5b933c779437bca"
       },
       {
         "path": "frontend/app/stationquests.js",
@@ -1408,8 +1408,8 @@
       },
       {
         "path": "frontend/app/world.js",
-        "bytes": 821334,
-        "sha256": "2d83e18ca4e52510c2daec372c2090c5ec7b6284d9ae15e1ae7f4c45de96be06"
+        "bytes": 822786,
+        "sha256": "c160a12fc1e64fdadda3e5035b0379ffb0dcfff3d4f0414f773fd922545f93cb"
       },
       {
         "path": "frontend/app/worldlab.js",

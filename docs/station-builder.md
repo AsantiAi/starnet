@@ -13,10 +13,18 @@ When the Commander asks, the lead agent can change the floor in these ways:
 - **add** a furnished room, or every room of a preset
 - **swap** the whole station for a preset, backed up like Build mode's Presets
 - **restyle** a room's floor or name
+- **design anything itself** (2026-10-01): rooms of any shape and size, every piece where it chooses, then **look** at
+  the station as it really renders and refine it
 
-The model never places anything itself. It fills a fixed menu, and StarNet does all the placing with the same code
-Build mode uses. A weak model's worst case is a change the Commander didn't want, which one UNDO removes. It can't
-break the station.
+The lead works two ways, mixed freely (Andrew 10-01: "the AI model should have the freedom … to make its own decisions
+… full customization from the model to place and change it how it wants"):
+- **its own design** (REFIT, below): every Refit mode tool on exact tiles. The design decisions are the model's; the only
+  rules are the world's own, the same checks a person meets in Refit mode (walls, doorways, what stands on what).
+- **shortcuts** (the forms): it fills a menu and StarNet does the placing with the same code Build mode uses. Quick,
+  and what a weak model falls back on.
+
+Either way a plan is built on a copy, shown on a card, and lands as one change that one UNDO removes. A weak model's
+worst case is a change the Commander didn't want. It can't break the station.
 
 ## How it works
 
@@ -170,7 +178,7 @@ corners").
 
 Added 2026-09-30 ("make it immensely more flexible, there should be no limits, it should be able to ambitiously use the
 refit mode itself"). `station.plan { refit: [ edits ] }` gives the lead every tool of Refit mode as an edit on exact
-WORLD tiles (x east, y south; a piece's x, y is its top-left), up to 400 edits a plan, applied IN ORDER on a copy by
+WORLD tiles (x east, y south; a piece's x, y is its top-left), up to 1500 edits a plan (400 until 10-01), applied IN ORDER on a copy by
 the very world-model call Refit mode makes for that tool (`refitOne`), so each passes or fails on Refit mode's own
 checks (`checkRects`, `checkProp` with the mount rules, `beltPlaceable`, `checkBlueprint`). The first edit that fails
 refuses the whole plan, naming it ("Edit 6 (place): overlaps a prop"). station.build replays the edits exactly
@@ -193,6 +201,24 @@ size, agent, role, label and brief; its belts; its doorways; the room drawn: `.`
 piece, `A` a seat, `M` a machine, `=` a belt, `D` a doorway). `station.map { catalog: true }` lists every piece (type,
 size, mount, turns, flips, yours), room types, floor styles and materials, wall and hull materials, room styles, bay
 roles, lines and line edits.
+
+**The lead designs (2026-10-01).** The planner's instructions open with the design handed to the lead ("You are the
+station's designer: the Commander's words are the brief, and the design is yours to decide"), REFIT first and the forms
+after it as SHORTCUTS. Until then they opened with "You never send a position" and listed REFIT last, for "anything
+the forms above do not say", so a capable model reached for the forms. A long refit's card names its first 25 edits and
+then every edit that removes, moves, resizes or briefs, up to 60. Past that it counts them by kind ("… and 7 more edits
+that change what stands (7 moves)"), and the preview shows them all.
+
+**LOOK.** `station.map { look: a room }` (or `true` for the whole station) hands the model the station as it really
+renders: the stage's own scene pass (`World.renderStillOfTiles`, a crop of `World.renderStill`, one tile round the room
+and the wall faces above it), WebP (else JPEG), shrunk until it fits one page answer (the sidecar's 256 KB ack). It
+rides back as a tool image (loop.js SCREENSHOTS AS PIXELS, on unless `SKYNET_TOOL_IMAGES=0`; every provider adapter
+carries image parts), with a note giving the tiles it shows and the pixels a tile. A model that can't see is pointed
+to `station.map { room }`. Proven: the e2e's stand-in model asks for a look and the next model request carries a
+1100 × 825 picture of the room (223 colours, not a blank frame). With a real model (GPT 6.1 Sol), "design me a cozy
+reading nook off the lounge, your way … then take a look and keep refining" became a 12 × 8 room with a narrower entrance
+alcove and every piece placed by hand. It looked, saw the back-wall bookshelves sat left of centre and the lounge TV
+crowded the new doorway, refitted both, and looked again.
 
 **Limits raised at the same time:** recruits 3 → 12 a plan (still only when the Commander asks), named pieces 16 → 120
 (40 of one kind), rooms in a rooms plan 6 → 24, lines in a room 6 → 16, a diamond 16 → 40 rooms, a concourse 8 → 24,
