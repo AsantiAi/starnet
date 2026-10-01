@@ -2196,6 +2196,11 @@
        unchanged picture is never re-sent. */
     const CAST_FAST_MS = 140, CAST_IDLE_MS = 700, CAST_IDLE_AFTER = 12;
     let castOn = false, castHandler = null, castGen = 0, castKick = null, castSame = 0;
+    /* the generation the screencast was LAST started for. The frame listener below is attached once per connection and
+       outlives every start, so it must read the CURRENT generation, never one it captured (release review 2026-09-30:
+       it kept the first start's, so after any restart every screencast frame was dropped and the view fell back to the
+       slow capture loop — the "laggy" picture again). */
+    let castLiveGen = 0;
     async function castSize(c) {
       try {
         const m = await c.send('Page.getLayoutMetrics', {});
@@ -2218,7 +2223,7 @@
         root.on('Page.screencastFrame', (p, sid) => {
           // ACK every frame on the session that sent it, or Chrome stops sending
           root.send('Page.screencastFrameAck', { sessionId: p.sessionId }, sid).catch(swallow('browser.cast-ack'));
-          if (!castOn || castMode !== 'screencast' || gen !== castGen || (sid || undefined) !== castSession) return;
+          if (!castOn || castMode !== 'screencast' || castLiveGen !== castGen || (sid || undefined) !== castSession) return;
           const m = p.metadata || {};
           const w = Math.round(m.deviceWidth || 0), h = Math.round(m.deviceHeight || 0);
           if (!(w > 0 && h > 0) || !p.data) return;
@@ -2227,6 +2232,7 @@
           try { if (castHandler) castHandler({ data: p.data, mime: 'image/jpeg', width: w, height: h }); } catch (e) { failNote('browser.cast-frame', e); }
         });
       }
+      castLiveGen = gen;
       castSession = castTarget();
       castExpect = await castSize(c);
       await root.send('Page.startScreencast', { format: 'jpeg', quality: 70, maxWidth: castExpect.width, maxHeight: castExpect.height, everyNthFrame: 1 }, castSession);
