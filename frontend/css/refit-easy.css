@@ -65,6 +65,13 @@
 .refit-overlay .refit-selection .refit-position label { margin: 0; }
 .refit-overlay .refit-selection .refit-sel-pos[aria-expanded="true"] { color: var(--ph-bright); border-color: rgba(var(--ph-rgb),.45); }
 
+/* ---- the Edit tab: the editor's keys as key caps (build.js renderPalette, THE TABS SHOW THEIR THINGS) */
+.refit-overlay .refit-keycard { gap: 10px; }
+.refit-overlay .refit-keyrows { display: grid; gap: 4px; }
+.refit-overlay .refit-keyrow { display: grid; grid-template-columns: 108px minmax(0,1fr); align-items: center; gap: 8px; min-height: 28px; padding: 2px 10px 2px 5px; border: 1px solid var(--refit-edge); border-radius: 8px; background: var(--refit-glass); }
+.refit-overlay .refit-keyrow kbd { justify-self: start; font: 12px/1 'VT323', monospace; letter-spacing: .3px; color: var(--ph-bright); padding: 3px 6px; border-radius: 4px; border: 1px solid var(--refit-edge); background: rgba(0,0,0,.25); white-space: nowrap; }
+.refit-overlay .refit-keyrow > span { min-width: 0; font-size: 14px; color: var(--ph-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 @media (prefers-reduced-motion: reduce) {
   .refit-overlay .refit-selection .refit-sel-act { transition: none; }
 }

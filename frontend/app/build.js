@@ -1117,6 +1117,11 @@ const Build = (() => {
     d.drawImage(off, Math.round((c.width - w) / 2), Math.round((c.height - h) / 2), w, h);
     host.appendChild(c);
   }
+  // the Surfaces tab shows its finishes with nothing armed: the first material or colour picked there arms SURFACE (capture
+  // phase, so the chip's own handler then sets the pick on the armed tool's palette)
+  function armPaintFromBrowse(e) {
+    if (tool === 'select' && buildGroup === 'surfaces' && e.target && e.target.closest && e.target.closest('.refit-mattile, .refit-hue')) selectTool('paint', { silent: true });
+  }
   function renderPalette() {
     const pal = root.querySelector('#refit-palette');
     if (!pal) return;
@@ -1134,24 +1139,24 @@ const Build = (() => {
     root.querySelectorAll('.refit-toolset').forEach(g => { g.hidden = g.dataset.group !== buildGroup; });
     pal.innerHTML = '';
     propThumbs.length = 0;   // drop any preview tiles from a prior render (they're rebuilt below for the prop tool)
-    if (tool === 'select' && buildGroup !== 'props' && buildGroup !== 'workflow') {
+    /* THE TABS SHOW THEIR THINGS (2026-10-01 build-mode upgrade). Rooms, Surfaces and Edit each opened on a title, one sentence
+       and an empty glass until you armed their tool. Now Rooms opens on its room types and Surfaces on its finishes — picking
+       one arms the tool with it (the branches below) — and Edit on the editor's keys, as key caps, with the object finder. */
+    if (tool === 'select' && buildGroup === 'edit') {
       paletteLabel = 'INSPECT';
       const note = document.createElement('div');
-      note.className = 'refit-selectnote';
-      const browse = {
-        rooms: ['Make space', 'Choose Room to add space, or Hallway to connect rooms. Click an existing room to edit it.'],
-        surfaces: ['Change the finish', 'Choose Surface to pick a floor, wall or exterior finish. Nothing changes until you apply it.'],
-        edit: ['Click anything to edit', 'Click a prop for its actions, or choose a tool above. Undo restores layout changes.']
-      }[buildGroup];
-      note.innerHTML = '<b>'+esc(browse[0])+'</b><span>'+esc(browse[1])+'</span>';
+      note.className = 'refit-selectnote refit-keycard';
+      const KEYS = [['Click', 'select it'], ['Drag a box', 'select several'], ['Shift + click', 'add or drop one'], ['Drag it', 'move it'],
+        ['Arrows', 'nudge · Shift: 5'], ['R · M', 'turn · flip'], ['Ctrl + D', 'duplicate'], ['Ctrl + C · V', 'copy · paste'], ['Del', 'delete'], ['Ctrl + Z', 'undo']];
+      note.innerHTML = '<b>Click anything to edit</b><div class="refit-keyrows">' + KEYS.map(([k, v]) => '<span class="refit-keyrow"><kbd>' + esc(k) + '</kbd><span>' + esc(v) + '</span></span>').join('') + '</div>';
       pal.appendChild(note);
       const finder=document.createElement('select');finder.setAttribute('aria-label','Find a placed object');finder.className='refit-object-finder';
       const refresh=()=>{finder.replaceChildren();const blank=document.createElement('option');blank.value='';blank.textContent='Find a placed object…';finder.append(blank);
         for(const p of station.props().slice().sort((a,b)=>propLabel(a.t).localeCompare(propLabel(b.t)))){const o=document.createElement('option');o.value=p.id;o.textContent=propLabel(p.t)+' · '+p.x+', '+p.y;finder.append(o);}};
       refresh();finder.onfocus=refresh;
       finder.onchange=()=>{const p=station.propById(finder.value);if(!p)return;onInspect(p,orientEv());zoom=Math.max(zoom,1);panX=cv.width*.72-(p.x+p.w/2)*T()*zoom;panY=cv.height*.5-(p.y+p.h/2)*T()*zoom;};
-      pal.append(finder);
-    } else if (tool === 'room') {
+      note.insertBefore(finder, note.querySelector('.refit-keyrows'));   // the finder first (it acts), the keys under it (they teach)
+    } else if (tool === 'room' || (tool === 'select' && buildGroup === 'rooms')) {
       /* ROOM TYPE was the last palette in REFIT still made of bare text chips, next to a prop
          gallery of live animated previews and a material grid painted by the real bake. A room
          kind IS a deck (a hue × a material), so it can preview itself the same honest way every
@@ -1162,7 +1167,7 @@ const Build = (() => {
       grid.setAttribute('aria-label', 'Room types');
       station.KIND_ORDER.forEach(k => {
         const def = station.ROOM_KINDS[k]; if (!def) return;
-        const active = k === kind;
+        const active = tool === 'room' && k === kind;   // nothing armed = nothing lit: the grid is a choice, not a state
         const b = document.createElement('button');
         b.type = 'button';
         b.className = 'refit-mattile refit-kindtile' + (active ? ' active' : '');
@@ -1175,7 +1180,7 @@ const Build = (() => {
         const hueDef = station.FLOOR_STYLES[def.floor];
         b.title = def.label + ' — ' + ((station.FLOOR_MATERIALS[def.mat] || {}).label || def.mat || 'plate')
           + ' deck in ' + ((hueDef && hueDef.label) || def.floor) + ' (SURFACE re-lays it any time)';
-        b.onclick = () => { kind = k; renderPalette(); setHint(); sfx('click'); };
+        b.onclick = () => { kind = k; if (tool !== 'room') selectTool('room', { silent: true }); else { renderPalette(); setHint(); } sfx('click'); };
         grid.appendChild(b);
       });
       pal.appendChild(grid);
@@ -1254,7 +1259,8 @@ const Build = (() => {
       const more = document.createElement('div'); more.className = 'refit-prop-more'; more.appendChild(details); inspector.appendChild(more);
       workspace.appendChild(inspector); pal.appendChild(workspace);
       renderPropGrid();
-    } else if (tool === 'paint') {
+    } else if (tool === 'paint' || (tool === 'select' && buildGroup === 'surfaces')) {
+      if (tool === 'select') pal.addEventListener('click', armPaintFromBrowse, true);   // the same function twice is one listener
       /* SURFACE — TWO AXES, TWO SECTIONS: the MATERIAL (what the surface is made of) and the HUE
          (what colour it is). They compose — every material renders in whatever colour is selected
          — so the Commander picks a room's finish the way you'd pick flooring: the stuff, then the
@@ -2435,7 +2441,8 @@ const Build = (() => {
     let verb = (t && t.verb) || (t && t.hint) || '';
     if (tool === 'select' && buildGroup === 'props') verb = 'Pick a prop, then click the floor to place it · click a placed one to edit it';
     if (tool === 'select' && buildGroup === 'workflow') verb = 'Choose a machine or a whole line, or use Belt to connect machines. Nothing is selected yet.';
-    if (tool === 'select' && (buildGroup === 'rooms' || buildGroup === 'surfaces')) verb = 'Choose a tool above to begin. Click existing objects to edit.';
+    if (tool === 'select' && buildGroup === 'rooms') verb = 'Pick a room type, then click or drag on the grid · HALLWAY joins rooms';
+    if (tool === 'select' && buildGroup === 'surfaces') verb = 'Pick a finish, then click a room to lay it · DECK, WALLS or SHELL';
     if (tool === 'paint') verb = paintTarget === 'hull' ? 'click a room to re-clad its outside'
       : paintTarget === 'walls' ? 'click a room to clad its walls'
       : 'click a room to lay this deck · drag to paint tiles';

@@ -13,7 +13,9 @@
         has already changed), from the station's own synth, no particles;
      6. MANY AT ONCE: a drag across empty floor in SELECT draws a box and selects everything it touches (Shift adds), Shift+click
         adds / drops one, Ctrl+A takes the floor; the group moves (drag any member, the arrows), duplicates (Ctrl+D) or goes (Delete)
-        as ONE edit — one UNDO, all-or-nothing; a plain click on empty floor lets go, and with nothing selected opens the room. */
+        as ONE edit — one UNDO, all-or-nothing; a plain click on empty floor lets go, and with nothing selected opens the room;
+     7. THE TABS SHOW THEIR THINGS: Rooms opens on its room types and Surfaces on its finishes (a pick arms the tool with it), Edit
+        on the editor's keys as key caps under the object finder — never a title, a sentence and an empty glass. */
 'use strict';
 const A = require('./_assert.js');
 const fs = require('fs');
@@ -146,5 +148,20 @@ A.ok(/RELEASE TO SELECT/.test(fn('drawSelectBox')) && /' THINGS'\]/.test(fn('dra
 A.ok(/groupmove: 1 \}/.test(build), 'a group drag ticks tile by tile like any move');
 A.ok(/<span><b>Drag a box<\/b> Select several<\/span>/.test(build), 'HELP teaches the box');
 A.ok(/selection: \(\) => selectionIds\(\),/.test(build), 'CDP proof can read the selection');
+
+/* ---------- 7. the tabs show their things ---------- */
+const pal = fn('renderPalette');
+A.ok(/if \(tool === 'select' && buildGroup === 'edit'\) \{/.test(pal) && !/Choose Room to add space/.test(pal) && !/Choose Surface to pick a floor/.test(pal), 'only the Edit tab keeps a note — Rooms and Surfaces show their things');
+A.ok(/\['Drag a box', 'select several'\]/.test(pal) && /\['Ctrl \+ D', 'duplicate'\]/.test(pal) && /\['Del', 'delete'\]/.test(pal) && /<kbd>' \+ esc\(k\) \+ '<\/kbd>/.test(pal),
+  'Edit shows the editor\'s keys as key caps (the gestures no button shows, too)');
+A.ok(/note\.insertBefore\(finder, note\.querySelector\('\.refit-keyrows'\)\);/.test(pal), '…under the object finder, which acts');
+A.ok(/\} else if \(tool === 'room' \|\| \(tool === 'select' && buildGroup === 'rooms'\)\) \{/.test(pal) && /const active = tool === 'room' && k === kind;/.test(pal)
+  && /kind = k; if \(tool !== 'room'\) selectTool\('room', \{ silent: true \}\);/.test(pal),
+  'Rooms opens on its room types (none lit until one is picked); picking one arms ROOM with it');
+A.ok(/\} else if \(tool === 'paint' \|\| \(tool === 'select' && buildGroup === 'surfaces'\)\) \{\n      if \(tool === 'select'\) pal\.addEventListener\('click', armPaintFromBrowse, true\);/.test(pal)
+  && /closest\('\.refit-mattile, \.refit-hue'\)\) selectTool\('paint', \{ silent: true \}\);/.test(fn('armPaintFromBrowse')),
+  'Surfaces opens on its finishes; the first material or colour picked arms SURFACE with it');
+A.ok(/buildGroup === 'rooms'\) verb = 'Pick a room type, then click or drag on the grid/.test(build) && /buildGroup === 'surfaces'\) verb = 'Pick a finish, then click a room to lay it/.test(build),
+  'the status line says what the open tab is for');
 
 A.report('build-mode-easy.test');
