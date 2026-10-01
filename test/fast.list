@@ -259,6 +259,7 @@ test/browser-single-launch.test.js
 test/browser-install.test.js
 test/browser-station-privacy.test.js
 test/browser-station-login.test.js
+test/browserstream.keys.test.js
 test/notebook.test.js
 test/skills.test.js
 test/skill-exchange.test.js
