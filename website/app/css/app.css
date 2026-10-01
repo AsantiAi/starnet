@@ -237,6 +237,16 @@ input[type=file]::file-selector-button:hover { border-color: var(--ph); backgrou
   top: 100%; border: 6px solid transparent; border-top-color: var(--ph);
 }
 .station-tip.below::after { top: auto; bottom: 100%; border-top-color: transparent; border-bottom-color: var(--ph); }
+/* THE BUILD LIBRARY'S TIP (2026-09-30): over the library's glass tiles the card is that glass — one hairline edge, the dark sheet,
+   8px, no glow — and it keeps its line breaks, so a tile's tip reads as its name, then what it does */
+.station-tip.glass-tip {
+  max-width: 300px; padding: 9px 12px; white-space: pre-line; color: var(--text);
+  background: linear-gradient(165deg, rgba(var(--ph-rgb),.09), transparent 55%), var(--panel2);
+  border: 1px solid rgba(var(--ph-rgb),.35); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.45);
+}
+.station-tip.glass-tip::first-line { color: var(--ph-bright); }
+.station-tip.glass-tip::after { border-top-color: rgba(var(--ph-rgb),.35); }
+.station-tip.glass-tip.below::after { border-top-color: transparent; border-bottom-color: rgba(var(--ph-rgb),.35); }
 @media (prefers-reduced-motion: reduce) {
   .station-tip { transition: none; transform: none; }
   .station-tip.show { transform: none; }
@@ -4205,123 +4215,65 @@ body.crew-rail-off #screen-game.active {
 .refit-hue-auto.active { color: var(--ph-bright); }
 .refit-hue-auto .refit-matname { font-size: 11px; letter-spacing: 1.2px; }
 
-/* STARTER LINES — one-click pre-wired layouts (the beginner onramp) + the belt tool's intro line.
-   v2: a single column of UNIFORM cards, each the same anatomy top-to-bottom — schematic viewport
-   (a fixed-height dark stage so every card is the same size no matter the blueprint's footprint),
-   NAME + a derived footprint/dock chip, one dim purpose line. Hover speaks the gallery's phosphor
-   hover language (.refit-proptile), not a private green. The intro stays THE ONE SENTENCE and
-   doubles as the belt palette's idle state. */
-.refit-lineintro {
-  width: 100%; margin: 2px 0 4px; font-size: 15px; line-height: 1.35; letter-spacing: .4px;
-  color: var(--ph-dim); text-shadow: 0 0 5px var(--ph-glow2);
-}
-.refit-linegrid { display: flex; flex-direction: column; gap: 7px; width: 100%; }
-/* START FROM INTENT (2026-09-28): the line with the shape of the Commander's goal, marked apart from the library below it */
-.refit-goalgrid .refit-linetile { border-color: var(--gold); }
-/* THE MACHINES SHELF (Conveyors tab): single workflow machines as a first-class palette — the same
-   matte card language as the line cards, a small live thumbnail + name + one-line purpose per row.
-   READABLE TYPE (2026-09-30, Andrew: "users will not be able to read this"): every sentence on this tab used to sit
-   at 10–12px VT323 — a tall, narrow pixel face that needs far more — beside a Workflow panel that speaks at 15px.
-   The tab is on the panel's scale now: sentences 15px, names and headings 16–17px, stat chips 13px. Nothing a
-   Commander has to READ on this tab goes under 13px again. */
-.refit-machines { display: flex; flex-direction: column; gap: 5px; width: 100%; margin-bottom: 6px; }
-.refit-palsection { margin-top: 2px; }
-.refit-machines .refit-palsection { border-top: 0; padding-top: 0; margin-top: 0; }
-.refit-machinegrid { display: grid; grid-template-columns: 1fr; gap: 4px; width: 100%; }
+/* THE CONVEYORS TAB (Build Library) — laid out like the Props tab beside it (2026-09-30, Andrew: "the long sentences underneath
+   each machine … I hate it … stop resorting back to the old ugly UI"). Two section keys (LINES · MACHINES — the prop-sections
+   row), then a grid of big glass tiles: a line's miniature or a machine's own art, its name, one small line. No sentence sits
+   under a tile; what a tile is for is its hover tip. The glass (edge, fill, radius, the lit active face) is the prop tile's —
+   refit-polish.css — and the type is the prop tile's roles (readability.css: names compact, small lines meta). */
+.refit-conv-sections { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin: 0 0 12px; }
+.refit-conv-sections .bb small { margin-left: 5px; opacity: .65; }
+/* BUILD YOUR OWN LINE: one full-width lit key at the top of the LINES section */
+.refit-ownline { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 42px; margin: 0 0 14px; }
+/* a section's name across its grid row — the props' "FURNITURE / 128 ITEMS" voice, never a blurb */
+.refit-linegroup, .refit-machinegroup { grid-column: 1 / -1; margin: 12px 2px 2px; letter-spacing: 1.2px; color: var(--ph-dim); text-transform: uppercase; }
+.refit-linegrid > .refit-linegroup:first-child, .refit-machines > .refit-machinegroup:first-child { margin-top: 0; }
+.refit-goalhd { color: var(--gold); }
+/* MACHINES — three across, the prop tile: art, name, and the machine's wiring drawn small */
+.refit-machines { display: block; width: 100%; }
+.refit-machinegrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; width: 100%; margin-top: 6px; }
 .refit-machinetile {
-  /* thumbnail | NAME …… wiring diagram
-               | the description, the tile's full width   (the text wrapper is display:contents, so its two lines are grid items) */
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 10px; row-gap: 3px; align-items: center; width: 100%; min-width: 0;
-  padding: 7px 8px; cursor: pointer; border-radius: 5px; font-family: inherit; text-align: left;
-  background: rgba(0,0,0,.34); border: 1.5px solid var(--ph-faint); color: var(--ph);
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  min-width: 0; min-height: 118px; padding: 8px 4px; cursor: pointer; font-family: inherit; color: var(--ph-dim);
 }
-.refit-machinetile:hover { border-color: var(--ph); color: var(--ph-bright); background: var(--ph-faint); }
-.refit-machinetile.active { border-color: var(--ph-bright); color: var(--ph-bright); box-shadow: 0 0 10px var(--ph-glow), inset 0 0 14px rgba(0,0,0,.55); }
-.refit-machinetile-cv { grid-column: 1; grid-row: 1 / span 2; align-self: start; display: block; border-radius: 3px; background: #0b0f0e; pointer-events: none; }
-.refit-machinetile-txt { display: contents; }
-.refit-machinetile-nm { grid-column: 2; grid-row: 1; min-width: 0; font-size: 17px; line-height: 1.1; letter-spacing: 1.2px; color: inherit; }
-.refit-machinetile-why { grid-column: 2 / span 2; grid-row: 2; min-width: 0; font-size: 15px; line-height: 1.3; letter-spacing: .3px; color: var(--ph-dim); white-space: normal; overflow-wrap: break-word; }
-/* the shelf in plain groups (2026-09-27 audit P2): THE LINE · BRANCH & COMBINE · REPEAT — a small rule + name + how-to line */
-.refit-machinegroup { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; margin: 10px 2px 2px; }
-.refit-machinegroup .nm { font-size: 15px; letter-spacing: 1.6px; color: var(--ph); }
-.refit-machinegroup .why { font-size: 14px; letter-spacing: .3px; color: var(--ph-dim); }
+.refit-machinetile-cv {
+  width: 76px; height: 50px; image-rendering: pixelated; pointer-events: none;
+  background: radial-gradient(ellipse 78% 78% at 50% 62%, rgba(130,170,150,.08), transparent 75%);
+}
+.refit-machinetile-nm { line-height: 1.1; letter-spacing: .5px; color: var(--ph-bright); text-align: center; }
 /* each machine's wiring as a tiny in→out diagram (fork / wait-bar / funnel / three-way / back arrow) — theme stroke, no fill */
-.refit-machinediagram { grid-column: 3; grid-row: 1; flex: 0 0 auto; width: 40px; height: 24px; margin-left: auto; color: var(--ph-dim); fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; opacity: .9; pointer-events: none; }
+.refit-machinediagram { width: 34px; height: 20px; color: var(--ph-dim); fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; opacity: .8; pointer-events: none; }
 .refit-machinediagram .md-fill { fill: currentColor; stroke: none; }
-.refit-machinetile:hover .refit-machinediagram, .refit-machinetile.active .refit-machinediagram { color: var(--ph-bright); }
-/* the LINE LIBRARY's section headers — a rule line + name + one-line blurb, matte phosphor */
-.refit-linegroup {
-  display: flex; flex-direction: column; gap: 1px; width: 100%; min-width: 0;
-  margin: 6px 0 0; padding: 5px 2px 0; border-top: 1px solid var(--ph-faint);
-}
-.refit-linegrid .refit-linegroup:first-child { margin-top: 0; border-top: 0; padding-top: 0; }
-.refit-linegroup-nm {
-  font-size: 17px; letter-spacing: 1.6px; color: var(--ph-bright); text-shadow: 0 0 6px var(--ph-glow2);
-}
-.refit-linegroup-why {
-  font-size: 15px; line-height: 1.3; letter-spacing: .4px; color: var(--ph-dim);
-  white-space: normal; overflow-wrap: break-word;
-}
+.refit-machinetile:hover .refit-machinediagram, .refit-machinetile.active .refit-machinediagram { color: var(--ph-bright); opacity: 1; }
+/* LINES — two across: the line's miniature, its name, one small line (steps · size, or its fit) */
+.refit-linegrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; width: 100%; align-items: start; }
+.refit-linecell { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .refit-linetile {
-  display: flex; flex-direction: column; align-items: stretch; gap: 4px; width: 100%; min-width: 0;
-  padding: 5px 6px 6px; cursor: pointer; border-radius: 5px; font-family: inherit; text-align: left;
-  background: rgba(0,0,0,.34); border: 1.5px solid var(--ph-faint); color: var(--ph);
+  display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; min-width: 0;
+  padding: 8px 6px 9px; cursor: pointer; font-family: inherit; text-align: center; color: var(--ph-dim);
 }
-.refit-linetile:hover { border-color: var(--ph); color: var(--ph-bright); background: var(--ph-faint); }
-.refit-linetile.active {
-  border-color: var(--ph-bright); color: var(--ph-bright);
-  box-shadow: 0 0 10px var(--ph-glow), inset 0 0 14px rgba(0,0,0,.55);
-}
-/* the schematic stage: fixed height = uniform cards; the canvas centres inside at 1:1 */
-.refit-linetile-view {
-  display: flex; align-items: center; justify-content: center; width: 100%; height: 70px;
-  border-radius: 3px; background: #0b0f0e; box-shadow: inset 0 0 0 1px rgba(0,0,0,.55);
-}
+/* the miniature's stage: a recessed glass well of one height, so every tile is the same size */
+.refit-linetile-view { display: flex; align-items: center; justify-content: center; width: 100%; height: 64px; border-radius: 6px; background: rgba(0,0,0,.28); box-shadow: inset 0 1px 3px rgba(0,0,0,.35); }
 .refit-linetile-cv { display: block; max-width: 100%; image-rendering: pixelated; pointer-events: none; }
-.refit-linetile-hd { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 3px 6px; width: 100%; }
-.refit-linetile .refit-matname { font-size: 16px; line-height: 1.2; letter-spacing: 1.1px; text-align: left; white-space: normal; overflow: visible; text-overflow: clip; }
-/* PLAIN NAMES (2026-09-28): the card leads with what the line does; the catalog name is a small tag beside it */
-.refit-linetile .refit-matname { flex: 1 1 100%; min-width: 0; }   /* the whole first row: the name is what the Commander reads */
-.refit-linetile-tag { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; letter-spacing: 1px; color: var(--ph-dim); opacity: .8; }
-/* SET UP BEFORE YOU PLACE: the armed card's cap + review tries, stacked right under it */
-.refit-lineprefs { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--ph-faint); border-radius: 4px; background: rgba(0,0,0,.25); }
-.refit-lineprefs-hd { font-size: 14px; letter-spacing: 1.2px; color: var(--ph); }
-.refit-lineprefs-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
-.refit-lineprefs-k { flex: 0 0 118px; font-size: 14px; letter-spacing: 1px; color: var(--ph-dim); }
-.refit-lineprefs .bb.sm { min-width: 30px; padding: 2px 7px; }
-.refit-lineprefs .bb.sm[aria-pressed="true"] { border-color: var(--ph); color: var(--ph-bright); background: rgba(var(--ph-rgb),.14); }
-.refit-lineprefs-note { font-size: 14px; line-height: 1.3; color: var(--ph-dim); }
-/* the stat chip mixes VT323 with fallback-font glyphs ('×' '·') — BOX-centred, never padded by
-   font metrics (the symbol-glyph law) */
-.refit-linetile-stat {
-  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
-  padding: 1px 5px; border: 1px solid var(--ph-faint); border-radius: 3px;
-  font-size: 13px; letter-spacing: 1px; line-height: 1.4;
-  color: var(--ph-dim); background: rgba(0,0,0,.3); white-space: nowrap;
-}
-/* one line of WHAT IT DOES; 2-line floor keeps every card the same height when a purpose wraps */
-.refit-linetile-why {
-  font-size: 15px; line-height: 1.3; letter-spacing: .3px; min-height: 39px;
-  color: var(--ph-dim); opacity: .9;
-}
-/* DECK-FIT HONESTY: a blueprint the current floor has nowhere to put. The card stays armable
-   (never gate the sandbox) — it just stops pretending. Dimmed schematic + the reason in the
-   warn amber the rest of REFIT uses for "this won't work yet", matte: no glow, no fill. */
-.refit-linetile.nofit { border-style: dashed; opacity: .82; }
-/* LAID OUT TO FIT (conveyor-links phase E): the drawn shape fits nowhere but the line does — the note reads as an offer, not a refusal */
-.refit-linetile.laidfit .refit-linetile-nofit { color: var(--ph); border-color: rgba(var(--ph-rgb),.35); }
+.refit-linetile .refit-matname { line-height: 1.15; letter-spacing: .5px; color: var(--ph-bright); text-align: center; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: break-word; }
+.refit-linetile-stat { letter-spacing: .4px; color: var(--ph-dim); white-space: nowrap; }
+/* DECK-FIT HONESTY: a line the floor has nowhere to put stays armable (never gate the sandbox) — a dashed edge, a dimmed
+   miniature and its small line in the warn tone; FITS LAID OUT reads as an offer, not a refusal. Matte: no glow, no fill. */
+.refit-linetile.nofit { border-style: dashed; }
 .refit-linetile.nofit .refit-linetile-view { opacity: .5; }
-.refit-linetile-nofit {
-  width: 100%; margin-top: 1px; font-family: 'VT323', monospace;
-  font-size: 14px; letter-spacing: 1px; line-height: 1.3;
-  color: var(--warn); opacity: .9;
-}
-/* MAKE ROOM (2026-09-27 audit B1): the way out of NO ROOM, tucked under its card — a quiet phosphor control, not a CTA */
-.refit-linetile-makeroom { width: 100%; margin-top: -4px; justify-content: center; font-size: 14px; letter-spacing: 1.2px; border-style: dashed; }
-.refit-linetile-makeroom:hover { border-style: solid; }
-/* the operational footing sits INSIDE the shelf, directly under the cards */
-/* BUILD YOUR OWN LINE (conveyor-links phase D): one plain button under the Conveyors intro */
-.refit-ownline { display: block; width: 100%; margin: 4px 0 8px; text-align: left; }
+.refit-linetile.nofit:not(.laidfit) .refit-linetile-stat { color: var(--warn); }
+.refit-linetile.laidfit .refit-linetile-stat { color: var(--ph); }
+/* MAKE ROOM FOR IT (2026-09-27 audit B1): the way out of NO ROOM, a quiet key under its tile */
+.refit-linetile-makeroom { display: flex; width: 100%; justify-content: center; }
+/* START FROM INTENT: the goal's tile carries the gold edge */
+.refit-goalcell .refit-linetile { border-color: var(--gold); }
+/* SET UP BEFORE YOU PLACE: the armed tile's daily cap + review tries, across the grid right under it */
+.refit-lineprefs { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; }
+.refit-lineprefs-hd { letter-spacing: 1.2px; color: var(--ph); }
+.refit-lineprefs-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.refit-lineprefs-k { flex: 1 1 100%; letter-spacing: .8px; color: var(--ph-dim); }   /* the name on its own line, its keys in one row under it */
+.refit-lineprefs .bb.sm { min-width: 40px; }
+.refit-lineprefs .bb.sm[aria-pressed="true"] { border-color: var(--ph); color: var(--ph-bright); background: rgba(var(--ph-rgb),.14); }
+/* the ROOM tool's one-line footnote under its deck grid */
 .refit-linenote {
   width: 100%; margin-top: 2px; padding-top: 5px; border-top: 1px solid var(--ph-faint);
   font-size: 14px; letter-spacing: 1px; line-height: 1.3;

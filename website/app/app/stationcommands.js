@@ -270,7 +270,7 @@ const StationCommands = (() => {
       if (unread.length && flow.trigger.propId && !anyStart && !flow.cyclic) {
         // a start the page could not read is unknown, not absent: never let "nothing starts it" stand on a failed read
         const unsure = 'What starts it could not be fully read right now (' + unread.join(', ') + ' unavailable)' + (starts.paused.length ? '; paused: ' + starts.paused.join('; ') : '') + '; ';
-        if (segs[0] && /^Nothing starts it/.test(segs[0].s)) segs[0] = { t: 'text', s: unsure };
+        if (segs[0] && /^(Nothing starts it|It runs when you send it a job)/.test(segs[0].s)) segs[0] = { t: 'text', s: unsure };   // (2026-09-30: the short opening too)
         hints = hints.filter(h => !/^nothing starts it/.test(h)).concat(['check what starts this line again: ' + unread.join(', ') + ' could not be read']);
       }
       const step = {}; flow.order.forEach((pid, i) => { step[pid] = i + 1; });

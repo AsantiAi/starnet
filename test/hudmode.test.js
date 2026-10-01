@@ -18,6 +18,49 @@ const names = { agent: { name: 'NOVA', color: '#4af' }, researcher: { name: 'ORI
 const who = id => names[id] || null;
 const T0 = 1_800_000_000_000;
 
+// ---- HUD QA 2026-09-30: controls only where they work, truthful endings ----
+{
+  const f = H.createFeed();
+  H.applySnapshot(f, { runs: [
+    { runId: 'r-com', agentId: 'agent', startedAt: T0 - 5000, stoppable: true },
+    { runId: 'r-line', agentId: 'researcher', startedAt: T0 - 9000, source: 'host', stoppable: false },
+    { runId: 'r-old', agentId: 'agent', startedAt: T0 - 1000 }
+  ], prompts: [], queues: [] }, T0);
+  const by = id => H.workItems({ feed: f, now: T0 }).find(x => x.runId === id);
+  const st = [{ id: 's1', runIds: ['r9'], history: [{ role: 'user', content: 'Go' }, { role: 'assistant', sourceRunId: 'r9', content: 'Part one.\n[steering] Also list the biggest files\nPart two.' }] }];
+  A.eq(H.replyOfRun('r9', 's1', st), 'Part one.\n\nPart two.', 'a direction echoed into the reply is never shown as the agent\'s result');
+  A.eq(H.replyOfRun('r9', 's1', [{ id: 's1', history: [{ role: 'assistant', sourceRunId: 'r9', content: '\n[steering] 1 steering note arrived as this run was ending and was NOT applied\n' }] }]), '', 'a reply that is only steering echoes is no reply');
+  A.ok(by('r-com').canStop && by('r-com').canSteer, 'a run the station can stop offers STOP and a direction');
+  A.ok(!by('r-line').canStop && !by('r-line').canSteer, 'a work-line step /api/cancel cannot reach offers neither (no "Stop requested." for a stop that never happens)');
+  A.ok(by('r-old').canStop, 'an older station that does not say keeps the controls');
+  const workers = [
+    { id: 'w1', agentId: 'researcher', status: 'stale', prompt: 'Dig up the docs', completedAt: T0 - 1000 },
+    { id: 'w2', agentId: 'researcher', status: 'refused', prompt: 'Do the thing', completedAt: T0 - 2000 },
+    { id: 'w3', agentId: 'researcher', status: 'weird', prompt: 'Other', completedAt: T0 - 3000 }
+  ];
+  const items = H.workItems({ feed: H.createFeed(), workers, now: T0 });
+  const w = id => items.find(x => x.workerId === id);
+  A.eq([w('w1').state, w('w1').status], ['fault', 'Lost when the station restarted'], 'a worker lost to a restart is a fault, not "done"');
+  A.eq([w('w2').state, w('w2').status], ['fault', 'Refused'], 'a refused worker is a fault');
+  A.eq([w('w3').state, w('w3').status], ['stopped', 'Ended (weird)'], 'an ending the HUD does not know is never painted done');
+  const js = fs.readFileSync(path.join(ROOT, 'frontend/app/hudmode.js'), 'utf8');
+  A.ok(!js.includes('No result was recorded') && js.includes("'Its reply isn’t shown here.'") && js.includes("'Its reply is in the conversation.'"),
+    'a finished card with no reply on this page says where the reply is, never that there was none');
+  A.ok(js.includes("setText(v.clock, down ? 'NO LINK'") && js.includes("v.node.dataset.state = down ? 'fault' : tile.state;"), 'the widget stops its clocks and says NO LINK when the station stops answering');
+  A.ok(js.includes('if (S.followId === id && S.followKey === key && cameraOn(id)) return;'), 'a follow the world could not take (or dropped) is retried, never marked done');
+  A.ok(js.includes("if (S.busy) { S.exitAfter = true;") && js.includes("invoke('starnet_hud_status').then(v => (v && v.active ? invoke('starnet_hud_set', { active: false }) : null))") && js.includes('else exit(); };'),
+    'leaving is never dropped: during entry it runs right after, and a page that lost the HUD still hands the window back');
+  A.ok(js.includes('holdToMove(open); holdToMove(rows);') && js.includes('cur.startDragging()') && js.includes("invoke('plugin:window|start_dragging', { label: 'main' })") && js.includes('if (!justMoved()) setView(\'activity\');'),
+    'the agent cam moves: hold the picture or a row and drag the window; a press that does not move stays a click');
+  A.ok(fs.readFileSync(path.join(ROOT, 'src-tauri/capabilities/default.json'), 'utf8').includes('core:window:allow-start-dragging'), 'the window may start an OS drag');
+  const side = fs.readFileSync(path.join(ROOT, 'sidecar/index.js'), 'utf8');
+  A.ok(side.includes('row.stoppable = runs.has(runId);') && side.includes("source: 'host', stoppable: runs.has(runId) }"), 'the snapshot says which runs /api/cancel can reach (additive)');
+  const world = fs.readFileSync(path.join(ROOT, 'frontend/app/world.js'), 'utf8');
+  A.ok(world.includes('function cameraState()') && world.includes('function restoreCamera(st)') && world.includes('cameraState, restoreCamera,'), 'the world hands a borrowed camera back exactly');
+  const rs = fs.readFileSync(path.join(ROOT, 'src-tauri/src/hud_mode.rs'), 'utf8');
+  A.ok(rs.includes('rect = Some(unfolded_rect(r, g.unfolded_w, h));') && rs.includes('let back = station_rect_back('), 'the HUD never walks off-screen on exit, and the station never comes back on a monitor that is gone');
+}
+
 // ---- nothing asserted before the first snapshot ----
 {
   const f = H.createFeed();
@@ -221,7 +264,8 @@ A.eq([H.fmtAgo(10_000), H.fmtAgo(5 * 60_000), H.fmtAgo(2 * 3_600_000)], ['just n
     'a size the Commander drags the widget to is kept (no auto-fit fights it) and remembered');
   A.ok(js.includes('if (e && e.isTrusted === false) return;'), 'the HUD\'s own synthetic resize (after a view change) is never mistaken for the Commander sizing the widget');
   A.ok(js.includes('World.setOverlays(!capped)'), 'the widget turns the in-world readouts off, and the station gets them back');
-  A.ok(js.includes('World.lockBody(id, fr.zoom, { seatAt: fr.seatAt })') && js.includes('function widgetFraming()') && js.includes('World.lockBody(S.followId, S.stationZoom)'), 'the widget frames its agent closer (a seated one with its desk in view) and gives the station its zoom back');
+  A.ok(js.includes('World.lockBody(id, fr.zoom, { seatAt: fr.seatAt })') && js.includes('function widgetFraming()') && js.includes('World.restoreCamera(S.stationCam)') && js.includes('keepStationCamera();'), 'the widget frames its agent closer (a seated one with its desk in view) and gives the station its zoom back');
+  A.ok(js.includes('return { zoom: WIDGET_ZOOM, seatAt:') && !js.includes('Math.min(1.33'), 'a bigger agent cam shows more station, never a bigger agent (Andrew: "WAY TOO BIG")');
   const w2 = read('frontend/app/world.js');
   A.ok(w2.includes('const fy = (camLock.seatAt && (lb.seated || lb.sitting)) ? camLock.seatAt : 0.56;') && w2.includes('function lockBody(id, zoom, opts)'), 'World.lockBody takes an optional seated framing (omitted = 0.56 for every body)');
   A.ok(read('frontend/app/world.js').includes('sc: clampz(zoom > 0 ? zoom : Math.max(scale, 3), MINZ, MAXZ)'), 'World.lockBody takes an optional zoom (omitted = the station rule)');

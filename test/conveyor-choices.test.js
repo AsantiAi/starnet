@@ -95,7 +95,8 @@ const splitOf = plan => Object.keys(plan.junctions).find(k => plan.junctions[k].
   A.eq(s(''), null, 'no words, no card');
   for (const id of ['revision_loop', 'research_line', 'code_foundry', 'build_test', 'second_opinion']) A.ok(WM.BLUEPRINTS.some(b => b.id === id), 'the suggested line exists in the catalog: ' + id);
   A.ok(/for \(const k of \['goals', 'ambition', 'pain'\]\)/.test(build) && /WorkflowLine\.suggestLineFor\(t\)/.test(build), 'the goal is the Commander\'s own dossier words');
-  A.ok(/FOR YOUR GOAL/.test(build) && /'“' \+ goal\.quote \+ '” — ' \+ goal\.why/.test(build) && /const gb = makeLineTile\(goal\.bp\); gg\.appendChild\(gb\); setLineTileFit\(gb, goal\.bp\);/.test(build), 'the card quotes them and is the same line card (fit + MAKE ROOM included)');
+  // (2026-09-30: the quote is the goal tile's hover tip and accessible description — no sentence under a tile)
+  A.ok(/FOR YOUR GOAL/.test(build) && /addLineCell\(grid, goal\.bp, '“' \+ goal\.quote \+ '” — ' \+ goal\.why, true\)/.test(build) && /b\.dataset\.tip = name [^\n]*\(why \? '\\n' \+ why : ''\)/.test(build), 'the card quotes them and is the same line card (fit + MAKE ROOM included)');
 }
 
 /* ---------- 4b: save, and turn scheduling on ---------- */

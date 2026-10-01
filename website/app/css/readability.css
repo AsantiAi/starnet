@@ -118,10 +118,12 @@ body #terms .sn-menu select.key-input { padding-right: 28px; }
 /* Build tools: keep compact dimensions, but give their captions real text sizes. */
 body .refit-dock :is(.refit-toolset-label,.refit-section-label,.refit-category-label,.refit-hint-keys,
  .refit-searchnote,.refit-propcat small,.refit-placement-note,.refit-core-status,.refit-access-chip span,
- .refit-preview-grant,.refit-equipment-scope,.refit-proptile-grant,.refit-proptile-size,.refit-key) {
+ .refit-preview-grant,.refit-equipment-scope,.refit-proptile-grant,.refit-proptile-size,.refit-key,
+ .refit-linetile-stat,.refit-linegroup,.refit-machinegroup,.refit-lineprefs-hd,.refit-lineprefs-k) {
   font-size: var(--sn-type-meta) !important; letter-spacing: .3px; line-height: 1.3;
 }
 body .refit-dock :is(.refit-tool,.refit-propcat,.refit-input,.bb,.refit-ability-intro,.refit-preview-info,.refit-proptile-lbl,
+ .refit-machinetile-nm,.refit-linetile .refit-matname,
  .refit-equipment-info,.refit-details-toggle,.refit-access-chip b), body #refit-kit-toggle {
   font-size: var(--sn-type-compact) !important;
 }

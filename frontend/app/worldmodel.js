@@ -894,7 +894,7 @@ const WorldModel = (() => {
      name; the station name stays as its tag), and the kind of work it is for (the shelf's sections, the same kinds the
      station presets are for). One source for the Lines shelf, the agent's station builder and the tests. */
   const LINE_PLAIN = {
-    front_desk: 'One agent', allowance_desk: 'One agent, capped', ship_out: 'Straight to outbox', two_doors: 'Two doors, one agent',
+    front_desk: 'One agent', allowance_desk: 'One agent, $5 a day', ship_out: 'Agent work to OUTBOX', two_doors: 'Two ways in',
     revision_loop: 'Draft + review', crucible: 'Two review rounds', fire_escape: 'Review + a fixer',
     build_test: 'Build + test', code_foundry: 'Build + review',
     research_line: 'Research + write', swarm_synthesis: 'Three researchers', deep_dive: 'Deep dive + review', assembly_line: 'Four-step chain',
@@ -1962,6 +1962,7 @@ const WorldModel = (() => {
         for (const k of CFG) if (sp[k] != null) cfg[k] = sp[k];
         if (sp.t === 'loop' && ov.maxIter != null) cfg.maxIter = ov.maxIter;
         if (Object.keys(cfg).length) n.cfg = cfg;
+        if (n.t === 'bay' && n.role) { const pb = { t: 'bay', role: n.role }; stampBrief(pb, ov.briefs); if (pb.brief) n.brief = pb.brief; if (pb.hands) n.hands = pb.hands; }
         return n;
       });
       const drawn = bp.props.map((sp, i) => {
@@ -2016,6 +2017,7 @@ const WorldModel = (() => {
             if (n.block === false) p.block = false;
             if (n.role && BAY_ROLES[n.role]) p.role = n.role;
             if (typeof n.agentId === 'string' && n.agentId) p.agentId = n.agentId;
+            if (n.t === 'bay') stampBrief(p, n.role && (n.brief || n.hands) ? { [n.role]: { does: n.brief, hands: n.hands } } : null);
             if (n.t === 'intake' && typeof n.label === 'string' && n.label.trim()) p.label = n.label.trim().slice(0, 48);
             if (n.t === 'intake' && n.limits && typeof n.limits === 'object') {   // through the one normalizer, as a stamp does
               const nl = normalizeLimits(n.limits);
@@ -2472,6 +2474,14 @@ const WorldModel = (() => {
     /* SET UP BEFORE YOU PLACE (2026-09-28): `opts` = { limits, maxIter } from the shelf card. They ride IN the stamp —
        the INBOX's budget through the same normalizer setPropLimits uses, the LOOP's pass cap through the same clamp its
        card uses — inside the ONE snapshot, so one UNDO still removes the whole line. */
+    // a stamped BAY of a role the caller gave instructions for carries them (the bounds setPropBrief / setPropHands keep)
+    function stampBrief(prop, briefs) {
+      const b = prop && prop.t === 'bay' && prop.role && briefs && typeof briefs === 'object' ? briefs[prop.role] : null;
+      if (!b || typeof b !== 'object') return;
+      const does = typeof b.does === 'string' ? b.does.trim().slice(0, 2000) : '', hands = typeof b.hands === 'string' ? b.hands.replace(/\s+/g, ' ').trim().slice(0, 160) : '';
+      if (does && !prop.brief) prop.brief = does;
+      if (hands && !prop.hands) prop.hands = hands;
+    }
     function stampBlueprint(id, tx, ty, opts) {
       const bp = blueprintById(id);
       const v = checkBlueprint(bp, tx, ty);
@@ -2498,6 +2508,7 @@ const WorldModel = (() => {
           if (nl) prop.limits = { maxHops: nl.maxHops, maxUsdPerMessage: nl.maxUsdPerMessage, maxUsdPerDay: nl.maxUsdPerDay };
         }
         if (s.t === 'loop' && ov.maxIter != null) applyJunctionCfg(prop, { maxIter: ov.maxIter });
+        stampBrief(prop, ov.briefs);   // (a shelf line's steps land with their role's instructions — one undo with the line)
         doc.props.push(prop);
         ids.push(prop.id);
         dirty.push({ x1: prop.x, y1: prop.y, x2: prop.x + prop.w - 1, y2: prop.y + prop.h - 1 });

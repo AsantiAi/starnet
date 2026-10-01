@@ -1841,6 +1841,23 @@ const World = (() => {
   // opts.seatAt (optional): where a SEATED body's feet sit in the frame (0..1 of its height). A seated worker
   // faces its desk, which stands ABOVE it on screen; a small frame that keeps the default 0.56 cuts the desk
   // and its screen off. Omitted = 0.56 for every body, byte-identical.
+  /* A BORROWED CAMERA, HANDED BACK (HUD mode, 2026-09-30): cameraState() is what drives the view right now — a
+     session lock (whom, at what zoom) or a free transform, kept as the zoom and the WORLD point at the canvas centre
+     (a canvas resize re-anchors on its centre, so that point survives the window changing size in between);
+     restoreCamera(state) puts exactly that back: the lock, or the free view (the cinecam re-casts on its own). */
+  function cameraState() {
+    const w = cv ? cv.width : 0, h = cv ? cv.height : 0;
+    return { lockId: camLock && camLock.source === 'session' ? camLock.id : null, lockSc: camLock ? camLock.sc : 0, seatAt: camLock && camLock.seatAt ? camLock.seatAt : 0,
+      scale, cx: scale > 0 ? (w / 2 - panX) / scale : 0, cy: scale > 0 ? (h / 2 - panY) / scale : 0 };
+  }
+  function restoreCamera(st) {
+    if (!st || !(st.scale > 0) || camAnim || awakeFrozen) return false;   // the scripted awakening camera owns the transform
+    camLerp = null; camLock = null;
+    if (st.lockId) { lockBody(st.lockId, st.lockSc, st.seatAt ? { seatAt: st.seatAt } : null); if (camLock) return true; }
+    scale = clampz(st.scale, MINZ, MAXZ);
+    if (cv) { panX = cv.width / 2 - st.cx * scale; panY = cv.height / 2 - st.cy * scale; }
+    return true;
+  }
   function lockBody(id, zoom, opts) {
     const b = bodyForAgent(id) || agent;
     if (!b || b.unplaced || !cache || camAnim || awakeFrozen) return;   // nothing to frame yet / the scripted awakening camera owns the transform
@@ -6665,7 +6682,10 @@ const World = (() => {
       // plate is the resting truth and the caption only a projection, so a caption that would collide sits that pass out.
       const plates = lwDrawOff ? [] : lwPlateBoxes();
       const onPlate = bx => plates.some(p => p.box && bx.x < p.box.x + p.box.w && bx.x + bx.w > p.box.x && bx.y < p.box.y + p.box.h && bx.y + bx.h > p.box.y);
-      ghost.draw(ctx, now, T, 8, plates.length ? (bx, paint) => { if (!onPlate(bx)) paint(); } : null);
+      // (2026-09-30) the caption plate is set at a reading size ON SCREEN — 14px, by pixel ratio and TEXT SIZE — whatever the camera
+      // zoom: at the shared 8 world px a plate grew to twice the NO FEED nag at a close zoom and covered the machines it spoke of
+      const capPx = 14 * (window.devicePixelRatio || 1) * ((typeof U !== 'undefined' && U.uiZoom && U.uiZoom()) || 1) / (scale || 1);
+      ghost.draw(ctx, now, T, capPx, plates.length ? (bx, paint) => { if (!onPlate(bx)) paint(); } : null);
     }
     drawHandoffBoxes(now);   // Stage 2: lead→worker delegation boxes fly over the entities
     drawQueueJam(now);   // the live backlog as a physical jam of waiting crates at the INTAKE (world-space, under the lightmap)
@@ -10690,6 +10710,8 @@ const World = (() => {
   return { init, rebake, frameReviewRoom, renderStill, crt: CRT, slagLog: () => (slaglog ? slaglog.recent() : []),
     // LINE WATCH: the Workflow panel pushes the step-test session it polls; reads today's numbers for a line
     noteStepTest, lineStatsFor: id => (lineStats.known ? (lineStats.byLine[id] || null) : null), pollLineStats,
+    // a bay's live state — the lamp's own fold (WORKING only once the sidecar confirmed the run), with how long it has held
+    bayLive: id => { const w = lineWatch(); if (!w || !id) return null; const t = lwNow(), s = w.status(id, t); return Object.assign({}, s, { forMs: s.since != null ? Math.max(0, t - s.since) : null }); },
     _dbgLineWatch: () => ({ setDraw: on => { lwDrawOff = !on; return !lwDrawOff; }, watch: watch ? watch.snapshot() : null, stats: lineStats, status: id => (watch ? watch.status(id, lwNow()) : null),
       crates: () => (convey ? convey.peekBoxes().filter(b => b.payload && !b.payload.ghost).map(b => { const v = CRATE_DIRV[b.dir] || [0, 0]; const wx = (b.x + 0.5) * T + (b.prog - 0.5) * T * v[0], wy = (b.y + 0.5) * T + (b.prog - 0.5) * T * v[1] - 1; return { id: b.id, box: b.payload.box || null, workitemId: b.payload.workitemId || null, runId: b.payload.runId || null, sx: wx * scale + panX, sy: wy * scale + panY }; }) : []),
       bays: () => (routingPlan && routingPlan.dockBays ? routingPlan.dockBays.filter(d => d.agentId).map(d => { const b = bayPlateBox(d); return { propId: d.propId, agentId: d.agentId, sx: b.cx * scale + panX, sy: (d.y + (d.h || 1) / 2) * T * scale + panY, lampX: (b.left + b.width - 4.75) * scale + panX, lampY: (b.top - 0.9) * scale + panY }; }) : []),
@@ -10725,7 +10747,7 @@ const World = (() => {
        floor to the router. `station: false` = no floor loaded (nothing is known). */
     planStatus: () => Object.assign({ station: !!station, pending: !!(station && (geoDirty || !geo)),
       errors: (routingPlan && routingPlan.errors ? routingPlan.errors : []).filter(e => !e.warn), hash: routingPlan ? routingPlan.hash : null }, planPoster.state()),
-    loadStation, spawn, spawnAgent, despawnAgent, setSkin, relabel, setActivityFor, agentRunsLive, dropRun: noteRunEnd, focusBody, lockBody, cameraMode, setFrameCap, setOverlays, setCinecamIdle, setChatFocus, chatFocusPing, start, stop, setActivity, wakeIn, beginAwakening, playArrival, cancelArrival, setWakeProgress, igniteSpark, armKindle, kindleHold, camPushIn, camCreep, camPunch, camPullBack, awakenTurn, truthPulse, beginFlood, collapseFlood, endAwakening, releaseAwakening, say, focusAgent, getActivity: () => activity, getUse: () => (agent ? agent.usingProp : null), setOnClick, setOnArcade, setOnOutbox, setOnMissionBoard, setOnTrophyCase, setOnPluginTerminal, setOnDesk, setOnBayAssign, setOnIntakeFeed, setOnIntakeSample, refit, pauseBridge, resumeBridge, linkState, _dbgSeedRun, _dbgAgeRun, _dbgReconcile, _dbgSweep, _dbgLinkState, _dbgDropBridge, _dbgCurveState, _dbgLoseCurveContext, _dbgLoseCanvases, _dbgCanvasLoss, _dbgKillStageContext, _dbgStageState, _dbgBeltLegibility, _dbgPropClientPoint, _dbgDeskClientPoint, _dbgSleep, _dbgUseProp, _dbgArrive, _dbgLeisure,
+    loadStation, spawn, spawnAgent, despawnAgent, setSkin, relabel, setActivityFor, agentRunsLive, dropRun: noteRunEnd, focusBody, lockBody, cameraMode, cameraState, restoreCamera, setFrameCap, setOverlays, setCinecamIdle, setChatFocus, chatFocusPing, start, stop, setActivity, wakeIn, beginAwakening, playArrival, cancelArrival, setWakeProgress, igniteSpark, armKindle, kindleHold, camPushIn, camCreep, camPunch, camPullBack, awakenTurn, truthPulse, beginFlood, collapseFlood, endAwakening, releaseAwakening, say, focusAgent, getActivity: () => activity, getUse: () => (agent ? agent.usingProp : null), setOnClick, setOnArcade, setOnOutbox, setOnMissionBoard, setOnTrophyCase, setOnPluginTerminal, setOnDesk, setOnBayAssign, setOnIntakeFeed, setOnIntakeSample, refit, pauseBridge, resumeBridge, linkState, _dbgSeedRun, _dbgAgeRun, _dbgReconcile, _dbgSweep, _dbgLinkState, _dbgDropBridge, _dbgCurveState, _dbgLoseCurveContext, _dbgLoseCanvases, _dbgCanvasLoss, _dbgKillStageContext, _dbgStageState, _dbgBeltLegibility, _dbgPropClientPoint, _dbgDeskClientPoint, _dbgSleep, _dbgUseProp, _dbgArrive, _dbgLeisure,
     // AGENT GROWTH: XpStore pushes pre-computed Xp.compute() snapshots here; pulseLevelUp fires
     // the addressed body's gold ring. The colony headline is the top-bar STATION chip.
     setXp: (agentId, a) => {

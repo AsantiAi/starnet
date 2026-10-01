@@ -105,65 +105,67 @@
    THE MAP (2026-09-30): each card leads with the part's own floor art, so the diagram is this line's machines and not a
    wireframe of boxes; and a one-row diagram stays PINNED at the top of the scroll (.pin) while the picked part's editor
    moves under it — the well is opaque for that, the same dark bay over the panel's own sheet. */
-.wf-strip-wrap { flex: 0 0 auto; overflow-x: auto; scrollbar-width: thin; scrollbar-color: rgba(var(--ph-rgb),.38) transparent; border-bottom: 1px solid var(--wf-edge);
+.wf-strip-wrap { flex: 0 0 auto; overflow-x: auto; scrollbar-width: thin; scrollbar-color: rgba(var(--ph-rgb),.24) transparent; border-bottom: 1px solid var(--wf-edge);
   background: linear-gradient(rgba(var(--ph-rgb),.03) 1px, transparent 1px) 0 0/24px 24px, linear-gradient(90deg, rgba(var(--ph-rgb),.03) 1px, transparent 1px) 0 0/24px 24px, linear-gradient(rgba(0,0,0,.3), rgba(0,0,0,.3)), var(--panel2);   /* --panel2 is opaque: nothing scrolling under the pinned map shows through */
   box-shadow: inset 0 2px 6px rgba(0,0,0,.28), inset 0 -1px 0 rgba(var(--ph-bright-rgb),.04); }
 .wf-strip-wrap.pin { position: sticky; top: 0; z-index: 3; }
 @media (max-width: 900px), (max-height: 720px) { .wf-strip-wrap.pin { position: static; } }   /* a short panel keeps its height for the editor */
-.wf-strip { position: relative; display: flex; align-items: center; padding: 14px 18px 16px; min-width: max-content; }
-.wf-strip.has-arcs { padding-bottom: 44px; }   /* a loop's way back is drawn under the cards */
-.wf-node { position: relative; z-index: 1; width: 168px; box-sizing: border-box; display: grid; gap: 5px; align-content: start; text-align: left;
-  font: inherit; line-height: 1.2; color: var(--text); border: 1px solid var(--wf-edge); border-radius: 10px; padding: 10px 12px; cursor: pointer;
-  background: linear-gradient(165deg, rgba(var(--ph-rgb),.075), transparent 46%), color-mix(in srgb, var(--panel2) 88%, transparent);
-  box-shadow: var(--wf-light), 0 2px 6px rgba(0,0,0,.25);
+.wf-strip { position: relative; display: flex; align-items: center; padding: 14px 14px 16px; min-width: max-content; }   /* every part and every join sit on the line's middle (an INBOX → BAY → OUTBOX line fits the panel whole) */
+.wf-strip.has-arcs { padding-bottom: 42px; }   /* a loop's way back is drawn under the tiles */
+/* THE LINE'S MACHINES AS TILES (2026-09-30, Andrew on this diagram: "make this look way better"): the Build Library's glass tile —
+   the machine's own art big in a lit well (a BAY's agent stands at it), its name, one short line; the lamp top-right, a BAY's
+   number top-left. The sentences the old card spelled out are the tile's hover tip (a glass card, name first). */
+.wf-node { position: relative; z-index: 1; flex: 0 0 auto; width: 124px; min-height: 128px; box-sizing: border-box;
+  display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px 8px 9px; text-align: center;
+  font: inherit; line-height: 1.2; color: var(--text); cursor: pointer;
+  border: 1px solid var(--wf-edge); border-radius: 10px;
+  background: linear-gradient(135deg, rgba(var(--ph-rgb),.075), rgba(var(--ph-rgb),.015)), rgba(0,0,0,.22);
+  box-shadow: var(--wf-light);
   transition: background-color var(--t-fast) var(--ease-soft), border-color var(--t-fast) var(--ease-soft); }
-.wf-node:hover { border-color: rgba(var(--ph-rgb),.45); }
+.wf-node:hover { border-color: rgba(var(--ph-rgb),.45); background: linear-gradient(135deg, rgba(var(--ph-rgb),.13), rgba(var(--ph-rgb),.04)), rgba(0,0,0,.22); }
 /* the selected part keeps the floor highlight's gold, as an edge + inner ring (no bloom) */
-.wf-node.sel { border-color: var(--gold); background: linear-gradient(165deg, rgba(var(--gold-rgb),.1), transparent 55%), color-mix(in srgb, var(--panel2) 88%, transparent);
-  box-shadow: inset 0 0 0 1px rgba(var(--gold-rgb),.35), var(--wf-light), 0 2px 6px rgba(0,0,0,.25); }
-.wf-node.wf-term { width: 148px; }
+.wf-node.sel { border-color: var(--gold); background: linear-gradient(135deg, rgba(var(--gold-rgb),.14), rgba(var(--gold-rgb),.03)), rgba(0,0,0,.22);
+  box-shadow: inset 0 0 0 1px rgba(var(--gold-rgb),.3), var(--wf-light); }
 .wf-node:disabled { opacity: .6; cursor: default; }
-/* the card's head: the machine's own art, then its place on the line + lamp over what it is */
-.wf-node .hd { display: grid; grid-template-columns: minmax(0,1fr); align-items: center; row-gap: 1px; }
-.wf-node .hd.art { grid-template-columns: 36px minmax(0,1fr); column-gap: 8px; }
-/* the machine's art on a faintly lit plate (dark steel on a dark card needs the lift; matte — a fill and a hairline) */
-.wf-node .wf-mthumb { grid-row: 1 / span 2; width: 36px; height: 36px; object-fit: contain; display: block; box-sizing: border-box; padding: 1px;
-  border-radius: 6px; background: rgba(var(--ph-bright-rgb),.07); box-shadow: inset 0 0 0 1px rgba(var(--ph-rgb),.12); }
-.wf-node .k { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 14px; letter-spacing: 1.6px; color: var(--ph-dim); }
-.wf-node .t { font-size: 20px; line-height: 1.15; color: var(--ph-bright); letter-spacing: .6px; overflow-wrap: anywhere; }
-.wf-node .a { font-size: 16px; color: var(--text); overflow-wrap: anywhere; display: flex; align-items: center; gap: 6px; min-width: 0; }
-.wf-node .a .an { min-width: 0; }
-/* the strip's crew: a small skin well per bay (same glass well as the agent picker) */
-.wf-node .wf-nthumb { border-radius: 5px; background: var(--wf-well); box-shadow: inset 0 0 0 1px var(--wf-edge), var(--wf-well-shadow); }
-/* inline skin (trigger rows, starting-agent chips, the run log, a working line): the figure alone, sat on the text line */
-.wf-panel .wf-ithumb { margin: -3px 4px -3px 0; }
-.wf-node .a.none { color: var(--gold); }
-.wf-node .s { font-size: 15px; color: var(--ph-dim); line-height: 1.25; max-height: 2.5em; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }   /* two lines, then … */
-.wf-node .s i { font-style: normal; color: var(--gold); }
-.wf-node .warn { font-size: 14px; color: var(--warn); }
-.wf-node .badge { justify-self: start; font-size: 14px; letter-spacing: 1.1px; color: var(--ok); background: rgba(var(--ok-rgb),.1);
-  border: 1px solid color-mix(in srgb, var(--ok) 50%, transparent); border-radius: 5px; padding: 0 6px; margin-top: 1px; }
+/* the art well: a soft pool of light under the machine (the props tile's), the machine drawn big and whole */
+.wf-nart { position: relative; display: grid; place-items: center; width: 96px; height: 62px; margin-bottom: 4px; border-radius: 8px;
+  background: radial-gradient(ellipse 72% 70% at 50% 64%, rgba(130,170,150,.11), transparent 76%); }
+.wf-nart .wf-mthumb { display: block; width: 80px; height: 62px; object-fit: contain; }
+/* a BAY's agent stands at its machine — the same skin the floor draws, the figure alone */
+.wf-nart .wf-nthumb { position: absolute; right: -2px; bottom: -4px; background: none; box-shadow: none; }
+.wf-nname { max-width: 100%; font-size: 16px; line-height: 1.15; letter-spacing: .7px; color: var(--ph-bright); overflow-wrap: anywhere; }
+.wf-nmeta { max-width: 100%; font-size: 14px; line-height: 1.25; letter-spacing: .3px; color: var(--ph-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wf-nmeta.warn { color: var(--gold); }
+.wf-nbadge { position: absolute; top: 7px; left: 9px; font-size: 14px; line-height: 1; letter-spacing: .4px; color: var(--ph-dim); }
+.wf-nbadge.ok { color: var(--ok); }
 /* status lamps: a small housed lamp — dark ring, top light, a faint spill (the glass session-lamp recipe) */
-.wf-node .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--gold); flex: 0 0 auto;
+.wf-node .dot { position: absolute; top: 8px; right: 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--gold);
   box-shadow: 0 0 0 1px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.3), 0 0 4px rgba(var(--gold-rgb),.3); }
 .wf-node .dot.ok { background: var(--ok); box-shadow: 0 0 0 1px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.3), 0 0 4px rgba(var(--ok-rgb),.3); }
-.wf-node.gate { width: 140px; border-style: dashed; border-color: color-mix(in srgb, var(--wf-cyan) 70%, transparent); }
-.wf-node.gate .hd.art { grid-template-columns: 26px minmax(0,1fr); }
-.wf-node.gate .wf-mthumb { grid-row: auto; width: 26px; height: 26px; }
-.wf-node.gate .k { color: var(--wf-cyan); }
+/* a junction is a smaller machine: a narrower tile, the loop's cyan "goes round" edge */
+.wf-node.gate { width: 110px; border-style: dashed; border-color: color-mix(in srgb, var(--wf-cyan) 60%, transparent); }
+.wf-node.gate .wf-nname { color: var(--wf-cyan); }
 .wf-node.gate.join { border-color: rgba(var(--ph-rgb),.35); }
-.wf-colgroup { display: grid; gap: 8px; padding: 22px 8px 8px; border: 1px dashed rgba(var(--ph-rgb),.3); border-radius: 12px; background: rgba(var(--ph-rgb),.02); }
-.wf-colmode { font-size: 14px; letter-spacing: 1.4px; color: var(--ph-dim); margin-top: -16px; }
-/* a belt runs at the cards' middle, what it carries written over it, and the + that adds to it sits ON it */
-/* (a belt is as wide as what it carries needs, within reason: a label wraps between words, never inside one) */
-.wf-belt { position: relative; flex: 0 0 auto; align-self: stretch; width: max-content; min-width: 48px; max-width: 112px; display: grid; grid-template-rows: minmax(0,1fr) 30px minmax(0,1fr); justify-items: center; align-items: center; }
-.wf-belt .carry { grid-row: 1; align-self: end; padding: 0 4px 2px; font-size: 14px; color: var(--ph-dim); text-align: center; line-height: 1.1; max-width: 112px; box-sizing: border-box; max-height: 3.3em; overflow: hidden; overflow-wrap: break-word; min-height: 1.1em; }
+.wf-node.gate.join .wf-nname { color: var(--ph-bright); }
+/* no INBOX yet / + OUTBOX: a dashed place where the machine goes */
+.wf-node.none { border-style: dashed; }
+.wf-node.wf-addend { justify-content: center; border-style: dashed; color: var(--gold); font-size: 16px; letter-spacing: .8px; }
+.wf-colgroup { position: relative; display: grid; gap: 8px; padding: 28px 8px 8px; border: 1px dashed rgba(var(--ph-rgb),.3); border-radius: 12px; background: rgba(var(--ph-rgb),.02); }
+.wf-colmode { position: absolute; top: 7px; left: 11px; font-size: 14px; letter-spacing: 1.2px; color: var(--ph-dim); }
+/* a join sits on the MIDDLE of the tiles (2026-09-30, Andrew: "CENTER THE ARROW IN THE MIDDLE NOT ON THE TOP"): three rows —
+   what it carries over the line, the line with the + that adds to it ON it, and an empty row as tall as the first — so the
+   line is the join's centre, and every join is centred on the tiles (beside stacked branches it meets them at their middle
+   the same way). A join is as wide as what it carries needs, within reason: a label wraps between words, never inside one. */
+.wf-belt { position: relative; flex: 0 0 auto; align-self: center; width: max-content; min-width: 60px; max-width: 112px; display: grid; grid-template-rows: 27px 28px 27px; justify-items: center; align-items: center; }
+.wf-belt .carry { grid-row: 1; align-self: end; padding: 0 4px 3px; font-size: 14px; color: var(--ph-dim); text-align: center; line-height: 1.1; max-width: 112px; box-sizing: border-box; max-height: 2.3em; overflow: hidden; overflow-wrap: break-word; }
+.wf-belt.gap .carry { grid-row: 2; align-self: center; padding-bottom: 0; }   /* a break in the line says so where the line would run */
 .wf-belt :is(.rail,.wf-plus) { grid-row: 2; grid-column: 1; }
-/* the belt: a recessed channel with the rollers passing under a hairline lip */
-.wf-belt .rail { width: 100%; height: 8px; background: rgba(0,0,0,.4); border-block: 1px solid var(--wf-edge); border-radius: 2px; position: relative; overflow: hidden;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,.5); }
-.wf-belt .rail::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 7px, rgba(var(--ph-rgb),.4) 7px 9px, transparent 9px 14px); animation: wf-roll 1.1s linear infinite; }
-@keyframes wf-roll { to { background-position: 14px 0; } }
+/* the join between two parts: ONE shape — a 2px line into a solid arrowhead whose tip touches the next part — a shade brighter
+   once the line can run, never moving (2026-09-30: the floor's real conveyor art here was rejected outright — the diagram draws
+   a line, not a belt). One clipped box with one fill, so the head never doubles over the line. */
+.wf-belt .rail { position: relative; width: 100%; height: 10px; background: rgba(var(--ph-rgb),.34);
+  clip-path: polygon(0 4px, calc(100% - 9px) 4px, calc(100% - 9px) 0, 100% 5px, calc(100% - 9px) 10px, calc(100% - 9px) 6px, 0 6px); }
+.wf-strip.live .wf-belt .rail { background: rgba(var(--ph-rgb),.55); }
 .wf-plus { position: relative; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--wf-edge);
   background: linear-gradient(180deg, rgba(var(--ph-rgb),.08), rgba(var(--ph-rgb),.02)), var(--panel2); box-shadow: var(--wf-light), 0 1px 3px rgba(0,0,0,.4);
   color: var(--ph); font: inherit; font-size: 22px; line-height: 1; padding: 0; display: grid; place-items: center; cursor: pointer; z-index: 2;
@@ -179,7 +181,10 @@
 .wf-inserter .n { font-size: 15px; color: var(--ph-dim); line-height: 1.35; }
 .wf-arcs { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 0; overflow: visible; }
 .wf-arcs path { fill: none; stroke: rgba(0,0,0,.5); stroke-width: 6; }
-.wf-arcs path.chev { stroke: var(--wf-cyan); stroke-width: 2; stroke-dasharray: 6 8; opacity: .85; animation: wf-rollb 1s linear infinite; }
+.wf-arcs path.chev { stroke: var(--wf-cyan); stroke-width: 2; stroke-dasharray: 6 8; opacity: .85; }
+.wf-arcs path.stem { stroke: var(--wf-cyan); stroke-width: 2; opacity: .85; }
+.wf-arcs .head { fill: var(--wf-cyan); stroke: none; opacity: .85; }   /* the way back ends in the joins' arrowhead on a solid stem, up into its part */
+.wf-strip.live .wf-arcs path.chev { animation: wf-rollb 1s linear infinite; }   /* the way back moves only on a line that can run */
 @keyframes wf-rollb { to { stroke-dashoffset: -14; } }
 .wf-arcs text { font-family: 'VT323', monospace; font-size: 15px; fill: var(--wf-cyan); letter-spacing: .6px; }
 
@@ -306,6 +311,43 @@ textarea.wf-io:focus { outline: none; border-color: var(--ph); box-shadow: var(-
 .wf-foot { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 12px 18px; border-top: 1px solid var(--wf-edge); background: rgba(0,0,0,.12); }
 .wf-foot-note { flex: 1; min-width: 150px; font-size: 15px; line-height: 1.3; color: var(--ph-dim); }
 .wf-sample-res { flex: 1 1 100%; font-size: 17px; line-height: 1.45; }
+/* a job, read back (2026-09-30): the whole result, then how each step did it — each step's reply one click open */
+.wf-job { flex: 1 1 100%; display: grid; gap: 8px; margin-top: 4px; }
+.wf-help.wf-live { color: var(--ph-bright); }   /* where the job is now, while it rides */
+/* the tile of the step working now (the floor lamp's WORKING): its own lamp turns the floor's working amber and pulses like the
+   bay lamp does, and the tile's edge brightens — never the selection's gold, so "working" and "picked" never look alike */
+.wf-node.working { border-color: rgba(var(--ph-rgb),.7); }
+.wf-node.working .dot { background: #ffb23e; box-shadow: 0 0 0 1px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.3); animation: wf-working 1.2s ease-in-out infinite; }
+@keyframes wf-working { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .wf-node.working .dot { animation: none; } }
+.wf-job-h { font-size: 16px; letter-spacing: .6px; color: var(--ph-dim); }
+.wf-job-h b { font-weight: normal; color: var(--ok); letter-spacing: 1.2px; }
+.wf-job-h b.warn { color: var(--gold); }
+.wf-step-out .src.warn { color: var(--gold); }
+.wf-job-out { max-height: 320px; }
+.wf-steps { display: grid; gap: 2px; }
+.wf-step-out summary { display: flex; justify-content: space-between; gap: 10px; }
+.wf-step-out .src { color: var(--ph-dim); font-size: 15px; letter-spacing: .4px; }
+.wf-step-out .wf-io { margin: 4px 0 6px; }
+/* a reply drawn as COMMS draws it (Chat.renderProse's classes, on the panel's scale) */
+.wf-io.wf-md { white-space: normal; }
+.wf-md .md-p { display: block; white-space: pre-wrap; margin: .35em 0; }
+.wf-md .md-p:first-child { margin-top: 0; }
+.wf-md .md-h { display: block; margin: .6em 0 .25em; color: var(--ph-bright); letter-spacing: .5px; }
+.wf-md .md-b { color: var(--ph-bright); }
+.wf-md .md-list { margin: .35em 0; padding-left: 1.6em; }
+.wf-md .md-list li { margin: .15em 0; }
+.wf-md .md-code { padding: 0 4px; border-radius: 4px; background: rgba(var(--ph-rgb),.08); }
+.wf-md a { color: var(--wf-cyan); }
+/* a READY line's next step: the ▶ SEND IT A JOB key beside the pill */
+.wf-ready #wf-sendnow { padding: 0 12px; }
+/* NOT RIGHT? — say what's wrong; each suggested change is a glass card to use or ignore (2026-09-30) */
+.wf-notright { display: grid; gap: 8px; margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--wf-edge); }
+.wf-fix { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--wf-edge); border-radius: 10px;
+  background: linear-gradient(135deg, rgba(var(--ph-rgb),.06), rgba(var(--ph-rgb),.015)), rgba(0,0,0,.18); box-shadow: var(--wf-light); }
+.wf-fix.applied { border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
+.wf-fix-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 16px; letter-spacing: .8px; color: var(--ph-bright); }
+.wf-fix-h b { font-weight: normal; }
 /* the real job's verdict (build.js finSampleHTML): RAN · COST · SAID as a result block — the panel's own left-rail voice
    (.wf-verdict): green when it reached the OUTBOX, gold when you stopped it, red when it was refused */
 .wf-sample-res .fl-result { display: grid; gap: 3px; border-left: 3px solid var(--ok); border-radius: 0 8px 8px 0; padding: 8px 12px; background: linear-gradient(90deg, rgba(var(--ok-rgb),.08), rgba(var(--ok-rgb),.02)); color: var(--text); }
@@ -380,6 +422,6 @@ textarea.wf-io:focus { outline: none; border-color: var(--ph); box-shadow: var(-
 .wf-route-k small { font-size: 14px; line-height: 1.25; letter-spacing: .2px; color: var(--ph-dim); }
 
 @media (prefers-reduced-motion: reduce) {
-  .wf-belt .rail::after, .wf-arcs path.chev, .wf-spin { animation: none; }
+  .wf-strip.live .wf-arcs path.chev, .wf-spin { animation: none; }
   .wf-panel :is(.bb,.wf-node,.wf-agent,.wf-chip,.wf-hop,.wf-hint,.wf-plus,.wf-contract,.wf-io) { transition: none; }
 }
