@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "651487ee698ae18cf811d25ebabc742eeb379bac",
+    "sourceCommit": "57ea99470c06368d0d6cdadfd97e1abb064152b9",
     "pathSetSha256": "1ea87b47f1e129f68dd6dc9b6339178332fe0c36f90859da4c220a7cc654d0aa",
     "files": [
       {
@@ -998,8 +998,8 @@
       },
       {
         "path": "frontend/app/remoteview.js",
-        "bytes": 5127,
-        "sha256": "b6fdfcf2a1b05b0d4f32f1c771fd00ac40fdfd3a94d8098f1b237aa1de8560b2"
+        "bytes": 7943,
+        "sha256": "28b4d0c518c7efe8d9b5dfdac05b58ad5b9b654df0317fffd1acfa764ed44224"
       },
       {
         "path": "frontend/app/resummonstore.js",
@@ -1378,8 +1378,8 @@
       },
       {
         "path": "frontend/app/world.js",
-        "bytes": 819910,
-        "sha256": "a7b48ff9e0a6072d8a1db8f6f0d451fd3e89ecd02f463e52af6d8cc455b937d5"
+        "bytes": 821319,
+        "sha256": "fd984300e898190ed1857ed1fb1c4e870c039cb9558c84a07fdb54019f72b6f6"
       },
       {
         "path": "frontend/app/worldlab.js",
