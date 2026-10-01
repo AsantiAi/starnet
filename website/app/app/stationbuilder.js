@@ -1047,8 +1047,10 @@
     let room = null; if (roomRaw != null) { const t = roomNamed(live, roomRaw); if (!t.ok) return t; room = t.room; }
     const named = live.props().filter(p => p.t === 'intake' && (!room || live.roomAt(p.x, p.y) === room.id));
     const all = named.map(p => p.label || 'an unnamed line');
-    let hits = named.filter(p => key(p.label) === key(raw));
-    if (!hits.length) hits = named.filter(p => key(p.label).indexOf(key(raw)) >= 0 || key(raw).indexOf(key(p.label)) >= 0);
+    // a line is found by ITS name: an unnamed line never answers to a name (an empty label is inside every string)
+    if (!key(raw)) return refuse('Say which line: its name (or the id of any machine on it). Lines: ' + (all.length ? all.join(', ') : 'none') + '.');
+    let hits = named.filter(p => key(p.label) && key(p.label) === key(raw));
+    if (!hits.length) hits = named.filter(p => key(p.label) && (key(p.label).indexOf(key(raw)) >= 0 || key(raw).indexOf(key(p.label)) >= 0));
     if (!hits.length) return refuse('There is no line called "' + String(raw).slice(0, 40) + '"' + (room ? ' in ' + room.name : '') + '. Lines: ' + (all.length ? all.join(', ') : 'none') + '.');
     if (hits.length > 1) return refuse('More than one line is called ' + (hits[0].label || '"' + raw + '"') + ': say which room it is in (' + hits.map(p => (live.rooms().find(r => r.id === live.roomAt(p.x, p.y)) || {}).name).join(', ') + ').');
     const intake = hits[0], comp = comps.find(c => (c.intakes || []).indexOf(intake.id) >= 0);
@@ -1204,6 +1206,10 @@
      world-model call Refit mode makes for that tool, so it passes or fails on Refit mode's own checks. Props and rooms
      made earlier in the same plan are named with `as` and used by that name. Ops run in order; the first that fails
      refuses the whole plan, naming it. */
+  // the edits a long refit's card always names, and what it calls them when it has to count them
+  const REFIT_WEIGHTY = { delete: 'removals', unbelt: 'belts taken up', resize: 'resizes', move: 'moves', type: 'room types', brief: 'briefs', hands: 'hand-offs', role: 'roles',
+    agent: 'staffing', cap: 'budgets', budget: 'budgets', loop: 'loop rules', tries: 'loop rules', routes: 'routes', wait: 'joiner waits', swap: 'joiner swaps', folder: 'folders',
+    bind: 'bound services', door: 'doors', edit: 'line edits' };
   const REFIT_MAX = 1500;   // a whole station designed by hand, room by room and piece by piece, fits one plan
   const REFIT_OPS = 'room, hall, resize, move, delete, rename, type, floor, walls, hull, paint, style, place, rotate, mirror, agent, door, belt, unbelt, connect, role, brief, hands, label, budget, cap, loop, tries, routes, wait, swap, folder, bind, stamp, edit';
   const LOOP_WHEN = /^(approved|revise|code|research|general)$/, CONNECTOR_T = /^connector_portal$/, DIR_WORD = { N: 'north', E: 'east', S: 'south', W: 'west' };
@@ -1289,14 +1295,19 @@
         const e1 = usd('maxUsdPerDay', op === 'cap' ? (o.usd === undefined ? null : o.usd) : o.perDay, op === 'cap' ? 'cap usd' : 'perDay'); if (e1) return refuse(e1);
         if (op === 'budget') { const e2 = usd('maxUsdPerMessage', o.perJob, 'perJob'); if (e2) return refuse(e2); if (o.stages !== undefined) { if (off(o.stages)) delete nx.maxHops; else { const n = Math.round(Number(o.stages)); if (!(n >= 1 && n <= 200)) return refuse('stages is how many steps one job may pass through, 1 to 200'); nx.maxHops = n; } } }
         const r = st.setPropLimits(ip.id, Object.keys(nx).length ? nx : null); if (!r || !r.ok) return refuse(wmMsg(r)); const L2 = r.limits || {};
-        return { ok: true, text: 'the line at ' + at(ip.x, ip.y) + (Object.keys(nx).length ? ' may spend $' + L2.maxUsdPerDay + ' a day, $' + L2.maxUsdPerMessage + ' a job, through ' + L2.maxHops + ' steps' : ' keeps the default budget') + ((r.clamped || []).length ? ' (held to the ceiling)' : '') }; }
+        const money = (v, per) => v == null ? 'no ' + per + ' cap' : '$' + v + ' a ' + per;
+        return { ok: true, text: 'the line at ' + at(ip.x, ip.y) + (Object.keys(nx).length ? ' may spend ' + money(L2.maxUsdPerDay, 'day') + ', ' + money(L2.maxUsdPerMessage, 'job') + ', through ' + (L2.maxHops == null ? 'the default number of' : L2.maxHops) + ' steps' : ' keeps the default budget') + ((r.clamped || []).length ? ' (held to the ceiling)' : '') }; }
       case 'tries': case 'loop': { const t = propRef(o.prop); if (!t.ok) return t; if (t.p.t !== 'loop') return refuse(op + ' is for a LOOP gate'); const cfg = jcfg(t.p), said = [];
         const n = o.max !== undefined ? o.max : o.passes; if (n !== undefined) { const k = Math.round(Number(n)); if (!(k >= 1 && k <= 20)) return refuse('a loop allows 1 to 20 passes'); cfg.maxIter = k; said.push('allows ' + k + (k === 1 ? ' pass' : ' passes')); }
         if (o.until !== undefined) { const w = String(o.until || '').toLowerCase().trim(); if (!LOOP_WHEN.test(w)) return refuse('until is approved, revise (the reviewer\'s VERDICT), or code, research or general (repeat while the result is that kind)'); cfg.when = w; said.push(/^(approved|revise)$/.test(w) ? 'repeats until the verdict is ' + w : 'repeats while the result is ' + w); }
-        for (const [k, key, word] of [['done', 'done', 'moves on'], ['escalate', 'esc', 'escalates']]) if (o[k] !== undefined) { if (o[k] == null && k === 'escalate') { delete cfg.esc; said.push('never escalates'); continue; } const d = dirOf(o[k]); if (!d) return refuse(k + ' is the side work leaves by: north, east, south or west'); cfg[key] = d; said.push(word + ' ' + DIR_WORD[d]); }
+        // a loop escalates down any third belt wired to it (the pipeline reads the wiring), so "never" is a belt taken up, not a setting
+        if (o.escalate === null || /^(none|never|no|off)$/i.test(String(o.escalate))) return refuse('a loop escalates down its third belt: to stop it escalating, take that belt up ({ op: "unbelt", tiles })');
+        for (const [k, key, word] of [['done', 'done', 'moves on'], ['escalate', 'esc', 'escalates']]) if (o[k] !== undefined) { const d = dirOf(o[k]); if (!d) return refuse(k + ' is the side work leaves by: north, east, south or west'); cfg[key] = d; said.push(word + ' ' + DIR_WORD[d]); }
         if (!said.length) return refuse('loop sets passes, until, done or escalate'); return did(st.configureJunction(t.p.id, cfg), 'the loop at ' + at(t.p.x, t.p.y) + ' ' + said.join(', ')); }
-      case 'routes': { const t = propRef(o.prop); if (!t.ok) return t; const cfg = jcfg(t.p); cfg.routes = {}; for (const [tag, side] of Object.entries(o.routes || {})) { const d = dirOf(side); if (!d) return refuse('a route sends a kind of work out north, east, south or west'); cfg.routes[tag] = d; } if (o.def !== undefined) { if (o.def == null) delete cfg.def; else { const d = dirOf(o.def); if (!d) return refuse('def is the side everything else leaves by'); cfg.def = d; } }
-        return did(st.configureJunction(t.p.id, cfg), 'the ' + nm(t.p.t) + ' at ' + at(t.p.x, t.p.y) + ' sorts ' + (Object.keys(cfg.routes).join(', ') || 'nothing apart')); }
+      case 'routes': { const t = propRef(o.prop); if (!t.ok) return t; const cfg = jcfg(t.p); if (o.routes === undefined && o.def === undefined) return refuse('routes sets routes: { code | research | general: side } and/or def');
+        if (o.routes !== undefined) { cfg.routes = {}; for (const [tag, side] of Object.entries(o.routes || {})) { const d = dirOf(side); if (!d) return refuse('a route sends a kind of work out north, east, south or west'); cfg.routes[tag] = d; } }
+        if (o.def !== undefined) { if (o.def == null) delete cfg.def; else { const d = dirOf(o.def); if (!d) return refuse('def is the side everything else leaves by'); cfg.def = d; } }
+        return did(st.configureJunction(t.p.id, cfg), 'the ' + nm(t.p.t) + ' at ' + at(t.p.x, t.p.y) + ' sorts ' + (Object.keys(cfg.routes || {}).join(', ') || 'nothing apart') + (cfg.def ? ', everything else ' + DIR_WORD[cfg.def] : '')); }
       case 'wait': { const t = propRef(o.prop); if (!t.ok) return t; if (t.p.t !== 'joiner') return refuse('wait is for a JOINER: how long it waits for every branch'); const cfg = jcfg(t.p); if (o.minutes == null || /^(default|none)$/i.test(String(o.minutes))) delete cfg.timeoutMin; else { const m = Math.round(Number(o.minutes)); if (!(m >= 1 && m <= 120)) return refuse('a joiner waits 1 to 120 minutes'); cfg.timeoutMin = m; }
         return did(st.configureJunction(t.p.id, cfg), 'the joiner at ' + at(t.p.x, t.p.y) + (cfg.timeoutMin ? ' waits up to ' + cfg.timeoutMin + ' minutes for every branch' : ' waits the default time')); }
       case 'swap': { const t = propRef(o.prop); if (!t.ok) return t; if (!/^(joiner|merger)$/.test(t.p.t)) return refuse('swap turns a JOINER (waits for every branch: the splitter copies to each) into a MERGER (takes each as it comes: the branches take turns), or back'); const to = t.p.t === 'joiner' ? 'merger' : 'joiner';
@@ -1359,17 +1370,15 @@
     if (newErr.length) warn.push(newErr.length + (newErr.length === 1 ? ' routing problem' : ' routing problems') + ' on the floor after it (' + [...new Set(newErr.map(e => e.split(':')[0]))].join(', ') + ')');
     const wb = walkableRooms(live), wa = walkableRooms(probe), cut = probe.rooms().filter(r => r.kind !== 'corridor' && !wa.has(r.id) && (wb.has(r.id) || !live.rooms().some(x => x.id === r.id))).map(r => r.name);
     if (cut.length) warn.push((cut.length > 1 ? cut.join(', ') + ' cannot be walked into' : cut[0] + ' cannot be walked into') + ' from the main room');
-    const list = ran.texts.map((t, i) => (i + 1) + '. ' + t);
-    // a long refit shows its first edits, and EVERY edit that takes something away, moves or resizes, or tells a step what
-    // to do, wherever it falls: nothing that changes what stands hides behind "and more"
-    const weighty = t => / removed|taken up|resized| moved to|is told:/.test(t);
-    let shown = list;
+    // a long refit shows its first edits, and EVERY edit that takes something away, moves or resizes, or changes what a line
+    // does, spends or reaches, wherever it falls (judged by its op, never by its wording): none of those hides behind "and more"
+    const list = ran.texts.map((t, i) => ({ t: (i + 1) + '. ' + t, k: REFIT_WEIGHTY[String((ops[i] && ops[i].op) || '').toLowerCase().trim()] || null }));
+    let shown = list.map(x => x.t);
     if (list.length > 30) {
-      const rest = list.slice(25), keep = rest.filter(weighty), named = keep.slice(0, 60), over = keep.slice(60);
+      const rest = list.slice(25), keep = rest.filter(x => x.k), named = keep.slice(0, 60), over = keep.slice(60);
       // a design of hundreds of edits: past 60 weighty ones the card counts the rest by kind (the preview shows them all)
-      const kinds = [[' removed', 'removals'], [' taken up', 'belts taken up'], [' resized', 'resizes'], [' moved to', 'moves'], ['is told:', 'briefs']]
-        .map(([w, n]) => [over.filter(t => t.includes(w)).length, n]).filter(([c]) => c).map(([c, n]) => c + ' ' + n);
-      shown = list.slice(0, 25).concat(named, over.length ? ['… and ' + over.length + ' more edits that change what stands (' + kinds.join(', ') + ')'] : [],
+      const counts = {}; for (const x of over) counts[x.k] = (counts[x.k] || 0) + 1;
+      shown = list.slice(0, 25).map(x => x.t).concat(named.map(x => x.t), over.length ? ['… and ' + over.length + ' more edits that change what stands (' + Object.keys(counts).map(k => counts[k] + ' ' + k).join(', ') + ')'] : [],
         rest.length > keep.length ? ['… and ' + (rest.length - keep.length) + ' more edits that add or name pieces'] : []);
     }
     const summary = 'REFIT, ' + ops.length + (ops.length === 1 ? ' edit' : ' edits') + ', in order: ' + shown.join('; ') + '.' + (warn.length ? ' Heads-up: ' + warn.join('; ') + '.' : '') + ' One UNDO in Build mode takes all of it back.';
