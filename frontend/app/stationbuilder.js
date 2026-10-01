@@ -1176,6 +1176,15 @@
       summary: 'Staff the line ' + ln.label + ': ' + out.map(r => 'step ' + r.step + ' (' + r.role + ')' + (r.agent ? ' → ' + r.agent : '') + (r.instructions ? (r.agent ? ', with' : ' gets') + ' new instructions' : '')).join('; ') + '. '
         + (rd.ready ? 'It will be ready to run.' : 'Still to do after: ' + rd.blocking.join('; ') + '.') + ' Nothing on the floor moves; one UNDO in Build mode puts the crew back.' };
   }
+  /* UNDO THE LEAD'S OWN LAST BUILD: `last` is the page's record of the builds the lead made (newest last). Only while the
+     station is exactly as that build left it, so it never takes back someone else's edit; one step, as Build mode's UNDO. */
+  function planUndo(doc, last) {
+    if (!doc) return refuse('the station builder is not loaded on this page');
+    if (!last) return refuse('There is nothing of the lead\'s to undo: StarNet only takes back a build the lead made on this page. The Commander can press UNDO in Build mode.');
+    if (sigOf(doc) !== last.resultSig) return refuse('The station has changed since the lead\'s last build, so StarNet will not undo it (that could take back someone else\'s edit). The Commander can press UNDO in Build mode.');
+    return { ok: true, plan: { floorSig: sigOf(doc), resultSig: last.floorSig, spec: { kind: 'undo' }, notes: [], steps: [], line: null, where: 'the undo of the last build', rooms: [],
+      summary: 'Undo the last build (' + String(last.summary || 'the lead\'s last change').replace(/\s+/g, ' ').slice(0, 260).replace(/[.\s]+$/, '') + '): the station goes back exactly as it was before it.' + (last.recruited ? ' The agents it recruited stay on the crew (DELETE AGENT in a Dossier removes one).' : '') } };
+  }
   function planEdit(doc, req, env) {
     const WM = env && env.WorldModel, P = env && env.Pipeline;
     if (!WM || !P || !doc) return refuse('the station builder is not loaded on this page');
@@ -2983,6 +2992,12 @@
     let built = null;
     const recruited = [], recruits = pl.spec.recruits || [];
     if (recruits.length && typeof env.recruit !== 'function') return refuse('Recruiting is not available on this page, so nothing was built. Plan it again without "new".');
+    if (pl.spec.kind === 'undo') {
+      const u = st.undo();
+      if (!u || !u.ok) return refuse('There was nothing to undo.');
+      if (sigOf(st.serialize()) !== pl.resultSig) { try { st.redo(); } catch (_) {} return refuse('That undo did not bring the station back exactly as it was before the build, so it was put back. The Commander can press UNDO in Build mode.'); }
+      return { ok: true, kind: 'edit', summary: pl.summary, where: pl.where, rooms: [], hallways: [], lines: [], roomIds: [] };
+    }
     const r = st.transact(() => {
       const b = buildInto(st, pl.spec, WM);
       if (!b.ok) return b;
@@ -3034,5 +3049,5 @@
       lineKey: rd.comp ? rd.comp.key : null, ready: rd.ready, blocking: rd.blocking, recruited };
   }
 
-  return { MENU, STEP_KEYS, ROOM_MENU, STYLE_MENU, DESIGN_MENU, ZONE_KEYS, ROOM_KEYS, LINE_KEYS, LAYOUT_KEYS, LAYOUT_ROOM_KEYS, AREAS, SIZES, EDIT_KEYS, catalog, resolveLine, plan, planRoom, planRestyle, planEdit, planDesign, planBuild, planLayout, mapOf, roomPlacements, dressRoom, shapeGraph, areaOf, apply, sigOf };
+  return { MENU, STEP_KEYS, ROOM_MENU, STYLE_MENU, DESIGN_MENU, ZONE_KEYS, ROOM_KEYS, LINE_KEYS, LAYOUT_KEYS, LAYOUT_ROOM_KEYS, AREAS, SIZES, EDIT_KEYS, catalog, resolveLine, plan, planRoom, planRestyle, planEdit, planUndo, planDesign, planBuild, planLayout, mapOf, roomPlacements, dressRoom, shapeGraph, areaOf, apply, sigOf };
 });

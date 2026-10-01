@@ -1431,6 +1431,21 @@ for (const c of T.catalog) {
     const blocked = SB.planBuild(full.serialize(), { hallways: [{ from: 'LIBRARY', to: 'CAFE' }] }, E);
     A.ok(!blocked.ok && /^There is no clear run for a hallway between LIBRARY and CAFE, straight or round one corner: /.test(blocked.error), 'one that cannot be laid says why: ' + blocked.error);
   }
+  // "NO, UNDO THAT": the lead takes back its own last build, only while nothing changed since
+  {
+    const st = fresh(), before = snap(st), b = SB.planBuild(st.serialize(), { rooms: [{ style: 'lounge' }] }, E);
+    A.ok(b.ok && SB.apply(st, b.plan, E).ok, 'fixture: the lead builds a lounge');
+    const last = { resultSig: SB.sigOf(st.serialize()), floorSig: b.plan.floorSig, summary: b.plan.summary };
+    const u = SB.planUndo(st.serialize(), last);
+    A.ok(u.ok && /^Undo the last build \(LOUNGE, a new 18 × 11 room .+\): the station goes back exactly as it was before it\./.test(u.plan.summary), 'the undo plan says what goes back: ' + (u.error || u.plan.summary.slice(0, 120)));
+    if (u.ok) { const a = SB.apply(st, u.plan, E); A.ok(a.ok, 'it undoes (' + (a.error || '') + ')'); A.eq(snap(st), before, 'the station is exactly as it was before the build'); }
+    A.ok(st.redo().ok, 'fixture: the lounge is back (redo)');
+    A.ok(st.addRoom({ kind: 'hab', name: 'MINE', rect: { x1: -40, y1: -40, x2: -30, y2: -33 } }).ok, 'fixture: the Commander builds something of their own');
+    const no = SB.planUndo(st.serialize(), last);
+    A.ok(!no.ok && /^The station has changed since the lead's last build, so StarNet will not undo it/.test(no.error), 'after someone else\'s edit, the lead will not undo');
+    const none = SB.planUndo(st.serialize(), null);
+    A.ok(!none.ok && /^There is nothing of the lead's to undo/.test(none.error), 'with no build of the lead\'s, there is nothing to undo');
+  }
   // a concourse from a crowded station finds a free side, or is refused naming the way forward
   {
     const st = fresh();
@@ -1540,6 +1555,7 @@ for (const c of T.catalog) {
     if (verb === 'station.plan_room') return { ok: true, result: { planId: 'plan-r-1', summary: 'LIBRARY (a quiet reading room) in a new room south of HOME, through a hallway.', rooms: [{ name: 'LIBRARY' }], steps: [] } };
     if (verb === 'station.plan_restyle') return { ok: true, result: { planId: 'plan-s-1', summary: 'Restyle HOME: teal floor. Nothing is added, moved or removed.' } };
     if (verb === 'station.plan_edit') return { ok: true, result: { planId: 'plan-e-1', summary: 'Remove GYM (18 × 11), with the hallway that joined it.' } };
+    if (verb === 'station.plan_undo') return { ok: true, result: { planId: 'plan-u-1', summary: 'Undo the last build (GYM): the station goes back exactly as it was before it.' } };
     if (verb === 'station.map') return { ok: true, result: { main: 'HOME', rooms: [{ name: 'HOME', main: true, w: 18, h: 11 }], hallways: 0, drawing: ['AAAAAAAAAAAAAAAAAA'] } };
     if (verb === 'station.plan_build') return (args.request.rooms || [])[0] && args.request.rooms[0].beside === 'Mars' ? { ok: false, error: 'There is no room called "Mars". Rooms: HOME.' }
       : { ok: true, result: { planId: 'plan-b-1', summary: args.request.layout ? 'A RING around HOME: a corridor loop with a hallway in from each side, planted and lit, and 2 rooms.' : 'CONVEYOR HALL, a new 36 × 20 room east of HOME, through a hallway: empty floor, ready for lines and furniture.', rooms: [{ name: 'CONVEYOR HALL' }], hallways: [], lines: [], steps: [] } };
@@ -1578,6 +1594,13 @@ for (const c of T.catalog) {
     const r = await planT.run(req, {});
     A.ok(/plan-e-1/.test(r.content) && r.summary === 'planned an edit', 'an edit of what stands plans through the page: ' + JSON.stringify(req));
     A.eq(calls[calls.length - 1], ['station.plan_edit', { request: req }], 'and reaches the edit planner as it was sent');
+  }
+  {
+    const r = await planT.run({ undo: true }, {});
+    A.ok(/plan-u-1/.test(r.content) && r.summary === 'planned an undo', 'an undo plans through the page');
+    A.eq(calls[calls.length - 1], ['station.plan_undo', { request: {} }], 'and reaches the undo planner');
+    const mixed = await planT.run({ undo: true, remove: 'GYM' }, {});
+    A.ok(/^REFUSED: undo goes on its own/.test(mixed.content), 'an undo goes on its own');
   }
   const n0 = calls.length;
   for (const req of [{ remove: 'GYM', clear: 'LAB' }, { refurnish: { room: 'GYM', style: 'library' }, rooms: [{ style: 'lounge' }] }]) {
