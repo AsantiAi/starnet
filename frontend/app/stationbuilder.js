@@ -1057,6 +1057,29 @@
     const inRoom = live.rooms().find(r => r.id === live.roomAt(intake.x, intake.y));
     return { ok: true, intake, comp, tiles, room: inRoom, label: intake.label || 'the line' };
   }
+  /* A LINE BY ITS NAME, OR BY ANY MACHINE ON IT (station.test_line, 2026-10-01): the compiled line id (the component key,
+     which is the routing plan's lineId), its name and room, and its steps in order with who works each. */
+  function lineRef(doc, env, ref, roomRef) {
+    const WM = env && env.WorldModel, P = env && env.Pipeline;
+    if (!WM || !P || !doc) return refuse('the station builder is not loaded on this page');
+    const live = WM.create(clone(doc));
+    let comp = null, label = null, room = null;
+    const p = typeof ref === 'string' ? live.propById(ref) : null;
+    if (p) {
+      let comps = []; try { comps = P.lineComponents(live.projectGeometry()) || []; } catch (_) { comps = []; }
+      comp = comps.find(c => (c.props || []).some(q => (q && q.id ? q.id : q) === p.id)) || null;
+      if (!comp) return refuse('the ' + pieceName(env, p.t) + ' ' + p.id + ' is not on a line');
+      const ip = live.propById((comp.intakes || [])[0]);
+      label = (ip && ip.label) || 'the line'; room = ip ? live.rooms().find(r => r.id === live.roomAt(ip.x, ip.y)) : null;
+    } else {
+      const ln = lineNamed(live, env, ref, roomRef); if (!ln.ok) return ln;
+      comp = ln.comp; label = ln.label; room = ln.room;
+    }
+    const steps = (comp.bays || []).map(b => live.propById(b && typeof b === 'object' ? (b.propId || b.id) : b)).filter(Boolean)
+      .map(b => ({ id: b.id, role: b.role ? titleCase(b.role) : null, agent: b.agentId ? nameOf(env, b.agentId) : null }));
+    if (!comp.key) return refuse('the line ' + label + ' could not be read');
+    return { ok: true, lineId: comp.key, name: label, room: room ? room.name : null, steps, crewed: steps.filter(s => s.agent).length };
+  }
   function editRemoveLine(live, env, q) {
     const bad = Object.keys(q).filter(k => ['line', 'room'].indexOf(k) < 0); if (bad.length) return refuse('remove { line, room } only takes line and room. Not accepted: ' + bad.slice(0, 6).join(', ') + '.');
     const ln = lineNamed(live, env, q.line, q.room); if (!ln.ok) return ln;
@@ -1182,11 +1205,13 @@
      made earlier in the same plan are named with `as` and used by that name. Ops run in order; the first that fails
      refuses the whole plan, naming it. */
   const REFIT_MAX = 1500;   // a whole station designed by hand, room by room and piece by piece, fits one plan
-  const REFIT_OPS = 'room, hall, resize, move, delete, rename, type, floor, walls, hull, paint, style, place, rotate, mirror, agent, door, belt, unbelt, connect, role, brief, label, cap, tries, routes, stamp, edit';
+  const REFIT_OPS = 'room, hall, resize, move, delete, rename, type, floor, walls, hull, paint, style, place, rotate, mirror, agent, door, belt, unbelt, connect, role, brief, hands, label, budget, cap, loop, tries, routes, wait, swap, folder, bind, stamp, edit';
+  const LOOP_WHEN = /^(approved|revise|code|research|general)$/, CONNECTOR_T = /^connector_portal$/, DIR_WORD = { N: 'north', E: 'east', S: 'south', W: 'west' };
+  const dirOf = v => { const s = String(v == null ? '' : v).trim().toLowerCase(); return { n: 'N', north: 'N', up: 'N', e: 'E', east: 'E', right: 'E', s: 'S', south: 'S', down: 'S', w: 'W', west: 'W', left: 'W' }[s] || null; };
   const tileRect = o => (o && isFinite(o.x) && isFinite(o.y) && isFinite(o.w) && isFinite(o.h) && o.w >= 1 && o.h >= 1) ? { x1: Math.round(o.x), y1: Math.round(o.y), x2: Math.round(o.x) + Math.round(o.w) - 1, y2: Math.round(o.y) + Math.round(o.h) - 1 } : null;
   const tileOf = v => Array.isArray(v) && v.length === 2 && v.every(n => isFinite(n)) ? { x: Math.round(v[0]), y: Math.round(v[1]) } : v && isFinite(v.x) && isFinite(v.y) ? { x: Math.round(v.x), y: Math.round(v.y) } : null;
   const wmMsg = r => (r && (r.msg || r.error)) || 'it was refused';
-  function refitOne(st, env, o, names) {
+  function refitOne(st, env, o, names, res) {
     const WM = env.WorldModel, S = env.PropSprites, at = (x, y) => '(' + x + ', ' + y + ')';
     if (!o || typeof o !== 'object' || Array.isArray(o) || typeof o.op !== 'string') return refuse('each edit is an object with an op (' + REFIT_OPS + ')');
     const op = o.op.toLowerCase().trim();
@@ -1198,6 +1223,8 @@
     const nm = t => pieceName(env, t), inRoom = (x, y) => { const id = st.roomAt(x, y), r = id && st.rooms().find(q => q.id === id); return r ? ' in ' + r.name : ''; };
     const did = (r, text) => r && r.ok ? { ok: true, text, res: r } : refuse(wmMsg(r));
     const isMain = rm => { const m = mainRoom(st), sp = (st.serialize().meta || {}).spawnRoomId; return (m && rm.id === m.id) || rm.id === sp; };
+    const jcfg = p => { const c = {}; for (const k of ['routes', 'def', 'bufferSize', 'timeoutMin', 'maxIter', 'done', 'esc', 'when']) if (p[k] != null) c[k] = clone(p[k]); return c; };   // a junction edit changes only what it names
+    const intakeOf = p => { if (p.t === 'intake') return p; if (!env.Pipeline || !env.Pipeline.lineComponents) return null; const g = st.projectGeometry(), o0 = g.origin || { tx: 0, ty: 0 }; const c = env.Pipeline.lineComponents(g).find(k => (k.props || []).some(q => (q && q.id ? q.id : q) === p.id)); const id = c && (c.intakes || [])[0]; return id ? st.propById(id) : null; };
     switch (op) {
       case 'room': case 'hall': {
         const rects = Array.isArray(o.rects) ? o.rects.map(tileRect) : [tileRect(o)];
@@ -1256,9 +1283,31 @@
       case 'role': { const t = propRef(o.prop); if (!t.ok) return t; const role = String(o.role || '').toUpperCase().replace(/[^A-Z]/g, ''); return did(st.setPropRole(t.p.id, role), 'the bay at ' + at(t.p.x, t.p.y) + ' is ' + (role ? titleCase(role) : 'roleless')); }
       case 'brief': { const t = propRef(o.prop); if (!t.ok) return t; const txt = String(o.text == null ? '' : o.text).trim(); if (!txt || txt.length > 2000) return refuse('brief text is 1 to 2000 characters'); return did(st.setPropBrief(t.p.id, txt), 'the ' + nm(t.p.t) + ' at ' + at(t.p.x, t.p.y) + ' is told: "' + txt.slice(0, 160) + (txt.length > 160 ? '…' : '') + '"'); }
       case 'label': { const t = propRef(o.prop); if (!t.ok) return t; const txt = String(o.text == null ? '' : o.text).trim().slice(0, 48); return did(st.setPropLabel(t.p.id, txt), 'the ' + nm(t.p.t) + ' at ' + at(t.p.x, t.p.y) + ' named ' + (txt || '(no name)')); }
-      case 'cap': { const t = propRef(o.prop); if (!t.ok) return t; const v = o.usd == null || /^(none|no cap|off)$/i.test(String(o.usd)) ? null : Number(o.usd); if (v !== null && !(v > 0 && v <= 10000)) return refuse('cap usd is a dollar amount above 0, or null for no cap'); return did(st.setPropLimits(t.p.id, Object.assign({}, t.p.limits || {}, { maxUsdPerDay: v })), 'the inbox at ' + at(t.p.x, t.p.y) + (v == null ? ' has no daily cap' : ' is capped at $' + v + ' a day')); }
-      case 'tries': { const t = propRef(o.prop); if (!t.ok) return t; const n = Math.round(Number(o.max)); if (!(n >= 1 && n <= 20)) return refuse('tries max is 1 to 20'); const cfg = { maxIter: n }; if (t.p.done != null) cfg.done = t.p.done; if (t.p.when != null) cfg.when = t.p.when; return did(st.configureJunction(t.p.id, cfg), 'the loop at ' + at(t.p.x, t.p.y) + ' allows ' + n + ' tries'); }
-      case 'routes': { const t = propRef(o.prop); if (!t.ok) return t; return did(st.configureJunction(t.p.id, { routes: o.routes || {}, def: o.def }), 'the ' + nm(t.p.t) + ' at ' + at(t.p.x, t.p.y) + ' sorts ' + Object.keys(o.routes || {}).join(', ')); }
+      case 'cap': case 'budget': { const t = propRef(o.prop); if (!t.ok) return t; const ip = intakeOf(t.p); if (!ip) return refuse('that piece is not on a line with an inbox');
+        const was = Object.assign({}, ip.limits || {}), nx = Object.assign({}, was), off = v => v == null || /^(none|no cap|off|default)$/i.test(String(v));
+        const usd = (k, v, what) => { if (v === undefined) return null; if (off(v)) { delete nx[k]; return null; } const n = Number(v); if (!(n > 0 && n <= 10000)) return what + ' is a dollar amount above 0, or null for the default'; nx[k] = n; return null; };
+        const e1 = usd('maxUsdPerDay', op === 'cap' ? (o.usd === undefined ? null : o.usd) : o.perDay, op === 'cap' ? 'cap usd' : 'perDay'); if (e1) return refuse(e1);
+        if (op === 'budget') { const e2 = usd('maxUsdPerMessage', o.perJob, 'perJob'); if (e2) return refuse(e2); if (o.stages !== undefined) { if (off(o.stages)) delete nx.maxHops; else { const n = Math.round(Number(o.stages)); if (!(n >= 1 && n <= 200)) return refuse('stages is how many steps one job may pass through, 1 to 200'); nx.maxHops = n; } } }
+        const r = st.setPropLimits(ip.id, Object.keys(nx).length ? nx : null); if (!r || !r.ok) return refuse(wmMsg(r)); const L2 = r.limits || {};
+        return { ok: true, text: 'the line at ' + at(ip.x, ip.y) + (Object.keys(nx).length ? ' may spend $' + L2.maxUsdPerDay + ' a day, $' + L2.maxUsdPerMessage + ' a job, through ' + L2.maxHops + ' steps' : ' keeps the default budget') + ((r.clamped || []).length ? ' (held to the ceiling)' : '') }; }
+      case 'tries': case 'loop': { const t = propRef(o.prop); if (!t.ok) return t; if (t.p.t !== 'loop') return refuse(op + ' is for a LOOP gate'); const cfg = jcfg(t.p), said = [];
+        const n = o.max !== undefined ? o.max : o.passes; if (n !== undefined) { const k = Math.round(Number(n)); if (!(k >= 1 && k <= 20)) return refuse('a loop allows 1 to 20 passes'); cfg.maxIter = k; said.push('allows ' + k + (k === 1 ? ' pass' : ' passes')); }
+        if (o.until !== undefined) { const w = String(o.until || '').toLowerCase().trim(); if (!LOOP_WHEN.test(w)) return refuse('until is approved, revise (the reviewer\'s VERDICT), or code, research or general (repeat while the result is that kind)'); cfg.when = w; said.push(/^(approved|revise)$/.test(w) ? 'repeats until the verdict is ' + w : 'repeats while the result is ' + w); }
+        for (const [k, key, word] of [['done', 'done', 'moves on'], ['escalate', 'esc', 'escalates']]) if (o[k] !== undefined) { if (o[k] == null && k === 'escalate') { delete cfg.esc; said.push('never escalates'); continue; } const d = dirOf(o[k]); if (!d) return refuse(k + ' is the side work leaves by: north, east, south or west'); cfg[key] = d; said.push(word + ' ' + DIR_WORD[d]); }
+        if (!said.length) return refuse('loop sets passes, until, done or escalate'); return did(st.configureJunction(t.p.id, cfg), 'the loop at ' + at(t.p.x, t.p.y) + ' ' + said.join(', ')); }
+      case 'routes': { const t = propRef(o.prop); if (!t.ok) return t; const cfg = jcfg(t.p); cfg.routes = {}; for (const [tag, side] of Object.entries(o.routes || {})) { const d = dirOf(side); if (!d) return refuse('a route sends a kind of work out north, east, south or west'); cfg.routes[tag] = d; } if (o.def !== undefined) { if (o.def == null) delete cfg.def; else { const d = dirOf(o.def); if (!d) return refuse('def is the side everything else leaves by'); cfg.def = d; } }
+        return did(st.configureJunction(t.p.id, cfg), 'the ' + nm(t.p.t) + ' at ' + at(t.p.x, t.p.y) + ' sorts ' + (Object.keys(cfg.routes).join(', ') || 'nothing apart')); }
+      case 'wait': { const t = propRef(o.prop); if (!t.ok) return t; if (t.p.t !== 'joiner') return refuse('wait is for a JOINER: how long it waits for every branch'); const cfg = jcfg(t.p); if (o.minutes == null || /^(default|none)$/i.test(String(o.minutes))) delete cfg.timeoutMin; else { const m = Math.round(Number(o.minutes)); if (!(m >= 1 && m <= 120)) return refuse('a joiner waits 1 to 120 minutes'); cfg.timeoutMin = m; }
+        return did(st.configureJunction(t.p.id, cfg), 'the joiner at ' + at(t.p.x, t.p.y) + (cfg.timeoutMin ? ' waits up to ' + cfg.timeoutMin + ' minutes for every branch' : ' waits the default time')); }
+      case 'swap': { const t = propRef(o.prop); if (!t.ok) return t; if (!/^(joiner|merger)$/.test(t.p.t)) return refuse('swap turns a JOINER (waits for every branch: the splitter copies to each) into a MERGER (takes each as it comes: the branches take turns), or back'); const to = t.p.t === 'joiner' ? 'merger' : 'joiner';
+        return did(st.swapJoinerMerger(t.p.id), 'the ' + t.p.t + ' at ' + at(t.p.x, t.p.y) + ' becomes a ' + to + (to === 'joiner' ? ' (the branches each get a copy and it waits for all of them)' : ' (the branches take turns)')); }
+      case 'hands': { const t = propRef(o.prop); if (!t.ok) return t; if (t.p.t !== 'bay') return refuse('hands is for a bay: what that step hands on'); const txt = String(o.text == null ? '' : o.text).replace(/\s+/g, ' ').trim(); if (txt.length > 160) return refuse('hands text is up to 160 characters');
+        return did(st.setPropHands(t.p.id, txt), 'the bay at ' + at(t.p.x, t.p.y) + (txt ? ' hands on: "' + txt + '"' : ' hands on its whole result')); }
+      case 'folder': { const t = propRef(o.prop); if (!t.ok) return t; const ip = intakeOf(t.p); if (!ip) return refuse('that piece is not on a line with an inbox'); if (!res || res.root == null) return refuse('the folder must be one of the Commander\'s trusted projects');
+        return did(st.setPropProject(ip.id, res.root), 'the line at ' + at(ip.x, ip.y) + (res.root ? ' works in ' + res.name : ' works in no project folder')); }
+      case 'bind': { const t = propRef(o.prop); if (!t.ok) return t; if (!res) return refuse('bind needs a service the station has'); const fn = t.p.t === 'plugin_terminal' ? 'bindPlugin' : 'bindConnector';
+        if (t.p.t !== 'plugin_terminal' && !CONNECTOR_T.test(t.p.t)) return refuse('bind is for a connector portal (a connector) or a plugin terminal (a plugin)'); if (res.id && (fn === 'bindPlugin') !== (res.kind === 'plugin')) return refuse(fn === 'bindPlugin' ? 'a plugin terminal takes a plugin' : 'a connector portal takes a connector');
+        return did(st[fn](t.p.id, res.id), 'the ' + nm(t.p.t) + ' at ' + at(t.p.x, t.p.y) + (res.id ? ' gives its room\'s agents ' + res.name + '\'s tools' : ' is unbound')); }
       case 'stamp': { const bp = resolveLine(WM, o.line); if (!bp) return refuse('there is no line called "' + String(o.line).slice(0, 40) + '" (lines: ' + lineList(WM) + ')'); const q = tileOf(o); if (!q) return refuse('stamp needs the line\'s top-left x and y'); const r = st.stampBlueprint(bp.id, q.x, q.y, {}); if (!r || !r.ok) return refuse(wmMsg(r)); if (o.as) names[o.as] = r.ids[0]; return { ok: true, text: 'the line ' + (bp.plain || bp.label) + ' laid at ' + at(q.x, q.y) + inRoom(q.x, q.y) }; }
       case 'edit': { const t = propRef(o.prop); if (!t.ok) return t; if (!env.LineEdit || !env.LineEdit.run) return refuse('line edits are not loaded on this page'); const args = Object.assign({}, o.args || {}); for (const k of ['from', 'to', 'after', 'around', 'id', 'split', 'head']) if (args[k] != null && names[args[k]]) args[k] = names[args[k]];
         const r = env.LineEdit.run(st, t.p.id, String(o.edit || ''), args, { sizes: sizesOf(env), tidy: !!o.tidy }); if (!r || !r.ok) return refuse(wmMsg(r)); if (o.as && r.focus) names[o.as] = r.focus; return { ok: true, text: 'the line at ' + at(t.p.x, t.p.y) + ' edited: ' + o.edit + (args.role ? ' (' + titleCase(String(args.role)) + ')' : '') }; }
@@ -1266,15 +1315,34 @@
     }
   }
   // every op in order on `st`; the first that fails refuses, naming it
-  function refitAll(st, env, ops) {
+  function refitAll(st, env, ops, resolved) {
     const names = {}, texts = [];
     for (let i = 0; i < ops.length; i++) {
       let r;
-      try { r = refitOne(st, env, ops[i], names); } catch (e) { r = refuse(String((e && e.message) || e)); }
+      try { r = refitOne(st, env, ops[i], names, resolved ? resolved[i] : null); } catch (e) { r = refuse(String((e && e.message) || e)); }
       if (!r.ok) return refuse('Edit ' + (i + 1) + ' (' + String((ops[i] && ops[i].op) || '?').slice(0, 12) + '): ' + r.error.replace(/\.$/, '') + '. Nothing was built; fix that edit and plan again.');
       texts.push(r.text);
     }
     return { ok: true, texts, names };
+  }
+  // a folder or bind edit names a service the station has: matched here against env.services (the page reads them for the plan)
+  function serviceOf(o, env) {
+    const op = o && typeof o.op === 'string' ? o.op.toLowerCase().trim() : '';
+    if (op !== 'folder' && op !== 'bind') return null;
+    const sv = (env && env.services) || {}, none = v => v == null || /^(none|nothing|clear|no folder|unbind)$/i.test(String(v).trim());
+    const pick = (rows, want, keys) => { const w = String(want).trim().toLowerCase(); return rows.find(r => keys.some(k => r[k] != null && String(r[k]).trim().toLowerCase() === w)) || rows.find(r => keys.some(k => r[k] != null && String(r[k]).toLowerCase().replace(/\\/g, '/').split('/').pop() === w)) || null; };
+    if (op === 'folder') {
+      if (none(o.project)) return { root: '', name: '' };
+      if (!Array.isArray(sv.projects)) return { error: 'this page could not read the Commander\'s trusted projects; try again' };
+      const p = pick(sv.projects, o.project, ['name', 'root']);
+      return p ? { root: String(p.root), name: String(p.name || p.root) } : { error: '"' + String(o.project).slice(0, 60) + '" is not one of the Commander\'s trusted projects (' + (sv.projects.map(x => x.name || x.root).join(', ') || 'none yet') + '). The Commander trusts a folder under PROJECTS first' };
+    }
+    const want = o.plugin != null ? ['plugin', o.plugin] : o.connector != null ? ['connector', o.connector] : null;
+    if (!want || none(want[1])) return { id: '', name: '', kind: want ? want[0] : null };
+    const rows = want[0] === 'plugin' ? sv.plugins : sv.connectors;
+    if (!Array.isArray(rows)) return { error: 'this page could not read the station\'s ' + want[0] + 's; try again' };
+    const r = pick(rows, want[1], ['id', 'name', 'label']);
+    return r ? { id: String(r.id), name: String(r.name || r.label || r.id), kind: want[0] } : { error: 'there is no ' + (want[0] === 'plugin' ? 'plugin that is on' : 'connected service') + ' called "' + String(want[1]).slice(0, 40) + '" (' + (rows.map(x => x.name || x.label || x.id).join(', ') || 'none yet') + ')' };
   }
   function planRefit(doc, ops, env) {
     const WM = env && env.WorldModel, P = env && env.Pipeline;
@@ -1282,7 +1350,9 @@
     if (!Array.isArray(ops) || !ops.length) return refuse('refit is a list of edits, each { op, … } (ops: ' + REFIT_OPS + ').');
     if (ops.length > REFIT_MAX) return refuse('That is ' + ops.length + ' edits; send up to ' + REFIT_MAX + ' in one plan and the rest in the next.');
     const live = WM.create(clone(doc)), before = floorFacts(live, P), probe = WM.create(clone(doc));
-    const ran = refitAll(probe, env, ops); if (!ran.ok) return ran;
+    const resolved = ops.map(o => serviceOf(o, env)), bad = resolved.findIndex(x => x && x.error);
+    if (bad >= 0) return refuse('Edit ' + (bad + 1) + ' (' + String(ops[bad].op) + '): ' + resolved[bad].error + '. Nothing was built; fix that edit and plan again.');
+    const ran = refitAll(probe, env, ops, resolved); if (!ran.ok) return ran;
     // what the Commander should know before approving: routing that breaks, rooms nobody can walk into any more
     const after = floorFacts(probe, P), warn = [];
     const newErr = [...after.errs].filter(e => !before.errs.has(e));
@@ -1303,7 +1373,7 @@
         rest.length > keep.length ? ['… and ' + (rest.length - keep.length) + ' more edits that add or name pieces'] : []);
     }
     const summary = 'REFIT, ' + ops.length + (ops.length === 1 ? ' edit' : ' edits') + ', in order: ' + shown.join('; ') + '.' + (warn.length ? ' Heads-up: ' + warn.join('; ') + '.' : '') + ' One UNDO in Build mode takes all of it back.';
-    return { ok: true, plan: { floorSig: sigOf(doc), resultSig: sigOf(probe.serialize()), spec: { kind: 'refit', ops: clone(ops) }, summary, notes: warn, steps: [], line: null, where: 'a refit of ' + ops.length + (ops.length === 1 ? ' edit' : ' edits'), rooms: [],
+    return { ok: true, plan: { floorSig: sigOf(doc), resultSig: sigOf(probe.serialize()), spec: { kind: 'refit', ops: clone(ops), res: clone(resolved) }, summary, notes: warn, steps: [], line: null, where: 'a refit of ' + ops.length + (ops.length === 1 ? ' edit' : ' edits'), rooms: [],
       preview: previewOf(WM, doc, probe.serialize(), [], null) } };
   }
 
@@ -3095,7 +3165,7 @@
     const t = roomNamed(st, ref); if (!t.ok) return t;
     const r = t.room, B = bboxOf(r), S = env.PropSprites, g = st.projectGeometry(), belts = st.serialize().belts || {};
     const here = st.props().filter(p => st.roomAt(p.x, p.y) === r.id);
-    const pieces = here.map(p => { const o = { id: p.id, t: p.t, name: pieceName(env, p.t), x: p.x, y: p.y, w: p.w || 1, h: p.h || 1 }; if (p.r) o.r = p.r; if (p.m) o.m = 1; if (p.agentId) o.agent = nameOf(env, p.agentId); if (p.role) o.role = p.role; if (p.label) o.label = p.label; if (p.brief) o.brief = String(p.brief).slice(0, 120); if (p.block === false) o.walkOver = true; return o; });
+    const pieces = here.map(p => { const o = { id: p.id, t: p.t, name: pieceName(env, p.t), x: p.x, y: p.y, w: p.w || 1, h: p.h || 1 }; if (p.r) o.r = p.r; if (p.m) o.m = 1; if (p.agentId) o.agent = nameOf(env, p.agentId); if (p.role) o.role = p.role; if (p.label) o.label = p.label; if (p.brief) o.brief = String(p.brief).slice(0, 120); if (p.hands) o.hands = p.hands; if (p.limits) o.budget = { perDay: p.limits.maxUsdPerDay, perJob: p.limits.maxUsdPerMessage, stages: p.limits.maxHops }; if (p.projectRoot) o.folder = String(p.projectRoot).replace(/\\/g, '/').split('/').pop(); for (const k of ['routes', 'def', 'maxIter', 'when', 'done', 'esc', 'timeoutMin', 'connectorId', 'pluginId']) if (p[k] != null) o[k] = p[k]; if (p.block === false) o.walkOver = true; return o; });
     const beltList = Object.keys(belts).map(k => { const [x, y] = k.split(',').map(Number); return [x, y, belts[k]]; }).filter(([x, y]) => st.roomAt(x, y) === r.id);
     const doors = doorTiles(st, g, r.id).map(d => [d.x, d.y]);
     const mark = {}; for (const p of here) for (let y = p.y; y < p.y + (p.h || 1); y++) for (let x = p.x; x < p.x + (p.w || 1); x++) mark[x + ',' + y] = MACHINE_T.test(p.t) ? 'M' : p.agentId ? 'A' : p.block === false ? '_' : '#';
@@ -3162,7 +3232,7 @@
       return { ok: true, kind: 'edit', summary: pl.summary, where: pl.where, rooms: [], hallways: [], lines: [], roomIds: [] };
     }
     const r = st.transact(() => {
-      const b = pl.spec.kind === 'refit' ? (() => { const ran = refitAll(st, env, pl.spec.ops || []); return ran.ok ? { ok: true, ids: [] } : ran; })() : buildInto(st, pl.spec, WM);
+      const b = pl.spec.kind === 'refit' ? (() => { const ran = refitAll(st, env, pl.spec.ops || [], pl.spec.res || null); return ran.ok ? { ok: true, ids: [] } : ran; })() : buildInto(st, pl.spec, WM);
       if (!b.ok) return b;
       if (sigOf(st.serialize()) !== pl.resultSig) return refuse('The build did not match its plan, so nothing was changed. Plan it again.');
       // recruits come AFTER the exact-match check (their ids are minted now), inside the same undo step: each one's desk
@@ -3212,5 +3282,5 @@
       lineKey: rd.comp ? rd.comp.key : null, ready: rd.ready, blocking: rd.blocking, recruited };
   }
 
-  return { MENU, STEP_KEYS, ROOM_MENU, STYLE_MENU, DESIGN_MENU, ZONE_KEYS, ROOM_KEYS, LINE_KEYS, LAYOUT_KEYS, LAYOUT_ROOM_KEYS, AREAS, SIZES, EDIT_KEYS, catalog, resolveLine, plan, planRoom, planRestyle, planEdit, planUndo, planDesign, planBuild, planLayout, mapOf, roomPlacements, dressRoom, shapeGraph, areaOf, apply, sigOf };
+  return { MENU, STEP_KEYS, ROOM_MENU, STYLE_MENU, DESIGN_MENU, ZONE_KEYS, ROOM_KEYS, LINE_KEYS, LAYOUT_KEYS, LAYOUT_ROOM_KEYS, AREAS, SIZES, EDIT_KEYS, catalog, resolveLine, plan, planRoom, planRestyle, planEdit, planUndo, planDesign, planBuild, planLayout, mapOf, lineRef, roomPlacements, dressRoom, shapeGraph, areaOf, apply, sigOf };
 });
