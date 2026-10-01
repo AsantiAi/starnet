@@ -1177,7 +1177,9 @@
            window IS somebody watching, so a covered station window keeps rendering. Only the two flags that fix that:
            background TABS keep Chrome's normal throttling (renderer backgrounding and timer throttling stay ON), so a
            page left animating in another tab does not drain a laptop for hours (release review 2026-09-30). */
-        args.push('--disable-features=CalculateNativeWinOcclusion', '--disable-backgrounding-occluded-windows');
+        // macOS has its OWN occlusion checker, gated by the MacWebContentsOcclusion feature (read from Chromium's
+        // content/app_shim_remote_cocoa/web_contents_occlusion_checker_mac.mm, 2026-10-01): turned off by name too.
+        args.push('--disable-features=CalculateNativeWinOcclusion,MacWebContentsOcclusion', '--disable-backgrounding-occluded-windows');
       } else {
         args.push('--headless=new', '--hide-scrollbars', '--mute-audio');
       }
