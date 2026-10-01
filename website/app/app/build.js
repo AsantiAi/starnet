@@ -249,6 +249,7 @@ const Build = (() => {
 
   function open() {
     makeResumed = false;   // a fresh REFIT session picks up a made-prop job still running in the station
+    makeMsg = null; if (makeJob && (makeJob.status === 'done' || makeJob.status === 'failed')) makeJob = null;   // and never greets with an old message
     makeCreditsAsked = false;   // and re-reads the credit state (the player may have just linked or topped up)
     if (running) return;
     station = opts.getStation();
@@ -584,13 +585,20 @@ const Build = (() => {
      state the station reports (step, try n of 3, the cost the cloud actually billed); the job keeps running in
      the station if REFIT closes, and this panel picks it back up on reopen. */
   let makeJob = null, makeMsg = null, makeWatching = '';
-  const MAKE_STEP = { queued: 'Queued', waiting: 'Working', sizing: 'Sizing it against the catalog', drawing: 'Drawing', retrying: 'Redrawing', checking: 'Checking it matches the station' };
+  let makeBusy = false;      // a paid start (preview, make, side view) is in flight: one at a time, from every door (button, Enter, kit)
+  let makeDraft = '', makeFocused = false;   // what is typed survives a palette redraw (a job landing, a chip click)
+  const MAKE_PRICE = 0.35;
+  const MAKE_STEP = { queued: 'Queued', waiting: 'Working', starting: 'Starting', saving: 'Saving it to the station', sizing: 'Sizing it against the catalog', drawing: 'Drawing', retrying: 'Redrawing', checking: 'Checking it matches the station' };
   function makeStatusText() {
     if (makeMsg) return makeMsg;
-    if (!makeJob) return { text: (makeCredits && makeCredits.linked && makeCredits.balanceUsd > 0 ? 'StarNet credits \u00b7 $' + makeCredits.balanceUsd.toFixed(2) + ' left' : 'StarNet credits') + ' \u00b7 preview first (about 5\u00a2), then make it (about $0.35; a side view about $0.30)', tone: '' };
+    if (!makeJob) {
+      const bal = makeCredits && makeCredits.linked ? makeCredits.balanceUsd : null;
+      if (bal != null && bal > 0 && bal < MAKE_PRICE) return { text: 'StarNet credits \u00b7 $' + bal.toFixed(2) + ' left \u00b7 not enough to make a prop (about $0.35)', tone: 'bad', door: true };
+      return { text: (bal != null && bal > 0 ? 'StarNet credits \u00b7 $' + bal.toFixed(2) + ' left' : 'StarNet credits') + ' \u00b7 preview first (about 5\u00a2), then make it (about $0.35; a side view about $0.30)', tone: '' };
+    }
     const j = makeJob, spent = j.costUsd > 0 ? ' \u00b7 $' + j.costUsd.toFixed(2) + ' so far' : '';
     if (j.status === 'done' && j.kind === 'side') return { text: 'Side view made \u00b7 cost $' + (Number(j.costUsd) || 0).toFixed(2) + (j.costPending ? ' (final cost settling)' : '') + ' \u00b7 press R to turn it', tone: 'ok' };
-    if (j.status === 'done') return { text: 'Made ' + (j.label || j.noun) + ' \u00b7 cost $' + (Number(j.costUsd) || 0).toFixed(2) + (j.costPending ? ' (final cost settling)' : '') + ' \u00b7 in MADE BY YOU', tone: 'ok' };
+    if (j.status === 'done') return { text: 'Made ' + (j.label || j.noun) + ' \u00b7 cost $' + (Number(j.costUsd) || 0).toFixed(2) + (j.costPending ? ' (final cost settling \u00b7 see credit history)' : '') + (j.placeHint ? ' \u00b7 place it from FURNITURE \u25b8 MADE BY YOU' : ' \u00b7 in MADE BY YOU'), tone: 'ok' };
     if (j.status === 'failed') return { text: ((j.error && j.error.message) || 'That prop could not be made.') + (j.costUsd > 0 ? ' Spent $' + j.costUsd.toFixed(2) + '.' : ''), tone: 'bad' };
     const step = MAKE_STEP[j.step] || 'Working';
     const tries = (j.step === 'drawing' || j.step === 'retrying' || j.step === 'checking') && j.tries ? ' (try ' + j.tries + ' of ' + (j.maxTries || 3) + ')' : '';
@@ -611,10 +619,11 @@ const Build = (() => {
         cta.querySelector('button').textContent = need === 'link' ? 'GET STARNET CREDITS' : 'TOP UP CREDITS';
       }
     }
-    if (door) door.hidden = !!need || !(makeMsg && makeMsg.door);   // the card above already carries the door
-    const busy = !!(makeJob && makeJob.status !== 'done' && makeJob.status !== 'failed');
+    if (door) door.hidden = !!need || !((makeMsg && makeMsg.door) || (!makeMsg && st.door));   // the card above already carries the door
+    const busy = makeBusy || !!(makeJob && makeJob.status !== 'done' && makeJob.status !== 'failed');
     const go = root.querySelector('#refit-makeprop-go');
     if (go) go.disabled = busy;
+    root.querySelectorAll('#refit-makeprop-preview button').forEach((b) => { if (b.id !== 'refit-makeprop-drop') b.disabled = busy; });
     // MAKE SIDE VIEW: offered only for a selected made prop that has no side view yet
     const size = root.querySelector('#refit-makeprop-size');
     if (size) {
@@ -623,6 +632,8 @@ const Build = (() => {
       if (mine) {
         const k = UserProps.SCALES.includes(mine.scale) ? mine.scale : 1;
         size.querySelector('.refit-makeprop-sizeval').textContent = Math.round(k * 100) + '%';
+        size.querySelector('[data-size="-1"]').setAttribute('aria-label', 'Make ' + (mine.label || 'this prop') + ' smaller, now ' + Math.round(k * 100) + '%');
+        size.querySelector('[data-size="1"]').setAttribute('aria-label', 'Make ' + (mine.label || 'this prop') + ' bigger, now ' + Math.round(k * 100) + '%');
         size.querySelector('[data-size="-1"]').disabled = busy || k === UserProps.SCALES[0];
         size.querySelector('[data-size="1"]').disabled = busy || k === UserProps.SCALES[UserProps.SCALES.length - 1];
       }
@@ -642,13 +653,16 @@ const Build = (() => {
   }
   async function startMakeSide(targetId) {
     const made = typeof UserProps !== 'undefined' && UserProps.get ? UserProps.get(targetId || propType) : null;
-    if (!made || made.side) return;
+    if (!made || made.side || makeBusy || (makeJob && makeJob.status !== 'done' && makeJob.status !== 'failed')) return null;
+    makeBusy = true;
     makeMsg = { text: 'Starting the side view\u2026', tone: 'busy' }; paintMakeStatus();
-    const r = await UserProps.makeSide(made.id);
-    if (r && r.ok && r.job) { watchMakeJob(r.job); return; }
+    let r;
+    try { r = await UserProps.makeSide(made.id); } finally { makeBusy = false; }
+    if (r && r.ok && r.job) { watchMakeJob(r.job); return r; }
     makeJob = null;
-    makeMsg = { text: (r && r.message) || 'That side view could not be started.', tone: 'bad', door: r && (r.code === 'not_linked' || r.code === 'insufficient_credits') };
+    makeMsg = { text: (r && r.message) || 'That side view could not be started.', tone: r && r.code === 'unreachable' ? '' : 'bad', door: r && (r.code === 'not_linked' || r.code === 'insufficient_credits') };
     paintMakeStatus();
+    return r;
   }
   function watchMakeJob(job) {
     makeJob = job; makeMsg = null;
@@ -658,12 +672,20 @@ const Build = (() => {
     UserProps.watch(job.id, (j) => { makeJob = j; paintMakeStatus(); }).then((j) => {
       makeWatching = '';
       makeJob = j;
-      if (j.status === 'done' && j.kind === 'side') { if (root) renderPalette(); }
+      makeCreditsAsked = false; loadMakeCredits();   // the balance moved: show the real one, and the top-up card if it hit zero
+      if (j.status === 'done' && j.kind === 'side') { if (root) { renderPalette(); renderSelection(); } }
       else if (j.status === 'done' && j.propId && typeof PropSprites !== 'undefined' && PropSprites.spec(j.propId)) {
         makeJob.label = PropSprites.spec(j.propId).label;
-        propType = j.propId; propCat = 'yours'; propQuery = '';
-        if (root) { renderPalette(); setLibraryPlacement(true); }
-      }
+        // arm it only where the player still is (FURNITURE shelf, props tools); elsewhere say where it went
+        const onShelf = buildGroup === 'props' && propSection === 'decoration' && (tool === 'prop' || tool === 'select');
+        if (onShelf) {
+          propType = j.propId; propCat = 'yours'; propQuery = '';
+          if (root) { setLibraryPlacement(true); renderPalette(); }
+        } else {
+          makeJob = { ...makeJob, placeHint: true };
+          if (root) { renderPalette(); renderSelection(); setHint('Made ' + (makeJob.label || makeJob.noun) + ' \u00b7 place it from FURNITURE \u25b8 MADE BY YOU'); }
+        }
+      } else if (root) renderSelection();
       paintMakeStatus();
       sfx(j.status === 'done' ? 'confirm' : 'click');
     });
@@ -682,26 +704,39 @@ const Build = (() => {
     card.innerHTML = '<img alt="Preview sketch of ' + esc(p.label || makePreview.noun) + '" src="' + esc(p.sketch) + '">' +
       '<div class="refit-makeprop-previewtxt"><b>' + esc(p.label || makePreview.noun) + '</b>' +
       '<span>About ' + esc(fp[0] || '?') + '\u00d7' + esc(fp[1] || '?') + ' tiles, ' + previewMetres(p.height) + ' tall' + (p.profile ? ' \u00b7 shown side-on' : '') + (p.symmetric ? ' \u00b7 turns freely' : '') + '</span>' +
-      '<small>Quick preview. The final is drawn in full detail from this, so small details can differ. Preview cost $' + (Number(makePreview.costUsd) || 0).toFixed(2) + '.</small>' +
+      '<small>Quick preview. The final is drawn in full detail from this, so small details can differ. ' + (makePreview.costPending ? 'Preview cost settling (see credit history).' : 'Preview cost $' + (Number(makePreview.costUsd) || 0).toFixed(2) + '.') + '</small>' +
       '<div class="refit-makeprop-previewbtns"><button type="button" class="bb sm" id="refit-makeprop-makeit">MAKE IT \u00b7 ~$0.35</button><button type="button" class="bb sm" id="refit-makeprop-again">ANOTHER \u00b7 ~5\u00a2</button><button type="button" class="bb sm" id="refit-makeprop-drop" aria-label="Discard preview">\u2715</button></div></div>';
-    card.querySelector('#refit-makeprop-makeit').onclick = () => { const pv = makePreview; makePreview = null; paintPreviewCard(); startMakeProp(pv.noun, pv.id); sfx('click'); };
-    card.querySelector('#refit-makeprop-again').onclick = () => { const n = makePreview.noun; makePreview = null; paintPreviewCard(); startPreviewProp(n); sfx('click'); };
-    card.querySelector('#refit-makeprop-drop').onclick = () => { makePreview = null; makeMsg = null; paintPreviewCard(); paintMakeStatus(); sfx('click'); };
+    // the paid preview stays until MAKE IT really started (out of credit, busy, offline: it is still there to use)
+    card.querySelector('#refit-makeprop-makeit').onclick = async () => { const pv = makePreview; sfx('click'); if (await startMakeProp(pv.noun, pv.id) && makePreview === pv) { makePreview = null; paintPreviewCard(); } focusMakeInput(); };
+    card.querySelector('#refit-makeprop-again').onclick = () => { sfx('click'); startPreviewProp(makePreview.noun).then(focusMakeInput); };
+    card.querySelector('#refit-makeprop-drop').onclick = () => { makePreview = null; makeMsg = null; paintPreviewCard(); paintMakeStatus(); sfx('click'); focusMakeInput(); };
+  }
+  function focusMakeInput() {
+    const inp = root && root.querySelector('#refit-makeprop-input');
+    if (inp) { try { inp.focus({ preventScroll: true }); } catch (_) { inp.focus(); } }
   }
   async function startPreviewProp(noun) {
     noun = String(noun || '').trim();
-    if (!noun || typeof UserProps === 'undefined') return;
-    makePreview = null; paintPreviewCard();
+    if (typeof UserProps === 'undefined') return;
+    if (!noun) { makeMsg = { text: 'Type an object first, like \u201ca grandfather clock\u201d.', tone: 'bad' }; paintMakeStatus(); focusMakeInput(); return; }
+    if (makeBusy || (makeJob && makeJob.status !== 'done' && makeJob.status !== 'failed')) return;   // Enter can't sneak past the lock
+    makeBusy = true;
     makeJob = null; makeMsg = { text: 'Previewing\u2026', tone: 'busy' }; paintMakeStatus();
-    const r = await UserProps.startPreview(noun);
+    let r, res;
+    try {
+      r = await UserProps.startPreview(noun);
+      if (r && r.ok && r.job) {
+        const PSTEP = { queued: 'Queued', sizing: 'Sizing it against the catalog', sketching: 'Sketching a preview', checking: 'Checking the preview' };
+        res = await UserProps.watchPreview(r.job.id, (j) => { makeMsg = { text: (PSTEP[j.step] || 'Previewing') + '\u2026', tone: 'busy' }; paintMakeStatus(); });
+      }
+    } finally { makeBusy = false; }
+    makeCreditsAsked = false; loadMakeCredits();
     if (!r || !r.ok || !r.job) {
       makeMsg = { text: (r && r.message) || 'That preview could not be started.', tone: 'bad', door: r && (r.code === 'not_linked' || r.code === 'insufficient_credits') };
-      paintMakeStatus(); return;
+      paintMakeStatus(); paintPreviewCard(); return;
     }
-    const PSTEP = { queued: 'Queued', sizing: 'Sizing it against the catalog', sketching: 'Sketching a preview' };
-    const res = await UserProps.watchPreview(r.job.id, (j) => { makeMsg = { text: (PSTEP[j.step] || 'Previewing') + '\u2026', tone: 'busy' }; paintMakeStatus(); });
     if (res && res.ok && res.preview) {
-      makePreview = { id: r.job.id, noun, preview: res.preview, costUsd: res.job && res.job.costUsd };
+      makePreview = { id: r.job.id, noun, preview: res.preview, costUsd: res.job && res.job.costUsd, costPending: !!(res.job && res.job.costPending) };
       makeMsg = { text: 'Preview ready \u00b7 make it, or try another', tone: 'ok' };
     } else {
       makeMsg = { text: ((res && res.job && res.job.error && res.job.error.message) || (res && res.message) || 'That preview could not be made.') + (res && res.job && res.job.costUsd > 0 ? ' Spent $' + res.job.costUsd.toFixed(2) + '.' : ''), tone: 'bad' };
@@ -710,14 +745,17 @@ const Build = (() => {
   }
   async function startMakeProp(noun, previewId) {
     noun = String(noun || '').trim();
-    if (!noun || typeof UserProps === 'undefined') return;
+    if (!noun || typeof UserProps === 'undefined' || makeBusy || (makeJob && makeJob.status !== 'done' && makeJob.status !== 'failed')) return false;
+    makeBusy = true;
     makeMsg = { text: 'Starting\u2026', tone: 'busy' }; paintMakeStatus();
-    const r = await UserProps.generate(noun, previewId);
-    if (r && r.ok && r.job) { watchMakeJob(r.job); return; }
+    let r;
+    try { r = await UserProps.generate(noun, previewId); } finally { makeBusy = false; }
+    if (r && r.ok && r.job) { watchMakeJob(r.job); return true; }
     const code = r && r.code;
     makeJob = null;
-    makeMsg = { text: (r && r.message) || 'That prop could not be started.', tone: 'bad', door: code === 'not_linked' || code === 'insufficient_credits' };
+    makeMsg = { text: (r && r.message) || 'That prop could not be started.', tone: code === 'unreachable' ? '' : 'bad', door: code === 'not_linked' || code === 'insufficient_credits' };
     paintMakeStatus();
+    return false;
   }
   // REFIT reopened while the station still has a job in flight: pick it back up instead of forgetting it.
   let makeResumed = false;   // once per REFIT open: a render must not refetch (and race) the made-prop list
@@ -752,7 +790,20 @@ const Build = (() => {
     loadMakeCredits();
     if (makeResumed || makeJob || makeWatching || typeof UserProps === 'undefined') return;
     makeResumed = true;
-    UserProps.load().then((r) => { const j = r && r.jobs && r.jobs[0]; if (j && !makeJob) watchMakeJob(j); paintMakeStatus(); });
+    UserProps.load().then((r) => {
+      const j = r && r.jobs && r.jobs[0];
+      if (j && !makeJob) watchMakeJob(j);
+      else if (!makeJob && !makeMsg && r && Array.isArray(r.recent)) {
+        let seen = [];
+        try { seen = JSON.parse(localStorage.getItem('starnet.userprops.seen') || '[]'); } catch (_) { seen = []; }
+        const miss = r.recent.find((x) => x && x.status === 'failed' && !seen.includes(x.id));
+        if (miss) {
+          makeMsg = { text: 'While REFIT was closed: ' + (miss.noun || 'a prop') + ' \u2014 ' + ((miss.error && miss.error.message) || 'it could not be made.'), tone: 'bad' };
+          try { localStorage.setItem('starnet.userprops.seen', JSON.stringify(seen.concat(r.recent.map((x) => x.id)).slice(-50))); } catch (_) { /* per-viewer convenience only */ }
+        }
+      }
+      paintMakeStatus();
+    });
   }
   // SIZE a made prop (library-wide, free): the art re-registers at the new size and this floor's copies are
   // re-laid at the new box as ONE undo. A copy that no longer fits aborts the whole resize and says so.
@@ -802,6 +853,7 @@ const Build = (() => {
     makeMsg = { text: 'Deleted ' + (made.label || 'that prop') + (copies.length ? ' \u00b7 removed ' + copies.length + ' placed ' + (copies.length === 1 ? 'copy' : 'copies') : ''), tone: 'ok' };
     if (root) { renderPalette(); setLibraryPlacement(false); }
     paintMakeStatus();
+    focusMakeInput();
   }
   function makePropPanel() {
     const box = document.createElement('section'); box.className = 'refit-makeprop'; box.setAttribute('aria-label', 'Make a prop');
@@ -811,14 +863,19 @@ const Build = (() => {
       '<button type="button" class="bb sm" id="refit-makeprop-go">PREVIEW</button></div>' +
       '<div class="refit-makeprop-preview" id="refit-makeprop-preview" hidden></div>' +
       '<div class="refit-makeprop-foot"><span class="refit-makeprop-status" id="refit-makeprop-status" role="status" aria-live="polite"></span>' +
-      '<button type="button" class="bb sm" id="refit-makeprop-door" hidden>\u25b8 OPEN PROVIDERS</button></div>' +
+      '<button type="button" class="bb sm" id="refit-makeprop-door" hidden>\u25b8 STARNET CREDITS</button></div>' +
       '<div class="refit-makeprop-size" id="refit-makeprop-size" hidden><span class="refit-makeprop-sizelbl">SIZE</span><button type="button" class="bb sm" data-size="-1" aria-label="Smaller">\u2212</button><b class="refit-makeprop-sizeval">100%</b><button type="button" class="bb sm" data-size="1" aria-label="Bigger">+</button></div>' +
       '<div class="refit-makeprop-actions"><button type="button" class="bb sm refit-makeprop-sidebtn" id="refit-makeprop-side" hidden>\u21bb MAKE SIDE VIEW</button>' +
       '<button type="button" class="bb sm" id="refit-makeprop-del" hidden>\u2715 DELETE</button></div>';
     const inp = box.querySelector('#refit-makeprop-input'), go = box.querySelector('#refit-makeprop-go');
+    inp.value = makeDraft;
+    inp.oninput = () => { makeDraft = inp.value; };
+    inp.onfocus = () => { makeFocused = true; };
+    inp.onblur = () => { makeFocused = false; };
+    if (makeFocused) setTimeout(() => { if (!inp.isConnected) return; inp.focus({ preventScroll: true }); try { inp.setSelectionRange(inp.value.length, inp.value.length); } catch (_) { /* not a text control */ } }, 0);
     go.onclick = () => { startPreviewProp(inp.value); sfx('click'); };
     inp.onkeydown = (ev) => {
-      if (ev.key === 'Enter') { ev.preventDefault(); startPreviewProp(inp.value); return; }
+      if (ev.key === 'Enter') { ev.preventDefault(); if (!go.disabled) startPreviewProp(inp.value); return; }
       if (ev.key !== 'Escape') return;
       ev.stopPropagation();   // like the search field: Escape leaves the field, never closes REFIT behind it
       inp.blur();
@@ -826,7 +883,8 @@ const Build = (() => {
     box.querySelector('#refit-makeprop-side').onclick = () => { startMakeSide(); sfx('click'); };
     box.querySelectorAll('[data-size]').forEach((b) => { b.onclick = () => { sizeMadeProp(Number(b.dataset.size)); sfx('click'); }; });
     const delBtn = box.querySelector('#refit-makeprop-del');
-    if (typeof ArmConfirm !== 'undefined' && ArmConfirm.wire) ArmConfirm.wire(delBtn, { armedLabel: '\u2715 DELETE FOR GOOD? \u00b7 credits are not refunded', onArm: () => sfx('bad'), onConfirm: () => deleteMadeProp() });
+    const copiesHere = station && UserProps.get && UserProps.get(propType) ? station.props().filter((p) => p.t === propType).length : 0;
+    if (typeof ArmConfirm !== 'undefined' && ArmConfirm.wire) ArmConfirm.wire(delBtn, { armedLabel: '\u2715 DELETE FOR GOOD?' + (copiesHere ? ' \u00b7 removes ' + copiesHere + ' placed ' + (copiesHere === 1 ? 'copy' : 'copies') : '') + ' \u00b7 credits are not refunded', onArm: () => sfx('bad'), onConfirm: () => deleteMadeProp() });
     box.querySelector('#refit-makeprop-door').onclick = openCreditsDoor;
     box.querySelector('#refit-makeprop-cta-go').onclick = () => { openCreditsDoor(); sfx('click'); };
     setTimeout(() => { paintMakeStatus(); paintPreviewCard(); resumeMakeJob(); }, 0);
@@ -4615,7 +4673,7 @@ const Build = (() => {
   function turnUnderCursor(dir) {
     const ev = orientEv(), p = orientTarget();
     if (p) {
-      if (!canTurn(p.t)) { sfx('bad'); flashTip(ev, propLabel(p.t) + ' only faces one way — its turned art is not drawn'); return; }
+      if (!canTurn(p.t)) { sfx('bad'); flashTip(ev, propLabel(p.t) + (/^user_/.test(p.t) ? ' has no side view yet \u00b7 select it and pick SIDE VIEW (about 30\u00a2) to turn it' : ' only faces one way — its turned art is not drawn')); return; }
       const nr = nextFace(p.t, p.r | 0, dir);
       const res = station.faceProp(p.id, nr, propBox(p.t, nr, p));
       if (res && res.ok) pushFlash([{ x1: p.x, y1: p.y, x2: p.x + p.w - 1, y2: p.y + p.h - 1 }], false);   // p is mutated in place → the NEW box
@@ -4623,7 +4681,7 @@ const Build = (() => {
       return;
     }
     if (tool !== 'prop') { sfx('bad'); flashTip(ev, 'hover a placed prop to turn it, or pick the PROP tool (6)'); return; }
-    if (!canTurn(propType)) { sfx('bad'); flashTip(ev, propLabel(propType) + ' only faces one way — its turned art is not drawn'); return; }
+    if (!canTurn(propType)) { sfx('bad'); flashTip(ev, propLabel(propType) + (/^user_/.test(propType) ? ' has no side view yet \u00b7 MAKE SIDE VIEW (about 30\u00a2) turns it' : ' only faces one way — its turned art is not drawn')); return; }
     propRot = nextFace(propType, propRot, dir) & 3;
     renderPropPreview();
     renderEquipmentInfo();
@@ -4681,7 +4739,7 @@ const Build = (() => {
       const k=UserProps.SCALES.includes(made.scale)?made.scale:1;
       if(k>UserProps.SCALES[0])add('SIZE \u2212',()=>sizeMadeProp(-1,p.t));
       if(k<UserProps.SCALES[UserProps.SCALES.length-1])add('SIZE + ('+Math.round(k*100)+'%)',()=>sizeMadeProp(1,p.t));
-      if(!made.side&&!made.symmetric)add('\u21bb SIDE VIEW',()=>{setHint('Making a side view of '+(made.label||'this prop')+' \u00b7 about $0.30 \u00b7 watch the MAKE A PROP panel');startMakeSide(p.t);});
+      if(!made.side&&!made.symmetric)add('\u21bb SIDE VIEW',async()=>{setHint('Starting a side view of '+(made.label||'this prop')+'\u2026');const r=await startMakeSide(p.t);if(!r)setHint('A prop job is already running \u00b7 wait for it to finish');else setHint(r.ok?'Making a side view of '+(made.label||'this prop')+' \u00b7 about $0.30 \u00b7 it turns with R when it lands':(r.message||'That side view could not be started.'));});
     }
     if(isEditableProp(p.t))add('CONFIGURE',()=>configureProp(p,orientEv()));
     add('DELETE',()=>{const had=linkedFloor()&&isWorkflowType(p.t)&&(station.links()||[]).some(l=>l.from.prop===p.id||l.to.prop===p.id);feedback(station.removeProp(p.id),orientEv(),had?'removed · its belts stay, loose — nothing rides them until a machine stands where they end · Undo restores it':'removed · Undo restores it');selectedPropId=null;movingPropId=null;renderSelection();setHint();});
