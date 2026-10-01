@@ -10696,6 +10696,7 @@ const ROUTES = [
   { m: 'POST', exact: '/api/cron/arm', h: handleCronArm },
   { m: 'POST', exact: '/api/cron/degraded/clear', h: handleCronDegradedClear },
   { m: 'POST', exact: '/api/cron/run', h: handleCronRun },
+  { m: 'GET', qsplit: '/api/cron/history', h: handleCronHistory },
   // ---- LOOPS (standing objectives): the review gate is /verdict, and it is also the loop's trigger ----
   { m: 'GET', exact: '/api/loops', h: handleLoopsList },
   { m: 'POST', exact: '/api/loops', h: handleLoopsCreate },
@@ -14056,6 +14057,31 @@ function handleCronDegradedClear(req, res) {
   }).catch(() => { try { json(400, { error: 'bad request' }); } catch (e) { failNote('cron.degraded.clear.reply', e); } });
 }
 
+// GET /api/cron/history?id=<jobId>&limit=N — one routine's past runs, newest first, straight from the durable run
+// history (runs.jsonl rows stamped with cronJobId; older rows that predate the stamp are matched by the job's own
+// lastRunId so the latest run is never missing). Every field is the row's own record — nothing synthesized.
+function handleCronHistory(req, res) {
+  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  try {
+    const u = new URL(req.url, 'http://x');
+    const id = String(u.searchParams.get('id') || '').slice(0, 100);
+    const limit = Math.max(1, Math.min(50, parseInt(u.searchParams.get('limit'), 10) || 10));
+    const job = id ? cronStore.getJob(cronJobs, id) : null;
+    if (!job) return json(404, { ok: false, error: 'no such routine' });
+    const out = [];
+    const rows = runStore.all();
+    for (let i = rows.length - 1; i >= 0 && out.length < limit; i--) {
+      const r = rows[i];
+      if (!r || !(r.cronJobId === id || (job.lastRunId && r.runId === job.lastRunId))) continue;
+      if (out.some(x => x.runId === r.runId)) continue;
+      out.push({ runId: r.runId, at: r.endedAt || r.ts || 0, startedAt: r.startedAt || 0, durationMs: r.durationMs || 0,
+        reason: r.reason, usd: r.usd || 0, unmetered: !!r.unmetered, toolsOk: r.toolsOk || 0, streamId: r.streamId || '',
+        error: r.error || '', artifacts: (r.artifacts || []).length });
+    }
+    return json(200, { ok: true, id, runs: out });
+  } catch (e) { return json(200, { ok: false, error: 'could not read routine history' }); }
+}
+
 // POST /api/cron — create a routine. body: { name, prompt, schedule:<string>, agentId?, model?, provider?, deliver?, enabled?, repeat?, meta? }
 //   meta (R3): an optional provenance bag, e.g. { recipeId } stamped by the recipe MAKE-ROUTINE flow. Additive.
 function handleCronCreate(req, res) {
@@ -14063,6 +14089,16 @@ function handleCronCreate(req, res) {
   readBody(req, 1 << 16).then(async raw => {
     let body; try { body = JSON.parse(raw) || {}; } catch (e) { return json(400, { error: 'bad json' }); }
     const out = await createCronJobFromSpec(body);
+    /* ARM ON CREATE (routine reliability, 2026-10-01): the panel used to save a routine and then toast "saved, but
+       the scheduler is off — this won't run" — a routine the Commander just made never firing is the most common
+       way a routine "doesn't work". body.arm:true (sent by the CREATE form, same default as routine.create's
+       arm) records the arm intent and starts the timer. A durable E-STOP is respected exactly as the tool path
+       does: intent recorded, timer left down, and the reply says so. */
+    if (body.arm === true && out.body && out.body.ok && out.body.job && !out.body.duplicate && out.body.job.enabled !== false) {
+      try { if (!cronArmed) { saveCronArmed(true); cronArmed = true; if (!cronHalted) armCron(); } }
+      catch (e) { console.warn('[cron] arm-on-create failed:', (e && e.message) || e); }
+    }
+    if (out.body && out.body.ok) out.body.scheduler = { armed: !!cronArmed && !cronHalted, halted: !!cronHalted };
     return json(out.status || 200, out.body);
   }).catch(() => { try { json(400, { error: 'bad request' }); } catch (_) {} });
 }
@@ -20312,7 +20348,7 @@ async function runOnceCore(o) {
         }
       }
       const runEndedAt = Date.now();
-      runStore.record({ runId, parentRunId: o.parentRunId || '', agentId, provider: activeProviderId, reason: ((result && result.reason) || 'done'), clarifying: taskQuestionAsked, turns: finalTurns, tokens: finalTokens, usd: finalUsd, title: title, streamId: o.streamId || '', sessionTitle: o.sessionTitle || '', deliveryPrompt: o.syntheticTrigger ? '' : (o.sessionPrompt || ''), deliveryText, recipeId: o.recipeId || '', projectRoot: o.projectRoot || '', deliverable: deliverableNotes.take(runId), model: finalModel, reasoningEffort, unmetered: runUnmetered && mediaUsd === 0, artifacts: execution.artifactList(), toolsOk: execution.toolsOk(), toolTrace: execution.toolTraceList(), failureStage: execution.failureStage(), failureCode: execution.failureCode(), uncertainMutations: execution.uncertainMutations(), completionEvidence: finalCompletionEvidence, recoveryAttempts: execution.recoveryAttempts(), startedAt: runStartedAt, endedAt: runEndedAt, durationMs: runEndedAt - runStartedAt, identityFallback, internal, surface, recoveryOf: o.recovery ? String(o.recovery.sourceRunId || '') : '', handoffEdited: o.handoffEdited === true, stepTest: o.stepTest === true, lineId: o.lineId || '', dockId: o.dockId || '', taintedBy: execution.taintedBy() || '' });   // execution terminal stays separate from the neutral Task Brief outcome used by progression; recoveryOf links a continuation to the interrupted run it resumed
+      runStore.record({ runId, parentRunId: o.parentRunId || '', agentId, provider: activeProviderId, reason: ((result && result.reason) || 'done'), clarifying: taskQuestionAsked, turns: finalTurns, tokens: finalTokens, usd: finalUsd, title: title, streamId: o.streamId || '', sessionTitle: o.sessionTitle || '', deliveryPrompt: o.syntheticTrigger ? '' : (o.sessionPrompt || ''), deliveryText, recipeId: o.recipeId || '', projectRoot: o.projectRoot || '', deliverable: deliverableNotes.take(runId), model: finalModel, reasoningEffort, unmetered: runUnmetered && mediaUsd === 0, artifacts: execution.artifactList(), toolsOk: execution.toolsOk(), toolTrace: execution.toolTraceList(), failureStage: execution.failureStage(), failureCode: execution.failureCode(), uncertainMutations: execution.uncertainMutations(), completionEvidence: finalCompletionEvidence, recoveryAttempts: execution.recoveryAttempts(), startedAt: runStartedAt, endedAt: runEndedAt, durationMs: runEndedAt - runStartedAt, identityFallback, internal, surface, recoveryOf: o.recovery ? String(o.recovery.sourceRunId || '') : '', handoffEdited: o.handoffEdited === true, stepTest: o.stepTest === true, lineId: o.lineId || '', dockId: o.dockId || '', taintedBy: execution.taintedBy() || '', cronJobId: trigger === 'schedule' ? String(o.cronJobId || '') : '' });   // execution terminal stays separate from the neutral Task Brief outcome used by progression; recoveryOf links a continuation to the interrupted run it resumed
 
       // P0.1/H1.1: persist the full DIALOGUE (not just the outcome) — a durable server-side transcript for EVERY
       // run, incl. headless ones (cron/Telegram/delegated). Append the triggering user directive, then EVERY new

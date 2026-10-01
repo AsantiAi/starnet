@@ -310,6 +310,7 @@
           // only DELETE and re-create a routine to move it an hour, which also threw away its run history.
           '<button class="bb xs" data-act="edit">✎ EDIT TASK</button>' +
           '<button class="bb xs" data-act="resched">◷ RESCHEDULE</button>' +
+          '<button class="bb xs" data-act="history"' + (j.lastRunAt ? '' : ' disabled title="no runs yet"') + '>☰ HISTORY</button>' +
           // no toggle on a settled one-shot: ENABLE can't re-arm it (see completedOnce above)
           (completedOnce ? '' : '<button class="bb xs" data-act="toggle">' + (on ? '⏸ DISABLE' : '▶ ENABLE') + '</button>') +
           // REVOKE — a standing unattended permission must be withdrawable without deleting the routine.
@@ -616,12 +617,44 @@
       });
     }
 
+    /* RUN HISTORY (2026-10-01): one routine's past runs, newest first, from GET /api/cron/history — each line is
+       that run's own durable record (status, when, how long, spend, tool calls, error). A list redraw closes it. */
+    function historyLine(r) {
+      const ok = r.reason === 'done';
+      const usd = Number(r.usd) || 0;
+      const cost = r.unmetered ? 'subscription' : usd >= 0.01 ? '$' + usd.toFixed(2) : usd > 0 ? '$' + usd.toFixed(4) : '$0';
+      const secs = Math.round((Number(r.durationMs) || 0) / 1000);
+      const took = secs >= 60 ? Math.floor(secs / 60) + 'm ' + (secs % 60) + 's' : secs + 's';
+      const tools = Number(r.toolsOk) || 0, files = Number(r.artifacts) || 0;
+      return '<div class="mc-detail">' + (ok ? '<span class="pos">✓ ok</span>' : '<span style="color:var(--bad)">✕ ' + esc(r.reason || 'error') + '</span>') +
+        ' <span class="dim">' + esc(r.at ? new Date(r.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '') +
+        ' · ' + took + ' · ' + cost + ' · ' + tools + ' tool call' + (tools === 1 ? '' : 's') +
+        (files ? ' · ' + files + ' file' + (files === 1 ? '' : 's') : '') + '</span>' +
+        (r.error && !ok ? '<div class="dim">' + esc(String(r.error).slice(0, 240)) + '</div>' : '') + '</div>';
+    }
+    async function toggleHistory(rowEl, id, btn) {
+      const open = rowEl.querySelector('.rt-hist');
+      if (open) { open.remove(); btn.classList.remove('on'); return; }
+      btn.classList.add('on');
+      const box = document.createElement('div'); box.className = 'rt-hist'; box.innerHTML = '<div class="mc-detail dim">loading…</div>';
+      rowEl.appendChild(box);
+      try {
+        const h = await Harness.api.get('/api/cron/history?id=' + encodeURIComponent(id) + '&limit=10');
+        if (!box.isConnected) return;
+        const runs = (h && h.ok && Array.isArray(h.runs)) ? h.runs : null;
+        box.innerHTML = runs == null ? '<div class="mc-detail" style="color:var(--bad)">could not read this routine’s history</div>'
+          : runs.length ? runs.map(historyLine).join('')
+          : '<div class="mc-detail dim">no recorded runs yet</div>';
+      } catch (_) { if (box.isConnected) box.innerHTML = '<div class="mc-detail" style="color:var(--bad)">could not reach the station</div>'; }
+    }
+
     // row actions: run-now (stream + show the reply), toggle enable/disable, delete (two-step arm/confirm).
     listEl.addEventListener('click', async ev => {
       const btn = ev.target.closest('button[data-act]'); if (!btn) return;
       if (editSaving) return;
       const rowEl = ev.target.closest('.mc-row'); const id = rowEl && rowEl.dataset.id; if (!id) return;
       const act = btn.dataset.act;
+      if (act === 'history') { sfx('click'); toggleHistory(rowEl, id, btn); return; }
       if (act === 'edit') {
         sfx('click');
         const wasOpen = btn.classList.contains('on');
@@ -741,7 +774,7 @@
         const attachToSession = !!body.querySelector('#rt-continue').checked;
         if ((deliveryMode === 'origin' || attachToSession) && !activeSession) throw new Error('Open the conversation this routine should return to, then save again.');
         const r = await (await post('/api/cron', {
-          name, prompt, schedule, agentId: agentId || undefined, tz,
+          name, prompt, schedule, agentId: agentId || undefined, tz, arm: true,   // a routine you just made should fire (E-STOP still holds)
           meta: body.querySelector('#rt-prompt').dataset.widgetId
             ? { widgetId: body.querySelector('#rt-prompt').dataset.widgetId }
             : body.querySelector('#rt-prompt').dataset.workflowTakeoverId
@@ -766,8 +799,10 @@
           // HONEST create-confirm: don't claim "scheduled" if the scheduler that fires it is off. armStateLine
           // returns null when armed (→ the normal "scheduled for <agent>" line) and an honest {text} when disarmed
           // ("saved, but the scheduler is off — this won't run until you enable scheduling"). Built for exactly this.
+          if (r && r.scheduler) schedulerArmed = !!r.scheduler.armed;   // the create reply carries the live arm state
           const arm = (typeof AutoJobs !== 'undefined' && AutoJobs.armStateLine) ? AutoJobs.armStateLine(schedulerArmed) : null;
-          if (arm) notify('routine "' + (name || 'unnamed') + '" ' + arm.text, 'warn');
+          if (r && r.scheduler && r.scheduler.halted) notify('routine "' + (name || 'unnamed') + '" saved — the scheduler is on E-STOP, so nothing fires until you resume it in ROUTINES', 'warn');
+          else if (arm) notify('routine "' + (name || 'unnamed') + '" ' + arm.text, 'warn');
           else notify('routine "' + (name || 'unnamed') + '" scheduled for ' + agentLabel(agentId || 'agent'), 'good');
           sfx('click');
           ['#rt-name', '#rt-prompt'].forEach(s => { body.querySelector(s).value = ''; });
