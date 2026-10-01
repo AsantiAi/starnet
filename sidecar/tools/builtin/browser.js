@@ -2934,8 +2934,16 @@
         const at = await navigate(u.href);
         if (typeof deps.onLoginOpen === 'function') { try { await deps.onLoginOpen({ host, url: at }); } catch (e) { failNote('browser.login.show', e); } }
         let doneHere = false;
+        /* FROZEN while the Commander signs in (release review 2026-09-30): the same rule as a STEP-IN handoff — a
+           browser tool called in parallel in this turn (snapshot, get_text, screenshot, console) must not read a page
+           they are typing a password or a 2FA code into. thaw() also retires every ref minted before. */
+        const wasFrozen = frozenBy;
+        if (!wasFrozen) freeze('sign-in at ' + host);
         try { doneHere = approved(await attended.prompt({ tool: 'browser.login.done', scope: 'execute', argsSummary: host })); }
-        finally { if (typeof deps.onLoginClose === 'function') { try { deps.onLoginClose({ host }); } catch (e) { failNote('browser.login.close', e); } } }
+        finally {
+          if (!wasFrozen) thaw();
+          if (typeof deps.onLoginClose === 'function') { try { deps.onLoginClose({ host }); } catch (e) { failNote('browser.login.close', e); } }
+        }
         return { status: doneHere ? 'done' : 'unconfirmed', host, url: at || u.href, station: true };
       }
       // Headed + real input: forceHeadless is HOST authority for model-driven navigation; this relaunch is
@@ -3507,7 +3515,7 @@
       const run = tool.run;
       tool.run = async (args, ctx) => {
         const held = typeof session.frozen === 'function' ? session.frozen() : null;
-        if (held) throw new Error('FROZEN: the Commander holds this browser (STEP-IN handoff ' + held + '). No browser tool may read or drive the page until they hand it back; browser.need_human returns when they do.');
+        if (held) throw new Error('FROZEN: the Commander holds this browser (' + (/^sign-in/.test(String(held)) ? String(held) : 'STEP-IN handoff ' + held) + '). No browser tool may read or drive the page until they hand it back.');
         return run(args, ctx);
       };
     }
