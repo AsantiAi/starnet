@@ -48,5 +48,37 @@ function connect(proxyPort, authority) {
     await proxy.close();
     await new Promise(resolve => sentinel.close(resolve));
   }
+
+  /* THE BROWSER CLOSES MID-CONNECT (measured 2026-09-30, gate): Chromium's socket resets while the proxy is still
+     resolving DNS for its CONNECT. That reset had no listener yet and ended the whole sidecar with ECONNRESET. */
+  {
+    const crashes = [];
+    const onCrash = e => crashes.push(e);
+    process.on('uncaughtException', onCrash);
+    let release; const resolving = new Promise(r => { release = r; });
+    let asked = 0;
+    const slow = await startPinnedProxy({ validate: _internals.assertSafeUrl,
+      resolve: async () => { asked++; await resolving; return { address: '93.184.215.14', family: 4 }; } });
+    try {
+      for (const verb of ['CONNECT example.com:443', 'GET ws://example.com/socket']) {
+        const sock = require('node:net').connect(slow.port, '127.0.0.1');
+        await new Promise(r => sock.once('connect', r));
+        sock.write(verb + ' HTTP/1.1\r\nHost: example.com\r\n' + (/^GET/.test(verb) ? 'Connection: Upgrade\r\nUpgrade: websocket\r\n' : '') + '\r\n');
+        await new Promise(r => setTimeout(r, 150));
+        sock.on('error', () => {});
+        sock.resetAndDestroy();   // a TCP RST, as when the browser process is killed
+      }
+      await new Promise(r => setTimeout(r, 150));
+      release();
+      await new Promise(r => setTimeout(r, 300));
+      A.ok(asked >= 1, 'the reset arrived while the proxy was still resolving the address');
+      A.eq(crashes.map(e => e.code || e.message), [], 'a browser reset mid-CONNECT / mid-upgrade never crashes the sidecar');
+      const after = await request(slow.port, 'http://127.0.0.1:1/');
+      A.eq(after.status, 403, 'and the proxy keeps serving');
+    } finally {
+      process.removeListener('uncaughtException', onCrash);
+      await slow.close();
+    }
+  }
   A.report('browser-proxy.test');
 })().catch(e => { console.error(e); process.exitCode = 1; });

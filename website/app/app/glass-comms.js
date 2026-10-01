@@ -25,9 +25,11 @@
   }
   function enhanceAddAgents() {
     const addAgents=document.querySelector('#gc-add-agents');if(!addAgents)return false;
-    const caption=document.createElement('span');caption.textContent='ADD AGENTS';
+    // Just the + (Andrew, 2026-09-30): the header's two doors are a pair of icons — + adds agents, the globe is the
+    // BROWSER. The words live in the tooltip and the accessible name.
     addAgents.setAttribute('aria-label','Add agents');
-    addAgents.replaceChildren(icon('add'),caption);return true;
+    addAgents.title='Add agents to this chat';
+    addAgents.replaceChildren(icon('add'));return true;
   }
   // Group chat can attach its control after the demo has loaded.
   if(!enhanceAddAgents()) {

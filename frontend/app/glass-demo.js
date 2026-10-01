@@ -110,9 +110,11 @@
     // Catalogs need room below their search/category controls on first open.
     // An explicit drag/keyboard height still wins, exactly as for every other sheet.
     const catalog = w.classList.contains('mkt-window') && w.querySelector('.mkt-stage');
+    // The BROWSER window shows a whole web page: at 56% of the band the page is a letterbox strip.
+    const page = w.classList.contains('browser-win');
     // The WORKFLOWS window is a work surface: the job, the step working on it and the whole result want the room (2026-09-30).
     const work = w.classList.contains('wfw-win');
-    const preferred = catalog ? Math.max(available * .75, w.offsetHeight - catalog.offsetHeight + 260) : work ? available * .8 : available * .56;
+    const preferred = catalog ? Math.max(available * .75, w.offsetHeight - catalog.offsetHeight + 260) : page ? available * .82 : work ? available * .8 : available * .56;
     const h = s.expanded ? available : Math.min(available, Math.max(220, s.height || preferred));
     w.style.animation = 'none'; w.style.transform = 'none';
     const geometry = {left:b.x+'px',top:(b.bottom-h)+'px',width:b.width+'px',height:h+'px',maxWidth:b.width+'px',maxHeight:available+'px'};

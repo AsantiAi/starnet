@@ -128,6 +128,24 @@
     } finally { if (state.previewAbort === controller) state.previewAbort = null; }
     return true;
   }
+  // The BROWSER window target for a library file, read off the backend's own openUrl (never rebuilt from display
+  // fields): '/workshop-run/<agent>/<run>/<path>' → a workshop page; '/api/file?agent=&path=' → a workspace page.
+  function browserTarget(r, f) {
+    if (!/\.html?$/i.test(String((f && f.path) || ''))) return null;
+    const url = String((f && f.openUrl) || '');
+    const m = /^\/workshop-run\/([^/?#]+)\/([^/?#]+)\/([^?#]+)$/.exec(url);
+    if (m) {
+      try { return { agentId: decodeURIComponent(m[1]), runId: decodeURIComponent(m[2]), path: m[3].split('/').map(decodeURIComponent).join('/'), source: 'workshop' }; }
+      catch (_) { return null; }
+    }
+    if (url.indexOf('/api/file?') === 0) {
+      const agent = (/[?&]agent=([^&#]*)/.exec(url) || [])[1];
+      let agentId = r.agentId || 'agent';
+      try { if (agent) agentId = decodeURIComponent(agent); } catch (_) {}
+      return { agentId, path: artifactPath(f), source: 'workspace' };
+    }
+    return null;
+  }
   async function handleOpenClick(ev, rows, state, say) {
     const link = ev && ev.target && ev.target.closest ? ev.target.closest('a[data-file]') : null;
     if (!link) return false;
@@ -135,6 +153,15 @@
     const r = card && rows && rows[Number(card.dataset.i)];
     const f = r && r.files && r.files[Number(link.dataset.file) || 0];
     if (!r || !f || !f.openUrl) return false;
+
+    // A web page opens RUNNING in the station's BROWSER window — a workshop page from its run folder, a workspace
+    // page through the sandboxed /view/ route (the window carries OPEN OUTSIDE for the OS browser).
+    const page = browserTarget(r, f);
+    if (page && typeof OutputBrowser !== 'undefined' && OutputBrowser.open) {
+      ev.preventDefault(); ev.stopPropagation();
+      OutputBrowser.open(page);
+      return true;
+    }
 
     const core = tauriCore();
     // A browser-only non-preview is already a real href; let the anchor perform its native navigation — with a

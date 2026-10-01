@@ -953,6 +953,9 @@
     // keeps the same hash and no station needlessly re-arms: typing a job brief, naming a line or upgrading to
     // line identity moves nothing here. Verified by test/pipeline.test.js ("a brief edit does not move the hash").
     plan.hash = hashStr(JSON.stringify({ sources, bays, junctions, belts: map }));
+    // the links this plan was compiled from, for a re-compile of the same floor (WorkflowLine's stand-in crew probe).
+    // Not enumerable, so it never rides the plan the page posts.
+    if (links) Object.defineProperty(plan, 'links', { value: links, enumerable: false });
     return plan;
   }
 

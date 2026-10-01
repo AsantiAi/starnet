@@ -31,7 +31,7 @@ function surface() {
   fs.mkdirSync(dir);
   let busy = false;
   const saved = {};
-  const host = makeHandoffHost({ onSettled: v => signins.note(v) });
+  const host = makeHandoffHost({ now: () => Date.now(), onSettled: v => signins.note(v) });
   const signins = R.makeSigninStore({
     dir, fs, path, now: () => 42,
     load: f => JSON.parse(fs.readFileSync(f, 'utf8')), save: (f, v) => { saved[f] = true; fs.writeFileSync(f, JSON.stringify(v)); },

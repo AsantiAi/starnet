@@ -2494,6 +2494,16 @@ const Chat = (() => {
     const refresh = () => { try { a.href = fileUrl(title, agentId); } catch (_) {} };
     a.addEventListener('click', refresh, true); a.addEventListener('auxclick', refresh, true);
     a.addEventListener('contextmenu', refresh, true); a.addEventListener('focus', refresh, true);
+    // A web page opens RUNNING, in the station's BROWSER window (the window has OPEN OUTSIDE for the OS browser).
+    // /api/file would hand the same .html over as an inert download.
+    if (typeof OutputBrowser !== 'undefined' && OutputBrowser.isHtml && OutputBrowser.isHtml(title)) {
+      a.addEventListener('click', ev => {
+        ev.preventDefault(); ev.stopPropagation();
+        if (window.getSelection && String(window.getSelection())) return;   // a drag-selection release is not an open
+        OutputBrowser.open({ agentId: agentId || 'agent', path: String(title || '') });
+      });
+      return;
+    }
     const core = tauriCore();
     if (core && core.invoke) {
       a.addEventListener('click', ev => {
@@ -2944,6 +2954,11 @@ const Chat = (() => {
       const act = pick('action'), ref = pick('id');
       return (act || 'change') + ' the routine' + (ref ? ' “' + ref + '”' : '') + (when ? ' — ' + when : '');
     }
+    // THE STATION BUILDER (2026-09-29): the card IS the plan — what gets built, where, who works each step. The sidecar
+    // sends the plan's own summary (its dry run on a copy of the station), never the model's words.
+    if (/^station[._]build$/.test(t)) { const plan = String(ev.argsSummary || '').split('\n')[0] || 'a planned change'; return 'build this on your station: ' + plan + (/\bUNDO\b/.test(plan) ? '' : ' One UNDO in Build mode takes it back.'); }
+    // MAKE A PROP (2026-10-01): the card names the object and what it costs in StarNet credits (the sidecar's own words)
+    if (/^station[._]make_prop$/.test(t)) return 'make a new prop: ' + (String(ev.argsSummary || '').split('\n')[0] || 'a new prop');
     return t.replace(/_/g, '.') + (ev.argsSummary ? ' ' + ev.argsSummary : '');
   }
 
@@ -3087,6 +3102,18 @@ const Chat = (() => {
       const payload = document.createElement('pre'); payload.textContent = p.argsSummary || '(payload unavailable)';
       if (/^routine/.test(String(p.tool))) { try { const o = JSON.parse(p.argsSummary || '{}'); if (o.prompt) payload.textContent = String(o.prompt); } catch (_) { /* clipped payload: the raw text above stays */ } }
       detail.appendChild(label); detail.appendChild(payload); r.body.appendChild(detail);
+    }
+    // the station builder's card: every step's instructions, one click away (the summary line is in the phrase above)
+    if (/^station[._]build$/.test(String(p.tool || '')) && String(p.argsSummary || '').indexOf('\n') > 0) {
+      const detail = document.createElement('details'); detail.className = 'consent-payload';
+      const label = document.createElement('summary'); label.textContent = 'What each step will be told';
+      const payload = document.createElement('pre'); payload.textContent = String(p.argsSummary).split('\n').slice(1).join('\n');
+      detail.appendChild(label); detail.appendChild(payload); r.body.appendChild(detail);
+    }
+    // …and draws the plan: where it goes and what goes where, before anything is built (the page's own parked plan)
+    if (/^station[._]build$/.test(String(p.tool || '')) && typeof StationCommands !== 'undefined' && StationCommands.previewFor && typeof PlanPreview !== 'undefined') {
+      const fig = PlanPreview.el(StationCommands.previewFor(String(p.argsSummary || '').split('\n')[0]));
+      if (fig) r.body.appendChild(fig);
     }
     const btns = document.createElement('span'); btns.className = 'consent-btns';
     let decided = false;
@@ -3793,6 +3820,11 @@ const Chat = (() => {
       ? ((htmlFiles.find(f => /(^|\/)index\.html?$/i.test(f.path)) || htmlFiles[0]).path)
       : '';
     const openRunTab = (relPath) => {
+      // a web page runs in the station's BROWSER window (same sandboxed /workshop-run/ bytes, OPEN OUTSIDE there)
+      if (typeof OutputBrowser !== 'undefined' && OutputBrowser.isHtml && OutputBrowser.isHtml(relPath)) {
+        OutputBrowser.open({ agentId, runId: m.runId, path: relPath, source: 'workshop' });
+        return;
+      }
       const url = opts.runUrl ? opts.runUrl(relPath) : '';
       const warn = (msg) => { if (typeof StationUI !== 'undefined' && StationUI.notify) StationUI.notify(msg, 'warn'); };
       if (!url) { warn('could not open that — the station may be unreachable'); return; }
@@ -8832,13 +8864,26 @@ const Chat = (() => {
     };
     const speechToken = typeof Voice !== 'undefined' && Voice.replyToken ? Voice.replyToken() : undefined;
     const speechOpts = { replyToken: speechToken, agentId: ws.agentId };
+    speechOpts.owner = speechOpts;   // Voice closes a reply only for the producer that owns it
+    // Close THIS run's spoken reply exactly once. If the Commander switches sessions mid-reply, the run stops
+    // feeding speech — but the reply it opened must still close, or Voice reads "speaking" forever (hands-free
+    // never re-opens, the next reply inherits its failures).
+    let speechClosed = false;
+    const closeSpeech = () => {
+      if (speechClosed || !willSpeak || typeof Voice === 'undefined' || !Voice.endReply) return;
+      speechClosed = true; Voice.endReply(undefined, speechOpts);
+    };
     let speechTimer = null, speechPendingSince = 0;
     const pushSpeech = (finalize, finalText) => {
       clearTimeout(speechTimer); speechTimer = null;
       // Ownership is checked again for every chunk. A voice-commanded rebind can happen while an
       // older run is still streaming; none of its late words may leak into the new call owner.
-      if (typeof Voice === 'undefined' || !willSpeak || !speechOwner() || !Voice.speakChunk) return;
-      const src = speakSafe(finalize ? (finalText || acc) : acc);
+      if (typeof Voice === 'undefined' || !willSpeak || !Voice.speakChunk) return;
+      if (!speechOwner()) { closeSpeech(); return; }
+      // spokenIdx is an offset into what was STREAMED. A final text that isn't a continuation of it (a work line's
+      // result replaced the reply) would be sliced mid-word — finish the streamed reply instead.
+      const fin = finalize && finalText && speakSafe(finalText).startsWith(speakSafe(acc).slice(0, spokenIdx)) ? finalText : acc;
+      const src = speakSafe(finalize ? fin : acc);
       const pending = src.slice(spokenIdx);
       if (!pending) return;
       if (finalize) { if (pending.trim()) { Voice.speakChunk(pending, name, speechOpts); spokenIdx = src.length; } return; }
@@ -8908,6 +8953,9 @@ const Chat = (() => {
         // along per the frozen event shape so any consumer sees the result's own words, never a bare 'error'.
         onToolResult: ev => { if (!ev.isError) runToolsOk++; const nm = callNames[ev.callId] || 'tool'; Channels.addToolResult(ws.id, { callId: ev.callId, name: nm, summary: ev.summary, isError: ev.isError, ms: ev.ms }); presenceToolResult(ws); if (isActiveWs(ws)) resolveChip(ev, nm); if (typeof U !== 'undefined' && U.bus && ev.callId) U.bus.emit('agent.tool_result', { name: nm, agentId: ws.agentId, runId: ev.runId, callId: ev.callId, ok: !ev.isError, isError: !!ev.isError, summary: ev.summary, ms: ev.ms }); },   // runId rides along: a runId-less copy reset xp.js's per-run buffer (freshRun(undefined)) and wiped buffered memory-reuse credit
         onDeliverable: ev => {
+          // BROWSER window: every write (not just the first per run) — it live-reloads the page on screen and, with
+          // FOLLOW on, shows a new web page as it's made. Before the per-run dedupe on purpose.
+          if (typeof OutputBrowser !== 'undefined' && OutputBrowser.noteOutput) { try { OutputBrowser.noteOutput(ev); } catch (_) {} }
           // Any produced file is an openable product (image_generate emits kind:'image', fs.write emits
           // kind:'file'). How we RENDER it is decided client-side from the EXTENSION (the reference harness's model), not
           // from the backend's kind — so a .mp4/.webm the agent writes becomes an inline player and a .png a
@@ -9235,13 +9283,13 @@ const Chat = (() => {
       // flush any trailing spoken text and CLOSE the speech stream — the last chunk's end re-arms the
       // hands-free mic (this is the heartbeat for spoken turns; onTurnEnd covers silent/no-speech turns).
       clearTimeout(speechTimer); speechTimer = null;
-      if (willSpeak && speechOwner() && typeof Voice !== 'undefined' && Voice.endReply) {
+      if (willSpeak && speechOwner() && !speechClosed && typeof Voice !== 'undefined' && Voice.endReply) {
         pushSpeech(true, finalReply);
         // VOICE-AWARE CHOICES: the choice itself is spoken as a natural question — question text only;
         // the 2-3 options are on-screen chips (reading them out was the "reads every option" glitch).
         if (voiceQuestion && Voice.speakChunk) Voice.speakChunk('Quick question. ' + voiceQuestion, name, speechOpts);
-        Voice.endReply();
       }
+      closeSpeech();
       // hands-free voice mode: the run is done — let Voice re-open the mic for the next turn.
       if ((!liveVoiceCall() || liveVoiceOwns(ws)) && typeof Voice !== 'undefined' && Voice.onTurnEnd) Voice.onTurnEnd();
       // TYPE-AHEAD: the stream just freed — send its next queued follow-up (after this call fully unwinds).
@@ -9320,7 +9368,9 @@ const Chat = (() => {
   /* DISCONNECT (or any teardown) cancels the in-flight billable run: abort the fetch (the sidecar's
      req.on('close') then stops the loop) AND tell the sidecar to kill the run by id — belt-and-suspenders. */
   function abort() {
-    if (typeof Voice !== 'undefined' && Voice.stopConvo) Voice.stopConvo();   // drop hands-free on disconnect
+    // drop hands-free on disconnect — Live Voice included (its own microphone loop stayed hot behind DISCONNECT)
+    if (typeof VoiceLive !== 'undefined' && VoiceLive.isActive && VoiceLive.isActive() && VoiceLive.end) VoiceLive.end();
+    if (typeof Voice !== 'undefined' && Voice.stopConvo) Voice.stopConvo();
     // teardown is a DELIBERATE interrupt, not a dropped connection: flag every in-flight stream interrupted BEFORE
     // aborting so send()'s catch reads `stopped` and stays silent — otherwise the AbortError gets reclassified as a
     // network fault and a spurious "can't reach the sidecar" row is pushed into ws.history + persisted. (A reader
