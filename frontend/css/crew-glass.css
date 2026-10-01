@@ -125,8 +125,6 @@ body.glass-demo:not(.hud-mode) #left #ws-search {
   background: rgba(0, 0, 0, .18); box-shadow: inset 0 1px 3px rgba(0, 0, 0, .15);
 }
 body.glass-demo:not(.hud-mode) #left #ws-search:focus { border-color: var(--ph); outline: 0; box-shadow: 0 0 0 2px rgba(var(--ph-rgb), .1); }
-body.glass-demo:not(.hud-mode) #left .ws-kind-filter { border-radius: 8px; border-color: var(--cg-hair); }
-body.glass-demo:not(.hud-mode) #left .ws-kind-filter button { border-radius: 7px; }
 body.glass-demo:not(.hud-mode) #left #workstreams .ws-row { border-radius: 8px; margin-inline: 6px; }
 body.glass-demo:not(.hud-mode) #left #workstreams .ws-row:is(.sel, :focus-visible) { background: var(--cg-card); border-color: var(--cg-edge); }
 
