@@ -2432,7 +2432,7 @@
         {
           "kind": "contains",
           "path": "frontend/app/deliverables.js",
-          "needle": "DELIVERABLES / WORKSHOP LIBRARY"
+          "needle": "<h3>DELIVERABLES</h3>"
         },
         {
           "kind": "contains",
