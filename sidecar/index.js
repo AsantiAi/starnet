@@ -20287,9 +20287,15 @@ async function runOnceCore(o) {
       && Failreview.failureSalient({ toolTrace: execution.toolTraceList(), turns: (result && result.turns) || 0 })
       && personalizationStore.read().enabled
       && !failReviewingNow.has(agentId) && (Date.now() - (lastFailReviewAt.get(agentId) || 0) >= memoryConfig.failureReviewCooldownMs));
-  const _gateStudy = !!(Study && o.reflect && memoryConfig.studyEnabled && isTask && _auxDone && Study.studySalient(result.messages, o.recurring)
+  /* A LINE HAND-OFF IS NOT THE COMMANDER SPEAKING (2026-09-30). A work line's later stages run on the hand-off frame
+     (Pipeline.handoffPrompt): the job, the upstream stage's work and THIS step's standing instructions, all in one USER turn. STUDY
+     and THREAD read a run's user turns as the Commander's own words, so a step's brief came back on a ◈ NOTICED card as «because you
+     said "Do not include a sources list…"». The Commander's words in a hand-off are only the original request — the line's first
+     run already carried those — so a hand-off run is neither studied nor thread-mined (and spends none of the agent's cooldown). */
+  const _lineHop = !!(Pipeline.isHandoff && Pipeline.isHandoff(latestUserText(msgs)));
+  const _gateStudy = !!(Study && o.reflect && memoryConfig.studyEnabled && isTask && _auxDone && !_lineHop && Study.studySalient(result.messages, o.recurring)
       && !studyingNow.has(agentId) && (Date.now() - (lastStudyAt.get(agentId) || 0) >= memoryConfig.studyCooldownMs));
-  const _gateThreadmine = !!(process.env.SKYNET_THREAD_MINE !== '0' && o.reflect && isTask && _auxDone && threadmine.mineSalient(result.messages)
+  const _gateThreadmine = !!(process.env.SKYNET_THREAD_MINE !== '0' && o.reflect && isTask && _auxDone && !_lineHop && threadmine.mineSalient(result.messages)
       && !threadMiningNow.has(agentId) && (Date.now() - (lastThreadMineAt.get(agentId) || 0) >= THREAD_MINE_COOLDOWN_MS));
   // skill review rides THE SKILL NUDGE (skillreview.nudgeAfterRun), not run size: this run's turns with skill tools on
   // the wire join the agent's carried count, and the review is a candidate only once the count reaches the bar. A
@@ -23704,6 +23710,12 @@ function serveProposals(req, res) {
 // STUDY pass raised for a run (with text). Read-only; falls back to the agent's newest pending study batch when
 // the runId is unknown. The DOSSIER write itself happens client-side (the dossier lives in the browser); the
 // browser then CONSUMES the decided proposal via POST /api/study/resolve below.
+/* A STUDY BATCH FROM A LINE HAND-OFF IS NEVER ASKED (2026-09-30): a batch stashed before the run-end gate skipped hand-off runs still
+   quotes a step's instructions as the Commander's words. It is read from its run row's title (the hand-off frame's opening). */
+function studyFromLineHop(b) {
+  try { const r = b && b.runId ? runStore.latest(b.runId) : null; return !!(r && Pipeline.isHandoff && Pipeline.isHandoff(r.title)); }
+  catch (e) { failNote('study.hopcheck', e); return false; }
+}
 function serveStudyProposals(req, res) {
   const json = (code, obj) => respondJson(res, code, obj);   // canonical helper (sidecar/respond.js)
   try {
@@ -23713,7 +23725,7 @@ function serveStudyProposals(req, res) {
     const runId = u.searchParams.get('run') || '';
     let batch = runId && studyByRun.get(runId);
     if (!batch) { const lr = latestStudyRun.get(agent); batch = lr && studyByRun.get(lr); }
-    if (!batch || batch.agentId !== agent) return json(200, { runId: runId || null, agentId: agent, proposals: [] });
+    if (!batch || batch.agentId !== agent || studyFromLineHop(batch)) return json(200, { runId: runId || null, agentId: agent, proposals: [] });
     json(200, { runId: batch.runId, agentId: agent, proposals: batch.proposals });
   } catch (e) { json(200, { proposals: [] }); }
 }
@@ -23728,7 +23740,7 @@ function serveStudyPending(req, res) {
   try {
     const batches = [];
     for (const b of studyByRun.values()) {
-      if (!b || !isAgentId(b.agentId) || !Array.isArray(b.proposals) || !b.proposals.length) continue;
+      if (!b || !isAgentId(b.agentId) || !Array.isArray(b.proposals) || !b.proposals.length || studyFromLineHop(b)) continue;
       batches.push({ agentId: b.agentId, runId: b.runId, createdAt: Number(b.createdAt) || 0, count: b.proposals.length });
     }
     batches.sort((a, b) => a.createdAt - b.createdAt);
