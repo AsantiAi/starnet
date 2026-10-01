@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "f48fc429ad807fd96887b94b4e975180f380ba63",
+    "sourceCommit": "f6b59c0cc6fe5d677838fbeaff0acc3cc2d2da67",
     "pathSetSha256": "8781a836a53cf4df83a4919e6f592fb072006651b6aa992ad9e59ed1aa8e4403",
     "files": [
       {
@@ -513,8 +513,8 @@
       },
       {
         "path": "frontend/app/glass-demo.js",
-        "bytes": 12738,
-        "sha256": "26ab648983de245226a42044801a3daf4d7d7671ac65f749a062421a5b5eb8e4"
+        "bytes": 12825,
+        "sha256": "7290cec9844314a0e0b4fe5cbc66868cb5484c34394b67bf37968614657ebf13"
       },
       {
         "path": "frontend/app/glossary.js",
