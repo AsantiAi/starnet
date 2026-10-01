@@ -356,6 +356,7 @@ const StationCommands = (() => {
 
   // the station builder's parked plans: planId -> { plan, at }, ten minutes, used once
   const builderPlans = new Map(), PLAN_TTL_MS = 10 * 60 * 1000;
+  const builderBuilt = [];   // the lead's builds on this page, newest last: what an undo may take back
   let planSeq = 0;
   const NEXT_STEP = 'Tell the Commander the summary in plain words, then call station.build with this planId. Nothing has been built yet.';
   function park(r) {
@@ -465,6 +466,13 @@ const StationCommands = (() => {
       const p = park(StationBuilder.planEdit(st.serialize(), (a && a.request) || {}, env));
       return { planId: p.planId, summary: p.plan.summary, steps: p.plan.steps, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
     },
+    // "no, undo that": the lead's own last build, only while nothing has changed since
+    'station.plan_undo': () => {
+      const { st } = builderReady();
+      if (!StationBuilder.planUndo) throw new Error('this page cannot undo a build yet; reload it');
+      const p = park(StationBuilder.planUndo(st.serialize(), builderBuilt[builderBuilt.length - 1] || null));
+      return { planId: p.planId, summary: p.plan.summary, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
+    },
     // builds ANY parked plan, exactly, in one undo step
     'station.build': (a) => {
       const { st, env } = builderReady();
@@ -484,6 +492,8 @@ const StationCommands = (() => {
         throw new Error(r.error);
       }
       builderPlans.delete(planId);
+      if (e.plan.spec && e.plan.spec.kind === 'undo') builderBuilt.pop();
+      else { builderBuilt.push({ resultSig: StationBuilder.sigOf(st.serialize()), floorSig: e.plan.floorSig, summary: e.plan.summary, recruited: (r.recruited || []).length > 0 }); if (builderBuilt.length > 10) builderBuilt.shift(); }
       const hallsBuilt = (r.hallways || []).length, roomNames = (r.rooms || []).map(x => x.name).join(', ');
       const what = r.line ? r.line.name + ' in ' + r.where : r.kind === 'restyle' ? 'the restyle of ' + r.where : r.kind === 'edit' ? r.where : r.kind === 'swap' ? (r.preset ? r.preset.name : 'the preset') + ' (RESTORE PREVIOUS in Build → Presets brings your old station back)'
         : roomNames + (hallsBuilt ? (roomNames ? ' and ' : '') + (hallsBuilt > 1 ? hallsBuilt + ' hallways' : 'a hallway') : '');
