@@ -104,4 +104,19 @@ A.eq(stanceFor(false, { voiceOn: true }), 'talk', 'voice ON must NOT promote a c
 for (const t of TASKS) A.eq(stanceFor(isTaskDirective(t)), 'task', 'mission -> task stance: ' + JSON.stringify(t));
 for (const c of CHATS) A.eq(stanceFor(isTaskDirective(c)), 'talk', 'small talk -> one-on-one: ' + JSON.stringify(c));
 
+// "YES" TO AN OFFER IS A GO: a bare yes is still chat on its own, but accepts an agent's offer to act.
+{
+  const { isAffirmation, offeredWork } = require('../frontend/app/classify.js');
+  for (const y of ['yes', 'Yes please', 'sure, go for it', 'ok do it', 'go ahead', 'do it', 'yep', 'sounds good', 'please do', 'yes!', 'absolutely'])
+    A.ok(isAffirmation(y), 'a bare yes is an affirmation: ' + JSON.stringify(y));
+  for (const y of ['yes', 'Yes please', 'sure', 'ok', 'yep', 'sounds good'])
+    A.ok(!isTaskDirective(y), 'on its own it is still chat (the gap the offer check closes): ' + JSON.stringify(y));
+  for (const n of ['thanks', 'no', 'nope', 'got it', 'hello', 'not now', 'yes but make it shorter and add the quarterly chart', ''])
+    A.ok(!isAffirmation(n), 'not a bare yes: ' + JSON.stringify(n));
+  for (const o of ['Here is the plan. Want me to draft it?', 'Shall I go ahead and send it?', 'Would you like me to create the file?', 'Should I proceed?', 'I can draft the email now — should I?'])
+    A.ok(offeredWork(o), 'an offer to act: ' + JSON.stringify(o));
+  for (const o of ['Done! Anything else?', 'I found 3 options:\n1. A\n2. B\nWhich do you prefer?', 'Here it is.', 'Should I have used tabs? Anyway, the file is saved.', '', null])
+    A.ok(!offeredWork(o), 'not an offer to act: ' + JSON.stringify(o));
+}
+
 A.report('classify.test');

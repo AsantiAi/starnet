@@ -8746,7 +8746,11 @@ const Chat = (() => {
       if (typeof App !== 'undefined' && App.refreshRail) App.refreshRail();
     }
 
-    const isTask = recoveryResume || !!pending || Classify.isTaskDirective(text);
+    // "YES" TO AN OFFER IS A GO: when the agent's last reply offered to do work ("want me to draft it?") a bare
+    // "yes" / "sure" / "do it" is the directive itself — classified as chat it ran tool-less and could only promise.
+    const priorAgentTurn = (() => { for (let i = ws.history.length - 2; i >= 0; i--) { const m = ws.history[i]; if (m && m.role === 'assistant') return typeof m.content === 'string' ? m.content : ''; if (m && m.role === 'user') return ''; } return ''; })();
+    const acceptsOffer = !!(Classify.isAffirmation && Classify.isAffirmation(text) && Classify.offeredWork(priorAgentTurn));
+    const isTask = recoveryResume || !!pending || acceptsOffer || Classify.isTaskDirective(text);
     // INTENT OFFER: a real, fresh directive is the one moment the Commander has stated what they want in their
     // own words — the only honest place to say "there is a class built for exactly this". Gated to genuine new
     // work: never a retry (already offered on the original), never a recipe launch (they came FROM the library),

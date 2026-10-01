@@ -36,6 +36,24 @@
                                                     // unused toolset stays invisible — a real task is never left tool-less)
   }
 
+  /* "YES" TO AN OFFER IS A GO (2026-10-01). An ack alone is chat ("thanks", "got it") — but when the agent's last
+     turn OFFERED to do work ("Want me to draft it?", "Shall I go ahead?"), the Commander's "yes" / "sure" / "do it"
+     IS the task directive. Classified as chat it ran with no tools, so the agent could only promise the work.
+     isAffirmation: the WHOLE message is a yes (a few trailing words allowed: "yes please", "sure, go for it").
+     offeredWork: the agent's reply ends on a question that offers to act. Both must hold. */
+  const AFFIRM = /^(y(es|ea|eah|ep|up)?|sure|ok(ay)?|k|alright|please|please do|do it|go( for it| ahead)?|let'?s do it|let'?s go|sounds good|absolutely|definitely|of course|yes please|why not|proceed|continue|carry on)([\s,!.]+(please|do it|go ahead|go for it|thanks?|thank you|sure|yes|that'?d be great|sounds good|let'?s do it|proceed))*[\s!.]*$/;
+  const OFFER = /\b(shall i|should i|want me to|would you like( me)? to|do you want( me)? to|like me to|can i go ahead|ok(ay)? to (go|proceed|start)|go ahead and|ready (for me )?to|i can (go ahead|start|do|draft|write|build|run|set)|happy to)\b/;
+  function isAffirmation(text) {
+    const t = String(text == null ? '' : text).trim().toLowerCase();
+    return !!t && t.length <= 60 && AFFIRM.test(t);
+  }
+  function offeredWork(agentText) {
+    const t = String(agentText == null ? '' : agentText).trim().toLowerCase();
+    if (!t) return false;
+    const tail = t.slice(-400);                     // the offer is the reply's closing question, not something said mid-way
+    return /\?\s*[)"'*_`]*\s*$/.test(tail) && OFFER.test(tail.slice(tail.lastIndexOf('\n') + 1) || tail);
+  }
+
   /* CONTENT TAG — what KIND of work is this, so a FILTER junction can sort it to the right agent's bay.
      This is the conveyor's content-router input: getTag(text) -> the tag a work-item box carries, which a
      filter routes by (config.routes[tag] || config.def). Pure + deterministic + case-insensitive.
@@ -67,5 +85,5 @@
      Locked by classify.test.js. */
   function stanceFor(isTask) { return isTask ? 'task' : 'talk'; }
 
-  return { isTaskDirective, getTag, stanceFor };
+  return { isTaskDirective, isAffirmation, offeredWork, getTag, stanceFor };
 });

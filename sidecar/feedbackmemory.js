@@ -80,6 +80,20 @@ function apply(list, input, deps) {
   return { list: list.concat([rec]), rec, created: true };
 }
 
+// directiveFor(candidates, messages) — what the rated work was ABOUT, for the "(on: …)" citation. A run started by
+// "yes" (accepting the agent's offer) is titled "yes", which cites nothing: skip bare short turns and fall back to
+// the most recent substantive user turn in the run's transcript.
+function substantive(s) { return String(s || '').trim().split(/\s+/).filter(Boolean).length >= 3; }
+function directiveFor(candidates, messages) {
+  for (const c of (Array.isArray(candidates) ? candidates : [])) if (substantive(c)) return String(c).trim();
+  const msgs = Array.isArray(messages) ? messages : [];
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i];
+    if (m && m.role === 'user' && typeof m.content === 'string' && substantive(m.content) && !/^\s*</.test(m.content)) return m.content.trim();
+  }
+  return String((Array.isArray(candidates) && candidates.find(c => String(c || '').trim())) || '').trim();
+}
+
 function isTaste(r) { return !!(r && r.origin === ORIGIN && String(r.content || r.body || '').trim()); }
 
 // selectTaste(records, opts) -> the newest feedback records (most recently given or updated first), capped.
@@ -90,4 +104,4 @@ function selectTaste(records, opts) {
   return (Array.isArray(records) ? records : []).filter(isTaste).slice().sort((a, b) => at(b) - at(a)).slice(0, limit);
 }
 
-module.exports = { ORIGIN, TASTE_HEADER, TASTE_LIMIT, TASTE_CHARS, content, apply, isTaste, selectTaste };
+module.exports = { ORIGIN, TASTE_HEADER, TASTE_LIMIT, TASTE_CHARS, content, apply, directiveFor, isTaste, selectTaste };

@@ -23567,7 +23567,7 @@ async function handleGrowthRatings(req, res) {
   let feedbackMemory = null;
   if (!result.duplicate) {
     const fbPacket = verdictReview.peek(runId);
-    const directive = lead.deliveryPrompt || lead.title || (fbPacket && Array.isArray(fbPacket.messages) ? latestUserText(fbPacket.messages) : '');
+    const directive = FeedbackMemory.directiveFor([lead.deliveryPrompt, lead.title], fbPacket && fbPacket.messages);
     feedbackMemory = await recordFeedbackMemory({ agentId: lead.agentId || 'agent', runId, verdict: canonical.verdict, words: String(body.correction || ''), directive });
   }
   let skillReviewArmed = false;

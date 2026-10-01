@@ -63,6 +63,13 @@ A.eq(FM.selectTaste(many).length, FM.TASTE_LIMIT, 'capped at TASTE_LIMIT');
 A.eq(FM.selectTaste(many)[0].id, 'n19', 'newest leads');
 A.eq(FM.selectTaste(null).length, 0, 'null-safe');
 
+// ---- directiveFor(): a run started by "yes" cites the request it accepted, not "yes" ----
+const convo = [{ role: 'user', content: 'plan a welcome note for the new crew' }, { role: 'assistant', content: 'Want me to draft it?' }, { role: 'user', content: 'yes' }];
+A.eq(FM.directiveFor(['', 'yes'], convo), 'plan a welcome note for the new crew', 'a "yes" run cites the substantive request');
+A.eq(FM.directiveFor(['write the weekly report', 'x'], convo), 'write the weekly report', 'a substantive title wins');
+A.eq(FM.directiveFor(['', 'yes'], [{ role: 'user', content: '<recalled-memory>\nlots of words here\n</recalled-memory>' }]), 'yes', 'never cites an injected fence; falls back to what there is');
+A.eq(FM.directiveFor(null, null), '', 'null-safe');
+
 // ---- the block renders through the real recall renderer with the taste header ----
 const block = renderRecall(picked, { limit: FM.TASTE_CHARS, header: FM.TASTE_HEADER });
 A.ok(block.text.indexOf('Commander\'s own verdicts') >= 0, 'taste header present');
