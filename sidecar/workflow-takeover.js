@@ -184,10 +184,13 @@ function rowsFrom(input, state) {
     const c = core(text); if (!c) continue;
     const uncertain = r.completionEvidence && (['verification_required', 'incomplete'].includes(r.completionEvidence.completionVerdict) ||
       ['unverified_effects', 'judgment_required'].includes(r.completionEvidence.effectVerdict));
-    const ok = !['ok', 'miss'].includes(ratingMap.get(r.runId)) &&
-      b.status === 'done' && r.reason === 'done' && !r.clarifying && !uncertain &&
+    // failed: a real failure or a "close"/"missed" rating — breaks the streak. ok: completed with proven work.
+    // Anything else (a chat-only answer, a clarifying turn, uncertain effects) is NEUTRAL: it neither counts nor
+    // resets — a quick follow-up answered from context is not a failed occasion of the habit.
+    const failed = ['ok', 'miss'].includes(ratingMap.get(r.runId)) || b.status !== 'done' || r.reason !== 'done';
+    const ok = !failed && !r.clarifying && !uncertain &&
       !(r.uncertainMutations || []).length && (r.toolsOk > 0 || (r.artifacts || []).length > 0);
-    rows.push({ b, r, text, at, ok, c, agentId: b.agentId, project: String(r.projectRoot || '') });
+    rows.push({ b, r, text, at, ok, failed, c, agentId: b.agentId, project: String(r.projectRoot || '') });
   }
   return rows.sort((a, b) => a.at - b.at);
 }
@@ -206,7 +209,8 @@ function cluster(rows) {
 function occasionsOf(rows) {
   let occasions = [];
   for (const row of rows) {
-    if (!row.ok) { occasions = []; continue; } // repeated failures never earn a takeover
+    if (row.failed) { occasions = []; continue; } // repeated failures never earn a takeover
+    if (!row.ok) continue;                        // neutral: neither an occasion nor a failure
     if (!occasions.length || row.at - occasions[occasions.length - 1].at >= MIN_GAP) occasions.push(row);
     else occasions[occasions.length - 1] = row; // one work session counts once, using its latest instructions
   }

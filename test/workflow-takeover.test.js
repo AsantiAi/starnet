@@ -97,3 +97,13 @@ console.log('workflow-takeover: repeat sense (paraphrase, guards, notice, cadenc
   assert.equal(CC.compose({ standingWork: { count: 2, dates: [] } }), '', 'fewer than three occasions writes nothing');
   console.log('workflow-takeover: standing-work notice block passed');
 }
+// A chat-only follow-up between occasions is neutral: it neither counts nor resets the streak (live finding 10-01).
+{
+  const x2 = habitInput();
+  x2.briefs.splice(1, 0, { id:'hn', runId:'hrn', agentId:'agent', source:'interactive', originalDirective:'AI news recap please', status:'done', completedAt: now-2*DAY+3600000 });
+  x2.runs.push({ runId:'hrn', agentId:'agent', reason:'done', toolsOk:0, projectRoot:'' });
+  assert.equal(W.candidates(x2)[0].count, 3, 'a neutral chat-only answer does not break the habit');
+  x2.runs[x2.runs.length-1].reason = 'error';
+  assert.equal(W.candidates(x2).length, 0, 'a real failure still does');
+  console.log('workflow-takeover: neutral follow-ups passed');
+}
