@@ -90,3 +90,52 @@ body.obs-deck:not(.hud-mode) #crew .crew-row:is(:hover, :focus-visible, .selecte
   border-color: var(--od-edge);
 }
 body.obs-deck:not(.hud-mode) #left #workstreams .ws-row { border-radius: 8px; }
+
+/* ============================================================
+   VARIANTS (?deck=window | docked | float) — what holds the panels
+   ============================================================ */
+
+/* WINDOW (default): one frosted console plate over the whole screen; the station is seen through a clear
+   viewport cut out of it (#od-plate's clip-path, written by obsdeck.js) with a thick window rim. The world
+   still runs under the plate, blurred, so the screen stays one place. The panels become regions OF the
+   plate instead of separate sheets. */
+#od-plate, #od-rim { display: none; }
+body.obs-deck.od-window:not(.hud-mode) #screen-game:not(.cinema) #od-plate {
+  display: block; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background: linear-gradient(160deg, rgba(var(--ph-rgb), .075), rgba(var(--ph-rgb), .02) 60%), color-mix(in srgb, var(--panel2) 76%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08); backdrop-filter: blur(18px) saturate(1.08);
+}
+body.obs-deck.od-window:not(.hud-mode) #screen-game:not(.cinema) #od-rim {
+  display: block; position: absolute; z-index: 2; pointer-events: none; border-radius: 14px;
+  /* a molded window frame, matte: lip · frame band · outer hairline, then the glass depth inside */
+  box-shadow:
+    0 0 0 1px rgba(var(--ph-rgb), .34),
+    0 0 0 6px color-mix(in srgb, var(--panel2) 92%, var(--ph) 8%),
+    0 -1px 0 6px rgba(var(--ph-bright-rgb), .08),
+    0 0 0 7px rgba(var(--ph-rgb), .16),
+    0 8px 24px 7px rgba(0, 0, 0, .35),
+    inset 0 0 0 1px rgba(0, 0, 0, .6),
+    inset 0 4px 12px rgba(0, 0, 0, .55),
+    inset 0 0 40px rgba(0, 0, 0, .35);
+}
+body.obs-deck.od-window:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar) {
+  background: none; border-color: transparent; box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+body.obs-deck.od-window:not(.hud-mode) #screen-game #bottombar {
+  background: rgba(0, 0, 0, .16); box-shadow: inset 0 1px 0 rgba(var(--ph-rgb), .05);
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+
+/* DOCKED: the panels hold the screen edges like a HUD frame — top rail across the top, CREW and COMMS down
+   the sides to the floor, the dock a tab on the bottom edge. Grounded because they touch the edges. */
+body.obs-deck.od-docked:not(.hud-mode) #screen-game.active:not(.cinema) { padding: 0; gap: 0; }
+body.obs-deck.od-docked:not(.hud-mode) #screen-game.active:not(.cinema) > #stage-wrap { margin: 0; }
+body.obs-deck.od-docked:not(.hud-mode) #screen-game.active:not(.cinema) > :is(#left, #chat-panel) { grid-row: 2 / 4; }
+body.obs-deck.od-docked:not(.hud-mode) #screen-game #topbar { border-radius: 0; border-width: 0 0 1px; }
+body.obs-deck.od-docked:not(.hud-mode) #screen-game #left { border-radius: 0; border-width: 0 1px 0 0; }
+body.obs-deck.od-docked:not(.hud-mode) #screen-game #chat-panel { border-radius: 0; border-width: 0 0 0 1px; }
+body.obs-deck.od-docked:not(.hud-mode) #screen-game :is(#left > h3, #chat-panel > h3) { border-radius: 0; }
+body.obs-deck.od-docked:not(.hud-mode) #screen-game.active:not(.cinema) > #bottombar {
+  align-self: end; border-radius: 12px 12px 0 0; border-bottom-width: 0; padding-bottom: 2px;
+}
