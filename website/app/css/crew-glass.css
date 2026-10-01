@@ -30,10 +30,11 @@ body.glass-demo:not(.hud-mode) #screen-game #left {
   backdrop-filter: blur(18px) saturate(1.08);
 }
 /* the station's film grain (the world renderer's own tile and blend: crewcards.js paints it into --sn-grain),
-   breathing a few steps a second like the feed's — held still for reduced motion */
-body.glass-demo:not(.hud-mode) #screen-game #left::after {
+   on ALL FOUR cabinet panels so the interface and the feed read as one screen (it replaces panelchrome's
+   faint etched corner marks on ::after), breathing a few steps a second like the feed's — still for reduced motion */
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar)::after {
   content: ''; position: absolute; inset: 0; z-index: 5; pointer-events: none;
-  border-radius: inherit; opacity: .2; mix-blend-mode: overlay;
+  border-radius: inherit; opacity: .11; mix-blend-mode: overlay;
   background: var(--sn-grain, none) 0 0 / 256px 256px repeat;
   animation: cg-grain .9s steps(1) infinite;
 }
@@ -41,7 +42,7 @@ body.glass-demo:not(.hud-mode) #screen-game #left::after {
   0% { background-position: 0 0; } 20% { background-position: -53px -97px; } 40% { background-position: -106px -38px; }
   60% { background-position: -159px -135px; } 80% { background-position: -212px -76px; }
 }
-@media (prefers-reduced-motion: reduce) { body.glass-demo:not(.hud-mode) #screen-game #left::after { animation: none; } }
+@media (prefers-reduced-motion: reduce) { body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar)::after { animation: none; } }
 body.glass-demo:not(.hud-mode) #screen-game #left::before { opacity: 0; }
 body.glass-demo:not(.hud-mode) #screen-game #left:focus-within { outline: 0; border-color: rgba(var(--ph-rgb), .38); }
 
