@@ -1669,7 +1669,7 @@
      NOT the user, it is a machine being handed material, so the turn names the line explicitly. Carrying the
      ORIGINAL request as well as the upstream output is load-bearing: a writer handed only research has no
      idea what was asked and invents one. */
-  function handoffPrompt(originalText, fromAgentId, upstream, hop, stageBrief, verdictBrief) {
+  function handoffPrompt(originalText, fromAgentId, upstream, hop, stageBrief, verdictBrief, lastStage) {
     // stageBrief (step editor, 2026-08-05): the RECEIVING dock's standing job brief — optional 5th param so
     // every existing caller composes byte-identical turns. Prompt text only; bounded like the compiled copy.
     // verdictBrief (LOOP verdicts, 2026-08-22): the VERDICT-line instruction for a dock whose lane meets a
@@ -1681,8 +1681,15 @@
       + 'The upstream stage (' + fromAgentId + ') produced:\n' + String(upstream) + '\n\n'
       + (brief ? 'YOUR STANDING BRIEF FOR THIS STATION:\n' + brief + '\n\n' : '')
       + (verdict ? verdict + '\n\n' : '')
-      + 'Do YOUR part of this work and produce the output for the next stage. Do not restate the upstream '
-      + 'output — build on it. Answer with the work itself, not a description of what you would do.';
+      /* lastStage (2026-09-30 — found on a real model): the stage whose reply LEAVES the line is told so. "Produce the output for
+         the next stage … build on it" made a last WRITER asked for three short stories write an essay about "the upstream report".
+         Optional 7th param, same law: every caller that does not pass it composes byte-identical turns. */
+      + (lastStage && !verdict
+        ? 'You are the LAST stage: your reply is the finished result the requester receives. Give them exactly what the original '
+          + 'request asks for — its format, length and tone — using the upstream work above. Answer with the result itself; never '
+          + 'mention stages, the line or the upstream work.'
+        : 'Do YOUR part of this work and produce the output for the next stage. Do not restate the upstream '
+          + 'output — build on it. Answer with the work itself, not a description of what you would do.');
   }
 
   /* parseHandoff(text) -> { stage, original, from } | null — the INVERSE of handoffPrompt, for surfaces that show a work line's

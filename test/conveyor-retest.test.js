@@ -52,9 +52,10 @@ const ghost = read('frontend/app/ghostline.js'), outbox = read('frontend/app/win
   // (phase E, 2026-09-29: the card's fit is the drawn-shape scan the ghost snaps to OR the engine's laid-out answer — a click
   // places the line either way, so the card never says NO ROOM for a line a click can place)
   A.ok(/const drawn = lineFits\(bp\.id\)/.test(fit) && /const fits = drawn \|\| !!\(laid && laid\.ok\)/.test(fit) && /b\.classList\.toggle\('nofit', !fits\)/.test(fit), 'a card reads its fit from the same scan the ghost snaps to');
-  A.ok(/if \(drawn\) \{ if \(nf\) nf\.remove\(\); if \(make\) make\.remove\(\); return; \}/.test(fit) && /if \(fits\) \{[^}]*if \(make\) make\.remove\(\);/.test(fit), 'a card that fits again sheds NO ROOM and MAKE ROOM');
+  // (2026-09-30: the fit is said on the tile's own small line — its steps and size again once the drawn shape fits)
+  A.ok(/if \(drawn\) \{ say\(stat \? stat\.dataset\.rest \|\| '' : ''\); if \(make\) make\.remove\(\); return; \}/.test(fit) && /if \(fits\) \{[^}]*if \(make\) make\.remove\(\);/.test(fit), 'a card that fits again sheds NO ROOM and MAKE ROOM');
   A.ok(/b\.after\(mk\)/.test(fit) && /mk\.onclick = e => makeRoomFor\(bp\.id, e\)/.test(fit), 'a card that stops fitting gains MAKE ROOM FOR IT as a sibling button');
-  A.ok(/grid\.appendChild\(b\);\s*setLineTileFit\(b, bp\);/.test(build), 'every card is fit-checked as it renders');
+  A.ok(/cell\.appendChild\(b\); grid\.appendChild\(cell\);\s*setLineTileFit\(b, bp\);/.test(build), 'every card is fit-checked as it renders');
   const onChange = build.slice(build.indexOf('unsub = station.onChange('), build.indexOf('unsub = station.onChange(') + 500);
   A.ok(/clearLineFields\(\);[\s\S]{0,120}scheduleLineFitSync\(\);/.test(onChange), 'every floor edit (UNDO included) re-syncs the cards on screen');
   A.ok(/for \(const b of root\.querySelectorAll\('\.refit-linetile\[data-line\]'\)\)/.test(build), '…every line card on screen');
@@ -157,7 +158,8 @@ A.ok(/const RING_DOCK_T = \{ bay: 1, intake: 1, outbox: 1 \}/.test(build) && /'C
   // (2026-09-30: a caption is a PLATE — the same rect is offered to the arbiter and painted)
   A.ok(/note\(x, y, '◇ ' \+ who \+ ' WOULD RUN IT', true\)/.test(ghost) && /y: n\.below \? \(n\.y \+ 1\) \* T \+ 3 : n\.y \* T - 3 - rise - ph/.test(ghost), 'a dock caption hangs under its tile (the nameplate owns the space above)');
   A.ok(/if \(say\) say\(b, paintNote\.bind\(null, n, k, b\)\); else paintNote\(n, k, b\);/.test(ghost), '…and the arbiter is told where it really is');
-  A.ok(/ghost\.draw\(ctx, now, T, 8, plates\.length \? \(bx, paint\) => \{ if \(!onPlate\(bx\)\) paint\(\); \} : null\)/.test(world), 'on the live floor a caption never prints over a line plate');
+  A.ok(/ghost\.draw\(ctx, now, T, capPx, plates\.length \? \(bx, paint\) => \{ if \(!onPlate\(bx\)\) paint\(\); \} : null\)/.test(world), 'on the live floor a caption never prints over a line plate');
+  A.ok(/const capPx = 14 \* \(window\.devicePixelRatio \|\| 1\) \* \(\(typeof U !== 'undefined' && U\.uiZoom && U\.uiZoom\(\)\) \|\| 1\) \/ \(scale \|\| 1\);/.test(world), '…and it reads at 14px on screen whatever the zoom (never a plate twice the size of the floor\'s own nags)');
   const pos = build.slice(build.indexOf('  function positionFinCard() {'), build.indexOf('  /* the delivery-retirement hook'));
   A.ok(/const FIN_AVOID = \{ intake: 1, bay: 1, outbox: 1, filter: 1, splitter: 1, merger: 1, joiner: 1, loop: 1 \}/.test(pos) && /spots\.find\(clear\) \|\| spots\[0\]/.test(pos), 'the FINISH card takes the first spot that covers no workflow machine');
   A.ok(/'\|' \+ geoVer \+ coachKey/.test(pos), '…and moves when a machine is placed under it');
