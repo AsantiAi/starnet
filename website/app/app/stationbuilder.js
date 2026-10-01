@@ -141,6 +141,7 @@
      room's floor, material or name). Every setter's answer is checked; one failure fails the whole edit. */
   function buildInto(st, spec, WM) {
     if (spec && spec.kind === 'restyle') return restyleInto(st, spec);
+    if (spec && spec.kind === 'edit') return editInto(st, spec);
     if (spec && spec.kind === 'build') return buildParts(st, spec, WM);
     if (spec && spec.kind === 'swap') { const r = st.replaceLayout(spec.layout); return r && r.ok ? { ok: true, ids: [] } : refuse('the preset could not be applied' + (r && r.msg ? ' (' + r.msg + ')' : '')); }
     // a whole new layout: the station cleared to its main room exactly as the plan did it, then the layout built on it
@@ -189,6 +190,25 @@
     }
     const th = trimHall(st, hallId, part); if (!th.ok) return th;
     return { ok: true, ids, roomId, lineIds: line ? line.ids : [], intakeId: line ? line.intakeId : null };
+  }
+  /* an edit of what stands, in a fixed order: furniture out, rooms out (everything on them goes with them), the agents
+     whose seats stood there seated again, then a refurnished room's floor, walls, name and furniture */
+  function editInto(st, spec) {
+    for (const id of spec.removeProps || []) { const r = st.removeProp(id); if (!r || !r.ok) return refuse('a piece of furniture could not be removed'); }
+    for (const id of spec.removeRooms || []) { const r = st.removeRoom(id); if (!r || !r.ok) return refuse('a room could not be removed' + (r && r.msg ? ' (' + r.msg + ')' : '')); }
+    for (const s of spec.reseat || []) {
+      const d = s.desk, a = st.addProp({ t: d.t, x: d.x, y: d.y, w: d.w, h: d.h, r: 0, block: true });
+      if (!a || !a.ok) return refuse('an agent\'s new desk could not be placed');
+      const g = st.assignPropAgent(a.id, s.agentId); if (!g || !g.ok) return refuse('an agent could not be given its new desk');
+    }
+    const rs = spec.restyle;
+    if (rs) {
+      if (rs.deck) { const r = st.setDeck(rs.roomId, rs.deck); if (!r || !r.ok) return refuse('the floor could not be laid'); }
+      if (rs.walls) { const r = st.setWalls(rs.roomId, rs.walls); if (!r || !r.ok) return refuse('the walls could not be put up'); }
+      if (rs.name) { const r = st.renameRoom(rs.roomId, rs.name); if (!r || !r.ok) return refuse('the room could not be renamed'); }
+    }
+    for (const p of spec.props || []) { const r = st.addProp({ t: p.t, x: p.x, y: p.y, w: p.w, h: p.h, r: p.r || 0, block: p.block }); if (!r || !r.ok) return refuse('a piece of furniture could not be placed'); }
+    return { ok: true, ids: [] };
   }
   function restyleInto(st, spec) {
     if (spec.floorStyle) { const r = st.setFloor(spec.roomId, spec.floorStyle); if (!r || !r.ok) return refuse('the floor could not be changed'); }
@@ -779,6 +799,145 @@
     if (!r.ok) return r;
     return { ok: true, plan: { floorSig: sigOf(doc), resultSig: sigOf(probe.serialize()), spec, preview: previewOf(WM, doc, probe.serialize(), [], room.id), summary: 'Restyle ' + room.name + (style.type ? ' with the ' + style.type.label + ' floor' : '') + ': ' + changes.join(', ') + '. Nothing is added, moved or removed.',
       notes: name ? ['requests that name this room by its old name will need the new one'] : [], steps: [], line: null, where: 'the ' + room.name + ' room', rooms: [] } };
+  }
+
+  /* ================= EDIT WHAT STANDS (2026-09-30, "it should be able to build anything the user wants") =================
+     Three edits of the station as it stands, each planned on a copy, checked, and built in ONE undo:
+     - remove: a room, or a list. Everything on it goes (its furniture, and any line in it, named on the card); a hallway
+       that joined it and now joins nothing goes too; an agent whose seat stood there gets a desk in a tidy row elsewhere.
+       The main room stays, and a removal that would cut another room off from the bridge is refused naming it.
+     - refurnish: { room, style, name }: its furniture is cleared and it is furnished in another whole-room style, floor
+       and walls too; its lines and agents' desks stay; a room still named for what it was takes the new style's name.
+     - clear: a room: its furniture goes; its lines and agents' desks stay.
+     Rooms do not move or resize: the refusal says to remove one and build it again where it should be. */
+  const EDIT_KEYS = ['remove', 'refurnish', 'clear'];
+  const EDIT_HOW = 'An edit is one of: { remove: a room or a list of rooms }, { refurnish: { room, style, name } }, { clear: a room }. Rooms do not move or resize: remove one and build it again where it should be.';
+  const SEAT_T = /^(desk|desk2|console|consoleL|pixelrig|bench|workbench)$/, KEEP_T = /^(airlock)$/;
+  // the zones a room or hallway opens onto
+  function zoneNeighbours(st, id) {
+    const g = st.projectGeometry(), ox = g.origin.tx, oy = g.origin.ty, out = new Set();
+    for (const d of g.doorDefs || []) { const a = st.roomAt(d[0] + ox, d[1] + oy), b = st.roomAt(d[2] + ox, d[3] + oy); if (a === id && b && b !== id) out.add(b); if (b === id && a && a !== id) out.add(a); }
+    return out;
+  }
+  // the rooms the crew can walk into from the main room
+  function walkableRooms(st) {
+    const g = st.projectGeometry(), o = spawnTile(st.serialize(), g), out = new Set();
+    if (!o) return out;
+    for (const r of st.rooms().filter(x => x.kind !== 'corridor')) {
+      const R = r.rects[0], cx = (R.x1 + R.x2) >> 1, cy = (R.y1 + R.y2) >> 1;
+      let t = null, bd = Infinity;
+      for (let y = R.y1; y <= R.y2; y++) for (let x = R.x1; x <= R.x2; x++) { const d = Math.abs(x - cx) + Math.abs(y - cy); if (d < bd && g.walkable(x - g.origin.tx, y - g.origin.ty)) { bd = d; t = { x, y }; } }
+      if (t && g.path(o.x - g.origin.tx, o.y - g.origin.ty, t.x - g.origin.tx, t.y - g.origin.ty)) out.add(r.id);
+    }
+    return out;
+  }
+  // a room's furniture: everything on it but its workflow machines, agents' seats and fixtures
+  const furnitureIn = (st, roomId) => st.props().filter(p => st.roomAt(p.x, p.y) === roomId && !MACHINE_T.test(p.t) && !p.agentId && !KEEP_T.test(p.t));
+  // equipment an edit takes away (what agents gained there), named on the card
+  const lostGear = (env, props) => { const e = equipmentOf(env, props); return e.length ? 'Equipment that goes: ' + e.join(', ') + '. ' : ''; };
+  const shortList = (env, props) => { const t = piecesText(env, props).split(', '); return t.length > 7 ? t.slice(0, 6).join(', ') + ' and more' : t.join(', '); };
+  function planEdit(doc, req, env) {
+    const WM = env && env.WorldModel, P = env && env.Pipeline;
+    if (!WM || !P || !doc) return refuse('the station builder is not loaded on this page');
+    if (!req || typeof req !== 'object' || Array.isArray(req)) return refuse(EDIT_HOW);
+    const keys = Object.keys(req).filter(k => req[k] != null), extra = keys.filter(k => EDIT_KEYS.indexOf(k) < 0);
+    if (extra.length) return refuse('An edit only takes one of: ' + EDIT_KEYS.join(', ') + '. Not accepted here: ' + extra.slice(0, 6).join(', ') + '. ' + EDIT_HOW);
+    if (keys.length !== 1) return refuse(EDIT_HOW);
+    const live = WM.create(clone(doc)), main = mainRoom(live), spawnId = (live.serialize().meta || {}).spawnRoomId, before = floorFacts(live, P), RS = env.RoomStyles;
+    const nameOfRoom = raw => (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw.room : raw);
+    let spec, summary, where, mark = null, goneRects = [];
+    if (keys[0] === 'remove') {
+      const list = Array.isArray(req.remove) ? req.remove : [req.remove];
+      if (!list.length || list.length > 8) return refuse('remove is a room name, or a list of up to 8 room names.');
+      const gone = [];
+      for (const raw of list) {
+        const t = roomNamed(live, nameOfRoom(raw)); if (!t.ok) return t;
+        if ((main && t.room.id === main.id) || t.room.id === spawnId) return refuse(t.room.name + ' is the main room, so it stays. To lay everything else out again, plan a layout with replace: true.');
+        if (!gone.some(r => r.id === t.room.id)) gone.push(t.room);
+      }
+      const goneIds = new Set(gone.map(r => r.id));
+      goneRects = [].concat(...gone.map(r => r.rects));
+      const inGone = p => goneIds.has(live.roomAt(p.x, p.y));
+      const furniture = live.props().filter(p => inGone(p) && !MACHINE_T.test(p.t) && !(p.agentId && SEAT_T.test(p.t)));
+      const intakes = live.props().filter(p => inGone(p) && p.t === 'intake'), machines = live.props().filter(p => inGone(p) && MACHINE_T.test(p.t));
+      // an agent whose only seat stands there is seated again elsewhere
+      const seats = live.props().filter(p => p.agentId && SEAT_T.test(p.t) && inGone(p) && !live.props().some(q => q.agentId === p.agentId && q.id !== p.id && SEAT_T.test(q.t) && !inGone(q)));
+      // the hallways that joined what goes and now join nothing
+      const scratch = WM.create(clone(doc)), wasNext = new Map();
+      for (const h of live.rooms().filter(r => r.kind === 'corridor')) wasNext.set(h.id, zoneNeighbours(live, h.id));
+      for (const r of gone) scratch.removeRoom(r.id);
+      const halls = [];
+      for (let changed = true; changed;) {
+        changed = false;
+        for (const h of scratch.rooms().filter(r => r.kind === 'corridor')) {
+          const was = wasNext.get(h.id) || new Set();
+          if (![...was].some(id => goneIds.has(id) || halls.indexOf(id) >= 0)) continue;   // it never touched what goes
+          if (zoneNeighbours(scratch, h.id).size <= 1) { halls.push(h.id); scratch.removeRoom(h.id); changed = true; }
+        }
+      }
+      const slots = seats.length ? desksFor(scratch, env, null, seats.length) : [];
+      if (slots.length < seats.length) return refuse('There is no clear floor left for ' + seats.length + ' agents\' desks once ' + gone.map(r => r.name).join(' and ') + (gone.length > 1 ? ' go' : ' goes') + '. Clear some floor first (clear: a room), or remove fewer rooms.');
+      spec = { kind: 'edit', removeRooms: gone.map(r => r.id).concat(halls), reseat: seats.map((p, i) => ({ agentId: p.agentId, desk: slots[i] })) };
+      const deskRooms = [...new Set(slots.map(d => (scratch.rooms().find(r => r.id === scratch.roomAt(d.x, d.y)) || {}).name).filter(Boolean))];
+      const crewName = id => { const a = (env.crew || []).find(x => x && x.id === id); return a ? a.name : 'an agent'; };
+      const sized = gone.map(r => { const R = r.rects[0]; return r.name + ' (' + (R.x2 - R.x1 + 1) + ' × ' + (R.y2 - R.y1 + 1) + ')'; });
+      summary = 'Remove ' + (sized.length > 1 ? sized.slice(0, -1).join(', ') + ' and ' + sized[sized.length - 1] : sized[0])
+        + (halls.length ? ', with the ' + (halls.length > 1 ? halls.length + ' hallways' : 'hallway') + ' that joined ' + (gone.length > 1 ? 'them' : 'it') : '') + '. '
+        + (furniture.length ? (gone.length > 1 ? 'Their furniture goes with them (' : 'Its furniture goes with it (') + shortList(env, furniture) + '). ' : '')
+        + (machines.length ? (intakes.length ? (intakes.length > 1 ? intakes.length + ' workflow lines go too: ' : 'A workflow line goes too: ') + intakes.map(p => p.label || 'an unnamed line').join(', ') : machines.length + ' workflow machines go too') + '. ' : '')
+        + lostGear(env, furniture)
+        + (seats.length ? seats.map(p => crewName(p.agentId)).join(', ') + (seats.length > 1 ? ' get new desks in ' : ' gets a new desk in ') + deskRooms.join(' and ') + '. ' : '')
+        + 'Agents and conversations stay; one UNDO in Build mode brings ' + (gone.length > 1 ? 'them' : 'it') + ' back.';
+      where = 'the removal of ' + gone.map(r => r.name).join(', ');
+    } else {
+      const isRefurnish = keys[0] === 'refurnish', q = isRefurnish ? req.refurnish : req.clear;
+      if (isRefurnish && (!q || typeof q !== 'object' || Array.isArray(q))) return refuse('refurnish is { room, style, name }: style is one of ' + RS.ROOM_ORDER.join(', ') + '.');
+      if (isRefurnish) { const bad = Object.keys(q).filter(k => ['room', 'style', 'name'].indexOf(k) < 0); if (bad.length) return refuse('refurnish only takes room, style and name. Not accepted: ' + bad.slice(0, 6).join(', ') + '.'); }
+      const t = roomNamed(live, nameOfRoom(q)); if (!t.ok) return t;
+      const room = t.room;
+      if (room.rects.length > 1) return refuse(room.name + ' is not a plain rectangle, so StarNet cannot furnish it. Build a new room instead.');
+      const old = furnitureIn(live, room.id);
+      if (!isRefurnish) {
+        if (!old.length) return refuse(room.name + ' has no furniture to clear (its workflow lines and agents\' desks always stay).');
+        spec = { kind: 'edit', removeProps: old.map(p => p.id) };
+        summary = 'Clear ' + room.name + ': its ' + old.length + (old.length === 1 ? ' piece' : ' pieces') + ' of furniture go (' + shortList(env, old) + '). ' + lostGear(env, old) + 'Its workflow lines and agents\' desks stay; one UNDO in Build mode brings the furniture back.';
+        where = 'the clearing of ' + room.name;
+      } else {
+        const sid = q.style != null && RS.resolveRoom ? RS.resolveRoom(q.style) : null;
+        if (!sid) return refuse((q.style == null ? 'refurnish needs a style.' : 'There is no room style called "' + String(q.style).slice(0, 30) + '".') + ' Styles: ' + RS.ROOM_ORDER.join(', ') + '.');
+        const rec = RS.ROOMS[sid];
+        let name = typeof q.name === 'string' ? q.name.replace(/\s+/g, ' ').trim().toUpperCase().slice(0, 24) : '';
+        const taken = nm => live.rooms().some(r => r.id !== room.id && r.kind !== 'corridor' && norm(r.name) === norm(nm));
+        if (name && taken(name)) return refuse('Another room is already called ' + name + '.');
+        // a room still named for what it was (LOUNGE, ROOM 3) takes the name of what it becomes
+        const auto = Object.keys(AUTO_NAME).some(k => AUTO_NAME[k] === room.name.replace(/ \d+$/, '')) || /^ROOM \d+$/.test(room.name);
+        if (!name && auto && AUTO_NAME[sid] && AUTO_NAME[sid] !== room.name && !taken(AUTO_NAME[sid])) name = AUTO_NAME[sid];
+        const scratch = WM.create(clone(doc));
+        for (const p of old) scratch.removeProp(p.id);
+        const dr = dressRoom(scratch, env, room.id, sid);
+        if (!dr.ok) return dr;
+        if (!dr.props.length) return refuse(room.name + ' has no clear floor left for ' + rec.name + ' (its lines and agents\' desks stay where they are).');
+        spec = { kind: 'edit', removeProps: old.map(p => p.id), restyle: { roomId: room.id, deck: rec.deck, walls: rec.walls, name: name && name !== room.name ? name : null }, props: dr.props };
+        summary = 'Refurnish ' + room.name + ' as ' + rec.name.replace(/^(a|an) /i, m => m.toLowerCase()) + ': ' + (old.length ? 'its ' + old.length + (old.length === 1 ? ' piece' : ' pieces') + ' of furniture are cleared (' + shortList(env, old) + '), and it' : 'it')
+          + ' is furnished as ' + rec.name.toLowerCase() + ', floor and walls too (' + shortList(env, dr.props) + ')' + (spec.restyle.name ? '; renamed ' + spec.restyle.name : '') + '. ' + lostGear(env, old.filter(p => !dr.props.some(q => q.t === p.t))) + 'Its workflow lines and agents\' desks stay; one UNDO in Build mode brings it back as it was.';
+        where = 'the refurnishing of ' + room.name;
+      }
+      mark = room.id;
+    }
+    // the edit, on a copy, exactly as station.build will make it; then every check
+    const probe = WM.create(clone(doc)), b = editInto(probe, spec);
+    if (!b.ok) return b;
+    const after = floorFacts(probe, P), inGoneTile = t => t && goneRects.some(r => t.x >= r.x1 && t.x <= r.x2 && t.y >= r.y1 && t.y <= r.y2);
+    for (const e of after.errs) if (!before.errs.has(e)) return refuse('that would add a routing problem (' + e.split(':')[0] + ')');
+    for (const dock in before.chains) {
+      if (!(dock in after.chains)) { if (inGoneTile((before.chains[dock] || {}).tile)) continue; return refuse('that would change how an existing line routes'); }
+      if (JSON.stringify(before.chains[dock]) !== JSON.stringify(after.chains[dock])) return refuse('that would change how an existing line routes (a line elsewhere runs into what goes)');
+    }
+    const walkBefore = walkableRooms(live), walkAfter = walkableRooms(probe);
+    const cut = live.rooms().filter(r => walkBefore.has(r.id) && probe.rooms().some(x => x.id === r.id) && !walkAfter.has(r.id)).map(r => r.name);
+    if (cut.length) return refuse('That would cut ' + cut.join(', ') + ' off from ' + (main ? main.name : 'the main room') + ': ' + (cut.length > 1 ? 'they are' : 'it is') + ' reached through what goes. Remove ' + (cut.length > 1 ? 'them' : 'it') + ' too, or keep the room.');
+    return { ok: true, plan: { floorSig: sigOf(doc), resultSig: sigOf(probe.serialize()), spec, summary, notes: [], steps: [], line: null, where, rooms: [],
+      preview: previewOf(WM, doc, probe.serialize(), [], mark) } };
   }
 
   /* ================= VIBE DESIGN (2026-09-29): the Commander describes the room, part by part =================
@@ -2390,6 +2549,7 @@
       const lines = (pl.lines || []).map(l => { const ln = ((built.parts[l.part] || {}).lines || [])[l.line], rl = ln ? readLine(st, ln.lineIds, env, crewIds) : { ready: false, blocking: [] }; return { label: l.label || null, room: l.room, lineId: rl.comp ? rl.comp.key : null, ready: rl.ready, blocking: rl.blocking }; });
       return { ok: true, kind: 'build', summary: pl.summary, rooms: pl.rooms || [], hallways: pl.hallways || [], where: pl.where, lines, roomIds: built.parts.map(p => p.roomId).filter(Boolean), recruited };
     }
+    if (pl.spec.kind === 'edit') return { ok: true, kind: 'edit', summary: pl.summary, rooms: [], hallways: [], where: pl.where, lines: [], roomIds: pl.spec.restyle ? [pl.spec.restyle.roomId] : [] };
     if (pl.spec.kind === 'swap' || pl.spec.kind === 'relayout') return { ok: true, kind: 'swap', summary: pl.summary, rooms: pl.rooms || [], where: pl.where, lines: pl.lines || [], preset: pl.preset, roomIds: [] };
     if (pl.spec.kind === 'rooms' || pl.spec.kind === 'restyle') {
       const lines = (built.parts || []).filter(p => p.lineIds && p.lineIds.length).map(p => { const rl = readLine(st, p.lineIds, env, crewIds); return { lineId: rl.comp ? rl.comp.key : null, ready: rl.ready, blocking: rl.blocking }; });
@@ -2402,5 +2562,5 @@
       lineKey: rd.comp ? rd.comp.key : null, ready: rd.ready, blocking: rd.blocking, recruited };
   }
 
-  return { MENU, STEP_KEYS, ROOM_MENU, STYLE_MENU, DESIGN_MENU, ZONE_KEYS, ROOM_KEYS, LINE_KEYS, LAYOUT_KEYS, LAYOUT_ROOM_KEYS, AREAS, SIZES, catalog, resolveLine, plan, planRoom, planRestyle, planDesign, planBuild, planLayout, mapOf, roomPlacements, dressRoom, shapeGraph, areaOf, apply, sigOf };
+  return { MENU, STEP_KEYS, ROOM_MENU, STYLE_MENU, DESIGN_MENU, ZONE_KEYS, ROOM_KEYS, LINE_KEYS, LAYOUT_KEYS, LAYOUT_ROOM_KEYS, AREAS, SIZES, EDIT_KEYS, catalog, resolveLine, plan, planRoom, planRestyle, planEdit, planDesign, planBuild, planLayout, mapOf, roomPlacements, dressRoom, shapeGraph, areaOf, apply, sigOf };
 });

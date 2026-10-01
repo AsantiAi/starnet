@@ -442,6 +442,13 @@ const StationCommands = (() => {
       const p = park(StationBuilder.planRestyle(st.serialize(), (a && a.request) || {}, env));
       return { planId: p.planId, summary: p.plan.summary, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
     },
+    // EDIT WHAT STANDS: remove rooms, refurnish a room in another style, or clear a room's furniture
+    'station.plan_edit': (a) => {
+      const { st, env } = builderReady();
+      if (!StationBuilder.planEdit) throw new Error('this page cannot edit what stands yet; reload it');
+      const p = park(StationBuilder.planEdit(st.serialize(), (a && a.request) || {}, env));
+      return { planId: p.planId, summary: p.plan.summary, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
+    },
     // builds ANY parked plan, exactly, in one undo step
     'station.build': (a) => {
       const { st, env } = builderReady();
@@ -462,7 +469,7 @@ const StationCommands = (() => {
       }
       builderPlans.delete(planId);
       const hallsBuilt = (r.hallways || []).length, roomNames = (r.rooms || []).map(x => x.name).join(', ');
-      const what = r.line ? r.line.name + ' in ' + r.where : r.kind === 'restyle' ? 'the restyle of ' + r.where : r.kind === 'swap' ? (r.preset ? r.preset.name : 'the preset') + ' (RESTORE PREVIOUS in Build → Presets brings your old station back)'
+      const what = r.line ? r.line.name + ' in ' + r.where : r.kind === 'restyle' ? 'the restyle of ' + r.where : r.kind === 'edit' ? r.where : r.kind === 'swap' ? (r.preset ? r.preset.name : 'the preset') + ' (RESTORE PREVIOUS in Build → Presets brings your old station back)'
         : roomNames + (hallsBuilt ? (roomNames ? ' and ' : '') + (hallsBuilt > 1 ? hallsBuilt + ' hallways' : 'a hallway') : '');
       const lead = (env.crew || []).find(x => x.id === env.heroId);
       try { if (typeof StationUI !== 'undefined' && StationUI.notify) StationUI.notify('Built by ' + (lead ? lead.name : 'your lead') + ': ' + what + ' · open BUILD and press UNDO to remove it', 'good'); } catch (_) {}

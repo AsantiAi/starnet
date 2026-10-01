@@ -210,14 +210,35 @@
     greenhouse: 'garden', atrium: 'garden', park: 'garden', kitchen: 'cafe', coffee: 'cafe', canteen: 'cafe', mess: 'cafe', 'break room': 'cafe',
     conference: 'meeting', boardroom: 'meeting', science: 'lab', research: 'lab', maker: 'workshop', engineering: 'workshop', garage: 'workshop',
     radio: 'comms', signals: 'comms', stores: 'storage', warehouse: 'storage', fitness: 'gym', training: 'gym',
-    conveyor: 'works', conveyors: 'works', factory: 'works', foundry: 'works', workflow: 'works', workflows: 'works', lines: 'works', production: 'works', assembly: 'works' };
+    conveyor: 'works', conveyors: 'works', factory: 'works', foundry: 'works', workflow: 'works', workflows: 'works', lines: 'works', production: 'works', assembly: 'works',
+    // the rooms people ask for by other names, each to the nearest of the fifteen (2026-09-30: "build anything the user wants")
+    pub: 'cafe', diner: 'cafe', dining: 'cafe', cafeteria: 'cafe', restaurant: 'cafe', snack: 'cafe', food: 'cafe', shop: 'cafe', market: 'cafe', vending: 'cafe',
+    sleeping: 'quarters', barracks: 'quarters', cabin: 'quarters', cabins: 'quarters', crew: 'quarters', nap: 'quarters',
+    med: 'lab', medbay: 'lab', medical: 'lab', infirmary: 'lab', hospital: 'lab', clinic: 'lab', sick: 'lab', surgery: 'lab', chemistry: 'lab', biology: 'lab', observatory: 'lab', telescope: 'lab',
+    server: 'comms', servers: 'comms', data: 'comms', datacenter: 'comms', control: 'comms', command: 'comms', ops: 'comms', operations: 'comms', network: 'comms', broadcast: 'comms',
+    communications: 'comms', radar: 'comms', monitoring: 'comms', surveillance: 'comms', security: 'comms', mission: 'comms',
+    studio: 'cozy', art: 'cozy', music: 'cozy', recording: 'cozy', jam: 'cozy', creative: 'cozy', pet: 'cozy', pets: 'cozy', nook: 'cozy',
+    theater: 'lounge', theatre: 'lounge', cinema: 'lounge', movie: 'lounge', movies: 'lounge', screening: 'lounge', film: 'lounge', aquarium: 'lounge', chill: 'lounge', hangout: 'lounge', common: 'lounge', relax: 'lounge',
+    classroom: 'meeting', class: 'meeting', school: 'meeting', lecture: 'meeting', seminar: 'meeting', briefing: 'meeting', council: 'meeting', war: 'meeting',
+    dojo: 'gym', sparring: 'gym', boxing: 'gym', weights: 'gym', workout: 'gym', exercise: 'gym',
+    spa: 'garden', zen: 'garden', meditation: 'garden', yoga: 'garden', hydroponics: 'garden', farm: 'garden', botanical: 'garden', plants: 'garden', nursery: 'garden', conservatory: 'garden',
+    armory: 'storage', armoury: 'storage', supply: 'storage', supplies: 'storage', cargo: 'storage', hold: 'storage', hangar: 'storage', vault: 'storage', store: 'storage', storeroom: 'storage', pantry: 'storage',
+    engine: 'workshop', reactor: 'workshop', machine: 'workshop', machinery: 'workshop', fabrication: 'workshop', fab: 'workshop', repair: 'workshop', maintenance: 'workshop', robotics: 'workshop', hardware: 'workshop',
+    archive: 'library', archives: 'library', records: 'library', museum: 'library', gallery: 'library', chapel: 'library', quiet: 'library',
+    coworking: 'desks', work: 'desks', desk: 'desks', cubicle: 'desks', cubicles: 'desks', bullpen: 'desks', hq: 'desks', headquarters: 'desks', admin: 'desks',
+    observation: 'lounge', playroom: 'games', play: 'games', party: 'games', mancave: 'games', 'man cave': 'games', esports: 'games', casino: 'games' };
   // a whole-room style by its id or a word for it ("arcade", "conveyor hall") — null when nothing matches
   function resolveRoom(raw) {
-    const n = norm(raw).replace(/ (room|hall|area|space|bay|deck)$/, '');
-    if (!n) return null;
+    const full = norm(raw);
+    if (!full) return null;
+    if (ROOMS[full]) return full;
+    if (ROOM_WORDS[full]) return ROOM_WORDS[full];   // "break room", "game room"
+    const n = full.replace(/ (room|hall|area|space|bay|deck)$/, '');
     if (ROOMS[n]) return n;
     if (ROOM_WORDS[n]) return ROOM_WORDS[n];
-    for (const w of n.split(' ')) { if (ROOMS[w]) return w; if (ROOM_WORDS[w]) return ROOM_WORDS[w]; }
+    const ws = n.split(' ');
+    for (const w of ws) if (ROOMS[w]) return w;   // a style named anywhere wins ("crew lounge")
+    for (const w of ws.slice().reverse()) if (ROOM_WORDS[w]) return ROOM_WORDS[w];   // else the head word, read from the end ("mission control")
     const z = resolve(raw);
     return z && ROOMS[z] ? z : null;
   }
