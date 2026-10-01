@@ -511,7 +511,7 @@ const { note: failNote } = require('../../failopen');
         await stampSeen(aid, abs);   // our own edit is the new baseline: read -> edit -> write used to refuse with a FABRICATED "someone else edited it" story
         emitDeliverable(ctx, aid, args.path);
         return finishEditDiagnostics(diagnosticTicket,
-          { content: 'Edited ' + args.path + ' (' + count + ' replacement' + (count === 1 ? '' : 's') + ').\n' + receiptLine(receipt) + locationLine(args.path, abs, ctx), summary: 'edited ' + args.path + ' (' + count + 'x)', mutationReceipt: receipt, receipt }, ctx);
+          { content: 'Edited ' + args.path + ' (' + count + ' replacement' + (count === 1 ? '' : 's') + ').\n' + receiptLine(receipt), summary: 'edited ' + args.path + ' (' + count + 'x)', mutationReceipt: receipt, receipt }, ctx);
       }
     };
 
