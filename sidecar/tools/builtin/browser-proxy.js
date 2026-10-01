@@ -1,6 +1,11 @@
 /* The owned Chromium uses this loopback proxy for every public connection.
    Validation and TCP dial share one DNS answer, including redirects and page
-   subresources. CONNECT tunnels preserve the browser's original TLS SNI. */
+   subresources. CONNECT tunnels preserve the browser's original TLS SNI.
+
+   A SOCKET ERROR MUST NEVER BE UNHANDLED HERE: this proxy lives inside the sidecar, so an 'error' with no listener
+   ends the whole station. Measured 2026-09-30 (browser gauntlet, gate): Chromium was closed while a CONNECT was still
+   resolving DNS — the browser's socket reset before its error listener existed (it was attached after the await) and
+   the process died with ECONNRESET. Every socket gets its listener synchronously, before any await. */
 'use strict';
 
 const http = require('node:http');
@@ -27,34 +32,42 @@ async function startPinnedProxy({ validate, resolve }) {
         path: u.pathname + u.search, method: req.method,
         headers: Object.assign({}, req.headers, { host: u.host }) }, incoming => {
         res.writeHead(incoming.statusCode, incoming.headers);
+        incoming.on('error', () => res.destroy());
         incoming.pipe(res);
       });
       upstream.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end(); });
       req.on('error', () => upstream.destroy());
+      res.on('error', () => upstream.destroy());
       req.pipe(upstream);
     })().catch(() => { if (!res.headersSent) res.writeHead(403); res.end(); });
   });
   server.on('connect', (req, client, head) => {
+    let upstream = null;
+    client.on('error', () => { if (upstream) upstream.destroy(); });   // before any await: see the header
+    client.on('close', () => { if (upstream) upstream.destroy(); });
     (async () => {
       if (!/^[^@/]+:\d+$/.test(req.url)) throw new Error('invalid CONNECT authority');
       const { u, address } = await destination('https://' + req.url + '/');
+      if (client.destroyed) return;   // the browser went away while DNS resolved
       const port = Number(u.port) || 443;
-      const upstream = net.connect({ host: address, port });
+      upstream = net.connect({ host: address, port });
       upstream.once('connect', () => {
         client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
         if (head && head.length) upstream.write(head);
         client.pipe(upstream); upstream.pipe(client);
       });
       upstream.on('error', () => client.destroy());
-      client.on('error', () => upstream.destroy());
-      client.on('close', () => upstream.destroy());
-    })().catch(() => { client.end('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n'); });
+    })().catch(() => { if (!client.destroyed) client.end('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n'); });
   });
   server.on('upgrade', (req, client, head) => {
+    let upstream = null;
+    client.on('error', () => { if (upstream) upstream.destroy(); });   // before any await: see the header
+    client.on('close', () => { if (upstream) upstream.destroy(); });
     (async () => {
       const { u, address } = await destination(req.url.replace(/^ws:/i, 'http:'));
       if (u.protocol !== 'http:') throw new Error('unsupported upgrade target');
-      const upstream = net.connect({ host: address, port: Number(u.port) || 80 });
+      if (client.destroyed) return;
+      upstream = net.connect({ host: address, port: Number(u.port) || 80 });
       upstream.once('connect', () => {
         const headers = req.rawHeaders.slice();
         for (let i = 0; i < headers.length; i += 2) {
@@ -67,10 +80,10 @@ async function startPinnedProxy({ validate, resolve }) {
         client.pipe(upstream); upstream.pipe(client);
       });
       upstream.on('error', () => client.destroy());
-      client.on('error', () => upstream.destroy());
-      client.on('close', () => upstream.destroy());
-    })().catch(() => { client.end('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n'); });
+    })().catch(() => { if (!client.destroyed) client.end('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n'); });
   });
+  // a malformed or reset request from the browser: drop that connection, never the station
+  server.on('clientError', (e, sock) => { if (sock && !sock.destroyed) sock.destroy(); });
   await new Promise((resolveReady, reject) => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', resolveReady);

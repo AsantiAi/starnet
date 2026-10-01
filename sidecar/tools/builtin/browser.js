@@ -1119,7 +1119,8 @@
       } catch (_) {}
       }
       // A real window starts much slower than headless on a loaded machine (measured >10 s at 100% CPU): ~30 s for it.
-      const readyTries = (headed && attachPort === null) ? 120 : 40;
+      // Headless full Chrome (the installed one) also missed ~10 s under a loaded gate (2026-09-30): ~20 s for it.
+      const readyTries = (headed && attachPort === null) ? 120 : 80;
       for (let i = 0; i < readyTries; i++) {
         if (attachPort === null && procExited) throw new Error('spawned Chromium exited before CDP ownership was established' + (procError ? ': ' + procError : ''));
         try {
