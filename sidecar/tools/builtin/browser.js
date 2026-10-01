@@ -952,13 +952,21 @@
     let reclaimed = false;
     // End a Chromium WE started together with its helper processes — instant, no process-table scan (that scan took
     // >15 s on a starved machine). Windows needs /T for the tree; elsewhere the group dies with the browser.
-    function killTree(pid) {
+    /* ASYNCHRONOUS (release review 2026-09-30): taskkill (≤10 s) and the PowerShell profile sweep (≤15 s, measured >15 s
+       on a starved box) ran as synchronous child calls on the retry / revive / profile-wait paths — exactly when the
+       machine is starved — freezing every request and stream of the station for their whole run. */
+    function runQuiet(cmd, args, timeout) {
+      return new Promise((resolve, reject) => {
+        CP.execFile(cmd, args, { timeout, windowsHide: true, maxBuffer: 1024 * 1024 }, err => (err ? reject(err) : resolve()));
+      });
+    }
+    async function killTree(pid) {
       if (!pid) return;
       try {
-        if (process.platform === 'win32') CP.execFileSync('taskkill', ['/T', '/F', '/PID', String(pid)], { stdio: 'ignore', timeout: 10000, windowsHide: true });
+        if (process.platform === 'win32') await runQuiet('taskkill', ['/T', '/F', '/PID', String(pid)], 10000);
         else process.kill(pid, 'SIGKILL');
       } catch (e) {
-        if (e && (e.status === 128 || e.code === 'ESRCH')) return;   // 128/ESRCH: already gone
+        if (e && (e.code === 128 || e.status === 128 || e.code === 'ESRCH')) return;   // 128/ESRCH: already gone
         failNote('browser.kill-tree', e);
         /* Measured 2026-09-30: `taskkill /T /F` can fail part-way through Chromium's tree (a helper exiting under it) and
            leave the BROWSER process itself running — the profile stays locked and close() reports a stuck browser.
@@ -966,18 +974,18 @@
         try { process.kill(pid, 'SIGKILL'); } catch (e2) { if (!(e2 && e2.code === 'ESRCH')) failNote('browser.kill-tree.direct', e2); }
       }
     }
-    function killProfileOrphans(dir) {
+    async function killProfileOrphans(dir) {
       if (spawn !== CP.spawn || !dir) return;   // a test rig's fake spawn owns no real processes
       const needle = String(dir).replace(/\\/g, '/');
       try {
         if (process.platform === 'win32') {
           const esc = needle.replace(/'/g, "''");
           const ps = "Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.Replace('\\','/') -like '*--user-data-dir=" + esc + "*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }";
-          CP.execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], { stdio: 'ignore', timeout: 15000, windowsHide: true });
+          await runQuiet('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], 15000);
         } else {
-          CP.execFileSync('pkill', ['-f', '--', '--user-data-dir=' + needle], { stdio: 'ignore', timeout: 5000 });
+          await runQuiet('pkill', ['-f', '--', '--user-data-dir=' + needle], 5000);
         }
-      } catch (e) { if (!(e && e.status === 1)) failNote('browser.launch-retry.orphans', e); }   // pkill exits 1 when nothing matched
+      } catch (e) { if (!(e && (e.code === 1 || e.status === 1))) failNote('browser.launch-retry.orphans', e); }   // pkill exits 1 when nothing matched
     }
     /* NEVER START ON A PROFILE ANOTHER CHROMIUM STILL HOLDS. Measured 2026-09-30, Andrew's "go to github so i can
        sign in": browser.login relaunches hidden → visible on the SAME profile; the visible one started while the
@@ -995,7 +1003,7 @@
         await sleep(200);
       }
       failNote('browser.profile-free', new Error('profile still held after 8 s: ending its processes'));
-      killProfileOrphans(dir);
+      await killProfileOrphans(dir);
       await sleep(600);
       return false;
     }
@@ -1039,7 +1047,7 @@
           if (attachPort !== null || !/exited before CDP ownership|could not attach to Chromium/.test(String((e && e.message) || ''))) throw e;
           failNote('browser.launch-retry', e);
           // our own attempt: its whole tree (a stuck one still holds the profile); a vanished one: sweep its orphans
-          if (proc && !procExited) killTree(proc.pid); else if (spawn === CP.spawn) killProfileOrphans(profileDir);
+          if (proc && !procExited) await killTree(proc.pid); else if (spawn === CP.spawn) await killProfileOrphans(profileDir);
           proc = null; procExited = false; procError = null; procClosePromise = null;
           if (networkProxy) { const px = networkProxy; networkProxy = null; try { await px.close(); } catch (e2) { failNote('browser.launch-retry.proxy', e2); } }
           await sleep(700 * (attempt + 1));
@@ -1075,7 +1083,7 @@
            the old driver still holds that process un-exited (its open handle pins the id). Otherwise the sweep
            matches this browser's unique profile directory, which no other program carries. */
         const ownPid = typeof deps.reclaimPid === 'function' ? deps.reclaimPid() : null;
-        if (ownPid) killTree(ownPid); else killProfileOrphans(profileDir);
+        if (ownPid) await killTree(ownPid); else await killProfileOrphans(profileDir);
         await sleep(600);
       }
       await waitProfileFree(profileDir);
@@ -2375,7 +2383,7 @@
       }
       try { cdp && cdp.close(); } catch (_) {}
       // only a process that has NOT exited is still ours to kill: an exited one's id may already be someone else's
-      if (owned && !exited && !procExited) { if (process.platform === 'win32' && owned.pid && spawn === CP.spawn) killTree(owned.pid); else { try { owned.kill('SIGKILL'); } catch (e) { failNote('browser.close.kill', e); } } }
+      if (owned && !exited && !procExited) { if (process.platform === 'win32' && owned.pid && spawn === CP.spawn) await killTree(owned.pid); else { try { owned.kill('SIGKILL'); } catch (e) { failNote('browser.close.kill', e); } } }
       cdp = null; proc = null;
       if (owned && waitForClose && !exited) {
         // a force-killed process can take seconds to leave on a busy Windows box (antivirus holding a freshly unpacked
