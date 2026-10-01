@@ -1147,6 +1147,9 @@ for (const c of T.catalog) {
     const pa = SB.planBuild(all.serialize(), { layout: { pattern: 'diamond', rooms: four.map(style => ({ style })) } }, E); A.ok(pa.ok && SB.apply(all, pa.plan, E).ok, 'the same four as a layout');
     const rects = st => st.rooms().filter(x => x.kind !== 'corridor' && x.name !== 'HOME').map(x => x.name + ' ' + JSON.stringify(x.rects[0])).sort();
     A.eq(rects(one), rects(all), 'room by room is the same diamond as all at once');
+    const halls = one.rooms().filter(x => x.kind === 'corridor');
+    A.ok(halls.length === 4 && halls.every(h => h.floorStyle === 'onyx' && h.floorMat === 'runner'), 'each hallway is a station corridor, as in a layout: ' + halls.map(h => h.floorStyle + '/' + h.floorMat).join(', '));
+    A.ok(halls.every(h => one.props().some(p => one.roomAt(p.x, p.y) === h.id)), 'and planted or lit, never a bare run of floor');
     // a size asked keeps the grid too, at that size: a small room centred in its place, a giant one on a wing
     const small = SB.planBuild(one.serialize(), { rooms: [{ name: 'Closet', size: 'small', style: 'storage' }] }, E);
     A.ok(small.ok && /^CLOSET, a new 12 × 8 room north-east of HOME, through a hallway/.test(small.plan.summary), 'a small room takes the next grid place at its own size: ' + (small.error || small.plan.summary.slice(0, 80)));

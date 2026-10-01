@@ -118,7 +118,7 @@ model still never sends a tile. It **looks**, then says where things go in words
 | --- | --- |
 | `name` | A new room's name. Left out, a room with a whole-room `style` is named for it (LOUNGE, OFFICE, CONVEYOR HALL), else for what fills it first, else `ROOM n`. |
 | `size` | `small` (12 × 8), `medium` (18 × 11, an empty room's default), `large` (24 × 14), `giant` (36 × 20), or `{ w: 6-44, h: 5-26 }`. Left out, a room with zones or lines is sized for them and grows until they fit. |
-| `beside` | The room it joins, by name. "bridge", "main" or "hub" mean the main room. A room earlier in the same list works. Left out (and no `side`), the room takes the **next free place of the station's grid**, the same place a diamond layout would give it, at its own size (a small room centred on its cell's inner edge, a big one on a wing); so rooms asked one at a time grow the same diamond as one laid out at once (tested). Only when the grid has no place left does StarNet take the spot that keeps the station most compact. |
+| `beside` | The room it joins, by name. "bridge", "main" or "hub" mean the main room. A room earlier in the same list works. Left out (and no `side`), the room takes the **next free place of the station's grid**, the same place a diamond layout would give it, at its own size (a small room centred on its cell's inner edge, a big one on a wing); so rooms asked one at a time grow the same diamond as one laid out at once (tested), and its hallway is a station corridor like a layout's (the corridor deck, planters and floor lights), never a bare run of floor. Only when the grid has no place left does StarNet take the spot that keeps the station most compact. |
 | `side` | north, south, east or west of that room (also left, right, top, below). Left out, the most compact side. |
 | `hallway` | `true` (the default: a hallway 3 tiles long, as wide as the presets' own), `false` (the rooms touch and open onto each other), or a length from 2 to 8. |
 | `align` | center, start or end along the shared wall. Left out, centred, sliding along the wall to find clear floor. |
@@ -156,8 +156,9 @@ With no `where`, `station.plan_line` puts a line into the station's conveyor hal
 when it has room, before it makes the line a room of its own on the grid. Recruits' desks stand together: one row
 centred on a wall (the top, then the bottom), split only when no row takes them all.
 
-**A room of zones is never half bare.** A room split into styled parts, with no whole-room style of its own, gets plants
-in its free corners, and the card says so ("two tall plants and two plants in the corners").
+**A room of zones is never half bare.** A room made only of styled parts (no whole-room style, no line zone: a line's
+half keeps its floor) gets plants in its free corners, and the card says so ("two tall plants and two plants in the
+corners").
 
 **The origin bug.** Found while building this. The routing plan counts tiles from the station's top-left corner, and a
 room added north or west of everything moves that corner. `floorFacts` compared those local tiles, so on any station
