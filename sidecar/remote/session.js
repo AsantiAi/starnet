@@ -105,17 +105,20 @@ function makeSessions(deps) {
     s.sink = fn;
     return () => { if (s.sink === fn) s.sink = null; };
   }
-  function broadcast(obj) {
+  // onlyDevices: deliver to these phones only (the crew stream goes only to phones that are looking at the station)
+  function broadcast(obj, onlyDevices) {
     let n = 0;
+    const only = Array.isArray(onlyDevices) ? new Set(onlyDevices) : null;
     for (const s of Array.from(live.values())) {
       if (!s.sink) continue;
+      if (only && !only.has(s.deviceId)) continue;
       if (!get(s.id)) continue;   // expired or revoked
       try { s.sink(sealOut(s, obj, 'ev')); n++; } catch (_) { s.sink = null; }
     }
     return n;
   }
 
-  return { hello, get, openRequest, sealOut, end, endDevice, sweep, list, keep, attachSink, broadcast };
+  return { hello, get, openRequest, sealOut, end, endDevice, sweep, list, keep, attachSink, broadcast, _live: live };
 }
 
 module.exports = { makeSessions };

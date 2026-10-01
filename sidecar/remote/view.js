@@ -43,6 +43,7 @@ function makeRemoteView(deps) {
   let still = null;      // { buf, mime, w, h, at, bodies, crewFree }
   let crew = null;       // { at, bodies:[{ agentId, key, idx, x, y, w, h, walking, working }] }
   let wantAt = 0;
+  const wantBy = new Map();   // deviceId -> when that phone last asked (the crew stream goes only to phones looking)
 
   const dim = (v) => { const n = Math.floor(Number(v)); return Number.isFinite(n) && n >= 1 && n <= MAX_SIDE ? n : 0; };
 
@@ -66,16 +67,22 @@ function makeRemoteView(deps) {
       bodies.push({ agentId, x, y });
     }
     const sc = Number(o.scale);
-    still = { buf, mime, w, h, at: now(), bodies, crewFree: o.crewFree === true, scale: Number.isFinite(sc) && sc > 0.01 && sc < 20 ? sc : 0 };
+    still = { buf, mime, w, h, at: now(), checkedAt: now(), bodies, crewFree: o.crewFree === true, scale: Number.isFinite(sc) && sc > 0.01 && sc < 20 ? sc : 0 };
     return { ok: true, at: still.at, bytes: buf.length };
   }
 
-  function want() { wantAt = now(); }
+  function want(deviceId) {
+    wantAt = now();
+    if (deviceId) { wantBy.set(String(deviceId), wantAt); if (wantBy.size > 64) wantBy.delete(wantBy.keys().next().value); }
+  }
+  function lookers() { const t = now(), out = []; for (const [id, at] of wantBy) if (t - at < WANT_MS) out.push(id); return out; }
+  // the desk drew the room again and it was unchanged: the picture is current, nothing is re-sent
+  function touch() { if (!still) return false; still.checkedAt = now(); return true; }
   function wanted() { return wantAt > 0 && now() - wantAt < WANT_MS; }
-  function meta() { return still ? { at: still.at, w: still.w, h: still.h, mime: still.mime, size: still.buf.length, bodies: still.bodies, crewFree: still.crewFree, scale: still.scale } : null; }
+  function meta() { return still ? { at: still.at, w: still.w, h: still.h, mime: still.mime, size: still.buf.length, bodies: still.bodies, crewFree: still.crewFree, scale: still.scale, checkedAt: still.checkedAt, crewPaused: !!(crew && crew.paused) } : null; }
 
   const num = (v, lo, hi) => { const n = Number(v); return Number.isFinite(n) && n >= lo && n <= hi ? Math.round(n * 10) / 10 : null; };
-  function putCrew(list) {
+  function putCrew(list, paused) {
     if (!still) return { ok: false, error: 'no picture yet' };
     const out = [];
     for (const b of Array.isArray(list) ? list.slice(0, MAX_BODIES) : []) {
@@ -87,8 +94,8 @@ function makeRemoteView(deps) {
       if (x == null || y == null || w == null || h == null || !(idx >= 0 && idx < 64)) continue;
       out.push({ agentId, key, idx, x, y, w, h, walking: b.walking === true, working: b.working === true });
     }
-    crew = { at: now(), bodies: out };
-    return { ok: true, at: crew.at, bodies: out };
+    crew = { at: now(), bodies: out, paused: paused === true };
+    return { ok: true, at: crew.at, bodies: out, paused: crew.paused };
   }
   const crewNow = () => crew;
   function read(offset, length) {
@@ -99,7 +106,7 @@ function makeRemoteView(deps) {
   }
   function clear() { still = null; crew = null; wantAt = 0; }
 
-  return { put, want, wanted, meta, read, clear, putCrew, crew: crewNow };
+  return { put, want, wanted, lookers, touch, meta, read, clear, putCrew, crew: crewNow };
 }
 
 module.exports = { makeRemoteView, MAX_BYTES, WANT_MS };

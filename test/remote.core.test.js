@@ -234,5 +234,22 @@ async function rejects(p, re, msg) {
     try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
   }
 
+  // the crew stream is sealed only for the phones that are looking
+  {
+    const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'sn-bc-'));
+    const dv = { get: (id) => ({ id }), touch: () => {} };   // every device exists for this check
+    const ss = makeSessions({ devices: dv, crypto: C, now: () => Date.now(), newId });
+    const sent = [];
+    // two fake sessions with sinks (the broadcast path only needs id, deviceId, keys and a sink)
+    for (const dev of ['d-look', 'd-away']) {
+      const s = { id: 's-' + dev, deviceId: dev, keys: { s2p: nodeCrypto.randomBytes(32) }, outSeq: 0, lastAt: Date.now(), sink: (f) => sent.push(dev) };
+      ss._live.set(s.id, s);
+    }
+    A.eq(ss.broadcast({ type: 'view.crew' }, ['d-look']), 1, 'sealed once');
+    A.eq(sent, ['d-look'], 'only the looking phone gets it');
+    sent.length = 0;
+    A.eq(ss.broadcast({ type: 'approval.opened' }), 2, 'an ordinary event still reaches every phone');
+    try { fs.rmSync(dir2, { recursive: true, force: true }); } catch (_) {}
+  }
   A.report('remote core');
 })().catch((e) => { console.log('FAIL: threw ' + (e && e.stack || e)); process.exit(1); });

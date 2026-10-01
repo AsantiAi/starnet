@@ -69,7 +69,10 @@ const RemoteView = (() => {
     const enc = await api._internals.encode(still.canvas);
     if (!enc) return false;
     // the same room as last time: nothing to send (the phone keeps the picture it has, and nothing is re-downloaded)
-    if (enc.data === lastData && stillScale) return true;
+    if (enc.data === lastData && stillScale) {
+      try { await fetch('/api/remote/view', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ same: true }) }); } catch (_) {}
+      return true;
+    }
     try {
       const r = await fetch('/api/remote/view', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mime: enc.mime, w: still.width, h: still.height, scale: Number(still.scale) || 0, bodies: still.bodies || [], crewFree: true, data: enc.data }) });
@@ -85,17 +88,20 @@ const RemoteView = (() => {
     const k = stillScale, r1 = (v) => Math.round(v * k * 10) / 10;
     let list = [];
     try { list = World.crewFrames() || []; } catch (_) { return null; }
-    return list.map(b => ({ agentId: b.agentId, key: b.key, idx: b.idx, x: r1(b.x), y: r1(b.y), w: r1(b.w), h: r1(b.h), walking: !!b.walking, working: !!b.working }));
+    return list.map(b => ({ agentId: b.agentId, key: b.key, idx: b.idx, x: r1(b.x), y: r1(b.y), w: r1(b.w), h: r1(b.h), at: b.at || 0, walking: !!b.walking, working: !!b.working }));
   }
   async function sendCrew() {
     if (crewBusy) return;
     const bodies = crewNow();
     if (!bodies) return;
-    const json = JSON.stringify(bodies), now = Date.now();
+    // the stage draws no frames while its window is hidden or minimized: the crew are frozen there, so say so
+    const t = performance.now(), newest = bodies.reduce((m, b) => Math.max(m, b.at || 0), 0), paused = !newest || t - newest > 3000;
+    for (const b of bodies) delete b.at;
+    const json = JSON.stringify(bodies) + (paused ? '|p' : ''), now = Date.now();
     if (json === lastCrew && now - lastCrewAt < CREW_KEEPALIVE_MS) return;   // nothing moved: say so only now and then
     crewBusy = true;
     try {
-      const r = await fetch('/api/remote/view/crew', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bodies }) });
+      const r = await fetch('/api/remote/view/crew', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bodies, paused }) });
       if (r && r.ok) { lastCrew = json; lastCrewAt = now; }
     } catch (_) { /* the next beat tries again */ }
     finally { crewBusy = false; }
