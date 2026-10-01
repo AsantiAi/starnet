@@ -28,9 +28,11 @@ const GUIDE = [
 ].join('\n');
 
 // the station's real date, in words — a model assumes its training-era date, so every app turn is told it
+// the SAME line every run's [RUNTIME] block carries (sidecar/runtimeinfo.js) — one wording, one place
 function todayLine(now) {
   if (typeof now !== 'function') return '';
-  try { return 'Today is ' + new Date(now()).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) + ' (the station clock — trust it over your own sense of the date).\n'; } catch (_) { return ''; }
+  const line = require('../../runtimeinfo.js').todayLine(now());
+  return line ? line + '\n' : '';
 }
 
 function makeAppTools(deps) {

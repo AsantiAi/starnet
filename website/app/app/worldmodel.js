@@ -890,6 +890,26 @@ const WorldModel = (() => {
         { x: 17, y: 0, d: 'S' }, { x: 17, y: 1, d: 'S' }, { x: 17, y: 2, d: 'S' }, { x: 17, y: 3, d: 'S' },
       ] },
   ];
+  /* PLAIN NAMES + KIND OF WORK (2026-09-28, moved here 2026-09-29): what each line does in everyday words (the shelf card's
+     name; the station name stays as its tag), and the kind of work it is for (the shelf's sections, the same kinds the
+     station presets are for). One source for the Lines shelf, the agent's station builder and the tests. */
+  const LINE_PLAIN = {
+    front_desk: 'One agent', allowance_desk: 'One agent, $5 a day', ship_out: 'Agent work to OUTBOX', two_doors: 'Two ways in',
+    revision_loop: 'Draft + review', crucible: 'Two review rounds', fire_escape: 'Review + a fixer',
+    build_test: 'Build + test', code_foundry: 'Build + review',
+    research_line: 'Research + write', swarm_synthesis: 'Three researchers', deep_dive: 'Deep dive + review', assembly_line: 'Four-step chain',
+    sorting_office: 'Sort by type', triage_desk: 'Three specialists', parallel_crew: 'Split across three', load_balancer: 'Take turns', mission_control: 'Full triage',
+    second_opinion: 'Second opinion', gauntlet: 'Two takes, reviewed',
+  };
+  const LINE_WORK = {
+    front_desk: 'any', allowance_desk: 'any', ship_out: 'any', two_doors: 'any',
+    revision_loop: 'write', crucible: 'write', fire_escape: 'write',
+    build_test: 'code', code_foundry: 'code',
+    research_line: 'research', swarm_synthesis: 'research', deep_dive: 'research', assembly_line: 'research',
+    sorting_office: 'volume', triage_desk: 'volume', parallel_crew: 'volume', load_balancer: 'volume', mission_control: 'volume',
+    second_opinion: 'decide', gauntlet: 'decide',
+  };
+  for (const bp of BLUEPRINTS) { if (LINE_PLAIN[bp.id]) bp.plain = LINE_PLAIN[bp.id]; if (LINE_WORK[bp.id]) bp.work = LINE_WORK[bp.id]; }
 
   /* ============================================================= */
   function makeStation(doc) {
@@ -1085,6 +1105,34 @@ const WorldModel = (() => {
       checkRects((rects || []).map(normRect), kind || 'hab', ignoreId);
     const canPlaceHallway = (rects, ignoreId) =>
       checkRects((rects || []).map(normRect), 'corridor', ignoreId);
+    /* ROOM SPOTS (2026-09-29; moved here from Build mode's MAKE ROOM so the agent's station builder uses the same finder):
+       every W×H room rect that touches the station orthogonally (so the auto-doors can join it) and passes the same
+       room check a drawn room does — right of the station, then below, left, above, each slid along its edge, the one
+       nearest that edge's middle first. Pure: it only looks. `limit` caps how many it returns (default all). */
+    function roomSpots(W, H, kind, limit) {
+      W |= 0; H |= 0;
+      if (W < MIN_ROOM || H < MIN_ROOM) return [];
+      const b = bounds(), cands = [];
+      const midY = (b.minTy + b.maxTy) >> 1, midX = (b.minTx + b.maxTx) >> 1;
+      for (let y = b.minTy - H + 1; y <= b.maxTy; y++) cands.push({ x: b.maxTx + 1, y, d: Math.abs(y + (H >> 1) - midY) });
+      for (let x = b.minTx - W + 1; x <= b.maxTx; x++) cands.push({ x, y: b.maxTy + 1, d: 1000 + Math.abs(x + (W >> 1) - midX) });
+      for (let y = b.minTy - H + 1; y <= b.maxTy; y++) cands.push({ x: b.minTx - W, y, d: 2000 + Math.abs(y + (H >> 1) - midY) });
+      for (let x = b.minTx - W + 1; x <= b.maxTx; x++) cands.push({ x, y: b.minTy - H, d: 3000 + Math.abs(x + (W >> 1) - midX) });
+      cands.sort((p, q) => p.d - q.d || p.y - q.y || p.x - q.x);
+      const touches = (x, y) => {
+        for (let yy = y; yy < y + H; yy++) if (roomAt(x - 1, yy) || roomAt(x + W, yy)) return true;
+        for (let xx = x; xx < x + W; xx++) if (roomAt(xx, y - 1) || roomAt(xx, y + H)) return true;
+        return false;
+      };
+      const out = [], max = limit > 0 ? limit : Infinity;
+      for (const c of cands) {
+        if (out.length >= max) break;
+        if (!touches(c.x, c.y)) continue;
+        const rect = { x1: c.x, y1: c.y, x2: c.x + W - 1, y2: c.y + H - 1 };
+        if (canPlaceRoom([rect], kind || 'hab').ok) out.push(rect);
+      }
+      return out;
+    }
 
     /* ---------- history (snapshot-based — small docs, correct by construction) ---------- */
     // links ride the snapshot exactly as the doc holds them (absent / null / a derivation) so an UNDO restores the doc exactly;
@@ -1106,7 +1154,9 @@ const WorldModel = (() => {
       if (!r || !r.ok) { restore(undoStack.pop()); emit([], { global: true }); }
       return r;
     }
-    function restore(s) { dropRoomIdx(); doc.rooms = s.rooms; doc.order = s.order; doc.meta = s.meta; doc._nid = s._nid; doc.props = s.props || []; doc.belts = s.belts || {}; doc.edges = s.edges || []; if (s.links === undefined) delete doc.links; else doc.links = Array.isArray(s.links) ? s.links : null; }
+    // undo/redo never restores copies of a player-made prop that was deleted since (its art and catalog row are gone)
+    const keepRestored = (p) => !(propRules && p && typeof p.t === 'string' && p.t.startsWith('user_')) || !!propRules(p.t);
+    function restore(s) { dropRoomIdx(); doc.rooms = s.rooms; doc.order = s.order; doc.meta = s.meta; doc._nid = s._nid; doc.props = (s.props || []).filter(keepRestored); doc.belts = s.belts || {}; doc.edges = s.edges || []; if (s.links === undefined) delete doc.links; else doc.links = Array.isArray(s.links) ? s.links : null; }
     /* `global: true` means THIS EDIT CANNOT BE INVALIDATED BY A RECTANGLE — a listener holding a
        tile-cached render must throw the whole cache away, not just the chunks the rects touch.
        Additive: the field is simply absent on every other mutation, and a listener that ignores it
@@ -1170,6 +1220,43 @@ const WorldModel = (() => {
         if (rm.rects.some(r => x >= r.x1 && x <= r.x2 && y >= r.y1 && y <= r.y2)) delete doc.belts[key];
       }
       emit(dirty);
+      return { ok: true };
+    }
+
+    /* RESIZE A ROOM (2026-09-30, the agent's REFIT access): one rect for its whole footprint, grown or shrunk where it
+       stands. Everything on it must still stand on it — a prop or belt the new edges would leave off the deck refuses the
+       whole resize, all-or-nothing — and the new footprint passes the same checks as a new room (size, no overlap, the
+       span). Per-tile paint outside it goes. One undo slot. */
+    function resizeRoom(id, rect) {
+      const rm = doc.rooms[id];
+      if (!rm) return fail('NOT_FOUND', 'no such room');
+      const nr = normRect(rect || {});
+      const v = checkRects([nr], rm.kind, id);
+      if (!v.ok) return v;
+      const inOld = (x, y) => rm.rects.some(r => x >= r.x1 && x <= r.x2 && y >= r.y1 && y <= r.y2);
+      const inNew = (x, y) => x >= nr.x1 && x <= nr.x2 && y >= nr.y1 && y <= nr.y2;
+      for (const p of doc.props) {
+        const fp = propFootprint(p);
+        for (let y = fp.y1; y <= fp.y2; y++) for (let x = fp.x1; x <= fp.x2; x++)
+          if (inOld(x, y) && !inNew(x, y)) return fail('CUTS_CONTENTS', 'a ' + p.t + ' would be left off the deck');
+      }
+      for (const k of Object.keys(doc.belts)) { const q = k.split(','), x = +q[0], y = +q[1]; if (inOld(x, y) && !inNew(x, y)) return fail('CUTS_CONTENTS', 'a belt would be left off the deck'); }
+      snapshot();
+      const before = rm.rects.slice();
+      rm.rects = [nr];
+      if (rm.floorPaint) for (const k of Object.keys(rm.floorPaint)) { const q = k.split(','); if (!inNew(+q[0], +q[1])) delete rm.floorPaint[k]; }
+      emit(before.concat([nr]));
+      return { ok: true };
+    }
+    // a room's TYPE (the TYPE palette's kind: HAB, BRIDGE, LAB, FOUNDRY, QUARTERS, STORAGE) after it is built; never to or from a corridor
+    function setRoomKind(id, kind) {
+      const rm = doc.rooms[id];
+      if (!rm) return fail('NOT_FOUND', 'no such room');
+      if (!ROOM_KINDS[kind] || kind === 'corridor' || rm.kind === 'corridor') return fail('BAD_KIND', 'unknown room type');
+      if (rm.kind === kind) return { ok: true };
+      snapshot();
+      rm.kind = kind;
+      emit(rm.rects.slice());
       return { ok: true };
     }
 
@@ -3281,7 +3368,7 @@ const WorldModel = (() => {
       hullMatOfRoom: id => hullMatOfRoom(doc.rooms[id]),
       hullStyleOfRoom: id => hullStyleOfRoom(doc.rooms[id]),
       // validation (no mutation — for ghost previews)
-      canPlaceRoom, canPlaceHallway, canPlaceProp, canPlaceBeltRun, canPlaceBlueprint,
+      canPlaceRoom, canPlaceHallway, canPlaceProp, canPlaceBeltRun, canPlaceBlueprint, roomSpots,
       // mount rules: injected so the model never imports the prop catalog (see MOUNT RULES).
       // surfaceHostOf is the read surface the world layer uses to decide whether a placed prop is
       // ACTUALLY standing on a table right now — a prop whose table was reclaimed renders back on the
@@ -3308,7 +3395,7 @@ const WorldModel = (() => {
         return surfaceHostFor(propFootprint(propById(p.id) || p), p.id) ? 'surface' : null;
       },
       // mutations
-      addRoom, placeHallway, removeRoom, moveRoom, setFloor, setMaterial, setDeck, setWalls, setHull, paintTiles, renameRoom,
+      addRoom, placeHallway, removeRoom, moveRoom, resizeRoom, setRoomKind, setFloor, setMaterial, setDeck, setWalls, setHull, paintTiles, renameRoom,
       addProp, removeProp, moveProp, rotateProp, faceProp, mirrorProp, assignPropAgent, ensureWorkstation, configureJunction, swapJoinerMerger, bindConnector, bindPlugin, placePluginTerminal, setDoorState, setPropProject, setPropBrief, setPropRole, setPropHands, setPropLabel, setPropLimits,
       setBelt, removeBelt, removeBelts, placeBeltRun, connectBelt, connectionPreview, hookedBelts, stampBlueprint, insertBayBetween, canInsertBayBetween, transact, lineGraph, applyLineLayout, blueprintGraph,
       // agent-bay binding queries

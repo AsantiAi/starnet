@@ -421,7 +421,7 @@ const App = (() => {
       }
       if (typeof patch.personaId === 'string' && typeof Personas !== 'undefined' && Personas.exists(patch.personaId)) {
         a.personaId = Personas.resolve ? Personas.resolve(patch.personaId) : patch.personaId;
-        if (focused && typeof Voice !== 'undefined' && Voice.init) Voice.init({ name: a.name, personaId: a.personaId, resumeCue: false });
+        if (focused && typeof Voice !== 'undefined' && Voice.setPersona) Voice.setPersona(a.personaId, a.name);
       }
       if (typeof patch.approvalMode === 'string') {
         a.approvalMode = patch.approvalMode === 'full' ? 'full' : 'ask';
@@ -504,7 +504,7 @@ const App = (() => {
     a.systemPrompt = composeSystemPrompt(a);
     if (agent && a.id === agent.id) {   // focused agent — the live COMMS session adopts the voice at once
       if (typeof Chat !== 'undefined' && Chat.setSystem) Chat.setSystem(a.systemPrompt);
-      if (typeof Voice !== 'undefined' && Voice.init) Voice.init({ name: a.name, personaId: a.personaId, resumeCue: false });
+      if (typeof Voice !== 'undefined' && Voice.setPersona) Voice.setPersona(a.personaId, a.name);
       syncChannels();   // a connected Telegram bot keeps speaking as the SAME agent, new voice
     }
     pushRoster();

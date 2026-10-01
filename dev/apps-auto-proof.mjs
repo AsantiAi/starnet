@@ -45,8 +45,11 @@ try {
   const task = 'Change the page itself: put the words "' + MARK + '" in small text under the title, and keep everything else exactly as it is.';
   await run(`(() => { const t = document.querySelector('.term.plugin-app-win .app-auto-task'); t.value = ${JSON.stringify(task)}; return true; })()`);
   await capture(cdp, out, '01-auto-update-panel');
+  await run(`(window.__frameBefore = document.querySelector('.term.plugin-app-win iframe.plugin-frame'), true)`);
   await run(`document.querySelector('.term.plugin-app-win .app-auto-save').click(), true`);
   check('SAVE made the app its own hourly routine', await until(`${appNow}.then(a => !!(a && a.schedule && a.schedule.jobId && /1h|hour/.test(a.schedule.display || a.schedule.every)))`, 10000));
+  await sleep(2500);
+  check('SAVE did not reload the open app (same frame, same page — a running timer keeps running)', await run(`document.querySelector('.term.plugin-app-win iframe.plugin-frame') === window.__frameBefore`));
   const sched = await run(appNow);
   facts.schedule = sched.schedule;
   check('the bar now says it auto-updates: ' + await run(`document.querySelector('.term.plugin-app-win .app-auto-toggle').textContent`), await run(`/AUTO-UPDATE · /.test(document.querySelector('.term.plugin-app-win .app-auto-toggle').textContent)`));
