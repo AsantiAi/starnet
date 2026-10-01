@@ -975,7 +975,7 @@ const App = (() => {
      specialty. Voice + spend are left untouched — deploy re-shapes the job, not the personality. */
   function openDeployBay(startTab) {
     if (typeof Marketplace === 'undefined' || !agent) return;
-    if (typeof Systems !== 'undefined') Systems.opened(startTab === 'recipes' ? 'recipes' : 'recruit');   // door law
+    if (typeof Systems !== 'undefined') Systems.opened(startTab === 'recipes' ? 'mywork' : 'recruit');   // door law (RECIPES is a MY WORK tab)
     SFX.click();
     Marketplace.open({
       mode: 'deploy',
@@ -3313,7 +3313,7 @@ const App = (() => {
         bbBuild.onclick = () => { SFX.click(); bbBuild.classList.remove('refit-nudge'); if (typeof Systems !== 'undefined') Systems.opened('refit'); Build.toggle(); if (typeof Tutorial !== 'undefined' && Tutorial.onBuildOpen && Build.isOpen && Build.isOpen()) Tutorial.onBuildOpen(); };
       }
     }
-    // WORK › WORKFLOWS (2026-09-30) is its own docked window (frontend/app/windows/workflows.js, data-term="workflows"): the dock binds it
+    // WORK › AUTOMATE › WORKFLOWS (2026-09-30) is its own docked window (frontend/app/windows/workflows.js, data-term="workflows"): the dock binds it
     // like every other window — it no longer opens Build Mode. The full editor is that window's EDIT WORKFLOW key.
     const bbRecruit = el('bb-recruit');
     if (bbRecruit) bbRecruit.onclick = openSummonBay;   // the ONE recruit door — bay carries both verbs (summon new / deploy to current)
@@ -5567,6 +5567,7 @@ const App = (() => {
     // stream still owes its agent a workstation, and the door its chip opens (REFIT, armed on WORKSTATIONS).
     needsWorkstation: needsWorkstation,
     openDeskPlacement: openDeskPlacement,
+    openRecipes: () => openDeployBay('recipes'),   // WORK › MY WORK › RECIPES tab (stationui FAMILIES)
     openSummonBay: openSummonBay,   // adaptive-recruitment beat: accepting the recruit nudge deep-links into the bay's summon flow
     openClassDossier: openClassDossier,   // intent-offer beat: accepting a class offer opens the bay ON that class's dossier
     openRecipeLaunch: openRecipeLaunch,   // routine-nudge beat (lane D): accepting deep-links into the recipe's SCHEDULE IT form

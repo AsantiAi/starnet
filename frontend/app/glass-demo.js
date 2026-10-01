@@ -48,7 +48,7 @@
     newapp:'M2 2h12v12H2zM8 5v6M5 8h6'
   };
   document.querySelectorAll('#bottombar .bb-menu .bb').forEach(button=>{
-    const key=button.dataset.term || ({'bb-recruit':'recruit','bb-missions':'recipes','bb-build':'refit','bb-newapp':'newapp','bb-newapp-build':'newapp'})[button.id];
+    const key=button.dataset.term || ({'bb-recruit':'recruit','bb-missions':'recipes','bb-build':'refit','bb-newapp':'newapp','bb-newapp-build':'newapp','bb-mywork':'tasks','bb-automate':'automation','bb-connect':'connectors'})[button.id];
     const icon=button.querySelector('.bb-i');
     if(icon && menuPaths[key]){icon.setAttribute('aria-hidden','true');icon.innerHTML=svgIcon(menuPaths[key]);}
   });
