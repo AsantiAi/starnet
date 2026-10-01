@@ -110,6 +110,13 @@ function fakeDriver() {
       A.eq(picked.path, fullCandidate.path, 'ordinary headless runs prefer a full Chromium binary over headless-shell');
       A.eq(picked.headless, false, 'the preferred browser retains the full browser surface');
     }
+    const pwFull = T.CHROME_CANDIDATES.find(c => !c.headless && /ms-playwright/.test(c.path));
+    const installed = T.CHROME_CANDIDATES.find(c => !c.headless && !/ms-playwright|STARNET|SKYNET/.test(c.path) && T.CHROME_CANDIDATES.indexOf(c) > T.CHROME_CANDIDATES.indexOf(pwFull));
+    if (pwFull && installed) {
+      const both = p => p === pwFull.path || p === installed.path;
+      A.eq(T.resolveChrome(true, both).path, installed.path, 'a WINDOW the Commander uses is their installed Chrome/Edge, not a Playwright test build');
+      A.eq(T.resolveChrome(false, both).path, pwFull.path, 'headless work keeps the old order');
+    }
   }
 
   const driver = fakeDriver();

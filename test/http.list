@@ -76,6 +76,7 @@ test/loops-git.e2e.test.js
 test/loops-endurance.e2e.test.js
 test/loops-stall.e2e.test.js
 test/workshop.e2e.test.js
+test/workspace-view.e2e.test.js
 test/nightshift-act.e2e.test.js
 test/nightshift-grant.e2e.test.js
 test/nightshift-contextpack.e2e.test.js
@@ -102,6 +103,7 @@ test/shell.test.js
 test/shell.process-tree.test.js
 test/verify.run.test.js
 test/browser.gauntlet.e2e.test.js
+test/browser-screencast-restart.e2e.test.js
 test/browser.stepin.e2e.test.js
 test/servicekeys.http.test.js
 test/servicekeys.shell.e2e.test.js

@@ -141,6 +141,8 @@ const Build = (() => {
   // interaction state
   let tool = 'select', kind = 'hab', style = 'cobalt', mat = 'plate', hallWidth = 2, propType = 'war_intelcab', propCat = 'all', propTier = 'functional';
   let selectedPropId=null, movingPropId=null, positionOpen=false, groupIds=[];   // groupIds: a selection of two or more (MANY AT ONCE)
+  let selectedRoomId=null, furnishOpen=false, roomDelArmedAt=0, hoverHandle=-1;   // a selected ROOM (THE ROOM CARD); its hovered edge handle
+  let roomAsk=null;   // a furnish / clear that would take equipment out, waiting on FURNISH ANYWAY (THE ROOM CARD)
   let propSection = 'decoration', propAbility = '', equipmentAgentId = '';
   let buildGroup = 'props';
   /* WHERE REFIT OPENS (2026-09-27 audit F1/B5): WORK › WORKFLOWS opens it straight on the Conveyors tab (openWorkflows), and a
@@ -1213,7 +1215,8 @@ const Build = (() => {
       const note = document.createElement('div');
       note.className = 'refit-selectnote refit-keycard';
       const KEYS = [['Click', 'select it'], ['Drag a box', 'select several'], ['Shift + click', 'add or drop one'], ['Drag it', 'move it'],
-        ['Arrows', 'nudge · Shift: 5'], ['R · M', 'turn · flip'], ['Ctrl + D', 'duplicate'], ['Ctrl + C · V', 'copy · paste'], ['Del', 'delete'], ['Ctrl + Z', 'undo']];
+        ['Arrows', 'nudge · Shift: 5'], ['R · M', 'turn · flip'], ['Ctrl + D', 'duplicate'], ['Ctrl + C · V', 'copy · paste'], ['Del', 'delete'], ['Ctrl + Z', 'undo'],
+        ['Click a room', 'resize · furnish']];
       note.innerHTML = '<b>Click anything to edit</b><div class="refit-keyrows">' + KEYS.map(([k, v]) => '<span class="refit-keyrow"><kbd>' + esc(k) + '</kbd><span>' + esc(v) + '</span></span>').join('') + '</div>';
       pal.appendChild(note);
       const finder=document.createElement('select');finder.setAttribute('aria-label','Find a placed object');finder.className='refit-object-finder';
@@ -2425,7 +2428,7 @@ const Build = (() => {
 
   function selectTool(id, o) {
     const wasSelect = tool === 'select';
-    movingPropId=null;selectedPropId=null;groupIds=[];renderSelection();
+    movingPropId=null;selectedPropId=null;groupIds=[];selectedRoomId=null;renderSelection();
     if (drag || dragPid != null) releaseDrag();
     tool = id; drag = null; connectFrom = null; dupe = null; hideTip(); hidePropCard();
     if (id !== 'select' && !(o && o.keepGroup)) buildGroup = BUILD_GROUPS.find(g => g[2].includes(id))?.[0] || buildGroup;
@@ -2476,7 +2479,7 @@ const Build = (() => {
     let verb = (t && t.verb) || (t && t.hint) || '';
     if (tool === 'select' && buildGroup === 'props') verb = 'Pick a prop, then click the floor to place it · click a placed one to edit it';
     if (tool === 'select' && buildGroup === 'workflow') verb = 'Choose a machine or a whole line, or use Belt to connect machines. Nothing is selected yet.';
-    if (tool === 'select' && buildGroup === 'rooms') verb = 'Pick a room type, then click or drag on the grid · HALLWAY joins rooms';
+    if (tool === 'select' && buildGroup === 'rooms') verb = 'Pick a room type, then drag on the grid · click a room to resize or furnish it';
     if (tool === 'select' && buildGroup === 'surfaces') verb = 'Pick a finish, then click a room to lay it · DECK, WALLS or SHELL';
     if (tool === 'paint') verb = paintTarget === 'hull' ? 'click a room to re-clad its outside'
       : paintTarget === 'walls' ? 'click a room to clad its walls'
@@ -4353,75 +4356,21 @@ const Build = (() => {
      This card is the room's own sheet: what it is, how big, what it's made of, and the three verbs
      that already existed (rename · re-deck · delete), each routed through the same mutation API the
      tools use — no new model surface, no state of its own. */
+  /* A ROOM IS SELECTED LIKE A PROP (2026-10-01 build-mode upgrade, phase 2). Clicking a room's floor used to open a sheet in
+     the middle of the screen (rename, floor, move, delete). The room is now a SELECTION: gold outline and edge handles on the
+     floor, and its card docks above the library like a prop's — name, size, MOVE / RESIZE / FLOOR / FURNISH / CLEAR / DELETE.
+     See THE ROOM CARD below. */
   function openRoomCard(roomId, ev) {
     if (!root) return;
-    const rm = station.roomById(roomId); if (!rm) return;
     cardCloseAll();
-    const isSpawn = roomId === station.spawnRoomId();
-    const kd = station.ROOM_KINDS[rm.kind] || {};
-    const matId = station.matOfRoom ? station.matOfRoom(roomId) : (rm.floorMat || kd.mat);
-    const matDef = station.FLOOR_MATERIALS[matId] || {};
-    const hueDef = station.FLOOR_STYLES[rm.floorStyle] || {};
-    let tiles = 0;
-    for (const r of rm.rects) tiles += (r.x2 - r.x1 + 1) * (r.y2 - r.y1 + 1);
-    const b = rm.rects[0], w = b.x2 - b.x1 + 1, h = b.y2 - b.y1 + 1;
-    const shape = rm.rects.length > 1 ? (rm.rects.length + ' SECTIONS') : (w + ' × ' + h);
-    const g = document.createElement('div');
-    g.className = 'refit-guide refit-room-card';
-    g.innerHTML = `
-      <div class="refit-guide-card">
-        <h3>▮ ${esc((rm.name || roomId).toUpperCase())}</h3>
-        <p class="step-fact">Give this room a name, change its floor, or move it.</p><details class="refit-room-help"><summary>How room equipment works</summary><p class="step-fact">Workflow agents use equipment in their desk’s room, or their bay’s room if they have no desk. Agents sharing a room share its equipment; each needs its own desk.</p></details>
-        <div class="refit-sec">THE ROOM</div>
-        <div class="step-fact"><b>${esc(kd.label || rm.kind)}</b>${isSpawn ? ' · the spawn room' : ''}</div>
-        <div class="step-fact">${esc(shape)} · <b>${tiles}</b> tiles of deck</div>
-        <div class="step-fact">deck: <b>${esc(matDef.label || matId || '—')}</b> in <b>${esc(hueDef.label || rm.floorStyle || '—')}</b></div>
-        <div class="refit-sec">NAME</div>
-        <input id="room-name" class="refit-input" aria-label="Room name" type="text" maxlength="40" placeholder="name this room" value="${esc(rm.name || '')}" />
-        <div class="refit-note">Saved when you press Enter or close this card. The name appears on the floor.</div>
-        <div class="refit-actions">
-          <button type="button" class="btn-sm" id="room-deck">▧ CHANGE FLOOR</button>
-          <button type="button" class="btn-sm" id="room-move">✥ MOVE</button>
-          <!-- NOT an emoji bin here: a colour-emoji glyph is a different font at a different weight
-               beside VT323 (the symbol-glyph law). ⌫ is the same mark the armed state uses. -->
-          <button type="button" class="btn-sm refit-danger" id="room-del">${isSpawn ? '⌂ PROTECTED' : '⌫ DELETE'}</button>
-          <button type="button" class="btn-sm" id="room-close">CLOSE</button>
-        </div>
-      </div>`;
-    root.appendChild(g);
-    requestAnimationFrame(() => g.classList.add('refit-swap'));
-    const nameEl = g.querySelector('#room-name');
-    // the rename is saved by CLOSING, like the step card's brief and the flow card's line name — removing a
-    // focused input does not reliably fire blur, so ESC/✕ used to drop a typed name on the floor.
-    let savedName = rm.name || '';
-    const saveName = () => {
-      const v = (nameEl.value || '').trim();
-      if (v === savedName) return;
-      const res = station.renameRoom(roomId, v);
-      if (res && res.ok) { savedName = v; sfx('click'); flashTip(ev, 'renamed', true); } else sfx('bad');
-    };
-    const closeC = () => { saveName(); if (g.parentNode) g.parentNode.removeChild(g); };
-    cardRegister(g, closeC);
-    nameEl.onkeydown = e => { if (e.key === 'Enter') { saveName(); closeC(); } };
-    nameEl.onblur = saveName;
-    // the two verbs that are TOOLS: arm the tool on this room rather than duplicating its behaviour
-    g.querySelector('#room-deck').onclick = () => { closeC(); selectTool('paint'); flashTip(ev, 'SURFACE armed — click the room to lay this deck', true); };
-    g.querySelector('#room-move').onclick = () => { closeC(); selectTool('move'); flashTip(ev, 'MOVE armed — drag the room', true); };
-    const del = g.querySelector('#room-del');
-    if (isSpawn) { del.disabled = true; del.title = 'the spawn room can’t be deleted — MOVE it instead'; }
-    // two-step arm, never a native confirm() (no OS dialogs — the station owns its own chrome)
-    else if (typeof ArmConfirm !== 'undefined' && ArmConfirm.wire) {
-      ArmConfirm.wire(del, { armedLabel: '⌫ REALLY DELETE?', onConfirm: () => { doDeleteRoom(roomId, ev); closeC(); } });
-    } else del.onclick = () => { doDeleteRoom(roomId, ev); closeC(); };
-    g.querySelector('#room-close').onclick = closeC;
-    g.addEventListener('click', e => { if (e.target === g) closeC(); });
-    setTimeout(() => { try { nameEl.focus(); nameEl.select(); } catch (e) {} }, 30);
+    selectRoom(roomId);
   }
   // the ONE room-removal path the card and the DELETE tool both take (flash, undo nudge, honest refusal)
   function doDeleteRoom(roomId, ev) {
     const rm = station.roomById(roomId);
+    const on = rm ? station.props().filter(p => rm.rects.some(r => p.x <= r.x2 && p.x + (p.w || 1) - 1 >= r.x1 && p.y <= r.y2 && p.y + (p.h || 1) - 1 >= r.y1)).map(p => Object.assign({}, p)) : [];
     const res = station.removeRoom(roomId);
-    if (res && res.ok) { if (rm) pushFlash(rm.rects, true); flashUndo(); flashTip(ev, 'deleted — UNDO to restore', true); sfx('click'); }
+    if (res && res.ok) { if (rm) pushFlash(rm.rects, true); on.forEach(p => vanishProp(p)); flashUndo(); flashTip(ev, 'deleted — UNDO to restore', true); sfx('click'); }
     else if (res && res.error === 'SPAWN_ROOM') { flashTip(ev, 'spawn room — can’t delete (try MOVE)'); sfx('bad'); }
     else { flashTip(ev, (res && res.msg) || 'blocked'); sfx('bad'); }
   }
@@ -4570,6 +4519,9 @@ const Build = (() => {
     if (tool === 'select') {
       // SELECT (the default): a click INSPECTS what's under it — machine → its editor/picker/flow
       // card, belt tile → where this lane goes. A drag across empty deck draws a SELECTION BOX (MANY AT ONCE).
+      // the SELECTED ROOM's edge handles come first: a drag on one resizes the room (THE ROOM CARD)
+      const hd = selectedRoomId ? roomHandleAt(ev) : null;
+      if (hd) { drag = { mode: 'roomresize', roomId: selectedRoomId, edge: hd.e, start: w, cur: w, moved: false }; return; }
       const pid = propAtEvent(ev);
       const p = pid && station.propById(pid);
       // a member of a selected group: a drag moves the whole group, a click (no drag) selects just it; Shift+click adds / drops one
@@ -4662,6 +4614,10 @@ const Build = (() => {
       if (drag.mode === 'paint' || drag.mode === 'reclaim') rasterTo(drag, w);   // accumulate every tile the brush crosses
       drag.cur = w;
     } else {
+      if (selectedRoomId && tool === 'select') {
+        const hh = roomHandleAt(ev); hoverHandle = hh ? hh.i : -1;
+        if (hh) cv.style.cursor = hh.cur; else if (/resize$/.test(cv.style.cursor || '')) setCursor();
+      } else hoverHandle = -1;
       hoverPropId = propAtEvent(ev);
       hoverRoomId = station.roomAt(w.tx, w.ty);
       hoverTile = { tx: w.tx, ty: w.ty };
@@ -4684,6 +4640,7 @@ const Build = (() => {
     if (d.mode === 'groupmove') return commitGroupMove(d, ev);
     if (d.mode === 'boxpress') return clickEmptyFloor(d, ev);
     if (d.mode === 'box') return commitBox(d, ev);
+    if (d.mode === 'roomresize') return commitRoomResize(d, ev);
     if (d.mode === 'draw') return commitDraw(d, ev);
     if (d.mode === 'move') return commitMove(d, ev);
     if (d.mode === 'propmove') return commitPropMove(d, ev);
@@ -4827,7 +4784,7 @@ const Build = (() => {
   function onInspect(p,ev) {
     if(!p)return;
     if(ev&&ev.detail>=2&&isEditableProp(p.t))return configureProp(p,ev);
-    groupIds=[];selectedPropId=p.id;renderSelection();
+    groupIds=[];selectedRoomId=null;selectedPropId=p.id;renderSelection();
     // THE CARD AND THE FLOOR ARE ONE LINE: a click on a line machine opens the docked Workflow panel on it
     // (or re-selects it there), without panning — the floor is where the Commander is looking
     if(WF_PART[p.t]){finFocusLine(p.id);openWorkflowPanel(p.id,true);}
@@ -4843,6 +4800,11 @@ const Build = (() => {
       const ps=groupIds.map(id=>station&&station.propById(id)).filter(Boolean);
       if(ps.length>1){host.hidden=false;root.classList.add('has-selection');return renderGroupCard(host,ps);}
       groupIds=[];if(ps.length===1)selectedPropId=ps[0].id;   // an undo took the rest away: one is just a selection
+    }
+    if(selectedRoomId){
+      const rm=station&&station.roomById(selectedRoomId);
+      if(rm){host.hidden=false;root.classList.add('has-selection');return renderRoomCard(host,rm);}
+      selectedRoomId=null;   // an undo took the room away
     }
     const p=station&&station.propById(selectedPropId);host.hidden=!p;root.classList.toggle('has-selection',!!p);
     if(!p){host.replaceChildren();return;}
@@ -4957,7 +4919,7 @@ const Build = (() => {
     const live = [...new Set(ids)].filter(id => station.propById(id));
     groupIds = live.length > 1 ? live : [];
     selectedPropId = live.length === 1 ? live[0] : null;
-    movingPropId = null; positionOpen = false;
+    movingPropId = null; positionOpen = false; selectedRoomId = null;
     renderSelection();
     if (live.length > 1) setHint(live.length + ' selected · drag any of them to move them together · Ctrl+D duplicates · Delete removes');
     else if (live.length === 1) setHint('Selected ' + propLabel(station.propById(live[0]).t) + ' · choose an action in the build kit');
@@ -4980,7 +4942,8 @@ const Build = (() => {
   // a plain click on empty floor: lets go of a selection; with nothing selected, a ROOM opens its own sheet (as it always has)
   function clickEmptyFloor(d, ev) {
     if (!d.add && selectionIds().length) { setSelection([]); sfx('click'); return; }
-    if (d.roomId) openRoomCard(d.roomId, ev);
+    if (d.roomId) { if (d.roomId !== selectedRoomId) openRoomCard(d.roomId, ev); return; }
+    if (selectedRoomId) { selectRoom(null); sfx('click'); }
   }
   function toggleInSelection(id) {
     const ids = selectionIds(), i = ids.indexOf(id);
@@ -5099,6 +5062,238 @@ const Build = (() => {
     return true;
   }
   // the group's card: up to three of them in the art well, how many and what, then the three things a group can do
+  /* ---------- THE ROOM CARD (2026-10-01 build-mode upgrade, phase 2) ----------
+     A selected room: its deck in the art well, its name (type to rename — Enter or leaving the field saves it), its size, then
+     MOVE (arms the move tool), RESIZE (its gold handles: drag an edge out to grow it, in to shrink it — WorldModel.resizeRoom,
+     everything on it must still stand on it, one undo), FLOOR (arms SURFACE), FURNISH (a whole furnished room in one click: the
+     station builder's own refurnish — its furniture cleared, the style laid, floor and walls too; lines and agents' desks stay;
+     one undo), CLEAR (its furniture goes; lines and desks stay) and DELETE (the spawn room is protected). */
+  function selectRoom(rid) {
+    const rm = rid ? station.roomById(rid) : null;
+    selectedPropId = null; groupIds = []; movingPropId = null; positionOpen = false; furnishOpen = false; roomDelArmedAt = 0; roomAsk = null;
+    selectedRoomId = rm ? rm.id : null;
+    renderSelection();
+    if (rm) { setHint('Selected ' + (rm.name || 'the room') + ' · drag a gold handle to resize it · arrows move it · Del deletes'); sfx('click'); }
+    else setHint();
+  }
+  function roomTiles(rm) { let n = 0; for (const r of rm.rects) n += (r.x2 - r.x1 + 1) * (r.y2 - r.y1 + 1); return n; }
+  // the furnisher is the station builder's own planner (planned on a copy, applied in one undo) — Build mode only hands it the page
+  const furnishReady = () => typeof StationBuilder !== 'undefined' && !!StationBuilder.planEdit && !!StationBuilder.apply && typeof RoomStyles !== 'undefined' && !!RoomStyles.ROOMS
+    && typeof Pipeline !== 'undefined' && typeof WorkflowLine !== 'undefined' && typeof StationTemplates !== 'undefined';
+  function furnishEnv() {
+    const crew = (typeof App !== 'undefined' && App.agents ? App.agents() : []).map(x => ({ id: x.id, name: x.name }));
+    return { WorldModel, Pipeline, WorkflowLine, crew, heroId: (typeof App !== 'undefined' && App.heroId) ? App.heroId() : null,
+      StationTemplates: typeof StationTemplates !== 'undefined' ? StationTemplates : null, PropSprites: typeof PropSprites !== 'undefined' ? PropSprites : null,
+      RoomStyles: typeof RoomStyles !== 'undefined' ? RoomStyles : null, LineLayout: typeof LineLayout !== 'undefined' ? LineLayout : null,
+      LineEdit: typeof LineEdit !== 'undefined' ? LineEdit : null, EquipmentHelp: typeof EquipmentHelp !== 'undefined' ? EquipmentHelp : null, canRecruit: false };
+  }
+  const styleLabel = sid => String(((typeof RoomStyles !== 'undefined' && RoomStyles.ROOMS[sid]) || {}).name || sid).replace(/^(a|an) /i, '').toUpperCase();
+  // a style's tile shows its signature piece (the feature wall's centre), else its first real piece
+  function styleIcon(sid) {
+    const rec = RoomStyles.ROOMS[sid] || {}, known = t => t && typeof PropSprites !== 'undefined' && PropSprites.spec && PropSprites.spec(t);
+    const c = (rec.feature && rec.feature.centre) || [];
+    for (const t of c) if (known(t)) return t;
+    for (const set of rec.centre || []) for (const pc of set.pieces || []) if (known(pc[0]) && !/rug/.test(pc[0])) return pc[0];
+    return 'plant';
+  }
+  /* the edit is planned on a copy first (every check the station builder makes), then applied as planned in one undo. A plan
+     that takes out EQUIPMENT — a piece that gives agents an ability (object = capability), which the new style does not
+     bring back — is not applied on the first click: the card names what goes and asks once more (roomAsk). */
+  function runRoomEdit(req, ev, ask, confirmed) {
+    const env = furnishEnv();
+    let r;
+    try { r = StationBuilder.planEdit(station.serialize(), req, env); } catch (e) { r = { ok: false, error: String((e && e.message) || e) }; }
+    if (!r || !r.ok) { sfx('bad'); flashTip(ev, (r && r.error) || 'that does not fit this room'); return null; }
+    const gear = gearLost(r.plan);
+    if (gear.length && !confirmed) { roomAsk = Object.assign({ gear }, ask); sfx('tick'); renderSelection(); return null; }
+    roomAsk = null;
+    let a;
+    try { a = StationBuilder.apply(station, r.plan, env); } catch (e) { a = { ok: false, error: String((e && e.message) || e) }; }
+    if (!a || !a.ok) { sfx('bad'); flashTip(ev, (a && a.error) || 'the room could not be changed — nothing was'); return null; }
+    return a;
+  }
+  // the equipment a plan removes and does not put back: "DISH (WEB)" — the builder's own capability table names the ability
+  function gearLost(plan) {
+    const spec = (plan && plan.spec) || {}, back = new Set(((spec.props) || []).map(q => q && q.t).filter(Boolean)), out = [], seen = {};
+    for (const id of spec.removeProps || []) {
+      const p = station.propById(id); if (!p || back.has(p.t)) continue;
+      const cap = WorldModel.capForProp ? WorldModel.capForProp(p.t) : null; if (!cap) continue;
+      const k = p.t + ':' + cap; if (seen[k]) continue; seen[k] = 1;
+      out.push(propLabel(p.t) + ' (' + String((WorldModel.CAP_LABEL || {})[cap] || cap).toUpperCase() + ')');
+    }
+    return out;
+  }
+  function furnishRoom(rm, sid, ev, confirmed) {
+    if (!rm.name) { sfx('bad'); flashTip(ev, 'name this room first — then FURNISH it'); return; }
+    const before = new Set(station.props().map(p => p.id)), was = station.props().filter(p => station.roomAt(p.x, p.y) === rm.id).map(p => Object.assign({}, p));
+    if (!runRoomEdit({ refurnish: { room: rm.name, style: sid } }, ev, { kind: 'furnish', sid }, confirmed)) return;
+    furnishOpen = false;
+    was.filter(p => !station.propById(p.id)).forEach(p => vanishProp(p));
+    landProps(station.props().filter(p => !before.has(p.id)).sort((a, b) => a.y - b.y || a.x - b.x).map(p => p.id), 28);   // the new room drops in, piece by piece
+    renderSelection(); flashUndo();
+    sfx('chime'); flashTip(ev, 'furnished as ' + styleLabel(sid).toLowerCase() + ' · floor and walls too · one Undo puts it back', true);
+  }
+  function clearRoom(rm, ev, confirmed) {
+    if (!rm.name) { sfx('bad'); flashTip(ev, 'name this room first — then CLEAR it'); return; }
+    const was = station.props().filter(p => station.roomAt(p.x, p.y) === rm.id).map(p => Object.assign({}, p));
+    if (!runRoomEdit({ clear: rm.name }, ev, { kind: 'clear' }, confirmed)) return;
+    const gone = was.filter(p => !station.propById(p.id));
+    gone.forEach(p => vanishProp(p)); renderSelection(); flashUndo();
+    flashTip(ev, 'cleared ' + gone.length + (gone.length === 1 ? ' piece' : ' pieces') + ' · its lines and desks stay · one Undo brings them back', true);
+  }
+  function deleteSelectedRoom(ev) {
+    const rm = station.roomById(selectedRoomId); if (!rm) return;
+    if (rm.id === station.spawnRoomId()) { sfx('bad'); flashTip(ev, 'the spawn room can’t be deleted — MOVE it instead'); return; }
+    const now = performance.now();
+    if (!roomDelArmedAt || now - roomDelArmedAt > 2500) { roomDelArmedAt = now; sfx('tick'); flashTip(ev, 'press Delete again to delete ' + (rm.name || 'this room') + ' — everything on it goes (one Undo brings it back)'); return; }
+    roomDelArmedAt = 0; selectedRoomId = null; doDeleteRoom(rm.id, ev); renderSelection(); setHint();
+  }
+  function nudgeRoom(dx, dy, ev) {
+    const rm = station.roomById(selectedRoomId); if (!rm) return;
+    const from = rm.rects.map(r => Object.assign({}, r));
+    const res = station.moveRoom(rm.id, dx, dy);
+    if (res && res.ok) { snapTick('move'); pushMoves(from.map(r => ({ from: r, to: { x1: r.x1 + dx, y1: r.y1 + dy, x2: r.x2 + dx, y2: r.y2 + dy } }))); renderSelection(); }
+    else { sfx('bad'); flashTip(ev, (res && res.msg) || 'blocked — the room did not move'); }
+  }
+  // the selected room's eight handles (corners + edge middles), in world px; a plain rectangle only (resizeRoom keeps one rect)
+  function roomHandles(rm, t) {
+    const r = rm.rects[0], X1 = r.x1 * t, X2 = (r.x2 + 1) * t, Y1 = r.y1 * t, Y2 = (r.y2 + 1) * t, mx = (X1 + X2) / 2, my = (Y1 + Y2) / 2;
+    return [
+      { x: X1, y: Y1, e: { l: 1, t: 1 }, cur: 'nwse-resize' }, { x: mx, y: Y1, e: { t: 1 }, cur: 'ns-resize' }, { x: X2, y: Y1, e: { r: 1, t: 1 }, cur: 'nesw-resize' },
+      { x: X2, y: my, e: { r: 1 }, cur: 'ew-resize' }, { x: X2, y: Y2, e: { r: 1, b: 1 }, cur: 'nwse-resize' }, { x: mx, y: Y2, e: { b: 1 }, cur: 'ns-resize' },
+      { x: X1, y: Y2, e: { l: 1, b: 1 }, cur: 'nesw-resize' }, { x: X1, y: my, e: { l: 1 }, cur: 'ew-resize' },
+    ];
+  }
+  // a handle under the pointer — or anywhere along an edge (a narrower band), so a long wall need not be grabbed at its middle
+  function roomHandleAt(ev) {
+    const rm = selectedRoomId && station.roomById(selectedRoomId);
+    if (!rm || rm.rects.length !== 1 || !cv) return null;
+    const c = toCanvas(ev), t = T(), wx = (c.x - panX) / zoom, wy = (c.y - panY) / zoom, R = Math.max(t * 0.45, 9 / zoom);
+    let best = null, bd = Infinity;
+    roomHandles(rm, t).forEach((h, i) => { const d = Math.hypot(wx - h.x, wy - h.y); if (d < R && d < bd) { bd = d; best = Object.assign({ i }, h); } });
+    if (best) return best;
+    const r = rm.rects[0], X1 = r.x1 * t, X2 = (r.x2 + 1) * t, Y1 = r.y1 * t, Y2 = (r.y2 + 1) * t, B = Math.max(t * 0.22, 6 / zoom);
+    const inX = wx > X1 + B && wx < X2 - B, inY = wy > Y1 + B && wy < Y2 - B;
+    if (inX && Math.abs(wy - Y1) < B) return { i: 1, e: { t: 1 }, cur: 'ns-resize' };
+    if (inX && Math.abs(wy - Y2) < B) return { i: 5, e: { b: 1 }, cur: 'ns-resize' };
+    if (inY && Math.abs(wx - X1) < B) return { i: 7, e: { l: 1 }, cur: 'ew-resize' };
+    if (inY && Math.abs(wx - X2) < B) return { i: 3, e: { r: 1 }, cur: 'ew-resize' };
+    return null;
+  }
+  // the rect a resize drag asks for: the grabbed edges follow the pointer by whole tiles, never past the room's minimum
+  function resizedRect(d) {
+    const rm = station.roomById(d.roomId); if (!rm) return null;
+    const r0 = rm.rects[0], e = d.edge, min = rm.kind === 'corridor' ? 1 : (station.MIN_ROOM || 3);
+    const dx = d.cur.tx - d.start.tx, dy = d.cur.ty - d.start.ty, r = { x1: r0.x1, y1: r0.y1, x2: r0.x2, y2: r0.y2 };
+    if (e.l) r.x1 = Math.min(r0.x1 + dx, r0.x2 - min + 1);
+    if (e.r) r.x2 = Math.max(r0.x2 + dx, r0.x1 + min - 1);
+    if (e.t) r.y1 = Math.min(r0.y1 + dy, r0.y2 - min + 1);
+    if (e.b) r.y2 = Math.max(r0.y2 + dy, r0.y1 + min - 1);
+    return r;
+  }
+  // the same two checks resizeRoom makes (the footprint as a room, and nothing on it left off the deck), named for the ghost
+  let resizeMemo = null;
+  function resizeCheck(rm, nr) {
+    const key = [geoVer, rm.id, nr.x1, nr.y1, nr.x2, nr.y2].join('|');
+    if (resizeMemo && resizeMemo.key === key) return resizeMemo.v;
+    let v = station.canPlaceRoom([nr], rm.kind, rm.id);
+    if (v && v.ok) {
+      const inOld = (x, y) => rm.rects.some(r => x >= r.x1 && x <= r.x2 && y >= r.y1 && y <= r.y2), inNew = (x, y) => x >= nr.x1 && x <= nr.x2 && y >= nr.y1 && y <= nr.y2;
+      outer: for (const p of station.props()) for (let y = p.y; y < p.y + (p.h || 1); y++) for (let x = p.x; x < p.x + (p.w || 1); x++)
+        if (inOld(x, y) && !inNew(x, y)) { v = { ok: false, error: 'CUTS_CONTENTS', msg: 'Move the ' + propLabel(p.t) + ' first · it would be left off the deck' }; break outer; }
+      if (v.ok) for (const k of Object.keys(station.belts() || {})) { const q = k.split(','); if (inOld(+q[0], +q[1]) && !inNew(+q[0], +q[1])) { v = { ok: false, error: 'CUTS_CONTENTS', msg: 'A belt would be left off the deck · clear it first' }; break; } }
+    } else v = { ok: false, error: (v && v.error) || 'BLOCKED', msg: String((v && v.msg) || 'blocked').replace(/^\w/, c => c.toUpperCase()) };
+    resizeMemo = { key, v };
+    return v;
+  }
+  function commitRoomResize(d, ev) {
+    const rm = station.roomById(d.roomId); if (!rm) return;
+    const nr = resizedRect(d), r0 = rm.rects[0];
+    if (!nr || (nr.x1 === r0.x1 && nr.y1 === r0.y1 && nr.x2 === r0.x2 && nr.y2 === r0.y2)) { hideTip(); return; }
+    const pre = resizeCheck(rm, nr);
+    const res = pre && pre.ok ? station.resizeRoom(rm.id, nr) : pre;
+    feedback(res, ev, 'resized to ' + (nr.x2 - nr.x1 + 1) + ' × ' + (nr.y2 - nr.y1 + 1) + ' · Undo puts it back');
+    if (res && res.ok) { pushFlash([nr], false); renderSelection(); }
+  }
+  // on the floor: the selected room in gold, and its handles (the hovered one lit)
+  function drawRoomSelection(t) {
+    const rm = station.roomById(selectedRoomId); if (!rm) return;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(244,200,112,.9)'; ctx.lineWidth = 1.5 / zoom;
+    for (const r of rm.rects) ctx.strokeRect(r.x1 * t + 0.75 / zoom, r.y1 * t + 0.75 / zoom, (r.x2 - r.x1 + 1) * t - 1.5 / zoom, (r.y2 - r.y1 + 1) * t - 1.5 / zoom);
+    if (rm.rects.length === 1 && tool === 'select') {
+      const s = Math.max(5 / zoom, t * 0.24);
+      roomHandles(rm, t).forEach((h, i) => {
+        ctx.fillStyle = i === hoverHandle ? 'rgba(255,236,180,1)' : 'rgba(244,200,112,.95)'; ctx.fillRect(h.x - s / 2, h.y - s / 2, s, s);
+        ctx.strokeStyle = 'rgba(24,18,8,.9)'; ctx.lineWidth = 1 / zoom; ctx.strokeRect(h.x - s / 2, h.y - s / 2, s, s);
+      });
+    }
+    ctx.restore();
+  }
+  function renderRoomCard(host, rm) {
+    const isSpawn = rm.id === station.spawnRoomId(), corridor = rm.kind === 'corridor', plain = rm.rects.length === 1;
+    const kd = station.ROOM_KINDS[rm.kind] || {}, b = rm.rects[0];
+    const shape = plain ? (b.x2 - b.x1 + 1) + ' × ' + (b.y2 - b.y1 + 1) : rm.rects.length + ' sections';
+    host.innerHTML = '<div class="refit-sel-head"><span class="refit-sel-art is-room" aria-hidden="true"></span><span class="refit-sel-name">'
+      + '<input class="refit-room-name" type="text" maxlength="40" aria-label="Room name" placeholder="name this room" value="' + esc(rm.name || '') + '">'
+      + '<small>' + esc((kd.label || rm.kind) + ' · ' + shape + ' · ' + roomTiles(rm) + ' tiles' + (isSpawn ? ' · the spawn room' : '')) + '</small></span>'
+      + '<button class="bb sm refit-sel-x" type="button" aria-label="Deselect" data-tip="Let go of the room · Esc">\u2715</button></div><div class="refit-selection-actions"></div>';
+    // the art well: the room's own deck, painted by the bake
+    try {
+      const matId = station.matOfRoom ? station.matOfRoom(rm.id) : (rm.floorMat || kd.mat);
+      const hue = (station.FLOOR_STYLES[rm.floorStyle] || station.FLOOR_STYLES[kd.floor] || station.FLOOR_STYLES.hull || {}).base || '#556';
+      host.querySelector('.refit-sel-art').appendChild(matSwatchCanvas(matId || 'plate', hue, 7, 4));
+    } catch (_) {}
+    host.querySelector('.refit-sel-x').onclick = () => { selectRoom(null); sfx('click'); };
+    // the name: type to rename — Enter or leaving the field saves it (Esc puts it back)
+    const nameEl = host.querySelector('.refit-room-name');
+    let saved = rm.name || '';
+    const saveName = () => {
+      const v = (nameEl.value || '').trim();
+      if (v === saved) return;
+      const res = station.renameRoom(rm.id, v);
+      if (res && res.ok) { saved = v; sfx('click'); } else { sfx('bad'); nameEl.value = saved; }
+    };
+    nameEl.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); } else if (e.key === 'Escape') { e.preventDefault(); nameEl.value = saved; nameEl.blur(); } };
+    nameEl.onblur = saveName;
+    const actions = host.querySelector('.refit-selection-actions');
+    const key = (label, k, fn, cls) => { const el = document.createElement('button'); el.className = 'bb sm refit-sel-act' + (cls ? ' ' + cls : ''); el.type = 'button'; el.innerHTML = '<span>' + esc(label) + '</span>' + (k ? '<kbd>' + esc(k) + '</kbd>' : ''); el.onclick = fn; actions.appendChild(el); return el; };
+    key('MOVE', 'arrows', () => { selectTool('move'); flashTip(orientEv(), 'drag the room — everything on it rides along', true); });
+    if (plain) key('RESIZE', 'edges', () => { sfx('click'); flashTip(orientEv(), 'drag a gold handle on its edge — out to grow it, in to shrink it', true); });
+    key('FLOOR', '3', () => { selectTool('paint'); flashTip(orientEv(), 'pick a finish, then click the room to lay it', true); });
+    if (!corridor && plain && furnishReady()) key('FURNISH', '', () => { furnishOpen = !furnishOpen; sfx('click'); renderSelection(); }, 'refit-room-furnish').setAttribute('aria-expanded', String(furnishOpen));
+    if (!corridor && furnishReady() && station.props().some(p => station.roomAt(p.x, p.y) === rm.id)) key('CLEAR', '', () => clearRoom(rm, orientEv()));
+    const del = key(isSpawn ? 'PROTECTED' : 'DELETE', isSpawn ? '' : 'Del', () => deleteSelectedRoom(orientEv()), 'refit-sel-del');
+    if (isSpawn) { del.disabled = true; del.setAttribute('data-tip', 'the spawn room can’t be deleted — MOVE it instead'); }
+    // the ask: what equipment goes, and the two ways on — never applied until FURNISH ANYWAY / CLEAR ANYWAY
+    if (roomAsk) {
+      const ask = document.createElement('div'); ask.className = 'refit-room-ask'; ask.setAttribute('role', 'alert');
+      const what = roomAsk.kind === 'furnish' ? styleLabel(roomAsk.sid) : 'CLEAR';
+      ask.innerHTML = '<span>' + esc(what) + ' takes out ' + esc(roomAsk.gear.join(' · ')) + ' — agents here lose what ' + (roomAsk.gear.length === 1 ? 'it gives' : 'they give') + '</span>'
+        + '<div class="refit-room-ask-keys"><button type="button" class="bb sm refit-sel-act refit-sel-del">' + (roomAsk.kind === 'furnish' ? 'FURNISH ANYWAY' : 'CLEAR ANYWAY') + '</button><button type="button" class="bb sm refit-sel-act">KEEP IT</button></div>';
+      const [go, keep] = ask.querySelectorAll('button');
+      const a = roomAsk;
+      go.onclick = () => { if (a.kind === 'furnish') furnishRoom(rm, a.sid, orientEv(), true); else clearRoom(rm, orientEv(), true); };
+      keep.onclick = () => { roomAsk = null; sfx('click'); renderSelection(); };
+      host.appendChild(ask);
+    }
+    // FURNISH: every whole-room style the station builder knows, as tiles — one click lays it (one undo)
+    if (furnishOpen && !corridor && plain && furnishReady()) {
+      const grid = document.createElement('div'); grid.className = 'refit-furnish-grid'; grid.setAttribute('aria-label', 'Furnish this room as');
+      for (const sid of RoomStyles.ROOM_ORDER || Object.keys(RoomStyles.ROOMS)) {
+        const rec = RoomStyles.ROOMS[sid]; if (!rec) continue;
+        const tile = document.createElement('button'); tile.type = 'button'; tile.className = 'refit-furnish-tile'; tile.dataset.style = sid;
+        tile.setAttribute('data-tip', styleLabel(sid) + ' — ' + rec.about);
+        const art = document.createElement('span'); art.className = 'refit-furnish-art'; tile.appendChild(art);
+        const icon = styleIcon(sid), sp = propSpec(icon);
+        propArtInto(art, { t: icon, w: sp.w || 1, h: sp.h || 1 });
+        const nm = document.createElement('span'); nm.className = 'refit-furnish-name'; nm.textContent = styleLabel(sid); tile.appendChild(nm);
+        tile.onclick = () => furnishRoom(rm, sid, orientEv());
+        grid.appendChild(tile);
+      }
+      host.appendChild(grid);
+    }
+  }
   function renderGroupCard(host, ps) {
     const count = {};
     for (const p of ps) { const l = propLabel(p.t); count[l] = (count[l] || 0) + 1; }
@@ -5528,7 +5723,7 @@ const Build = (() => {
       const details = root.querySelector('.refit-propworkspace.show-details');
       if (details) { const toggle = details.querySelector('.refit-details-toggle'); toggle.click(); toggle.focus(); return; }
       if (drag || connectFrom || dupe) { selectTool('select'); return; }
-      if (selectedPropId || movingPropId || groupIds.length) { selectTool('select'); return; }
+      if (selectedPropId || movingPropId || groupIds.length || selectedRoomId) { selectTool('select'); return; }
       if (typeof WorkflowPanel !== 'undefined' && WorkflowPanel.isOpen()) { WorkflowPanel.close(); return; }   // the docked panel closes (saving) before REFIT does
       if (tool !== 'select') { deselectTool(); return; }                 // then the armed tool → SELECT
       /* LEAVING IS ITS OWN, EXPLICIT PRESS (2026-09-23 playtest). A bare select-mode ESC used to close REFIT
@@ -5555,6 +5750,12 @@ const Build = (() => {
     if (ev.key === 'r' || ev.key === 'R') { ev.preventDefault(); turnUnderCursor(ev.shiftKey ? -1 : 1); return; }
     if (ev.key === 'm' || ev.key === 'M') { ev.preventDefault(); flipUnderCursor(); return; }
     if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'a' || ev.key === 'A') && tool === 'select') { ev.preventDefault(); selectAllProps(orientEv()); return; }
+    // a selected ROOM: Delete twice deletes it (everything on it goes, one Undo brings it back), the arrows nudge it (Shift: five)
+    if (selectedRoomId && tool === 'select') {
+      if (ev.key === 'Delete' || ev.key === 'Backspace') { ev.preventDefault(); deleteSelectedRoom(orientEv()); return; }
+      const RA = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key];
+      if (RA) { ev.preventDefault(); const n = ev.shiftKey ? 5 : 1; nudgeRoom(RA[0] * n, RA[1] * n, orientEv()); return; }
+    }
     // EDITOR KEYS on the selected object — or the selected group (MANY AT ONCE); with nothing selected they do nothing, quietly
     if ((selectedPropId || groupIds.length) && tool === 'select') {
       if (ev.key === 'Delete' || ev.key === 'Backspace') { ev.preventDefault(); deleteSelected(orientEv()); return; }
@@ -5824,6 +6025,10 @@ const Build = (() => {
       const rect = { x1: nx, y1: ny, x2: nx + p.w - 1, y2: ny + p.h - 1 };
       const links = isWorkflowType(p.t) && (dx || dy) ? ghostLinks({ props: [{ t: p.t, x: nx, y: ny, w: p.w, h: p.h }], ignoreId: p.id }) : [];
       return { rects: [rect], v: station.canPlaceProp(p.t, nx, ny, p.w, p.h, p.id), move: true, dx, dy, preview:{...p,x:nx,y:ny}, links, leftBehind: (dx || dy) ? beltsLeftBehind(p, nx, ny) : 0 };
+    }
+    if (drag.mode === 'roomresize') {
+      const rm = station.roomById(drag.roomId), nr = rm && resizedRect(drag); if (!nr) return null;
+      return { rects: [nr], v: resizeCheck(rm, nr), kind: 'resize' };
     }
     if (drag.mode === 'groupmove') {
       const ps = groupIds.map(id => station.propById(id)).filter(Boolean); if (!ps.length) return null;
@@ -6355,7 +6560,7 @@ const Build = (() => {
      is the point — the paint and delete brushes raster whole runs of tiles per frame and would
      machine-gun it. */
   let lastTick = 0;
-  const SNAP_GESTURES = { draw: 1, beltrun: 1, move: 1, propmove: 1, propstamp: 1, groupmove: 1 };
+  const SNAP_GESTURES = { draw: 1, beltrun: 1, move: 1, propmove: 1, propstamp: 1, groupmove: 1, roomresize: 1 };
   function snapTick(mode) {
     if (!SNAP_GESTURES[mode]) return;
     const n = performance.now();
@@ -6988,6 +7193,7 @@ const Build = (() => {
       drawPropSelection(selected,t,'rgba(244,200,112,.9)');
     }
     for(const id of groupIds){const gp=station.propById(id);if(gp)drawPropSelection(gp,t,'rgba(244,200,112,.9)',false);}
+    if (selectedRoomId && !(drag && drag.mode === 'roomresize')) drawRoomSelection(t);
     if (drag) return;
     // a hovered prop (select/move/reclaim) outlines on top of any room outline
     if ((tool === 'select' || tool === 'move' || tool === 'reclaim' || (tool === 'dupe' && !dupe)) && hoverPropId) {
@@ -7228,6 +7434,7 @@ const Build = (() => {
   }
 
   function placementReason(g) {
+    if (g.kind === 'resize') return (g.v && g.v.msg) || 'Choose a clear space';   // a room's own refusal names its own reason
     const code = g.v && g.v.error;
     if (code === 'OFF_DECK') return 'Place this on a room floor';
     if (code === 'NEEDS_WALL') return 'Place this against the back wall';
