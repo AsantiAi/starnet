@@ -17852,13 +17852,16 @@ async function runOnceCore(o) {
   let runRecipes = [];
   const openrouterToolKey = providerId === 'openrouter' ? runKey : runtimeKey;
   const studioRoute = ImageTask.resolveRoute({
-    providerId, runKey, providerBaseUrl: baseUrl,
+    providerId: providerUsesCodex(providerId) ? 'codex' : providerId, runKey, providerBaseUrl: baseUrl,
     managedKey: providerRuntimeKey('starnet', ''),
     managedBaseUrl: providerRuntimeBaseUrl('starnet', ''),
     stationOpenRouterKey: runtimeKey,
     stationOpenRouterBaseUrl: providerRuntimeBaseUrl('openrouter', ''),
     stationOpenAIKey: providerRuntimeKey('openai', ''),
-    stationOpenAIBaseUrl: providerRuntimeBaseUrl('openai', '')
+    stationOpenAIBaseUrl: providerRuntimeBaseUrl('openai', ''),
+    // the station's ChatGPT sign-in renders gpt-image-2 on the plan (image.js codex-responses); a known-dead
+    // sign-in is not a route, so the blocker names the real fix instead of a 401 mid-run
+    codexSignedIn: !!(codexTokens && codexTokens.access_token) && !codexAuthDead
   });
   // web_search/web_fetch (DDG/Jina, OR fallback) + web_request. `accessSurface` is host authority: it comes
   // from the run host, never from tool args. An authenticated owner DM has the same stored-key reach as the
@@ -17941,7 +17944,9 @@ async function runOnceCore(o) {
       return out;
     } finally { clearTimeout(t); }
   };
-  const imageTools = makeImageTools({ openrouter: studioRoute.ok ? { apiKey: studioRoute.key, model, baseUrl: studioRoute.baseUrl, provider: studioRoute.provider, protocol: studioRoute.protocol } : null, fsp, pathMod: path, root: WORKSPACES, imageModel: String(ENV('IMAGE_MODEL') || '').trim() || undefined, auxVision: auxVisionCall, signal, onUsage: recordMediaUsage });
+  const imageTools = makeImageTools({ openrouter: studioRoute.ok ? { apiKey: studioRoute.key, model, baseUrl: studioRoute.baseUrl, provider: studioRoute.provider, protocol: studioRoute.protocol,
+    getToken: studioRoute.protocol === 'codex-responses' ? ensureCodexAccessToken : undefined,
+    renewToken: studioRoute.protocol === 'codex-responses' ? forceRefreshCodexAccessToken : undefined } : null, fsp, pathMod: path, root: WORKSPACES, imageModel: String(ENV('IMAGE_MODEL') || '').trim() || undefined, auxVision: auxVisionCall, signal, onUsage: recordMediaUsage });
   // browser.vision uses the SAME vision model as image_analyze when a key exists; with no key it
   // reports "unavailable" honestly (never a success-shaped stub). Pass the dep only when usable.
   runBrowser = makeBrowserTools({
