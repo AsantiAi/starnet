@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "b5d279fd5a297f0f9208a6faba358be99cbed8ba",
+    "sourceCommit": "8885918154c4981f75b2a6b98f27d6246cd69e36",
     "pathSetSha256": "390a2a551d88b2597ca4ab3f1acc7ca535b3b978e277a0ed8c0fb507e73e87c0",
     "files": [
       {
@@ -563,8 +563,8 @@
       },
       {
         "path": "frontend/app/industrialtextures.js",
-        "bytes": 32648,
-        "sha256": "ac0177b4b72bbf860aa3fcb3aa5949f3d7b66bec13769b97392a5d10a7d4b3e7"
+        "bytes": 32665,
+        "sha256": "543890874f769b760fad3317b9bca33f9c739ed21e5dfdaf3c3b59eac45a7d8c"
       },
       {
         "path": "frontend/app/intake.js",
@@ -1123,8 +1123,8 @@
       },
       {
         "path": "frontend/app/stationbake.js",
-        "bytes": 363645,
-        "sha256": "70f2a02d53ed65fd10185604556ad7f088b21c3ce4ec494c7502ed449fb678e7"
+        "bytes": 363713,
+        "sha256": "785869e8ca1fc1c08b1c89f0090a6bc4aa3d22094d10a2584f255d7ba5fb60bd"
       },
       {
         "path": "frontend/app/stationbuilder.js",
@@ -1428,8 +1428,8 @@
       },
       {
         "path": "frontend/app/worldmodel.js",
-        "bytes": 237214,
-        "sha256": "2c1867d4ac3eeb08273ba29abcdd0b56047137e658577b1140c97e32443ee09e"
+        "bytes": 237339,
+        "sha256": "cacdf6266c872c5b4b63b1a4e2d64c3c654fc4b1a205224f4fe2c7a6f35d47c4"
       },
       {
         "path": "frontend/app/worldrenderer.js",
@@ -1438,8 +1438,8 @@
       },
       {
         "path": "frontend/app/worldsurface.js",
-        "bytes": 38406,
-        "sha256": "78a93375a184be75454d5e7b0c2a296fcfb86b1d6b9ba3a3e99c12dc8cbb2b15"
+        "bytes": 39672,
+        "sha256": "3fc7ae0913ddeb8c38923866c23f047ca78ef856a7af19261e462451debcbd0b"
       },
       {
         "path": "frontend/app/xp.js",
