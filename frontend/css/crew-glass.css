@@ -147,3 +147,21 @@ body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-grp-badge {
   font-size: 15px; line-height: 20px; color: #140c04; background: var(--gold);
   box-shadow: 0 0 0 2px rgba(0, 0, 0, .6); animation: none;
 }
+
+/* ---------- 5 · per-agent threads (trunk 638d8c217) in the card language ---------- */
+/* the row whose sessions the rail shows: the card, plus a solid edge bar (an edge, never a glow) */
+body.glass-demo:not(.hud-mode) #crew .crew-row.filtering.crew-row {
+  background: var(--cg-card); border-color: rgba(var(--ph-rgb), .45);
+  box-shadow: inset 3px 0 0 var(--ph), inset 0 1px 0 rgba(var(--ph-bright-rgb), .06);
+}
+body.glass-demo:not(.hud-mode) #crew .crew-dossier {
+  bottom: 8px; right: 9px; padding: 2px 8px; font-size: 13px; letter-spacing: .8px;
+  border-radius: 6px; border-color: var(--cg-edge); background: rgba(0, 0, 0, .35);
+}
+body.glass-demo:not(.hud-mode) #crew .crew-row:is(:hover, :focus-within, .filtering):has(.crew-dossier) .crew-step { padding-right: 66px; }
+/* the chip that names whose sessions are showing */
+body.glass-demo:not(.hud-mode) #left .ws-agent-filter {
+  margin: 8px 10px 0; min-height: 34px; padding: 5px 10px 5px 7px;
+  border-radius: 8px; border-color: var(--cg-edge); background: var(--cg-card);
+}
+body.glass-demo:not(.hud-mode) #left .ws-agent-filter:hover { border-color: rgba(var(--ph-rgb), .45); background: rgba(var(--ph-rgb), .1); }
