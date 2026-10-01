@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "a77c4b4a183195fc7b383e444591975003ecbbb1",
+    "sourceCommit": "cd789343ef7c2ee131b730fb0119628644003221",
     "pathSetSha256": "5e692c5f0c56bc6565c363fb4eb622af3093a911f55496ecdf16c95cad03c8af",
     "files": [
       {
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 690432,
-        "sha256": "cc9a461e67ba3bffe159dcdab9ee59c625bc00c7f86230804b4afd115ad5a6dc"
+        "bytes": 690695,
+        "sha256": "22d8ac381ed018828c896a9d2dac682fd1538a5f68d72a5d8e75b869312d356e"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -1268,8 +1268,8 @@
       },
       {
         "path": "frontend/app/voice-live.js",
-        "bytes": 95485,
-        "sha256": "c7165575df3e3c9a850f389c324554702e745ebc252244f258bc9f2ee679d639"
+        "bytes": 95947,
+        "sha256": "505b33e33ebf5c8afef12fe73ef686628a40ac96abc2cecee588e991082829aa"
       },
       {
         "path": "frontend/app/voice-stream.js",
@@ -1278,8 +1278,8 @@
       },
       {
         "path": "frontend/app/voice.js",
-        "bytes": 120418,
-        "sha256": "9cd86c1674c8718ad785d211c5f4cd566ca8e143717f278de8c15d6f82a17e99"
+        "bytes": 122530,
+        "sha256": "d5388d0412e06ef377fb3462fb62aab35a8096e07ad61c880083e93efca73b79"
       },
       {
         "path": "frontend/app/waitanchor.js",
