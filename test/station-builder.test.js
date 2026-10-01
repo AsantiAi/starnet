@@ -618,7 +618,6 @@ for (const c of T.catalog) {
       [{ zones: [{ area: 'left', line: 'build_test', dailyCap: 'lots' }] }, /dailyCap must be a dollar amount/],
       [{ zones: [{ area: 'left', style: 'cozy' }], where: 'Mars' }, /There is no room called "Mars"/],
       [{ zones: [{ area: 'left', style: 'cozy' }], floorStyle: 'lava' }, /floorStyle must be one of/],
-      [{ zones: [{ area: 'left', line: 'deep_dive' }, { area: 'right', line: 'gauntlet' }] }, /larger than the 44 × 26 StarNet builds at once\. Split it into two rooms\./],
     ]) { const r = SB.planRoom(st.serialize(), req, E); A.ok(!r.ok && re.test(r.error), 'design refused: ' + JSON.stringify(req).slice(0, 90) + ' -> ' + (r.error || 'NOT REFUSED').slice(0, 160)); }
     A.eq(snap(st), before, 'no refusal changed anything');
   }
@@ -793,7 +792,7 @@ for (const c of T.catalog) {
       const s2 = M.create(st.serialize()), r = SB.planBuild(s2.serialize(), { rooms: [{ name: 'S', size: sz }] }, E);
       A.ok(r.ok && SB.apply(s2, r.plan, E).ok && size(room(s2, 'S')) === want, 'size ' + JSON.stringify(sz) + ' is ' + want + ' (' + (r.error || '') + ')');
     }
-    for (const sz of ['enormous-ish', { w: 3, h: 3 }, { w: 80, h: 9 }, 7, []]) { const r = SB.planBuild(st.serialize(), { rooms: [{ size: sz }] }, E); A.ok(!r.ok && /^size is small \(12 × 8\), medium \(18 × 11\), large \(24 × 14\), giant \(36 × 20\), or/.test(r.error), 'size ' + JSON.stringify(sz) + ' is refused with the sizes: ' + r.error); }
+    for (const sz of ['enormous-ish', { w: 3, h: 3 }, { w: 200, h: 9 }, 7, []]) { const r = SB.planBuild(st.serialize(), { rooms: [{ size: sz }] }, E); A.ok(!r.ok && /^size is small \(12 × 8\), medium \(18 × 11\), large \(24 × 14\), giant \(36 × 20\), or/.test(r.error), 'size ' + JSON.stringify(sz) + ' is refused with the sizes: ' + r.error); }
   }
   // no room named: the spot that keeps the station compact, never a strip marching east
   {
@@ -848,13 +847,13 @@ for (const c of T.catalog) {
     ]) { const q = SB.planBuild(st.serialize(), { hallways: hw }, E); A.ok(!q.ok && re.test(q.error), 'hallway refused: ' + JSON.stringify(hw) + ' -> ' + (q.error || 'NOT REFUSED').slice(0, 120)); }
     A.eq(snap(st), before, 'no refusal changed anything');
   }
-  // RECRUITS DONE ACCORDINGLY (Andrew 09-30: a lead recruited ten agents and their desks piled up in the bridge): at most
-  // three a plan, and each recruit's desk stands in a tidy row by its own line
+  // RECRUITS DONE ACCORDINGLY (Andrew 09-30: a lead recruited ten agents and their desks piled up in the bridge): only when
+  // asked, at most twelve a plan (the cap was three until "there should be no limits"), each recruit's desk in a tidy row by its own line
   {
     const st = fresh(), before = snap(st), made = [];
     const R = Object.assign({}, E, { canRecruit: true, recruit: role => { const id = 'rq' + (made.length + 1); if (!st.ensureWorkstation(id).ok) return null; made.push(id); return { id, name: role }; } });
-    const four = SB.planBuild(st.serialize(), { rooms: [{ name: 'Works', size: 'giant', lines: [{ line: 'build_test', staff: [{ step: 1, agent: 'new' }, { step: 2, agent: 'new' }] }, { line: 'research_line', staff: [{ step: 1, agent: 'new' }, { step: 2, agent: 'new' }] }] }] }, R);
-    A.ok(!four.ok && /^That plan recruits 4 new agents\. Recruit only when the Commander asks for new crew, and at most 3 in one plan/.test(four.error), 'four recruits are refused with what to do instead: ' + four.error);
+    const many = SB.planBuild(st.serialize(), { rooms: [{ name: 'Works', size: { w: 90, h: 50 }, lines: new Array(7).fill(0).map(() => ({ line: 'build_test', staff: [{ step: 1, agent: 'new' }, { step: 2, agent: 'new' }] })) }] }, R);
+    A.ok(!many.ok && /^That plan recruits 14 new agents\. Recruit only when the Commander asks for new crew, and at most 12 in one plan/.test(many.error), 'fourteen recruits are refused with what to do instead: ' + many.error);
     const three = SB.planBuild(st.serialize(), { rooms: [{ name: 'Works', size: 'giant', lines: [{ line: 'build_test', staff: [{ step: 1, agent: 'new' }, { step: 2, agent: 'new' }] }, { line: 'research_line', staff: [{ step: 1, agent: 'new' }, { step: 2, agent: 'lead' }] }] }] }, R);
     A.ok(three.ok && /It adds 3 crew members: ENGINEER, TESTER, RESEARCHER, with a desk in WORKS\./.test(three.plan.summary), 'three recruits, their desks in the hall of their lines: ' + (three.error || three.plan.summary.slice(-200)));
     if (three.ok) {
@@ -869,7 +868,7 @@ for (const c of T.catalog) {
       A.ok(st.undo().ok); A.eq(snap(st).length > 0, true);
     }
     const line4 = SB.plan(fresh().serialize(), { shape: ['RESEARCHER', { together: ['WRITER', 'ANALYST'] }, 'REVIEWER'], steps: [1, 2, 3, 4].map(step => ({ step, agent: 'new' })) }, R);
-    A.ok(!line4.ok && /^That plan recruits 4 new agents/.test(line4.error), 'a single line with four recruits is refused too');
+    A.ok(line4.ok && /It adds 4 crew members: /.test(line4.plan.summary), 'a single line with four recruits plans now (the cap is twelve): ' + (line4.error || ''));
   }
   // refusals say why, and what does fit
   {
@@ -877,7 +876,7 @@ for (const c of T.catalog) {
     const r = SB.planBuild(st.serialize(), { rooms: [{ name: 'X', beside: 'HOME', side: 'north' }] }, E);
     A.ok(!r.ok && /^There is no room for a 18 × 11 room north of HOME with a hallway: a hallway is already there\. That size fits east, west of HOME\./.test(r.error), 'a taken side names the free ones: ' + r.error);
     for (const [req, re] of [
-      [{ rooms: [] }, /^Send \{ "rooms"/], [{}, /^Send \{ "rooms"/], [null, /^Send \{ "rooms"/], [{ rooms: 'big' }, /^Send \{ "rooms"/], [{ rooms: new Array(7).fill({}) }, /^Send \{ "rooms"/],
+      [{ rooms: [] }, /^Send \{ "rooms"/], [{}, /^Send \{ "rooms"/], [null, /^Send \{ "rooms"/], [{ rooms: 'big' }, /^Send \{ "rooms"/], [{ rooms: new Array(25).fill({}) }, /^Send \{ "rooms"/],
       [{ rooms: [{}], props: [] }, /these fields are not accepted: props/],
       [{ rooms: [{ x: 4, y: 9 }] }, /a room does not take: x, y\. A room takes: name, style, size, beside, side, hallway, align, into, type, floorStyle, floorMat, zones, lines\./],
       [{ rooms: [{ beside: 'Mars' }] }, /There is no room called "Mars"\. Rooms: HOME, WORKROOM, LOUNGE\./],
@@ -891,7 +890,7 @@ for (const c of T.catalog) {
       [{ rooms: [{ into: 'LOUNGE', size: 'giant', lines: [{ line: 'build_test' }] }] }, /fills an existing room \(into\), so it takes no size/],
       [{ rooms: [{ into: 'LOUNGE', name: 'Den', lines: [{ line: 'build_test' }] }] }, /name names a NEW room/],
       [{ rooms: [{ zones: [{ area: 'left', style: 'cozy' }], lines: [{ line: 'build_test' }] }] }, /takes zones .* or lines .*, not both/],
-      [{ rooms: [{ lines: [] }] }, /lines is a list of 1 to 6 workflow lines/],
+      [{ rooms: [{ lines: [] }] }, /lines is a list of 1 to 16 workflow lines/],
       [{ rooms: [{ lines: [{ line: 'teleporter' }] }] }, /There is no line called "teleporter"/],
       [{ rooms: [{ lines: [{ line: 'build_test', belts: [] }] }] }, /A line only takes: line, purpose, shape, name, staff, dailyCap, tries\. Not accepted: belts\./],
       [{ rooms: [{ size: 'small', lines: [{ line: 'gauntlet' }] }] }, /at 12 × 8 is too small for what goes in it: that needs about \d+ × \d+\. Leave size out, or ask for a bigger one\./],
@@ -1326,8 +1325,8 @@ for (const c of T.catalog) {
     A.ok(!bad.ok && /^There is no piece called "spaceship"\. Pieces include: a couch, /.test(bad.error), 'an unknown piece is refused with what there is');
     const mach = SB.planEdit(st.serialize(), { add: { room: 'GYM', pieces: ['an inbox'] } }, E);
     A.ok(!mach.ok && /Workflow machines come with a line\./.test(mach.error), 'a workflow machine is not a piece');
-    const many = SB.planEdit(st.serialize(), { add: { room: 'GYM', pieces: ['eight plants', 'eight lamps', 'a tv'] } }, E);
-    A.ok(!many.ok && /^That is 17 pieces; ask for up to 16/.test(many.error), 'too many pieces in one plan are refused');
+    const many = SB.planEdit(st.serialize(), { add: { room: 'GYM', pieces: ['40 plants', '40 lamps', '40 rugs', 'a tv'] } }, E);
+    A.ok(!many.ok && /^That is 121 pieces; ask for up to 120/.test(many.error), 'too many pieces in one plan are refused');
     if ((E.PropSprites.ruleFor('lavalamp') || {}).mount === 'surface') {
       const lamp = SB.planEdit(st.serialize(), { add: { room: 'GYM', pieces: ['a lava lamp'] } }, E);
       A.ok(!lamp.ok && /on a table: add a table first/.test(lamp.error), 'a table piece in a room with no table says to add a table');
@@ -1446,6 +1445,69 @@ for (const c of T.catalog) {
     const none = SB.planUndo(st.serialize(), null);
     A.ok(!none.ok && /^There is nothing of the lead's to undo/.test(none.error), 'with no build of the lead\'s, there is nothing to undo');
   }
+  // REFIT (Andrew 09-30: "it should be able to ambitiously use the refit mode itself"): the Commander's own tools as edits on
+  // exact tiles — rooms of any shape, hallways, resize, type, floors, paint, any piece turned and flipped, machines wired by
+  // hand, briefs, a shelf line at a spot, the Workflow panel's own line edits — run in order on Refit mode's own checks
+  {
+    const st = fresh(), before = snap(st), S0 = E.PropSprites;
+    const MT_RE = /^(intake|bay|outbox|filter|merger|splitter|joiner|loop|airlock)$/, turnable = (S0.CATALOG || []).map(c => c.id).find(t => S0.canRotate && S0.canRotate(t) && !MT_RE.test(t) && (S0.spec(t).w || 1) <= 3) || null;
+    const ops = [
+      { op: 'hall', x: 18, y: 4, w: 6, h: 3 },
+      { op: 'room', name: 'Studio', kind: 'lab', x: 24, y: 0, w: 30, h: 22, as: 'S' },
+      { op: 'floor', room: 'S', style: 'teal' },
+      { op: 'place', t: 'tv', x: 30, y: 0 },
+      { op: 'place', t: 'a plant', x: 24, y: 1 },
+      { op: 'place', t: 'intake', x: 26, y: 8, as: 'in' }, { op: 'place', t: 'bay', x: 31, y: 8, as: 'b1' }, { op: 'place', t: 'outbox', x: 36, y: 8, as: 'out' },
+      { op: 'connect', from: 'in', to: 'b1' }, { op: 'connect', from: 'b1', to: 'out' },
+      { op: 'role', prop: 'b1', role: 'writer' }, { op: 'brief', prop: 'b1', text: 'Write it up in 200 words.' }, { op: 'label', prop: 'in', text: 'Quick write' }, { op: 'agent', prop: 'b1', agent: 'rex' },
+      { op: 'type', room: 'S', kind: 'quarters' }, { op: 'rename', room: 'S', name: 'Writers Room' },
+      { op: 'paint', room: 'Writers Room', style: 'cobalt', tiles: [[50, 20], [51, 20]] },
+      { op: 'stamp', line: 'build_test', x: 26, y: 13 }
+    ].concat(turnable ? [{ op: 'place', t: turnable, x: 46, y: 2, r: 3, as: 'turned' }] : []);
+    const p = SB.planEdit(st.serialize(), { refit: ops }, E);
+    A.ok(p.ok && new RegExp('^REFIT, ' + ops.length + ' edits, in order: 1\\. a 6 × 3 hallway at \\(18, 4\\); 2\\. a new 30 × 22 LAB room STUDIO at \\(24, 0\\); ').test(p.plan.summary) && /the bay at \(31, 8\) is told: "Write it up in 200 words\."/.test(p.plan.summary) && /One UNDO in Build mode takes all of it back\.$/.test(p.plan.summary), 'a refit plans every edit, in order, in words (briefs quoted): ' + (p.error || p.plan.summary.slice(0, 200)));
+    A.eq(snap(st), before, 'planning changes nothing');
+    if (p.ok) {
+      const a = SB.apply(st, p.plan, E);
+      A.ok(a.ok, 'it builds exactly (' + (a.error || '') + ')');
+      const rm = st.rooms().find(x => x.name === 'WRITERS ROOM');
+      A.ok(rm && rm.kind === 'quarters' && rm.floorStyle === 'teal', 'the room stands, renamed, retyped, on its floor');
+      const bay = st.props().find(x => x.t === 'bay' && x.x === 31 && x.y === 8);
+      A.ok(bay && bay.role === 'WRITER' && bay.agentId === 'rex' && bay.brief === 'Write it up in 200 words.', 'the hand-built bay has its role, agent and brief');
+      A.ok(st.props().some(x => x.t === 'intake' && x.label === 'Quick write') && st.props().filter(x => x.t === 'intake').length === 2, 'both lines stand: the wired one and the stamped one');
+      if (turnable) { const tp = st.props().find(x => x.t === turnable && x.x === 46 && x.y === 2); A.ok(tp && tp.r === 3, 'a piece that turns stands turned'); }
+      A.ok(walks(st, st.rooms().find(x => x.name === 'HOME'), rm), 'and it is walked into along its hallway');
+      // the map's views for exact edits
+      const det = SB.mapOf(st.serialize(), E, { room: 'Writers Room' });
+      A.ok(det.ok && det.map.pieces.some(x => x.t === 'bay' && x.x === 31 && x.y === 8 && x.agent === 'REX' && x.role === 'WRITER') && det.map.drawing.length === 22 && det.map.doorways.length >= 2, 'station.map { room } details every piece with its id and place, the doorways, the room drawn');
+      const cat = SB.mapOf(st.serialize(), E, { catalog: true });
+      A.ok(cat.ok && cat.map.pieces.length > 100 && cat.map.pieces.some(x => x.t === 'bay' && x.machine) && cat.map.roomTypes.indexOf('quarters') >= 0 && cat.map.lineEdits.indexOf('insertStep') >= 0, 'station.map { catalog } lists every piece, room type and line edit');
+      // a Workflow-panel line edit through refit: a step appended after the tester
+      const tester = st.props().find(x => x.t === 'bay' && x.role === 'TESTER');
+      const e = SB.planEdit(st.serialize(), { refit: [{ op: 'edit', prop: tester.id, edit: 'appendStep', args: { after: tester.id, role: 'REVIEWER' }, tidy: true }] }, E);
+      A.ok(e.ok && SB.apply(st, e.plan, E).ok && st.props().some(x => x.role === 'REVIEWER'), 'a line edit through refit adds a step to a line where it stands (' + (e.error || '') + ')');
+      if (e.ok) A.ok(st.undo().ok);
+      // resize: grown and shrunk where it stands, never cutting what is on it
+      const grow = SB.planEdit(st.serialize(), { refit: [{ op: 'resize', room: 'Writers Room', x: 24, y: 0, w: 34, h: 24 }] }, E);
+      A.ok(grow.ok && SB.apply(st, grow.plan, E).ok && st.rooms().find(x => x.name === 'WRITERS ROOM').rects[0].x2 === 57, 'a room grows where it stands');
+      if (grow.ok) A.ok(st.undo().ok);
+      const cut = SB.planEdit(st.serialize(), { refit: [{ op: 'resize', room: 'Writers Room', x: 24, y: 0, w: 10, h: 10 }] }, E);
+      A.ok(!cut.ok && /^Edit 1 \(resize\): a .+ would be left off the deck\. Nothing was built/.test(cut.error), 'a shrink that would cut what is on it is refused: ' + cut.error);
+      A.ok(st.undo().ok); A.eq(snap(st), before, 'one undo takes the whole refit back');
+    }
+    // refusals name the edit and give Refit mode's own reason; nothing is built
+    for (const [q, re] of [
+      [[{ op: 'place', t: 'tv', x: 300, y: 300 }], /^Edit 1 \(place\): must sit on a deck\. Nothing was built/],
+      [[{ op: 'fly' }], /^Edit 1 \(fly\): there is no op "fly" \(ops: room, hall, /],
+      [[{ op: 'place', t: 'tv', x: 2, y: 2 }, { op: 'place', t: 'couch', x: 2, y: 5, r: 1 }], /^Edit 2 \(place\): a couch does not turn/],
+      [[{ op: 'delete', room: 'HOME' }], /^Edit 1 \(delete\): HOME is the main room, so it stays/],
+      [[{ op: 'room', x: 0, y: 0, w: 10, h: 8 }], /^Edit 1 \(room\): overlaps HOME/],
+      [[{ op: 'brief', prop: 'nope', text: 'x' }], /^Edit 1 \(brief\): there is no piece "nope"/],
+      [new Array(401).fill({ op: 'place', t: 'plant', x: 1, y: 1 }), /^That is 401 edits; send up to 400 in one plan/],
+      [[], /^refit is a list of edits/]
+    ]) { const r = SB.planEdit(st.serialize(), { refit: q }, E); A.ok(!r.ok && re.test(r.error), 'refit refused: ' + JSON.stringify(q).slice(0, 70) + ' -> ' + (r.error || 'NOT REFUSED').slice(0, 140)); }
+    A.eq(snap(st), before, 'no refusal changed anything');
+  }
   // a concourse from a crowded station finds a free side, or is refused naming the way forward
   {
     const st = fresh();
@@ -1459,7 +1521,7 @@ for (const c of T.catalog) {
   {
     const st = fresh(), before = snap(st);
     for (const [req, re] of [
-      [{ layout: {} }, /^layout\.rooms is a list of 1 to 16 rooms/],
+      [{ layout: {} }, /^layout\.rooms is a list of 1 to 40 rooms/],
       [{ layout: 'ring' }, /^Send \{ "layout"/],
       [{ layout: { pattern: 'spiral', rooms: [{ style: 'lounge' }] } }, /^pattern is diamond .* or concourse/],
       [{ layout: { pattern: 'ring', rooms: [{ style: 'lounge' }], x: 3 } }, /a layout does not take: x\. It takes: pattern, around, side, rooms\./],
@@ -1467,9 +1529,9 @@ for (const c of T.catalog) {
       [{ layout: { pattern: 'ring', rooms: [{ name: 'X' }] } }, /needs a style/],
       [{ layout: { pattern: 'ring', rooms: [{ style: 'lounge', x: 1 }] } }, /a layout room does not take: x\./],
       [{ layout: { pattern: 'ring', rooms: [{ style: 'lounge', lines: [{ line: 'build_test' }] }] } }, /Lines go in a works room/],
-      [{ layout: { pattern: 'diamond', rooms: new Array(17).fill({ style: 'lounge' }) } }, /^layout\.rooms is a list of 1 to 16 rooms/],
+      [{ layout: { pattern: 'diamond', rooms: new Array(41).fill({ style: 'lounge' }) } }, /^layout\.rooms is a list of 1 to 40 rooms/],
       [{ layout: { pattern: 'diamond', rooms: new Array(5).fill({ style: 'works' }) } }, /There is no wing of the diamond around HOME clear for CONVEYOR HALL 5 .*A diamond takes up to four big rooms\./],
-      [{ layout: { pattern: 'concourse', rooms: new Array(9).fill({ style: 'lounge' }) } }, /^A concourse holds 8 rooms \(9 were asked\)\./],
+      [{ layout: { pattern: 'concourse', rooms: new Array(25).fill({ style: 'lounge' }) } }, /^A concourse holds 24 rooms \(25 were asked\)\./],
       [{ layout: { pattern: 'ring', rooms: [{ style: 'lounge' }] }, replace: 'yes' }, /^replace is true/],
       [{ layout: { pattern: 'ring', rooms: [{ style: 'lounge', name: 'Home' }] } }, /A room is already called HOME/],
       [{ layout: { pattern: 'ring', around: 'Mars', rooms: [{ style: 'lounge' }] } }, /There is no room called "Mars"/],
@@ -1596,6 +1658,8 @@ for (const c of T.catalog) {
     A.eq(calls[calls.length - 1], ['station.plan_edit', { request: req }], 'and reaches the edit planner as it was sent');
   }
   {
+    const rf = await planT.run({ refit: [{ op: 'place', t: 'tv', x: 2, y: 2 }] }, {});
+    A.eq(calls[calls.length - 1], ['station.plan_edit', { request: { refit: [{ op: 'place', t: 'tv', x: 2, y: 2 }] } }], 'a refit plans through the page\'s edit planner as it was sent');
     const r = await planT.run({ undo: true }, {});
     A.ok(/plan-u-1/.test(r.content) && r.summary === 'planned an undo', 'an undo plans through the page');
     A.eq(calls[calls.length - 1], ['station.plan_undo', { request: {} }], 'and reaches the undo planner');
@@ -1605,7 +1669,7 @@ for (const c of T.catalog) {
   const n0 = calls.length;
   for (const req of [{ remove: 'GYM', clear: 'LAB' }, { refurnish: { room: 'GYM', style: 'library' }, rooms: [{ style: 'lounge' }] }]) {
     const r = await planT.run(req, {});
-    A.ok(/^REFUSED: remove, refurnish, clear, add, seat, move and staff each go on their own, one edit a plan\./.test(r.content), 'an edit mixed with anything else is refused: ' + JSON.stringify(req));
+    A.ok(/^REFUSED: remove, refurnish, clear, add, seat, move, staff and refit each go on their own, one edit a plan/.test(r.content), 'an edit mixed with anything else is refused: ' + JSON.stringify(req));
   }
   for (const req of [{}, { name: 'X' }, { restyle: { room: 'HOME' }, kit: 'LIBRARY' }]) {
     const r = await planT.run(req, {});

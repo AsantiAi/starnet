@@ -1221,6 +1221,43 @@ const WorldModel = (() => {
       return { ok: true };
     }
 
+    /* RESIZE A ROOM (2026-09-30, the agent's REFIT access): one rect for its whole footprint, grown or shrunk where it
+       stands. Everything on it must still stand on it — a prop or belt the new edges would leave off the deck refuses the
+       whole resize, all-or-nothing — and the new footprint passes the same checks as a new room (size, no overlap, the
+       span). Per-tile paint outside it goes. One undo slot. */
+    function resizeRoom(id, rect) {
+      const rm = doc.rooms[id];
+      if (!rm) return fail('NOT_FOUND', 'no such room');
+      const nr = normRect(rect || {});
+      const v = checkRects([nr], rm.kind, id);
+      if (!v.ok) return v;
+      const inOld = (x, y) => rm.rects.some(r => x >= r.x1 && x <= r.x2 && y >= r.y1 && y <= r.y2);
+      const inNew = (x, y) => x >= nr.x1 && x <= nr.x2 && y >= nr.y1 && y <= nr.y2;
+      for (const p of doc.props) {
+        const fp = propFootprint(p);
+        for (let y = fp.y1; y <= fp.y2; y++) for (let x = fp.x1; x <= fp.x2; x++)
+          if (inOld(x, y) && !inNew(x, y)) return fail('CUTS_CONTENTS', 'a ' + p.t + ' would be left off the deck');
+      }
+      for (const k of Object.keys(doc.belts)) { const q = k.split(','), x = +q[0], y = +q[1]; if (inOld(x, y) && !inNew(x, y)) return fail('CUTS_CONTENTS', 'a belt would be left off the deck'); }
+      snapshot();
+      const before = rm.rects.slice();
+      rm.rects = [nr];
+      if (rm.floorPaint) for (const k of Object.keys(rm.floorPaint)) { const q = k.split(','); if (!inNew(+q[0], +q[1])) delete rm.floorPaint[k]; }
+      emit(before.concat([nr]));
+      return { ok: true };
+    }
+    // a room's TYPE (the TYPE palette's kind: HAB, BRIDGE, LAB, FOUNDRY, QUARTERS, STORAGE) after it is built; never to or from a corridor
+    function setRoomKind(id, kind) {
+      const rm = doc.rooms[id];
+      if (!rm) return fail('NOT_FOUND', 'no such room');
+      if (!ROOM_KINDS[kind] || kind === 'corridor' || rm.kind === 'corridor') return fail('BAD_KIND', 'unknown room type');
+      if (rm.kind === kind) return { ok: true };
+      snapshot();
+      rm.kind = kind;
+      emit(rm.rects.slice());
+      return { ok: true };
+    }
+
     function moveRoom(id, dTx, dTy) {
       const rm = doc.rooms[id];
       if (!rm) return fail('NOT_FOUND', 'no such room');
@@ -3356,7 +3393,7 @@ const WorldModel = (() => {
         return surfaceHostFor(propFootprint(propById(p.id) || p), p.id) ? 'surface' : null;
       },
       // mutations
-      addRoom, placeHallway, removeRoom, moveRoom, setFloor, setMaterial, setDeck, setWalls, setHull, paintTiles, renameRoom,
+      addRoom, placeHallway, removeRoom, moveRoom, resizeRoom, setRoomKind, setFloor, setMaterial, setDeck, setWalls, setHull, paintTiles, renameRoom,
       addProp, removeProp, moveProp, rotateProp, faceProp, mirrorProp, assignPropAgent, ensureWorkstation, configureJunction, swapJoinerMerger, bindConnector, bindPlugin, placePluginTerminal, setDoorState, setPropProject, setPropBrief, setPropRole, setPropHands, setPropLabel, setPropLimits,
       setBelt, removeBelt, removeBelts, placeBeltRun, connectBelt, connectionPreview, hookedBelts, stampBlueprint, insertBayBetween, canInsertBayBetween, transact, lineGraph, applyLineLayout, blueprintGraph,
       // agent-bay binding queries

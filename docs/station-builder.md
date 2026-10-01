@@ -166,6 +166,39 @@ centred on a wall (the top, then the bottom), split only when no row takes them 
 half keeps its floor) gets plants in its free corners, and the card says so ("two tall plants and two plants in the
 corners").
 
+## REFIT: the Commander's own tools
+
+Added 2026-09-30 ("make it immensely more flexible, there should be no limits, it should be able to ambitiously use the
+refit mode itself"). `station.plan { refit: [ edits ] }` gives the lead every tool of Refit mode as an edit on exact
+WORLD tiles (x east, y south; a piece's x, y is its top-left), up to 400 edits a plan, applied IN ORDER on a copy by
+the very world-model call Refit mode makes for that tool (`refitOne`), so each passes or fails on Refit mode's own
+checks (`checkRects`, `checkProp` with the mount rules, `beltPlaceable`, `checkBlueprint`). The first edit that fails
+refuses the whole plan, naming it ("Edit 6 (place): overlaps a prop"). station.build replays the edits exactly
+(`refitAll` inside the one `transact`), so one UNDO takes all of it back. The card lists every edit in words (a brief
+quoted), and warns when the floor would have a routing problem or a room nobody can walk into.
+
+| Edits | World-model call |
+| --- | --- |
+| `room` { name, kind, x, y, w, h } or rects (L, U) · `hall` { x, y, w, h } | `addRoom`, `placeHallway` (+ corridor deck) |
+| `resize` { room, x, y, w, h } · `move` { room, x, y } · `delete` { room } · `rename` · `type` { kind } | `resizeRoom` (new: grown or shrunk where it stands, never cutting what is on it), `moveRoom`, `removeRoom`, `renameRoom`, `setRoomKind` (new) |
+| `floor` / `walls` / `hull` { room, style, mat } · `paint` { room, style, tiles } · `style` { room, style } | `setDeck`, `setWalls`, `setHull`, `paintTiles`, a room style's deck + walls + `dressRoom` |
+| `place` { t, x, y, r, m, as } (any piece, a player-made prop, or a machine) · `move` / `rotate` / `mirror` / `delete` { prop } | `addProp` (footprint from `footprintAt(t, r)`), `moveProp`, `faceProp`, `mirrorProp`, `removeProp` |
+| `agent` · `door` · `role` · `brief` · `label` · `cap` · `tries` · `routes` { prop, … } | `assignPropAgent`, `setDoorState`, `setPropRole`, `setPropBrief`, `setPropLabel`, `setPropLimits`, `configureJunction` |
+| `belt` { from, to } · `unbelt` { tiles } · `connect` { from, to } | `placeBeltRun`, `removeBelts`, `connectBelt` |
+| `stamp` { line, x, y } · `edit` { prop, edit, args } | `stampBlueprint`; the Workflow panel's own `LineEdit.run` (insertStep, appendStep, addBranch, addLoop, addSorter, addRoute, removeStep, moveStep, tidy, addOutbox …) |
+
+A piece is named by its id (from `station.map { room }`), a name given earlier with `as`, or a tile `[x, y]`; a room
+by its name or an `as`. `station.map { room }` details a room tile by tile (every piece with its id, type, place,
+size, agent, role, label and brief; its belts; its doorways; the room drawn: `.` floor, `#` a piece, `_` a walk-over
+piece, `A` a seat, `M` a machine, `=` a belt, `D` a doorway). `station.map { catalog: true }` lists every piece (type,
+size, mount, turns, flips, yours), room types, floor styles and materials, wall and hull materials, room styles, bay
+roles, lines and line edits.
+
+**Limits raised at the same time:** recruits 3 → 12 a plan (still only when the Commander asks), named pieces 16 → 120
+(40 of one kind), rooms in a rooms plan 6 → 24, lines in a room 6 → 16, a diamond 16 → 40 rooms, a concourse 8 → 24,
+rooms removed at once 8 → 60, a hallway 40 → 160 tiles (200 round a corner), a designed room 44 × 26 → 96 × 60. The
+bound left is the world model's own: a station spans at most 240 tiles.
+
 ## Editing what stands
 
 Added 2026-09-30 ("it should be able to build anything the user wants"). `station.plan` with one of these goes to the
@@ -316,8 +349,6 @@ of furniture itself, so these fields are not accepted: x".
 
 Custom shapes (the plan's phase 4) are built as line zones. The card draws the plan rather than overlaying the live floor.
 
-Not built: rooms do not resize (the world model has no resize, and rebuilding a room bigger would break its lines'
-links: remove one and build it again the size it should be) and are rectangles; a hallway turns at most one corner; a
-piece is placed where StarNet judges
-best, never at a tile the model names; a line's machines are not edited one by one (restaff it, remove it, or plan a
-new one). The Commander does those in Build mode.
+Not built: everything Refit mode can do, the lead can now do through REFIT (rooms of any shape, resize, type, exact
+pieces turned and flipped, belts, wiring, line edits). What stays out: a station wider than the world model's 240-tile
+span, and creating new prop art (the MAKE A PROP flow).

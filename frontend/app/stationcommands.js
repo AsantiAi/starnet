@@ -444,11 +444,14 @@ const StationCommands = (() => {
     /* THE SPATIAL BUILDER (2026-09-30): the lead SEES the floor (station.map: every room's place and size, what joins what,
        what fits where, the floor drawn in characters) and then says where rooms go in words — beside which room, on which
        side, how big, by a hallway or open plan, empty or filled. StationBuilder.planBuild turns that into tiles. */
-    'station.map': () => {
+    'station.map': (a) => {
       const st = typeof App !== 'undefined' && App.station ? App.station() : null;
       if (!st || !st.serialize || !st.rooms) throw new Error('the station is not ready yet');
       if (typeof StationBuilder === 'undefined' || !StationBuilder.mapOf || typeof WorldModel === 'undefined') throw new Error('the station builder is not loaded on this page');
-      const r = StationBuilder.mapOf(st.serialize(), { WorldModel, Pipeline: typeof Pipeline !== 'undefined' ? Pipeline : null });
+      const crew = (App.agents ? App.agents() : []).map(x => ({ id: x.id, name: x.name }));
+      const r = StationBuilder.mapOf(st.serialize(), { WorldModel, Pipeline: typeof Pipeline !== 'undefined' ? Pipeline : null, crew,
+        PropSprites: typeof PropSprites !== 'undefined' ? PropSprites : null, RoomStyles: typeof RoomStyles !== 'undefined' ? RoomStyles : null, LineEdit: typeof LineEdit !== 'undefined' ? LineEdit : null },
+        { room: a && a.room != null ? String(a.room) : null, catalog: !!(a && a.catalog) });
       if (!r || !r.ok) throw new Error((r && r.error) || 'the map could not be read');
       return r.map;
     },
