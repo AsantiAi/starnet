@@ -17540,9 +17540,7 @@ async function runOnceCore(o) {
      (including allowed group chats), STARNET REMOTE phone runs and group sessions — none of which is the Commander
      sitting at this desktop. The shared station browser carries their sign-ins and open tabs, so only a run started
      from COMMS (the stationBrowser flag) may drive it; every other run browses in a private browser, as before. */
-  runStationBrowser = await browserViews.sessionForRun({ agentId, runId, interactive: surface === 'interactive' && o.stationBrowser === true, loginPrompt: o.loginPrompt });
-  runBrowser = makeBrowserTools({
-    session: runStationBrowser || undefined,
+  const runBrowserDeps = {
     ensureChromium: () => chromiumInstaller.ensure(),
     vision: imageTools.hasVision ? imageTools.browserVision : null,
     ledger: procLedger,
@@ -17581,7 +17579,11 @@ async function runOnceCore(o) {
       // fall back to a different port when the requested one belongs to another process.
       return backgroundOwnsLocalUrl(st, url, loopbackListenerProbe);
     }
-  });
+  };
+  runStationBrowser = await browserViews.sessionForRun({ agentId, runId, interactive: surface === 'interactive' && o.stationBrowser === true, loginPrompt: o.loginPrompt,
+    // the station browser is busy with another run: this run browses in a private browser built exactly as below
+    makePrivate: () => browserInternals.makeBrowserSession(runBrowserDeps) });
+  runBrowser = makeBrowserTools(Object.assign({ session: runStationBrowser || undefined }, runBrowserDeps));
   runBrowser.register(registry);   // browser.* + isolated browser.test_* automation
   if (!runStationBrowser) browserViews.registerRun({ agentId, runId, session: runBrowser.session });   // a private browser: the Commander may still watch it
   makeDesktopTools({ allowRemoteDesktop: DESKTOP_SHELL }).register(registry);

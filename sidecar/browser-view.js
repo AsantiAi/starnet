@@ -185,12 +185,21 @@ function makeBrowserViews(deps) {
     const me = { agentId: String(info.agentId || 'agent'), runId: String(info.runId), released: false };
     runHandles.set(me.runId, me);
     const loginPrompt = typeof info.loginPrompt === 'function' ? info.loginPrompt : undefined;
-    // returns null when this run already drives; a promise while it takes the wheel; throws when another run has it
+    /* returns null when this run already drives; a promise while it takes the wheel; 'private' when ANOTHER run holds
+       the station browser and this run browses in its own private browser instead (release review 2026-09-30: it used
+       to throw "in use by another run", so a second agent could not browse at all for the whole of a long COMMS run).
+       A run that went private stays private for the rest of the run: one run, one browser. */
     function take() {
       if (me.released) throw new Error('this run has ended — it no longer drives the station browser');
+      if (me.private) return 'private';
       const st = ensureStation();
       if (st.driver && st.driver.runId === me.runId) return null;
-      if (st.driver) throw new Error('the station browser is in use by another run right now — retry after it finishes');
+      if (st.driver) {
+        if (typeof info.makePrivate !== 'function') throw new Error('the station browser is in use by another run right now — retry after it finishes');
+        me.private = info.makePrivate();
+        registerRun({ agentId: me.agentId, runId: me.runId, session: me.private });   // the Commander may still watch it
+        return 'private';
+      }
       st.driver = me;
       if (st.idleTimer) { clearT(st.idleTimer); st.idleTimer = null; }
       if (attended) attended.prompt = loginPrompt;
@@ -200,21 +209,30 @@ function makeBrowserViews(deps) {
     }
     return new Proxy({}, {
       get(_t, prop) {
+        if (me.private) { const pv = me.private[prop]; return typeof pv === 'function' ? pv.bind(me.private) : pv; }
         const st = ensureStation();
         const v = st.session[prop];
         if (typeof v !== 'function') return v;
         if (PASSIVE.has(String(prop))) return v.bind(st.session);
         return (...args) => {
           const taking = take();
+          if (taking === 'private') return me.private[prop](...args);
           return taking ? taking.then(() => ensureStation().session[prop](...args)) : v.apply(st.session, args);
         };
       },
-      has(_t, prop) { return prop in ensureStation().session; }
+      has(_t, prop) { return prop in (me.private || ensureStation().session); }
     });
   }
   function releaseRun(runId) {
     const h = runHandles.get(String(runId || ''));
-    if (h) { h.released = true; runHandles.delete(h.runId); }   // its view can never drive again, even from a late tool
+    if (h) {
+      h.released = true; runHandles.delete(h.runId);   // its view can never drive again, even from a late tool
+      if (h.private) {   // it browsed privately (the station browser was busy): that browser ends with the run
+        const priv = h.private; h.private = null;
+        unregisterRun(h.runId);
+        Promise.resolve().then(() => priv.close()).catch(e => failNote('view.private-close', e));
+      }
+    }
     if (!station || !station.driver || station.driver.runId !== String(runId || '')) return false;
     station.driver = null; station.signIn = null;
     if (attended) attended.prompt = undefined;

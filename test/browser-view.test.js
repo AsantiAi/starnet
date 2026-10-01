@@ -164,6 +164,29 @@ function rig(extra) {
     A.ok(f.ok && f.page.url === 'https://youtube.com/', 'the Commander opens the window after the run and YouTube is there');
   }
 
+  // ---- a SECOND run while one drives: it browses in its own private browser instead of failing (release review) ----
+  {
+    const { made, views } = rig();
+    const first = views.sessionForRun({ agentId: 'nova', runId: 'r1', interactive: true });
+    await first.navigate('https://first.example/');
+    const priv = fakeSession(); let privMade = 0;
+    const second = views.sessionForRun({ agentId: 'kira', runId: 'r2', interactive: true, makePrivate: () => { privMade++; return priv.api; } });
+    const went = await second.navigate('https://second.example/');
+    A.eq(went, 'https://second.example/', 'the second run browses (no "in use" error)');
+    A.eq(privMade, 1, '…in a private browser made for it');
+    A.eq(made[0].url, 'https://first.example/', 'the shared browser was not touched');
+    A.eq(views.list().station.driver.runId, 'r1', 'the first run still drives the shared browser');
+    A.ok(views.list().agents.some(a => a.runId === 'r2'), 'the Commander can watch the second run\'s private browser');
+    await second.navigate('https://second.example/two');
+    A.eq(privMade, 1, 'one run, one browser: it stays private for the rest of the run');
+    views.releaseRun('r2');
+    await tick(); await tick();
+    A.eq(priv.closed, 1, 'its private browser closes when the run ends');
+    A.ok(!views.list().agents.some(a => a.runId === 'r2'), '…and is no longer listed');
+    A.eq(views.list().station.driver.runId, 'r1', 'the first run is unaffected');
+    views.releaseRun('r1');
+  }
+
   // ---- PRIVACY: when the run lets go, the Commander's own downloads go to THEIR folder, not the agent's ----
   {
     const { made, views } = rig({ commanderDownloadDir: () => '/home/me/Downloads' });
