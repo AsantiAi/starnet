@@ -22,7 +22,7 @@ const PropSprites = require('../frontend/app/propsprites.js');
 /* F1 — a door named for the job */
 const workMenu = html.slice(html.indexOf('data-group="work"'), html.indexOf('data-group="build"'));
 A.ok(/id="bb-workflows"[^>]*>[\s\S]{0,80}<b>WORKFLOWS<\/b>/.test(workMenu), 'WORK menu has a WORKFLOWS entry');
-A.ok(/bbWorkflows\.onclick = [^\n]*Build\.openWorkflows\(\)/.test(app), 'WORKFLOWS opens the conveyor builder');
+A.ok(/id="bb-workflows" data-term="workflows"/.test(workMenu) && !/bbWorkflows\.onclick/.test(app), 'WORKFLOWS opens its own docked window — send a job, read the result, change it (2026-09-30; never Build Mode)');
 A.ok(/const api = \{ init, open, openWorkflows,/.test(build), 'Build exports openWorkflows');
 const ow = build.slice(build.indexOf('function openWorkflows()'), build.indexOf('const api = {'));
 A.ok(/pendingGroup = 'workflow'/.test(ow) && /rebake\(\)/.test(ow) && /openFlowCard\(first\.id\)/.test(ow), 'it opens on the Conveyors tab, compiles, and docks the line’s panel');

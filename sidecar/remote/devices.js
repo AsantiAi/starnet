@@ -161,11 +161,12 @@ function makeDevices(deps) {
     return res.ok ? { ok: true, token } : { ok: false, error: res.error };
   }
   function relayTokenHashes() { return load().devices.map(d => d.relayTokenHash).filter(Boolean); }
+  function tokenHashOf(id) { const d = load().devices.find(x => x.id === String(id || '')); return (d && d.relayTokenHash) || ''; }
 
   function enabled() { return load().enabled === true; }
   function setEnabled(on) { const s = load(); const res = persist(Object.assign({}, s, { enabled: on === true })); return res.ok ? { ok: true } : { ok: false, error: res.error }; }
 
-  return { stationKeys, list, get, startPairing, completePairing, revoke, touch, enabled, setEnabled, issueRelayToken, relayTokenHashes, _pairings: pairings };
+  return { stationKeys, list, get, startPairing, completePairing, revoke, touch, enabled, setEnabled, issueRelayToken, relayTokenHashes, tokenHashOf, _pairings: pairings };
 }
 
 module.exports = { makeDevices, CODE_ALPHABET, PAIR_TTL_MS, PAIR_MAX_TRIES };

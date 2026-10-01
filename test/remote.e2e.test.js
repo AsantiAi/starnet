@@ -259,6 +259,14 @@ function startMockModel() {
     A.eq(again.data.same, true, 'an unchanged picture is not sent twice');
     const face = await client.call('portrait', { agentId: 'forge' });
     A.ok(face.ok && face.data.mime === 'image/png' && Buffer.from(face.data.data, 'base64').toString('latin1', 1, 4) === 'PNG', 'the portrait of an agent is a real sprite from the shipped art');
+    const crewPut = await fx.json('POST', '/api/remote/view/crew', { bodies: [{ agentId: 'forge', key: 'approved_robot.walk.south', idx: 1, x: 100, y: 50, w: 6, h: 18, walking: true }] });
+    A.ok(crewPut.status === 200 && crewPut.body.ok, 'the desk page streams where the crew are');
+    const withCrew = await client.call('view', {});
+    A.eq(withCrew.data.crew && withCrew.data.crew.bodies.map(b => b.key), ['approved_robot.walk.south'], 'a phone opening the picture gets the crew positions with it');
+    const trk = await client.call('sprite', { key: 'approved_robot.walk.south' });
+    A.ok(trk.ok && trk.data.frames.length >= 4, 'and the drawings to show them walking');
+    const act = await client.call('activity', { limit: 10 });
+    A.ok(act.ok && Array.isArray(act.data.live) && act.data.done.some(r => r.streamId === 'ws_desk_launch' && r.state === 'done'), 'ACTIVITY lists the finished desk-session task: ' + JSON.stringify(act.data.done.map(r => r.title)).slice(0, 160));
     const stl = await client.call('status');
     A.ok(stl.data.agents.every(a => typeof a.skin === 'string'), 'status says how each agent looks');
 
@@ -302,6 +310,19 @@ function startMockModel() {
     A.eq(after.body.devices.map(d => d.name), ['Tablet'], 'the paired phone survived the restart');
     const c3 = Phone.connect({ base: lan, deviceId: paired2.deviceId, stationPub: pr2.body.stationPub, key: key2 });
     A.eq((await c3.call('status')).ok, true, 'the phone reconnects after a restart with the same station key');
+
+    // 12. E-STOP reaches a phone run: while it works it is on the station's run list (a reconnect keeps the agent
+    //     working on the floor), and the halt aborts it and counts it
+    const held = await c3.call('send', { agentId: 'forge', text: 'slow reply' });
+    A.eq(held.ok, true, 'a held phone task started');
+    await waitUntil(() => !!llm.gate.held, 20000, 'model holding the phone task');
+    const snap = await fx.json('GET', '/api/state/snapshot');
+    A.ok(snap.body.runs.some(r => r.runId === held.data.runId && r.agentId === 'forge' && r.source === 'remote'), 'the phone run is in the station snapshot: ' + JSON.stringify(snap.body.runs).slice(0, 200));
+    const halt = await fx.json('POST', '/api/halt', {});
+    A.ok(halt.status === 200 && halt.body.halted >= 1, 'E-STOP counts the phone run: ' + JSON.stringify(halt.body).slice(0, 160));
+    await waitUntil(async () => (await fx.json('GET', '/api/remote/recent')).body.runs.some(r => r.runId === held.data.runId && r.live === false), 10000, 'phone run ended by E-STOP');
+    A.ok(!(await fx.json('GET', '/api/state/snapshot')).body.runs.some(r => r.runId === held.data.runId), 'and it is off the run list');
+    llm.gate.release();
 
     const offAgain = await fx.json('POST', '/api/remote/enable', { on: false });
     A.eq(offAgain.body.listening, false, 'switching off closes the door');

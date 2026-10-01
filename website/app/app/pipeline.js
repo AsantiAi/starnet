@@ -953,6 +953,9 @@
     // keeps the same hash and no station needlessly re-arms: typing a job brief, naming a line or upgrading to
     // line identity moves nothing here. Verified by test/pipeline.test.js ("a brief edit does not move the hash").
     plan.hash = hashStr(JSON.stringify({ sources, bays, junctions, belts: map }));
+    // the links this plan was compiled from, for a re-compile of the same floor (WorkflowLine's stand-in crew probe).
+    // Not enumerable, so it never rides the plan the page posts.
+    if (links) Object.defineProperty(plan, 'links', { value: links, enumerable: false });
     return plan;
   }
 
@@ -1701,6 +1704,12 @@
     const m = HANDOFF_RE.exec(String(text == null ? '' : text));
     return m ? { stage: +m[1], original: m[2], from: m[3] } : null;
   }
+  /* isHandoff(text) -> bool — is this turn a work line's HAND-OFF (the frame handoffPrompt writes), however it was cut? Only the
+     frame's fixed opening is read, so a run row's shortened title answers too. A hand-off's words are the LINE's — the step's
+     standing instructions, the upstream stage's work — never the Commander's own: the run-end STUDY and THREAD passes skip such a
+     run (2026-09-30: NOVA quoted a WRITER step's brief back to the Commander as «because you said …»). Pure. */
+  const HANDOFF_HEAD_RE = /^PIPELINE HANDOFF — you are stage \d+ of a work line on this station\./;
+  function isHandoff(text) { return HANDOFF_HEAD_RE.test(String(text == null ? '' : text).replace(/^\s+/, '')); }
   /* stripVerdictLine(text) -> the text without a trailing reviewer VERDICT line (one of its last 3 non-empty lines), for showing
      a work line's result: the line is the loop gate's control signal, not part of the work (R1; sidecar/routing/verdict.js holds
      the gate's own reader). A text that is ONLY the verdict line is returned unchanged. Pure. */
@@ -1877,7 +1886,7 @@
     return rec && typeof rec === 'object' ? rec : null;
   }
 
-  return { rejoinOf, deriveLinks, reconcileLinks, compileRoutingPlan, composeStageBrief, HANDS_LEAD, resolveTarget, lineOf, lineOriginOf, lineLimitsOf, normalizeLineLimits, LINE_LIMIT_DEFAULTS, LINE_LIMIT_CEILINGS, sourceFor, ok, liveTiles, routeFrom, junctionLaneOwners, chainNext, chainStep, fanSiblings, handoffPrompt, parseHandoff, stripVerdictLine, joinPayload, lineComponents, LOOP_MAX_DEFAULT, LOOP_MAX_CEILING,
+  return { rejoinOf, deriveLinks, reconcileLinks, compileRoutingPlan, composeStageBrief, HANDS_LEAD, resolveTarget, lineOf, lineOriginOf, lineLimitsOf, normalizeLineLimits, LINE_LIMIT_DEFAULTS, LINE_LIMIT_CEILINGS, sourceFor, ok, liveTiles, routeFrom, junctionLaneOwners, chainNext, chainStep, fanSiblings, handoffPrompt, parseHandoff, isHandoff, stripVerdictLine, joinPayload, lineComponents, LOOP_MAX_DEFAULT, LOOP_MAX_CEILING,
     // THE DOCK LAYER (multi-bay agents, 2026-09-22) — the dock-keyed truth the agent readings above are views of
     resolveDock, chainNextDock, chainStepDock, fanSiblingsDock, junctionLaneDocks, lineOfDock, lineOriginOfDock, entryDockOf, docksOf, dockOf, agentOfDock: agentOfDockIn, deriveDockLayer, dockLayer, hasDockLayer, stepToAgents, propIdCmp,
     _internals: { DIRV, OPP, LANE_ORDER, key, buildBeltMap, outLanes, inLanes, loopLanes, beltTileNear, ringBelts, junctionAnchor, dirBetween, linkTilesByProp, linkedBeltMap, nextTiles, detectCycle, hashStr, compileChains, compileDockChains, chainCycle, shipFrom, propIdCmp, entryDocksOf, agentChainsView } };

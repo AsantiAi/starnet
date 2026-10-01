@@ -68,9 +68,10 @@ for (const k of ['_saveName', '_saveBay', '_saveLimits', '_saveGate']) A.ok(pSav
 A.ok(/WorkflowPanel\.isOpen\(\)\) \{ WorkflowPanel\.close\(\); return; \}/.test(build), 'ESC closes the docked panel THROUGH its close path (saving) before it leaves REFIT');
 A.ok(/if \(typeof WorkflowPanel !== 'undefined' && WorkflowPanel\.isOpen\(\)\) WorkflowPanel\.close\(\);/.test(build.slice(build.indexOf('  function close() {'), build.indexOf('  const toggle'))), 'closing REFIT closes the panel through its save path while the station is still ours');
 
-const roomBlock = build.slice(build.indexOf('function openRoomCard'), build.indexOf('function doDeleteRoom'));
-A.ok(/const closeC = \(\) => \{ saveName\(\);/.test(roomBlock), "the room card's close path saves the rename");
-A.ok(/cardRegister\(g, closeC\)/.test(roomBlock), '…and it is registered');
+// the ROOM card docks above the library now (2026-10-01 build-mode upgrade, phase 2): its rename saves on Enter or on leaving the field
+const roomBlock = build.slice(build.indexOf('function renderRoomCard'), build.indexOf('function renderGroupCard'));
+A.ok(/nameEl\.onblur = saveName;/.test(roomBlock), "the room card saves the rename when the field is left");
+A.ok(/if \(e\.key === 'Enter'\) \{ e\.preventDefault\(\); nameEl\.blur\(\); \}/.test(roomBlock), '…and on Enter');
 
 // EVERY card opener replaces rather than bailing out
 for (const fn of ['openStepCard', 'openWorkstationPicker', 'openFlowCard', 'openBeltCard',

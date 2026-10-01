@@ -421,7 +421,7 @@ const App = (() => {
       }
       if (typeof patch.personaId === 'string' && typeof Personas !== 'undefined' && Personas.exists(patch.personaId)) {
         a.personaId = Personas.resolve ? Personas.resolve(patch.personaId) : patch.personaId;
-        if (focused && typeof Voice !== 'undefined' && Voice.init) Voice.init({ name: a.name, personaId: a.personaId, resumeCue: false });
+        if (focused && typeof Voice !== 'undefined' && Voice.setPersona) Voice.setPersona(a.personaId, a.name);
       }
       if (typeof patch.approvalMode === 'string') {
         a.approvalMode = patch.approvalMode === 'full' ? 'full' : 'ask';
@@ -504,7 +504,7 @@ const App = (() => {
     a.systemPrompt = composeSystemPrompt(a);
     if (agent && a.id === agent.id) {   // focused agent — the live COMMS session adopts the voice at once
       if (typeof Chat !== 'undefined' && Chat.setSystem) Chat.setSystem(a.systemPrompt);
-      if (typeof Voice !== 'undefined' && Voice.init) Voice.init({ name: a.name, personaId: a.personaId, resumeCue: false });
+      if (typeof Voice !== 'undefined' && Voice.setPersona) Voice.setPersona(a.personaId, a.name);
       syncChannels();   // a connected Telegram bot keeps speaking as the SAME agent, new voice
     }
     pushRoster();
@@ -3311,8 +3311,8 @@ const App = (() => {
         bbBuild.onclick = () => { SFX.click(); bbBuild.classList.remove('refit-nudge'); Build.toggle(); if (typeof Tutorial !== 'undefined' && Tutorial.onBuildOpen && Build.isOpen && Build.isOpen()) Tutorial.onBuildOpen(); };
       }
     }
-    const bbWorkflows = el('bb-workflows');
-    if (bbWorkflows) bbWorkflows.onclick = () => { SFX.click(); if (typeof Build !== 'undefined' && Build.openWorkflows) Build.openWorkflows(); };
+    // WORK › WORKFLOWS (2026-09-30) is its own docked window (frontend/app/windows/workflows.js, data-term="workflows"): the dock binds it
+    // like every other window — it no longer opens Build Mode. The full editor is that window's EDIT WORKFLOW key.
     const bbRecruit = el('bb-recruit');
     if (bbRecruit) bbRecruit.onclick = openSummonBay;   // the ONE recruit door — bay carries both verbs (summon new / deploy to current)
 

@@ -22,6 +22,15 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  /* the approval card's words for a station.build call: the plan's own summary and each step's instructions, as
+     station.plan_line returned them (memo: planId -> { summary, steps }) — never text the model supplied. */
+  function planSummaryFrom(memo, planId) {
+    const e = memo && memo.get ? memo.get(String(planId || '')) : null;
+    if (!e) return null;
+    const steps = (e.steps || []).map(s => 'Step ' + s.step + ' ' + s.role + ' (' + (s.agent || 'nobody yet') + '): ' + String(s.instructions || '').slice(0, 160)).join('\n');
+    return e.summary + (steps ? '\n' + steps : '');
+  }
+
   function makeStationTools(deps) {
     deps = deps || {};
     const station = (deps.station && typeof deps.station.request === 'function') ? deps.station : null;
@@ -316,12 +325,180 @@
       }
     };
 
+    /* THE STATION BUILDER (2026-09-29, one planner 2026-09-30): three tools, DEFERRED (CAP_REGISTRY `deferred: true`) so
+       they cost the per-call payload nothing until the lead needs them — the lead's note names them and says to reach
+       them with tool_search "station builder"; each result reveals the next one. station.map sees the floor, station.plan
+       plans ANY floor change on a copy (nothing changes), station.build applies exactly one plan behind the approval
+       card. The model never sends a tile: it names a pattern, rooms, styles, sides and sizes, and the page's
+       StationBuilder places everything. The card's text is the PLAN's own summary (planSummaryFor), recorded here when
+       station.plan answered — never words the model supplied. */
+    const planMemo = deps.planMemo instanceof Map ? deps.planMemo : new Map();
+    const menu = typeof deps.lineMenu === 'function' ? deps.lineMenu : () => [];
+    const menuText = () => { try { return (menu() || []).map(l => l.id + ' (' + (l.roles || []).join(' → ') + ')').join('; '); } catch (_) { return ''; } };
+    const planSummaryFor = planId => planSummaryFrom(planMemo, planId);
+    // every plan parks in the memo the approval card reads (planSummaryFrom)
+    function remember(p) {
+      if (!p || !p.planId) return;
+      for (const [id, e] of planMemo) if (clock && clock() - e.at > 10 * 60 * 1000) planMemo.delete(id);
+      planMemo.set(p.planId, { summary: String(p.summary || ''), steps: p.steps || [], at: clock ? clock() : 0 });
+    }
+    const kitMenu = typeof deps.kitMenu === 'function' ? deps.kitMenu : () => [];
+    const presetMenu = typeof deps.presetMenu === 'function' ? deps.presetMenu : () => [];
+    const kitText = () => { try { return (kitMenu() || []).map(k => k.name).join(', '); } catch (_) { return ''; } };
+    const presetText = () => { try { return (presetMenu() || []).join(', '); } catch (_) { return ''; } };
+    const styleMenu = typeof deps.styleMenu === 'function' ? deps.styleMenu : () => [];
+    const styleText = () => { try { return (styleMenu() || []).map(s => s.id).join(', '); } catch (_) { return ''; } };
+    const roomMenu = typeof deps.roomMenu === 'function' ? deps.roomMenu : () => [];
+    const roomText = () => { try { return (roomMenu() || []).map(s => s.id + ' (' + s.name + (s.about ? ': ' + s.about : '') + ')').join('; '); } catch (_) { return ''; } };
+    const BUILDER = ['station.map', 'station.plan', 'station.build', 'station.make_prop'];
+    const mapTool = {
+      name: 'station.map', capability: 'orchestrator', scope: 'read', requiresConsent: false,
+      description: 'STATION BUILDER, step 1: see the station floor before you build on it. Every room with its position and size in tiles, its type, what it is joined to (through hallways, or open to it), its machines, furniture and lines, how much floor is clear, which sizes of new room fit on each side, and the floor drawn in characters (a letter per room, + for a hallway; north is the top). '
+        + 'The room marked main is the one the station started from; the Commander may call it the bridge, the hub or the main room. '
+        + 'For exact REFIT edits: { room: a name } details that room tile by tile (every piece with its id, type, place and size; its belts; its doorways; the room drawn); { catalog: true } lists every piece that can be placed (type, size, rules), room types, floors, walls, bay roles, lines and line edits. Then plan with station.plan. Read-only; needs an open station page.',
+      schema: { type: 'object', properties: { room: { type: 'string' }, catalog: { type: 'boolean' } } },
+      run: async (args) => {
+        const a = args && typeof args === 'object' ? args : {}, q = {};
+        if (a.room != null) q.room = String(a.room).slice(0, 60);
+        if (a.catalog) q.catalog = true;
+        const out = await ask('station.map', q);
+        if (!out.ok) return refuse(out.error);
+        const m = out.result || {};
+        const summary = q.catalog ? ((m.pieces || []).length) + ' pieces in the catalog' : q.room ? m.room + ': ' + ((m.pieces || []).length) + ' pieces' : ((m.rooms || []).length) + ' room(s), ' + (m.hallways || 0) + ' hallway(s)';
+        return { content: JSON.stringify(m), summary, control: { revealTools: BUILDER } };
+      }
+    };
+    /* ONE PLANNER: the form of the request says what kind of change it is, and the page's own planner for that kind answers */
+    const PLAN_HOW = 'Send one form: { layout: { pattern, rooms } } (a whole station), { rooms, hallways } (rooms where the Commander says), { line | shape | purpose } (one workflow line), { kit | preset } (a furnished room or a preset), { zones } (one room part by part), { restyle: { room, … } }, or an edit of what stands ({ remove }, { refurnish }, { clear }).';
+    function planVerb(a) {
+      const has = k => a[k] !== undefined && a[k] !== null;
+      if (has('restyle')) return Object.keys(a).length === 1 ? { verb: 'station.plan_restyle', request: a.restyle } : { error: 'restyle goes on its own: { restyle: { room, type, floorStyle, floorMat, name } }.' };
+      if (has('undo')) return Object.keys(a).filter(has).length === 1 ? { verb: 'station.plan_undo', request: {} } : { error: 'undo goes on its own: { undo: true } takes back the lead\'s own last build.' };
+      if (['remove', 'refurnish', 'clear', 'add', 'seat', 'move', 'staff', 'refit'].some(has)) return Object.keys(a).filter(has).length === 1 ? { verb: 'station.plan_edit', request: a } : { error: 'remove, refurnish, clear, add, seat, move, staff and refit each go on their own, one edit a plan (a refit holds as many edits as you need).' };
+      if (has('layout') || has('rooms') || has('hallways')) return { verb: 'station.plan_build', request: a };
+      if (has('kit') || has('preset') || has('zones')) return { verb: 'station.plan_room', request: a };
+      if (has('line') || has('shape') || has('purpose')) return { verb: 'station.plan_line', request: a };
+      return { error: PLAN_HOW };
+    }
+    const planTool = {
+      name: 'station.plan', capability: 'orchestrator', scope: 'read', requiresConsent: false,
+      get description() {
+        return 'STATION BUILDER, step 2: plan a change to the station floor when the Commander asks for one. It is built on a copy and checked; nothing changes until station.build. You never send a position: you name the pattern, rooms, styles, sides and sizes, and StarNet places every room, hallway, machine and piece of furniture. ' + PLAN_HOW + ' '
+          + '1 LAYOUT, the way to a beautiful station: { "layout": { "pattern": "diamond" | "concourse", "rooms": [ { "name", "style", "size", "lines" } ] }, "replace": true? }. diamond (the usual one) = every room on an even grid all round the main room, each the bridge\'s size and a hallway apart, filled in diamond order (the four sides, then the corners and far sides, then the next ring out) so the station keeps its shape at any size, with a corridor loop round the bridge at its centre; big rooms (a conveyor hall, size giant) take the east and west wings; up to 40 rooms. To ADD rooms later, send a layout again with only the new rooms: they take the next free places of the same diamond, or go down the same concourse. concourse = a wide corridor from one side of the main room, rooms down both sides, a big room at the far end (up to 24; "side" picks the direction). '
+          + 'Each room is furnished wall to wall in its style (floor, walls, feature wall, centrepiece, plants) and the corridors are planted and lit. Room styles: ' + roomText() + '. A room given lines is a conveyor hall (works); a works room without lines is kept clear for lines to come. '
+          + 'replace: true lays the whole station out again around the main room: every other room is replaced, the main room, agents and conversations stay, and the old layout is backed up for RESTORE PREVIOUS. Use it when the Commander wants the station redone, or when there is no clear space round the main room. '
+          + '2 ROOMS where the Commander says: { "rooms": [ { name, style | zones | lines, size, beside, side, hallway, align, type } or { into: an existing room, style | zones | lines } ], "hallways": [ { from, to } ] } (straight, or round one corner when the rooms stand diagonally apart). size: small 12×8, medium 18×11, large 24×14, giant 36×20, or { w, h }. beside: a room name ("bridge" or "main" = the main room); side: north, south, east, west; hallway: true (default), false (open plan) or 2-8 long. With no beside or side, a new room takes the station\'s next free place (on the diamond grid, or down its concourse), at its size; a conveyor hall is giant unless sized.'
+          + '3 ONE LINE: { line | shape | purpose, where, beside, side, hallway, name, steps, dailyCap, tries }; with no where it goes into a conveyor hall that has room for it, else a room of its own on the grid, and lines sharing a room stand in rows with walkways between. LINES: ' + menuText() + '. shape = stages in order: a role ("RESEARCHER"), { together: [roles] }, { turns: [roles] }, { sort: { code: role, research: role } }, { review: true, tries: 3 }. steps (or a line\'s staff): [ { step, agent, instructions } ], agent = a crew name or "lead"; "new" recruits a new specialist ONLY when the Commander asks for new crew (each gets a desk by its line); otherwise leave agent out and the card lists the step as still to do. '
+          + '4 { kit | preset, replace, where, name }: KITS ' + kitText() + '; PRESETS ' + presetText() + ' (replace: true swaps the whole station for the preset). '
+          + '5 { zones: [ { area, style } | { area, line | purpose | shape, … } ], where, name, size, beside, side }: area left, right, back, front, back-left, back-right, front-left, front-right or whole; zone styles ' + styleText() + '. '
+          + '6 { restyle: { room, type, floorStyle, floorMat, name } } changes a floor or a name only. '
+          + '7 EDIT what stands, one edit a plan: { add: { room, pieces: ["a tv", "three plants", "a sofa"] } } places named pieces (any catalog piece, or a prop the Commander made, by its name) against the walls or on the open floor, clear of doorways and lines; { remove: { room, pieces } } takes named pieces out ("all plants" too); { remove: { line, room? } } takes one workflow line out; { remove: a room or [rooms] } takes rooms out with everything in them and the hallways left joining nothing (agents keep a desk; the main room stays); { refurnish: { room, style, name } } clears a room\'s furniture and furnishes it in another style, floor and walls too ("turn the gym into a library"); { clear: a room } empties its furniture; { seat: { agent, room } } moves an agent\'s desk into a room; { move: { room, beside, side } } moves a room with everything in it; { staff: { line, steps: [ { step, agent, instructions } ] } } restaffs an existing line (agent "nobody" clears a step). Rooms do not resize: remove one and build it again the size it should be. '
+          + '9 REFIT, the Commander\'s own Refit-mode tools on exact tiles, for anything the forms above do not say: { refit: [ edits ] }, applied in order with Refit mode\'s own checks, as many as you need, one approval, one undo. Read exact tiles first: station.map { room } (every piece\'s id, type, place, size; belts; doorways; the room drawn) and { catalog: true } (every piece type and size, room types, floors, walls, bay roles, lines, line edits). Tiles are world x, y (x east, y south; a piece\'s x, y is its top-left). Edits: '
+          + '{ op: "room", name, kind, x, y, w, h } (or rects: [ {x, y, w, h}, … ] for an L or U; kind hab, bridge, lab, factory, quarters, storage) · { op: "hall", x, y, w, h } (one straight run, 1-3 wide; several make any route) · { op: "resize", room, x, y, w, h } · { op: "move", room, x, y } · { op: "delete", room } · { op: "rename", room, name } · { op: "type", room, kind } · { op: "floor" | "walls" | "hull", room, style, mat } · { op: "paint", room, style, tiles: [[x, y], …] } · { op: "style", room, style } (furnish in a room style) · '
+          + '{ op: "place", t, x, y, r, m, as } (any piece or machine: intake, bay, filter, merger, splitter, joiner, loop, outbox; r 0 faces south, 1 west, 2 north, 3 east; m: 1 flips; as names it for later edits) · { op: "move", prop, x, y } · { op: "rotate", prop, r } · { op: "mirror", prop } · { op: "delete", prop } · { op: "agent", prop, agent } · { op: "door", prop, state } · '
+          + '{ op: "belt", from: [x, y], to: [x, y] } (a straight run) · { op: "unbelt", tiles } · { op: "connect", from: prop, to: prop } (belts one machine into the next) · { op: "role" | "brief" | "label", prop, role | text } · { op: "cap", prop, usd } · { op: "tries", prop, max } · { op: "routes", prop, routes: { tag: side }, def } · { op: "stamp", line, x, y } (a shelf line at an exact spot) · { op: "edit", prop, edit, args } (the Workflow panel\'s own line edits on the line that prop is on: insertStep { from, to, role }, appendStep { after, role }, addBranch, addLoop, addSorter, addRoute, removeStep { id }, moveStep, tidy, addOutbox …). '
+          + 'prop is an id from station.map { room }, a name given with as, or a tile [x, y]; room is a name or an as. The first edit that fails refuses the plan and names it with Refit mode\'s reason: fix that edit and plan again. '
+          + 'A piece the catalog does not have: station.make_prop makes it with the Commander\'s StarNet credits, then add or place it by its name. '
+          + '8 { undo: true } takes back the lead\'s own last build ("no, undo that"), only while nothing has changed since; repeat it to go back further. '
+          + 'It answers a planId and a plain summary: tell the Commander the summary, then call station.build with the planId. If it refuses it says why and what does fit: fix the request and plan again. Never give up after one refusal, and never say something was built that station.build did not report.';
+      },
+      schema: { type: 'object', properties: {
+        layout: { type: 'object', properties: { pattern: { type: 'string' }, around: { type: 'string' }, side: { type: 'string' }, rooms: { type: 'array', items: { type: 'object' } } } },
+        replace: { type: 'boolean' }, rooms: { type: 'array', items: { type: 'object' } }, hallways: { type: 'array', items: { type: 'object' } },
+        line: { type: 'string' }, shape: { type: 'array' }, purpose: { type: 'string' }, steps: { type: 'array', items: { type: 'object' } }, dailyCap: {}, tries: { type: 'integer' },
+        kit: { type: 'string' }, preset: { type: 'string' }, zones: { type: 'array', items: { type: 'object' } }, restyle: { type: 'object' }, remove: {}, refurnish: { type: 'object' }, clear: {}, add: { type: 'object' }, seat: { type: 'object' }, move: { type: 'object' }, staff: { type: 'object' }, undo: { type: 'boolean' }, refit: { type: 'array', items: { type: 'object' } },
+        where: { type: 'string' }, name: { type: 'string' }, size: {}, beside: { type: 'string' }, side: { type: 'string' }, hallway: {}, type: { type: 'string' }, floorStyle: { type: 'string' }, floorMat: { type: 'string' } } },
+      run: async (args) => {
+        const a = args && typeof args === 'object' && !Array.isArray(args) ? args : {};
+        const route = planVerb(a);
+        if (route.error) return refuse(route.error);
+        const out = await ask(route.verb, { request: route.request });
+        if (!out.ok) return refuse(out.error);
+        const p = out.result || {};
+        remember(p);
+        const rooms = (p.rooms || []).map(r => r.name).join(', '), h = (p.hallways || []).length;
+        const what = route.verb === 'station.plan_line' ? ((p.line && p.line.name) || 'a line') + (p.ready ? ' (ready once built)' : ' (' + ((p.blocking || []).length) + ' to do)')
+          : route.verb === 'station.plan_restyle' ? 'a restyle' : route.verb === 'station.plan_edit' ? 'an edit' : route.verb === 'station.plan_undo' ? 'an undo' : (rooms || 'a build') + (h ? ' + ' + h + ' hallway' + (h > 1 ? 's' : '') : '');
+        return { content: JSON.stringify(p), summary: 'planned ' + what, control: { revealTools: BUILDER } };
+      }
+    };
+    const buildTool = {
+      name: 'station.build', capability: 'orchestrator', scope: 'write', requiresConsent: true,
+      // briefs persist and every later run of those Bays obeys them: a run that read untrusted content may not write them
+      taintLocked: true,
+      description: 'STATION BUILDER, step 3: build exactly what station.plan planned, by its planId, after the Commander approves. It lands as one step the Commander can take back with one UNDO in Build mode; '
+        + 'nothing already on the station is moved or removed except what the plan said (an edit names everything it moves or takes out; replace: true, a preset swap or a whole new layout, backs the old layout up for RESTORE PREVIOUS). It refuses if the plan expired (ten minutes), was already used, or the station changed since the plan: then plan again. Afterwards, report what it says is still missing, exactly.',
+      schema: { type: 'object', properties: { planId: { type: 'string' } }, required: ['planId'] },
+      run: async (args) => {
+        const planId = String((args && args.planId) || '').trim().slice(0, 60);
+        const out = await ask('station.build', { planId });
+        if (!out.ok) return refuse(out.error);
+        planMemo.delete(planId);
+        const r = out.result || {};
+        const what = (r.line && r.line.name) || (r.rooms || []).map(x => x.name).join(', ') || ((r.hallways || []).length ? 'a hallway' : r.where || 'the plan');
+        return { content: JSON.stringify(r), summary: 'built ' + what + (r.line ? (r.ready ? ' · ready to run' : ' · ' + ((r.blocking || []).length) + ' to do') : '') };
+      }
+    };
+
+    /* MAKE A PROP (2026-10-01): a NEW piece the catalog does not have, drawn by StarNet's prop maker in the station's own
+       style (the very pipeline REFIT's MAKE A PROP runs: deps.userProps), paid with the Commander's StarNet credits, so
+       it asks first (the card names the object and the price). It waits for the prop to land, has the page load it into
+       the MADE BY YOU library, and answers its name and id, so station.plan places it like any piece. A side view (so it
+       turns) is a second paid step, asked for with sideView. */
+    const PROP_WAIT_MS = 6 * 60 * 1000, PROP_TICK_MS = 2000;
+    const userProps = deps.userProps && typeof deps.userProps.start === 'function' ? deps.userProps : null;
+    const pause = (ms, signal) => new Promise(res => { const t = setTimeout(res, ms); if (signal && signal.addEventListener) signal.addEventListener('abort', () => { clearTimeout(t); res(); }, { once: true }); });
+    async function waitJob(id, signal) {
+      // counted in ticks, not wall-clock time (tools never read the clock: lint-determinism)
+      for (let tick = 0; ; tick++) {
+        const j = userProps.job(id);
+        if (j && (j.status === 'done' || j.status === 'failed')) return j;
+        if ((signal && signal.aborted) || tick >= PROP_WAIT_MS / PROP_TICK_MS) return j || { id, status: 'running' };
+        await pause(PROP_TICK_MS, signal);
+      }
+    }
+    const makePropTool = {
+      name: 'station.make_prop', capability: 'orchestrator', scope: 'write', requiresConsent: true,
+      // it spends the Commander's StarNet credits: a run that read untrusted content may not
+      taintLocked: true, timeoutMs: PROP_WAIT_MS + 60000,
+      description: 'STATION BUILDER: make a NEW piece of furniture when no catalog piece is what the Commander wants (a hot-dog stand, a robot butler, a neon arcade sign), with the Commander\'s StarNet credits. StarNet\'s prop maker draws it in the station\'s own style; it joins the Commander\'s MADE BY YOU library and then places like any piece: station.plan { add: { room, pieces: ["its name"] } } or a refit { op: "place", t: "its id" }. '
+        + 'It costs StarNet credits (about $0.35 a prop; sideView: true adds about $0.30 for the side view it turns with), needs this station linked to StarNet credits, and asks the Commander first. Look in station.map { catalog: true } first: props already made show as yours, and cost nothing to place again. describe is the object in a few words (under 60 characters). It waits while the prop is drawn (a minute or two) and answers its name and id; if StarNet is still drawing when the wait ends, it says so and the prop appears in MADE BY YOU when it lands.',
+      schema: { type: 'object', properties: { describe: { type: 'string' }, sideView: { type: 'boolean' } }, required: ['describe'] },
+      run: async (args, ctx) => {
+        if (!userProps) return refuse('Making props is not available on this station.');
+        const a = args && typeof args === 'object' ? args : {};
+        const noun = String(a.describe == null ? '' : a.describe).replace(/\s+/g, ' ').trim();
+        const signal = ctx && ctx.signal;
+        const r = await userProps.start(noun);
+        if (!r || !r.ok) return refuse((r && r.message) || 'StarNet could not start that prop.');
+        const j = await waitJob(r.job.id, signal);
+        if (j.status === 'failed') return refuse('StarNet could not make "' + noun + '": ' + ((j.error && j.error.message) || 'it failed') + (Number(j.costUsd) > 0 ? ' (' + '$' + Number(j.costUsd).toFixed(2) + ' was spent on the tries)' : ''));
+        if (j.status !== 'done' || !j.propId) return { content: JSON.stringify({ made: false, stillDrawing: true, jobId: r.job.id, note: 'StarNet is still drawing it. It appears in the MADE BY YOU library when it lands; place it then by its name.' }), summary: 'still drawing ' + noun };
+        const entry = (userProps.list() || []).find(p => p.id === j.propId) || { id: j.propId, label: noun.toUpperCase() };
+        let cost = Number(j.costUsd) || Number(entry.costUsd) || 0, side = false, sideNote = null;
+        if (a.sideView && entry.symmetric) sideNote = 'it is round, so it turns with its own front view (no side view needed)';
+        else if (a.sideView && typeof userProps.startSide === 'function') {
+          const s = await userProps.startSide(entry.id);
+          if (!s || !s.ok) sideNote = 'the side view could not start: ' + ((s && s.message) || 'refused');
+          else { const sj = await waitJob(s.job.id, signal); if (sj.status === 'done') { side = true; cost += Number(sj.costUsd) || 0; } else sideNote = sj.status === 'failed' ? 'the side view failed: ' + ((sj.error && sj.error.message) || 'it failed') : 'the side view is still being drawn'; }
+        }
+        // the page loads it into the catalog, so the builder can place it by its name at once
+        let loaded = false;
+        try { const lo = await ask('station.props_reload', {}); loaded = !!(lo.ok && lo.result && (lo.result.props || []).some(p => p.id === entry.id)); } catch (_) { loaded = false; }
+        const out = { made: true, id: entry.id, name: String(entry.label || '').toLowerCase(), footprint: entry.footprint || null, costUsd: Math.round(cost * 100) / 100, sideView: side, onPage: loaded,
+          place: 'station.plan { add: { room, pieces: ["' + String(entry.label || '').toLowerCase() + '"] } } or a refit { op: "place", t: "' + entry.id + '", x, y' + (side ? ', r' : '') + ' }' };
+        if (sideNote) out.sideNote = sideNote;
+        if (!loaded) out.note = 'The station page did not load it yet (is it open?). It is in MADE BY YOU; reopen the page, then place it.';
+        return { content: JSON.stringify(out), summary: 'made ' + out.name + ' ($' + out.costUsd.toFixed(2) + ')', control: { revealTools: BUILDER } };
+      }
+    };
+
     return {
-      agentConfigTool, agentConfigureTool, layoutTool,
+      agentConfigTool, agentConfigureTool, layoutTool, mapTool, planTool, buildTool, makePropTool, planSummaryFor,
       listTool, createTool, peekTool, focusTool, taskListTool, taskCreateTool, taskManageTool,
-      register(reg) { [listTool, createTool, peekTool, focusTool, taskListTool, taskCreateTool, taskManageTool, agentConfigTool, agentConfigureTool, layoutTool].forEach(t => reg.register(t)); return reg; }
+      register(reg) { [listTool, createTool, peekTool, focusTool, taskListTool, taskCreateTool, taskManageTool, agentConfigTool, agentConfigureTool, layoutTool, mapTool, planTool, buildTool, makePropTool].forEach(t => reg.register(t)); return reg; }
     };
   }
 
-  return { makeStationTools };
+  return { makeStationTools, planSummaryFrom };
 });

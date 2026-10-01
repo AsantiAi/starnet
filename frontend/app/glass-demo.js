@@ -36,6 +36,7 @@
     recipes:'M3 2h10v12H3zM6 5h4M6 8h4M6 11h2',
     automation:'M3 6V3h10v4M11 5l2 2 2-2M13 10v3H3V9M1 11l2-2 2 2',
     quests:'M4 14V2h8l-2 3 2 3H4',
+    workflows:'M1 6h3v4H1zM6.5 6h3v4h-3zM12 6h3v4h-3zM4 8h2.5M9.5 8H12',
     refit:'M2 3h12v10H2zM7 3v10M7 8h7',
     connectors:'M3 2v4M7 2v4M2 6h6v4H2zM5 10v3h8V9',
     messaging:'M2 3h12v9H7l-3 2v-2H2zM5 6h6M5 9h4',
@@ -109,7 +110,11 @@
     // Catalogs need room below their search/category controls on first open.
     // An explicit drag/keyboard height still wins, exactly as for every other sheet.
     const catalog = w.classList.contains('mkt-window') && w.querySelector('.mkt-stage');
-    const preferred = catalog ? Math.max(available * .75, w.offsetHeight - catalog.offsetHeight + 260) : available * .56;
+    // The BROWSER window shows a whole web page: at 56% of the band the page is a letterbox strip.
+    const page = w.classList.contains('browser-win');
+    // The WORKFLOWS window is a work surface: the job, the step working on it and the whole result want the room (2026-09-30).
+    const work = w.classList.contains('wfw-win');
+    const preferred = catalog ? Math.max(available * .75, w.offsetHeight - catalog.offsetHeight + 260) : page ? available * .82 : work ? available * .8 : available * .56;
     const h = s.expanded ? available : Math.min(available, Math.max(220, s.height || preferred));
     w.style.animation = 'none'; w.style.transform = 'none';
     const geometry = {left:b.x+'px',top:(b.bottom-h)+'px',width:b.width+'px',height:h+'px',maxWidth:b.width+'px',maxHeight:available+'px'};
