@@ -209,7 +209,8 @@ function makeRelay(opts) {
     const limit = makeLimiter(30, 60);
     const ip = ipOf(req);
     st.phones.set(conn, ws);
-    send(st.ws, { t: 'open', conn, paired });
+    // th = which relay pass this connection showed, so the station can hold the phone to the device that pass belongs to
+    send(st.ws, { t: 'open', conn, paired, th: paired ? tokenHash(tok) : '' });
     const onMsg = (data, isBinary) => {
       if (isBinary) return;
       if (data && data.length > MAX_PHONE_MSG) return ws.close(4413, 'too large');

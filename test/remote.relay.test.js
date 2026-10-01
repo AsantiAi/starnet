@@ -179,6 +179,18 @@ function wsClose(url) {
     const paired2 = await Phone.pairRelay({ relay: base, stationPub: st.publicRaw, pairingId: p2.pairingId, code: p2.code, name: 'Tablet', key: key2 });
     const c2 = Phone.connectRelay({ relay: base, stationPub: st.publicRaw, deviceId: paired2.deviceId, relayToken: paired2.relayToken, key: key2 });
     A.eq((await c2.call('ping')).ok, true, 'second phone linked');
+    // a paired phone cannot say hello as ANOTHER paired phone (its relay pass belongs to its own device)
+    {
+      const rid = ridOf(st.publicRaw);
+      const spoof = new WebSocket(base.replace('http', 'ws') + '/v1/phone?rid=' + encodeURIComponent(rid) + '&tok=' + encodeURIComponent(paired2.relayToken));
+      const ans = await new Promise((resolve) => {
+        spoof.onopen = () => spoof.send(JSON.stringify({ t: 'hello', v: 1, deviceId: paired.deviceId, eph: key2.publicRaw, nonce: 'AAAAAAAAAAAAAAAAAAAAAA' }));
+        spoof.onmessage = (ev) => resolve(JSON.parse(ev.data));
+        setTimeout(() => resolve(null), 4000);
+      });
+      A.eq(ans && ans.t === 'error' && ans.error, 'unknown device', 'a phone using its own pass to speak as another phone is refused');
+      try { spoof.close(); } catch (_) {}
+    }
     const closed2 = [];
     c2.onStatus((s, d) => { if (s === 'closed') closed2.push(d && d.code); });
     await relay.close();

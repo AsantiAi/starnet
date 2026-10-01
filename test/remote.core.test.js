@@ -234,6 +234,20 @@ async function rejects(p, re, msg) {
     try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
   }
 
+  // one phone cannot crowd the others off: its own sessions are capped, oldest first
+  {
+    const stationKp = C.generateKeyPair(), phoneKp = C.generateKeyPair();
+    const dv2 = { get: (id) => ({ id, publicKey: phoneKp.publicRaw }), stationKeys: () => ({ id: 'stn', privateKey: stationKp.privateKey, publicRaw: stationKp.publicRaw }), touch: () => {} };
+    const ss2 = makeSessions({ devices: dv2, crypto: C, now: () => Date.now(), newId, perDevice: 4 });
+    for (let i = 0; i < 4; i++) ss2._live.set('other-' + i, { id: 'other-' + i, deviceId: 'phone-b', keys: {}, lastAt: Date.now(), inSeq: 0, outSeq: 0 });
+    let made = 0;
+    for (let i = 0; i < 7; i++) { const eph = C.generateKeyPair(); if (ss2.hello({ v: C.VERSION, deviceId: 'phone-a', eph: eph.publicRaw, nonce: C.newNonce() }).ok) made++; }
+    const byDev = {}; for (const x of ss2._live.values()) byDev[x.deviceId] = (byDev[x.deviceId] || 0) + 1;
+    A.eq(made, 7, 'every hello from the phone is answered');
+    A.eq(byDev['phone-a'], 4, 'but one phone holds at most four sessions');
+    A.eq(byDev['phone-b'], 4, 'and another phone keeps all of its own');
+  }
+
   // the crew stream is sealed only for the phones that are looking
   {
     const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'sn-bc-'));
