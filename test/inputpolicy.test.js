@@ -323,5 +323,12 @@ A.eq(backgroundOwnsLoopbackUrl({ running: true, tail: 'Local: https://[::1]:4443
   const unattended = makeRunAuthority({ surface: 'autonomous' });
   const unattendedChild = makeRunAuthority({ connectorAuthority: unattended });
   A.eq(unattendedChild.project(mcp), false, 'an ungranted unattended lead cannot mint a connector grant');
+  // NAMING the work and the run's own checklist have no outward effect: they must never read as external-unknown
+  // (2026-09-30: after web research, a build stopped on an approval card just to call deliverable_note)
+  const { makeDeliverableTool } = require('../sidecar/tools/builtin/deliverable.js');
+  const delivTools = []; makeDeliverableTool({ notes: new Map() }).register({ register: (t) => delivTools.push(t) });
+  A.eq(impactOfTool(delivTools.find((t) => t.name === 'deliverable_note')), IMPACTS.NONE, 'deliverable_note is impact none (it labels work already done)');
+  const todoSrc = require('fs').readFileSync(require('path').join(__dirname, '../sidecar/tools/builtin/todo.js'), 'utf8');
+  A.ok(/name: 'todo', capability: 'taskplan'[^\n]*impact: 'none'/.test(todoSrc), 'todo is impact none (the run\'s own checklist)');
   A.report('inputpolicy.test');
 })().catch(e => { console.error(e); process.exit(1); });
