@@ -1684,7 +1684,7 @@ const WorkflowPanel = (() => {
        complete cleanly"). It is said as FINISHED WITH A PROBLEM: which step, what happened, in words; what came out, and every step. */
     const bad = v.ok ? null : runs.find(r => r.reason && r.reason !== 'done');
     const badLine = v.ok ? '' : bad
-      ? (() => { const pr = bad.dockId ? prop(bad.dockId) : null; return 'The ' + ((pr && pr.role) || 'a') + ' step (' + String(nameOf(bad.agentId)).toUpperCase() + ') ' + runEnd(bad.reason) + ', so this job did not finish cleanly and was not put in the OUTBOX. Sending it again often works.'; })()
+      ? (() => { const pr = bad.dockId ? prop(bad.dockId) : null; return 'The ' + (pr && pr.role ? pr.role + ' step' : 'step') + ' (' + String(nameOf(bad.agentId)).toUpperCase() + ') ' + runEnd(bad.reason) + ', so this job did not finish cleanly and was not put in the OUTBOX. Sending it again often works.'; })()
       : String(v.reason || 'the job did not finish cleanly');
     return '<div class="wf-job' + (v.ok ? '' : ' problem') + '">'
       + (v.ok ? '<div class="wf-job-h"><b>✓ DELIVERED</b> · ' + runs.length + ' step' + (runs.length === 1 ? '' : 's') + (v.usd != null ? ' · $' + v.usd.toFixed(4) : '') + (mine.folded ? ' · in the OUTBOX' : '') + '</div>'
