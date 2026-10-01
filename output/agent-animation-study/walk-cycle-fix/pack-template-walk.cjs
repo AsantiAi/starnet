@@ -27,13 +27,19 @@ const raw = path.join(base, 'raw'); fs.mkdirSync(raw, { recursive: true });
 //   <cdn>/<charId>/rotations/<dir>.png?t=<rotT> and <cdn>/<charId>/animations/<animId>/<dir>/<i>.png?t=<t>
 const CDN = 'https://backblaze.pixellab.ai/file/pixellab-characters/1ff7d2cf-cfe6-44f9-9533-9eea41eb05cb/';
 const rotUrls = {}, walkUrls = {};
+// FR = frames per cycle. Template walks ship 8; skeleton-v3 walks (walk.json "frames": 6) ship 6 on a
+// larger canvas (the silhouette grows it, e.g. 112px), centred on the 96px rotation canvas.
+let FR = 8, SKELETON = false;
 if (fs.existsSync(path.join(base, 'walk.json'))) {
   const j = JSON.parse(fs.readFileSync(path.join(base, 'walk.json'), 'utf8'));
+  FR = j.frames || 8;
+  SKELETON = j.mode === 'skeleton-v3';
+  if (FR % 2) throw Error('walk.json frames must be even (opposite-phase repair pairs frame i with i+FR/2)');
   for (const d of DIRS) {
     rotUrls[d] = `${CDN}${j.charId}/rotations/${d}.png?t=${j.rotT}`;
     const [anim, t] = j.anims[d] || [];
     if (!anim) throw Error('walk.json missing ' + d);
-    walkUrls[d] = Array.from({ length: 8 }, (_, i) => `${CDN}${j.charId}/animations/${anim}/${d}/${i}.png?t=${t}`);
+    walkUrls[d] = Array.from({ length: FR }, (_, i) => `${CDN}${j.charId}/animations/${anim}/${d}/${i}.png?t=${t}`);
   }
 } else {
   const detail = fs.readFileSync(path.join(base, 'character.txt'), 'utf8');
@@ -96,6 +102,34 @@ async function headCrop(buf) {
   }
   return { rgb, mask };
 }
+// Skeleton-v3 walks move ONE drawing rather than redrawing each frame, so the head is near pixel-identical
+// across the cycle (to-others ~0.3-5 units). A frame whose hood was re-drawn anyway (finn west frame 1:
+// 108 vs a 22 median) flickers the face once per step. Its BODY is still the right phase of the stride, so
+// swapping in the opposite-phase frame (the template repair) would double a pose and stutter the legs.
+// Instead the steady head of the nearest clean neighbour is moved onto it, aligned to this frame's own
+// skull top and centre (the stride's bob survives), over the head rows only.
+const TRANSPLANT_H = 18;
+async function headAnchor(buf) {
+  const { data, info } = await sharp(buf).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const W = info.width, A = (x, y) => data[(y * W + x) * 4 + 3] > 100;
+  let top = -1;
+  for (let y = 0; y < info.height && top < 0; y++) for (let x = 0; x < W; x++) if (A(x, y)) { top = y; break; }
+  let l = W, r = -1;
+  for (let y = top; y < Math.min(top + 12, info.height); y++) for (let x = 0; x < W; x++) if (A(x, y)) { l = Math.min(l, x); r = Math.max(r, x); }
+  return { top, cx: Math.round((l + r) / 2), data, info };
+}
+async function transplantHead(dstBuf, srcBuf) {
+  const d = await headAnchor(dstBuf), s = await headAnchor(srcBuf);
+  const W = d.info.width, out = Buffer.from(d.data);
+  for (let y = 0; y < TRANSPLANT_H; y++) for (let x = -HEAD_W / 2; x < HEAD_W / 2; x++) {
+    const dx = d.cx + x, dy = d.top + y, sx = s.cx + x, sy = s.top + y;
+    if (dx < 0 || dx >= W || dy >= d.info.height) continue;
+    const k = (dy * W + dx) * 4;
+    const inSrc = sx >= 0 && sx < s.info.width && sy < s.info.height;
+    for (let c = 0; c < 4; c++) out[k + c] = inSrc ? s.data[(sy * s.info.width + sx) * 4 + c] : 0;
+  }
+  return sharp(out, { raw: { width: W, height: d.info.height, channels: 4 } }).png().toBuffer();
+}
 function headDist(a, b) {
   let sum = 0, n = 0;
   for (let k = 0; k < a.mask.length; k++) if (a.mask[k] || b.mask[k]) {
@@ -125,21 +159,23 @@ function headDist(a, b) {
     transforms[d] = { s, rb };
     const pack = async (file) => {
       const m = await sharp(file).metadata();
-      if (m.width !== 96 || m.height !== 96) throw Error('frame canvas ' + m.width + 'x' + m.height + ' ' + file);
+      if (m.width !== m.height || m.width < 96 || (m.width - 96) % 2) throw Error('frame canvas ' + m.width + 'x' + m.height + ' ' + file);
+      // a grown canvas is centred on the rotation's 96px canvas: shift the origin back by its margin
+      const o = (m.width - 96) / 2, NC = Math.round(m.width * s);
       let img = sharp(file).ensureAlpha();
-      if (N !== 96) img = img.resize(N, N);            // same kernel as the rotation refs (sharp default)
+      if (NC !== m.width) img = img.resize(NC, NC);    // same kernel as the rotation refs (sharp default)
       let buf = await img.png().toBuffer();
-      let left = left0, top = top0, w = N, h = N, ex = 0, ey = 0;   // clamp into the 144 master
+      let left = left0 - Math.round(o * s), top = top0 - Math.round(o * s), w = NC, h = NC, ex = 0, ey = 0;   // clamp into the 144 master
       if (left < 0) { ex = -left; w += left; left = 0; }
       if (top < 0) { ey = -top; h += top; top = 0; }
       if (left + w > 144) w = 144 - left;
       if (top + h > 144) h = 144 - top;
-      if (ex || ey || w !== N || h !== N) buf = await sharp(buf).extract({ left: ex, top: ey, width: w, height: h }).png().toBuffer();
+      if (ex || ey || w !== NC || h !== NC) buf = await sharp(buf).extract({ left: ex, top: ey, width: w, height: h }).png().toBuffer();
       return sharp({ create: { width: 144, height: 144, channels: 4, background: '#00000000' } }).composite([{ input: buf, left, top }]).png().toBuffer();
     };
     rotMasters[d] = await pack(rotFile);
     masters[d] = [];
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < FR; i++) {
       const f = path.join(raw, `walk_${d}_${i}.png`);
       await download(walkUrls[d][i], f);
       masters[d].push(await pack(f));
@@ -172,7 +208,7 @@ function headDist(a, b) {
         return sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer();
       }));
       report.scrub = { rules: scrub, pixelsCleared: cleared };
-      console.log(`  SCRUB ${setId}: cleared ${cleared} off-palette pixels (${scrub.join(', ')}) across 64 frames`);
+      console.log(`  SCRUB ${setId}: cleared ${cleared} off-palette pixels (${scrub.join(', ')}) across ${FR * 8} frames`);
     }
   }
   // mirror fallback: walk.json may declare  "mirror": { "north-west": "north-east" }  — the template kept
@@ -215,7 +251,7 @@ function headDist(a, b) {
       // silhouette mass: xenomorph's north-west track came back as a round-headed humanoid with no tail —
       // right colours, half the pixels. Mean alpha area of the track vs its rotation must stay within 0.55..1.5 (hard) and is warned below 0.72; good sets measure 0.78-1.13, ultrondroid 0.60-0.66 (chunky rotation, slimmer template).
       const area = async (a) => { const A = await sharp(a).ensureAlpha().raw().toBuffer(); let n = 0; for (let k = 3; k < A.length; k += 4) if (A[k] > 100) n++; return n; };
-      const ra = await area(rotMasters[d]), wa = (await Promise.all(masters[d].map(area))).reduce((a, v) => a + v, 0) / 8;
+      const ra = await area(rotMasters[d]), wa = (await Promise.all(masters[d].map(area))).reduce((a, v) => a + v, 0) / FR;
       const ar = wa / ra;
       report.directions[d] = { colourDrift: +dd.toFixed(1), areaRatio: +ar.toFixed(3) };
       if (dd > 60) drift.push(`${d} (colour ${dd.toFixed(0)})`);
@@ -231,16 +267,18 @@ function headDist(a, b) {
     const heads = [];
     for (const b of masters[d]) heads.push(await headCrop(b));
     const flags = [];
-    const toOthers = heads.map((h, i) => heads.reduce((acc, o, j) => i === j ? acc : acc + headDist(h, o), 0) / 7);
-    const med = [...toOthers].sort((a, b) => a - b)[4];
-    for (let i = 0; i < 8; i++) {
+    const toOthers = heads.map((h, i) => heads.reduce((acc, o, j) => i === j ? acc : acc + headDist(h, o), 0) / (FR - 1));
+    const med = [...toOthers].sort((a, b) => a - b)[FR / 2];
+    for (let i = 0; i < FR; i++) {
       const same = headDist(heads[i], rotHeads[d]), opp = headDist(heads[i], rotHeads[OPP[d]]);
       const score = toOthers[i] / med;
+      if (process.env.HEADLOG) console.log(`  head ${d} ${i}: to-others ${toOthers[i].toFixed(1)} median ${med.toFixed(1)} same ${same.toFixed(1)} opp ${opp.toFixed(1)}`);
       const why = [];
       // clear margin only: a faceless cadet's front and back heads differ by ~10-30 units, real flips by 2x / 60+ units
       if (same > opp * 1.3 && same - opp > 40) why.push(`faces ${OPP[d]} (d_same ${same.toFixed(0)} > d_opp ${opp.toFixed(0)})`);
-      if (score >= OUTLIER) why.push(`head outlier x${score.toFixed(2)}`);
-      if (why.length) flags.push({ i, why });
+      // a skeleton head is so steady that 3x its median can still be invisible (south 5.4 vs 1.5): require a real redraw
+      if (score >= OUTLIER && (!SKELETON || toOthers[i] - med > 20)) why.push(`head outlier x${score.toFixed(2)}`);
+      if (why.length) flags.push({ i, why, headOnly: why.length === 1 && why[0].startsWith('head outlier') });
     }
     // manual override from walk.json  "badFrames": { "south": [4,5,6,7] }  — for flips the head metrics miss
     // (morpheus is bald: his skull reads the same from front and back, so four south frames turned around unseen)
@@ -248,9 +286,17 @@ function headDist(a, b) {
       const manual = fs.existsSync(path.join(base, 'walk.json')) ? ((JSON.parse(fs.readFileSync(path.join(base, 'walk.json'), 'utf8')).badFrames || {})[d] || []) : [];
       for (const i of manual) if (!flags.some(f => f.i === i)) flags.push({ i, why: ['marked bad in walk.json'] });
     }
-    if (flags.length > 4) throw Error(`${d}: ${flags.length} glitched frames — regenerate this direction: ` + JSON.stringify(flags));
+    if (flags.length > FR / 2) throw Error(`${d}: ${flags.length} glitched frames — regenerate this direction: ` + JSON.stringify(flags));
     for (const fl of flags) {
-      const src = (fl.i + 4) % 8;
+      if (SKELETON && fl.headOnly) {
+        const near = [1, -1, 2, -2].map(k => (fl.i + k + FR) % FR).find(j => !flags.some(o => o.i === j));
+        if (near == null) throw Error(`${d}: no clean neighbour for frame ${fl.i}`);
+        masters[d][fl.i] = await transplantHead(masters[d][fl.i], masters[d][near]);
+        report.repairs.push({ dir: d, frame: fl.i, headFrom: near, why: fl.why });
+        console.log(`  HEAD ${setId} ${d} frame ${fl.i} ← head of frame ${near}: ${fl.why.join('; ')}`);
+        continue;
+      }
+      const src = (fl.i + FR / 2) % FR;
       if (flags.some(o => o.i === src)) throw Error(`${d}: frames ${fl.i} and ${src} both glitched — regenerate this direction`);
       const mirror = d === 'south' || d === 'north';
       masters[d][fl.i] = mirror ? await sharp(masters[d][src]).flop().png().toBuffer() : Buffer.from(masters[d][src]);
@@ -262,7 +308,12 @@ function headDist(a, b) {
   fs.mkdirSync(prod, { recursive: true }); fs.mkdirSync(demo, { recursive: true });
   for (const d of DIRS) {
     const frames = [];
-    for (let i = 0; i < 8; i++) {
+    // a shorter cycle replacing a longer one: retire the old higher-numbered drawings
+    for (const dirPath of [prod, demo]) for (let i = FR + 1; i <= 8; i++) {
+      const stale = path.join(dirPath, `walk_${d}_${i}.png`);
+      if (fs.existsSync(stale)) fs.unlinkSync(stale);
+    }
+    for (let i = 0; i < FR; i++) {
       const out = masters[d][i];
       const tmp = path.join(raw, `master_${d}_${i}.png`); fs.writeFileSync(tmp, out);
       const b = await box(tmp);
@@ -289,9 +340,9 @@ function headDist(a, b) {
   for (let r = 0; r < DIRS.length; r++) {
     const d = DIRS[r];
     comps.push({ input: await crop(path.join(prod, 'rot_' + d + '.png')), left: 0, top: r * ch });
-    for (let i = 0; i < 8; i++) comps.push({ input: await crop(masters[d][i]), left: (i + 1) * cw, top: r * ch });
+    for (let i = 0; i < FR; i++) comps.push({ input: await crop(masters[d][i]), left: (i + 1) * cw, top: r * ch });
   }
-  await sharp({ create: { width: cw * 9, height: ch * 8, channels: 4, background: '#282830ff' } }).composite(comps).png().toFile(path.join(base, 'contact.png'));
+  await sharp({ create: { width: cw * (FR + 1), height: ch * 8, channels: 4, background: '#282830ff' } }).composite(comps).png().toFile(path.join(base, 'contact.png'));
   fs.writeFileSync(path.join(base, 'report.json'), JSON.stringify(report, null, 2) + '\n');
   console.log('packed', setId, '→', prod, '+ demo; repairs:', report.repairs.length, '; contact:', path.join(base, 'contact.png'));
 })().catch(e => { console.error(e); process.exit(1); });

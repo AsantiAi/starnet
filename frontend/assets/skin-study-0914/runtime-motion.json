@@ -4862,9 +4862,7 @@
       "../agent-demo/approved-motion/finn/walk_south_3.png",
       "../agent-demo/approved-motion/finn/walk_south_4.png",
       "../agent-demo/approved-motion/finn/walk_south_5.png",
-      "../agent-demo/approved-motion/finn/walk_south_6.png",
-      "../agent-demo/approved-motion/finn/walk_south_7.png",
-      "../agent-demo/approved-motion/finn/walk_south_8.png"
+      "../agent-demo/approved-motion/finn/walk_south_6.png"
     ],
     "approved_finn.walk.south-east": [
       "../agent-demo/approved-motion/finn/walk_south-east_1.png",
@@ -4872,9 +4870,7 @@
       "../agent-demo/approved-motion/finn/walk_south-east_3.png",
       "../agent-demo/approved-motion/finn/walk_south-east_4.png",
       "../agent-demo/approved-motion/finn/walk_south-east_5.png",
-      "../agent-demo/approved-motion/finn/walk_south-east_6.png",
-      "../agent-demo/approved-motion/finn/walk_south-east_7.png",
-      "../agent-demo/approved-motion/finn/walk_south-east_8.png"
+      "../agent-demo/approved-motion/finn/walk_south-east_6.png"
     ],
     "approved_finn.walk.east": [
       "../agent-demo/approved-motion/finn/walk_east_1.png",
@@ -4882,9 +4878,7 @@
       "../agent-demo/approved-motion/finn/walk_east_3.png",
       "../agent-demo/approved-motion/finn/walk_east_4.png",
       "../agent-demo/approved-motion/finn/walk_east_5.png",
-      "../agent-demo/approved-motion/finn/walk_east_6.png",
-      "../agent-demo/approved-motion/finn/walk_east_7.png",
-      "../agent-demo/approved-motion/finn/walk_east_8.png"
+      "../agent-demo/approved-motion/finn/walk_east_6.png"
     ],
     "approved_finn.walk.north-east": [
       "../agent-demo/approved-motion/finn/walk_north-east_1.png",
@@ -4892,9 +4886,7 @@
       "../agent-demo/approved-motion/finn/walk_north-east_3.png",
       "../agent-demo/approved-motion/finn/walk_north-east_4.png",
       "../agent-demo/approved-motion/finn/walk_north-east_5.png",
-      "../agent-demo/approved-motion/finn/walk_north-east_6.png",
-      "../agent-demo/approved-motion/finn/walk_north-east_7.png",
-      "../agent-demo/approved-motion/finn/walk_north-east_8.png"
+      "../agent-demo/approved-motion/finn/walk_north-east_6.png"
     ],
     "approved_finn.walk.north": [
       "../agent-demo/approved-motion/finn/walk_north_1.png",
@@ -4902,9 +4894,7 @@
       "../agent-demo/approved-motion/finn/walk_north_3.png",
       "../agent-demo/approved-motion/finn/walk_north_4.png",
       "../agent-demo/approved-motion/finn/walk_north_5.png",
-      "../agent-demo/approved-motion/finn/walk_north_6.png",
-      "../agent-demo/approved-motion/finn/walk_north_7.png",
-      "../agent-demo/approved-motion/finn/walk_north_8.png"
+      "../agent-demo/approved-motion/finn/walk_north_6.png"
     ],
     "approved_finn.sit.south": [
       "../agent-demo/approved-motion/finn/sit_south_4.png"
@@ -4921,9 +4911,7 @@
       "../agent-demo/approved-motion/finn/walk_north-west_3.png",
       "../agent-demo/approved-motion/finn/walk_north-west_4.png",
       "../agent-demo/approved-motion/finn/walk_north-west_5.png",
-      "../agent-demo/approved-motion/finn/walk_north-west_6.png",
-      "../agent-demo/approved-motion/finn/walk_north-west_7.png",
-      "../agent-demo/approved-motion/finn/walk_north-west_8.png"
+      "../agent-demo/approved-motion/finn/walk_north-west_6.png"
     ],
     "approved_finn.walk.west": [
       "../agent-demo/approved-motion/finn/walk_west_1.png",
@@ -4931,9 +4919,7 @@
       "../agent-demo/approved-motion/finn/walk_west_3.png",
       "../agent-demo/approved-motion/finn/walk_west_4.png",
       "../agent-demo/approved-motion/finn/walk_west_5.png",
-      "../agent-demo/approved-motion/finn/walk_west_6.png",
-      "../agent-demo/approved-motion/finn/walk_west_7.png",
-      "../agent-demo/approved-motion/finn/walk_west_8.png"
+      "../agent-demo/approved-motion/finn/walk_west_6.png"
     ],
     "approved_finn.sit.east": [
       "../agent-demo/approved-motion/finn/sit_east_4.png"
@@ -4944,9 +4930,7 @@
       "../agent-demo/approved-motion/finn/walk_south-west_3.png",
       "../agent-demo/approved-motion/finn/walk_south-west_4.png",
       "../agent-demo/approved-motion/finn/walk_south-west_5.png",
-      "../agent-demo/approved-motion/finn/walk_south-west_6.png",
-      "../agent-demo/approved-motion/finn/walk_south-west_7.png",
-      "../agent-demo/approved-motion/finn/walk_south-west_8.png"
+      "../agent-demo/approved-motion/finn/walk_south-west_6.png"
     ],
     "approved_finn.sit.north": [
       "../agent-demo/approved-motion/finn/sit_north_4.png"
