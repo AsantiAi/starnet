@@ -493,6 +493,10 @@ const imageReply = png => jsonResp({ choices: [{ message: { images: [{ image_url
       /model returned no image \(I cannot draw that\.\)/, 'a text-only reply is an honest failure that quotes the model');
     await rejects(makeImageTools({ openrouter: { provider: 'codex', protocol: 'codex-responses' }, fsp, pathMod: path, root: ROOT, fetchImpl: textOnly }).generateTool.run({ prompt: 'x' }, ctx),
       /sign in to ChatGPT/, 'no sign-in getter names the fix');
+    // a stream that sent a PARTIAL preview frame and then FAILED is a failed render — never a half-drawn image saved as the result
+    const partialThenFail = stubFetch(() => sse([{ type: 'response.image_generation_call.partial_image', partial_image_b64: PNG_B64 }, { type: 'response.failed', response: { error: { message: 'content policy' } } }]));
+    await rejects(makeImageTools({ openrouter: { provider: 'codex', protocol: 'codex-responses', getToken: async () => jwt }, fsp, pathMod: path, root: ROOT, fetchImpl: partialThenFail }).generateTool.run({ prompt: 'x' }, ctx),
+      /ChatGPT image generation failed: content policy/, 'a partial frame followed by response.failed is reported as the failure');
   }
 
   try { await fsp.rm(ROOT, { recursive: true, force: true }); } catch (_) {}
