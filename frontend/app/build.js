@@ -322,6 +322,9 @@ const Build = (() => {
     running = true;
     if (typeof SFX !== 'undefined') SFX.open();
     raf = requestAnimationFrame(frame);
+    /* the BUILD menu's own tooltip, armed under a pointer that did not move after the click, used to sit on the glass for the whole
+       session: REFIT opens OVER that button, so its pointerout never fires. The station tooltip hides on a scroll signal. */
+    try { document.dispatchEvent(new Event('scroll')); } catch (_) {}
   }
 
   function close() {
@@ -1067,6 +1070,53 @@ const Build = (() => {
       .catch(() => { if (status.isConnected) status.textContent = EquipmentHelp.status(facts, null); });
   }
 
+  /* MAKE A PROP, AS ONE ROW (2026-10-01 build-mode upgrade — Andrew: "it needs to be easier and more fun to use"). At 1440×900 the
+     whole panel (a heading, two lines of copy, the credits card, the field, the cost line) plus the category menu and the hint box
+     left the Props tab showing ZERO props. The panel now rests as one row — MAKE A PROP and, where linking is possible, the panel's
+     own credits key (conversion stays in view) — and opens in place on a click. It is held OPEN whenever a paid job is running, a
+     preview or a message is waiting, or the field has the focus (the props lane's rule: a job the Commander paid for is never hidden
+     behind a key). The panel itself is makePropPanel(), untouched — every id and class it renders. */
+  let makeOpen = false;
+  function makePropMount() {
+    const box = makePropPanel();
+    const busy = !!(makeJob && makeJob.status !== 'done' && makeJob.status !== 'failed') || !!makePreview || !!makeMsg;
+    const open = makeOpen || busy;
+    box.classList.toggle('is-compact', !open);
+    const head = box.querySelector('.refit-makeprop-head');
+    if (head) {
+      head.setAttribute('role', 'button'); head.tabIndex = 0;
+      head.setAttribute('aria-expanded', String(open));
+      head.dataset.tip = open ? 'Close MAKE A PROP' : 'Make your own prop: type any object, StarNet draws it in the station\u2019s style (StarNet credits)';
+      const toggle = () => {
+        if (busy) return;   // a running job, a preview or a message keeps it open
+        makeOpen = !box.classList.contains('is-compact') ? false : true;
+        box.classList.toggle('is-compact', !makeOpen); head.setAttribute('aria-expanded', String(makeOpen));
+        sfx('click');
+        if (makeOpen) setTimeout(() => { const f = box.querySelector('#refit-makeprop-input'); if (f) f.focus(); }, 0);
+      };
+      head.onclick = toggle;
+      head.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); } };
+    }
+    const inp = box.querySelector('#refit-makeprop-input');
+    if (inp) inp.addEventListener('focus', () => { makeOpen = true; box.classList.remove('is-compact'); if (head) head.setAttribute('aria-expanded', 'true'); });
+    return box;
+  }
+  // a placed prop's own art, small — the selection card shows WHAT is selected, not only its name
+  function propArtInto(host, p) {
+    if (!host || !p || typeof PropSprites === 'undefined') return;
+    const nativeW = (p.w || 1) * 12 + 24, nativeH = (p.h || 1) * 12 + 24;
+    const density = typeof PropRemaster !== 'undefined' && PropRemaster.isProjection && PropRemaster.isProjection() ? 4 : 1;
+    const off = document.createElement('canvas'); off.width = nativeW * density; off.height = nativeH * density;
+    const o = off.getContext('2d'); o.scale(density, density); o.translate(12, 12); o.imageSmoothingEnabled = true;
+    try { PropSprites.setCtx(o); PropSprites.setNow(0); PropSprites.draw({ t: p.t, x: 0, y: 0, w: p.w || 1, h: p.h || 1, r: p.r | 0, m: p.m ? 1 : 0 }, false); }
+    catch (e) { return; }
+    finally { if (ctx) PropSprites.setCtx(ctx); }
+    const c = document.createElement('canvas'); c.width = 112; c.height = 72;
+    const d = c.getContext('2d'); d.imageSmoothingEnabled = true; d.imageSmoothingQuality = 'high';
+    const s = Math.min(c.width / nativeW, c.height / nativeH), w = Math.round(nativeW * s), h = Math.round(nativeH * s);
+    d.drawImage(off, Math.round((c.width - w) / 2), Math.round((c.height - h) / 2), w, h);
+    host.appendChild(c);
+  }
   function renderPalette() {
     const pal = root.querySelector('#refit-palette');
     if (!pal) return;
@@ -1079,7 +1129,7 @@ const Build = (() => {
     let paletteLabel = '';
     root.dataset.tool = tool;
     root.dataset.buildGroup = buildGroup;
-    root.dataset.catalog = String((tool === 'prop' && buildGroup !== 'workflow') || (tool === 'select' && buildGroup === 'props'));
+    root.dataset.catalog = String((tool === 'prop' && buildGroup !== 'workflow') || ((tool === 'select' || tool === 'dupe') && buildGroup === 'props'));
     root.querySelectorAll('[data-build-group]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.buildGroup === buildGroup)));
     root.querySelectorAll('.refit-toolset').forEach(g => { g.hidden = g.dataset.group !== buildGroup; });
     pal.innerHTML = '';
@@ -1144,7 +1194,7 @@ const Build = (() => {
         b.onclick = () => { hallWidth = w; renderPalette(); sfx('click'); };
         pal.appendChild(b);
       });
-    } else if ((tool === 'prop' && buildGroup !== 'workflow') || (tool === 'select' && buildGroup === 'props')) {
+    } else if ((tool === 'prop' && buildGroup !== 'workflow') || ((tool === 'select' || tool === 'dupe') && buildGroup === 'props')) {
       paletteLabel = 'CATALOG';
       const CATS = (typeof PropSprites !== 'undefined') ? PropSprites.CATS : {};
       const workspace = document.createElement('div'); workspace.className = 'refit-propworkspace';
@@ -1165,11 +1215,11 @@ const Build = (() => {
         details.scrollIntoView({ block: 'nearest' });
       };
       browser.append(search, sections);
-      if (propSection === 'decoration' && typeof UserProps !== 'undefined') browser.append(makePropPanel());
+      if (propSection === 'decoration' && typeof UserProps !== 'undefined') browser.append(makePropMount());
       else if (typeof UserProps !== 'undefined') {   // the door to MAKE A PROP from the other shelves: one click to FURNITURE with the field focused
         const door = document.createElement('button'); door.type = 'button'; door.className = 'bb sm refit-makeprop-door';
         door.innerHTML = '<b>MAKE A PROP</b><small>Type any object. StarNet draws it in the station\u2019s style.</small>';
-        door.onclick = () => { chooseLibrarySection('decoration'); setTimeout(() => { const f = root && root.querySelector('#refit-makeprop-input'); if (f) f.focus(); }, 0); sfx('click'); };
+        door.onclick = () => { makeOpen = true; chooseLibrarySection('decoration'); setTimeout(() => { const f = root && root.querySelector('#refit-makeprop-input'); if (f) f.focus(); }, 0); sfx('click'); };
         browser.append(door);
       }
       browser.append(renderAbilityOverview());
@@ -2336,7 +2386,7 @@ const Build = (() => {
     movingPropId=null;selectedPropId=null;renderSelection();
     if (drag || dragPid != null) releaseDrag();
     tool = id; drag = null; connectFrom = null; dupe = null; hideTip(); hidePropCard();
-    if (id !== 'select') buildGroup = BUILD_GROUPS.find(g => g[2].includes(id))?.[0] || buildGroup;
+    if (id !== 'select' && !(o && o.keepGroup)) buildGroup = BUILD_GROUPS.find(g => g[2].includes(id))?.[0] || buildGroup;
     root.querySelectorAll('.refit-tool').forEach(b => {
       const active = b.dataset.tool === id;
       b.classList.toggle('active', active);
@@ -2382,7 +2432,7 @@ const Build = (() => {
     const t = TOOLS.find(x => x.id === tool);
     // SURFACE means three different gestures depending on which surface is targeted — say which
     let verb = (t && t.verb) || (t && t.hint) || '';
-    if (tool === 'select' && buildGroup === 'props') verb = 'Choose a prop, then click the floor to place it. Click existing props to edit.';
+    if (tool === 'select' && buildGroup === 'props') verb = 'Pick a prop, then click the floor to place it · click a placed one to edit it';
     if (tool === 'select' && buildGroup === 'workflow') verb = 'Choose a machine or a whole line, or use Belt to connect machines. Nothing is selected yet.';
     if (tool === 'select' && (buildGroup === 'rooms' || buildGroup === 'surfaces')) verb = 'Choose a tool above to begin. Click existing objects to edit.';
     if (tool === 'paint') verb = paintTarget === 'hull' ? 'click a room to re-clad its outside'
@@ -4679,7 +4729,7 @@ const Build = (() => {
   // keyboard events carry no cursor position; the tip anchors to the last place the pointer was.
   const orientEv = () => ({ clientX: lastClient.x, clientY: lastClient.y });
   // Placement owns R/M. Browsing may rotate the hovered furniture; placing never edits it.
-  const orientTarget = () => (tool === 'select' && !drag && hoverPropId) ? station.propById(hoverPropId) : null;
+  const orientTarget = () => (tool === 'select' && !drag && (hoverPropId || selectedPropId)) ? station.propById(hoverPropId || selectedPropId) : null;
   const propLabel = t => String(propSpec(t).label || t).toUpperCase();
 
   function turnUnderCursor(dir) {
@@ -4734,17 +4784,26 @@ const Build = (() => {
     if(WF_PART[p.t]){finFocusLine(p.id);openWorkflowPanel(p.id,true);}
     setHint('Selected '+propLabel(p.t)+' · choose an action in the build kit');
   }
+  /* THE SELECTED OBJECT, BESIDE THE LIBRARY (2026-10-01 build-mode upgrade). Selecting a placed prop used to REPLACE the whole Build
+     Library with a column of keys, so placing the next thing meant deselecting first. It is now one compact card ABOVE the library —
+     the object's own art and name, then its actions, each key wearing the keyboard shortcut that does the same thing (drag, R, M,
+     Ctrl+D, Ctrl+C, Delete, the arrows nudge) — and the library stays where it was. */
   function renderSelection(){
     const host=root&&root.querySelector('#refit-selection');if(!host)return;
     const p=station&&station.propById(selectedPropId);host.hidden=!p;root.classList.toggle('has-selection',!!p);
     if(!p){host.replaceChildren();return;}
-    host.innerHTML='<b>'+esc(propLabel(p.t))+'</b><span>'+p.w+' × '+p.h+' floor tiles'+(canTurn(p.t)?' · '+FACE_WORD[(p.r|0)&3]:'')+'</span><div class="refit-selection-actions"></div>';
-    const actions=host.querySelector('div');
-    const add=(label,fn)=>{const b=document.createElement('button');b.className='bb sm';b.type='button';b.textContent=label;b.onclick=fn;actions.appendChild(b);};
-    add('MOVE',()=>{const id=p.id;selectTool('move');movingPropId=id;selectedPropId=id;renderSelection();setHint('Click a clear spot to move '+propLabel(p.t)+' · Esc cancels');});
-    if(canTurn(p.t))add('ROTATE',()=>{const nr=nextFace(p.t,p.r|0,1);feedback(station.faceProp(p.id,nr,propBox(p.t,nr,p)),orientEv(),'turned');renderSelection();});
-    if(canFlip(p.t))add('FLIP',()=>{feedback(station.mirrorProp(p.id),orientEv(),'flipped');renderSelection();});
-    add('COPY',()=>{selectTool('dupe');pickupDupe({tx:p.x,ty:p.y},orientEv(),p.id);});
+    host.innerHTML='<div class="refit-sel-head"><span class="refit-sel-art" aria-hidden="true"></span><span class="refit-sel-name"><b>'+esc(propLabel(p.t))+'</b><small>'+p.w+' × '+p.h+' tiles'+(canTurn(p.t)?' · facing '+FACE_WORD[(p.r|0)&3]:'')+' · arrows nudge</small></span>'
+      +'<button class="bb sm refit-sel-x" type="button" aria-label="Deselect" data-tip="Deselect · Esc">\u2715</button></div><div class="refit-selection-actions"></div>';
+    propArtInto(host.querySelector('.refit-sel-art'),p);
+    host.querySelector('.refit-sel-x').onclick=()=>{selectedPropId=null;renderSelection();setHint();sfx('click');};
+    const actions=host.querySelector('.refit-selection-actions');
+    const addKey=(label,key,fn,cls)=>{const b=document.createElement('button');b.className='bb sm refit-sel-act'+(cls?' '+cls:'');b.type='button';b.innerHTML='<span>'+esc(label)+'</span>'+(key?'<kbd>'+esc(key)+'</kbd>':'');b.onclick=fn;actions.appendChild(b);return b;};
+    const add=(label,fn)=>addKey(label,'',fn);
+    addKey('MOVE','drag',()=>{const id=p.id;selectTool('move');movingPropId=id;selectedPropId=id;renderSelection();setHint('Click a clear spot to move '+propLabel(p.t)+' · Esc cancels');});
+    if(canTurn(p.t))addKey('TURN','R',()=>{const nr=nextFace(p.t,p.r|0,1);feedback(station.faceProp(p.id,nr,propBox(p.t,nr,p)),orientEv(),'turned');renderSelection();});
+    if(canFlip(p.t))addKey('FLIP','M',()=>{feedback(station.mirrorProp(p.id),orientEv(),'flipped');renderSelection();});
+    addKey('DUPLICATE','Ctrl+D',()=>duplicateSelected(orientEv()));
+    addKey('COPY','Ctrl+C',()=>copySelected(orientEv()));
     // a MADE prop carries its library controls right here: SIZE (free) and its side view, like the MAKE A PROP panel
     const made=(typeof UserProps!=='undefined'&&UserProps.get&&typeof PropSprites!=='undefined'&&PropSprites.isUserProp&&PropSprites.isUserProp(p.t))?UserProps.get(p.t):null;
     if(made){
@@ -4754,8 +4813,7 @@ const Build = (() => {
       if(!made.side&&!made.symmetric)add('\u21bb SIDE VIEW',()=>{setHint('Making a side view of '+(made.label||'this prop')+' \u00b7 about $0.30 \u00b7 watch the MAKE A PROP panel');startMakeSide(p.t);});
     }
     if(isEditableProp(p.t))add('CONFIGURE',()=>configureProp(p,orientEv()));
-    add('DELETE',()=>{const had=linkedFloor()&&isWorkflowType(p.t)&&(station.links()||[]).some(l=>l.from.prop===p.id||l.to.prop===p.id);feedback(station.removeProp(p.id),orientEv(),had?'removed · its belts stay, loose — nothing rides them until a machine stands where they end · Undo restores it':'removed · Undo restores it');selectedPropId=null;movingPropId=null;renderSelection();setHint();});
-    add('DESELECT',()=>{selectedPropId=null;renderSelection();setHint();});
+    addKey('DELETE','Del',()=>deleteSelected(orientEv()),'refit-sel-del');
     const position=document.createElement('details');position.className='refit-position';
     position.innerHTML='<summary>Position on grid</summary><label>X <input aria-label="Object grid X" type="number" step="1" value="'+p.x+'"></label><label>Y <input aria-label="Object grid Y" type="number" step="1" value="'+p.y+'"></label><button class="bb sm" type="button">APPLY POSITION</button>';
     position.querySelector('button').onclick=()=>{
@@ -4763,6 +4821,66 @@ const Build = (() => {
       if(!Number.isInteger(x)||!Number.isInteger(y)){feedback({ok:false,msg:'Use whole tile coordinates'},orientEv());return;}
       const res=station.moveProp(p.id,x-p.x,y-p.y);feedback(res,orientEv(),moveMsg(res,0,'position updated'));renderSelection();
     };host.append(position);
+  }
+  /* ---------- THE EDITOR KEYS (2026-10-01 build-mode upgrade) ----------
+     What every editor does, on the SELECTED object: Delete/Backspace removes it, Ctrl+D drops a copy beside it (the copy is then
+     the selection, so Ctrl+D again makes a row), Ctrl+C picks it up as a stamp (every click places a copy; Ctrl+V picks the last one
+     up again), the arrows nudge it a tile (Shift: five). Each is one ordinary edit — one UNDO. A copy is the COPY tool's own pickup:
+     orientation, a filter's routes, a door's seal travel with it; an agent binding never does. */
+  function copySpecOf(p) {
+    const s = propSpec(p.t), cfg = {};
+    if (p.r) cfg.r = p.r;
+    if (p.m) cfg.m = 1;
+    if (p.routes && typeof p.routes === 'object') cfg.routes = Object.assign({}, p.routes);
+    if (p.def) cfg.def = p.def;
+    if (p.door) cfg.door = p.door;
+    return { t: p.t, w: p.w || 1, h: p.h || 1, block: s.blocks !== false, cfg };
+  }
+  // the nearest clear spot for a copy: right of it, below, left, above — then ring by ring outward
+  function freeSpotNear(spec, x0, y0) {
+    const fits = (x, y) => !!(station.canPlaceProp(spec.t, x, y, spec.w, spec.h) || {}).ok;
+    for (const [dx, dy] of [[spec.w, 0], [0, spec.h], [-spec.w, 0], [0, -spec.h]]) if (fits(x0 + dx, y0 + dy)) return { x: x0 + dx, y: y0 + dy };
+    for (let r = 1; r <= 10; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+      if (fits(x0 + dx, y0 + dy)) return { x: x0 + dx, y: y0 + dy };
+    }
+    return null;
+  }
+  function deleteSelected(ev) {
+    const p = station.propById(selectedPropId); if (!p) return false;
+    const had = linkedFloor() && isWorkflowType(p.t) && (station.links() || []).some(l => l.from.prop === p.id || l.to.prop === p.id);
+    const res = station.removeProp(p.id);
+    feedback(res, ev, had ? 'removed · its belts stay, loose — nothing rides them until a machine stands where they end · Undo restores it' : 'removed · Undo restores it');
+    if (res && res.ok) { selectedPropId = null; movingPropId = null; renderSelection(); setHint(); }
+    return true;
+  }
+  function duplicateSelected(ev) {
+    const p = station.propById(selectedPropId); if (!p) return false;
+    const spec = copySpecOf(p), at = freeSpotNear(spec, p.x, p.y);
+    if (!at) { sfx('bad'); flashTip(ev, 'no clear floor beside it for a copy — clear some space, or COPY it to place one anywhere'); return true; }
+    const res = station.addProp(Object.assign({ t: spec.t, x: at.x, y: at.y, w: spec.w, h: spec.h, block: spec.block }, spec.cfg));
+    if (res && res.ok) {
+      pushFlash([{ x1: at.x, y1: at.y, x2: at.x + spec.w - 1, y2: at.y + spec.h - 1 }], false);
+      if (typeof StationUI !== 'undefined' && StationUI.pokeQuests) { try { StationUI.pokeQuests(); } catch (_) {} }
+      if (typeof Tutorial !== 'undefined' && Tutorial.onPropPlaced) Tutorial.onPropPlaced(spec.t);
+      if (res.id) { selectedPropId = res.id; renderSelection(); }
+    }
+    feedback(res, ev, 'duplicated · the copy is selected · Ctrl+D again for another');
+    return true;
+  }
+  let lastCopy = null;   // the last prop picked up with Ctrl+C / COPY — Ctrl+V picks it up again
+  function copySelected(ev) {
+    const p = station.propById(selectedPropId); if (!p) return false;
+    selectTool('dupe', { keepGroup: true, silent: true });
+    pickupDupe({ tx: p.x, ty: p.y }, ev, p.id);
+    return true;
+  }
+  function nudgeSelected(dx, dy, ev) {
+    const p = station.propById(selectedPropId); if (!p) return false;
+    const res = station.moveProp(p.id, dx, dy);
+    if (res && res.ok) { snapTick('propmove'); pushMoves([{ from: { x1: p.x - dx, y1: p.y - dy, x2: p.x - dx + p.w - 1, y2: p.y - dy + p.h - 1 }, to: { x1: p.x, y1: p.y, x2: p.x + p.w - 1, y2: p.y + p.h - 1 } }]); renderSelection(); }
+    else { sfx('bad'); flashTip(ev, (res && res.msg) || 'blocked — nothing moved'); }
+    return true;
   }
   function configureProp(p, ev) {
     if (!p) return;
@@ -4951,6 +5069,7 @@ const Build = (() => {
                rects: rm.rects.map(r => ({ x1: r.x1 - mx, y1: r.y1 - my, x2: r.x2 - mx, y2: r.y2 - my })) };
     }
     sfx('click');
+    lastCopy = dupe;
     flashTip(ev, 'COPIED ' + dupe.label + ' — click to stamp · right-click to drop', true);
     setHint('holding ' + dupe.label + ' — click to stamp copies · right-click / Esc to drop');
   }
@@ -5127,6 +5246,22 @@ const Build = (() => {
     // Both are no-ops with a reason on art that cannot turn/flip.
     if (ev.key === 'r' || ev.key === 'R') { ev.preventDefault(); turnUnderCursor(ev.shiftKey ? -1 : 1); return; }
     if (ev.key === 'm' || ev.key === 'M') { ev.preventDefault(); flipUnderCursor(); return; }
+    // EDITOR KEYS on the selected object (see THE EDITOR KEYS); with nothing selected they do nothing, quietly
+    if (selectedPropId && tool === 'select') {
+      if (ev.key === 'Delete' || ev.key === 'Backspace') { ev.preventDefault(); deleteSelected(orientEv()); return; }
+      if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'd' || ev.key === 'D')) { ev.preventDefault(); duplicateSelected(orientEv()); return; }
+      if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'c' || ev.key === 'C')) { ev.preventDefault(); copySelected(orientEv()); return; }
+      const ARROW = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key];
+      if (ARROW) { ev.preventDefault(); const n = ev.shiftKey ? 5 : 1; nudgeSelected(ARROW[0] * n, ARROW[1] * n, orientEv()); return; }
+    }
+    if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'v' || ev.key === 'V') && lastCopy) {
+      ev.preventDefault();
+      const held = lastCopy;
+      selectTool('dupe', { keepGroup: true, silent: true }); dupe = held; sfx('click');
+      flashTip(orientEv(), 'HOLDING ' + held.label + ' — click to place copies · right-click to drop', true);
+      setHint('holding ' + held.label + ' — click to stamp copies · right-click / Esc to drop');
+      return;
+    }
     const map = { '0': 'select', '1': 'room', '2': 'hall', '3': 'paint', '4': 'move', '5': 'reclaim', '6': 'prop', '7': 'belt', '8': 'dupe', '9': 'line' };
     if (map[ev.key]) selectTool(map[ev.key]);
   }

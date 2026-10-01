@@ -45,7 +45,7 @@ const tutorialSrc = read('tutorial.js');
   const wfBranch = build.slice(build.indexOf("} else if (tool === 'line' || ((tool === 'select' || tool === 'prop') && buildGroup === 'workflow')) {"), build.indexOf('function updateSafetyClearance'));
   A.ok(wfBranch.length > 200 && /pal\.appendChild\(machinePalette\(\)\)/.test(wfBranch), 'the Conveyors tab renders the MACHINES shelf above the line library');
   A.ok(/\['lines', LINES_LABEL, blueprints\(\)\.length\], \['machines', MACHINES_LABEL, workflowMachines\(\)\.length\]/.test(wfBranch), 'the line library header counts the real catalog (the LINES · MACHINES section keys)');
-  A.ok(/\(tool === 'prop' && buildGroup !== 'workflow'\) \|\| \(tool === 'select' && buildGroup === 'props'\)/.test(build), 'arming a machine from the Conveyors tab keeps the Conveyors tab up (it does not jump to the Props catalog)');
+  A.ok(/\(tool === 'prop' && buildGroup !== 'workflow'\) \|\| \(\(tool === 'select' \|\| tool === 'dupe'\) && buildGroup === 'props'\)/.test(build), 'arming a machine from the Conveyors tab keeps the Conveyors tab up (it does not jump to the Props catalog); a copy held from the Props tab keeps the catalog up (2026-10-01)');
   const mp = build.slice(build.indexOf('function machinePalette()'), build.indexOf('const THUMB_PAD'));
   A.ok(/propType = c\.id;\s*setLibraryPlacement\(true\);/.test(mp), 'a shelf pick arms the ordinary PROP placement for that machine');
 }
