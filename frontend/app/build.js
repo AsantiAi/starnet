@@ -7162,7 +7162,19 @@ const Build = (() => {
     if (first && typeof WorkflowPanel !== 'undefined') { try { openFlowCard(first.id); } catch (e) {} }
     else if (!first) { try { selectTool('line'); } catch (e) {} }
   }
-  const api = { init, open, openWorkflows, testJobForProp, close, toggle, isOpen, requisition, refitNames: guideNames, openAssign, noteLineDelivered, lineOfAgentInfo, summonForRole, nagLabel: code => VAL_LABEL[code] || code,
+  /* EDIT WORKFLOW (2026-09-30): the WORKFLOWS window's door into the full editor — REFIT open on the floor with THIS line's own
+     Workflow panel on screen (the diagram, every step's instructions, what starts it, its budget, floor edits). */
+  function editLine(propId) {
+    pendingGroup = 'workflow'; writeLastGroup('workflow');
+    if (!running) open(); else { buildGroup = 'workflow'; selectTool('select'); }
+    if (!running || !station || !station.propById(propId)) return false;
+    try { rebake(); } catch (e) { /* the frame loop compiles on its next tick; the panel repaints when it does */ }
+    try { openFlowCard(propId); } catch (e) { return false; }
+    return true;
+  }
+  const api = { init, open, openWorkflows, editLine, testJobForProp, close, toggle, isOpen, requisition, refitNames: guideNames, openAssign, noteLineDelivered, lineOfAgentInfo, summonForRole, nagLabel: code => VAL_LABEL[code] || code,
+    // the WORKFLOWS window speaks the shelf's own words and shows the shelf's own art (one name per line, never a second one)
+    lineWords: () => ({ plain: LINE_PLAIN, purpose: LINE_PURPOSE }), lineSchematic: bp => lineSchematic(bp), machineStill: t => machineStill(t),
     nagWhy: valWhy };   // nagLabel: the floor's own nag copy for a compiler code (ROUTINES RUN NOW refusal reads it); nagWhy: the full fix sentence the hover card + Workflow panel say (station.layout reads it)
   if (typeof window !== 'undefined' && window.__STARNET_DEV__) api.__test__ = __test__;
   return api;

@@ -1,0 +1,165 @@
+/* WORK › WORKFLOWS — the docked WORKFLOWS window (frontend/app/windows/workflows.js, 2026-09-30).
+   One path: pick a workflow → send it a job → see the step working → read the result → change it → send it again.
+   MATERIAL: the Workflow panel / Build Library glass, copied exactly (workflow-panel.css, refit-polish.css). Those tokens live on
+   .wf-panel and .refit-overlay, so this window restates them on its own root — then the panel's unscoped pieces (.wf-node tiles,
+   .wf-belt joins, .wf-pill, .wf-io wells, .wf-fix cards, .wf-step-out rows, .wf-md prose) draw here exactly as they draw there.
+   Keys are the panel's 8px glass keys (36px, 16px VT323, lit-glass primary); fields are the Build Library field (8px, recessed);
+   cards are 10px glass. Theme tokens only, so every phosphor set re-tints it. Nothing a Commander reads is under 14px. */
+.term.wfw-win {
+  --refit-glass: linear-gradient(125deg, rgba(var(--ph-bright-rgb),.09), rgba(var(--ph-rgb),.045) 48%, rgba(var(--ph-rgb),.015));
+  --refit-edge: rgba(var(--ph-rgb),.2);
+  --wf-cyan: #5fd8ff;
+  --wf-edge: var(--refit-edge);
+  --wf-light: inset 0 1px 0 rgba(var(--ph-bright-rgb),.07);
+  --wf-plate: rgba(var(--ph-rgb),.035);
+  --wf-hover: rgba(var(--ph-rgb),.1);
+  --wf-on: rgba(var(--ph-rgb),.13);
+  --wf-well: rgba(0,0,0,.34);
+  --wf-well-shadow: inset 0 1px 3px rgba(0,0,0,.15);
+  --wf-ring: 0 0 0 2px rgba(var(--ph-rgb),.1);
+}
+.term.wfw-win .term-body { font-family: 'VT323', 'Courier New', monospace; font-size: 17px; line-height: 1.45; color: var(--text); text-shadow: none; }
+.wfw { display: grid; gap: 4px; padding: 4px 6px 18px; max-width: 1100px; }
+.wfw [hidden] { display: none !important; }
+.wfw :is(button,input,textarea,summary,[role="button"]):focus-visible { outline: 2px solid var(--ph-bright); outline-offset: 2px; }
+
+/* keys: the panel's glass key, one voice for every .bb in the window */
+.term.wfw-win .bb {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box;
+  min-height: 36px; padding: 7px 14px; font: 16px/1.15 'VT323', monospace; letter-spacing: .6px; white-space: nowrap;
+  color: var(--ph); border: 1px solid var(--wf-edge); border-radius: 8px;
+  background: var(--refit-glass); box-shadow: var(--wf-light); text-shadow: none; cursor: pointer;
+  transition: background-color var(--t-fast) var(--ease-soft), border-color var(--t-fast) var(--ease-soft), color var(--t-fast) var(--ease-soft);
+}
+.term.wfw-win .bb.sm { min-height: 34px; padding: 6px 13px; }
+.term.wfw-win .bb:hover::before, .term.wfw-win .bb:hover::after { content: none; }   /* never the old pip-boy [..] hover brackets */
+.term.wfw-win .bb:hover:not(:disabled) { color: var(--ph-bright); border-color: rgba(var(--ph-rgb),.45); background: var(--wf-hover); box-shadow: var(--wf-light); }
+.term.wfw-win .bb:active:not(:disabled) { box-shadow: inset 0 2px 4px rgba(0,0,0,.35); }
+.term.wfw-win .bb:is(.active,[aria-expanded="true"]) { color: var(--ph-bright); border-color: var(--ph); background: var(--wf-on); box-shadow: var(--wf-light), inset 0 -2px 0 rgba(var(--ph-rgb),.65); }
+.term.wfw-win .bb:disabled { opacity: .4; cursor: default; }
+.term.wfw-win .bb.refit-primary { color: var(--ph-bright) !important; background: rgba(var(--ph-rgb),.16) !important; border-color: var(--ph) !important; text-shadow: none !important; }
+.term.wfw-win .bb.refit-primary:hover:not(:disabled) { background: rgba(var(--ph-rgb),.24) !important; }
+.wfw .wf-link { font: inherit; font-size: 16px; background: none; border: 0; padding: 0; color: var(--ph-bright); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.wfw .wf-row { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+
+/* fields: the Build Library field */
+.wfw-field {
+  width: 100%; box-sizing: border-box; min-width: 0; min-height: 36px; padding: 9px 12px;
+  font: 17px/1.4 'VT323', monospace; color: var(--ph-bright); text-shadow: none; outline: none; resize: vertical;
+  border: 1px solid var(--wf-edge); border-radius: 8px; background: rgba(0,0,0,.18); box-shadow: inset 0 1px 3px rgba(0,0,0,.15);
+  transition: border-color var(--t-fast) var(--ease-soft), box-shadow var(--t-fast) var(--ease-soft);
+}
+.wfw-field:hover { border-color: rgba(var(--ph-rgb),.38); }
+.wfw-field:focus { border-color: var(--ph); box-shadow: var(--wf-ring); }
+.wfw-field:focus-visible { outline: none; }
+.wfw-field::placeholder { color: var(--text); opacity: .55; }
+textarea.wfw-field { min-height: 76px; }
+
+/* header: where you are, the status, the one way into the editor */
+.wfw-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 6px 0 10px; border-bottom: 1px solid var(--wf-edge); }
+.wfw-title { margin: 0; padding: 0; border: 0; background: none; text-transform: none; font: 24px/1.2 'VT323', monospace; letter-spacing: .6px; color: var(--ph-bright); }
+.wfw-title::after { display: none; }
+.wfw-grow { flex: 1 1 auto; }
+.wfw .wf-pill { cursor: default; }
+.wfw-lead { margin: 10px 0 2px; font-size: 17px; color: var(--text); }
+.wfw-note { font-size: 15px; line-height: 1.35; color: var(--ph-dim); }
+.wfw-bad { margin: 0; font-size: 16px; line-height: 1.4; color: var(--warn); }
+.wfw-okline { margin: 0; font-size: 16px; line-height: 1.4; color: var(--ok); }
+.wfw-why { margin: 0; font-size: 17px; line-height: 1.45; color: var(--text); }
+.wfw-k { font-size: 15px; letter-spacing: 1.2px; color: var(--ph-dim); text-transform: uppercase; }
+.wfw-empty { padding: 24px 6px; color: var(--ph-dim); }
+
+/* sections */
+.wfw-sec { display: grid; gap: 10px; padding: 14px 0; }
+.wfw-sec + .wfw-sec { border-top: 1px solid var(--wf-edge); }
+.wfw-sec h3 { margin: 0; padding: 0; border: 0; background: none; text-shadow: none; text-transform: none; font-weight: normal; font-size: 21px; line-height: 1.25; letter-spacing: .4px; color: var(--ph-bright); display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+.wfw-sec h3::after { display: none; }
+.wfw-sec h3 .wf-tag { font-size: 14px; line-height: 1.3; }
+
+/* THE LIST: one glass card per workflow — who works it, its name and one short stat, its status, ONE key */
+.wfw-list { display: grid; gap: 8px; padding-top: 10px; }
+.wfw-row { display: grid; grid-template-columns: auto minmax(0,1fr) auto auto; align-items: center; gap: 12px; padding: 10px 14px; cursor: pointer;
+  border: 1px solid var(--wf-edge); border-radius: 10px; background: var(--refit-glass); box-shadow: var(--wf-light);
+  transition: background-color var(--t-fast) var(--ease-soft), border-color var(--t-fast) var(--ease-soft); }
+.wfw-row:is(:hover, :focus-visible) { border-color: rgba(var(--ph-rgb),.45); background: var(--wf-hover); }
+.wfw-crew { display: flex; align-items: flex-end; min-width: 36px; }
+.wfw-crew .wfw-av + .wfw-av { margin-left: -10px; }
+.wfw-av { flex: 0 0 auto; border-radius: 6px; background: var(--wf-well); box-shadow: inset 0 0 0 1px var(--wf-edge), var(--wf-well-shadow); }
+.wfw-av.none { display: grid; place-items: center; width: 30px; height: 38px; color: var(--ph-dim); }
+.wfw-rt { display: grid; gap: 1px; min-width: 0; }
+.wfw-rname { font-weight: normal; font-size: 20px; line-height: 1.2; letter-spacing: .5px; color: var(--ph-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wfw-rstat { font-size: 15px; color: var(--ph-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 720px) { .wfw-row { grid-template-columns: auto minmax(0,1fr); } .wfw-row .wf-pill { justify-self: start; } }
+
+/* NEW WORKFLOW: the starters are the Build Library's line tiles — the line's own schematic, its name, one short stat */
+.wfw-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.wfw-tile { display: grid; justify-items: center; gap: 4px; padding: 10px 10px 9px; font: inherit; color: var(--text); cursor: pointer; text-align: center;
+  border: 1px solid var(--wf-edge); border-radius: 10px; background: var(--refit-glass); box-shadow: var(--wf-light);
+  transition: background-color var(--t-fast) var(--ease-soft), border-color var(--t-fast) var(--ease-soft); }
+.wfw-tile:hover { border-color: rgba(var(--ph-rgb),.45); background: var(--wf-hover); }
+.wfw-tile.on { border-color: var(--ph); background: var(--wf-on); box-shadow: var(--wf-light), inset 0 -2px 0 rgba(var(--ph-rgb),.65); }
+.wfw-tart { display: grid; place-items: center; width: 100%; height: 62px; border-radius: 8px; background: radial-gradient(ellipse 72% 70% at 50% 64%, rgba(130,170,150,.11), transparent 76%); }
+.wfw-tart img { display: block; max-width: 100%; max-height: 58px; image-rendering: pixelated; }
+.wfw-tile b { font-weight: normal; font-size: 17px; line-height: 1.15; letter-spacing: .5px; color: var(--ph-bright); }
+.wfw-tstat { font-size: 14px; color: var(--ph-dim); }
+.wfw-picked { gap: 8px; }
+.wfw-pstep { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--wf-edge); border-radius: 10px; background: var(--wf-plate); box-shadow: var(--wf-light); }
+.wfw-pn { font-size: 17px; letter-spacing: .6px; color: var(--ph-bright); }
+
+/* an agent pick: the agent's body and name, one click (the Workflow panel's agent card, compact) */
+.wfw-agents { display: flex; flex-wrap: wrap; gap: 6px; }
+.wfw-agent { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 3px 12px 3px 4px; font: inherit; font-size: 16px; letter-spacing: .5px; color: var(--ph); cursor: pointer;
+  border: 1px solid var(--wf-edge); border-radius: 8px; background: var(--refit-glass); box-shadow: var(--wf-light);
+  transition: background-color var(--t-fast) var(--ease-soft), border-color var(--t-fast) var(--ease-soft); }
+.wfw-agent:hover { border-color: rgba(var(--ph-rgb),.45); background: var(--wf-hover); color: var(--ph-bright); }
+.wfw-agent.on { border-color: var(--ph); background: var(--wf-on); color: var(--ph-bright); box-shadow: inset 2px 0 0 var(--ph), var(--wf-light); }
+.wfw-agent .wfw-av { width: 26px; height: 32px; }
+
+/* ONE WORKFLOW: the line as the floor's machines (the panel's diagram tiles and joins), one row, scrolling sideways if it must */
+.wfw-mapwrap { overflow-x: auto; margin: 10px 0 2px; border: 1px solid var(--wf-edge); border-radius: 10px; scrollbar-width: thin; scrollbar-color: rgba(var(--ph-rgb),.24) transparent;
+  background: linear-gradient(rgba(var(--ph-rgb),.03) 1px, transparent 1px) 0 0/24px 24px, linear-gradient(90deg, rgba(var(--ph-rgb),.03) 1px, transparent 1px) 0 0/24px 24px, rgba(0,0,0,.28);
+  box-shadow: inset 0 2px 6px rgba(0,0,0,.28); }
+.wfw-map { padding: 10px 12px 12px; }
+.wfw-map span.wf-node { cursor: default; }
+/* here the line is a summary, not the editor: the panel's own tiles, a size smaller, so the job keeps the room */
+.wfw-map .wf-node { width: 100px; min-height: 0; padding: 8px 5px 7px; }
+.wfw-map .wf-nart { width: 78px; height: 44px; margin-bottom: 2px; }
+.wfw-map .wf-nart .wf-mthumb { width: 58px; height: 44px; }
+.wfw-map .wf-belt { min-width: 40px; }
+.wfw-stepbox .wfw-does { max-height: 160px; }
+
+/* FINISH SETUP: each missing thing with the key that fixes it */
+.wfw-setup { gap: 8px; }
+.wfw-fixrow { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent); border-radius: 10px;
+  background: linear-gradient(135deg, rgba(var(--gold-rgb),.07), rgba(var(--gold-rgb),.015)); box-shadow: var(--wf-light); }
+.wfw-fixh { font-size: 17px; color: var(--ph-bright); }
+
+/* the job box, the job riding, the jobs before */
+.wfw-live { margin: 0; padding: 8px 12px; font-size: 18px; color: var(--ph-bright); border-left: 3px solid #ffb23e; border-radius: 0 8px 8px 0; background: linear-gradient(90deg, rgba(255,178,62,.09), rgba(255,178,62,.02)); }
+.wfw-you { display: grid; gap: 3px; }
+.wfw-quote { font-size: 17px; line-height: 1.4; color: var(--ph-bright); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 7.2em; overflow: auto; }
+.wfw-jobs { display: grid; gap: 4px; }
+.wfw-jobrow { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; padding: 7px 12px; font: inherit; font-size: 16px; text-align: left; color: var(--text); cursor: pointer;
+  border: 1px solid var(--wf-edge); border-radius: 8px; background: var(--wf-plate); box-shadow: var(--wf-light); }
+.wfw-jobrow:hover { border-color: rgba(var(--ph-rgb),.45); background: var(--wf-hover); }
+.wfw-jtext { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ph-bright); }
+.wfw-jmeta { font-size: 14px; color: var(--ph-dim); white-space: nowrap; }
+.wfw-st { font-size: 14px; letter-spacing: 1px; color: var(--ph-dim); white-space: nowrap; }
+.wfw-st.ok { color: var(--ok); } .wfw-st.warn { color: var(--gold); } .wfw-st.run { color: #ffb23e; }
+
+/* the result page: what came out first, then what you can do about it, then the detail */
+.wfw-result { gap: 10px; }
+.wfw-rhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; font-size: 16px; color: var(--ph-dim); }
+.wfw-rhead b { font-weight: normal; font-size: 19px; letter-spacing: 1.2px; color: var(--ph-bright); }
+.wfw-rhead b.ok { color: var(--ok); } .wfw-rhead b.warn { color: var(--gold); }
+.wfw-rmeta { font-variant-numeric: tabular-nums; }
+.wfw .wfw-out { max-height: 380px; }
+.wfw-acts { padding-top: 2px; }
+.wfw-fix { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--wf-edge); border-radius: 10px; background: var(--wf-plate); box-shadow: var(--wf-light); }
+.wfw-fixes { display: grid; gap: 8px; }
+.wfw-changes { margin: 4px 0 0; padding-left: 1.2em; font-size: 16px; color: var(--text); }
+.wfw .wf-more summary { font-size: 17px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .wfw :is(.bb,.wfw-row,.wfw-tile,.wfw-agent,.wfw-field) { transition: none; }
+}
