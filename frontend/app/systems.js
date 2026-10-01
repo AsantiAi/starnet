@@ -33,11 +33,11 @@ const Systems = (() => {
     { id: 'stepin', label: 'STEP-IN', group: 'crew', sel: '.bb[data-term="stepin"]', terms: ['stepin'], words: ['STEP-IN'], how: 'when an agent needs you to take its browser', tip: 'Take an agent’s browser when it needs you to sign in' },
     // ONE MENU (2026-10-01): MY WORK / AUTOMATE / CONNECT are each one dock button over several windows (stationui
     // FAMILIES) — every member window's key is listed in terms, so opening any of them by any door counts.
-    { id: 'mywork', label: 'MY WORK', group: 'work', sel: '#bb-mywork', terms: ['tasks', 'work', 'deliverables', 'outbox'], start: true, tip: 'Tasks, finished work, work to rate, and ready-made jobs' },
-    { id: 'automate', label: 'AUTOMATE', group: 'work', sel: '#bb-automate', terms: ['workflows', 'automation', 'routines', 'loops'], words: ['AUTOMATE', 'AUTOMATION', 'WORKFLOWS', 'WORKFLOW', 'ROUTINE', 'ROUTINES', 'CONVEYOR'], jobs: 3, crew: 2, how: 'when you ask for something on a schedule', tip: 'Workflows, schedules, goal loops and away work' },
-    { id: 'quests', label: 'QUESTS', group: 'work', sel: '.bb[data-term="quests"]', terms: ['quests'], start: true, tip: 'Small steps toward your goals, and your progress' },
+    { id: 'mywork', label: 'MY WORK', group: 'bar', sel: '#bb-mywork', terms: ['tasks', 'work', 'deliverables', 'outbox'], start: true, tip: 'Tasks, finished work, work to rate, and ready-made jobs' },
+    { id: 'automate', label: 'AUTOMATE', group: 'bar', sel: '#bb-automate', terms: ['workflows', 'automation', 'routines', 'loops'], words: ['AUTOMATE', 'AUTOMATION', 'WORKFLOWS', 'WORKFLOW', 'ROUTINE', 'ROUTINES', 'CONVEYOR'], jobs: 3, crew: 2, how: 'when you ask for something on a schedule', tip: 'Workflows, schedules, goal loops and away work' },
+    { id: 'quests', label: 'QUESTS', group: 'crew', sel: '.bb[data-term="quests"]', terms: ['quests'], start: true, tip: 'Small steps toward your goals, and your progress' },
     { id: 'refit', label: 'BUILD MODE', group: 'build', sel: '#bb-build', start: true, tip: 'Rooms, gear and workflow lines' },
-    { id: 'connect', label: 'CONNECT', group: 'build', sel: '#bb-connect', terms: ['connectors', 'skills', 'messaging'], words: ['ABILITIES', 'CHANNELS'], jobs: 2, how: 'when an agent needs a tool or you mention a chat app', tip: 'Tools and apps your agents use, and where you message them' },
+    { id: 'connect', label: 'CONNECT', group: 'bar', sel: '#bb-connect', terms: ['connectors', 'skills', 'messaging'], words: ['ABILITIES', 'CHANNELS'], jobs: 2, how: 'when an agent needs a tool or you mention a chat app', tip: 'Tools and apps your agents use, and where you message them' },
     { id: 'newapp', label: 'NEW APP', group: 'build', sel: '#bb-newapp-build', start: true, tip: 'Describe anything and your crew builds it in its own window' },
     { id: 'manual', label: 'FIELD MANUAL', group: 'system', sel: '.bb[data-term="manual"]', terms: ['manual'], start: true, tip: 'First mission, controls and the station handbook' },
     { id: 'settings', label: 'SETTINGS', group: 'system', sel: '.bb[data-term="settings"]', terms: ['settings'], start: true, tip: 'Keys, models, voice, data' },
@@ -105,11 +105,13 @@ const Systems = (() => {
     if (typeof document === 'undefined') return;
     LIST.forEach(s => {
       const b = itemOf(s); if (!b) return;
-      if (isOnline(s.id)) b.removeAttribute('data-offline'); else b.setAttribute('data-offline', '');
+      // a bar button (no popover) hides its whole slot on the bar; a menu item hides inside its popover
+      const slot = b.classList.contains('bb-grp') ? (b.closest('.bb-group') || b) : b;
+      if (isOnline(s.id)) slot.removeAttribute('data-offline'); else slot.setAttribute('data-offline', '');
       if (state && state.fresh.includes(s.id) && isOnline(s.id)) b.setAttribute('data-fresh', ''); else b.removeAttribute('data-fresh');
     });
     document.querySelectorAll('#bottombar .bb-group').forEach(g => {
-      g.classList.toggle('has-fresh', !!g.querySelector('.bb-menu .bb[data-fresh]:not([hidden])'));
+      g.classList.toggle('has-fresh', !!g.querySelector('.bb-menu .bb[data-fresh]:not([hidden]), .bb-grp[data-fresh]'));
     });
     const coachAll = document.getElementById('nav-coach-all');
     if (coachAll) coachAll.hidden = !staged();
@@ -132,7 +134,7 @@ const Systems = (() => {
     if (!list.length || typeof StationUI === 'undefined' || !StationUI.notify) return;
     const names = list.map(s => s.label);
     const msg = (list.length === 1 ? 'NEW SYSTEM ONLINE — ' : 'NEW SYSTEMS ONLINE — ') + names.join(' · ')
-      + ' · find ' + (list.length === 1 ? 'it' : 'them') + ' in the ' + Array.from(new Set(list.map(s => s.group.toUpperCase()))).join(' / ') + ' dock';
+      + ' · find ' + (list.length === 1 ? 'it' : 'them') + ' ' + Array.from(new Set(list.map(s => s.group === 'bar' ? 'on the bottom bar' : 'in the ' + s.group.toUpperCase() + ' dock'))).join(' and ');
     try { StationUI.notify(msg, 'gold', undefined, { key: 'systems-online', onClick: () => { if (StationUI.openTerm) StationUI.openTerm('quests', 'progress'); } }); } catch (_) {}
     try { if (typeof SFX !== 'undefined' && SFX.level) SFX.level(); } catch (_) {}
   }

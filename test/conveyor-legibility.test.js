@@ -20,8 +20,9 @@ const Glossary = require('../frontend/app/glossary.js');
 const PropSprites = require('../frontend/app/propsprites.js');
 
 /* F1 — a door named for the job */
-const workMenu = html.slice(html.indexOf('data-group="work"'), html.indexOf('data-group="build"'));
-A.ok(/id="bb-automate" data-family="automate"[^>]*>[\s\S]{0,120}<b>AUTOMATE<\/b>/.test(workMenu) && /automate: \{ label: 'AUTOMATE', tabs: \[\s*\{ id: 'workflows', k: 'workflows', label: 'WORKFLOWS'/.test(read('frontend/app/stationui.js')), 'WORK menu has AUTOMATE, whose first tab is WORKFLOWS (ONE MENU, 2026-10-01)');
+// ONE MENU, ONE CLICK (2026-10-01): MY WORK / AUTOMATE / CONNECT sit on the bar itself, between CREW and BUILD
+const workMenu = html.slice(html.indexOf('data-group="mywork"'), html.indexOf('data-group="build"'));
+A.ok(/id="bb-automate" data-family="automate"[^>]*>[\s\S]{0,120}AUTOMATE/.test(workMenu) && /automate: \{ label: 'AUTOMATE', tabs: \[\s*\{ id: 'workflows', k: 'workflows', label: 'WORKFLOWS'/.test(read('frontend/app/stationui.js')), 'the bar has AUTOMATE, whose first tab is WORKFLOWS (ONE MENU, 2026-10-01)');
 A.ok(/registerWindow\('workflows', 'WORKFLOWS'/.test(read('frontend/app/windows/workflows.js')) && !/bbWorkflows\.onclick/.test(app), 'WORKFLOWS opens its own docked window — send a job, read the result, change it (2026-09-30; never Build Mode)');
 A.ok(/const api = \{ init, open, openWorkflows,/.test(build), 'Build exports openWorkflows');
 const ow = build.slice(build.indexOf('function openWorkflows()'), build.indexOf('const api = {'));

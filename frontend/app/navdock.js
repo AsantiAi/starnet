@@ -120,7 +120,9 @@
     // ev.detail === 0 ⇒ the click was synthesized by Enter/Space on the trigger (keyboard); > 0 ⇒ real mouse.
     // After a MOUSE toggle, also drop focus from the trigger — otherwise it silently keeps focus and a stray
     // Space/Enter later re-toggles the dock (the same "opens by itself" class of bug, one level up).
-    if (trigger) trigger.addEventListener('click', ev => {
+    // a DIRECT bar button (MY WORK / AUTOMATE / CONNECT) has no popover: its own handler opens its window
+    const hasMenu = !!g.querySelector('.bb-menu');
+    if (trigger && hasMenu) trigger.addEventListener('click', ev => {
       ev.stopPropagation();
       const viaKeyboard = ev.detail === 0;
       toggle(g, viaKeyboard);
@@ -136,10 +138,10 @@
     // trapped inside an open popover so focus can't wander to the page behind it.
     // the adjacent group in the visual row (wrapping), for horizontal dock navigation.
     // (a HIDDEN dock — APPS before the first app — is skipped)
-    const sibling = (dir) => { let gi = groups.indexOf(g); for (let k = 0; k < groups.length; k++) { gi = (gi + (dir > 0 ? 1 : groups.length - 1)) % groups.length; if (!groups[gi].hidden) break; } return groups[gi]; };
+    const sibling = (dir) => { let gi = groups.indexOf(g); for (let k = 0; k < groups.length; k++) { gi = (gi + (dir > 0 ? 1 : groups.length - 1)) % groups.length; if (!groups[gi].hidden && !groups[gi].hasAttribute('data-offline')) break; } return groups[gi]; };
     g.addEventListener('keydown', ev => {
       const open = g.classList.contains('open');
-      if (!open && (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') && document.activeElement === trigger) {
+      if (!open && hasMenu && (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') && document.activeElement === trigger) {
         ev.preventDefault(); toggle(g, true); return;   // keyboard open → toggle() focuses the first item
       }
       // closed trigger: Left/Right walks to the adjacent dock trigger (menubar-style), no popover opened.
@@ -186,7 +188,7 @@
   const sysBadge = document.getElementById('bb-sys-badge');
   function syncGroupState() {
     groups.forEach(g => {
-      const anyOpen = !!g.querySelector('.bb-menu .bb.active');
+      const anyOpen = !!g.querySelector('.bb-menu .bb.active, .bb-grp.active');   // a direct bar button lights itself
       g.classList.toggle('has-active', anyOpen);
     });
     if (nfBadge) {
