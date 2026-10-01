@@ -2807,9 +2807,9 @@ fn build_main_window(
     app: &AppHandle,
     restore: Option<MainWindowRestore>,
 ) -> tauri::Result<tauri::WebviewWindow> {
-    let init = {
+    let (init, sidecar_port) = {
         let st = app.state::<AppState>();
-        webview_init_script(st.port, &st.api_token)
+        (webview_init_script(st.port, &st.api_token), st.port)
     };
     // A rebuilt window reveals itself after its first load only when the window it replaces was
     // showing — a crash while parked in the tray must not pop the app open.
@@ -2830,7 +2830,7 @@ fn build_main_window(
         // disabled (above), WebView2 would otherwise navigate this frameless window to a link the user
         // drags onto it — a full-window page with no URL bar. External links already leave through
         // open_external_url (the system browser).
-        .on_navigation(|url| is_app_navigation(url))
+        .on_navigation(move |url| is_app_navigation(url, sidecar_port))
         .center()
         .visible(false)
         // Page-load hooks fire for Started AND Finished. Reveal only once,
@@ -3964,12 +3964,30 @@ mod artifact_open_tests {
 /// The main window may only navigate within the bundled app origin: `tauri://localhost` (macOS/Linux)
 /// or `http(s)://tauri.localhost` (Windows WebView2). Everything else — a dragged-in link, a stray
 /// `location = …` — is refused, so no foreign page ever runs in the token-bearing window.
-fn is_app_navigation(url: &tauri::Url) -> bool {
+///
+/// ONE exception, for FRAMES: the BROWSER window shows pages an agent made inside a sandboxed iframe served
+/// by this app's own sidecar (`http://127.0.0.1:<sidecar port>/view/…` and `/workshop-run/…`). WebKit on
+/// macOS and WebKitGTK on Linux ask this guard about EVERY frame's navigation (WebView2 asks only about the
+/// main frame), so without the exception those pages never load there (2026-09-30 release review). The
+/// exception is exactly that loopback origin and those two paths; both are served with a CSP `sandbox`
+/// header (opaque origin, no token, no top navigation), so even a main-frame load of one could not reach
+/// the app's privileges.
+fn is_app_navigation(url: &tauri::Url, sidecar_port: u16) -> bool {
     match url.scheme() {
         "tauri" => true,
-        "http" | "https" => url.host_str() == Some("tauri.localhost"),
+        "http" | "https" if url.host_str() == Some("tauri.localhost") => true,
+        "http" => is_sidecar_page(url, sidecar_port),
         _ => false,
     }
+}
+
+fn is_sidecar_page(url: &tauri::Url, sidecar_port: u16) -> bool {
+    sidecar_port != 0
+        && url.host_str() == Some("127.0.0.1")
+        && url.port() == Some(sidecar_port)
+        && url.username().is_empty()
+        && url.password().is_none()
+        && (url.path().starts_with("/view/") || url.path().starts_with("/workshop-run/"))
 }
 
 #[cfg(test)]
@@ -3977,7 +3995,7 @@ mod navigation_guard_tests {
     use super::is_app_navigation;
 
     fn ok(s: &str) -> bool {
-        is_app_navigation(&tauri::Url::parse(s).expect("valid url"))
+        is_app_navigation(&tauri::Url::parse(s).expect("valid url"), 8787)
     }
 
     #[test]
@@ -3995,6 +4013,22 @@ mod navigation_guard_tests {
         assert!(!ok("file:///C:/Users/x/page.html"));
         assert!(!ok("javascript:alert(1)"));
         assert!(!ok("data:text/html,hi"));
+    }
+
+    #[test]
+    fn agent_pages_from_this_sidecar_load_in_the_browser_window() {
+        // macOS / Linux ask the guard about every frame: the BROWSER window's sandboxed iframe must pass
+        assert!(ok("http://127.0.0.1:8787/view/~t/st1.abc/nova/site/index.html"));
+        assert!(ok("http://127.0.0.1:8787/workshop-run/~t/st1.abc/nova/r1/index.html"));
+        // …and nothing wider: the API, another port, another host, https, credentials, look-alike paths
+        assert!(!ok("http://127.0.0.1:8787/api/file?agent=a&path=x"));
+        assert!(!ok("http://127.0.0.1:8787/"));
+        assert!(!ok("http://127.0.0.1:9999/view/~t/x/nova/a.html"));
+        assert!(!ok("http://localhost:8787/view/~t/x/nova/a.html"));
+        assert!(!ok("https://127.0.0.1:8787/view/~t/x/nova/a.html"));
+        assert!(!ok("http://user:pw@127.0.0.1:8787/view/~t/x/nova/a.html"));
+        assert!(!ok("http://127.0.0.1:8787/viewer/x"));
+        assert!(!is_app_navigation(&tauri::Url::parse("http://127.0.0.1:0/view/x").unwrap(), 0));
     }
 }
 
