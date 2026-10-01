@@ -26,12 +26,25 @@
       <div class="err-line" id="setup-err" hidden></div>
       <div class="btns"><button class="btn" id="setup-retry" type="button" hidden>Try again</button></div>
     </div>
+    <!-- iPhone, in Safari: a Home Screen app keeps its OWN storage, so pairing happens there, not here -->
+    <div id="setup-install" class="glass pad" hidden>
+      <div class="push-h">Put StarNet on your Home Screen</div>
+      <ol class="steps">
+        <li><b>Copy</b> your pairing link.<div class="btns"><button class="btn go" id="install-copy" type="button">Copy pairing link</button></div></li>
+        <li>Tap <b>Share</b> <span class="share-ico" aria-hidden="true"></span> below, then <b>Add to Home Screen</b>.</li>
+        <li>Open <b>StarNet</b> from your Home Screen and tap <b>Paste</b>. That's it.</li>
+      </ol>
+      <p class="hint">The link works once and for ten minutes. If it runs out, press PAIR A PHONE on your desktop again.</p>
+      <div class="btns"><button class="btn quiet" id="install-here" type="button">Use it in Safari instead</button></div>
+    </div>
     <div id="setup-howto" class="glass pad">
       <p>Your station runs on your computer. This phone reaches it from anywhere.</p>
-      <p>On your desktop open <b>SETTINGS → DEVICES</b>, switch Remote on, and press <b>PAIR A PHONE</b>. Scan the code it shows with this phone's camera.</p>
-      <p class="hint">Or paste the pairing link here:</p>
-      <input type="text" id="setup-link" placeholder="https://…#pair=…" autocomplete="off" autocapitalize="off" spellcheck="false">
-      <div class="btns"><button class="btn" id="setup-go" type="button">Pair</button></div>
+      <div class="btns fill"><button class="btn go" id="setup-paste" type="button">Paste pairing link</button></div>
+      <p class="hint">No link yet? On your desktop open <b>SETTINGS → DEVICES</b>, switch Remote on, press <b>PAIR A PHONE</b> and scan the code with your camera.</p>
+      <details class="manual"><summary>Type or paste it yourself</summary>
+        <input type="text" id="setup-link" placeholder="https://…#pair=…" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <div class="btns"><button class="btn" id="setup-go" type="button">Pair</button></div>
+      </details>
     </div>
   </section>
 
