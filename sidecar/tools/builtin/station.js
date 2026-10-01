@@ -350,7 +350,7 @@
     const styleText = () => { try { return (styleMenu() || []).map(s => s.id).join(', '); } catch (_) { return ''; } };
     const roomMenu = typeof deps.roomMenu === 'function' ? deps.roomMenu : () => [];
     const roomText = () => { try { return (roomMenu() || []).map(s => s.id + ' (' + s.name + (s.about ? ': ' + s.about : '') + ')').join('; '); } catch (_) { return ''; } };
-    const BUILDER = ['station.map', 'station.plan', 'station.build', 'station.make_prop', 'station.test_line'];
+    const BUILDER = ['station.map', 'station.plan', 'station.build', 'station.make_prop', 'station.test_line', 'station.start_line'];
     const mapTool = {
       name: 'station.map', capability: 'orchestrator', scope: 'read', requiresConsent: false,
       description: 'STATION BUILDER, step 1: see the station floor before you build on it. Every room with its position and size in tiles, its type, what it is joined to (through hallways, or open to it), its machines, furniture and lines, how much floor is clear, which sizes of new room fit on each side, and the floor drawn in characters (a letter per room, + for a hallway; north is the top). '
@@ -400,7 +400,7 @@
           + '{ op: "belt", from: [x, y], to: [x, y] } (a straight run) · { op: "unbelt", tiles } · { op: "connect", from: prop, to: prop } (belts one machine into the next) · SET A LINE UP (everything the Workflow panel sets): { op: "role" | "brief" | "label", prop, role | text } (a step\'s role, its instructions, the line\'s name) · { op: "hands", prop: a bay, text } (what that step hands on) · { op: "budget", prop: any machine on the line, stages, perJob, perDay } (null = the default) · { op: "loop", prop: a loop, passes, until: approved | revise | code | research | general, done, escalate } (done, escalate: the side work leaves by) · { op: "wait", prop: a joiner, minutes } · { op: "swap", prop: a joiner or a merger } (a joiner waits for every branch, so the splitter copies to each; a merger takes them as they come, so the branches take turns) · { op: "routes", prop: a filter, routes: { code | research | general: side }, def } · { op: "folder", prop, project: one of the Commander\'s trusted projects, or null } · { op: "bind", prop: a connector portal or a plugin terminal, connector | plugin: its name } (its room\'s agents get that service\'s tools) · sides are north, east, south, west · { op: "stamp", line, x, y } (a shelf line at an exact spot) · { op: "edit", prop, edit, args } (the Workflow panel\'s own line edits on the line that prop is on: insertStep { from, to, role }, appendStep { after, role }, addBranch, addLoop, addSorter, addRoute, removeStep { id }, moveStep, tidy, addOutbox …). '
           + 'prop is an id from station.map { room }, a name given with as, or a tile [x, y]; room is a name or an as. The first edit that fails refuses the plan and names it with Refit mode\'s reason: fix that edit and plan again. '
           + 'A piece the catalog does not have: station.make_prop makes it with the Commander\'s StarNet credits; then place it by its id. '
-          + 'LOOK at your work: after station.build, station.map { look: the room } shows it as it really renders. If it is not right yet (crowded, bare, lopsided, a doorway or walkway blocked, pieces that clash), refit it again; a design is finished when it looks finished. TEST a line you built or set up: station.test_line sends one real job down it and reads each step back; fix what went wrong and test again. A good station: every room reached by a hallway or open to a neighbour, doorways and walkways clear, each room furnished for what it is for, lines with room to run, nothing piled up. '
+          + 'LOOK at your work: after station.build, station.map { look: the room } shows it as it really renders. If it is not right yet (crowded, bare, lopsided, a doorway or walkway blocked, pieces that clash), refit it again; a design is finished when it looks finished. TEST a line you built or set up: station.test_line sends one real job down it and reads each step back; fix what went wrong and test again. station.start_line sets what starts it (a schedule, a folder, a webhook). A good station: every room reached by a hallway or open to a neighbour, doorways and walkways clear, each room furnished for what it is for, lines with room to run, nothing piled up. '
           + 'SHORTCUTS, when StarNet should place things for you (quick, and right when the Commander just wants it done; refit the result by hand afterwards if you want it your way): ' + PLAN_HOW + ' '
           + '1 LAYOUT, the way to a beautiful station: { "layout": { "pattern": "diamond" | "concourse", "rooms": [ { "name", "style", "size", "lines" } ] }, "replace": true? }. diamond (the usual one) = every room on an even grid all round the main room, each the bridge\'s size and a hallway apart, filled in diamond order (the four sides, then the corners and far sides, then the next ring out) so the station keeps its shape at any size, with a corridor loop round the bridge at its centre; big rooms (a conveyor hall, size giant) take the east and west wings; up to 40 rooms. To ADD rooms later, send a layout again with only the new rooms: they take the next free places of the same diamond, or go down the same concourse. concourse = a wide corridor from one side of the main room, rooms down both sides, a big room at the far end (up to 24; "side" picks the direction). '
           + 'Each room is furnished wall to wall in its style (floor, walls, feature wall, centrepiece, plants) and the corridors are planted and lit. Room styles: ' + roomText() + '. A room given lines is a conveyor hall (works); a works room without lines is kept clear for lines to come. '
@@ -552,10 +552,47 @@
       }
     };
 
+    /* WHAT STARTS A LINE (2026-10-01): a schedule, a folder or a webhook, set the way the line's Workflow panel sets it
+       (deps.startLine = the panel's own cores in the sidecar). It runs the line unattended from then on, so it asks first.
+       A webhook's key is never in the answer: StarNet shows a key once, to the Commander, in the panel. */
+    const startLine = typeof deps.startLine === 'function' ? deps.startLine : null;
+    const START_KINDS = ['schedule', 'folder', 'webhook', 'off'];
+    const startLineTool = {
+      name: 'station.start_line', capability: 'orchestrator', scope: 'write', requiresConsent: true,
+      // standing automation in the lead's words: a run that read untrusted content may not set one
+      taintLocked: true, timeoutMs: 30000,
+      description: 'STATION BUILDER: set what starts a workflow line, the way its Workflow panel does. { line, schedule: "every weekday at 9am" (or a cron expression), tz, job } runs the whole line on that schedule, from its first step; '
+        + '{ line, folder: a folder path, job } starts it whenever a new file lands there (inside the folders the Commander allows; files already there never fire); { line, webhook: true, job } starts it whenever its webhook is called (the Commander takes its address and key from the line\'s Workflow panel; you never see the key); '
+        + '{ line, off: a trigger id } turns a folder or webhook trigger off (a schedule is a routine: routine.manage pauses or removes it). job is the work it sends down the line each time; maxPerHour caps a trigger. It runs the line\'s agents unattended, within the line\'s budget, so it asks the Commander first. station.layout shows what starts each line now.',
+      schema: { type: 'object', properties: { line: { type: 'string' }, room: { type: 'string' }, schedule: { type: 'string' }, tz: { type: 'string' }, folder: { type: 'string' }, webhook: { type: 'boolean' }, job: { type: 'string' }, maxPerHour: { type: 'integer' }, off: { type: 'string' } }, required: ['line'] },
+      run: async (args) => {
+        if (!startLine) return refuse('Starting lines is not available on this station.');
+        const a = args && typeof args === 'object' ? args : {};
+        const kinds = START_KINDS.filter(k => a[k] !== undefined && a[k] !== null && a[k] !== false && a[k] !== '');
+        if (kinds.length !== 1) return refuse('Say one start: { schedule }, { folder } or { webhook: true }, each with the job it sends, or { off: a trigger id }.');
+        const kind = kinds[0], job = String(a.job == null ? '' : a.job).replace(/\r/g, '').trim();
+        if (kind !== 'off' && !job) return refuse('job is the work the line gets each time it starts, in a sentence or two.');
+        if (job.length > 2000) return refuse('A job is up to 2000 characters.');
+        const ref = await ask('station.line_ref', Object.assign({ line: String(a.line == null ? '' : a.line).slice(0, 80) }, a.room != null ? { room: String(a.room).slice(0, 60) } : {}));
+        if (!ref.ok) return refuse(ref.error);
+        const L = ref.result || {};
+        let r;
+        try { r = await startLine({ kind, lineId: L.lineId, name: L.name, job, schedule: a.schedule != null ? String(a.schedule).slice(0, 120) : undefined, tz: a.tz != null ? String(a.tz).slice(0, 60) : undefined,
+          folder: a.folder != null ? String(a.folder).slice(0, 1024) : undefined, maxPerHour: a.maxPerHour, id: a.off != null ? String(a.off).slice(0, 60) : undefined }); }
+        catch (e) { return refuse('The start could not be saved: ' + String((e && e.message) || e).slice(0, 200)); }
+        if (!r || !r.ok) return refuse(String((r && r.error) || 'the start was not saved').replace(/[.\s]*$/, '.'));
+        const said = kind === 'schedule' ? 'The line ' + L.name + ' now runs ' + r.when + (r.halted ? ', but automation is stopped (E-STOP): nothing fires until the Commander resumes it' : r.armed ? '' : ', once the Commander turns the scheduler on') + '. Its routine is ' + r.id + ' (routine.manage pauses or removes it).'
+          : kind === 'folder' ? 'The line ' + L.name + ' now starts whenever a new file lands in ' + r.path + ' (files already there never fire)' + (r.blockedBy ? '; it is waiting on: ' + r.blockedBy : '') + '. Its trigger is ' + r.id + '.'
+          : kind === 'webhook' ? 'The line ' + L.name + ' now starts whenever its webhook is called. Tell the Commander to open the line\'s Workflow panel and press NEW KEY on this trigger for its address and key (StarNet shows a key once, to the Commander only). Its trigger is ' + r.id + '.'
+          : 'The ' + (r.was || '') + ' trigger ' + r.id + ' on ' + L.name + ' is off.';
+        return { content: JSON.stringify({ line: L.name, kind, id: r.id, said }), summary: kind === 'off' ? 'turned off a trigger on ' + L.name : L.name + ' starts ' + (kind === 'schedule' ? r.when : 'from a ' + kind), control: { revealTools: BUILDER } };
+      }
+    };
+
     return {
-      agentConfigTool, agentConfigureTool, layoutTool, mapTool, planTool, buildTool, makePropTool, testLineTool, planSummaryFor,
+      agentConfigTool, agentConfigureTool, layoutTool, mapTool, planTool, buildTool, makePropTool, testLineTool, startLineTool, planSummaryFor,
       listTool, createTool, peekTool, focusTool, taskListTool, taskCreateTool, taskManageTool,
-      register(reg) { [listTool, createTool, peekTool, focusTool, taskListTool, taskCreateTool, taskManageTool, agentConfigTool, agentConfigureTool, layoutTool, mapTool, planTool, buildTool, makePropTool, testLineTool].forEach(t => reg.register(t)); return reg; }
+      register(reg) { [listTool, createTool, peekTool, focusTool, taskListTool, taskCreateTool, taskManageTool, agentConfigTool, agentConfigureTool, layoutTool, mapTool, planTool, buildTool, makePropTool, testLineTool, startLineTool].forEach(t => reg.register(t)); return reg; }
     };
   }
 

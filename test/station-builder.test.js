@@ -1799,7 +1799,26 @@ for (const c of T.catalog) {
     A.ok(/^REFUSED: Nobody works the line EMPTY yet/.test((await tt.run({ line: 'empty', job: 'x' }, {})).content), 'a line nobody works is refused before anything is sent');
     A.ok(/^REFUSED: There is no line called "nope"\. Lines: SHIP IT, EMPTY\./.test((await tt.run({ line: 'nope', job: 'x' }, {})).content), 'a line that is not there names the lines that are');
     A.ok(/^REFUSED: job is the work to send/.test((await tt.run({ line: 'ship it', job: '  ' }, {})).content) && /^REFUSED: Testing lines is not available/.test((await toolsT(null).testLineTool.run({ line: 'ship it', job: 'x' }, {})).content), 'no job, or no line runner, is refused');
+    // WHAT STARTS A LINE: one start a call, the panel's own cores, a webhook's key never in the answer
+    const starts = [];
+    let startAnswer = null;
+    const startLine = async spec => { starts.push(spec); return startAnswer; };
+    const sl = makeStationTools({ station: tbridge, now: () => 1000, planMemo: new Map(), lineMenu: () => [], styleMenu: () => [], roomMenu: () => [], kitMenu: () => [], presetMenu: () => [], startLine }).startLineTool;
+    A.ok(sl && sl.name === 'station.start_line' && sl.requiresConsent === true && sl.taintLocked === true, 'start_line asks first and refuses a tainted run');
+    startAnswer = { ok: true, kind: 'schedule', id: 'cron_abc', when: 'every weekday at 09:00', armed: true, halted: false };
+    const sc = await sl.run({ line: 'ship it', schedule: 'every weekday at 9am', tz: 'Europe/London', job: 'Ship the day\'s fixes' }, {});
+    A.eq(starts[starts.length - 1], { kind: 'schedule', lineId: 'p12', name: 'SHIP IT', job: 'Ship the day\'s fixes', schedule: 'every weekday at 9am', tz: 'Europe/London', folder: undefined, maxPerHour: undefined, id: undefined }, 'a schedule goes to the panel\'s core for that line');
+    A.ok(/"said":"The line SHIP IT now runs every weekday at 09:00\. Its routine is cron_abc \(routine\.manage pauses or removes it\)\."/.test(sc.content) && sc.summary === 'SHIP IT starts every weekday at 09:00', 'and says when it runs: ' + sc.content.slice(0, 200));
+    startAnswer = { ok: true, kind: 'webhook', id: 'trg_x1', path: null, enabled: true, secret: 'SHOULD-NEVER-SHOW' };
+    const wh = await sl.run({ line: 'ship it', webhook: true, job: 'A deploy finished: check it' }, {});
+    A.ok(/press NEW KEY on this trigger for its address and key/.test(wh.content) && !/SHOULD-NEVER-SHOW/.test(wh.content), 'a webhook tells the Commander where its key is, and never carries a key');
+    startAnswer = { ok: false, error: 'that folder is outside the folders StarNet may watch' };
+    A.ok(/^REFUSED: that folder is outside the folders StarNet may watch\./.test((await sl.run({ line: 'ship it', folder: 'C:/Windows', job: 'x' }, {})).content), 'the panel core\'s refusal travels back');
+    A.ok(/^REFUSED: Say one start/.test((await sl.run({ line: 'ship it', schedule: 'daily', webhook: true, job: 'x' }, {})).content) && /^REFUSED: job is the work the line gets/.test((await sl.run({ line: 'ship it', schedule: 'daily' }, {})).content), 'one start a call, each with its job');
+    startAnswer = { ok: true, kind: 'off', id: 'trg_x1', was: 'webhook' };
+    A.ok(/"said":"The webhook trigger trg_x1 on SHIP IT is off\."/.test((await sl.run({ line: 'ship it', off: 'trg_x1' }, {})).content), 'a trigger turns off');
     const idx2 = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
+    A.ok(/startLine: spec => startLineFor\(spec\)/.test(idx2) && /async function startLineFor\(spec\)/.test(idx2) && /createCronJobFromSpec\(\{ name: \(name \? name \+ ' — ' : ''\)/.test(idx2) && /extra\.secretHash = mintTriggerSecret\(\)\.hash;   \/\/ the key itself is never kept or handed on/.test(idx2), 'the tool runs the panel\'s own schedule and trigger cores, and drops a webhook key');
     A.ok(/station\[\._\]test_line\$\/\.test\(String\(call && call\.name \|\| ''\)\)\) return 'the line ' \+/.test(idx2) && /runLineJob: args => runSampleJob\(async \(\) => args\)/.test(idx2) && /async function handleRoutingSample\(req, res\) \{\n  const r = await runSampleJob\(/.test(idx2), 'the card names the line and the job, and the tool runs SEND A JOB\'s own core');
   }
   {
@@ -1824,7 +1843,7 @@ for (const c of T.catalog) {
   // the plan is remembered for the approval card, reveals the next tools, and a refusal travels back as REFUSED
   const p = await planT.run({ line: 'build_test', name: 'SHIP IT' }, {});
   A.ok(memo.has('plan-t-1') && /^\{"planId":"plan-t-1"/.test(p.content) && p.summary === 'planned Build + test (1 to do)', 'the plan is remembered for the approval card');
-  A.eq(p.control, { revealTools: ['station.map', 'station.plan', 'station.build', 'station.make_prop', 'station.test_line'] }, 'a plan reveals station.build (and the rest of the builder) for the next turn');
+  A.eq(p.control, { revealTools: ['station.map', 'station.plan', 'station.build', 'station.make_prop', 'station.test_line', 'station.start_line'] }, 'a plan reveals station.build (and the rest of the builder) for the next turn');
   const card = planSummaryFrom(memo, 'plan-t-1');
   A.ok(/^Build \+ test \("SHIP IT"\) in a new room south of HOME/.test(card) && /Step 1 Engineer \(NOVA\): Build what the incoming request asks for\./.test(card) && /Step 2 Tester \(nobody yet\)/.test(card), 'the card shows the plan\'s own summary and every step\'s instructions');
   A.eq(planSummaryFrom(memo, 'plan-forged'), null, 'an unknown plan id has no card text');

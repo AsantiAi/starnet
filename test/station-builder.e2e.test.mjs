@@ -185,6 +185,29 @@ try {
   check('what the line delivered comes back fenced as data, not instructions', /\[BEGIN EXTERNAL WEB CONTENT — what the line SHIP IT delivered/.test(tl) && /LINE STEP DONE: hello/.test(tl), tl.slice(-240));
   const jobs = await fetch(base + '/api/line-jobs', { headers: { 'X-StarNet-Token': token, Origin: base } }).then(r => r.json()).catch(() => null);
   check('and the job is on record like any SEND A JOB', !!jobs && (jobs.jobs || []).some(j => j.name === 'SHIP IT' && j.status === 'delivered'), JSON.stringify(jobs || {}).slice(0, 240));
+
+  // 4c. WHAT STARTS A LINE (10-01): a schedule and a webhook through the panel's own cores, and a trigger turned off
+  const api = (p, o) => fetch(base + p, Object.assign({ headers: { 'Content-Type': 'application/json', 'X-StarNet-Token': token, Origin: base } }, o || {})).then(r => r.json()).catch(() => null);
+  mock.planTool = 'station_start_line'; mock.planArgs = { line: 'SHIP IT', schedule: 'weekdays at 8:30am', job: 'TEST JOB: the morning check' };
+  let nS = mock.results.length;
+  await leadRun(base, token, 'run the SHIP IT line every weekday morning');
+  let SJ = null; try { SJ = JSON.parse(mock.results[nS] || ''); } catch (_) { SJ = null; }
+  const cronNow = await api('/api/cron');
+  const routine = SJ && cronNow && (cronNow.jobs || []).find(j => j.id === SJ.id);
+  check('station_start_line { schedule } makes a routine that runs the whole line from its first step', !!routine && routine.runsLine === true && !!routine.dockId && routine.prompt === 'TEST JOB: the morning check' && /^SHIP IT — /.test(routine.name) && /^The line SHIP IT now runs /.test(SJ.said), (mock.results[nS] || '').slice(0, 240));
+  mock.planArgs = { line: 'SHIP IT', webhook: true, job: 'TEST JOB: a deploy finished' };
+  nS = mock.results.length;
+  await leadRun(base, token, 'start the SHIP IT line from a webhook');
+  let WJ = null; try { WJ = JSON.parse(mock.results[nS] || ''); } catch (_) { WJ = null; }
+  const trg = await api('/api/routing/triggers');
+  const hook = WJ && trg && (trg.triggers || []).find(t => t.id === WJ.id);
+  check('station_start_line { webhook } makes the line\'s webhook trigger, and the lead never sees a key', !!hook && hook.kind === 'webhook' && hook.config.task === 'TEST JOB: a deploy finished' && /press NEW KEY/.test(WJ.said) && !/"secret"|whsec|trg_[A-Za-z0-9]+\.[A-Za-z0-9]{16,}/.test(mock.results[nS] || ''), (mock.results[nS] || '').slice(0, 240));
+  mock.planArgs = { line: 'SHIP IT', off: WJ ? WJ.id : 'none' };
+  nS = mock.results.length;
+  await leadRun(base, token, 'turn that webhook off');
+  const trg2 = await api('/api/routing/triggers');
+  check('and turns a trigger off', !!WJ && (trg2.triggers || []).some(t => t.id === WJ.id && t.enabled === false), (mock.results[nS] || '').slice(0, 200));
+  if (routine) await api('/api/cron/remove', { method: 'POST', body: JSON.stringify({ id: routine.id }) });
   mock.planTool = 'station_plan';
 
   // 5. one UNDO removes the room, the line and every setting
