@@ -18,8 +18,8 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "246d8be41b1be8fae80ee4d1e2012fd614b25d2a",
-    "pathSetSha256": "5e692c5f0c56bc6565c363fb4eb622af3093a911f55496ecdf16c95cad03c8af",
+    "sourceCommit": "6d6694026669e27622529c311cb5fd9605faf820",
+    "pathSetSha256": "390a2a551d88b2597ca4ab3f1acc7ca535b3b978e277a0ed8c0fb507e73e87c0",
     "files": [
       {
         "path": "INSTALL.md",
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 410767,
-        "sha256": "1970c509d2be46d3416f25156403e1e09da2344678e3827d4408b85001a34089"
+        "bytes": 410891,
+        "sha256": "56169610493646ae66519006c56814e4dd965f60f4ab25c1099abd1d3c6e5265"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 691883,
-        "sha256": "8206ff9988b2a0916efb8146dfe1b744c47c01592aaaae378d26e46ff5d4af6b"
+        "bytes": 692033,
+        "sha256": "ac951bc3a98c82bc45c4f4c7fa304799db2ab7998736b87b2fb327dcad40d097"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -385,6 +385,11 @@
         "path": "frontend/app/cratecard.js",
         "bytes": 6993,
         "sha256": "65e81fb388abd4838768eec3bd144110c959e314a4450724c201bcbda5391727"
+      },
+      {
+        "path": "frontend/app/crewcards.js",
+        "bytes": 5376,
+        "sha256": "f30500e98dc75b8b49b7efa8495cb66255f2f223a4fdc5b130117fe237994f85"
       },
       {
         "path": "frontend/app/cronhuman.js",
@@ -783,8 +788,8 @@
       },
       {
         "path": "frontend/app/project-home.js",
-        "bytes": 12945,
-        "sha256": "248875733cc8b4c355202e8cb96b24db22c77af6727add2796e8192c936dd604"
+        "bytes": 12941,
+        "sha256": "cb2e68af6390bbd7e1893575aa0cc17abc88c78cb3f4448efb24cff9c4ad485e"
       },
       {
         "path": "frontend/app/projection-audit-panel.js",
@@ -1148,8 +1153,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 783138,
-        "sha256": "738f8e7c657935cb42b1bd100afd74768e82b306c191dca3a5e7471614f15bfc"
+        "bytes": 783394,
+        "sha256": "0181c358d50962383bf52e26ff979abbabecbc989ca0f3df8284171e3c2552cb"
       },
       {
         "path": "frontend/app/stepin.js",
@@ -1497,6 +1502,11 @@
         "sha256": "e46a5e58ceddcefb79e3efe7502679f34dbb384540a7eaa3f8691ee624cc9b4d"
       },
       {
+        "path": "frontend/css/cabinet-clean.css",
+        "bytes": 3243,
+        "sha256": "de5cb7ffaccfa116ffbb69cdf0da0a797004ae328e31c8f746701e96702e499a"
+      },
+      {
         "path": "frontend/css/channels.css",
         "bytes": 10301,
         "sha256": "6a85c9e3d07325f5b0c159af3f52d19cca2ba9a1fa73acb0d964c2c5a850e86e"
@@ -1515,6 +1525,11 @@
         "path": "frontend/css/comms.css",
         "bytes": 52975,
         "sha256": "64e9c4154f4092c5b255ac4754c8774d281324bdda439982d93b7c7973e6ba5f"
+      },
+      {
+        "path": "frontend/css/crew-glass.css",
+        "bytes": 10201,
+        "sha256": "3d9c42525cc1712ec572c7fde991af6c6aaab3b4bdf4aabf45cb91273b6e935e"
       },
       {
         "path": "frontend/css/deskscreen.css",
@@ -1743,8 +1758,8 @@
       },
       {
         "path": "frontend/index.html",
-        "bytes": 96732,
-        "sha256": "d275f78d602823c64422010c471d61a7f7b4bc3a98186a600429703ab64fef67"
+        "bytes": 96862,
+        "sha256": "5a56a41b8d8edd4285088787ee17c5394f2289d05d0fad34c81cae277c11fe9a"
       },
       {
         "path": "frontend/js/arcade.js",
