@@ -30,7 +30,7 @@
     body.innerHTML =
       '<header class="utility-head"><h2>Ready to review</h2><p>Finished work from your lines and routines, including what ran while you were away. Open a result, then decide what comes next.</p></header>' +
       '<div id="ob-list" class="ob-list"></div>' +
-      '<div class="row ob-doors" style="margin-top:10px;gap:8px"><button class="bb sm" id="ob-library">LIBRARY · all saved outputs</button><button class="bb sm" id="ob-logbook">AGENT RECORD · run history</button></div>';
+      '<div class="row ob-doors" style="margin-top:10px;gap:8px"><button class="bb sm" id="ob-library">DELIVERABLES · all saved outputs</button><button class="bb sm" id="ob-logbook">AGENT RECORD · run history</button></div>';
     const list = body.querySelector('#ob-list');
     const lb = body.querySelector('#ob-logbook');
     if (lb) lb.addEventListener('click', () => H.navigateWork('outbox', 'logbook'));

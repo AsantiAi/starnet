@@ -975,6 +975,7 @@ const App = (() => {
      specialty. Voice + spend are left untouched — deploy re-shapes the job, not the personality. */
   function openDeployBay(startTab) {
     if (typeof Marketplace === 'undefined' || !agent) return;
+    if (typeof Systems !== 'undefined') Systems.opened(startTab === 'recipes' ? 'recipes' : 'recruit');   // door law
     SFX.click();
     Marketplace.open({
       mode: 'deploy',
@@ -1270,6 +1271,7 @@ const App = (() => {
   }
   function openSummonBayWith(classSeed) {
     if (typeof Marketplace === 'undefined' || !agent) return;
+    if (typeof Systems !== 'undefined') Systems.opened('recruit');   // door law: whoever opened the bay, RECRUIT is online
     SFX.click();
     const go = () => Marketplace.open({
       mode: 'pick', summon: true, concurrentCap: concurrentCap,
@@ -3308,11 +3310,11 @@ const App = (() => {
       if (bbBuild) {
         let seenBuild = false; try { seenBuild = !!localStorage.getItem('starnet.refit.seen'); } catch (e) {}
         if (!seenBuild) bbBuild.classList.add('refit-nudge');   // pulse the dock button until first opened
-        bbBuild.onclick = () => { SFX.click(); bbBuild.classList.remove('refit-nudge'); Build.toggle(); if (typeof Tutorial !== 'undefined' && Tutorial.onBuildOpen && Build.isOpen && Build.isOpen()) Tutorial.onBuildOpen(); };
+        bbBuild.onclick = () => { SFX.click(); bbBuild.classList.remove('refit-nudge'); if (typeof Systems !== 'undefined') Systems.opened('refit'); Build.toggle(); if (typeof Tutorial !== 'undefined' && Tutorial.onBuildOpen && Build.isOpen && Build.isOpen()) Tutorial.onBuildOpen(); };
       }
     }
     const bbWorkflows = el('bb-workflows');
-    if (bbWorkflows) bbWorkflows.onclick = () => { SFX.click(); if (typeof Build !== 'undefined' && Build.openWorkflows) Build.openWorkflows(); };
+    if (bbWorkflows) bbWorkflows.onclick = () => { SFX.click(); if (typeof Systems !== 'undefined') Systems.opened('workflows'); if (typeof Build !== 'undefined' && Build.openWorkflows) Build.openWorkflows(); };
     const bbRecruit = el('bb-recruit');
     if (bbRecruit) bbRecruit.onclick = openSummonBay;   // the ONE recruit door — bay carries both verbs (summon new / deploy to current)
 
@@ -3336,6 +3338,11 @@ const App = (() => {
       });
       // Presence is already proven by the live roster, link indicator, and COMMS state. Do not
       // create a fresh persistent notification every time an existing station is reloaded.
+    }
+    // STATION SYSTEMS ONLINE: a station whose awakening starts now grows its dock as it is used; one that was
+    // already awake opens with everything online. Keyed by the hero's epoch so a fresh start grows again.
+    if (typeof Systems !== 'undefined' && Systems.init) {
+      try { Systems.init({ epoch: agent && agent.createdAt != null ? agent.createdAt : 'legacy', fresh: !!(opts && opts.awaitingPurpose), crewCount: () => agents.size }); } catch (e) { console.warn('[systems] init failed', e); }
     }
     // AGENT GROWTH: subscribe XP/Level/Confidence to the real run-outcome bus. Seeds agent.stats +
     // the station rollup, pushes the live numbers to the world HUD, and fires level-up celebrations.
@@ -3785,7 +3792,7 @@ const App = (() => {
       onReturn: () => { try { if (typeof WorkshopStore !== 'undefined' && WorkshopStore.presentOnReturn) WorkshopStore.presentOnReturn(); } catch (_) {} }
     });
     if (typeof Voice !== 'undefined') Voice.init({ name: agent.name, personaId: agent.personaId, resumeCue: !opts.awaitingPurpose });   // mic + this agent's per-persona voice; offer hands-free resume except during the awakening
-    if (typeof ModelDock !== 'undefined') ModelDock.init({ apply: applyQuickModel, identity: () => (agent && agent.id) || '' });
+    if (typeof ModelDock !== 'undefined') ModelDock.init({ apply: applyQuickModel, identity: () => (agent && agent.id) || '', agentName: () => (agent && agent.name) || '' });
     syncChannels();   // if a Telegram bot auto-started from saved config, refresh it to THIS agent's live identity
     pushRoster();     // Stage 2: seed the sidecar with the live crew so the lead can delegate (no-op for a solo station)
     renderRail();

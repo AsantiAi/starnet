@@ -56,6 +56,9 @@
     if (!group) return;
     group.hidden = !list.length;
     if (!list.length) group.classList.remove('open');
+    // ONE NEW APP DOOR: BUILD carries it only until the APPS dock exists — then it lives in APPS alone
+    const buildNew = document.getElementById('bb-newapp-build');
+    if (buildNew) buildNew.hidden = !!list.length;
     const box = document.getElementById('bb-apps-items');
     if (!box) return;
     // each entry reads like every other dock item: the instrument icon, the name, ONE short line (its live status —

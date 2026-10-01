@@ -8668,6 +8668,9 @@ const Chat = (() => {
     // own triggering turn — that loop simply wasn't running yet when the turn started.
     const goalActiveAtStart = !goalContinuation && typeof GoalLoop !== 'undefined' && (() => { const g = goalOf(activeWs); return !!(g && GoalLoop.isActive(g)); })();
     if (interview) { clearChoices(); interview(text); return; }   // THE AWAKENING owns the input: typed answers retire any stale chip row
+    // STATION SYSTEMS: asking for something on a schedule, or to be reached on a phone/chat app, is the moment
+    // AUTOMATION / CHANNELS join a growing dock (a real user turn only — never a retry or a loop continuation)
+    if (!retry && !goalContinuation && typeof Systems !== 'undefined' && Systems.noticeText) { try { Systems.noticeText(text); } catch (_) {} }
     const runFocusVersion = focusVersion;
     const ws = activeWs;   // CAPTURE the origin stream now — a mid-run switch must not cross-post its cost/files
     if (!ws) return;

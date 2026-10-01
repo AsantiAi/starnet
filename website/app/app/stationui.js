@@ -949,6 +949,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     // Mode-exclusivity: a dock panel and full-screen REFIT must never be mounted at once.
     // Opening a panel exits refit first so two features can't stack (see COHERENCE_MATRIX dim T).
     if (typeof Build !== 'undefined' && Build.isOpen && Build.isOpen()) { try { Build.close(); } catch (_) {} }
+    // DOOR LAW (systems.js): whatever opened this window — the dock, a deep link, a quest, the agent — its station
+    // system is online from now on, so the dock never hides a window the Commander has been sent to.
+    if (typeof Systems !== 'undefined' && Systems.openedTerm) { try { Systems.openedTerm(key); } catch (_) {} }
     sfx('open');
     // re-measure the band before the window exists: the desktop titlebar mounts after this module
     // loads, and the rails re-flow on every breakpoint — a stale band would place the first window
@@ -4246,7 +4249,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const streams = boardStreams();
     const openMenus = live ? Array.from(body.querySelectorAll('.kb-more[open]')).map(d => d.closest('.kb-card').dataset.id) : [];
     body.innerHTML =
-      '<div class="kb-heading"><header class="kb-header"><h2>Your tasks</h2><p>Plan, start, and review your work.</p></header><div class="work-entry"><button type="button" class="bb sm" data-work-to="outbox">OUTBOX</button><button type="button" class="bb sm" data-work-to="deliverables">LIBRARY</button></div></div>' +
+      '<div class="kb-heading"><header class="kb-header"><h2>Your tasks</h2><p>Plan, start, and review your work.</p></header><div class="work-entry"><button type="button" class="bb sm" data-work-to="outbox">OUTBOX</button><button type="button" class="bb sm" data-work-to="deliverables">DELIVERABLES</button></div></div>' +
       '<div class="kb-add"><input id="kb-in" aria-label="New task" maxlength="80" placeholder="What would you like to get done?" autocomplete="off">' +
       '<button class="bb sm" id="kb-add">ADD TASK</button></div><p class="kb-add-note">Adding saves your plan. Start sends the task to its agent.</p>' +
       '<div class="kb-cols">' +
@@ -6762,6 +6765,15 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         return '<button class="set-theme ' + (cur === v ? 'sel' : '') + '" aria-pressed="' + (cur === v ? 'true' : 'false') + '" data-srow="' + v + '" title="' + why + '">' + name + '</button>';
       }).join('') +
       '</div>' +
+      // STATION DOCK (systems.js) — GROW WITH ME adds dock buttons as the station is used; SHOW EVERYTHING puts every
+      // system in the dock now. Either way every window opens from every other door; this only shapes the dock.
+      '<div class="set-row"><span class="dim">STATION DOCK — GROW WITH ME adds a dock button the first time you need it; SHOW EVERYTHING puts every system in the dock now</span></div>' +
+      '<div class="set-themes" id="set-stationdock">' +
+      [['staged', 'GROW WITH ME'], ['all', 'SHOW EVERYTHING']].map(([v, name]) => {
+        const cur = (typeof Systems !== 'undefined' && Systems.staged && Systems.staged()) ? 'staged' : 'all';
+        return '<button class="set-theme ' + (cur === v ? 'sel' : '') + '" aria-pressed="' + (cur === v ? 'true' : 'false') + '" data-sdock="' + v + '">' + name + '</button>';
+      }).join('') +
+      '</div>' +
       // CRT — its own section, and a LEVEL rather than a named mode. Framing this as an
       // accessibility fix ("easy read") tells the people who like the tube that they are enduring
       // something, which is not what most of them report. There is no OFF: the station is a CRT.
@@ -7072,6 +7084,16 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       s.sessionRow = resolveSessionRow(b.dataset.srow);
       applySettings(); save(); sfx('click');
       syncSessionRow(); flashSaved(appMsg());
+    }));
+    // STATION DOCK chips — the mode lives in systems.js (its own store); switching never takes a button away
+    const sdChips = host.querySelectorAll('#set-stationdock [data-sdock]');
+    sdChips.forEach(b => b.addEventListener('click', () => {
+      if (typeof Systems === 'undefined') return;
+      if (b.dataset.sdock === 'all') Systems.showEverything(); else Systems.growWithMe();
+      sfx('click');
+      const cur = Systems.staged() ? 'staged' : 'all';
+      sdChips.forEach(x => { const on = x.dataset.sdock === cur; x.classList.toggle('sel', on); x.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+      flashSaved(appMsg());
     }));
     // TEXT SIZE chips — instant-apply + persist, same idiom as the theme row above.
     const tsChips = host.querySelectorAll('#set-textsize [data-ts]');
@@ -9046,7 +9068,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         + '<span class="sub dim">' + (latest.source === 'commander' ? 'You reported this action' : 'Recorded work completion') + ' · ' + esc(qrRel(latest.doneAt)) + '</span>' : '<p>This is a step you chose toward ' + esc(goal.text) + '.</p>')
       + (latest ? '<div class="q-return-actions">' + jump('progress', 'VIEW PROGRESS')
         + (latestWork && latestWork.runId ? '<button class="consent-btn q-step-outputs" data-run="' + esc(latestWork.runId) + '" data-label="' + esc(latest.text) + '">OPEN THIS STEP’S OUTPUTS</button>'
-          : latest.source !== 'commander' ? '<button class="consent-btn q-go" data-dest="deliverables">OPEN OUTPUT LIBRARY</button>' : '') + '</div>' : '') + '</details>';
+          : latest.source !== 'commander' ? '<button class="consent-btn q-go" data-dest="deliverables">OPEN DELIVERABLES</button>' : '') + '</div>' : '') + '</details>';
     const action = next && !brief.inFlight
       ? '<button class="consent-btn q-arc-accept" data-gid="' + esc(goal.id) + '" data-mid="' + esc(next.id) + '">START THIS STEP</button>' : '';
     return '<section class="q-return-card" aria-label="Your next move"><span class="q-ns-eyebrow">YOUR NEXT MOVE · ' + brief.progress.done + ' / ' + brief.progress.total + ' PLANNED STEPS</span>'
@@ -9268,6 +9290,51 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       + lastHtml + disabledNote + '</div>';
   }
 
+  /* STATION SYSTEMS (systems.js) — the dock's map, at the top of QUESTS › Progress. On a growing station it shows
+     what is online and how the rest comes online; every tile opens its system (an offline one comes online as it
+     opens — reveal, never lock). Tiles copy the constellation's star recipe: glyph + name + ONE short stat, the
+     description lives in the hover tip. Counts read Systems.snapshot(), i.e. the dock's real state. */
+  function systemsHtml() {
+    if (typeof Systems === 'undefined' || !Systems.snapshot) return '';
+    const s = Systems.snapshot();
+    const staged = s.mode === 'staged';
+    const pct = s.total ? Math.round(s.online * 100 / s.total) : 0;
+    // the tile wears the SAME icon as its dock button (our own static markup — an SVG instrument icon, or a glyph)
+    const glyphOf = id => {
+      const def = Systems.LIST.find(x => x.id === id);
+      const b = def && def.sel ? document.querySelector('#bottombar ' + def.sel + ' .bb-i') : null;
+      if (!b) return '◇';
+      const svg = b.querySelector('svg');
+      return svg ? svg.outerHTML : esc(b.textContent || '◇');
+    };
+    return '<div class="q-systems q-constellation" id="q-systems"><div class="gx-sec"><span class="gx-title">STATION SYSTEMS</span><span class="gx-tag">'
+      + s.online + ' OF ' + s.total + ' ONLINE</span></div>'
+      + (staged ? '<div class="arc-bar q-bar"><div class="q-bar-fill" style="width:' + pct + '%"></div></div>' : '')
+      + '<div class="q-star-map q-sys-map">' + s.list.map(x =>
+        '<button type="button" class="q-star q-sys' + (x.online ? ' q-star-reached' : ' q-sys-off') + (x.fresh ? ' q-sys-fresh' : '') + '" data-sys="' + esc(x.id) + '" data-tip="'
+        + esc(x.tip + (x.online ? '' : ' — it already works; open it now and it joins your dock')) + '">'
+        + '<span class="q-star-glyph" aria-hidden="true">' + glyphOf(x.id) + '</span><span>' + esc(x.label) + '</span><small>'
+        + (x.online ? (x.fresh ? 'NEW · ' : '') + esc(x.group.toUpperCase()) + ' DOCK' : esc(x.how || 'not in your dock yet')) + '</small></button>').join('')
+      + '</div>'
+      + (staged ? '<p class="sub dim">Your dock grows as you use the station. Every system already works: open any of them here.</p>'
+        + '<div class="q-journey-actions"><button type="button" class="bb sm q-sys-all">SHOW EVERYTHING</button></div>' : '')
+      + '</div>';
+  }
+  function wireSystems(root) {
+    if (!root) return;
+    root.querySelectorAll('.q-sys').forEach(b => b.addEventListener('click', () => { sfx('click'); Systems.openSystem(b.dataset.sys); }));
+    const all = root.querySelector('.q-sys-all');
+    if (all) all.addEventListener('click', () => { sfx('click'); Systems.showEverything(); notify('Every station system is in your dock now. SETTINGS › APPEARANCE › STATION DOCK switches it back.', '', undefined, { transient: true }); });
+  }
+  // repaint ONLY the systems block of an open quest log — never the whole window (drafts live there)
+  function refreshSystems() {
+    const w = open.quests; if (!w) return;
+    const cur = w.querySelector('#q-systems'); if (!cur) return;
+    const tmp = mkEl('div'); tmp.innerHTML = systemsHtml();
+    const next = tmp.firstElementChild; if (!next) return;
+    cur.replaceWith(next); wireSystems(next);
+  }
+
   // The three progression tracks stay deliberately separate:
   //   AGENT GROWTH = explicit feedback XP (the existing meter below)
   //   COMMANDER JOURNEY = real-world goal metrics + verified outcomes
@@ -9442,7 +9509,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
           + '<ol class="q-history-line">' + (events.length ? events.map(e => '<li><span class="q-ns-eyebrow">' + esc(e.label.toUpperCase()) + '</span><time>' + esc(e.at ? new Date(e.at).toLocaleDateString() : '') + '</time><p>' + esc(e.text) + '</p></li>').join('') : '<li>The plan is saved. Results and reflections will appear as you work.</li>') + '</ol>'
           + '<button class="consent-btn q-goal-review" data-gid="' + esc(g.id) + '">REFLECT WITH MY CREW</button></details>';
       }).join('')
-      + '<div class="q-journey-actions"><button class="consent-btn q-journey-export">EXPORT JOURNEY NOTES</button><button class="consent-btn q-go" data-dest="deliverables">OPEN OUTPUT LIBRARY</button></div><p class="sub dim">Plans, possibilities, and reflections are saved on this device. Export includes those notes; output files remain in your library.</p></div>';
+      + '<div class="q-journey-actions"><button class="consent-btn q-journey-export">EXPORT JOURNEY NOTES</button><button class="consent-btn q-go" data-dest="deliverables">OPEN DELIVERABLES</button></div><p class="sub dim">Plans, possibilities, and reflections are saved on this device. Export includes those notes; output files remain in your library.</p></div>';
   }
 
   // Stores can repaint synchronously during a write. Resolve submitted fields by their stable ids,
@@ -9684,7 +9751,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       + '</section><section id="q-view-goals" class="q-view-panel q-journal-planning" role="tabpanel" aria-labelledby="q-tab-goals">'
       + questTrackHtml(arcs) + lifeGoalsHtml() + '<details class="q-refresh-options"><summary>Quest suggestions <span class="q-section-note">Direction &amp; refresh</span></summary>' + questRefreshHtml() + '</details>'
       + '</section><section id="q-view-progress" class="q-view-panel q-journal-progress" role="tabpanel" aria-labelledby="q-tab-progress">'
-      + journeyHtml() + milestonesHtml + meterHtml
+      + systemsHtml() + journeyHtml() + milestonesHtml + meterHtml
       + '</section><section id="q-view-completed" class="q-view-panel q-journal-history" role="tabpanel" aria-labelledby="q-tab-completed">'
       + journeyChaptersHtml() + '<div class="gx-tros q-grid q-done">' + (done.map(tro).join('') || '<div class="q-journal-empty"><h3>No completed quests yet</h3><p>Finished quests and their results will appear here.</p></div>') + '</div></section></div>';
     // Stable field identities keep a background refresh from transplanting a draft into another chapter.
@@ -9720,7 +9787,10 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         ev.preventDefault(); viewButtons[next].click(); viewButtons[next].focus();
       });
     });
+    // a deep link (openTerm('quests', 'progress') — the top-bar COMMANDER gauge, NEW SYSTEM ONLINE) lands on its view once
+    if (consoleSection.quests) { body.dataset.questView = consoleSection.quests; delete consoleSection.quests; }
     selectQuestView(body.dataset.questView);
+    wireSystems(body.querySelector('#q-systems'));
     body.querySelectorAll('.q-step-outputs').forEach(b => b.addEventListener('click', () => {
       questOpenOutputs(b.dataset.run, b.dataset.label);
     }));
@@ -10290,7 +10360,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
 
   // Following work should uncover the destination and preserve the source's scroll/draft.
   // Reuse the window manager's suspension, never destroy a form to follow a link.
-  const WORK_LABELS = { tasks: 'TASK BOARD', outbox: 'OUTBOX', deliverables: 'LIBRARY', agents: 'AGENT RECORD' };
+  const WORK_LABELS = { tasks: 'TASK BOARD', outbox: 'OUTBOX', deliverables: 'DELIVERABLES', agents: 'AGENT RECORD' };
   let workTrail = [];
   function navigateWork(from, to, section, back) {
     const alias = TERM_ALIAS[to];
@@ -10425,7 +10495,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   // GROWTH Tier 3: repaint the Settings AUTONOMY panel's EARNED badge if it is open (no-op otherwise — the paint fn
   // queries its own (possibly detached) host nodes, so a closed panel costs nothing). Called after a trust accept.
   const repaintAutonomy = () => { try { if (repaintAutonomyDial) repaintAutonomyDial(); } catch (_) {} };
-  return { init, enter, setRoster, leave, clearRunning, runningCount: () => runningAgents.size, isAgentRunning: (id) => agentLive(id), notify, flashSave, openAgent, openArcade, toggleTerm, openTerm, openDesk, closeTerm, rerender, refreshBoard: refreshBoardLive, pokeQuests, setTheme, getTheme, repaintAutonomy, registerWindow, h };
+  return { init, enter, setRoster, leave, clearRunning, runningCount: () => runningAgents.size, isAgentRunning: (id) => agentLive(id), notify, flashSave, openAgent, openArcade, toggleTerm, openTerm, openDesk, closeTerm, rerender, refreshBoard: refreshBoardLive, pokeQuests, setTheme, getTheme, repaintAutonomy, refreshSystems, registerWindow, h };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { visibleTerminalRect, clampTerminalSize };
