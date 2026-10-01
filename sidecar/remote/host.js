@@ -205,14 +205,16 @@ function makeRemoteHost(d) {
     if (!d.view) return { none: true, now: now() };
     d.view.want();
     const m = d.view.meta();
-    if (!m) return { none: true, now: now() };
+    let desk = false;
+    try { desk = !!(d.deskOpen && d.deskOpen()); } catch (e) { note('remote.host.deskOpen', e); }
+    if (!m) return { none: true, desk, now: now() };
     // `now` is this station's clock at the moment of the answer: the phone works out the picture's age from
     // (now - at), so a phone whose own clock is off still shows the right age
     if (!o.offset && o.have && o.have === m.at) return { at: m.at, now: now(), same: true };
     if (o.offset && o.at !== m.at) return { at: m.at, now: now(), changed: true };   // the desk drew a newer one mid-read: start over
     const buf = d.view.read(o.offset, o.length);
     const out = { at: m.at, now: now(), w: m.w, h: m.h, mime: m.mime, size: m.size, offset: o.offset, bytes: buf.length, eof: o.offset + buf.length >= m.size, data: buf.toString('base64') };
-    if (!o.offset) out.bodies = m.bodies;
+    if (!o.offset) { out.bodies = m.bodies; out.crewFree = !!m.crewFree; out.scale = m.scale || 0; out.crew = d.view.crew ? d.view.crew() : null; }
     return out;
   }
 
@@ -224,9 +226,43 @@ function makeRemoteHost(d) {
     return p ? { agentId: a.agentId, skin: p.skin, mime: p.mime, data: p.data } : { ok: false, error: 'no portrait' };
   }
 
+  // every drawing of one sprite track, so the phone can draw a crew member exactly as the stage does
+  async function sprite(o) {
+    const t = d.sprites ? d.sprites(o.key) : null;
+    return t ? t : { ok: false, error: 'unknown sprite' };
+  }
+
+  /* ACTIVITY: the station's work in one list, newest first — what is running now (and what the phone knows of its
+     steps), then what finished, with its result line and the files it made. Background self-talk is left out.
+     It reads the same run history the desk's activity feed reads; nothing here is inferred. */
+  async function activity(o) {
+    const live = (await status()).runs.map(r => {
+      const rec = recent.find(x => x.runId === r.runId);
+      return { runId: r.runId, agentId: r.agentId, state: 'working', startedAt: r.startedAt || null, source: r.source || null,
+        title: rec ? rec.title : '', streamId: rec ? rec.streamId : (r.streamId || '') };
+    });
+    let rows = [];
+    try { rows = (d.runHistory && d.runHistory(o.limit + 20)) || []; } catch (e) { note('remote.host.runHistory', e); rows = []; }
+    const liveIds = new Set(live.map(r => r.runId));
+    const done = [];
+    for (const r of rows) {
+      if (!r || r.internal || r.parentRunId || liveIds.has(r.runId)) continue;
+      const files = [];
+      for (const a of Array.isArray(r.artifacts) ? r.artifacts : []) if (a && a.path && files.length < 6) files.push(String(a.path).slice(0, 300));
+      if (r.deliverable && r.deliverable.main && files.indexOf(r.deliverable.main) < 0 && files.length < 6) files.push(String(r.deliverable.main).slice(0, 300));
+      const said = String(r.deliveryText || (r.deliverable && r.deliverable.summary) || '').replace(/\s+/g, ' ').trim();
+      done.push({ runId: r.runId, agentId: r.agentId, state: r.reason === 'done' ? 'done' : r.reason === 'cancelled' || r.reason === 'stopped' ? 'stopped' : 'failed',
+        title: clip(String(r.sessionTitle || r.title || '').replace(/\s+/g, ' ').trim(), 140), result: clip(said, 240),
+        error: r.reason === 'done' ? '' : clip(r.failureCode || r.reason || '', 80),
+        startedAt: r.startedAt || null, endedAt: r.endedAt || null, usd: Number(r.usd) || 0, streamId: r.streamId || '', files });
+      if (done.length >= o.limit) break;
+    }
+    return { at: now(), live, done };
+  }
+
   function liveRemoteRuns() { return Array.from(remoteRuns, ([runId, r]) => ({ runId, agentId: r.agentId, startedAt: r.startedAt, source: 'remote' })); }
 
-  return { status, threads, thread, send, stop, files, fetchFile, routines, setRoutine, view, portrait, liveRemoteRuns, recentRuns, _remoteRuns: remoteRuns };
+  return { status, threads, thread, send, stop, files, fetchFile, routines, setRoutine, view, portrait, sprite, activity, liveRemoteRuns, recentRuns, _remoteRuns: remoteRuns };
 }
 
 module.exports = { makeRemoteHost };
