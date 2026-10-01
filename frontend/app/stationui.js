@@ -1556,6 +1556,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
           Object.keys(panes).forEach(k => {
             panes[k].classList.remove('con-sec-nomatch', 'con-sec-searchshow');
             panes[k].querySelectorAll('.con-hit, .con-miss').forEach(r => r.classList.remove('con-hit', 'con-miss'));
+            panes[k].querySelectorAll('details[data-search-opened]').forEach(d => { d.open = false; delete d.dataset.searchOpened; });   // only the folds search opened
             railItems[k].classList.remove('con-rail-dim', 'con-rail-hit');
           });
           selectSection(activeId, false);
@@ -1590,6 +1591,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
             r.classList.toggle('con-miss', !hit);
             if (hit) hits++;
           });
+          // SEARCH OPENS WHAT IT FINDS: a hit sealed inside a closed fold would be a dead end the search made
+          pane.querySelectorAll('details').forEach(d => { if (!d.open && d.querySelector('.con-hit')) { d.open = true; d.dataset.searchOpened = '1'; } });
           // also let a section match by its own label/desc even if no granular row matched
           const secMatch = hits > 0 || sec.label.toLowerCase().indexOf(q) >= 0 || (sec.desc || '').toLowerCase().indexOf(q) >= 0;
           if (secMatch) matches.push(sec.id);
@@ -1906,7 +1909,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       '<div class="sec ag-brief-sec"><span class="sec-l">SET UP AS</span><span class="sec-r"></span><span class="sec-nd"></span></div>' +
       agSetupStrip(a) +
       '<div class="sec ag-brief-sec"><span class="sec-l">CAN DO</span><span class="sec-r"></span><span class="sec-nd"></span></div>' +
-      agSkills(a && a.id) +
+      agSkillsBrief(a && a.id) +
       '<div class="ag-foot-row">on station since <b>' + since + '</b></div>';
   }
 
@@ -2126,6 +2129,10 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   function agSkills(agentId) {
     return '<div class="ag-effective" data-access-agent="' + esc(agentId || 'agent') + '" role="status">Checking effective access…</div>';
   }
+  // the BRIEF tab's one-line readout of the SAME live /api/toolsets answer CONFIG › ACCESS shows in full
+  function agSkillsBrief(agentId) {
+    return '<div class="ag-effective" data-access-agent="' + esc(agentId || 'agent') + '" data-access-compact role="status">Checking effective access…</div>';
+  }
 
   function loadEffectiveAccess(body, a) {
     const targets = body.querySelectorAll('[data-access-agent]');
@@ -2148,7 +2155,17 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
             '</div><div class="perk-desc">' + esc(t.grantSource || 'No current grant') + '</div></div>').join('') + '</div>' +
           '<p class="sk-note">' + esc(authority.revoke) + ' Service credentials, task-specific permissions and operating-system limits still apply. Unattended jobs have their own grants.</p>' +
           '<button class="bb sm" data-access-manage>MANAGE ABILITIES</button> <button class="bb sm" data-access-settings>STATION PERMISSIONS</button> <button class="bb sm" data-access-refresh>REFRESH ACCESS</button>';
+        // BRIEF's compact line: how many toolsets are ready, which ones, and the approval mode — one jump to the full grid
+        const ready = view.toolsets.filter(x => x.available);
+        const compactHtml = '<p class="ag-can-do"><b>' + ready.length + ' of ' + view.toolsets.length + ' toolsets ready</b>'
+          + (ready.length ? ' · ' + ready.slice(0, 6).map(x => esc(x.label)).join(', ') + (ready.length > 6 ? ' +' + (ready.length - 6) : '') : '')
+          + ' · ' + esc(authority.approvalLabel) + '</p><button class="bb sm" data-access-full>SEE FULL ACCESS</button>';
         targets.forEach(target => {
+          if (target.hasAttribute('data-access-compact')) {
+            target.innerHTML = compactHtml;
+            target.querySelector('[data-access-full]').onclick = () => { consoleSection['agents'] = 'config'; sfx('click'); rerender('agents'); };
+            return;
+          }
           target.innerHTML = html;
           target.querySelector('[data-access-manage]').onclick = () => openTerm('connectors', 'toolsets');
           target.querySelector('[data-access-settings]').onclick = () => openTerm('settings', 'permissions');
@@ -6673,7 +6690,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // /api/nightshift/focus + POST/DELETE /api/nightshift/avoid) — one directive, surfaced where the user tunes
       // autonomy, so "tune it" and "aim it" live together. Every line maps to a route field; the cold states are
       // honest, never an invented priority or a fake learned profile.
-      '<h4 class="ms-h">DIRECTION <span class="dim">— where its unattended work should go</span></h4>' +
+      // QUIETER (front doors, 2026-10-01): DIRECTION is set once and rarely revisited — it folds closed under its own
+      // heading. Every control and id is unchanged; settings search opens the fold when a match is inside.
+      '<details class="cf-group set-fold" id="auto-direction-fold"><summary><h4 class="ms-h">DIRECTION <span class="dim">— where its unattended work should go</span></h4></summary>' +
       '<div class="set-sub"><span class="set-sub-k">FOCUS</span><span class="set-sub-d" id="auto-focus">…</span></div>' +
       '<div class="set-row ns-steer"><input id="auto-steer" class="key-input" type="text" autocomplete="off" placeholder="Project folder, thread:&lt;id&gt;, or goal"><button class="bb xs" id="auto-steer-set">SET FOCUS</button><button class="bb xs" id="auto-steer-clear" style="display:none">CLEAR</button></div>' +
       '<div class="mc-hint">a steer outranks learned evidence (~7 days, or until cleared). It only redirects the unattended priority — no new access.</div>' +
@@ -6683,6 +6702,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       '<div class="mc-hint">off-limits holds until you remove it. You can still work there yourself — it only stops the station choosing it unattended.</div>' +
       '<div class="set-sub"><span class="set-sub-k">LEARNED INTERESTS</span><span class="set-sub-d">what it thinks you keep coming back to</span></div>' +
       '<div class="key-list" id="auto-interests"><p class="set-about">reading interests…</p></div>' +
+      '</details>' +
       // LIVE HELPERS — the real background sub-agents (team.spawn) running RIGHT NOW, from GET /api/subagents
       // (server truth; the floor's ghost sprites are the same ledger). STOP rides POST /api/subagents/interrupt —
       // before this row a runaway helper could not be stopped from anywhere in the UI.
@@ -8869,7 +8889,15 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         el.appendChild(mkEl('p', 'cd-privacy', 'Saved locally. Your profile briefing is shared with your agents’ configured models when they work.'));
         addCards(['identity', 'stack', 'people'])(el);
       } },
-      { id: 'goals', label: 'GOALS', glyph: '↗', desc: 'What you want to achieve and where you need help.', build: addCards(['goals', 'pain', 'ambition']) },
+      // GOALS IN ONE PLACE (front doors, 2026-10-01): goals with plans and steps live in QUESTS › Goals; this tab is what the
+      // agents KNOW about your aims and pain points (briefing notes) — named for that, with one door to the real goals.
+      { id: 'goals', label: 'AIMS', glyph: '↗', desc: 'What your agents know about your aims and where you need help. Goals with plans and steps live in QUESTS › Goals.', build: el => {
+        const door = mkEl('p', 'cd-privacy', 'Planning a goal with steps? It lives in QUESTS › Goals. ');
+        const go = mkEl('button', 'bb xs', 'OPEN QUESTS › GOALS'); go.type = 'button';
+        go.addEventListener('click', () => { sfx('click'); openTerm('quests', 'goals'); });
+        door.appendChild(go); el.appendChild(door);
+        addCards(['goals', 'pain', 'ambition'])(el);
+      } },
       { id: 'preferences', label: 'PREFERENCES', glyph: '≡', desc: 'How you like to work, your standing instructions, and your schedule.', build: addCards(['style', 'standing_orders', 'schedule']) },
       { id: 'briefing', label: 'AGENT BRIEFING', glyph: '▤', desc: 'See the exact profile text included in your agents’ briefing.', build: el => {
         el.appendChild(mkEl('p', 'cd-privacy', 'Your profile is stored locally. Its briefing is sent to each agent’s configured model when it works; relevant summaries may also be used for suggestions.'));
