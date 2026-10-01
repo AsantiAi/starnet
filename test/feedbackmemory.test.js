@@ -63,6 +63,25 @@ A.eq(FM.selectTaste(many).length, FM.TASTE_LIMIT, 'capped at TASTE_LIMIT');
 A.eq(FM.selectTaste(many)[0].id, 'n19', 'newest leads');
 A.eq(FM.selectTaste(null).length, 0, 'null-safe');
 
+// ---- review fixes: newest corrections win the cap · the Commander's own edit is never regenerated over ----
+{
+  let l = FM.apply([], { runId: 'r9', verdict: 'miss', words: 'a'.repeat(390), directive: 'write the brief' }, deps(1)).list;
+  l = FM.apply(l, { runId: 'r9', verdict: 'miss', words: 'use three bullets' }, deps(2)).list;
+  A.ok(/use three bullets/.test(l[0].content), 'a later correction still lands after a near-cap first one (newest kept)');
+  for (let i = 0; i < 10; i++) l = FM.apply(l, { runId: 'r9', verdict: 'miss', words: 'note ' + i }, deps(3 + i)).list;
+  A.ok(l[0].feedbackWords.length <= 6, 'per-run words are capped');
+  // the Commander edits the record in the Memory Core (memcore.applyEdit rewrites content+body only)
+  l = [Object.assign({}, l[0], { content: 'Keep briefs under 100 words, bullets only', body: 'Keep briefs under 100 words, bullets only' })];
+  const r = FM.apply(l, { runId: 'r9', verdict: 'miss', words: 'and no emoji' }, deps(50));
+  A.ok(r && /^Keep briefs under 100 words, bullets only · also: "and no emoji"$/.test(r.rec.content), 'new words append to the Commander\'s edit (' + (r && r.rec.content) + ')');
+  A.eq(FM.apply(r.list, { runId: 'r9', verdict: 'miss' }, deps(51)), null, 'an edited record with nothing new stays exactly as edited');
+}
+// ---- looksLikeFeedback(): a typed follow-up only becomes taste when it is about the work ----
+for (const t of ['too long, give me 3 bullets', 'make it shorter', 'use a table instead', 'wrong tone for the board', 'not what I asked for', 'I wanted it more formal'])
+  A.ok(FM.looksLikeFeedback(t), 'feedback: ' + JSON.stringify(t));
+for (const t of ['now summarize my inbox', 'research the candle market', 'hello', '', 'x'.repeat(500)])
+  A.ok(!FM.looksLikeFeedback(t), 'not feedback: ' + JSON.stringify(t.slice(0, 40)));
+
 // ---- stationTaste(): taste is about the Commander, so every agent's feedback shapes every agent ----
 {
   const own = [{ id: 'note_1', origin: 'feedback', title: 'Preference', confirmation: 'user-confirmed', content: 'LIKED: "bold headers"', createdAt: 10 }, { id: 'note_2', kind: 'fact', content: 'uses pnpm', createdAt: 99 }];

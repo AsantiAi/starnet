@@ -25,25 +25,33 @@ const VERDICTS_THAT_TEACH = new Set(['ok', 'miss']);
 // transcript() tail-caps at 12k chars) plus the run's directive, so a packet on disk stays a few KB.
 const PERSIST_CHARS = 16000;
 const PER_MESSAGE_CHARS = 4000;
-function compactPacket(p) {
+// the FINAL answer is kept whole (up to this cap): a `great` rating after a restart mints a golden from it, and a
+// golden measured against a truncated output would flag every faithful later run as off-length.
+const FINAL_CHARS = 60000;
+// redact (optional): the host's secret scrub — a tool that read a .env or an API response put that text in the
+// transcript, and a packet on disk must never hold it in cleartext (every other durable transcript store redacts).
+function compactPacket(p, redact) {
   p = p || {};
+  const scrub = typeof redact === 'function' ? (t) => { try { return String(redact(t)); } catch (_) { return ''; } } : (t) => t;
   const msgs = Array.isArray(p.messages) ? p.messages : [];
+  let finalAt = -1;
+  for (let i = msgs.length - 1; i >= 0; i--) { const m = msgs[i]; if (m && m.role === 'assistant' && typeof m.content === 'string' && m.content.trim()) { finalAt = i; break; } }
   const keep = [];
   let used = 0;
   for (let i = msgs.length - 1; i >= 0 && used < PERSIST_CHARS; i--) {
     const m = msgs[i];
     if (!m || (m.role !== 'user' && m.role !== 'assistant' && m.role !== 'tool')) continue;
-    const c = typeof m.content === 'string' ? m.content.slice(0, PER_MESSAGE_CHARS) : '';
+    const c = typeof m.content === 'string' ? scrub(m.content.slice(0, i === finalAt ? FINAL_CHARS : PER_MESSAGE_CHARS)) : '';
     const calls = Array.isArray(m.tool_calls) ? m.tool_calls.map(tc => ({ function: { name: String((tc && tc.function && tc.function.name) || '') } })).filter(tc => tc.function.name) : [];
     if (!c && !calls.length) continue;
     keep.unshift(calls.length ? { role: m.role, content: c, tool_calls: calls } : { role: m.role, content: c });
-    used += c.length;
+    if (i !== finalAt) used += c.length;   // the final answer never crowds the transcript tail out
   }
   // the directive (latest user turn) anchors the review's memory ranking: keep it even when the tail cut it off
   if (!keep.some(m => m.role === 'user')) {
     for (let i = msgs.length - 1; i >= 0; i--) {
       const m = msgs[i];
-      if (m && m.role === 'user' && typeof m.content === 'string' && m.content.trim()) { keep.unshift({ role: 'user', content: m.content.slice(0, PER_MESSAGE_CHARS) }); break; }
+      if (m && m.role === 'user' && typeof m.content === 'string' && m.content.trim()) { keep.unshift({ role: 'user', content: scrub(m.content.slice(0, PER_MESSAGE_CHARS)) }); break; }
     }
   }
   const skillRefs = list => (Array.isArray(list) ? list : []).map(s => s && ({ id: s.id, target: s.target, name: s.name, summary: s.summary, action: s.action })).filter(Boolean);
@@ -69,7 +77,7 @@ function makeVerdictReview(opts) {
   }
   function snapshot() {
     const rows = [];
-    for (const [runId, row] of packets) rows.push({ runId, at: row.at, packet: compactPacket(row.packet) });
+    for (const [runId, row] of packets) rows.push({ runId, at: row.at, packet: compactPacket(row.packet, opts.redact) });
     return rows;
   }
   function restore(rows) {

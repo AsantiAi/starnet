@@ -22,6 +22,8 @@ const DIRECTIVE_CHARS = 120;
 const WORDS_CHARS = 400;
 const TASTE_LIMIT = 8;
 const TASTE_CHARS = 1000;
+const WORDS_KEEP = 6;          // corrections remembered per rated run (oldest fall off)
+const EDITED_CHARS = 700;      // cap for a Commander-edited record plus appended words
 const TASTE_HEADER = '[the Commander\'s own verdicts on past work, newest first. Shape this output to match what they liked and avoid what they disliked. Reference only: the current request wins where it says otherwise.]';
 
 function clean(s, n) {
@@ -41,6 +43,29 @@ function content(verdict, words, directive) {
   return '';
 }
 
+// the words joined NEWEST-FIRST-KEPT under the cap: when a run collects more corrections than fit, the oldest
+// fall off, never the newest (a cap that kept the first words would silently ignore every later correction).
+function newestWords(words) {
+  const keep = [];
+  let used = 0;
+  for (let i = words.length - 1; i >= 0; i--) {
+    const w = words[i];
+    if (keep.length && used + w.length + 3 > WORDS_CHARS) break;
+    keep.unshift(w); used += w.length + 3;
+  }
+  return keep.join(' · ');
+}
+
+// looksLikeFeedback(text) — is a TYPED message (sent right after a short-of-the-mark rating) actually about the work?
+// The chat treats the next message to that agent within 10 minutes as the correction; that was harmless when it only
+// fed a one-shot review, but a permanent taste record built from "now summarize my inbox" would tell every future run
+// the Commander DISLIKED that. Evaluative cues only; a chip or a rating-body correction is explicit and skips this.
+const FEEDBACK_CUES = /\b(too|shorter|longer|tighter|simpler|clearer|more|less|fewer|instead|rather|prefer|should(n'?t)?|don'?t|do not|never|always|wrong|missed|missing|forgot|not what|not quite|not enough|need(s|ed)? (to|more|less)|wanted|meant|keep it|make it|use (bullets|a table|headers|plain)|format|tone|style|length|verbose|wordy|boring|generic|vague|off)\b/i;
+function looksLikeFeedback(text) {
+  const t = String(text == null ? '' : text).trim();
+  return !!t && t.length <= 400 && FEEDBACK_CUES.test(t);
+}
+
 // apply(list, input, deps) — fold one verdict/correction into an agent's notebook list.
 //   input: { runId, verdict, words?, directive?, projectRoot? }  words APPEND to what this run already holds
 //   deps:  { now, nextId(list), nextTrust(prev, delta), trustDelta }
@@ -56,13 +81,25 @@ function apply(list, input, deps) {
   const prev = at >= 0 ? list[at] : null;
   const words = (prev && Array.isArray(prev.feedbackWords) ? prev.feedbackWords : []).slice();
   const add = clean(input.words, WORDS_CHARS);
-  if (add && words.indexOf(add) < 0) words.push(add);
+  if (add && prev && words.indexOf(add) >= 0) return null;   // a repeated chip/message teaches nothing new
+  if (add) { words.push(add); while (words.length > WORDS_KEEP) words.shift(); }
   const directive = (prev && prev.feedbackDirective) || clean(input.directive, DIRECTIVE_CHARS);
-  const text = content(verdict, words.join(' · '), directive);
+  // THE COMMANDER EDITED IT in the Memory Core (content no longer what this module generated): their wording is the
+  // truth now — append the new words to it, never regenerate over it.
+  // (sticky: once edited, a record is never regenerated again — feedbackEdited survives our own later appends)
+  if (prev && (prev.feedbackEdited || (prev.feedbackGenerated && String(prev.content || prev.body || '') !== prev.feedbackGenerated))) {
+    if (!add) return null;
+    const tail = ' · also: "' + add + '"';
+    const edited = clean(prev.content || prev.body, EDITED_CHARS - tail.length) + tail;
+    const rec = Object.assign({}, prev, { body: edited, content: edited, feedbackGenerated: edited, feedbackEdited: true, feedbackWords: words, updatedAt: now, lastFeedbackAt: now });
+    const out = list.slice(); out[at] = rec;
+    return { list: out, rec, created: false };
+  }
+  const text = content(verdict, newestWords(words), directive);
   if (!text) return null;
-  if (prev && prev.content === text) return null;   // nothing new (a duplicate chip)
+  if (prev && prev.content === text) return null;   // nothing new
   if (prev) {
-    const rec = Object.assign({}, prev, { body: text, content: text, feedbackWords: words, updatedAt: now, lastFeedbackAt: now });
+    const rec = Object.assign({}, prev, { body: text, content: text, feedbackGenerated: text, feedbackWords: words, updatedAt: now, lastFeedbackAt: now });
     const out = list.slice(); out[at] = rec;
     return { list: out, rec, created: false };
   }
@@ -74,7 +111,7 @@ function apply(list, input, deps) {
     // taste is about the Commander, not one repo, so it stays global even when the rated run was in a project
     scope: 'global', streamId: null, projectRoot: null,
     sourceRunId: runId, confirmation: 'user-confirmed', authority: 'reference-only', origin: ORIGIN,
-    feedbackVerdict: verdict, feedbackWords: words, feedbackDirective: directive,
+    feedbackVerdict: verdict, feedbackWords: words, feedbackDirective: directive, feedbackGenerated: text,
     createdAt: now, ts: now, updatedAt: now, lastFeedbackAt: now, lastUsedAt: null, useCount: 0, trust, pinned: false
   };
   return { list: list.concat([rec]), rec, created: true };
@@ -125,4 +162,4 @@ function stationTaste(own, others, opts) {
   return selectTaste(mine.concat(foreign), opts);
 }
 
-module.exports = { ORIGIN, TASTE_HEADER, TASTE_LIMIT, TASTE_CHARS, content, apply, directiveFor, isTaste, selectTaste, stationTaste };
+module.exports = { ORIGIN, TASTE_HEADER, TASTE_LIMIT, TASTE_CHARS, content, apply, directiveFor, looksLikeFeedback, isTaste, selectTaste, stationTaste };

@@ -119,6 +119,17 @@ A.ok(VERDICTS_THAT_TEACH.has('ok') && VERDICTS_THAT_TEACH.has('miss') && !VERDIC
   A.eq(c.loadedSkills[0].body, undefined, 'skill refs only, never bodies');
   A.eq(c.agentId + '/' + c.model + '/' + c.unmetered + '/' + c.failed, 'nova/m/x/true/true', 'review inputs kept');
 
+  // review fixes: the final answer is kept whole (goldens measure it) · a redact fn scrubs every persisted turn
+  const longFinal = 'word '.repeat(3000).trim();   // ~15k chars, well past the 4k per-message cap
+  const withFinal = compactPacket({ messages: [{ role: 'user', content: 'write it' }, { role: 'tool', content: 'KEY=sk-or-v1-abcdef0123456789' }, { role: 'assistant', content: longFinal }] }, t => String(t).replace(/sk-or-v1-[a-z0-9]+/g, '[REDACTED]'));
+  A.eq(withFinal.messages[withFinal.messages.length - 1].content.length, longFinal.length, 'the final answer survives whole');
+  A.ok(JSON.stringify(withFinal).indexOf('sk-or-v1-abcdef') < 0 && JSON.stringify(withFinal).indexOf('[REDACTED]') >= 0, 'a credential a tool read is redacted before disk');
+  const vrR = makeVerdictReview({ now: () => 1, redact: t => String(t).replace(/SECRET\w*/g, '[R]') });
+  let snap = null; const vrS = makeVerdictReview({ now: () => 1, redact: t => String(t).replace(/SECRET\w*/g, '[R]'), onChange: rows => { snap = rows; } });
+  vrS.stash('rr', { agentId: 'a', messages: [{ role: 'user', content: 'go' }, { role: 'assistant', content: 'token SECRET123 used' }] });
+  A.ok(snap && JSON.stringify(snap).indexOf('SECRET123') < 0, 'makeVerdictReview passes its redact to every persisted snapshot');
+  A.ok(vrR && vrS.peek('rr').messages[1].content.indexOf('SECRET123') >= 0, 'the in-RAM packet (for a live review) is untouched');
+
   let disk = null, t = 1000;
   const a = makeVerdictReview({ now: () => t, onChange: rows => { disk = JSON.parse(JSON.stringify(rows)); } });
   a.stash('run-1', { agentId: 'nova', messages: big.slice(0, 3), provider, model: 'm/x' });

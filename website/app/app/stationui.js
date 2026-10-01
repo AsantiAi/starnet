@@ -2129,13 +2129,16 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
      can arrive from a routine, a night shift, or a messaging channel — and "the agent believes this about me" and
      "someone said this in a group chat" are different claims. 'commander' renders NO chip: the ordinary case must
      stay quiet, or the label becomes noise nobody reads. */
-  const ORIGIN_LABEL = { schedule: '⏱ routine', nightshift: '◈ autonomy', api: '⇄ external app' };
+  // 'feedback' = the Commander's OWN rating / correction of a run (sidecar/feedbackmemory.js): it is theirs, so its
+  // tip must never say it was learned unwatched. 'failure-review' = a lesson from a run that failed.
+  const ORIGIN_LABEL = { schedule: '⏱ routine', nightshift: '◈ autonomy', api: '⇄ external app', feedback: '★ your rating', 'failure-review': '⚠ failed run' };
+  const ORIGIN_TIP = { feedback: 'from your own rating of a run — every agent shapes its work to this', 'failure-review': 'a lesson taken from a run that failed' };
   function originChip(origin) {
     const o = String(origin || 'commander');
     if (o === 'commander') return null;
     const label = ORIGIN_LABEL[o] || (o.indexOf('channel:') === 0 ? '✆ ' + o.slice(8) : o);
     const el = mkEl('span', 'mc-scope'); el.textContent = label;
-    el.title = 'learned on a run you were not watching (' + o + ')';
+    el.title = ORIGIN_TIP[o] || ('learned on a run you were not watching (' + o + ')');
     return el;
   }
 

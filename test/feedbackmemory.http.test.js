@@ -70,6 +70,11 @@ const feedbackRecs = async () => ((await api('/api/memory/records?agent=agent'))
     A.eq(recs.length, 1, 'still one record for that run');
     A.ok(/^DISLIKED: "way too long, give me 3 bullet points max"/.test(recs[0].body), 'record now carries the Commander\'s words');
 
+    // 2b. the chat posts the NEXT typed message as the correction; a new task is not feedback and is never stored as taste
+    const unrelated = await api('/api/growth/ratings/correction', {runId: r1.runId, text: 'now summarize my inbox', final: true, source: 'message'});
+    A.eq(unrelated.body.feedbackMemory && unrelated.body.feedbackMemory.reason, 'not feedback on the work', 'an unrelated typed message is not stored as a dislike');
+    A.ok((await feedbackRecs()).every(r => r.body.indexOf('summarize my inbox') < 0), 'the record is unchanged');
+
     // 3. the NEXT run on an unrelated task carries the taste in its prompt
     const r2 = await run('Summarize these customer call notes.');
     A.ok(r2.prompt.indexOf('way too long, give me 3 bullet points max') >= 0, 'unrelated next run carries the correction in its prompt');

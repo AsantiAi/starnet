@@ -3186,6 +3186,12 @@ function persistSkillNudge() {
 // run's end stashes a packet. TTL 72h (was 6h): a rating from the OUTBOX the next day still teaches.
 const VERDICT_PACKETS_FILE = path.join(WORKSPACES, 'verdict.packets.json');
 let _verdictPersistTimer = null, _verdictPersistRows = null;
+function flushVerdictPackets() {
+  if (!_verdictPersistTimer) return;
+  clearTimeout(_verdictPersistTimer); _verdictPersistTimer = null;
+  try { saveResilient(VERDICT_PACKETS_FILE, { v: 1, rows: _verdictPersistRows || [] }); }
+  catch (e) { failNote('verdict.packets.flush', e); }
+}
 function persistVerdictPackets(rows) {
   _verdictPersistRows = rows;
   if (_verdictPersistTimer) return;
@@ -3196,7 +3202,7 @@ function persistVerdictPackets(rows) {
   }, 1000);
   if (_verdictPersistTimer.unref) _verdictPersistTimer.unref();
 }
-const verdictReview = makeVerdictReview({ cap: num(process.env.SKYNET_VERDICT_REVIEW_CAP, 40), ttlMs: num(process.env.SKYNET_VERDICT_REVIEW_TTL_MS, 72 * 60 * 60 * 1000), graceMs: num(process.env.SKYNET_VERDICT_REVIEW_GRACE_MS, 90 * 1000), now: () => Date.now(), onChange: persistVerdictPackets });
+const verdictReview = makeVerdictReview({ cap: num(process.env.SKYNET_VERDICT_REVIEW_CAP, 40), ttlMs: num(process.env.SKYNET_VERDICT_REVIEW_TTL_MS, 72 * 60 * 60 * 1000), graceMs: num(process.env.SKYNET_VERDICT_REVIEW_GRACE_MS, 90 * 1000), now: () => Date.now(), onChange: persistVerdictPackets, redact: (t) => redact(t) });
 try {
   const savedPackets = loadResilient(VERDICT_PACKETS_FILE, 'verdict-packets');
   const n = verdictReview.restore(savedPackets && savedPackets.rows);
@@ -11331,6 +11337,7 @@ function gracefulShutdown(signal) {
   // HARD deadline: no matter what hangs, exit within 3s. unref so this timer itself never keeps us alive.
   const deadline = setTimeout(() => { try { console.warn('  · shutdown deadline hit — forcing exit'); } catch (_) {} process.exit(0); }, 3000);
   if (deadline.unref) deadline.unref();
+  try { flushVerdictPackets(); } catch (e) { failNote('verdict.packets.shutdown', e); }   // a rating after the restart must still find its packet
   try { if (typeof cronTimer !== 'undefined' && cronTimer) { clearInterval(cronTimer); } } catch (_) {}
   try { if (typeof nightshiftTimer !== 'undefined' && nightshiftTimer) { clearInterval(nightshiftTimer); } } catch (_) {}   // NS-1: stop the night-shift ticker on shutdown
   try { if (typeof connectorLifecycleTimer !== 'undefined' && connectorLifecycleTimer) { clearInterval(connectorLifecycleTimer); } } catch (_) {}
@@ -18400,10 +18407,12 @@ async function runOnceCore(o) {
     getTaskContext: () => {
       const settled = taskBriefState ? commanderEvidenceContext(system || '', Object.assign({},taskContextInputs,{brief:taskBriefState.brief})) : taskContextBlock;
       const notes = notebookStore.get('notebook:' + agentId);
-      const pinned = Array.isArray(notes) ? notes.filter(r => r && r.pinned && !FeedbackMemory.isTaste(r)) : [];
-      const recalled = renderRecall(rank(pinned, recentUserText(messages), { now: Date.now(), streamId, projectRoot: o.projectRoot || null }), { limit: 1500 });
       // the Commander's taste rides into delegated work too: a worker writes the deliverable the Commander rates
-      const taste = renderRecall(FeedbackMemory.stationTaste(notes, otherAgentNotebooks(agentId)), { limit: FeedbackMemory.TASTE_CHARS, header: FeedbackMemory.TASTE_HEADER });
+      const tasteRecs = personalizationStore.read().enabled ? FeedbackMemory.stationTaste(notes, otherAgentNotebooks(agentId)) : [];
+      const tasteIds = new Set(tasteRecs.map(r => r.id).filter(Boolean));
+      const pinned = Array.isArray(notes) ? notes.filter(r => r && r.pinned && !tasteIds.has(r.id)) : [];
+      const recalled = renderRecall(rank(pinned, recentUserText(messages), { now: Date.now(), streamId, projectRoot: o.projectRoot || null }), { limit: 1500 });
+      const taste = renderRecall(tasteRecs, { limit: FeedbackMemory.TASTE_CHARS, header: FeedbackMemory.TASTE_HEADER });
       return settled + (recalled.text ? '\n\n' + redact(recalled.text) : '') + (taste.text ? '\n\n' + redact(taste.text) : '');
     },
     // A worker shares the LEAD's consent broker (see the `consent` note below), so its own roster APPROVAL clause is
@@ -20214,7 +20223,7 @@ async function runOnceCore(o) {
     // decide whether it surfaces. Those records leave the ranked pool so they never take a recall slot twice.
     // station-wide: a correction given to ANY agent is about the Commander, so it shapes this agent's work too
     // (recovery runs inject nothing at all — see the note above msgs).
-    const tasteRecs = o.recovery ? [] : FeedbackMemory.stationTaste(all, otherAgentNotebooks(agentId));
+    const tasteRecs = (o.recovery || !personalizationStore.read().enabled) ? [] : FeedbackMemory.stationTaste(all, otherAgentNotebooks(agentId));
     const tasteIds = new Set(tasteRecs.map(r => r.id).filter(Boolean));
     const recs = all.filter(r => !(r && tasteIds.has(r.id)));
     const q = recentUserText(convo);   // include restored conversation context on terse post-restart follow-ups
@@ -23604,7 +23613,12 @@ async function handleGrowthRatingCorrection(req, res) {
     const epoch = Math.max(1, Math.floor(Number(saved && saved.agent && saved.agent.createdAt) || 1));
     const rating = growthRatings.get(runId, epoch);
     const lead = rating ? runStore.all().find(row => row && row.runId === runId) : null;
-    if (rating && lead && !lead.internal) {
+    // the chat posts the NEXT typed message (within 10 min of a short rating) as the correction; only words that read
+    // as feedback on the work become permanent taste ("now summarize my inbox" is a new task, not a dislike). A chip
+    // or a rating-body correction is explicit and always counts. The held review still gets the words either way.
+    const typed = String(body.source || '') === 'message';
+    if (rating && lead && !lead.internal && typed && !FeedbackMemory.looksLikeFeedback(body.text)) feedbackMemory = { stored: false, reason: 'not feedback on the work' };
+    else if (rating && lead && !lead.internal) {
       feedbackMemory = await recordFeedbackMemory({ agentId: lead.agentId || 'agent', runId, verdict: rating.verdict, words: String(body.text || ''), directive: lead.deliveryPrompt || lead.title || '' });
     }
   } catch (e) { failNote('feedback.correction', e); }
