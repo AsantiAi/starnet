@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "1389df8812eaaad0c41b6767f53f24bab97f4615",
+    "sourceCommit": "b5d279fd5a297f0f9208a6faba358be99cbed8ba",
     "pathSetSha256": "390a2a551d88b2597ca4ab3f1acc7ca535b3b978e277a0ed8c0fb507e73e87c0",
     "files": [
       {
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 692407,
-        "sha256": "094292b3407671506f4289eeb4f2afe119a55d2577cba02530c6595e57d85f5b"
+        "bytes": 693428,
+        "sha256": "52589563671a7a92c50dcc30b9027b775c1d305988dab1769c6019dacd5c20ee"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -353,8 +353,8 @@
       },
       {
         "path": "frontend/app/classify.js",
-        "bytes": 6267,
-        "sha256": "e745e7e0cc274131a3fce19a6c391ca4fd3fa13d1a5a6815b889d28cec76fc02"
+        "bytes": 8330,
+        "sha256": "1f3a70a99074f7ca76c00738933f9acaa2729fb0e992cb72859643b1848c70ca"
       },
       {
         "path": "frontend/app/cloudsave.js",
@@ -1153,8 +1153,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 784956,
-        "sha256": "154ce7c384537de8324d8db9c73f91695a71e190408fb1c2655d305bc92dc7df"
+        "bytes": 785426,
+        "sha256": "35f5ddc2aadfca704b1f06e29ca0690fe04bd3b5fc3af4da3a8b59e1c5ff7974"
       },
       {
         "path": "frontend/app/stepin.js",
