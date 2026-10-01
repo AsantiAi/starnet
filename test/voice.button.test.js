@@ -437,6 +437,29 @@ async function opensWithin(t, ms) {
     t.Voice.stopCoordinator();
   }
 
+  // --- a recognizer that fails every time stops the hands-free loop and says why ----------------
+  // Live dictation re-armed a failing engine forever (~every 150ms) while the panel read LISTENING and the
+  // status showed a raw 'mic: network'. Three hard errors in a row end the loop with plain words.
+  {
+    const t = boot();
+    const fatal = [];
+    t.Voice.startCoordinator({ onState() {}, onTranscript: () => false, onFatal: v => fatal.push(v) }); await tick();
+    for (let i = 0; i < 3; i++) {
+      const before = srInstances.length;
+      srInstances[srInstances.length - 1].fireError('network');
+      if (i < 2) await until(() => srInstances.length > before, 1000);
+    }
+    await tick(300);
+    const instances = srInstances.length;
+    await tick(300);
+    A.eq(fatal.length, 1, 'mic errors: the loop reports ONE fatal stop to the Live panel');
+    A.ok(/can.t be reached/.test(fatal[0] && fatal[0].message || ''), 'mic errors: the reason is in plain words');
+    A.eq(t.Voice.inVoiceMode(), false, 'mic errors: hands-free stops instead of re-arming forever');
+    A.eq(srInstances.length, instances, 'mic errors: no further recognizer is spawned');
+    A.ok(!t.statusLog.some(s => /^mic: /.test(String(s))), 'mic errors: no raw engine code reaches the status line');
+    t.Voice.stopCoordinator();
+  }
+
   // --- a reply closes only for the producer that owns it ---------------------------------------
   // Switching sessions mid-reply: the old run must still close its reply (else draining forever), but a run that
   // finishes minutes later must not close a reply ANOTHER session is now streaming.

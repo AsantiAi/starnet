@@ -83,6 +83,20 @@ const Voice = (() => {
   // hands-free loop bookkeeping
   let rearmTimer = null;            // pending mic re-open
   let emptyStreak = 0;              // silent listens in a row (→ go passive instead of looping forever)
+  let micErrStreak = 0;             // hard recognizer errors in a row (→ stop the hands-free loop and say why)
+  const MAX_MIC_ERRORS = 3;
+  // Plain words for recognizer failure codes — the raw ids ('stt-failed', 'network', 'native-unavailable')
+  // reached the COMMS status line and the Commander had nothing to act on.
+  function micErrorText(code) {
+    const c = String(code || '');
+    if (c === 'native-unavailable') return 'Windows dictation isn’t responding';
+    if (c === 'network') return 'the speech service can’t be reached';
+    if (c === 'audio-capture') return 'no microphone was found';
+    if (c === 'stt-failed') return 'transcription failed';
+    if (c === 'start-failed') return 'the microphone couldn’t start';
+    if (c === 'unsupported') return 'speech input isn’t available here';
+    return 'speech input failed';
+  }
   let sentThisListen = false;       // did the just-finished listen actually send a message?
   let discarding = false;           // teardown in progress → drop any buffered transcript (don't send)
   let forcedSpeak = false;          // voice mode flipped the speaker on for us → restore the user's mute on exit
@@ -545,9 +559,11 @@ const Voice = (() => {
   // deep=true disables pitch-preservation, so a sub-1 rate lowers PITCH along with pace — the character-
   // voice register (persona ttsDeep). Vendor-prefixed setters for older engines; all guarded.
   function playBlob(blob, onEnd, volume, onFail, rate, deep, shell, onStarted) {
-    let url = null, a = null, done = false;
+    let url = null, a = null, done = false, watchdog = null;
     const cleanup = () => {
       done = true; // cancellation also fences a late rejected play() promise
+      clearTimeout(watchdog); watchdog = null;
+      if (a) a.onloadedmetadata = null;
       if (a) { a.onplay = null; a.onended = null; a.onerror = null; }
       if (url) { try { URL.revokeObjectURL(url); } catch (_) {} url = null; }
       if (currentAudio === a) currentAudio = null;
@@ -581,7 +597,16 @@ const Voice = (() => {
       if (shell && routeThroughShell(a, shell)) outAnalyser = shAnalyser;
       else if (routeThroughFx(a)) outAnalyser = fxAnalyser;
       else outAnalyser = null;              // dry playback: no tap, so the meter reports nothing rather than lying
-      a.onplay = () => { onSpeakStart(); if (onStarted) onStarted(); };
+      // PLAYBACK WATCHDOG: an element captured into a WebAudio graph that suspends (device change, WebKit) can
+      // go silent and never fire ended/error — the queue then waited forever. Re-armed once the length is known.
+      const armWatchdog = () => {
+        if (done) return;
+        clearTimeout(watchdog);
+        const len = a && isFinite(a.duration) && a.duration > 0 ? a.duration / (a.playbackRate || 1) : PLAY_MAX_S;
+        watchdog = setTimeout(() => endFailed(Object.assign(new Error('playback stalled'), { name: 'PlaybackStalled' })), len * 1000 + PLAY_GRACE_MS);
+      };
+      a.onloadedmetadata = armWatchdog;
+      a.onplay = () => { armWatchdog(); onSpeakStart(); if (onStarted) onStarted(); };
       a.onended = endOk;
       // Preserve the media error for bounded playback recovery and an attributed interruption.
       a.onerror = () => endFailed(a.error);
@@ -706,7 +731,11 @@ const Voice = (() => {
   let ttsAbort = null;    // controller of the most-recent in-flight fetch
   let onReplyDone = null; // heartbeat fired ONCE when the whole reply finishes (→ maybeRearm)
   const MAX_INFLIGHT = 2;        // synth at most this many chunks ahead of playback
-  const TTS_CHUNK_MAX = 1000;    // keep each synth call under the sidecar's 1200-char cap
+  const TTS_CHUNK_MAX = 1000;
+  const TTS_TIMEOUT_MS = 30000;              // one synthesis round-trip ceiling (a timeout is retried like any blip)
+  const TTS_FIRST_LOCAL_TIMEOUT_MS = 90000;  // the first local-engine request may be loading its model
+  const PLAY_MAX_S = 120;                    // playback watchdog when the clip reports no duration
+  const PLAY_GRACE_MS = 8000;                // slack past the clip's own length before a playback counts as stalled    // keep each synth call under the sidecar's 1200-char cap
 
   function resetQueue() { jobs = []; replyVoice = null; replyOwner = null; playIdx = 0; synthIdx = 0; draining = false; playing = false; replyClosed = true; replyFails = 0; replyTried = false; }
 
@@ -717,6 +746,11 @@ const Voice = (() => {
     const cred = ttsCred(), cfg = ttsConfig();
     job.attempt = (job.attempt || 0) + 1;
     const ac = new AbortController(); job.ac = ac; ttsAbort = ac;
+    // A hung request must not hold the whole queue: playback waits on this chunk, so without a ceiling one
+    // stuck call froze every later sentence. The first local request may load a model, so it gets longer.
+    let timedOut = false;
+    const ceiling = setTimeout(() => { timedOut = true; try { ac.abort(); } catch (_) {} },
+      job.voice.local && !job.voice.engine ? TTS_FIRST_LOCAL_TIMEOUT_MS : TTS_TIMEOUT_MS);
     return fetch('/api/tts', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ac.signal,
       body: JSON.stringify({
@@ -745,9 +779,9 @@ const Voice = (() => {
       return { kind: 'fail', reason };
     }).catch(e => {
       if (e && e.name === 'AbortError' && job.seq !== speakSeq) return { kind: 'skip' };   // intentionally cancelled — stay silent
-      if (job.seq === speakSeq) recordSpeechEvent('synthesis_failure', { chunk: jobs.indexOf(job), attempt: job.attempt, code: String(e && e.name || 'network') });
-      return { kind: 'fail', reason: 'network: ' + ((e && e.message) || e) };
-    });
+      if (job.seq === speakSeq) recordSpeechEvent('synthesis_failure', { chunk: jobs.indexOf(job), attempt: job.attempt, code: timedOut ? 'timeout' : String(e && e.name || 'network') });
+      return { kind: 'fail', reason: timedOut ? 'timeout' : 'network: ' + ((e && e.message) || e) };
+    }).finally(() => clearTimeout(ceiling));
   }
   function startSynth(job) {
     if (job.result) return;
@@ -1314,7 +1348,13 @@ const Voice = (() => {
         if (aborted) { cb && cb.onEnd && cb.onEnd(); return; }
         // setDiagStatus, not setStatus: cb.onEnd() below runs endListening() in this same synchronous block
         // and its restore would otherwise repaint 'online' over this before a single frame is drawn.
-        if (!text && reason) { setDiagStatus('voice: ' + String(reason).slice(0, 60)); maybeFallbackToWebSpeech(reason); }
+        if (!text && reason) {
+          // Name the real reason (truthful telemetry), but say the bare structural 'no key' in plain words.
+          const r = String(reason);
+          setDiagStatus(/^no key$/i.test(r.trim()) ? 'Voice input needs a speech provider — connect OpenAI or Groq, or use Live Voice'
+            : 'Voice input: ' + r.slice(0, 80));
+          maybeFallbackToWebSpeech(reason);
+        }
         cb && cb.onFinal && cb.onFinal(String(text || '').trim());
         cb && cb.onEnd && cb.onEnd();
       }).catch(e => {
@@ -1545,11 +1585,24 @@ const Voice = (() => {
           setStatus(microphoneHelp());
           return;
         }
+        const hard = msg !== 'no-speech' && msg !== 'aborted';
+        // A recognizer that fails every time must not be re-armed forever: Live dictation re-spawned a
+        // failing engine every ~150ms while the panel kept saying "listening". Stop the loop and say why.
+        if (hard && convoMode && ++micErrStreak >= MAX_MIC_ERRORS) {
+          micErrStreak = 0;
+          const why = 'Voice input stopped — ' + micErrorText(msg) + '. Click 🎤 to try again.';
+          listening = false; setMicState(false);
+          clearTimeout(rearmTimer); rearmTimer = null;
+          coordinatorEvent('onFatal', { code: String(msg || ''), message: why });
+          stopConvo();
+          setStatus(why);
+          return;
+        }
         endListening();
         // a failed mic OPEN (timeout on a dismissed prompt, getUserMedia error, recorder start failure) is
         // recoverable — say so plainly and invite a retry, rather than a cryptic 'mic: mic-failed' dead end.
         if (msg === 'mic-failed' || msg === 'rec-failed' || msg === 'rec-error') setStatus('mic didn\'t open — click 🎤 to try again');
-        else if (msg !== 'no-speech' && msg !== 'aborted') setStatus('mic: ' + msg);
+        else if (hard) setStatus('Voice input: ' + micErrorText(msg) + ' — click 🎤 to try again');
       },
       onEnd: () => { endListening(); }
     });
@@ -1592,7 +1645,7 @@ const Voice = (() => {
     const cmd = norm.replace(/^(?:ok(?:ay)?|hey|um|uh|so|please|yeah|now|can you|could you|would you|i want to|i'd like to|let'?s)[,\s]+/, '').trim();
     if (convoMode && (/^(?:exit|stop|end|leave|quit|turn off)\s+(?:the\s+|this\s+)?voice\s*mode\b/.test(cmd)
                       || /^(?:exit|leave)\s+(?:the\s+|this\s+)?voice\b/.test(cmd))) { savePref(LS_CONVO, false); stopConvo(); return; }
-    sentThisListen = true; emptyStreak = 0;
+    sentThisListen = true; emptyStreak = 0; micErrStreak = 0;
     // a dedicated "got it" cue (not the generic send click) so the user knows their words landed —
     // closes the perceived gap until the agent's first spoken word.
     if (typeof SFX !== 'undefined') (SFX.think || SFX.click)();

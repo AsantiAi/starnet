@@ -9318,7 +9318,9 @@ const Chat = (() => {
   /* DISCONNECT (or any teardown) cancels the in-flight billable run: abort the fetch (the sidecar's
      req.on('close') then stops the loop) AND tell the sidecar to kill the run by id — belt-and-suspenders. */
   function abort() {
-    if (typeof Voice !== 'undefined' && Voice.stopConvo) Voice.stopConvo();   // drop hands-free on disconnect
+    // drop hands-free on disconnect — Live Voice included (its own microphone loop stayed hot behind DISCONNECT)
+    if (typeof VoiceLive !== 'undefined' && VoiceLive.isActive && VoiceLive.isActive() && VoiceLive.end) VoiceLive.end();
+    if (typeof Voice !== 'undefined' && Voice.stopConvo) Voice.stopConvo();
     // teardown is a DELIBERATE interrupt, not a dropped connection: flag every in-flight stream interrupted BEFORE
     // aborting so send()'s catch reads `stopped` and stays silent — otherwise the AbortError gets reclassified as a
     // network fault and a spurious "can't reach the sidecar" row is pushed into ws.history + persisted. (A reader
