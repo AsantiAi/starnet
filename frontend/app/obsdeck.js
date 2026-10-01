@@ -28,10 +28,11 @@
     const z = (typeof U !== 'undefined' && U.uiZoom) ? U.uiZoom() : 1;
     let l = 0, t = 0, r = 0, b = 0;
     if (!off) {
-      const left = $('left'), chat = $('chat-panel'), top = $('topbar'), bot = $('bottombar');
+      const left = $('left'), chat = $('chat-panel'), bot = $('bottombar');
       if (visible(left)) l = Math.max(0, left.getBoundingClientRect().right - s.left + GAP);
       if (visible(chat)) r = Math.max(0, s.right - chat.getBoundingClientRect().left + GAP);
-      if (visible(top)) t = Math.max(0, top.getBoundingClientRect().bottom - s.top + GAP);
+      // no top bar in the deck: #topbar is a transparent overlay whose middle is open station
+      t = GAP;
       if (visible(bot)) b = Math.max(0, s.bottom - bot.getBoundingClientRect().top + GAP);
     }
     // rects are VISUAL px; the canvas and the stage's own style px are ZOOMED px (uiZoom law)

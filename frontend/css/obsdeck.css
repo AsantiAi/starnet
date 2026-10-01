@@ -139,3 +139,23 @@ body.obs-deck.od-docked:not(.hud-mode) #screen-game :is(#left > h3, #chat-panel 
 body.obs-deck.od-docked:not(.hud-mode) #screen-game.active:not(.cinema) > #bottombar {
   align-self: end; border-radius: 12px 12px 0 0; border-bottom-width: 0; padding-bottom: 2px;
 }
+
+/* ============================================================
+   NO TOP BAR (Andrew 10-01): the logo heads the CREW panel and COMMANDER / UPLINK head COMMS.
+   #topbar stays in the DOM (positionLogo, topbar.js and every id writer still find it) but stops
+   being a bar: a transparent overlay across the top row, while CREW and COMMS grow up into that row
+   and reserve its height as headroom. The middle of the row is open station.
+   ============================================================ */
+body.obs-deck:not(.hud-mode) #screen-game.active:not(.cinema) > :is(#left, #chat-panel) { grid-row: 1 / 3; }
+body.obs-deck.od-docked:not(.hud-mode) #screen-game.active:not(.cinema) > :is(#left, #chat-panel) { grid-row: 1 / 4; }
+body.obs-deck:not(.hud-mode) #screen-game.active:not(.cinema) > #topbar {
+  z-index: 9; pointer-events: none;
+  background: none; border-color: transparent; box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+body.obs-deck:not(.hud-mode) #screen-game.active:not(.cinema) > #topbar > * { pointer-events: auto; }
+body.obs-deck:not(.hud-mode) #screen-game.active:not(.cinema) > #topbar .widget-rail[data-empty="1"] { visibility: hidden; }
+body.obs-deck:not(.hud-mode) #screen-game.active:not(.cinema) > :is(#left, #chat-panel) { padding-top: calc(64px * var(--cz)); }
+body.obs-deck:not(.hud-mode) #screen-game.active:not(.cinema) :is(#left > h3, #chat-panel > h3) {
+  border-radius: 0; border-top: 1px solid var(--od-hair);
+}
