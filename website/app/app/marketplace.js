@@ -414,7 +414,8 @@ const Marketplace = (() => {
      recipes tab reads RECIPES — exactly the ❒ RECIPES label. plainTitle() feeds the close button's
      aria-label; title() adds the ▮ nameplate glyph. */
   function plainTitle() {
-    return (!(ctx && ctx.mode === 'pick') && tab === 'recipes' && hasRecipes()) ? 'RECIPES' : 'RECRUITMENT BAY';
+    // ONE MENU (2026-10-01): the recipe library is a tab of WORK › MY WORK, so the window wears its dock button's name
+    return (!(ctx && ctx.mode === 'pick') && tab === 'recipes' && hasRecipes()) ? 'MY WORK' : 'RECRUITMENT BAY';
   }
   function title() { return '▮ ' + plainTitle(); }
 
