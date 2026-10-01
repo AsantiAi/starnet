@@ -6644,8 +6644,9 @@ const World = (() => {
       return bed ? { y: (bed.y + (bed.h || 1)) * T + 0.5, draw: () => drawSleeper(now, b, bed) }
                  : { y: fallbackY, draw: () => drawAgent(now, b) };
     };
-    if (agent && !agent.unplaced) items.push(bodyItem(agent, rposY()));
-    for (const b of crew) items.push(bodyItem(b, (b.seated ? b.seatPy : b.py)));   // the other agents, at their bays (seated → sort by the cushion pos like the hero's rposY, so a couch-lounging crew body tucks just behind the back-facing couch panel, head over the cap)
+    const crewInScene = !(stillPass && stillPass.noBodies);   // a crew-free still: the phone draws the crew itself, live
+    if (crewInScene && agent && !agent.unplaced) items.push(bodyItem(agent, rposY()));
+    if (crewInScene) for (const b of crew) items.push(bodyItem(b, (b.seated ? b.seatPy : b.py)));   // the other agents, at their bays (seated → sort by the cushion pos like the hero's rposY, so a couch-lounging crew body tucks just behind the back-facing couch panel, head over the cap)
     // A raised doorway stands in front of a body until its feet clear the wall.
     // Use the baked surfaces in the same depth order as props and agents; leaving
     // them only in baseCv made every body paint through the solid jambs.
@@ -6666,7 +6667,7 @@ const World = (() => {
     reviewMark('sceneSetup');
     if (sceneRenderer) sceneRenderer.prepareLight(propLights, { ambient: StationBake.LIGHT.ambient, emission: CRT.emit });
     drawPropShadows();
-    if (sceneRenderer) sceneRenderer.drawGrounding(ctx, [agent, ...crew].filter(b => b && !b.unplaced && !b.seated && !b.lying)
+    if (sceneRenderer && crewInScene) sceneRenderer.drawGrounding(ctx, [agent, ...crew].filter(b => b && !b.unplaced && !b.seated && !b.lying)
       .map(b => ({ x: bodyPosX(b), y: bodyPosY(b), width: 7, height: 20, opacity: .16 })));
     reviewMark('shadows');
     if (sceneRenderer) {
@@ -6779,7 +6780,12 @@ const World = (() => {
      { canvas, width, height, bodies:[{ agentId, name, x, y, working }] } with bodies in still pixels, or null
      when there is no honest picture to give (no bake yet, the awakening is still playing). */
   let stillPass = null;
-  function renderStill(maxPx) {
+  function renderStill(maxPx, opts) {
+    // A window that has not drawn a frame yet (opened behind other tabs: the browser runs no frames there) has not
+    // built its station either. Build it here, exactly as the first frame would, so the phone still gets a picture.
+    if (!stillPass && station && geo !== undefined) {
+      try { if (geoDirty) rederive(); if (bakeDirty || !cache) rebake(); } catch (e) { try { console.error('[world] still could not build the station:', e); } catch (_) {} }
+    }
     if (stillPass || !cache || !cv || !ctx || !geo || camAnim || kindleArmed || arrivalScene || wakeDark > 0.002) return null;
     const W = cache.baseCv.width, H = cache.baseCv.height;
     if (!(W > 1 && H > 1)) return null;
@@ -6793,7 +6799,7 @@ const World = (() => {
     const landed = typeof Terrain !== 'undefined' && Terrain.active();
     let drawn = false;
     cv = off; ctx = g; scale = s; panX = 0; panY = 0; overlaysOn = false;
-    stillPass = { fill: landed ? Terrain.baseColor() : '#040302' };
+    stillPass = { fill: landed ? Terrain.baseColor() : '#040302', noBodies: !!(opts && opts.noBodies) };
     // the wall clock, never the last frame's time: a hidden or minimized window stops its frames, and a stale
     // clock froze every timed effect (a failed run's red desk flash stayed lit in every still)
     try { drawScene(performance.now(), 0); drawn = true; }
@@ -6818,7 +6824,21 @@ const World = (() => {
       agentId: String(b.agentId || b.id || ''), name: String(b.name || ''),
       x: Math.round(bodyPosX(b) * s * k), y: Math.round(bodyPosY(b) * s * k), working: !!b.working
     }));
-    return { canvas: out, width: out.width, height: out.height, bodies };
+    return { canvas: out, width: out.width, height: out.height, bodies, scale: s * k };
+  }
+
+  /* THE CREW AS THE STAGE LAST DREW THEM, for a surface that draws them itself (the phone's live station view):
+     each body's sprite track + frame and the exact rectangle drawBody put it in, in world pixels. Read-only:
+     it reports what was drawn and decides nothing. A body not drawn yet is left out. */
+  function crewFrames() {
+    const out = [];
+    for (const b of [agent, ...crew]) {
+      const p = b && !b.unplaced ? b._poseLast : null;
+      if (!p || !p.key) continue;
+      out.push({ agentId: String(b.agentId || b.id || ''), key: p.key, idx: b._renderFrame | 0,
+        x: p.x, y: p.y, w: p.w, h: p.h, walking: b.state === 'walk', working: !!b.working });
+    }
+    return out;
   }
 
   // ---- CRT SCANLINES + FADE (screen-space, drawn last, OVER the curved feed) --------
@@ -10707,7 +10727,7 @@ const World = (() => {
     pollFeed: () => pollFeedState(),
     pollShip: () => pollShipStats()
   });
-  return { init, rebake, frameReviewRoom, renderStill, crt: CRT, slagLog: () => (slaglog ? slaglog.recent() : []),
+  return { init, rebake, frameReviewRoom, renderStill, crewFrames, crt: CRT, slagLog: () => (slaglog ? slaglog.recent() : []),
     // LINE WATCH: the Workflow panel pushes the step-test session it polls; reads today's numbers for a line
     noteStepTest, lineStatsFor: id => (lineStats.known ? (lineStats.byLine[id] || null) : null), pollLineStats,
     // a bay's live state — the lamp's own fold (WORKING only once the sidecar confirmed the run), with how long it has held

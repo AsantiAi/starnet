@@ -10175,6 +10175,7 @@ const remoteHost = require('./remote/host.js').makeRemoteHost({
   },
   runOnce: (o) => runOnce(o),
   view: remoteView,
+  deskOpen: () => sse.size() > 1,   // a StarNet page is connected (the phones' own tee is always one listener)
   // how each agent looks (the skin the Commander picked), from the station save the page mirrors here
   crewLooks: () => {
     const save = saveStore.load('agent') || {}, out = {};
@@ -10183,6 +10184,9 @@ const remoteHost = require('./remote/host.js').makeRemoteHost({
     return out;
   },
   portrait: (skin) => remotePortraits.forSkin(skin),
+  sprites: (key) => remotePortraits.framesFor(key),
+  // the run history the desk's activity feed reads (newest first)
+  runHistory: (n) => runStore.list(null, { limit: n }),
   // the desk's own sessions (title, agent, history) live in the station save the page mirrors here
   deskSessions: () => { const save = saveStore.load('agent') || {}; return Array.isArray(save.workstreams) ? save.workstreams : []; },
   classify: (text) => Classify.isTaskDirective(text),   // the SAME task-vs-talk call the desk and the channels make
@@ -10309,6 +10313,15 @@ async function handleRemoteViewPut(req, res) {
   catch (_) { if (!res.headersSent) respondJson(res, 400, { ok: false, error: 'bad request' }); return; }
   const r = remoteView.put(b);
   respondJson(res, r.ok ? 200 : 400, r);
+}
+// POST /api/remote/view/crew { bodies } — where the crew are right now, from the desk page's crew stream. Passed straight
+// to looking phones as a view.crew event (a few hundred bytes); nothing is sent while no phone is looking.
+async function handleRemoteViewCrew(req, res) {
+  if (!remoteDevices.enabled()) return respondJson(res, 409, { ok: false, error: 'Remote is off' });
+  let b; try { b = JSON.parse((await readBody(req, 256 * 1024, res)) || '{}') || {}; } catch (_) { if (!res.headersSent) respondJson(res, 400, { ok: false, error: 'bad request' }); return; }
+  const r = remoteView.putCrew(b.bodies);
+  if (r.ok && remoteView.wanted()) remoteBroadcast({ type: 'view.crew', at: r.at, bodies: r.bodies });
+  respondJson(res, r.ok ? 200 : 409, { ok: r.ok, error: r.error });
 }
 // POST /api/remote/enable { on } — the switch. Persisted; the LAN door opens or closes with it.
 async function handleRemoteEnable(req, res) {
@@ -10518,7 +10531,8 @@ const ROUTES = [
   { m: 'POST', exact: '/api/userprops/side', h: handleUserPropSide },           // {id} → turn a made prop into its left-facing side view (credits, 200-always)
   { m: 'GET', exact: '/api/remote/recent', h: handleRemoteRecent },   // phone-started runs, for the desk to adopt as sessions
   { m: 'GET', exact: '/api/remote/view', h: handleRemoteViewWant },   // is a phone looking at the station picture?
-  { m: 'POST', exact: '/api/remote/view', h: handleRemoteViewPut },   // the desk page's still of the station, for phones
+  { m: 'POST', exact: '/api/remote/view', h: handleRemoteViewPut },
+  { m: 'POST', exact: '/api/remote/view/crew', h: handleRemoteViewCrew },   // where the crew are, for looking phones   // the desk page's still of the station, for phones
   { m: 'GET', exact: '/api/remote', h: handleRemoteStatus },          // STARNET REMOTE: on/off, where it listens, paired + connected phones
   { m: 'POST', exact: '/api/remote/enable', h: handleRemoteEnable },  // the switch (persisted); opens/closes the LAN door
   { m: 'POST', exact: '/api/remote/pair', h: handleRemotePair },      // one-time pairing code for ONE phone (10 min)
