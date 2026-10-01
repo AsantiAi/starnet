@@ -894,7 +894,7 @@ const WorldModel = (() => {
      name; the station name stays as its tag), and the kind of work it is for (the shelf's sections, the same kinds the
      station presets are for). One source for the Lines shelf, the agent's station builder and the tests. */
   const LINE_PLAIN = {
-    front_desk: 'One agent', allowance_desk: 'One agent, capped', ship_out: 'Straight to outbox', two_doors: 'Two doors, one agent',
+    front_desk: 'One agent', allowance_desk: 'One agent, $5 a day', ship_out: 'Agent work to OUTBOX', two_doors: 'Two ways in',
     revision_loop: 'Draft + review', crucible: 'Two review rounds', fire_escape: 'Review + a fixer',
     build_test: 'Build + test', code_foundry: 'Build + review',
     research_line: 'Research + write', swarm_synthesis: 'Three researchers', deep_dive: 'Deep dive + review', assembly_line: 'Four-step chain',
