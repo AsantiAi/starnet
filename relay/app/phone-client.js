@@ -242,20 +242,24 @@
         const ws = new WS(wsUrlOf(o.relay) + '/v1/phone?rid=' + encodeURIComponent(rid) + '&tok=' + encodeURIComponent(o.relayToken || ''));
         st.ws = ws;
         await new Promise((resolve, reject) => {
-          let welcomed = false;
+          let welcomed = false, deriving = false;
+          const early = [];   // frames that arrive while the keys are still being derived (events never wait for us)
           const timer = setTimeout(() => reject(new Error('the station did not answer')), 20000);
           ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', v: VERSION, deviceId: o.deviceId, eph: eph.publicRaw, nonce }));
           ws.onmessage = async (ev) => {
             let m; try { m = JSON.parse(ev.data); } catch (_) { return; }
+            if (deriving) { if (early.length < 64) early.push(m); return; }
             if (!welcomed) {
               if (m && m.t === 'welcome') {
+                deriving = true;
                 const w = m.welcome;
                 try {
                   st.keys = await deriveKeys({ ephPrivate: eph.privateKey, devicePrivate: o.key.privateKey, stationPub: o.stationPub, devicePub: o.key.publicRaw,
                     stationEph: w.eph, phoneEph: eph.publicRaw, phoneNonce: nonce, stationNonce: w.nonce });
                 } catch (e) { clearTimeout(timer); return reject(e); }
-                st.sid = w.sessionId; st.seq = 0; st.lastRes = 0; st.lastEv = 0; welcomed = true;
+                st.sid = w.sessionId; st.seq = 0; st.lastRes = 0; st.lastEv = 0; welcomed = true; deriving = false;
                 clearTimeout(timer); resolve();
+                for (const f of early.splice(0)) onFrame(f);
               } else { clearTimeout(timer); reject(new Error((m && m.error) || 'hello refused')); }
               return;
             }
@@ -320,12 +324,15 @@
         return callOnce(verb, args, timeoutMs);
       }
     }
+    // sealing is async: chain it, so frame n always leaves before frame n+1 (the station refuses an older seq)
+    let sendChain = Promise.resolve();
     async function callOnce(verb, args, timeoutMs) {
       await open();
       const id = st.nextId++;
-      st.seq += 1;
-      const seq = st.seq;
-      const frame = await seal(st.keys.p2s, 'p2s', seq, { id, verb, args: args || {} });
+      let seq, frame;
+      const turn = sendChain.then(async () => { st.seq += 1; seq = st.seq; frame = await seal(st.keys.p2s, 'p2s', seq, { id, verb, args: args || {} }); });
+      sendChain = turn.catch(() => {});
+      await turn;
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => { st.pending.delete(id); st.bySeq.delete(seq); reject(new Error('the station took too long to answer')); }, timeoutMs || 30000);
         st.pending.set(id, { resolve, reject, timer, seq });

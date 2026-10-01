@@ -70,6 +70,8 @@ function makeRelayClient(d) {
     }
     if (!c.paired) return toPhone(conn, { t: 'error', error: 'not paired' });
     if (msg.t === 'hello') {
+      // a phone may only say hello as the device its relay pass belongs to (never as another paired phone)
+      if (c.th && devices.tokenHashOf && devices.tokenHashOf(msg.deviceId) !== c.th) return toPhone(conn, { t: 'error', error: 'unknown device' });
       const r = sessions.hello(msg);
       if (!r.ok) return toPhone(conn, { t: 'error', error: r.error });
       if (c.detach) { try { c.detach(); } catch (e) { note('remote.relay-client.c.detach', e); } }
@@ -102,7 +104,7 @@ function makeRelayClient(d) {
     }
     if (m.t === 'ready') { rid = m.rid; retryMs = 1000; set('online', null); log('online at the relay'); syncTokens(); return; }
     if (m.t === 'pong') { if (pongTimer) { clearTimeout(pongTimer); pongTimer = null; } return; }
-    if (m.t === 'open') { conns.set(Number(m.conn), { paired: !!m.paired, sid: null, deviceId: '', detach: null }); return; }
+    if (m.t === 'open') { conns.set(Number(m.conn), { paired: !!m.paired, th: String(m.th || ''), sid: null, deviceId: '', detach: null }); return; }
     if (m.t === 'gone') { drop(Number(m.conn)); return; }
     if (m.t === 'from') { onPhone(Number(m.conn), m.msg).catch(swallow('remote.relay.onPhone')); return; }
   }
