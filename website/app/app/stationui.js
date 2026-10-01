@@ -2161,7 +2161,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
           + (ready.length ? ' · ' + ready.slice(0, 6).map(x => esc(x.label)).join(', ') + (ready.length > 6 ? ' +' + (ready.length - 6) : '') : '')
           + ' · ' + esc(authority.approvalLabel) + '</p><button class="bb sm" data-access-full>SEE FULL ACCESS</button>';
         targets.forEach(target => {
-          if (target.hasAttribute('data-access-compact')) {
+          if (typeof target.hasAttribute === 'function' && target.hasAttribute('data-access-compact')) {
             target.innerHTML = compactHtml;
             target.querySelector('[data-access-full]').onclick = () => { consoleSection['agents'] = 'config'; sfx('click'); rerender('agents'); };
             return;
