@@ -16841,6 +16841,8 @@ async function handleRun(req, res) {
       retryUserRunId: body && body.retryUserRunId,
       surface: 'interactive', prompt: promptConsent, pathPrompt: promptPathTrust, summon: summonRequest,   // team.summon → live summonAgent() round-trip; pathPrompt → NS-5 "work in <root>?" bless
       loginPrompt: askHuman,   // attended browser login: browser.login's two consent asks ride the same fail-closed permission.prompt channel
+      // the Commander is AT the station (COMMS): this run may drive the shared, signed-in station browser
+      stationBrowser: true,
       idempotencyScope: connectorContinuationScope,
       parentRunId: connectorContinuationScope ? body.connectorContinuationOf : undefined,
       askCommander,            // in-turn clarify: brief.ask blocks + resumes the SAME turn on this watched surface
@@ -17516,7 +17518,11 @@ async function runOnceCore(o) {
   // reports "unavailable" honestly (never a success-shaped stub). Pass the dep only when usable.
   // An interactive run drives the STATION browser — the one the Commander sees and uses — when it is free. Anything
   // else (unattended runs, or a second run while another is driving) gets a private per-run browser as before.
-  runStationBrowser = await browserViews.sessionForRun({ agentId, runId, interactive: surface === 'interactive', loginPrompt: o.loginPrompt });
+  /* PRIVACY (release review 2026-09-30): 'interactive' is also the surface of Telegram/Discord chats with approvals on
+     (including allowed group chats), STARNET REMOTE phone runs and group sessions — none of which is the Commander
+     sitting at this desktop. The shared station browser carries their sign-ins and open tabs, so only a run started
+     from COMMS (the stationBrowser flag) may drive it; every other run browses in a private browser, as before. */
+  runStationBrowser = await browserViews.sessionForRun({ agentId, runId, interactive: surface === 'interactive' && o.stationBrowser === true, loginPrompt: o.loginPrompt });
   runBrowser = makeBrowserTools({
     session: runStationBrowser || undefined,
     ensureChromium: () => chromiumInstaller.ensure(),

@@ -257,6 +257,7 @@ test/browser-station-window.test.js
 test/browser-dead-browser.test.js
 test/browser-single-launch.test.js
 test/browser-install.test.js
+test/browser-station-privacy.test.js
 test/notebook.test.js
 test/skills.test.js
 test/skill-exchange.test.js
