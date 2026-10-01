@@ -1577,9 +1577,10 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const sum = $('#crew-sum');
     const empty = $('#crew-search-empty');
     if (empty) empty.hidden = !crewQuery || visible > 0;
+    // crewcards.js seats this beside the CREW title ("2 WORKING · 1 IDLE"); the ▮ ▯ marks were fallback-font glyphs
     if (sum) sum.innerHTML =
-      '<span class="pos">▮ ' + working + ' WORKING</span>' +
-      '<span class="dim">▯ ' + (present.length - working) + ' IDLE</span>';
+      '<span class="pos">' + working + ' WORKING</span>' +
+      '<span class="dim">' + (present.length - working) + ' IDLE</span>';
     // #8: keep the canvas's screen-reader live region in sync (the <canvas> itself is opaque to AT).
     // Update only when the text actually changes so the region doesn't spam announcements every tick.
     const stageSum = $('#stage-summary');
@@ -8393,6 +8394,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // window meant one notch per 20k tokens — the bar sat on one cell from 5% to 14% and read as stuck.
       // Driven off s.frac, not the rounded s.pct, so the extra resolution is real and not re-quantised.
       const frac = s.known ? s.frac : 0;
+      g.style.setProperty('--ctx-fill', String(Math.max(0, Math.min(1, +frac || 0))));   // cabinet-clean.css draws the cells as one thin bar
       const b = (typeof AsciiFX !== 'undefined' && AsciiFX.barCells)
         ? AsciiFX.barCells(frac, N)
         : { full: 0, half: false, off: N };
