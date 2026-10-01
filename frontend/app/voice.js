@@ -649,6 +649,12 @@ const Voice = (() => {
     return URL.createObjectURL(new Blob([b], { type: 'audio/wav' }));
   }
   function armAudio() {
+    // Build the voice's effect graphs INSIDE a user gesture so they start running: created later (at the first
+    // reply) they start suspended, and the opening sentence played dry — without the station shell — so the
+    // reply's first words sounded like a different voice. Only while the speaker is on; idempotent.
+    if (speakReplies) {
+      try { const cfg = ttsConfig(); if (cfg && cfg.shell) ensureShellGraph(); else if (TRANSMISSION_FX) ensureFxGraph(); } catch (_) {}
+    }
     resumeSpeechContext(fxCtx); resumeSpeechContext(shCtx);
     if (audioArmed) return; audioArmed = true;
     try { const u = silentWav(); const a = new Audio(u); a.volume = 0; const p = a.play(); if (p && p.catch) p.catch(() => {}); setTimeout(() => { try { URL.revokeObjectURL(u); } catch (_) {} }, 1000); } catch (_) {}
