@@ -2934,6 +2934,11 @@ const Chat = (() => {
     }
     if (/write|append|edit/.test(t)) return 'write ' + (ev.argsSummary || 'a file');
     if (t === 'brief.ask') return 'ask you a quick question about the task';   // clarify card renders its own body
+    // THE STATION BUILDER (2026-09-29): the card IS the plan — what gets built, where, who works each step. The sidecar
+    // sends the plan's own summary (its dry run on a copy of the station), never the model's words.
+    if (/^station[._]build$/.test(t)) { const plan = String(ev.argsSummary || '').split('\n')[0] || 'a planned change'; return 'build this on your station: ' + plan + (/\bUNDO\b/.test(plan) ? '' : ' One UNDO in Build mode takes it back.'); }
+    // MAKE A PROP (2026-10-01): the card names the object and what it costs in StarNet credits (the sidecar's own words)
+    if (/^station[._]make_prop$/.test(t)) return 'make a new prop: ' + (String(ev.argsSummary || '').split('\n')[0] || 'a new prop');
     return t.replace(/_/g, '.') + (ev.argsSummary ? ' ' + ev.argsSummary : '');
   }
 
@@ -3075,6 +3080,18 @@ const Chat = (() => {
       const label = document.createElement('summary'); label.textContent = 'Inspect proposed change (secret patterns redacted)';
       const payload = document.createElement('pre'); payload.textContent = p.argsSummary || '(payload unavailable)';
       detail.appendChild(label); detail.appendChild(payload); r.body.appendChild(detail);
+    }
+    // the station builder's card: every step's instructions, one click away (the summary line is in the phrase above)
+    if (/^station[._]build$/.test(String(p.tool || '')) && String(p.argsSummary || '').indexOf('\n') > 0) {
+      const detail = document.createElement('details'); detail.className = 'consent-payload';
+      const label = document.createElement('summary'); label.textContent = 'What each step will be told';
+      const payload = document.createElement('pre'); payload.textContent = String(p.argsSummary).split('\n').slice(1).join('\n');
+      detail.appendChild(label); detail.appendChild(payload); r.body.appendChild(detail);
+    }
+    // …and draws the plan: where it goes and what goes where, before anything is built (the page's own parked plan)
+    if (/^station[._]build$/.test(String(p.tool || '')) && typeof StationCommands !== 'undefined' && StationCommands.previewFor && typeof PlanPreview !== 'undefined') {
+      const fig = PlanPreview.el(StationCommands.previewFor(String(p.argsSummary || '').split('\n')[0]));
+      if (fig) r.body.appendChild(fig);
     }
     const btns = document.createElement('span'); btns.className = 'consent-btns';
     let decided = false;
