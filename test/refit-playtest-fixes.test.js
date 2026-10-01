@@ -98,7 +98,7 @@ const tutorialSrc = read('tutorial.js');
 {
   // ESC: the bare select-mode ESC arms, a second one inside the window leaves; any other key disarms
   const between = (a, b) => build.slice(build.indexOf(a), build.indexOf(b, build.indexOf(a)));
-  const s = { tool: 'select', buildGroup: 'workflow', drag: null, dragPid: null, connectFrom: null, dupe: null, selectedPropId: null, movingPropId: null, closed: 0, tipped: '',
+  const s = { tool: 'select', buildGroup: 'workflow', drag: null, dragPid: null, connectFrom: null, dupe: null, selectedPropId: null, movingPropId: null, groupIds: [], closed: 0, tipped: '',
     root: { querySelector: () => null, querySelectorAll: () => [] }, cardTop: () => null, WorkflowPanel: { isOpen: () => false },
     performance: { now: () => s.now }, now: 1000, tipTimer: 0,
     showTip: t => { s.tipped = t; }, hideTip() {}, setTimeout: () => 0, clearTimeout() {}, sfx() {}, selectTool() {}, deselectTool() {}, fitCamera() {},

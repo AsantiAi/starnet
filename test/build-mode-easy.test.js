@@ -10,7 +10,10 @@
      4. the BUILD menu's tooltip never outlives opening REFIT;
      5. THE FEEL: a placed thing drops into its own shadow and settles with a low thunk (a whole line drops machine by machine), a
         deleted thing dissolves behind a sweeping cut line with a falling hiss, a hovered prop lifts a hair — drawn only (the model
-        has already changed), from the station's own synth, no particles. */
+        has already changed), from the station's own synth, no particles;
+     6. MANY AT ONCE: a drag across empty floor in SELECT draws a box and selects everything it touches (Shift adds), Shift+click
+        adds / drops one, Ctrl+A takes the floor; the group moves (drag any member, the arrows), duplicates (Ctrl+D) or goes (Delete)
+        as ONE edit — one UNDO, all-or-nothing; a plain click on empty floor lets go, and with nothing selected opens the room. */
 'use strict';
 const A = require('./_assert.js');
 const fs = require('fs');
@@ -51,12 +54,12 @@ A.ok(/addKey\('POSITION','',\(\)=>\{positionOpen=!positionOpen;renderSelection\(
 
 /* ---------- 3. the editor keys ---------- */
 const key = fn('onKey');
-A.ok(/if \(selectedPropId && tool === 'select'\) \{/.test(key), 'the editor keys act on the SELECTED object only');
+A.ok(/if \(\(selectedPropId \|\| groupIds\.length\) && tool === 'select'\) \{/.test(key), 'the editor keys act on the SELECTED object (or the selected group) only');
 A.ok(/ev\.key === 'Delete' \|\| ev\.key === 'Backspace'\) \{ ev\.preventDefault\(\); deleteSelected/.test(key), 'Delete / Backspace remove it');
 A.ok(/\(ev\.ctrlKey \|\| ev\.metaKey\) && \(ev\.key === 'd' \|\| ev\.key === 'D'\)\) \{ ev\.preventDefault\(\); duplicateSelected/.test(key), 'Ctrl+D duplicates it');
 A.ok(/\(ev\.key === 'c' \|\| ev\.key === 'C'\)\) \{ ev\.preventDefault\(\); copySelected/.test(key) && /\(ev\.key === 'v' \|\| ev\.key === 'V'\) && lastCopy\)/.test(key), 'Ctrl+C picks it up as a stamp; Ctrl+V picks the last copy up again');
 A.ok(/ArrowLeft: \[-1, 0\], ArrowRight: \[1, 0\], ArrowUp: \[0, -1\], ArrowDown: \[0, 1\]/.test(key) && /const n = ev\.shiftKey \? 5 : 1;/.test(key), 'the arrows nudge a tile (Shift: five)');
-A.ok(key.indexOf("if (selectedPropId && tool === 'select')") < key.indexOf("const map = { '0': 'select'"), '…before the number keys pick tools');
+A.ok(key.indexOf("if ((selectedPropId || groupIds.length) && tool === 'select')") > 0 && key.indexOf("if ((selectedPropId || groupIds.length) && tool === 'select')") < key.indexOf("const map = { '0': 'select'"), '…before the number keys pick tools');
 const dup = fn('duplicateSelected');
 A.ok(/const spec = copySpecOf\(p\), at = freeSpotNear\(spec, p\.x, p\.y\);/.test(dup) && /if \(res\.id\) \{ selectedPropId = res\.id; renderSelection\(\); \}/.test(dup), 'a duplicate lands in the nearest clear spot and becomes the selection (Ctrl+D again makes a row)');
 A.ok(!/agentId/.test(fn('copySpecOf')), '…a copy never carries an agent binding (the COPY tool\'s own rule)');
@@ -94,5 +97,54 @@ A.ok(/SFX\.voice\(\{ freq: 140, glide: 62,/.test(fn('sfxLand')) && /SFX\.noise\(
 const feelBlock = build.slice(build.indexOf('THINGS LAND, THINGS DISSOLVE'), build.indexOf('function drawFlashes('));
 A.ok(feelBlock.length > 0 && !/confetti|particle|sparkle/i.test(feelBlock.replace(/no particles, no confetti/, '')), 'eerie, not cute: no particles, no confetti');
 A.ok(/feel: \(\) => \(\{ landing: \[\.\.\.landings\.keys\(\)\], vanishing: vanishing\.length, selected: selectedPropId \}\)/.test(build), 'CDP proof can read what is landing / dissolving mid-animation');
+
+/* ---------- 6. many at once ---------- */
+const down = fn('onDown');
+A.ok(/if \(p && groupIds\.includes\(p\.id\)\) \{ drag=\{mode:'grouppress',propId:p\.id,start:w,cur:w,moved:false,add:ev\.shiftKey\};return; \}/.test(down)
+  && /if \(p\) \{ drag=\{mode:'selectpress',propId:p\.id,start:w,cur:w,moved:false,add:ev\.shiftKey\};return; \}/.test(down),
+  'pressing a member of the group grabs the group; pressing anything else grabs just it (Shift remembered)');
+A.ok(/drag = \{ mode: 'boxpress', start: w, cur: w, moved: false, add: ev\.shiftKey, roomId: station\.roomAt\(w\.tx, w\.ty\) \};/.test(down) && !/openRoomCard\(/.test(down),
+  'a press on empty floor can become a box — the room card waits for the release, never opens on the press');
+A.ok(/if\(drag\.mode==='grouppress'&&drag\.moved\)drag\.mode='groupmove';/.test(build) && /if\(drag\.mode==='boxpress'&&drag\.moved\)drag\.mode='box';/.test(build), '…a press that moves becomes a group drag or a box');
+const up = fn('onUp');
+A.ok(/if \(d\.mode === 'selectpress' \|\| d\.mode === 'grouppress'\) return d\.add \? toggleInSelection\(d\.propId\) : onInspect\(/.test(up)
+  && /if \(d\.mode === 'groupmove'\) return commitGroupMove\(d, ev\);/.test(up) && /if \(d\.mode === 'boxpress'\) return clickEmptyFloor\(d, ev\);/.test(up) && /if \(d\.mode === 'box'\) return commitBox\(d, ev\);/.test(up),
+  'releases: Shift+click toggles, a click inspects one, a group drag commits, a box selects, a plain floor click lets go');
+A.ok(/if \(!d\.add && selectionIds\(\)\.length\) \{ setSelection\(\[\]\); sfx\('click'\); return; \}\n    if \(d\.roomId\) openRoomCard\(d\.roomId, ev\);/.test(fn('clickEmptyFloor')),
+  'a plain click on empty floor lets go of a selection first; with nothing selected the room still opens its card');
+A.ok(/rectsMeet\(propRect\(p\), r\)/.test(fn('propsInBox')) && /setSelection\(d\.add \? selectionIds\(\)\.concat\(ids\) : ids\);/.test(fn('commitBox')),
+  'the box takes everything it TOUCHES; Shift adds to what was already selected');
+A.ok(/groupIds = live\.length > 1 \? live : \[\];/.test(fn('setSelection')) && /selectedPropId = live\.length === 1 \? live\[0\] : null;/.test(fn('setSelection')),
+  'one is a selection, two or more a group (never both)');
+A.ok(/groupIds=\[\];selectedPropId=p\.id;renderSelection\(\);/.test(fn('onInspect')) && /movingPropId=null;selectedPropId=null;groupIds=\[\];renderSelection\(\);/.test(build),
+  'inspecting one thing, or arming any tool, lets go of the group');
+const mg = fn('moveGroupBy');
+A.ok(/return station\.transact\(\(\) => \{/.test(mg) && /sort\(\(a, b\) => \(b\.x \* dx \+ b\.y \* dy\) - \(a\.x \* dx \+ a\.y \* dy\)\)/.test(mg)
+  && /if \(next\.length === pending\.length\) return last/.test(mg) && /error: 'LINK_LOST'/.test(mg),
+  'a group moves as ONE transact: front-first, members wait for each other, and a stuck member or a lost belt link puts it all back');
+A.ok(/!ids\.has\(q\.id\) && !propSpec\(q\.t\)\.flat && rectsMeet\(propRect\(q\), to\)/.test(fn('groupFit')), 'the drag ghost counts only things OUTSIDE the group as in the way');
+A.ok(/const fit = groupFit\(/.test(fn('refusalOf')) && /refusalOf\(res, ids, dx, dy\)/.test(fn('commitGroupMove')) && /refusalOf\(res, ids, dx, dy\)\.msg/.test(fn('nudgeGroup')),
+  'a refused group move names what is in the way, as the ghost did');
+const dg = fn('deleteGroup');
+A.ok(/station\.transact\(\(\) => \{ for \(const p of was\) \{ const r = station\.removeProp\(p\.id\);/.test(dg) && /was\.forEach\(p => vanishProp\(p\)\)/.test(dg),
+  'Delete removes the whole group in one transact (one UNDO), and every member dissolves');
+A.ok(/if \(n - lastVanishSfx < 80\) return;/.test(fn('sfxVanish')), '…on one hiss, not a hiss per member');
+const dup2 = fn('duplicateGroup');
+A.ok(/tries\.push\(\[W \+ gap, 0\], \[0, H \+ gap\], \[-\(W \+ gap\), 0\], \[0, -\(H \+ gap\)\]\)/.test(dup2) && /const res = station\.transact\(/.test(dup2)
+  && /sort\(\(a, b\) => onTable\(a\) - onTable\(b\)\)/.test(dup2) && /setSelection\(made\);/.test(dup2) && /copySpecOf\(p\)/.test(dup2),
+  'Ctrl+D lays the whole arrangement again beside itself (one transact, tables before what stands on them), and the copies become the selection');
+for (const fname of ['deleteSelected', 'duplicateSelected', 'nudgeSelected']) A.ok(/if \(groupIds\.length\) return /.test(fn(fname)), fname + ' speaks for the group when there is one');
+A.ok(/COPY holds one thing at a time/.test(fn('copySelected')), 'Ctrl+C on a group says COPY holds one thing and points at Ctrl+D');
+const gc = fn('renderGroupCard');
+A.ok(/key\('MOVE', 'drag'/.test(gc) && /key\('DUPLICATE', 'Ctrl\+D'/.test(gc) && /key\('DELETE', 'Del'/.test(gc) && /ps\.slice\(0, 3\)\.forEach\(p => propArtInto\(art, p\)\)/.test(gc),
+  'the group card: up to three of them in the art well, then MOVE / DUPLICATE / DELETE wearing their keys');
+A.ok(/\(ev\.key === 'a' \|\| ev\.key === 'A'\) && tool === 'select'\) \{ ev\.preventDefault\(\); selectAllProps/.test(key), 'Ctrl+A takes the whole floor');
+A.ok(/if \(selectedPropId \|\| movingPropId \|\| groupIds\.length\) \{ selectTool\('select'\); return; \}/.test(key), 'Esc lets go of a group');
+A.ok(/for\(const id of groupIds\)\{const gp=station\.propById\(id\);if\(gp\)drawPropSelection\(gp,t,'rgba\(244,200,112,\.9\)',false\);\}/.test(fn('drawHover')), 'every member wears the selection gold');
+A.ok(/if \(drag && drag\.mode === 'box'\) \{ drawSelectBox\(t\); return; \}/.test(build) && /if \(g\.group\) \{ drawGroupGhost\(t, now, g\); return; \}/.test(build), 'the box and a group drag each draw their own ghost');
+A.ok(/RELEASE TO SELECT/.test(fn('drawSelectBox')) && /' THINGS'\]/.test(fn('drawGroupGhost')), '…the box says how many it will take; the group ghost says how far and how many');
+A.ok(/groupmove: 1 \}/.test(build), 'a group drag ticks tile by tile like any move');
+A.ok(/<span><b>Drag a box<\/b> Select several<\/span>/.test(build), 'HELP teaches the box');
+A.ok(/selection: \(\) => selectionIds\(\),/.test(build), 'CDP proof can read the selection');
 
 A.report('build-mode-easy.test');

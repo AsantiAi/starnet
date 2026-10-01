@@ -42,6 +42,11 @@
 .refit-overlay .refit-sel-art { display: grid; place-items: center; width: 84px; height: 54px; border-radius: 8px;
   background: radial-gradient(ellipse 72% 70% at 50% 64%, rgba(130,170,150,.12), transparent 76%), rgba(0,0,0,.22); box-shadow: inset 0 0 0 1px var(--refit-edge); }
 .refit-overlay .refit-sel-art canvas { display: block; width: 84px; height: 54px; }
+/* a group: up to three of them, stacked in the one well */
+.refit-overlay .refit-sel-art.is-group canvas { grid-area: 1 / 1; }
+.refit-overlay .refit-sel-art.is-group canvas:nth-child(1) { transform: translate(-13px, -7px) scale(.62); }
+.refit-overlay .refit-sel-art.is-group canvas:nth-child(2) { transform: translate(13px, -7px) scale(.62); }
+.refit-overlay .refit-sel-art.is-group canvas:nth-child(3) { transform: translate(0, 9px) scale(.62); }
 .refit-overlay .refit-sel-name { display: grid; gap: 2px; min-width: 0; }
 .refit-overlay .refit-sel-name b { font-weight: normal; font-size: 17px; line-height: 1.15; letter-spacing: .6px; color: var(--ph-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .refit-overlay .refit-sel-name small { font-size: 13px; color: var(--ph-dim); line-height: 1.25; }

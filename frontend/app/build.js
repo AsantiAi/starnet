@@ -17,7 +17,7 @@ const Build = (() => {
     // place something. Key 0, ESC and right-click all return here from any armed tool.
     // labels are WORDS ONLY — the leading symbol each one used to carry (◎ ▦ ═ …) is now a pixel
     // icon painted on the button's canvas, because those glyphs fall back to a system font
-    { id: 'select', key: '0', label: 'SELECT', verb: 'click an object for Move, Rotate, Copy or Delete', hint: 'click an object to select it · edit it with the buttons in the build kit', cursor: 'default' },
+    { id: 'select', key: '0', label: 'SELECT', verb: 'click an object for Move, Rotate, Copy or Delete', hint: 'click an object to select it · drag a box to select several', cursor: 'default' },
     { id: 'room', key: '1', label: 'ROOM', verb: 'click to place · drag to size', hint: 'click the deck to place a room at the last size you drew, or drag out any size', cursor: 'crosshair' },
     { id: 'hall', key: '2', label: 'HALLWAY', verb: 'click to run · drag to size', hint: 'click to run a corridor at the last length you drew, or drag along an axis for any length', cursor: 'crosshair' },
     // 'paint' stays the INTERNAL id (the drag mode, the model's paintTiles verb, the key map and every
@@ -140,7 +140,7 @@ const Build = (() => {
 
   // interaction state
   let tool = 'select', kind = 'hab', style = 'cobalt', mat = 'plate', hallWidth = 2, propType = 'war_intelcab', propCat = 'all', propTier = 'functional';
-  let selectedPropId=null, movingPropId=null, positionOpen=false;
+  let selectedPropId=null, movingPropId=null, positionOpen=false, groupIds=[];   // groupIds: a selection of two or more (MANY AT ONCE)
   let propSection = 'decoration', propAbility = '', equipmentAgentId = '';
   let buildGroup = 'props';
   /* WHERE REFIT OPENS (2026-09-27 audit F1/B5): WORK › WORKFLOWS opens it straight on the Conveyors tab (openWorkflows), and a
@@ -2384,7 +2384,7 @@ const Build = (() => {
 
   function selectTool(id, o) {
     const wasSelect = tool === 'select';
-    movingPropId=null;selectedPropId=null;renderSelection();
+    movingPropId=null;selectedPropId=null;groupIds=[];renderSelection();
     if (drag || dragPid != null) releaseDrag();
     tool = id; drag = null; connectFrom = null; dupe = null; hideTip(); hidePropCard();
     if (id !== 'select' && !(o && o.keepGroup)) buildGroup = BUILD_GROUPS.find(g => g[2].includes(id))?.[0] || buildGroup;
@@ -2828,7 +2828,7 @@ const Build = (() => {
           </div>
         </div>
         <p class="refit-guide-foot">For a head start, open <b>${esc(G.tab)} › ${esc(G.lines)}</b> (${G.lineCount} ready-made layouts), stamp one, then assign its bays. <b>${esc(G.preview)}</b> animates the routing and runs no AI job. To test for real, click any machine on a line and use <b>STEP TEST</b> in its Workflow panel: it runs the real agents one step at a time and pauses at every hand-off so you can read or edit what moves on.</p>
-        <div class="refit-guide-shortcuts"><span><b>Wheel</b> Zoom</span><span><b>Space + drag</b> Pan</span><span><b>Ctrl + Z</b> Undo</span><span><b>SAVE &amp; EXIT</b> Leave (or Esc twice)</span></div><button class="btn-sm refit-primary" id="refit-guide-go">START BUILDING</button>
+        <div class="refit-guide-shortcuts"><span><b>Wheel</b> Zoom</span><span><b>Space + drag</b> Pan</span><span><b>Ctrl + Z</b> Undo</span><span><b>Drag a box</b> Select several</span><span><b>SAVE &amp; EXIT</b> Leave (or Esc twice)</span></div><button class="btn-sm refit-primary" id="refit-guide-go">START BUILDING</button>
       </div>`;
     root.appendChild(g);
     g.querySelectorAll('.refit-step').forEach(s => {
@@ -4527,15 +4527,16 @@ const Build = (() => {
     const w = toWorldTile(ev);
     if (tool === 'select') {
       // SELECT (the default): a click INSPECTS what's under it — machine → its editor/picker/flow
-      // card, belt tile → where this lane goes. Empty deck does nothing (space-drag still pans).
+      // card, belt tile → where this lane goes. A drag across empty deck draws a SELECTION BOX (MANY AT ONCE).
       const pid = propAtEvent(ev);
       const p = pid && station.propById(pid);
-      if (p) { drag={mode:'selectpress',propId:p.id,start:w,cur:w,moved:false};return; }
+      // a member of a selected group: a drag moves the whole group, a click (no drag) selects just it; Shift+click adds / drops one
+      if (p && groupIds.includes(p.id)) { drag={mode:'grouppress',propId:p.id,start:w,cur:w,moved:false,add:ev.shiftKey};return; }
+      if (p) { drag={mode:'selectpress',propId:p.id,start:w,cur:w,moved:false,add:ev.shiftKey};return; }
       if (station.beltAt(w.tx, w.ty)) { openBeltCard(w.tx, w.ty, ev); return; }
-      // ...and a ROOM opens its own sheet. Clicking the thing you spent build mode MAKING used to
-      // be the one dead click in the editor.
-      const rid = station.roomAt(w.tx, w.ty);
-      if (rid) { openRoomCard(rid, ev); return; }
+      // ...and a ROOM opens its own sheet — on the RELEASE now, so the same press can become a box. Clicking the thing
+      // you spent build mode MAKING used to be the one dead click in the editor.
+      drag = { mode: 'boxpress', start: w, cur: w, moved: false, add: ev.shiftKey, roomId: station.roomAt(w.tx, w.ty) };
       return;
     }
     if (tool === 'belt') {
@@ -4614,6 +4615,8 @@ const Build = (() => {
     if (drag) {
       if (w.tx !== drag.cur.tx || w.ty !== drag.cur.ty) { drag.moved = true; snapTick(drag.mode); }
       if(drag.mode==='selectpress'&&drag.moved)drag.mode='propmove';
+      if(drag.mode==='grouppress'&&drag.moved)drag.mode='groupmove';
+      if(drag.mode==='boxpress'&&drag.moved)drag.mode='box';
       if (drag.mode === 'paint' || drag.mode === 'reclaim') rasterTo(drag, w);   // accumulate every tile the brush crosses
       drag.cur = w;
     } else {
@@ -4635,7 +4638,10 @@ const Build = (() => {
     const d = drag; drag = null;
     setCursor();
     if (d.mode === 'pan') return;
-    if (d.mode === 'selectpress') return onInspect(station.propById(d.propId),ev);
+    if (d.mode === 'selectpress' || d.mode === 'grouppress') return d.add ? toggleInSelection(d.propId) : onInspect(station.propById(d.propId),ev);
+    if (d.mode === 'groupmove') return commitGroupMove(d, ev);
+    if (d.mode === 'boxpress') return clickEmptyFloor(d, ev);
+    if (d.mode === 'box') return commitBox(d, ev);
     if (d.mode === 'draw') return commitDraw(d, ev);
     if (d.mode === 'move') return commitMove(d, ev);
     if (d.mode === 'propmove') return commitPropMove(d, ev);
@@ -4779,7 +4785,7 @@ const Build = (() => {
   function onInspect(p,ev) {
     if(!p)return;
     if(ev&&ev.detail>=2&&isEditableProp(p.t))return configureProp(p,ev);
-    selectedPropId=p.id;renderSelection();
+    groupIds=[];selectedPropId=p.id;renderSelection();
     // THE CARD AND THE FLOOR ARE ONE LINE: a click on a line machine opens the docked Workflow panel on it
     // (or re-selects it there), without panning — the floor is where the Commander is looking
     if(WF_PART[p.t]){finFocusLine(p.id);openWorkflowPanel(p.id,true);}
@@ -4791,6 +4797,11 @@ const Build = (() => {
      Ctrl+D, Ctrl+C, Delete, the arrows nudge) — and the library stays where it was. */
   function renderSelection(){
     const host=root&&root.querySelector('#refit-selection');if(!host)return;
+    if(groupIds.length){
+      const ps=groupIds.map(id=>station&&station.propById(id)).filter(Boolean);
+      if(ps.length>1){host.hidden=false;root.classList.add('has-selection');return renderGroupCard(host,ps);}
+      groupIds=[];if(ps.length===1)selectedPropId=ps[0].id;   // an undo took the rest away: one is just a selection
+    }
     const p=station&&station.propById(selectedPropId);host.hidden=!p;root.classList.toggle('has-selection',!!p);
     if(!p){host.replaceChildren();return;}
     host.innerHTML='<div class="refit-sel-head"><span class="refit-sel-art" aria-hidden="true"></span><span class="refit-sel-name"><b>'+esc(propLabel(p.t))+'</b><small>'+p.w+' × '+p.h+' tiles'+(canTurn(p.t)?' · facing '+FACE_WORD[(p.r|0)&3]:'')+' · arrows nudge</small></span>'
@@ -4851,6 +4862,7 @@ const Build = (() => {
     return null;
   }
   function deleteSelected(ev) {
+    if (groupIds.length) return deleteGroup(ev);
     const p = station.propById(selectedPropId); if (!p) return false;
     const had = linkedFloor() && isWorkflowType(p.t) && (station.links() || []).some(l => l.from.prop === p.id || l.to.prop === p.id);
     const was = Object.assign({}, p);
@@ -4861,6 +4873,7 @@ const Build = (() => {
     return true;
   }
   function duplicateSelected(ev) {
+    if (groupIds.length) return duplicateGroup(ev);
     const p = station.propById(selectedPropId); if (!p) return false;
     const spec = copySpecOf(p), at = freeSpotNear(spec, p.x, p.y);
     if (!at) { sfx('bad'); flashTip(ev, 'no clear floor beside it for a copy — clear some space, or COPY it to place one anywhere'); return true; }
@@ -4877,17 +4890,188 @@ const Build = (() => {
   }
   let lastCopy = null;   // the last prop picked up with Ctrl+C / COPY — Ctrl+V picks it up again
   function copySelected(ev) {
+    if (groupIds.length) { sfx('bad'); flashTip(ev, 'COPY holds one thing at a time — Ctrl+D duplicates the whole group'); return true; }
     const p = station.propById(selectedPropId); if (!p) return false;
     selectTool('dupe', { keepGroup: true, silent: true });
     pickupDupe({ tx: p.x, ty: p.y }, ev, p.id);
     return true;
   }
   function nudgeSelected(dx, dy, ev) {
+    if (groupIds.length) return nudgeGroup(dx, dy, ev);
     const p = station.propById(selectedPropId); if (!p) return false;
     const res = station.moveProp(p.id, dx, dy);
     if (res && res.ok) { snapTick('propmove'); pushMoves([{ from: { x1: p.x - dx, y1: p.y - dy, x2: p.x - dx + p.w - 1, y2: p.y - dy + p.h - 1 }, to: { x1: p.x, y1: p.y, x2: p.x + p.w - 1, y2: p.y + p.h - 1 } }]); renderSelection(); }
     else { sfx('bad'); flashTip(ev, (res && res.msg) || 'blocked — nothing moved'); }
     return true;
+  }
+  /* ---------- MANY AT ONCE (2026-10-01 build-mode upgrade) ----------
+     In SELECT a drag across empty floor draws a box, and everything it touches is selected (Shift adds to what is already
+     selected); Shift+click adds or drops one; Ctrl+A takes the whole floor. The group then moves — drag any of them, or the
+     arrows — duplicates (Ctrl+D: the whole arrangement again, beside itself) or goes (Delete) as ONE edit: one UNDO, and
+     all-or-nothing (station.transact puts back anything half-done). A plain click on empty floor lets go of a selection; with
+     nothing selected it still opens that room's card. */
+  const selectionIds = () => groupIds.length ? groupIds.slice() : (selectedPropId ? [selectedPropId] : []);
+  function setSelection(ids) {
+    const live = [...new Set(ids)].filter(id => station.propById(id));
+    groupIds = live.length > 1 ? live : [];
+    selectedPropId = live.length === 1 ? live[0] : null;
+    movingPropId = null; positionOpen = false;
+    renderSelection();
+    if (live.length > 1) setHint(live.length + ' selected · drag any of them to move them together · Ctrl+D duplicates · Delete removes');
+    else if (live.length === 1) setHint('Selected ' + propLabel(station.propById(live[0]).t) + ' · choose an action in the build kit');
+    else setHint();
+  }
+  const propRect = (p, dx, dy) => ({ x1: p.x + (dx | 0), y1: p.y + (dy | 0), x2: p.x + (dx | 0) + (p.w || 1) - 1, y2: p.y + (dy | 0) + (p.h || 1) - 1 });
+  const rectsMeet = (a, b) => a.x1 <= b.x2 && a.x2 >= b.x1 && a.y1 <= b.y2 && a.y2 >= b.y1;
+  let boxMemo = null;
+  function propsInBox(r) {
+    const key = [geoVer, r.x1, r.y1, r.x2, r.y2].join('|');
+    if (!boxMemo || boxMemo.key !== key) boxMemo = { key, ids: station.props().filter(p => rectsMeet(propRect(p), r)).map(p => p.id) };
+    return boxMemo.ids;
+  }
+  function commitBox(d, ev) {
+    const ids = propsInBox(norm(d.start, d.cur));
+    if (!ids.length && !d.add) { setSelection([]); sfx('bad'); flashTip(ev, 'nothing in that box — drag across the things you want'); return; }
+    sfx('click');
+    setSelection(d.add ? selectionIds().concat(ids) : ids);
+  }
+  // a plain click on empty floor: lets go of a selection; with nothing selected, a ROOM opens its own sheet (as it always has)
+  function clickEmptyFloor(d, ev) {
+    if (!d.add && selectionIds().length) { setSelection([]); sfx('click'); return; }
+    if (d.roomId) openRoomCard(d.roomId, ev);
+  }
+  function toggleInSelection(id) {
+    const ids = selectionIds(), i = ids.indexOf(id);
+    if (i >= 0) ids.splice(i, 1); else ids.push(id);
+    sfx('click'); setSelection(ids);
+  }
+  function selectAllProps(ev) {
+    const ids = station.props().map(p => p.id);
+    if (!ids.length) { sfx('bad'); flashTip(ev, 'nothing on the floor to select yet'); return; }
+    sfx('click'); setSelection(ids);
+  }
+  /* move every member by (dx, dy) as ONE edit. Members go front-first along the motion, and one that would step into another's
+     spot waits for it (pass after pass). Anything that cannot move — or a belt link that would be taken up on the way — puts
+     the whole edit back: nothing is ever left half-moved. */
+  function moveGroupBy(ids, dx, dy) {
+    if (!dx && !dy) return { ok: true };
+    const order = ids.map(id => station.propById(id)).filter(Boolean).sort((a, b) => (b.x * dx + b.y * dy) - (a.x * dx + a.y * dy)).map(p => p.id);
+    return station.transact(() => {
+      let pending = order, last = null;
+      while (pending.length) {
+        const next = [];
+        for (const id of pending) {
+          const r = station.moveProp(id, dx, dy);
+          if (!r || !r.ok) { next.push(id); last = r; continue; }
+          if (Array.isArray(r.lost) && r.lost.length) return { ok: false, error: 'LINK_LOST', msg: 'moving these together would take up a belt link — move those machines one at a time (their belts follow)' };
+        }
+        if (next.length === pending.length) return last || { ok: false, msg: 'blocked — nothing moved' };
+        pending = next;
+      }
+      return { ok: true };
+    });
+  }
+  /* will the group fit at (dx, dy)? This only colours the drag ghost — moveGroupBy is the judge. Each member is asked of the
+     floor, and its way counts as blocked only by something OUTSIDE the group: members step out of each other's way. */
+  let groupFitMemo = null;
+  function groupFit(ps, dx, dy) {
+    const key = [geoVer, dx, dy, ps.map(p => p.id).join(',')].join('|');
+    if (groupFitMemo && groupFitMemo.key === key) return groupFitMemo.v;
+    const ids = new Set(ps.map(p => p.id));
+    let v = { ok: true };
+    for (const p of ps) {
+      const r = station.canPlaceProp(p.t, p.x + dx, p.y + dy, p.w, p.h, p.id);
+      if (r && r.ok) continue;
+      if (r && r.error === 'OVERLAP') {
+        const to = propRect(p, dx, dy), hit = station.props().find(q => !ids.has(q.id) && !propSpec(q.t).flat && rectsMeet(propRect(q), to));
+        if (!hit) continue;
+        v = { ok: false, error: 'OVERLAP', msg: 'Blocked by ' + (propSpec(hit.t).label || hit.t) + ' · choose a clear space' }; break;
+      }
+      if (r && r.error === 'NEEDS_SURFACE' && ps.some(q => q.id !== p.id && rectsMeet(propRect(q), propRect(p)))) continue;   // its table moves with it
+      v = r || { ok: false, msg: 'blocked' }; break;
+    }
+    groupFitMemo = { key, v };
+    return v;
+  }
+  function commitGroupMove(d, ev) {
+    const dx = d.cur.tx - d.start.tx, dy = d.cur.ty - d.start.ty;
+    if (!dx && !dy) { hideTip(); return; }
+    const ids = groupIds.slice(), res = moveGroupBy(ids, dx, dy);
+    feedback(refusalOf(res, ids, dx, dy), ev, 'moved ' + ids.length + ' together · Undo puts them back');
+    if (res && res.ok) { landProps(ids, 25); renderSelection(); }
+  }
+  function nudgeGroup(dx, dy, ev) {
+    const ids = groupIds.slice(), from = ids.map(id => station.propById(id)).filter(Boolean).map(p => propRect(p));
+    const res = moveGroupBy(ids, dx, dy);
+    if (res && res.ok) { snapTick('propmove'); pushMoves(from.map(r => ({ from: r, to: { x1: r.x1 + dx, y1: r.y1 + dy, x2: r.x2 + dx, y2: r.y2 + dy } }))); renderSelection(); }
+    else { sfx('bad'); flashTip(ev, refusalOf(res, ids, dx, dy).msg || 'blocked — nothing moved'); }
+    return true;
+  }
+  // a refused group move says what is in the way, the way its ghost did (the model's own refusal only knows "overlaps a prop")
+  function refusalOf(res, ids, dx, dy) {
+    if (!res || res.ok) return res;
+    const fit = groupFit(ids.map(id => station.propById(id)).filter(Boolean), dx, dy);
+    return fit && !fit.ok && fit.msg ? fit : res;
+  }
+  function deleteGroup(ev) {
+    const was = groupIds.map(id => station.propById(id)).filter(Boolean).map(p => Object.assign({}, p));
+    if (!was.length) return false;
+    const res = station.transact(() => { for (const p of was) { const r = station.removeProp(p.id); if (!r || !r.ok) return r; } return { ok: true }; });
+    if (res && res.ok) { pushFlash(was.map(p => propRect(p)), true); was.forEach(p => vanishProp(p)); setSelection([]); flashUndo(); }
+    feedback(res, ev, 'removed ' + was.length + ' things · Undo restores them');
+    return true;
+  }
+  /* Ctrl+D on a group: the whole arrangement again, beside itself — right, below, left, above, then a tile further out each
+     time — and the copies become the selection, so Ctrl+D again lays the next one. What stands on a table goes down after its
+     table. A quick look at the floor first; the real lay-down (one transact, all-or-nothing) only where that look says yes. */
+  function duplicateGroup(ev) {
+    const ps = groupIds.map(id => station.propById(id)).filter(Boolean);
+    if (ps.length < 2) return false;
+    const x1 = Math.min(...ps.map(p => p.x)), y1 = Math.min(...ps.map(p => p.y));
+    const W = Math.max(...ps.map(p => p.x + (p.w || 1))) - x1, H = Math.max(...ps.map(p => p.y + (p.h || 1))) - y1;
+    const onTable = p => (station.mountOf && station.mountOf(p)) ? 1 : 0;
+    const plan = ps.slice().sort((a, b) => onTable(a) - onTable(b)).map(p => ({ p, spec: copySpecOf(p) }));
+    const looksClear = (dx, dy) => plan.every(({ p, spec }) => onTable(p) || (station.canPlaceProp(spec.t, p.x + dx, p.y + dy, spec.w, spec.h) || {}).ok);
+    const tries = [];
+    for (let gap = 0; gap <= 6; gap++) tries.push([W + gap, 0], [0, H + gap], [-(W + gap), 0], [0, -(H + gap)]);
+    for (const [dx, dy] of tries) {
+      if (!looksClear(dx, dy)) continue;
+      const made = [];
+      const res = station.transact(() => {
+        for (const { p, spec } of plan) {
+          const r = station.addProp(Object.assign({ t: spec.t, x: p.x + dx, y: p.y + dy, w: spec.w, h: spec.h, block: spec.block }, spec.cfg));
+          if (!r || !r.ok) return r || { ok: false };
+          made.push(r.id);
+        }
+        return { ok: true };
+      });
+      if (!res || !res.ok) continue;
+      pushFlash(plan.map(({ p }) => propRect(p, dx, dy)), false);
+      landProps(made, 40);
+      if (typeof StationUI !== 'undefined' && StationUI.pokeQuests) { try { StationUI.pokeQuests(); } catch (_) {} }
+      setSelection(made);
+      flashTip(ev, 'duplicated ' + made.length + ' · the copies are selected · Ctrl+D again for another', true);
+      return true;
+    }
+    sfx('bad'); flashTip(ev, 'no clear floor beside them for a copy of all ' + ps.length + ' — clear some space, or select fewer');
+    return true;
+  }
+  // the group's card: up to three of them in the art well, how many and what, then the three things a group can do
+  function renderGroupCard(host, ps) {
+    const count = {};
+    for (const p of ps) { const l = propLabel(p.t); count[l] = (count[l] || 0) + 1; }
+    const kinds = Object.keys(count);
+    const names = kinds.slice(0, 3).map(l => count[l] > 1 ? l + ' ×' + count[l] : l).join(' · ') + (kinds.length > 3 ? ' · +' + (kinds.length - 3) + ' more' : '');
+    host.innerHTML = '<div class="refit-sel-head"><span class="refit-sel-art is-group" aria-hidden="true"></span><span class="refit-sel-name"><b>' + ps.length + ' SELECTED</b><small>' + esc(names) + '</small></span>'
+      + '<button class="bb sm refit-sel-x" type="button" aria-label="Deselect all" data-tip="Let go of all of them · Esc">✕</button></div><div class="refit-selection-actions"></div>';
+    const art = host.querySelector('.refit-sel-art');
+    ps.slice(0, 3).forEach(p => propArtInto(art, p));
+    host.querySelector('.refit-sel-x').onclick = () => { setSelection([]); sfx('click'); };
+    const actions = host.querySelector('.refit-selection-actions');
+    const key = (label, k, fn, cls) => { const b = document.createElement('button'); b.className = 'bb sm refit-sel-act' + (cls ? ' ' + cls : ''); b.type = 'button'; b.innerHTML = '<span>' + esc(label) + '</span><kbd>' + esc(k) + '</kbd>'; b.onclick = fn; actions.appendChild(b); };
+    key('MOVE', 'drag', () => { sfx('click'); flashTip(orientEv(), 'drag any of them — they all move together · the arrows nudge them a tile', true); });
+    key('DUPLICATE', 'Ctrl+D', () => duplicateGroup(orientEv()));
+    key('DELETE', 'Del', () => deleteGroup(orientEv()), 'refit-sel-del');
   }
   function configureProp(p, ev) {
     if (!p) return;
@@ -5229,7 +5413,7 @@ const Build = (() => {
       const details = root.querySelector('.refit-propworkspace.show-details');
       if (details) { const toggle = details.querySelector('.refit-details-toggle'); toggle.click(); toggle.focus(); return; }
       if (drag || connectFrom || dupe) { selectTool('select'); return; }
-      if (selectedPropId || movingPropId) { selectTool('select'); return; }
+      if (selectedPropId || movingPropId || groupIds.length) { selectTool('select'); return; }
       if (typeof WorkflowPanel !== 'undefined' && WorkflowPanel.isOpen()) { WorkflowPanel.close(); return; }   // the docked panel closes (saving) before REFIT does
       if (tool !== 'select') { deselectTool(); return; }                 // then the armed tool → SELECT
       /* LEAVING IS ITS OWN, EXPLICIT PRESS (2026-09-23 playtest). A bare select-mode ESC used to close REFIT
@@ -5255,8 +5439,9 @@ const Build = (() => {
     // Both are no-ops with a reason on art that cannot turn/flip.
     if (ev.key === 'r' || ev.key === 'R') { ev.preventDefault(); turnUnderCursor(ev.shiftKey ? -1 : 1); return; }
     if (ev.key === 'm' || ev.key === 'M') { ev.preventDefault(); flipUnderCursor(); return; }
-    // EDITOR KEYS on the selected object (see THE EDITOR KEYS); with nothing selected they do nothing, quietly
-    if (selectedPropId && tool === 'select') {
+    if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'a' || ev.key === 'A') && tool === 'select') { ev.preventDefault(); selectAllProps(orientEv()); return; }
+    // EDITOR KEYS on the selected object — or the selected group (MANY AT ONCE); with nothing selected they do nothing, quietly
+    if ((selectedPropId || groupIds.length) && tool === 'select') {
       if (ev.key === 'Delete' || ev.key === 'Backspace') { ev.preventDefault(); deleteSelected(orientEv()); return; }
       if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'd' || ev.key === 'D')) { ev.preventDefault(); duplicateSelected(orientEv()); return; }
       if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'c' || ev.key === 'C')) { ev.preventDefault(); copySelected(orientEv()); return; }
@@ -5522,6 +5707,11 @@ const Build = (() => {
       const rect = { x1: nx, y1: ny, x2: nx + p.w - 1, y2: ny + p.h - 1 };
       const links = isWorkflowType(p.t) && (dx || dy) ? ghostLinks({ props: [{ t: p.t, x: nx, y: ny, w: p.w, h: p.h }], ignoreId: p.id }) : [];
       return { rects: [rect], v: station.canPlaceProp(p.t, nx, ny, p.w, p.h, p.id), move: true, dx, dy, preview:{...p,x:nx,y:ny}, links, leftBehind: (dx || dy) ? beltsLeftBehind(p, nx, ny) : 0 };
+    }
+    if (drag.mode === 'groupmove') {
+      const ps = groupIds.map(id => station.propById(id)).filter(Boolean); if (!ps.length) return null;
+      const dx = drag.cur.tx - drag.start.tx, dy = drag.cur.ty - drag.start.ty;
+      return { rects: ps.map(p => propRect(p, dx, dy)), v: groupFit(ps, dx, dy), move: true, dx, dy, group: ps.map(p => ({ ...p, x: p.x + dx, y: p.y + dy })) };
     }
     if (drag.mode === 'move') {
       const rm = station.roomById(drag.roomId); if (!rm) return null;
@@ -5977,7 +6167,9 @@ const Build = (() => {
     if (typeof SFX === 'undefined' || !SFX.voice || !SFX.ctx) return;
     try { if (SFX.noise) SFX.noise({ dur: 0.06, cut: 700, cut2: 160, type: 'lowpass', vol: 0.1 }); SFX.voice({ freq: 140, glide: 62, dur: 0.12, type: 'sine', vol: 0.2, atk: 0.002, cut: 800 }); } catch (_) {}
   }
+  let lastVanishSfx = 0;
   function sfxVanish() {
+    const n = performance.now(); if (n - lastVanishSfx < 80) return; lastVanishSfx = n;   // a group dissolves on one hiss
     if (typeof SFX === 'undefined' || !SFX.noise || !SFX.ctx) return;
     try { SFX.noise({ dur: 0.26, cut: 4200, cut2: 500, type: 'bandpass', q: 1.1, vol: 0.06 }); if (SFX.voice) SFX.voice({ freq: 480, glide: 150, dur: 0.2, type: 'triangle', vol: 0.05, atk: 0.006 }); } catch (_) {}
   }
@@ -6046,7 +6238,7 @@ const Build = (() => {
      is the point — the paint and delete brushes raster whole runs of tiles per frame and would
      machine-gun it. */
   let lastTick = 0;
-  const SNAP_GESTURES = { draw: 1, beltrun: 1, move: 1, propmove: 1, propstamp: 1 };
+  const SNAP_GESTURES = { draw: 1, beltrun: 1, move: 1, propmove: 1, propstamp: 1, groupmove: 1 };
   function snapTick(mode) {
     if (!SNAP_GESTURES[mode]) return;
     const n = performance.now();
@@ -6678,6 +6870,7 @@ const Build = (() => {
     if(selected){
       drawPropSelection(selected,t,'rgba(244,200,112,.9)');
     }
+    for(const id of groupIds){const gp=station.propById(id);if(gp)drawPropSelection(gp,t,'rgba(244,200,112,.9)',false);}
     if (drag) return;
     // a hovered prop (select/move/reclaim) outlines on top of any room outline
     if ((tool === 'select' || tool === 'move' || tool === 'reclaim' || (tool === 'dupe' && !dupe)) && hoverPropId) {
@@ -6930,6 +7123,31 @@ const Build = (() => {
     }
     return (g.v && g.v.msg) || 'Choose a clear space';
   }
+  // the selection box (SELECT, a drag across empty floor): the tiles it covers, and a cyan outline on everything it will take
+  function drawSelectBox(t) {
+    const r = norm(drag.start, drag.cur), ids = propsInBox(r);
+    for (const id of ids) { const p = station.propById(id); if (p) drawPropSelection(p, t, 'rgba(120,220,255,0.95)', false); }
+    const X = r.x1 * t, Y = r.y1 * t, W = (r.x2 - r.x1 + 1) * t, H = (r.y2 - r.y1 + 1) * t;
+    ctx.save();
+    ctx.fillStyle = 'rgba(120,220,255,0.06)'; ctx.fillRect(X, Y, W, H);
+    ctx.strokeStyle = 'rgba(120,220,255,0.85)'; ctx.lineWidth = 1.2 / zoom; ctx.setLineDash([4 / zoom, 3 / zoom]);
+    ctx.strokeRect(X + 0.5 / zoom, Y + 0.5 / zoom, W - 1 / zoom, H - 1 / zoom);
+    ctx.restore();
+    ghostBadge(t, ids.length ? [ids.length + (ids.length === 1 ? ' THING' : ' THINGS'), drag.add ? 'RELEASE TO ADD THEM' : 'RELEASE TO SELECT'] : ['DRAG ACROSS WHAT YOU WANT'], ids.length > 0, r);
+  }
+  // a group being dragged: every member's art at its new spot, outlined green (it fits) or red (something outside the group is in the way)
+  function drawGroupGhost(t, now, g) {
+    const ok = !!(g.v && g.v.ok), line = ok ? 'rgba(120,255,170,0.95)' : 'rgba(255,120,110,0.95)', fill = ok ? 'rgba(80,255,140,0.12)' : 'rgba(255,90,80,0.16)';
+    const ps = g.group.slice().sort((a, b) => (a.y + (a.h || 1)) - (b.y + (b.h || 1)));
+    ctx.save(); ctx.globalAlpha = 0.65; PropSprites.setCtx(ctx); PropSprites.setNow(now);
+    try { for (const p of ps) { const mount = station.mountOf ? station.mountOf(p) : null; PropSprites.draw(mount ? { ...p, mount } : p, false); } } finally { ctx.restore(); }
+    for (const p of ps) { const r = propRect(p); ctx.fillStyle = fill; ctx.fillRect(r.x1 * t, r.y1 * t, (r.x2 - r.x1 + 1) * t, (r.y2 - r.y1 + 1) * t); drawPropSelection(p, t, line, false); }
+    let bb = g.rects[0];
+    for (const r of g.rects) bb = { x1: Math.min(bb.x1, r.x1), y1: Math.min(bb.y1, r.y1), x2: Math.max(bb.x2, r.x2), y2: Math.max(bb.y2, r.y2) };
+    const lines = ['MOVE ' + (g.dx >= 0 ? '+' : '') + g.dx + ', ' + (g.dy >= 0 ? '+' : '') + g.dy + ' · ' + ps.length + ' THINGS'];
+    if (!ok) lines.push(String((g.v && g.v.msg) || 'blocked').toUpperCase());
+    ghostBadge(t, lines, ok, bb);
+  }
   function drawGhost(t, now) {
     // paint brush: tint the crossed tiles with the chosen deck colour
     if (drag && drag.mode === 'paint' && drag.moved) {
@@ -6952,8 +7170,10 @@ const Build = (() => {
       if (bb) ghostBadge(t, n ? [n + (n === 1 ? ' BELT' : ' BELTS'), 'RELEASE TO CLEAR'] : ['DRAG ALONG A BELT'], n > 0, bb);
       return;
     }
+    if (drag && drag.mode === 'box') { drawSelectBox(t); return; }
     const g = ghostInfo();
     if (!g) return;
+    if (g.group) { drawGroupGhost(t, now, g); return; }
     // Show the actual art at the exact candidate footprint, including its facing
     // and tabletop lift. The outline still communicates the model's occupied tiles.
     const rr=g.rects[0];
@@ -7193,6 +7413,8 @@ const Build = (() => {
     isOpen: () => running,
     // the build feel (2026-10-01): what is landing / dissolving right now — CDP proof reads these mid-animation
     feel: () => ({ landing: [...landings.keys()], vanishing: vanishing.length, selected: selectedPropId }),
+    // MANY AT ONCE: the ids selected right now (one, a group, or none)
+    selection: () => selectionIds(),
     // the armed tool (select = nothing armed) — CDP proof scripts assert the deselect gestures on this
     tool: () => tool,
     // the live WorldModel — for CDP verify scripts to lay a floor through the REAL validated
