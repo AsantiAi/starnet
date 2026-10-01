@@ -408,6 +408,57 @@ async function opensWithin(t, ms) {
     A.ok(t.Voice.isListening() === true, 'recorder: mic works after re-grant');
   }
 
+  // --- Live re-arm must not cancel the reply it is waiting for ----------------------------------
+  // 2026-10-01 ("the fun voice of Onyx has been completely absent since I upgraded from 0.10.0"): Live
+  // dictation re-opens the mic while the run thinks; startListening() called stopSpeaking() unconditionally,
+  // bumping the reply token chat.js captured at send — every chunk of the coming reply was dropped. And once
+  // audio starts, a still-open dictation take must be discarded so the agent never hears itself.
+  {
+    const requests = [];
+    const t = boot({ Audio: AutoEndAudio, fetch: (url, o) => {
+      if (String(url).includes('/api/tts')) { requests.push(JSON.parse(o.body).text); return Promise.resolve({ ok: true, headers: { get: () => 'audio/mpeg' }, blob: async () => ({ size: 128 }) }); }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    } });
+    t.Voice.setSpeakReplies(true);
+    t.Voice.startCoordinator({ onState() {}, onTranscript: () => false }); await tick();
+    srInstances[srInstances.length - 1].fireFinal('what is the weather on deck'); await tick();
+    A.eq(t.sandbox.__sent.length, 1, 'live re-arm: the spoken turn was sent');
+    const token = t.Voice.replyToken();          // chat.js captures this the moment the run starts
+    t.sandbox.__busy = true;
+    await until(() => t.Voice.isListening(), 1000);
+    A.ok(t.Voice.isListening(), 'live re-arm: the mic re-opens while the run thinks (steering)');
+    t.Voice.speakChunk('Clear skies over the station tonight.', 'agent', { replyToken: token });
+    await until(() => requests.length > 0, 1000);
+    A.eq(requests.length, 1, 'live re-arm: the re-armed mic did NOT cancel the reply — it is synthesized');
+    await until(() => !t.Voice.isListening(), 1000);
+    A.ok(!t.Voice.isListening(), 'live re-arm: the open take is discarded once the agent starts talking (no echo)');
+    t.sandbox.__busy = false; t.Voice.endReply(); await until(() => !t.Voice.isReplyPending(), 1000);
+    A.eq(t.sandbox.__sent.length, 1, 'live re-arm: the agent’s own voice is never sent back as a message');
+    t.Voice.stopCoordinator();
+  }
+
+  // --- a reply closes only for the producer that owns it ---------------------------------------
+  // Switching sessions mid-reply: the old run must still close its reply (else draining forever), but a run that
+  // finishes minutes later must not close a reply ANOTHER session is now streaming.
+  {
+    const t = boot({ Audio: AutoEndAudio, fetch: (url) => String(url).includes('/api/tts')
+      ? Promise.resolve({ ok: true, headers: { get: () => 'audio/mpeg' }, blob: async () => ({ size: 128 }) })
+      : Promise.resolve({ ok: true, json: async () => ({}) }) });
+    t.Voice.setSpeakReplies(true);
+    const a = {}; a.owner = a; const b = {}; b.owner = b;
+    t.Voice.speakChunk('Session A opening line.', 'agent', a);
+    t.Voice.endReply(undefined, a);
+    await until(() => !t.Voice.isReplyPending(), 1000);
+    A.eq(t.Voice.isReplyPending(), false, 'owner: the run that opened a reply closes it (no stuck speaking)');
+    t.Voice.speakChunk('Session A again.', 'agent', a);
+    t.Voice.speakChunk('Session B takes over.', 'agent', b);
+    t.Voice.endReply(undefined, a); await tick(30);
+    A.eq(t.Voice.isReplyPending(), true, 'owner: a backgrounded run cannot close the reply another session is streaming');
+    t.Voice.endReply(undefined, b);
+    await until(() => !t.Voice.isReplyPending(), 1000);
+    A.eq(t.Voice.isReplyPending(), false, 'owner: the new owner closes it');
+  }
+
   // --- OAuth Live coordinator: keyless speech stays open while a task is busy ------------------
   {
     const t = boot();

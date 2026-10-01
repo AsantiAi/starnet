@@ -111,7 +111,13 @@ const Voice = (() => {
      OUTPUT — the agent's voice (TTS)
      ====================================================================== */
 
-  function onSpeakStart() { speaking = true; setSpeaking(true); duckSfx(true); coordinatorEvent('onState', 'speaking'); startOutputMeter(); }
+  function onSpeakStart() {
+    // ECHO GUARD for Live dictation: the mic re-opens while the run thinks (so the Commander can steer), but
+    // dictation engines cannot tell the agent's voice from the Commander's — a take still open when audio
+    // starts would send the agent's own sentence back as the next message. Discard it; the reply's end re-arms.
+    if (coordinator && listening) { discarding = true; listening = false; setMicState(false); try { sttProvider.abort(); } catch (_) {} }
+    speaking = true; setSpeaking(true); duckSfx(true); coordinatorEvent('onState', 'speaking'); startOutputMeter();
+  }
   function onSpeakEnd() {
     // Meter teardown is deliberately unconditional. A failed media element can fire after another
     // path already cleared `speaking`; leaving the rAF alive in that race would pin the live panel
@@ -668,6 +674,9 @@ const Voice = (() => {
   let sessionDefaultVoice = '';
   let sessionVoices = new Map();
   let replyVoice = null;
+  // WHO opened the reply now in the queue (chat.js passes its per-run speech opts object). endReply from a
+  // different producer must never close it — a backgrounded session's run ends minutes later, mid-someone-else.
+  let replyOwner = null;
   function speechVoice(agentId) {
     if (preferLocalTts && sessionVoices.has(agentId)) return sessionVoices.get(agentId);
     const override = voiceChoice(agentId);
@@ -699,7 +708,7 @@ const Voice = (() => {
   const MAX_INFLIGHT = 2;        // synth at most this many chunks ahead of playback
   const TTS_CHUNK_MAX = 1000;    // keep each synth call under the sidecar's 1200-char cap
 
-  function resetQueue() { jobs = []; replyVoice = null; playIdx = 0; synthIdx = 0; draining = false; playing = false; replyClosed = true; replyFails = 0; replyTried = false; }
+  function resetQueue() { jobs = []; replyVoice = null; replyOwner = null; playIdx = 0; synthIdx = 0; draining = false; playing = false; replyClosed = true; replyFails = 0; replyTried = false; }
 
   // One attempt returns audio, a recoverable/terminal failure, or an intentional cancellation.
   // The sidecar owns credentials and the engine ladder. startSynth owns bounded retries/cold-off;
@@ -883,6 +892,9 @@ const Voice = (() => {
     let body = opts.mutter ? clean.slice(0, 80) : clean;
     if (!body.trim()) return;
     const opening = (jobs.length === 0);
+    // A new producer takes over the open reply (its previous owner stopped feeding it — e.g. the Commander
+    // switched sessions mid-reply); from here the NEW owner's endReply is the one that closes it.
+    if (opts.owner && opts.owner !== replyOwner) replyOwner = opts.owner;
     if (opening) replyNumber++;
     if (opening && interruptionMessage) showInterruption(''); // a new reply gets a fresh outcome
     const agentId = String(opts.agentId || currentAgentId());
@@ -894,14 +906,18 @@ const Voice = (() => {
     pumpSynth(); pumpPlay();
   }
   // signal end-of-reply; the heartbeat (default: re-arm the hands-free loop) fires once the LAST chunk ends.
-  function endReply(onDone) {
+  function endReply(onDone, opts) {
+    const owner = opts && opts.owner;
+    if (owner && replyOwner && owner !== replyOwner) return;   // not this producer's reply to close
     onReplyDone = onDone || onReplyEnded;
     replyClosed = true;
     if (!draining && jobs.length === 0) { const cb = onReplyDone; onReplyDone = null; if (cb) cb(); return; }
     pumpPlay();
   }
   // public one-shot (non-streaming callers): speak a whole finished reply.
-  function speak(text, voiceId) { speakChunk(text, voiceId); endReply(onReplyEnded); }
+  // A one-shot line spoken while a STREAMED reply is still open joins that reply instead of closing it early
+  // (a Live approval prompt used to end the reply mid-stream and re-open the mic over the rest of it).
+  function speak(text, voiceId) { speakChunk(text, voiceId); if (!(replyOwner && !replyClosed)) endReply(onReplyEnded); }
 
   // tear everything down NOW: invalidate in-flight work, abort fetches, cut audio.
   // Used by barge-in, mute, voice-mode-off, and DISCONNECT — the agent must go silent immediately.
@@ -1498,7 +1514,10 @@ const Voice = (() => {
     if (!coordinator) sttProvider = classicSttProvider;
     if (busyNow() && !coordinator) { setStatus('busy — wait for the reply'); return; }  // classic mode stays half-duplex
     clearTimeout(rearmTimer); rearmTimer = null;
-    stopSpeaking();                       // don't let the agent's voice bleed into the mic
+    // Don't let the agent's voice bleed into the mic — but only cut speech that EXISTS. An unconditional stop
+    // bumped the reply token on every Live re-arm (coordinator mode re-opens the mic while the run thinks),
+    // so the reply chat.js was about to stream was dropped whole: Live Voice never spoke (since 0.11.0).
+    if (talking()) stopSpeaking();
     listening = true; sentThisListen = false; discarding = false; setMicState(true);
     dictShown = '';   // fresh listen: dictation has written nothing yet — a typed draft in the box stays untouchable
     savedStatus = currentStatusText();
