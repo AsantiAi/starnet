@@ -1,102 +1,120 @@
-/* CREW PANEL + DOCK KEYS (Andrew 10-01, from the Observation Deck concept: "this is what i am looking for for
-   the left panel, and also I want to use the buttons on the bottom"). Layout untouched; materials only.
-   · the left rail = the Build Library sheet: 12px frosted shell, plain CREW header over a hairline with the
-     roster total beside it, no corner brackets
-   · crew rows = agent cards (app/crewcards.js): portrait well with a housed lamp, name in the agent's colour,
-     run clock or Lv on the right, status + live step under it, a gold frame while it needs your OK
-   · SESSIONS / PROJECTS = glass keys, a glass search field, rows that become a card when selected
-   · the dock group triggers = 8px glass keys (36px, 16px type), the badge a gold pip on the key's corner */
+/* CREW PANEL + DOCK KEYS (Andrew 10-01). Layout from the Observation Deck concept ("this is what i am
+   looking for"), material pushed back toward the classic CRT console ("a bit too glass like … needs a bit
+   of creative gritty more rough look"): hard edges, phosphor scanlines and film grain on every surface,
+   recessed CRT wells, square LEDs, etched corner ticks, molded keycaps, and the RobCo INVERT (solid
+   phosphor field, dark ink) as the one "this is on" state. No frosted blur, no soft glass.
+   · crew rows = agent cards (app/crewcards.js): portrait in a little CRT well with a square LED, name +
+     run clock (or Lv), status + live step, a gold bracketed frame while it needs your OK
+   · roster total as a stamped caption under CREW; SESSIONS / PROJECTS / + NEW and the dock triggers are keycaps */
 body.glass-demo {
-  --cg-edge: rgba(var(--ph-rgb), .2);
-  --cg-hair: rgba(var(--ph-rgb), .12);
-  --cg-glass: linear-gradient(125deg, rgba(var(--ph-bright-rgb), .09), rgba(var(--ph-rgb), .045) 48%, rgba(var(--ph-rgb), .015));
-  --cg-card: linear-gradient(165deg, rgba(var(--ph-rgb), .075), transparent 46%), color-mix(in srgb, var(--panel2) 70%, transparent);
-  --cg-mute: color-mix(in srgb, var(--text) 62%, var(--panel2));
-  --cg-lamp: 0 0 0 1px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .3);
+  --cg-edge: rgba(var(--ph-rgb), .34);
+  --cg-hair: rgba(var(--ph-rgb), .16);
+  --cg-mute: color-mix(in srgb, var(--text) 60%, var(--panel2));
+  --cg-scan: repeating-linear-gradient(0deg, rgba(0, 0, 0, .26) 0 1px, transparent 1px 3px);
+  --cg-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .5 0'/></filter><rect width='100%25' height='100%25' filter='url(%23g)'/></svg>");
+  --cg-key: linear-gradient(180deg, rgba(var(--ph-rgb), .1), rgba(var(--ph-rgb), .02) 55%, rgba(0, 0, 0, .3));
+  --cg-key-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb), .1), inset 0 -2px 0 rgba(0, 0, 0, .45), 0 1px 0 rgba(0, 0, 0, .6);
+  --cg-glow: 0 0 6px rgba(var(--ph-rgb), .32);
 }
 
-/* ---------- 1 · the sheet ---------- */
+/* corner ticks resolve --ph on the row itself, so a needs-you card's ticks turn gold with it */
+body.glass-demo:not(.hud-mode) #left :is(.crew-row, .ws-row) {
+  --cg-ticks: linear-gradient(var(--ph), var(--ph)) left top / 7px 1px, linear-gradient(var(--ph), var(--ph)) left top / 1px 7px,
+    linear-gradient(var(--ph), var(--ph)) right top / 7px 1px, linear-gradient(var(--ph), var(--ph)) right top / 1px 7px,
+    linear-gradient(var(--ph), var(--ph)) left bottom / 7px 1px, linear-gradient(var(--ph), var(--ph)) left bottom / 1px 7px,
+    linear-gradient(var(--ph), var(--ph)) right bottom / 7px 1px, linear-gradient(var(--ph), var(--ph)) right bottom / 1px 7px;
+}
+
+/* ---------- 1 · the console plate ---------- */
 body.glass-demo:not(.hud-mode) #screen-game #left {
-  background: var(--cg-glass), color-mix(in srgb, var(--panel2) 56%, transparent);
+  background: var(--cg-scan), var(--cg-grain), linear-gradient(170deg, rgba(var(--ph-rgb), .06), transparent 40%), var(--panel2);
   border: 1px solid var(--cg-edge);
-  border-radius: 12px;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, .4), inset 0 1px rgba(var(--ph-rgb), .08);
-  -webkit-backdrop-filter: blur(18px) saturate(1.08);
-  backdrop-filter: blur(18px) saturate(1.08);
+  border-radius: 6px;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, .85), inset 0 0 0 1px rgba(0, 0, 0, .7), inset 0 0 36px rgba(0, 0, 0, .65);
+  -webkit-backdrop-filter: none; backdrop-filter: none;
 }
 body.glass-demo:not(.hud-mode) #screen-game #left::after { display: none; }
 body.glass-demo:not(.hud-mode) #screen-game #left::before { opacity: 0; }
-body.glass-demo:not(.hud-mode) #screen-game #left:focus-within { outline: 0; border-color: rgba(var(--ph-rgb), .38); }
+body.glass-demo:not(.hud-mode) #screen-game #left:focus-within { outline: 0; border-color: rgba(var(--ph-rgb), .55); }
 
-/* header: CREW + find / hide, the roster total on a caption line under the title */
+/* header: CREW + find / hide, the roster total stamped under it; a ruler of ticks for the rule */
 body.glass-demo:not(.hud-mode) #screen-game #left > h3 {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; column-gap: 8px; row-gap: 1px;
-  background: none; box-shadow: none;
-  border-bottom: 1px solid var(--cg-hair);
-  border-radius: 12px 12px 0 0;
-  padding: 11px 10px 9px 14px;
-  font-size: 17px; letter-spacing: 2.5px; color: var(--ph-bright);
+  background: repeating-linear-gradient(90deg, var(--cg-edge) 0 1px, transparent 1px 6px) left bottom / 100% 4px no-repeat;
+  box-shadow: none; border: 0; border-radius: 6px 6px 0 0;
+  padding: 11px 10px 11px 14px;
+  font-size: 18px; letter-spacing: 3px; color: var(--ph-bright); text-shadow: var(--cg-glow);
 }
 body.glass-demo:not(.hud-mode) #left > h3 .crew-h3-right { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
 body.glass-demo:not(.hud-mode) #left > h3 #crew-sum {
   order: 3; flex: 1 0 100%; display: flex; justify-content: flex-start; gap: 0;
   margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none;
-  font-size: 13px; letter-spacing: 1.2px; line-height: 1.2; white-space: nowrap; color: var(--cg-mute);
+  font-size: 13px; letter-spacing: 2px; line-height: 1.2; white-space: nowrap; color: var(--cg-mute); text-shadow: none;
 }
 body.glass-demo:not(.hud-mode) #left > h3 #crew-sum span { color: inherit; opacity: 1; background: none; border: 0; box-shadow: none; padding: 0; font-size: inherit; letter-spacing: inherit; }
-body.glass-demo:not(.hud-mode) #left > h3 #crew-sum .pos::after { content: '\00a0·\00a0'; }
+body.glass-demo:not(.hud-mode) #left > h3 #crew-sum .pos { color: var(--ph); }
+body.glass-demo:not(.hud-mode) #left > h3 #crew-sum .pos::after { content: '\00a0/\00a0'; color: var(--cg-mute); }
 body.glass-demo:not(.hud-mode) #left > h3 #crew-sum:empty { display: none; }
 
 /* ---------- 2 · agent cards ---------- */
 body.glass-demo:not(.hud-mode) #crew { padding: 6px 2px; }
 body.glass-demo:not(.hud-mode) #crew .crew-row {
   gap: 11px; margin: 4px 8px; padding: 8px 9px;
-  border: 1px solid transparent; border-radius: 10px;
+  border: 1px solid transparent; border-radius: 2px; background: none; box-shadow: none;
 }
 body.glass-demo:not(.hud-mode) #crew .crew-row:is(:hover, :focus-visible, .selected) {
-  background: var(--cg-card); border-color: var(--cg-edge);
-  box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb), .06), 0 2px 8px rgba(0, 0, 0, .2);
+  border-color: var(--cg-hair);
+  background: var(--cg-ticks), var(--cg-scan), rgba(var(--ph-rgb), .045);
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat, repeat;
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, .5);
 }
 body.glass-demo:not(.hud-mode) #crew .crew-row.asking {
-  border-color: rgba(var(--gold-rgb), .55);
-  background: linear-gradient(165deg, rgba(var(--gold-rgb), .09), transparent 50%), color-mix(in srgb, var(--panel2) 70%, transparent);
+  --ph: var(--gold);
+  border-color: rgba(var(--gold-rgb), .45);
+  background: var(--cg-ticks), var(--cg-scan), rgba(var(--gold-rgb), .06);
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat, repeat;
 }
-/* the portrait well, its figure and the housed lamp in its corner */
+/* the portrait: a tiny CRT — black well, scanlines over the figure, a square LED in the corner */
 body.glass-demo:not(.hud-mode) #crew .crew-portrait {
   position: relative; width: 48px; height: 56px; align-items: flex-end;
-  border-radius: 8px; border: 1px solid var(--cg-hair);
-  background: rgba(0, 0, 0, .3); box-shadow: inset 0 2px 6px rgba(0, 0, 0, .45);
+  border-radius: 3px; border: 1px solid var(--cg-hair);
+  background: radial-gradient(ellipse at 50% 60%, rgba(var(--ph-rgb), .1), transparent 70%), #050302;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, .9), 0 0 0 1px rgba(0, 0, 0, .7);
+}
+body.glass-demo:not(.hud-mode) #crew .crew-portrait::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: var(--cg-scan), radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0, 0, 0, .55));
 }
 body.glass-demo:not(.hud-mode) #crew .crew-portrait img { width: 40px; height: 50px; object-fit: contain; object-position: 50% 100%; }
 body.glass-demo:not(.hud-mode) #crew .crew-portrait > .dot {
-  position: absolute; left: auto; bottom: auto; right: 4px; top: 4px;
-  width: 9px; height: 9px; border-radius: 50%; outline: 0; animation: none;
-  background: var(--ok, #7fd89a); box-shadow: var(--cg-lamp);
+  position: absolute; left: auto; bottom: auto; right: 4px; top: 4px; z-index: 1;
+  width: 7px; height: 7px; border-radius: 1px; outline: 0; animation: none;
+  background: var(--ok, #7bc88a); box-shadow: 0 0 0 1px rgba(0, 0, 0, .8), 0 0 4px rgba(123, 200, 138, .35);
 }
-body.glass-demo:not(.hud-mode) #crew .crew-row.working .crew-portrait > .dot { background: var(--ph); }
-body.glass-demo:not(.hud-mode) #crew .crew-row.asking .crew-portrait > .dot { background: var(--gold); }
+body.glass-demo:not(.hud-mode) #crew .crew-row.working .crew-portrait > .dot { background: var(--ph); box-shadow: 0 0 0 1px rgba(0, 0, 0, .8), 0 0 4px rgba(var(--ph-rgb), .45); }
+body.glass-demo:not(.hud-mode) #crew .crew-row.asking .crew-portrait > .dot { background: var(--gold); box-shadow: 0 0 0 1px rgba(0, 0, 0, .8), 0 0 4px rgba(var(--gold-rgb), .5); }
 /* name line: NAME ........ 4:12  (or Lv 2 while idle) */
 body.glass-demo:not(.hud-mode) #crew .crew-main { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 0; }
 body.glass-demo:not(.hud-mode) #crew .crew-name {
   flex: 1 0 100%; display: flex; align-items: baseline; gap: 6px;
-  font-size: 19px; letter-spacing: 1.2px; line-height: 1.15;
+  font-size: 19px; letter-spacing: 1.5px; line-height: 1.15; text-shadow: 0 0 5px color-mix(in srgb, currentColor 45%, transparent);
 }
-body.glass-demo:not(.hud-mode) #crew .crew-name .crew-room { margin-left: auto; font-size: 13px; letter-spacing: .5px; opacity: 1; color: var(--cg-mute); }
+body.glass-demo:not(.hud-mode) #crew .crew-name .crew-room { margin-left: auto; font-size: 13px; letter-spacing: 1px; opacity: 1; color: var(--cg-mute); text-shadow: none; }
 body.glass-demo:not(.hud-mode) #crew .crew-name .crew-clock {
-  font-size: 19px; color: var(--ph-bright); font-variant-numeric: tabular-nums; letter-spacing: .5px;
+  font-size: 20px; color: var(--ph-bright); font-variant-numeric: tabular-nums; letter-spacing: 1px; text-shadow: var(--cg-glow);
 }
 body.glass-demo:not(.hud-mode) #crew .crew-name .crew-clock:empty { display: none; }
 body.glass-demo:not(.hud-mode) #crew .crew-row.has-clock .crew-room { display: none; }
 body.glass-demo:not(.hud-mode) #crew .crew-row.has-clock .crew-clock { margin-left: auto; }
-/* status line: working · web.search */
+/* status line: WORKING · web.search */
 body.glass-demo:not(.hud-mode) #crew :is(.crew-status, .crew-step) {
-  margin-top: 3px; font-size: 14px; letter-spacing: .4px; line-height: 1.3; opacity: 1;
-  color: var(--cg-mute); text-transform: lowercase;
+  margin-top: 3px; font-size: 14px; letter-spacing: 1px; line-height: 1.3; opacity: 1; color: var(--cg-mute);
 }
 body.glass-demo:not(.hud-mode) #crew .crew-status { flex: none; }
-body.glass-demo:not(.hud-mode) #crew .crew-step { flex: 1 1 0; min-width: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: none; }
+body.glass-demo:not(.hud-mode) #crew .crew-row.working .crew-status { color: var(--ph); }
+body.glass-demo:not(.hud-mode) #crew .crew-step { flex: 1 1 0; min-width: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .4px; }
 body.glass-demo:not(.hud-mode) #crew .crew-step:not(:empty)::before { content: '\00a0·\00a0'; }
-body.glass-demo:not(.hud-mode) #crew .crew-row.asking :is(.crew-status, .crew-step) { color: var(--gold); }
+body.glass-demo:not(.hud-mode) #crew .crew-row.asking :is(.crew-status, .crew-step) { color: var(--gold); letter-spacing: 1px; text-transform: uppercase; }
 body.glass-demo:not(.hud-mode) #crew .crew-row.asking .crew-status { display: none; }
 body.glass-demo:not(.hud-mode) #crew .crew-row.asking .crew-step::before { content: none; }
 body.glass-demo:not(.hud-mode) #crew .crew-prog { display: none; }
@@ -104,52 +122,61 @@ body.glass-demo:not(.hud-mode) #crew .crew-prog { display: none; }
 /* ---------- 3 · sessions / projects ---------- */
 body.glass-demo:not(.hud-mode) #screen-game #left #ws-wrap { margin: 0; border-radius: 0; background: none; box-shadow: none; }
 body.glass-demo:not(.hud-mode) #screen-game #left .ws-head {
-  background: none; box-shadow: none; border-radius: 0; border-block: 1px solid var(--cg-hair); padding: 10px 10px 8px; gap: 6px; flex-wrap: wrap;
+  background: repeating-linear-gradient(90deg, var(--cg-edge) 0 1px, transparent 1px 6px) left top / 100% 4px no-repeat;
+  box-shadow: none; border: 0; border-radius: 0; padding: 12px 8px 8px; gap: 5px; flex-wrap: wrap;
 }
-body.glass-demo:not(.hud-mode) #left .ws-head .ws-view { display: inline-flex; gap: 6px; }
-body.glass-demo:not(.hud-mode) #left .ws-head :is(.ws-tab, #ws-new, #ws-addproject) {
-  min-height: 32px; padding: 4px 8px; font-size: 14px; letter-spacing: .4px;
-  color: var(--ph); border: 1px solid var(--cg-edge); border-radius: 8px;
-  background: var(--cg-glass); box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb), .07); text-shadow: none;
+body.glass-demo:not(.hud-mode) #left .ws-head .ws-view { display: inline-flex; gap: 5px; }
+/* keycaps — the tabs and the actions are separate selectors so the .on invert can out-rank the tab rule */
+body.glass-demo:not(.hud-mode) #left .ws-head .ws-tab,
+body.glass-demo:not(.hud-mode) #left .ws-head :is(#ws-new, #ws-addproject) {
+  min-height: 32px; padding: 4px 7px; font-size: 14px; letter-spacing: .5px;
+  color: var(--ph); border: 1px solid var(--cg-edge); border-radius: 2px;
+  background: var(--cg-key); box-shadow: var(--cg-key-shadow); text-shadow: none;
 }
-body.glass-demo:not(.hud-mode) #left .ws-head :is(.ws-tab, #ws-new, #ws-addproject):is(:hover, :focus-visible) {
-  color: var(--ph-bright); border-color: rgba(var(--ph-rgb), .45); background: rgba(var(--ph-rgb), .1);
+body.glass-demo:not(.hud-mode) #left .ws-head .ws-tab:not(.on):is(:hover, :focus-visible),
+body.glass-demo:not(.hud-mode) #left .ws-head :is(#ws-new, #ws-addproject):is(:hover, :focus-visible) {
+  color: var(--ph-bright); border-color: var(--ph);
 }
 body.glass-demo:not(.hud-mode) #left .ws-head .ws-tab.on {
-  color: var(--ph-bright); border-color: var(--ph); background: rgba(var(--ph-rgb), .16);
-  box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb), .07);
+  color: var(--ink); border-color: var(--ph); background: var(--ph);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), inset 0 -2px 0 rgba(0, 0, 0, .25);
 }
 body.glass-demo:not(.hud-mode) #left .ws-rail-search { padding: 10px 10px 6px; }
 body.glass-demo:not(.hud-mode) #left #ws-search {
-  min-height: 38px; border-radius: 8px; border: 1px solid var(--cg-edge);
-  background: rgba(0, 0, 0, .18); box-shadow: inset 0 1px 3px rgba(0, 0, 0, .15);
+  min-height: 38px; border-radius: 2px; border: 1px solid var(--cg-hair);
+  background: var(--cg-scan), #050302; box-shadow: inset 0 0 10px rgba(0, 0, 0, .8);
 }
-body.glass-demo:not(.hud-mode) #left #ws-search:focus { border-color: var(--ph); outline: 0; box-shadow: 0 0 0 2px rgba(var(--ph-rgb), .1); }
-body.glass-demo:not(.hud-mode) #left #workstreams .ws-row { border-radius: 8px; margin-inline: 6px; }
-body.glass-demo:not(.hud-mode) #left #workstreams .ws-row:is(.sel, :focus-visible) { background: var(--cg-card); border-color: var(--cg-edge); }
+body.glass-demo:not(.hud-mode) #left #ws-search:focus { border-color: var(--ph); outline: 0; box-shadow: inset 0 0 10px rgba(0, 0, 0, .8); }
+body.glass-demo:not(.hud-mode) #left #workstreams .ws-row { border-radius: 2px; margin-inline: 6px; }
+body.glass-demo:not(.hud-mode) #left #workstreams .ws-row:is(.sel, :focus-visible) {
+  border-color: var(--cg-hair);
+  background: var(--cg-ticks), var(--cg-scan), rgba(var(--ph-rgb), .045);
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat, repeat;
+  box-shadow: none;
+}
 
 /* ---------- 4 · dock keys ---------- */
 body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group > .bb-grp {
   position: relative; min-width: 0; height: 36px; padding: 0 15px; gap: 8px;
-  font: 16px/1 'VT323', monospace; letter-spacing: 1px;
-  color: var(--ph); border: 1px solid var(--cg-edge); border-radius: 8px;
-  background: var(--cg-glass);
-  box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb), .07);
-  text-shadow: none;
+  font: 17px/1 'VT323', monospace; letter-spacing: 1.5px;
+  color: var(--ph); border: 1px solid var(--cg-edge); border-radius: 2px;
+  background: var(--cg-grain), var(--cg-key);
+  box-shadow: var(--cg-key-shadow);
+  text-shadow: var(--cg-glow);
 }
 body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group > .bb-grp:is(:hover, :focus-visible) {
-  color: var(--ph-bright); border-color: rgba(var(--ph-rgb), .45); background: rgba(var(--ph-rgb), .1);
+  color: var(--ph-bright); border-color: var(--ph);
 }
 body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group.open > .bb-grp {
-  color: var(--ph-bright); border-color: var(--ph); background: rgba(var(--ph-rgb), .16);
-  box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb), .07);
+  color: var(--ink); border-color: var(--ph); background: var(--ph); text-shadow: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), inset 0 -2px 0 rgba(0, 0, 0, .25);
 }
-/* a window from this group is open: a gold hairline under the label, no glow */
-body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group.has-active > .bb-grp { box-shadow: inset 0 -2px 0 var(--gold), inset 0 1px 0 rgba(var(--ph-bright-rgb), .07); }
+/* a window from this group is open: a gold bar stamped under the label */
+body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group.has-active > .bb-grp { box-shadow: var(--cg-key-shadow), inset 0 -3px 0 var(--gold); }
 body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-gi { opacity: 1; }
 body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-grp-badge {
   position: absolute; top: -7px; right: -7px;
-  min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px;
-  font-size: 15px; line-height: 20px; color: #140c04; background: var(--gold);
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, .6); animation: none;
+  min-width: 18px; height: 18px; padding: 0 4px; border-radius: 1px;
+  font-size: 15px; line-height: 18px; color: #140c04; background: var(--gold); text-shadow: none;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, .75); animation: none;
 }
