@@ -248,6 +248,7 @@ test/personalization-store.test.js
 test/recruiterstore-readiness.test.js
 test/auxgovernor.test.js
 test/failreview.test.js
+test/feedbackmemory.test.js
 test/embed.test.js
 test/threadstore.test.js
 test/autopilot-threads.test.js

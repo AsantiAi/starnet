@@ -3025,8 +3025,6 @@ const WorldModel = (() => {
       snapshot();
       delete p.routes; delete p.def; delete p.bufferSize; delete p.timeoutMin; delete p.maxIter; delete p.done; delete p.when;   // replace wholesale
       if (cfg) applyJunctionCfg(p, cfg);
-      // esc is KEPT across an edit that doesn't name it (the panel's loop save never sends it); an explicit esc:null clears it
-      if (cfg && Object.prototype.hasOwnProperty.call(cfg, 'esc') && cfg.esc == null) delete p.esc;
       // a linked floor: the junction's out-links carry what the new config routes down their lanes (links are what the
       // compiler reads — a route set in the panel must land on the link it names)
       if (linkedNow && isJunction(p)) {

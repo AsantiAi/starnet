@@ -142,4 +142,20 @@ A.eq(O.successPrior(null, 'x'), null, '…and leans nothing');
     'GET /api/insights serves the same record (the fold every prompt cites is inspectable over HTTP)');
 }
 
+/* ── the Commander's verdict outranks the harness: a finished run rated `miss` is a failure ── */
+{
+  const rows = [];
+  for (let i = 0; i < 5; i++) rows.push(run({ runId: 'radar-' + i, recipeId: 'radar', title: 'Stock Radar', ts: T - i * 1000 }));
+  const blind = O.fold(rows, { now: T });
+  A.eq(O.summary(blind)[0] && O.summary(blind)[0].verdict, 'proven', 'without verdicts, five finished runs read as proven');
+  const verdicts = { 'radar-0': 'miss', 'radar-1': 'miss', 'radar-2': 'miss', 'radar-3': 'miss', 'radar-4': 'great' };
+  const rated = O.fold(rows, { now: T, verdicts });
+  const k = rated.keys['recipe:radar'];
+  A.eq(k.n + '/' + k.ok + '/' + k.fail, '5/1/4', 'four runs the Commander rated missed count as failures');
+  A.eq(k.failReasons.rated_missed, 4, 'named as rated_missed');
+  const line = O.lines(rated).find(l => l.indexOf('Stock Radar') >= 0);
+  A.ok(line && line.indexOf('only 1 of 5 recent runs landed') >= 0 && line.indexOf('rated_missed ×4') >= 0, 'the line says it did not land, and why (' + line + ')');
+  A.eq(O.fold([run({ runId: 'x', reason: 'error' })], { now: T, verdicts: { x: 'great' } }).keys['lane:interactive'].ok, 0, 'praise never turns a harness failure into a success');
+}
+
 A.report('outcomes track record');

@@ -1696,6 +1696,14 @@
         history = canonicalStreamId && historyFor ? historyFor(canonicalStreamId, agentId) : store.loadHistory(agentId);
         if (!Array.isArray(history)) history = [];
       } catch (_) { try { history = store.loadHistory(agentId); } catch (_) { history = []; } }
+      // "YES" TO AN OFFER IS A GO: classified on its own, "yes" is chat and the run gets no task prompt. Ask again with the
+      // agent's last reply: an affirmation that answers its offer to act ("want me to draft it?") IS the directive.
+      if (!isTask && history.length) {
+        const prior = history[history.length - 1];
+        if (prior && prior.role === 'assistant' && typeof prior.content === 'string') {
+          try { isTask = !!classify(msg.text || '', { priorAgentTurn: prior.content }); } catch (e) { failNote('channels.hub.classify.offer', e); }
+        }
+      }
       try { store.appendTurn(agentId, 'user', turnText || '[the user sent a media message]'); } catch (e) { failNote('channels.hub.appendTurn', e); }
       const userTurn = { role: 'user', content: turnText };
       if (mediaIngest.attachments.length) userTurn.attachments = mediaIngest.attachments;

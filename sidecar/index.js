@@ -172,6 +172,7 @@ const { json: respondJson, readJsonBody, isAgentId } = require('./respond.js'); 
 const { readBody, readBodyBuffer } = require('./http-body.js');
 const { MIME, CHANNEL_UPLOAD_MAX_BYTES, mimeForPath, safeDownloadName, isActiveDeliverable, parseRange } = require('./file-response.js');
 const { reflect, reflectSalient, recordFromProposal, feedbackFor, highStakes } = require('./reflect.js');
+const FeedbackMemory = require('./feedbackmemory.js');   // THE COMMANDER'S TASTE: verdicts + corrections -> durable like/dislike memory
 const Failreview = require('./failreview.js');   // failure-review aux pass: PURE lesson producer for FAILED runs (reflect.js mold)
 const Embed = require('./embed.js');              // memory-compound: the embedding lane of hybrid recall (BM25 + vectors over a configured provider)
 const { swallow, note: failNote, summary: failopenSummary, setClock: failopenSetClock } = require('./failopen.js');    // tagged fail-open: a swallowed error stays visible (throttled warn + counter + diagnostics summary)
@@ -3181,7 +3182,47 @@ function persistSkillNudge() {
   try { saveResilient(SKILL_NUDGE_FILE, { v: 1, counts: Object.fromEntries(skillNudge) }); }
   catch (e) { failNote('skill.nudge.persist', e); }
 }
-const verdictReview = makeVerdictReview({ cap: num(process.env.SKYNET_VERDICT_REVIEW_CAP, 40), ttlMs: num(process.env.SKYNET_VERDICT_REVIEW_TTL_MS, 6 * 60 * 60 * 1000), graceMs: num(process.env.SKYNET_VERDICT_REVIEW_GRACE_MS, 90 * 1000), now: () => Date.now() });
+// The parked review packets are DURABLE (verdict.packets.json, provider-free + compacted): a verdict the Commander
+// gives after a restart still reaches its review. Writes are coalesced (one per second at most) because every task
+// run's end stashes a packet. TTL 72h (was 6h): a rating from the OUTBOX the next day still teaches.
+const VERDICT_PACKETS_FILE = path.join(WORKSPACES, 'verdict.packets.json');
+let _verdictPersistTimer = null, _verdictPersistRows = null;
+function flushVerdictPackets() {
+  if (!_verdictPersistTimer) return;
+  clearTimeout(_verdictPersistTimer); _verdictPersistTimer = null;
+  try { saveResilient(VERDICT_PACKETS_FILE, { v: 1, rows: _verdictPersistRows || [] }); }
+  catch (e) { failNote('verdict.packets.flush', e); }
+}
+function persistVerdictPackets(rows) {
+  _verdictPersistRows = rows;
+  if (_verdictPersistTimer) return;
+  _verdictPersistTimer = setTimeout(() => {
+    _verdictPersistTimer = null;
+    try { saveResilient(VERDICT_PACKETS_FILE, { v: 1, rows: _verdictPersistRows || [] }); }
+    catch (e) { failNote('verdict.packets.persist', e); }
+  }, 1000);
+  if (_verdictPersistTimer.unref) _verdictPersistTimer.unref();
+}
+const verdictReview = makeVerdictReview({ cap: num(process.env.SKYNET_VERDICT_REVIEW_CAP, 40), ttlMs: num(process.env.SKYNET_VERDICT_REVIEW_TTL_MS, 72 * 60 * 60 * 1000), graceMs: num(process.env.SKYNET_VERDICT_REVIEW_GRACE_MS, 90 * 1000), now: () => Date.now(), onChange: persistVerdictPackets, redact: (t) => redact(t) });
+try {
+  const savedPackets = loadResilient(VERDICT_PACKETS_FILE, 'verdict-packets');
+  const n = verdictReview.restore(savedPackets && savedPackets.rows);
+  if (n) console.log('[skills] restored ' + n + ' verdict review packet(s)');
+} catch (e) { failNote('verdict.packets.restore', e); }
+// a RESTORED packet carries no live provider (never persisted: it is a live handle that can hold a credential).
+// Rebuild one for the agent's CURRENT run config, exactly as a fresh run would resolve it.
+async function rehydrateReviewJob(job) {
+  if (job.provider) return job;
+  const cfg = sampleRunConfigFor(job.agentId || 'agent');
+  if (!cfg || cfg.ok === false || !cfg.model || (!cfg.configured && !cfg.key)) throw new Error('no model configured for ' + (job.agentId || 'agent'));
+  const providerId = normalizeProvider(cfg.provider);
+  const provider = await providerForRunConfig(cfg, resolveReasoningEffort(providerId, cfg.reasoningEffort));
+  return Object.assign({}, job, {
+    provider, cost: makeCostEngine({ priceOf: provider.priceOf }),
+    model: auxSkillModel(provider, cfg.model),   // the CURRENT config's model: the parked one may belong to a provider since switched away from
+    unmetered: !!((getProviderProfile(providerId) || {}).unmetered)
+  });
+}
 const SKILL_CURATOR_INTERVAL_MS = num(process.env.SKYNET_SKILL_CURATOR_INTERVAL_MS, 24 * 60 * 60 * 1000);
 const SKILL_CURATOR_MAX_COST_USD = num(process.env.SKYNET_SKILL_CURATOR_MAX_USD, 0.12);
 const skillCuratorLastRun = new Map();
@@ -3232,7 +3273,7 @@ async function runBackgroundSkillReview(o) {
     };
     const reviewNotebook = notebookStore.get('notebook:' + agentId);
     const prompt = skillReview.buildPrompt({
-      agentId, runId, messages, verdict, correction,
+      agentId, runId, messages, verdict, correction, failed: !!(o && o.failed),
       loadedSkills: loadedSkills || [],
       managedSkills: managedSkills || [],
       // top-12 by rank() against the run's directive (was: last 12 in raw store order) — the reviewer sees the
@@ -7200,6 +7241,17 @@ function nightshiftContextPack() {
    context pack, the quest ranker and the insights route, so every surface reads the SAME record. Gated by the
    personalization pause like every other learned-about-you signal; fail-open to nothing. */
 let _trackRecordMemo = { at: 0, rec: null };
+// runId -> the Commander's verdict, for the CURRENT station generation (the same epoch the rating route stamps).
+// The track record reads it so a finished run the Commander rated `miss` counts as a failure, not a success.
+function ratingVerdictMap() {
+  const out = {};
+  try {
+    const saved = saveStore.load('agent') || null;
+    const epoch = Math.max(1, Math.floor(Number(saved && saved.agent && saved.agent.createdAt) || 1));
+    for (const r of growthRatings.list({ limit: 2000, epoch })) if (r && r.runId) out[r.runId] = r.verdict;
+  } catch (e) { failNote('outcomes.verdicts', e); }
+  return out;
+}
 function stationTrackRecord() {
   try {
     if (!personalizationStore.read().enabled) return null;
@@ -7209,7 +7261,7 @@ function stationTrackRecord() {
        the memo is cleared by nothing and needs to be: it re-folds on its own within the window. */
     const now = Date.now();
     if (_trackRecordMemo.rec && (now - _trackRecordMemo.at) < 30000) return _trackRecordMemo.rec;
-    const rec = Outcomes.fold(runStore.list(null, { limit: 400 }), { now: now });
+    const rec = Outcomes.fold(runStore.list(null, { limit: 400 }), { now: now, verdicts: ratingVerdictMap() });
     _trackRecordMemo = { at: now, rec: rec };
     return rec;
   } catch (_) { return null; }
@@ -11306,6 +11358,7 @@ function gracefulShutdown(signal) {
   // HARD deadline: no matter what hangs, exit within 3s. unref so this timer itself never keeps us alive.
   const deadline = setTimeout(() => { try { console.warn('  · shutdown deadline hit — forcing exit'); } catch (_) {} process.exit(0); }, 3000);
   if (deadline.unref) deadline.unref();
+  try { flushVerdictPackets(); } catch (e) { failNote('verdict.packets.shutdown', e); }   // a rating after the restart must still find its packet
   try { if (typeof cronTimer !== 'undefined' && cronTimer) { clearInterval(cronTimer); } } catch (_) {}
   try { if (typeof nightshiftTimer !== 'undefined' && nightshiftTimer) { clearInterval(nightshiftTimer); } } catch (_) {}   // NS-1: stop the night-shift ticker on shutdown
   try { if (typeof connectorLifecycleTimer !== 'undefined' && connectorLifecycleTimer) { clearInterval(connectorLifecycleTimer); } } catch (_) {}
@@ -11711,7 +11764,8 @@ async function runSampleJob(readArgs) {
       runs = (runStore.list(null, { streamId: streamId, limit: 200 }) || [])   // THIS sample's rows, not the station's newest 50
         .filter(r => r && String(r.streamId || '') === streamId)
         .map(r => ({ runId: r.runId, agentId: r.agentId, reason: r.reason, usd: r.usd, ts: r.ts, title: r.title, streamId: r.streamId, turns: r.turns,
-          dockId: r.dockId || null, lineId: r.lineId || null }));   // (the BAY each stage ran at: the panel names each step's work by it)
+          dockId: r.dockId || null, lineId: r.lineId || null,
+          taintedBy: r.taintedBy || null }));   // (a stage that read untrusted content: whoever reads this job's text inherits it — station.test_line relays it)   // (the BAY each stage ran at: the panel names each step's work by it)
     } catch (_) { runs = []; }
     // Outbound warning text is not delivery evidence. The proof succeeds only when every durable stage
     // outcome is clean, including every hop after the routed entry dock.
@@ -11936,6 +11990,9 @@ async function startLineFor(spec) {
     return r.ok ? { ok: true, kind: 'off', id: cur.id, was: cur.kind } : { ok: false, error: r.error };
   }
   if (!job) return { ok: false, error: 'a start needs the job it sends down the line each time' };
+  // the routine tripwire, for EVERY start (a schedule meets it again in createCronJobFromSpec; a trigger's task is the same
+  // standing words): an override or exfil payload is refused before anything is saved
+  { const scan = cronGuard.scanRoutinePrompt(job); if (!scan.ok) return { ok: false, error: scan.error }; }
   if (s.kind === 'schedule') {
     const docks = crewedDocksOnLine(plan, lineId);
     if (!docks.length) return { ok: false, error: 'nobody works the first step of ' + name + ': give it an agent first' };
@@ -18456,9 +18513,13 @@ async function runOnceCore(o) {
     getTaskContext: () => {
       const settled = taskBriefState ? commanderEvidenceContext(system || '', Object.assign({},taskContextInputs,{brief:taskBriefState.brief})) : taskContextBlock;
       const notes = notebookStore.get('notebook:' + agentId);
-      const pinned = Array.isArray(notes) ? notes.filter(r => r && r.pinned) : [];
+      // the Commander's taste rides into delegated work too: a worker writes the deliverable the Commander rates
+      const tasteRecs = personalizationStore.read().enabled ? FeedbackMemory.stationTaste(notes, otherAgentNotebooks(agentId)) : [];
+      const tasteIds = new Set(tasteRecs.map(r => r.id).filter(Boolean));
+      const pinned = Array.isArray(notes) ? notes.filter(r => r && r.pinned && !tasteIds.has(r.id)) : [];
       const recalled = renderRecall(rank(pinned, recentUserText(messages), { now: Date.now(), streamId, projectRoot: o.projectRoot || null }), { limit: 1500 });
-      return settled + (recalled.text ? '\n\n' + redact(recalled.text) : '');
+      const taste = renderRecall(tasteRecs, { limit: FeedbackMemory.TASTE_CHARS, header: FeedbackMemory.TASTE_HEADER });
+      return settled + (recalled.text ? '\n\n' + redact(recalled.text) : '') + (taste.text ? '\n\n' + redact(taste.text) : '');
     },
     // A worker shares the LEAD's consent broker (see the `consent` note below), so its own roster APPROVAL clause is
     // the wrong one whenever the two postures differ. Hand orchestration the EFFECTIVE posture so the delegated
@@ -20280,15 +20341,31 @@ async function runOnceCore(o) {
   // (a title call crediting memory.used would fake the Memory Core stats).
   if (!internal) try {
     const stored = notebookStore.get('notebook:' + agentId);
-    const recs = o.recovery ? [] : (Array.isArray(stored) ? stored : []);
+    const all = o.recovery ? [] : (Array.isArray(stored) ? stored : []);
+    // THE COMMANDER'S TASTE (feedbackmemory.js): their verdicts + corrections ride EVERY run in a block of their
+    // own. Taste is not topical ("shorter" applies to any deliverable), so BM25's word-overlap floor must not
+    // decide whether it surfaces. Those records leave the ranked pool so they never take a recall slot twice.
+    // station-wide: a correction given to ANY agent is about the Commander, so it shapes this agent's work too
+    // (recovery runs inject nothing at all — see the note above msgs).
+    const tasteRecs = (o.recovery || !personalizationStore.read().enabled) ? [] : FeedbackMemory.stationTaste(all, otherAgentNotebooks(agentId));
+    const tasteIds = new Set(tasteRecs.map(r => r.id).filter(Boolean));
+    const recs = all.filter(r => !(r && tasteIds.has(r.id)));
     const q = recentUserText(convo);   // include restored conversation context on terse post-restart follow-ups
     // memory-compound: the embedding lane (BM25 + vectors) — null => pure BM25, byte-identical to before
     const hv = recs.length ? await hybridVectors({ agentId, recs, query: q, run: { providerId, key: runKey, baseUrl }, runId, cost, unmetered: providerUnmetered }) : null;
     const ranked = rank(recs, q, { now: Date.now(), streamId, projectRoot: o.projectRoot || null, vectors: hv && hv.vectors, queryVec: hv && hv.queryVec });   // M-mem.2b stream boost · project tier: only THIS project's lessons
-    const recall = renderRecall(ranked, { limit: 1500 });
+    const recalled = renderRecall(ranked, { limit: 1500 });
+    const taste = renderRecall(tasteRecs, { limit: FeedbackMemory.TASTE_CHARS, header: FeedbackMemory.TASTE_HEADER });
+    const recall = {
+      text: [recalled.text, taste.text].filter(Boolean).join('\n'),
+      count: recalled.count + taste.count,
+      usedIds: (recalled.usedIds || []).concat(taste.usedIds || [])
+    };
+    recall.chars = recall.text.length;
     if (recall.text) {
       msgs = injectRecall(msgs, redact(recall.text));   // §5.6 belt-and-suspenders: a legacy plaintext note can't reach the provider verbatim
       emit('memory.recall', { agentId, runId, count: recall.count, chars: recall.chars });
+      if (taste.count && DEBUG_CHANNEL_LOGS) console.log('[memory] taste run=' + runId + ' agent=' + agentId + ' records=' + taste.count);
       // M-mem.6: surfacing a record IS a use — fold useCount++ / lastUsedAt back onto the stored record (the
       // reduction that makes the Memory Core stats AND rank()'s recency/trust boosts REAL), then emit. One
       // store write per run (only when something changed); the bumped recs don't affect THIS run's ranking.
@@ -20902,13 +20979,14 @@ async function runOnceCore(o) {
     skillReviewingNow.add(agentId);
     runBackgroundSkillReview({ agentId, runId, messages: result.messages.slice(), provider, model: _auxSkillModel, cost, loadedSkills, managedSkills, unmetered: providerUnmetered }).catch(swallow('aux.skillreview.envelope')).finally(() => { skillReviewingNow.delete(agentId); });
   }
-  if (process.env.SKYNET_SKILL_REVIEW !== '0' && _auxDone && isTask && !internal) {
-    // CONSISTENCY LOOP (2026-08-22): park this real task run's review packet so that if the Commander rates it
+  if (process.env.SKYNET_SKILL_REVIEW !== '0' && (_auxDone || _auxFail) && isTask && !internal) {
+    // CONSISTENCY LOOP (2026-08-22): park this real task run's review packet (a FAILED one too, 2026-10-01: the
+    // rating route accepts max_iters/budget/refusal runs, and their `miss` used to find no packet) so that if the Commander rates it
     // `ok`/`miss` (POST /api/growth/ratings) the SAME quiet review runs again WITH THE VERDICT in the prompt.
     // Parked even when the nudge review above already fired: that pass ran before the verdict existed and is
     // blind to it. The verdict pass is the one that knows the work fell short. Bounded LRU + TTL in verdictreview.js;
     // `great` never spends it; taken once; one extra aux pass per rated-short run, a Commander-initiated signal.
-    verdictReview.stash(runId, { agentId, messages: result.messages.slice(), provider, model: _auxSkillModel, cost, loadedSkills, managedSkills, unmetered: providerUnmetered });
+    verdictReview.stash(runId, { agentId, messages: result.messages.slice(), provider, model: _auxSkillModel, cost, loadedSkills, managedSkills, unmetered: providerUnmetered, failed: !_auxDone });
   }
   if (_auxSpend.has('skill-curator')) {
     runSkillCurator({ agentId, runId, provider, model: _auxSkillModel, cost, unmetered: providerUnmetered }).catch(swallow('aux.skillcurator.envelope'));
@@ -23627,17 +23705,25 @@ async function handleGrowthRatings(req, res) {
       }
     } catch (e) { console.warn('[skills] golden mint failed:', (e && e.message) || e); }
   }
+  // THE COMMANDER'S TASTE: a first-time verdict becomes a durable like/dislike memory NOW, independent of the
+  // review packet below (which is RAM, TTL'd, and skill-only). Read the directive before arm() takes the packet.
+  let feedbackMemory = null;
+  if (!result.duplicate) {
+    const fbPacket = verdictReview.peek(runId);
+    const directive = FeedbackMemory.directiveFor([lead.deliveryPrompt, lead.title], fbPacket && fbPacket.messages);
+    feedbackMemory = await recordFeedbackMemory({ agentId: lead.agentId || 'agent', runId, verdict: canonical.verdict, words: String(body.correction || ''), directive });
+  }
   let skillReviewArmed = false;
   if (!result.duplicate && process.env.SKYNET_SKILL_REVIEW !== '0') {
     // ARM, don't fire (slice 2): hold the review for a grace window so the Commander's correction — a follow-up
     // chip or the next typed message (POST /api/growth/ratings/correction) — rides into the prompt in their words.
     skillReviewArmed = verdictReview.arm(runId, canonical.verdict, (job) => {
       console.log('[skills] verdict-triggered review fired run=' + runId + ' verdict=' + job.verdict + ' by=' + job.firedBy + (job.correction ? ' correction=' + JSON.stringify(job.correction.slice(0, 80)) : ''));
-      runBackgroundSkillReview(job).catch(swallow('aux.skillreview.verdict'));
+      rehydrateReviewJob(job).then(runBackgroundSkillReview).catch(swallow('aux.skillreview.verdict'));
     }, String(body.correction || ''));
     if (skillReviewArmed) console.log('[skills] verdict-triggered review armed run=' + runId + ' verdict=' + canonical.verdict + ' grace=' + verdictReview.graceMs + 'ms');
   }
-  return json(200, { ok: true, duplicate: !!result.duplicate, rating: result.rating, skillReviewArmed, goldensMinted });
+  return json(200, { ok: true, duplicate: !!result.duplicate, rating: result.rating, skillReviewArmed, goldensMinted, feedbackMemory });
 }
 // POST /api/growth/ratings/correction { runId, text, final } — the Commander's CORRECTION of a run they rated short
 // (consistency loop, slice 2). Attaches their words to the held verdict review: a follow-up chip (final:false) keeps
@@ -23651,8 +23737,25 @@ async function handleGrowthRatingCorrection(req, res) {
   const runId = String(body.runId || '').trim();
   if (!runId) return json(400, { ok: false, error: 'runId required' });
   const r = verdictReview.correct(runId, String(body.text || ''), body.final === true, String(body.source || ''));
-  if (!r.ok) return json(200, { ok: true, held: false, fired: false, reason: r.reason });
-  return json(200, { ok: true, held: true, fired: !!r.fired });
+  // THE COMMANDER'S TASTE: their words fold into the run's feedback memory whether or not a review was held —
+  // the held review is a RAM packet that a restart or the TTL can lose; the words must not go with it.
+  let feedbackMemory = null;
+  try {
+    const saved = (() => { try { return saveStore.load('agent') || null; } catch (_) { return null; } })();
+    const epoch = Math.max(1, Math.floor(Number(saved && saved.agent && saved.agent.createdAt) || 1));
+    const rating = growthRatings.get(runId, epoch);
+    const lead = rating ? runStore.all().find(row => row && row.runId === runId) : null;
+    // the chat posts the NEXT typed message (within 10 min of a short rating) as the correction; only words that read
+    // as feedback on the work become permanent taste ("now summarize my inbox" is a new task, not a dislike). A chip
+    // or a rating-body correction is explicit and always counts. The held review still gets the words either way.
+    const typed = String(body.source || '') === 'message';
+    if (rating && lead && !lead.internal && typed && !FeedbackMemory.looksLikeFeedback(body.text)) feedbackMemory = { stored: false, reason: 'not feedback on the work' };
+    else if (rating && lead && !lead.internal) {
+      feedbackMemory = await recordFeedbackMemory({ agentId: lead.agentId || 'agent', runId, verdict: rating.verdict, words: String(body.text || ''), directive: lead.deliveryPrompt || lead.title || '' });
+    }
+  } catch (e) { failNote('feedback.correction', e); }
+  if (!r.ok) return json(200, { ok: true, held: false, fired: false, reason: r.reason, feedbackMemory });
+  return json(200, { ok: true, held: true, fired: !!r.fired, feedbackMemory });
 }
 // GET /api/runs?agent=<id>&limit=<n>&since=<ms>[&runId=<id>] — the agent's run history (M-save P4), newest-first.
 // Rows carry the run's `artifacts` ledger (work-visibility); an explicit runId narrows to that single run's
@@ -24160,7 +24263,7 @@ function serveInsights(req, res) {
        Commander's own run history (none of it is pause-gated), so the record stays visible while personalization
        is paused even though the prompts stop citing it. What a prompt may cite ≠ what the Commander may see. */
     let trackRecord = null;
-    try { const rec = Outcomes.fold(rows, { now: Date.now() }); trackRecord = { decided: rec.decided, windowMs: rec.windowMs, patterns: Outcomes.summary(rec), lines: Outcomes.lines(rec) }; } catch (_) { trackRecord = null; }
+    try { const rec = Outcomes.fold(rows, { now: Date.now(), verdicts: ratingVerdictMap() }); trackRecord = { decided: rec.decided, windowMs: rec.windowMs, patterns: Outcomes.summary(rec), lines: Outcomes.lines(rec) }; } catch (_) { trackRecord = null; }
     json(200, Object.assign(foldInsights(rows, { nowMs: Date.now(), bucketMs: 3600000, buckets: 24 }), { trackRecord }));
   } catch (e) { json(500, readRouteFailure('insights', e)); }   // a zeroed fold would read as "0 runs, $0" — a fabricated telemetry claim
 }
@@ -24423,6 +24526,48 @@ function skillNameFromReflection(content) {
 // user validation to reward), and emits the frozen memory.write / deliverable SSE rungs. It does NOT emit
 // memory.feedback — the caller owns that (the semantics differ: keep=+2, edit=+1, silent auto-save=none). Returns
 // { ok, id, kind, skill? } or { ok:false, error }. `opts.source` labels a skill's provenance ('reflection').
+// recordFeedbackMemory — fold one verdict / correction into the rated agent's notebook as the Commander's TASTE
+// (feedbackmemory.js). One record per rated run; a later correction updates that record instead of adding another.
+// User-confirmed by construction (the Commander's own verdict and words) and seeded with Keep-strength trust. Honors
+// the personalization pause like every learning pass. Returns a truthful summary for the route response; never throws.
+// every OTHER agent's notebook (the roster, plus the hero), for the station-wide taste block. Reads go through the
+// durable store's cache; an unreadable notebook contributes nothing and never fails the run.
+function otherAgentNotebooks(agentId) {
+  const ids = new Set(['agent']);
+  for (const id of agentRoster.keys()) ids.add(id);
+  ids.delete(String(agentId || 'agent'));
+  const out = [];
+  for (const id of ids) {
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(String(id))) continue;
+    try { const l = notebookStore.get('notebook:' + id); if (Array.isArray(l) && l.length) out.push(l); }
+    catch (e) { failNote('feedback.taste.read', e); }
+  }
+  return out;
+}
+async function recordFeedbackMemory(o) {
+  o = o || {};
+  const agentId = String(o.agentId || 'agent');
+  try {
+    if (!personalizationStore.read().enabled) return { stored: false, reason: 'personalization-paused' };
+    let out = null;
+    await notebookStore.update('notebook:' + agentId, (stored) => {
+      const r = FeedbackMemory.apply(stored, { runId: o.runId, verdict: o.verdict, words: redact(String(o.words || '')), directive: redact(String(o.directive || '')) },
+        { now: Date.now(), nextId: memcore.nextNoteId, nextTrust: memcore.nextTrust, trustDelta: 2 });
+      if (!r) return undefined;
+      out = r;
+      return r.list;
+    });
+    if (!out) return { stored: false, reason: 'nothing to learn' };
+    chanEmit('memory.write', { agentId, runId: String(o.runId || ''), id: out.rec.id, kind: out.rec.kind, scope: out.rec.scope });
+    try { hookSpine.invoke('on_memory_write', { session_id: String(o.runId || ''), extra: { agent_id: agentId, id: out.rec.id, kind: out.rec.kind, scope: out.rec.scope, source: 'feedback' } }); } catch (e) { failNote('feedback.hook', e); }
+    console.log('[memory] feedback ' + (out.created ? 'saved' : 'updated') + ' run=' + o.runId + ' agent=' + agentId + ' id=' + out.rec.id + ' verdict=' + o.verdict);
+    return { stored: true, id: out.rec.id, created: out.created };
+  } catch (e) {
+    failNote('feedback.memory', e);
+    return { stored: false, reason: 'could not save' };
+  }
+}
+
 async function writeMemoryRecord(agentId, prop, opts) {
   opts = opts || {};
   const content = String(opts.content != null ? opts.content : (prop && prop.content) || '').trim();
