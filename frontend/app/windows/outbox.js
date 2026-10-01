@@ -30,14 +30,13 @@
     body.innerHTML =
       '<header class="utility-head"><h2>Ready to review</h2><p>Finished work from your lines and routines, including what ran while you were away. Open a result, then decide what comes next.</p></header>' +
       '<div id="ob-list" class="ob-list"></div>' +
-      '<div class="row ob-doors" style="margin-top:10px;gap:8px"><button class="bb sm" id="ob-library">DELIVERABLES · all saved outputs</button><button class="bb sm" id="ob-logbook">AGENT RECORD · run history</button></div>';
+      '<div class="row ob-doors" style="margin-top:10px;gap:8px"><button class="bb sm" id="ob-logbook">AGENT RECORD · run history</button></div>';
     const list = body.querySelector('#ob-list');
     const lb = body.querySelector('#ob-logbook');
     if (lb) lb.addEventListener('click', () => H.navigateWork('outbox', 'logbook'));
-    const lib = body.querySelector('#ob-library');
-    if (lib) lib.addEventListener('click', () => H.navigateWork('outbox', 'deliverables'));
+    // (ONE MENU: DELIVERABLES is this window's neighbouring MY WORK tab — no second door to it here)
     function renderEmpty() {
-      list.innerHTML = '<div class="empty-state"><span class="es-glyph">▤</span><b>You’re all caught up</b><span>New results from away work appear here. Your saved outputs are still in the Library.</span></div>';
+      list.innerHTML = '<div class="empty-state"><span class="es-glyph">▤</span><b>You’re all caught up</b><span>New results from away work appear here. Your saved outputs are in the DELIVERABLES tab.</span></div>';
     }
     if (!rows.length) { renderEmpty(); return; }
     // agent id → display name via the live roster (raw ids read as debug output)

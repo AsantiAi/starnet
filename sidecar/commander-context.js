@@ -92,7 +92,7 @@ function compose(input) {
     lines.push('- Build routines your own tools can run today (web research, watching public pages, drafting, summaries, checklists, reminders). Never wait on a connection or API key: create the runnable version and mention any upgrade in one line.');
     lines.push('- A broad goal ("help me run my shop") gets 2-5 distinct routines at sensible times. Plain-English schedules work: "weekdays at 8am", "mondays at 9am", "1st of every month".');
     lines.push('- Every run must deliver something useful on its own (fresh findings, a ready draft, a short decision list), never a blank template or generic advice. Each prompt is self-contained: task, sources, output format, what to flag. Results come back to this chat by default. Check routine_list first; never duplicate.');
-    lines.push('- End by listing each routine (name, when, what it delivers) and say they can pause or edit them in AUTOMATION › ROUTINES. With no routine_create tool, point them there instead.');
+    lines.push('- End by listing each routine (name, when, what it delivers) and say they can pause or edit them in AUTOMATE › SCHEDULES. With no routine_create tool, point them there instead.');
     lines.push('</automation_request>');
   }
   // STANDING WORK (repeat sense, 2026-10-01): this request is the same work the Commander already had completed on
@@ -106,7 +106,7 @@ function compose(input) {
       + (Array.isArray(sw.quotes) && sw.quotes.length ? ' Earlier wording: ' + sw.quotes.map(q => '"' + clip(q, 160) + '"').join(' / ') + '.' : ''));
     lines.push('Do the current task fully first. Then, at the very END of your reply, offer ONCE in one short sentence to take it off their plate as a standing routine'
       + (sw.suggest && sw.suggest.display ? ' — suggest ' + clip(sw.suggest.display, 60) + ' (' + clip(sw.suggest.why, 80) + ')' : ' — ask when it should run')
-      + '. Create nothing unless they say yes. On yes: call routine.list, then routine.create with a self-contained prompt (the full instruction, sources, format and choices they made) and the agreed schedule, deliver "origin" so results come back here. If you have no routine.create tool, say AUTOMATION › ROUTINES can set it up in one step. If they decline or ignore it, drop it.');
+      + '. Create nothing unless they say yes. On yes: call routine.list, then routine.create with a self-contained prompt (the full instruction, sources, format and choices they made) and the agreed schedule, deliver "origin" so results come back here. If you have no routine.create tool, say AUTOMATE › SCHEDULES can set it up in one step. If they decline or ignore it, drop it.');
     lines.push('</standing_work_notice>');
   }
   const patterns = Array.isArray(input.patterns) ? input.patterns : [];

@@ -993,7 +993,12 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const fam = FAMILIES[famId];
     const nav = mkEl('nav', 'fam-tabs'); nav.dataset.family = famId;
     nav.setAttribute('role', 'tablist'); nav.setAttribute('aria-label', fam.label);
-    nav.innerHTML = '<span class="fam-name" aria-hidden="true">' + esc(fam.label) + '</span>' + fam.tabs.map(t =>
+    // the window is named for its MENU (MY WORK / AUTOMATE / CONNECT) — the lit tab says which part is showing,
+    // so the title never changes under the Commander as they move between tabs
+    const titleEl = w.querySelector('.term-title'); if (titleEl) titleEl.textContent = fam.label;
+    const plate = w.querySelector('.term-foot-k'); if (plate) plate.textContent = fam.label;
+    const x = w.querySelector('.term-x'); if (x) x.setAttribute('aria-label', 'Close ' + fam.label);
+    nav.innerHTML = fam.tabs.map(t =>
       '<button type="button" role="tab" class="fam-tab" data-fam-tab="' + esc(t.id) + '" data-tip="' + esc(t.tip) + '">' + esc(t.label) + '</button>').join('');
     const head = w.querySelector('.term-head'); if (!head) return;
     head.after(nav);
@@ -1023,12 +1028,33 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     if (tab.k === fromKey) { openFamilyTab(famId, tab); return; }
     const w = open[fromKey];
     if (w && windowDirty(w)) { requestCloseTerm(fromKey); return; }   // unsaved draft: arm the guard, switch nothing
-    if (termPos[fromKey]) termPos[tab.k] = Object.assign({}, termPos[fromKey]); else delete termPos[tab.k];
-    if (termSize[fromKey]) termSize[tab.k] = Object.assign({}, termSize[fromKey]);
-    if (store.termDock && store.termDock[fromKey]) store.termDock[tab.k] = Object.assign({}, store.termDock[fromKey]);
+    swapInPlace(fromKey, () => openFamilyTab(famId, tab), tab.k);
+  }
+  // the next window takes the current one's spot, size and docked height; the current one closes. toKey is optional
+  // (the opener names it); without it the geometry is carried by key after the open. While the flag is up, the closing
+  // sheet and the opening one skip their travel animations (glass-demo moveSheet + the .term power keyframes), so a
+  // tab reads as a tab, not a close-and-rise.
+  function swapInPlace(fromKey, openNext, toKey) {
+    const carry = k => {
+      if (!k || k === fromKey) return;
+      if (termPos[fromKey]) termPos[k] = Object.assign({}, termPos[fromKey]); else delete termPos[k];
+      if (termSize[fromKey]) termSize[k] = Object.assign({}, termSize[fromKey]);
+      if (store.termDock && store.termDock[fromKey]) store.termDock[k] = Object.assign({}, store.termDock[fromKey]);
+    };
+    carry(toKey);
     save();
-    if (w) closeTerm(fromKey);
-    openFamilyTab(famId, tab);
+    document.body.setAttribute('data-fam-switch', '');
+    clearTimeout(swapInPlace._t);
+    swapInPlace._t = setTimeout(() => document.body.removeAttribute('data-fam-switch'), 400);
+    const fam = familyOf(fromKey);
+    const before = new Set(Object.keys(open));
+    if (open[fromKey]) closeTerm(fromKey);
+    openNext();
+    // the opener did not name its window: find the menu window that just appeared and seat it where the old one was
+    if (!toKey) {
+      const k = Object.keys(open).find(x => !before.has(x) && familyOf(x) === fam);
+      if (k && open[k] && termPos[fromKey]) { carry(k); placeTerm(open[k], k); }
+    }
   }
   // the dock button of a menu: open its last-used tab — or, like every dock button, raise / close what is showing
   function toggleFamily(famId) {
@@ -2468,7 +2494,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       CF_GROUPS.map((g, i) => {
         const key = a.id + ':' + g.id;
         return '<details class="cf-group" id="' + g.id + '" data-cf-group="' + esc(key) + '"' + (cfOpen.get(key) ? ' open' : '') + '><summary><span class="cf-group-title">' + g.label + '</span><span class="cf-group-summary">' + esc(summaries[i]) + '</span></summary><div class="cf-group-body">' + content[i] + '</div></details>';
-      }).join('') + '<div class="cf-card" id="ag-away-link"><button class="bb sm" data-away-open>WHILE I’M AWAY → AUTOMATION</button></div>' +
+      }).join('') + '<div class="cf-card" id="ag-away-link"><button class="bb sm" data-away-open>WHILE I’M AWAY → AUTOMATE</button></div>' +
       agDeleteRow(a);
   }
 
@@ -8462,7 +8488,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     if (backfilled) save();
     const unread = store.notifs.filter(n => !n.read).length;
     const rows = store.notifs.slice().reverse().filter(n => notifView !== 'unread' || !n.read);
-    body.innerHTML = '<header class="utility-head"><h2>Station updates</h2><p>Run results, saved outputs, and updates from your crew.</p></header>' +
+    body.innerHTML = '<header class="utility-head"><h2>Notifications</h2><p>Run results, saved outputs, and alerts from your crew.</p></header>' +
       '<div class="nf-toolbar"><div class="utility-tabs" role="group" aria-label="Show notifications">' +
       '<button type="button" data-nf-view="all" aria-pressed="' + (notifView === 'all') + '">All · ' + store.notifs.length + '</button>' +
       '<button type="button" data-nf-view="unread" aria-pressed="' + (notifView === 'unread') + '">Unread · ' + unread + '</button></div>' +
@@ -10487,6 +10513,11 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     // mechanism as the dossier's "jump to CONFIG" (consoleSection is what mountConsole reads at render).
     if (section) consoleSection[key] = section;
     if (open[key]) { if (minimized[key]) restoreTerm(key); if (section) rerender(key); return; }   // minimized → restore, not duplicate
+    // ONE MENU: a link to a sibling of a menu window that is already showing (OUTBOX → DELIVERABLES, ABILITIES →
+    // CHANNELS, a schedule draft while WORKFLOWS is up) switches that window's tab in place — never a second window
+    const fam = familyOf(key);
+    const sib = fam && Object.keys(open).find(k => k !== key && open[k] && !minimized[k] && !open[k]._closing && familyOf(k) === fam);
+    if (sib && !windowDirty(open[sib])) { swapInPlace(sib, () => toggleTerm(key, def[0], def[1], def[2])); return; }
     toggleTerm(key, def[0], def[1], def[2]);
   }
 
@@ -10498,6 +10529,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const alias = TERM_ALIAS[to];
     if (alias) { section = (section && alias.map[section]) || alias.section; to = alias.term; }
     if (!BUILDERS[to]) return;
+    // ONE MENU: two tabs of the same menu (OUTBOX → DELIVERABLES) — the tab strip is the way back, so switch in place
+    if (from !== to && familyOf(from) && familyOf(from) === familyOf(to)) { openTerm(to, section); return; }
     if (!back) {
       if (!workTrail.length || workTrail[workTrail.length - 1].key !== from) workTrail = [{ key: from, section: consoleSection[from] }];
       const prior = workTrail.findIndex(x => x.key === to);

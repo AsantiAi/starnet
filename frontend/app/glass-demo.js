@@ -69,7 +69,8 @@
     s.exiting = !showing;
     w.inert = !showing;
     if (showing) seat(w,s);
-    if (reducedMotion.matches) { done(); return; }
+    // a ONE MENU tab switch (stationui switchFamilyTab) swaps windows in place: no sheet travel either way
+    if (reducedMotion.matches || document.body.hasAttribute('data-fam-switch')) { done(); return; }
     const style = getComputedStyle(w);
     const duration = parseFloat(style.getPropertyValue('--t-med')) || 220;
     w.style.willChange = 'translate, opacity';
