@@ -182,6 +182,7 @@ ONE undo:
 | `{ remove: { line, room? } }` | Takes one workflow line out, its machines and belts, by its name ("build and test" finds BUILD + TEST). Every other line stays exactly. |
 | `{ seat: { agent, room } }` | Moves an agent's desk (or gives one) into the room, in a tidy spot against its wall. |
 | `{ move: { room, beside, side } }` | Moves a room with everything in it (furniture, lines, seats ride along, `WorldModel.moveRoom`): its old hallways that would join nothing go, a new corridor, planted and lit, joins it where it lands. The main room stays; a move that would strand a room is refused naming it. |
+| `{ undo: true }` | "No, undo that": takes back the lead's own last build (the page keeps a record of them per station, ten deep), only while the station is exactly as that build left it, so it never takes back the Commander's own edit; one step, as Build mode's UNDO, checked to land exactly on the station before the build. After a page reload the one-step history is gone, and the refusal says which edit takes it back instead. |
 | `{ staff: { line, steps } }` | Restaffs an existing line where it stands: `[{ step, agent, instructions }]` by run order, `agent: "nobody"` clears a step. Recruiting is not done here. The card lists every step's instructions. |
 
 The card names every piece of equipment that goes ("Equipment that goes: a dish (WEB), a studio (IMAGES)"), so

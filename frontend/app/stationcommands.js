@@ -356,7 +356,11 @@ const StationCommands = (() => {
 
   // the station builder's parked plans: planId -> { plan, at }, ten minutes, used once
   const builderPlans = new Map(), PLAN_TTL_MS = 10 * 60 * 1000;
-  const builderBuilt = [];   // the lead's builds on this page, newest last: what an undo may take back
+  /* the lead's builds on this station, newest last: what an undo may take back. Kept per station (its createdAt) in
+     localStorage so a reload keeps them; an undo still plans only while the station is exactly as that build left it. */
+  const builtKey = st => 'starnet.builderBuilt.' + ((st && st.doc && st.doc().meta && st.doc().meta.createdAt) || 'station');
+  const builtRead = st => { try { const v = JSON.parse(localStorage.getItem(builtKey(st)) || '[]'); return Array.isArray(v) ? v.slice(-10) : []; } catch (_) { return []; } };
+  const builtWrite = (st, list) => { try { localStorage.setItem(builtKey(st), JSON.stringify(list.slice(-10))); } catch (_) {} };
   let planSeq = 0;
   const NEXT_STEP = 'Tell the Commander the summary in plain words, then call station.build with this planId. Nothing has been built yet.';
   function park(r) {
@@ -470,7 +474,8 @@ const StationCommands = (() => {
     'station.plan_undo': () => {
       const { st } = builderReady();
       if (!StationBuilder.planUndo) throw new Error('this page cannot undo a build yet; reload it');
-      const p = park(StationBuilder.planUndo(st.serialize(), builderBuilt[builderBuilt.length - 1] || null));
+      const built = builtRead(st);
+      const p = park(StationBuilder.planUndo(st.serialize(), built[built.length - 1] || null, { canUndo: typeof st.canUndo === 'function' ? st.canUndo() : true }));
       return { planId: p.planId, summary: p.plan.summary, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
     },
     // builds ANY parked plan, exactly, in one undo step
@@ -492,8 +497,10 @@ const StationCommands = (() => {
         throw new Error(r.error);
       }
       builderPlans.delete(planId);
-      if (e.plan.spec && e.plan.spec.kind === 'undo') builderBuilt.pop();
-      else { builderBuilt.push({ resultSig: StationBuilder.sigOf(st.serialize()), floorSig: e.plan.floorSig, summary: e.plan.summary, recruited: (r.recruited || []).length > 0 }); if (builderBuilt.length > 10) builderBuilt.shift(); }
+      { const built = builtRead(st);
+        if (e.plan.spec && e.plan.spec.kind === 'undo') built.pop();
+        else built.push({ resultSig: StationBuilder.sigOf(st.serialize()), floorSig: e.plan.floorSig, summary: String(e.plan.summary || '').slice(0, 400), recruited: (r.recruited || []).length > 0 });
+        builtWrite(st, built); }
       const hallsBuilt = (r.hallways || []).length, roomNames = (r.rooms || []).map(x => x.name).join(', ');
       const what = r.line ? r.line.name + ' in ' + r.where : r.kind === 'restyle' ? 'the restyle of ' + r.where : r.kind === 'edit' ? r.where : r.kind === 'swap' ? (r.preset ? r.preset.name : 'the preset') + ' (RESTORE PREVIOUS in Build → Presets brings your old station back)'
         : roomNames + (hallsBuilt ? (roomNames ? ' and ' : '') + (hallsBuilt > 1 ? hallsBuilt + ' hallways' : 'a hallway') : '');
