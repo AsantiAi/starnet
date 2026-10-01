@@ -437,6 +437,23 @@ async function opensWithin(t, ms) {
     t.Voice.stopCoordinator();
   }
 
+  // --- click, stop, click during the permission prompt: the first take never comes alive -------------
+  {
+    const t = boot({ recorder: true });
+    gumMode = 'hang';
+    t.Voice.startListening(); await tick();          // take A waits on the prompt
+    t.Voice.stopListening(); await tick();           // stop before it ever opened
+    t.Voice.startListening(); await tick();          // take B
+    A.eq(gumPending.length, 2, 'race: two permission requests are pending');
+    let stoppedA = 0;
+    gumPending[0].res({ getTracks: () => [{ stop() { stoppedA++; } }] }); await tick();   // A's grant lands late
+    A.eq(stoppedA, 1, 'race: the late grant for the abandoned take is released (mic not left hot)');
+    A.eq(mrInstances.length, 0, 'race: no recorder is built for the abandoned take');
+    gumPending[1].res(fakeStream()); await tick();
+    A.eq(mrInstances.length, 1, 'race: exactly one recorder — the live take’s');
+    gumMode = 'ok';
+  }
+
   // --- a recognizer that fails every time stops the hands-free loop and says why ----------------
   // Live dictation re-armed a failing engine forever (~every 150ms) while the panel read LISTENING and the
   // status showed a raw 'mic: network'. Three hard errors in a row end the loop with plain words.

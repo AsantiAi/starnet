@@ -1370,17 +1370,23 @@ const Voice = (() => {
       cb = cbs; chunks = []; pcmFrames = []; pcmSamples = 0; pcmRate = 0; takeSttMode = classicSttMode;
       previewSeq++; previewPending = false; previewAbort = null; previewLastAt = 0;
       aborted = false; delivered = false;
+      // This take's identity. A click-stop-click during the permission prompt resets the shared flags above, so
+      // the FIRST take's late getUserMedia used to pass the re-entry guard and build a second hot recorder (mic
+      // left on, frames mixed, its prompt timeout firing 'mic-failed' into the new take).
+      const take = previewSeq;
       if (takeSttMode === 'local' || classicPreviewMode === 'local') fetch('/api/local-voice/warm?tts=0', {method:'POST'}).catch(() => {});
+      let granted = null;
       try {
         // DEAD-BUTTON GUARD: getUserMedia can hang forever if the mic-permission prompt is DISMISSED (not
         // answered) — WebView2 and some browsers never settle the promise. Without a ceiling, `listening`
         // stays true and the mic button is wedged 'rec' until a page reload. Race the request against a
         // timeout so a stuck prompt degrades to a recoverable error instead of a permanently dead button.
-        stream = await Promise.race([
+        granted = await Promise.race([
           navigator.mediaDevices.getUserMedia({ audio: true }),
           new Promise((_, rej) => setTimeout(() => { const e = new Error('mic prompt timed out'); e.name = 'TimeoutError'; rej(e); }, GUM_TIMEOUT_MS))
         ]);
       } catch (e) {
+        if (take !== previewSeq) return;   // a newer take owns the callbacks now
         // NotAllowedError / SecurityError → the user (or policy) denied the mic. Map to the SR error string
         // so startListening()'s existing not-allowed branch (drop hands-free + clear copy) fires unchanged.
         const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
@@ -1391,7 +1397,8 @@ const Voice = (() => {
       // again, or a teardown/barge-in landed). If so, don't spin up a hot recorder no one is listening to —
       // release the just-granted stream and bail. `aborted` is set by abort(); `delivered` by a stop() that
       // ran before the stream arrived (mr was still null → it went straight to finish()).
-      if (aborted || delivered) { try { stream.getTracks().forEach(t => t.stop()); } catch (_) {} stream = null; return; }
+      if (take !== previewSeq || aborted || delivered) { try { granted.getTracks().forEach(t => t.stop()); } catch (_) {} return; }
+      stream = granted;
       try {
         mime = pickMime();
         mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
@@ -1608,7 +1615,13 @@ const Voice = (() => {
     });
   }
 
-  function stopListening() { if (listening) sttProvider.stop(); }   // onend → onFinal handles the rest
+  function stopListening() {   // onend → onFinal handles the rest
+    if (!listening) return;
+    // The take is finished but not yet transcribed — say so instead of leaving 'recording — click the mic when
+    // finished' up for the whole round-trip (the button looked dead after the second click).
+    if (!convoMode) { setStatus('transcribing…'); if (micBtn) micBtn.title = 'transcribing…'; }
+    sttProvider.stop();
+  }
 
   function endListening() {
     if (!listening) return;
