@@ -1478,8 +1478,9 @@ fn free_port() -> u16 {
 const CSP_ANY_LOOPBACK_PORT: &str = "http://127.0.0.1:*";
 
 /// Replace every `http://127.0.0.1:*` source with `http://127.0.0.1:<port>` — connect-src (the
-/// fetch bridge + SSE), script-src (BootGuard loads specialties.js from the sidecar), img-src
-/// and media-src. Any other local service stays unreachable from the webview.
+/// fetch bridge + SSE), script-src (BootGuard loads specialties.js from the sidecar), img-src,
+/// media-src and frame-src (plugin windows: a sandboxed /plugin-ui/ page served by the sidecar).
+/// Any other local service stays unreachable from the webview.
 fn pin_csp_to_sidecar_port(csp: &str, port: u16) -> String {
     csp.replace(CSP_ANY_LOOPBACK_PORT, &format!("http://127.0.0.1:{port}"))
 }
