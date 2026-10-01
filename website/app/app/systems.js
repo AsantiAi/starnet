@@ -133,7 +133,7 @@ const Systems = (() => {
     const names = list.map(s => s.label);
     const msg = (list.length === 1 ? 'NEW SYSTEM ONLINE — ' : 'NEW SYSTEMS ONLINE — ') + names.join(' · ')
       + ' · find ' + (list.length === 1 ? 'it' : 'them') + ' in the ' + Array.from(new Set(list.map(s => s.group.toUpperCase()))).join(' / ') + ' dock';
-    try { StationUI.notify(msg, 'gold', undefined, { key: 'systems-online', onClick: () => { if (StationUI.openTerm) StationUI.openTerm('quests', 'progress'); } }); } catch (_) {}
+    try { StationUI.notify(msg, 'gold', undefined, { key: 'systems-online', transient: true, onClick: () => { if (StationUI.openTerm) StationUI.openTerm('quests', 'progress'); } }); } catch (_) {}   // a toast, not inbox history
     try { if (typeof SFX !== 'undefined' && SFX.level) SFX.level(); } catch (_) {}
   }
   function growTo(ids) {
