@@ -74,24 +74,7 @@
     if (sum && sum.parentElement !== h3) h3.appendChild(sum);
   }
 
-  // The station's film grain for the HTML glass: the SAME tile world.js grainPattern() draws into the feed
-  // (grey, two-sample triangular noise), painted once and handed to CSS as --sn-grain. crew-glass.css lays it
-  // over the CREW sheet with the feed's own blend (overlay) so the panel and the picture share one grain.
-  function paintGrain() {
-    try {
-      const S = 256, c = document.createElement('canvas'); c.width = S; c.height = S;
-      const g = c.getContext('2d'), id = g.createImageData(S, S);
-      for (let i = 0; i < S * S; i++) {
-        const v = Math.round((Math.random() + Math.random()) * 127.5);
-        id.data[i * 4] = v; id.data[i * 4 + 1] = v; id.data[i * 4 + 2] = v; id.data[i * 4 + 3] = 255;
-      }
-      g.putImageData(id, 0, 0);
-      document.body.style.setProperty('--sn-grain', 'url(' + c.toDataURL('image/png') + ')');
-    } catch (_) {}
-  }
-
   function wire() {
-    paintGrain();
     seatSummary();
     if (typeof U !== 'undefined' && U.bus) {
       U.bus.on('agent.run.start', (p) => { if (p && p.runId && p.agentId) runs.set(String(p.runId), { agentId: String(p.agentId), startedAt: Date.now(), tool: '' }); paint(); });

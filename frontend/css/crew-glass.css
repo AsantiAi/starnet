@@ -17,32 +17,14 @@ body.glass-demo {
 
 /* ---------- 1 · the sheet ---------- */
 body.glass-demo:not(.hud-mode) #screen-game #left {
-  /* BLACK MIRROR: the glass is a dark screen — near-black, a faint reflection across its top-left, the
-     tube's own vignette pulling the edges down — and the station's film grain lives in it (::after) */
-  background:
-    linear-gradient(152deg, rgba(var(--ph-bright-rgb), .055), transparent 34%),
-    var(--cg-glass),
-    color-mix(in srgb, var(--panel2) 80%, transparent);
+  background: var(--cg-glass), color-mix(in srgb, var(--panel2) 56%, transparent);
   border: 1px solid var(--cg-edge);
   border-radius: 12px;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, .45), inset 0 1px rgba(var(--ph-rgb), .08), inset 0 0 44px rgba(0, 0, 0, .55);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, .4), inset 0 1px rgba(var(--ph-rgb), .08);
   -webkit-backdrop-filter: blur(18px) saturate(1.08);
   backdrop-filter: blur(18px) saturate(1.08);
 }
-/* the station's film grain (the world renderer's own tile and blend: crewcards.js paints it into --sn-grain),
-   on ALL FOUR cabinet panels so the interface and the feed read as one screen (it replaces panelchrome's
-   faint etched corner marks on ::after), breathing a few steps a second like the feed's — still for reduced motion */
-body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar)::after {
-  content: ''; position: absolute; inset: 0; z-index: 5; pointer-events: none;
-  border-radius: inherit; opacity: .11; mix-blend-mode: overlay;
-  background: var(--sn-grain, none) 0 0 / 256px 256px repeat;
-  animation: cg-grain .9s steps(1) infinite;
-}
-@keyframes cg-grain {
-  0% { background-position: 0 0; } 20% { background-position: -53px -97px; } 40% { background-position: -106px -38px; }
-  60% { background-position: -159px -135px; } 80% { background-position: -212px -76px; }
-}
-@media (prefers-reduced-motion: reduce) { body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar)::after { animation: none; } }
+body.glass-demo:not(.hud-mode) #screen-game #left::after { display: none; }
 body.glass-demo:not(.hud-mode) #screen-game #left::before { opacity: 0; }
 body.glass-demo:not(.hud-mode) #screen-game #left:focus-within { outline: 0; border-color: rgba(var(--ph-rgb), .38); }
 
@@ -85,13 +67,9 @@ body.glass-demo:not(.hud-mode) #crew .crew-portrait {
   border-radius: 8px; border: 1px solid var(--cg-hair);
   background: rgba(0, 0, 0, .3); box-shadow: inset 0 2px 6px rgba(0, 0, 0, .45);
 }
-body.glass-demo:not(.hud-mode) #crew .crew-portrait::after {
-  content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
-  background: radial-gradient(ellipse at 50% 45%, transparent 50%, rgba(0, 0, 0, .55)), linear-gradient(150deg, rgba(var(--ph-bright-rgb), .07), transparent 40%);
-}
 body.glass-demo:not(.hud-mode) #crew .crew-portrait img { width: 40px; height: 50px; object-fit: contain; object-position: 50% 100%; }
 body.glass-demo:not(.hud-mode) #crew .crew-portrait > .dot {
-  position: absolute; left: auto; bottom: auto; right: 4px; top: 4px; z-index: 1;
+  position: absolute; left: auto; bottom: auto; right: 4px; top: 4px;
   width: 9px; height: 9px; border-radius: 50%; outline: 0; animation: none;
   background: var(--ok, #7fd89a); box-shadow: var(--cg-lamp);
 }
