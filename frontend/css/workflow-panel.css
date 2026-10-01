@@ -339,9 +339,8 @@ textarea.wf-io:focus { outline: none; border-color: var(--ph); box-shadow: var(-
 .wf-md .md-list li { margin: .15em 0; }
 .wf-md .md-code { padding: 0 4px; border-radius: 4px; background: rgba(var(--ph-rgb),.08); }
 .wf-md a { color: var(--wf-cyan); }
-/* the READY pill leads on (a key-like pill: it takes you to SEND IT A JOB) */
-.wf-pill.go { cursor: pointer; }
-.wf-pill.go:hover { border-color: var(--ok); background: rgba(var(--ok-rgb),.12); }
+/* a READY line's next step: the ▶ SEND IT A JOB key beside the pill */
+.wf-ready #wf-sendnow { padding: 0 12px; }
 /* NOT RIGHT? — say what's wrong; each suggested change is a glass card to use or ignore (2026-09-30) */
 .wf-notright { display: grid; gap: 8px; margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--wf-edge); }
 .wf-fix { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--wf-edge); border-radius: 10px;

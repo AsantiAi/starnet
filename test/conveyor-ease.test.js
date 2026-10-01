@@ -103,6 +103,11 @@ A.ok(/⚠ FINISHED WITH A PROBLEM/.test(res) && /const bad = v\.ok \? null : run
 A.ok(/v\.ok \? 'THE RESULT' : 'WHAT CAME OUT'/.test(res) && /\(!v\.ok \? '' : '<div class="wf-row">'/.test(res), '…still shows what came out and every step (no KEEP AS THE EXAMPLE on a problem job)');
 A.ok(/empty: 'gave no final answer', error: 'hit an error', max_iters: 'ran out of turns'/.test(panel) && /esc\(runEnd\(r\.reason\)\)/.test(res), 'each step says how its run ended in words, never the raw reason code');
 A.ok(/placeholder="e\.g\. Find this week’s AI news and summarize the three biggest stories\.">' \+ esc\(S\.testJob\[S\.lineKey\] \|\| ''\) \+ '<\/textarea>'/.test(panel), 'a new schedule\'s task starts as the job this line was last sent ("do that every morning" is one click)');
+/* ---------- a READY line says what to do next — and its pill keeps the station's word (station-layout.e2e: panel pill == the status an
+   agent reads with station.layout) ---------- */
+A.ok(/<button type="button" class="bb sm refit-primary" id="wf-sendnow" hidden>▶ SEND IT A JOB<\/button>/.test(panel) && /sendNow\.hidden = !sendTo \|\| S\.sel === sendTo; sendNow\.onclick = toSend;/.test(panel),
+  'a READY line shows ▶ SEND IT A JOB beside its pill, taking you to the send box (hidden while the INBOX card is open)');
+A.ok(/if \(r\) \{ pill\.textContent = W\.pillText\(r\);/.test(panel) && !/READY · SEND IT A JOB ▸/.test(panel), '…and the pill itself says exactly what an agent reads: READY TO RUN');
 /* ---------- the LAST stage is told its reply IS the result (found on a real model: a WRITER asked for three short stories wrote an
    essay about "the upstream report", because every stage was told to produce output "for the next stage … build on it") ---------- */
 const P = require('../frontend/app/pipeline.js'), Chain = require('../sidecar/routing/chain.js');

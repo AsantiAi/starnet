@@ -276,7 +276,7 @@ const WorkflowPanel = (() => {
         + '<div class="wf-name">' + (intake
           ? '<input id="wf-name" class="wf-name-in" type="text" maxlength="48" aria-label="Workflow name" placeholder="' + esc(H.stampName(intake.id) || 'Name this workflow') + '" value="' + esc(intake.label || '') + '" />'
           : '<span class="wf-name-none">' + (c ? 'Unnamed line' : 'A single BAY') + '</span>') + '</div>'
-        + '<div class="wf-ready"><span class="wf-pill" id="wf-pill"></span><span class="wf-est" id="wf-est"></span></div>'
+        + '<div class="wf-ready"><span class="wf-pill" id="wf-pill"></span><button type="button" class="bb sm refit-primary" id="wf-sendnow" hidden>▶ SEND IT A JOB</button><span class="wf-est" id="wf-est"></span></div>'
         + '<p class="wf-today" id="wf-today" aria-label="This line today"></p>'
         + '<p class="wf-sentence" id="wf-sentence" aria-live="polite"></p><ul class="wf-hints" id="wf-hints"></ul>';
       $('#wf-close').onclick = () => { H.sfx('click'); close(); };
@@ -292,12 +292,17 @@ const WorkflowPanel = (() => {
     }
     $('#wf-kick').textContent = 'WORKFLOW · ' + nSteps + ' STEP' + (nSteps === 1 ? '' : 'S');
     const pill = $('#wf-pill');
-    /* A READY LINE'S PILL SAYS WHAT TO DO NEXT (2026-09-30, found walking a fresh station: "READY TO RUN" sat over a BAY card with
-       no way on — the send box lives on the INBOX card). It reads READY · SEND IT A JOB ▸ and takes you to that box. */
+    /* A READY LINE SAYS WHAT TO DO NEXT (2026-09-30, found walking a fresh station: "READY TO RUN" sat over a BAY card with no way
+       on — the send box lives on the INBOX card). The pill keeps the station's own word — the status an agent reads with
+       station.layout, held equal by station-layout.e2e — and beside it a key, ▶ SEND IT A JOB, takes you to that box (hidden while
+       the INBOX card is the one open: the box is right there). */
     const sendTo = r && r.ready && f && f.trigger && f.trigger.propId ? f.trigger.propId : '';
-    if (r) { pill.textContent = sendTo ? 'READY · SEND IT A JOB ▸' : W.pillText(r); pill.className = 'wf-pill' + (r.ready ? ' ok' : '') + (sendTo ? ' go' : ''); pill.dataset.go = r.ready ? sendTo : (r.blocking[0].propId || ''); pill.dataset.send = sendTo ? '1' : ''; }
-    else { pill.textContent = 'CONNECT IT TO A LINE'; pill.className = 'wf-pill'; pill.dataset.go = ''; pill.dataset.send = ''; }
-    pill.onclick = () => { if (!pill.dataset.go) return; select(pill.dataset.go); if (pill.dataset.send) setTimeout(() => { const t = $('#wf-send-in'); if (t) t.focus(); }, 0); };
+    if (r) { pill.textContent = W.pillText(r); pill.className = 'wf-pill' + (r.ready ? ' ok' : ''); pill.dataset.go = r.ready ? sendTo : (r.blocking[0].propId || ''); }
+    else { pill.textContent = 'CONNECT IT TO A LINE'; pill.className = 'wf-pill'; pill.dataset.go = ''; }
+    const toSend = () => { select(sendTo); setTimeout(() => { const t = $('#wf-send-in'); if (t) t.focus(); }, 0); };
+    pill.onclick = () => { if (!pill.dataset.go) return; if (pill.dataset.go === sendTo) toSend(); else select(pill.dataset.go); };
+    const sendNow = $('#wf-sendnow');
+    if (sendNow) { sendNow.hidden = !sendTo || S.sel === sendTo; sendNow.onclick = toSend; }
     $('#wf-est').textContent = est && est.tested ? est.text : '';   // a real number only: "test a step to see its cost" is an instruction, and the TEST key is right below
     paintToday();
     const sent = $('#wf-sentence');
