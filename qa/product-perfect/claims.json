@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "f86f5dc6d3c1a1c1b60435faad3897149372570f",
+    "sourceCommit": "1fe4f0d6006497a2bfcaf7406f601535562ec62e",
     "pathSetSha256": "1f21b60c842df940e631e96e62f4cd8a2d43075cb32a87ba99707c6a3f435683",
     "files": [
       {
@@ -1118,8 +1118,8 @@
       },
       {
         "path": "frontend/app/stationcommands.js",
-        "bytes": 61284,
-        "sha256": "2cfb9b80f301378a431e7a344b536357e737559e9eab1dbb98813acb2fa6fad4"
+        "bytes": 61703,
+        "sha256": "527a92e5906747ad0cf5c2cf4cc42e087b9c448d8feddb71e73ea153fbeb47a0"
       },
       {
         "path": "frontend/app/stationquests.js",
