@@ -25,7 +25,11 @@ const GroupChat = (() => {
     if (!r.ok || !out?.ok) throw new Error(out?.error || 'Group request failed'); return out.result;
   }
   function save() { if (typeof App !== 'undefined') { App.persist(); App.refreshRail(); } }
+  // Who sits in each group, as the backend last reported it. The rail's per-agent view lists a group
+  // under EVERY member, so it reads this instead of the workstream's single agentId (the lead).
+  const membersById = new Map();
   function adopt(g) {
+    if (g && Array.isArray(g.members)) membersById.set(g.id, g.members.slice());
     let ws = Workstreams.get(g.id) || Workstreams.adopt({ id: g.id, title: g.title, agentId: g.leadId, kind: 'chat', conversationMode: 'group', lane: 'active' });
     if (ws) {
       ws.conversationMode = 'group'; ws.agentId = g.leadId; ws.title = g.title;
@@ -444,5 +448,5 @@ const GroupChat = (() => {
   async function rename(id, title) { const state = await api(null, '?id=' + encodeURIComponent(id)); await api({ op: 'configure', id, revision: state.revision, title }); return true; }
   async function remove(id) { await api({ op: 'control', id, action: 'delete' }); }
   async function pause(id) { await api({ op: 'control', id, action: 'pause' }); }
-  return { bind, sendText, discover, rename, remove, pause, isBusy, stop };
+  return { bind, sendText, discover, rename, remove, pause, isBusy, stop, membersOf: id => membersById.get(id) || null };
 })();

@@ -1493,6 +1493,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     return present.filter(x => x && String(x.name || '').trim().toUpperCase() === key).length > 1 ? String(a.id || '') : '';
   }
   let crewQuery = '';
+  // the agent whose sessions the rail is narrowed to (App owns it; '' = every session)
+  function railFilterId() { try { return (typeof App !== 'undefined' && App.railAgentFilter && App.railAgentFilter()) || ''; } catch (_) { return ''; } }
   function crewPortrait(a) {
     return '<span class="crew-portrait" aria-hidden="true"><img alt="" draggable="false" hidden></span>';
   }
@@ -1505,7 +1507,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       return;
     }
     ul.innerHTML = present.map((a, i) =>
-      '<li class="crew-row" role="button" tabindex="0" aria-label="Open dossier for ' + esc(a.name || a.id) + '" data-i="' + i + '" data-agent-id="' + esc(a.id) + '" style="--ci:' + i + '">' +
+      '<li class="crew-row" role="button" tabindex="0" aria-label="Show sessions with ' + esc(a.name || a.id) + '" data-i="' + i + '" data-agent-id="' + esc(a.id) + '" style="--ci:' + i + '">' +
       crewPortrait(a) +
       '<span class="dot on"></span>' +
       '<div class="crew-main">' +
@@ -1516,11 +1518,22 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // in-flight work bar: hidden until the row is .working (crewTick toggles it from the real run state).
       // The shimmer (.bar-active) reads as live activity; it's an indeterminate sweep, not a % readout.
       '<div class="crew-prog bar-active" id="cp-' + esc(a.id) + '" aria-hidden="true"><div></div></div>' +
-      '</div></li>').join('');
+      '</div>' +
+      // the dossier stays one step away: this key (or a right-click) opens it; the row itself shows the sessions
+      '<button type="button" class="crew-dossier" tabindex="-1" aria-label="Open dossier for ' + esc(a.name || a.id) + '" data-tip="Open ' + esc(a.name || a.id) + '&#39;s dossier">DOSSIER</button>' +
+      '</li>').join('');
     // (the head's roster count moved out — #crew-sum below the list already totals the same crew)
     ul.querySelectorAll('.crew-row').forEach(li => {
       if (typeof AgentPortraits !== 'undefined') AgentPortraits.paint(li.querySelector('.crew-portrait img'), present[+li.dataset.i]);
-      li.addEventListener('click', () => { sfx('click'); openAgent(+li.dataset.i); });
+      // PER-AGENT THREADS: a row click narrows the SESSIONS rail to this agent's sessions (again = all of them)
+      li.addEventListener('click', () => {
+        sfx('click');
+        if (typeof App !== 'undefined' && App.filterRailByAgent) App.filterRailByAgent(li.dataset.agentId);
+        else openAgent(+li.dataset.i);
+      });
+      li.addEventListener('contextmenu', ev => { ev.preventDefault(); sfx('click'); openAgent(+li.dataset.i); });
+      const dos = li.querySelector('.crew-dossier');
+      if (dos) dos.addEventListener('click', ev => { ev.stopPropagation(); sfx('click'); openAgent(+li.dataset.i); });
       li.addEventListener('keydown', ev => {
         if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); li.click(); }
       });
@@ -1550,6 +1563,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         if ((e.getAttribute('data-tip') || '') !== tip) { if (tip) e.setAttribute('data-tip', tip); else e.removeAttribute('data-tip'); }
         const row = e.closest('.crew-row');
         row.classList.toggle('selected', a.id === focusedId);
+        const filtering = a.id === railFilterId();
+        if (row.classList.contains('filtering') !== filtering) { row.classList.toggle('filtering', filtering); row.setAttribute('aria-pressed', String(filtering)); }
         const hide = !!crewQuery && !String(a.name || a.id).toLowerCase().includes(crewQuery) && !String(a.id).toLowerCase().includes(crewQuery);
         if (row.hidden !== hide) row.hidden = hide;
         if (!row.hidden) visible++;
@@ -10435,7 +10450,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   // GROWTH Tier 3: repaint the Settings AUTONOMY panel's EARNED badge if it is open (no-op otherwise — the paint fn
   // queries its own (possibly detached) host nodes, so a closed panel costs nothing). Called after a trust accept.
   const repaintAutonomy = () => { try { if (repaintAutonomyDial) repaintAutonomyDial(); } catch (_) {} };
-  return { init, enter, setRoster, leave, clearRunning, runningCount: () => runningAgents.size, isAgentRunning: (id) => agentLive(id), notify, flashSave, openAgent, openArcade, toggleTerm, openTerm, openDesk, closeTerm, rerender, refreshBoard: refreshBoardLive, pokeQuests, setTheme, getTheme, repaintAutonomy, registerWindow, h };
+  return { init, enter, setRoster, leave, clearRunning, runningCount: () => runningAgents.size, isAgentRunning: (id) => agentLive(id), notify, flashSave, openAgent, refreshCrew: () => crewTick(), openArcade, toggleTerm, openTerm, openDesk, closeTerm, rerender, refreshBoard: refreshBoardLive, pokeQuests, setTheme, getTheme, repaintAutonomy, registerWindow, h };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { visibleTerminalRect, clampTerminalSize };
