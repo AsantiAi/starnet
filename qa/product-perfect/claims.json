@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "a77c4b4a183195fc7b383e444591975003ecbbb1",
+    "sourceCommit": "7053aae7b357d334c853191b8c1793e58ad3de43",
     "pathSetSha256": "5e692c5f0c56bc6565c363fb4eb622af3093a911f55496ecdf16c95cad03c8af",
     "files": [
       {
@@ -323,8 +323,8 @@
       },
       {
         "path": "frontend/app/browserstream.js",
-        "bytes": 9167,
-        "sha256": "7c384863b62ed3cc50170cbc489ae78a44660edeaf07c4afce4277b8e11759ac"
+        "bytes": 9273,
+        "sha256": "24a07eb424665c6d8a0961ebac79c8600e4601fd1ab3b1069679af9aaf5435dc"
       },
       {
         "path": "frontend/app/build.js",
@@ -1153,8 +1153,8 @@
       },
       {
         "path": "frontend/app/stepin.js",
-        "bytes": 24302,
-        "sha256": "dabdeba30bfd3bb2c252c2ffd569e734419dd46cb5be7543b4c5d2e8c476337e"
+        "bytes": 24408,
+        "sha256": "75edbb89a62c7c76101730227506b49d77ba6f450fc8a1496c5d288877b3d1e5"
       },
       {
         "path": "frontend/app/study.js",
