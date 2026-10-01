@@ -1178,10 +1178,11 @@
   }
   /* UNDO THE LEAD'S OWN LAST BUILD: `last` is the page's record of the builds the lead made (newest last). Only while the
      station is exactly as that build left it, so it never takes back someone else's edit; one step, as Build mode's UNDO. */
-  function planUndo(doc, last) {
+  function planUndo(doc, last, opts) {
     if (!doc) return refuse('the station builder is not loaded on this page');
-    if (!last) return refuse('There is nothing of the lead\'s to undo: StarNet only takes back a build the lead made on this page. The Commander can press UNDO in Build mode.');
+    if (!last) return refuse('There is nothing of the lead\'s to undo: StarNet only takes back a build the lead made on this station. The Commander can press UNDO in Build mode.');
     if (sigOf(doc) !== last.resultSig) return refuse('The station has changed since the lead\'s last build, so StarNet will not undo it (that could take back someone else\'s edit). The Commander can press UNDO in Build mode.');
+    if (opts && opts.canUndo === false) return refuse('The page was reloaded since that build, so its one-step UNDO is gone. Take it back with an edit instead: a new room with { remove: room }, added pieces with { remove: { room, pieces } }, a new line with { remove: { line } }, a restaffing with { staff } as it was.');
     return { ok: true, plan: { floorSig: sigOf(doc), resultSig: last.floorSig, spec: { kind: 'undo' }, notes: [], steps: [], line: null, where: 'the undo of the last build', rooms: [],
       summary: 'Undo the last build (' + String(last.summary || 'the lead\'s last change').replace(/\s+/g, ' ').slice(0, 260).replace(/[.\s]+$/, '') + '): the station goes back exactly as it was before it.' + (last.recruited ? ' The agents it recruited stay on the crew (DELETE AGENT in a Dossier removes one).' : '') } };
   }
