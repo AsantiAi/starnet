@@ -33,11 +33,11 @@ const IndustrialTextures = (() => {
   const detailTargets = new WeakMap(), wallStrips = new Map(), materials = new Map(), emitters = new Map();
   let loaded = false;
   const floorIds = 'spine alloy plate panel tile tread soft grate hex plank turf diamond resin ceramic cargo runner treadway meshway basalt parquet rubber slotted terrazzo octile'.split(' ');
-  const wallIds = 'bulkhead courses service plating ribbed panelled pipework viewport wainscot hedge'.split(' ');
+  const wallIds = 'bulkhead courses service plating ribbed panelled pipework viewport wainscot hedge braced machinery'.split(' ');
   const floorArtRevision = new Set(['basalt', 'rubber', 'soft']);
   const floorArtName = id => 'remaster/floors/' + id + (floorArtRevision.has(id) ? '-v2' : '');
   const wallArtRevision = new Set(['bulkhead', 'courses', 'panelled', 'pipework', 'ribbed', 'service']);
-  const wallArtName = id => 'remaster/walls/' + id + (wallArtRevision.has(id) ? '-v2' : '');
+  const wallArtName = id => 'remaster/walls/' + id + (wallArtRevision.has(id) ? '-v3' : '');
   const names = ['floor', 'wall', 'shell', 'workstation', 'workstation-compact', 'chair-s', 'chair-e', 'chair-n',
     'tactical-table', 'console-bank', 'equipment-bay', 'deck-perimeter',
     ...floorIds.map(floorArtName), ...wallIds.map(wallArtName),
