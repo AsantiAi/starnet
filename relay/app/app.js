@@ -1039,7 +1039,7 @@
 
   /* ---------- pairing ---------- */
   const DECK = ['bar', 'view', 'tabs'];
-  function showSetup(pairing) { $('setup').hidden = false; $('setup-pairing').hidden = !pairing; $('setup-howto').hidden = !!pairing; for (const id of DECK.concat('compose')) $(id).hidden = true; }
+  function showSetup(pairing) { $('setup').hidden = false; $('setup-install').hidden = true; $('setup-pairing').hidden = !pairing; $('setup-howto').hidden = !!pairing; for (const id of DECK.concat('compose')) $(id).hidden = true; }
   function showDeck() { $('setup').hidden = true; for (const id of DECK) $(id).hidden = false; }
 
   async function pairFrom(blob) {
@@ -1057,16 +1057,56 @@
   }
 
   const looking = () => document.visibilityState === 'visible' && S.linkState === 'open';
+  /* GETTING ONTO THE HOME SCREEN. On iPhone a Home Screen app gets its OWN storage, apart from Safari: a phone paired in
+     Safari opens from the Home Screen unpaired, and its one-time code is already spent. So on an iPhone the pairing link
+     does NOT pair in Safari. It walks you through copying the link and adding StarNet to the Home Screen, and the Home
+     Screen app pairs from a single Paste. Everywhere else (Android, desktop) the link pairs straight away. */
+  const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const PAIR_RE = /[#&]pair=([A-Za-z0-9_-]{20,})/;
+  function showInstall(blob) {
+    $('setup').hidden = false; $('setup-install').hidden = false; $('setup-pairing').hidden = true; $('setup-howto').hidden = true;
+    for (const id of DECK.concat('compose')) $(id).hidden = true;
+    const link = location.origin + location.pathname + '#pair=' + blob;
+    const copy = $('install-copy');
+    copy.onclick = async () => {
+      try { await navigator.clipboard.writeText(link); copy.textContent = 'Copied'; copy.classList.add('done'); toast('Link copied. Now add StarNet to your Home Screen.'); }
+      catch (_) { toast('Could not copy here. Use it in Safari instead, or press PAIR A PHONE again.', true); }
+    };
+    $('install-here').onclick = () => pairAndStart(blob);
+  }
+  async function pairAndStart(blob) {
+    try { S.rec = await pairFrom(blob); toast('Paired'); }
+    catch (e) { showSetup(true); $('setup-err').textContent = friendlyPairError(e); $('setup-err').hidden = false; $('setup-retry').hidden = false; return; }
+    startDeck();
+  }
+  function friendlyPairError(e) {
+    const m = String((e && e.message) || e || '');
+    if (/expired|already used/i.test(m)) return 'That pairing link was already used or ran out. On your desktop press PAIR A PHONE again and use the new one.';
+    if (/already paired/i.test(m)) return 'This phone is already paired. If it lost its pairing, remove it on the desktop (SETTINGS → DEVICES) and pair again.';
+    return m || 'Pairing did not work. Press PAIR A PHONE on your desktop for a fresh link.';
+  }
+  async function pasteAndPair() {
+    let text = '';
+    try { text = await navigator.clipboard.readText(); } catch (_) { text = ''; }
+    const m = PAIR_RE.exec(text || '');
+    if (!m) { $('setup-howto').querySelector('details').open = true; toast(text ? 'That is not a StarNet pairing link' : 'Nothing to paste. Copy the pairing link first, or paste it below.', true); return; }
+    pairAndStart(m[1]);
+  }
   async function boot() {
-    const m = /[#&]pair=([A-Za-z0-9_-]+)/.exec(location.hash || '');
+    const m = PAIR_RE.exec(location.hash || '');
     if (m) {
       history.replaceState(null, '', location.pathname);   // the one-time code leaves the address bar at once
-      try { S.rec = await pairFrom(m[1]); toast('Paired'); }
-      catch (e) { showSetup(true); $('setup-err').textContent = e.message; $('setup-err').hidden = false; $('setup-retry').hidden = false; return; }
-    } else {
-      try { S.rec = await RemoteStore.load(); } catch (_) { S.rec = null; }
+      if (isIOS() && !isStandalone()) return showInstall(m[1]);   // pair in the Home Screen app, where it will live
+      return pairAndStart(m[1]);
     }
+    try { S.rec = await RemoteStore.load(); } catch (_) { S.rec = null; }
     if (!S.rec) return showSetup(false);
+    startDeck();
+  }
+  let deckStarted = false;
+  function startDeck() {
+    if (deckStarted) return;
+    deckStarted = true;
     showDeck(); paintLamp(); render(); connect();
     const openHash = /^#(needs|thread=[A-Za-z0-9_-]{1,64})$/.test(location.hash) ? location.hash : '';
     if (openHash) { history.replaceState(null, '', location.pathname); setTimeout(() => openFromPush(openHash), 2500); }
@@ -1083,7 +1123,8 @@
 
   $('back').appendChild(icon('back')); $('gear').appendChild(icon('gear')); $('compose-send').appendChild(icon('send'));
   for (const s of document.querySelectorAll('[data-ico]')) s.appendChild(icon(s.dataset.ico));
-  $('setup-go').onclick = () => { const v = $('setup-link').value.trim(); const m = /#pair=([A-Za-z0-9_-]+)/.exec(v); if (!m) { toast('Paste the whole pairing link from the desktop', true); return; } location.hash = 'pair=' + m[1]; location.reload(); };
+  $('setup-go').onclick = () => { const v = $('setup-link').value.trim(); const m = PAIR_RE.exec(v); if (!m) { toast('Paste the whole pairing link from the desktop', true); return; } pairAndStart(m[1]); };
+  $('setup-paste').onclick = pasteAndPair;
   $('setup-retry').onclick = () => location.replace(location.pathname);
   $('compose-send').onclick = send;
   $('compose-to').onclick = openSheet;
