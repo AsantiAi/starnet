@@ -463,7 +463,7 @@ const StationCommands = (() => {
       const { st, env } = builderReady();
       if (!StationBuilder.planEdit) throw new Error('this page cannot edit what stands yet; reload it');
       const p = park(StationBuilder.planEdit(st.serialize(), (a && a.request) || {}, env));
-      return { planId: p.planId, summary: p.plan.summary, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
+      return { planId: p.planId, summary: p.plan.summary, steps: p.plan.steps, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
     },
     // builds ANY parked plan, exactly, in one undo step
     'station.build': (a) => {
@@ -497,7 +497,7 @@ const StationCommands = (() => {
         + ((r.recruited || []).length ? '; the recruited agents stay on the crew (DELETE AGENT in a Dossier removes one)' : '') + '.';
       return Object.assign({ built: true, undo }, r.line
         ? { summary: r.summary, line: r.line, where: r.where, steps: r.steps, lineId: r.lineKey, ready: r.ready, blocking: r.blocking, recruited: r.recruited }
-        : { summary: r.summary, rooms: r.rooms, hallways: r.hallways, lines: r.lines, recruited: r.recruited });
+        : { summary: r.summary, rooms: r.rooms, hallways: r.hallways, lines: r.lines, recruited: r.recruited, where: r.where });
     },
 
     'station.agent_config': (args) => {
