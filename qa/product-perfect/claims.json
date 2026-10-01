@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "15ac5a9ee7eaf326c1aaeb54cbfaec9e9de25f9f",
+    "sourceCommit": "e938db1d0b93d2dcdb9a03438c4147f4488600b4",
     "pathSetSha256": "c6aba28c9ab0146eef8aebbc12d196bf006714b580b24b33d1fc748bcaabc126",
     "files": [
       {
@@ -988,8 +988,8 @@
       },
       {
         "path": "frontend/app/remote-devices.js",
-        "bytes": 9255,
-        "sha256": "0256dfa6c68af8922da3024c290697c0ba63feb5668f75ab66074713dd269a98"
+        "bytes": 9352,
+        "sha256": "bbddee9720f4421eb396305442016272e69258e3bcfd393aa7f35399ed502d4d"
       },
       {
         "path": "frontend/app/remotesessions.js",
@@ -998,8 +998,8 @@
       },
       {
         "path": "frontend/app/remoteview.js",
-        "bytes": 7943,
-        "sha256": "28b4d0c518c7efe8d9b5dfdac05b58ad5b9b654df0317fffd1acfa764ed44224"
+        "bytes": 8455,
+        "sha256": "4d661ba59b8ba78e16d3b36bceec9d381683007066bd0f5209ef37b27620dc2d"
       },
       {
         "path": "frontend/app/resummonstore.js",
@@ -1383,8 +1383,8 @@
       },
       {
         "path": "frontend/app/world.js",
-        "bytes": 821319,
-        "sha256": "fd984300e898190ed1857ed1fb1c4e870c039cb9558c84a07fdb54019f72b6f6"
+        "bytes": 821334,
+        "sha256": "2d83e18ca4e52510c2daec372c2090c5ec7b6284d9ae15e1ae7f4c45de96be06"
       },
       {
         "path": "frontend/app/worldlab.js",
