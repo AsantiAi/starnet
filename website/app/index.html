@@ -40,6 +40,7 @@
 <link rel="stylesheet" href="css/interface.css">
 <link rel="stylesheet" href="css/refit-kit.css">
 <link rel="stylesheet" href="css/refit-polish.css?v=3">
+<link rel="stylesheet" href="css/refit-easy.css"><!-- BUILD MODE, easier + more fun (2026-10-01): the library shows its props, the selection card, the editor keys' look -->
 <link rel="stylesheet" href="css/linewatch.css"><!-- LINE WATCH: the crate-inspect card on the live floor + the Workflow panel's TODAY row -->
 <link rel="stylesheet" href="css/deskscreen.css"><!-- DESK SCREEN: click an agent's workstation → its live work -->
 <link rel="stylesheet" href="css/workflow-panel.css"><!-- the DOCKED Workflow panel of REFIT (workflowpanel.js) — rides the refit glass tokens -->
@@ -978,6 +979,9 @@
 <script src="app/leftrail.js"></script><!-- hide/show the CREW rail (◂ in the rail header · ▸ CREW drawer tab on the stage edge); persisted per machine -->
 
 <script src="app/worldmodel.js"></script>
+<script src="app/roomstyles.js"></script><!-- the zone styles the lead furnishes a room with when the Commander describes it part by part (vibe design) -->
+<script src="app/stationbuilder.js"></script><!-- the lead agent builds the station exactly: a fixed menu, planned on a copy, applied in one undo -->
+<script src="app/planpreview.js"></script><!-- the builder's approval card draws its plan: where it goes and what goes where -->
 <script src="app/linelayout.js"></script><!-- the line LAYOUT ENGINE: one line's graph in, every machine's tile and every link's belt out (conveyor-links phase C) -->
 <script src="app/lineedit.js"></script><!-- the Workflow panel's line edits (step, branch, review loop, sorter, remove, move, tidy, new line): graph edit → engine → one undo (phase D) -->
 <script src="app/stationbake.js"></script>

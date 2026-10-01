@@ -264,6 +264,13 @@ const Interests = require('./interests.js');               // SCOUT lane 1: pure
 const Scout = require('./scout.js');                        // SCOUT lane 2: pure drafting gates + recipe parse + the honest mint ledger
 const Discovery = require('./discovery.js');                // ENVIRONMENT DISCOVERY: blessed-root scan findings with verbatim citations (pure half)
 const Outcomes = require('./outcomes.js');                  // OUTCOME LEARNING: the run history folded into a support-gated track record (pure)
+// THE STATION BUILDER (2026-09-29): the lead's line menu, read from the same pure catalog the page builds from, and the
+// plans it has made (planId -> { summary, steps, at }) so the approval card for station.build shows the PLAN's words
+let stationLineMenu = () => [], stationKitMenu = () => [], stationPresetMenu = () => [], stationStyleMenu = () => [], stationRoomMenu = () => [];
+try { const RStyles = require('../frontend/app/roomstyles.js'); stationStyleMenu = () => RStyles.menu(); stationRoomMenu = () => RStyles.roomMenu(); } catch (_) { stationStyleMenu = () => []; stationRoomMenu = () => []; }
+try { const WMenu = require('../frontend/app/worldmodel.js'), SBuilder = require('../frontend/app/stationbuilder.js'); stationLineMenu = () => SBuilder.catalog(WMenu); } catch (_) { stationLineMenu = () => []; }
+try { const STpl = require('../frontend/app/stationtemplates.js'); stationKitMenu = () => STpl.kits().map(k => ({ name: k.name, about: k.about })); stationPresetMenu = () => STpl.catalog.filter(c => STpl.presetKits(c.id).length).map(c => c.name); } catch (_) { stationKitMenu = () => []; stationPresetMenu = () => []; }
+const stationPlanMemo = new Map();
 const ProspectGen = require('../frontend/app/prospect.js'); // SCOUT: the pure prospect generator — REUSED server-side (same directive + hard validation)
 const SharedSpecialties = require('../shared/specialties.js');           // SCOUT: builtin class catalog (prospect dedup + context)
 const RecipeCatalogAll = require('../frontend/app/recipe-catalog/index.js'); // SCOUT: builtin recipe catalog (draft dedup + context)
@@ -353,7 +360,7 @@ const { foldInsights } = require('./insights.js');                  // H3.3: usa
 const { makeVerifyTool } = require('./tools/builtin/verify.js');    // the workbench verify.run check-runner
 const { makeLspManager } = require('./lsp-manager.js');             // lazy installed-language-server edit diagnostics
 const { makeOrchestrationTools } = require('./tools/builtin/orchestration.js');   // Stage 2: team.dispatch (lead->worker delegation)
-const { makeStationTools } = require('./tools/builtin/station.js');               // session verbs (list/create/focus) over the station bridge
+const { makeStationTools, planSummaryFrom: stationPlanSummary } = require('./tools/builtin/station.js');               // session verbs (list/create/focus) over the station bridge
 const { makeRoutineTools } = require('./tools/builtin/routines.js'); // ROUTINES: agent-created StarNet cron jobs
 const { makeLoopTools } = require('./tools/builtin/loops.js');       // LOOPS: model-facing durable standing-objective controls
 const { makeCommsTools } = require('./tools/builtin/comms.js');      // COMMS: outbound reach — an agent messages a connected chat
@@ -18306,6 +18313,8 @@ async function runOnceCore(o) {
   // worker can never open or steal the Commander's sessions. Only visual actions require a live page.
   makeStationTools({ station: require('./overseer.js').isCoordinatorRun({ ...o, agentId, surface })
     ? overseerStation(o.streamId, runId) : stationBridge, scanText: t => cronGuard.scanRoutinePrompt(t), now: () => Date.now(),
+    planMemo: stationPlanMemo, lineMenu: stationLineMenu, kitMenu: stationKitMenu, presetMenu: stationPresetMenu, styleMenu: stationStyleMenu, roomMenu: stationRoomMenu,
+    userProps,   // MAKE A PROP: the station's own prop maker (StarNet credits), for station.make_prop
     // station.layout's HARNESS facts (audit 2026-09-28): the plan the router actually holds, each line's effective
     // budget (the runner's own effectiveLimits), and today's numbers since local midnight (the line plate's window)
     layoutFacts: {
@@ -19806,7 +19815,7 @@ async function runOnceCore(o) {
     teamNote += '\n• CREW CONFIGURATION: use team.config to read Dossier documents, then team.configure to edit the requested agent by exact ID. '
       + 'A notebook entry does not update another agent\'s Purpose or standing orders. Report a change only after the tool confirms it was saved. '
       + 'Dossier Purpose and standing orders describe the ongoing role; Bay briefs add the workflow-stage job. '
-      + 'Bay assignment, briefs, and assembly-line layout are configured in the station UI; do not claim to change them with a Dossier or notebook edit. '
+      + 'A Dossier or notebook edit changes no Bay, brief or floor; to change the floor, tool_search "station builder" and claim only what station.build reports. '
       + 'To explain or troubleshoot Bays and assembly lines (what runs, in what order, what starts a line, why a step is not running), read station.layout first and quote its status; never answer from memory.';
     /* SESSIONS (2026-07-30): the lead can also RUN the station's sessions — and the peek rule exists because
        of a live failure: asked "what did the researcher do?", a lead with no way to read the other session
@@ -23082,6 +23091,9 @@ function consentSummary(call) {
   if (/^fs[._](?:write|append|edit|patch)$/.test(String(call && call.name || ''))) {
     try { return JSON.stringify(redact(a), null, 2); } catch (_) { return '[mutation payload unavailable]'; }
   }
+  // the station builder: the card shows what the dry run found (the plan's summary + every step's instructions), never the model's words
+  if (/^station[._]build$/.test(String(call && call.name || ''))) return stationPlanSummary(stationPlanMemo, a.planId) || 'an unknown or expired plan: it will be refused, and nothing will be built';
+  if (/^station[._]make_prop$/.test(String(call && call.name || ''))) return '"' + String(a.describe || '').replace(/\s+/g, ' ').trim().slice(0, 60) + '", drawn with your StarNet credits (about $0.35' + (a.sideView ? ', and about $0.30 more for its side view' : '') + '). It joins your MADE BY YOU library; nothing is placed until a plan says so.';
   if (typeof a.path === 'string' && a.path) return a.path;
   try { const s = JSON.stringify(a); return s.length > 80 ? s.slice(0, 77) + '…' : s; } catch (_) { return ''; }
 }
