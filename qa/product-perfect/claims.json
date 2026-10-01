@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "cd789343ef7c2ee131b730fb0119628644003221",
+    "sourceCommit": "7053aae7b357d334c853191b8c1793e58ad3de43",
     "pathSetSha256": "5e692c5f0c56bc6565c363fb4eb622af3093a911f55496ecdf16c95cad03c8af",
     "files": [
       {
@@ -323,8 +323,8 @@
       },
       {
         "path": "frontend/app/browserstream.js",
-        "bytes": 9167,
-        "sha256": "7c384863b62ed3cc50170cbc489ae78a44660edeaf07c4afce4277b8e11759ac"
+        "bytes": 9273,
+        "sha256": "24a07eb424665c6d8a0961ebac79c8600e4601fd1ab3b1069679af9aaf5435dc"
       },
       {
         "path": "frontend/app/build.js",
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 690695,
-        "sha256": "22d8ac381ed018828c896a9d2dac682fd1538a5f68d72a5d8e75b869312d356e"
+        "bytes": 690432,
+        "sha256": "cc9a461e67ba3bffe159dcdab9ee59c625bc00c7f86230804b4afd115ad5a6dc"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -1153,8 +1153,8 @@
       },
       {
         "path": "frontend/app/stepin.js",
-        "bytes": 24302,
-        "sha256": "dabdeba30bfd3bb2c252c2ffd569e734419dd46cb5be7543b4c5d2e8c476337e"
+        "bytes": 24408,
+        "sha256": "75edbb89a62c7c76101730227506b49d77ba6f450fc8a1496c5d288877b3d1e5"
       },
       {
         "path": "frontend/app/study.js",
@@ -1268,8 +1268,8 @@
       },
       {
         "path": "frontend/app/voice-live.js",
-        "bytes": 95947,
-        "sha256": "505b33e33ebf5c8afef12fe73ef686628a40ac96abc2cecee588e991082829aa"
+        "bytes": 95485,
+        "sha256": "c7165575df3e3c9a850f389c324554702e745ebc252244f258bc9f2ee679d639"
       },
       {
         "path": "frontend/app/voice-stream.js",
@@ -1278,8 +1278,8 @@
       },
       {
         "path": "frontend/app/voice.js",
-        "bytes": 122530,
-        "sha256": "d5388d0412e06ef377fb3462fb62aab35a8096e07ad61c880083e93efca73b79"
+        "bytes": 120418,
+        "sha256": "9cd86c1674c8718ad785d211c5f4cd566ca8e143717f278de8c15d6f82a17e99"
       },
       {
         "path": "frontend/app/waitanchor.js",

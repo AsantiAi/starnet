@@ -40,6 +40,11 @@ function key(k, o) {
   A.eq(lastDown().modifiers & 3, 0, '…without Ctrl/Alt modifiers (or the page would treat it as a shortcut)');
   vp.fire('keydown', key('€', { ctrl: true, alt: true, code: 'KeyE' })); await tick();
   A.eq(lastDown().text, '€', 'Ctrl+Alt reporting a symbol (no AltGraph state) is still text');
+  vp.fire('keydown', key('@', { alt: true, code: 'KeyL' })); await tick();
+  A.eq(lastDown().text, '@', 'macOS Option+L on a German Mac sends "@" as TEXT');
+  A.eq(lastDown().modifiers & 1, 0, '…without the Option modifier');
+  vp.fire('keydown', key('å', { alt: true, code: 'KeyA' })); await tick();
+  A.eq(lastDown().text, 'å', 'Option+A (US Mac) types å');
   vp.fire('keydown', key('c', { ctrl: true, alt: true })); await tick();
   A.eq(lastDown().text, undefined, 'a real Ctrl+Alt+letter shortcut stays a key, not text');
 

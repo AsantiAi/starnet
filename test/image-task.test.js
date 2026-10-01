@@ -71,6 +71,17 @@ const borrowedOpenAI = ImageTask.resolveRoute({ providerId: 'gemini', runKey: 'g
 A.eq(borrowedOpenAI.provider, 'openai', 'a text run can use a separately connected OpenAI key for STUDIO generation');
 A.eq(borrowedOpenAI.protocol, 'openai-images', 'the station OpenAI route selects the dedicated Images API');
 
+// The ChatGPT sign-in is a keyless STUDIO route: first for a run on the plan, last resort for any other text run,
+// never for a StarNet-credits run.
+const planRoute = { ok: true, provider: 'codex', protocol: 'codex-responses', key: '', baseUrl: '', keySource: 'plan' };
+A.eq(ImageTask.resolveRoute({ providerId: 'codex', codexSignedIn: true }), planRoute, 'a Codex run renders on its own ChatGPT plan');
+A.eq(ImageTask.resolveRoute({ ...managedInput, providerId: 'codex', codexSignedIn: true }).provider, 'codex', 'a Codex run uses the plan before spending linked credits');
+A.eq(ImageTask.resolveRoute({ providerId: 'anthropic', runKey: 'k', stationOpenRouterKey: 'or', codexSignedIn: true }).provider, 'openrouter', 'a connected OpenRouter key still wins for a non-Codex run');
+A.eq(ImageTask.resolveRoute({ providerId: 'anthropic', runKey: 'k', codexSignedIn: true }), planRoute, 'a keyless non-Codex run falls back to the ChatGPT sign-in');
+A.eq(ImageTask.resolveRoute({ providerId: 'starnet', codexSignedIn: true }).ok, false, 'a StarNet-credits run never moves onto the ChatGPT account');
+A.eq(ImageTask.resolveRoute({ providerId: 'codex', codexSignedIn: false }).code, 'media-route-required', 'a dead or missing sign-in is no route');
+A.ok(/sign in to ChatGPT/.test(ImageTask.admissionBlocker({ hasStudio: true, studioEnabled: true, route: { ok: false }, providerId: 'codex', model: 'gpt-5.5' })), 'the blocker names the ChatGPT sign-in as a fix');
+
 const noGear = ImageTask.admissionBlocker({ hasStudio: false, studioEnabled: false, route: direct, providerId: 'openrouter', model: 'x' });
 A.ok(/Open REFIT, place a STUDIO/.test(noGear), 'missing gear names the exact REFIT action');
 const disabled = ImageTask.admissionBlocker({ hasStudio: true, studioEnabled: false, route: direct });
