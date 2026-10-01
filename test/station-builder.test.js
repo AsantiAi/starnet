@@ -1582,6 +1582,17 @@ for (const c of T.catalog) {
     ]) { const r = SB.planEdit(st.serialize(), { refit: q }, SV); A.ok(!r.ok && re.test(r.error), 'refused: ' + JSON.stringify(q[0]).slice(0, 60) + ' -> ' + (r.error || 'NOT REFUSED').slice(0, 160)); }
     const noSv = SB.planEdit(st.serialize(), { refit: [{ op: 'folder', prop: inP.id, project: 'starnet' }] }, E);
     A.ok(!noSv.ok && /could not read the Commander's trusted projects/.test(noSv.error), 'a page that could not read the projects refuses, never guesses');
+    // sweep 2026-10-01: routes only on a FILTER; "$null a day" never printed
+    const rb = SB.planEdit(st.serialize(), { refit: [{ op: 'routes', prop: bayP.id, routes: { code: 'east' } }] }, SV);
+    A.ok(!rb.ok && /routes is for a FILTER/.test(rb.error), 'routes on a bay is refused, not stored as a sorter that sorts nothing');
+    const bj = SB.planEdit(st.serialize(), { refit: [{ op: 'budget', prop: bayP.id, perDay: null, perJob: 2 }] }, SV);
+    A.ok(bj.ok && !/\$null|\$undefined/.test(bj.plan.summary) && /no daily cap, \$2 a job/.test(bj.plan.summary), 'a budget with no daily cap says so in words: ' + (bj.ok ? (bj.plan.summary.match(/may spend[^.]*/) || [''])[0] : bj.error));
+    // escalate:null really clears the loop's escalation (it said "never escalates" while esc stayed set)
+    const ne = SB.planEdit(st.serialize(), { refit: [{ op: 'loop', prop: loopP.id, escalate: null }] }, SV);
+    A.ok(ne.ok && /never escalates/.test(ne.plan.summary) && SB.apply(st, ne.plan, E).ok && !P(loopP.id).esc && P(loopP.id).maxIter === 3, 'escalate:null clears the escalation and keeps the rest of the loop');
+    // …while a loop edit that doesn't name escalation keeps it (the Workflow panel's save never sends esc)
+    A.ok(st.configureJunction(loopP.id, { esc: 'E', maxIter: 3, when: 'approved' }).ok && st.configureJunction(loopP.id, { maxIter: 4, when: 'approved' }).ok && P(loopP.id).esc === 'E', 'a junction edit that omits esc keeps it');
+    for (let i = 0; i < 3; i++) A.ok(st.undo().ok, 'undo the escalation edits ' + (i + 1));
     for (let i = 0; i < 3; i++) A.ok(st.undo().ok, 'undo ' + (i + 1));
     A.eq(snap(st), before, 'three UNDOs take it all back');
   }
@@ -1882,5 +1893,26 @@ for (const c of T.catalog) {
   const idx = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
   A.ok(/if \(\/\^station\[\._\]build\$\/\.test\(String\(call && call\.name \|\| ''\)\)\) return stationPlanSummary\(stationPlanMemo, a\.planId\)/.test(idx), 'consentSummary reads the station.build card from the plan memo');
   A.ok(/to change the floor, tool_search "station builder" and claim only what station\.build reports\./.test(idx), 'the lead\'s note says how to reach the builder, and never to claim what it did not report');
+  // sweep 2026-10-01: a misnamed line never resolves to an UNNAMED one (key('') sat inside every name), and a refused
+  // all-or-nothing edit leaves undo/redo exactly as it found them
+  {
+    const st = M.create(M.starterDoc()); st.ensureWorkstation('agent'); st.ensureWorkstation('rex');
+    st.replaceLayout(T.build('software', M, Sprites, st.doc()._nid + 100));
+    const ip = st.props().find(p => p.t === 'intake'); A.ok(st.setPropLabel(ip.id, '').ok, 'fixture: a hand-built line with no name');
+    const ref = SB.lineRef(st.serialize(), env, 'Newsletter', null);
+    A.ok(ref && !ref.ok, '"Newsletter" does not resolve to the unnamed line: ' + JSON.stringify(ref).slice(0, 120));
+    const rm = SB.planEdit(st.serialize(), { remove: { line: 'Newsletter' } }, env);
+    A.ok(!rm.ok && /no line called "Newsletter"/.test(rm.error), 'removing a line that does not exist is refused, never the unnamed one: ' + (rm.error || rm.plan.summary).slice(0, 120));
+
+    const room = st.rooms()[0];
+    A.ok(st.renameRoom(room.id, 'ZZTOP').ok && st.undo().ok && st.canRedo(), 'fixture: an undone edit waiting to be redone');
+    const refused = st.transact(() => ({ ok: false, msg: 'blocked' }));
+    A.ok(!refused.ok && st.canRedo(), 'a refused batch edit keeps redo');
+    A.ok(st.redo().ok && st.rooms()[0].name === 'ZZTOP', 'and Ctrl+Y still redoes the rename');
+    const depthBefore = st.serialize();
+    const outer = st.transact(() => { st.renameRoom(room.id, 'OUTER'); const inner = st.transact(() => { st.renameRoom(room.id, 'INNER'); return { ok: false }; }); return { ok: !inner.ok && st.rooms()[0].name === 'OUTER' }; });
+    A.ok(outer.ok && st.rooms()[0].name === 'OUTER', 'a refused NESTED batch rolls back only itself');
+    A.ok(st.undo().ok && JSON.stringify(st.serialize()) === JSON.stringify(depthBefore) && st.rooms()[0].name === 'ZZTOP', 'one undo takes back the outer batch, and the user\'s earlier rename is still there');
+  }
   A.report('station-builder');
 })();
