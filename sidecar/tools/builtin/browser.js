@@ -1097,6 +1097,12 @@
         // tab beside its startup one, and the driver could bind to the tab that then went away — its first command hung
         // for a full CDP timeout (measured: 2 of 3 relaunches stalled 15 s). Only a crash bubble is disabled on top.
         args.push('--hide-crash-restore-bubble');
+        /* A COVERED WINDOW MUST KEEP DRAWING. Measured 2026-09-30 in the desktop app: StarNet's own window sits on top of
+           the station's Chrome window, Chrome's native occlusion tracking decides nobody can see it and stops painting,
+           and the in-app BROWSER view froze on the old page (0 frames/s) while the agent kept browsing. The BROWSER
+           window IS somebody watching, so a covered or minimised station window keeps rendering and its timers run. */
+        args.push('--disable-features=CalculateNativeWinOcclusion', '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding', '--disable-background-timer-throttling');
       } else {
         args.push('--headless=new', '--hide-scrollbars', '--mute-audio');
       }
