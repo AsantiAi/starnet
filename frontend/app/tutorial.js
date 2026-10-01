@@ -1134,7 +1134,7 @@ const Tutorial = (() => {
     const apps = kind === 'apps';
     return '<details class="platform-guide" data-platform-guide="' + kind + '"' + (guidedPlatform === kind ? ' open' : '') + '>'
       + '<summary>' + (apps ? 'Connect a work app — step by step' : 'Chat from another platform — step by step') + '</summary>'
-      + '<p class="fm-note">Find this again: <b>BUILD › ' + (apps ? 'ABILITIES › CATALOG' : 'CHANNELS') + '</b>.</p>'
+      + '<p class="fm-note">Find this again: <b>BUILD › CONNECT › ' + (apps ? 'ABILITIES › CATALOG' : 'CHANNELS') + '</b>.</p>'
       + '<ol><li>' + (apps ? 'Use Search abilities above to find your app. Its card shows the setup it needs.' : 'Choose your platform in the list. Its setup guide explains where to get the details it needs.') + '</li>'
       + '<li>' + (apps ? 'Use the card’s action. SIGN IN opens account authorization; API key asks for a key from that service. Follow any setup instructions and review the access requested.' : 'Follow that platform’s setup instructions, then use its CONNECT action. Complete pairing if the platform asks for it.') + '</li>'
       + '<li>' + (apps ? 'Check the status beside the service. A saved key is not a tested connection. If setup fails, read the message there before retrying.' : 'Check the platform’s status, then send your agent a message there. Seeing the reply is your end-to-end check.') + '</li></ol>'

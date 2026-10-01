@@ -210,7 +210,7 @@
       const r = await post('/api/cron/arm', { enabled: true });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       notify('Routines are on: your apps refresh on schedule.');
-    } catch (_) { notify('Could not turn routines on — open AUTOMATION to check.', 'warn'); return; }
+    } catch (_) { notify('Could not turn routines on — open WORK › AUTOMATE › SCHEDULES to check.', 'warn'); return; }
     await load(); paintAll();
   }
   async function removeApp(id) {
