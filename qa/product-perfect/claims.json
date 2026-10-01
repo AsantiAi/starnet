@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "246d8be41b1be8fae80ee4d1e2012fd614b25d2a",
+    "sourceCommit": "90794aa084642c7b59aa7f14878fd186c2682c91",
     "pathSetSha256": "5e692c5f0c56bc6565c363fb4eb622af3093a911f55496ecdf16c95cad03c8af",
     "files": [
       {
@@ -558,8 +558,8 @@
       },
       {
         "path": "frontend/app/industrialtextures.js",
-        "bytes": 32340,
-        "sha256": "01637db5431474ccbe53ca4c97f8f7ea1af8ce817082f7ee5213862c67f29770"
+        "bytes": 32476,
+        "sha256": "2519aafcab4fcacce12cb024b0b1e8dcf95c48e100ce8c70128cd8f8f6dfd947"
       },
       {
         "path": "frontend/app/intake.js",
