@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "19f87afb1acd25220ba7eff060df8f9bad73d8c1",
+    "sourceCommit": "8e6eb17c03273be050d9add0a1acc06797fa4d23",
     "pathSetSha256": "5e692c5f0c56bc6565c363fb4eb622af3093a911f55496ecdf16c95cad03c8af",
     "files": [
       {
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 690695,
-        "sha256": "22d8ac381ed018828c896a9d2dac682fd1538a5f68d72a5d8e75b869312d356e"
+        "bytes": 691883,
+        "sha256": "8206ff9988b2a0916efb8146dfe1b744c47c01592aaaae378d26e46ff5d4af6b"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -1128,8 +1128,8 @@
       },
       {
         "path": "frontend/app/stationcommands.js",
-        "bytes": 61703,
-        "sha256": "527a92e5906747ad0cf5c2cf4cc42e087b9c448d8feddb71e73ea153fbeb47a0"
+        "bytes": 61832,
+        "sha256": "993b72b41b9b3f22d7074f8102e4e40b5346ed878d7ec20b7299e35f7503c1ed"
       },
       {
         "path": "frontend/app/stationquests.js",
@@ -1303,8 +1303,8 @@
       },
       {
         "path": "frontend/app/windows/automation.js",
-        "bytes": 7222,
-        "sha256": "9c69dab9fc1d40df7533aba0553e5c0d29dc426e216ff43dc76cb6fbb68da51d"
+        "bytes": 8007,
+        "sha256": "cc1b4cfdb0b4d7bcc70f9bd1e1802a51c5fa9b3aac12890fef90ca0b12462ef4"
       },
       {
         "path": "frontend/app/windows/connectors.js",
@@ -1338,8 +1338,8 @@
       },
       {
         "path": "frontend/app/windows/routines.js",
-        "bytes": 62109,
-        "sha256": "aa902d9e42761c8136287b0ff59008b05c30d7258280cf69d7f8924a4091b1cb"
+        "bytes": 65185,
+        "sha256": "1858bf2584cf41d1e89a23903d2581ebee058046345a76a5a809f0e6586f424c"
       },
       {
         "path": "frontend/app/windows/trophies.js",
@@ -1363,8 +1363,8 @@
       },
       {
         "path": "frontend/app/workflowtakeoverstore.js",
-        "bytes": 3819,
-        "sha256": "88adf8fb083dd371b2b19f682021a1789f8a7ff81e0ee5a9400cf86953227775"
+        "bytes": 3906,
+        "sha256": "b8c7533eb37ed81df567427c8f7ba7a0c72dcc1a8dcc6fd60f2f0f14ca49c7e7"
       },
       {
         "path": "frontend/app/workhub.js",
