@@ -106,8 +106,13 @@ function makeRemoteHost(d) {
     return out.slice(0, o.limit);
   }
 
+  // newest turns first into a byte budget, so a long conversation always fits one sealed frame through the relay
+  const THREAD_BUDGET = 180 * 1024;
   async function thread(o) {
-    return mergedTurns(o.streamId, o.limit).map(r => ({ role: r.role, agentId: r.agentId || null, ts: r.ts || null, content: clip(r.content, 20000) }));
+    const rows = mergedTurns(o.streamId, o.limit).map(r => ({ role: r.role, agentId: r.agentId || null, ts: r.ts || null, content: clip(r.content, 20000) }));
+    let used = 0, keep = rows.length;
+    for (let i = rows.length - 1; i >= 0; i--) { used += Buffer.byteLength(rows[i].content) + 80; if (used > THREAD_BUDGET && i < rows.length - 1) break; keep = i; }
+    return rows.slice(keep);
   }
 
   // what the desk needs to show a phone conversation as one of its own sessions (GET /api/remote/recent)
@@ -185,7 +190,10 @@ function makeRemoteHost(d) {
     }));
   }
 
-  async function fetchFile(o) { return d.readFile(o.agentId, o.path, o.offset, o.length); }
+  async function fetchFile(o) {
+    if (!agentsList().some(a => a.agentId === o.agentId)) return { ok: false, error: 'unknown file' };   // never make a folder for a made-up agent
+    return d.readFile(o.agentId, o.path, o.offset, o.length);
+  }
 
   async function routines() {
     return (d.routines() || []).map(j => ({
@@ -203,18 +211,18 @@ function makeRemoteHost(d) {
      the time the desk drew it and shows that age: an old picture is never passed off as live. */
   async function view(o) {
     if (!d.view) return { none: true, now: now() };
-    d.view.want();
+    d.view.want(o.deviceId);
     const m = d.view.meta();
     let desk = false;
     try { desk = !!(d.deskOpen && d.deskOpen()); } catch (e) { note('remote.host.deskOpen', e); }
     if (!m) return { none: true, desk, now: now() };
     // `now` is this station's clock at the moment of the answer: the phone works out the picture's age from
     // (now - at), so a phone whose own clock is off still shows the right age
-    if (!o.offset && o.have && o.have === m.at) return { at: m.at, now: now(), same: true };
+    if (!o.offset && o.have && o.have === m.at) return { at: m.at, checked: m.checkedAt || m.at, now: now(), same: true, crewPaused: !!m.crewPaused };
     if (o.offset && o.at !== m.at) return { at: m.at, now: now(), changed: true };   // the desk drew a newer one mid-read: start over
     const buf = d.view.read(o.offset, o.length);
     const out = { at: m.at, now: now(), w: m.w, h: m.h, mime: m.mime, size: m.size, offset: o.offset, bytes: buf.length, eof: o.offset + buf.length >= m.size, data: buf.toString('base64') };
-    if (!o.offset) { out.bodies = m.bodies; out.crewFree = !!m.crewFree; out.scale = m.scale || 0; out.crew = d.view.crew ? d.view.crew() : null; }
+    if (!o.offset) { out.checked = m.checkedAt || m.at; out.crewPaused = !!m.crewPaused; out.bodies = m.bodies; out.crewFree = !!m.crewFree; out.scale = m.scale || 0; out.crew = d.view.crew ? d.view.crew() : null; }
     return out;
   }
 
@@ -244,13 +252,20 @@ function makeRemoteHost(d) {
     let rows = [];
     try { rows = (d.runHistory && d.runHistory(o.limit + 20)) || []; } catch (e) { note('remote.host.runHistory', e); rows = []; }
     const liveIds = new Set(live.map(r => r.runId));
-    const done = [];
+    const done = [], resultOf = new Set();
     for (const r of rows) {
       if (!r || r.internal || r.parentRunId || liveIds.has(r.runId)) continue;
       const files = [];
       for (const a of Array.isArray(r.artifacts) ? r.artifacts : []) if (a && a.path && files.length < 6) files.push(String(a.path).slice(0, 300));
       if (r.deliverable && r.deliverable.main && files.indexOf(r.deliverable.main) < 0 && files.length < 6) files.push(String(r.deliverable.main).slice(0, 300));
-      const said = String(r.deliveryText || (r.deliverable && r.deliverable.summary) || '').replace(/\s+/g, ' ').trim();
+      let said = String(r.deliveryText || (r.deliverable && r.deliverable.summary) || '').replace(/\s+/g, ' ').trim();
+      // a conversational reply has no delivery note: its result line is the newest reply in that conversation (only
+      // the newest finished run of a conversation is shown against it, so that is this run's own reply)
+      if (!said && r.reason === 'done' && r.streamId && !resultOf.has(r.streamId)) {
+        resultOf.add(r.streamId);
+        const turns = stationTurns(r.streamId, 6);
+        for (let i = turns.length - 1; i >= 0; i--) if (turns[i].role === 'assistant') { said = turns[i].content.replace(/\s+/g, ' ').trim(); break; }
+      }
       done.push({ runId: r.runId, agentId: r.agentId, state: r.reason === 'done' ? 'done' : r.reason === 'cancelled' || r.reason === 'stopped' ? 'stopped' : 'failed',
         title: clip(String(r.sessionTitle || r.title || '').replace(/\s+/g, ' ').trim(), 140), result: clip(said, 240),
         error: r.reason === 'done' ? '' : clip(r.failureCode || r.reason || '', 80),

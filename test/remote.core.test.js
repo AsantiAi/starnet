@@ -234,5 +234,36 @@ async function rejects(p, re, msg) {
     try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
   }
 
+  // one phone cannot crowd the others off: its own sessions are capped, oldest first
+  {
+    const stationKp = C.generateKeyPair(), phoneKp = C.generateKeyPair();
+    const dv2 = { get: (id) => ({ id, publicKey: phoneKp.publicRaw }), stationKeys: () => ({ id: 'stn', privateKey: stationKp.privateKey, publicRaw: stationKp.publicRaw }), touch: () => {} };
+    const ss2 = makeSessions({ devices: dv2, crypto: C, now: () => Date.now(), newId, perDevice: 4 });
+    for (let i = 0; i < 4; i++) ss2._live.set('other-' + i, { id: 'other-' + i, deviceId: 'phone-b', keys: {}, lastAt: Date.now(), inSeq: 0, outSeq: 0 });
+    let made = 0;
+    for (let i = 0; i < 7; i++) { const eph = C.generateKeyPair(); if (ss2.hello({ v: C.VERSION, deviceId: 'phone-a', eph: eph.publicRaw, nonce: C.newNonce() }).ok) made++; }
+    const byDev = {}; for (const x of ss2._live.values()) byDev[x.deviceId] = (byDev[x.deviceId] || 0) + 1;
+    A.eq(made, 7, 'every hello from the phone is answered');
+    A.eq(byDev['phone-a'], 4, 'but one phone holds at most four sessions');
+    A.eq(byDev['phone-b'], 4, 'and another phone keeps all of its own');
+  }
+
+  // the crew stream is sealed only for the phones that are looking
+  {
+    const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'sn-bc-'));
+    const dv = { get: (id) => ({ id }), touch: () => {} };   // every device exists for this check
+    const ss = makeSessions({ devices: dv, crypto: C, now: () => Date.now(), newId });
+    const sent = [];
+    // two fake sessions with sinks (the broadcast path only needs id, deviceId, keys and a sink)
+    for (const dev of ['d-look', 'd-away']) {
+      const s = { id: 's-' + dev, deviceId: dev, keys: { s2p: nodeCrypto.randomBytes(32) }, outSeq: 0, lastAt: Date.now(), sink: (f) => sent.push(dev) };
+      ss._live.set(s.id, s);
+    }
+    A.eq(ss.broadcast({ type: 'view.crew' }, ['d-look']), 1, 'sealed once');
+    A.eq(sent, ['d-look'], 'only the looking phone gets it');
+    sent.length = 0;
+    A.eq(ss.broadcast({ type: 'approval.opened' }), 2, 'an ordinary event still reaches every phone');
+    try { fs.rmSync(dir2, { recursive: true, force: true }); } catch (_) {}
+  }
   A.report('remote core');
 })().catch((e) => { console.log('FAIL: threw ' + (e && e.stack || e)); process.exit(1); });
