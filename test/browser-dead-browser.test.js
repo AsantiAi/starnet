@@ -58,5 +58,30 @@ function fakeWs() {
     A.eq(built.length, 3, 'a non-navigate call never repeats itself: the NEXT call starts the fresh browser');
     void snapErr;
   }
+
+  // ---- NEVER KILL A REUSED PROCESS ID (release review 2026-09-30) ----
+  {
+    const made = [];
+    const make = deps => {
+      const drv = { deps, dead: false, exited: false, pid: 4242 + made.length,
+        alive: () => !drv.dead, ownedPid: () => (drv.exited ? null : drv.pid),
+        navigate: async u => u, close: async () => {}, usingPersistentProfile: () => false, tabs: async () => [] };
+      made.push(drv); return drv;
+    };
+    const B = makeBrowserTools({ makeDriver: make, lookup: null, preferVisible: true, forceHeadless: false });
+    await B.session.navigate('https://example.com/');
+    // the window was closed: the browser is dead but its process has not exited yet
+    made[0].dead = true;
+    await B.session.navigate('https://example.org/');
+    A.eq(typeof made[1].deps.reclaimPid, 'function', 'the replacement asks for the old pid at reclaim time, not when it died');
+    A.eq(made[1].deps.reclaimPid(), 4242, 'while the old process is still running (its handle pins the id) it is ours to end');
+    made[0].exited = true;
+    A.eq(made[1].deps.reclaimPid(), null, 'once it has exited the number may belong to another program: nothing is killed by number');
+    // and the real driver: an exited Chromium reports no owned pid
+    const d = T.makeCdpDriver({ chrome: 'C:/x/chrome.exe', env: {}, fetchImpl: async () => ({}), WebSocketImpl: function () {},
+      spawn: () => { const ls = {}; const p = { pid: 9191, on: (ev, fn) => { (ls[ev] = ls[ev] || []).push(fn); }, kill: () => {} }; setTimeout(() => (ls.close || []).forEach(fn => fn(0)), 5); return p; } });
+    try { await d.tabs(); } catch (_) { /* the fake browser exits at once */ }
+    A.eq(d.ownedPid(), null, 'the driver never reports the pid of a Chromium that has exited');
+  }
   A.report('browser-dead-browser.test');
 })().catch(e => { console.log('FAIL: browser-dead-browser.test threw - ' + (e && e.stack || e)); process.exit(1); });

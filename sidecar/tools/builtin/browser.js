@@ -1070,7 +1070,12 @@
          first, then start one clean browser. */
       if (deps.reclaimProfile === true && !reclaimed) {
         reclaimed = true;
-        if (deps.reclaimPid) killTree(deps.reclaimPid); else killProfileOrphans(profileDir);
+        /* NEVER KILL A NUMBER WE DO NOT OWN (release review 2026-09-30): Windows reuses process ids, so the dead
+           browser's pid can belong to an unrelated program by now. reclaimPid is asked NOW, and answers only while
+           the old driver still holds that process un-exited (its open handle pins the id). Otherwise the sweep
+           matches this browser's unique profile directory, which no other program carries. */
+        const ownPid = typeof deps.reclaimPid === 'function' ? deps.reclaimPid() : null;
+        if (ownPid) killTree(ownPid); else killProfileOrphans(profileDir);
         await sleep(600);
       }
       await waitProfileFree(profileDir);
@@ -2340,7 +2345,8 @@
     }
     // False once the Chromium WE started has exited (the Commander closed the station browser window, or it crashed).
     function alive() { return !(proc && procExited) && !(cdp && cdp.closed); }
-    function ownedPid() { return proc && proc.pid ? proc.pid : null; }
+    // the Chromium we started, while it has not exited — never a number that may have been reused since
+    function ownedPid() { return proc && proc.pid && !procExited ? proc.pid : null; }
     // Raise the station browser's window (the Commander asked to see it).
     async function bringToFront() { const c = await page(); await c.send('Page.bringToFront'); return true; }
     async function close(opts) {
@@ -2362,7 +2368,8 @@
         exited = await exitedWithin(2000);
       }
       try { cdp && cdp.close(); } catch (_) {}
-      if (owned && !exited) { if (process.platform === 'win32' && owned.pid && spawn === CP.spawn) killTree(owned.pid); else { try { owned.kill('SIGKILL'); } catch (e) { failNote('browser.close.kill', e); } } }
+      // only a process that has NOT exited is still ours to kill: an exited one's id may already be someone else's
+      if (owned && !exited && !procExited) { if (process.platform === 'win32' && owned.pid && spawn === CP.spawn) killTree(owned.pid); else { try { owned.kill('SIGKILL'); } catch (e) { failNote('browser.close.kill', e); } } }
       cdp = null; proc = null;
       if (owned && waitForClose && !exited) {
         // a force-killed process can take seconds to leave on a busy Windows box (antivirus holding a freshly unpacked
@@ -2473,7 +2480,8 @@
     function reviveIfDead() {
       if (!driver || injected || attachedToUserBrowser || typeof driver.alive !== 'function' || driver.alive()) return false;
       const dead = driver; driver = null; driverHeaded = null; version++; navEpoch++; reviveNext = true;
-      revivePid = typeof dead.ownedPid === 'function' ? dead.ownedPid() : null;
+      // asked again at reclaim time (not now): by then the old process may have exited and its id be reused
+      revivePid = typeof dead.ownedPid === 'function' ? () => dead.ownedPid() : null;
       Promise.resolve().then(() => dead.close({ keepProfile: true })).catch(e => failNote('browser.dead-driver.close', e));
       return true;
     }
