@@ -122,11 +122,14 @@ const turnAt = lastStage => Chain.hopTurn({ originalText: 'req', from: 'a', upst
 A.ok(/LAST stage/.test(turnAt((a, d) => a === 'w' && d === 'd2')) && !/LAST stage/.test(turnAt(() => false)) && !/LAST stage/.test(turnAt(undefined)), 'the chain asks lastStage(target, dock) — no helper, no change');
 A.ok(/lastStage: \(agentId, dockId\) => router\.chainShipsToOutbox\(agentId, dockId\)/.test(sidecar) && /lastStage: \(a, d\) => router\.chainShipsToOutbox\(a, d\)/.test(sidecar),
   '…and the station answers it for real runs and step tests alike: the dock whose lane ships to the OUTBOX');
+// the one billed station call NOT RIGHT? and SET IT UP FOR ME share (2026-09-30: stationOneShot)
+const oneShot = at(sidecar, 'async function stationOneShot(prompt, tag, failLead) {', 'async function handleRoutingFixSuggest(req, res) {');
 const route = at(sidecar, 'async function handleRoutingFixSuggest(req, res) {', 'async function stepTestRunDock(h) {');
 A.ok(/\{ m: 'POST', exact: '\/api\/routing\/fix-suggest', h: handleRoutingFixSuggest \}/.test(sidecar), 'POST /api/routing/fix-suggest is a route');
-A.ok(route.indexOf('budget.check(null, \'agent\', 0, Date.now(), null)') > 0 && route.indexOf('budget.check(') < route.indexOf('provider.stream('), '…the spending cap is read BEFORE the model call');
-A.ok(/cfg = sampleRunConfigFor\('agent'\)/.test(route) && /ledger\.record\(\{ runId: 'linefix-' \+ crypto\.randomUUID\(\), agentId: 'station'/.test(route), '…one call on the station default model, its spend booked on the ledger');
-A.ok(/const parsed = LineFix\.parseFixes\(out, input\);/.test(route) && /return json\(400, \{ ok: false, error: input\.error \}\);/.test(route), '…the reply checked (LineFix), bad input refused');
+A.ok(oneShot.indexOf('budget.check(null, \'agent\', 0, Date.now(), null)') > 0 && oneShot.indexOf('budget.check(') < oneShot.indexOf('provider.stream('), '…the spending cap is read BEFORE the model call');
+A.ok(/cfg = sampleRunConfigFor\('agent'\)/.test(oneShot) && /ledger\.record\(\{ runId: tag \+ '-' \+ crypto\.randomUUID\(\), agentId: 'station'/.test(oneShot) && /catch \(e\) \{ failNote\(tag \+ '\.ledger', e\); \}/.test(oneShot)
+  && /stationOneShot\(LineFix\.buildPrompt\(input\), 'linefix', /.test(route), '…one call on the station default model, its spend booked on the ledger (a failed booking is noted)');
+A.ok(/const parsed = LineFix\.parseFixes\(call\.out, input\);/.test(route) && /return json\(400, \{ ok: false, error: input\.error \}\);/.test(route), '…the reply checked (LineFix), bad input refused');
 A.ok(/dockId: r\.dockId \|\| null, lineId: r\.lineId \|\| null/.test(sidecar), 'the server names the BAY each stage ran at');
 
 /* ---------- the OUTBOX is told ---------- */
