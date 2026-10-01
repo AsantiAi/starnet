@@ -1493,8 +1493,6 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     return present.filter(x => x && String(x.name || '').trim().toUpperCase() === key).length > 1 ? String(a.id || '') : '';
   }
   let crewQuery = '';
-  // the agent whose sessions the rail is narrowed to (App owns it; '' = every session)
-  function railFilterId() { try { return (typeof App !== 'undefined' && App.railAgentFilter && App.railAgentFilter()) || ''; } catch (_) { return ''; } }
   function crewPortrait(a) {
     return '<span class="crew-portrait" aria-hidden="true"><img alt="" draggable="false" hidden></span>';
   }
@@ -1553,6 +1551,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const act = activity();
     let focusedId = '';
     try { focusedId = (typeof App !== 'undefined' && App.currentAgent && App.currentAgent() || {}).id || ''; } catch (_) {}
+    // the agent whose sessions the rail is narrowed to (App owns it; '' = every session)
+    let railFilter = '';
+    try { railFilter = (typeof App !== 'undefined' && App.railAgentFilter && App.railAgentFilter()) || ''; } catch (_) {}
     let working = 0, visible = 0;
     present.forEach(a => {
       const live = agentLive(a.id);
@@ -1565,8 +1566,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         if ((e.getAttribute('data-tip') || '') !== tip) { if (tip) e.setAttribute('data-tip', tip); else e.removeAttribute('data-tip'); }
         const row = e.closest('.crew-row');
         row.classList.toggle('selected', a.id === focusedId);
-        const filtering = a.id === railFilterId();
-        if (row.classList.contains('filtering') !== filtering) { row.classList.toggle('filtering', filtering); row.setAttribute('aria-pressed', String(filtering)); }
+        row.classList.toggle('filtering', !!railFilter && a.id === railFilter);
         const hide = !!crewQuery && !String(a.name || a.id).toLowerCase().includes(crewQuery) && !String(a.id).toLowerCase().includes(crewQuery);
         if (row.hidden !== hide) row.hidden = hide;
         if (!row.hidden) visible++;
