@@ -368,7 +368,7 @@
     function planVerb(a) {
       const has = k => a[k] !== undefined && a[k] !== null;
       if (has('restyle')) return Object.keys(a).length === 1 ? { verb: 'station.plan_restyle', request: a.restyle } : { error: 'restyle goes on its own: { restyle: { room, type, floorStyle, floorMat, name } }.' };
-      if (has('remove') || has('refurnish') || has('clear')) return Object.keys(a).filter(has).length === 1 ? { verb: 'station.plan_edit', request: a } : { error: 'remove, refurnish and clear each go on their own: { remove: a room or [rooms] }, { refurnish: { room, style, name } } or { clear: a room }.' };
+      if (['remove', 'refurnish', 'clear', 'add', 'seat', 'move', 'staff'].some(has)) return Object.keys(a).filter(has).length === 1 ? { verb: 'station.plan_edit', request: a } : { error: 'remove, refurnish, clear, add, seat, move and staff each go on their own, one edit a plan.' };
       if (has('layout') || has('rooms') || has('hallways')) return { verb: 'station.plan_build', request: a };
       if (has('kit') || has('preset') || has('zones')) return { verb: 'station.plan_room', request: a };
       if (has('line') || has('shape') || has('purpose')) return { verb: 'station.plan_line', request: a };
@@ -386,14 +386,14 @@
           + '4 { kit | preset, replace, where, name }: KITS ' + kitText() + '; PRESETS ' + presetText() + ' (replace: true swaps the whole station for the preset). '
           + '5 { zones: [ { area, style } | { area, line | purpose | shape, … } ], where, name, size, beside, side }: area left, right, back, front, back-left, back-right, front-left, front-right or whole; zone styles ' + styleText() + '. '
           + '6 { restyle: { room, type, floorStyle, floorMat, name } } changes a floor or a name only. '
-          + '7 EDIT what stands: { remove: a room or [rooms] } takes rooms out with everything in them (their lines too, named on the card), and the hallways left joining nothing; agents keep a desk; the main room stays. { refurnish: { room, style, name } } clears a room\'s furniture and furnishes it in another style, floor and walls too ("turn the gym into a library"); its lines and agents\' desks stay. { clear: a room } empties its furniture. Rooms do not move or resize: remove one, then build it again where the Commander wants it. '
+          + '7 EDIT what stands, one edit a plan: { add: { room, pieces: ["a tv", "three plants", "a sofa"] } } places named pieces (any catalog piece, or a prop the Commander made, by its name) against the walls or on the open floor, clear of doorways and lines; { remove: { room, pieces } } takes named pieces out ("all plants" too); { remove: { line, room? } } takes one workflow line out; { remove: a room or [rooms] } takes rooms out with everything in them and the hallways left joining nothing (agents keep a desk; the main room stays); { refurnish: { room, style, name } } clears a room\'s furniture and furnishes it in another style, floor and walls too ("turn the gym into a library"); { clear: a room } empties its furniture; { seat: { agent, room } } moves an agent\'s desk into a room; { move: { room, beside, side } } moves a room with everything in it; { staff: { line, steps: [ { step, agent, instructions } ] } } restaffs an existing line (agent "nobody" clears a step). Rooms do not resize: remove one and build it again the size it should be. '
           + 'It answers a planId and a plain summary: tell the Commander the summary, then call station.build with the planId. If it refuses it says why and what does fit: fix the request and plan again. Never give up after one refusal, and never say something was built that station.build did not report.';
       },
       schema: { type: 'object', properties: {
         layout: { type: 'object', properties: { pattern: { type: 'string' }, around: { type: 'string' }, side: { type: 'string' }, rooms: { type: 'array', items: { type: 'object' } } } },
         replace: { type: 'boolean' }, rooms: { type: 'array', items: { type: 'object' } }, hallways: { type: 'array', items: { type: 'object' } },
         line: { type: 'string' }, shape: { type: 'array' }, purpose: { type: 'string' }, steps: { type: 'array', items: { type: 'object' } }, dailyCap: {}, tries: { type: 'integer' },
-        kit: { type: 'string' }, preset: { type: 'string' }, zones: { type: 'array', items: { type: 'object' } }, restyle: { type: 'object' }, remove: {}, refurnish: { type: 'object' }, clear: {},
+        kit: { type: 'string' }, preset: { type: 'string' }, zones: { type: 'array', items: { type: 'object' } }, restyle: { type: 'object' }, remove: {}, refurnish: { type: 'object' }, clear: {}, add: { type: 'object' }, seat: { type: 'object' }, move: { type: 'object' }, staff: { type: 'object' },
         where: { type: 'string' }, name: { type: 'string' }, size: {}, beside: { type: 'string' }, side: { type: 'string' }, hallway: {}, type: { type: 'string' }, floorStyle: { type: 'string' }, floorMat: { type: 'string' } } },
       run: async (args) => {
         const a = args && typeof args === 'object' && !Array.isArray(args) ? args : {};
@@ -414,7 +414,7 @@
       // briefs persist and every later run of those Bays obeys them: a run that read untrusted content may not write them
       taintLocked: true,
       description: 'STATION BUILDER, step 3: build exactly what station.plan planned, by its planId, after the Commander approves. It lands as one step the Commander can take back with one UNDO in Build mode; '
-        + 'nothing already on the station is moved or removed, except by replace: true (a preset swap or a whole new layout), which backs the old layout up for RESTORE PREVIOUS. It refuses if the plan expired (ten minutes), was already used, or the station changed since the plan: then plan again. Afterwards, report what it says is still missing, exactly.',
+        + 'nothing already on the station is moved or removed except what the plan said (an edit names everything it moves or takes out; replace: true, a preset swap or a whole new layout, backs the old layout up for RESTORE PREVIOUS). It refuses if the plan expired (ten minutes), was already used, or the station changed since the plan: then plan again. Afterwards, report what it says is still missing, exactly.',
       schema: { type: 'object', properties: { planId: { type: 'string' } }, required: ['planId'] },
       run: async (args) => {
         const planId = String((args && args.planId) || '').trim().slice(0, 60);
@@ -422,7 +422,7 @@
         if (!out.ok) return refuse(out.error);
         planMemo.delete(planId);
         const r = out.result || {};
-        const what = (r.line && r.line.name) || (r.rooms || []).map(x => x.name).join(', ') || ((r.hallways || []).length ? 'a hallway' : 'the plan');
+        const what = (r.line && r.line.name) || (r.rooms || []).map(x => x.name).join(', ') || ((r.hallways || []).length ? 'a hallway' : r.where || 'the plan');
         return { content: JSON.stringify(r), summary: 'built ' + what + (r.line ? (r.ready ? ' · ready to run' : ' · ' + ((r.blocking || []).length) + ' to do') : '') };
       }
     };

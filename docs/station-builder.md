@@ -171,6 +171,12 @@ ONE undo:
 | `{ remove: room \| [rooms] }` | Takes up to 8 rooms out with everything on them: furniture, and any workflow line (named on the card). A hallway that joined them and now joins nothing goes too (one that never touched them stays). An agent whose only seat stood there gets a desk in a tidy row elsewhere (`desksFor`). The main room never goes, and a removal that would cut another room off from the bridge is refused naming it ("That would cut LAB, GYM off from HOME…"). |
 | `{ refurnish: { room, style, name } }` | Clears the room's furniture and furnishes it in another whole-room style, floor and walls too (`dressRoom`). Its lines and agents' seats stay where they are. A room still named for what it was (LOUNGE, ROOM 3) takes the new style's name; a `name` given wins. |
 | `{ clear: room }` | Removes the room's furniture. Lines, agents' seats and fixtures stay. |
+| `{ add: { room, pieces } }` | Places NAMED pieces: `["a tv", "three plants", { "piece": "sofa", "count": 2 }]`, up to 16 a plan. Any piece of the page's catalog by its id, label, card name or a word for it ("sofa", "fridge", "fish tank"), and any prop the Commander made, by the name its maker gave it. A wall piece hangs on the back wall, a table piece (a lava lamp) stands on a table (or the refusal says to add one), a rug lies on the open floor, everything else stands against a wall first (the back, then the sides, then the front) and then the open floor; never on a belt or a doorway's lane, and never where it or anything already there could not be walked up to, or where a room would be cut off. Workflow machines are not pieces (lines bring them). |
+| `{ remove: { room, pieces } }` | Takes named pieces out ("the couch", "all plants"); what stood on a table that goes, goes with it. An agent's seat is not taken this way (seat the agent elsewhere). |
+| `{ remove: { line, room? } }` | Takes one workflow line out, its machines and belts, by its name ("build and test" finds BUILD + TEST). Every other line stays exactly. |
+| `{ seat: { agent, room } }` | Moves an agent's desk (or gives one) into the room, in a tidy spot against its wall. |
+| `{ move: { room, beside, side } }` | Moves a room with everything in it (furniture, lines, seats ride along, `WorldModel.moveRoom`): its old hallways that would join nothing go, a new corridor, planted and lit, joins it where it lands. The main room stays; a move that would strand a room is refused naming it. |
+| `{ staff: { line, steps } }` | Restaffs an existing line where it stands: `[{ step, agent, instructions }]` by run order, `agent: "nobody"` clears a step. Recruiting is not done here. The card lists every step's instructions. |
 
 The card names every piece of equipment that goes ("Equipment that goes: a dish (WEB), a studio (IMAGES)"), so
 nobody loses a capability unawares. Rooms do not move or resize: the refusal says to remove one and build it again
@@ -303,6 +309,7 @@ of furniture itself, so these fields are not accepted: x".
 
 Custom shapes (the plan's phase 4) are built as line zones. The card draws the plan rather than overlaying the live floor.
 
-Not built: the lead cannot move or resize what already stands, or remove a single piece of furniture or one line on its
-own (it removes rooms, refurnishes them and clears their furniture: see "Editing what stands"). The Commander does the
-rest in Build mode. Hallways run straight, so two rooms that do not face each other cannot be joined directly.
+Not built: rooms do not resize (remove one and build it again the size it should be) and are rectangles; hallways run
+straight, so two rooms that do not face each other cannot be joined directly; a piece is placed where StarNet judges
+best, never at a tile the model names; a line's machines are not edited one by one (restaff it, remove it, or plan a
+new one). The Commander does those in Build mode.

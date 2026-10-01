@@ -1256,7 +1256,9 @@ for (const c of T.catalog) {
       const none = SB.planEdit(st.serialize(), { remove: 'Mars' }, E);
       A.ok(!none.ok && /^There is no room called "Mars"\. Rooms: HOME, /.test(none.error), 'an unknown room lists the rooms');
       const mv = SB.planEdit(st.serialize(), { move: 'LAB' }, E);
-      A.ok(!mv.ok && /Rooms do not move or resize: remove one and build it again where it should be\./.test(mv.error), 'a move says how instead: ' + mv.error);
+      A.ok(!mv.ok && /^move is \{ room, beside, side \}/.test(mv.error), 'a move with no place says how: ' + mv.error);
+      const rs = SB.planEdit(st.serialize(), { move: { room: 'LAB', size: 'large' } }, E);
+      A.ok(!rs.ok && /Rooms do not resize: remove one and build it again the size it should be\./.test(rs.error), 'a resize says how instead: ' + rs.error);
       const two = SB.planEdit(st.serialize(), { remove: 'GYM', clear: 'LAB' }, E);
       A.ok(!two.ok && /^An edit is one of:/.test(two.error), 'two edits at once are refused');
       const bad = SB.planEdit(st.serialize(), { refurnish: { room: 'GYM', style: 'spaceship' } }, E);
@@ -1294,6 +1296,88 @@ for (const c of T.catalog) {
       const empty = SB.planEdit(st.serialize(), { clear: 'GYM' }, E);
       if (empty.ok) { A.ok(SB.apply(st, empty.plan, E).ok); const again = SB.planEdit(st.serialize(), { clear: 'GYM' }, E); A.ok(!again.ok && /^GYM has no furniture to clear/.test(again.error), 'clearing an empty room is refused'); A.ok(st.undo().ok); }
     }
+  }
+  // EDIT WHAT STANDS, part 2 (Andrew 09-30: "reliably and cleanly build and put together anything within the starnet world"):
+  // named pieces in and out, one line out, an agent seated, a room moved with everything in it, a line restaffed
+  {
+    const st = fresh();
+    const lay = SB.planBuild(st.serialize(), { layout: { pattern: 'diamond', rooms: ['lounge', 'library', 'garden', 'lab', 'cafe', 'gym'].map(style => ({ style })).concat([{ name: 'Conveyor Hall', style: 'works', lines: [{ line: 'build_test' }, { line: 'research_line' }] }]) } }, E);
+    A.ok(lay.ok && SB.apply(st, lay.plan, E).ok, 'fixture: a diamond with two lines in its hall (' + (lay.error || '') + ')');
+    const room = n => st.rooms().find(x => x.name === n), inR = (n, p) => st.roomAt(p.x, p.y) === room(n).id;
+    const allWalk = () => st.rooms().filter(x => x.kind !== 'corridor').every(x => walks(st, room('HOME'), x));
+    const tryEdit = (q, re, label, check) => {
+      const before = snap(st), r = SB.planEdit(st.serialize(), q, E);
+      A.ok(r.ok && re.test(r.plan.summary), label + ': ' + (r.error || r.plan.summary).slice(0, 260));
+      if (!r.ok) return;
+      A.eq(snap(st), before, label + ': planning changes nothing');
+      const a = SB.apply(st, r.plan, E);
+      A.ok(a.ok && a.kind === 'edit', label + ': it builds (' + (a.error || '') + ')');
+      if (check) check(r);
+      A.ok(allWalk(), label + ': every room is still walkable');
+      A.ok(st.undo().ok); A.eq(snap(st), before, label + ': one undo puts it back exactly');
+    };
+    // pieces by name, a count, a word for one; placed against the walls, every room still walkable
+    const n0 = st.props().filter(p => inR('LOUNGE', p)).length;
+    tryEdit({ add: { room: 'Lounge', pieces: ['a tv', 'two plants', 'a sofa'] } }, /^Add to LOUNGE: a TV, two plants and a couch, /, 'add named pieces', () => {
+      const mine = st.props().filter(p => inR('LOUNGE', p));
+      A.eq(mine.length, n0 + 4, 'four pieces stand in the LOUNGE now');
+    });
+    const bad = SB.planEdit(st.serialize(), { add: { room: 'GYM', pieces: ['a spaceship'] } }, E);
+    A.ok(!bad.ok && /^There is no piece called "spaceship"\. Pieces include: a couch, /.test(bad.error), 'an unknown piece is refused with what there is');
+    const mach = SB.planEdit(st.serialize(), { add: { room: 'GYM', pieces: ['an inbox'] } }, E);
+    A.ok(!mach.ok && /Workflow machines come with a line\./.test(mach.error), 'a workflow machine is not a piece');
+    const many = SB.planEdit(st.serialize(), { add: { room: 'GYM', pieces: ['eight plants', 'eight lamps', 'a tv'] } }, E);
+    A.ok(!many.ok && /^That is 17 pieces; ask for up to 16/.test(many.error), 'too many pieces in one plan are refused');
+    if ((E.PropSprites.ruleFor('lavalamp') || {}).mount === 'surface') {
+      const lamp = SB.planEdit(st.serialize(), { add: { room: 'GYM', pieces: ['a lava lamp'] } }, E);
+      A.ok(!lamp.ok && /on a table: add a table first/.test(lamp.error), 'a table piece in a room with no table says to add a table');
+    }
+    // pieces out by name, all of a kind, what stood on a table with it
+    const plants0 = st.props().filter(p => inR('GARDEN', p) && p.t === 'plant').length;
+    tryEdit({ remove: { room: 'GARDEN', pieces: ['all plants'] } }, /^Remove from GARDEN: (a|two|three|four|five|six|\d+) plants?\./, 'remove all of a kind', () => {
+      A.eq(st.props().filter(p => inR('GARDEN', p) && p.t === 'plant').length, 0, 'no plant is left in the GARDEN (there were ' + plants0 + ')');
+    });
+    const none = SB.planEdit(st.serialize(), { remove: { room: 'LOUNGE', pieces: ['a pool table'] } }, E);
+    A.ok(!none.ok && /^LOUNGE has no pool table\. It holds: /.test(none.error), 'removing what is not there says what is');
+    // one line out, the other stays exactly
+    const other = () => JSON.stringify(st.props().filter(p => /^(intake|bay|outbox)$/.test(p.t) && !/BUILD/.test(p.label || '')).map(p => [p.t, p.x, p.y]));
+    const keep = other();
+    tryEdit({ remove: { line: 'build and test' } }, /^Remove the line BUILD \+ TEST from CONVEYOR HALL: its \d+ machines and \d+ belt tiles go\./, 'remove one line', () => {
+      A.ok(!st.props().some(p => p.t === 'intake' && p.label === 'BUILD + TEST'), 'BUILD + TEST is gone');
+      A.ok(st.props().some(p => p.t === 'intake' && p.label === 'RESEARCH + WRITE'), 'RESEARCH + WRITE stands');
+    });
+    A.eq(other(), keep, 'and nothing of the other line moved');
+    const nol = SB.planEdit(st.serialize(), { remove: { line: 'nope' } }, E);
+    A.ok(!nol.ok && /^There is no line called "nope"\. Lines: BUILD \+ TEST, RESEARCH \+ WRITE\./.test(nol.error), 'an unknown line lists the lines');
+    // an agent seated in a room: exactly one desk, there
+    tryEdit({ seat: { agent: 'rex', room: 'library' } }, /^REX's desk moves from HOME to LIBRARY, in a tidy spot against its wall\./, 'seat an agent', () => {
+      const d = st.props().filter(p => p.agentId === 'rex' && /^(desk|desk2)$/.test(p.t));
+      A.ok(d.length === 1 && inR('LIBRARY', d[0]), 'REX has one desk, in the LIBRARY');
+    });
+    // a room moved with everything in it; its old hallway goes, a new one joins it
+    const gymWas = room('GYM').rects[0], gymN = st.props().filter(p => inR('GYM', p)).length;
+    tryEdit({ move: { room: 'GYM', beside: 'CAFE', side: 'west' } }, /^Move GYM \(18 × 11\) to west of CAFE, with everything in it/, 'move a room', () => {
+      const R = room('GYM').rects[0];
+      A.ok(R.x1 !== gymWas.x1 || R.y1 !== gymWas.y1, 'GYM stands somewhere new');
+      A.eq(st.props().filter(p => inR('GYM', p)).length, gymN, 'with every piece it had');
+    });
+    tryEdit({ move: { room: 'CONVEYOR HALL', beside: 'LAB', side: 'north' } }, /^Move CONVEYOR HALL \(36 × 20\) to north of LAB/, 'move a room with lines', () => {
+      A.eq(st.props().filter(p => p.t === 'intake' && inR('CONVEYOR HALL', p)).length, 2, 'both lines rode along');
+    });
+    const home = SB.planEdit(st.serialize(), { move: { room: 'HOME', side: 'west' } }, E);
+    A.ok(!home.ok && /^HOME is the main room/.test(home.error), 'the main room does not move');
+    const where = SB.planEdit(st.serialize(), { move: { room: 'GYM' } }, E);
+    A.ok(!where.ok && /^Say where GYM goes/.test(where.error), 'a move with nowhere named asks where');
+    // a line restaffed where it stands, with instructions on the card's steps
+    tryEdit({ staff: { line: 'BUILD + TEST', steps: [{ step: 1, agent: 'rex' }, { step: 2, agent: 'lead', instructions: 'Run the tests and report.' }] } }, /^Staff the line BUILD \+ TEST: step 1 \(Engineer\) → REX; step 2 \(Tester\) → NOVA, with new instructions\./, 'restaff a line', r => {
+      A.ok(r.plan.steps.length === 2 && r.plan.steps[1].instructions === 'Run the tests and report.', 'the plan\'s steps carry the instructions (the approval card shows them)');
+      const bays = st.props().filter(p => p.t === 'bay' && inR('CONVEYOR HALL', p) && p.agentId);
+      A.ok(bays.some(p => p.agentId === 'rex') && bays.some(p => p.agentId === 'agent' && p.brief === 'Run the tests and report.'), 'REX and NOVA stand at the steps, NOVA with the brief');
+    });
+    const ns = SB.planEdit(st.serialize(), { staff: { line: 'BUILD + TEST', steps: [{ step: 1, agent: 'new' }] } }, E);
+    A.ok(!ns.ok && /^A new recruit comes with a new line/.test(ns.error), 'restaffing does not recruit');
+    const n9 = SB.planEdit(st.serialize(), { staff: { line: 'BUILD + TEST', steps: [{ step: 9, agent: 'rex' }] } }, E);
+    A.ok(!n9.ok && /^step is a number from 1 to 2/.test(n9.error), 'a step that is not there is refused');
   }
   // a concourse from a crowded station finds a free side, or is refused naming the way forward
   {
@@ -1446,7 +1530,7 @@ for (const c of T.catalog) {
   const n0 = calls.length;
   for (const req of [{ remove: 'GYM', clear: 'LAB' }, { refurnish: { room: 'GYM', style: 'library' }, rooms: [{ style: 'lounge' }] }]) {
     const r = await planT.run(req, {});
-    A.ok(/^REFUSED: remove, refurnish and clear each go on their own/.test(r.content), 'an edit mixed with anything else is refused: ' + JSON.stringify(req));
+    A.ok(/^REFUSED: remove, refurnish, clear, add, seat, move and staff each go on their own, one edit a plan\./.test(r.content), 'an edit mixed with anything else is refused: ' + JSON.stringify(req));
   }
   for (const req of [{}, { name: 'X' }, { restyle: { room: 'HOME' }, kit: 'LIBRARY' }]) {
     const r = await planT.run(req, {});
