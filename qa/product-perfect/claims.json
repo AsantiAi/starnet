@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "c2d3e9dff3290daf90eadde938aa6351cad5c800",
+    "sourceCommit": "024b8c9a6bb0d00e0e509aae6b92dcee283df2f0",
     "pathSetSha256": "c218737e8fb339c74f073e42d11f580a04bde46b042e931855728791613abf73",
     "files": [
       {
@@ -1318,8 +1318,8 @@
       },
       {
         "path": "frontend/app/workflowpanel.js",
-        "bytes": 180019,
-        "sha256": "2ca43f2ad26ff416cb037736b0c1f8f211fc499a326bf0c80ff36827e6f765dd"
+        "bytes": 180034,
+        "sha256": "cda79750864331fbeffecbf4355b049cb5f804a80653ae0237899f7d514c6c2f"
       },
       {
         "path": "frontend/app/workflowtakeoverstore.js",
