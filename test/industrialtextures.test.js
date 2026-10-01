@@ -126,7 +126,7 @@ async function main() {
   for(const id of Surface.MATERIALS) {
     const d=draw(api,'floor',0,0,12,0,0,id);
     const paths=[...d.image.paths]; equal(paths.length,1,id+' floor samples one authored source');
-    const asset = ['flightdeck','lunar','maggrid','habitat'].includes(id) ? '/floor-'+id+'.png' : '/remaster/floors/'+id+'.png';
+    const asset = ['flightdeck','lunar','maggrid','habitat'].includes(id) ? '/floor-'+id+'.png' : '/remaster/floors/'+id+(['basalt','rubber','soft'].includes(id)?'-v2':'')+'.png';
     ok(paths[0].endsWith(asset),id+' selection loads its own floor art'); floorPaths.add(paths[0]);
   }
   for(const id of Surface.WALLS) {

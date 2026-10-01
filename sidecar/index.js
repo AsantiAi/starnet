@@ -11566,7 +11566,14 @@ function getSampleHub() {
   return sampleHub;
 }
 async function handleRoutingSample(req, res) {
-  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  const r = await runSampleJob(async () => { const raw = await readBody(req, 1 << 16); return raw && raw.trim() ? (JSON.parse(raw) || {}) : {}; });
+  res.writeHead(r.code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(r.obj));
+}
+/* RUN ONE REAL JOB down a line: the route above (the Workflow panel's TEST, WORKFLOWS' SEND A JOB) and the lead's
+   station.test_line (2026-10-01) both come here, so a test the lead runs is the very job the Commander's button sends:
+   the same one-per-station lock, the same refusals, the same job record in the OUTBOX. Answers { code, obj }. */
+async function runSampleJob(readArgs) {
+  const json = (code, obj) => ({ code, obj });
   // ONE PER STATION — the lock is claimed in this synchronous slice (before any await), so two concurrent
   // posts can never both dispatch. Refusal paths below release it before answering.
   if (sampleInFlight) {
@@ -11576,7 +11583,7 @@ async function handleRoutingSample(req, res) {
   sampleInFlight = { streamId: 'sample-' + crypto.randomUUID().slice(0, 8), workitemId: '', startedAt: Date.now() };
   try {
     let body = {};
-    try { const raw = await readBody(req, 1 << 16); body = raw && raw.trim() ? (JSON.parse(raw) || {}) : {}; }
+    try { body = (await readArgs()) || {}; }
     catch (_) { return json(400, { ok: false, error: 'bad json' }); }   // the finally releases the lock on every exit
     const text = String(body.text == null ? '' : body.text).trim().slice(0, 2000) || SAMPLE_TEXT;
     /* the line this proof is FOR (additive, 2026-08-10): the FINISH card posts { line: c.key } — the same
@@ -11876,6 +11883,57 @@ function triggerView(v) {
 }
 const triggerJson = (res, code, obj, extra) => { res.writeHead(code, Object.assign({ 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, extra || {})); res.end(JSON.stringify(obj)); };
 function mintTriggerSecret() { const secret = LineTriggers.mintSecret(crypto.randomBytes(32)); return { secret, hash: LineTriggers.hashSecret(secret) }; }
+/* WHAT STARTS A LINE, for the lead (station.start_line, 2026-10-01): a schedule (a runsLine routine fired at the line's
+   entry step), a folder or a webhook trigger, made through the very cores the Workflow panel's forms post to
+   (createCronJobFromSpec + arm on create; LineTriggers.validateInput, the folder jail + baseline, triggerRunner.create),
+   so the same refusals, the same tripwire on the job's words, the same records. A webhook's key is never handed to the
+   model: the Commander takes a new one from the line's Workflow panel. */
+async function startLineFor(spec) {
+  const s = spec || {}, lineId = String(s.lineId || ''), job = String(s.job || '').trim(), name = String(s.name || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  const plan = router.getPlan();
+  if (!plan || !(Array.isArray(plan.lines) ? plan.lines : []).some(l => l && String(l.lineId) === lineId))
+    return { ok: false, error: 'the line ' + (name || lineId) + ' is not armed yet (the station page compiles it as it is built): keep the page open and try again in a moment' };
+  if (s.kind === 'off') {
+    const cur = triggerRunner.get(String(s.id || ''));
+    if (!cur || String(cur.lineId) !== lineId) return { ok: false, error: 'there is no trigger ' + String(s.id || '').slice(0, 40) + ' on ' + name + ' (a schedule is a routine: routine.manage pauses or removes it)' };
+    const r = triggerRunner.update(cur.id, { enabled: false }, {});
+    return r.ok ? { ok: true, kind: 'off', id: cur.id, was: cur.kind } : { ok: false, error: r.error };
+  }
+  if (!job) return { ok: false, error: 'a start needs the job it sends down the line each time' };
+  if (s.kind === 'schedule') {
+    const docks = crewedDocksOnLine(plan, lineId);
+    if (!docks.length) return { ok: false, error: 'nobody works the first step of ' + name + ': give it an agent first' };
+    const layer = Pipeline.hasDockLayer(plan) ? Pipeline.dockLayer(plan) : null;
+    const dockId = layer ? docks[0] : null, agentId = layer ? layer.agentOfDock[dockId] : docks[0];
+    const out = await createCronJobFromSpec({ name: (name ? name + ' — ' : '') + (job.length > 48 ? job.slice(0, 45) + '…' : job), prompt: job, schedule: s.schedule, tz: s.tz || undefined,
+      agentId, dockId: dockId || undefined, runsLine: true });
+    const b = out.body || {};
+    if (b.duplicate) return { ok: false, error: 'a similar routine already exists ("' + ((b.job && b.job.name) || '') + '"): nothing new was made' };
+    if (!((out.status || 200) === 200 && b.ok && b.job && b.job.id)) return { ok: false, error: b.error || b.message || 'the schedule was not saved' };
+    try { if (!cronArmed) { saveCronArmed(true); cronArmed = true; if (!cronHalted) armCron(); } } catch (e) { console.warn('[cron] arm-on-create failed:', (e && e.message) || e); }
+    const asked = String(s.schedule || '').replace(/\s+/g, ' ').trim(), shown = String(b.job.scheduleDisplay || '');
+    return { ok: true, kind: 'schedule', id: b.job.id, when: asked + (shown && shown !== asked ? ' (' + shown + ')' : ''), armed: !!cronArmed && !cronHalted, halted: !!cronHalted };
+  }
+  if (s.kind === 'folder' || s.kind === 'webhook') {
+    const v = LineTriggers.validateInput(Object.assign({ kind: s.kind, lineId, name, config: Object.assign({ task: job }, s.kind === 'folder' ? { path: String(s.folder || '') } : {}) },
+      s.maxPerHour != null ? { maxPerHour: s.maxPerHour } : {}), { partial: false });
+    if (!v.ok) return { ok: false, error: v.error };
+    const fields = v.fields, extra = {};
+    if (fields.kind === 'folder') {
+      const pol = await triggerFolderPolicy.check(fields.config.path);
+      if (!pol.ok) return { ok: false, error: pol.error };
+      fields.config.path = pol.path;
+      const base = await triggerWatcher.baseline(pol.path);
+      if (!base.ok) return { ok: false, error: base.error };
+      extra.baselineKeys = base.keys;
+    } else extra.secretHash = mintTriggerSecret().hash;   // the key itself is never kept or handed on
+    const r = triggerRunner.create(fields, extra);
+    if (!r.ok) return { ok: false, error: r.error };
+    const t = triggerView(r.trigger);
+    return { ok: true, kind: s.kind, id: t.id, path: (t.config && t.config.path) || null, maxPerHour: t.maxPerHour, enabled: t.enabled !== false, blockedBy: t.blockedBy || null };
+  }
+  return { ok: false, error: 'a line starts on a schedule, from a folder, or from a webhook' };
+}
 
 /* GET /api/routing/triggers — every trigger (secrets never included), plus what the station can offer. */
 function handleTriggersList(req, res) {
@@ -18392,6 +18450,8 @@ async function runOnceCore(o) {
     ? overseerStation(o.streamId, runId) : stationBridge, scanText: t => cronGuard.scanRoutinePrompt(t), now: () => Date.now(),
     planMemo: stationPlanMemo, lineMenu: stationLineMenu, kitMenu: stationKitMenu, presetMenu: stationPresetMenu, styleMenu: stationStyleMenu, roomMenu: stationRoomMenu,
     userProps,   // MAKE A PROP: the station's own prop maker (StarNet credits), for station.make_prop
+    runLineJob: args => runSampleJob(async () => args),   // TEST A LINE: the very job SEND A JOB sends, for station.test_line
+    startLine: spec => startLineFor(spec),                 // WHAT STARTS A LINE: the panel's own schedule + trigger cores, for station.start_line
     // station.layout's HARNESS facts (audit 2026-09-28): the plan the router actually holds, each line's effective
     // budget (the runner's own effectiveLimits), and today's numbers since local midnight (the line plate's window)
     layoutFacts: {
@@ -23181,6 +23241,14 @@ function consentSummary(call) {
   }
   // the station builder: the card shows what the dry run found (the plan's summary + every step's instructions), never the model's words
   if (/^station[._]build$/.test(String(call && call.name || ''))) return stationPlanSummary(stationPlanMemo, a.planId) || 'an unknown or expired plan: it will be refused, and nothing will be built';
+  if (/^station[._]start_line$/.test(String(call && call.name || ''))) {
+    const ln = 'the line ' + String(a.line || '').replace(/\s+/g, ' ').trim().slice(0, 48), job = String(a.job || '').replace(/\s+/g, ' ').trim();
+    if (a.off) return ln + ': turn its trigger ' + String(a.off).slice(0, 40) + ' off.';
+    const how = a.schedule ? 'run it ' + String(a.schedule).replace(/\s+/g, ' ').trim().slice(0, 80) + (a.tz ? ' (' + String(a.tz).slice(0, 40) + ')' : '')
+      : a.folder ? 'start it whenever a new file lands in ' + String(a.folder).slice(0, 160) : a.webhook ? 'start it whenever its webhook is called' : 'start it';
+    return ln + ': ' + how + ', with the job: "' + job.slice(0, 240) + (job.length > 240 ? '…' : '') + '". From then on it runs the line\'s agents unattended, within the line\'s budget.';
+  }
+  if (/^station[._]test_line$/.test(String(call && call.name || ''))) return 'the line ' + String(a.line || '').replace(/\s+/g, ' ').trim().slice(0, 48) + ', with this test job: "' + String(a.job || '').replace(/\s+/g, ' ').trim().slice(0, 240) + (String(a.job || '').length > 240 ? '…' : '') + '". It runs the line\'s agents and spends what they spend; the result lands in your OUTBOX.';
   if (/^station[._]make_prop$/.test(String(call && call.name || ''))) return '"' + String(a.describe || '').replace(/\s+/g, ' ').trim().slice(0, 60) + '", drawn with your StarNet credits (about $0.35' + (a.sideView ? ', and about $0.30 more for its side view' : '') + '). It joins your MADE BY YOU library; nothing is placed until a plan says so.';
   if (typeof a.path === 'string' && a.path) return a.path;
   try { const s = JSON.stringify(a); return s.length > 80 ? s.slice(0, 77) + '…' : s; } catch (_) { return ''; }
