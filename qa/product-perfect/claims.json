@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "337dfd4acfca22ce5fdcd735e4f82939a53a4dc3",
+    "sourceCommit": "56eb5929637a76ff4fd512a00d4370636ac50414",
     "pathSetSha256": "20437f005a0804e8cd4c9cd07bf2021eb0e54ee39ef0fb475e4aa7410c53467b",
     "files": [
       {
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 410821,
-        "sha256": "7645aee80d72f3c28e183b77d8f7031a75b9eb457a0602208f6cfc1bc521da9f"
+        "bytes": 410767,
+        "sha256": "1970c509d2be46d3416f25156403e1e09da2344678e3827d4408b85001a34089"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
@@ -323,8 +323,8 @@
       },
       {
         "path": "frontend/app/build.js",
-        "bytes": 564717,
-        "sha256": "eb623b412853c11b7234d483694f02c75223226f862b7c92ff7bc4e341f1fcb7"
+        "bytes": 547308,
+        "sha256": "dabc3faac47a144e88d9371a958d2819ce6606478de2f5f2ccade5c2ab5a40ee"
       },
       {
         "path": "frontend/app/channels.js",
@@ -333,8 +333,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 687929,
-        "sha256": "15d7f1ad4f28624d6ea8f4ac265f654a31fb0a5764a7901ead685f5161bffe1d"
+        "bytes": 689125,
+        "sha256": "cd7903df8878de1d1e6a75c746deeec0557e577d4e568fe151e34a67c272fd6e"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -1258,8 +1258,8 @@
       },
       {
         "path": "frontend/app/voice-live.js",
-        "bytes": 95147,
-        "sha256": "ed2e482f7f2de57d4ce76340c401f6b8430de32a33addb9c00b4c11f33c5f273"
+        "bytes": 95485,
+        "sha256": "c7165575df3e3c9a850f389c324554702e745ebc252244f258bc9f2ee679d639"
       },
       {
         "path": "frontend/app/voice-stream.js",
@@ -1268,8 +1268,8 @@
       },
       {
         "path": "frontend/app/voice.js",
-        "bytes": 112042,
-        "sha256": "250de9e26463b6933082e1d21215586cdbd71524a2f904767e37ffec8b17497f"
+        "bytes": 120418,
+        "sha256": "9cd86c1674c8718ad785d211c5f4cd566ca8e143717f278de8c15d6f82a17e99"
       },
       {
         "path": "frontend/app/waitanchor.js",
@@ -1588,8 +1588,8 @@
       },
       {
         "path": "frontend/css/refit-easy.css",
-        "bytes": 10136,
-        "sha256": "d8273c095034109965a07b827d7836dfbe16bb46ff79336d44272bb9f7f49aad"
+        "bytes": 8166,
+        "sha256": "c2ebc82363817377d170e73a5932a75cef9965ed0a4837242898cf4077c43789"
       },
       {
         "path": "frontend/css/refit-kit.css",

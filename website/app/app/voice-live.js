@@ -1640,7 +1640,10 @@ const VoiceLive = (() => {
          the identity bug Andrew heard. */
       if (Voice.setLocalTts) Voice.setLocalTts(true);
       if (Voice.startCoordinator) Voice.startCoordinator({ onState, onAssistant, onOutputLevel, onTiming, onTranscript: handleTranscript,
-        onInterim: text => { if (!paused && text) { caption('user', text); setState('hearing'); } } });
+        onInterim: text => { if (!paused && text) { caption('user', text); setState('hearing'); } },
+        // the dictation engine failed repeatedly and Voice stopped re-arming it — the panel must stop saying
+        // "listening" and name the problem (it used to stay on LISTENING over a dead loop).
+        onFatal: value => { if (!active) return; setError(value && value.message || 'Voice input stopped.'); setState('stopped'); } });
     }
     if (!active || seq !== sessionSeq) return;
     // The meter is real on this leg too (see openMeterTap): the tap arrives whenever the permission
