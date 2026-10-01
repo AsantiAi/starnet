@@ -160,6 +160,31 @@ centred on a wall (the top, then the bottom), split only when no row takes them 
 half keeps its floor) gets plants in its free corners, and the card says so ("two tall plants and two plants in the
 corners").
 
+## Editing what stands
+
+Added 2026-09-30 ("it should be able to build anything the user wants"). `station.plan` with one of these goes to the
+page's `station.plan_edit` (`StationBuilder.planEdit`); like every plan it is built on a copy, checked, and built in
+ONE undo:
+
+| Form | What it does |
+| --- | --- |
+| `{ remove: room \| [rooms] }` | Takes up to 8 rooms out with everything on them: furniture, and any workflow line (named on the card). A hallway that joined them and now joins nothing goes too (one that never touched them stays). An agent whose only seat stood there gets a desk in a tidy row elsewhere (`desksFor`). The main room never goes, and a removal that would cut another room off from the bridge is refused naming it ("That would cut LAB, GYM off from HOME…"). |
+| `{ refurnish: { room, style, name } }` | Clears the room's furniture and furnishes it in another whole-room style, floor and walls too (`dressRoom`). Its lines and agents' seats stay where they are. A room still named for what it was (LOUNGE, ROOM 3) takes the new style's name; a `name` given wins. |
+| `{ clear: room }` | Removes the room's furniture. Lines, agents' seats and fixtures stay. |
+
+The card names every piece of equipment that goes ("Equipment that goes: a dish (WEB), a studio (IMAGES)"), so
+nobody loses a capability unawares. Rooms do not move or resize: the refusal says to remove one and build it again
+where it should be. Real-model proof (GPT 6.1 Sol, 09-30): "turn the garden into a games room" refurnished it; "get
+rid of the office and add a cozy den" refurnished the office in place (keeping the diamond); "remove the games room
+completely" removed it and its hallway.
+
+**Rooms by any name.** `RoomStyles.resolveRoom` maps the rooms people ask for to the nearest of the fifteen styles:
+medbay / infirmary / sick bay → lab, server room / control room / mission control → comms, cinema / theater →
+lounge, art or music studio → cozy, classroom / war room → meeting, dojo → gym, spa / hydroponics → garden, armory /
+hangar / vault → storage, engine room / reactor → workshop, archive → library, coworking → office, pub / diner /
+break room → cafe, and more. A style named anywhere in the words wins ("crew lounge" is a lounge); otherwise the head
+word, read from the end ("mission control"). A word with no near style ("bathroom") is refused with the styles.
+
 **The origin bug.** Found while building this. The routing plan counts tiles from the station's top-left corner, and a
 room added north or west of everything moves that corner. `floorFacts` compared those local tiles, so on any station
 with a working line every such room was refused as "that would change how an existing line routes". It went unseen
@@ -278,5 +303,6 @@ of furniture itself, so these fields are not accepted: x".
 
 Custom shapes (the plan's phase 4) are built as line zones. The card draws the plan rather than overlaying the live floor.
 
-Not built: the lead cannot move, resize or remove what already stands (rooms, hallways, furniture, lines). The Commander
-does that in Build mode. Hallways run straight, so two rooms that do not face each other cannot be joined directly.
+Not built: the lead cannot move or resize what already stands, or remove a single piece of furniture or one line on its
+own (it removes rooms, refurnishes them and clears their furniture: see "Editing what stands"). The Commander does the
+rest in Build mode. Hallways run straight, so two rooms that do not face each other cannot be joined directly.

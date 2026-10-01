@@ -364,10 +364,11 @@
       }
     };
     /* ONE PLANNER: the form of the request says what kind of change it is, and the page's own planner for that kind answers */
-    const PLAN_HOW = 'Send one form: { layout: { pattern, rooms } } (a whole station), { rooms, hallways } (rooms where the Commander says), { line | shape | purpose } (one workflow line), { kit | preset } (a furnished room or a preset), { zones } (one room part by part), or { restyle: { room, … } }.';
+    const PLAN_HOW = 'Send one form: { layout: { pattern, rooms } } (a whole station), { rooms, hallways } (rooms where the Commander says), { line | shape | purpose } (one workflow line), { kit | preset } (a furnished room or a preset), { zones } (one room part by part), { restyle: { room, … } }, or an edit of what stands ({ remove }, { refurnish }, { clear }).';
     function planVerb(a) {
       const has = k => a[k] !== undefined && a[k] !== null;
       if (has('restyle')) return Object.keys(a).length === 1 ? { verb: 'station.plan_restyle', request: a.restyle } : { error: 'restyle goes on its own: { restyle: { room, type, floorStyle, floorMat, name } }.' };
+      if (has('remove') || has('refurnish') || has('clear')) return Object.keys(a).filter(has).length === 1 ? { verb: 'station.plan_edit', request: a } : { error: 'remove, refurnish and clear each go on their own: { remove: a room or [rooms] }, { refurnish: { room, style, name } } or { clear: a room }.' };
       if (has('layout') || has('rooms') || has('hallways')) return { verb: 'station.plan_build', request: a };
       if (has('kit') || has('preset') || has('zones')) return { verb: 'station.plan_room', request: a };
       if (has('line') || has('shape') || has('purpose')) return { verb: 'station.plan_line', request: a };
@@ -384,14 +385,15 @@
           + '3 ONE LINE: { line | shape | purpose, where, beside, side, hallway, name, steps, dailyCap, tries }; with no where it goes into a conveyor hall that has room for it, else a room of its own on the grid, and lines sharing a room stand in rows with walkways between. LINES: ' + menuText() + '. shape = stages in order: a role ("RESEARCHER"), { together: [roles] }, { turns: [roles] }, { sort: { code: role, research: role } }, { review: true, tries: 3 }. steps (or a line\'s staff): [ { step, agent, instructions } ], agent = a crew name or "lead"; "new" recruits a new specialist ONLY when the Commander asks for new crew (at most 3 a plan, each gets a desk by its line); otherwise leave agent out and the card lists the step as still to do. '
           + '4 { kit | preset, replace, where, name }: KITS ' + kitText() + '; PRESETS ' + presetText() + ' (replace: true swaps the whole station for the preset). '
           + '5 { zones: [ { area, style } | { area, line | purpose | shape, … } ], where, name, size, beside, side }: area left, right, back, front, back-left, back-right, front-left, front-right or whole; zone styles ' + styleText() + '. '
-          + '6 { restyle: { room, type, floorStyle, floorMat, name } }. '
+          + '6 { restyle: { room, type, floorStyle, floorMat, name } } changes a floor or a name only. '
+          + '7 EDIT what stands: { remove: a room or [rooms] } takes rooms out with everything in them (their lines too, named on the card), and the hallways left joining nothing; agents keep a desk; the main room stays. { refurnish: { room, style, name } } clears a room\'s furniture and furnishes it in another style, floor and walls too ("turn the gym into a library"); its lines and agents\' desks stay. { clear: a room } empties its furniture. Rooms do not move or resize: remove one, then build it again where the Commander wants it. '
           + 'It answers a planId and a plain summary: tell the Commander the summary, then call station.build with the planId. If it refuses it says why and what does fit: fix the request and plan again. Never give up after one refusal, and never say something was built that station.build did not report.';
       },
       schema: { type: 'object', properties: {
         layout: { type: 'object', properties: { pattern: { type: 'string' }, around: { type: 'string' }, side: { type: 'string' }, rooms: { type: 'array', items: { type: 'object' } } } },
         replace: { type: 'boolean' }, rooms: { type: 'array', items: { type: 'object' } }, hallways: { type: 'array', items: { type: 'object' } },
         line: { type: 'string' }, shape: { type: 'array' }, purpose: { type: 'string' }, steps: { type: 'array', items: { type: 'object' } }, dailyCap: {}, tries: { type: 'integer' },
-        kit: { type: 'string' }, preset: { type: 'string' }, zones: { type: 'array', items: { type: 'object' } }, restyle: { type: 'object' },
+        kit: { type: 'string' }, preset: { type: 'string' }, zones: { type: 'array', items: { type: 'object' } }, restyle: { type: 'object' }, remove: {}, refurnish: { type: 'object' }, clear: {},
         where: { type: 'string' }, name: { type: 'string' }, size: {}, beside: { type: 'string' }, side: { type: 'string' }, hallway: {}, type: { type: 'string' }, floorStyle: { type: 'string' }, floorMat: { type: 'string' } } },
       run: async (args) => {
         const a = args && typeof args === 'object' && !Array.isArray(args) ? args : {};
@@ -403,7 +405,7 @@
         remember(p);
         const rooms = (p.rooms || []).map(r => r.name).join(', '), h = (p.hallways || []).length;
         const what = route.verb === 'station.plan_line' ? ((p.line && p.line.name) || 'a line') + (p.ready ? ' (ready once built)' : ' (' + ((p.blocking || []).length) + ' to do)')
-          : route.verb === 'station.plan_restyle' ? 'a restyle' : (rooms || 'a build') + (h ? ' + ' + h + ' hallway' + (h > 1 ? 's' : '') : '');
+          : route.verb === 'station.plan_restyle' ? 'a restyle' : route.verb === 'station.plan_edit' ? 'an edit' : (rooms || 'a build') + (h ? ' + ' + h + ' hallway' + (h > 1 ? 's' : '') : '');
         return { content: JSON.stringify(p), summary: 'planned ' + what, control: { revealTools: BUILDER } };
       }
     };

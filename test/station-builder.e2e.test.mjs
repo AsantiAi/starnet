@@ -202,9 +202,27 @@ try {
   const styled = await evalJS(cdp, `(() => { const st = App.station(), r = st.rooms().find(x => x.name === ${JSON.stringify(kit.name)}); return { style: r && r.floorStyle, mat: r && r.floorMat, same: JSON.stringify(st.serialize().props) === ${JSON.stringify(propsBefore)} }; })()`);
   check('the room is restyled and no prop changed', styled.style === 'teal' && styled.mat === 'tile' && styled.same, JSON.stringify(styled));
 
-  // 8. two UNDOs: the restyle, then the whole room
-  const undone2 = await evalJS(cdp, `(() => { const st = App.station(); const a = st.undo(), b = st.undo(); return { ok: a.ok && b.ok, rooms: st.rooms().filter(r => r.kind !== 'corridor').map(r => r.name) }; })()`);
-  check('one UNDO each removes the restyle and the furnished room', undone2.ok && JSON.stringify(undone2.rooms) === JSON.stringify(before.rooms), JSON.stringify(undone2));
+  // 7b. EDIT WHAT STANDS through the real page: refurnish the lounge as a library, then remove it
+  mock.planTool = 'station_plan'; mock.planArgs = { refurnish: { room: kit.name, style: 'library', name: 'Reading Room' } };
+  at = mock.results.length;
+  const run4b = await leadRun(base, token, 'turn the lounge into a library called reading room');
+  check('the refurnish run completes', run4b.status === 200);
+  let EP = null; try { EP = JSON.parse(mock.results[at] || ''); } catch (_) {}
+  check('the refurnish plan says what goes and what comes', !!EP && new RegExp('^Refurnish ' + kit.name + ' as a library: its \\d+ pieces of furniture are cleared').test(EP.summary) && /; renamed READING ROOM\./.test(EP.summary), (mock.results[at] || '').slice(0, 300));
+  const refurnished = await evalJS(cdp, `(() => { const st = App.station(), r = st.rooms().find(x => x.name === 'READING ROOM'); if (!r) return null; const t = st.props().filter(p => st.roomAt(p.x, p.y) === r.id).map(p => p.t); return { books: t.filter(x => /bookshelf/.test(x)).length, kitLeft: t.filter(x => ${JSON.stringify(kit.types)}.indexOf(x) >= 0 && !/plant|rug|lamp/.test(x)).length }; })()`);
+  check('the room is a READING ROOM of bookshelves, the kit furniture gone', !!refurnished && refurnished.books >= 2, JSON.stringify(refurnished));
+  mock.planTool = 'station_plan'; mock.planArgs = { remove: 'Reading Room' };
+  at = mock.results.length;
+  const run4c = await leadRun(base, token, 'actually remove the reading room');
+  check('the remove run completes', run4c.status === 200);
+  let XP = null; try { XP = JSON.parse(mock.results[at] || ''); } catch (_) {}
+  check('the remove plan names what goes', !!XP && /^Remove READING ROOM \(\d+ × \d+\), with the hallway that joined it\. Its furniture goes with it/.test(XP.summary), (mock.results[at] || '').slice(0, 300));
+  const removed = await evalJS(cdp, `(() => { const st = App.station(); return { rooms: st.rooms().filter(r => r.kind !== 'corridor').map(r => r.name), halls: st.rooms().filter(r => r.kind === 'corridor').length }; })()`);
+  check('the room and its hallway are gone; the station is as it began', JSON.stringify(removed.rooms) === JSON.stringify(before.rooms) && removed.halls === 0, JSON.stringify(removed));
+
+  // 8. one UNDO each: the removal, the refurnish, the restyle, then the whole room
+  const undone2 = await evalJS(cdp, `(() => { const st = App.station(); const u = [st.undo(), st.undo()], back = st.rooms().some(r => r.name === ${JSON.stringify(kit.name)}); const v = [st.undo(), st.undo()]; return { ok: u.concat(v).every(x => x && x.ok), back, rooms: st.rooms().filter(r => r.kind !== 'corridor').map(r => r.name) }; })()`);
+  check('one UNDO each takes back the removal, the refurnish, the restyle and the furnished room', undone2.ok && undone2.back && JSON.stringify(undone2.rooms) === JSON.stringify(before.rooms), JSON.stringify(undone2));
 
   // 9. the whole-station swap: backed up to Build mode's own slot, so its RESTORE PREVIOUS brings the old station back
   const preSwap = await evalJS(cdp, `(() => { const st = App.station(); return { rooms: st.rooms().filter(r => r.kind !== 'corridor').map(r => r.name), props: st.props().length, key: 'starnet.layoutBackup.' + st.doc().meta.createdAt }; })()`);

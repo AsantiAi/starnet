@@ -1211,6 +1211,90 @@ for (const c of T.catalog) {
       A.ok(walks(st, st.rooms().find(x => x.name === 'HOME'), rm), 'and it is still walkable');
     }
   }
+  // EDIT WHAT STANDS (Andrew 09-30: "it should be able to build anything the user wants"): remove rooms, refurnish one in
+  // another style, clear one's furniture — planned on a copy, one undo each, nothing else touched
+  {
+    const st = fresh(), styles = ['lounge', 'library', 'garden', 'lab', 'cafe', 'gym', 'workshop', 'meeting'];
+    const lay = SB.planBuild(st.serialize(), { layout: { pattern: 'diamond', rooms: styles.map(style => ({ style })).concat([{ name: 'Conveyor Hall', style: 'works', lines: [{ line: 'build_test' }] }]) } }, E);
+    A.ok(lay.ok && SB.apply(st, lay.plan, E).ok, 'fixture: a diamond of nine with a line (' + (lay.error || '') + ')');
+    const room = n => st.rooms().find(x => x.name === n), inRoom = (n, p) => room(n) && st.roomAt(p.x, p.y) === room(n).id;
+    const labDesk = st.props().find(p => p.t === 'desk' && inRoom('LAB', p)); A.ok(!!labDesk && st.assignPropAgent(labDesk.id, 'rex').ok, 'fixture: REX sits in the LAB');
+    const rexOld = st.props().filter(p => p.agentId === 'rex' && !inRoom('LAB', p) && /^(desk|desk2)$/.test(p.t));
+    for (const p of rexOld) st.removeProp(p.id);   // the LAB desk is his only one
+    const homeLine = () => JSON.stringify(st.props().filter(p => /^(intake|bay|outbox)$/.test(p.t)).map(p => [p.t, p.x, p.y]).sort());
+    const halls = () => st.rooms().filter(x => x.kind === 'corridor').length, snapOf = () => snap(st);
+    // remove one room: it, its hallway and everything on it go; nothing else changes; one undo
+    {
+      const before = snapOf(), h0 = halls(), others = st.props().filter(p => !inRoom('GYM', p)).length;
+      const r = SB.planEdit(st.serialize(), { remove: 'Gym' }, E);
+      A.ok(r.ok && /^Remove GYM \(18 × 11\), with the hallway that joined it\. Its furniture goes with it \(.+\)\. Agents and conversations stay; one UNDO in Build mode brings it back\.$/.test(r.plan.summary), 'remove says what goes: ' + (r.error || r.plan.summary));
+      A.eq(snapOf(), before, 'planning changes nothing');
+      const a = SB.apply(st, r.plan, E);
+      A.ok(a.ok && a.kind === 'edit' && !room('GYM') && halls() === h0 - 1, 'GYM and its hallway are gone (' + (a.error || '') + ')');
+      A.ok(st.rooms().filter(x => x.kind !== 'corridor').every(x => walks(st, room('HOME'), x)), 'every room left is walkable');
+      A.ok(st.undo().ok); A.eq(snapOf(), before, 'one undo brings GYM back exactly');
+    }
+    // remove a room holding a line: the card names the line; an agent whose only desk stood in a removed room gets one
+    {
+      const before = snapOf(), r = SB.planEdit(st.serialize(), { remove: ['Conveyor Hall', 'lab'] }, E);
+      A.ok(r.ok && /^Remove CONVEYOR HALL \(36 × 20\) and LAB \(18 × 11\), with the 2 hallways that joined them\./.test(r.plan.summary) && /A workflow line goes too: BUILD \+ TEST\./.test(r.plan.summary) && /REX gets a new desk in /.test(r.plan.summary), 'the card names the line and the agent re-seated: ' + (r.error || r.plan.summary));
+      if (r.ok) {
+        A.ok(SB.apply(st, r.plan, E).ok && !room('LAB') && !room('CONVEYOR HALL'), 'both go');
+        const rex = st.props().filter(p => p.agentId === 'rex' && /^(desk|desk2)$/.test(p.t));
+        A.ok(rex.length === 1 && st.roomAt(rex[0].x, rex[0].y), 'REX owns exactly one desk, on a room that stands');
+        A.ok(!st.props().some(p => /^(intake|bay|outbox)$/.test(p.t)), 'the hall\'s line went with it');
+        A.ok(st.undo().ok); A.eq(snapOf(), before, 'one undo brings both rooms, the line and REX\'s desk back exactly');
+      }
+    }
+    // refusals: the main room, a room others are reached through, a name that is not there, a move
+    {
+      const before = snapOf();
+      const main = SB.planEdit(st.serialize(), { remove: 'bridge' }, E);
+      A.ok(!main.ok && /^HOME is the main room, so it stays\./.test(main.error), 'the main room is never removed: ' + main.error);
+      const cut = SB.planEdit(st.serialize(), { remove: 'LOUNGE' }, E);
+      A.ok(!cut.ok && /^That would cut .+ off from HOME: (it is|they are) reached through what goes\. Remove (it|them) too, or keep the room\.$/.test(cut.error), 'a removal that strands a room names it: ' + cut.error);
+      const none = SB.planEdit(st.serialize(), { remove: 'Mars' }, E);
+      A.ok(!none.ok && /^There is no room called "Mars"\. Rooms: HOME, /.test(none.error), 'an unknown room lists the rooms');
+      const mv = SB.planEdit(st.serialize(), { move: 'LAB' }, E);
+      A.ok(!mv.ok && /Rooms do not move or resize: remove one and build it again where it should be\./.test(mv.error), 'a move says how instead: ' + mv.error);
+      const two = SB.planEdit(st.serialize(), { remove: 'GYM', clear: 'LAB' }, E);
+      A.ok(!two.ok && /^An edit is one of:/.test(two.error), 'two edits at once are refused');
+      const bad = SB.planEdit(st.serialize(), { refurnish: { room: 'GYM', style: 'spaceship' } }, E);
+      A.ok(!bad.ok && /^There is no room style called "spaceship"\. Styles: lounge, /.test(bad.error), 'an unknown style lists the styles');
+      A.eq(snapOf(), before, 'no refusal changed anything');
+    }
+    // refurnish: the furniture is replaced by another style's, floor and walls too, the name follows; lines and seats stay
+    {
+      const before = snapOf(), lineWas = homeLine(), seats = JSON.stringify(st.props().filter(p => p.agentId).map(p => [p.id, p.x, p.y]));
+      const r = SB.planEdit(st.serialize(), { refurnish: { room: 'LIBRARY', style: 'games' } }, E);
+      A.ok(r.ok && /^Refurnish LIBRARY as an arcade: its \d+ pieces of furniture are cleared \(.+\), and it is furnished as an arcade, floor and walls too \(.+\); renamed ARCADE\. /.test(r.plan.summary), 'refurnish says what goes and what comes: ' + (r.error || r.plan.summary));
+      if (r.ok) {
+        const id = room('LIBRARY').id;
+        A.ok(SB.apply(st, r.plan, E).ok, 'it builds');
+        const rm = st.rooms().find(x => x.id === id), mine = st.props().filter(p => st.roomAt(p.x, p.y) === id);
+        A.ok(rm.name === 'ARCADE' && rm.floorStyle === RS.ROOMS.games.deck.style, 'the room is an ARCADE, on the arcade floor');
+        A.ok(mine.some(p => /arcade|pinball/.test(p.t)) && !mine.some(p => /bookshelf/.test(p.t)), 'arcade furniture in, the bookshelves gone');
+        A.eq(homeLine(), lineWas, 'every line stands as it was'); A.eq(JSON.stringify(st.props().filter(p => p.agentId).map(p => [p.id, p.x, p.y])), seats, 'and every seat');
+        A.ok(walks(st, room('HOME'), rm), 'it is still walkable');
+        A.ok(st.undo().ok); A.eq(snapOf(), before, 'one undo brings the LIBRARY back exactly');
+      }
+      const named = SB.planEdit(st.serialize(), { refurnish: { room: 'GARDEN', style: 'quarters', name: 'Bunks' } }, E);
+      A.ok(named.ok && /; renamed BUNKS\./.test(named.plan.summary), 'a name asked wins');
+    }
+    // clear: the furniture goes, equipment named; lines and seats stay
+    {
+      const before = snapOf(), r = SB.planEdit(st.serialize(), { clear: { room: 'HOME' } }, E);
+      A.ok(r.ok && /^Clear HOME: its \d+ pieces of furniture go \(.+\)\. Equipment that goes: .+\. Its workflow lines and agents' desks stay;/.test(r.plan.summary), 'clear names the equipment that goes: ' + (r.error || r.plan.summary));
+      if (r.ok) {
+        A.ok(SB.apply(st, r.plan, E).ok);
+        const left = st.props().filter(p => st.roomAt(p.x, p.y) === room('HOME').id);
+        A.ok(left.length && left.every(p => p.agentId || /^(intake|bay|outbox|airlock)$/.test(p.t)), 'only the seats (and fixtures) are left in HOME');
+        A.ok(st.undo().ok); A.eq(snapOf(), before, 'one undo brings the furniture back');
+      }
+      const empty = SB.planEdit(st.serialize(), { clear: 'GYM' }, E);
+      if (empty.ok) { A.ok(SB.apply(st, empty.plan, E).ok); const again = SB.planEdit(st.serialize(), { clear: 'GYM' }, E); A.ok(!again.ok && /^GYM has no furniture to clear/.test(again.error), 'clearing an empty room is refused'); A.ok(st.undo().ok); }
+    }
+  }
   // a concourse from a crowded station finds a free side, or is refused naming the way forward
   {
     const st = fresh();
@@ -1319,6 +1403,7 @@ for (const c of T.catalog) {
       : { ok: true, result: { planId: 'plan-t-1', summary: 'Build + test ("SHIP IT") in a new room south of HOME, through a hallway: Engineer (NOVA) → Tester (nobody yet) → Outbox.', line: { name: 'Build + test' }, steps: [{ step: 1, role: 'Engineer', agent: 'NOVA', instructions: 'Build what the incoming request asks for.' }, { step: 2, role: 'Tester', agent: null, instructions: 'Test it.' }], ready: false, blocking: ['BAY 2 (TESTER) needs an agent'] } };
     if (verb === 'station.plan_room') return { ok: true, result: { planId: 'plan-r-1', summary: 'LIBRARY (a quiet reading room) in a new room south of HOME, through a hallway.', rooms: [{ name: 'LIBRARY' }], steps: [] } };
     if (verb === 'station.plan_restyle') return { ok: true, result: { planId: 'plan-s-1', summary: 'Restyle HOME: teal floor. Nothing is added, moved or removed.' } };
+    if (verb === 'station.plan_edit') return { ok: true, result: { planId: 'plan-e-1', summary: 'Remove GYM (18 × 11), with the hallway that joined it.' } };
     if (verb === 'station.map') return { ok: true, result: { main: 'HOME', rooms: [{ name: 'HOME', main: true, w: 18, h: 11 }], hallways: 0, drawing: ['AAAAAAAAAAAAAAAAAA'] } };
     if (verb === 'station.plan_build') return (args.request.rooms || [])[0] && args.request.rooms[0].beside === 'Mars' ? { ok: false, error: 'There is no room called "Mars". Rooms: HOME.' }
       : { ok: true, result: { planId: 'plan-b-1', summary: args.request.layout ? 'A RING around HOME: a corridor loop with a hallway in from each side, planted and lit, and 2 rooms.' : 'CONVEYOR HALL, a new 36 × 20 room east of HOME, through a hallway: empty floor, ready for lines and furniture.', rooms: [{ name: 'CONVEYOR HALL' }], hallways: [], lines: [], steps: [] } };
@@ -1353,7 +1438,16 @@ for (const c of T.catalog) {
   for (const [req, verb] of forms) { await planT.run(req, {}); A.eq(calls[calls.length - 1], [verb, { request: req }], JSON.stringify(req).slice(0, 60) + ' goes to ' + verb); }
   await planT.run({ restyle: { room: 'HOME', floorStyle: 'teal' } }, {});
   A.eq(calls[calls.length - 1], ['station.plan_restyle', { request: { room: 'HOME', floorStyle: 'teal' } }], 'a restyle goes to the restyle planner with its own fields');
+  for (const req of [{ remove: 'GYM' }, { remove: ['GYM', 'CAFE'] }, { refurnish: { room: 'GYM', style: 'library' } }, { clear: 'LOUNGE' }]) {
+    const r = await planT.run(req, {});
+    A.ok(/plan-e-1/.test(r.content) && r.summary === 'planned an edit', 'an edit of what stands plans through the page: ' + JSON.stringify(req));
+    A.eq(calls[calls.length - 1], ['station.plan_edit', { request: req }], 'and reaches the edit planner as it was sent');
+  }
   const n0 = calls.length;
+  for (const req of [{ remove: 'GYM', clear: 'LAB' }, { refurnish: { room: 'GYM', style: 'library' }, rooms: [{ style: 'lounge' }] }]) {
+    const r = await planT.run(req, {});
+    A.ok(/^REFUSED: remove, refurnish and clear each go on their own/.test(r.content), 'an edit mixed with anything else is refused: ' + JSON.stringify(req));
+  }
   for (const req of [{}, { name: 'X' }, { restyle: { room: 'HOME' }, kit: 'LIBRARY' }]) {
     const r = await planT.run(req, {});
     A.ok(/^REFUSED: (Send one form|restyle goes on its own)/.test(r.content), 'a request of no form is refused with the forms: ' + JSON.stringify(req));
