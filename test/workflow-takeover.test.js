@@ -107,3 +107,16 @@ console.log('workflow-takeover: repeat sense (paraphrase, guards, notice, cadenc
   assert.equal(W.candidates(x2).length, 0, 'a real failure still does');
   console.log('workflow-takeover: neutral follow-ups passed');
 }
+// AUTOMATION ASK: the routine playbook rides only runs whose request asks for automation.
+{
+  const CC = require('../sidecar/commander-context.js');
+  for (const t of ['every morning at 7 send me a summary of the top AI news', 'Set up whatever automations would help me run my shop',
+    'can you automate this?', 'make this a weekly thing', 'remind me to stretch every 2 hours', 'keep an eye on hacker news for local LLM posts'])
+    assert.ok(CC.automationIntent(t), 'automation ask: ' + t);
+  for (const t of ['summarize this automation article', 'what is cron?', 'how do routines work?', 'write me a tweet about our launch', 'research soy wax suppliers'])
+    assert.ok(!CC.automationIntent(t), 'not an automation ask: ' + t);
+  const block = CC.compose({ automationAsk: true });
+  assert.match(block, /<automation_request/); assert.match(block, /routine_create now/); assert.match(block, /Never wait on a connection/);
+  assert.equal(CC.compose({ automationAsk: false }), '', 'no ask -> no block');
+  console.log('workflow-takeover: automation-ask playbook passed');
+}

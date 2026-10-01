@@ -17886,7 +17886,10 @@ async function runOnceCore(o) {
     // recipes.js — the same data the launch chips rendered), so a mid-run question arrives pre-aimed.
     let recipeIntake = [];
     try { const rr = o.recipeId ? Recipes.get(String(o.recipeId)) : null; if (rr && Array.isArray(rr.intake)) recipeIntake = rr.intake; } catch (_) {}
-    taskContextInputs = {brief:taskBrief, goal, patterns, deferredDimensions, recipeIntake, standingWork: standingWorkNotice(taskBrief, agentId, o)};
+    // AUTOMATION ASK: the task's own words (or this turn's) ask for recurring/scheduled work -> the routine playbook rides this run
+    let automationAsk = false;
+    try { automationAsk = CommanderContext.automationIntent(taskBrief.originalDirective) || CommanderContext.automationIntent(latestUserText(messages)); } catch (_) { automationAsk = false; }
+    taskContextInputs = {brief:taskBrief, goal, patterns, deferredDimensions, recipeIntake, standingWork: standingWorkNotice(taskBrief, agentId, o), automationAsk};
     taskContextBlock = commanderEvidenceContext(system || '', taskContextInputs);
   } else if (isTask) {
     // Channels and integrations may not carry a durable taskKey. They still receive the SAME bounded Commander
