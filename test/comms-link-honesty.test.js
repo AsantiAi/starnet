@@ -42,6 +42,8 @@ A.ok(/#chat-status\.status-down\s*\{[^}]*#ff6a4c/i.test(cssSrc), 'app.css paints
 const resCloseAborts = (sidecarSrc.match(/res\.on\('close',\s*\(\)\s*=>\s*\{\s*ac\.abort\(\)/g) || []).length;
 A.ok(resCloseAborts >= 2, 'handleRun + handleCronRun abort on the RESPONSE close (got ' + resCloseAborts + ' sites)');
 A.ok(/res\.on\('close',\s*onClose\)/.test(sidecarSrc), 'the nightshift beat route aborts on the RESPONSE close too');
+// APPS: an app's REFRESH asks Run Now to DETACH (closing the window must not cancel the app's update) — opt-in only
+A.ok(/const detached = body\.detach === true;/.test(sidecarSrc) && /if \(!detached\) res\.on\('close', \(\) => \{ ac\.abort\(\)/.test(sidecarSrc), 'Run Now detaches only when asked (detach:true); by default the watcher leaving still cancels');
 // the trap itself must not come back: no run route may attach its abort cleanup to req 'close'.
 A.ok(!/req\.on\('close',\s*\(\)\s*=>\s*\{\s*ac\.abort\(\)/.test(sidecarSrc), "no route attaches ac.abort() to req 'close' (fires at message completion on Node >=15 — a dead seam after readBody)");
 

@@ -33,6 +33,7 @@ const EXPECTED = {
   gigs_servercart: 'notebook', bridge_relaystack: 'notebook', core: 'notebook',
   // dynamic / single-prop caps
   connector_portal: 'connector',
+  plugin_terminal: 'plugin',   // a plugin terminal = that bound plugin's tools (dynamic, like a connector portal)
   workbench: 'workbench',
   studio: 'studio',
   jukebox: 'jukebox'
@@ -61,12 +62,13 @@ for (const propId of expIds) {
 
 // (3) the objectType->capId link the sidecar actually consumes is intact for every cap this map grants: the
 // registry entry is a non-empty grant list (or the intentional dynamic-connector marker), never an empty stub
-// that would silently grant nothing. `connector` is the one documented empty marker (its grants are per-instance).
+// that would silently grant nothing. `connector` and `plugin` are the documented empty markers (their grants are per-instance:
+// an MCP server's live tools / a bound plugin's registered tools, projected at run time).
 for (const cap of [...new Set(Object.values(EXPECTED))]) {
   const grants = CAP_REGISTRY[cap];
   A.ok(Array.isArray(grants), 'CAP_REGISTRY.' + cap + ' is a grant array');
-  if (cap === 'connector') {
-    A.eq(grants.length, 0, 'CAP_REGISTRY.connector is the intentional dynamic marker (per-instance grants, empty in the static registry)');
+  if (cap === 'connector' || cap === 'plugin') {
+    A.eq(grants.length, 0, 'CAP_REGISTRY.' + cap + ' is an intentional dynamic marker (per-instance grants, empty in the static registry)');
   } else {
     A.ok(grants.length > 0, 'CAP_REGISTRY.' + cap + ' carries at least one real tool grant (never an empty stub)');
   }

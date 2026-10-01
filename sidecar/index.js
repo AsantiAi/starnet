@@ -56,6 +56,12 @@ const { makeDesktopTools } = require('./tools/builtin/desktop.js');
 const { makeHooks } = require('./hooks.js');                 // the hook spine: pre/post tool + llm, session, compress
 const { makeShellHooks } = require('./shellhooks.js');       // the Commander's shell scripts, on that spine
 const { makePluginLoader } = require('./plugins.js');        // packaged JS extensions, on that same spine
+const { makePluginUiServer, makePluginStore } = require('./plugin-surface.js');   // a plugin's windows + its private store
+const { makePluginRuntime } = require('./plugin-runtime.js');   // each plugin's code in its own process (plugin-worker.js)
+const { makePluginToolDefs } = require('./plugin-tools.js');      // a plugin's api.tool()s as crew tools (connector trust)
+const { makePluginAuthorTools } = require('./tools/builtin/plugin-author.js');   // the crew drafts plugins; inert until approved
+const { makeApps } = require('./apps.js');                        // APPS: describe it -> a real app window, refreshed on a schedule
+const { makeAppTools } = require('./tools/builtin/apps.js');       // the crew builds / changes / fills apps
 const { makeFsTools } = require('./tools/builtin/fs.js');
 // fs.read extracts .docx / .xlsx / .ipynb to readable text. inflateRawSync is injected so the extractor stays
 // pure + headless-testable, and so the OOXML path needs no dependency beyond what Node already ships.
@@ -3619,14 +3625,180 @@ const shellHooks = makeShellHooks({
    of the code itself so a silent edit re-asks. */
 const PLUGINS_DIR = path.join(WORKSPACES, 'plugins');
 const PLUGINS_ALLOW_FILE = path.join(WORKSPACES, 'plugins-allowed.json');
+/* PLUGIN WINDOWS (plugin extensions phase 1) — sidecar/plugin-surface.js. The files route re-proves the approval
+   on every request; the store is one durable JSON object per plugin, OUTSIDE every agent's fs jail. */
+const PLUGIN_DATA_DIR = path.join(WORKSPACES, 'plugin-data');
+const pluginDataStore = makeDurableJsonStore({
+  fs: fs, path: path,
+  fileFor: (id) => path.join(PLUGIN_DATA_DIR, String(id) + '.json'),
+  writeDurable: writeFileDurable,
+  onRecover: (key, file) => console.warn('[plugins] recovered ' + file + ' from .bak last-known-good.'),
+  onCorrupt: (key, file) => quarantineCorrupt(file, 'plugin-data')
+});
+const pluginStore = makePluginStore({ store: pluginDataStore });
+/* PLUGIN PROCESSES (plugin extensions phase 2) — every approved plugin with code runs in its OWN child process
+   (station-secret-free env, like every helper process). Not a security boundary — approved plugin code has the
+   Commander's full permissions — but a FAILURE boundary: a plugin that throws, hangs or exits costs itself, never
+   the station. The loader starts/stops these as approvals change. */
+const pluginRuntime = makePluginRuntime({
+  fork: stationChildProcess.fork, workerPath: path.join(__dirname, 'plugin-worker.js'), store: pluginStore,
+  now: () => Date.now(), cwd: WORKSPACES,
+  // the approval must still cover the exact code a process runs (before tool/window calls, restarts, and jobs)
+  verify: async (id, digest) => { const r = await pluginLoader.approvedRecord(id); return !!r && r.digest === digest; },
+  onLog: (id, line) => { for (const l of String(line || '').split(/\r?\n/)) if (l) console.log('[plugin:' + id + '] ' + l); }
+});
+/* A RE-APPROVAL MUST RUN THE NEW CODE. Node caches every require()d module forever, so after an edit + re-approve
+   the plugin used to keep running its OLD module (and old helpers) until the next restart — the approval said one
+   thing, the process ran another. Every load drops the cached modules under the plugins folder first. */
+function requirePluginFresh(p) {
+  const root = PLUGINS_DIR + path.sep;
+  for (const k of Object.keys(require.cache)) { if (k.indexOf(root) === 0) delete require.cache[k]; }
+  return require(p);
+}
 const pluginLoader = makePluginLoader({
   fsp, pathMod: path, dir: PLUGINS_DIR, allowFile: PLUGINS_ALLOW_FILE,
-  requireModule: (p) => require(p), hash: (s) => crypto.createHash('sha256').update(String(s)).digest('hex'),
+  requireModule: requirePluginFresh, hash: (s) => crypto.createHash('sha256').update(String(s)).digest('hex'),
   guard: skillGuard, clock: { now: () => Date.now() },
+  template: require('./plugin-template.js').templateFiles,   // "Create a plugin" writes a hook AND a kit-built window
+  runtime: pluginRuntime,                                     // plugin code runs in its own process, never in the sidecar
   onError: (e) => console.warn('[plugins] ' + (e && e.plugin) + ': ' + (e && e.error))
 });
 let pluginsLoaded = { loaded: [], pending: [], errors: [] };
 let hooksInstalled = { installed: [], pending: [], errors: [] };
+/* reloadExtensions() — THE way plugins + shell hooks are re-installed after any change. Two guarantees:
+   · ATOMIC: the new handlers are collected off to the side (a plugin's process may take seconds to start) and swapped
+     onto the live spine in one synchronous step — the Commander's blocking pre_tool_call hooks are never missing
+     while a reload is in flight (they used to be cleared first and re-added only after every plugin had started);
+   · SERIAL: overlapping reloads queue instead of interleaving (which registered handlers twice and let the two
+     loads kill each other's freshly started plugin processes). */
+let extReloadChain = Promise.resolve();
+function reloadExtensions() {
+  const run = extReloadChain.then(async () => {
+    const staged = [];
+    const collector = { register: (event, fn, meta) => { staged.push([event, fn, meta]); return () => {}; }, events: () => hookSpine.events() };
+    const pl = await pluginLoader.load(collector);
+    const hk = await shellHooks.install(collector);
+    hookSpine.clear();
+    for (const [event, fn, meta] of staged) hookSpine.register(event, fn, meta);
+    pluginsLoaded = pl; hooksInstalled = hk;
+  });
+  extReloadChain = run.catch((e) => failNote('extensions.reload', e));
+  return run;
+}
+const servePluginUi = makePluginUiServer({
+  fs, fsp, path, frontendDir: FRONTEND, loader: pluginLoader, apitickets, apiKey: API_TOKEN, mime: MIME,
+  tokenOk: (req) => apiauth.apiTokenOk(req, API_TOKEN), now: () => Date.now(),
+  // who may FRAME a plugin page: the station itself (browser mode) and the desktop shell's app origins
+  frameAncestors: () => Array.from(apiauth.TAURI_ORIGINS).concat(['http://127.0.0.1:' + PORT, 'http://localhost:' + PORT]).join(' ')
+});
+/* APPS (2026-09-29) — "describe it, get it": a page the crew writes (served network-less, like a draft), its data
+   (published by the crew), and an optional routine that refreshes it. sidecar/apps.js has the whole model. */
+const APPS_DIR = path.join(WORKSPACES, 'apps');
+const appDataStore = makeDurableJsonStore({
+  fs: fs, path: path,
+  fileFor: (id) => path.join(WORKSPACES, 'app-data', String(id) + '.json'),
+  writeDurable: writeFileDurable,
+  onRecover: (key, file) => console.warn('[apps] recovered ' + file + ' from .bak last-known-good.'),
+  onCorrupt: (key, file) => quarantineCorrupt(file, 'app-data')
+});
+const APP_TEMPLATE = fs.readFileSync(path.join(__dirname, 'app-template', 'index.html.tpl'), 'utf8');
+const appHtml = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const apps = makeApps({
+  fsp, path, dir: APPS_DIR, store: makePluginStore({ store: appDataStore }),
+  treeDigest: (d) => pluginLoader._internals.treeDigest(d),
+  relPathOk: require('./plugins.js')._internals.relPathOk,
+  now: () => Date.now(),
+  template: ({ name, description }) => ({ 'index.html': APP_TEMPLATE.split('{{NAME_HTML}}').join(appHtml(name)).split('{{DESCRIPTION_HTML}}').join(appHtml(description || '')) }),
+  cron: {
+    create: async (spec) => { const o = await createCronJobFromSpec(spec); return (o && o.body && o.body.ok && o.body.job) ? { ok: true, job: o.body.job } : { ok: false, error: (o && o.body && (o.body.error || o.body.message)) || 'the routine could not be created' }; },
+    remove: async (id) => { const lease = cronDriver.leases.get(id); if (lease && lease.ac) { try { lease.ac.abort(); } catch (e) { failNote('apps.routine-abort', e); } } await withCronWrite(jobs => cronStore.removeJob(jobs, id)); },
+    get: (id) => cronStore.getJob(cronJobs, id) || null,
+    armed: () => !!cronArmed && !cronHalted
+  },
+  // tell the open window (fire-and-forget: with no page open the command simply lapses)
+  notify: {
+    reload: (id, digest) => { stationBridge.request('app.reload', { id, digest: digest || null }).catch((e) => failNote('apps.notify-reload', e)); },
+    data: (id) => { stationBridge.request('app.data', { id }).catch((e) => failNote('apps.notify-data', e)); }
+  }
+});
+const serveAppUi = makePluginUiServer({
+  fs, fsp, path, frontendDir: FRONTEND, loader: pluginLoader, apitickets, apiKey: API_TOKEN, mime: MIME,
+  tokenOk: (req) => apiauth.apiTokenOk(req, API_TOKEN), now: () => Date.now(),
+  frameAncestors: () => Array.from(apiauth.TAURI_ORIGINS).concat(['http://127.0.0.1:' + PORT, 'http://localhost:' + PORT]).join(' '),
+  prefix: '/app-ui/', scopeFor: (id, digest) => apitickets.scopeApp(id, digest), resolve: (id) => apps.record(id),
+  goneMessage: 'this app changed — reopening it shows the new version',
+  // An app page only DRAWS: scripts, styles and images from its own files, no network, no forms, no popups.
+  sandbox: 'sandbox allow-scripts',
+  extraCsp: () => {
+    const self = 'http://127.0.0.1:' + PORT + ' http://localhost:' + PORT;
+    return "; default-src 'none'; script-src 'unsafe-inline' " + self + "; style-src 'unsafe-inline' " + self +
+      '; img-src data: blob: ' + self + '; font-src data: ' + self + '; media-src data: blob: ' + self +
+      "; connect-src 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'; webrtc 'block'";
+  }
+});
+/* PLUGIN DRAFTS (plugin extensions phase 4) — the crew writes plugins into <workspaces>/plugin-drafts/<id>. A draft
+   never runs: its window previews through /plugin-draft/ (the same sandboxed server, a draft-scoped ticket, the live
+   folder digest as the record), and plugin.submit installs it OFF behind a consent card. */
+const PLUGIN_DRAFTS_DIR = path.join(WORKSPACES, 'plugin-drafts');
+const draftDigestCache = new Map();
+async function draftRecord(id) {
+  const pid = String(id || '');
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(pid)) return null;
+  const c = draftDigestCache.get(pid);
+  if (c && Date.now() - c.at < 1500) return c.rec;
+  const dir = path.join(PLUGIN_DRAFTS_DIR, pid);
+  const tree = await pluginLoader._internals.treeDigest(dir);
+  const rec = tree.error ? null : { id: pid, dir, digest: tree.digest };
+  draftDigestCache.set(pid, { rec, at: Date.now() });
+  return rec;
+}
+const servePluginDraft = makePluginUiServer({
+  fs, fsp, path, frontendDir: FRONTEND, loader: pluginLoader, apitickets, apiKey: API_TOKEN, mime: MIME,
+  tokenOk: (req) => apiauth.apiTokenOk(req, API_TOKEN), now: () => Date.now(),
+  frameAncestors: () => Array.from(apiauth.TAURI_ORIGINS).concat(['http://127.0.0.1:' + PORT, 'http://localhost:' + PORT]).join(' '),
+  prefix: '/plugin-draft/', scopeFor: (id, digest) => apitickets.scopeDraft(id, digest), resolve: draftRecord,
+  // A DRAFT never reaches the network: scripts and styles only from its own ticketed files (plus inline), no
+  // fetch/XHR/WebSocket, no form posts, no popups. A preview shows what the page LOOKS like; it can never carry
+  // what an agent read out of the station. (An installed plugin keeps the normal sandbox — approved code may fetch.)
+  sandbox: 'sandbox allow-scripts',
+  extraCsp: () => {
+    const self = 'http://127.0.0.1:' + PORT + ' http://localhost:' + PORT;
+    return "; default-src 'none'; script-src 'unsafe-inline' " + self + "; style-src 'unsafe-inline' " + self +
+      '; img-src data: blob: ' + self + '; font-src data: ' + self + '; media-src data: blob: ' + self +
+      "; connect-src 'none'; form-action 'none'; frame-src 'none'; worker-src 'none'; webrtc 'block'";
+  },
+  goneMessage: 'this draft changed since this preview opened — preview it again'
+});
+const pluginAuthor = makePluginAuthorTools({
+  fsp, path, draftsDir: PLUGIN_DRAFTS_DIR, pluginsDir: PLUGINS_DIR, now: () => Date.now(),
+  beforeReplace: (id) => pluginRuntime.stop(id),   // a running plugin holds its folder open on Windows
+  template: require('./plugin-template.js').templateFiles,
+  parseScreens: require('./plugins.js').parseScreens,
+  relPathOk: require('./plugin-surface.js').relPathOk,
+  // COMPILE ONLY, never run: the CommonJS wrapper Node itself uses, so `return`/`require` parse like in a real module.
+  // An ES module file (import/export) is left to the browser — it is window code, not station code.
+  compile: (source, file) => {
+    if (/^\s*(?:import|export)\s/m.test(source)) return '';
+    try { new (require('node:vm').Script)('(function (exports, require, module, __filename, __dirname) {' + source + '\n})', { filename: file }); return ''; }
+    catch (e) { return String((e && e.message) || e); }
+  },
+  preview: async (id, screen) => {
+    draftDigestCache.delete(id);
+    const rec = await draftRecord(id);
+    if (!rec) return { ok: false, error: 'the draft folder could not be read' };
+    let manifest = {};
+    try { manifest = JSON.parse(await fsp.readFile(path.join(rec.dir, 'plugin.json'), 'utf8')); } catch (e) { failNote('plugins.draft-preview-manifest', e); }
+    const files = new Set(((await pluginLoader._internals.treeDigest(rec.dir)).files || []).map(x => x.rel));
+    const screens = require('./plugins.js').parseScreens(manifest, files).screens;
+    const r = await stationBridge.request('plugin.preview', { id, digest: rec.digest, screen, name: String(manifest.name || id).slice(0, 60), screens });
+    return r && r.ok ? { ok: true, title: r.result && r.result.title } : { ok: false, error: (r && r.error) || 'the station page did not answer' };
+  },
+  // an installed draft is OFF until approved: re-list so EXTENSIONS shows it as needing approval right away
+  afterInstall: async () => {
+    try { await reloadExtensions(); }
+    catch (e) { console.warn('[plugins] reload after install failed: ' + ((e && e.message) || e)); }
+  }
+});
 async function installShellHooks() {
   /* ORDER IS LOAD-BEARING: plugins register BEFORE shell hooks, mirroring the reference harness. The spine
      reports the FIRST block's reason, so on a blocking event this decides who gets to explain the refusal —
@@ -9702,7 +9874,7 @@ function rejectProcessFaultRequest(req, res) {
   const diagnosticRead = method === 'GET' && (pathname === '/api/health' || pathname === '/api/diagnostics');
   const staticRead = (method === 'GET' || method === 'HEAD') &&
     pathname.indexOf('/api') !== 0 && pathname.indexOf('/v1') !== 0 && pathname !== '/health' &&
-    pathname.indexOf('/workshop-run/') !== 0;
+    pathname.indexOf('/workshop-run/') !== 0 && pathname.indexOf('/plugin-ui/') !== 0 && pathname.indexOf('/plugin-draft/') !== 0 && pathname.indexOf('/app-ui/') !== 0;
   if (diagnosticRead || staticRead) return false;
   if (pathname.indexOf('/api') === 0) {
     try { applyApiCors(req, res); } catch (e) { failNote('process-fault.reply-cors', e); }
@@ -10505,6 +10677,13 @@ const ROUTES = [
   //   form /workshop-run/~t/<ticket>/<agentId>/<runId>/<path...> (a run-scoped capability, never the master token).
   //   This is NOT under /api/ so it never touches the /api CORS/token gate above — the handler enforces its own auth.
   { m: ['GET', 'HEAD'], qprefix: '/workshop-run/', h: serveWorkshopRun },
+  //   GET/HEAD /plugin-ui/~t/<ticket>/<pluginId>/<digest>/<path...> — an APPROVED plugin's window files, sandboxed to
+  //   an opaque origin, the kit injected into every page (sidecar/plugin-surface.js).
+  { m: ['GET', 'HEAD'], qprefix: '/plugin-ui/', h: servePluginUi },
+  //   GET/HEAD /plugin-draft/~t/<ticket>/<pluginId>/<digest>/<path...> — a plugin DRAFT's preview window (never runs code)
+  { m: ['GET', 'HEAD'], qprefix: '/plugin-draft/', h: servePluginDraft },
+  //   GET/HEAD /app-ui/~t/<ticket>/<appId>/<digest>/<path...> — an APP's page (sandboxed, network-less, kit injected)
+  { m: ['GET', 'HEAD'], qprefix: '/app-ui/', h: serveAppUi },
   // ADDITIVE (Lane B / ux-run-truth): read-only stat of a user-chosen KEEP destination folder, so the return
   // card can validate the typed path inline instead of failing silently on Keep. Strictly less powerful than
   // the existing keep copy (which already writes to an arbitrary destPath) — this only reports exists/isDir.
@@ -10519,6 +10698,14 @@ const ROUTES = [
   { m: 'POST', exact: '/api/plugins/revoke', h: handlePluginsRevoke },
   { m: 'POST', exact: '/api/plugins/create', h: handlePluginsCreate },
   { m: 'POST', exact: '/api/plugins/delete', h: handlePluginsDelete },
+  { m: 'POST', exact: '/api/plugins/store', h: handlePluginsStore },
+  { m: 'POST', exact: '/api/plugins/call', h: handlePluginsCall },
+  { m: 'GET', exact: '/api/apps', h: handleAppsList },
+  { m: 'POST', exact: '/api/apps', h: handleAppsCreate },
+  { m: 'POST', exact: '/api/apps/delete', h: handleAppsDelete },
+  { m: 'POST', exact: '/api/apps/rename', h: handleAppsRename },
+  { m: 'POST', exact: '/api/apps/schedule', h: handleAppsSchedule },
+  { m: 'POST', exact: '/api/apps/store', h: handleAppsStore },
   { m: 'POST', exact: '/api/checkpoint/restore', h: handleCheckpointRestore },
   { m: 'GET', prefix: '/api/checkpoint', h: handleCheckpointList },
   // /api/health is the topbar LINK / Diag liveness probe. After an uncaught exception it answers 503 with the fault
@@ -10933,6 +11120,7 @@ function gracefulShutdown(signal) {
   try { if (typeof connectorLifecycleTimer !== 'undefined' && connectorLifecycleTimer) { clearInterval(connectorLifecycleTimer); } } catch (_) {}
   try { if (typeof shellBg !== 'undefined' && shellBg && shellBg.killAll) shellBg.killAll(); } catch (_) {}   // reap backgrounded shell children (dev servers etc.)
   try { if (typeof terminalSessions !== 'undefined' && terminalSessions && terminalSessions.stopAll) terminalSessions.stopAll(); } catch (_) {}   // reap owned PTY/ConPTY trees
+  try { pluginRuntime.stopAll().catch((e) => failNote('plugins.shutdown', e)); } catch (e) { failNote('plugins.shutdown', e); }   // reap plugin processes
   // release any cursor confinement a reaped child leaves stuck (the PS one-shot outlives our exit; best-effort —
   // the boot-time ensureFree is the reliable cover for the force-kill path this handler can't see at all)
   try { if (typeof inputGuard !== 'undefined' && inputGuard) inputGuard.observe('shutdown').catch(() => {}); } catch (_) {}
@@ -13728,7 +13916,9 @@ async function createCronJobFromSpec(body) {
   // W6 MINT GATE — server is the authority. If this agent already has a routine with the same (or near-same)
   // name, return the EXISTING job with a plain anti-retry message instead of minting a second one. Same guard
   // as routine.create so every create path funnels through it.
-  const gate = mintGate(agentId, body.name);
+  // An APP's refresh routine is exempt: the app owns exactly one (sidecar/apps.js replaces it itself), and the
+  // near-name match would hand "App: Tech News" the routine of "App: News" — then deleting one app deletes the other's.
+  const gate = (body.meta && body.meta.appId) ? {} : mintGate(agentId, body.name);
   if (gate.dup) return out(200, { ok: true, duplicate: true, job: gate.dup, message: mintLedger.ANTI_RETRY });
   if (gate.reason === 'declined') return out(200, { ok: false, declined: true, message: mintLedger.ANTI_RETRY });
   const id = crypto.randomUUID();
@@ -13993,7 +14183,12 @@ async function handleCronRun(req, res) {
   cronDriver.leases.set(job.id, { runId: runId, startedAt: Date.now(), heartbeatAt: Date.now(), ac: ac, isOnce: false });
   // res 'close', not req 'close' — same disconnect-detection law as handleRun: readBody() already consumed the
   // request, so req 'close' has fired before this listener attaches and a dead watcher was never noticed (F1).
-  res.on('close', () => { ac.abort(); runs.delete(runId); runsMeta.delete(runId); });
+  // DETACHED (additive, APPS 2026-09-30): an app's REFRESH is the routine's own job, not the watcher's — closing the
+  // window that asked for it must not cancel it (it stays stoppable through its lease, like a scheduled fire).
+  // Without detach:true, Run Now keeps its law: the watcher leaving cancels the run.
+  const detached = body.detach === true;
+  if (!detached) res.on('close', () => { ac.abort(); runs.delete(runId); runsMeta.delete(runId); });
+  else res.on('close', () => { runs.delete(runId); runsMeta.delete(runId); });   // the watcher left; the run goes on
   const bus = { emit: (name, payload) => { try { res.write(JSON.stringify({ name, payload: redact(payload) }) + '\n'); } catch (_) {} } };
   const emit = wrapEmitDiag(makeEmitter(bus, e => { if (e) console.warn('[event]', e.kind, e.event, (e.errors || []).join(';')); }));
   // tee: stream every event to the watching browser AND capture the outcome so the last-run record is honest.
@@ -15545,7 +15740,7 @@ async function handleHooksCreate(req, res) {
   if (hookSpine.events().indexOf(event) < 0) return json(400, { error: 'unknown event — pick one of: ' + hookSpine.events().join(', ') });
   const r = await shellHooks.create({ event, command: (body && body.command) || '', name: (body && body.name) || '' });
   if (!r.ok) return json(400, { error: r.error });
-  try { hookSpine.clear(); pluginsLoaded = await pluginLoader.load(hookSpine); hooksInstalled = await shellHooks.install(hookSpine); }
+  try { await reloadExtensions(); }
   catch (e) { return json(500, { error: 'created, but could not start it: ' + ((e && e.message) || e) }); }
   return json(200, { ok: true, active: hooksInstalled.installed.length });
 }
@@ -15558,7 +15753,7 @@ async function handleHooksDelete(req, res) {
   const command = String((body && body.command) || '').trim();
   if (!event || !command) return json(400, { error: 'event and command are required' });
   if (!(await shellHooks.remove(event, command))) return json(404, { error: 'no such hook' });
-  try { hookSpine.clear(); pluginsLoaded = await pluginLoader.load(hookSpine); hooksInstalled = await shellHooks.install(hookSpine); }
+  try { await reloadExtensions(); }
   catch (e) { return json(500, { error: 'deleted, but reload failed: ' + ((e && e.message) || e) }); }
   return json(200, { ok: true, active: hooksInstalled.installed.length });
 }
@@ -15569,7 +15764,7 @@ async function handlePluginsCreate(req, res) {
   catch (e) { if (res.headersSent) return; res.writeHead(400); return res.end('bad json'); }
   const r = await pluginLoader.scaffold({ id: (body && body.id) || '', name: (body && body.name) || '', description: (body && body.description) || '' });
   if (!r.ok) return json(400, { error: r.error });
-  try { hookSpine.clear(); pluginsLoaded = await pluginLoader.load(hookSpine); hooksInstalled = await shellHooks.install(hookSpine); }
+  try { await reloadExtensions(); }
   catch (e) { return json(500, { error: 'created, but could not load it: ' + ((e && e.message) || e) }); }
   return json(200, { ok: true, id: r.id, active: pluginsLoaded.loaded.length });
 }
@@ -15581,7 +15776,7 @@ async function handlePluginsDelete(req, res) {
   const id = String((body && body.id) || '').trim();
   if (!id) return json(400, { error: 'id is required' });
   if (!(await pluginLoader.destroy(id))) return json(404, { error: 'no such plugin' });
-  try { hookSpine.clear(); pluginsLoaded = await pluginLoader.load(hookSpine); hooksInstalled = await shellHooks.install(hookSpine); }
+  try { await reloadExtensions(); }
   catch (e) { return json(500, { error: 'deleted, but reload failed: ' + ((e && e.message) || e) }); }
   return json(200, { ok: true, active: pluginsLoaded.loaded.length });
 }
@@ -15600,9 +15795,7 @@ async function handleHooksRevoke(req, res) {
   if (!event || !command) return json(400, { error: 'event and command are required' });
   if (!(await shellHooks.revoke(event, command))) return json(404, { error: 'that hook was not approved' });
   try {
-    hookSpine.clear();
-    pluginsLoaded = await pluginLoader.load(hookSpine);
-    hooksInstalled = await shellHooks.install(hookSpine);
+    await reloadExtensions();
   } catch (e) { return json(500, { error: 'revoked, but re-install failed: ' + ((e && e.message) || e) }); }
   return json(200, { ok: true, active: hooksInstalled.installed.length, pending: hooksInstalled.pending.length });
 }
@@ -15615,9 +15808,7 @@ async function handlePluginsRevoke(req, res) {
   if (!id) return json(400, { error: 'id is required' });
   if (!(await pluginLoader.revoke(id))) return json(404, { error: 'that plugin was not approved' });
   try {
-    hookSpine.clear();
-    pluginsLoaded = await pluginLoader.load(hookSpine);
-    hooksInstalled = await shellHooks.install(hookSpine);
+    await reloadExtensions();
   } catch (e) { return json(500, { error: 'revoked, but re-load failed: ' + ((e && e.message) || e) }); }
   return json(200, { ok: true, active: pluginsLoaded.loaded.length, pending: pluginsLoaded.pending.length });
 }
@@ -15637,11 +15828,103 @@ async function handlePluginsList(req, res) {
     dir: PLUGINS_DIR,
     plugins: found.plugins.map(p => ({
       id: p.id, name: p.name, version: p.version, description: p.description,
-      active: live.has(p.id), pending: pend.has(p.id), digest: p.digest, findings: p.findings || null
+      // ACTIVE means running THIS code: a plugin edited since approval was loaded, but its handlers now refuse
+      // (plugins.js stillApproved) and its windows are refused (approvedRecord) — calling it "on" would be a lie.
+      active: live.has(p.id) && !pend.has(p.id), pending: pend.has(p.id), digest: p.digest, findings: p.findings || null,
+      hasCode: !!p.main, screens: p.screens || [],
+      // what its process actually registered (never what the manifest claims) + that process's real state
+      tools: ((pluginsLoaded.loaded.find(x => x.id === p.id) || {}).tools) || [],
+      process: p.main && live.has(p.id) ? pluginRuntime.status(p.id) : null
     })),
     errors: (found.errors || []).concat(pluginsLoaded.errors || [])
   });
 }
+/* POST /api/plugins/store { id, op: get|set|delete|keys, key?, value? } — a plugin window's private store. Only the
+   page host calls this (the plugin's frame is an opaque origin with no token); the host names the plugin from its
+   own registry, never from the frame. Refused for any plugin whose approval does not cover its bytes right now. */
+async function handlePluginsStore(req, res) {
+  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  let body;
+  try { body = JSON.parse(await readBody(req, 512 << 10, res)); }
+  catch (e) { if (res.headersSent) return; res.writeHead(400); return res.end('bad json'); }
+  const id = String((body && body.id) || '').trim();
+  let rec = null;
+  try { rec = await pluginLoader.approvedRecord(id); } catch (_) { rec = null; }
+  if (!rec) return json(409, { ok: false, error: 'that plugin is not approved as it is on disk right now' });
+  let r;
+  try { r = await pluginStore.op(id, String((body && body.op) || ''), body && body.key, body && body.value); }
+  catch (e) { return json(500, { ok: false, error: 'the plugin store could not be written: ' + ((e && e.message) || e) }); }
+  return json(r.ok ? 200 : 400, r);
+}
+
+/* APPS routes — the APPS window and the app windows. GET lists every app with its schedule's REAL state (the routine's
+   next/last run, and whether routines are switched on at all — an app never claims a refresh that will not fire). */
+async function appsBody(req, res, max) {
+  try { return JSON.parse(await readBody(req, max || (1 << 16), res)) || {}; }
+  catch (e) { if (!res.headersSent) { res.writeHead(400); res.end('bad json'); } return null; }
+}
+const appsJson = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+async function handleAppsList(req, res) {
+  let list = [];
+  try { list = await apps.list(); } catch (e) { return appsJson(res, 500, { error: 'could not read apps: ' + ((e && e.message) || e) }); }
+  return appsJson(res, 200, { apps: list, routinesOn: !!cronArmed && !cronHalted });
+}
+async function handleAppsCreate(req, res) {
+  const body = await appsBody(req, res); if (!body) return;
+  try { const made = await apps.create({ name: body.name, description: body.description }); return appsJson(res, 200, { ok: true, app: await apps.describe(made.id) }); }
+  catch (e) { return appsJson(res, 400, { ok: false, error: (e && e.message) || String(e) }); }
+}
+async function handleAppsDelete(req, res) {
+  const body = await appsBody(req, res); if (!body) return;
+  try { await apps.remove(body.id); return appsJson(res, 200, { ok: true }); }
+  catch (e) { return appsJson(res, 400, { ok: false, error: (e && e.message) || String(e) }); }
+}
+// AUTO-UPDATE from the app's own bar: the Commander sets how often it updates and what each update does (the same
+// app.schedule the crew uses — an ordinary routine the app owns; "off" removes it)
+async function handleAppsSchedule(req, res) {
+  const body = await appsBody(req, res); if (!body) return;
+  try {
+    const out = await apps.schedule(body.id, { every: body.every, task: body.task });
+    return appsJson(res, 200, Object.assign({ ok: true }, out, { app: await apps.describe(String(body.id)) }));
+  } catch (e) { return appsJson(res, 400, { ok: false, error: (e && e.message) || String(e) }); }
+}
+async function handleAppsRename(req, res) {
+  const body = await appsBody(req, res); if (!body) return;
+  try { const meta = await apps.rename(body.id, body.name); return appsJson(res, 200, { ok: true, name: meta.name }); }
+  catch (e) { return appsJson(res, 400, { ok: false, error: (e && e.message) || String(e) }); }
+}
+// the app page's own store (read its published data; keep its own UI state) — only the page host calls this
+async function handleAppsStore(req, res) {
+  const body = await appsBody(req, res, 512 << 10); if (!body) return;
+  let id;
+  try { id = (await apps.need(body.id)).id; } catch (e) { return appsJson(res, 404, { ok: false, error: (e && e.message) || String(e) }); }
+  const op = String(body.op || '');
+  if ((op === 'set' || op === 'delete') && body.key === apps.META_KEY) return appsJson(res, 400, { ok: false, error: 'that key is kept by the station' });
+  if (op === 'clear') return appsJson(res, 400, { ok: false, error: 'unknown store operation' });
+  const store = makePluginStore({ store: appDataStore });
+  let r;
+  try { r = await store.op(id, op, body.key, body.value); } catch (e) { return appsJson(res, 500, { ok: false, error: (e && e.message) || String(e) }); }
+  return appsJson(res, r.ok ? 200 : 400, r);
+}
+
+/* POST /api/plugins/call { id, fn, args } — a plugin WINDOW calling its own backend (api.handle(fn)). Only the page
+   host calls this, naming the plugin from its own registry; refused unless the approval covers the bytes on disk
+   right now. The handler runs in the plugin's process with a deadline — a hung plugin costs this call, nothing else. */
+async function handlePluginsCall(req, res) {
+  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  let body;
+  try { body = JSON.parse(await readBody(req, 512 << 10, res)); }
+  catch (e) { if (res.headersSent) return; res.writeHead(400); return res.end('bad json'); }
+  const id = String((body && body.id) || '').trim();
+  const fn = String((body && body.fn) || '').trim();
+  let rec = null;
+  try { rec = await pluginLoader.approvedRecord(id); } catch (_) { rec = null; }
+  if (!rec) return json(409, { ok: false, error: 'that plugin is not approved as it is on disk right now' });
+  if (!rec.main) return json(400, { ok: false, error: 'this plugin has no backend code' });
+  try { return json(200, { ok: true, value: await pluginRuntime.callHandler(id, fn, body && body.args) }); }
+  catch (e) { return json(400, { ok: false, error: String((e && e.message) || e).slice(0, 2000) }); }
+}
+
 /* POST /api/plugins/allow { id, digest } — approve THIS EXACT CODE and load it without a restart.
    The digest is REQUIRED and must match what is on disk right now: approving by id alone would let a plugin
    that changed between the moment the Commander read it and the moment they clicked be approved sight-unseen,
@@ -15662,9 +15945,7 @@ async function handlePluginsAllow(req, res) {
   if (!(await pluginLoader.allow(id, digest))) return json(500, { error: 'could not persist the approval' });
   // Same in-place rebuild as the hooks route, and the same ordering: plugins first, then shell hooks.
   try {
-    hookSpine.clear();
-    pluginsLoaded = await pluginLoader.load(hookSpine);
-    hooksInstalled = await shellHooks.install(hookSpine);
+    await reloadExtensions();
   } catch (e) { return json(500, { error: 'approved, but re-load failed: ' + ((e && e.message) || e) }); }
   return json(200, { ok: true, active: pluginsLoaded.loaded.length, pending: pluginsLoaded.pending.length });
 }
@@ -15708,9 +15989,10 @@ async function handleHooksAllow(req, res) {
   // rather than replaced: it was captured by reference at boot (by the dispatch ctx and by every in-flight
   // run), so handing out a new object would leave those holding the old one and the reload would look like it
   // did nothing. Clearing first is what stops the already-installed hooks being registered a second time.
+  // (reloadExtensions: plugins AND hooks, swapped atomically — this used to re-add only the shell hooks, which
+  // silently dropped every plugin's handlers until the next reload)
   try {
-    hookSpine.clear();
-    hooksInstalled = await shellHooks.install(hookSpine);
+    await reloadExtensions();
   } catch (e) { return json(500, { error: 'approved, but re-install failed: ' + ((e && e.message) || e) }); }
   return json(200, { ok: true, active: hooksInstalled.installed.length, pending: hooksInstalled.pending.length });
 }
@@ -16617,6 +16899,9 @@ async function handleRun(req, res) {
         const ot = String(typeof e === 'string' ? e : e.objectType);
         const ob = { instanceId: 'placed_' + i + '_' + ot, objectType: ot };
         if (e && typeof e === 'object' && e.connectorId) ob.connectorId = e.connectorId;
+        // a PLUGIN TERMINAL's binding — which plugin's tools it grants (projected below only while that plugin's
+        // approval covers its code on disk, so naming a plugin here grants nothing by itself)
+        if (e && typeof e === 'object' && e.pluginId && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(String(e.pluginId))) ob.pluginId = String(e.pluginId);
         return ob;
       });
   } else {
@@ -17436,6 +17721,8 @@ async function runOnceCore(o) {
     inspect: () => harnessSnapshotForRun({ provider: providerId, model, agentId, runId, surface, trigger })
   }).register(registry);
   makeManualReadTool().register(registry);   // same always-present COMPUTER grant: the manual's reference sections, verbatim
+  // PLUGIN AUTHORING is not offered to runs (no grant — see capability/registry.js): the crew builds APPS, not plugins
+  makeAppTools({ apps, now: () => Date.now(), compile: (source, file) => { try { new (require('node:vm').Script)('(function (exports, require, module, __filename, __dirname) {' + source + '\n})', { filename: file }); return ''; } catch (e) { return String((e && e.message) || e); } } }).register(registry);   // APPS (computer grant, deferred): create / write / publish / schedule
   // STUDIO media tools, built up-front so browser.vision can borrow its multimodal analyze path
   // (one provider seam, no duplication). Registered below; here we only need its vision callback.
   // STARNET_IMAGE_MODEL overrides the studio's default text->image model (image.js picks the current-gen
@@ -17999,6 +18286,29 @@ async function runOnceCore(o) {
       resolved.approvalRules[def.name] = { requiresConsent: !!def.requiresConsent, scope: def.scope, network: true };
     }
   } catch (e) { console.warn('[mcp] connector tool projection failed:', (e && e.message) || e); }
+  // PLUGIN TERMINALS (per-agent, object = capability): a plugin terminal placed in THIS agent's room grants that
+  // plugin's api.tool()s — with the connector trust contract (plugin-tools.js: external-unknown, consent, fenced).
+  // Only a plugin whose approval covers its bytes on disk right now projects anything.
+  try {
+    const room = station.rooms && station.agents && station.agents[agentId] && station.rooms[station.agents[agentId].room];
+    const seenPlugins = new Set();
+    for (const ob of ((room && room.objects) || [])) {
+      if (!ob || ob.objectType !== 'plugin') continue;
+      const pid = String(ob.pluginId || (ob.binding && ob.binding.pluginId) || '');
+      if (!pid || seenPlugins.has(pid)) continue;
+      seenPlugins.add(pid);
+      const live = (pluginsLoaded.loaded || []).find(p => p.id === pid && p.process);
+      if (!live || !(await pluginLoader.approvedRecord(pid))) continue;
+      const defs = makePluginToolDefs({ pluginId: pid, pluginName: live.name, tools: pluginRuntime.tools(pid),
+        call: (name, args, ctx) => pluginRuntime.callTool(pid, name, args, ctx) });
+      for (const def of defs) {
+        registry.register(def, { provenance: 'connector' });   // not host-authored: the connector trust class
+        if (resolved.tools.indexOf(def.name) < 0) resolved.tools.push(def.name);
+        resolved.networkCaps[def.name] = true;
+        resolved.approvalRules[def.name] = { requiresConsent: true, scope: def.scope, network: true };
+      }
+    }
+  } catch (e) { console.warn('[plugins] plugin tool projection failed:', (e && e.message) || e); }
   // Connector projection happens after the base office is resolved. Re-apply the host floor so
   // no dynamic server or future registration order can restore a real-screen tool by name.
   resolved = enforceSyntheticOnly(resolved, realDesktopAuthority);
@@ -19185,7 +19495,7 @@ async function runOnceCore(o) {
   // whole manual stays inline. Both forms are constants, so the cached prefix is as stable as before.
   const manualBlock = (isTask && surface === 'interactive') ? (coreNames.indexOf('manual.read') >= 0 ? starnetManualIndex() : starnetManual()) : '';
   const runtimeVersion = computeVersionSurface();
-  const runtimeBlock = runtimeIdentityBlock({ provider: providerId, model, agentId, runId, surface, trigger, fallbackModels, harness: runtimeVersion.harness, app: runtimeVersion.app });
+  const runtimeBlock = runtimeIdentityBlock({ provider: providerId, model, agentId, runId, surface, trigger, fallbackModels, harness: runtimeVersion.harness, app: runtimeVersion.app, now: Date.now() });
   // RUNTIME SKILL LIBRARY (skill-builder-gap): index the agent's own authored skills + preload any it invokes,
   // riding the same skill.view/skill.manage capability gate. Never breaks a run.
   try {
@@ -21135,6 +21445,7 @@ async function handleHaltResume(req, res) {
     armLoops(true);
   });
   attempt('overseer', () => { overseer.resumeReviews(); });
+  attempt('plugins', () => { reloadExtensions().catch((e) => failNote('plugins.resume', e)); });   // E-STOP stopped their processes
   const state = haltStatus();
   const ok = !state.halted && Object.keys(errors).length === 0;
   haltJson(res, ok ? 200 : 503, { ok, ...state, errors });
@@ -21168,6 +21479,8 @@ function handleHalt(req, res) {
   // line triggers: every trigger hub's live runs die too, and whatever was waiting in their queues is dropped
   let triggerInflights = [];
   try { triggerRunner.haltAll(); triggerInflights = triggerRunner.inflights(); } catch (e) { failNote('triggers.halt', e); }
+  // plugin processes (their tools, window calls and background jobs) stop with everything else; RESUME restarts them
+  try { pluginRuntime.stopAll().catch((e) => failNote('plugins.halt', e)); } catch (e) { failNote('plugins.halt', e); }
   // the whole-line SAMPLE hub (POST /api/routing/sample): its entry run AND every stage it chains live in its inflight record
   const sampleInflight = (sampleHub && sampleHub._internals) ? sampleHub._internals.inflight : null;
   const halted = killAll(runs, tgInflight, dcInflight, ...genericInflights, ...tgBotInflights, devInflight, stepTest ? stepTest.inflight : null, ...triggerInflights, sampleInflight);   // browser runs + ALL channel hub runs, in one kill (see sidecar/halt.js)
@@ -23899,7 +24212,7 @@ async function serveStatic(req, res) {
     // Host/Origin with its own requests, so a clickjacking overlay could drive consent cards and toggles).
     // SAMEORIGIN, not DENY: frontend/dev/comms-layout-review.html frames "/" from this same origin.
     res.writeHead(200, { 'Content-Type': MIME[path.extname(abs).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-store',
-      'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': "frame-ancestors 'self'", 'X-Content-Type-Options': 'nosniff' });
+      'X-Frame-Options': 'SAMEORIGIN', 'Content-Security-Policy': "frame-ancestors 'self'; frame-src 'self' http://127.0.0.1:" + PORT + ' http://localhost:' + PORT, 'X-Content-Type-Options': 'nosniff' });
     res.end(data);
   } catch (e) { res.writeHead(404); res.end('not found'); }
 }

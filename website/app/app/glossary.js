@@ -70,6 +70,8 @@
     toolset:      'a family of tools you can switch on or off for agents (web, files, terminal…) — the switches live in the TOOLSETS section of ⇄ ABILITIES.',
     capability:   'the same tool families as TOOLSETS, read-only — what an agent is equipped with right now; each agent’s readout is the SKILLS tab of its dossier.',
     connector:    'an outside service you plug IN so agents can use it as a tool (calendar, Slack actions, databases).',
+    app:          'something your crew built for you in its own window — a dashboard, a tracker, a tool, a game. Describe it (or a change) in plain words; it can refresh itself on a schedule.',
+    apps:         'the apps your crew built for you — open one, or describe a new one.',
     channel:      'your way IN from a messaging app — connect Telegram/Slack/Discord and talk to your agents from your pocket.',
     autonomy:     'how far an agent may act on its own between your messages — you set the ceiling.',
     initiative:   'whether an agent starts work on its own — the same four rungs everywhere: WAIT, SUGGEST, BUILD, FREE.',
