@@ -1290,7 +1290,11 @@
     const wb = walkableRooms(live), wa = walkableRooms(probe), cut = probe.rooms().filter(r => r.kind !== 'corridor' && !wa.has(r.id) && (wb.has(r.id) || !live.rooms().some(x => x.id === r.id))).map(r => r.name);
     if (cut.length) warn.push((cut.length > 1 ? cut.join(', ') + ' cannot be walked into' : cut[0] + ' cannot be walked into') + ' from the main room');
     const list = ran.texts.map((t, i) => (i + 1) + '. ' + t);
-    const shown = list.length > 30 ? list.slice(0, 25).concat(['… and ' + (list.length - 25) + ' more edits']) : list;
+    // a long refit shows its first edits, and EVERY edit that takes something away, moves or resizes, or tells a step what
+    // to do, wherever it falls: nothing that changes what stands hides behind "and more"
+    const weighty = t => / removed|taken up|resized| moved to|is told:/.test(t);
+    let shown = list;
+    if (list.length > 30) { const rest = list.slice(25), keep = rest.filter(weighty); shown = list.slice(0, 25).concat(keep, rest.length > keep.length ? ['… and ' + (rest.length - keep.length) + ' more edits that add or name pieces'] : []); }
     const summary = 'REFIT, ' + ops.length + (ops.length === 1 ? ' edit' : ' edits') + ', in order: ' + shown.join('; ') + '.' + (warn.length ? ' Heads-up: ' + warn.join('; ') + '.' : '') + ' One UNDO in Build mode takes all of it back.';
     return { ok: true, plan: { floorSig: sigOf(doc), resultSig: sigOf(probe.serialize()), spec: { kind: 'refit', ops: clone(ops) }, summary, notes: warn, steps: [], line: null, where: 'a refit of ' + ops.length + (ops.length === 1 ? ' edit' : ' edits'), rooms: [],
       preview: previewOf(WM, doc, probe.serialize(), [], null) } };
