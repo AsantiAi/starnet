@@ -3389,7 +3389,6 @@ body.rows-inbox #workstreams .ws-kebab { grid-area: meta; }
   .ag-skin-section { flex-direction: column; }
   .ag-skin-stage { flex: 0 0 auto; align-self: center; }
 }
-.ag-cmd-danger .ag-cmd-lbl { color: var(--bad); }
 .ag-del-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .ag-del { border-color: var(--bad) !important; color: var(--bad) !important; }
 .ag-del:hover:not(:disabled) { background: rgba(var(--bad-rgb),.12) !important; }

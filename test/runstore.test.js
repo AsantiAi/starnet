@@ -309,4 +309,11 @@ const clock = { now: () => clk };
   A.ok(/runs = \(runStore\.list\(null, \{ streamId: streamId, limit: 200 \}\)/.test(src), 'the sample route reads its runs back by streamId');
 }
 
+// ---- ROUTINE HISTORY (2026-10-01): a scheduled run carries its routine id; ordinary rows stay byte-identical ----
+{
+  const s = makeRunStore({ io: memIo(), clock });
+  A.eq(s.record({ runId: 'c1', cronJobId: 'job-1' }).cronJobId, 'job-1', 'a scheduled run records its routine id');
+  A.ok(!('cronJobId' in s.record({ runId: 'i1' })), 'a non-scheduled run has no cronJobId key');
+}
+
 A.report('runstore.test');

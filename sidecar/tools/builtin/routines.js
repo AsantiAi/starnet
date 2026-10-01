@@ -127,13 +127,19 @@
     return { agentId: rosterEntries[0].id, reason: 'used first available agent' };
   }
 
-  function packJob(job) {
+  // describe (injected by the host) turns a job into plain words: { when, next } on the host's wall clock. The model
+  // reports a routine's cadence back to the Commander, and reading `cron 0 10 * * 1` it once told them "bi-weekly".
+  function packJob(job, describe) {
     if (!job) return null;
+    let words = null;
+    try { words = typeof describe === 'function' ? describe(job) : null; } catch (_) { words = null; }
     return {
       id: job.id,
       name: job.name,
       agentId: job.agentId,
       scheduleDisplay: job.scheduleDisplay,
+      when: (words && words.when) || undefined,
+      nextRunLocal: (words && words.next) || undefined,
       enabled: !!job.enabled,
       state: job.state,
       nextRunAt: job.nextRunAt,
@@ -212,6 +218,7 @@
       return schedulerState() ? null : 'the scheduler is DISARMED — nothing fires until it is armed';
     };
     const roster = typeof deps.roster === 'function' ? deps.roster : function () { return new Map(); };
+    const pack = function (job) { return packJob(job, deps.describeSchedule); };
     // W6: the plain anti-retry line + the per-agent "you already maintain: …" summary. Injected so this tool
     // stays node-testable; defaults keep it a no-op when the host doesn't wire the mint ledger.
     const ANTI_RETRY = 'this routine already exists — do not recreate it';
@@ -242,7 +249,7 @@
       run: async (args) => {
         const agentId = clean(args && args.agentId, 80);
         if (agentId && !validId(agentId)) throw new Error('agentId must be one of your station agents');
-        let jobs = (listJobs() || []).map(packJob).filter(Boolean);
+        let jobs = (listJobs() || []).map(pack).filter(Boolean);
         if (agentId) jobs = jobs.filter(j => j.agentId === agentId);
         return { content: JSON.stringify({ schedulerArmed: !!schedulerState(), schedulerHalted: !!schedulerHalted(), schedulerNote: armedNote() || undefined, jobs: jobs }), summary: jobs.length + ' routine(s)' };
       }
@@ -255,14 +262,14 @@
          to a shell, and the check-first rule. Dropped: the agentId auto-routing and `arm` default, both of
          which the schema below already states at the point of use, and the explanation that the server
          rejects a duplicate name — it says so itself, at call time, more precisely than a remembered note. */
-      description: 'Create a StarNet ROUTINES scheduled job in the built-in harness scheduler. Use this whenever the Commander asks for a cron, routine, recurring task, reminder, standing job, or scheduled research — never shell.exec, crontab, Windows Task Scheduler, or any OS scheduler. Check routine.list first and do not re-create a routine that already exists.',
+      description: 'Create a StarNet ROUTINE: work an agent runs on a schedule (digests, research, monitoring, reports, drafts, reminders). Use it whenever the Commander wants anything recurring, scheduled or automated — never shell.exec, crontab or an OS scheduler. Results come back to this chat by default; do not ask where to send them. Write a self-contained prompt: task, sources, format, what to flag. Asked to automate something broadly? Create 2-5 routines your own tools can run now (web research, writing, checks; no connection needed), then list them. Call routine.list first; never duplicate.',
       schema: {
         type: 'object',
         required: ['prompt', 'schedule'],
         properties: {
           name: { type: 'string' },
           prompt: { type: 'string', description: 'The instruction the target agent will run every time the routine fires.' },
-          schedule: { type: 'string', description: 'Examples: every 30m, every 6h, 0 9 * * *, in 2h, or an ISO timestamp.' },
+          schedule: { type: 'string', description: 'Plain English (every day at 7am, weekdays at 9am, mondays at 6pm, 1st of every month, tomorrow at 9am), every 30m, in 2h, or cron.' },
           agentId: { type: 'string', description: 'Optional exact station agent id. Omit to auto-route by specialty.' },
           agentHint: { type: 'string', description: 'Optional specialty hint such as research, engineer, scribe, operator, designer.' },
           timezone: { type: 'string', description: 'Optional IANA timezone for cron expressions, e.g. America/New_York.' },
@@ -325,7 +332,7 @@
           };
         }
         if (job && job._duplicate) {
-          const existing = packJob(job);
+          const existing = pack(job);
           return {
             content: JSON.stringify({ ok: true, duplicate: true, message: ANTI_RETRY, routedTo: route.agentId, job: existing }),
             summary: 'already exists — did not create a duplicate for ' + route.agentId
@@ -347,7 +354,7 @@
           armError: armError,
           routedTo: route.agentId,
           routingReason: route.reason,
-          job: packJob(job),
+          job: pack(job),
           // W6: the plain "you already maintain: …" reminder so the model tracks what exists across turns.
           maintains: mintSummary(route.agentId) || undefined
         };
@@ -415,7 +422,7 @@
           if (typeof setRoutineEnabled !== 'function') throw new Error('routine pause/resume unavailable');
           const updated = await setRoutineEnabled(job.id, action === 'resume');
           return {
-            content: JSON.stringify({ ok: true, action: action, schedulerArmed: !!schedulerState(), schedulerHalted: !!schedulerHalted(), schedulerNote: armedNote() || undefined, job: packJob(updated || job) }),
+            content: JSON.stringify({ ok: true, action: action, schedulerArmed: !!schedulerState(), schedulerHalted: !!schedulerHalted(), schedulerNote: armedNote() || undefined, job: pack(updated || job) }),
             summary: (action === 'resume' ? 'resumed' : 'paused') + ' routine "' + job.name + '"'
           };
         }
@@ -436,7 +443,7 @@
                 : armed
                   ? 'queued — the scheduler fires this routine on its next tick (within ~1 minute); it has not run yet'
                   : 'queued, but the scheduler is DISARMED so nothing will fire until it is armed',
-              job: packJob(updated || job)
+              job: pack(updated || job)
             }),
             summary: 'queued routine "' + job.name + '" to fire on the next tick' + (armed ? '' : ' (scheduler disarmed)')
           };
@@ -480,7 +487,7 @@
         // TRUTHFUL TELEMETRY: a rewritten prompt drops the routine's unattended grants (host rule, see updateRoutine
         // in index.js) — say so, or the model promises the Commander a routine that will now be locked out.
         const cleared = updated && Array.isArray(updated._grantsCleared) ? updated._grantsCleared : [];
-        const out = { ok: true, action: action, changed: touched, job: packJob(updated || job) };
+        const out = { ok: true, action: action, changed: touched, job: pack(updated || job) };
         if (cleared.length) out.standingGrantsCleared = { grants: cleared, note: 'the new instruction was not approved by the Commander, so its unattended ' + cleared.join('/') + ' grant was removed; the Commander can re-grant it in ROUTINES' };
         return {
           content: JSON.stringify(out),

@@ -37,7 +37,8 @@ const WorkflowTakeoverStore = (() => {
     let shown;
     // This is only an offer to review: technical completion is not proof of unattended readiness.
     const card = Chat.nudge('You’ve asked me to “' + c.name + '” on ' + c.count +
-      ' separate occasions, and those runs completed. Want me to take this off your plate? Review the instructions and choose when it should run.',
+      ' separate occasions, and those runs completed. Want me to take this off your plate' +
+      (c.suggest && c.suggest.display ? ' — ' + c.suggest.display + '?' : '?') + ' Review the instructions and choose when it should run.',
       [{ label: 'review takeover', value: 'review' }, { label: 'not now', value: 'defer', skip: true },
         { label: 'don’t offer this again', value: 'never', skip: true }], async choice => {
         if (gen !== generation || handled) return;

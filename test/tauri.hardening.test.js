@@ -85,8 +85,11 @@ A.ok(/fn is_app_navigation\(url: &tauri::Url, sidecar_port: u16\) -> bool \{\s*m
   'the navigation allow-list is exactly the tauri scheme, the tauri.localhost host, or this app\'s own sidecar agent pages');
 // The one exception (2026-09-30: macOS/Linux ask the guard about every FRAME, so the BROWSER window's sandboxed agent
 // pages need it): exactly 127.0.0.1 on THIS app's sidecar port, no credentials, only the two sandboxed page routes.
-A.ok(/fn is_sidecar_page\(url: &tauri::Url, sidecar_port: u16\) -> bool \{\s*sidecar_port != 0\s*&& url\.host_str\(\) == Some\("127\.0\.0\.1"\)\s*&& url\.port\(\) == Some\(sidecar_port\)\s*&& url\.username\(\)\.is_empty\(\)\s*&& url\.password\(\)\.is_none\(\)\s*&& \(url\.path\(\)\.starts_with\("\/view\/"\) \|\| url\.path\(\)\.starts_with\("\/workshop-run\/"\)\)\s*\}/.test(mainRs),
-  'the sidecar-page exception is exactly loopback + this port + the sandboxed /view/ and /workshop-run/ routes');
+A.ok(/fn is_sidecar_page\(url: &tauri::Url, sidecar_port: u16\) -> bool \{\s*sidecar_port != 0\s*&& url\.host_str\(\) == Some\("127\.0\.0\.1"\)\s*&& url\.port\(\) == Some\(sidecar_port\)\s*&& url\.username\(\)\.is_empty\(\)\s*&& url\.password\(\)\.is_none\(\)\s*&& SIDECAR_PAGE_ROUTES\.iter\(\)\.any\(\|route\| url\.path\(\)\.starts_with\(route\)\)\s*\}/.test(mainRs),
+  'the sidecar-page exception is exactly loopback + this port + the sandboxed page routes');
+// …and those routes are exactly the sidecar's SANDBOXED page routes (each served with a CSP sandbox header)
+A.ok(/const SIDECAR_PAGE_ROUTES: \[&str; 5\] = \["\/view\/", "\/workshop-run\/", "\/plugin-ui\/", "\/plugin-draft\/", "\/app-ui\/"\];/.test(mainRs),
+  'the frame exception covers the BROWSER window and the APPS / plugin windows, and nothing else');
 A.ok(/let init = format!\(\s*"if\(location\.protocol==='tauri:'\|\|location\.hostname==='tauri\.localhost'\)\{\{window\.__STARNET_API__=/.test(mainRs),
   'the API token is injected only into the bundled app origin (second layer behind on_navigation)');
 

@@ -132,6 +132,24 @@ function boot(port, workspaces, attemptsLeft, extraEnv) {
     const ticksAfter = (getOut().match(/\[cron\] cron\.tick/g) || []).length;
     A.eq(ticksAfter, ticksBefore, 'after disarm: the timer is cleared — no further cron ticks run');
 
+    // ---- ARM ON CREATE (2026-10-01): the CREATE form sends arm:true — a routine you just made fires ----
+    const plain = await j('POST', '/api/cron', { name: 'No arm asked', prompt: 'p', schedule: 'every 6h' });
+    A.eq(plain.status, 200, 'a create without arm -> 200');
+    A.eq(plain.body.scheduler && plain.body.scheduler.armed, false, 'a create without arm leaves a disarmed scheduler disarmed, and says so');
+    const armedCreate = await j('POST', '/api/cron', { name: 'Arm me', prompt: 'p', schedule: 'every 6h', arm: true });
+    A.eq(armedCreate.status, 200, 'a create with arm:true -> 200');
+    A.eq(armedCreate.body.scheduler && armedCreate.body.scheduler.armed, true, 'the create reply reports the scheduler armed');
+    A.eq((await j('GET', '/api/cron')).body.enabled, true, 'GET /api/cron agrees: enabled:true');
+    A.eq(JSON.parse(fs.readFileSync(ARMED_FILE, 'utf8')).armed, true, 'arm-on-create persisted the arm intent');
+    // ---- ROUTINE HISTORY: one routine's past runs (none yet), unknown id is an honest 404 ----
+    const hist = await j('GET', '/api/cron/history?id=' + encodeURIComponent(armedCreate.body.job.id));
+    A.eq(hist.status, 200, 'GET /api/cron/history -> 200');
+    A.ok(hist.body.ok && Array.isArray(hist.body.runs) && hist.body.runs.length === 0, 'a routine that never ran has an empty history (nothing synthesized)');
+    A.eq((await j('GET', '/api/cron/history?id=nope')).status, 404, 'unknown routine -> 404');
+    await j('POST', '/api/cron/remove', { id: plain.body.job.id });
+    await j('POST', '/api/cron/remove', { id: armedCreate.body.job.id });
+    A.eq((await j('POST', '/api/cron/arm', { enabled: false })).status, 200, 'disarm again before the boot phase');
+
     // ---- ARM AT BOOT: re-arm, kill, reboot the SAME workspace with NO env arm -> armed at boot ----
     // Seed a FRESH past one-shot that is unclaimed at reboot so the boot-reconcile has a DUE routine to tick
     // over. To keep it unclaimed by THIS process's live timer (which would stamp a fire-claim and then make it

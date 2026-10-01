@@ -32,7 +32,9 @@ const fakeUnzip = key => async (zip, dest) => {
   A.eq(platformKey('darwin', 'arm64'), 'mac-arm64', 'Apple silicon');
   A.eq(platformKey('darwin', 'x64'), 'mac-x64', 'Intel Mac');
   A.eq(platformKey('linux', 'x64'), 'linux64', 'Linux x64');
-  A.eq(platformKey('linux', 'arm64'), null, 'Linux ARM has no Chrome for Testing build: none offered');
+  A.eq(platformKey('linux', 'arm64'), 'linux-arm64', 'Linux ARM (Google lists a build now)');
+  A.eq(exeInside('linux-arm64').split(path.sep).join('/'), 'chrome-linux-arm64/chrome', '…and the browser sits where the zip has it (checked against the real zip 2026-10-01)');
+  A.eq(platformKey('freebsd', 'x64'), null, 'a system with no Chrome for Testing build: none offered');
 
   for (const [plat, arch] of [['win32', 'x64'], ['darwin', 'arm64'], ['linux', 'x64']]) {
     const key = platformKey(plat, arch);
@@ -110,7 +112,7 @@ const fakeUnzip = key => async (zip, dest) => {
   }
   // no build for this computer
   {
-    const inst = makeChromiumInstaller({ root: path.join(os.tmpdir(), 'sn-none'), fetchImpl: fakeFetch('x'), platform: 'linux', arch: 'arm64' });
+    const inst = makeChromiumInstaller({ root: path.join(os.tmpdir(), 'sn-none'), fetchImpl: fakeFetch('x'), platform: 'freebsd', arch: 'x64' });
     let err = null; try { await inst.ensure(); } catch (e) { err = e; }
     A.ok(err && /install Chrome, Edge or Chromium/.test(err.message), 'no build → tells the user what to install');
   }

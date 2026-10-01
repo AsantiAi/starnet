@@ -445,6 +445,56 @@ const imageReply = png => jsonResp({ choices: [{ message: { images: [{ image_url
       A.ok(/fitted to 100x30/.test(odd.content) && !/not the requested/.test(odd.content), 'an exact size far from any provider ratio is not misreported: ' + JSON.stringify(odd.content));
     }
   }
+  // ---- K. the ChatGPT plan: gpt-image-2 through the Codex Responses image_generation tool, no API key ----
+  {
+    const rejects = async (p, re, msg) => { let m = ''; try { await p; } catch (e) { m = String(e && e.message || e); } A.ok(re.test(m), msg + ' (got: ' + m + ')'); };
+    const sse = events => ({ status: 200, text: async () => events.map(e => 'event: ' + e.type + '\ndata: ' + JSON.stringify(e) + '\n\n').join('') });
+    const jwt = 'h.' + Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'acct-1' } })).toString('base64url') + '.sig';
+    const logo = logoPng();
+    const planEvents = [
+      { type: 'response.image_generation_call.partial_image', partial_image_b64: PNG_B64 },
+      { type: 'response.output_item.done', item: { type: 'image_generation_call', result: logo.toString('base64') } },
+      { type: 'response.output_text.done', text: 'Here is your fox.' },
+      { type: 'response.completed', response: { output: [] } }
+    ];
+    let tokenCalls = 0, usage = 0;
+    const planFetch = stubFetch(() => sse(planEvents));
+    const TP = makeImageTools({ openrouter: { provider: 'codex', protocol: 'codex-responses', getToken: async () => { tokenCalls++; return jwt; } },
+      fsp, pathMod: path, root: ROOT, fetchImpl: planFetch, onUsage: () => { usage++; } });
+    const plan = await TP.generateTool.run({ prompt: 'a fox logo', transparent: true, aspect_ratio: 'portrait' }, ctx);
+    const pc = planFetch.calls[0];
+    A.eq(pc.url, 'https://chatgpt.com/backend-api/codex/responses', 'the plan route posts to the Codex Responses wire');
+    A.eq([pc.init.headers.Authorization, pc.init.headers.originator, pc.init.headers['ChatGPT-Account-ID']], ['Bearer ' + jwt, 'codex_cli_rs', 'acct-1'], 'the plan route sends the sign-in token, the Codex originator and the account id from the JWT');
+    A.eq(pc.body.tool_choice, undefined, 'no tool_choice is sent: the Codex backend 400s every forcing shape for a hosted tool');
+    A.eq(pc.body.tools, [{ type: 'image_generation', output_format: 'png', partial_images: 1, model: 'gpt-image-2', size: '1024x1536', quality: 'medium', background: 'transparent' }], 'the hosted tool carries the gpt-image model, size, quality and transparency');
+    A.eq(pc.body.input[0].content[0].text, 'a fox logo Render the subject alone on a fully transparent background (PNG with an alpha channel): no backdrop, no scenery and no checkerboard pattern.', 'the prompt rides as the user turn');
+    A.eq(tokenCalls, 1, 'the token is asked for at call time (the host refreshes it)');
+    A.eq(usage, 0, 'a flat-rate plan render books no per-token media cost');
+    A.ok(/model gpt-image-2/.test(plan.content) && /Transparent background verified/.test(plan.content), 'the FINAL image (not the partial frame) is saved and its alpha verified: ' + JSON.stringify(plan.content));
+    A.ok(/Model note: Here is your fox\./.test(plan.content), 'the host model\'s words ride as the model note');
+    A.ok(/ChatGPT plan/.test(TP.generateTool.description) && !/gemini-3-pro-image/.test(TP.generateTool.description), 'the plan route teaches its own model');
+    // an OpenRouter-only model choice cannot cross onto the plan; DALL-E has no hosted tool
+    const crossFetch = stubFetch(() => sse(planEvents));
+    await makeImageTools({ openrouter: { provider: 'codex', protocol: 'codex-responses', getToken: async () => jwt }, imageModel: 'dall-e-3', fsp, pathMod: path, root: ROOT, fetchImpl: crossFetch })
+      .generateTool.run({ prompt: 'x', model: 'google/gemini-3-pro-image' }, ctx);
+    A.eq([crossFetch.calls[0].body.tools[0].model, crossFetch.calls[0].body.tools[0].background], ['gpt-image-2', 'opaque'], 'a foreign model choice falls back to gpt-image-2, opaque by default');
+    // the server is the authority on expiry: one renew + retry on a 401
+    let n = 0; const renewed = [];
+    const expFetch = stubFetch(() => (++n === 1) ? { status: 401, text: async () => JSON.stringify({ error: { message: 'token expired' } }) } : sse(planEvents));
+    await makeImageTools({ openrouter: { provider: 'codex', protocol: 'codex-responses', getToken: async () => 'old', renewToken: async t => { renewed.push(t); return jwt; } }, fsp, pathMod: path, root: ROOT, fetchImpl: expFetch })
+      .generateTool.run({ prompt: 'x' }, ctx);
+    A.eq([renewed, expFetch.calls.map(c => c.init.headers.Authorization)], [['old'], ['Bearer old', 'Bearer ' + jwt]], 'a 401 renews the token once and retries');
+    // provider errors surface verbatim, and a reply with no image is never saved
+    const errFetch = stubFetch(() => ({ status: 403, text: async () => JSON.stringify({ error: { message: 'plan limit reached' } }) }));
+    await rejects(makeImageTools({ openrouter: { provider: 'codex', protocol: 'codex-responses', getToken: async () => jwt }, fsp, pathMod: path, root: ROOT, fetchImpl: errFetch }).generateTool.run({ prompt: 'x' }, ctx),
+      /ChatGPT 403: plan limit reached/, 'a plan error is reported verbatim');
+    const textOnly = stubFetch(() => sse([{ type: 'response.output_text.done', text: 'I cannot draw that.' }, { type: 'response.completed', response: { output: [] } }]));
+    await rejects(makeImageTools({ openrouter: { provider: 'codex', protocol: 'codex-responses', getToken: async () => jwt }, fsp, pathMod: path, root: ROOT, fetchImpl: textOnly }).generateTool.run({ prompt: 'x' }, ctx),
+      /model returned no image \(I cannot draw that\.\)/, 'a text-only reply is an honest failure that quotes the model');
+    await rejects(makeImageTools({ openrouter: { provider: 'codex', protocol: 'codex-responses' }, fsp, pathMod: path, root: ROOT, fetchImpl: textOnly }).generateTool.run({ prompt: 'x' }, ctx),
+      /sign in to ChatGPT/, 'no sign-in getter names the fix');
+  }
+
   try { await fsp.rm(ROOT, { recursive: true, force: true }); } catch (_) {}
   A.report('image.test');
 })().catch(e => { console.log('FATAL', e && e.stack || e); process.exit(1); });
