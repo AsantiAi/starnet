@@ -1863,27 +1863,10 @@ const Build = (() => {
     load_balancer: 'jobs take turns between two agents',
     fire_escape: 'if the reviewer still is not happy after its tries, a fixer takes over',
   };
-  /* PLAIN NAMES (2026-09-28): a card leads with what the line does in everyday words; the catalog's station name
-     (REVISION LOOP …) rides beside it as a small tag, so a Commander who knows the old names still finds them. */
-  const LINE_PLAIN = {
-    front_desk: 'One agent', allowance_desk: 'One agent, $5 a day', ship_out: 'Agent work to OUTBOX', two_doors: 'Two ways in',
-    revision_loop: 'Draft + review', crucible: 'Two review rounds', fire_escape: 'Review + a fixer',
-    build_test: 'Build + test', code_foundry: 'Build + review',
-    research_line: 'Research + write', swarm_synthesis: 'Three researchers', deep_dive: 'Deep dive + review', assembly_line: 'Four-step chain',
-    sorting_office: 'Sort by type', triage_desk: 'Three specialists', parallel_crew: 'Split across three', load_balancer: 'Take turns', mission_control: 'Full triage',
-    second_opinion: 'Second opinion', gauntlet: 'Two takes, reviewed',
-  };
-
-  /* THE SHELF BY KIND OF WORK (2026-09-28): the same kinds the station presets are for. A line with no entry here falls
-     into the last section, so a catalog entry can never vanish from the shelf. */
-  const LINE_WORK = {
-    front_desk: 'any', allowance_desk: 'any', ship_out: 'any', two_doors: 'any',
-    revision_loop: 'write', crucible: 'write', fire_escape: 'write',
-    build_test: 'code', code_foundry: 'code',
-    research_line: 'research', swarm_synthesis: 'research', deep_dive: 'research', assembly_line: 'research',
-    sorting_office: 'volume', triage_desk: 'volume', parallel_crew: 'volume', load_balancer: 'volume', mission_control: 'volume',
-    second_opinion: 'decide', gauntlet: 'decide',
-  };
+  /* PLAIN NAMES + KIND OF WORK (2026-09-28): each shelf line carries them in the catalog itself (WorldModel.BLUEPRINTS
+     .plain / .work), so the shelf, the agent's station builder and the tests read one source. */
+  const LINE_PLAIN = {}, LINE_WORK = {};
+  for (const bp of ((typeof WorldModel !== 'undefined' && WorldModel.BLUEPRINTS) || [])) { if (bp.plain) LINE_PLAIN[bp.id] = bp.plain; if (bp.work) LINE_WORK[bp.id] = bp.work; }
   const LINE_WORK_GROUPS = [
     { id: 'any', label: 'ANY JOB', blurb: 'one agent takes the work door to door' },
     { id: 'write', label: 'WRITING & CONTENT', blurb: 'a draft, and a reviewer who can send it back' },
@@ -2306,23 +2289,9 @@ const Build = (() => {
     if (!bp || !station) return;
     const laid = lineLaidFits(bp.id), need = laid && laid.needs ? laid.needs : { w: bp.w, h: bp.h };
     const W = Math.min(bp.w, need.w) + 2, H = Math.min(bp.h, need.h) + 2;   // the smaller of the drawn and the laid-out line, a tile of walking room round it
-    const b = boundsMemoed();
-    const cands = [];
-    // right of the station, below it, left of it, above it — each slid along the edge; nearest to the station middle first
-    const midY = (b.minTy + b.maxTy) >> 1, midX = (b.minTx + b.maxTx) >> 1;
-    for (let y = b.minTy - H + 1; y <= b.maxTy; y++) cands.push({ x: b.maxTx + 1, y, d: Math.abs(y + (H >> 1) - midY) });
-    for (let x = b.minTx - W + 1; x <= b.maxTx; x++) cands.push({ x, y: b.maxTy + 1, d: 1000 + Math.abs(x + (W >> 1) - midX) });
-    for (let y = b.minTy - H + 1; y <= b.maxTy; y++) cands.push({ x: b.minTx - W, y, d: 2000 + Math.abs(y + (H >> 1) - midY) });
-    for (let x = b.minTx - W + 1; x <= b.maxTx; x++) cands.push({ x, y: b.minTy - H, d: 3000 + Math.abs(x + (W >> 1) - midX) });
-    cands.sort((p, q) => p.d - q.d || p.y - q.y || p.x - q.x);
-    const touches = (x, y) => {   // orthogonally adjacent to an existing deck tile, or the auto-doors can't join it
-      for (let yy = y; yy < y + H; yy++) if (station.roomAt(x - 1, yy) || station.roomAt(x + W, yy)) return true;
-      for (let xx = x; xx < x + W; xx++) if (station.roomAt(xx, y - 1) || station.roomAt(xx, y + H)) return true;
-      return false;
-    };
-    for (const c of cands) {
-      if (!touches(c.x, c.y)) continue;
-      const res = station.addRoom({ kind: 'hab', rect: { x1: c.x, y1: c.y, x2: c.x + W - 1, y2: c.y + H - 1 } });
+    // the station's own room finder (worldmodel.roomSpots) — the same one the agent's station builder uses
+    for (const rect of (station.roomSpots ? station.roomSpots(W, H, 'hab') : [])) {
+      const res = station.addRoom({ kind: 'hab', rect });
       if (!res || !res.ok) continue;
       clearLineFields();
       lineType = bp.id; selectTool('line');
@@ -7718,7 +7687,7 @@ const Build = (() => {
     try { openFlowCard(propId); } catch (e) { return false; }
     return true;
   }
-  const api = { init, open, openWorkflows, editLine, testJobForProp, close, toggle, isOpen, requisition, refitNames: guideNames, openAssign, noteLineDelivered, lineOfAgentInfo, nagLabel: code => VAL_LABEL[code] || code,
+  const api = { init, open, openWorkflows, editLine, testJobForProp, close, toggle, isOpen, requisition, refitNames: guideNames, openAssign, noteLineDelivered, lineOfAgentInfo, summonForRole, nagLabel: code => VAL_LABEL[code] || code,
     // the WORKFLOWS window speaks the shelf's own words and shows the shelf's own art (one name per line, never a second one)
     lineWords: () => ({ plain: LINE_PLAIN, purpose: LINE_PURPOSE }), lineSchematic: bp => lineSchematic(bp), machineStill: t => machineStill(t),
     nagWhy: valWhy };   // nagLabel: the floor's own nag copy for a compiler code (ROUTINES RUN NOW refusal reads it); nagWhy: the full fix sentence the hover card + Workflow panel say (station.layout reads it)
