@@ -1,0 +1,38 @@
+/* CREW PANEL GLASS (Andrew 10-01: "the crew panel and the sessions and projects simplicity looks really
+   good and clean") — the left rail wears the Build Library sheet: 12px frosted shell, a plain header over
+   a hairline instead of the gradient strip, no corner brackets, crew rows as 10px cards. Layout untouched.
+   Kept from the OBSERVATION DECK study; the rest of that study was dropped. */
+body.glass-demo {
+  --cg-edge: rgba(var(--ph-rgb), .2);
+  --cg-hair: rgba(var(--ph-rgb), .12);
+  --cg-glass: linear-gradient(125deg, rgba(var(--ph-bright-rgb), .09), rgba(var(--ph-rgb), .045) 48%, rgba(var(--ph-rgb), .015));
+}
+body.glass-demo:not(.hud-mode) #screen-game #left {
+  background: var(--cg-glass), color-mix(in srgb, var(--panel2) 56%, transparent);
+  border: 1px solid var(--cg-edge);
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, .4), inset 0 1px rgba(var(--ph-rgb), .08);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+  backdrop-filter: blur(18px) saturate(1.08);
+}
+body.glass-demo:not(.hud-mode) #screen-game #left::after { display: none; }
+body.glass-demo:not(.hud-mode) #screen-game #left::before { opacity: 0; }
+body.glass-demo:not(.hud-mode) #screen-game #left:focus-within { outline: 0; border-color: rgba(var(--ph-rgb), .38); }
+
+/* plain headers over a hairline */
+body.glass-demo:not(.hud-mode) #screen-game #left > h3 {
+  background: none; box-shadow: none;
+  border-bottom: 1px solid var(--cg-hair);
+  border-radius: 12px 12px 0 0;
+  padding: 11px 14px 9px;
+  font-size: 17px; letter-spacing: 2.5px; color: var(--ph-bright);
+}
+body.glass-demo:not(.hud-mode) #screen-game #left .ws-head { background: none; box-shadow: none; border-bottom: 1px solid var(--cg-hair); }
+
+/* rows read as cards inside the sheet */
+body.glass-demo:not(.hud-mode) #crew .crew-row { border-radius: 10px; margin: 4px 8px; }
+body.glass-demo:not(.hud-mode) #crew .crew-row:is(:hover, :focus-visible, .selected) {
+  background: linear-gradient(165deg, rgba(var(--ph-rgb), .075), transparent 46%), color-mix(in srgb, var(--panel2) 70%, transparent);
+  border-color: var(--cg-edge);
+}
+body.glass-demo:not(.hud-mode) #left #workstreams .ws-row { border-radius: 8px; }

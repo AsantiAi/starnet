@@ -1487,7 +1487,7 @@ const World = (() => {
       const wx = (c.x - panX) / scale, wy = (c.y - panY) / scale;
       scale = clampz(scale * Math.exp(-ev.deltaY * 0.0015), MINZ, MAXZ);
       panX = c.x - wx * scale; panY = c.y - wy * scale;
-      camLerp = null; camLock = null; camUserAt = performance.now(); userMovedCamera = true;   // the user is driving the camera — stop any focus ease, release any follow-lock, reset the cinecam idle clock
+      camLerp = null; camLock = null; camUserAt = performance.now();   // the user is driving the camera — stop any focus ease, release any follow-lock, reset the cinecam idle clock
     }, { passive: false });
     cv.addEventListener('mousedown', ev => { if (kindleArmed) { kindleHolding = true; return; } camLerp = null; camLock = null; camUserAt = performance.now(); const c = toCanvas(ev); drag = { sx: c.x, sy: c.y, moved: false }; });
     cv.addEventListener('mousemove', ev => {
@@ -1500,7 +1500,7 @@ const World = (() => {
         if (!drag.moved) {
           drag.acc = (drag.acc || 0) + Math.hypot(c.x - drag.sx, c.y - drag.sy);
           if (drag.acc <= 4) { drag.sx = c.x; drag.sy = c.y; return; }
-          drag.moved = true; userMovedCamera = true;
+          drag.moved = true;
         }
         panX += c.x - drag.sx; panY += c.y - drag.sy; drag.sx = c.x; drag.sy = c.y;
         cv.style.cursor = 'grabbing'; return;
@@ -1762,14 +1762,6 @@ const World = (() => {
   }
   function collapseFlood() { if (floodAt && !floodEndAt) floodEndAt = performance.now(); }   // pull the cascade inward into the mind
   function refit() { fitNeeded = true; }
-  // Canvas CSS px the fit keeps clear ({ l, t, r, b }). Re-frames only while the user hasn't moved the camera.
-  let viewInset = null, userMovedCamera = false, insetPending = false;
-  function setViewInset(v) {
-    const n = v ? { l: +v.l || 0, t: +v.t || 0, r: +v.r || 0, b: +v.b || 0 } : null;
-    if (JSON.stringify(n) === JSON.stringify(viewInset)) return;
-    viewInset = n;
-    insetPending = !userMovedCamera;   // applied by the frame loop once no follow-lock or focus ease owns the camera
-  }
   function say(text, opts) {
     if (!agent) return;
     const t = String(text || '').replace(/\s+/g, ' ').trim();
@@ -1917,11 +1909,8 @@ const World = (() => {
   function fitCamera() {
     if (!cache) return;
     const W = cache.W, H = cache.H;
-    // OBSERVATION DECK: the canvas runs under floating panels, so frame the station inside the open gap.
-    const k = cv.clientWidth ? cv.width / cv.clientWidth : 1, vi = viewInset || {};
-    const l = (vi.l || 0) * k, t = (vi.t || 0) * k, aw = Math.max(1, cv.width - l - (vi.r || 0) * k), ah = Math.max(1, cv.height - t - (vi.b || 0) * k);
-    scale = clampz(Math.min(aw / W, ah / H), MINZ, MAXZ);
-    panX = l + (aw - W * scale) / 2; panY = t + (ah - H * scale) / 2;
+    scale = clampz(Math.min(cv.width / W, cv.height / H), MINZ, MAXZ);
+    panX = (cv.width - W * scale) / 2; panY = (cv.height - H * scale) / 2;
     fitW = cv.width; fitH = cv.height;   // remember the size this fit framed — resize() treats a degenerate-size fit as "never fit"
   }
   // Room framing for the local composition review; no simulation/geometry edit.
@@ -6439,8 +6428,7 @@ const World = (() => {
       drawBackdrop(now, null);
       return;   // wrapper frame() already scheduled the next rAF — never double-schedule here
     }
-    if (fitNeeded && !camAnim) { fitCamera(); fitNeeded = false; insetPending = false; }
-    else if (insetPending && !camAnim && !camLock && !camLerp) { insetPending = false; if (!userMovedCamera) fitCamera(); }   // the scripted awakening camera owns the transform while it runs
+    if (fitNeeded && !camAnim) { fitCamera(); fitNeeded = false; }   // the scripted awakening camera owns the transform while it runs
     cinecamTick(now);   // the idle auto-director: may cast/re-cast a 'cine' follow-lock (never touches a 'session' lock; inert while the Commander is active)
     if (camLock && !camAnim) {   // FOLLOW-LOCK: continuously trail the locked body (session select or the idle cinecam)
       const lb = bodyForAgent(camLock.id);
@@ -10779,7 +10767,7 @@ const World = (() => {
        floor to the router. `station: false` = no floor loaded (nothing is known). */
     planStatus: () => Object.assign({ station: !!station, pending: !!(station && (geoDirty || !geo)),
       errors: (routingPlan && routingPlan.errors ? routingPlan.errors : []).filter(e => !e.warn), hash: routingPlan ? routingPlan.hash : null }, planPoster.state()),
-    loadStation, spawn, spawnAgent, despawnAgent, setSkin, relabel, setActivityFor, agentRunsLive, dropRun: noteRunEnd, focusBody, lockBody, cameraMode, cameraState, restoreCamera, setFrameCap, setViewInset, setOverlays, setCinecamIdle, setChatFocus, chatFocusPing, start, stop, setActivity, wakeIn, beginAwakening, playArrival, cancelArrival, setWakeProgress, igniteSpark, armKindle, kindleHold, camPushIn, camCreep, camPunch, camPullBack, awakenTurn, truthPulse, beginFlood, collapseFlood, endAwakening, releaseAwakening, say, focusAgent, getActivity: () => activity, getUse: () => (agent ? agent.usingProp : null), setOnClick, setOnArcade, setOnOutbox, setOnMissionBoard, setOnTrophyCase, setOnPluginTerminal, setOnDesk, setOnBayAssign, setOnIntakeFeed, setOnIntakeSample, refit, pauseBridge, resumeBridge, linkState, _dbgSeedRun, _dbgAgeRun, _dbgReconcile, _dbgSweep, _dbgLinkState, _dbgDropBridge, _dbgCurveState, _dbgLoseCurveContext, _dbgLoseCanvases, _dbgCanvasLoss, _dbgKillStageContext, _dbgStageState, _dbgBeltLegibility, _dbgPropClientPoint, _dbgDeskClientPoint, _dbgSleep, _dbgUseProp, _dbgArrive, _dbgLeisure,
+    loadStation, spawn, spawnAgent, despawnAgent, setSkin, relabel, setActivityFor, agentRunsLive, dropRun: noteRunEnd, focusBody, lockBody, cameraMode, cameraState, restoreCamera, setFrameCap, setOverlays, setCinecamIdle, setChatFocus, chatFocusPing, start, stop, setActivity, wakeIn, beginAwakening, playArrival, cancelArrival, setWakeProgress, igniteSpark, armKindle, kindleHold, camPushIn, camCreep, camPunch, camPullBack, awakenTurn, truthPulse, beginFlood, collapseFlood, endAwakening, releaseAwakening, say, focusAgent, getActivity: () => activity, getUse: () => (agent ? agent.usingProp : null), setOnClick, setOnArcade, setOnOutbox, setOnMissionBoard, setOnTrophyCase, setOnPluginTerminal, setOnDesk, setOnBayAssign, setOnIntakeFeed, setOnIntakeSample, refit, pauseBridge, resumeBridge, linkState, _dbgSeedRun, _dbgAgeRun, _dbgReconcile, _dbgSweep, _dbgLinkState, _dbgDropBridge, _dbgCurveState, _dbgLoseCurveContext, _dbgLoseCanvases, _dbgCanvasLoss, _dbgKillStageContext, _dbgStageState, _dbgBeltLegibility, _dbgPropClientPoint, _dbgDeskClientPoint, _dbgSleep, _dbgUseProp, _dbgArrive, _dbgLeisure,
     // AGENT GROWTH: XpStore pushes pre-computed Xp.compute() snapshots here; pulseLevelUp fires
     // the addressed body's gold ring. The colony headline is the top-bar STATION chip.
     setXp: (agentId, a) => {
