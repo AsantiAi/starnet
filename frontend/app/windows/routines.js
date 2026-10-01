@@ -491,6 +491,7 @@
     const picker = (typeof SchedPicker !== 'undefined')
       ? SchedPicker.mount(body.querySelector('#rt-when'), { onChange: () => sfx('click') })
       : null;
+    body._rtPicker = picker;   // AUTOMATION.openDraft pre-selects a takeover's suggested cadence through set()
 
     body.querySelector('#rt-agent-select').addEventListener('change', e => {
       const btn = Array.from(body.querySelectorAll('.rt-agent-btn')).find(b => b.dataset.agent === e.target.value); if (btn) btn.click();
