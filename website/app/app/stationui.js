@@ -1507,7 +1507,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       return;
     }
     ul.innerHTML = present.map((a, i) =>
-      '<li class="crew-row" role="button" tabindex="0" aria-label="Show sessions with ' + esc(a.name || a.id) + '" data-i="' + i + '" data-agent-id="' + esc(a.id) + '" style="--ci:' + i + '">' +
+      '<li class="crew-row" role="button" tabindex="0" aria-label="' + (present.length > 1 ? 'Show sessions with ' : 'Open dossier for ') + esc(a.name || a.id) + '" data-i="' + i + '" data-agent-id="' + esc(a.id) + '" style="--ci:' + i + '">' +
       crewPortrait(a) +
       '<span class="dot on"></span>' +
       '<div class="crew-main">' +
@@ -1520,15 +1520,17 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       '<div class="crew-prog bar-active" id="cp-' + esc(a.id) + '" aria-hidden="true"><div></div></div>' +
       '</div>' +
       // the dossier stays one step away: this key (or a right-click) opens it; the row itself shows the sessions
-      '<button type="button" class="crew-dossier" tabindex="-1" aria-label="Open dossier for ' + esc(a.name || a.id) + '" data-tip="Open ' + esc(a.name || a.id) + '&#39;s dossier">DOSSIER</button>' +
+      (present.length > 1 ? '<button type="button" class="crew-dossier" tabindex="-1" aria-label="Open dossier for ' + esc(a.name || a.id) + '" data-tip="Open ' + esc(a.name || a.id) + '&#39;s dossier">DOSSIER</button>' : '') +
       '</li>').join('');
     // (the head's roster count moved out — #crew-sum below the list already totals the same crew)
     ul.querySelectorAll('.crew-row').forEach(li => {
       if (typeof AgentPortraits !== 'undefined') AgentPortraits.paint(li.querySelector('.crew-portrait img'), present[+li.dataset.i]);
-      // PER-AGENT THREADS: a row click narrows the SESSIONS rail to this agent's sessions (again = all of them)
+      // PER-AGENT THREADS: a row click narrows the SESSIONS rail to this agent's sessions (again = all of them).
+      // A one-agent station has nothing to narrow — every session is already that agent's — so there the
+      // row keeps opening the dossier, as it always has.
       li.addEventListener('click', () => {
         sfx('click');
-        if (typeof App !== 'undefined' && App.filterRailByAgent) App.filterRailByAgent(li.dataset.agentId);
+        if (present.length > 1 && typeof App !== 'undefined' && App.filterRailByAgent) App.filterRailByAgent(li.dataset.agentId);
         else openAgent(+li.dataset.i);
       });
       li.addEventListener('contextmenu', ev => { ev.preventDefault(); sfx('click'); openAgent(+li.dataset.i); });
