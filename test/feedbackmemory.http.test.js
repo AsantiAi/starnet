@@ -35,9 +35,9 @@ async function boot() {
 }
 async function stop() { if (child && child.exitCode === null) { const exit = once(child, 'exit'); child.kill(); await exit; } }
 async function api(url, body) { const r = await fetch(base + url, {headers, method: body === undefined ? 'GET' : 'POST', body: body === undefined ? undefined : JSON.stringify(body)}); return {status: r.status, body: await r.json()}; }
-async function run(text) {
+async function run(text, agentId) {
   const before = seen.length;
-  const r = await fetch(base + '/api/run', {method: 'POST', headers, body: JSON.stringify({agentId: 'agent', key: 'sk-or-v1-feedback-fixture', model: 'test/model', messages: [{role: 'user', content: text}]})});
+  const r = await fetch(base + '/api/run', {method: 'POST', headers, body: JSON.stringify({agentId: agentId || 'agent', key: 'sk-or-v1-feedback-fixture', model: 'test/model', messages: [{role: 'user', content: text}]})});
   const events = (await r.text()).split('\n').filter(Boolean).map(s => JSON.parse(s));
   const end = events.find(e => e.name === 'agent.run.end');
   A.eq(end && end.payload.reason, 'done', 'run completed: ' + text);
@@ -50,7 +50,7 @@ const feedbackRecs = async () => ((await api('/api/memory/records?agent=agent'))
   mock.listen(0, '127.0.0.1'); await once(mock, 'listening');
   try {
     await boot();
-    A.ok((await api('/api/roster', {agents: [{agentId: 'agent', name: 'Hero', model: 'test/model', provider: 'openrouter'}]})).body.ok, 'roster saved');
+    A.ok((await api('/api/roster', {agents: [{agentId: 'agent', name: 'Hero', model: 'test/model', provider: 'openrouter'}, {agentId: 'scribe', name: 'Scribe', model: 'test/model', provider: 'openrouter'}]})).body.ok, 'roster saved');
 
     // 1. a bare `missed` already teaches something durable
     const r1 = await run('Write the weekly status report for the board.');
@@ -75,6 +75,11 @@ const feedbackRecs = async () => ((await api('/api/memory/records?agent=agent'))
     A.ok(r2.prompt.indexOf('way too long, give me 3 bullet points max') >= 0, 'unrelated next run carries the correction in its prompt');
     A.ok(r2.prompt.indexOf('Commander\'s own verdicts on past work') >= 0, 'under the taste header');
     A.ok(r2.prompt.indexOf('[user-confirmed reference] Preference') >= 0, 'marked as the Commander\'s confirmed preference');
+
+    // 3b. station-wide: a DIFFERENT agent's next run carries the Commander's correction too (no foreign note id)
+    const rs = await run('Compose a short poem about autumn leaves.', 'scribe');
+    A.ok(rs.prompt.indexOf('way too long, give me 3 bullet points max') >= 0, 'another agent\'s run carries the correction (taste is about the Commander)');
+    A.ok(!/\[note_\d+\] \[user-confirmed reference\] Preference — DISLIKED/.test(rs.prompt), 'the foreign record shows no note id in the other agent\'s prompt');
 
     // 4. a like with words adds a second belief
     const liked = await api('/api/growth/ratings', {runId: r2.runId, verdict: 'great', epoch: 1, correction: 'perfect length, keep the bold headers'});

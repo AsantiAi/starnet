@@ -104,4 +104,25 @@ function selectTaste(records, opts) {
   return (Array.isArray(records) ? records : []).filter(isTaste).slice().sort((a, b) => at(b) - at(a)).slice(0, limit);
 }
 
-module.exports = { ORIGIN, TASTE_HEADER, TASTE_LIMIT, TASTE_CHARS, content, apply, directiveFor, isTaste, selectTaste };
+// stationTaste(own, others, opts) — the Commander's taste is about THE COMMANDER, not one agent: a correction given
+// to a specialist must shape the overseer's next deliverable too. Merge this agent's own feedback records with every
+// other agent's, newest first. Foreign copies lose their id (an id is only meaningful in its own notebook: rendered,
+// it would invite notebook.feedback on the wrong record, and recall's useCount bump would hit a same-numbered local
+// note). The same belief given twice (same text) appears once, own copy preferred.
+function stationTaste(own, others, opts) {
+  const mine = (Array.isArray(own) ? own : []).filter(isTaste);
+  const seen = new Set(mine.map(r => String(r.content || r.body).trim()));
+  const foreign = [];
+  for (const list of (Array.isArray(others) ? others : [])) {
+    for (const r of (Array.isArray(list) ? list : [])) {
+      if (!isTaste(r)) continue;
+      const key = String(r.content || r.body).trim();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      foreign.push(Object.assign({}, r, { id: '', foreign: true }));
+    }
+  }
+  return selectTaste(mine.concat(foreign), opts);
+}
+
+module.exports = { ORIGIN, TASTE_HEADER, TASTE_LIMIT, TASTE_CHARS, content, apply, directiveFor, isTaste, selectTaste, stationTaste };

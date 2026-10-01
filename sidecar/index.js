@@ -18403,7 +18403,7 @@ async function runOnceCore(o) {
       const pinned = Array.isArray(notes) ? notes.filter(r => r && r.pinned && !FeedbackMemory.isTaste(r)) : [];
       const recalled = renderRecall(rank(pinned, recentUserText(messages), { now: Date.now(), streamId, projectRoot: o.projectRoot || null }), { limit: 1500 });
       // the Commander's taste rides into delegated work too: a worker writes the deliverable the Commander rates
-      const taste = renderRecall(FeedbackMemory.selectTaste(notes), { limit: FeedbackMemory.TASTE_CHARS, header: FeedbackMemory.TASTE_HEADER });
+      const taste = renderRecall(FeedbackMemory.stationTaste(notes, otherAgentNotebooks(agentId)), { limit: FeedbackMemory.TASTE_CHARS, header: FeedbackMemory.TASTE_HEADER });
       return settled + (recalled.text ? '\n\n' + redact(recalled.text) : '') + (taste.text ? '\n\n' + redact(taste.text) : '');
     },
     // A worker shares the LEAD's consent broker (see the `consent` note below), so its own roster APPROVAL clause is
@@ -20212,8 +20212,10 @@ async function runOnceCore(o) {
     // THE COMMANDER'S TASTE (feedbackmemory.js): their verdicts + corrections ride EVERY run in a block of their
     // own. Taste is not topical ("shorter" applies to any deliverable), so BM25's word-overlap floor must not
     // decide whether it surfaces. Those records leave the ranked pool so they never take a recall slot twice.
-    const tasteRecs = FeedbackMemory.selectTaste(all);
-    const tasteIds = new Set(tasteRecs.map(r => r.id));
+    // station-wide: a correction given to ANY agent is about the Commander, so it shapes this agent's work too
+    // (recovery runs inject nothing at all — see the note above msgs).
+    const tasteRecs = o.recovery ? [] : FeedbackMemory.stationTaste(all, otherAgentNotebooks(agentId));
+    const tasteIds = new Set(tasteRecs.map(r => r.id).filter(Boolean));
     const recs = all.filter(r => !(r && tasteIds.has(r.id)));
     const q = recentUserText(convo);   // include restored conversation context on terse post-restart follow-ups
     // memory-compound: the embedding lane (BM25 + vectors) — null => pure BM25, byte-identical to before
@@ -24382,6 +24384,20 @@ function skillNameFromReflection(content) {
 // (feedbackmemory.js). One record per rated run; a later correction updates that record instead of adding another.
 // User-confirmed by construction (the Commander's own verdict and words) and seeded with Keep-strength trust. Honors
 // the personalization pause like every learning pass. Returns a truthful summary for the route response; never throws.
+// every OTHER agent's notebook (the roster, plus the hero), for the station-wide taste block. Reads go through the
+// durable store's cache; an unreadable notebook contributes nothing and never fails the run.
+function otherAgentNotebooks(agentId) {
+  const ids = new Set(['agent']);
+  for (const id of agentRoster.keys()) ids.add(id);
+  ids.delete(String(agentId || 'agent'));
+  const out = [];
+  for (const id of ids) {
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(String(id))) continue;
+    try { const l = notebookStore.get('notebook:' + id); if (Array.isArray(l) && l.length) out.push(l); }
+    catch (e) { failNote('feedback.taste.read', e); }
+  }
+  return out;
+}
 async function recordFeedbackMemory(o) {
   o = o || {};
   const agentId = String(o.agentId || 'agent');

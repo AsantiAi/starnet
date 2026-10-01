@@ -63,6 +63,22 @@ A.eq(FM.selectTaste(many).length, FM.TASTE_LIMIT, 'capped at TASTE_LIMIT');
 A.eq(FM.selectTaste(many)[0].id, 'n19', 'newest leads');
 A.eq(FM.selectTaste(null).length, 0, 'null-safe');
 
+// ---- stationTaste(): taste is about the Commander, so every agent's feedback shapes every agent ----
+{
+  const own = [{ id: 'note_1', origin: 'feedback', title: 'Preference', confirmation: 'user-confirmed', content: 'LIKED: "bold headers"', createdAt: 10 }, { id: 'note_2', kind: 'fact', content: 'uses pnpm', createdAt: 99 }];
+  const scribe = [{ id: 'note_1', origin: 'feedback', title: 'Preference', confirmation: 'user-confirmed', content: 'DISLIKED: "too wordy"', createdAt: 20 }, { id: 'note_9', origin: 'feedback', content: 'LIKED: "bold headers"', createdAt: 30 }];
+  const t = FM.stationTaste(own, [scribe, null, [{ id: 'x', content: 'not feedback' }]]);
+  A.eq(t.map(r => r.content).join(' | '), 'DISLIKED: "too wordy" | LIKED: "bold headers"', 'another agent\'s feedback is included, newest first, same belief once');
+  const foreign = t.find(r => /too wordy/.test(r.content));
+  A.ok(foreign.foreign === true && foreign.id === '', 'a foreign record loses its id (ids only mean something in their own notebook)');
+  A.eq(t.find(r => /bold/.test(r.content)).id, 'note_1', 'the own copy of a shared belief is preferred');
+  A.eq(scribe[0].id, 'note_1', 'the source notebook is never mutated');
+  const block = renderRecall(t, { limit: FM.TASTE_CHARS, header: FM.TASTE_HEADER });
+  A.ok(block.text.indexOf('[note_1] [user-confirmed reference] Preference — LIKED') >= 0 && block.text.indexOf('• [user-confirmed reference] Preference — DISLIKED') >= 0, 'foreign line renders with no id');
+  A.eq(block.usedIds.join(','), 'note_1', 'only the own record counts as used (no useCount bump on a same-numbered local note)');
+  A.eq(FM.stationTaste(null, null).length, 0, 'null-safe');
+}
+
 // ---- directiveFor(): a run started by "yes" cites the request it accepted, not "yes" ----
 const convo = [{ role: 'user', content: 'plan a welcome note for the new crew' }, { role: 'assistant', content: 'Want me to draft it?' }, { role: 'user', content: 'yes' }];
 A.eq(FM.directiveFor(['', 'yes'], convo), 'plan a welcome note for the new crew', 'a "yes" run cites the substantive request');
