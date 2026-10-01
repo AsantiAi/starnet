@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "fb608f467aac090a49b5e6b1c5618ebeb19cd076",
+    "sourceCommit": "4a051c3f49236b7c8070eafabe4b557d68e0d12f",
     "pathSetSha256": "25bb3a27ace1c92b893b6ec4c9f0e932263320d47b58d83c9fccdf7b9785616d",
     "files": [
       {
@@ -318,8 +318,8 @@
       },
       {
         "path": "frontend/app/browserstream.js",
-        "bytes": 7860,
-        "sha256": "b5dd18bc92cfdc4f83ace45e65e624bb7263eecaf09854823f81da2e9bc2a511"
+        "bytes": 9167,
+        "sha256": "7c384863b62ed3cc50170cbc489ae78a44660edeaf07c4afce4277b8e11759ac"
       },
       {
         "path": "frontend/app/build.js",
@@ -703,8 +703,8 @@
       },
       {
         "path": "frontend/app/outputbrowser.js",
-        "bytes": 42188,
-        "sha256": "4f51028758605ea64a83a7cd8c051e0a14f66a2a3dcc9ea9a06c0b1b433e7906"
+        "bytes": 45390,
+        "sha256": "d9365113327223bf859d01a227cbc2382d580e5d279a02cd2ed2954b136b2b18"
       },
       {
         "path": "frontend/app/overseer-setup.js",
@@ -1128,8 +1128,8 @@
       },
       {
         "path": "frontend/app/stepin.js",
-        "bytes": 23980,
-        "sha256": "125dd1a40f52d82231600923076cd3244134dbba4939072b4c01f5f7c0966a80"
+        "bytes": 24302,
+        "sha256": "dabdeba30bfd3bb2c252c2ffd569e734419dd46cb5be7543b4c5d2e8c476337e"
       },
       {
         "path": "frontend/app/study.js",
