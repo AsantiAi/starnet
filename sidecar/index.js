@@ -6882,6 +6882,26 @@ function handleRecommendationsEval(req, res) {
     json(200, { ok: true, evaluation: RecommendationEval.evaluate(rows, Object.assign({ now: Date.now() }, surface ? { surface } : {})) });
   } catch (e) { json(200, { ok: false, error: (e && e.message) || 'recommendation eval failed' }); }
 }
+/* REPEAT SENSE (2026-10-01): the lead's side of "it noticed I keep asking for this". While a NEW interactive or
+   channel request is prepared, if it is the same work the Commander already had completed on two+ earlier days,
+   the run's context carries a standing-work notice so the agent can offer — once, in its own reply — to make it a
+   routine (routine.create stays consent-gated; nothing is created here). The impression is recorded like a card
+   shown, so the takeover card and the agent never both pitch the same work the same day, and an offer the
+   Commander ignores stops after MAX_OFFERS. Fails open to no notice. */
+function standingWorkNotice(brief, agentId, o) {
+  try {
+    if (!brief || brief.status === 'cancelled' || (o && o.recovery) || !['interactive', 'channel'].includes(brief.source)) return null;
+    if (!personalizationStore.read().enabled) return null;
+    const saved = saveStore.load('agent') || null;
+    const epoch = Math.max(1, Math.floor(Number(saved && saved.agent && saved.agent.createdAt) || 1));
+    const n = WorkflowTakeover.notice({ directive: brief.originalDirective, agentId, projectRoot: (o && o.projectRoot) || '',
+      briefs: taskBriefStore.list({ limit: 500 }).filter(b => b.id !== brief.id), runs: runStore.all(), jobs: cronJobs,
+      ratings: growthRatings.list({ limit: 500, epoch }), state: workflowTakeoverStore.read(), enabled: true, now: Date.now(), redact });
+    if (!n) return null;
+    workflowTakeoverStore.decide(n.id, 'shown', Date.now(), n.core).catch(e => console.warn('[workflow-takeover] notice impression not saved:', (e && e.message) || e));
+    return n;
+  } catch (e) { console.warn('[workflow-takeover] notice failed:', (e && e.message) || e); return null; }
+}
 function workflowTakeoverCandidates(ignoreOffers) {
   const state = workflowTakeoverStore.read();
   const saved = saveStore.load('agent') || null;
@@ -6899,7 +6919,7 @@ async function handleWorkflowTakeovers(req, res) {
     if (!body || !['shown', 'defer', 'never', 'review'].includes(body.action)) return json(400, { ok: false, error: 'invalid workflow decision' });
     const c = workflowTakeoverCandidates(body.action !== 'shown').find(c => c.id === body.id);
     if (!c) return json(409, { ok: false, error: 'This workflow is no longer available. Refresh before setting it up.' });
-    await workflowTakeoverStore.decide(c.id, body.action, Date.now());
+    await workflowTakeoverStore.decide(c.id, body.action, Date.now(), c.core);
     return json(200, { ok: true, candidate: body.action === 'review' ? c : undefined });
   } catch (e) {
     if (!res.headersSent) json(400, { ok: false, error: 'Could not read or save the workflow offer.' });
@@ -17826,7 +17846,7 @@ async function runOnceCore(o) {
     // recipes.js — the same data the launch chips rendered), so a mid-run question arrives pre-aimed.
     let recipeIntake = [];
     try { const rr = o.recipeId ? Recipes.get(String(o.recipeId)) : null; if (rr && Array.isArray(rr.intake)) recipeIntake = rr.intake; } catch (_) {}
-    taskContextInputs = {brief:taskBrief, goal, patterns, deferredDimensions, recipeIntake};
+    taskContextInputs = {brief:taskBrief, goal, patterns, deferredDimensions, recipeIntake, standingWork: standingWorkNotice(taskBrief, agentId, o)};
     taskContextBlock = commanderEvidenceContext(system || '', taskContextInputs);
   } else if (isTask) {
     // Channels and integrations may not carry a durable taskKey. They still receive the SAME bounded Commander

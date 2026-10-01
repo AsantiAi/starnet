@@ -83,6 +83,20 @@ function compose(input) {
       + deferred.map(d => clip(d, 24)).join(', ') + '. Do NOT ask about them. Choose the most sensible reversible default and state it as a correctable assumption in brief_proceed.');
     lines.push('</deferred_decisions>');
   }
+  // STANDING WORK (repeat sense, 2026-10-01): this request is the same work the Commander already had completed on
+  // separate earlier days (workflow-takeover.js notice()). The agent may OFFER a routine — never create one unasked.
+  const sw = input.standingWork;
+  if (sw && Number(sw.count) >= 3 && Array.isArray(sw.dates)) {
+    const day = t => { const d = new Date(Number(t)); return isFinite(d.getTime()) ? d.toDateString() : ''; };
+    lines.push('<standing_work_notice provenance="observed: completed task history">');
+    lines.push('The Commander has now asked for this same work ' + Number(sw.count) + ' times on separate days (earlier: '
+      + sw.dates.slice(-4).map(day).filter(Boolean).join('; ') + ').'
+      + (Array.isArray(sw.quotes) && sw.quotes.length ? ' Earlier wording: ' + sw.quotes.map(q => '"' + clip(q, 160) + '"').join(' / ') + '.' : ''));
+    lines.push('Do the current task fully first. Then, at the very END of your reply, offer ONCE in one short sentence to take it off their plate as a standing routine'
+      + (sw.suggest && sw.suggest.display ? ' — suggest ' + clip(sw.suggest.display, 60) + ' (' + clip(sw.suggest.why, 80) + ')' : ' — ask when it should run')
+      + '. Create nothing unless they say yes. On yes: call routine.list, then routine.create with a self-contained prompt (the full instruction, sources, format and choices they made) and the agreed schedule, deliver "origin" so results come back here. If you have no routine.create tool, say AUTOMATION › ROUTINES can set it up in one step. If they decline or ignore it, drop it.');
+    lines.push('</standing_work_notice>');
+  }
   const patterns = Array.isArray(input.patterns) ? input.patterns : [];
   if (patterns.length) {
     lines.push('<observed_task_patterns strength="weak; never override current instructions">');
