@@ -218,43 +218,8 @@ try {
   await sleep(500);
   report.facts.shot2c = await capture(cdp, out, '02c-crew-note');
 
-  // ---- 3c. the CREW BUILDS a plugin: draft → check → DRAFT preview → submit (approval) → Commander approves → live ----
-  await run(`(()=>{ const i=document.getElementById('chat-input'); i.value='Build me a weather plugin with tomorrow at a glance'; i.dispatchEvent(new Event('input',{bubbles:true})); document.getElementById('chat-send').click(); return true; })()`);
-  await until(`!!document.querySelector('.term.plugin-draft-win iframe.plugin-frame')`, 150);
-  await check('the crew\'s draft opened as a DRAFT window (plugin.draft_start → draft_write → check → preview)', true);
-  await check('the draft window wears the gold DRAFT plate, not PLUGIN', await run(`document.querySelector('.term.plugin-draft-win .plugin-plate').textContent === 'DRAFT'`));
-  await check('the draft is served from /plugin-draft/ (a draft ticket, never the installed route)', await run(`/\\/plugin-draft\\/~t\\//.test(document.querySelector('.term.plugin-draft-win iframe.plugin-frame').src)`));
-  await frameUntil(`document.querySelectorAll('.sn-stat').length === 3 && typeof starnet === 'object'`, 80, /\/plugin-draft\/.*weather-deck/);
-  await check('the draft page runs with the kit, drawn in station glass', await frameEval(`getComputedStyle(document.body).fontFamily.indexOf('VT323') >= 0`, /\/plugin-draft\/.*weather-deck/));
-  const draftBackend = await frameEval(`starnet.backend.call('x').then(()=>'ran', e=>e.message)`, /\/plugin-draft\/.*weather-deck/);
-  await check('a draft has no backend (its code never runs before approval)', /no backend/.test(draftBackend));
-  await sleep(400);
-  report.facts.shot7 = await capture(cdp, out, '07-draft-preview');
-  await until(`[...document.querySelectorAll('#chat-panel button')].some(b => b.textContent.trim() === 'Approve once' && !b.disabled)`, 150);
-  report.facts.submitCard = await run(`((document.querySelector('#chat-panel').innerText || '').match(/wants to install the plugin it built[^\\n]*/g) || []).pop() || ''`);
-  await check('installing the draft asks first, and the card says it stays OFF until approved', /install the plugin it built “weather-deck” — it stays OFF until you approve/.test(report.facts.submitCard));
-  await run(`(()=>{ const bs=[...document.querySelectorAll('#chat-panel button')].filter(b => b.textContent.trim()==='Approve once' && !b.disabled); bs[bs.length-1].click(); return true; })()`);
-  for (let i = 0; i < 80 && !modelLog.authorFinal; i++) await sleep(200);
-  await check('submit installed it OFF and said so', /it is OFF until the Commander approves it/.test(modelLog.authorFinal || ''));
-  const wlist = await run(`fetch('/api/plugins').then(r=>r.json()).then(j=>j.plugins.filter(p=>p.id==='weather-deck').map(p=>({active:p.active,pending:p.pending,hasCode:p.hasCode})))`);
-  await check('the installed plugin is listed OFF and pending the Commander\'s approval (the agent cannot switch it on)', wlist.length === 1 && !wlist[0].active && wlist[0].pending && wlist[0].hasCode === false);
-  await run(`StationUI.openTerm('connectors','extensions')`);
-  await until(`!!document.querySelector('[data-ext="plugin-allow"][data-id="weather-deck"]')`, 60);
-  await run(`document.querySelector('[data-ext="plugin-allow"][data-id="weather-deck"]').click(), true`);
-  await until(`!!document.querySelector('[data-ext="plugin-open"][data-id="weather-deck"]')`, 60);
-  await check('the Commander\'s APPROVE & ENABLE turns it on', true);
-  await run(`(()=>{ const r=document.querySelector('[data-ext="plugin-open"][data-id="pr-radar"]'); (r||document.querySelector('#pl-list')).scrollIntoView({block:'center'}); return true; })()`);
-  await run(`(()=>{ document.querySelectorAll('.term.plugin-win').forEach(w => { if (w._minimize) w._minimize(); }); StationUI.openTerm('connectors','extensions'); const r=document.querySelector('#pl-list'); if (r) r.scrollIntoView({block:'start'}); return true; })()`);
-  await sleep(700);
-  report.facts.shotExt = await capture(cdp, out, '09-extensions-rows');
-  await run(`document.querySelector('[data-ext="plugin-open"][data-id="weather-deck"]').click(), true`);
-  await until(`[...document.querySelectorAll('.term.plugin-win:not(.plugin-draft-win) .term-title')].some(t => t.textContent === 'WEATHER DECK')`, 60);
-  await frameUntil(`document.querySelectorAll('.sn-stat').length === 3`, 80, /\/plugin-ui\/.*weather-deck/);
-  await until(`!document.querySelector('.term.plugin-draft-win')`, 30);   // the close plays its exit motion first
-  await check('opening the installed plugin closed its DRAFT preview (no stale copy left docked)', true);
-  await check('the crew-built plugin now opens as a real PLUGIN window', await run(`[...document.querySelectorAll('.term.plugin-win:not(.plugin-draft-win)')].some(w => w.querySelector('.term-title').textContent === 'WEATHER DECK' && w.querySelector('.plugin-plate').textContent === 'PLUGIN')`));
-  await sleep(500);
-  report.facts.shot8 = await capture(cdp, out, '08-crew-built-plugin-live');
+  // ---- 3c. (retired 2026-09-30) the crew no longer BUILDS plugins: plugin-authoring is ungranted, the crew builds
+  //      APPS instead (dev/apps-*-proof.mjs). Plugins remain the Commander's own power-user path.
 
   // ---- 4. the page CANNOT reach the station ----
   await check('no API token in the frame', await frameEval(`typeof window.__STARNET_API_TOKEN__ === 'undefined'`));
