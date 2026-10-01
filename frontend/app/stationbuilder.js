@@ -1181,7 +1181,7 @@
      world-model call Build Mode makes for that tool, so it passes or fails on Build Mode's own checks. Props and rooms
      made earlier in the same plan are named with `as` and used by that name. Ops run in order; the first that fails
      refuses the whole plan, naming it. */
-  const REFIT_MAX = 400;
+  const REFIT_MAX = 1500;   // a whole station designed by hand, room by room and piece by piece, fits one plan
   const REFIT_OPS = 'room, hall, resize, move, delete, rename, type, floor, walls, hull, paint, style, place, rotate, mirror, agent, door, belt, unbelt, connect, role, brief, label, cap, tries, routes, stamp, edit';
   const tileRect = o => (o && isFinite(o.x) && isFinite(o.y) && isFinite(o.w) && isFinite(o.h) && o.w >= 1 && o.h >= 1) ? { x1: Math.round(o.x), y1: Math.round(o.y), x2: Math.round(o.x) + Math.round(o.w) - 1, y2: Math.round(o.y) + Math.round(o.h) - 1 } : null;
   const tileOf = v => Array.isArray(v) && v.length === 2 && v.every(n => isFinite(n)) ? { x: Math.round(v[0]), y: Math.round(v[1]) } : v && isFinite(v.x) && isFinite(v.y) ? { x: Math.round(v.x), y: Math.round(v.y) } : null;
@@ -1294,7 +1294,14 @@
     // to do, wherever it falls: nothing that changes what stands hides behind "and more"
     const weighty = t => / removed|taken up|resized| moved to|is told:/.test(t);
     let shown = list;
-    if (list.length > 30) { const rest = list.slice(25), keep = rest.filter(weighty); shown = list.slice(0, 25).concat(keep, rest.length > keep.length ? ['… and ' + (rest.length - keep.length) + ' more edits that add or name pieces'] : []); }
+    if (list.length > 30) {
+      const rest = list.slice(25), keep = rest.filter(weighty), named = keep.slice(0, 60), over = keep.slice(60);
+      // a design of hundreds of edits: past 60 weighty ones the card counts the rest by kind (the preview shows them all)
+      const kinds = [[' removed', 'removals'], [' taken up', 'belts taken up'], [' resized', 'resizes'], [' moved to', 'moves'], ['is told:', 'briefs']]
+        .map(([w, n]) => [over.filter(t => t.includes(w)).length, n]).filter(([c]) => c).map(([c, n]) => c + ' ' + n);
+      shown = list.slice(0, 25).concat(named, over.length ? ['… and ' + over.length + ' more edits that change what stands (' + kinds.join(', ') + ')'] : [],
+        rest.length > keep.length ? ['… and ' + (rest.length - keep.length) + ' more edits that add or name pieces'] : []);
+    }
     const summary = 'BUILD MODE, ' + ops.length + (ops.length === 1 ? ' edit' : ' edits') + ', in order: ' + shown.join('; ') + '.' + (warn.length ? ' Heads-up: ' + warn.join('; ') + '.' : '') + ' One UNDO in Build mode takes all of it back.';
     return { ok: true, plan: { floorSig: sigOf(doc), resultSig: sigOf(probe.serialize()), spec: { kind: 'refit', ops: clone(ops) }, summary, notes: warn, steps: [], line: null, where: 'a refit of ' + ops.length + (ops.length === 1 ? ' edit' : ' edits'), rooms: [],
       preview: previewOf(WM, doc, probe.serialize(), [], null) } };

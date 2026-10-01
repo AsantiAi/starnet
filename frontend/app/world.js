@@ -6789,16 +6789,21 @@ const World = (() => {
     if (stillPass || !cache || !cv || !ctx || !geo || camAnim || kindleArmed || arrivalScene || wakeDark > 0.002) return null;
     const W = cache.baseCv.width, H = cache.baseCv.height;
     if (!(W > 1 && H > 1)) return null;
+    // opts.crop { x, y, w, h } in station pixels draws only that part (the lead builder's close look at a room); absent = the whole station
+    const cr = (opts && opts.crop) ? (() => { const c = opts.crop, x = Math.max(0, Math.floor(c.x)), y = Math.max(0, Math.floor(c.y));
+      const w = Math.min(W, Math.ceil(c.x + c.w)) - x, h = Math.min(H, Math.ceil(c.y + c.h)) - y; return w > 1 && h > 1 ? { x, y, w, h } : null; })() : null;
+    if (opts && opts.crop && !cr) return null;
+    const CW = cr ? cr.w : W, CH = cr ? cr.h : H;
     const cap = Math.max(320, Math.min(2400, Number(maxPx) || 1600));
-    const s = Math.max(1, Math.min(6, cap / Math.max(W, H)));   // never draw the pixel art below 1:1 (that crushes it); a big station is shrunk smoothly afterwards
+    const s = Math.max(1, Math.min(6, cap / Math.max(CW, CH)));   // never draw the pixel art below 1:1 (that crushes it); a big station is shrunk smoothly afterwards
     const off = document.createElement('canvas');
-    off.width = Math.max(1, Math.round(W * s)); off.height = Math.max(1, Math.round(H * s));
+    off.width = Math.max(1, Math.round(CW * s)); off.height = Math.max(1, Math.round(CH * s));
     const g = off.getContext('2d');
     if (!g) return null;
     const keep = { cv, ctx, scale, panX, panY, overlaysOn };
     const landed = typeof Terrain !== 'undefined' && Terrain.active();
     let drawn = false;
-    cv = off; ctx = g; scale = s; panX = 0; panY = 0; overlaysOn = false;
+    cv = off; ctx = g; scale = s; panX = cr ? -cr.x * s : 0; panY = cr ? -cr.y * s : 0; overlaysOn = false;
     stillPass = { fill: landed ? Terrain.baseColor() : '#040302', noBodies: !!(opts && opts.noBodies) };
     // the wall clock, never the last frame's time: a hidden or minimized window stops its frames, and a stale
     // clock froze every timed effect (a failed run's red desk flash stayed lit in every still)
@@ -6820,11 +6825,23 @@ const World = (() => {
       og.imageSmoothingEnabled = true; og.imageSmoothingQuality = 'high';
       og.drawImage(off, 0, 0, out.width, out.height);
     }
+    const ox = cr ? cr.x : 0, oy = cr ? cr.y : 0;
     const bodies = [agent, ...crew].filter(b => b && !b.unplaced).map(b => ({
       agentId: String(b.agentId || b.id || ''), name: String(b.name || ''),
-      x: Math.round(bodyPosX(b) * s * k), y: Math.round(bodyPosY(b) * s * k), working: !!b.working
+      x: Math.round((bodyPosX(b) - ox) * s * k), y: Math.round((bodyPosY(b) - oy) * s * k), working: !!b.working
     }));
     return { canvas: out, width: out.width, height: out.height, bodies, scale: s * k };
+  }
+
+  /* A STILL OF SOME OF THE STATION'S OWN TILES (the lead builder's station.map { look: a room }): renderStill cropped to
+     world tiles x1..x2, y1..y2, one tile of margin round them and the wall faces above the top row. Null when no still. */
+  function renderStillOfTiles(t, maxPx, opts) {
+    if (!t || !station) return null;
+    try { if (geoDirty) rederive(); if (bakeDirty || !cache) rebake(); } catch (_) { return null; }
+    if (!geo || !geo.origin) return null;
+    const up = (typeof StationBake !== 'undefined' && StationBake.WALL && StationBake.WALL.up) || T;
+    const x = (t.x1 - geo.origin.tx - 1) * T, y = (t.y1 - geo.origin.ty - 1) * T - up;
+    return renderStill(maxPx, Object.assign({}, opts, { crop: { x, y, w: (t.x2 - t.x1 + 3) * T, h: (t.y2 - t.y1 + 3) * T + up } }));
   }
 
   /* THE CREW AS THE STAGE LAST DREW THEM, for a surface that draws them itself (the phone's live station view):
@@ -10727,7 +10744,7 @@ const World = (() => {
     pollFeed: () => pollFeedState(),
     pollShip: () => pollShipStats()
   });
-  return { init, rebake, frameReviewRoom, renderStill, crewFrames, crt: CRT, slagLog: () => (slaglog ? slaglog.recent() : []),
+  return { init, rebake, frameReviewRoom, renderStill, renderStillOfTiles, crewFrames, crt: CRT, slagLog: () => (slaglog ? slaglog.recent() : []),
     // LINE WATCH: the Workflow panel pushes the step-test session it polls; reads today's numbers for a line
     noteStepTest, lineStatsFor: id => (lineStats.known ? (lineStats.byLine[id] || null) : null), pollLineStats,
     // a bay's live state — the lamp's own fold (WORKING only once the sidecar confirmed the run), with how long it has held

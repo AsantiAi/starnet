@@ -78,7 +78,7 @@ function startMock() {
       const pre = ['tool_search'].concat(mock.lookFirst ? ['station_map'] : []), seq = pre.length;   // tool calls before the plan
       if (offered && answered.length === 1) mock.searched.push({ result: answered[0], toolsAfter: null });
       if (offered && answered.length === 1 && mock.searched.length) mock.searched[mock.searched.length - 1].toolsAfter = (p.tools || []).map(t => t && t.function && t.function.name);
-      if (offered && answered.length < seq) call(pre[answered.length], pre[answered.length] === 'tool_search' ? { query: 'station builder' } : {});
+      if (offered && answered.length < seq) call(pre[answered.length], pre[answered.length] === 'tool_search' ? { query: 'station builder' } : (mock.mapArgs || {}));
       else if (offered && answered.length === seq) { if (mock.lookFirst) mock.results.push(answered[1]); call(mock.planTool, mock.planArgs); }
       else if (offered && answered.length === seq + 1) {
         mock.results.push(answered[seq]);
@@ -366,6 +366,27 @@ try {
   const undone11 = await evalJS(cdp, `(() => { const st = App.station(); const u = st.undo(); return { ok: u && u.ok, json: JSON.stringify(st.serialize()) }; })()`);
   check('one UNDO brings the old station back exactly', undone11.ok && undone11.json === pre11.json, String(undone11.ok));
   mock.lookFirst = false;
+
+  // LOOK (Andrew 10-01: the model designs freely): through the real loop, station_map { look: a room } hands the model that
+  // room as it really renders (the next model request carries the picture), then the lead refits what it saw
+  const homeName = await evalJS(cdp, `(() => { const st = App.station(); const r = st.rooms().find(x => x.kind !== 'corridor' && st.props().some(p => p.agentId === App.heroId() && st.roomAt(p.x, p.y) === x.id)) || st.rooms().find(x => x.kind !== 'corridor'); return r.name; })()`);
+  mock.lookFirst = true; mock.mapArgs = { look: homeName };
+  mock.planTool = 'station_plan'; mock.planArgs = { refit: [{ op: 'rename', room: homeName, name: 'LOOKED AT' }] };
+  const nReq = mock.requests.length;
+  const run12 = await leadRun(base, token, 'take a look at the bridge, then rename it');
+  const pics = mock.requests.slice(nReq).flatMap(p => (p.messages || []).filter(m => m && m.role === 'user' && Array.isArray(m.content)).flatMap(m => m.content.filter(c => c && c.type === 'image_url').map(c => String((c.image_url && c.image_url.url) || ''))));
+  const pic = pics[0] || '', b64 = pic.replace(/^data:image\/(webp|jpeg);base64,/, '');
+  check('station_map { look } puts the room as it renders in front of the model', run12.status === 200 && /^data:image\/(webp|jpeg);base64,(UklGR|\/9j\/)/.test(pic) && b64.length > 3000 && b64.length <= 180000, pics.length + ' picture(s), ' + b64.length + ' base64 chars');
+  check('with a note saying what it shows', /^A picture of [A-Z ]+ as it renders now \(\d+ x \d+ px; it shows tiles x -?\d+--?\d+, y -?\d+--?\d+ with the wall faces above, about \d+ px a tile\)/.test(mock.results[mock.results.length - 3] || ''), String(mock.results[mock.results.length - 3] || '').slice(0, 160));
+  const seen = await evalJS(cdp, `(async () => { const img = new Image(); img.src = ${JSON.stringify(pic)}; await img.decode(); const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height).data, colours = new Set(); let lit = 0; for (let i = 0; i < d.length; i += 16) { colours.add((d[i] >> 4) + '.' + (d[i + 1] >> 4) + '.' + (d[i + 2] >> 4)); if (d[i] + d[i + 1] + d[i + 2] > 90) lit++; }
+    return { w: img.width, h: img.height, colours: colours.size, lit: lit / (d.length / 16) }; })()`);
+  check('and the picture is the real room, drawn (not a blank frame)', seen && seen.w >= 300 && seen.colours > 60 && seen.lit > 0.25, JSON.stringify(seen));
+  const renamed = await evalJS(cdp, `(() => App.station().rooms().some(r => r.name === 'LOOKED AT'))()`);
+  check('then the lead refits what it saw', renamed === true);
+  const undone12 = await evalJS(cdp, `(() => { const u = App.station().undo(); return !!(u && u.ok) && App.station().rooms().some(r => r.name === ${JSON.stringify(homeName)}); })()`);
+  check('one UNDO takes the refit back', undone12 === true);
+  mock.lookFirst = false; mock.mapArgs = {};
 
   check('the mock carried every model call (no real provider)', mock.requests.length >= 30, String(mock.requests.length));
   check('no page exceptions', diagnostics.exceptions.length === 0, JSON.stringify(diagnostics.exceptions.slice(0, 3)));
