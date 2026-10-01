@@ -184,6 +184,32 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
   const first = await hv.view({ offset: 0, length: 1000 });
   A.eq([first.crewFree, first.crew && first.crew.bodies.length], [true, 1], 'a phone that opens gets the room and where the crew are at once');
 
+  // the room checked again and unchanged: the picture is current (its age restarts) without being re-sent
+  now += 30000;
+  A.eq(v3.touch(), true, 'an unchanged room can be marked current');
+  A.eq(v3.meta().checkedAt, now, 'its checked time moves');
+  A.ok(v3.meta().at < now, 'while the picture itself (and what a phone has) stays the same');
+  // the crew stream goes only to phones that are looking
+  v3.want('phone-a'); now += 1000; v3.want('phone-b'); now += 20000;
+  A.eq(v3.lookers().sort(), ['phone-a', 'phone-b'], 'phones that asked recently are looking');
+  now += 4500;
+  A.eq(v3.lookers(), ['phone-b'], 'a phone that stopped asking stops getting the crew stream');
+  // a frozen crew (the desk window hidden) is reported, so the phone never calls it LIVE
+  v3.putCrew([{ agentId: 'forge', key: 'approved_robot.rot.south', idx: 0, x: 1, y: 1, w: 5, h: 9 }], true);
+  A.eq(v3.meta().crewPaused, true, 'a paused crew stream is known');
+
+  // a long conversation always fits one sealed frame through the relay: newest turns first, within the budget
+  const longTurns = [];
+  for (let i = 0; i < 60; i++) longTurns.push({ role: i % 2 ? 'assistant' : 'user', content: 'x'.repeat(9000) + ' #' + i, ts: i });
+  const hl = makeRemoteHost({ now: () => now, newId: () => 'r', broadcast: () => {}, roster: () => [], liveRuns: () => [],
+    transcript: { streams: () => [], history: () => longTurns }, deskSessions: () => [] });
+  const th = await hl.thread({ streamId: 'long', limit: 200 });
+  const bytes = Buffer.byteLength(JSON.stringify(th));
+  A.ok(bytes < 200 * 1024, 'a 540 KB conversation comes back under 200 KB (' + Math.round(bytes / 1024) + ' KB)');
+  A.ok(/#59$/.test(th[th.length - 1].content) && th.length < 60, 'the newest turns are the ones kept');
+  // a file read for an agent that does not exist makes nothing
+  A.eq((await hl.fetchFile({ agentId: 'ghost', path: 'x.txt', offset: 0, length: 10 })).ok, false, 'no file read (and no folder) for a made-up agent');
+
   /* ---------- 6. ACTIVITY: running now + what finished, from the run history ---------- */
   history = [
     { runId: 'h1', agentId: 'forge', reason: 'done', title: 'draft the launch plan', deliveryText: 'Here is the **plan**', streamId: 'ws_1', startedAt: 100, endedAt: 900, artifacts: [{ kind: 'file', path: 'plan.md' }], deliverable: { main: 'out/plan.pdf' }, usd: 0.02 },

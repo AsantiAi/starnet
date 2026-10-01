@@ -122,9 +122,9 @@ function makeGateway(deps) {
       return r && r.ok === false ? bad(r.error || 'unknown file') : good(r);
     },
 
-    async view(a) {
+    async view(a, ctx) {
       const stamp = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 0; };
-      return good(await host.view({ have: stamp(a.have), at: stamp(a.at), offset: clampInt(a.offset, 0, Number.MAX_SAFE_INTEGER, 0), length: clampInt(a.length, 1, MAX_CHUNK, MAX_CHUNK) }));
+      return good(await host.view({ deviceId: ctx.deviceId, have: stamp(a.have), at: stamp(a.at), offset: clampInt(a.offset, 0, Number.MAX_SAFE_INTEGER, 0), length: clampInt(a.length, 1, MAX_CHUNK, MAX_CHUNK) }));
     },
 
     async sprite(a) {

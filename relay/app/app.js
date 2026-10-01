@@ -33,7 +33,8 @@
     status: null, approvals: [], threads: [], files: [], routines: [],
     tab: 'station', page: null, thread: null, file: null, target: null, query: '',
     live: new Map(),            // runId -> { streamId, agentId, text, steps:[], ended }
-    stepOf: new Map(),           // runId -> the tool it is using right now (from the station's feed)
+    stepOf: new Map(),
+    drafts: new Map(),           // promptId -> a half-typed answer           // runId -> the tool it is using right now (from the station's feed)
     view: null, viewNone: false, viewBusy: false,   // the station picture: { at, w, h, bodies, url, age0, seenAt }
     portraits: new Map(), portraitBusy: false,      // skin -> image URL (null = none)
     scroll: {}, seen: new Set(), retryMs: 1000, retryTimer: null, arrivedAt: new Map()
@@ -56,7 +57,8 @@
   function agentName(id) { const a = agentOf(id); return (a && a.name) || id || 'AGENT'; }
   const isWorking = (a) => !!a && a.state === 'working' && S.linkState === 'open';
   // a one-line label from text that may carry markdown marks
-  const plain = (t) => String(t == null ? '' : t).replace(/`{1,3}|\*\*|^\s{0,3}#{1,6}\s+/gm, '').replace(/\s+/g, ' ').trim();
+  const plain = (t) => { const q = questionOf(t); return q ? 'Asks: ' + q.question : plainText(t); };
+  const plainText = (t) => String(t == null ? '' : t).replace(/`{1,3}|\*\*|^\s{0,3}#{1,6}\s+/gm, '').replace(/\s+/g, ' ').trim();
   const streamLive = (streamId) => { for (const [, L] of S.live) if (L.streamId === streamId && !L.ended) return true; return false; };
   let toastT = null;
   function toast(msg, bad) {
@@ -76,6 +78,17 @@
       last = m.index + tok.length;
     }
     if (last < s.length) node.appendChild(document.createTextNode(s.slice(last)));
+    for (const n of node.childNodes) if (n.nodeType === 3 && n.nodeValue.indexOf('**') >= 0) n.nodeValue = n.nodeValue.replace(/\*\*/g, '');
+  }
+  /* AN AGENT'S QUESTION. A run that needs the Commander's call ends on a machine line the desk turns into choice chips:
+       TASK_QUESTION: <question> || <option> | <option>      (or "[free text]")      and the same shape for FORK:
+     The phone renders it the same way: the question, and one key per option that answers in the same conversation. */
+  const MARKER_RE = /^\s*(TASK_QUESTION|FORK):\s*(.+?)\s*\|\|\s*(.*)$/m;
+  function questionOf(text) {
+    const m = MARKER_RE.exec(String(text || ''));
+    if (!m) return null;
+    const opts = m[3].split('|').map(x => x.replace(/^[\s★*]+|[\s*]+$/g, '').trim()).filter(x => x && !/^\[free text\]$/i.test(x)).slice(0, 6);
+    return { kind: m[1], question: m[2].trim(), options: opts, before: String(text).slice(0, m.index).trim() };
   }
   function mdNode(text) {
     const root = el('div', 'md');
@@ -180,11 +193,20 @@
   async function ping() {
     if (S.linkState !== 'open') return;
     const t = performance.now();
-    try { await call('ping'); S.latency = Math.round(performance.now() - t); } catch (_) {}
+    try { await S.client.call('ping', {}, 12000); S.latency = Math.round(performance.now() - t); S.lastOkAt = Date.now(); }
+    catch (_) { S.latency = null; S.linkState = 'connecting'; try { S.client.close(); } catch (__) {} scheduleReconnect(); render(true); }
     paintLamp();
   }
 
-  async function refreshStatus() { try { const r = await call('status'); if (r.ok) S.status = r.data; } catch (_) {} }
+  async function refreshStatus() {
+    try {
+      const r = await call('status');
+      if (!r.ok) return;
+      S.status = r.data;
+      const running = new Set((r.data.runs || []).map(x => x.runId));
+      for (const [runId, L] of S.live) if (!L.ended && !running.has(runId) && Date.now() - (L.seenAt || 0) > 4000) L.ended = { runId, reason: 'gone' };
+    } catch (_) {}
+  }
   async function refreshApprovals() { try { const r = await call('approvals'); if (r.ok) { S.approvals = r.data; for (const a of S.approvals) if (!S.arrivedAt.has(a.promptId)) S.arrivedAt.set(a.promptId, Date.now()); } } catch (_) {} }
   async function refreshThreads() { try { const r = await call('threads', { limit: 50 }); if (r.ok) S.threads = r.data; } catch (_) {} }
   async function refreshRoutines() { try { const r = await call('routines'); if (r.ok) S.routines = r.data; } catch (_) {} }
@@ -209,7 +231,7 @@
       render(true); return;
     }
     if (e.type === 'approval.closed') { S.approvals = S.approvals.filter(a => a.promptId !== e.promptId); render(true); return; }
-    if (e.type === 'run.started') { S.live.set(e.runId, { streamId: e.streamId, agentId: e.agentId, text: '', steps: [], ended: null }); statusSoonish(); if (S.tab === 'sessions') activitySoonish(); render(true); return; }
+    if (e.type === 'run.started') { S.live.set(e.runId, { streamId: e.streamId, agentId: e.agentId, text: '', steps: [], ended: null, seenAt: Date.now() }); statusSoonish(); if (S.tab === 'sessions') activitySoonish(); render(true); return; }
     const L = e.runId && S.live.get(e.runId);
     const showing = L && S.thread && S.thread.streamId === L.streamId;
     if (e.type === 'run.text' && L) { L.text = e.text; if (showing) renderLive(); return; }
@@ -224,7 +246,7 @@
       if (S.tab === 'sessions') activitySoonish();
       return;
     }
-    if (e.type === 'view.crew') { if (S.view) applyCrew(e.bodies); return; }
+    if (e.type === 'view.crew') { if (S.view) { S.crewPaused = !!e.paused; applyCrew(e.bodies); paintHero(); } return; }
     if (e.type === 'station' && e.name === 'agent.tool_call' && e.payload && e.payload.runId && e.payload.name) {
       S.stepOf.set(String(e.payload.runId), String(e.payload.name));
       if (S.stepOf.size > 200) S.stepOf.delete(S.stepOf.keys().next().value);
@@ -368,8 +390,11 @@
     return { root, frame, cv, chip, chipText, expand, empty, eb, es };
   })();
   const viewAge = () => (S.view ? S.view.age0 + (Date.now() - S.view.seenAt) : Infinity);
-  const viewLive = () => S.linkState === 'open' && viewAge() < LIVE_VIEW_MS;
-  function stampText() { return viewLive() ? 'LIVE' : 'AS OF ' + ago(viewAge()).toUpperCase() + ' AGO'; }
+  const viewLive = () => S.linkState === 'open' && viewAge() < LIVE_VIEW_MS && !(S.view && S.view.crewFree && S.crewPaused);
+  function stampText() {
+    if (S.linkState === 'open' && viewAge() < LIVE_VIEW_MS && S.crewPaused) return 'DESK WINDOW HIDDEN';
+    return viewLive() ? 'LIVE' : 'AS OF ' + ago(viewAge()).toUpperCase() + ' AGO';
+  }
 
   function paintHero() {
     const v = S.view;
@@ -397,7 +422,7 @@
       let d = r.data;
       if (d.none) { S.viewNone = true; S.deskOpen = !!d.desk; return; }
       S.viewNone = false;
-      if (d.same && S.view) { S.view.age0 = Math.max(0, d.now - d.at); S.view.seenAt = Date.now(); return; }
+      if (d.same && S.view) { S.view.age0 = Math.max(0, d.now - (d.checked || d.at)); S.view.seenAt = Date.now(); S.crewPaused = !!d.crewPaused; return; }
       const first = d, parts = [];
       for (let i = 0; i < 12; i++) {
         parts.push(bytesOf(d.data));
@@ -411,7 +436,8 @@
       try { await pre.decode(); } catch (_) { URL.revokeObjectURL(url); return; }
       const old = S.view && S.view.url;
       if (!S.view || S.view.w !== first.w || S.view.h !== first.h) scene.crop = null;
-      S.view = { at: first.at, w: first.w, h: first.h, scale: Number(first.scale) || 0, bodies: first.bodies || [], crewFree: !!first.crewFree, url, age0: Math.max(0, first.now - first.at), seenAt: Date.now() };
+      S.view = { at: first.at, w: first.w, h: first.h, scale: Number(first.scale) || 0, bodies: first.bodies || [], crewFree: !!first.crewFree, url, age0: Math.max(0, first.now - (first.checked || first.at)), seenAt: Date.now() };
+      S.crewPaused = !!first.crewPaused;
       scene.base = pre;
       if (first.crew && Array.isArray(first.crew.bodies) && !scene.crew.size) applyCrew(first.crew.bodies);
       paintHero();
@@ -580,7 +606,7 @@
     const box = el('div', 'glass pad push-card');
     if (sup === 'install') {
       box.appendChild(el('div', 'push-h', 'Get a tap when your crew needs you'));
-      box.appendChild(el('div', 'note-line', 'On iPhone, notifications work once StarNet is on your Home Screen: tap Share, then Add to Home Screen, and open it from there.'));
+      box.appendChild(el('div', 'note-line', 'On iPhone, notifications work in the Home Screen app. Press PAIR A PHONE on your desktop, open the link here, and follow the steps: Copy, Add to Home Screen, Paste.'));
     } else if (sup === 'no') {
       box.appendChild(el('div', 'note-line', 'This browser cannot receive notifications.'));
     } else {
@@ -600,9 +626,14 @@
     return box;
   }
   // a notification tap: '#needs' opens STATION, '#thread=<id>' opens that conversation
-  function openFromPush(url) {
+  async function openFromPush(url) {
     const m = /^#thread=([A-Za-z0-9_-]{1,64})$/.exec(String(url || ''));
-    if (m) { const t = S.threads.find(x => x.streamId === m[1]); openThread(m[1], (t && t.agentId) || S.target); return; }
+    if (m) {
+      let t = S.threads.find(x => x.streamId === m[1]);
+      if (!t) { await refreshThreads(); t = S.threads.find(x => x.streamId === m[1]); }
+      const agentId = (t && t.agentId) || (((S.activity && S.activity.done) || []).find(r => r.streamId === m[1]) || {}).agentId || S.target;
+      openThread(m[1], agentId); return;
+    }
     if (url === '#needs') { closeViewer(); setTab('station'); }
   }
 
@@ -691,7 +722,7 @@
         opts.appendChild(b);
       }
       if (opts.childNodes.length) box.appendChild(opts);
-      const ta = el('textarea'); ta.rows = 2; ta.placeholder = 'Or type an answer…'; box.appendChild(ta);
+      const ta = el('textarea'); ta.rows = 2; ta.placeholder = 'Or type an answer…'; ta.value = S.drafts.get(a.promptId) || ''; ta.oninput = () => S.drafts.set(a.promptId, ta.value); box.appendChild(ta);
       const row = el('div', 'btns'); const send = el('button', 'btn go', 'Answer'); send.type = 'button';
       send.onclick = () => { if (ta.value.trim()) replyQ(a, ta.value, box); };
       row.appendChild(send); box.appendChild(row);
@@ -700,7 +731,7 @@
       if (a.argsSummary) box.appendChild(el('pre', null, a.argsSummary));
       const row = el('div', 'btns fill');
       const mk = (label, cls, decision) => { const b = el('button', 'btn ' + cls, label); b.type = 'button'; b.onclick = () => decide(a, decision, box); row.appendChild(b); };
-      mk('Once', 'go', 'once'); mk('This session', '', 'session'); mk('Deny', 'no', 'deny');
+      mk('Once', 'go', 'once'); if (!/^path\.trust$/.test(String(a.tool || ''))) mk('This session', '', 'session'); mk('Deny', 'no', 'deny');
       box.appendChild(row);
       box.appendChild(el('div', 'note', 'Arrived ' + clock(Date.now() - arrived) + ' ago. "Always" and full access are set at the desk.'));
     }
@@ -849,13 +880,27 @@
     const log = el('div', 'log');
     const turns = S.thread.turns;
     if (!turns) log.appendChild(el('div', 'empty', 'Loading…'));
-    else for (const t of turns) {
-      if (t.role !== 'user' && t.role !== 'assistant') continue;
-      if (!t.content || t.content === 'null') continue;
-      const m = el('div', 'msg ' + (t.role === 'user' ? 'user' : 'agent'));
-      m.appendChild(el('span', 'who', t.role === 'user' ? 'YOU' : agentName(t.agentId || S.thread.agentId).toUpperCase()));
-      m.appendChild(mdNode(t.content));
-      log.appendChild(m);
+    else {
+      const shown = turns.filter(t => (t.role === 'user' || t.role === 'assistant') && t.content && t.content !== 'null');
+      shown.forEach((t, i) => {
+        const m = el('div', 'msg ' + (t.role === 'user' ? 'user' : 'agent'));
+        m.appendChild(el('span', 'who', t.role === 'user' ? 'YOU' : agentName(t.agentId || S.thread.agentId).toUpperCase()));
+        const q = t.role === 'assistant' ? questionOf(t.content) : null;
+        if (!q) { m.appendChild(mdNode(t.content)); log.appendChild(m); return; }
+        if (q.before) m.appendChild(mdNode(q.before));
+        const box = el('div', 'qcard');
+        box.appendChild(el('div', 'q', q.question));
+        // only the newest question can still be answered (anything later means it was answered already)
+        const open = i === shown.length - 1 && !streamLive(S.thread.streamId) && S.linkState === 'open';
+        if (q.options.length) {
+          const row = el('div', 'btns');
+          for (const o of q.options) { const b = el('button', 'btn' + (open ? '' : ' quiet'), o); b.type = 'button'; b.disabled = !open; if (open) b.onclick = () => { $('compose-text').value = o; send(); }; row.appendChild(b); }
+          box.appendChild(row);
+        }
+        if (open) box.appendChild(el('div', 'note-line', q.options.length ? 'Tap an answer, or type your own below.' : 'Type your answer below.'));
+        m.appendChild(box);
+        log.appendChild(m);
+      });
     }
     const mine = S.approvals.filter(a => [...S.live.entries()].some(([rid, L]) => rid === a.runId && L.streamId === S.thread.streamId));
     for (const a of mine) log.appendChild(askCard(a));
@@ -1029,7 +1074,7 @@
       const r = await call('send', { agentId, text, streamId: S.thread ? S.thread.streamId : undefined });
       if (!r.ok) { toast(r.error, true); return; }
       ta.value = ''; autosize();
-      S.live.set(r.data.runId, S.live.get(r.data.runId) || { streamId: r.data.streamId, agentId, text: '', steps: [], ended: null });
+      S.live.set(r.data.runId, S.live.get(r.data.runId) || { streamId: r.data.streamId, agentId, text: '', steps: [], ended: null, seenAt: Date.now() });
       await openThread(r.data.streamId, agentId);
       refreshThreads();   // so the new session is in the list when you go back
     } catch (e) { toast(e.message, true); }
@@ -1039,7 +1084,7 @@
 
   /* ---------- pairing ---------- */
   const DECK = ['bar', 'view', 'tabs'];
-  function showSetup(pairing) { $('setup').hidden = false; $('setup-pairing').hidden = !pairing; $('setup-howto').hidden = !!pairing; for (const id of DECK.concat('compose')) $(id).hidden = true; }
+  function showSetup(pairing) { $('setup').hidden = false; $('setup-install').hidden = true; $('setup-pairing').hidden = !pairing; $('setup-howto').hidden = !!pairing; for (const id of DECK.concat('compose')) $(id).hidden = true; }
   function showDeck() { $('setup').hidden = true; for (const id of DECK) $(id).hidden = false; }
 
   async function pairFrom(blob) {
@@ -1057,16 +1102,56 @@
   }
 
   const looking = () => document.visibilityState === 'visible' && S.linkState === 'open';
+  /* GETTING ONTO THE HOME SCREEN. On iPhone a Home Screen app gets its OWN storage, apart from Safari: a phone paired in
+     Safari opens from the Home Screen unpaired, and its one-time code is already spent. So on an iPhone the pairing link
+     does NOT pair in Safari. It walks you through copying the link and adding StarNet to the Home Screen, and the Home
+     Screen app pairs from a single Paste. Everywhere else (Android, desktop) the link pairs straight away. */
+  const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const PAIR_RE = /[#&]pair=([A-Za-z0-9_-]{20,})/;
+  function showInstall(blob) {
+    $('setup').hidden = false; $('setup-install').hidden = false; $('setup-pairing').hidden = true; $('setup-howto').hidden = true;
+    for (const id of DECK.concat('compose')) $(id).hidden = true;
+    const link = location.origin + location.pathname + '#pair=' + blob;
+    const copy = $('install-copy');
+    copy.onclick = async () => {
+      try { await navigator.clipboard.writeText(link); copy.textContent = 'Copied'; copy.classList.add('done'); toast('Link copied. Now add StarNet to your Home Screen.'); }
+      catch (_) { toast('Could not copy here. Use it in Safari instead, or press PAIR A PHONE again.', true); }
+    };
+    $('install-here').onclick = () => pairAndStart(blob);
+  }
+  async function pairAndStart(blob) {
+    try { S.rec = await pairFrom(blob); toast('Paired'); }
+    catch (e) { showSetup(true); $('setup-err').textContent = friendlyPairError(e); $('setup-err').hidden = false; $('setup-retry').hidden = false; return; }
+    startDeck();
+  }
+  function friendlyPairError(e) {
+    const m = String((e && e.message) || e || '');
+    if (/expired|already used/i.test(m)) return 'That pairing link was already used or ran out. On your desktop press PAIR A PHONE again and use the new one.';
+    if (/already paired/i.test(m)) return 'This phone is already paired. If it lost its pairing, remove it on the desktop (SETTINGS → DEVICES) and pair again.';
+    return m || 'Pairing did not work. Press PAIR A PHONE on your desktop for a fresh link.';
+  }
+  async function pasteAndPair() {
+    let text = '';
+    try { text = await navigator.clipboard.readText(); } catch (_) { text = ''; }
+    const m = PAIR_RE.exec(text || '');
+    if (!m) { $('setup-howto').querySelector('details').open = true; toast(text ? 'That is not a StarNet pairing link' : 'Nothing to paste. Copy the pairing link first, or paste it below.', true); return; }
+    pairAndStart(m[1]);
+  }
   async function boot() {
-    const m = /[#&]pair=([A-Za-z0-9_-]+)/.exec(location.hash || '');
+    const m = PAIR_RE.exec(location.hash || '');
     if (m) {
       history.replaceState(null, '', location.pathname);   // the one-time code leaves the address bar at once
-      try { S.rec = await pairFrom(m[1]); toast('Paired'); }
-      catch (e) { showSetup(true); $('setup-err').textContent = e.message; $('setup-err').hidden = false; $('setup-retry').hidden = false; return; }
-    } else {
-      try { S.rec = await RemoteStore.load(); } catch (_) { S.rec = null; }
+      if (isIOS() && !isStandalone()) return showInstall(m[1]);   // pair in the Home Screen app, where it will live
+      return pairAndStart(m[1]);
     }
+    try { S.rec = await RemoteStore.load(); } catch (_) { S.rec = null; }
     if (!S.rec) return showSetup(false);
+    startDeck();
+  }
+  let deckStarted = false;
+  function startDeck() {
+    if (deckStarted) return;
+    deckStarted = true;
     showDeck(); paintLamp(); render(); connect();
     const openHash = /^#(needs|thread=[A-Za-z0-9_-]{1,64})$/.test(location.hash) ? location.hash : '';
     if (openHash) { history.replaceState(null, '', location.pathname); setTimeout(() => openFromPush(openHash), 2500); }
@@ -1083,7 +1168,8 @@
 
   $('back').appendChild(icon('back')); $('gear').appendChild(icon('gear')); $('compose-send').appendChild(icon('send'));
   for (const s of document.querySelectorAll('[data-ico]')) s.appendChild(icon(s.dataset.ico));
-  $('setup-go').onclick = () => { const v = $('setup-link').value.trim(); const m = /#pair=([A-Za-z0-9_-]+)/.exec(v); if (!m) { toast('Paste the whole pairing link from the desktop', true); return; } location.hash = 'pair=' + m[1]; location.reload(); };
+  $('setup-go').onclick = () => { const v = $('setup-link').value.trim(); const m = PAIR_RE.exec(v); if (!m) { toast('Paste the whole pairing link from the desktop', true); return; } pairAndStart(m[1]); };
+  $('setup-paste').onclick = pasteAndPair;
   $('setup-retry').onclick = () => location.replace(location.pathname);
   $('compose-send').onclick = send;
   $('compose-to').onclick = openSheet;

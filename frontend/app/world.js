@@ -6836,7 +6836,7 @@ const World = (() => {
       const p = b && !b.unplaced ? b._poseLast : null;
       if (!p || !p.key) continue;
       out.push({ agentId: String(b.agentId || b.id || ''), key: p.key, idx: b._renderFrame | 0,
-        x: p.x, y: p.y, w: p.w, h: p.h, walking: b.state === 'walk', working: !!b.working });
+        x: p.x, y: p.y, w: p.w, h: p.h, at: p.at || 0, walking: b.state === 'walk', working: !!b.working });
     }
     return out;
   }
