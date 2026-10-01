@@ -70,6 +70,10 @@ function makeChromiumInstaller(deps) {
   const F = deps.fs || fs;
   const key = platformKey(platform, arch);
   const currentFile = path.join(root, 'current.json');
+  const now = typeof deps.now === 'function' ? deps.now : () => 0;   // the composition root injects the clock (no clock: no cooldown)
+  // after a failed download, wait before trying again: every browser call must not start another ~150 MB download
+  const retryAfterMs = deps.retryAfterMs > 0 ? deps.retryAfterMs : 10 * 60 * 1000;
+  let failedAt = 0, lastError = null;
 
   let st = { state: 'idle', received: 0, total: 0, version: null, error: null };
   let inflight = null;
@@ -103,6 +107,7 @@ function makeChromiumInstaller(deps) {
     const zipFile = path.join(root, 'download-' + version + '.zip');
     const stage = path.join(root, 'unpack-' + version);
     const finalDir = path.join(root, version);
+    partial = [zipFile, stage];   // removed if anything below fails
     const res = await fetchImpl(u.href);
     if (!res.ok || !res.body) throw new Error('the browser download failed (HTTP ' + res.status + ')');
     st.total = Number(res.headers && res.headers.get && res.headers.get('content-length')) || 0;
@@ -124,17 +129,27 @@ function makeChromiumInstaller(deps) {
     F.renameSync(stage, finalDir);
     F.writeFileSync(currentFile, JSON.stringify({ version, exe: exeRel }, null, 2));
     try { F.rmSync(zipFile, { force: true }); } catch (e) { failNote('browser-install.cleanup', e); }
+    partial = [];
     st.state = 'ready';
     return path.join(finalDir, exeRel);
+  }
+  let partial = [];
+  function cleanPartial() {
+    for (const p of partial) { try { F.rmSync(p, { recursive: true, force: true }); } catch (e) { failNote('browser-install.cleanup', e); } }
+    partial = [];
   }
 
   // the downloaded browser's path — downloading it first if there is none (one download, however many callers)
   function ensure() {
     const have = find();
     if (have) return Promise.resolve(have);
+    if (!inflight && failedAt && now() - failedAt < retryAfterMs) {
+      return Promise.reject(new Error('the browser download failed a moment ago (' + lastError + ') — it is retried in a few minutes; installing Chrome, Edge or Chromium fixes it now'));
+    }
     if (!inflight) {
       inflight = download()
-        .catch(e => { st.state = 'failed'; st.error = String((e && e.message) || e); throw e; })
+        .then(p => { failedAt = 0; lastError = null; return p; })
+        .catch(e => { cleanPartial(); failedAt = now(); lastError = String((e && e.message) || e); st.state = 'failed'; st.error = lastError; throw e; })
         .finally(() => { inflight = null; });
     }
     return inflight;

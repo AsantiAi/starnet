@@ -70,6 +70,36 @@ const fakeUnzip = key => async (zip, dest) => {
     A.ok(err && /refusing a browser download from evil\.example/.test(err.message), 'only storage.googleapis.com is trusted');
     fs.rmSync(root, { recursive: true, force: true });
   }
+  // a failed download leaves nothing behind, and is not retried on every browser call
+  {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sn-binstall-'));
+    let t = 1000; const f = fakeFetch('win64', { short: true });
+    const inst = makeChromiumInstaller({ root, fetchImpl: f, platform: 'win32', arch: 'x64', unzip: fakeUnzip('win64'), now: () => t, retryAfterMs: 60000 });
+    let e1 = null; try { await inst.ensure(); } catch (e) { e1 = e; }
+    A.ok(e1 && /cut short/.test(e1.message), 'the first attempt fails');
+    A.ok(!fs.readdirSync(root).some(n => /^download-|^unpack-/.test(n)), 'its partial download is removed');
+    const zips = () => f.calls.filter(u => /\.zip$/.test(u)).length;
+    t += 1000;
+    let e2 = null; try { await inst.ensure(); } catch (e) { e2 = e; }
+    A.ok(e2 && /retried in a few minutes/.test(e2.message), 'a call right after the failure does not download again');
+    A.eq(zips(), 1, '…no second 150 MB download');
+    t += 60000;
+    try { await inst.ensure(); } catch (_) { /* still short */ }
+    A.eq(zips(), 2, 'after the wait it tries again');
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+  // LINUX + the downloaded browser + restricted user namespaces (Ubuntu 23.10+): --no-sandbox, and ONLY then
+  {
+    const T2 = require('../sidecar/tools/builtin/browser.js')._internals;
+    const own = '/home/u/.starnet/.browsers/150/chrome-linux64/chrome';
+    const restricted = () => '1\n', open = () => '0\n', missing = () => { throw new Error('ENOENT'); };
+    A.eq(T2.needsNoSandbox({ platform: 'linux', chromePath: own, ownChrome: own, readFile: restricted }), true, 'downloaded browser on restricted Linux: no sandbox (it cannot start otherwise)');
+    A.eq(T2.needsNoSandbox({ platform: 'linux', chromePath: own, ownChrome: own, readFile: open }), false, 'unrestricted Linux keeps the sandbox');
+    A.eq(T2.needsNoSandbox({ platform: 'linux', chromePath: own, ownChrome: own, readFile: missing }), false, 'no such setting keeps the sandbox');
+    A.eq(T2.needsNoSandbox({ platform: 'linux', chromePath: '/usr/bin/google-chrome', ownChrome: own, readFile: restricted }), false, 'an INSTALLED Chrome always keeps its sandbox');
+    A.eq(T2.needsNoSandbox({ platform: 'darwin', chromePath: own, ownChrome: own, readFile: restricted }), false, 'never on macOS');
+    A.eq(T2.needsNoSandbox({ platform: 'win32', chromePath: own, ownChrome: own, readFile: restricted }), false, 'never on Windows');
+  }
   // unpacked but the browser is missing: not installed
   {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sn-binstall-'));

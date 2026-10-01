@@ -614,6 +614,21 @@
      Chromium installed. The composition root registers the finder; it is used only when nothing installed exists. */
   let extraChrome = () => null;
   function setExtraChrome(fn) { extraChrome = typeof fn === 'function' ? fn : () => null; }
+  /* LINUX + THE DOWNLOADED BROWSER (release review 2026-09-30). Chrome for Testing has no setuid sandbox helper and no
+     AppArmor profile; on Ubuntu 23.10+ / 24.04 (kernel.apparmor_restrict_unprivileged_userns = 1) it aborts with
+     "No usable sandbox!". An INSTALLED Chrome/Chromium ships the profile that lets it sandbox, so it is never
+     affected. Only in that exact case — our own download, on Linux, with the restriction on — the browser starts with
+     --no-sandbox (what Playwright does for its bundled Chromium); every other case keeps Chrome's sandbox. */
+  function needsNoSandbox(o) {
+    o = o || {};
+    if ((o.platform || process.platform) !== 'linux' || !o.chromePath) return false;
+    let own = null; try { own = o.ownChrome !== undefined ? o.ownChrome : extraChrome(); } catch (_) { own = null; }
+    if (!own || P.resolve(String(own)) !== P.resolve(String(o.chromePath))) return false;
+    try {
+      const read = o.readFile || (p => FS.readFileSync(p, 'utf8'));
+      return String(read('/proc/sys/kernel/apparmor_restrict_unprivileged_userns')).trim() === '1';
+    } catch (_) { return false; }   // no such setting: user namespaces are not restricted, the sandbox works
+  }
   function resolveChrome(wantHeaded, existsSync) {
     existsSync = existsSync || FS.existsSync;
     const exists = (c) => { try { return existsSync(c.path); } catch (_) { return false; } };
@@ -1103,6 +1118,7 @@
         '--user-data-dir=' + profileDir];
       if (networkProxy) args.push('--proxy-server=http://127.0.0.1:' + networkProxy.port,
         '--proxy-bypass-list=<-loopback>');
+      if (needsNoSandbox({ chromePath })) { args.push('--no-sandbox'); failNote('browser.no-sandbox', new Error('downloaded Chromium on a Linux host that restricts user namespaces: running without the Chromium sandbox')); }
       args.push('--lang=' + hostBrowserLocale(deps));
       if (headed) {
         // Visible window the user can watch (and hear — no --mute-audio in headed mode). No --new-window: on a profile
@@ -1113,9 +1129,10 @@
         /* A COVERED WINDOW MUST KEEP DRAWING. Measured 2026-09-30 in the desktop app: StarNet's own window sits on top of
            the station's Chrome window, Chrome's native occlusion tracking decides nobody can see it and stops painting,
            and the in-app BROWSER view froze on the old page (0 frames/s) while the agent kept browsing. The BROWSER
-           window IS somebody watching, so a covered or minimised station window keeps rendering and its timers run. */
-        args.push('--disable-features=CalculateNativeWinOcclusion', '--disable-backgrounding-occluded-windows',
-          '--disable-renderer-backgrounding', '--disable-background-timer-throttling');
+           window IS somebody watching, so a covered station window keeps rendering. Only the two flags that fix that:
+           background TABS keep Chrome's normal throttling (renderer backgrounding and timer throttling stay ON), so a
+           page left animating in another tab does not drain a laptop for hours (release review 2026-09-30). */
+        args.push('--disable-features=CalculateNativeWinOcclusion', '--disable-backgrounding-occluded-windows');
       } else {
         args.push('--headless=new', '--hide-scrollbars', '--mute-audio');
       }
@@ -3530,5 +3547,5 @@
     return { tools, session, register(reg) { tools.forEach(t => reg.register(t)); return reg; }, _internals: { assertSafeUrl, assertLoopbackUrl, assertResolvedSafe, isPrivateV4, isPrivateV6, makeBrowserSession, makeCdpDriver, makeDownloadLedger, findChrome, resolveChrome, headlessRequested, SYNTHETIC_INPUT_BOOTSTRAP, CHROME_CANDIDATES } };
   }
 
-  return { makeBrowserTools, _internals: { CdpClient, assertSafeUrl, assertLoopbackUrl, assertResolvedSafe, isPrivateV4, isPrivateV6, makeBrowserSession, makeCdpDriver, makeDownloadLedger, findChrome, resolveChrome, setExtraChrome, headlessRequested, SYNTHETIC_INPUT_BOOTSTRAP, SETTLE_BOOTSTRAP, SETTLE_PROBE, SETTLE_QUIET_POLLS, describeResponse, jsLiteral, normalizeBrowserLocale, detectBrowserVersion, makeLaunchIdentity, browserVersionFrom, cleanBrandRows, makeCdpIdentity, CHROME_CANDIDATES } };
+  return { makeBrowserTools, _internals: { CdpClient, assertSafeUrl, assertLoopbackUrl, assertResolvedSafe, isPrivateV4, isPrivateV6, makeBrowserSession, makeCdpDriver, makeDownloadLedger, findChrome, resolveChrome, setExtraChrome, needsNoSandbox, headlessRequested, SYNTHETIC_INPUT_BOOTSTRAP, SETTLE_BOOTSTRAP, SETTLE_PROBE, SETTLE_QUIET_POLLS, describeResponse, jsLiteral, normalizeBrowserLocale, detectBrowserVersion, makeLaunchIdentity, browserVersionFrom, cleanBrandRows, makeCdpIdentity, CHROME_CANDIDATES } };
 });

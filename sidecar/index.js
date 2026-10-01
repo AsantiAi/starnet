@@ -4295,7 +4295,7 @@ const browserHandoffRoutes = makeHandoffRoutes({ host: browserHandoffs, readBody
    (browserProfileLeaseFor → fallback). */
 const STATION_BROWSER_ID = 'station-browser';
 // A computer with no Chrome, Edge or Chromium gets Chrome for Testing downloaded on first use (sidecar/browser-install.js)
-const chromiumInstaller = require('./browser-install.js').makeChromiumInstaller({ root: path.join(WORKSPACES, '.browsers') });
+const chromiumInstaller = require('./browser-install.js').makeChromiumInstaller({ root: path.join(WORKSPACES, '.browsers'), now: () => Date.now() });
 browserInternals.setExtraChrome(() => chromiumInstaller.find());
 // Hermes installs its browser at setup; StarNet starts that download shortly after launch — only on a computer with no
 // browser at all, never for a headless-pinned rig (CI, gates) and never when STARNET_BROWSER_DOWNLOAD=0.
