@@ -1339,7 +1339,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   function syncBB() {
     document.querySelectorAll('.bb[data-term]').forEach(b => b.classList.toggle('active', !!open[b.dataset.term]));
     // a menu's dock button is lit while any of its windows is open
-    document.querySelectorAll('#bottombar [data-family]').forEach(b => b.classList.toggle('active', Object.keys(open).some(k => open[k] && familyOf(k) === b.dataset.family)));
+    document.querySelectorAll('.bb[data-family]').forEach(b => b.classList.toggle('active', Object.keys(open).some(k => open[k] && familyOf(k) === b.dataset.family)));
   }
 
   /* ============== CONSOLE MODE — the large two-pane window framework ==============
@@ -8628,19 +8628,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     if (typeof MaintQuestStore !== 'undefined' && MaintQuestStore.sync) { try { MaintQuestStore.sync(); } catch (_) {} }
     if (typeof QuestStateStore !== 'undefined' && QuestStateStore.sync) { try { QuestStateStore.sync(); } catch (_) {} }
   }
-  // MY WORK on the bar carries a count of finished work waiting for your rating — ReturnStore's pending rows, the very
-  // rows the OUTBOX tab lists (never an estimate). Change-detected so the 1s tick never churns the DOM.
-  function workBadgeTick() {
-    const b = document.getElementById('bb-mywork-badge'); if (!b) return;
-    let n = 0; try { n = (typeof ReturnStore !== 'undefined' && ReturnStore.pendingRows) ? ReturnStore.pendingRows().length : 0; } catch (_) {}
-    const txt = n ? String(n) : '';
-    if (b.textContent !== txt) b.textContent = txt;
-    if (b.hidden === !!n) b.hidden = !n;
-  }
   function tick() {
     crewTick();
     ctxTick();
-    workBadgeTick();
     // TASK BOARD: age the card "last worked" stamps in place while the window is open. The board's
     // live refresh only fires on rail pokes, so between them a "2m" stamp froze at render time (P6).
     // Change-detected text writes on the existing spans — no rebuild, no focus/scroll impact.
@@ -9495,7 +9485,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         '<button type="button" class="q-star q-sys' + (x.online ? ' q-star-reached' : ' q-sys-off') + (x.fresh ? ' q-sys-fresh' : '') + '" data-sys="' + esc(x.id) + '" data-tip="'
         + esc(x.tip + (x.online ? '' : ' — it already works; open it now and it joins your dock')) + '">'
         + '<span class="q-star-glyph" aria-hidden="true">' + glyphOf(x.id) + '</span><span>' + esc(x.label) + '</span><small>'
-        + (x.online ? (x.fresh ? 'NEW · ' : '') + (x.group === 'bar' ? 'ON THE BAR' : esc(x.group.toUpperCase()) + ' DOCK') : esc(x.how || 'not in your dock yet')) + '</small></button>').join('')
+        + (x.online ? (x.fresh ? 'NEW · ' : '') + esc(x.group.toUpperCase()) + ' DOCK' : esc(x.how || 'not in your dock yet')) + '</small></button>').join('')
       + '</div>'
       + (staged ? '<p class="sub dim">Your dock grows as you use the station. Every system already works: open any of them here.</p>'
         + '<div class="q-journey-actions"><button type="button" class="bb sm q-sys-all">SHOW EVERYTHING</button></div>' : '')
@@ -10513,7 +10503,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       else openTerm('trophies');
     });
     // ONE MENU dock buttons (MY WORK / AUTOMATE / CONNECT): open the menu's last-used tab
-    document.querySelectorAll('#bottombar [data-family]').forEach(b => b.addEventListener('click', () => toggleFamily(b.dataset.family)));
+    document.querySelectorAll('.bb[data-family]').forEach(b => b.addEventListener('click', () => toggleFamily(b.dataset.family)));
     badges();
   }
 

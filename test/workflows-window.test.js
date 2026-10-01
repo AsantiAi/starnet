@@ -97,7 +97,7 @@ const tick = () => new Promise(r => setTimeout(r, 15));
   /* ---------- source locks ---------- */
   const html = rd('frontend/index.html'), app = rd('frontend/app/app.js'), build = rd('frontend/app/build.js'), outbox = rd('frontend/app/windows/outbox.js');
   const css = rd('frontend/css/workflows-window.css'), glass = rd('frontend/app/glass-demo.js'), sc = rd('frontend/app/stationcommands.js');
-  A.ok(/<button class="bb-grp" id="bb-automate" data-family="automate"/.test(html) && /\{ id: 'workflows', k: 'workflows', label: 'WORKFLOWS'/.test(fs.readFileSync(path.join(__dirname, '..', 'frontend', 'app', 'stationui.js'), 'utf8')) && !/bbWorkflows\.onclick/.test(app), 'AUTOMATE › WORKFLOWS opens this window from the bar (never Build Mode)');
+  A.ok(/<button class="bb" id="bb-automate" data-family="automate"/.test(html) && /\{ id: 'workflows', k: 'workflows', label: 'WORKFLOWS'/.test(fs.readFileSync(path.join(__dirname, '..', 'frontend', 'app', 'stationui.js'), 'utf8')) && !/bbWorkflows\.onclick/.test(app), 'WORK › AUTOMATE › WORKFLOWS opens this window through the dock (never Build Mode)');
   A.ok(html.indexOf('app/windows/workflows.js') > html.indexOf('app/stationui.js') && /css\/workflows-window\.css/.test(html), 'it loads after the window manager, with its stylesheet');
   A.ok(/function editLine\(propId\) \{[\s\S]{0,400}openFlowCard\(propId\)/.test(build) && /lineWords: \(\) => \(\{ plain: LINE_PLAIN, purpose: LINE_PURPOSE \}\)/.test(build), 'EDIT WORKFLOW opens the full editor on this line; the window speaks the shelf\'s own words');
   A.ok(/class="consent-btn ob-wf">OPEN IN WORKFLOWS<\/button>/.test(outbox) && /WorkflowsWindow\.openByStream\(rw\.streamId, 'outbox'\)/.test(outbox), 'the OUTBOX opens a workflow job\'s own record here');
