@@ -614,6 +614,20 @@
      Chromium installed. The composition root registers the finder; it is used only when nothing installed exists. */
   let extraChrome = () => null;
   function setExtraChrome(fn) { extraChrome = typeof fn === 'function' ? fn : () => null; }
+  /* WHO HOLDS THIS PROFILE (macOS / Linux). A running Chromium marks its user-data-dir with a SingletonLock symlink
+     whose target is "<hostname>-<pid>". A second Chromium started on that profile while the owner is still alive hands
+     its command line to the owner and exits ("exited before CDP ownership"). Returns the owner's pid when it is THIS
+     machine's and still alive, else null (no lock, a stale lock, or another host's). Pure: every effect is injected. */
+  function profileOwnerPid(o) {
+    o = o || {};
+    let target;
+    try { target = String((o.readlink || FS.readlinkSync)(P.join(String(o.dir || ''), 'SingletonLock'))); } catch (_) { return null; }
+    const m = /^(.*)-(\d+)$/.exec(target);
+    if (!m) return null;
+    if (m[1] !== (o.hostname || OS.hostname())) return null;
+    const pid = Number(m[2]);
+    try { (o.alive || (p => process.kill(p, 0)))(pid); return pid; } catch (_) { return null; }
+  }
   /* LINUX + THE DOWNLOADED BROWSER (release review 2026-09-30). Chrome for Testing has no setuid sandbox helper and no
      AppArmor profile; on Ubuntu 23.10+ / 24.04 (kernel.apparmor_restrict_unprivileged_userns = 1) it aborts with
      "No usable sandbox!". An INSTALLED Chrome/Chromium ships the profile that lets it sandbox, so it is never
@@ -1010,7 +1024,19 @@
        end whatever runs on this profile (ours by construction) and go. POSIX uses a SingletonLock symlink that a
        dead owner does not pin, so this is Windows-only. */
     async function waitProfileFree(dir) {
-      if (process.platform !== 'win32' || !dir) return true;
+      if (!dir) return true;
+      if ((deps.platform || process.platform) !== 'win32') {
+        /* macOS / Linux: the SingletonLock symlink names the owner. Wait while that owner is alive (a closed window's
+           Chromium lingers for seconds), then end what is left on this profile — same rule as the Windows lockfile. */
+        for (let waited = 0; waited <= 8000; waited += 200) {
+          if (!profileOwnerPid({ dir, readlink: deps.readlinkSync, hostname: deps.hostname, alive: deps.pidAlive })) return true;
+          await sleep(200);
+        }
+        failNote('browser.profile-free', new Error('profile still held after 8 s: ending its processes'));
+        await killProfileOrphans(dir);
+        await sleep(600);
+        return false;
+      }
       const lock = P.join(dir, 'lockfile');
       for (let waited = 0; waited <= 8000; waited += 200) {
         try { if (!FS.existsSync(lock)) return true; FS.rmSync(lock, { force: true }); return true; }
@@ -3557,5 +3583,5 @@
     return { tools, session, register(reg) { tools.forEach(t => reg.register(t)); return reg; }, _internals: { assertSafeUrl, assertLoopbackUrl, assertResolvedSafe, isPrivateV4, isPrivateV6, makeBrowserSession, makeCdpDriver, makeDownloadLedger, findChrome, resolveChrome, headlessRequested, SYNTHETIC_INPUT_BOOTSTRAP, CHROME_CANDIDATES } };
   }
 
-  return { makeBrowserTools, _internals: { CdpClient, assertSafeUrl, assertLoopbackUrl, assertResolvedSafe, isPrivateV4, isPrivateV6, makeBrowserSession, makeCdpDriver, makeDownloadLedger, findChrome, resolveChrome, setExtraChrome, needsNoSandbox, headlessRequested, SYNTHETIC_INPUT_BOOTSTRAP, SETTLE_BOOTSTRAP, SETTLE_PROBE, SETTLE_QUIET_POLLS, describeResponse, jsLiteral, normalizeBrowserLocale, detectBrowserVersion, makeLaunchIdentity, browserVersionFrom, cleanBrandRows, makeCdpIdentity, CHROME_CANDIDATES } };
+  return { makeBrowserTools, _internals: { CdpClient, assertSafeUrl, assertLoopbackUrl, assertResolvedSafe, isPrivateV4, isPrivateV6, makeBrowserSession, makeCdpDriver, makeDownloadLedger, findChrome, resolveChrome, setExtraChrome, needsNoSandbox, profileOwnerPid, headlessRequested, SYNTHETIC_INPUT_BOOTSTRAP, SETTLE_BOOTSTRAP, SETTLE_PROBE, SETTLE_QUIET_POLLS, describeResponse, jsLiteral, normalizeBrowserLocale, detectBrowserVersion, makeLaunchIdentity, browserVersionFrom, cleanBrandRows, makeCdpIdentity, CHROME_CANDIDATES } };
 });

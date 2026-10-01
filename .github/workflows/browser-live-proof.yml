@@ -1,0 +1,78 @@
+name: browser-live-proof
+
+# LIVE proof of the station browser on REAL macOS and Linux machines (2026-10-01: the feature was proven live on
+# Windows only). Real sidecar, real Chrome as a visible window, the real BROWSER window UI driven over CDP, a scripted
+# model. Runs on pushes to the browser lane and on demand. Builds nothing, publishes nothing.
+on:
+  workflow_dispatch:
+  push:
+    branches: [agent/browser-view]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-live-proof-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  proof:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-14, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      - name: Chrome for the proofs (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+          test -x "$CHROME" || { echo "::error::no Google Chrome on this runner"; exit 1; }
+          echo "SKYNET_CHROME=$CHROME" >> "$GITHUB_ENV"
+          "$CHROME" --version
+
+      - name: Chrome for the proofs (Linux, under a virtual display)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb > /dev/null
+          CHROME=$(command -v google-chrome || command -v google-chrome-stable)
+          # CI containers cannot use Chrome's sandbox (a real desktop's installed Chrome can): same wrapper as fast-gate
+          WRAP=/usr/local/bin/starnet-ci-chrome
+          printf '#!/bin/sh\nexec %s --no-sandbox --disable-dev-shm-usage "$@"\n' "$CHROME" | sudo tee "$WRAP" > /dev/null
+          sudo chmod +x "$WRAP"
+          echo "SKYNET_CHROME=$WRAP" >> "$GITHUB_ENV"
+          echo "STARNET_CHROME=$WRAP" >> "$GITHUB_ENV"
+          echo "apparmor_restrict_unprivileged_userns=$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || echo n/a)"
+          "$CHROME" --version
+
+      - name: No Chrome installed → Chrome for Testing is downloaded and works
+        run: ${{ runner.os == 'Linux' && 'xvfb-run -a -s "-screen 0 1920x1200x24"' || '' }} node scripts/qa/browser-live/browser-install.proof.mjs
+
+      - name: GitHub sign-in in the shared browser (agent asks, you sign in, Done)
+        run: |
+          mkdir -p proof-out/signin
+          ${{ runner.os == 'Linux' && 'xvfb-run -a -s "-screen 0 1920x1200x24"' || '' }} node scripts/qa/browser-live/station-signin.proof.mjs proof-out/signin
+
+      - name: The full station browser (address bar, agent drives, real window, covered window, close + revive, quit)
+        run: |
+          mkdir -p proof-out/station
+          ${{ runner.os == 'Linux' && 'xvfb-run -a -s "-screen 0 1920x1200x24"' || '' }} node scripts/qa/browser-live/station-browser.proof.mjs proof-out/station
+
+      - name: Screenshots and sidecar logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-live-proof-${{ matrix.os }}
+          path: proof-out
+          if-no-files-found: ignore

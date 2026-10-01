@@ -97,5 +97,21 @@ function fakeWs() {
     A.ok(/could not load example\.com/.test(e) && !/redirect/.test(e), 'a page that keeps failing says it did not load, not "unsafe redirect"');
     A.eq(m, 2, '…after exactly one retry');
   }
+  // ---- macOS / Linux: never start on a profile a still-running Chromium holds (its SingletonLock names it) ----
+  {
+    const host = 'my-mac';
+    A.eq(T.profileOwnerPid({ dir: '/p', readlink: () => host + '-4242', hostname: host, alive: () => {} }), 4242, 'a live owner on this machine is reported');
+    A.eq(T.profileOwnerPid({ dir: '/p', readlink: () => host + '-4242', hostname: host, alive: () => { throw new Error('ESRCH'); } }), null, 'a dead owner (stale lock) is not');
+    A.eq(T.profileOwnerPid({ dir: '/p', readlink: () => 'other-host-4242', hostname: host, alive: () => {} }), null, 'another host\'s lock is not ours to wait on');
+    A.eq(T.profileOwnerPid({ dir: '/p', readlink: () => { throw new Error('ENOENT'); }, hostname: host }), null, 'no lock: free');
+    // the driver waits for the old owner to go before it starts Chromium
+    let polls = 0, spawnedAtPoll = -1;
+    const d = T.makeCdpDriver({ chrome: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', env: {}, platform: 'darwin',
+      readlinkSync: () => host + '-777', hostname: host, pidAlive: () => { if (++polls < 4) return; throw new Error('ESRCH'); },
+      fetchImpl: async () => { throw new Error('no'); }, WebSocketImpl: function () {},
+      spawn: () => { spawnedAtPoll = polls; throw new Error('stop here'); } });
+    try { await d.tabs(); } catch (_) { /* the fake spawn stops the launch */ }
+    A.ok(spawnedAtPoll >= 4, 'Chromium is started only after the old owner has exited (polled ' + spawnedAtPoll + ' times)');
+  }
   A.report('browser-dead-browser.test');
 })().catch(e => { console.log('FAIL: browser-dead-browser.test threw - ' + (e && e.stack || e)); process.exit(1); });
