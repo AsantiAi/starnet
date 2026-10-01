@@ -400,7 +400,22 @@
     const op = ++state.opSeq;
     state.busy = true; paintBar();
     setNote('Opening…');
+    /* A SLOW START SHOWS ITS PICTURE (measured 2026-10-01 at ~90% CPU: switching to a Chrome window, the old browser
+       took 10+ s to exit and the open answered after ~30 s — the window sat on a blank "Opening…"). While the open is
+       in flight, ask the station each second, and as soon as it says the browser is up, show the live picture (the
+       page loading in it); the note keeps saying "Opening…" until the open answers. */
+    const early = setInterval(() => {
+      if (op !== state.opSeq || !mounted()) { clearInterval(early); return; }
+      refreshLive().then(() => {
+        if (op === state.opSeq && mounted() && state.busy && station().open && state.mode !== 'live') {
+          clearInterval(early);
+          state.mode = 'live'; state.watch = null;
+          startLive(); setNote('Opening…');
+        }
+      });
+    }, 1000);
     const r = await postJson('/api/browser/view/open', { url: raw }).catch(() => ({ status: 0, body: {} }));
+    clearInterval(early);
     if (op !== state.opSeq) return;
     state.busy = false;
     if (!mounted()) return;

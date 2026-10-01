@@ -285,6 +285,7 @@ try {
   const headedPids = () => chromeProcs(['browser-profile', basename(scratch)]).map(r => r.pid);
   const wins = headedPids();
   ok('a headed Chrome process (no --headless) runs on this station\'s profile', wins.length >= 1, wins.join(','));
+  await until(() => ui().then(u => u && u.mode === 'live' && !/Opening/.test(u.note) ? 1 : null), 60000);   // a mode switch can take a while on a loaded box
   const frontShown = await until(() => evalJS(cdp, "!" + Q('.ob-front') + ".hidden"), 8000);
   ok('SHOW WINDOW is offered', !!frontShown, frontShown ? '' : JSON.stringify(await ui()) + ' | ' + JSON.stringify((await view()).station));
   const fr1 = await evalJS(cdp, "fetch('/api/browser/view/front',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(r=>r.status)");
