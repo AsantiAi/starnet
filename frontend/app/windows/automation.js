@@ -44,7 +44,18 @@
     const labels = { routines: 'Scheduled jobs', 'routines-create': 'New schedule', loops: 'Goal loops', 'loops-start': 'New goal loop', away: 'Away work' };
     const hints = { routines: 'Next runs and recent results', 'routines-create': 'Repeat a task at a chosen time', loops: 'Progress and work to review', 'loops-start': 'Work toward a defined stopping point', away: 'Queued work between messages' };
     sections.forEach(sec => { sec.label = labels[sec.id] || sec.label; });
-    StationUI.h.mountConsole(body, 'automation', sections, { search: false });
+    // ONE AUTOMATION DOOR: the agents' initiative lives in SETTINGS › AUTONOMY, but whoever opens AUTOMATION sees it
+    // here (read from the confirmed posture, never assumed) with a CHANGE door — no hunting through two windows.
+    const INIT_NAME = { wait: 'WAIT', propose: 'SUGGEST', leash: 'BUILD', free: 'FREE' };
+    const railTop = top => {
+      const sum = (typeof AutonomyStore !== 'undefined' && AutonomyStore.summary) ? AutonomyStore.summary() : null;
+      top.classList.add('auto-init-head');
+      top.innerHTML = '<div class="set-sub"><span class="set-sub-k">INITIATIVE</span><span class="set-sub-d">'
+        + (sum ? H.esc(INIT_NAME[sum.initiative] || String(sum.initiative).toUpperCase()) : 'not loaded yet') + '</span></div>'
+        + '<button type="button" class="bb sm" id="auto-init-change" data-tip="Whether agents start work nobody asked for. It does not change the schedules here.">CHANGE</button>';
+      top.querySelector('#auto-init-change').addEventListener('click', () => H.openTerm('settings', 'autonomy'));
+    };
+    StationUI.h.mountConsole(body, 'automation', sections, { search: false, railTop });
     body.querySelectorAll('.con-rail-item').forEach(item => {
       const hint = document.createElement('span'); hint.className = 'sn-menu-nav-note';
       hint.textContent = hints[item.dataset.section] || ''; item.appendChild(hint);

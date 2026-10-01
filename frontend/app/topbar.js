@@ -93,6 +93,15 @@ const Topbar = (() => {
     if (wired) return;
     wired = true;
 
+    // ONE PROGRESS DOOR: the COMMANDER gauge opens QUESTS › Progress (its tooltip always promised the quest log)
+    const chip = document.getElementById('tb-station');
+    if (chip) {
+      chip.setAttribute('role', 'button'); chip.tabIndex = 0; chip.style.cursor = 'pointer';
+      const go = () => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('quests', 'progress'); };
+      chip.addEventListener('click', go);
+      chip.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); go(); } });
+    }
+
     // first paints (may run before any event — honest current level)
     paintXp();
     paintSig();
