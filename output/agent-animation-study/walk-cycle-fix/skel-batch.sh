@@ -15,14 +15,22 @@ until [ "$(curl -s -o /dev/null -w '%{http_code}' "https://api.pixellab.ai/mcp/c
 rm -rf "$TMP"; mkdir -p "$TMP"
 curl -s -f "https://api.pixellab.ai/mcp/characters/$CHAR/download" -o "$TMP/c.zip"
 (cd "$TMP" && unzip -q c.zip)
-STATE=$(ls -d "$TMP"/*/animations/"$ANIM" | head -1 | sed 's#/animations/.*##')
+STATE=$(ls -d "$TMP"/*/animations/"$ANIM" | head -1 | sed 's#/animations/.*##' || true)
 [ -d "$STATE/animations/$ANIM" ] || { echo "no animation $ANIM for $SET"; exit 2; }
 rm -rf "$BASE/raw"; mkdir -p "$BASE/raw"
 for d in south south-east east north-east north north-west west south-west; do
   cp "$STATE/rotations/$d.png" "$BASE/raw/rot_$d.png"
-  n=$(ls "$STATE/animations/$ANIM/$d" | wc -l)
+  SRC="$STATE/animations/$ANIM/$d"
+  if [ ! -d "$SRC" ]; then
+    # two copies of this direction landed as <dir>-<hash>: keep the steadier one (skel-pick.cjs)
+    CANDS=$(ls -d "$STATE/animations/$ANIM/"* | grep -E "/$d-[0-9a-f]{8}$" || true)
+    [ -n "$CANDS" ] || { echo "$SET $d missing"; exit 3; }
+    SRC=$(node output/agent-animation-study/walk-cycle-fix/skel-pick.cjs $CANDS)
+    echo "  PICK $SET $d <- $(basename "$SRC")"
+  fi
+  n=$(ls "$SRC" | wc -l)
   [ "$n" = 6 ] || { echo "$SET $d has $n frames"; exit 3; }
-  i=0; for f in $(ls "$STATE/animations/$ANIM/$d" | sort); do cp "$STATE/animations/$ANIM/$d/$f" "$BASE/raw/walk_${d}_$i.png"; i=$((i+1)); done
+  i=0; for f in $(ls "$SRC" | sort); do cp "$SRC/$f" "$BASE/raw/walk_${d}_$i.png"; i=$((i+1)); done
 done
 node -e "
 const fs=require('fs'),p='$BASE/walk.json',o=JSON.parse(fs.readFileSync(p,'utf8'));

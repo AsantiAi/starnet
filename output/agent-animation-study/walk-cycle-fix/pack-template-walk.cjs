@@ -154,7 +154,10 @@ function headDist(a, b) {
     const rotFile = path.join(raw, 'rot_' + d + '.png');
     await download(rotUrls[d], rotFile);
     const rb = await box(rotFile);
-    if (rb.cw !== 96 || rb.ch !== 96) throw Error('rotation canvas ' + rb.cw + 'x' + rb.ch);
+    // PixelLab characters are 96px or 128px; the placement below only uses the rotation's alpha box, so any
+    // square canvas packs the same way (the 128px skins used to be staged down to 96px by hand first)
+    if (rb.cw !== rb.ch || ![96, 128].includes(rb.cw)) throw Error('rotation canvas ' + rb.cw + 'x' + rb.ch);
+    const R = rb.cw;
     const s = 76 / rb.h, wr = Math.round(rb.w * s);
     const left0 = 24 + Math.floor((96 - wr) / 2) - Math.round(rb.l * s);
     const top0 = 36 - Math.round(rb.t * s);
@@ -162,9 +165,9 @@ function headDist(a, b) {
     transforms[d] = { s, rb };
     const pack = async (file) => {
       const m = await sharp(file).metadata();
-      if (m.width !== m.height || m.width < 96 || (m.width - 96) % 2) throw Error('frame canvas ' + m.width + 'x' + m.height + ' ' + file);
-      // a grown canvas is centred on the rotation's 96px canvas: shift the origin back by its margin
-      const o = (m.width - 96) / 2, NC = Math.round(m.width * s);
+      if (m.width !== m.height || m.width < R || (m.width - R) % 2) throw Error('frame canvas ' + m.width + 'x' + m.height + ' ' + file);
+      // a grown canvas is centred on the rotation's canvas: shift the origin back by its margin
+      const o = (m.width - R) / 2, NC = Math.round(m.width * s);
       let img = sharp(file).ensureAlpha();
       if (NC !== m.width) img = img.resize(NC, NC);    // same kernel as the rotation refs (sharp default)
       let buf = await img.png().toBuffer();
@@ -262,6 +265,39 @@ function headDist(a, b) {
       else if (ar < 0.72) console.log(`  WARN ${setId} ${d}: template slimmed the build to x${ar.toFixed(2)} of the rotation's pixel mass (review the contact sheet)`);
     }
     if (drift.length && !process.argv.includes('--force')) throw Error('colour drift vs rotation in: ' + drift.join(', ') + ' — regenerate those directions');
+  }
+  // floating debris: a skeleton frame can carry a detached scrap of the drawing hovering ABOVE the head
+  // (candyprincess west frame 5: a slice of her hair bow, clipped at the canvas edge). Nothing a character
+  // owns floats wholly above its own skull, so any separate blob that ends above the body's top is cleared.
+  if (SKELETON) {
+    let cleared = 0;
+    for (const d of DIRS) masters[d] = await Promise.all(masters[d].map(async (buf, i) => {
+      const { data, info } = await sharp(buf).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      const W = info.width, H = info.height, lab = new Int32Array(W * H).fill(-1), comps = [];
+      for (let p = 0; p < W * H; p++) {
+        if (lab[p] >= 0 || data[p * 4 + 3] <= 16) continue;
+        const c = { px: [], top: H, bot: -1 }, stack = [p]; lab[p] = comps.length;
+        while (stack.length) {
+          const q = stack.pop(), x = q % W, y = (q - x) / W;
+          c.px.push(q); if (y < c.top) c.top = y; if (y > c.bot) c.bot = y;
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx, ny = y + dy, n = ny * W + nx;
+            if (nx < 0 || ny < 0 || nx >= W || ny >= H || lab[n] >= 0 || data[n * 4 + 3] <= 16) continue;
+            lab[n] = comps.length; stack.push(n);
+          }
+        }
+        comps.push(c);
+      }
+      if (comps.length < 2) return buf;
+      const main = comps.reduce((a, b) => (b.px.length > a.px.length ? b : a));
+      const debris = comps.filter(c => c !== main && c.bot < main.top);
+      if (!debris.length) return buf;
+      for (const c of debris) for (const q of c.px) data[q * 4 + 3] = 0;
+      cleared += debris.length;
+      report.repairs.push({ dir: d, frame: i, debrisCleared: debris.reduce((a, c) => a + c.px.length, 0) });
+      console.log(`  DEBRIS ${setId} ${d} frame ${i}: cleared ${debris.length} blob(s) floating above the head`);
+      return sharp(data, { raw: { width: W, height: H, channels: 4 } }).png().toBuffer();
+    }));
   }
   // pass 2: flag + repair glitched frames
   const rotHeads = {};

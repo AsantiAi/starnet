@@ -6371,9 +6371,7 @@
       "approved_secretagent/walk_east_3.png",
       "approved_secretagent/walk_east_4.png",
       "approved_secretagent/walk_east_5.png",
-      "approved_secretagent/walk_east_6.png",
-      "approved_secretagent/walk_east_7.png",
-      "approved_secretagent/walk_east_8.png"
+      "approved_secretagent/walk_east_6.png"
     ],
     "approved_secretagent.walk.north-east": [
       "approved_secretagent/walk_north-east_1.png",
@@ -6381,9 +6379,7 @@
       "approved_secretagent/walk_north-east_3.png",
       "approved_secretagent/walk_north-east_4.png",
       "approved_secretagent/walk_north-east_5.png",
-      "approved_secretagent/walk_north-east_6.png",
-      "approved_secretagent/walk_north-east_7.png",
-      "approved_secretagent/walk_north-east_8.png"
+      "approved_secretagent/walk_north-east_6.png"
     ],
     "approved_secretagent.walk.north-west": [
       "approved_secretagent/walk_north-west_1.png",
@@ -6391,9 +6387,7 @@
       "approved_secretagent/walk_north-west_3.png",
       "approved_secretagent/walk_north-west_4.png",
       "approved_secretagent/walk_north-west_5.png",
-      "approved_secretagent/walk_north-west_6.png",
-      "approved_secretagent/walk_north-west_7.png",
-      "approved_secretagent/walk_north-west_8.png"
+      "approved_secretagent/walk_north-west_6.png"
     ],
     "approved_secretagent.walk.north": [
       "approved_secretagent/walk_north_1.png",
@@ -6401,9 +6395,7 @@
       "approved_secretagent/walk_north_3.png",
       "approved_secretagent/walk_north_4.png",
       "approved_secretagent/walk_north_5.png",
-      "approved_secretagent/walk_north_6.png",
-      "approved_secretagent/walk_north_7.png",
-      "approved_secretagent/walk_north_8.png"
+      "approved_secretagent/walk_north_6.png"
     ],
     "approved_secretagent.walk.south-east": [
       "approved_secretagent/walk_south-east_1.png",
@@ -6411,9 +6403,7 @@
       "approved_secretagent/walk_south-east_3.png",
       "approved_secretagent/walk_south-east_4.png",
       "approved_secretagent/walk_south-east_5.png",
-      "approved_secretagent/walk_south-east_6.png",
-      "approved_secretagent/walk_south-east_7.png",
-      "approved_secretagent/walk_south-east_8.png"
+      "approved_secretagent/walk_south-east_6.png"
     ],
     "approved_secretagent.walk.south-west": [
       "approved_secretagent/walk_south-west_1.png",
@@ -6421,9 +6411,7 @@
       "approved_secretagent/walk_south-west_3.png",
       "approved_secretagent/walk_south-west_4.png",
       "approved_secretagent/walk_south-west_5.png",
-      "approved_secretagent/walk_south-west_6.png",
-      "approved_secretagent/walk_south-west_7.png",
-      "approved_secretagent/walk_south-west_8.png"
+      "approved_secretagent/walk_south-west_6.png"
     ],
     "approved_secretagent.walk.south": [
       "approved_secretagent/walk_south_1.png",
@@ -6431,9 +6419,7 @@
       "approved_secretagent/walk_south_3.png",
       "approved_secretagent/walk_south_4.png",
       "approved_secretagent/walk_south_5.png",
-      "approved_secretagent/walk_south_6.png",
-      "approved_secretagent/walk_south_7.png",
-      "approved_secretagent/walk_south_8.png"
+      "approved_secretagent/walk_south_6.png"
     ],
     "approved_secretagent.walk.west": [
       "approved_secretagent/walk_west_1.png",
@@ -6441,9 +6427,7 @@
       "approved_secretagent/walk_west_3.png",
       "approved_secretagent/walk_west_4.png",
       "approved_secretagent/walk_west_5.png",
-      "approved_secretagent/walk_west_6.png",
-      "approved_secretagent/walk_west_7.png",
-      "approved_secretagent/walk_west_8.png"
+      "approved_secretagent/walk_west_6.png"
     ],
     "approved_secretagent.sit.east": [
       "approved_secretagent/sit_east_4.png"
@@ -6490,9 +6474,7 @@
       "approved_ultron/walk_east_3.png",
       "approved_ultron/walk_east_4.png",
       "approved_ultron/walk_east_5.png",
-      "approved_ultron/walk_east_6.png",
-      "approved_ultron/walk_east_7.png",
-      "approved_ultron/walk_east_8.png"
+      "approved_ultron/walk_east_6.png"
     ],
     "approved_ultron.walk.north-east": [
       "approved_ultron/walk_north-east_1.png",
@@ -6500,9 +6482,7 @@
       "approved_ultron/walk_north-east_3.png",
       "approved_ultron/walk_north-east_4.png",
       "approved_ultron/walk_north-east_5.png",
-      "approved_ultron/walk_north-east_6.png",
-      "approved_ultron/walk_north-east_7.png",
-      "approved_ultron/walk_north-east_8.png"
+      "approved_ultron/walk_north-east_6.png"
     ],
     "approved_ultron.walk.north-west": [
       "approved_ultron/walk_north-west_1.png",
@@ -6510,9 +6490,7 @@
       "approved_ultron/walk_north-west_3.png",
       "approved_ultron/walk_north-west_4.png",
       "approved_ultron/walk_north-west_5.png",
-      "approved_ultron/walk_north-west_6.png",
-      "approved_ultron/walk_north-west_7.png",
-      "approved_ultron/walk_north-west_8.png"
+      "approved_ultron/walk_north-west_6.png"
     ],
     "approved_ultron.walk.north": [
       "approved_ultron/walk_north_1.png",
@@ -6520,9 +6498,7 @@
       "approved_ultron/walk_north_3.png",
       "approved_ultron/walk_north_4.png",
       "approved_ultron/walk_north_5.png",
-      "approved_ultron/walk_north_6.png",
-      "approved_ultron/walk_north_7.png",
-      "approved_ultron/walk_north_8.png"
+      "approved_ultron/walk_north_6.png"
     ],
     "approved_ultron.walk.south-east": [
       "approved_ultron/walk_south-east_1.png",
@@ -6530,9 +6506,7 @@
       "approved_ultron/walk_south-east_3.png",
       "approved_ultron/walk_south-east_4.png",
       "approved_ultron/walk_south-east_5.png",
-      "approved_ultron/walk_south-east_6.png",
-      "approved_ultron/walk_south-east_7.png",
-      "approved_ultron/walk_south-east_8.png"
+      "approved_ultron/walk_south-east_6.png"
     ],
     "approved_ultron.walk.south-west": [
       "approved_ultron/walk_south-west_1.png",
@@ -6540,9 +6514,7 @@
       "approved_ultron/walk_south-west_3.png",
       "approved_ultron/walk_south-west_4.png",
       "approved_ultron/walk_south-west_5.png",
-      "approved_ultron/walk_south-west_6.png",
-      "approved_ultron/walk_south-west_7.png",
-      "approved_ultron/walk_south-west_8.png"
+      "approved_ultron/walk_south-west_6.png"
     ],
     "approved_ultron.walk.south": [
       "approved_ultron/walk_south_1.png",
@@ -6550,9 +6522,7 @@
       "approved_ultron/walk_south_3.png",
       "approved_ultron/walk_south_4.png",
       "approved_ultron/walk_south_5.png",
-      "approved_ultron/walk_south_6.png",
-      "approved_ultron/walk_south_7.png",
-      "approved_ultron/walk_south_8.png"
+      "approved_ultron/walk_south_6.png"
     ],
     "approved_ultron.walk.west": [
       "approved_ultron/walk_west_1.png",
@@ -6560,9 +6530,7 @@
       "approved_ultron/walk_west_3.png",
       "approved_ultron/walk_west_4.png",
       "approved_ultron/walk_west_5.png",
-      "approved_ultron/walk_west_6.png",
-      "approved_ultron/walk_west_7.png",
-      "approved_ultron/walk_west_8.png"
+      "approved_ultron/walk_west_6.png"
     ],
     "approved_ultron.sit.east": [
       "approved_ultron/sit_east_4.png"
@@ -6609,9 +6577,7 @@
       "approved_skeleton/walk_east_3.png",
       "approved_skeleton/walk_east_4.png",
       "approved_skeleton/walk_east_5.png",
-      "approved_skeleton/walk_east_6.png",
-      "approved_skeleton/walk_east_7.png",
-      "approved_skeleton/walk_east_8.png"
+      "approved_skeleton/walk_east_6.png"
     ],
     "approved_skeleton.walk.north-east": [
       "approved_skeleton/walk_north-east_1.png",
@@ -6619,9 +6585,7 @@
       "approved_skeleton/walk_north-east_3.png",
       "approved_skeleton/walk_north-east_4.png",
       "approved_skeleton/walk_north-east_5.png",
-      "approved_skeleton/walk_north-east_6.png",
-      "approved_skeleton/walk_north-east_7.png",
-      "approved_skeleton/walk_north-east_8.png"
+      "approved_skeleton/walk_north-east_6.png"
     ],
     "approved_skeleton.walk.north-west": [
       "approved_skeleton/walk_north-west_1.png",
@@ -6629,9 +6593,7 @@
       "approved_skeleton/walk_north-west_3.png",
       "approved_skeleton/walk_north-west_4.png",
       "approved_skeleton/walk_north-west_5.png",
-      "approved_skeleton/walk_north-west_6.png",
-      "approved_skeleton/walk_north-west_7.png",
-      "approved_skeleton/walk_north-west_8.png"
+      "approved_skeleton/walk_north-west_6.png"
     ],
     "approved_skeleton.walk.north": [
       "approved_skeleton/walk_north_1.png",
@@ -6639,9 +6601,7 @@
       "approved_skeleton/walk_north_3.png",
       "approved_skeleton/walk_north_4.png",
       "approved_skeleton/walk_north_5.png",
-      "approved_skeleton/walk_north_6.png",
-      "approved_skeleton/walk_north_7.png",
-      "approved_skeleton/walk_north_8.png"
+      "approved_skeleton/walk_north_6.png"
     ],
     "approved_skeleton.walk.south-east": [
       "approved_skeleton/walk_south-east_1.png",
@@ -6649,9 +6609,7 @@
       "approved_skeleton/walk_south-east_3.png",
       "approved_skeleton/walk_south-east_4.png",
       "approved_skeleton/walk_south-east_5.png",
-      "approved_skeleton/walk_south-east_6.png",
-      "approved_skeleton/walk_south-east_7.png",
-      "approved_skeleton/walk_south-east_8.png"
+      "approved_skeleton/walk_south-east_6.png"
     ],
     "approved_skeleton.walk.south-west": [
       "approved_skeleton/walk_south-west_1.png",
@@ -6659,9 +6617,7 @@
       "approved_skeleton/walk_south-west_3.png",
       "approved_skeleton/walk_south-west_4.png",
       "approved_skeleton/walk_south-west_5.png",
-      "approved_skeleton/walk_south-west_6.png",
-      "approved_skeleton/walk_south-west_7.png",
-      "approved_skeleton/walk_south-west_8.png"
+      "approved_skeleton/walk_south-west_6.png"
     ],
     "approved_skeleton.walk.south": [
       "approved_skeleton/walk_south_1.png",
@@ -6669,9 +6625,7 @@
       "approved_skeleton/walk_south_3.png",
       "approved_skeleton/walk_south_4.png",
       "approved_skeleton/walk_south_5.png",
-      "approved_skeleton/walk_south_6.png",
-      "approved_skeleton/walk_south_7.png",
-      "approved_skeleton/walk_south_8.png"
+      "approved_skeleton/walk_south_6.png"
     ],
     "approved_skeleton.walk.west": [
       "approved_skeleton/walk_west_1.png",
@@ -6679,9 +6633,7 @@
       "approved_skeleton/walk_west_3.png",
       "approved_skeleton/walk_west_4.png",
       "approved_skeleton/walk_west_5.png",
-      "approved_skeleton/walk_west_6.png",
-      "approved_skeleton/walk_west_7.png",
-      "approved_skeleton/walk_west_8.png"
+      "approved_skeleton/walk_west_6.png"
     ],
     "approved_skeleton.sit.east": [
       "approved_skeleton/sit_east_4.png"
@@ -6728,9 +6680,7 @@
       "approved_plaguedoctor/walk_east_3.png",
       "approved_plaguedoctor/walk_east_4.png",
       "approved_plaguedoctor/walk_east_5.png",
-      "approved_plaguedoctor/walk_east_6.png",
-      "approved_plaguedoctor/walk_east_7.png",
-      "approved_plaguedoctor/walk_east_8.png"
+      "approved_plaguedoctor/walk_east_6.png"
     ],
     "approved_plaguedoctor.walk.north-east": [
       "approved_plaguedoctor/walk_north-east_1.png",
@@ -6738,9 +6688,7 @@
       "approved_plaguedoctor/walk_north-east_3.png",
       "approved_plaguedoctor/walk_north-east_4.png",
       "approved_plaguedoctor/walk_north-east_5.png",
-      "approved_plaguedoctor/walk_north-east_6.png",
-      "approved_plaguedoctor/walk_north-east_7.png",
-      "approved_plaguedoctor/walk_north-east_8.png"
+      "approved_plaguedoctor/walk_north-east_6.png"
     ],
     "approved_plaguedoctor.walk.north-west": [
       "approved_plaguedoctor/walk_north-west_1.png",
@@ -6748,9 +6696,7 @@
       "approved_plaguedoctor/walk_north-west_3.png",
       "approved_plaguedoctor/walk_north-west_4.png",
       "approved_plaguedoctor/walk_north-west_5.png",
-      "approved_plaguedoctor/walk_north-west_6.png",
-      "approved_plaguedoctor/walk_north-west_7.png",
-      "approved_plaguedoctor/walk_north-west_8.png"
+      "approved_plaguedoctor/walk_north-west_6.png"
     ],
     "approved_plaguedoctor.walk.north": [
       "approved_plaguedoctor/walk_north_1.png",
@@ -6758,9 +6704,7 @@
       "approved_plaguedoctor/walk_north_3.png",
       "approved_plaguedoctor/walk_north_4.png",
       "approved_plaguedoctor/walk_north_5.png",
-      "approved_plaguedoctor/walk_north_6.png",
-      "approved_plaguedoctor/walk_north_7.png",
-      "approved_plaguedoctor/walk_north_8.png"
+      "approved_plaguedoctor/walk_north_6.png"
     ],
     "approved_plaguedoctor.walk.south-east": [
       "approved_plaguedoctor/walk_south-east_1.png",
@@ -6768,9 +6712,7 @@
       "approved_plaguedoctor/walk_south-east_3.png",
       "approved_plaguedoctor/walk_south-east_4.png",
       "approved_plaguedoctor/walk_south-east_5.png",
-      "approved_plaguedoctor/walk_south-east_6.png",
-      "approved_plaguedoctor/walk_south-east_7.png",
-      "approved_plaguedoctor/walk_south-east_8.png"
+      "approved_plaguedoctor/walk_south-east_6.png"
     ],
     "approved_plaguedoctor.walk.south-west": [
       "approved_plaguedoctor/walk_south-west_1.png",
@@ -6778,9 +6720,7 @@
       "approved_plaguedoctor/walk_south-west_3.png",
       "approved_plaguedoctor/walk_south-west_4.png",
       "approved_plaguedoctor/walk_south-west_5.png",
-      "approved_plaguedoctor/walk_south-west_6.png",
-      "approved_plaguedoctor/walk_south-west_7.png",
-      "approved_plaguedoctor/walk_south-west_8.png"
+      "approved_plaguedoctor/walk_south-west_6.png"
     ],
     "approved_plaguedoctor.walk.south": [
       "approved_plaguedoctor/walk_south_1.png",
@@ -6788,9 +6728,7 @@
       "approved_plaguedoctor/walk_south_3.png",
       "approved_plaguedoctor/walk_south_4.png",
       "approved_plaguedoctor/walk_south_5.png",
-      "approved_plaguedoctor/walk_south_6.png",
-      "approved_plaguedoctor/walk_south_7.png",
-      "approved_plaguedoctor/walk_south_8.png"
+      "approved_plaguedoctor/walk_south_6.png"
     ],
     "approved_plaguedoctor.walk.west": [
       "approved_plaguedoctor/walk_west_1.png",
@@ -6798,9 +6736,7 @@
       "approved_plaguedoctor/walk_west_3.png",
       "approved_plaguedoctor/walk_west_4.png",
       "approved_plaguedoctor/walk_west_5.png",
-      "approved_plaguedoctor/walk_west_6.png",
-      "approved_plaguedoctor/walk_west_7.png",
-      "approved_plaguedoctor/walk_west_8.png"
+      "approved_plaguedoctor/walk_west_6.png"
     ],
     "approved_plaguedoctor.sit.east": [
       "approved_plaguedoctor/sit_east_4.png"
@@ -6847,9 +6783,7 @@
       "approved_voidwizard/walk_east_3.png",
       "approved_voidwizard/walk_east_4.png",
       "approved_voidwizard/walk_east_5.png",
-      "approved_voidwizard/walk_east_6.png",
-      "approved_voidwizard/walk_east_7.png",
-      "approved_voidwizard/walk_east_8.png"
+      "approved_voidwizard/walk_east_6.png"
     ],
     "approved_voidwizard.walk.north-east": [
       "approved_voidwizard/walk_north-east_1.png",
@@ -6857,9 +6791,7 @@
       "approved_voidwizard/walk_north-east_3.png",
       "approved_voidwizard/walk_north-east_4.png",
       "approved_voidwizard/walk_north-east_5.png",
-      "approved_voidwizard/walk_north-east_6.png",
-      "approved_voidwizard/walk_north-east_7.png",
-      "approved_voidwizard/walk_north-east_8.png"
+      "approved_voidwizard/walk_north-east_6.png"
     ],
     "approved_voidwizard.walk.north-west": [
       "approved_voidwizard/walk_north-west_1.png",
@@ -6867,9 +6799,7 @@
       "approved_voidwizard/walk_north-west_3.png",
       "approved_voidwizard/walk_north-west_4.png",
       "approved_voidwizard/walk_north-west_5.png",
-      "approved_voidwizard/walk_north-west_6.png",
-      "approved_voidwizard/walk_north-west_7.png",
-      "approved_voidwizard/walk_north-west_8.png"
+      "approved_voidwizard/walk_north-west_6.png"
     ],
     "approved_voidwizard.walk.north": [
       "approved_voidwizard/walk_north_1.png",
@@ -6877,9 +6807,7 @@
       "approved_voidwizard/walk_north_3.png",
       "approved_voidwizard/walk_north_4.png",
       "approved_voidwizard/walk_north_5.png",
-      "approved_voidwizard/walk_north_6.png",
-      "approved_voidwizard/walk_north_7.png",
-      "approved_voidwizard/walk_north_8.png"
+      "approved_voidwizard/walk_north_6.png"
     ],
     "approved_voidwizard.walk.south-east": [
       "approved_voidwizard/walk_south-east_1.png",
@@ -6887,9 +6815,7 @@
       "approved_voidwizard/walk_south-east_3.png",
       "approved_voidwizard/walk_south-east_4.png",
       "approved_voidwizard/walk_south-east_5.png",
-      "approved_voidwizard/walk_south-east_6.png",
-      "approved_voidwizard/walk_south-east_7.png",
-      "approved_voidwizard/walk_south-east_8.png"
+      "approved_voidwizard/walk_south-east_6.png"
     ],
     "approved_voidwizard.walk.south-west": [
       "approved_voidwizard/walk_south-west_1.png",
@@ -6897,9 +6823,7 @@
       "approved_voidwizard/walk_south-west_3.png",
       "approved_voidwizard/walk_south-west_4.png",
       "approved_voidwizard/walk_south-west_5.png",
-      "approved_voidwizard/walk_south-west_6.png",
-      "approved_voidwizard/walk_south-west_7.png",
-      "approved_voidwizard/walk_south-west_8.png"
+      "approved_voidwizard/walk_south-west_6.png"
     ],
     "approved_voidwizard.walk.south": [
       "approved_voidwizard/walk_south_1.png",
@@ -6907,9 +6831,7 @@
       "approved_voidwizard/walk_south_3.png",
       "approved_voidwizard/walk_south_4.png",
       "approved_voidwizard/walk_south_5.png",
-      "approved_voidwizard/walk_south_6.png",
-      "approved_voidwizard/walk_south_7.png",
-      "approved_voidwizard/walk_south_8.png"
+      "approved_voidwizard/walk_south_6.png"
     ],
     "approved_voidwizard.walk.west": [
       "approved_voidwizard/walk_west_1.png",
@@ -6917,9 +6839,7 @@
       "approved_voidwizard/walk_west_3.png",
       "approved_voidwizard/walk_west_4.png",
       "approved_voidwizard/walk_west_5.png",
-      "approved_voidwizard/walk_west_6.png",
-      "approved_voidwizard/walk_west_7.png",
-      "approved_voidwizard/walk_west_8.png"
+      "approved_voidwizard/walk_west_6.png"
     ],
     "approved_voidwizard.sit.east": [
       "approved_voidwizard/sit_east_4.png"
@@ -6945,9 +6865,7 @@
       "approved_pepe/walk_south_3.png",
       "approved_pepe/walk_south_4.png",
       "approved_pepe/walk_south_5.png",
-      "approved_pepe/walk_south_6.png",
-      "approved_pepe/walk_south_7.png",
-      "approved_pepe/walk_south_8.png"
+      "approved_pepe/walk_south_6.png"
     ],
     "approved_pepe.rot.south-east": [
       "approved_pepe/rot_south-east.png"
@@ -6958,9 +6876,7 @@
       "approved_pepe/walk_south-east_3.png",
       "approved_pepe/walk_south-east_4.png",
       "approved_pepe/walk_south-east_5.png",
-      "approved_pepe/walk_south-east_6.png",
-      "approved_pepe/walk_south-east_7.png",
-      "approved_pepe/walk_south-east_8.png"
+      "approved_pepe/walk_south-east_6.png"
     ],
     "approved_pepe.rot.east": [
       "approved_pepe/rot_east.png"
@@ -6971,9 +6887,7 @@
       "approved_pepe/walk_east_3.png",
       "approved_pepe/walk_east_4.png",
       "approved_pepe/walk_east_5.png",
-      "approved_pepe/walk_east_6.png",
-      "approved_pepe/walk_east_7.png",
-      "approved_pepe/walk_east_8.png"
+      "approved_pepe/walk_east_6.png"
     ],
     "approved_pepe.rot.north-east": [
       "approved_pepe/rot_north-east.png"
@@ -6984,9 +6898,7 @@
       "approved_pepe/walk_north-east_3.png",
       "approved_pepe/walk_north-east_4.png",
       "approved_pepe/walk_north-east_5.png",
-      "approved_pepe/walk_north-east_6.png",
-      "approved_pepe/walk_north-east_7.png",
-      "approved_pepe/walk_north-east_8.png"
+      "approved_pepe/walk_north-east_6.png"
     ],
     "approved_pepe.rot.north": [
       "approved_pepe/rot_north.png"
@@ -6997,9 +6909,7 @@
       "approved_pepe/walk_north_3.png",
       "approved_pepe/walk_north_4.png",
       "approved_pepe/walk_north_5.png",
-      "approved_pepe/walk_north_6.png",
-      "approved_pepe/walk_north_7.png",
-      "approved_pepe/walk_north_8.png"
+      "approved_pepe/walk_north_6.png"
     ],
     "approved_pepe.rot.north-west": [
       "approved_pepe/rot_north-west.png"
@@ -7010,9 +6920,7 @@
       "approved_pepe/walk_north-west_3.png",
       "approved_pepe/walk_north-west_4.png",
       "approved_pepe/walk_north-west_5.png",
-      "approved_pepe/walk_north-west_6.png",
-      "approved_pepe/walk_north-west_7.png",
-      "approved_pepe/walk_north-west_8.png"
+      "approved_pepe/walk_north-west_6.png"
     ],
     "approved_pepe.rot.west": [
       "approved_pepe/rot_west.png"
@@ -7023,9 +6931,7 @@
       "approved_pepe/walk_west_3.png",
       "approved_pepe/walk_west_4.png",
       "approved_pepe/walk_west_5.png",
-      "approved_pepe/walk_west_6.png",
-      "approved_pepe/walk_west_7.png",
-      "approved_pepe/walk_west_8.png"
+      "approved_pepe/walk_west_6.png"
     ],
     "approved_pepe.rot.south-west": [
       "approved_pepe/rot_south-west.png"
@@ -7036,9 +6942,7 @@
       "approved_pepe/walk_south-west_3.png",
       "approved_pepe/walk_south-west_4.png",
       "approved_pepe/walk_south-west_5.png",
-      "approved_pepe/walk_south-west_6.png",
-      "approved_pepe/walk_south-west_7.png",
-      "approved_pepe/walk_south-west_8.png"
+      "approved_pepe/walk_south-west_6.png"
     ],
     "approved_vaultboy.rot.south-east": [
       "approved_vaultboy/rot_south-east.png"
@@ -7130,9 +7034,7 @@
       "approved_vaultboy/walk_south_3.png",
       "approved_vaultboy/walk_south_4.png",
       "approved_vaultboy/walk_south_5.png",
-      "approved_vaultboy/walk_south_6.png",
-      "approved_vaultboy/walk_south_7.png",
-      "approved_vaultboy/walk_south_8.png"
+      "approved_vaultboy/walk_south_6.png"
     ],
     "approved_vaultboy.walk.south-east": [
       "approved_vaultboy/walk_south-east_1.png",
@@ -7140,9 +7042,7 @@
       "approved_vaultboy/walk_south-east_3.png",
       "approved_vaultboy/walk_south-east_4.png",
       "approved_vaultboy/walk_south-east_5.png",
-      "approved_vaultboy/walk_south-east_6.png",
-      "approved_vaultboy/walk_south-east_7.png",
-      "approved_vaultboy/walk_south-east_8.png"
+      "approved_vaultboy/walk_south-east_6.png"
     ],
     "approved_vaultboy.walk.east": [
       "approved_vaultboy/walk_east_1.png",
@@ -7150,9 +7050,7 @@
       "approved_vaultboy/walk_east_3.png",
       "approved_vaultboy/walk_east_4.png",
       "approved_vaultboy/walk_east_5.png",
-      "approved_vaultboy/walk_east_6.png",
-      "approved_vaultboy/walk_east_7.png",
-      "approved_vaultboy/walk_east_8.png"
+      "approved_vaultboy/walk_east_6.png"
     ],
     "approved_vaultboy.walk.north-east": [
       "approved_vaultboy/walk_north-east_1.png",
@@ -7160,9 +7058,7 @@
       "approved_vaultboy/walk_north-east_3.png",
       "approved_vaultboy/walk_north-east_4.png",
       "approved_vaultboy/walk_north-east_5.png",
-      "approved_vaultboy/walk_north-east_6.png",
-      "approved_vaultboy/walk_north-east_7.png",
-      "approved_vaultboy/walk_north-east_8.png"
+      "approved_vaultboy/walk_north-east_6.png"
     ],
     "approved_vaultboy.walk.north": [
       "approved_vaultboy/walk_north_1.png",
@@ -7170,9 +7066,7 @@
       "approved_vaultboy/walk_north_3.png",
       "approved_vaultboy/walk_north_4.png",
       "approved_vaultboy/walk_north_5.png",
-      "approved_vaultboy/walk_north_6.png",
-      "approved_vaultboy/walk_north_7.png",
-      "approved_vaultboy/walk_north_8.png"
+      "approved_vaultboy/walk_north_6.png"
     ],
     "approved_vaultboy.walk.north-west": [
       "approved_vaultboy/walk_north-west_1.png",
@@ -7180,9 +7074,7 @@
       "approved_vaultboy/walk_north-west_3.png",
       "approved_vaultboy/walk_north-west_4.png",
       "approved_vaultboy/walk_north-west_5.png",
-      "approved_vaultboy/walk_north-west_6.png",
-      "approved_vaultboy/walk_north-west_7.png",
-      "approved_vaultboy/walk_north-west_8.png"
+      "approved_vaultboy/walk_north-west_6.png"
     ],
     "approved_vaultboy.walk.west": [
       "approved_vaultboy/walk_west_1.png",
@@ -7190,9 +7082,7 @@
       "approved_vaultboy/walk_west_3.png",
       "approved_vaultboy/walk_west_4.png",
       "approved_vaultboy/walk_west_5.png",
-      "approved_vaultboy/walk_west_6.png",
-      "approved_vaultboy/walk_west_7.png",
-      "approved_vaultboy/walk_west_8.png"
+      "approved_vaultboy/walk_west_6.png"
     ],
     "approved_vaultboy.walk.south-west": [
       "approved_vaultboy/walk_south-west_1.png",
@@ -7200,9 +7090,7 @@
       "approved_vaultboy/walk_south-west_3.png",
       "approved_vaultboy/walk_south-west_4.png",
       "approved_vaultboy/walk_south-west_5.png",
-      "approved_vaultboy/walk_south-west_6.png",
-      "approved_vaultboy/walk_south-west_7.png",
-      "approved_vaultboy/walk_south-west_8.png"
+      "approved_vaultboy/walk_south-west_6.png"
     ],
     "approved_bear.walk.south": [
       "approved_bear/walk_south_1.png",
@@ -7210,9 +7098,7 @@
       "approved_bear/walk_south_3.png",
       "approved_bear/walk_south_4.png",
       "approved_bear/walk_south_5.png",
-      "approved_bear/walk_south_6.png",
-      "approved_bear/walk_south_7.png",
-      "approved_bear/walk_south_8.png"
+      "approved_bear/walk_south_6.png"
     ],
     "approved_bear.walk.south-east": [
       "approved_bear/walk_south-east_1.png",
@@ -7220,9 +7106,7 @@
       "approved_bear/walk_south-east_3.png",
       "approved_bear/walk_south-east_4.png",
       "approved_bear/walk_south-east_5.png",
-      "approved_bear/walk_south-east_6.png",
-      "approved_bear/walk_south-east_7.png",
-      "approved_bear/walk_south-east_8.png"
+      "approved_bear/walk_south-east_6.png"
     ],
     "approved_bear.walk.east": [
       "approved_bear/walk_east_1.png",
@@ -7230,9 +7114,7 @@
       "approved_bear/walk_east_3.png",
       "approved_bear/walk_east_4.png",
       "approved_bear/walk_east_5.png",
-      "approved_bear/walk_east_6.png",
-      "approved_bear/walk_east_7.png",
-      "approved_bear/walk_east_8.png"
+      "approved_bear/walk_east_6.png"
     ],
     "approved_bear.walk.north-east": [
       "approved_bear/walk_north-east_1.png",
@@ -7240,9 +7122,7 @@
       "approved_bear/walk_north-east_3.png",
       "approved_bear/walk_north-east_4.png",
       "approved_bear/walk_north-east_5.png",
-      "approved_bear/walk_north-east_6.png",
-      "approved_bear/walk_north-east_7.png",
-      "approved_bear/walk_north-east_8.png"
+      "approved_bear/walk_north-east_6.png"
     ],
     "approved_bear.walk.north": [
       "approved_bear/walk_north_1.png",
@@ -7250,9 +7130,7 @@
       "approved_bear/walk_north_3.png",
       "approved_bear/walk_north_4.png",
       "approved_bear/walk_north_5.png",
-      "approved_bear/walk_north_6.png",
-      "approved_bear/walk_north_7.png",
-      "approved_bear/walk_north_8.png"
+      "approved_bear/walk_north_6.png"
     ],
     "approved_bear.walk.north-west": [
       "approved_bear/walk_north-west_1.png",
@@ -7260,9 +7138,7 @@
       "approved_bear/walk_north-west_3.png",
       "approved_bear/walk_north-west_4.png",
       "approved_bear/walk_north-west_5.png",
-      "approved_bear/walk_north-west_6.png",
-      "approved_bear/walk_north-west_7.png",
-      "approved_bear/walk_north-west_8.png"
+      "approved_bear/walk_north-west_6.png"
     ],
     "approved_bear.walk.west": [
       "approved_bear/walk_west_1.png",
@@ -7270,9 +7146,7 @@
       "approved_bear/walk_west_3.png",
       "approved_bear/walk_west_4.png",
       "approved_bear/walk_west_5.png",
-      "approved_bear/walk_west_6.png",
-      "approved_bear/walk_west_7.png",
-      "approved_bear/walk_west_8.png"
+      "approved_bear/walk_west_6.png"
     ],
     "approved_bear.walk.south-west": [
       "approved_bear/walk_south-west_1.png",
@@ -7280,9 +7154,7 @@
       "approved_bear/walk_south-west_3.png",
       "approved_bear/walk_south-west_4.png",
       "approved_bear/walk_south-west_5.png",
-      "approved_bear/walk_south-west_6.png",
-      "approved_bear/walk_south-west_7.png",
-      "approved_bear/walk_south-west_8.png"
+      "approved_bear/walk_south-west_6.png"
     ],
     "approved_pepe.sit.east": [
       "approved_pepe/sit_east_4.png"
@@ -7338,9 +7210,7 @@
       "approved_ghostface/walk_south_3.png",
       "approved_ghostface/walk_south_4.png",
       "approved_ghostface/walk_south_5.png",
-      "approved_ghostface/walk_south_6.png",
-      "approved_ghostface/walk_south_7.png",
-      "approved_ghostface/walk_south_8.png"
+      "approved_ghostface/walk_south_6.png"
     ],
     "approved_ghostface.walk.south-east": [
       "approved_ghostface/walk_south-east_1.png",
@@ -7348,9 +7218,7 @@
       "approved_ghostface/walk_south-east_3.png",
       "approved_ghostface/walk_south-east_4.png",
       "approved_ghostface/walk_south-east_5.png",
-      "approved_ghostface/walk_south-east_6.png",
-      "approved_ghostface/walk_south-east_7.png",
-      "approved_ghostface/walk_south-east_8.png"
+      "approved_ghostface/walk_south-east_6.png"
     ],
     "approved_ghostface.walk.east": [
       "approved_ghostface/walk_east_1.png",
@@ -7358,9 +7226,7 @@
       "approved_ghostface/walk_east_3.png",
       "approved_ghostface/walk_east_4.png",
       "approved_ghostface/walk_east_5.png",
-      "approved_ghostface/walk_east_6.png",
-      "approved_ghostface/walk_east_7.png",
-      "approved_ghostface/walk_east_8.png"
+      "approved_ghostface/walk_east_6.png"
     ],
     "approved_bear.type.north": [
       "approved_bear/type_north_1.png",
@@ -7374,9 +7240,7 @@
       "approved_ghostface/walk_north_3.png",
       "approved_ghostface/walk_north_4.png",
       "approved_ghostface/walk_north_5.png",
-      "approved_ghostface/walk_north_6.png",
-      "approved_ghostface/walk_north_7.png",
-      "approved_ghostface/walk_north_8.png"
+      "approved_ghostface/walk_north_6.png"
     ],
     "approved_ghostface.walk.north-west": [
       "approved_ghostface/walk_north-west_1.png",
@@ -7384,9 +7248,7 @@
       "approved_ghostface/walk_north-west_3.png",
       "approved_ghostface/walk_north-west_4.png",
       "approved_ghostface/walk_north-west_5.png",
-      "approved_ghostface/walk_north-west_6.png",
-      "approved_ghostface/walk_north-west_7.png",
-      "approved_ghostface/walk_north-west_8.png"
+      "approved_ghostface/walk_north-west_6.png"
     ],
     "approved_ghostface.walk.west": [
       "approved_ghostface/walk_west_1.png",
@@ -7394,9 +7256,7 @@
       "approved_ghostface/walk_west_3.png",
       "approved_ghostface/walk_west_4.png",
       "approved_ghostface/walk_west_5.png",
-      "approved_ghostface/walk_west_6.png",
-      "approved_ghostface/walk_west_7.png",
-      "approved_ghostface/walk_west_8.png"
+      "approved_ghostface/walk_west_6.png"
     ],
     "approved_ghostface.walk.north-east": [
       "approved_ghostface/walk_north-east_1.png",
@@ -7404,9 +7264,7 @@
       "approved_ghostface/walk_north-east_3.png",
       "approved_ghostface/walk_north-east_4.png",
       "approved_ghostface/walk_north-east_5.png",
-      "approved_ghostface/walk_north-east_6.png",
-      "approved_ghostface/walk_north-east_7.png",
-      "approved_ghostface/walk_north-east_8.png"
+      "approved_ghostface/walk_north-east_6.png"
     ],
     "approved_ghostface.walk.south-west": [
       "approved_ghostface/walk_south-west_1.png",
@@ -7414,9 +7272,7 @@
       "approved_ghostface/walk_south-west_3.png",
       "approved_ghostface/walk_south-west_4.png",
       "approved_ghostface/walk_south-west_5.png",
-      "approved_ghostface/walk_south-west_6.png",
-      "approved_ghostface/walk_south-west_7.png",
-      "approved_ghostface/walk_south-west_8.png"
+      "approved_ghostface/walk_south-west_6.png"
     ],
     "approved_ghostface.sit.south": [
       "approved_ghostface/sit_south_4.png"
@@ -7442,9 +7298,7 @@
       "approved_morpheus/walk_south_3.png",
       "approved_morpheus/walk_south_4.png",
       "approved_morpheus/walk_south_5.png",
-      "approved_morpheus/walk_south_6.png",
-      "approved_morpheus/walk_south_7.png",
-      "approved_morpheus/walk_south_8.png"
+      "approved_morpheus/walk_south_6.png"
     ],
     "approved_morpheus.walk.south-east": [
       "approved_morpheus/walk_south-east_1.png",
@@ -7452,9 +7306,7 @@
       "approved_morpheus/walk_south-east_3.png",
       "approved_morpheus/walk_south-east_4.png",
       "approved_morpheus/walk_south-east_5.png",
-      "approved_morpheus/walk_south-east_6.png",
-      "approved_morpheus/walk_south-east_7.png",
-      "approved_morpheus/walk_south-east_8.png"
+      "approved_morpheus/walk_south-east_6.png"
     ],
     "approved_morpheus.walk.east": [
       "approved_morpheus/walk_east_1.png",
@@ -7462,9 +7314,7 @@
       "approved_morpheus/walk_east_3.png",
       "approved_morpheus/walk_east_4.png",
       "approved_morpheus/walk_east_5.png",
-      "approved_morpheus/walk_east_6.png",
-      "approved_morpheus/walk_east_7.png",
-      "approved_morpheus/walk_east_8.png"
+      "approved_morpheus/walk_east_6.png"
     ],
     "approved_morpheus.walk.north-east": [
       "approved_morpheus/walk_north-east_1.png",
@@ -7472,9 +7322,7 @@
       "approved_morpheus/walk_north-east_3.png",
       "approved_morpheus/walk_north-east_4.png",
       "approved_morpheus/walk_north-east_5.png",
-      "approved_morpheus/walk_north-east_6.png",
-      "approved_morpheus/walk_north-east_7.png",
-      "approved_morpheus/walk_north-east_8.png"
+      "approved_morpheus/walk_north-east_6.png"
     ],
     "approved_morpheus.walk.north": [
       "approved_morpheus/walk_north_1.png",
@@ -7482,9 +7330,7 @@
       "approved_morpheus/walk_north_3.png",
       "approved_morpheus/walk_north_4.png",
       "approved_morpheus/walk_north_5.png",
-      "approved_morpheus/walk_north_6.png",
-      "approved_morpheus/walk_north_7.png",
-      "approved_morpheus/walk_north_8.png"
+      "approved_morpheus/walk_north_6.png"
     ],
     "approved_morpheus.sit.south": [
       "approved_morpheus/sit_south_4.png"
@@ -7495,9 +7341,7 @@
       "approved_morpheus/walk_north-west_3.png",
       "approved_morpheus/walk_north-west_4.png",
       "approved_morpheus/walk_north-west_5.png",
-      "approved_morpheus/walk_north-west_6.png",
-      "approved_morpheus/walk_north-west_7.png",
-      "approved_morpheus/walk_north-west_8.png"
+      "approved_morpheus/walk_north-west_6.png"
     ],
     "approved_morpheus.walk.west": [
       "approved_morpheus/walk_west_1.png",
@@ -7505,9 +7349,7 @@
       "approved_morpheus/walk_west_3.png",
       "approved_morpheus/walk_west_4.png",
       "approved_morpheus/walk_west_5.png",
-      "approved_morpheus/walk_west_6.png",
-      "approved_morpheus/walk_west_7.png",
-      "approved_morpheus/walk_west_8.png"
+      "approved_morpheus/walk_west_6.png"
     ],
     "approved_morpheus.walk.south-west": [
       "approved_morpheus/walk_south-west_1.png",
@@ -7515,9 +7357,7 @@
       "approved_morpheus/walk_south-west_3.png",
       "approved_morpheus/walk_south-west_4.png",
       "approved_morpheus/walk_south-west_5.png",
-      "approved_morpheus/walk_south-west_6.png",
-      "approved_morpheus/walk_south-west_7.png",
-      "approved_morpheus/walk_south-west_8.png"
+      "approved_morpheus/walk_south-west_6.png"
     ],
     "approved_morpheus.sit.east": [
       "approved_morpheus/sit_east_4.png"
@@ -7555,9 +7395,7 @@
       "approved_android/walk_south_3.png",
       "approved_android/walk_south_4.png",
       "approved_android/walk_south_5.png",
-      "approved_android/walk_south_6.png",
-      "approved_android/walk_south_7.png",
-      "approved_android/walk_south_8.png"
+      "approved_android/walk_south_6.png"
     ],
     "approved_android.walk.south-east": [
       "approved_android/walk_south-east_1.png",
@@ -7565,9 +7403,7 @@
       "approved_android/walk_south-east_3.png",
       "approved_android/walk_south-east_4.png",
       "approved_android/walk_south-east_5.png",
-      "approved_android/walk_south-east_6.png",
-      "approved_android/walk_south-east_7.png",
-      "approved_android/walk_south-east_8.png"
+      "approved_android/walk_south-east_6.png"
     ],
     "approved_android.walk.east": [
       "approved_android/walk_east_1.png",
@@ -7575,9 +7411,7 @@
       "approved_android/walk_east_3.png",
       "approved_android/walk_east_4.png",
       "approved_android/walk_east_5.png",
-      "approved_android/walk_east_6.png",
-      "approved_android/walk_east_7.png",
-      "approved_android/walk_east_8.png"
+      "approved_android/walk_east_6.png"
     ],
     "approved_android.walk.north-east": [
       "approved_android/walk_north-east_1.png",
@@ -7585,9 +7419,7 @@
       "approved_android/walk_north-east_3.png",
       "approved_android/walk_north-east_4.png",
       "approved_android/walk_north-east_5.png",
-      "approved_android/walk_north-east_6.png",
-      "approved_android/walk_north-east_7.png",
-      "approved_android/walk_north-east_8.png"
+      "approved_android/walk_north-east_6.png"
     ],
     "approved_android.walk.north": [
       "approved_android/walk_north_1.png",
@@ -7595,9 +7427,7 @@
       "approved_android/walk_north_3.png",
       "approved_android/walk_north_4.png",
       "approved_android/walk_north_5.png",
-      "approved_android/walk_north_6.png",
-      "approved_android/walk_north_7.png",
-      "approved_android/walk_north_8.png"
+      "approved_android/walk_north_6.png"
     ],
     "approved_morpheus.type.north": [
       "approved_morpheus/type_north_1.png",
@@ -7611,9 +7441,7 @@
       "approved_android/walk_north-west_3.png",
       "approved_android/walk_north-west_4.png",
       "approved_android/walk_north-west_5.png",
-      "approved_android/walk_north-west_6.png",
-      "approved_android/walk_north-west_7.png",
-      "approved_android/walk_north-west_8.png"
+      "approved_android/walk_north-west_6.png"
     ],
     "approved_android.walk.west": [
       "approved_android/walk_west_1.png",
@@ -7621,9 +7449,7 @@
       "approved_android/walk_west_3.png",
       "approved_android/walk_west_4.png",
       "approved_android/walk_west_5.png",
-      "approved_android/walk_west_6.png",
-      "approved_android/walk_west_7.png",
-      "approved_android/walk_west_8.png"
+      "approved_android/walk_west_6.png"
     ],
     "approved_android.sit.south": [
       "approved_android/sit_south_4.png"
@@ -7640,9 +7466,7 @@
       "approved_android/walk_south-west_3.png",
       "approved_android/walk_south-west_4.png",
       "approved_android/walk_south-west_5.png",
-      "approved_android/walk_south-west_6.png",
-      "approved_android/walk_south-west_7.png",
-      "approved_android/walk_south-west_8.png"
+      "approved_android/walk_south-west_6.png"
     ],
     "approved_android.sit.north": [
       "approved_android/sit_north_4.png"
@@ -7674,9 +7498,7 @@
       "approved_astronaut/walk_south_3.png",
       "approved_astronaut/walk_south_4.png",
       "approved_astronaut/walk_south_5.png",
-      "approved_astronaut/walk_south_6.png",
-      "approved_astronaut/walk_south_7.png",
-      "approved_astronaut/walk_south_8.png"
+      "approved_astronaut/walk_south_6.png"
     ],
     "approved_astronaut.walk.south-east": [
       "approved_astronaut/walk_south-east_1.png",
@@ -7684,9 +7506,7 @@
       "approved_astronaut/walk_south-east_3.png",
       "approved_astronaut/walk_south-east_4.png",
       "approved_astronaut/walk_south-east_5.png",
-      "approved_astronaut/walk_south-east_6.png",
-      "approved_astronaut/walk_south-east_7.png",
-      "approved_astronaut/walk_south-east_8.png"
+      "approved_astronaut/walk_south-east_6.png"
     ],
     "approved_astronaut.walk.east": [
       "approved_astronaut/walk_east_1.png",
@@ -7694,9 +7514,7 @@
       "approved_astronaut/walk_east_3.png",
       "approved_astronaut/walk_east_4.png",
       "approved_astronaut/walk_east_5.png",
-      "approved_astronaut/walk_east_6.png",
-      "approved_astronaut/walk_east_7.png",
-      "approved_astronaut/walk_east_8.png"
+      "approved_astronaut/walk_east_6.png"
     ],
     "approved_astronaut.walk.north-east": [
       "approved_astronaut/walk_north-east_1.png",
@@ -7704,9 +7522,7 @@
       "approved_astronaut/walk_north-east_3.png",
       "approved_astronaut/walk_north-east_4.png",
       "approved_astronaut/walk_north-east_5.png",
-      "approved_astronaut/walk_north-east_6.png",
-      "approved_astronaut/walk_north-east_7.png",
-      "approved_astronaut/walk_north-east_8.png"
+      "approved_astronaut/walk_north-east_6.png"
     ],
     "approved_astronaut.walk.north": [
       "approved_astronaut/walk_north_1.png",
@@ -7714,9 +7530,7 @@
       "approved_astronaut/walk_north_3.png",
       "approved_astronaut/walk_north_4.png",
       "approved_astronaut/walk_north_5.png",
-      "approved_astronaut/walk_north_6.png",
-      "approved_astronaut/walk_north_7.png",
-      "approved_astronaut/walk_north_8.png"
+      "approved_astronaut/walk_north_6.png"
     ],
     "approved_android.type.north": [
       "approved_android/type_north_1.png",
@@ -7730,9 +7544,7 @@
       "approved_astronaut/walk_north-west_3.png",
       "approved_astronaut/walk_north-west_4.png",
       "approved_astronaut/walk_north-west_5.png",
-      "approved_astronaut/walk_north-west_6.png",
-      "approved_astronaut/walk_north-west_7.png",
-      "approved_astronaut/walk_north-west_8.png"
+      "approved_astronaut/walk_north-west_6.png"
     ],
     "approved_astronaut.walk.west": [
       "approved_astronaut/walk_west_1.png",
@@ -7740,9 +7552,7 @@
       "approved_astronaut/walk_west_3.png",
       "approved_astronaut/walk_west_4.png",
       "approved_astronaut/walk_west_5.png",
-      "approved_astronaut/walk_west_6.png",
-      "approved_astronaut/walk_west_7.png",
-      "approved_astronaut/walk_west_8.png"
+      "approved_astronaut/walk_west_6.png"
     ],
     "approved_astronaut.sit.south": [
       "approved_astronaut/sit_south_4.png"
@@ -7753,9 +7563,7 @@
       "approved_astronaut/walk_south-west_3.png",
       "approved_astronaut/walk_south-west_4.png",
       "approved_astronaut/walk_south-west_5.png",
-      "approved_astronaut/walk_south-west_6.png",
-      "approved_astronaut/walk_south-west_7.png",
-      "approved_astronaut/walk_south-west_8.png"
+      "approved_astronaut/walk_south-west_6.png"
     ],
     "approved_astronaut.sit.east": [
       "approved_astronaut/sit_east_4.png"
@@ -7793,9 +7601,7 @@
       "approved_robot/walk_south_3.png",
       "approved_robot/walk_south_4.png",
       "approved_robot/walk_south_5.png",
-      "approved_robot/walk_south_6.png",
-      "approved_robot/walk_south_7.png",
-      "approved_robot/walk_south_8.png"
+      "approved_robot/walk_south_6.png"
     ],
     "approved_astronaut.type.north": [
       "approved_astronaut/type_north_1.png",
@@ -7809,9 +7615,7 @@
       "approved_robot/walk_south-east_3.png",
       "approved_robot/walk_south-east_4.png",
       "approved_robot/walk_south-east_5.png",
-      "approved_robot/walk_south-east_6.png",
-      "approved_robot/walk_south-east_7.png",
-      "approved_robot/walk_south-east_8.png"
+      "approved_robot/walk_south-east_6.png"
     ],
     "approved_robot.walk.east": [
       "approved_robot/walk_east_1.png",
@@ -7819,9 +7623,7 @@
       "approved_robot/walk_east_3.png",
       "approved_robot/walk_east_4.png",
       "approved_robot/walk_east_5.png",
-      "approved_robot/walk_east_6.png",
-      "approved_robot/walk_east_7.png",
-      "approved_robot/walk_east_8.png"
+      "approved_robot/walk_east_6.png"
     ],
     "approved_robot.walk.north-east": [
       "approved_robot/walk_north-east_1.png",
@@ -7829,9 +7631,7 @@
       "approved_robot/walk_north-east_3.png",
       "approved_robot/walk_north-east_4.png",
       "approved_robot/walk_north-east_5.png",
-      "approved_robot/walk_north-east_6.png",
-      "approved_robot/walk_north-east_7.png",
-      "approved_robot/walk_north-east_8.png"
+      "approved_robot/walk_north-east_6.png"
     ],
     "approved_robot.walk.north": [
       "approved_robot/walk_north_1.png",
@@ -7839,9 +7639,7 @@
       "approved_robot/walk_north_3.png",
       "approved_robot/walk_north_4.png",
       "approved_robot/walk_north_5.png",
-      "approved_robot/walk_north_6.png",
-      "approved_robot/walk_north_7.png",
-      "approved_robot/walk_north_8.png"
+      "approved_robot/walk_north_6.png"
     ],
     "approved_robot.walk.north-west": [
       "approved_robot/walk_north-west_1.png",
@@ -7849,9 +7647,7 @@
       "approved_robot/walk_north-west_3.png",
       "approved_robot/walk_north-west_4.png",
       "approved_robot/walk_north-west_5.png",
-      "approved_robot/walk_north-west_6.png",
-      "approved_robot/walk_north-west_7.png",
-      "approved_robot/walk_north-west_8.png"
+      "approved_robot/walk_north-west_6.png"
     ],
     "approved_robot.walk.west": [
       "approved_robot/walk_west_1.png",
@@ -7859,9 +7655,7 @@
       "approved_robot/walk_west_3.png",
       "approved_robot/walk_west_4.png",
       "approved_robot/walk_west_5.png",
-      "approved_robot/walk_west_6.png",
-      "approved_robot/walk_west_7.png",
-      "approved_robot/walk_west_8.png"
+      "approved_robot/walk_west_6.png"
     ],
     "approved_robot.walk.south-west": [
       "approved_robot/walk_south-west_1.png",
@@ -7869,9 +7663,7 @@
       "approved_robot/walk_south-west_3.png",
       "approved_robot/walk_south-west_4.png",
       "approved_robot/walk_south-west_5.png",
-      "approved_robot/walk_south-west_6.png",
-      "approved_robot/walk_south-west_7.png",
-      "approved_robot/walk_south-west_8.png"
+      "approved_robot/walk_south-west_6.png"
     ],
     "approved_robot.sit.east": [
       "approved_robot/sit_east_4.png"
@@ -7918,9 +7710,7 @@
       "approved_crthead/walk_south_3.png",
       "approved_crthead/walk_south_4.png",
       "approved_crthead/walk_south_5.png",
-      "approved_crthead/walk_south_6.png",
-      "approved_crthead/walk_south_7.png",
-      "approved_crthead/walk_south_8.png"
+      "approved_crthead/walk_south_6.png"
     ],
     "approved_crthead.walk.south-east": [
       "approved_crthead/walk_south-east_1.png",
@@ -7928,9 +7718,7 @@
       "approved_crthead/walk_south-east_3.png",
       "approved_crthead/walk_south-east_4.png",
       "approved_crthead/walk_south-east_5.png",
-      "approved_crthead/walk_south-east_6.png",
-      "approved_crthead/walk_south-east_7.png",
-      "approved_crthead/walk_south-east_8.png"
+      "approved_crthead/walk_south-east_6.png"
     ],
     "approved_crthead.walk.east": [
       "approved_crthead/walk_east_1.png",
@@ -7938,9 +7726,7 @@
       "approved_crthead/walk_east_3.png",
       "approved_crthead/walk_east_4.png",
       "approved_crthead/walk_east_5.png",
-      "approved_crthead/walk_east_6.png",
-      "approved_crthead/walk_east_7.png",
-      "approved_crthead/walk_east_8.png"
+      "approved_crthead/walk_east_6.png"
     ],
     "approved_crthead.walk.north": [
       "approved_crthead/walk_north_1.png",
@@ -7948,9 +7734,7 @@
       "approved_crthead/walk_north_3.png",
       "approved_crthead/walk_north_4.png",
       "approved_crthead/walk_north_5.png",
-      "approved_crthead/walk_north_6.png",
-      "approved_crthead/walk_north_7.png",
-      "approved_crthead/walk_north_8.png"
+      "approved_crthead/walk_north_6.png"
     ],
     "approved_crthead.walk.north-east": [
       "approved_crthead/walk_north-east_1.png",
@@ -7958,9 +7742,7 @@
       "approved_crthead/walk_north-east_3.png",
       "approved_crthead/walk_north-east_4.png",
       "approved_crthead/walk_north-east_5.png",
-      "approved_crthead/walk_north-east_6.png",
-      "approved_crthead/walk_north-east_7.png",
-      "approved_crthead/walk_north-east_8.png"
+      "approved_crthead/walk_north-east_6.png"
     ],
     "approved_crthead.walk.north-west": [
       "approved_crthead/walk_north-west_1.png",
@@ -7968,9 +7750,7 @@
       "approved_crthead/walk_north-west_3.png",
       "approved_crthead/walk_north-west_4.png",
       "approved_crthead/walk_north-west_5.png",
-      "approved_crthead/walk_north-west_6.png",
-      "approved_crthead/walk_north-west_7.png",
-      "approved_crthead/walk_north-west_8.png"
+      "approved_crthead/walk_north-west_6.png"
     ],
     "approved_crthead.walk.west": [
       "approved_crthead/walk_west_1.png",
@@ -7978,9 +7758,7 @@
       "approved_crthead/walk_west_3.png",
       "approved_crthead/walk_west_4.png",
       "approved_crthead/walk_west_5.png",
-      "approved_crthead/walk_west_6.png",
-      "approved_crthead/walk_west_7.png",
-      "approved_crthead/walk_west_8.png"
+      "approved_crthead/walk_west_6.png"
     ],
     "approved_crthead.walk.south-west": [
       "approved_crthead/walk_south-west_1.png",
@@ -7988,9 +7766,7 @@
       "approved_crthead/walk_south-west_3.png",
       "approved_crthead/walk_south-west_4.png",
       "approved_crthead/walk_south-west_5.png",
-      "approved_crthead/walk_south-west_6.png",
-      "approved_crthead/walk_south-west_7.png",
-      "approved_crthead/walk_south-west_8.png"
+      "approved_crthead/walk_south-west_6.png"
     ],
     "approved_crthead.sit.east": [
       "approved_crthead/sit_east_4.png"
@@ -8037,9 +7813,7 @@
       "approved_alien/walk_south_3.png",
       "approved_alien/walk_south_4.png",
       "approved_alien/walk_south_5.png",
-      "approved_alien/walk_south_6.png",
-      "approved_alien/walk_south_7.png",
-      "approved_alien/walk_south_8.png"
+      "approved_alien/walk_south_6.png"
     ],
     "approved_alien.walk.south-east": [
       "approved_alien/walk_south-east_1.png",
@@ -8047,9 +7821,7 @@
       "approved_alien/walk_south-east_3.png",
       "approved_alien/walk_south-east_4.png",
       "approved_alien/walk_south-east_5.png",
-      "approved_alien/walk_south-east_6.png",
-      "approved_alien/walk_south-east_7.png",
-      "approved_alien/walk_south-east_8.png"
+      "approved_alien/walk_south-east_6.png"
     ],
     "approved_alien.walk.east": [
       "approved_alien/walk_east_1.png",
@@ -8057,9 +7829,7 @@
       "approved_alien/walk_east_3.png",
       "approved_alien/walk_east_4.png",
       "approved_alien/walk_east_5.png",
-      "approved_alien/walk_east_6.png",
-      "approved_alien/walk_east_7.png",
-      "approved_alien/walk_east_8.png"
+      "approved_alien/walk_east_6.png"
     ],
     "approved_alien.walk.north-east": [
       "approved_alien/walk_north-east_1.png",
@@ -8067,9 +7837,7 @@
       "approved_alien/walk_north-east_3.png",
       "approved_alien/walk_north-east_4.png",
       "approved_alien/walk_north-east_5.png",
-      "approved_alien/walk_north-east_6.png",
-      "approved_alien/walk_north-east_7.png",
-      "approved_alien/walk_north-east_8.png"
+      "approved_alien/walk_north-east_6.png"
     ],
     "approved_alien.walk.north": [
       "approved_alien/walk_north_1.png",
@@ -8077,9 +7845,7 @@
       "approved_alien/walk_north_3.png",
       "approved_alien/walk_north_4.png",
       "approved_alien/walk_north_5.png",
-      "approved_alien/walk_north_6.png",
-      "approved_alien/walk_north_7.png",
-      "approved_alien/walk_north_8.png"
+      "approved_alien/walk_north_6.png"
     ],
     "approved_alien.walk.north-west": [
       "approved_alien/walk_north-west_1.png",
@@ -8087,9 +7853,7 @@
       "approved_alien/walk_north-west_3.png",
       "approved_alien/walk_north-west_4.png",
       "approved_alien/walk_north-west_5.png",
-      "approved_alien/walk_north-west_6.png",
-      "approved_alien/walk_north-west_7.png",
-      "approved_alien/walk_north-west_8.png"
+      "approved_alien/walk_north-west_6.png"
     ],
     "approved_alien.walk.west": [
       "approved_alien/walk_west_1.png",
@@ -8097,9 +7861,7 @@
       "approved_alien/walk_west_3.png",
       "approved_alien/walk_west_4.png",
       "approved_alien/walk_west_5.png",
-      "approved_alien/walk_west_6.png",
-      "approved_alien/walk_west_7.png",
-      "approved_alien/walk_west_8.png"
+      "approved_alien/walk_west_6.png"
     ],
     "approved_alien.walk.south-west": [
       "approved_alien/walk_south-west_1.png",
@@ -8107,9 +7869,7 @@
       "approved_alien/walk_south-west_3.png",
       "approved_alien/walk_south-west_4.png",
       "approved_alien/walk_south-west_5.png",
-      "approved_alien/walk_south-west_6.png",
-      "approved_alien/walk_south-west_7.png",
-      "approved_alien/walk_south-west_8.png"
+      "approved_alien/walk_south-west_6.png"
     ],
     "approved_alien.sit.south": [
       "approved_alien/sit_south_4.png"
@@ -8265,9 +8025,7 @@
       "approved_robocop/walk_south_3.png",
       "approved_robocop/walk_south_4.png",
       "approved_robocop/walk_south_5.png",
-      "approved_robocop/walk_south_6.png",
-      "approved_robocop/walk_south_7.png",
-      "approved_robocop/walk_south_8.png"
+      "approved_robocop/walk_south_6.png"
     ],
     "approved_robocop.walk.south-east": [
       "approved_robocop/walk_south-east_1.png",
@@ -8275,9 +8033,7 @@
       "approved_robocop/walk_south-east_3.png",
       "approved_robocop/walk_south-east_4.png",
       "approved_robocop/walk_south-east_5.png",
-      "approved_robocop/walk_south-east_6.png",
-      "approved_robocop/walk_south-east_7.png",
-      "approved_robocop/walk_south-east_8.png"
+      "approved_robocop/walk_south-east_6.png"
     ],
     "approved_robocop.walk.east": [
       "approved_robocop/walk_east_1.png",
@@ -8285,9 +8041,7 @@
       "approved_robocop/walk_east_3.png",
       "approved_robocop/walk_east_4.png",
       "approved_robocop/walk_east_5.png",
-      "approved_robocop/walk_east_6.png",
-      "approved_robocop/walk_east_7.png",
-      "approved_robocop/walk_east_8.png"
+      "approved_robocop/walk_east_6.png"
     ],
     "approved_robocop.walk.north-east": [
       "approved_robocop/walk_north-east_1.png",
@@ -8295,9 +8049,7 @@
       "approved_robocop/walk_north-east_3.png",
       "approved_robocop/walk_north-east_4.png",
       "approved_robocop/walk_north-east_5.png",
-      "approved_robocop/walk_north-east_6.png",
-      "approved_robocop/walk_north-east_7.png",
-      "approved_robocop/walk_north-east_8.png"
+      "approved_robocop/walk_north-east_6.png"
     ],
     "approved_robocop.walk.north": [
       "approved_robocop/walk_north_1.png",
@@ -8305,9 +8057,7 @@
       "approved_robocop/walk_north_3.png",
       "approved_robocop/walk_north_4.png",
       "approved_robocop/walk_north_5.png",
-      "approved_robocop/walk_north_6.png",
-      "approved_robocop/walk_north_7.png",
-      "approved_robocop/walk_north_8.png"
+      "approved_robocop/walk_north_6.png"
     ],
     "approved_robocop.walk.north-west": [
       "approved_robocop/walk_north-west_1.png",
@@ -8315,9 +8065,7 @@
       "approved_robocop/walk_north-west_3.png",
       "approved_robocop/walk_north-west_4.png",
       "approved_robocop/walk_north-west_5.png",
-      "approved_robocop/walk_north-west_6.png",
-      "approved_robocop/walk_north-west_7.png",
-      "approved_robocop/walk_north-west_8.png"
+      "approved_robocop/walk_north-west_6.png"
     ],
     "approved_robocop.walk.west": [
       "approved_robocop/walk_west_1.png",
@@ -8325,9 +8073,7 @@
       "approved_robocop/walk_west_3.png",
       "approved_robocop/walk_west_4.png",
       "approved_robocop/walk_west_5.png",
-      "approved_robocop/walk_west_6.png",
-      "approved_robocop/walk_west_7.png",
-      "approved_robocop/walk_west_8.png"
+      "approved_robocop/walk_west_6.png"
     ],
     "approved_robocop.sit.south": [
       "approved_robocop/sit_south_4.png"
@@ -8338,9 +8084,7 @@
       "approved_robocop/walk_south-west_3.png",
       "approved_robocop/walk_south-west_4.png",
       "approved_robocop/walk_south-west_5.png",
-      "approved_robocop/walk_south-west_6.png",
-      "approved_robocop/walk_south-west_7.png",
-      "approved_robocop/walk_south-west_8.png"
+      "approved_robocop/walk_south-west_6.png"
     ],
     "approved_robocop.sit.east": [
       "approved_robocop/sit_east_4.png"
@@ -8507,9 +8251,7 @@
       "approved_grimreaper/walk_east_3.png",
       "approved_grimreaper/walk_east_4.png",
       "approved_grimreaper/walk_east_5.png",
-      "approved_grimreaper/walk_east_6.png",
-      "approved_grimreaper/walk_east_7.png",
-      "approved_grimreaper/walk_east_8.png"
+      "approved_grimreaper/walk_east_6.png"
     ],
     "approved_grimreaper.walk.north": [
       "approved_grimreaper/walk_north_1.png",
@@ -8517,9 +8259,7 @@
       "approved_grimreaper/walk_north_3.png",
       "approved_grimreaper/walk_north_4.png",
       "approved_grimreaper/walk_north_5.png",
-      "approved_grimreaper/walk_north_6.png",
-      "approved_grimreaper/walk_north_7.png",
-      "approved_grimreaper/walk_north_8.png"
+      "approved_grimreaper/walk_north_6.png"
     ],
     "approved_grimreaper.walk.south": [
       "approved_grimreaper/walk_south_1.png",
@@ -8527,9 +8267,7 @@
       "approved_grimreaper/walk_south_3.png",
       "approved_grimreaper/walk_south_4.png",
       "approved_grimreaper/walk_south_5.png",
-      "approved_grimreaper/walk_south_6.png",
-      "approved_grimreaper/walk_south_7.png",
-      "approved_grimreaper/walk_south_8.png"
+      "approved_grimreaper/walk_south_6.png"
     ],
     "approved_grimreaper.walk.north-east": [
       "approved_grimreaper/walk_north-east_1.png",
@@ -8537,9 +8275,7 @@
       "approved_grimreaper/walk_north-east_3.png",
       "approved_grimreaper/walk_north-east_4.png",
       "approved_grimreaper/walk_north-east_5.png",
-      "approved_grimreaper/walk_north-east_6.png",
-      "approved_grimreaper/walk_north-east_7.png",
-      "approved_grimreaper/walk_north-east_8.png"
+      "approved_grimreaper/walk_north-east_6.png"
     ],
     "approved_grimreaper.walk.north-west": [
       "approved_grimreaper/walk_north-west_1.png",
@@ -8547,9 +8283,7 @@
       "approved_grimreaper/walk_north-west_3.png",
       "approved_grimreaper/walk_north-west_4.png",
       "approved_grimreaper/walk_north-west_5.png",
-      "approved_grimreaper/walk_north-west_6.png",
-      "approved_grimreaper/walk_north-west_7.png",
-      "approved_grimreaper/walk_north-west_8.png"
+      "approved_grimreaper/walk_north-west_6.png"
     ],
     "approved_masterchief.type.north": [
       "approved_masterchief/type_north_1.png",
@@ -8563,9 +8297,7 @@
       "approved_grimreaper/walk_south-east_3.png",
       "approved_grimreaper/walk_south-east_4.png",
       "approved_grimreaper/walk_south-east_5.png",
-      "approved_grimreaper/walk_south-east_6.png",
-      "approved_grimreaper/walk_south-east_7.png",
-      "approved_grimreaper/walk_south-east_8.png"
+      "approved_grimreaper/walk_south-east_6.png"
     ],
     "approved_grimreaper.walk.west": [
       "approved_grimreaper/walk_west_1.png",
@@ -8573,9 +8305,7 @@
       "approved_grimreaper/walk_west_3.png",
       "approved_grimreaper/walk_west_4.png",
       "approved_grimreaper/walk_west_5.png",
-      "approved_grimreaper/walk_west_6.png",
-      "approved_grimreaper/walk_west_7.png",
-      "approved_grimreaper/walk_west_8.png"
+      "approved_grimreaper/walk_west_6.png"
     ],
     "approved_grimreaper.walk.south-west": [
       "approved_grimreaper/walk_south-west_1.png",
@@ -8583,9 +8313,7 @@
       "approved_grimreaper/walk_south-west_3.png",
       "approved_grimreaper/walk_south-west_4.png",
       "approved_grimreaper/walk_south-west_5.png",
-      "approved_grimreaper/walk_south-west_6.png",
-      "approved_grimreaper/walk_south-west_7.png",
-      "approved_grimreaper/walk_south-west_8.png"
+      "approved_grimreaper/walk_south-west_6.png"
     ],
     "approved_grimreaper.sit.east": [
       "approved_grimreaper/sit_east_4.png"
@@ -8632,9 +8360,7 @@
       "approved_crewmate/walk_south_3.png",
       "approved_crewmate/walk_south_4.png",
       "approved_crewmate/walk_south_5.png",
-      "approved_crewmate/walk_south_6.png",
-      "approved_crewmate/walk_south_7.png",
-      "approved_crewmate/walk_south_8.png"
+      "approved_crewmate/walk_south_6.png"
     ],
     "approved_crewmate.walk.south-east": [
       "approved_crewmate/walk_south-east_1.png",
@@ -8642,9 +8368,7 @@
       "approved_crewmate/walk_south-east_3.png",
       "approved_crewmate/walk_south-east_4.png",
       "approved_crewmate/walk_south-east_5.png",
-      "approved_crewmate/walk_south-east_6.png",
-      "approved_crewmate/walk_south-east_7.png",
-      "approved_crewmate/walk_south-east_8.png"
+      "approved_crewmate/walk_south-east_6.png"
     ],
     "approved_crewmate.walk.east": [
       "approved_crewmate/walk_east_1.png",
@@ -8652,9 +8376,7 @@
       "approved_crewmate/walk_east_3.png",
       "approved_crewmate/walk_east_4.png",
       "approved_crewmate/walk_east_5.png",
-      "approved_crewmate/walk_east_6.png",
-      "approved_crewmate/walk_east_7.png",
-      "approved_crewmate/walk_east_8.png"
+      "approved_crewmate/walk_east_6.png"
     ],
     "approved_crewmate.walk.north-east": [
       "approved_crewmate/walk_north-east_1.png",
@@ -8662,9 +8384,7 @@
       "approved_crewmate/walk_north-east_3.png",
       "approved_crewmate/walk_north-east_4.png",
       "approved_crewmate/walk_north-east_5.png",
-      "approved_crewmate/walk_north-east_6.png",
-      "approved_crewmate/walk_north-east_7.png",
-      "approved_crewmate/walk_north-east_8.png"
+      "approved_crewmate/walk_north-east_6.png"
     ],
     "approved_crewmate.walk.north": [
       "approved_crewmate/walk_north_1.png",
@@ -8672,9 +8392,7 @@
       "approved_crewmate/walk_north_3.png",
       "approved_crewmate/walk_north_4.png",
       "approved_crewmate/walk_north_5.png",
-      "approved_crewmate/walk_north_6.png",
-      "approved_crewmate/walk_north_7.png",
-      "approved_crewmate/walk_north_8.png"
+      "approved_crewmate/walk_north_6.png"
     ],
     "approved_crewmate.walk.north-west": [
       "approved_crewmate/walk_north-west_1.png",
@@ -8682,9 +8400,7 @@
       "approved_crewmate/walk_north-west_3.png",
       "approved_crewmate/walk_north-west_4.png",
       "approved_crewmate/walk_north-west_5.png",
-      "approved_crewmate/walk_north-west_6.png",
-      "approved_crewmate/walk_north-west_7.png",
-      "approved_crewmate/walk_north-west_8.png"
+      "approved_crewmate/walk_north-west_6.png"
     ],
     "approved_crewmate.walk.west": [
       "approved_crewmate/walk_west_1.png",
@@ -8692,9 +8408,7 @@
       "approved_crewmate/walk_west_3.png",
       "approved_crewmate/walk_west_4.png",
       "approved_crewmate/walk_west_5.png",
-      "approved_crewmate/walk_west_6.png",
-      "approved_crewmate/walk_west_7.png",
-      "approved_crewmate/walk_west_8.png"
+      "approved_crewmate/walk_west_6.png"
     ],
     "approved_crewmate.walk.south-west": [
       "approved_crewmate/walk_south-west_1.png",
@@ -8702,9 +8416,7 @@
       "approved_crewmate/walk_south-west_3.png",
       "approved_crewmate/walk_south-west_4.png",
       "approved_crewmate/walk_south-west_5.png",
-      "approved_crewmate/walk_south-west_6.png",
-      "approved_crewmate/walk_south-west_7.png",
-      "approved_crewmate/walk_south-west_8.png"
+      "approved_crewmate/walk_south-west_6.png"
     ],
     "approved_crewmate.sit.south": [
       "approved_crewmate/sit_south_4.png"
@@ -8855,9 +8567,7 @@
       "approved_station_minion/walk_south_3.png",
       "approved_station_minion/walk_south_4.png",
       "approved_station_minion/walk_south_5.png",
-      "approved_station_minion/walk_south_6.png",
-      "approved_station_minion/walk_south_7.png",
-      "approved_station_minion/walk_south_8.png"
+      "approved_station_minion/walk_south_6.png"
     ],
     "approved_station_minion.walk.south-east": [
       "approved_station_minion/walk_south-east_1.png",
@@ -8865,9 +8575,7 @@
       "approved_station_minion/walk_south-east_3.png",
       "approved_station_minion/walk_south-east_4.png",
       "approved_station_minion/walk_south-east_5.png",
-      "approved_station_minion/walk_south-east_6.png",
-      "approved_station_minion/walk_south-east_7.png",
-      "approved_station_minion/walk_south-east_8.png"
+      "approved_station_minion/walk_south-east_6.png"
     ],
     "approved_station_minion.walk.east": [
       "approved_station_minion/walk_east_1.png",
@@ -8875,9 +8583,7 @@
       "approved_station_minion/walk_east_3.png",
       "approved_station_minion/walk_east_4.png",
       "approved_station_minion/walk_east_5.png",
-      "approved_station_minion/walk_east_6.png",
-      "approved_station_minion/walk_east_7.png",
-      "approved_station_minion/walk_east_8.png"
+      "approved_station_minion/walk_east_6.png"
     ],
     "approved_station_minion.walk.north": [
       "approved_station_minion/walk_north_1.png",
@@ -8885,9 +8591,7 @@
       "approved_station_minion/walk_north_3.png",
       "approved_station_minion/walk_north_4.png",
       "approved_station_minion/walk_north_5.png",
-      "approved_station_minion/walk_north_6.png",
-      "approved_station_minion/walk_north_7.png",
-      "approved_station_minion/walk_north_8.png"
+      "approved_station_minion/walk_north_6.png"
     ],
     "approved_crewmate.type.north": [
       "approved_crewmate/type_north_1.png",
@@ -8904,9 +8608,7 @@
       "approved_station_minion/walk_north-east_3.png",
       "approved_station_minion/walk_north-east_4.png",
       "approved_station_minion/walk_north-east_5.png",
-      "approved_station_minion/walk_north-east_6.png",
-      "approved_station_minion/walk_north-east_7.png",
-      "approved_station_minion/walk_north-east_8.png"
+      "approved_station_minion/walk_north-east_6.png"
     ],
     "approved_station_minion.walk.north-west": [
       "approved_station_minion/walk_north-west_1.png",
@@ -8914,9 +8616,7 @@
       "approved_station_minion/walk_north-west_3.png",
       "approved_station_minion/walk_north-west_4.png",
       "approved_station_minion/walk_north-west_5.png",
-      "approved_station_minion/walk_north-west_6.png",
-      "approved_station_minion/walk_north-west_7.png",
-      "approved_station_minion/walk_north-west_8.png"
+      "approved_station_minion/walk_north-west_6.png"
     ],
     "approved_station_minion.sit.east": [
       "approved_station_minion/sit_east_4.png"
@@ -8930,9 +8630,7 @@
       "approved_station_minion/walk_west_3.png",
       "approved_station_minion/walk_west_4.png",
       "approved_station_minion/walk_west_5.png",
-      "approved_station_minion/walk_west_6.png",
-      "approved_station_minion/walk_west_7.png",
-      "approved_station_minion/walk_west_8.png"
+      "approved_station_minion/walk_west_6.png"
     ],
     "approved_station_minion.walk.south-west": [
       "approved_station_minion/walk_south-west_1.png",
@@ -8940,9 +8638,7 @@
       "approved_station_minion/walk_south-west_3.png",
       "approved_station_minion/walk_south-west_4.png",
       "approved_station_minion/walk_south-west_5.png",
-      "approved_station_minion/walk_south-west_6.png",
-      "approved_station_minion/walk_south-west_7.png",
-      "approved_station_minion/walk_south-west_8.png"
+      "approved_station_minion/walk_south-west_6.png"
     ],
     "approved_station_minion.sit.south": [
       "approved_station_minion/sit_south_4.png"
@@ -8977,9 +8673,7 @@
       "approved_blank_blue/walk_south_3.png",
       "approved_blank_blue/walk_south_4.png",
       "approved_blank_blue/walk_south_5.png",
-      "approved_blank_blue/walk_south_6.png",
-      "approved_blank_blue/walk_south_7.png",
-      "approved_blank_blue/walk_south_8.png"
+      "approved_blank_blue/walk_south_6.png"
     ],
     "approved_capybara.type.north": [
       "approved_capybara/type_north_1.png",
@@ -8993,9 +8687,7 @@
       "approved_blank_blue/walk_south-east_3.png",
       "approved_blank_blue/walk_south-east_4.png",
       "approved_blank_blue/walk_south-east_5.png",
-      "approved_blank_blue/walk_south-east_6.png",
-      "approved_blank_blue/walk_south-east_7.png",
-      "approved_blank_blue/walk_south-east_8.png"
+      "approved_blank_blue/walk_south-east_6.png"
     ],
     "approved_blank_blue.walk.east": [
       "approved_blank_blue/walk_east_1.png",
@@ -9003,9 +8695,7 @@
       "approved_blank_blue/walk_east_3.png",
       "approved_blank_blue/walk_east_4.png",
       "approved_blank_blue/walk_east_5.png",
-      "approved_blank_blue/walk_east_6.png",
-      "approved_blank_blue/walk_east_7.png",
-      "approved_blank_blue/walk_east_8.png"
+      "approved_blank_blue/walk_east_6.png"
     ],
     "approved_blank_blue.walk.north-east": [
       "approved_blank_blue/walk_north-east_1.png",
@@ -9013,9 +8703,7 @@
       "approved_blank_blue/walk_north-east_3.png",
       "approved_blank_blue/walk_north-east_4.png",
       "approved_blank_blue/walk_north-east_5.png",
-      "approved_blank_blue/walk_north-east_6.png",
-      "approved_blank_blue/walk_north-east_7.png",
-      "approved_blank_blue/walk_north-east_8.png"
+      "approved_blank_blue/walk_north-east_6.png"
     ],
     "approved_blank_blue.walk.north": [
       "approved_blank_blue/walk_north_1.png",
@@ -9023,9 +8711,7 @@
       "approved_blank_blue/walk_north_3.png",
       "approved_blank_blue/walk_north_4.png",
       "approved_blank_blue/walk_north_5.png",
-      "approved_blank_blue/walk_north_6.png",
-      "approved_blank_blue/walk_north_7.png",
-      "approved_blank_blue/walk_north_8.png"
+      "approved_blank_blue/walk_north_6.png"
     ],
     "approved_station_minion.type.north": [
       "approved_station_minion/type_north_1.png",
@@ -9039,9 +8725,7 @@
       "approved_blank_blue/walk_north-west_3.png",
       "approved_blank_blue/walk_north-west_4.png",
       "approved_blank_blue/walk_north-west_5.png",
-      "approved_blank_blue/walk_north-west_6.png",
-      "approved_blank_blue/walk_north-west_7.png",
-      "approved_blank_blue/walk_north-west_8.png"
+      "approved_blank_blue/walk_north-west_6.png"
     ],
     "approved_blank_blue.walk.west": [
       "approved_blank_blue/walk_west_1.png",
@@ -9049,9 +8733,7 @@
       "approved_blank_blue/walk_west_3.png",
       "approved_blank_blue/walk_west_4.png",
       "approved_blank_blue/walk_west_5.png",
-      "approved_blank_blue/walk_west_6.png",
-      "approved_blank_blue/walk_west_7.png",
-      "approved_blank_blue/walk_west_8.png"
+      "approved_blank_blue/walk_west_6.png"
     ],
     "approved_blank_blue.walk.south-west": [
       "approved_blank_blue/walk_south-west_1.png",
@@ -9059,9 +8741,7 @@
       "approved_blank_blue/walk_south-west_3.png",
       "approved_blank_blue/walk_south-west_4.png",
       "approved_blank_blue/walk_south-west_5.png",
-      "approved_blank_blue/walk_south-west_6.png",
-      "approved_blank_blue/walk_south-west_7.png",
-      "approved_blank_blue/walk_south-west_8.png"
+      "approved_blank_blue/walk_south-west_6.png"
     ],
     "approved_blank_blue.sit.south": [
       "approved_blank_blue/sit_south_4.png"
@@ -9102,9 +8782,7 @@
       "approved_blank_green/walk_south_3.png",
       "approved_blank_green/walk_south_4.png",
       "approved_blank_green/walk_south_5.png",
-      "approved_blank_green/walk_south_6.png",
-      "approved_blank_green/walk_south_7.png",
-      "approved_blank_green/walk_south_8.png"
+      "approved_blank_green/walk_south_6.png"
     ],
     "approved_blank_green.walk.south-east": [
       "approved_blank_green/walk_south-east_1.png",
@@ -9112,9 +8790,7 @@
       "approved_blank_green/walk_south-east_3.png",
       "approved_blank_green/walk_south-east_4.png",
       "approved_blank_green/walk_south-east_5.png",
-      "approved_blank_green/walk_south-east_6.png",
-      "approved_blank_green/walk_south-east_7.png",
-      "approved_blank_green/walk_south-east_8.png"
+      "approved_blank_green/walk_south-east_6.png"
     ],
     "approved_blank_green.walk.east": [
       "approved_blank_green/walk_east_1.png",
@@ -9122,9 +8798,7 @@
       "approved_blank_green/walk_east_3.png",
       "approved_blank_green/walk_east_4.png",
       "approved_blank_green/walk_east_5.png",
-      "approved_blank_green/walk_east_6.png",
-      "approved_blank_green/walk_east_7.png",
-      "approved_blank_green/walk_east_8.png"
+      "approved_blank_green/walk_east_6.png"
     ],
     "approved_blank_blue.type.north": [
       "approved_blank_blue/type_north_1.png",
@@ -9138,9 +8812,7 @@
       "approved_blank_green/walk_north-west_3.png",
       "approved_blank_green/walk_north-west_4.png",
       "approved_blank_green/walk_north-west_5.png",
-      "approved_blank_green/walk_north-west_6.png",
-      "approved_blank_green/walk_north-west_7.png",
-      "approved_blank_green/walk_north-west_8.png"
+      "approved_blank_green/walk_north-west_6.png"
     ],
     "approved_blank_green.walk.north-east": [
       "approved_blank_green/walk_north-east_1.png",
@@ -9148,9 +8820,7 @@
       "approved_blank_green/walk_north-east_3.png",
       "approved_blank_green/walk_north-east_4.png",
       "approved_blank_green/walk_north-east_5.png",
-      "approved_blank_green/walk_north-east_6.png",
-      "approved_blank_green/walk_north-east_7.png",
-      "approved_blank_green/walk_north-east_8.png"
+      "approved_blank_green/walk_north-east_6.png"
     ],
     "approved_blank_green.walk.north": [
       "approved_blank_green/walk_north_1.png",
@@ -9158,9 +8828,7 @@
       "approved_blank_green/walk_north_3.png",
       "approved_blank_green/walk_north_4.png",
       "approved_blank_green/walk_north_5.png",
-      "approved_blank_green/walk_north_6.png",
-      "approved_blank_green/walk_north_7.png",
-      "approved_blank_green/walk_north_8.png"
+      "approved_blank_green/walk_north_6.png"
     ],
     "approved_blank_green.walk.west": [
       "approved_blank_green/walk_west_1.png",
@@ -9168,9 +8836,7 @@
       "approved_blank_green/walk_west_3.png",
       "approved_blank_green/walk_west_4.png",
       "approved_blank_green/walk_west_5.png",
-      "approved_blank_green/walk_west_6.png",
-      "approved_blank_green/walk_west_7.png",
-      "approved_blank_green/walk_west_8.png"
+      "approved_blank_green/walk_west_6.png"
     ],
     "approved_blank_green.sit.south": [
       "approved_blank_green/sit_south_4.png"
@@ -9187,9 +8853,7 @@
       "approved_blank_green/walk_south-west_3.png",
       "approved_blank_green/walk_south-west_4.png",
       "approved_blank_green/walk_south-west_5.png",
-      "approved_blank_green/walk_south-west_6.png",
-      "approved_blank_green/walk_south-west_7.png",
-      "approved_blank_green/walk_south-west_8.png"
+      "approved_blank_green/walk_south-west_6.png"
     ],
     "approved_blank_green.sit.west": [
       "approved_blank_green/sit_west_4.png"
@@ -9227,9 +8891,7 @@
       "approved_blank_red/walk_south_3.png",
       "approved_blank_red/walk_south_4.png",
       "approved_blank_red/walk_south_5.png",
-      "approved_blank_red/walk_south_6.png",
-      "approved_blank_red/walk_south_7.png",
-      "approved_blank_red/walk_south_8.png"
+      "approved_blank_red/walk_south_6.png"
     ],
     "approved_blank_red.walk.south-east": [
       "approved_blank_red/walk_south-east_1.png",
@@ -9237,9 +8899,7 @@
       "approved_blank_red/walk_south-east_3.png",
       "approved_blank_red/walk_south-east_4.png",
       "approved_blank_red/walk_south-east_5.png",
-      "approved_blank_red/walk_south-east_6.png",
-      "approved_blank_red/walk_south-east_7.png",
-      "approved_blank_red/walk_south-east_8.png"
+      "approved_blank_red/walk_south-east_6.png"
     ],
     "approved_blank_red.walk.east": [
       "approved_blank_red/walk_east_1.png",
@@ -9247,9 +8907,7 @@
       "approved_blank_red/walk_east_3.png",
       "approved_blank_red/walk_east_4.png",
       "approved_blank_red/walk_east_5.png",
-      "approved_blank_red/walk_east_6.png",
-      "approved_blank_red/walk_east_7.png",
-      "approved_blank_red/walk_east_8.png"
+      "approved_blank_red/walk_east_6.png"
     ],
     "approved_blank_red.walk.north-east": [
       "approved_blank_red/walk_north-east_1.png",
@@ -9257,9 +8915,7 @@
       "approved_blank_red/walk_north-east_3.png",
       "approved_blank_red/walk_north-east_4.png",
       "approved_blank_red/walk_north-east_5.png",
-      "approved_blank_red/walk_north-east_6.png",
-      "approved_blank_red/walk_north-east_7.png",
-      "approved_blank_red/walk_north-east_8.png"
+      "approved_blank_red/walk_north-east_6.png"
     ],
     "approved_blank_red.walk.north": [
       "approved_blank_red/walk_north_1.png",
@@ -9267,9 +8923,7 @@
       "approved_blank_red/walk_north_3.png",
       "approved_blank_red/walk_north_4.png",
       "approved_blank_red/walk_north_5.png",
-      "approved_blank_red/walk_north_6.png",
-      "approved_blank_red/walk_north_7.png",
-      "approved_blank_red/walk_north_8.png"
+      "approved_blank_red/walk_north_6.png"
     ],
     "approved_blank_red.walk.north-west": [
       "approved_blank_red/walk_north-west_1.png",
@@ -9277,9 +8931,7 @@
       "approved_blank_red/walk_north-west_3.png",
       "approved_blank_red/walk_north-west_4.png",
       "approved_blank_red/walk_north-west_5.png",
-      "approved_blank_red/walk_north-west_6.png",
-      "approved_blank_red/walk_north-west_7.png",
-      "approved_blank_red/walk_north-west_8.png"
+      "approved_blank_red/walk_north-west_6.png"
     ],
     "approved_blank_red.walk.west": [
       "approved_blank_red/walk_west_1.png",
@@ -9287,9 +8939,7 @@
       "approved_blank_red/walk_west_3.png",
       "approved_blank_red/walk_west_4.png",
       "approved_blank_red/walk_west_5.png",
-      "approved_blank_red/walk_west_6.png",
-      "approved_blank_red/walk_west_7.png",
-      "approved_blank_red/walk_west_8.png"
+      "approved_blank_red/walk_west_6.png"
     ],
     "approved_blank_red.walk.south-west": [
       "approved_blank_red/walk_south-west_1.png",
@@ -9297,9 +8947,7 @@
       "approved_blank_red/walk_south-west_3.png",
       "approved_blank_red/walk_south-west_4.png",
       "approved_blank_red/walk_south-west_5.png",
-      "approved_blank_red/walk_south-west_6.png",
-      "approved_blank_red/walk_south-west_7.png",
-      "approved_blank_red/walk_south-west_8.png"
+      "approved_blank_red/walk_south-west_6.png"
     ],
     "approved_blank_red.sit.south": [
       "approved_blank_red/sit_south_4.png"
@@ -9340,9 +8988,7 @@
       "approved_blank_amber/walk_south_3.png",
       "approved_blank_amber/walk_south_4.png",
       "approved_blank_amber/walk_south_5.png",
-      "approved_blank_amber/walk_south_6.png",
-      "approved_blank_amber/walk_south_7.png",
-      "approved_blank_amber/walk_south_8.png"
+      "approved_blank_amber/walk_south_6.png"
     ],
     "approved_blank_amber.walk.south-east": [
       "approved_blank_amber/walk_south-east_1.png",
@@ -9350,9 +8996,7 @@
       "approved_blank_amber/walk_south-east_3.png",
       "approved_blank_amber/walk_south-east_4.png",
       "approved_blank_amber/walk_south-east_5.png",
-      "approved_blank_amber/walk_south-east_6.png",
-      "approved_blank_amber/walk_south-east_7.png",
-      "approved_blank_amber/walk_south-east_8.png"
+      "approved_blank_amber/walk_south-east_6.png"
     ],
     "approved_blank_amber.walk.east": [
       "approved_blank_amber/walk_east_1.png",
@@ -9360,9 +9004,7 @@
       "approved_blank_amber/walk_east_3.png",
       "approved_blank_amber/walk_east_4.png",
       "approved_blank_amber/walk_east_5.png",
-      "approved_blank_amber/walk_east_6.png",
-      "approved_blank_amber/walk_east_7.png",
-      "approved_blank_amber/walk_east_8.png"
+      "approved_blank_amber/walk_east_6.png"
     ],
     "approved_blank_amber.walk.north-east": [
       "approved_blank_amber/walk_north-east_1.png",
@@ -9370,9 +9012,7 @@
       "approved_blank_amber/walk_north-east_3.png",
       "approved_blank_amber/walk_north-east_4.png",
       "approved_blank_amber/walk_north-east_5.png",
-      "approved_blank_amber/walk_north-east_6.png",
-      "approved_blank_amber/walk_north-east_7.png",
-      "approved_blank_amber/walk_north-east_8.png"
+      "approved_blank_amber/walk_north-east_6.png"
     ],
     "approved_blank_amber.walk.north": [
       "approved_blank_amber/walk_north_1.png",
@@ -9380,9 +9020,7 @@
       "approved_blank_amber/walk_north_3.png",
       "approved_blank_amber/walk_north_4.png",
       "approved_blank_amber/walk_north_5.png",
-      "approved_blank_amber/walk_north_6.png",
-      "approved_blank_amber/walk_north_7.png",
-      "approved_blank_amber/walk_north_8.png"
+      "approved_blank_amber/walk_north_6.png"
     ],
     "approved_blank_amber.walk.north-west": [
       "approved_blank_amber/walk_north-west_1.png",
@@ -9390,9 +9028,7 @@
       "approved_blank_amber/walk_north-west_3.png",
       "approved_blank_amber/walk_north-west_4.png",
       "approved_blank_amber/walk_north-west_5.png",
-      "approved_blank_amber/walk_north-west_6.png",
-      "approved_blank_amber/walk_north-west_7.png",
-      "approved_blank_amber/walk_north-west_8.png"
+      "approved_blank_amber/walk_north-west_6.png"
     ],
     "approved_blank_amber.walk.west": [
       "approved_blank_amber/walk_west_1.png",
@@ -9400,9 +9036,7 @@
       "approved_blank_amber/walk_west_3.png",
       "approved_blank_amber/walk_west_4.png",
       "approved_blank_amber/walk_west_5.png",
-      "approved_blank_amber/walk_west_6.png",
-      "approved_blank_amber/walk_west_7.png",
-      "approved_blank_amber/walk_west_8.png"
+      "approved_blank_amber/walk_west_6.png"
     ],
     "approved_blank_amber.walk.south-west": [
       "approved_blank_amber/walk_south-west_1.png",
@@ -9410,9 +9044,7 @@
       "approved_blank_amber/walk_south-west_3.png",
       "approved_blank_amber/walk_south-west_4.png",
       "approved_blank_amber/walk_south-west_5.png",
-      "approved_blank_amber/walk_south-west_6.png",
-      "approved_blank_amber/walk_south-west_7.png",
-      "approved_blank_amber/walk_south-west_8.png"
+      "approved_blank_amber/walk_south-west_6.png"
     ],
     "approved_blank_amber.sit.south": [
       "approved_blank_amber/sit_south_4.png"
@@ -9459,9 +9091,7 @@
       "approved_endoskeleton/walk_south_3.png",
       "approved_endoskeleton/walk_south_4.png",
       "approved_endoskeleton/walk_south_5.png",
-      "approved_endoskeleton/walk_south_6.png",
-      "approved_endoskeleton/walk_south_7.png",
-      "approved_endoskeleton/walk_south_8.png"
+      "approved_endoskeleton/walk_south_6.png"
     ],
     "approved_endoskeleton.walk.south-east": [
       "approved_endoskeleton/walk_south-east_1.png",
@@ -9469,9 +9099,7 @@
       "approved_endoskeleton/walk_south-east_3.png",
       "approved_endoskeleton/walk_south-east_4.png",
       "approved_endoskeleton/walk_south-east_5.png",
-      "approved_endoskeleton/walk_south-east_6.png",
-      "approved_endoskeleton/walk_south-east_7.png",
-      "approved_endoskeleton/walk_south-east_8.png"
+      "approved_endoskeleton/walk_south-east_6.png"
     ],
     "approved_endoskeleton.walk.north-east": [
       "approved_endoskeleton/walk_north-east_1.png",
@@ -9479,9 +9107,7 @@
       "approved_endoskeleton/walk_north-east_3.png",
       "approved_endoskeleton/walk_north-east_4.png",
       "approved_endoskeleton/walk_north-east_5.png",
-      "approved_endoskeleton/walk_north-east_6.png",
-      "approved_endoskeleton/walk_north-east_7.png",
-      "approved_endoskeleton/walk_north-east_8.png"
+      "approved_endoskeleton/walk_north-east_6.png"
     ],
     "approved_blank_amber.type.north": [
       "approved_blank_amber/type_north_1.png",
@@ -9495,9 +9121,7 @@
       "approved_endoskeleton/walk_east_3.png",
       "approved_endoskeleton/walk_east_4.png",
       "approved_endoskeleton/walk_east_5.png",
-      "approved_endoskeleton/walk_east_6.png",
-      "approved_endoskeleton/walk_east_7.png",
-      "approved_endoskeleton/walk_east_8.png"
+      "approved_endoskeleton/walk_east_6.png"
     ],
     "approved_endoskeleton.walk.north": [
       "approved_endoskeleton/walk_north_1.png",
@@ -9505,9 +9129,7 @@
       "approved_endoskeleton/walk_north_3.png",
       "approved_endoskeleton/walk_north_4.png",
       "approved_endoskeleton/walk_north_5.png",
-      "approved_endoskeleton/walk_north_6.png",
-      "approved_endoskeleton/walk_north_7.png",
-      "approved_endoskeleton/walk_north_8.png"
+      "approved_endoskeleton/walk_north_6.png"
     ],
     "approved_endoskeleton.walk.north-west": [
       "approved_endoskeleton/walk_north-west_1.png",
@@ -9515,9 +9137,7 @@
       "approved_endoskeleton/walk_north-west_3.png",
       "approved_endoskeleton/walk_north-west_4.png",
       "approved_endoskeleton/walk_north-west_5.png",
-      "approved_endoskeleton/walk_north-west_6.png",
-      "approved_endoskeleton/walk_north-west_7.png",
-      "approved_endoskeleton/walk_north-west_8.png"
+      "approved_endoskeleton/walk_north-west_6.png"
     ],
     "approved_endoskeleton.sit.east": [
       "approved_endoskeleton/sit_east_4.png"
@@ -9528,9 +9148,7 @@
       "approved_endoskeleton/walk_west_3.png",
       "approved_endoskeleton/walk_west_4.png",
       "approved_endoskeleton/walk_west_5.png",
-      "approved_endoskeleton/walk_west_6.png",
-      "approved_endoskeleton/walk_west_7.png",
-      "approved_endoskeleton/walk_west_8.png"
+      "approved_endoskeleton/walk_west_6.png"
     ],
     "approved_endoskeleton.walk.south-west": [
       "approved_endoskeleton/walk_south-west_1.png",
@@ -9538,9 +9156,7 @@
       "approved_endoskeleton/walk_south-west_3.png",
       "approved_endoskeleton/walk_south-west_4.png",
       "approved_endoskeleton/walk_south-west_5.png",
-      "approved_endoskeleton/walk_south-west_6.png",
-      "approved_endoskeleton/walk_south-west_7.png",
-      "approved_endoskeleton/walk_south-west_8.png"
+      "approved_endoskeleton/walk_south-west_6.png"
     ],
     "approved_endoskeleton.sit.south": [
       "approved_endoskeleton/sit_south_4.png"
@@ -9697,9 +9313,7 @@
       "approved_samaltman/walk_south_3.png",
       "approved_samaltman/walk_south_4.png",
       "approved_samaltman/walk_south_5.png",
-      "approved_samaltman/walk_south_6.png",
-      "approved_samaltman/walk_south_7.png",
-      "approved_samaltman/walk_south_8.png"
+      "approved_samaltman/walk_south_6.png"
     ],
     "approved_samaltman.walk.south-east": [
       "approved_samaltman/walk_south-east_1.png",
@@ -9707,9 +9321,7 @@
       "approved_samaltman/walk_south-east_3.png",
       "approved_samaltman/walk_south-east_4.png",
       "approved_samaltman/walk_south-east_5.png",
-      "approved_samaltman/walk_south-east_6.png",
-      "approved_samaltman/walk_south-east_7.png",
-      "approved_samaltman/walk_south-east_8.png"
+      "approved_samaltman/walk_south-east_6.png"
     ],
     "approved_samaltman.walk.east": [
       "approved_samaltman/walk_east_1.png",
@@ -9717,9 +9329,7 @@
       "approved_samaltman/walk_east_3.png",
       "approved_samaltman/walk_east_4.png",
       "approved_samaltman/walk_east_5.png",
-      "approved_samaltman/walk_east_6.png",
-      "approved_samaltman/walk_east_7.png",
-      "approved_samaltman/walk_east_8.png"
+      "approved_samaltman/walk_east_6.png"
     ],
     "approved_samaltman.walk.north-east": [
       "approved_samaltman/walk_north-east_1.png",
@@ -9727,9 +9337,7 @@
       "approved_samaltman/walk_north-east_3.png",
       "approved_samaltman/walk_north-east_4.png",
       "approved_samaltman/walk_north-east_5.png",
-      "approved_samaltman/walk_north-east_6.png",
-      "approved_samaltman/walk_north-east_7.png",
-      "approved_samaltman/walk_north-east_8.png"
+      "approved_samaltman/walk_north-east_6.png"
     ],
     "approved_samaltman.walk.north": [
       "approved_samaltman/walk_north_1.png",
@@ -9737,9 +9345,7 @@
       "approved_samaltman/walk_north_3.png",
       "approved_samaltman/walk_north_4.png",
       "approved_samaltman/walk_north_5.png",
-      "approved_samaltman/walk_north_6.png",
-      "approved_samaltman/walk_north_7.png",
-      "approved_samaltman/walk_north_8.png"
+      "approved_samaltman/walk_north_6.png"
     ],
     "approved_samaltman.walk.north-west": [
       "approved_samaltman/walk_north-west_1.png",
@@ -9747,9 +9353,7 @@
       "approved_samaltman/walk_north-west_3.png",
       "approved_samaltman/walk_north-west_4.png",
       "approved_samaltman/walk_north-west_5.png",
-      "approved_samaltman/walk_north-west_6.png",
-      "approved_samaltman/walk_north-west_7.png",
-      "approved_samaltman/walk_north-west_8.png"
+      "approved_samaltman/walk_north-west_6.png"
     ],
     "approved_ultrondroid.type.north": [
       "approved_ultrondroid/type_north_1.png",
@@ -9763,9 +9367,7 @@
       "approved_samaltman/walk_west_3.png",
       "approved_samaltman/walk_west_4.png",
       "approved_samaltman/walk_west_5.png",
-      "approved_samaltman/walk_west_6.png",
-      "approved_samaltman/walk_west_7.png",
-      "approved_samaltman/walk_west_8.png"
+      "approved_samaltman/walk_west_6.png"
     ],
     "approved_samaltman.walk.south-west": [
       "approved_samaltman/walk_south-west_1.png",
@@ -9773,9 +9375,7 @@
       "approved_samaltman/walk_south-west_3.png",
       "approved_samaltman/walk_south-west_4.png",
       "approved_samaltman/walk_south-west_5.png",
-      "approved_samaltman/walk_south-west_6.png",
-      "approved_samaltman/walk_south-west_7.png",
-      "approved_samaltman/walk_south-west_8.png"
+      "approved_samaltman/walk_south-west_6.png"
     ],
     "approved_samaltman.sit.south": [
       "approved_samaltman/sit_south_4.png"
@@ -9816,9 +9416,7 @@
       "approved_dario/walk_south_3.png",
       "approved_dario/walk_south_4.png",
       "approved_dario/walk_south_5.png",
-      "approved_dario/walk_south_6.png",
-      "approved_dario/walk_south_7.png",
-      "approved_dario/walk_south_8.png"
+      "approved_dario/walk_south_6.png"
     ],
     "approved_dario.walk.south-east": [
       "approved_dario/walk_south-east_1.png",
@@ -9826,9 +9424,7 @@
       "approved_dario/walk_south-east_3.png",
       "approved_dario/walk_south-east_4.png",
       "approved_dario/walk_south-east_5.png",
-      "approved_dario/walk_south-east_6.png",
-      "approved_dario/walk_south-east_7.png",
-      "approved_dario/walk_south-east_8.png"
+      "approved_dario/walk_south-east_6.png"
     ],
     "approved_dario.walk.east": [
       "approved_dario/walk_east_1.png",
@@ -9836,9 +9432,7 @@
       "approved_dario/walk_east_3.png",
       "approved_dario/walk_east_4.png",
       "approved_dario/walk_east_5.png",
-      "approved_dario/walk_east_6.png",
-      "approved_dario/walk_east_7.png",
-      "approved_dario/walk_east_8.png"
+      "approved_dario/walk_east_6.png"
     ],
     "approved_dario.sit.south": [
       "approved_dario/sit_south_4.png"
@@ -9855,9 +9449,7 @@
       "approved_dario/walk_north-east_3.png",
       "approved_dario/walk_north-east_4.png",
       "approved_dario/walk_north-east_5.png",
-      "approved_dario/walk_north-east_6.png",
-      "approved_dario/walk_north-east_7.png",
-      "approved_dario/walk_north-east_8.png"
+      "approved_dario/walk_north-east_6.png"
     ],
     "approved_dario.walk.north": [
       "approved_dario/walk_north_1.png",
@@ -9865,9 +9457,7 @@
       "approved_dario/walk_north_3.png",
       "approved_dario/walk_north_4.png",
       "approved_dario/walk_north_5.png",
-      "approved_dario/walk_north_6.png",
-      "approved_dario/walk_north_7.png",
-      "approved_dario/walk_north_8.png"
+      "approved_dario/walk_north_6.png"
     ],
     "approved_dario.walk.north-west": [
       "approved_dario/walk_north-west_1.png",
@@ -9875,9 +9465,7 @@
       "approved_dario/walk_north-west_3.png",
       "approved_dario/walk_north-west_4.png",
       "approved_dario/walk_north-west_5.png",
-      "approved_dario/walk_north-west_6.png",
-      "approved_dario/walk_north-west_7.png",
-      "approved_dario/walk_north-west_8.png"
+      "approved_dario/walk_north-west_6.png"
     ],
     "approved_dario.walk.west": [
       "approved_dario/walk_west_1.png",
@@ -9885,9 +9473,7 @@
       "approved_dario/walk_west_3.png",
       "approved_dario/walk_west_4.png",
       "approved_dario/walk_west_5.png",
-      "approved_dario/walk_west_6.png",
-      "approved_dario/walk_west_7.png",
-      "approved_dario/walk_west_8.png"
+      "approved_dario/walk_west_6.png"
     ],
     "approved_dario.walk.south-west": [
       "approved_dario/walk_south-west_1.png",
@@ -9895,9 +9481,7 @@
       "approved_dario/walk_south-west_3.png",
       "approved_dario/walk_south-west_4.png",
       "approved_dario/walk_south-west_5.png",
-      "approved_dario/walk_south-west_6.png",
-      "approved_dario/walk_south-west_7.png",
-      "approved_dario/walk_south-west_8.png"
+      "approved_dario/walk_south-west_6.png"
     ],
     "approved_dario.sit.east": [
       "approved_dario/sit_east_4.png"
@@ -9941,9 +9525,7 @@
       "approved_freddyfazbear/walk_south_3.png",
       "approved_freddyfazbear/walk_south_4.png",
       "approved_freddyfazbear/walk_south_5.png",
-      "approved_freddyfazbear/walk_south_6.png",
-      "approved_freddyfazbear/walk_south_7.png",
-      "approved_freddyfazbear/walk_south_8.png"
+      "approved_freddyfazbear/walk_south_6.png"
     ],
     "approved_freddyfazbear.walk.south-east": [
       "approved_freddyfazbear/walk_south-east_1.png",
@@ -9951,9 +9533,7 @@
       "approved_freddyfazbear/walk_south-east_3.png",
       "approved_freddyfazbear/walk_south-east_4.png",
       "approved_freddyfazbear/walk_south-east_5.png",
-      "approved_freddyfazbear/walk_south-east_6.png",
-      "approved_freddyfazbear/walk_south-east_7.png",
-      "approved_freddyfazbear/walk_south-east_8.png"
+      "approved_freddyfazbear/walk_south-east_6.png"
     ],
     "approved_freddyfazbear.walk.east": [
       "approved_freddyfazbear/walk_east_1.png",
@@ -9961,9 +9541,7 @@
       "approved_freddyfazbear/walk_east_3.png",
       "approved_freddyfazbear/walk_east_4.png",
       "approved_freddyfazbear/walk_east_5.png",
-      "approved_freddyfazbear/walk_east_6.png",
-      "approved_freddyfazbear/walk_east_7.png",
-      "approved_freddyfazbear/walk_east_8.png"
+      "approved_freddyfazbear/walk_east_6.png"
     ],
     "approved_freddyfazbear.walk.north-east": [
       "approved_freddyfazbear/walk_north-east_1.png",
@@ -9971,9 +9549,7 @@
       "approved_freddyfazbear/walk_north-east_3.png",
       "approved_freddyfazbear/walk_north-east_4.png",
       "approved_freddyfazbear/walk_north-east_5.png",
-      "approved_freddyfazbear/walk_north-east_6.png",
-      "approved_freddyfazbear/walk_north-east_7.png",
-      "approved_freddyfazbear/walk_north-east_8.png"
+      "approved_freddyfazbear/walk_north-east_6.png"
     ],
     "approved_freddyfazbear.walk.north": [
       "approved_freddyfazbear/walk_north_1.png",
@@ -9981,9 +9557,7 @@
       "approved_freddyfazbear/walk_north_3.png",
       "approved_freddyfazbear/walk_north_4.png",
       "approved_freddyfazbear/walk_north_5.png",
-      "approved_freddyfazbear/walk_north_6.png",
-      "approved_freddyfazbear/walk_north_7.png",
-      "approved_freddyfazbear/walk_north_8.png"
+      "approved_freddyfazbear/walk_north_6.png"
     ],
     "approved_freddyfazbear.walk.north-west": [
       "approved_freddyfazbear/walk_north-west_1.png",
@@ -9991,9 +9565,7 @@
       "approved_freddyfazbear/walk_north-west_3.png",
       "approved_freddyfazbear/walk_north-west_4.png",
       "approved_freddyfazbear/walk_north-west_5.png",
-      "approved_freddyfazbear/walk_north-west_6.png",
-      "approved_freddyfazbear/walk_north-west_7.png",
-      "approved_freddyfazbear/walk_north-west_8.png"
+      "approved_freddyfazbear/walk_north-west_6.png"
     ],
     "approved_freddyfazbear.walk.west": [
       "approved_freddyfazbear/walk_west_1.png",
@@ -10001,9 +9573,7 @@
       "approved_freddyfazbear/walk_west_3.png",
       "approved_freddyfazbear/walk_west_4.png",
       "approved_freddyfazbear/walk_west_5.png",
-      "approved_freddyfazbear/walk_west_6.png",
-      "approved_freddyfazbear/walk_west_7.png",
-      "approved_freddyfazbear/walk_west_8.png"
+      "approved_freddyfazbear/walk_west_6.png"
     ],
     "approved_freddyfazbear.walk.south-west": [
       "approved_freddyfazbear/walk_south-west_1.png",
@@ -10011,9 +9581,7 @@
       "approved_freddyfazbear/walk_south-west_3.png",
       "approved_freddyfazbear/walk_south-west_4.png",
       "approved_freddyfazbear/walk_south-west_5.png",
-      "approved_freddyfazbear/walk_south-west_6.png",
-      "approved_freddyfazbear/walk_south-west_7.png",
-      "approved_freddyfazbear/walk_south-west_8.png"
+      "approved_freddyfazbear/walk_south-west_6.png"
     ],
     "approved_freddyfazbear.sit.south": [
       "approved_freddyfazbear/sit_south_4.png"
@@ -10060,9 +9628,7 @@
       "approved_ninjaturtle/walk_south-east_3.png",
       "approved_ninjaturtle/walk_south-east_4.png",
       "approved_ninjaturtle/walk_south-east_5.png",
-      "approved_ninjaturtle/walk_south-east_6.png",
-      "approved_ninjaturtle/walk_south-east_7.png",
-      "approved_ninjaturtle/walk_south-east_8.png"
+      "approved_ninjaturtle/walk_south-east_6.png"
     ],
     "approved_ninjaturtle.walk.north-east": [
       "approved_ninjaturtle/walk_north-east_1.png",
@@ -10070,9 +9636,7 @@
       "approved_ninjaturtle/walk_north-east_3.png",
       "approved_ninjaturtle/walk_north-east_4.png",
       "approved_ninjaturtle/walk_north-east_5.png",
-      "approved_ninjaturtle/walk_north-east_6.png",
-      "approved_ninjaturtle/walk_north-east_7.png",
-      "approved_ninjaturtle/walk_north-east_8.png"
+      "approved_ninjaturtle/walk_north-east_6.png"
     ],
     "approved_ninjaturtle.sit.south": [
       "approved_ninjaturtle/sit_south_4.png"
@@ -10083,9 +9647,7 @@
       "approved_ninjaturtle/walk_east_3.png",
       "approved_ninjaturtle/walk_east_4.png",
       "approved_ninjaturtle/walk_east_5.png",
-      "approved_ninjaturtle/walk_east_6.png",
-      "approved_ninjaturtle/walk_east_7.png",
-      "approved_ninjaturtle/walk_east_8.png"
+      "approved_ninjaturtle/walk_east_6.png"
     ],
     "approved_ninjaturtle.walk.north": [
       "approved_ninjaturtle/walk_north_1.png",
@@ -10093,9 +9655,7 @@
       "approved_ninjaturtle/walk_north_3.png",
       "approved_ninjaturtle/walk_north_4.png",
       "approved_ninjaturtle/walk_north_5.png",
-      "approved_ninjaturtle/walk_north_6.png",
-      "approved_ninjaturtle/walk_north_7.png",
-      "approved_ninjaturtle/walk_north_8.png"
+      "approved_ninjaturtle/walk_north_6.png"
     ],
     "approved_ninjaturtle.walk.north-west": [
       "approved_ninjaturtle/walk_north-west_1.png",
@@ -10103,9 +9663,7 @@
       "approved_ninjaturtle/walk_north-west_3.png",
       "approved_ninjaturtle/walk_north-west_4.png",
       "approved_ninjaturtle/walk_north-west_5.png",
-      "approved_ninjaturtle/walk_north-west_6.png",
-      "approved_ninjaturtle/walk_north-west_7.png",
-      "approved_ninjaturtle/walk_north-west_8.png"
+      "approved_ninjaturtle/walk_north-west_6.png"
     ],
     "approved_ninjaturtle.walk.south-west": [
       "approved_ninjaturtle/walk_south-west_1.png",
@@ -10113,9 +9671,7 @@
       "approved_ninjaturtle/walk_south-west_3.png",
       "approved_ninjaturtle/walk_south-west_4.png",
       "approved_ninjaturtle/walk_south-west_5.png",
-      "approved_ninjaturtle/walk_south-west_6.png",
-      "approved_ninjaturtle/walk_south-west_7.png",
-      "approved_ninjaturtle/walk_south-west_8.png"
+      "approved_ninjaturtle/walk_south-west_6.png"
     ],
     "approved_ninjaturtle.walk.west": [
       "approved_ninjaturtle/walk_west_1.png",
@@ -10123,9 +9679,7 @@
       "approved_ninjaturtle/walk_west_3.png",
       "approved_ninjaturtle/walk_west_4.png",
       "approved_ninjaturtle/walk_west_5.png",
-      "approved_ninjaturtle/walk_west_6.png",
-      "approved_ninjaturtle/walk_west_7.png",
-      "approved_ninjaturtle/walk_west_8.png"
+      "approved_ninjaturtle/walk_west_6.png"
     ],
     "approved_ninjaturtle.sit.east": [
       "approved_ninjaturtle/sit_east_4.png"
@@ -10163,9 +9717,7 @@
       "approved_caseyjones/walk_south_3.png",
       "approved_caseyjones/walk_south_4.png",
       "approved_caseyjones/walk_south_5.png",
-      "approved_caseyjones/walk_south_6.png",
-      "approved_caseyjones/walk_south_7.png",
-      "approved_caseyjones/walk_south_8.png"
+      "approved_caseyjones/walk_south_6.png"
     ],
     "approved_caseyjones.walk.south-east": [
       "approved_caseyjones/walk_south-east_1.png",
@@ -10173,9 +9725,7 @@
       "approved_caseyjones/walk_south-east_3.png",
       "approved_caseyjones/walk_south-east_4.png",
       "approved_caseyjones/walk_south-east_5.png",
-      "approved_caseyjones/walk_south-east_6.png",
-      "approved_caseyjones/walk_south-east_7.png",
-      "approved_caseyjones/walk_south-east_8.png"
+      "approved_caseyjones/walk_south-east_6.png"
     ],
     "approved_caseyjones.walk.east": [
       "approved_caseyjones/walk_east_1.png",
@@ -10183,9 +9733,7 @@
       "approved_caseyjones/walk_east_3.png",
       "approved_caseyjones/walk_east_4.png",
       "approved_caseyjones/walk_east_5.png",
-      "approved_caseyjones/walk_east_6.png",
-      "approved_caseyjones/walk_east_7.png",
-      "approved_caseyjones/walk_east_8.png"
+      "approved_caseyjones/walk_east_6.png"
     ],
     "approved_caseyjones.walk.north-east": [
       "approved_caseyjones/walk_north-east_1.png",
@@ -10193,9 +9741,7 @@
       "approved_caseyjones/walk_north-east_3.png",
       "approved_caseyjones/walk_north-east_4.png",
       "approved_caseyjones/walk_north-east_5.png",
-      "approved_caseyjones/walk_north-east_6.png",
-      "approved_caseyjones/walk_north-east_7.png",
-      "approved_caseyjones/walk_north-east_8.png"
+      "approved_caseyjones/walk_north-east_6.png"
     ],
     "approved_caseyjones.walk.north": [
       "approved_caseyjones/walk_north_1.png",
@@ -10203,9 +9749,7 @@
       "approved_caseyjones/walk_north_3.png",
       "approved_caseyjones/walk_north_4.png",
       "approved_caseyjones/walk_north_5.png",
-      "approved_caseyjones/walk_north_6.png",
-      "approved_caseyjones/walk_north_7.png",
-      "approved_caseyjones/walk_north_8.png"
+      "approved_caseyjones/walk_north_6.png"
     ],
     "approved_caseyjones.walk.north-west": [
       "approved_caseyjones/walk_north-west_1.png",
@@ -10213,9 +9757,7 @@
       "approved_caseyjones/walk_north-west_3.png",
       "approved_caseyjones/walk_north-west_4.png",
       "approved_caseyjones/walk_north-west_5.png",
-      "approved_caseyjones/walk_north-west_6.png",
-      "approved_caseyjones/walk_north-west_7.png",
-      "approved_caseyjones/walk_north-west_8.png"
+      "approved_caseyjones/walk_north-west_6.png"
     ],
     "approved_ninjaturtle.walk.south": [
       "approved_ninjaturtle/walk_south_1.png",
@@ -10223,9 +9765,7 @@
       "approved_ninjaturtle/walk_south_3.png",
       "approved_ninjaturtle/walk_south_4.png",
       "approved_ninjaturtle/walk_south_5.png",
-      "approved_ninjaturtle/walk_south_6.png",
-      "approved_ninjaturtle/walk_south_7.png",
-      "approved_ninjaturtle/walk_south_8.png"
+      "approved_ninjaturtle/walk_south_6.png"
     ],
     "approved_ninjaturtle.type.north": [
       "approved_ninjaturtle/type_north_1.png",
@@ -10239,9 +9779,7 @@
       "approved_caseyjones/walk_west_3.png",
       "approved_caseyjones/walk_west_4.png",
       "approved_caseyjones/walk_west_5.png",
-      "approved_caseyjones/walk_west_6.png",
-      "approved_caseyjones/walk_west_7.png",
-      "approved_caseyjones/walk_west_8.png"
+      "approved_caseyjones/walk_west_6.png"
     ],
     "approved_caseyjones.walk.south-west": [
       "approved_caseyjones/walk_south-west_1.png",
@@ -10249,9 +9787,7 @@
       "approved_caseyjones/walk_south-west_3.png",
       "approved_caseyjones/walk_south-west_4.png",
       "approved_caseyjones/walk_south-west_5.png",
-      "approved_caseyjones/walk_south-west_6.png",
-      "approved_caseyjones/walk_south-west_7.png",
-      "approved_caseyjones/walk_south-west_8.png"
+      "approved_caseyjones/walk_south-west_6.png"
     ],
     "approved_caseyjones.sit.south": [
       "approved_caseyjones/sit_south_4.png"
@@ -10642,9 +10178,7 @@
       "approved_bikini/walk_south_3.png",
       "approved_bikini/walk_south_4.png",
       "approved_bikini/walk_south_5.png",
-      "approved_bikini/walk_south_6.png",
-      "approved_bikini/walk_south_7.png",
-      "approved_bikini/walk_south_8.png"
+      "approved_bikini/walk_south_6.png"
     ],
     "approved_bikini.walk.south-east": [
       "approved_bikini/walk_south-east_1.png",
@@ -10652,9 +10186,7 @@
       "approved_bikini/walk_south-east_3.png",
       "approved_bikini/walk_south-east_4.png",
       "approved_bikini/walk_south-east_5.png",
-      "approved_bikini/walk_south-east_6.png",
-      "approved_bikini/walk_south-east_7.png",
-      "approved_bikini/walk_south-east_8.png"
+      "approved_bikini/walk_south-east_6.png"
     ],
     "approved_bikini.walk.east": [
       "approved_bikini/walk_east_1.png",
@@ -10662,9 +10194,7 @@
       "approved_bikini/walk_east_3.png",
       "approved_bikini/walk_east_4.png",
       "approved_bikini/walk_east_5.png",
-      "approved_bikini/walk_east_6.png",
-      "approved_bikini/walk_east_7.png",
-      "approved_bikini/walk_east_8.png"
+      "approved_bikini/walk_east_6.png"
     ],
     "approved_bikini.walk.north-east": [
       "approved_bikini/walk_north-east_1.png",
@@ -10672,9 +10202,7 @@
       "approved_bikini/walk_north-east_3.png",
       "approved_bikini/walk_north-east_4.png",
       "approved_bikini/walk_north-east_5.png",
-      "approved_bikini/walk_north-east_6.png",
-      "approved_bikini/walk_north-east_7.png",
-      "approved_bikini/walk_north-east_8.png"
+      "approved_bikini/walk_north-east_6.png"
     ],
     "approved_bikini.walk.north": [
       "approved_bikini/walk_north_1.png",
@@ -10682,9 +10210,7 @@
       "approved_bikini/walk_north_3.png",
       "approved_bikini/walk_north_4.png",
       "approved_bikini/walk_north_5.png",
-      "approved_bikini/walk_north_6.png",
-      "approved_bikini/walk_north_7.png",
-      "approved_bikini/walk_north_8.png"
+      "approved_bikini/walk_north_6.png"
     ],
     "approved_bikini.walk.north-west": [
       "approved_bikini/walk_north-west_1.png",
@@ -10692,9 +10218,7 @@
       "approved_bikini/walk_north-west_3.png",
       "approved_bikini/walk_north-west_4.png",
       "approved_bikini/walk_north-west_5.png",
-      "approved_bikini/walk_north-west_6.png",
-      "approved_bikini/walk_north-west_7.png",
-      "approved_bikini/walk_north-west_8.png"
+      "approved_bikini/walk_north-west_6.png"
     ],
     "approved_bikini.walk.west": [
       "approved_bikini/walk_west_1.png",
@@ -10702,9 +10226,7 @@
       "approved_bikini/walk_west_3.png",
       "approved_bikini/walk_west_4.png",
       "approved_bikini/walk_west_5.png",
-      "approved_bikini/walk_west_6.png",
-      "approved_bikini/walk_west_7.png",
-      "approved_bikini/walk_west_8.png"
+      "approved_bikini/walk_west_6.png"
     ],
     "approved_bikini.walk.south-west": [
       "approved_bikini/walk_south-west_1.png",
@@ -10712,9 +10234,7 @@
       "approved_bikini/walk_south-west_3.png",
       "approved_bikini/walk_south-west_4.png",
       "approved_bikini/walk_south-west_5.png",
-      "approved_bikini/walk_south-west_6.png",
-      "approved_bikini/walk_south-west_7.png",
-      "approved_bikini/walk_south-west_8.png"
+      "approved_bikini/walk_south-west_6.png"
     ],
     "approved_bikini.sit.south": [
       "approved_bikini/sit_south_4.png"
@@ -10764,9 +10284,7 @@
       "approved_catwoman/walk_south_3.png",
       "approved_catwoman/walk_south_4.png",
       "approved_catwoman/walk_south_5.png",
-      "approved_catwoman/walk_south_6.png",
-      "approved_catwoman/walk_south_7.png",
-      "approved_catwoman/walk_south_8.png"
+      "approved_catwoman/walk_south_6.png"
     ],
     "approved_catwoman.walk.south-east": [
       "approved_catwoman/walk_south-east_1.png",
@@ -10774,9 +10292,7 @@
       "approved_catwoman/walk_south-east_3.png",
       "approved_catwoman/walk_south-east_4.png",
       "approved_catwoman/walk_south-east_5.png",
-      "approved_catwoman/walk_south-east_6.png",
-      "approved_catwoman/walk_south-east_7.png",
-      "approved_catwoman/walk_south-east_8.png"
+      "approved_catwoman/walk_south-east_6.png"
     ],
     "approved_catwoman.walk.east": [
       "approved_catwoman/walk_east_1.png",
@@ -10784,9 +10300,7 @@
       "approved_catwoman/walk_east_3.png",
       "approved_catwoman/walk_east_4.png",
       "approved_catwoman/walk_east_5.png",
-      "approved_catwoman/walk_east_6.png",
-      "approved_catwoman/walk_east_7.png",
-      "approved_catwoman/walk_east_8.png"
+      "approved_catwoman/walk_east_6.png"
     ],
     "approved_catwoman.walk.north-east": [
       "approved_catwoman/walk_north-east_1.png",
@@ -10794,9 +10308,7 @@
       "approved_catwoman/walk_north-east_3.png",
       "approved_catwoman/walk_north-east_4.png",
       "approved_catwoman/walk_north-east_5.png",
-      "approved_catwoman/walk_north-east_6.png",
-      "approved_catwoman/walk_north-east_7.png",
-      "approved_catwoman/walk_north-east_8.png"
+      "approved_catwoman/walk_north-east_6.png"
     ],
     "approved_catwoman.walk.north": [
       "approved_catwoman/walk_north_1.png",
@@ -10804,9 +10316,7 @@
       "approved_catwoman/walk_north_3.png",
       "approved_catwoman/walk_north_4.png",
       "approved_catwoman/walk_north_5.png",
-      "approved_catwoman/walk_north_6.png",
-      "approved_catwoman/walk_north_7.png",
-      "approved_catwoman/walk_north_8.png"
+      "approved_catwoman/walk_north_6.png"
     ],
     "approved_catwoman.walk.north-west": [
       "approved_catwoman/walk_north-west_1.png",
@@ -10814,9 +10324,7 @@
       "approved_catwoman/walk_north-west_3.png",
       "approved_catwoman/walk_north-west_4.png",
       "approved_catwoman/walk_north-west_5.png",
-      "approved_catwoman/walk_north-west_6.png",
-      "approved_catwoman/walk_north-west_7.png",
-      "approved_catwoman/walk_north-west_8.png"
+      "approved_catwoman/walk_north-west_6.png"
     ],
     "approved_catwoman.walk.west": [
       "approved_catwoman/walk_west_1.png",
@@ -10824,9 +10332,7 @@
       "approved_catwoman/walk_west_3.png",
       "approved_catwoman/walk_west_4.png",
       "approved_catwoman/walk_west_5.png",
-      "approved_catwoman/walk_west_6.png",
-      "approved_catwoman/walk_west_7.png",
-      "approved_catwoman/walk_west_8.png"
+      "approved_catwoman/walk_west_6.png"
     ],
     "approved_catwoman.walk.south-west": [
       "approved_catwoman/walk_south-west_1.png",
@@ -10834,9 +10340,7 @@
       "approved_catwoman/walk_south-west_3.png",
       "approved_catwoman/walk_south-west_4.png",
       "approved_catwoman/walk_south-west_5.png",
-      "approved_catwoman/walk_south-west_6.png",
-      "approved_catwoman/walk_south-west_7.png",
-      "approved_catwoman/walk_south-west_8.png"
+      "approved_catwoman/walk_south-west_6.png"
     ],
     "approved_catwoman.sit.south": [
       "approved_catwoman/sit_south_4.png"
@@ -10886,9 +10390,7 @@
       "approved_animegirl/walk_south_3.png",
       "approved_animegirl/walk_south_4.png",
       "approved_animegirl/walk_south_5.png",
-      "approved_animegirl/walk_south_6.png",
-      "approved_animegirl/walk_south_7.png",
-      "approved_animegirl/walk_south_8.png"
+      "approved_animegirl/walk_south_6.png"
     ],
     "approved_animegirl.walk.south-east": [
       "approved_animegirl/walk_south-east_1.png",
@@ -10896,9 +10398,7 @@
       "approved_animegirl/walk_south-east_3.png",
       "approved_animegirl/walk_south-east_4.png",
       "approved_animegirl/walk_south-east_5.png",
-      "approved_animegirl/walk_south-east_6.png",
-      "approved_animegirl/walk_south-east_7.png",
-      "approved_animegirl/walk_south-east_8.png"
+      "approved_animegirl/walk_south-east_6.png"
     ],
     "approved_animegirl.walk.east": [
       "approved_animegirl/walk_east_1.png",
@@ -10906,9 +10406,7 @@
       "approved_animegirl/walk_east_3.png",
       "approved_animegirl/walk_east_4.png",
       "approved_animegirl/walk_east_5.png",
-      "approved_animegirl/walk_east_6.png",
-      "approved_animegirl/walk_east_7.png",
-      "approved_animegirl/walk_east_8.png"
+      "approved_animegirl/walk_east_6.png"
     ],
     "approved_animegirl.walk.north-east": [
       "approved_animegirl/walk_north-east_1.png",
@@ -10916,9 +10414,7 @@
       "approved_animegirl/walk_north-east_3.png",
       "approved_animegirl/walk_north-east_4.png",
       "approved_animegirl/walk_north-east_5.png",
-      "approved_animegirl/walk_north-east_6.png",
-      "approved_animegirl/walk_north-east_7.png",
-      "approved_animegirl/walk_north-east_8.png"
+      "approved_animegirl/walk_north-east_6.png"
     ],
     "approved_animegirl.walk.north": [
       "approved_animegirl/walk_north_1.png",
@@ -10926,9 +10422,7 @@
       "approved_animegirl/walk_north_3.png",
       "approved_animegirl/walk_north_4.png",
       "approved_animegirl/walk_north_5.png",
-      "approved_animegirl/walk_north_6.png",
-      "approved_animegirl/walk_north_7.png",
-      "approved_animegirl/walk_north_8.png"
+      "approved_animegirl/walk_north_6.png"
     ],
     "approved_animegirl.walk.north-west": [
       "approved_animegirl/walk_north-west_1.png",
@@ -10936,9 +10430,7 @@
       "approved_animegirl/walk_north-west_3.png",
       "approved_animegirl/walk_north-west_4.png",
       "approved_animegirl/walk_north-west_5.png",
-      "approved_animegirl/walk_north-west_6.png",
-      "approved_animegirl/walk_north-west_7.png",
-      "approved_animegirl/walk_north-west_8.png"
+      "approved_animegirl/walk_north-west_6.png"
     ],
     "approved_animegirl.walk.west": [
       "approved_animegirl/walk_west_1.png",
@@ -10946,9 +10438,7 @@
       "approved_animegirl/walk_west_3.png",
       "approved_animegirl/walk_west_4.png",
       "approved_animegirl/walk_west_5.png",
-      "approved_animegirl/walk_west_6.png",
-      "approved_animegirl/walk_west_7.png",
-      "approved_animegirl/walk_west_8.png"
+      "approved_animegirl/walk_west_6.png"
     ],
     "approved_animegirl.walk.south-west": [
       "approved_animegirl/walk_south-west_1.png",
@@ -10956,9 +10446,7 @@
       "approved_animegirl/walk_south-west_3.png",
       "approved_animegirl/walk_south-west_4.png",
       "approved_animegirl/walk_south-west_5.png",
-      "approved_animegirl/walk_south-west_6.png",
-      "approved_animegirl/walk_south-west_7.png",
-      "approved_animegirl/walk_south-west_8.png"
+      "approved_animegirl/walk_south-west_6.png"
     ],
     "approved_animegirl.sit.south": [
       "approved_animegirl/sit_south_4.png"
@@ -11008,9 +10496,7 @@
       "approved_harrypotter/walk_south_3.png",
       "approved_harrypotter/walk_south_4.png",
       "approved_harrypotter/walk_south_5.png",
-      "approved_harrypotter/walk_south_6.png",
-      "approved_harrypotter/walk_south_7.png",
-      "approved_harrypotter/walk_south_8.png"
+      "approved_harrypotter/walk_south_6.png"
     ],
     "approved_harrypotter.walk.south-east": [
       "approved_harrypotter/walk_south-east_1.png",
@@ -11018,9 +10504,7 @@
       "approved_harrypotter/walk_south-east_3.png",
       "approved_harrypotter/walk_south-east_4.png",
       "approved_harrypotter/walk_south-east_5.png",
-      "approved_harrypotter/walk_south-east_6.png",
-      "approved_harrypotter/walk_south-east_7.png",
-      "approved_harrypotter/walk_south-east_8.png"
+      "approved_harrypotter/walk_south-east_6.png"
     ],
     "approved_harrypotter.walk.east": [
       "approved_harrypotter/walk_east_1.png",
@@ -11028,9 +10512,7 @@
       "approved_harrypotter/walk_east_3.png",
       "approved_harrypotter/walk_east_4.png",
       "approved_harrypotter/walk_east_5.png",
-      "approved_harrypotter/walk_east_6.png",
-      "approved_harrypotter/walk_east_7.png",
-      "approved_harrypotter/walk_east_8.png"
+      "approved_harrypotter/walk_east_6.png"
     ],
     "approved_harrypotter.walk.north-east": [
       "approved_harrypotter/walk_north-east_1.png",
@@ -11038,9 +10520,7 @@
       "approved_harrypotter/walk_north-east_3.png",
       "approved_harrypotter/walk_north-east_4.png",
       "approved_harrypotter/walk_north-east_5.png",
-      "approved_harrypotter/walk_north-east_6.png",
-      "approved_harrypotter/walk_north-east_7.png",
-      "approved_harrypotter/walk_north-east_8.png"
+      "approved_harrypotter/walk_north-east_6.png"
     ],
     "approved_harrypotter.walk.north": [
       "approved_harrypotter/walk_north_1.png",
@@ -11048,9 +10528,7 @@
       "approved_harrypotter/walk_north_3.png",
       "approved_harrypotter/walk_north_4.png",
       "approved_harrypotter/walk_north_5.png",
-      "approved_harrypotter/walk_north_6.png",
-      "approved_harrypotter/walk_north_7.png",
-      "approved_harrypotter/walk_north_8.png"
+      "approved_harrypotter/walk_north_6.png"
     ],
     "approved_harrypotter.walk.north-west": [
       "approved_harrypotter/walk_north-west_1.png",
@@ -11058,9 +10536,7 @@
       "approved_harrypotter/walk_north-west_3.png",
       "approved_harrypotter/walk_north-west_4.png",
       "approved_harrypotter/walk_north-west_5.png",
-      "approved_harrypotter/walk_north-west_6.png",
-      "approved_harrypotter/walk_north-west_7.png",
-      "approved_harrypotter/walk_north-west_8.png"
+      "approved_harrypotter/walk_north-west_6.png"
     ],
     "approved_harrypotter.walk.west": [
       "approved_harrypotter/walk_west_1.png",
@@ -11068,9 +10544,7 @@
       "approved_harrypotter/walk_west_3.png",
       "approved_harrypotter/walk_west_4.png",
       "approved_harrypotter/walk_west_5.png",
-      "approved_harrypotter/walk_west_6.png",
-      "approved_harrypotter/walk_west_7.png",
-      "approved_harrypotter/walk_west_8.png"
+      "approved_harrypotter/walk_west_6.png"
     ],
     "approved_harrypotter.walk.south-west": [
       "approved_harrypotter/walk_south-west_1.png",
@@ -11078,9 +10552,7 @@
       "approved_harrypotter/walk_south-west_3.png",
       "approved_harrypotter/walk_south-west_4.png",
       "approved_harrypotter/walk_south-west_5.png",
-      "approved_harrypotter/walk_south-west_6.png",
-      "approved_harrypotter/walk_south-west_7.png",
-      "approved_harrypotter/walk_south-west_8.png"
+      "approved_harrypotter/walk_south-west_6.png"
     ],
     "approved_harrypotter.sit.south": [
       "approved_harrypotter/sit_south_4.png"
@@ -11130,9 +10602,7 @@
       "approved_rickybobby/walk_south_3.png",
       "approved_rickybobby/walk_south_4.png",
       "approved_rickybobby/walk_south_5.png",
-      "approved_rickybobby/walk_south_6.png",
-      "approved_rickybobby/walk_south_7.png",
-      "approved_rickybobby/walk_south_8.png"
+      "approved_rickybobby/walk_south_6.png"
     ],
     "approved_rickybobby.walk.south-east": [
       "approved_rickybobby/walk_south-east_1.png",
@@ -11140,9 +10610,7 @@
       "approved_rickybobby/walk_south-east_3.png",
       "approved_rickybobby/walk_south-east_4.png",
       "approved_rickybobby/walk_south-east_5.png",
-      "approved_rickybobby/walk_south-east_6.png",
-      "approved_rickybobby/walk_south-east_7.png",
-      "approved_rickybobby/walk_south-east_8.png"
+      "approved_rickybobby/walk_south-east_6.png"
     ],
     "approved_rickybobby.walk.east": [
       "approved_rickybobby/walk_east_1.png",
@@ -11150,9 +10618,7 @@
       "approved_rickybobby/walk_east_3.png",
       "approved_rickybobby/walk_east_4.png",
       "approved_rickybobby/walk_east_5.png",
-      "approved_rickybobby/walk_east_6.png",
-      "approved_rickybobby/walk_east_7.png",
-      "approved_rickybobby/walk_east_8.png"
+      "approved_rickybobby/walk_east_6.png"
     ],
     "approved_rickybobby.walk.north-east": [
       "approved_rickybobby/walk_north-east_1.png",
@@ -11160,9 +10626,7 @@
       "approved_rickybobby/walk_north-east_3.png",
       "approved_rickybobby/walk_north-east_4.png",
       "approved_rickybobby/walk_north-east_5.png",
-      "approved_rickybobby/walk_north-east_6.png",
-      "approved_rickybobby/walk_north-east_7.png",
-      "approved_rickybobby/walk_north-east_8.png"
+      "approved_rickybobby/walk_north-east_6.png"
     ],
     "approved_rickybobby.walk.north": [
       "approved_rickybobby/walk_north_1.png",
@@ -11170,9 +10634,7 @@
       "approved_rickybobby/walk_north_3.png",
       "approved_rickybobby/walk_north_4.png",
       "approved_rickybobby/walk_north_5.png",
-      "approved_rickybobby/walk_north_6.png",
-      "approved_rickybobby/walk_north_7.png",
-      "approved_rickybobby/walk_north_8.png"
+      "approved_rickybobby/walk_north_6.png"
     ],
     "approved_rickybobby.walk.north-west": [
       "approved_rickybobby/walk_north-west_1.png",
@@ -11180,9 +10642,7 @@
       "approved_rickybobby/walk_north-west_3.png",
       "approved_rickybobby/walk_north-west_4.png",
       "approved_rickybobby/walk_north-west_5.png",
-      "approved_rickybobby/walk_north-west_6.png",
-      "approved_rickybobby/walk_north-west_7.png",
-      "approved_rickybobby/walk_north-west_8.png"
+      "approved_rickybobby/walk_north-west_6.png"
     ],
     "approved_rickybobby.walk.west": [
       "approved_rickybobby/walk_west_1.png",
@@ -11190,9 +10650,7 @@
       "approved_rickybobby/walk_west_3.png",
       "approved_rickybobby/walk_west_4.png",
       "approved_rickybobby/walk_west_5.png",
-      "approved_rickybobby/walk_west_6.png",
-      "approved_rickybobby/walk_west_7.png",
-      "approved_rickybobby/walk_west_8.png"
+      "approved_rickybobby/walk_west_6.png"
     ],
     "approved_rickybobby.walk.south-west": [
       "approved_rickybobby/walk_south-west_1.png",
@@ -11200,9 +10658,7 @@
       "approved_rickybobby/walk_south-west_3.png",
       "approved_rickybobby/walk_south-west_4.png",
       "approved_rickybobby/walk_south-west_5.png",
-      "approved_rickybobby/walk_south-west_6.png",
-      "approved_rickybobby/walk_south-west_7.png",
-      "approved_rickybobby/walk_south-west_8.png"
+      "approved_rickybobby/walk_south-west_6.png"
     ],
     "approved_rickybobby.sit.south": [
       "approved_rickybobby/sit_south_4.png"
@@ -11252,9 +10708,7 @@
       "approved_catinthehat/walk_south_3.png",
       "approved_catinthehat/walk_south_4.png",
       "approved_catinthehat/walk_south_5.png",
-      "approved_catinthehat/walk_south_6.png",
-      "approved_catinthehat/walk_south_7.png",
-      "approved_catinthehat/walk_south_8.png"
+      "approved_catinthehat/walk_south_6.png"
     ],
     "approved_catinthehat.walk.south-east": [
       "approved_catinthehat/walk_south-east_1.png",
@@ -11262,9 +10716,7 @@
       "approved_catinthehat/walk_south-east_3.png",
       "approved_catinthehat/walk_south-east_4.png",
       "approved_catinthehat/walk_south-east_5.png",
-      "approved_catinthehat/walk_south-east_6.png",
-      "approved_catinthehat/walk_south-east_7.png",
-      "approved_catinthehat/walk_south-east_8.png"
+      "approved_catinthehat/walk_south-east_6.png"
     ],
     "approved_catinthehat.walk.east": [
       "approved_catinthehat/walk_east_1.png",
@@ -11272,9 +10724,7 @@
       "approved_catinthehat/walk_east_3.png",
       "approved_catinthehat/walk_east_4.png",
       "approved_catinthehat/walk_east_5.png",
-      "approved_catinthehat/walk_east_6.png",
-      "approved_catinthehat/walk_east_7.png",
-      "approved_catinthehat/walk_east_8.png"
+      "approved_catinthehat/walk_east_6.png"
     ],
     "approved_catinthehat.walk.north-east": [
       "approved_catinthehat/walk_north-east_1.png",
@@ -11282,9 +10732,7 @@
       "approved_catinthehat/walk_north-east_3.png",
       "approved_catinthehat/walk_north-east_4.png",
       "approved_catinthehat/walk_north-east_5.png",
-      "approved_catinthehat/walk_north-east_6.png",
-      "approved_catinthehat/walk_north-east_7.png",
-      "approved_catinthehat/walk_north-east_8.png"
+      "approved_catinthehat/walk_north-east_6.png"
     ],
     "approved_catinthehat.walk.north": [
       "approved_catinthehat/walk_north_1.png",
@@ -11292,9 +10740,7 @@
       "approved_catinthehat/walk_north_3.png",
       "approved_catinthehat/walk_north_4.png",
       "approved_catinthehat/walk_north_5.png",
-      "approved_catinthehat/walk_north_6.png",
-      "approved_catinthehat/walk_north_7.png",
-      "approved_catinthehat/walk_north_8.png"
+      "approved_catinthehat/walk_north_6.png"
     ],
     "approved_catinthehat.walk.north-west": [
       "approved_catinthehat/walk_north-west_1.png",
@@ -11302,9 +10748,7 @@
       "approved_catinthehat/walk_north-west_3.png",
       "approved_catinthehat/walk_north-west_4.png",
       "approved_catinthehat/walk_north-west_5.png",
-      "approved_catinthehat/walk_north-west_6.png",
-      "approved_catinthehat/walk_north-west_7.png",
-      "approved_catinthehat/walk_north-west_8.png"
+      "approved_catinthehat/walk_north-west_6.png"
     ],
     "approved_catinthehat.walk.west": [
       "approved_catinthehat/walk_west_1.png",
@@ -11312,9 +10756,7 @@
       "approved_catinthehat/walk_west_3.png",
       "approved_catinthehat/walk_west_4.png",
       "approved_catinthehat/walk_west_5.png",
-      "approved_catinthehat/walk_west_6.png",
-      "approved_catinthehat/walk_west_7.png",
-      "approved_catinthehat/walk_west_8.png"
+      "approved_catinthehat/walk_west_6.png"
     ],
     "approved_catinthehat.walk.south-west": [
       "approved_catinthehat/walk_south-west_1.png",
@@ -11322,9 +10764,7 @@
       "approved_catinthehat/walk_south-west_3.png",
       "approved_catinthehat/walk_south-west_4.png",
       "approved_catinthehat/walk_south-west_5.png",
-      "approved_catinthehat/walk_south-west_6.png",
-      "approved_catinthehat/walk_south-west_7.png",
-      "approved_catinthehat/walk_south-west_8.png"
+      "approved_catinthehat/walk_south-west_6.png"
     ],
     "approved_catinthehat.sit.south": [
       "approved_catinthehat/sit_south_4.png"
@@ -11374,9 +10814,7 @@
       "approved_reptilian/walk_south_3.png",
       "approved_reptilian/walk_south_4.png",
       "approved_reptilian/walk_south_5.png",
-      "approved_reptilian/walk_south_6.png",
-      "approved_reptilian/walk_south_7.png",
-      "approved_reptilian/walk_south_8.png"
+      "approved_reptilian/walk_south_6.png"
     ],
     "approved_reptilian.walk.south-east": [
       "approved_reptilian/walk_south-east_1.png",
@@ -11384,9 +10822,7 @@
       "approved_reptilian/walk_south-east_3.png",
       "approved_reptilian/walk_south-east_4.png",
       "approved_reptilian/walk_south-east_5.png",
-      "approved_reptilian/walk_south-east_6.png",
-      "approved_reptilian/walk_south-east_7.png",
-      "approved_reptilian/walk_south-east_8.png"
+      "approved_reptilian/walk_south-east_6.png"
     ],
     "approved_reptilian.walk.east": [
       "approved_reptilian/walk_east_1.png",
@@ -11394,9 +10830,7 @@
       "approved_reptilian/walk_east_3.png",
       "approved_reptilian/walk_east_4.png",
       "approved_reptilian/walk_east_5.png",
-      "approved_reptilian/walk_east_6.png",
-      "approved_reptilian/walk_east_7.png",
-      "approved_reptilian/walk_east_8.png"
+      "approved_reptilian/walk_east_6.png"
     ],
     "approved_reptilian.walk.north-east": [
       "approved_reptilian/walk_north-east_1.png",
@@ -11404,9 +10838,7 @@
       "approved_reptilian/walk_north-east_3.png",
       "approved_reptilian/walk_north-east_4.png",
       "approved_reptilian/walk_north-east_5.png",
-      "approved_reptilian/walk_north-east_6.png",
-      "approved_reptilian/walk_north-east_7.png",
-      "approved_reptilian/walk_north-east_8.png"
+      "approved_reptilian/walk_north-east_6.png"
     ],
     "approved_reptilian.walk.north": [
       "approved_reptilian/walk_north_1.png",
@@ -11414,9 +10846,7 @@
       "approved_reptilian/walk_north_3.png",
       "approved_reptilian/walk_north_4.png",
       "approved_reptilian/walk_north_5.png",
-      "approved_reptilian/walk_north_6.png",
-      "approved_reptilian/walk_north_7.png",
-      "approved_reptilian/walk_north_8.png"
+      "approved_reptilian/walk_north_6.png"
     ],
     "approved_reptilian.walk.north-west": [
       "approved_reptilian/walk_north-west_1.png",
@@ -11424,9 +10854,7 @@
       "approved_reptilian/walk_north-west_3.png",
       "approved_reptilian/walk_north-west_4.png",
       "approved_reptilian/walk_north-west_5.png",
-      "approved_reptilian/walk_north-west_6.png",
-      "approved_reptilian/walk_north-west_7.png",
-      "approved_reptilian/walk_north-west_8.png"
+      "approved_reptilian/walk_north-west_6.png"
     ],
     "approved_reptilian.walk.west": [
       "approved_reptilian/walk_west_1.png",
@@ -11434,9 +10862,7 @@
       "approved_reptilian/walk_west_3.png",
       "approved_reptilian/walk_west_4.png",
       "approved_reptilian/walk_west_5.png",
-      "approved_reptilian/walk_west_6.png",
-      "approved_reptilian/walk_west_7.png",
-      "approved_reptilian/walk_west_8.png"
+      "approved_reptilian/walk_west_6.png"
     ],
     "approved_reptilian.walk.south-west": [
       "approved_reptilian/walk_south-west_1.png",
@@ -11444,9 +10870,7 @@
       "approved_reptilian/walk_south-west_3.png",
       "approved_reptilian/walk_south-west_4.png",
       "approved_reptilian/walk_south-west_5.png",
-      "approved_reptilian/walk_south-west_6.png",
-      "approved_reptilian/walk_south-west_7.png",
-      "approved_reptilian/walk_south-west_8.png"
+      "approved_reptilian/walk_south-west_6.png"
     ],
     "approved_reptilian.sit.south": [
       "approved_reptilian/sit_south_4.png"
@@ -11496,9 +10920,7 @@
       "approved_elonmusk/walk_south_3.png",
       "approved_elonmusk/walk_south_4.png",
       "approved_elonmusk/walk_south_5.png",
-      "approved_elonmusk/walk_south_6.png",
-      "approved_elonmusk/walk_south_7.png",
-      "approved_elonmusk/walk_south_8.png"
+      "approved_elonmusk/walk_south_6.png"
     ],
     "approved_elonmusk.walk.south-east": [
       "approved_elonmusk/walk_south-east_1.png",
@@ -11506,9 +10928,7 @@
       "approved_elonmusk/walk_south-east_3.png",
       "approved_elonmusk/walk_south-east_4.png",
       "approved_elonmusk/walk_south-east_5.png",
-      "approved_elonmusk/walk_south-east_6.png",
-      "approved_elonmusk/walk_south-east_7.png",
-      "approved_elonmusk/walk_south-east_8.png"
+      "approved_elonmusk/walk_south-east_6.png"
     ],
     "approved_elonmusk.walk.east": [
       "approved_elonmusk/walk_east_1.png",
@@ -11516,9 +10936,7 @@
       "approved_elonmusk/walk_east_3.png",
       "approved_elonmusk/walk_east_4.png",
       "approved_elonmusk/walk_east_5.png",
-      "approved_elonmusk/walk_east_6.png",
-      "approved_elonmusk/walk_east_7.png",
-      "approved_elonmusk/walk_east_8.png"
+      "approved_elonmusk/walk_east_6.png"
     ],
     "approved_elonmusk.walk.north-east": [
       "approved_elonmusk/walk_north-east_1.png",
@@ -11526,9 +10944,7 @@
       "approved_elonmusk/walk_north-east_3.png",
       "approved_elonmusk/walk_north-east_4.png",
       "approved_elonmusk/walk_north-east_5.png",
-      "approved_elonmusk/walk_north-east_6.png",
-      "approved_elonmusk/walk_north-east_7.png",
-      "approved_elonmusk/walk_north-east_8.png"
+      "approved_elonmusk/walk_north-east_6.png"
     ],
     "approved_elonmusk.walk.north": [
       "approved_elonmusk/walk_north_1.png",
@@ -11536,9 +10952,7 @@
       "approved_elonmusk/walk_north_3.png",
       "approved_elonmusk/walk_north_4.png",
       "approved_elonmusk/walk_north_5.png",
-      "approved_elonmusk/walk_north_6.png",
-      "approved_elonmusk/walk_north_7.png",
-      "approved_elonmusk/walk_north_8.png"
+      "approved_elonmusk/walk_north_6.png"
     ],
     "approved_elonmusk.walk.north-west": [
       "approved_elonmusk/walk_north-west_1.png",
@@ -11546,9 +10960,7 @@
       "approved_elonmusk/walk_north-west_3.png",
       "approved_elonmusk/walk_north-west_4.png",
       "approved_elonmusk/walk_north-west_5.png",
-      "approved_elonmusk/walk_north-west_6.png",
-      "approved_elonmusk/walk_north-west_7.png",
-      "approved_elonmusk/walk_north-west_8.png"
+      "approved_elonmusk/walk_north-west_6.png"
     ],
     "approved_elonmusk.walk.west": [
       "approved_elonmusk/walk_west_1.png",
@@ -11556,9 +10968,7 @@
       "approved_elonmusk/walk_west_3.png",
       "approved_elonmusk/walk_west_4.png",
       "approved_elonmusk/walk_west_5.png",
-      "approved_elonmusk/walk_west_6.png",
-      "approved_elonmusk/walk_west_7.png",
-      "approved_elonmusk/walk_west_8.png"
+      "approved_elonmusk/walk_west_6.png"
     ],
     "approved_elonmusk.walk.south-west": [
       "approved_elonmusk/walk_south-west_1.png",
@@ -11566,9 +10976,7 @@
       "approved_elonmusk/walk_south-west_3.png",
       "approved_elonmusk/walk_south-west_4.png",
       "approved_elonmusk/walk_south-west_5.png",
-      "approved_elonmusk/walk_south-west_6.png",
-      "approved_elonmusk/walk_south-west_7.png",
-      "approved_elonmusk/walk_south-west_8.png"
+      "approved_elonmusk/walk_south-west_6.png"
     ],
     "approved_elonmusk.sit.south": [
       "approved_elonmusk/sit_south_4.png"
@@ -11618,9 +11026,7 @@
       "approved_tonymontana/walk_south_3.png",
       "approved_tonymontana/walk_south_4.png",
       "approved_tonymontana/walk_south_5.png",
-      "approved_tonymontana/walk_south_6.png",
-      "approved_tonymontana/walk_south_7.png",
-      "approved_tonymontana/walk_south_8.png"
+      "approved_tonymontana/walk_south_6.png"
     ],
     "approved_tonymontana.walk.south-east": [
       "approved_tonymontana/walk_south-east_1.png",
@@ -11628,9 +11034,7 @@
       "approved_tonymontana/walk_south-east_3.png",
       "approved_tonymontana/walk_south-east_4.png",
       "approved_tonymontana/walk_south-east_5.png",
-      "approved_tonymontana/walk_south-east_6.png",
-      "approved_tonymontana/walk_south-east_7.png",
-      "approved_tonymontana/walk_south-east_8.png"
+      "approved_tonymontana/walk_south-east_6.png"
     ],
     "approved_tonymontana.walk.east": [
       "approved_tonymontana/walk_east_1.png",
@@ -11638,9 +11042,7 @@
       "approved_tonymontana/walk_east_3.png",
       "approved_tonymontana/walk_east_4.png",
       "approved_tonymontana/walk_east_5.png",
-      "approved_tonymontana/walk_east_6.png",
-      "approved_tonymontana/walk_east_7.png",
-      "approved_tonymontana/walk_east_8.png"
+      "approved_tonymontana/walk_east_6.png"
     ],
     "approved_tonymontana.walk.north-east": [
       "approved_tonymontana/walk_north-east_1.png",
@@ -11648,9 +11050,7 @@
       "approved_tonymontana/walk_north-east_3.png",
       "approved_tonymontana/walk_north-east_4.png",
       "approved_tonymontana/walk_north-east_5.png",
-      "approved_tonymontana/walk_north-east_6.png",
-      "approved_tonymontana/walk_north-east_7.png",
-      "approved_tonymontana/walk_north-east_8.png"
+      "approved_tonymontana/walk_north-east_6.png"
     ],
     "approved_tonymontana.walk.north": [
       "approved_tonymontana/walk_north_1.png",
@@ -11658,9 +11058,7 @@
       "approved_tonymontana/walk_north_3.png",
       "approved_tonymontana/walk_north_4.png",
       "approved_tonymontana/walk_north_5.png",
-      "approved_tonymontana/walk_north_6.png",
-      "approved_tonymontana/walk_north_7.png",
-      "approved_tonymontana/walk_north_8.png"
+      "approved_tonymontana/walk_north_6.png"
     ],
     "approved_tonymontana.walk.north-west": [
       "approved_tonymontana/walk_north-west_1.png",
@@ -11668,9 +11066,7 @@
       "approved_tonymontana/walk_north-west_3.png",
       "approved_tonymontana/walk_north-west_4.png",
       "approved_tonymontana/walk_north-west_5.png",
-      "approved_tonymontana/walk_north-west_6.png",
-      "approved_tonymontana/walk_north-west_7.png",
-      "approved_tonymontana/walk_north-west_8.png"
+      "approved_tonymontana/walk_north-west_6.png"
     ],
     "approved_tonymontana.walk.west": [
       "approved_tonymontana/walk_west_1.png",
@@ -11678,9 +11074,7 @@
       "approved_tonymontana/walk_west_3.png",
       "approved_tonymontana/walk_west_4.png",
       "approved_tonymontana/walk_west_5.png",
-      "approved_tonymontana/walk_west_6.png",
-      "approved_tonymontana/walk_west_7.png",
-      "approved_tonymontana/walk_west_8.png"
+      "approved_tonymontana/walk_west_6.png"
     ],
     "approved_tonymontana.walk.south-west": [
       "approved_tonymontana/walk_south-west_1.png",
@@ -11688,9 +11082,7 @@
       "approved_tonymontana/walk_south-west_3.png",
       "approved_tonymontana/walk_south-west_4.png",
       "approved_tonymontana/walk_south-west_5.png",
-      "approved_tonymontana/walk_south-west_6.png",
-      "approved_tonymontana/walk_south-west_7.png",
-      "approved_tonymontana/walk_south-west_8.png"
+      "approved_tonymontana/walk_south-west_6.png"
     ],
     "approved_tonymontana.sit.south": [
       "approved_tonymontana/sit_south_4.png"
@@ -11740,9 +11132,7 @@
       "approved_gothgirl/walk_south_3.png",
       "approved_gothgirl/walk_south_4.png",
       "approved_gothgirl/walk_south_5.png",
-      "approved_gothgirl/walk_south_6.png",
-      "approved_gothgirl/walk_south_7.png",
-      "approved_gothgirl/walk_south_8.png"
+      "approved_gothgirl/walk_south_6.png"
     ],
     "approved_gothgirl.walk.south-east": [
       "approved_gothgirl/walk_south-east_1.png",
@@ -11750,9 +11140,7 @@
       "approved_gothgirl/walk_south-east_3.png",
       "approved_gothgirl/walk_south-east_4.png",
       "approved_gothgirl/walk_south-east_5.png",
-      "approved_gothgirl/walk_south-east_6.png",
-      "approved_gothgirl/walk_south-east_7.png",
-      "approved_gothgirl/walk_south-east_8.png"
+      "approved_gothgirl/walk_south-east_6.png"
     ],
     "approved_gothgirl.walk.east": [
       "approved_gothgirl/walk_east_1.png",
@@ -11760,9 +11148,7 @@
       "approved_gothgirl/walk_east_3.png",
       "approved_gothgirl/walk_east_4.png",
       "approved_gothgirl/walk_east_5.png",
-      "approved_gothgirl/walk_east_6.png",
-      "approved_gothgirl/walk_east_7.png",
-      "approved_gothgirl/walk_east_8.png"
+      "approved_gothgirl/walk_east_6.png"
     ],
     "approved_gothgirl.walk.north-east": [
       "approved_gothgirl/walk_north-east_1.png",
@@ -11770,9 +11156,7 @@
       "approved_gothgirl/walk_north-east_3.png",
       "approved_gothgirl/walk_north-east_4.png",
       "approved_gothgirl/walk_north-east_5.png",
-      "approved_gothgirl/walk_north-east_6.png",
-      "approved_gothgirl/walk_north-east_7.png",
-      "approved_gothgirl/walk_north-east_8.png"
+      "approved_gothgirl/walk_north-east_6.png"
     ],
     "approved_gothgirl.walk.north": [
       "approved_gothgirl/walk_north_1.png",
@@ -11780,9 +11164,7 @@
       "approved_gothgirl/walk_north_3.png",
       "approved_gothgirl/walk_north_4.png",
       "approved_gothgirl/walk_north_5.png",
-      "approved_gothgirl/walk_north_6.png",
-      "approved_gothgirl/walk_north_7.png",
-      "approved_gothgirl/walk_north_8.png"
+      "approved_gothgirl/walk_north_6.png"
     ],
     "approved_gothgirl.walk.north-west": [
       "approved_gothgirl/walk_north-west_1.png",
@@ -11790,9 +11172,7 @@
       "approved_gothgirl/walk_north-west_3.png",
       "approved_gothgirl/walk_north-west_4.png",
       "approved_gothgirl/walk_north-west_5.png",
-      "approved_gothgirl/walk_north-west_6.png",
-      "approved_gothgirl/walk_north-west_7.png",
-      "approved_gothgirl/walk_north-west_8.png"
+      "approved_gothgirl/walk_north-west_6.png"
     ],
     "approved_gothgirl.walk.west": [
       "approved_gothgirl/walk_west_1.png",
@@ -11800,9 +11180,7 @@
       "approved_gothgirl/walk_west_3.png",
       "approved_gothgirl/walk_west_4.png",
       "approved_gothgirl/walk_west_5.png",
-      "approved_gothgirl/walk_west_6.png",
-      "approved_gothgirl/walk_west_7.png",
-      "approved_gothgirl/walk_west_8.png"
+      "approved_gothgirl/walk_west_6.png"
     ],
     "approved_gothgirl.walk.south-west": [
       "approved_gothgirl/walk_south-west_1.png",
@@ -11810,9 +11188,7 @@
       "approved_gothgirl/walk_south-west_3.png",
       "approved_gothgirl/walk_south-west_4.png",
       "approved_gothgirl/walk_south-west_5.png",
-      "approved_gothgirl/walk_south-west_6.png",
-      "approved_gothgirl/walk_south-west_7.png",
-      "approved_gothgirl/walk_south-west_8.png"
+      "approved_gothgirl/walk_south-west_6.png"
     ],
     "approved_gothgirl.sit.south": [
       "approved_gothgirl/sit_south_4.png"
@@ -11862,9 +11238,7 @@
       "approved_baddie/walk_south_3.png",
       "approved_baddie/walk_south_4.png",
       "approved_baddie/walk_south_5.png",
-      "approved_baddie/walk_south_6.png",
-      "approved_baddie/walk_south_7.png",
-      "approved_baddie/walk_south_8.png"
+      "approved_baddie/walk_south_6.png"
     ],
     "approved_baddie.walk.south-east": [
       "approved_baddie/walk_south-east_1.png",
@@ -11872,9 +11246,7 @@
       "approved_baddie/walk_south-east_3.png",
       "approved_baddie/walk_south-east_4.png",
       "approved_baddie/walk_south-east_5.png",
-      "approved_baddie/walk_south-east_6.png",
-      "approved_baddie/walk_south-east_7.png",
-      "approved_baddie/walk_south-east_8.png"
+      "approved_baddie/walk_south-east_6.png"
     ],
     "approved_baddie.walk.east": [
       "approved_baddie/walk_east_1.png",
@@ -11882,9 +11254,7 @@
       "approved_baddie/walk_east_3.png",
       "approved_baddie/walk_east_4.png",
       "approved_baddie/walk_east_5.png",
-      "approved_baddie/walk_east_6.png",
-      "approved_baddie/walk_east_7.png",
-      "approved_baddie/walk_east_8.png"
+      "approved_baddie/walk_east_6.png"
     ],
     "approved_baddie.walk.north-east": [
       "approved_baddie/walk_north-east_1.png",
@@ -11892,9 +11262,7 @@
       "approved_baddie/walk_north-east_3.png",
       "approved_baddie/walk_north-east_4.png",
       "approved_baddie/walk_north-east_5.png",
-      "approved_baddie/walk_north-east_6.png",
-      "approved_baddie/walk_north-east_7.png",
-      "approved_baddie/walk_north-east_8.png"
+      "approved_baddie/walk_north-east_6.png"
     ],
     "approved_baddie.walk.north": [
       "approved_baddie/walk_north_1.png",
@@ -11902,9 +11270,7 @@
       "approved_baddie/walk_north_3.png",
       "approved_baddie/walk_north_4.png",
       "approved_baddie/walk_north_5.png",
-      "approved_baddie/walk_north_6.png",
-      "approved_baddie/walk_north_7.png",
-      "approved_baddie/walk_north_8.png"
+      "approved_baddie/walk_north_6.png"
     ],
     "approved_baddie.walk.north-west": [
       "approved_baddie/walk_north-west_1.png",
@@ -11912,9 +11278,7 @@
       "approved_baddie/walk_north-west_3.png",
       "approved_baddie/walk_north-west_4.png",
       "approved_baddie/walk_north-west_5.png",
-      "approved_baddie/walk_north-west_6.png",
-      "approved_baddie/walk_north-west_7.png",
-      "approved_baddie/walk_north-west_8.png"
+      "approved_baddie/walk_north-west_6.png"
     ],
     "approved_baddie.walk.west": [
       "approved_baddie/walk_west_1.png",
@@ -11922,9 +11286,7 @@
       "approved_baddie/walk_west_3.png",
       "approved_baddie/walk_west_4.png",
       "approved_baddie/walk_west_5.png",
-      "approved_baddie/walk_west_6.png",
-      "approved_baddie/walk_west_7.png",
-      "approved_baddie/walk_west_8.png"
+      "approved_baddie/walk_west_6.png"
     ],
     "approved_baddie.walk.south-west": [
       "approved_baddie/walk_south-west_1.png",
@@ -11932,9 +11294,7 @@
       "approved_baddie/walk_south-west_3.png",
       "approved_baddie/walk_south-west_4.png",
       "approved_baddie/walk_south-west_5.png",
-      "approved_baddie/walk_south-west_6.png",
-      "approved_baddie/walk_south-west_7.png",
-      "approved_baddie/walk_south-west_8.png"
+      "approved_baddie/walk_south-west_6.png"
     ],
     "approved_baddie.sit.south": [
       "approved_baddie/sit_south_4.png"
@@ -11984,9 +11344,7 @@
       "approved_candyprincess/walk_south_3.png",
       "approved_candyprincess/walk_south_4.png",
       "approved_candyprincess/walk_south_5.png",
-      "approved_candyprincess/walk_south_6.png",
-      "approved_candyprincess/walk_south_7.png",
-      "approved_candyprincess/walk_south_8.png"
+      "approved_candyprincess/walk_south_6.png"
     ],
     "approved_candyprincess.walk.south-east": [
       "approved_candyprincess/walk_south-east_1.png",
@@ -11994,9 +11352,7 @@
       "approved_candyprincess/walk_south-east_3.png",
       "approved_candyprincess/walk_south-east_4.png",
       "approved_candyprincess/walk_south-east_5.png",
-      "approved_candyprincess/walk_south-east_6.png",
-      "approved_candyprincess/walk_south-east_7.png",
-      "approved_candyprincess/walk_south-east_8.png"
+      "approved_candyprincess/walk_south-east_6.png"
     ],
     "approved_candyprincess.walk.east": [
       "approved_candyprincess/walk_east_1.png",
@@ -12004,9 +11360,7 @@
       "approved_candyprincess/walk_east_3.png",
       "approved_candyprincess/walk_east_4.png",
       "approved_candyprincess/walk_east_5.png",
-      "approved_candyprincess/walk_east_6.png",
-      "approved_candyprincess/walk_east_7.png",
-      "approved_candyprincess/walk_east_8.png"
+      "approved_candyprincess/walk_east_6.png"
     ],
     "approved_candyprincess.walk.north-east": [
       "approved_candyprincess/walk_north-east_1.png",
@@ -12014,9 +11368,7 @@
       "approved_candyprincess/walk_north-east_3.png",
       "approved_candyprincess/walk_north-east_4.png",
       "approved_candyprincess/walk_north-east_5.png",
-      "approved_candyprincess/walk_north-east_6.png",
-      "approved_candyprincess/walk_north-east_7.png",
-      "approved_candyprincess/walk_north-east_8.png"
+      "approved_candyprincess/walk_north-east_6.png"
     ],
     "approved_candyprincess.walk.north": [
       "approved_candyprincess/walk_north_1.png",
@@ -12024,9 +11376,7 @@
       "approved_candyprincess/walk_north_3.png",
       "approved_candyprincess/walk_north_4.png",
       "approved_candyprincess/walk_north_5.png",
-      "approved_candyprincess/walk_north_6.png",
-      "approved_candyprincess/walk_north_7.png",
-      "approved_candyprincess/walk_north_8.png"
+      "approved_candyprincess/walk_north_6.png"
     ],
     "approved_candyprincess.walk.north-west": [
       "approved_candyprincess/walk_north-west_1.png",
@@ -12034,9 +11384,7 @@
       "approved_candyprincess/walk_north-west_3.png",
       "approved_candyprincess/walk_north-west_4.png",
       "approved_candyprincess/walk_north-west_5.png",
-      "approved_candyprincess/walk_north-west_6.png",
-      "approved_candyprincess/walk_north-west_7.png",
-      "approved_candyprincess/walk_north-west_8.png"
+      "approved_candyprincess/walk_north-west_6.png"
     ],
     "approved_candyprincess.walk.west": [
       "approved_candyprincess/walk_west_1.png",
@@ -12044,9 +11392,7 @@
       "approved_candyprincess/walk_west_3.png",
       "approved_candyprincess/walk_west_4.png",
       "approved_candyprincess/walk_west_5.png",
-      "approved_candyprincess/walk_west_6.png",
-      "approved_candyprincess/walk_west_7.png",
-      "approved_candyprincess/walk_west_8.png"
+      "approved_candyprincess/walk_west_6.png"
     ],
     "approved_candyprincess.walk.south-west": [
       "approved_candyprincess/walk_south-west_1.png",
@@ -12054,9 +11400,7 @@
       "approved_candyprincess/walk_south-west_3.png",
       "approved_candyprincess/walk_south-west_4.png",
       "approved_candyprincess/walk_south-west_5.png",
-      "approved_candyprincess/walk_south-west_6.png",
-      "approved_candyprincess/walk_south-west_7.png",
-      "approved_candyprincess/walk_south-west_8.png"
+      "approved_candyprincess/walk_south-west_6.png"
     ],
     "approved_candyprincess.sit.south": [
       "approved_candyprincess/sit_south_4.png"
@@ -12106,9 +11450,7 @@
       "approved_bunnycutie/walk_south_3.png",
       "approved_bunnycutie/walk_south_4.png",
       "approved_bunnycutie/walk_south_5.png",
-      "approved_bunnycutie/walk_south_6.png",
-      "approved_bunnycutie/walk_south_7.png",
-      "approved_bunnycutie/walk_south_8.png"
+      "approved_bunnycutie/walk_south_6.png"
     ],
     "approved_bunnycutie.walk.south-east": [
       "approved_bunnycutie/walk_south-east_1.png",
@@ -12116,9 +11458,7 @@
       "approved_bunnycutie/walk_south-east_3.png",
       "approved_bunnycutie/walk_south-east_4.png",
       "approved_bunnycutie/walk_south-east_5.png",
-      "approved_bunnycutie/walk_south-east_6.png",
-      "approved_bunnycutie/walk_south-east_7.png",
-      "approved_bunnycutie/walk_south-east_8.png"
+      "approved_bunnycutie/walk_south-east_6.png"
     ],
     "approved_bunnycutie.walk.east": [
       "approved_bunnycutie/walk_east_1.png",
@@ -12126,9 +11466,7 @@
       "approved_bunnycutie/walk_east_3.png",
       "approved_bunnycutie/walk_east_4.png",
       "approved_bunnycutie/walk_east_5.png",
-      "approved_bunnycutie/walk_east_6.png",
-      "approved_bunnycutie/walk_east_7.png",
-      "approved_bunnycutie/walk_east_8.png"
+      "approved_bunnycutie/walk_east_6.png"
     ],
     "approved_bunnycutie.walk.north-east": [
       "approved_bunnycutie/walk_north-east_1.png",
@@ -12136,9 +11474,7 @@
       "approved_bunnycutie/walk_north-east_3.png",
       "approved_bunnycutie/walk_north-east_4.png",
       "approved_bunnycutie/walk_north-east_5.png",
-      "approved_bunnycutie/walk_north-east_6.png",
-      "approved_bunnycutie/walk_north-east_7.png",
-      "approved_bunnycutie/walk_north-east_8.png"
+      "approved_bunnycutie/walk_north-east_6.png"
     ],
     "approved_bunnycutie.walk.north": [
       "approved_bunnycutie/walk_north_1.png",
@@ -12146,9 +11482,7 @@
       "approved_bunnycutie/walk_north_3.png",
       "approved_bunnycutie/walk_north_4.png",
       "approved_bunnycutie/walk_north_5.png",
-      "approved_bunnycutie/walk_north_6.png",
-      "approved_bunnycutie/walk_north_7.png",
-      "approved_bunnycutie/walk_north_8.png"
+      "approved_bunnycutie/walk_north_6.png"
     ],
     "approved_bunnycutie.walk.north-west": [
       "approved_bunnycutie/walk_north-west_1.png",
@@ -12156,9 +11490,7 @@
       "approved_bunnycutie/walk_north-west_3.png",
       "approved_bunnycutie/walk_north-west_4.png",
       "approved_bunnycutie/walk_north-west_5.png",
-      "approved_bunnycutie/walk_north-west_6.png",
-      "approved_bunnycutie/walk_north-west_7.png",
-      "approved_bunnycutie/walk_north-west_8.png"
+      "approved_bunnycutie/walk_north-west_6.png"
     ],
     "approved_bunnycutie.walk.west": [
       "approved_bunnycutie/walk_west_1.png",
@@ -12166,9 +11498,7 @@
       "approved_bunnycutie/walk_west_3.png",
       "approved_bunnycutie/walk_west_4.png",
       "approved_bunnycutie/walk_west_5.png",
-      "approved_bunnycutie/walk_west_6.png",
-      "approved_bunnycutie/walk_west_7.png",
-      "approved_bunnycutie/walk_west_8.png"
+      "approved_bunnycutie/walk_west_6.png"
     ],
     "approved_bunnycutie.walk.south-west": [
       "approved_bunnycutie/walk_south-west_1.png",
@@ -12176,9 +11506,7 @@
       "approved_bunnycutie/walk_south-west_3.png",
       "approved_bunnycutie/walk_south-west_4.png",
       "approved_bunnycutie/walk_south-west_5.png",
-      "approved_bunnycutie/walk_south-west_6.png",
-      "approved_bunnycutie/walk_south-west_7.png",
-      "approved_bunnycutie/walk_south-west_8.png"
+      "approved_bunnycutie/walk_south-west_6.png"
     ],
     "approved_bunnycutie.sit.south": [
       "approved_bunnycutie/sit_south_4.png"
@@ -12228,9 +11556,7 @@
       "approved_tylerdurden/walk_south_3.png",
       "approved_tylerdurden/walk_south_4.png",
       "approved_tylerdurden/walk_south_5.png",
-      "approved_tylerdurden/walk_south_6.png",
-      "approved_tylerdurden/walk_south_7.png",
-      "approved_tylerdurden/walk_south_8.png"
+      "approved_tylerdurden/walk_south_6.png"
     ],
     "approved_tylerdurden.walk.south-east": [
       "approved_tylerdurden/walk_south-east_1.png",
@@ -12238,9 +11564,7 @@
       "approved_tylerdurden/walk_south-east_3.png",
       "approved_tylerdurden/walk_south-east_4.png",
       "approved_tylerdurden/walk_south-east_5.png",
-      "approved_tylerdurden/walk_south-east_6.png",
-      "approved_tylerdurden/walk_south-east_7.png",
-      "approved_tylerdurden/walk_south-east_8.png"
+      "approved_tylerdurden/walk_south-east_6.png"
     ],
     "approved_tylerdurden.walk.east": [
       "approved_tylerdurden/walk_east_1.png",
@@ -12248,9 +11572,7 @@
       "approved_tylerdurden/walk_east_3.png",
       "approved_tylerdurden/walk_east_4.png",
       "approved_tylerdurden/walk_east_5.png",
-      "approved_tylerdurden/walk_east_6.png",
-      "approved_tylerdurden/walk_east_7.png",
-      "approved_tylerdurden/walk_east_8.png"
+      "approved_tylerdurden/walk_east_6.png"
     ],
     "approved_tylerdurden.walk.north-east": [
       "approved_tylerdurden/walk_north-east_1.png",
@@ -12258,9 +11580,7 @@
       "approved_tylerdurden/walk_north-east_3.png",
       "approved_tylerdurden/walk_north-east_4.png",
       "approved_tylerdurden/walk_north-east_5.png",
-      "approved_tylerdurden/walk_north-east_6.png",
-      "approved_tylerdurden/walk_north-east_7.png",
-      "approved_tylerdurden/walk_north-east_8.png"
+      "approved_tylerdurden/walk_north-east_6.png"
     ],
     "approved_tylerdurden.walk.north": [
       "approved_tylerdurden/walk_north_1.png",
@@ -12268,9 +11588,7 @@
       "approved_tylerdurden/walk_north_3.png",
       "approved_tylerdurden/walk_north_4.png",
       "approved_tylerdurden/walk_north_5.png",
-      "approved_tylerdurden/walk_north_6.png",
-      "approved_tylerdurden/walk_north_7.png",
-      "approved_tylerdurden/walk_north_8.png"
+      "approved_tylerdurden/walk_north_6.png"
     ],
     "approved_tylerdurden.walk.north-west": [
       "approved_tylerdurden/walk_north-west_1.png",
@@ -12278,9 +11596,7 @@
       "approved_tylerdurden/walk_north-west_3.png",
       "approved_tylerdurden/walk_north-west_4.png",
       "approved_tylerdurden/walk_north-west_5.png",
-      "approved_tylerdurden/walk_north-west_6.png",
-      "approved_tylerdurden/walk_north-west_7.png",
-      "approved_tylerdurden/walk_north-west_8.png"
+      "approved_tylerdurden/walk_north-west_6.png"
     ],
     "approved_tylerdurden.walk.west": [
       "approved_tylerdurden/walk_west_1.png",
@@ -12288,9 +11604,7 @@
       "approved_tylerdurden/walk_west_3.png",
       "approved_tylerdurden/walk_west_4.png",
       "approved_tylerdurden/walk_west_5.png",
-      "approved_tylerdurden/walk_west_6.png",
-      "approved_tylerdurden/walk_west_7.png",
-      "approved_tylerdurden/walk_west_8.png"
+      "approved_tylerdurden/walk_west_6.png"
     ],
     "approved_tylerdurden.walk.south-west": [
       "approved_tylerdurden/walk_south-west_1.png",
@@ -12298,9 +11612,7 @@
       "approved_tylerdurden/walk_south-west_3.png",
       "approved_tylerdurden/walk_south-west_4.png",
       "approved_tylerdurden/walk_south-west_5.png",
-      "approved_tylerdurden/walk_south-west_6.png",
-      "approved_tylerdurden/walk_south-west_7.png",
-      "approved_tylerdurden/walk_south-west_8.png"
+      "approved_tylerdurden/walk_south-west_6.png"
     ],
     "approved_tylerdurden.sit.south": [
       "approved_tylerdurden/sit_south_4.png"
