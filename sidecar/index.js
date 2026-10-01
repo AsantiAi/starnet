@@ -3708,7 +3708,17 @@ const APP_TEMPLATE = fs.readFileSync(path.join(__dirname, 'app-template', 'index
 const appHtml = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const apps = makeApps({
   fsp, path, dir: APPS_DIR, store: makePluginStore({ store: appDataStore }),
-  treeDigest: (d) => pluginLoader._internals.treeDigest(d),
+  // an app's VERSION is its page files only: app.json (name, schedule, built/changed stamps) is the station's
+  // bookkeeping, so saving a schedule or a rename never reloads the open window and loses what is on it
+  treeDigest: async (d) => {
+    const t = await pluginLoader._internals.treeDigest(d);
+    if (!t || t.error) return t;
+    const files = (t.files || []).filter((f) => f.rel !== 'app.json');
+    const h = crypto.createHash('sha256');
+    // the BYTES of every page file (treeDigest's `text` is null for files it does not treat as code: never hash that)
+    for (const f of files) h.update(f.rel + '\0' + crypto.createHash('sha256').update(await fsp.readFile(path.join(d, ...f.rel.split('/')))).digest('hex') + '\n');
+    return { digest: h.digest('hex'), files };
+  },
   relPathOk: require('./plugins.js')._internals.relPathOk,
   now: () => Date.now(),
   template: ({ name, description }) => ({ 'index.html': APP_TEMPLATE.split('{{NAME_HTML}}').join(appHtml(name)).split('{{DESCRIPTION_HTML}}').join(appHtml(description || '')) }),
@@ -3716,6 +3726,18 @@ const apps = makeApps({
     create: async (spec) => { const o = await createCronJobFromSpec(spec); return (o && o.body && o.body.ok && o.body.job) ? { ok: true, job: o.body.job } : { ok: false, error: (o && o.body && (o.body.error || o.body.message)) || 'the routine could not be created' }; },
     remove: async (id) => { const lease = cronDriver.leases.get(id); if (lease && lease.ac) { try { lease.ac.abort(); } catch (e) { failNote('apps.routine-abort', e); } } await withCronWrite(jobs => cronStore.removeJob(jobs, id)); },
     get: (id) => cronStore.getJob(cronJobs, id) || null,
+    update: async (id, p) => {
+      const cur = cronStore.getJob(cronJobs, id);
+      if (!cur) return { ok: false, error: 'the routine is gone' };
+      const scan = cronGuard.scanRoutinePrompt(p.prompt);
+      if (!scan.ok) return { ok: false, error: scan.error };
+      let schedule;
+      try { schedule = parseCronScheduleOr400(p.schedule, Date.now(), (cur.schedule && cur.schedule.tz) || undefined); } catch (e) { return { ok: false, error: e.message }; }
+      try { await withCronWrite((jobs) => cronStore.updateJob(jobs, id, { schedule, prompt: p.prompt, name: p.name }, { now: Date.now(), defaultTz: CRON_HOST_TZ })); }
+      catch (e) { return { ok: false, error: (e && e.message) || String(e) }; }
+      return { ok: true, job: cronStore.getJob(cronJobs, id) };
+    },
+    ownedBy: (appId) => cronJobs.filter((j) => j && j.meta && j.meta.appId === appId).map((j) => j.id),
     armed: () => !!cronArmed && !cronHalted
   },
   // tell the open window (fire-and-forget: with no page open the command simply lapses)
@@ -14373,7 +14395,8 @@ async function handleCronRun(req, res) {
   // Without detach:true, Run Now keeps its law: the watcher leaving cancels the run.
   const detached = body.detach === true;
   if (!detached) res.on('close', () => { ac.abort(); runs.delete(runId); runsMeta.delete(runId); });
-  else res.on('close', () => { runs.delete(runId); runsMeta.delete(runId); });   // the watcher left; the run goes on
+  // detached: the watcher leaving changes nothing — the run stays in runs/runsMeta (live in the snapshot, busy, and
+  // stoppable on its own) until its own finally below removes it
   const bus = { emit: (name, payload) => { try { res.write(JSON.stringify({ name, payload: redact(payload) }) + '\n'); } catch (_) {} } };
   const emit = wrapEmitDiag(makeEmitter(bus, e => { if (e) console.warn('[event]', e.kind, e.event, (e.errors || []).join(';')); }));
   // tee: stream every event to the watching browser AND capture the outcome so the last-run record is honest.
