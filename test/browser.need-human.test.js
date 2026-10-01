@@ -56,7 +56,7 @@ async function runErr(tool, args) { try { await tool.run(args || {}, {}); return
   {
     const driver = fakeDriver({ authWall: 'login', persistent: true });
     const emitted = [];
-    const host = makeHandoffHost({ emit: (n, p) => emitted.push(p) });
+    const host = makeHandoffHost({ now: () => Date.now(), emit: (n, p) => emitted.push(p) });
     let runSignal = new AbortController();
     const handoff = { request: f => host.request(Object.assign({ agentId: 'nova', runId: 'run-1' }, f)) };
     const B = makeBrowserTools({ driver, lookup: null, handoff });
@@ -128,7 +128,7 @@ async function runErr(tool, args) { try { await tool.run(args || {}, {}); return
   // ---- can't do it, expiry, and the temporary-profile truth ----
   {
     const driver = fakeDriver();
-    const host = makeHandoffHost({ waitMs: 30 });
+    const host = makeHandoffHost({ now: () => Date.now(), waitMs: 30 });
     const B = makeBrowserTools({ driver, lookup: null, handoff: { request: f => host.request(Object.assign({ agentId: 'a', runId: 'r2' }, f)) } });
     await toolOf(B, 'browser.navigate').run({ url: 'https://example.com/captcha' }, {});
     const p1 = toolOf(B, 'browser.need_human').run({ reason: 'captcha', note: 'please solve the captcha' }, {});
@@ -149,7 +149,7 @@ async function runErr(tool, args) { try { await tool.run(args || {}, {}); return
   // ---- a stopped run ends the handoff (never tied to a socket, but never outlives its run) ----
   {
     const driver = fakeDriver();
-    const host = makeHandoffHost({});
+    const host = makeHandoffHost({ now: () => Date.now() });
     const B = makeBrowserTools({ driver, lookup: null, handoff: { request: f => host.request(Object.assign({ agentId: 'a', runId: 'r3' }, f)) } });
     await toolOf(B, 'browser.navigate').run({ url: 'https://example.com/login' }, {});
     const ac = new AbortController();

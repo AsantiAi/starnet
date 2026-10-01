@@ -55,6 +55,27 @@ const StationTemplates = (() => {
     comms: { name: 'COMMS', kind: 'bridge', floorStyle: 'hull', floorMat: 'resin', props: [['consoleL',3,1],['screens',10,0],['rack',12,1],['plant',16,1]] },
     archive: { name: 'ARCHIVE', kind: 'hab', floorStyle: 'walnut', floorMat: 'plank', props: [['bookshelf',2,1],['bookshelf',6,1],['bookshelf',10,1],['plant',16,1],['desk',3,7]] }
   };
+  /* ROOM KITS (2026-09-29): the hand-designed rooms the presets are made of, offered one at a time to the agent's station
+     builder ("add a Library"). Each is an 18 × 11 room: its kind, floor, furniture and, for some, a ready line with
+     written steps. `about` is what the approval card says the kit is. The station builder places them; nothing else
+     reads this list. */
+  const KIT_ABOUT = {
+    cozyWorkshop: 'a warm workroom with a front desk line: one agent, a $5-a-day cap',
+    cozyLounge: 'a lounge: a TV, a couch, coffee, a table and a bunk',
+    reading: 'a quiet library: a couch, a bookshelf and a reading table',
+    creative: 'a design studio: a desk, an easel, drawers and a table',
+    creativeReview: 'a draft and review room with a Draft + review line',
+    review: 'a review room: a desk, a whiteboard and a meeting table',
+    researchLab: 'an analysis lab with a Research + write line',
+    engineering: 'a workshop: a desk, a fabricator, drawers and a crate',
+    buildTest: 'a build and test room with a Build + test line',
+    dispatch: 'a dispatch room with a line that sorts requests to three specialists',
+    comms: 'a comms room: a console, screens and a rack',
+    archive: 'an archive: three bookshelves and a desk'
+  };
+  const kits = () => Object.keys(rooms).map(id => Object.freeze({ id, name: rooms[id].name, kind: rooms[id].kind, floorStyle: rooms[id].floorStyle,
+    floorMat: rooms[id].floorMat, props: rooms[id].props.map(p => p.slice()), line: rooms[id].line ? JSON.parse(JSON.stringify(rooms[id].line)) : null, about: KIT_ABOUT[id] || '' }));
+  const presetKits = id => { const c = catalog.find(x => x.id === id); return c ? c.wings.map(w => w[0]) : []; };
   const slots = {
     east: { x:21, y:0, hall:{x1:18,y1:4,x2:20,y2:6} },
     west: { x:-21, y:0, hall:{x1:-3,y1:4,x2:-1,y2:6} },
@@ -204,6 +225,6 @@ const StationTemplates = (() => {
     }
     return doc;
   }
-  return { catalog: catalog.map(({wings,...entry}) => Object.freeze(entry)), guides, build, example, recommend };
+  return { catalog: catalog.map(({wings,...entry}) => Object.freeze(entry)), guides, build, example, recommend, kits, presetKits };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = StationTemplates;

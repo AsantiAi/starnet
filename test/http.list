@@ -43,6 +43,7 @@ test/e2e.attachments.test.js
 test/e2e.summon.test.js
 test/e2e.dispatch-session.test.js
 test/station-layout.e2e.test.mjs
+test/station-builder.e2e.test.mjs
 test/e2e.worker-access.test.js
 test/taint-lineage.e2e.test.js
 test/e2e.trigger-fullaccess-taint.test.js
@@ -75,6 +76,7 @@ test/loops-git.e2e.test.js
 test/loops-endurance.e2e.test.js
 test/loops-stall.e2e.test.js
 test/workshop.e2e.test.js
+test/workspace-view.e2e.test.js
 test/nightshift-act.e2e.test.js
 test/nightshift-grant.e2e.test.js
 test/nightshift-contextpack.e2e.test.js
@@ -101,6 +103,7 @@ test/shell.test.js
 test/shell.process-tree.test.js
 test/verify.run.test.js
 test/browser.gauntlet.e2e.test.js
+test/browser-screencast-restart.e2e.test.js
 test/browser.stepin.e2e.test.js
 test/servicekeys.http.test.js
 test/servicekeys.shell.e2e.test.js
@@ -173,3 +176,4 @@ test/remote.e2e.test.js
 test/remote.relay.e2e.test.js
 test/subscription-stacking.e2e.test.js
 test/subscription-stacking-oauth.e2e.test.js
+test/apps.http.test.js

@@ -32,6 +32,7 @@ const SKEW_MS = 30 * 1000;   // same machine, but page and sidecar read the cloc
 const KINDS = Object.freeze({
   file: Object.freeze({ method: 'GET', maxTtlMs: 5 * 60 * 1000, once: false }),    // link/tab open of ONE workspace file
   run: Object.freeze({ method: 'GET', maxTtlMs: 10 * 60 * 1000, once: false }),    // ONE workshop run dir (page + its relative assets)
+  view: Object.freeze({ method: 'GET', maxTtlMs: 10 * 60 * 1000, once: false }),   // ONE workspace folder rendered in the BROWSER window (page + its relative assets)
   sse: Object.freeze({ method: 'GET', maxTtlMs: 2 * 60 * 1000, once: true }),      // one EventSource CONNECT (a live stream outlives it)
   save: Object.freeze({ method: 'POST', maxTtlMs: 2 * 60 * 1000, once: true }),    // one unload beacon
   // ONE approved plugin's UI files at ONE exact code digest (a plugin window's iframe + its relative assets). Long
@@ -43,6 +44,7 @@ const KINDS = Object.freeze({
 function b64url(buf) { return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
 function scopeFile(agent, relPath) { return 'file\n' + String(agent || 'agent') + '\n' + String(relPath || ''); }
 function scopeRun(agent, runId) { return 'run\n' + String(agent || '') + '\n' + String(runId || ''); }
+function scopeView(agent, dir) { return 'view\n' + String(agent || '') + '\n' + String(dir || ''); }
 function scopePlugin(id, digest) { return 'plugin\n' + String(id || '') + '\n' + String(digest || ''); }
 // a plugin DRAFT's preview window (/plugin-draft/): same kind, a different scope, so a draft ticket can never open an
 // installed plugin's files or the other way round
@@ -164,8 +166,14 @@ function splitPrefixTicket(prefix, rawPath) {
   return { ticket: tail.slice(0, slash), rest: tail.slice(slash + 1) };
 }
 function splitPluginTicket(rawPath) { return splitPrefixTicket(PLUGIN_PREFIX, rawPath); }
+/* /view/~t/<ticket>/<agentId>/<dir>/<path...> — the BROWSER window's in-app view of a workspace web page. <dir> is
+   ONE percent-encoded segment naming the folder the ticket covers ('~' = the workspace root), so the page's
+   relative assets (./style.css, img/a.png) stay under the same ticketed prefix, while a '../' out of the folder
+   changes <dir> and fails the MAC. A view url has NO unticketed form. */
+const VIEW_PREFIX = '/view/';
+function splitViewTicket(rawPath) { return splitPrefixTicket(VIEW_PREFIX, rawPath); }
 
 module.exports = {
-  KINDS, SKEW_MS, mint, verify, parse, replayGuard, apiTicketClaim, splitRunTicket, splitPluginTicket, splitPrefixTicket,
-  scopeFile, scopeRun, scopePlugin, scopeDraft, scopeApp, SCOPE_SSE, SCOPE_SAVE, message
+  KINDS, SKEW_MS, mint, verify, parse, replayGuard, apiTicketClaim, splitRunTicket, splitViewTicket, splitPluginTicket, splitPrefixTicket,
+  scopeFile, scopeRun, scopeView, scopePlugin, scopeDraft, scopeApp, SCOPE_SSE, SCOPE_SAVE, message
 };

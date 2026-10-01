@@ -149,7 +149,7 @@
 .refit-selection > span { font-size:12px; color:var(--muted); }
 .refit-selection-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; }
 .refit-selection-actions .bb { min-height:30px; padding:5px; }
-.refit-overlay.has-selection[data-tool="select"] #refit-option-section { display:none; }
+/* (2026-10-01) a selection no longer hides the library: the selection card sits above it (refit-easy.css) */
 .refit-finline { max-height: calc(100vh * var(--sn-unzoom,1) - 150px); overflow-y: auto; }
 @container (max-width: 270px) {
   .refit-propcat small, .refit-tool .refit-key { display: none; }

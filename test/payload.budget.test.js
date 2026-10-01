@@ -39,10 +39,14 @@ const HOST = '127.0.0.1';
    The system budgets drop to the new measurement + ~6% so the diet cannot silently regrow.
    STEP-IN 2026-09-30: browser.need_human is advertised on every run with a browser (it is the way out of a login /
    2FA / CAPTCHA wall, so it is never deferred): 84 tools | 64,918 tool bytes. Intended growth; the byte budget moves
-   to 65,300 (measurement + ~0.6%: the earlier headroom is spent, so the next tool owes a diet, not another raise). */
+   to 65,300 (measurement + ~0.6%: the earlier headroom is spent, so the next tool owes a diet, not another raise).
+   STATION BUILDER 2026-09-30: the lead's one-line pointer to the deferred builder ("to change the floor, tool_search
+   \"station builder\" and claim only what station.build reports") replaces the old "configured in the station UI"
+   sentence, and the three deferred builder tools are named in the deferred index: 24,606 / 24,827 system chars on the
+   APPS trunk (7854c4241). Intended growth; the system budgets move by 50 (measurement + ~0.2%). */
 const BUDGET = {
-  'default-new-install': { systemChars: 24600, tools: 84, toolBytes: 65300 },
-  'fully-granted-floor': { systemChars: 24800, tools: 84, toolBytes: 65300 }
+  'default-new-install': { systemChars: 24650, tools: 84, toolBytes: 65300 },
+  'fully-granted-floor': { systemChars: 24850, tools: 84, toolBytes: 65300 }
 };
 
 (async () => {

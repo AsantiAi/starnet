@@ -100,7 +100,7 @@ const UserProps = (() => {
         // load() to resume a running job — an unconditional event would loop (and wipe what the player typed).
         if (any || props.map((p) => p.id).join(',') !== before) changed();
       }
-      return { props: props.slice(), jobs: (j && j.jobs) || [] };
+      return { props: props.slice(), jobs: (j && j.jobs) || [], recent: (j && Array.isArray(j.recent)) ? j.recent : [] };
     })().finally(() => { loading = null; });
     return loading;
   }
@@ -157,7 +157,12 @@ const UserProps = (() => {
     try {
       const r = await apiFetch('/api/userprops/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
       const j = await r.json();
-      if (j && j.ok) { props = props.filter((p) => p.id !== id); registered.delete(id); sided.delete(id); }
+      if (j && j.ok) {
+        props = props.filter((p) => p.id !== id); registered.delete(id); sided.delete(id);
+        // tombstone now (not on the next load): the model's undo filters tombstoned made props, so Ctrl+Z after a
+        // delete can never bring back copies of a prop whose art is gone
+        if (typeof PropSprites !== 'undefined' && PropSprites.markUserDeleted) PropSprites.markUserDeleted([id]);
+      }
       return j;
     } catch (_) { return { ok: false, code: 'unreachable', message: 'The station did not answer. Try again.' }; }
   }
@@ -191,10 +196,16 @@ const UserProps = (() => {
   // Poll one job until it settles. onUpdate(job) on every change; resolves with the final job.
   function watch(id, onUpdate) {
     return new Promise((resolve) => {
-      let last = '';
+      let last = '', missing = 0;
       const tick = async () => {
         const r = await job(id);
         const j = r && r.ok ? r.job : null;
+        // the station no longer knows this job (it settled while it restarted): stop instead of polling forever
+        if (!j && r && r.code === 'not_found' && ++missing >= 3) {
+          resolve({ id, status: 'failed', costUsd: 0, error: { code: 'lost', message: 'The station lost track of this job. If it finished, it is in MADE BY YOU; check your credit history for its charge.' } });
+          return;
+        }
+        if (j) missing = 0;
         if (j) {
           const sig = JSON.stringify(j);
           if (sig !== last) { last = sig; try { onUpdate && onUpdate(j); } catch (_) {} }
