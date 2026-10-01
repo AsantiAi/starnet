@@ -164,7 +164,7 @@ const Tutorial = (() => {
   // the capability gear the kit-out walks through, in order. `grant` is the power-word grantLabelForProp returns
   // when its prop lands; `prop` is the catalog id we point at. The display LABEL and the CATEGORY tab are resolved
   // from the LIVE catalog at runtime (resolveKit) so the coach can never name a prop or tab that doesn't exist —
-  // the root of the old "the CABINET"/"REFIT button" drift. FILES is first so the fs demo that follows is honest.
+  // the root of the old "the CABINET"/"BUILD MODE button" drift. FILES is first so the fs demo that follows is honest.
   // (COMPUTE isn't here — always-on freebie + a synthetic desk; a SEATED workstation is editable so it doesn't
   // fire onPropPlaced, but the WORKBENCH does, which is why TERMINAL can ride the placement loop. Note the
   // workbench lives under WORKSTATIONS, the other three under CAPABILITY — resolveKit carries that, so the loop
@@ -279,7 +279,7 @@ const Tutorial = (() => {
     const caps = equipmentInScope();
     if (Dialogue.setStage) Dialogue.setStage('QUICK TOUR · 2 OF 2', 'Start with a task');
     Dialogue.node({
-      lines: [seg('Ask for work in COMMS. Review the reply and files.\nBUILD › REFIT STATION: pick a prop, click a clear tile. Press Esc to cancel. Select a placed prop to move it.\nPresets build a whole station, and the work ones come with a line ready to staff. To chain agents step by step, open WORK › AUTOMATE › WORKFLOWS: belts carry the job from one agent to the next.', 64, 0)],
+      lines: [seg('Ask for work in COMMS. Review the reply and files.\nBUILD › BUILD MODE: pick a prop, click a clear tile. Press Esc to cancel. Select a placed prop to move it.\nPresets build a whole station, and the work ones come with a line ready to staff. To chain agents step by step, open WORK › AUTOMATE › WORKFLOWS: belts carry the job from one agent to the next.', 64, 0)],
       options: [
         ...(resumeFirstTask ? [{ label: '▸ CONTINUE MY FIRST TASK', value: 'handoff', yield: true }]   // the tour's way out when a first task is waiting (Dialogue.yieldTour)
           : typeof FirstValue !== 'undefined' ? [{ label: '▸ CHOOSE MY FIRST TASK', value: 'value' }] : []),
@@ -306,8 +306,8 @@ const Tutorial = (() => {
 
   /* ---- THE KIT-OUT: a guided, GLOW-DRIVEN placement loop. One self-rescheduling tick (kitTick) is the whole
      goal system: each pass it reads the live UI and lights exactly the single next control along the real path —
-     BUILD dock ▸ REFIT STATION ▸ ⚇ PROP ▸ the right CATEGORY tab ▸ the exact gear tile — naming each with the
-     REAL catalog label. A category switch, a placement, or closing REFIT all advance it cleanly: no stale copy,
+     BUILD dock ▸ BUILD MODE ▸ ⚇ PROP ▸ the right CATEGORY tab ▸ the exact gear tile — naming each with the
+     REAL catalog label. A category switch, a placement, or closing BUILD MODE all advance it cleanly: no stale copy,
      no covered buttons, no freeze. resolveKit() pins the labels/categories to the live catalog so they can't drift. */
   const q = sel => document.querySelector(sel);
   const CATLABEL = { workstation: 'WORKSTATIONS', workflow: 'WORKFLOW', capability: 'CAPABILITY', isolation: 'ISOLATION' };
@@ -332,28 +332,28 @@ const Tutorial = (() => {
     KIT = resolveKit();
     kitNeeded = new Set(KIT.map(k => k.grant));
     try { if (typeof World !== 'undefined' && World.say) World.say('build me a floor.'); } catch (_) {}
-    kitTick();                                        // the loop takes over: glow BUILD ▸ REFIT STATION, then guide inside
+    kitTick();                                        // the loop takes over: glow BUILD ▸ BUILD MODE, then guide inside
   }
-  // the goal loop. Catches REFIT open/close from any path; self-clears on finishUp/teardown.
+  // the goal loop. Catches BUILD MODE open/close from any path; self-clears on finishUp/teardown.
   function kitTick() {
     if (!active || !kitMode) return;
     const open = !!(typeof Build !== 'undefined' && Build.isOpen && Build.isOpen());
-    if (open && !kitWasOpen) { kitWasOpen = true; clearSpot(); kitFocusKey = null; }       // just entered REFIT — drop the bottom-bar scrim
-    else if (!open && kitWasOpen) { kitWasOpen = false; return kitClosedDuringPlace(); }   // just left REFIT
+    if (open && !kitWasOpen) { kitWasOpen = true; clearSpot(); kitFocusKey = null; }       // just entered BUILD MODE — drop the bottom-bar scrim
+    else if (!open && kitWasOpen) { kitWasOpen = false; return kitClosedDuringPlace(); }   // just left BUILD MODE
     if (open) kitInRefit(); else kitGuideToRefit();
     kitPollTimer = setTimeout(kitTick, 180);
   }
   function nextKit() { return kitNeeded ? KIT.find(k => kitNeeded.has(k.grant)) : null; }
 
-  // OUTSIDE REFIT: light the REAL path into the builder — the BUILD dock, then REFIT STATION once that dock opens.
+  // OUTSIDE BUILD MODE: light the REAL path into the builder — the BUILD dock, then BUILD MODE once that dock opens.
   function kitGuideToRefit() {
     const station = q('#bb-build');
-    const menuOpen = !!(station && station.getClientRects().length);   // REFIT STATION is only visible once its dock is open
-    if (menuOpen) kitFocus(station, 'now hit ⌂ REFIT STATION — that opens REFIT, where you build my floor.', 'to-refit-station', { scrim: true, zone: 'bottom' });
-    else kitFocus(q('.bb-group[data-group="build"] .bb-grp'), 'open the ⚒ BUILD dock down in the bar, then ⌂ REFIT STATION — that’s where you kit me out.', 'to-refit-grp', { scrim: true, zone: 'bottom' });
+    const menuOpen = !!(station && station.getClientRects().length);   // BUILD MODE is only visible once its dock is open
+    if (menuOpen) kitFocus(station, 'now hit ⌂ BUILD MODE — that opens BUILD MODE, where you build my floor.', 'to-refit-station', { scrim: true, zone: 'bottom' });
+    else kitFocus(q('.bb-group[data-group="build"] .bb-grp'), 'open the ⚒ BUILD dock down in the bar, then ⌂ BUILD MODE — that’s where you kit me out.', 'to-refit-grp', { scrim: true, zone: 'bottom' });
   }
 
-  // INSIDE REFIT: compute the single next sub-step and glow exactly that control, named with the REAL label + tab.
+  // INSIDE BUILD MODE: compute the single next sub-step and glow exactly that control, named with the REAL label + tab.
   function kitInRefit() {
     if (kitHold) return;                              // a "✓ placed" flash is breathing — don't fight it
     const k = nextKit();
@@ -429,9 +429,9 @@ const Tutorial = (() => {
     if (!active || !kitMode || kitComplete) return;   // latch: the tick + the post-flash timer both reach here — run once
     kitComplete = true;
     kitFocus(q('#refit-done'), 'that’s the whole kit — files, web, a terminal, memory. hit ✓ DONE up top to step back out.', 'step-done');
-    // kitTick sees REFIT close → kitClosedDuringPlace → (all placed) → beatFullyEquipped
+    // kitTick sees BUILD MODE close → kitClosedDuringPlace → (all placed) → beatFullyEquipped
   }
-  // REFIT closed during the kit-out. The tutorial's COMPLETION CONDITION is "every capability prop placed" —
+  // BUILD MODE closed during the kit-out. The tutorial's COMPLETION CONDITION is "every capability prop placed" —
   // when that's met we celebrate + offer an optional real-job demo, then END. If they closed early we never
   // dead-end (Theme 3): name what's wired vs still dark and offer to keep going or stop here. The Commander's
   // floor, always.
@@ -466,10 +466,10 @@ const Tutorial = (() => {
   }
 
   /* THE BAIL — the kit-out is opt-IN, so it must be opt-OUT-able at any moment (sandbox law: never a mode the
-     Commander can't leave). Before this, the only exits were "place all four" or "open REFIT then close it":
+     Commander can't leave). Before this, the only exits were "place all four" or "open BUILD MODE then close it":
      a Commander who accepted the tour and changed their mind at the very first step — the BUILD-dock glow,
-     OUTSIDE REFIT — had no dismiss button and no Esc, just a permanent half-dimmed station.
-     Inside REFIT we simply close it and let the tick take the normal exit (REFIT owns Esc there); outside, we
+     OUTSIDE BUILD MODE — had no dismiss button and no Esc, just a permanent half-dimmed station.
+     Inside BUILD MODE we simply close it and let the tick take the normal exit (BUILD MODE owns Esc there); outside, we
      run the same accounting directly. Either way the Commander lands on kitClosedDuringPlace's honest
      "here's what's wired, here's what's still dark — keep going or stop here" choice, never a dead end. */
   function kitBail() {
@@ -499,7 +499,7 @@ const Tutorial = (() => {
   // they stopped with SOME gear placed — a real, partial agent. Acknowledge honestly and bow out (no nag).
   function beatEquippedPartial() {
     if (!active) return;
-    dsay('you can add equipment in REFIT whenever a task needs it. for now, tell me what you want done in COMMS.', 44, 320).then(() => finishUp(false));
+    dsay('you can add equipment in BUILD MODE whenever a task needs it. for now, tell me what you want done in COMMS.', 44, 320).then(() => finishUp(false));
   }
 
   // Explicitly chosen file example. COMMS owns actual tool output and access prompts.
@@ -573,7 +573,7 @@ const Tutorial = (() => {
     const who = document.createElement('div'); who.className = 'tut-coach-who'; who.textContent = agentLabel();
     const body = document.createElement('div'); body.className = 'tut-coach-body'; body.textContent = text;
     bubble.appendChild(who); bubble.appendChild(body);
-    // an optional one-tap ACTION in the bubble (the coach is the only UI visible over REFIT) — used by the
+    // an optional one-tap ACTION in the bubble (the coach is the only UI visible over BUILD MODE) — used by the
     // kit-out's "requisition the rest" offer. Reuses the .tut-coach-ok button styling.
     if (opts.action && opts.action.label) {
       const act = document.createElement('button'); act.className = 'tut-coach-ok'; act.type = 'button'; act.textContent = opts.action.label;
@@ -589,7 +589,7 @@ const Tutorial = (() => {
     let ring = null;
     if (target) { ring = document.createElement('div'); ring.className = 'tut-ring' + (reduceMotion() ? ' no-anim' : ''); document.body.appendChild(ring); }
     // Esc bails too — but only when nothing else claims the key, matching briefKey's guard below. Inside
-    // REFIT, build.js's own Esc closes the builder and kitTick reads that close as the very same exit
+    // BUILD MODE, build.js's own Esc closes the builder and kitTick reads that close as the very same exit
     // (double-handling would fire kitClosedDuringPlace twice and stack two dialogue nodes); over an open
     // station panel, Esc belongs to the panel — the bottom bar stays live under the scrim, so a Commander
     // really can open one mid-kit-out, and one keypress must not both close it and end the tour.
@@ -853,7 +853,7 @@ const Tutorial = (() => {
     return dodgeRect(box, { left: r0.left / z, top: r0.top / z, right: r0.right / z, bottom: r0.bottom / z }, vw, vh);
   }
   // glue the bubble (and ring) to the anchor every frame — survives camera/layout shifts and self-clears
-  // the moment the surface is gone (e.g. REFIT closed out from under a REFIT coach).
+  // the moment the surface is gone (e.g. BUILD MODE closed out from under a BUILD MODE coach).
   function placeCoach() {
     if (!coach) return;
     const a = coach.anchor, b = coach.bubble;
@@ -898,7 +898,7 @@ const Tutorial = (() => {
       && document.querySelector('.refit-overlay')) return;
     // don't paint over an open panel (e.g. the Field Manual) — defer (not marked seen) until it's closed.
     // EXCEPT a one-shot whose trigger never re-fires (level-up): show it over the panel rather than lose it forever.
-    // Same rule for REFIT's first-run card (.refit-firstrun): it now waits for the tour to finish, so the very
+    // Same rule for BUILD MODE's first-run card (.refit-firstrun): it now waits for the tour to finish, so the very
     // open that finally shows it is also the one that fires the 'build' coachmark — defer rather than stack.
     // (.refit-firstrun, not .refit-guide: the bay/workstation/flow/junction/connector editors share that class,
     // and the WORKFLOW coaches fire from commitPropStamp BEFORE openPropEditor runs — suppressing on the bare
@@ -927,9 +927,9 @@ const Tutorial = (() => {
 
   /* ---- the catalog: one direct hook per surface (callers guard with typeof Tutorial) ---- */
   function onBuildOpen() {
-    if (kitMode) return;   // during the guided kit-out, kitTick drives REFIT — don't stack the generic coachmark on top
+    if (kitMode) return;   // during the guided kit-out, kitTick drives BUILD MODE — don't stack the generic coachmark on top
     showCoach('build', '#refit-tools',
-      'this is REFIT. PROP adds equipment or decoration. ROOMS organize your station. LINES connect agents into repeatable workflows. choose what your work needs — you can already ask for help in COMMS.');
+      'this is BUILD MODE. PROP adds equipment or decoration. ROOMS organize your station. LINES connect agents into repeatable workflows. choose what your work needs — you can already ask for help in COMMS.');
   }
   function onEquipmentInspect() { if (!kitMode) clearCoach(); }
   /* WORKFLOW COACHES (2026-07-05 belt-teach): each routing prop teaches ITS role in the two-trip story the
@@ -986,7 +986,7 @@ const Tutorial = (() => {
   const STEPS = [
     { k: 'command',   label: 'Give your agent a command' },
     { k: 'approve',   label: 'Approve a tool request' },
-    { k: 'build',     label: 'Place a piece of gear in REFIT' },
+    { k: 'build',     label: 'Place a piece of gear in BUILD MODE' },
     { k: 'belt',      label: 'Lay a conveyor belt' },
     // Keep old portal-placement progress stored, but never reinterpret it as a verified account connection.
     { k: 'platform',  label: 'Connect a work app (BUILD › CONNECT › ABILITIES)' },
@@ -1051,7 +1051,7 @@ const Tutorial = (() => {
     document.body.appendChild(briefEl);
     placeBrief();
     briefResize = () => placeBrief(); window.addEventListener('resize', briefResize);
-    // Esc dismisses (matching the coachmark) — but not while REFIT or another panel owns Esc
+    // Esc dismisses (matching the coachmark) — but not while BUILD MODE or another panel owns Esc
     briefKey = e => { if (e.key === 'Escape' && !document.querySelector('.refit-overlay') && !document.querySelector('#terms .term')) dismissBrief(); };
     window.addEventListener('keydown', briefKey);
     renderBrief();
@@ -1088,7 +1088,7 @@ const Tutorial = (() => {
      WorldModel; examples are instructions to try, never badges claiming completed work. */
 
   const fmEsc = v => String(v == null ? '' : v).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
-  /* THE NAMES THE LINES CHAPTER USES COME FROM REFIT ITSELF (Build.refitNames — tab, tool, button labels and
+  /* THE NAMES THE LINES CHAPTER USES COME FROM BUILD MODE ITSELF (Build.refitNames — tab, tool, button labels and
      live counts), so a renamed tab or a new machine cannot leave the manual describing a UI that is gone
      (2026-09-23 playtest). The fallback is only for a context where build.js is not loaded (headless tests). */
   function refitNames() {
@@ -1174,14 +1174,14 @@ const Tutorial = (() => {
     }
     if (tab === 'CONTROLS') {
       const keys = [['0', 'Select / inspect'], ['1', 'Room'], ['2', 'Hallway'], ['3', 'Surface'], ['4', 'Move'], ['5', 'Delete'], ['6', 'Props'], ['7', 'Belt'], ['8', 'Copy'], ['9', 'Layouts']];
-      return '<p class="fm-lead">Your control deck: chat to give orders, the bottom menus to manage the station, REFIT to build.</p>'
+      return '<p class="fm-lead">Your control deck: chat to give orders, the bottom menus to manage the station, BUILD MODE to build.</p>'
         + fmEntry('CHAT', 'Send a command', '<kbd>Enter</kbd> sends. <kbd>Shift + Enter</kbd> adds a line. Type <kbd>/</kbd> to browse slash commands. Use the agent picker in COMMS to choose who receives your message.')
         + '<div class="fm-map"><div><b>CREW</b><span>Agents, recruitment, your Commander dossier.</span></div><div><b>WORK</b><span>Tasks, deliverables, recipes, automation, quests.</span></div><div><b>BUILD</b><span>Refit the station, manage abilities, connect channels.</span></div><div><b>SYSTEM</b><span>This manual, settings, updates, notifications.</span></div></div>'
-        + '<h3 class="fm-subhead">BUILD › REFIT STATION</h3><p class="fm-note">These keys work while REFIT is open and you are not typing in a field.</p>'
+        + '<h3 class="fm-subhead">BUILD › BUILD MODE</h3><p class="fm-note">These keys work while BUILD MODE is open and you are not typing in a field.</p>'
         + '<dl class="fm-keys">' + keys.map(([key, label]) => '<div><dt><kbd>' + key + '</kbd></dt><dd>' + label + '</dd></div>').join('') + '</dl>'
-        + fmEntry(null, 'Camera &amp; editing', '<kbd>Space + drag</kbd> pans; the scroll wheel zooms. <kbd>F</kbd> fits the station. <kbd>R</kbd> rotates supported props; <kbd>Shift + R</kbd> rotates back; <kbd>M</kbd> mirrors. <kbd>Ctrl / ⌘ + Z</kbd> undoes; add <kbd>Shift</kbd> to redo. <kbd>Esc</kbd> backs out of the current card, placement, or tool before leaving REFIT.')
-        + fmMission('Make room for an idea', 'Open REFIT, press <kbd>1</kbd> and drag out a room. Press <kbd>6</kbd>, choose a prop, then click the floor to place it. Use Undo to reverse an edit.')
-        + fmAction('refit', 'ENTER REFIT');
+        + fmEntry(null, 'Camera &amp; editing', '<kbd>Space + drag</kbd> pans; the scroll wheel zooms. <kbd>F</kbd> fits the station. <kbd>R</kbd> rotates supported props; <kbd>Shift + R</kbd> rotates back; <kbd>M</kbd> mirrors. <kbd>Ctrl / ⌘ + Z</kbd> undoes; add <kbd>Shift</kbd> to redo. <kbd>Esc</kbd> backs out of the current card, placement, or tool before leaving BUILD MODE.')
+        + fmMission('Make room for an idea', 'Open BUILD MODE, press <kbd>1</kbd> and drag out a room. Press <kbd>6</kbd>, choose a prop, then click the floor to place it. Use Undo to reverse an edit.')
+        + fmAction('refit', 'ENTER BUILD MODE');
     }
     if (tab === 'CREW') {
       return '<p class="fm-lead">Give each crew member a clear role. Pick the right agent for the job, then keep its conversation together.</p>'
@@ -1215,12 +1215,12 @@ const Tutorial = (() => {
       const junctions = R.machines.filter(m => m.junction);
       return '<p class="fm-lead">Turn repeatable work into a production line. You can still give ordinary jobs in COMMS without building belts.</p>'
         + '<div class="fm-route"><span>INBOX<small>work arrives</small></span><i aria-hidden="true">→</i><span>BAY<small>agent + instructions</small></span><i aria-hidden="true">→</i><span>OUTBOX<small>output leaves</small></span></div>'
-        + fmEntry('01', 'Place the stations', 'In REFIT, open <b>' + e(R.tab) + ' › ' + e(R.machinesShelf) + '</b> and place an INBOX, BAY, and OUTBOX. Click the BAY: the <b>Workflow panel</b> docks beside the floor — assign an agent and define its step. Its room needs a computer.')
+        + fmEntry('01', 'Place the stations', 'In BUILD MODE, open <b>' + e(R.tab) + ' › ' + e(R.machinesShelf) + '</b> and place an INBOX, BAY, and OUTBOX. Click the BAY: the <b>Workflow panel</b> docks beside the floor — assign an agent and define its step. Its room needs a computer.')
         + fmEntry('02', 'Connect the route', 'Press <kbd>' + e(R.beltKey) + '</kbd> for ' + e(R.belt) + '. <b>Click one machine, then another</b> to lay a connection automatically; dragging lays tiles by hand. Connect INBOX → BAY, then BAY → OUTBOX. Inspect the route and fix any flagged breaks.')
         + fmEntry('03', 'Give the line a source', 'Click the INBOX: its Workflow panel answers <b>What starts this line?</b> — add a schedule there, or a message on a connected channel (<b>BUILD › CONNECT › CHANNELS</b> connects the platforms; <b>WORK › AUTOMATE</b> manages routines and loops). An inbox marked <b>NO FEED</b> has nothing feeding it yet.')
-        + fmEntry('TEST', 'Rehearse, then test for real', '<b>' + e(R.preview) + '</b> in the REFIT top bar (or in any line’s Workflow panel) opens one TEST with three modes. <b>WATCH IT</b> is free: a crate rides the route and no agent runs. <b>STEP THROUGH</b> runs the real agents one step at a time and pauses at every hand-off so you can read or edit what moves on; nothing is delivered. <b>RUN ONE REAL JOB</b> runs it end to end and the result lands in the OUTBOX.')
+        + fmEntry('TEST', 'Rehearse, then test for real', '<b>' + e(R.preview) + '</b> in the BUILD MODE top bar (or in any line’s Workflow panel) opens one TEST with three modes. <b>WATCH IT</b> is free: a crate rides the route and no agent runs. <b>STEP THROUGH</b> runs the real agents one step at a time and pauses at every hand-off so you can read or edit what moves on; nothing is delivered. <b>RUN ONE REAL JOB</b> runs it end to end and the result lands in the OUTBOX.')
         + fmEntry('BRANCHES', 'Add steps when you need them', junctions.map(m => '<b>' + e(m.label) + '</b>: ' + e(m.purpose) + '.').join(' ') + ' Assign agents to bays, not to belt tiles.')
-        + fmMission('Start with a layout', 'In REFIT, press <kbd>' + e(R.lineKey) + '</kbd> or open <b>' + e(R.tab) + ' › ' + e(R.lines) + '</b>: ' + (typeof R.lineCount === 'number' ? R.lineCount + ' ' : '') + 'ready-made layouts. Stamp one, then inspect its bays and feed before running your job.')
+        + fmMission('Start with a layout', 'In BUILD MODE, press <kbd>' + e(R.lineKey) + '</kbd> or open <b>' + e(R.tab) + ' › ' + e(R.lines) + '</b>: ' + (typeof R.lineCount === 'number' ? R.lineCount + ' ' : '') + 'ready-made layouts. Stamp one, then inspect its bays and feed before running your job.')
         + '<p class="fm-note"><b>Recipes = WHAT.</b> A job to launch. <b>Skills = HOW.</b> Reusable instructions. <b>Routines = WHEN.</b> Scheduled work. <b>Loops = UNTIL.</b> Repeated work with a stopping condition.</p>'
         + fmAction('automation', 'OPEN AUTOMATION');
     }
@@ -1236,7 +1236,7 @@ const Tutorial = (() => {
       + fmEntry('NO REPLY', 'Check the connection', 'Open <b>SYSTEM › SETTINGS</b> and check the selected provider’s sign-in or key. Check the agent’s model in COMMS. Read the error before retrying; a missing connection needs fixing first.')
       + fmEntry('WAITING', 'Look for a decision', 'Return to the job’s COMMS session. Answer a context question or approve or deny the pending action. An unanswered question is not a running tool.')
       + fmEntry('MISSING TOOL', 'Check ability &amp; reach', 'Inspect the agent in <b>CREW › AGENTS</b>. In <b>BUILD › CONNECT › ABILITIES</b>, check toolsets and connector status. Equipment, permissions, service sign-in, and operating-system access each affect what can run.')
-      + fmEntry('COLD LINE', 'Inspect feed, bay, and route', 'In REFIT, check the inbox feed, bay assignment, room computer, and belt connections. A sample crate moving does not establish that a real job ran.')
+      + fmEntry('COLD LINE', 'Inspect feed, bay, and route', 'In BUILD MODE, check the inbox feed, bay assignment, room computer, and belt connections. A sample crate moving does not establish that a real job ran.')
       + fmEntry('WHERE IS IT?', 'Find the session or output', 'Return to <b>COMMS › Sessions</b> for the conversation. Open <b>WORK › MY WORK › DELIVERABLES</b> for generated files and apps. Check <b>TASKS</b> if it was planned board work.')
       + fmEntry('STOP', 'Interrupt work', 'Use the stop control in COMMS for the current run. Stopping a run does not undo actions it already completed; inspect the result before starting again.')
       + '<div class="fm-actions">' + fmAction('settings', 'OPEN SETTINGS') + fmAction('comms', 'RETURN TO COMMS') + '</div>';

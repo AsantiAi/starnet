@@ -26,7 +26,7 @@ A.ok(/registerWindow\('workflows', 'WORKFLOWS'/.test(read('frontend/app/windows/
 A.ok(/const api = \{ init, open, openWorkflows,/.test(build), 'Build exports openWorkflows');
 const ow = build.slice(build.indexOf('function openWorkflows()'), build.indexOf('const api = {'));
 A.ok(/pendingGroup = 'workflow'/.test(ow) && /rebake\(\)/.test(ow) && /openFlowCard\(first\.id\)/.test(ow), 'it opens on the Conveyors tab, compiles, and docks the line’s panel');
-A.ok(/<b>REFIT STATION<\/b><small>[^<]*workflow lines<\/small>/.test(html), 'REFIT STATION’s subtitle names workflow lines');
+A.ok(/<b>BUILD MODE<\/b><small>[^<]*workflow lines<\/small>/.test(html), 'BUILD MODE’s subtitle names workflow lines');
 A.ok(/workflow:\s/.test(read('frontend/app/glossary.js')) && Glossary.has('workflow') && /INBOX[\s\S]*BAY[\s\S]*OUTBOX/.test(Glossary.lookup('workflow')), 'the glossary explains a workflow in the order work meets it');
 
 /* F2 — one account of belts */

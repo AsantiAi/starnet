@@ -607,7 +607,7 @@
       else if (kind === 'plugin-place') {
         const host = typeof PluginHost !== 'undefined' ? PluginHost : null;
         const r = host ? host.placeTerminal(btn.dataset.id) : { ok: false, msg: 'plugin windows are not available in this build' };
-        if (!r || !r.ok) { extSay('Could not place its terminal: ' + ((r && (r.msg || r.error)) || 'unknown') + '. Place a PLUGIN TERMINAL in REFIT instead.', true); return; }
+        if (!r || !r.ok) { extSay('Could not place its terminal: ' + ((r && (r.msg || r.error)) || 'unknown') + '. Place a PLUGIN TERMINAL in BUILD MODE instead.', true); return; }
         try { sfx('ok'); } catch (_) {}
         await renderExtensions();
         extSay('Its terminal now stands in the lead’s room.');
@@ -670,7 +670,7 @@
               if (r && r.ok) { try { localStorage.setItem('starnet.pluginTerminalsPlaced', JSON.stringify(placedBefore.concat([pid]).slice(-200))); } catch (_) { /* per-browser memory only */ } }
               const n = p.tools.length + ' tool' + (p.tools.length === 1 ? '' : 's');
               const note = r && r.ok ? (r.existing ? '' : ' Its terminal now stands in the lead’s room, so the lead can use its ' + n + '.')
-                : ' Its terminal could not be placed (' + ((r && (r.msg || r.error)) || 'unknown') + ') — place a PLUGIN TERMINAL in REFIT.';
+                : ' Its terminal could not be placed (' + ((r && (r.msg || r.error)) || 'unknown') + ') — place a PLUGIN TERMINAL in BUILD MODE.';
               done = (done || 'Plugin on.') + note;
             }
           } catch (_) {}
@@ -748,7 +748,7 @@
       const inert = availability === 'NEEDS PROP';
       // A DIAGNOSIS WITHOUT A CURE. This span named the exact missing prop and offered nothing to click,
       // so the one row that knows what is wrong was the one row you could not act on. The button hands
-      // off to the same REFIT deep-link the SKILLS library's PLACE uses (arms the palette on the prop),
+      // off to the same BUILD MODE deep-link the SKILLS library's PLACE uses (arms the palette on the prop),
       // which is the honest path: the prop still lands where the Commander puts it.
       const hint = inert
         ? '<span class="ts-inert">no ' + esc(t.object || 'prop') + ' in this agent’s workspace — choose one matching prop for this ability' +
@@ -818,7 +818,7 @@
       tsRefresh();
     });
     // The two non-toggle controls on a toolset row: unfold the rest of the tool chips, and cure an
-    // inert row by deep-linking its missing prop into REFIT.
+    // inert row by deep-linking its missing prop into BUILD MODE.
     tsListEl.addEventListener('click', ev => {
       const more = ev.target.closest('button[data-ts-more]');
       if (more) {
@@ -829,8 +829,8 @@
       const place = ev.target.closest('button[data-ts-place]');
       if (place) {
         sfx('click');
-        // H.placeGearForSkill minimizes this console, opens REFIT and arms the palette on the prop.
-        // No mapping for this objectType still opens REFIT + names the gear in a toast, which is the
+        // H.placeGearForSkill minimizes this console, opens BUILD MODE and arms the palette on the prop.
+        // No mapping for this objectType still opens BUILD MODE + names the gear in a toast, which is the
         // floor of acceptable — never a silent no-op.
         if (typeof H.placeGearForSkill === 'function') H.placeGearForSkill(place.dataset.tsPlace);
         else notify('Open ⚒ BUILD and place a ' + place.dataset.tsPlace + ' to grant these tools', 'warn');

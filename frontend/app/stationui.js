@@ -1091,7 +1091,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       requestCloseTerm(key);
       return;
     }
-    // Mode-exclusivity: a dock panel and full-screen REFIT must never be mounted at once.
+    // Mode-exclusivity: a dock panel and full-screen BUILD MODE must never be mounted at once.
     // Opening a panel exits refit first so two features can't stack (see COHERENCE_MATRIX dim T).
     if (typeof Build !== 'undefined' && Build.isOpen && Build.isOpen()) { try { Build.close(); } catch (_) {} }
     // DOOR LAW (systems.js): whatever opened this window — the dock, a deep link, a quest, the agent — its station
@@ -3495,7 +3495,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
      so the two catalogs look and behave the same, search included). Every status a card shows comes from the
      sidecar's /api/skill-market listing: available, installed, built in (our bundled copy IS the published
      version), update, or tampered (its files changed on disk, so agents are not given it). */
-  // gear is named with the REFIT palette's own labels (SK_OBJ_NAME, shared with SKILL LIBRARY), so a card never
+  // gear is named with the BUILD MODE palette's own labels (SK_OBJ_NAME, shared with SKILL LIBRARY), so a card never
   // names an object the Commander can't find
   const skmGear = g => SK_OBJ_NAME[g] || String(g).toUpperCase();
   let skmFilter = 'all';
@@ -3564,7 +3564,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     // ORCHESTRATOR is not a prop — every run the Commander starts carries it (runtimeGranted) — so it never gets one.
     const placeable = missing.filter(g => g !== 'orchestrator');
     const place = placeable.length && (e.status === 'available' || e.status === 'installed' || e.status === 'update')
-      ? '<div class="sk-place-row">' + placeable.map(g => '<button class="sk-place" type="button" data-place="' + esc(g) + '" title="Open REFIT to place ' + skArt(skmGear(g)) + esc(skmGear(g)) + '">→ PLACE ' + esc(skmGear(g)) + '</button>').join('') + '</div>' : '';
+      ? '<div class="sk-place-row">' + placeable.map(g => '<button class="sk-place" type="button" data-place="' + esc(g) + '" title="Open BUILD MODE to place ' + skArt(skmGear(g)) + esc(skmGear(g)) + '">→ PLACE ' + esc(skmGear(g)) + '</button>').join('') + '</div>' : '';
     const result = skmResult && skmResult.slug === e.slug
       ? '<div class="mc-hint skm-result' + (skmResult.ok ? '' : ' skm-result-bad') + '">' + esc(skmResult.text) + '</div>' : '';
     const files = (e.files || []).map(f => '<li><code>' + esc(f.path) + '</code> <span class="dim">' + esc(String(f.bytes)) + ' B</span></li>').join('');
@@ -3736,11 +3736,11 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       });
   }
 
-  // The gear names here are the REFIT palette's own labels (the cabinet cap's representative prop is the INTEL CAB),
+  // The gear names here are the BUILD MODE palette's own labels (the cabinet cap's representative prop is the INTEL CAB),
   // so a "place a …" nudge names something the Commander can actually find in the palette. skArt keeps the article
   // right for a vowel-initial label ("place an INTEL CAB", not "a INTEL CAB").
   const SK_OBJ_NAME = { cabinet: 'INTEL CAB', dish: 'DISH', workbench: 'WORKBENCH', studio: 'STUDIO', notebook: 'NOTEBOOK', jukebox: 'JUKEBOX', computer: 'COMPUTER', orchestrator: 'ORCHESTRATOR', connector: 'CONNECTOR' };
-  // Each capability objectType → the representative placeable prop (CAP_PROP_MAP) and the REFIT palette category tab
+  // Each capability objectType → the representative placeable prop (CAP_PROP_MAP) and the BUILD MODE palette category tab
   // that holds it. Lets a locked skill's "PLACE" button land the user on the exact gear in the real build surface.
   const skArt = (label) => (/^[AEIOU]/.test(String(label || '')) ? 'an ' : 'a ');
   const SK_PLACE = {
@@ -3750,7 +3750,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     studio:   { prop: 'studio',    cat: 'capability' },
     notebook: { prop: 'core',      cat: 'capability' }
   };
-  // Deep-link a locked skill's missing gear into the REAL placement surface: minimize SKILLS, open REFIT, drive its
+  // Deep-link a locked skill's missing gear into the REAL placement surface: minimize SKILLS, open BUILD MODE, drive its
   // palette to the PROP tool → FUNCTIONAL tier → the missing cap's category tab → its prop tile (so the very next
   // floor-click drops it). Mirrors app.js openDeskPlacement() — the honest path, never a fake auto-place. `objType`
   // is a capability objectType (cabinet/dish/workbench/…); `agentName` is only for the guidance toast.
@@ -3761,18 +3761,18 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       notify('Open ⚒ BUILD and place ' + skArt(label) + label + ' to unlock this skill', 'warn'); return;
     }
     // the caller may sit in the ABILITIES console (skill library PLACE) or the dossier's SKILLS tab
-    // (locked capability card) — clear whichever is open so REFIT isn't buried under it.
+    // (locked capability card) — clear whichever is open so BUILD MODE isn't buried under it.
     try { if (open.connectors) minimizeTerm('connectors'); } catch (_) {}
     try { if (open.agents) minimizeTerm('agents'); } catch (_) {}
     try {
-      if (Build.isOpen && Build.isOpen()) { /* already in REFIT */ }
+      if (Build.isOpen && Build.isOpen()) { /* already in BUILD MODE */ }
       else if (Build.open) Build.open();
       else Build.toggle();
-    } catch (_) { notify('Could not open REFIT — open ⚒ BUILD and place ' + skArt(label) + label, 'warn'); return; }
+    } catch (_) { notify('Could not open BUILD MODE — open ⚒ BUILD and place ' + skArt(label) + label, 'warn'); return; }
     notify('Place ' + skArt(label) + label + ' at ' + (agentName || 'the agent') + '’s desk to unlock this skill', 'good');
-    if (!spot) return;   // no known prop mapping — REFIT is open, the toast named the gear; that's the floor of acceptable
+    if (!spot) return;   // no known prop mapping — BUILD MODE is open, the toast named the gear; that's the floor of acceptable
     // Drive the palette to the PROP tool → FUNCTIONAL tier → the missing cap's category tab → its prop tile so the
-    // very next floor-click drops it. REFIT builds its DOM synchronously in open(), so the FIRST pass runs inline
+    // very next floor-click drops it. BUILD MODE builds its DOM synchronously in open(), so the FIRST pass runs inline
     // (works even where rAF is throttled); a few rAF retries then cover any deferred re-render. Each pass clicks only
     // what isn't already active, so it's idempotent + cheap.
     let tries = 0;
@@ -3830,9 +3830,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const reqBadges = (s) => (s.requires || []).length
       ? s.requires.map(r => '<span class="sk-badge ' + (placedSet[r] ? 'have' : 'miss') + '">' + objLabel(r) + '</span>').join('')
       : '<span class="sk-badge free">no gear needed</span>';
-    // one PLACE button per missing object → the real REFIT placement surface (placeGearForSkill).
+    // one PLACE button per missing object → the real BUILD MODE placement surface (placeGearForSkill).
     const placeBtns = (missing) => missing.map(r =>
-      '<button class="sk-place" data-place="' + esc(r) + '" title="Open REFIT to place ' + skArt(objLabel(r)) + esc(objLabel(r)) + '">→ PLACE ' + esc(objLabel(r)) + '</button>').join('');
+      '<button class="sk-place" data-place="' + esc(r) + '" title="Open BUILD MODE to place ' + skArt(objLabel(r)) + esc(objLabel(r)) + '">→ PLACE ' + esc(objLabel(r)) + '</button>').join('');
     let ci = 0;
     const card = (s) => {
       const missing = (s.requires || []).filter(r => !placedSet[r]);
@@ -9088,13 +9088,13 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     }
   }
   // §C — the GO destination token for a quest that has a real, already-existing openable surface (never a new
-  // window). null → no GO button. dossier → the Commander dossier; work/build → the TASK BOARD; a floor gap → REFIT.
+  // window). null → no GO button. dossier → the Commander dossier; work/build → the TASK BOARD; a floor gap → BUILD MODE.
   /* WHERE A QUEST IS ACTUALLY DONE. A build/work quest used to send the Commander to the TASK BOARD — a
      board of OTHER work, where the quest itself does not appear and nothing tells you what to do next. The
      work happens in a conversation with an agent, so that is where the button goes: its OWN session, opened
      on the quest, with the ask already typed. The other two destinations were already right and are
-     unchanged: a dossier question is answered in the dossier, a floor gap is fixed in REFIT. */
-  const GO_LABEL = { commander: '▶ ANSWER IT', session: '▶ START QUEST', refit: '▶ OPEN REFIT', recruit: '▶ OPEN RECRUITMENT' };
+     unchanged: a dossier question is answered in the dossier, a floor gap is fixed in BUILD MODE. */
+  const GO_LABEL = { commander: '▶ ANSWER IT', session: '▶ START QUEST', refit: '▶ OPEN BUILD MODE', recruit: '▶ OPEN RECRUITMENT' };
   /* A one-word badge naming WHICH KIND of thing a card is. The log mixes six genuinely different sources —
      a personalized ledger quest, a goal-arc step, a capability gap on your floor, an accepted build, a
      recurring maintenance cause, a dossier question, a milestone — and rendering them identically is what
@@ -9785,7 +9785,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         ? '<button class="q-queue" data-qid="' + esc(q.id) + '" title="Build this while I’m away — queue it for the sandbox">◈</button>'
         : '';
       // §C — a GO affordance where a real, openable destination exists (never invents a window): dossier asks →
-      // the Commander dossier; work/build → the TASK BOARD; a floor gap → REFIT. Absent target → no button.
+      // the Commander dossier; work/build → the TASK BOARD; a floor gap → BUILD MODE. Absent target → no button.
       const goDest = questGoDest(q);
       const goBtn = goDest ? '<button class="q-go" data-dest="' + esc(goDest) + '" data-qid="' + esc(q.id) + '" title="Open where you do this next">' + esc(q.executionMode === 'commander' || q.executionMode === 'together' ? '▶ HELP ME PREPARE' : (GO_LABEL[goDest] || 'GO')) + '</button>' : '';
       // §C — EVERY open row answers "what do I do next": the honest completion condition in words.
@@ -10320,7 +10320,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       if (m) { sfx('click'); rerender('quests', false); }
     }));
     // §C — GO: open the existing surface where this quest's next move happens (never a new window). openTerm is
-    // idempotent (restores a minimized panel, no-ops if already open); a floor gap opens REFIT via Build.open.
+    // idempotent (restores a minimized panel, no-ops if already open); a floor gap opens BUILD MODE via Build.open.
     body.querySelectorAll('.q-go').forEach(b => b.addEventListener('click', ev => {
       ev.stopPropagation();
       const d = b.dataset.dest;
@@ -10438,9 +10438,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     // hud + window plumbing
     notify, toast, mountConsole, rerender, openTerm, openSignIn, navigateWork, workConversation,
     // deep-link a missing capability object into the REAL placement surface (minimize this console,
-    // open REFIT, arm its palette on the exact prop). The TOOLSETS pane's inert rows use it, so a row
+    // open BUILD MODE, arm its palette on the exact prop). The TOOLSETS pane's inert rows use it, so a row
     // that diagnoses "no dish on station" can also cure it. Shared, never re-implemented: an auto-place
-    // that skipped REFIT would be a fake placement, and the honest path already exists.
+    // that skipped BUILD MODE would be a fake placement, and the honest path already exists.
     placeGearForSkill,
     // shared window fragments (roster switcher for the per-agent windows; dossier memory loader)
     rosterSwitchHtml, wireRosterSwitch, loadMemoryCore, workshopCard, wireWorkshop,
