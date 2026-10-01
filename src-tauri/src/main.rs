@@ -4016,9 +4016,11 @@ mod artifact_open_tests {
 /// by this app's own sidecar (`http://127.0.0.1:<sidecar port>/view/…` and `/workshop-run/…`). WebKit on
 /// macOS and WebKitGTK on Linux ask this guard about EVERY frame's navigation (WebView2 asks only about the
 /// main frame), so without the exception those pages never load there (2026-09-30 release review). The
-/// exception is exactly that loopback origin and those two paths; both are served with a CSP `sandbox`
-/// header (opaque origin, no token, no top navigation), so even a main-frame load of one could not reach
-/// the app's privileges.
+/// exception is exactly that loopback origin and the sidecar's SANDBOXED page routes — the BROWSER window's
+/// /view/ and /workshop-run/, and the APPS / plugin windows' /plugin-ui/, /plugin-draft/ and /app-ui/ (read from
+/// wry 0.55.1 wkwebview/navigation.rs 2026-10-01: navigation_policy has NO main-frame filter, so on macOS those
+/// windows were cancelled too). Every one is served with a CSP `sandbox` header (opaque origin, no token, no top
+/// navigation), so even a main-frame load of one could not reach the app's privileges.
 fn is_app_navigation(url: &tauri::Url, sidecar_port: u16) -> bool {
     match url.scheme() {
         "tauri" => true,
@@ -4034,8 +4036,11 @@ fn is_sidecar_page(url: &tauri::Url, sidecar_port: u16) -> bool {
         && url.port() == Some(sidecar_port)
         && url.username().is_empty()
         && url.password().is_none()
-        && (url.path().starts_with("/view/") || url.path().starts_with("/workshop-run/"))
+        && SIDECAR_PAGE_ROUTES.iter().any(|route| url.path().starts_with(route))
 }
+
+/// The sidecar's sandboxed page routes a frame of the main window may load (see is_app_navigation).
+const SIDECAR_PAGE_ROUTES: [&str; 5] = ["/view/", "/workshop-run/", "/plugin-ui/", "/plugin-draft/", "/app-ui/"];
 
 #[cfg(test)]
 mod navigation_guard_tests {
@@ -4067,6 +4072,12 @@ mod navigation_guard_tests {
         // macOS / Linux ask the guard about every frame: the BROWSER window's sandboxed iframe must pass
         assert!(ok("http://127.0.0.1:8787/view/~t/st1.abc/nova/site/index.html"));
         assert!(ok("http://127.0.0.1:8787/workshop-run/~t/st1.abc/nova/r1/index.html"));
+        // …and the APPS / plugin windows, which frame the same way (macOS asks about their frames too)
+        assert!(ok("http://127.0.0.1:8787/plugin-ui/~t/st1.abc/weather/0123abcd/index.html"));
+        assert!(ok("http://127.0.0.1:8787/plugin-draft/~t/st1.abc/weather/0123abcd/index.html"));
+        assert!(ok("http://127.0.0.1:8787/app-ui/~t/st1.abc/notes/0123abcd/index.html"));
+        assert!(!ok("http://127.0.0.1:9999/app-ui/~t/st1.abc/notes/0123abcd/index.html"));
+        assert!(!ok("http://127.0.0.1:8787/app-uix/x"));
         // …and nothing wider: the API, another port, another host, https, credentials, look-alike paths
         assert!(!ok("http://127.0.0.1:8787/api/file?agent=a&path=x"));
         assert!(!ok("http://127.0.0.1:8787/"));
