@@ -46,7 +46,11 @@ A.ok(remoteUrls.every(u => u.indexOf('localhost') < 0), 'remote capability does 
 A.ok(remoteUrls.every(u => /\/api\/\*\*$/.test(u)), 'remote capability does not expose all loopback paths');
 A.ok(/fn sidecar_command[\s\S]*?\.env\("STARNET_COMPUTER_DRIVER", "1"\)/.test(mainRs), 'desktop host enables the native driver; paired remote-owner authority still gates every call in the sidecar');
 A.ok(!/fn sidecar_command[\s\S]*?\.env\("STARNET_BROWSER_HEADLESS", "1"\)/.test(mainRs), 'desktop sidecar does not globally disable the attended browser-login exception');
-A.ok(/runBrowser = makeBrowserTools\([\s\S]*?forceHeadless:\s*true[\s\S]*?syntheticInputOnly:\s*true[\s\S]*?attendedLogin:/.test(indexJs), 'ordinary desktop research stays headless and input-isolated while the watched login channel is wired separately');
+// A run's browser options live in ONE object (runBrowserDeps) used both for its own tools and for the private browser it
+// falls back to when the shared station browser is busy (2026-10-01) — so neither path can drop the headless rules.
+A.ok(/const runBrowserDeps = \{[\s\S]*?forceHeadless:\s*true[\s\S]*?syntheticInputOnly:\s*true[\s\S]*?attendedLogin:[\s\S]*?\n  \};/.test(indexJs), 'ordinary desktop research stays headless and input-isolated while the watched login channel is wired separately');
+A.ok(/makePrivate: \(\) => browserInternals\.makeBrowserSession\(runBrowserDeps\)/.test(indexJs), 'the private fallback browser is built from those same options');
+A.ok(/runBrowser = makeBrowserTools\(Object\.assign\(\{ session: runStationBrowser \|\| undefined \}, runBrowserDeps\)\)/.test(indexJs), 'and so are the run\'s own browser tools');
 A.ok(/relaunch\(\{ headed: true, forceHeadless: false, headless: false, syntheticInputOnly: false \}\)/.test(browserJs), 'browser.login is the narrow human-consented exception that may open a real visible Chrome window');
 A.ok(/fn sidecar_command[\s\S]*?\.env\("STARNET_USER_CONTROL_MODE", "preserve"\)/.test(mainRs), 'every desktop sidecar launch pins user-control preservation');
 A.ok(/fn sidecar_command[\s\S]*?\.env\("STARNET_MCP_STDIO", "0"\)/.test(mainRs), 'installed desktop refuses unsandboxed local MCP children');
