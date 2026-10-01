@@ -217,19 +217,52 @@ body.glass-demo #left .ws-tab.on { text-shadow: none; }
 /* Keep the station view free of decorative targeting marks. */
 body.glass-demo #stage-wrap .cam-hud::before,
 body.glass-demo #stage-wrap .cam-hud::after { content: none; display: none; }
+/* CAMERA OVERLAY, 09-30 (Andrew: the four corners were ugly). One system for every corner:
+   - the frame marks are drawn hairlines, not ┌┐└┘ glyphs (those come from a fallback font and sit
+     off the text grid; the BR one poked through the CINEMA key);
+   - every readout is the same small glass chip (the Build Library sheet glass), on one inset line,
+     sitting inside the marks; the lamp glyph alone carries the feed colour;
+   - "FEED: LIVE" only repeated "● LIVE", so the bottom-left chip shows only when the feed is NOT live
+     (PAUSED / RECONNECTING) — the same readout, no state invented or hidden. */
+body.glass-demo #stage-wrap .cam-hud {
+  --cam-in: 16px; --cam-chip: 28px;
+  --cam-glass: linear-gradient(125deg,rgba(var(--ph-bright-rgb),.09),rgba(var(--ph-rgb),.045) 48%,rgba(var(--ph-rgb),.015)),rgba(6,4,2,.6);
+}
+body.glass-demo #stage-wrap .cam-c {
+  width: 14px; height: 14px; font-size: 0; color: transparent; text-shadow: none; opacity: 1;
+  border: 0 solid rgba(var(--ph-rgb),.42);
+}
+body.glass-demo #stage-wrap .cam-tl { top: 8px; left: 8px; border-top-width: 1px; border-left-width: 1px; border-top-left-radius: 4px; }
+body.glass-demo #stage-wrap .cam-tr { top: 8px; right: 8px; border-top-width: 1px; border-right-width: 1px; border-top-right-radius: 4px; }
+body.glass-demo #stage-wrap .cam-bl { bottom: 8px; left: 8px; border-bottom-width: 1px; border-left-width: 1px; border-bottom-left-radius: 4px; }
+body.glass-demo #stage-wrap .cam-br { bottom: 8px; right: 8px; border-bottom-width: 1px; border-right-width: 1px; border-bottom-right-radius: 4px; }
+body.glass-demo #stage-wrap :is(.cam-label,.cam-rec,.cam-feed,.cam-mode,.cam-cine) {
+  box-sizing: border-box; height: var(--cam-chip); padding: 0 11px; margin: 0;
+  font: 15px/26px 'VT323',monospace; letter-spacing: .8px; white-space: nowrap;
+  color: var(--ph); opacity: 1; text-shadow: none; animation: none;
+  background: var(--cam-glass); border: 1px solid rgba(var(--ph-rgb),.2); border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb),.07), 0 4px 14px rgba(0,0,0,.3);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+}
 body.glass-demo #stage-wrap .cam-label {
-  top: 16px; left: 27px; font-size: 12px; letter-spacing: 1px;
-  opacity: .75; color: var(--ph); text-shadow: 0 1px 2px #000;
+  top: var(--cam-in); left: var(--cam-in); max-width: calc(100% - 150px);
+  overflow: hidden; text-overflow: ellipsis; color: var(--ph-bright);
 }
-body.glass-demo #stage-wrap .cam-rec { top: 16px; font-size: 11px; opacity: .7; text-shadow: 0 1px 2px #000; }
-body.glass-demo #stage-wrap .cam-feed {
-  bottom: 16px; left: 27px; padding: 0; border: 0; background: none;
-  font-size: 11px; opacity: .65; text-shadow: 0 1px 2px #000;
+body.glass-demo #stage-wrap .cam-rec { top: var(--cam-in); right: var(--cam-in); }
+body.glass-demo #stage-wrap .cam-mode { display: block; top: calc(var(--cam-in) + var(--cam-chip) + 6px); left: var(--cam-in); right: auto; bottom: auto; }
+body.glass-demo #stage-wrap .cam-feed { bottom: var(--cam-in); left: var(--cam-in); }
+body.glass-demo #stage-wrap .cam-cine { bottom: var(--cam-in); right: var(--cam-in); padding: 0 12px; cursor: pointer; }
+body.glass-demo #stage-wrap .cam-cine:is(:hover,:focus-visible) {
+  color: var(--ph-bright); border-color: rgba(var(--ph-rgb),.45);
+  background: linear-gradient(125deg,rgba(var(--ph-bright-rgb),.16),rgba(var(--ph-rgb),.08) 48%,rgba(var(--ph-rgb),.03)),rgba(6,4,2,.66);
 }
-body.glass-demo #stage-wrap .cam-mode {
-  top: 36px; left: 27px; padding: 0; border: 0; background: none;
-  font-size: 11px; opacity: .75; color: var(--ph); text-shadow: 0 1px 2px #000;
-}
+body.glass-demo #stage-wrap .cam-mode::first-letter { color: var(--ph-bright); }
+body.glass-demo #stage-wrap .cam-hud[data-feed="live"] .cam-feed { display: none; }
+body.glass-demo #stage-wrap .cam-hud[data-feed="paused"] :is(.cam-rec,.cam-feed) { color: var(--warn); border-color: color-mix(in srgb,var(--warn) 40%,transparent); }
+body.glass-demo #stage-wrap .cam-hud[data-feed="offline"] :is(.cam-rec,.cam-feed) { color: var(--link-down); border-color: color-mix(in srgb,var(--link-down) 40%,transparent); }
+body.glass-demo #stage-wrap .cam-hud[data-feed] :is(.cam-rec,.cam-feed)::first-letter { color: inherit; }
+body.glass-demo #stage-wrap .cam-hud[data-feed="live"] .cam-rec::first-letter { color: var(--ok); }
+body.glass-demo #stage-wrap .cam-ticker { bottom: calc(var(--cam-in) + 8px); max-width: calc(100% - 300px); }
 body.glass-demo #screen-game #bottombar .bb-gi {
   width: 18px; height: 18px; padding: 0; margin: 0; border: 0; opacity: .9;
 }
