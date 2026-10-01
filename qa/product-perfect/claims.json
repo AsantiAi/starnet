@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "31e80623ef1d6eef6a35ee6245dc1c6f38646a50",
+    "sourceCommit": "34434c06ffec5731163f86aa60ded9b8b30865a6",
     "pathSetSha256": "1ea87b47f1e129f68dd6dc9b6339178332fe0c36f90859da4c220a7cc654d0aa",
     "files": [
       {
@@ -183,8 +183,8 @@
       },
       {
         "path": "frontend/app/apps.js",
-        "bytes": 32547,
-        "sha256": "c010a25ba9075911b30b377db5ad76f905cff1d726ea2a2c009f64d2fb8add31"
+        "bytes": 33546,
+        "sha256": "c1d84073b3be5a22a8c069415a9bcc6d3452bd900b7dc57d4e2b75a9e0317ada"
       },
       {
         "path": "frontend/app/armconfirm.js",
@@ -743,8 +743,8 @@
       },
       {
         "path": "frontend/app/pluginhost.js",
-        "bytes": 28909,
-        "sha256": "d61301019fd2ee8fc8cd7a5ccb82f620a1c24cf4b7550604df188e48bac99d99"
+        "bytes": 29102,
+        "sha256": "d095c169bad3b2a32756c5d066b392de49d630ae3690a9aad7f73e93f02ff94b"
       },
       {
         "path": "frontend/app/pride.js",
@@ -1549,7 +1549,7 @@
       {
         "path": "frontend/css/plugins.css",
         "bytes": 11293,
-        "sha256": "387d760fe9a6c00988d662f1e36dbbbdc79e2aa27655e2951f96975d70f51be2"
+        "sha256": "f73f5824fb65f2c5ed4d03e108717c3fddc91ef2e0d7c524bcad26e3f7417a2e"
       },
       {
         "path": "frontend/css/project-home.css",
