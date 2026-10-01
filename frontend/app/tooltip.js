@@ -110,6 +110,9 @@
       if (!el.isConnected) return;
       anchor = el;
       card.classList.toggle('dock-tip', !!el.closest('#bottombar'));
+      // (2026-09-30) a Build Library tile's tip — and a Workflow panel tile's — is its name, then what it does, on lines of their
+      // own, in the station glass
+      card.classList.toggle('glass-tip', !!el.closest('.refit-dock, .wf-panel'));
       card.textContent = text;
       card.hidden = false;
       card.classList.remove('show');

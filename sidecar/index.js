@@ -220,6 +220,7 @@ const { makeHandoffRoutes, makeSigninStore, nudgeLine: handoffNudgeLine } = requ
 const { makeRouter } = require('./routing/router.js');
 const { makeChainRunner, effectiveLimits: chainEffectiveLimits } = require('./routing/chain.js');
 const { makeStepTest } = require('./routing/steptest.js');   // the conveyor STEP-THROUGH TEST engine (/api/routing/steptest)
+const LineFix = require('./routing/linefix.js');   // NOT RIGHT? — a result the Commander doesn't want → fixes to the line's step instructions (/api/routing/fix-suggest)
 const { lineStats: foldLineStats } = require('./routing/line-stats.js');   // LINE WATCH: per-line runs/shipped/failed/$ + each bay's last outcome (GET /api/routing/lines/stats)
 const { makeLineSpend } = require('./routing/line-spend.js');   // per-line DAY spend ledger (LINE BUDGET maxUsdPerDay) — durable sibling of routing.plan.json
 const LineTriggers = require('./routing/triggers.js');   // LINE TRIGGERS (2026-09-23): folder/webhook events that start ONE line
@@ -4859,6 +4860,7 @@ const chainRunner = makeChainRunner({
   entryDockOf: (agentId) => router.entryDockOf(agentId),
   // LOOP VERDICTS (2026-08-22): a dock whose lane meets a verdict-keyed LOOP gate is told to end with the VERDICT line
   loopGateAfter: (agentId, lineId, dockId) => router.loopGateAfter(agentId, lineId, dockId),
+  lastStage: (agentId, dockId) => router.chainShipsToOutbox(agentId, dockId),   // the stage whose reply leaves the line is told it IS the result
   barrierStore: {
     load: () => { try { return loadResilient(path.join(WORKSPACES, 'join.barriers.json'), 'join-barriers'); } catch (_) { return null; } },
     save: (v) => { try { saveResilient(path.join(WORKSPACES, 'join.barriers.json'), v); } catch (e) { failNote('chain.barriers.save', e); } }
@@ -10477,6 +10479,7 @@ const ROUTES = [
   { m: 'GET', exact: '/api/routing/sample', h: handleRoutingSampleStatus },
   { m: 'POST', exact: '/api/routing/sample', h: handleRoutingSample },
   { m: 'POST', exact: '/api/routing/sample/stop', h: handleRoutingSampleStop },   // ■ STOP on RUN ONE REAL JOB: this station's one sample, nothing else
+  { m: 'POST', exact: '/api/routing/fix-suggest', h: handleRoutingFixSuggest },   // NOT RIGHT? — suggested fixes to a line's step instructions (one billed call)
   // STEP-THROUGH TEST (2026-09-22): GET is the active-or-latest session (the panel's feature probe + poll);
   // POST starts one; /:id answers one session and /:id/<verb> drives it. Every refusal 409, never 404.
   { m: 'GET', qsplit: '/api/routing/steptest', h: handleStepTestLatest },
@@ -11446,7 +11449,8 @@ async function handleRoutingSample(req, res) {
     try {
       runs = (runStore.list(null, { streamId: streamId, limit: 200 }) || [])   // THIS sample's rows, not the station's newest 50
         .filter(r => r && String(r.streamId || '') === streamId)
-        .map(r => ({ runId: r.runId, agentId: r.agentId, reason: r.reason, usd: r.usd, ts: r.ts, title: r.title, streamId: r.streamId, turns: r.turns }));
+        .map(r => ({ runId: r.runId, agentId: r.agentId, reason: r.reason, usd: r.usd, ts: r.ts, title: r.title, streamId: r.streamId, turns: r.turns,
+          dockId: r.dockId || null, lineId: r.lineId || null }));   // (the BAY each stage ran at: the panel names each step's work by it)
     } catch (_) { runs = []; }
     // Outbound warning text is not delivery evidence. The proof succeeds only when every durable stage
     // outcome is clean, including every hop after the routed entry dock.
@@ -11771,6 +11775,59 @@ const STEPTEST_PERSONA = 'You are an agent aboard the STARNET station. The Comma
   + 'job through it and are watching each stage\'s output before it moves on. Do your stage of the work directly and '
   + 'report the result clearly.';
 function stepTestLabel(agentId) { const r = agentRoster.get(String(agentId || '')); return (r && r.name) || null; }
+/* NOT RIGHT? (2026-09-30, ease of use — Andrew: "if the output is terrible and not consistent … how the user can properly correct
+   it"). POST /api/routing/fix-suggest { complaint, job, result, steps:[{dockId, role, agent, does, hands, output}] } →
+   { ok, diagnosis, fixes:[{dockId, does?, hands?, why}], usd, model }. ONE model call on the STATION DEFAULT (the Overseer's roster
+   model — what an unpinned specialist runs on), made the way the channel probe makes its call (same adapter and sign-in seams), its
+   spend reconciled and booked on the ledger like the station's other passes. The budget is read BEFORE the spend. Nothing on the
+   floor changes here: the panel shows each fix for the Commander to accept (an ordinary brief edit, one undo) or skip. */
+function providerForRunConfig(c, reasoningEffort) {
+  const providerId = normalizeProvider(c.provider);
+  const extra = extraAccountProviderFor(providerId, c.baseUrl, reasoningEffort);   // subscription stacking
+  if (extra) return Promise.resolve(extra);
+  if (providerUsesCodex(providerId)) return ensureCodexAccessToken().then(token => selectProvider({ provider: providerId, fetch: globalThis.fetch, token, renewToken: forceRefreshCodexAccessToken, baseUrl: c.baseUrl, reasoningEffort }));
+  if (providerUsesDeviceOAuth(providerId)) return ensureOAuthAccessToken(providerId).then(token => selectProvider({ provider: providerId, fetch: globalThis.fetch, token, headers: oauthInferenceHeaders(providerId), baseUrl: c.baseUrl, reasoningEffort }));
+  return Promise.resolve(selectProvider({ provider: providerId, fetch: globalThis.fetch, key: c.key, baseUrl: c.baseUrl, reasoningEffort }));
+}
+async function handleRoutingFixSuggest(req, res) {
+  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  let body = {};
+  try { const raw = await readBody(req, 1 << 17); body = raw && raw.trim() ? (JSON.parse(raw) || {}) : {}; }
+  catch (_) { return json(400, { ok: false, error: 'bad json' }); }
+  const input = LineFix.normalizeInput(body);
+  if (!input.ok) return json(400, { ok: false, error: input.error });
+  // the COST GATE, before any spend (side-effect-free read): an exhausted pool names the actionable reason
+  let blocked = null;
+  try { blocked = budget.check(null, 'agent', 0, Date.now(), null); } catch (_) { blocked = null; }
+  if (blocked) return json(409, { ok: false, error: 'the station\'s spending cap is reached — raise it or resume spending, then ask again' });
+  let cfg = null;
+  try { cfg = sampleRunConfigFor('agent'); } catch (e) { cfg = null; }
+  if (!cfg || cfg.ok === false || !cfg.model || (!cfg.configured && !cfg.key)) return json(409, { ok: false, error: (cfg && cfg.error) || 'no model is set for the station — pick one in COMMS first' });
+  const providerId = normalizeProvider(cfg.provider);
+  const reasoningEffort = resolveReasoningEffort(providerId, cfg.reasoningEffort);
+  const prompt = LineFix.buildPrompt(input);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 120000);
+  if (timer && timer.unref) timer.unref();
+  let out = '', usage = null, usd = 0, tokens = 0;
+  try {
+    const provider = await providerForRunConfig(cfg, reasoningEffort);
+    const cost = makeCostEngine({ priceOf: provider.priceOf });
+    for await (const ev of provider.stream({ model: cfg.model, stream: true, signal: ctrl.signal, reasoningEffort,
+      messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }] })) {
+      if (ev && ev.type === 'text') out += ev.delta;
+      else if (ev && ev.type === 'usage') usage = ev.usage;
+    }
+    const c = cost.reconcile(usage, cfg.model);
+    usd = c.usd || 0; tokens = (c.tokensIn || 0) + (c.tokensOut || 0);
+  } catch (e) {
+    return json(502, { ok: false, error: 'the suggestion call failed — ' + String((e && e.message) || e).slice(0, 200) });
+  } finally { clearTimeout(timer); }
+  if (usd) { try { ledger.record({ runId: 'linefix-' + crypto.randomUUID(), agentId: 'station', turns: 0, usd, tokens, model: cfg.model, unmetered: !!((getProviderProfile(providerId) || {}).unmetered) }); } catch (e) { failNote('linefix.ledger', e); } }
+  const parsed = LineFix.parseFixes(out, input);
+  if (!parsed.ok) return json(502, { ok: false, error: parsed.error, usd, model: cfg.model });
+  return json(200, { ok: true, diagnosis: parsed.diagnosis, fixes: parsed.fixes, usd, model: cfg.model });
+}
 async function stepTestRunDock(h) {
   let cfg = null;
   try { cfg = sampleRunConfigFor(h.agentId); } catch (e) { return { text: '', usd: 0, error: 'target agent configuration failed: ' + ((e && e.message) || e) }; }
@@ -11851,6 +11908,7 @@ function getStepTest() {
       lineOf: (a, d) => router.lineOfAgent(a, d),
       stageBrief: (a, d) => router.stageBrief(a, d),
       loopGateAfter: (a, l, d) => router.loopGateAfter(a, l, d),
+      lastStage: (a, d) => router.chainShipsToOutbox(a, d),
       lineLimits: (l) => router.lineLimits(l),
       shipsToOutbox: (a, d) => router.chainShipsToOutbox(a, d)
     },
