@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "353b5ac495359a2a336235a8e6afa689fdacb690",
+    "sourceCommit": "d71530470ba3a6b1d0b5a995bc02d6b3469cc1d4",
     "pathSetSha256": "424c16be8108b6ecba5ad48199cf06d99e8209996466a8596e315c7d2dd2c79d",
     "files": [
       {
@@ -1123,8 +1123,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 782325,
-        "sha256": "be49c0c84b6ef897d0b1589e6be1f81141473113e96766b6519902bfe9adc3bb"
+        "bytes": 782698,
+        "sha256": "a4316c85fd679e86de729d7c208aa64c1fa90199bd13b0f3165d080467c7ef62"
       },
       {
         "path": "frontend/app/stepin.js",
@@ -1453,13 +1453,13 @@
       },
       {
         "path": "frontend/css/agent-dossier.css",
-        "bytes": 15100,
-        "sha256": "1c388e0c1136390a9d22c580af249c26d6975835da344bcb5fd4e734f1de46de"
+        "bytes": 15106,
+        "sha256": "56f3f78a1035e2366630b7d342fe013d7b1eef5b2cbe82cec94cb0608b8098eb"
       },
       {
         "path": "frontend/css/app.css",
-        "bytes": 411624,
-        "sha256": "620a84224b7e37d97f14ade078410ccab769c220bcbdd1dd401a683833e675a4"
+        "bytes": 411574,
+        "sha256": "a5147917ad2f257828b6b928a8672818ccb88f590d7b99a5875f5af900dad964"
       },
       {
         "path": "frontend/css/asciifx.css",
