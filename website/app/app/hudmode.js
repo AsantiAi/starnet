@@ -140,6 +140,9 @@
       if (s.source) r.source = String(s.source);
       if (s.streamId) r.streamId = String(s.streamId);
       r.internal = s.internal === true;
+      // whether STOP / a direction can reach this run (a work-line step or a channel hub run is not in the
+      // station's stoppable set): the card never offers a control whose 'ok' would be a lie
+      if (typeof s.stoppable === 'boolean') r.stoppable = s.stoppable;
     }
     for (const [id, r] of feed.runs) {
       if (live.has(id)) continue;
@@ -252,7 +255,10 @@
     error: ['fault', 'Needs attention'], budget: ['fault', 'Stopped at the spend cap'], max_iters: ['fault', 'Stopped at the turn limit'],
     refusal: ['fault', 'Refused'], empty: ['fault', 'Ended without a reply']
   };
-  const WORKER_END = { done: ['done', 'Completed'], interrupted: ['stopped', 'Stopped'], error: ['fault', 'Needs attention'] };
+  const WORKER_END = {
+    done: ['done', 'Completed'], interrupted: ['stopped', 'Stopped'], error: ['fault', 'Needs attention'],
+    stale: ['fault', 'Lost when the station restarted'], refused: ['fault', 'Refused']
+  };
 
   function oneLine(v, max) {
     const t = String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
@@ -284,7 +290,10 @@
   function replyOfRun(runId, streamId, streams) {
     for (const s of arr(streams)) {
       if (!s || !(s.id === streamId || arr(s.runIds).includes(runId))) continue;
-      const said = arr(s.history).filter(h => h && h.role === 'assistant' && h.sourceRunId === runId && !h.error).map(h => textOf(h.content)).join('\n\n').trim();
+      // a folded direction streams back as a '[steering] …' line inside the reply text (COMMS draws it as its own
+      // note row): it is the Commander's words, never the agent's result
+      const said = arr(s.history).filter(h => h && h.role === 'assistant' && h.sourceRunId === runId && !h.error)
+        .map(h => textOf(h.content).replace(/(^|\n)\[steering\] [^\n]*/g, '$1')).join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
       if (said) return said.length > 2000 ? said.slice(0, 1999) + '…' : said;
     }
     return '';
@@ -320,7 +329,7 @@
         time: r.startedAt ? fmtElapsed(t - r.startedAt) : '', sortAt: r.startedAt || t,
         task: found.task || TRIGGER_WORDS[r.trigger] || SOURCE_WORDS[r.source] || 'Working on a task',
         result: '', tools: [], outputs: [], directions: [],
-        canSteer: !asking, canStop: true, streamId: found.streamId
+        canSteer: !asking && r.stoppable !== false, canStop: r.stoppable !== false, streamId: found.streamId
       });
       seen.add(r.runId);
     }
@@ -331,7 +340,7 @@
       const endAt = wk.completedAt || wk.updatedAt || 0;
       if (!running && !(endAt && t - endAt <= FINISHED_WINDOW_MS)) continue;
       const asking = running && !!wk.runId && feed.prompts.has(wk.runId);
-      const end = WORKER_END[wk.status] || ['done', String(wk.status || 'Finished')];
+      const end = WORKER_END[wk.status] || ['stopped', wk.status ? 'Ended (' + String(wk.status) + ')' : 'Ended'];
       const w = who(wk.agentId);
       out.push({
         key: 'worker:' + wk.id, kind: 'worker', workerId: wk.id, generation: wk.generation, runId: wk.runId || '',
@@ -518,6 +527,14 @@
     return card;
   }
 
+  /* A card with no reply text on this page. The reply may well exist (a routine's, a Telegram thread's, one in a
+     conversation this page has not loaded): say where it is, never that there was none. */
+  function noResultWords(it) {
+    if (it.state === 'live' || it.state === 'ask') return 'Waiting for the agent’s result.';
+    if (it.state === 'stopped') return 'Stopped before it finished.';
+    return it.streamId ? 'Its reply is in the conversation.' : 'Its reply isn’t shown here.';
+  }
+
   function patchCard(card, it) {
     card.item = it;
     card.node.dataset.state = it.state;
@@ -525,7 +542,7 @@
     if (it.color) card.agent.style.color = it.color; else card.agent.style.removeProperty('color');
     setText(card.status, it.status + (it.time ? ' · ' + it.time : ''));
     setText(card.task, it.task);
-    setText(card.result, it.result || (it.state === 'live' || it.state === 'ask' ? 'Waiting for the agent’s result.' : 'No result was recorded.'));
+    setText(card.result, it.result || noResultWords(it));
     setText(card.tools, it.tools.length ? 'Tools used: ' + it.tools.join(', ') : '');
     setText(card.outputs, it.outputs.map(o => 'Output: ' + o).join('\n'));
     setText(card.directions, it.directions.join('\n'));
@@ -588,39 +605,78 @@
   // Point the station's camera at an agent (its own follow-lock: the same one a CREW click makes).
   const WIDGET_ZOOM = 4.5;   // the agent fills the small picture; the station's own lock is 3
   const WIDGET_SEAT_AT = 0.84;   // an agent at its desk: feet low in the frame, so its desk and screen show above it
-  /* The framing follows the picture's size: the default 190px-tall picture frames its agent at 4.5 with a
-     seated worker's feet low (its desk and screen above it); a picture the Commander has made bigger zooms in
-     up to a third more (the station's own ceiling is 6) and brings a seated worker toward the middle, so a
-     bigger widget shows a bigger agent, not more empty floor. */
+  /* The framing: the agent is always shown at the same closeness (4.5, the agent cam Andrew liked); a picture the
+     Commander makes bigger shows MORE STATION round the agent, never a bigger agent (Andrew 09-30: "the agent cam
+     is WAY TOO BIG" — it used to zoom up to a third closer as the window grew). A seated worker moves from low in
+     the small frame (its desk and screen above it) toward the middle of a tall one. */
   function widgetFraming() {
     let h = 0; try { h = $('stage-wrap').clientHeight || 0; } catch (_) {}
-    const k = h > 0 ? Math.min(1.33, Math.max(1, h / WIDGET_VIEW_H)) : 1;
     const t = h > WIDGET_VIEW_H ? Math.min(1, (h - WIDGET_VIEW_H) / 210) : 0;
-    return { zoom: +(WIDGET_ZOOM * k).toFixed(2), seatAt: +(WIDGET_SEAT_AT - 0.18 * t).toFixed(2) };
+    return { zoom: WIDGET_ZOOM, seatAt: +(WIDGET_SEAT_AT - 0.18 * t).toFixed(2) };
+  }
+  function cameraOn(id) {
+    try { const d = typeof World !== 'undefined' && World.cameraDbg ? World.cameraDbg() : null; return !d || d.lockId === id; } catch (_) { return true; }
   }
   function follow(id) {
     if (!id) return;
     const fr = widgetFraming(), key = id + '|' + fr.zoom + '|' + fr.seatAt;
-    if (S.followId === id && S.followKey === key) return;
+    if (S.followId === id && S.followKey === key && cameraOn(id)) return;
     S.followId = id; S.followKey = key;
     try {
       if (typeof World === 'undefined' || !World.lockBody) return;
-      if (S.stationZoom == null) { const d = World.cameraDbg && World.cameraDbg(); S.stationZoom = d && d.scale > 0 ? d.scale : 0; }
+      keepStationCamera();
       World.lockBody(id, fr.zoom, { seatAt: fr.seatAt });
     } catch (_) {}
   }
-  // leaving the HUD: the camera keeps watching the same agent, at the zoom the station had
-  function unfollow() {
-    try { if (S.followId && S.stationZoom > 0 && typeof World !== 'undefined' && World.lockBody) World.lockBody(S.followId, S.stationZoom); } catch (_) {}
-    S.stationZoom = null;
+  /* The widget BORROWS the station's camera. Before its first follow it keeps what the station was showing (a
+     free view or a CREW follow, its zoom and where it looked), and leaving the HUD gives exactly that back — the
+     station never comes back zoomed in on whoever the widget last watched. */
+  function keepStationCamera() {
+    if (S.stationCam) return;
+    try { S.stationCam = (typeof World !== 'undefined' && World.cameraState) ? World.cameraState() : null; } catch (_) { S.stationCam = null; }
   }
+  function unfollow() {
+    try { if (S.stationCam && typeof World !== 'undefined' && World.restoreCamera) World.restoreCamera(S.stationCam); } catch (_) {}
+    S.stationCam = null;
+  }
+
+  /* MOVE THE AGENT CAM (Andrew 09-30: "I cant drag the agent cam mode, its just stuck in the top right"). The picture
+     and its rows are what you click, so they are also what you hold: press and move a few pixels and the WINDOW
+     moves (the OS drag, the same one the title bar's drag region uses); a press that does not move stays a click —
+     open ACTIVITY on the picture, watch that agent on a row. Where it is left is where the HUD comes back. */
+  const DRAG_PX = 4;
+  function startWindowDrag() {
+    try {
+      const w = root.__TAURI__ && root.__TAURI__.window;
+      const cur = w && (typeof w.getCurrentWindow === 'function' ? w.getCurrentWindow() : (typeof w.getCurrent === 'function' ? w.getCurrent() : null));
+      if (cur && typeof cur.startDragging === 'function') return Promise.resolve(cur.startDragging()).catch(() => null);
+    } catch (_) {}
+    return invoke('plugin:window|start_dragging', { label: 'main' });
+  }
+  function holdToMove(node) {
+    let down = null;
+    node.addEventListener('pointerdown', e => {
+      down = (S.desktop && e.button === 0 && e.isPrimary !== false) ? { x: e.clientX, y: e.clientY } : null;
+    });
+    node.addEventListener('pointermove', e => {
+      if (!down || !(e.buttons & 1)) { down = null; return; }
+      if (Math.abs(e.clientX - down.x) < DRAG_PX && Math.abs(e.clientY - down.y) < DRAG_PX) return;
+      down = null;
+      S.movedAt = now();   // the click that may follow a drag is not a click
+      startWindowDrag();
+    });
+    const clear = () => { down = null; };
+    node.addEventListener('pointerup', clear);
+    node.addEventListener('pointercancel', clear);
+  }
+  const justMoved = () => now() - (S.movedAt || 0) < 500;
 
   function buildWidget() {
     if (S.widget) return S.widget;
     const g = gameScreen(); if (!g) return null;
     // the view: a click-catcher over the station view (a click on the world would otherwise open a dossier)
     const open = el('button', 'hud-wview'); open.type = 'button';
-    open.setAttribute('aria-label', 'Open activity'); open.title = 'Open activity';
+    open.setAttribute('aria-label', 'Open activity'); open.title = 'Click to open activity · drag to move';
     const box = el('section', 'hud-widget');
     box.id = 'hud-widget';
     box.setAttribute('aria-label', 'StarNet HUD: your agents at work');
@@ -630,9 +686,11 @@
     box.append(rows, more);
     g.insertBefore(box, g.firstChild);
     g.insertBefore(open, g.firstChild);
-    open.addEventListener('click', () => { setView('activity'); });
+    holdToMove(open); holdToMove(rows);
+    open.addEventListener('click', () => { if (!justMoved()) setView('activity'); });
     more.addEventListener('click', () => { setView('activity'); });
     rows.addEventListener('click', e => {
+      if (justMoved()) return;
       const row = e.target && e.target.closest && e.target.closest('[data-agent]');
       if (!row) return;
       S.followPinned = row.getAttribute('data-agent');   // the Commander chose who to watch
@@ -653,6 +711,8 @@
     if (S.followPinned && !plan.tiles.some(x => x.agentId === S.followPinned)) S.followPinned = '';
     const watch = S.followPinned || (plan.tiles[0] && plan.tiles[0].agentId) || '';
     follow(watch);
+    // the station stopped answering: what the rows last knew may be over, so no clock keeps counting it
+    const down = S.feed.snapOk === false;
     const keep = new Set();
     let prev = null;
     for (const tile of plan.tiles) {
@@ -667,13 +727,13 @@
         w.map.set(tile.agentId, v);
       }
       v.node.setAttribute('data-agent', tile.agentId);
-      v.node.dataset.state = tile.state;
+      v.node.dataset.state = down ? 'fault' : tile.state;
       v.node.classList.toggle('on', tile.agentId === watch);
       v.dot.className = 'dot' + (tile.state === 'ask' ? ' alert' : '');
       setText(v.name, tile.name);
       if (tile.color) v.name.style.color = tile.color; else v.name.style.removeProperty('color');
-      setText(v.clock, tile.working ? fmtClock(t - tile.startedAt) : 'ALL QUIET');
-      setText(v.step, tile.step);
+      setText(v.clock, down ? 'NO LINK' : tile.working ? fmtClock(t - tile.startedAt) : 'ALL QUIET');
+      setText(v.step, down ? 'The station is not answering' : tile.step);
       v.node.setAttribute('aria-label', tile.name + (tile.working ? ' · ' + tile.step + ' · running ' + fmtClock(t - tile.startedAt) : ' · all quiet · ' + tile.step) + '. Watch');
       v.node.title = 'Watch ' + tile.name;
       const want = prev ? prev.nextSibling : w.rows.firstChild;
@@ -933,11 +993,17 @@
       .then(v => { if (v) { S.pinned = !!v.pinned; syncButtons(); } return true; })
       // the shell opened the HUD at its full rect: now hug the widget
       .then(ok => askWidgetSize(widgetSize()).then(() => ok))
-      .finally(() => { S.busy = false; });
+      .finally(() => { S.busy = false; if (S.exitAfter) { S.exitAfter = false; exit(); } });
   }
 
   function exit() {
-    if (!S.active || S.busy) return Promise.resolve(false);
+    if (S.busy) { S.exitAfter = true; return Promise.resolve(false); }   // entering: leave right after
+    if (!S.active) {
+      // the page is not in HUD mode, but the shell may still hold the small pinned window (a reload that never
+      // reached the station): hand the window back so it is never stranded tiny and on top
+      if (!tauriCore(root)) return Promise.resolve(false);
+      return invoke('starnet_hud_status').then(v => (v && v.active ? invoke('starnet_hud_set', { active: false }) : null)).then(() => false);
+    }
     S.busy = true;
     return invoke('starnet_hud_set', { active: false })
       .then(v => {
@@ -1003,8 +1069,9 @@
     // so the page puts its HUD layout back instead of drawing the full station into a tiny frame.
     invoke('starnet_hud_status').then(v => {
       if (!v || !v.active) return;
-      const tryEnter = (n) => { if (inGame()) enter(); else if (n > 0) root.setTimeout(() => tryEnter(n - 1), 500); };
-      tryEnter(40);
+      // the station may take a while to boot; if it never gets there, give the window back rather than strand it
+      const tryEnter = (n) => { if (inGame()) enter(); else if (n > 0) root.setTimeout(() => tryEnter(n - 1), 500); else exit(); };
+      tryEnter(240);
     });
   }
 

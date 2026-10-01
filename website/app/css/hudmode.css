@@ -223,11 +223,12 @@ html body.hud-mode #chat-panel > h3 {
 }
 html body.hud-mode #chat-panel > h3::before, html body.hud-mode #chat-panel > h3::after { display: none; }
 html body.hud-mode #chat-panel .hud-ctl { gap: 6px; align-items: center; flex: 0 0 auto; }
-html body.hud-mode #chat-panel > h3 .h3-right { flex: 1 1 auto; min-width: 0; justify-content: flex-end; align-items: center; gap: 8px; }
+/* the keys are never cut: the title gives way (to an ellipsis) before a key loses an edge */
+html body.hud-mode #chat-panel > h3 .h3-right { flex: 0 0 auto; margin-left: auto; min-width: 0; overflow: visible; justify-content: flex-end; align-items: center; gap: 8px; }
 /* the run's state and clock are on its WORKING row in the transcript (and the ACTIVITY key counts the work);
    in a HUD-wide header they only squeezed the title and pushed the keys out of the window */
 html body.hud-mode #chat-panel > h3 :is(#chat-status, #chat-elapsed) { display: none !important; }
-html body.hud-mode #chat-panel > h3 #comms-title { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html body.hud-mode #chat-panel > h3 #comms-title { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* the HUD's keys: the Build Library's glass key */
 html body.hud-mode #chat-panel .hud-ctl .btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -311,6 +312,9 @@ html body.hud-mode.hud-view-widget #screen-game.active > #stage-wrap {
   box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb), .07);
 }
 html body.hud-mode.hud-view-widget .hud-wview { border-radius: 12px 12px 0 0; }
+/* the agent cam is held to move it (and clicked to open ACTIVITY): the hand says so */
+html body.hud-mode.hud-view-widget .hud-wview { cursor: grab; }
+html body.hud-mode.hud-view-widget .hud-wview:active { cursor: grabbing; }
 html body.hud-mode.hud-view-widget.hud-asking #stage-wrap { outline: 0; border-color: var(--gold, #e9c46a); }
 html body.hud-mode.hud-view-widget #hud-widget {
   padding: 5px; gap: 2px;
@@ -339,6 +343,9 @@ html body.hud-mode.hud-view-widget #hud-widget .hud-wrow > .dot {
 }
 html body.hud-mode.hud-view-widget #hud-widget .hud-wrow[data-state="idle"] > .dot { background: var(--ph-dim); box-shadow: var(--hud-lamp); }
 html body.hud-mode.hud-view-widget #hud-widget .hud-wrow[data-state="ask"] > .dot { background: var(--gold, #e9c46a); box-shadow: var(--hud-lamp), 0 0 4px rgba(var(--gold-rgb, 233, 196, 106), .3); }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow[data-state="fault"] > .dot { background-color: var(--bad, #ff4a3d); box-shadow: var(--hud-lamp); }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow[data-state="fault"] :is(.hud-wclock, .hud-wstep) { color: color-mix(in srgb, var(--bad, #ff4a3d) 75%, var(--text)); opacity: 1; }
+html body.hud-mode.hud-view-widget #hud-widget .hud-wrow[data-state="fault"] .hud-wclock { font-size: 15px; letter-spacing: 1.2px; }
 html body.hud-mode.hud-view-widget #hud-widget .hud-wname { font-size: 17px; letter-spacing: .8px; }
 html body.hud-mode.hud-view-widget #hud-widget .hud-wstep { font-size: 15px; color: var(--text); opacity: .7; }
 html body.hud-mode.hud-view-widget #hud-widget .hud-wclock { font-size: 20px; letter-spacing: .6px; }
