@@ -63,4 +63,14 @@ A.ok(/li\.addEventListener\('contextmenu', ev => \{ ev\.preventDefault\(\); sfx\
 A.ok(/present\.length > 1 \? '<button type="button" class="crew-dossier"/.test(ui), 'the DOSSIER key shows only when the click is a filter');
 A.ok(/row\.classList\.toggle\('filtering', !!railFilter && a\.id === railFilter\)/.test(ui), 'the narrowed agent\'s row is marked');
 
+// sweep 2026-10-01
+A.ok(/ev\.key === 'ContextMenu' \|\| \(ev\.shiftKey && ev\.key === 'F10'\)\) \{ ev\.preventDefault\(\); sfx\('click'\); openAgent\(\+li\.dataset\.i\); \}/.test(ui),
+  'Shift+F10 / the menu key open the dossier from the keydown too (WKWebView fires no contextmenu for it)');
+A.ok(/if \(railAttentionOnly && railAgentFilter\) \{ railAgentFilter = null;/.test(app),
+  '"Waiting for you" shows every waiting session — the station-wide count never opens a narrowed, blank rail');
+const desk = read('frontend/app/deskscreen.js');
+A.ok(/deskAgentId = String\(agentId\);/.test(ui) && !/function openDesk\(agentId\) \{[^}]*\bsel = i;/.test(ui) && /get deskAgentId\(\) \{ return deskAgentId; \}/.test(ui),
+  'opening a desk sets the desk\'s own target, never the dossier\'s selection');
+A.ok(/H\.deskAgentId && H\.present\.find\(x => x && x\.id === H\.deskAgentId\)/.test(desk), 'the desk window builds from its own target');
+
 A.report('agent-threads-rail.test');
