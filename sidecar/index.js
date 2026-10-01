@@ -220,6 +220,8 @@ const { makeHandoffRoutes, makeSigninStore, nudgeLine: handoffNudgeLine } = requ
 const { makeRouter } = require('./routing/router.js');
 const { makeChainRunner, effectiveLimits: chainEffectiveLimits } = require('./routing/chain.js');
 const { makeStepTest } = require('./routing/steptest.js');   // the conveyor STEP-THROUGH TEST engine (/api/routing/steptest)
+const LineJobs = require('./routing/linejobs.js');   // WORKFLOWS — every job sent down a line, kept as one record the window and the OUTBOX open (/api/line-jobs)
+const LineDraft = require('./routing/linedraft.js');   // WORKFLOWS › SET IT UP FOR ME — "what should it make?" → a starter, a name, each step's instructions (/api/routing/line-draft)
 const LineFix = require('./routing/linefix.js');   // NOT RIGHT? — a result the Commander doesn't want → fixes to the line's step instructions (/api/routing/fix-suggest)
 const { lineStats: foldLineStats } = require('./routing/line-stats.js');   // LINE WATCH: per-line runs/shipped/failed/$ + each bay's last outcome (GET /api/routing/lines/stats)
 const { makeLineSpend } = require('./routing/line-spend.js');   // per-line DAY spend ledger (LINE BUDGET maxUsdPerDay) — durable sibling of routing.plan.json
@@ -9954,6 +9956,7 @@ const GENERIC_CHANNEL_RX = {
 // LINE TRIGGERS (2026-09-23): the webhook ingress + per-trigger CRUD paths (declared before ROUTES reads them)
 const TRIGGER_HOOK_RX = /^\/api\/hooks\/(trg_[a-z0-9]{8,24})(?:\?.*)?$/;
 const TRIGGER_ID_RX = /^\/api\/routing\/triggers\/(trg_[a-z0-9]{8,24})(\/secret)?(?:\?.*)?$/;
+const LINE_JOB_RX = /^\/api\/line-jobs\/(job-[a-z0-9]{8,24})(\/note)?(?:\?.*)?$/;   // WORKFLOWS: one job record (GET) / a change made because of it (POST …/note)
 const STEPTEST_RX = /^\/api\/routing\/steptest\/([A-Za-z0-9_-]{1,80})(?:\/(continue|rerun|rewind|stop|pause))?(?:\?.*)?$/;
 let stepTest = null;
 const TG_BOT_RX = {
@@ -10493,6 +10496,7 @@ const ROUTES = [
   { m: 'POST', exact: '/api/routing/sample', h: handleRoutingSample },
   { m: 'POST', exact: '/api/routing/sample/stop', h: handleRoutingSampleStop },   // ■ STOP on RUN ONE REAL JOB: this station's one sample, nothing else
   { m: 'POST', exact: '/api/routing/fix-suggest', h: handleRoutingFixSuggest },   // NOT RIGHT? — suggested fixes to a line's step instructions (one billed call)
+  { m: 'POST', exact: '/api/routing/line-draft', h: handleRoutingLineDraft },   // WORKFLOWS › SET IT UP FOR ME — a line drafted from a description (one billed call; nothing placed)
   // STEP-THROUGH TEST (2026-09-22): GET is the active-or-latest session (the panel's feature probe + poll);
   // POST starts one; /:id answers one session and /:id/<verb> drives it. Every refusal 409, never 404.
   { m: 'GET', qsplit: '/api/routing/steptest', h: handleStepTestLatest },
@@ -10506,6 +10510,10 @@ const ROUTES = [
   { m: 'GET', qsplit: '/api/routing/triggers', h: handleTriggersList },
   { m: 'POST', exact: '/api/routing/triggers', h: handleTriggerCreate },
   { m: ['PATCH', 'POST', 'DELETE'], rx: TRIGGER_ID_RX, h: handleTriggerId },
+  // WORKFLOWS (2026-09-30): every job sent down a line, kept as ONE record — the window's history and result page, the OUTBOX's way
+  // back to it (sidecar/routing/linejobs.js). GETs are read-only; …/note records what the Commander changed because of a job.
+  { m: 'GET', qsplit: '/api/line-jobs', h: handleLineJobsList },
+  { m: ['GET', 'POST'], rx: LINE_JOB_RX, h: handleLineJobId },
   { m: 'GET', exact: '/api/budget/status', h: handleBudgetStatus },
   { m: 'GET', qsplit: '/api/credits', h: handleCredits },   // 404s (no surface) unless managed credits are configured
   { m: 'GET', qsplit: '/api/credits/linkable', h: handleCreditsLinkable },   // {available} — is device linking offered (STARNET_CLOUD_URL set + not already configured)?
@@ -11302,6 +11310,50 @@ function handleRoutingSampleStatus(_req, res) {
        real recorded outcomes (runs.jsonl rows scoped by the sample's own streamId — never synthesized).
    The workitem events carry an additive `sample:true` marker (obj() stanzas in shared/events.js set no
    additionalProperties:false — re-proven by validate() in test/routing.sample.e2e.test.js). ---- */
+/* ---- LINE JOBS (2026-09-30): the record of every job POST /api/routing/sample sends down a line (sidecar/routing/linejobs.js) — the
+   WORKFLOWS window's history and its result page after a reload, and the OUTBOX's way back to it. A job the station stopped under is
+   said as interrupted at boot. A failed write is noted, never fatal: the job itself already ran, and its runs are in runs.jsonl. ---- */
+const LINE_JOBS_FILE = path.join(WORKSPACES, 'line-jobs.json');
+const lineJobStore = makeDomainStore({
+  fs, path, file: LINE_JOBS_FILE, version: 1, writeDurable: writeFileDurable,
+  defaults: () => ({ jobs: [] }),
+  normalize: value => LineJobs.normalizeAll(value),
+  encode: value => ({ jobs: value.jobs }),
+  decode: envelope => (envelope && Array.isArray(envelope.jobs)) ? { jobs: envelope.jobs } : undefined,
+  onIssue: reportDomainStoreIssue('line-jobs')
+});
+let lineJobs = (() => {
+  const b = LineJobs.boot(lineJobStore.load().value, Date.now());
+  if (b.changed) { try { lineJobStore.save(b.state); } catch (e) { failNote('linejobs.boot', e); } }
+  return b.state;
+})();
+function lineJobsSet(r) {
+  if (!r || !r.job) return null;
+  lineJobs = r.state;
+  try { lineJobStore.save(lineJobs); } catch (e) { failNote('linejobs.save', e); }
+  return r.job;
+}
+/* GET /api/line-jobs?line=&stream=&limit= — the jobs sent down a line, newest first (each a summary: the job, how it ended, what it
+   cost, a glance at what came out); GET /api/line-jobs/<id> — one whole record; POST /api/line-jobs/<id>/note {kind:'fix'|'putback'|
+   'example', dockId, role, field, text, was, why} — what the Commander changed because of it. An unknown id is 404 {ok:false}. */
+function handleLineJobsList(req, res) {
+  const u = new URL(req.url, 'http://127.0.0.1');
+  respondJson(res, 200, { ok: true, jobs: LineJobs.list(lineJobs, { line: u.searchParams.get('line') || '', stream: u.searchParams.get('stream') || '', limit: u.searchParams.get('limit') || 30 }) });
+}
+async function handleLineJobId(req, res, gm) {
+  const id = gm[1], job = LineJobs.get(lineJobs, id);
+  if (!job) return respondJson(res, 404, { ok: false, error: 'no such job' });
+  if (req.method === 'GET' && !gm[2]) return respondJson(res, 200, { ok: true, job });
+  if (req.method === 'POST' && gm[2] === '/note') {
+    let body = {};
+    try { const raw = await readBody(req, 1 << 15); body = raw && raw.trim() ? (JSON.parse(raw) || {}) : {}; }
+    catch (_) { return respondJson(res, 400, { ok: false, error: 'bad json' }); }
+    const r = LineJobs.note(lineJobs, id, Object.assign({}, body, { at: Date.now() }));
+    if (!r.job) return respondJson(res, 400, { ok: false, error: 'not a change this record keeps' });
+    return respondJson(res, 200, { ok: true, job: lineJobsSet(r) });
+  }
+  return respondJson(res, 405, { ok: false, error: 'method not allowed' });
+}
 const SAMPLE_CHAT = 'sample';
 const SAMPLE_TEXT = 'SAMPLE JOB: summarize what this work line does, in three sentences.';
 const SAMPLE_PERSONA = 'You are an agent aboard the STARNET station. This is a clearly-labeled SAMPLE JOB — a small test '
@@ -11382,6 +11434,9 @@ async function handleRoutingSample(req, res) {
        lineId namespace the compiled plan carries (lineComponents key === plan lineId). Absent -> exactly
        the old station-wide behaviour, so older cards and bare curl keep working byte-for-byte. */
     const line = String(body.line == null ? '' : body.line).trim().slice(0, 200);
+    // WORKFLOWS (2026-09-30): what the job's record is kept under — the line's name as the window shows it, and the job it re-runs
+    const jobName = String(body.name == null ? '' : body.name).replace(/\s+/g, ' ').trim().slice(0, 60);
+    const retryOf = LineJobs.isId(body.retryOf) ? String(body.retryOf) : null;
     // the armed plan is the precondition — a sample with no line to ride is a lie, not a fallback run.
     const plan = router.getPlan();
     if (!plan) {
@@ -11428,6 +11483,11 @@ async function handleRoutingSample(req, res) {
     // ■ STOP pressed while the line was still being checked (POST /api/routing/sample/stop): nothing runs, nothing is spent
     if (sampleInFlight.stopRequested) return json(409, { ok: false, stopped: true, error: 'stopped before it started — nothing ran.' });
     const t0 = Date.now();
+    // the job is out from here: its record exists, as running (a refusal above is not a job — nothing was sent down the line)
+    if (line) {
+      const jobId = 'job-' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+      if (lineJobsSet(LineJobs.start(lineJobs, { id: jobId, line, name: jobName, text, streamId: sampleInFlight.streamId, retryOf, at: t0 }))) sampleInFlight.jobId = jobId;
+    }
     const streamId = sampleInFlight.streamId;
     sampleReplies.length = 0;
     const hub = getSampleHub();
@@ -11478,6 +11538,15 @@ async function handleRoutingSample(req, res) {
       && router.chainShipsToOutbox(sampleLineOutcome.agentId, sampleLineOutcome.dockId);
     const delivered = completed ? runs[0] : null;
     const totalUsd = runs.reduce((s, r) => s + ((typeof r.usd === 'number' && isFinite(r.usd)) ? r.usd : 0), 0);
+    // the job's record takes the route's own verdict: delivered · a problem (steps ran, not all clean) · stopped · failed (nothing ran)
+    const jobId = sampleInFlight.jobId || null;
+    if (jobId) {
+      const stoppedJob = !!sampleInFlight.stopRequested;
+      lineJobsSet(LineJobs.finish(lineJobs, jobId, { at: Date.now(), usd: totalUsd, output: sampleReplies.join(''), runs,
+        status: completed ? 'delivered' : stoppedJob ? 'stopped' : runs.length ? 'problem' : 'failed',
+        error: completed ? '' : stoppedJob ? 'you stopped this job' : !onLine ? 'the job did not enter through this line' : runs.length ? 'a step did not finish cleanly' : 'no step ran' }));
+      sampleInFlight.jobId = null;
+    }
     if (workitemId) {
       const d = bumpQueue(agentId, -1);
       if (completed) chanEmit('workitem.delivered', { workitemId, finalQueueId: 'outbox', agentId, box: '', ms: Date.now() - t0, ts: Date.now(), sample: true });
@@ -11493,14 +11562,16 @@ async function handleRoutingSample(req, res) {
           : runs.length ? 'sample job did not complete cleanly' : 'sample job produced no durable run outcome',
         chatId: SAMPLE_CHAT, streamId: streamId, agentId: agentId || null, isTask: isTask,
         workitemId: workitemId || null, replies: sampleReplies.slice(), runs: runs, delivered: null, totalUsd: totalUsd
-      }, line ? { line: line } : null, stopped ? { stopped: true } : null));
+      }, line ? { line: line } : null, stopped ? { stopped: true } : null, jobId ? { jobId } : null));
     }
     return json(200, Object.assign({
       ok: true, sample: true, chatId: SAMPLE_CHAT, streamId: streamId,
       agentId: agentId || null, isTask: isTask, workitemId: workitemId || null,
       replies: sampleReplies.slice(), runs: runs, delivered: delivered, totalUsd: totalUsd
-    }, line ? { line: line } : null));
+    }, line ? { line: line } : null, jobId ? { jobId } : null));
   } finally {
+    // a job whose route threw after it went out is never left "running"
+    if (sampleInFlight && sampleInFlight.jobId) { try { lineJobsSet(LineJobs.finish(lineJobs, sampleInFlight.jobId, { at: Date.now(), status: 'failed', error: 'the station hit an error while the job was out' })); } catch (e) { failNote('linejobs.finish', e); } }
     sampleInFlight = null;
     sampleLineScope = null;
   }
@@ -11803,23 +11874,20 @@ function providerForRunConfig(c, reasoningEffort) {
   if (providerUsesDeviceOAuth(providerId)) return ensureOAuthAccessToken(providerId).then(token => selectProvider({ provider: providerId, fetch: globalThis.fetch, token, headers: oauthInferenceHeaders(providerId), baseUrl: c.baseUrl, reasoningEffort }));
   return Promise.resolve(selectProvider({ provider: providerId, fetch: globalThis.fetch, key: c.key, baseUrl: c.baseUrl, reasoningEffort }));
 }
-async function handleRoutingFixSuggest(req, res) {
-  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
-  let body = {};
-  try { const raw = await readBody(req, 1 << 17); body = raw && raw.trim() ? (JSON.parse(raw) || {}) : {}; }
-  catch (_) { return json(400, { ok: false, error: 'bad json' }); }
-  const input = LineFix.normalizeInput(body);
-  if (!input.ok) return json(400, { ok: false, error: input.error });
-  // the COST GATE, before any spend (side-effect-free read): an exhausted pool names the actionable reason
+/* ONE BILLED CALL ON THE STATION'S DEFAULT MODEL — NOT RIGHT?'s suggested fixes and SET IT UP FOR ME's drafted line share it. The COST
+   GATE is read before any spend (side-effect-free: an exhausted pool names the actionable reason); the model is the station default
+   (the Overseer's roster model — what an unpinned specialist runs on), reached through the channel probe's adapter and sign-in seams;
+   the spend is reconciled and booked on the ledger like the station's other passes (a failed booking is noted, never swallowed).
+   Returns { ok:true, out, usd, model } or { ok:false, status, error }. */
+async function stationOneShot(prompt, tag, failLead) {
   let blocked = null;
   try { blocked = budget.check(null, 'agent', 0, Date.now(), null); } catch (_) { blocked = null; }
-  if (blocked) return json(409, { ok: false, error: 'the station\'s spending cap is reached — raise it or resume spending, then ask again' });
+  if (blocked) return { ok: false, status: 409, error: 'the station\'s spending cap is reached — raise it or resume spending, then ask again' };
   let cfg = null;
   try { cfg = sampleRunConfigFor('agent'); } catch (e) { cfg = null; }
-  if (!cfg || cfg.ok === false || !cfg.model || (!cfg.configured && !cfg.key)) return json(409, { ok: false, error: (cfg && cfg.error) || 'no model is set for the station — pick one in COMMS first' });
+  if (!cfg || cfg.ok === false || !cfg.model || (!cfg.configured && !cfg.key)) return { ok: false, status: 409, error: (cfg && cfg.error) || 'no model is set for the station — pick one in COMMS first' };
   const providerId = normalizeProvider(cfg.provider);
   const reasoningEffort = resolveReasoningEffort(providerId, cfg.reasoningEffort);
-  const prompt = LineFix.buildPrompt(input);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 120000);
   if (timer && timer.unref) timer.unref();
@@ -11835,12 +11903,40 @@ async function handleRoutingFixSuggest(req, res) {
     const c = cost.reconcile(usage, cfg.model);
     usd = c.usd || 0; tokens = (c.tokensIn || 0) + (c.tokensOut || 0);
   } catch (e) {
-    return json(502, { ok: false, error: 'the suggestion call failed — ' + String((e && e.message) || e).slice(0, 200) });
+    return { ok: false, status: 502, error: (failLead || 'the call failed') + ' — ' + String((e && e.message) || e).slice(0, 200) };
   } finally { clearTimeout(timer); }
-  if (usd) { try { ledger.record({ runId: 'linefix-' + crypto.randomUUID(), agentId: 'station', turns: 0, usd, tokens, model: cfg.model, unmetered: !!((getProviderProfile(providerId) || {}).unmetered) }); } catch (e) { failNote('linefix.ledger', e); } }
-  const parsed = LineFix.parseFixes(out, input);
-  if (!parsed.ok) return json(502, { ok: false, error: parsed.error, usd, model: cfg.model });
-  return json(200, { ok: true, diagnosis: parsed.diagnosis, fixes: parsed.fixes, usd, model: cfg.model });
+  if (usd) { try { ledger.record({ runId: tag + '-' + crypto.randomUUID(), agentId: 'station', turns: 0, usd, tokens, model: cfg.model, unmetered: !!((getProviderProfile(providerId) || {}).unmetered) }); } catch (e) { failNote(tag + '.ledger', e); } }
+  return { ok: true, out, usd, model: cfg.model };
+}
+async function handleRoutingFixSuggest(req, res) {
+  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  let body = {};
+  try { const raw = await readBody(req, 1 << 17); body = raw && raw.trim() ? (JSON.parse(raw) || {}) : {}; }
+  catch (_) { return json(400, { ok: false, error: 'bad json' }); }
+  const input = LineFix.normalizeInput(body);
+  if (!input.ok) return json(400, { ok: false, error: input.error });
+  const call = await stationOneShot(LineFix.buildPrompt(input), 'linefix', 'the suggestion call failed');
+  if (!call.ok) return json(call.status, { ok: false, error: call.error });
+  const parsed = LineFix.parseFixes(call.out, input);
+  if (!parsed.ok) return json(502, { ok: false, error: parsed.error, usd: call.usd, model: call.model });
+  return json(200, { ok: true, diagnosis: parsed.diagnosis, fixes: parsed.fixes, usd: call.usd, model: call.model });
+}
+/* POST /api/routing/line-draft {want, starters:[{id, name, purpose, roles:[ROLE…]}]} → { ok, starter, name, briefs:{ROLE: instructions},
+   job, usd, model } — WORKFLOWS › SET IT UP FOR ME (2026-09-30): "what should it make?" becomes a line to place, drafted by ONE billed
+   call on the station's default model (stationOneShot). Nothing is placed or changed here: the window shows the draft and lays the
+   line on the floor only on CREATE. Bad input → 400; no model, or the cap reached → 409; a reply that is not a usable line → 502. */
+async function handleRoutingLineDraft(req, res) {
+  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  let body = {};
+  try { const raw = await readBody(req, 1 << 16); body = raw && raw.trim() ? (JSON.parse(raw) || {}) : {}; }
+  catch (_) { return json(400, { ok: false, error: 'bad json' }); }
+  const input = LineDraft.normalizeInput(body);
+  if (!input.ok) return json(400, { ok: false, error: input.error });
+  const call = await stationOneShot(LineDraft.buildPrompt(input), 'linedraft', 'the set-up call failed');
+  if (!call.ok) return json(call.status, { ok: false, error: call.error });
+  const parsed = LineDraft.parseDraft(call.out, input);
+  if (!parsed.ok) return json(502, { ok: false, error: parsed.error, usd: call.usd, model: call.model });
+  return json(200, Object.assign({ ok: true, usd: call.usd, model: call.model }, parsed));
 }
 async function stepTestRunDock(h) {
   let cfg = null;
@@ -20290,7 +20386,14 @@ async function runOnceCore(o) {
   // cooldown comparisons are byte-for-byte the originals, so the settings-P1 source-locks still hold). A pass
   // becomes a budget CANDIDATE iff it would actually SPEND a model call this run-end — so an already-blocked pass
   // never eats a slot. Cortex M-mem.5b reflection · GROWTH Tier 1 study · NS-6 thread-mine — all ride isTask/done/salience.
-  const _gateReflect = !!(o.reflect && memoryConfig.reflectEnabled && isTask && _auxDone && reflectSalient(result.messages, o.recurring)
+  /* A LINE HAND-OFF IS NOT THE COMMANDER SPEAKING (2026-09-30). A work line's later stages run on the hand-off frame
+     (Pipeline.handoffPrompt): the job, the upstream stage's work and THIS step's standing instructions, all in one USER turn. STUDY
+     and THREAD read a run's user turns as the Commander's own words, so a step's brief came back on a ◈ NOTICED card as «because you
+     said "Do not include a sources list…"»; REFLECTION saves what it reads there as "the user prefers …", silently. The Commander's
+     words in a hand-off are only the original request — the line's first run already carried those — so a hand-off run is not
+     reflected on, studied or thread-mined (and spends none of the agent's cooldowns). */
+  const _lineHop = !!(Pipeline.isHandoff && Pipeline.isHandoff(latestUserText(msgs)));
+  const _gateReflect = !!(o.reflect && memoryConfig.reflectEnabled && isTask && _auxDone && !_lineHop && reflectSalient(result.messages, o.recurring)
       && personalizationStore.read().enabled   // the personalization PAUSE never even offers the candidate (runReflection re-checks the same authority)
       && !reflectingNow.has(agentId) && (Date.now() - (lastReflectAt.get(agentId) || 0) >= memoryConfig.reflectCooldownMs));
   // failure-review: reflection's exact gate shape on the FAILURE side — o.reflect (real-work hosts only; delegated
@@ -20301,9 +20404,9 @@ async function runOnceCore(o) {
       && Failreview.failureSalient({ toolTrace: execution.toolTraceList(), turns: (result && result.turns) || 0 })
       && personalizationStore.read().enabled
       && !failReviewingNow.has(agentId) && (Date.now() - (lastFailReviewAt.get(agentId) || 0) >= memoryConfig.failureReviewCooldownMs));
-  const _gateStudy = !!(Study && o.reflect && memoryConfig.studyEnabled && isTask && _auxDone && Study.studySalient(result.messages, o.recurring)
+  const _gateStudy = !!(Study && o.reflect && memoryConfig.studyEnabled && isTask && _auxDone && !_lineHop && Study.studySalient(result.messages, o.recurring)
       && !studyingNow.has(agentId) && (Date.now() - (lastStudyAt.get(agentId) || 0) >= memoryConfig.studyCooldownMs));
-  const _gateThreadmine = !!(process.env.SKYNET_THREAD_MINE !== '0' && o.reflect && isTask && _auxDone && threadmine.mineSalient(result.messages)
+  const _gateThreadmine = !!(process.env.SKYNET_THREAD_MINE !== '0' && o.reflect && isTask && _auxDone && !_lineHop && threadmine.mineSalient(result.messages)
       && !threadMiningNow.has(agentId) && (Date.now() - (lastThreadMineAt.get(agentId) || 0) >= THREAD_MINE_COOLDOWN_MS));
   // skill review rides THE SKILL NUDGE (skillreview.nudgeAfterRun), not run size: this run's turns with skill tools on
   // the wire join the agent's carried count, and the review is a candidate only once the count reaches the bar. A
@@ -23718,6 +23821,12 @@ function serveProposals(req, res) {
 // STUDY pass raised for a run (with text). Read-only; falls back to the agent's newest pending study batch when
 // the runId is unknown. The DOSSIER write itself happens client-side (the dossier lives in the browser); the
 // browser then CONSUMES the decided proposal via POST /api/study/resolve below.
+/* A STUDY BATCH FROM A LINE HAND-OFF IS NEVER ASKED (2026-09-30): a batch stashed before the run-end gate skipped hand-off runs still
+   quotes a step's instructions as the Commander's words. It is read from its run row's title (the hand-off frame's opening). */
+function studyFromLineHop(b) {
+  try { const r = b && b.runId ? runStore.latest(b.runId) : null; return !!(r && Pipeline.isHandoff && Pipeline.isHandoff(r.title)); }
+  catch (e) { failNote('study.hopcheck', e); return false; }
+}
 function serveStudyProposals(req, res) {
   const json = (code, obj) => respondJson(res, code, obj);   // canonical helper (sidecar/respond.js)
   try {
@@ -23727,7 +23836,7 @@ function serveStudyProposals(req, res) {
     const runId = u.searchParams.get('run') || '';
     let batch = runId && studyByRun.get(runId);
     if (!batch) { const lr = latestStudyRun.get(agent); batch = lr && studyByRun.get(lr); }
-    if (!batch || batch.agentId !== agent) return json(200, { runId: runId || null, agentId: agent, proposals: [] });
+    if (!batch || batch.agentId !== agent || studyFromLineHop(batch)) return json(200, { runId: runId || null, agentId: agent, proposals: [] });
     json(200, { runId: batch.runId, agentId: agent, proposals: batch.proposals });
   } catch (e) { json(200, { proposals: [] }); }
 }
@@ -23742,7 +23851,7 @@ function serveStudyPending(req, res) {
   try {
     const batches = [];
     for (const b of studyByRun.values()) {
-      if (!b || !isAgentId(b.agentId) || !Array.isArray(b.proposals) || !b.proposals.length) continue;
+      if (!b || !isAgentId(b.agentId) || !Array.isArray(b.proposals) || !b.proposals.length || studyFromLineHop(b)) continue;
       batches.push({ agentId: b.agentId, runId: b.runId, createdAt: Number(b.createdAt) || 0, count: b.proposals.length });
     }
     batches.sort((a, b) => a.createdAt - b.createdAt);
