@@ -64,13 +64,10 @@
     });
   }
 
-  // the roster total moves up under the CREW title: "2 WORKING · 1 IDLE" (the same element, its writer unchanged),
-  // and the title loses its ▮ mark (a fallback-font glyph; the sheet header is plain type)
+  // the roster total moves up under the CREW title: "2 WORKING · 1 IDLE" (the same element, its writer unchanged)
   function seatSummary() {
     const h3 = document.querySelector('#left > h3'), sum = document.getElementById('crew-sum');
     if (!h3) return;
-    const t = h3.firstChild;
-    if (t && t.nodeType === 3 && t.nodeValue.indexOf('▮') >= 0) t.nodeValue = t.nodeValue.replace(/▮\s*/, '');
     if (sum && sum.parentElement !== h3) h3.appendChild(sum);
   }
 
