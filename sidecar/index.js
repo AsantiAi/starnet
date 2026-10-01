@@ -11761,14 +11761,19 @@ async function runSampleJob(readArgs) {
    server's own answer, never on the click alone. A stop that lands before the first run starts is honoured by the POST
    itself (stopRequested). Same contract as the sample route: behind the launch token, and 409 {ok:false,error} when
    there is nothing to stop — never 404. */
-function handleRoutingSampleStop(_req, res) {
-  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
-  if (!sampleInFlight) return json(409, { ok: false, error: 'no sample job is riding the line — nothing to stop.' });
+function stopSampleJob() {
+  if (!sampleInFlight) return null;
   sampleInFlight.stopRequested = true;
   let halted = 0;
   try { halted = killAll(null, (sampleHub && sampleHub._internals) ? sampleHub._internals.inflight : null); }
   catch (e) { failNote('routing.sample.stop', e); }
-  return json(200, { ok: true, stopped: true, halted: halted, streamId: sampleInFlight.streamId });
+  return { halted, streamId: sampleInFlight.streamId };
+}
+function handleRoutingSampleStop(_req, res) {
+  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  const r = stopSampleJob();
+  if (!r) return json(409, { ok: false, error: 'no sample job is riding the line — nothing to stop.' });
+  return json(200, { ok: true, stopped: true, halted: r.halted, streamId: r.streamId });
 }
 
 /* ---- LINE TRIGGERS (2026-09-23, owner-approved) — /api/routing/triggers[/:id[/secret]] + POST /api/hooks/:id.
@@ -18476,7 +18481,19 @@ async function runOnceCore(o) {
     ? overseerStation(o.streamId, runId) : stationBridge, scanText: t => cronGuard.scanRoutinePrompt(t), now: () => Date.now(),
     planMemo: stationPlanMemo, lineMenu: stationLineMenu, kitMenu: stationKitMenu, presetMenu: stationPresetMenu, styleMenu: stationStyleMenu, roomMenu: stationRoomMenu,
     userProps,   // MAKE A PROP: the station's own prop maker (StarNet credits), for station.make_prop
-    runLineJob: args => runSampleJob(async () => args),   // TEST A LINE: the very job SEND A JOB sends, for station.test_line
+    // TEST A LINE: the very job SEND A JOB sends, for station.test_line. A stopped lead run (or the tool's own timeout)
+    // stops ITS job the way the panel's STOP does — it used to ride on, spending, holding the one-per-station lock.
+    runLineJob: (args, signal) => {
+      const before = sampleInFlight;
+      const p = runSampleJob(async () => args);
+      const mine = sampleInFlight !== before ? sampleInFlight : null;   // the lock is claimed synchronously; a 409 claims nothing
+      if (mine && signal) {
+        const stopMine = () => { if (sampleInFlight === mine) stopSampleJob(); };
+        if (signal.aborted) stopMine(); else signal.addEventListener('abort', stopMine, { once: true });
+        p.finally(() => signal.removeEventListener('abort', stopMine)).catch(() => {});
+      }
+      return p;
+    },
     startLine: spec => startLineFor(spec),                 // WHAT STARTS A LINE: the panel's own schedule + trigger cores, for station.start_line
     // station.layout's HARNESS facts (audit 2026-09-28): the plan the router actually holds, each line's effective
     // budget (the runner's own effectiveLimits), and today's numbers since local midnight (the line plate's window)

@@ -1806,6 +1806,9 @@ for (const c of T.catalog) {
     const bad = JSON.parse((await tt.run({ line: 'ship it', job: 'x' }, {})).content.split('\n')[0]);
     A.ok(bad.status === 'problem' && bad.steps[0].ended === 'error' && /did not complete cleanly\. Look at which step ended badly, fix the line, and test again\./.test(bad.verdict), 'a step that failed is named, with what to do');
     answer = { code: 409, obj: { ok: false, error: 'a sample job is already riding the line (started 4s ago) — wait for it to deliver.' } };
+    // a stopped lead run stops ITS test job (sweep 2026-10-01): the run's signal reaches the line runner
+    { let got = null; const ac = new AbortController(); await toolsT(async (body, signal) => { got = signal; return { code: 200, obj: { ok: false, stopped: true, runs: [] } }; }).testLineTool.run({ line: 'ship it', job: 'x' }, { signal: ac.signal });
+      A.ok(got === ac.signal, 'test_line hands the lead run\'s stop signal to the line runner'); }
     A.ok(/^REFUSED: a sample job is already riding the line/.test((await tt.run({ line: 'ship it', job: 'x' }, {})).content), 'one job at a time: the route\'s own refusal');
     A.ok(/^REFUSED: Nobody works the line EMPTY yet/.test((await tt.run({ line: 'empty', job: 'x' }, {})).content), 'a line nobody works is refused before anything is sent');
     A.ok(/^REFUSED: There is no line called "nope"\. Lines: SHIP IT, EMPTY\./.test((await tt.run({ line: 'nope', job: 'x' }, {})).content), 'a line that is not there names the lines that are');
@@ -1834,7 +1837,7 @@ for (const c of T.catalog) {
     A.ok(/"said":"The webhook trigger trg_x1 on SHIP IT is off\."/.test((await sl.run({ line: 'ship it', off: 'trg_x1' }, {})).content), 'a trigger turns off');
     const idx2 = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
     A.ok(/startLine: spec => startLineFor\(spec\)/.test(idx2) && /async function startLineFor\(spec\)/.test(idx2) && /createCronJobFromSpec\(\{ name: \(name \? name \+ ' — ' : ''\)/.test(idx2) && /extra\.secretHash = mintTriggerSecret\(\)\.hash;   \/\/ the key itself is never kept or handed on/.test(idx2), 'the tool runs the panel\'s own schedule and trigger cores, and drops a webhook key');
-    A.ok(/station\[\._\]test_line\$\/\.test\(String\(call && call\.name \|\| ''\)\)\) return 'the line ' \+/.test(idx2) && /runLineJob: args => runSampleJob\(async \(\) => args\)/.test(idx2) && /async function handleRoutingSample\(req, res\) \{\n  const r = await runSampleJob\(/.test(idx2), 'the card names the line and the job, and the tool runs SEND A JOB\'s own core');
+    A.ok(/station\[\._\]test_line\$\/\.test\(String\(call && call\.name \|\| ''\)\)\) return 'the line ' \+/.test(idx2) && /runLineJob: \(args, signal\) => \{\s*const before = sampleInFlight;\s*const p = runSampleJob\(async \(\) => args\);/.test(idx2) && /const stopMine = \(\) => \{ if \(sampleInFlight === mine\) stopSampleJob\(\); \};/.test(idx2) && /async function handleRoutingSample\(req, res\) \{\n  const r = await runSampleJob\(/.test(idx2), 'the card names the line and the job, and the tool runs SEND A JOB\'s own core');
   }
   {
     const rf = await planT.run({ refit: [{ op: 'place', t: 'tv', x: 2, y: 2 }] }, {});
