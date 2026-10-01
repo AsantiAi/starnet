@@ -366,8 +366,10 @@ const StepIn = (() => {
       // Paste arrives as its own event with the text; the chord itself must not also paste the headless clipboard.
       if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) return;
       e.preventDefault();
-      const printable = e.key && e.key.length === 1 && !e.ctrlKey && !e.metaKey;
-      const ev = { type: 'key', action: 'down', key: e.key, code: e.code, keyCode: e.keyCode || 0, modifiers: mods(e) };
+      // AltGr (@ { € on German/French keyboards) arrives as Ctrl+Alt on Windows: it is text, not a shortcut
+      const ag = !!(e.getModifierState && e.getModifierState('AltGraph')) || !!(e.ctrlKey && e.altKey && !e.metaKey && e.key && e.key.length === 1 && !/^[a-z0-9]$/i.test(e.key));
+      const printable = e.key && e.key.length === 1 && (ag || (!e.ctrlKey && !e.metaKey));
+      const ev = { type: 'key', action: 'down', key: e.key, code: e.code, keyCode: e.keyCode || 0, modifiers: ag ? (mods(e) & ~3) : mods(e) };
       if (printable) ev.text = e.key;
       else if (e.key === 'Enter') ev.text = '\r';
       send(v, ev);

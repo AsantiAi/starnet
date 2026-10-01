@@ -19,6 +19,18 @@
   const MOVE_MS = 50;
   const BTN = ['left', 'middle', 'right'];
   const mods = e => (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0);
+  /* AltGr (German/French/Nordic @ { } [ ] € …) reaches the page as Ctrl+Alt on Windows. It is TEXT, not a shortcut:
+     without this, those characters never arrived and an email address could not be typed (release review 2026-09-30).
+     A real Ctrl+Alt+letter shortcut still gives the letter itself, so it stays a key. */
+  const altGr = e => !!(e.getModifierState && e.getModifierState('AltGraph'))
+    || !!(e.ctrlKey && e.altKey && !e.metaKey && e.key && e.key.length === 1 && !/^[a-z0-9]$/i.test(e.key));
+  const keyDown = e => {
+    const ag = altGr(e);
+    const printable = !!(e.key && e.key.length === 1 && (ag || (!e.ctrlKey && !e.metaKey)));
+    const ev = { type: 'key', action: 'down', key: e.key, code: e.code, keyCode: e.keyCode || 0, modifiers: ag ? (mods(e) & ~3) : mods(e) };
+    if (printable) ev.text = e.key; else if (e.key === 'Enter') ev.text = '\r';
+    return ev;
+  };
 
   function create(opts) {
     const vp = opts.vp, img = opts.img;
@@ -113,25 +125,29 @@
         const k = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? 800 : 1;
         push({ type: 'wheel', x: p.x, y: p.y, dx: e.deltaX * k, dy: e.deltaY * k, modifiers: mods(e) });
       }, { passive: false });
+      /* NO KEYBOARD TRAP (release review 2026-09-30): keys are taken for the page only while you can actually type in
+         it (opts.canType — not while an agent drives and every key would be refused anyway), so Tab and Esc move on as
+         everywhere else in the station. And F6 / Ctrl+L always leave the page for the address bar, like any browser. */
+      const typing = () => s.on && (typeof opts.canType !== 'function' || !!opts.canType());
       vp.addEventListener('keydown', e => {
-        if (!s.on) return;
+        if ((e.key === 'F6' || ((e.ctrlKey || e.metaKey) && (e.key === 'l' || e.key === 'L'))) && typeof opts.onLeave === 'function') {
+          e.preventDefault(); e.stopPropagation(); opts.onLeave(); return;
+        }
+        if (!typing()) return;
         e.stopPropagation();   // everything typed here belongs to the page, not the station (no hotkeys, no COMMS)
         if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) return;   // paste arrives as its own event
         e.preventDefault();
-        const printable = e.key && e.key.length === 1 && !e.ctrlKey && !e.metaKey;
-        const ev = { type: 'key', action: 'down', key: e.key, code: e.code, keyCode: e.keyCode || 0, modifiers: mods(e) };
-        if (printable) ev.text = e.key; else if (e.key === 'Enter') ev.text = '\r';
-        push(ev);
+        push(keyDown(e));
       });
       vp.addEventListener('keyup', e => {
-        if (!s.on) return;
+        if (!typing()) return;
         e.stopPropagation();
         if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) return;
         e.preventDefault();
         push({ type: 'key', action: 'up', key: e.key, code: e.code, keyCode: e.keyCode || 0, modifiers: mods(e) });
       });
       vp.addEventListener('paste', e => {
-        if (!s.on) return;
+        if (!typing()) return;
         e.preventDefault(); e.stopPropagation();
         const t = e.clipboardData ? e.clipboardData.getData('text/plain') : '';
         if (t) push({ type: 'text', text: t.slice(0, 4000) });

@@ -151,8 +151,11 @@
           return r;
         }),
         // the station refuses input while an agent drives (409): the picture is then simply view-only
-        send: events => postJson('/api/browser/view/input', { events }) });
+        send: events => postJson('/api/browser/view/input', { events }),
+        canType: () => !state.driver || !!state.driver.signIn,
+        onLeave: () => { try { ui.url.focus(); } catch (_) { /* focus is best-effort */ } } });
     }
+    setTimeout(watchMinimize, 0);   // once the window is in place
     ui.bar.addEventListener('submit', ev => { ev.preventDefault(); go(ui.url.value); });
     ui.url.addEventListener('keydown', ev => { ev.stopPropagation(); if (ev.key === 'Escape') { ev.preventDefault(); paintBar(true); ui.url.blur(); } });
     ui.url.addEventListener('focus', () => { try { ui.url.select(); } catch (_) { /* selection is a nicety */ } });
@@ -461,6 +464,10 @@
       const first = !state.liveLoaded; state.liveLoaded = true;
       const st = station();
       const started = !!(st.driver && st.driver.runId !== wasRun);   // an agent just took the browser
+      if (st.driver && st.driver.signIn) {
+        stopSignInWatch();
+        if (state.signInShownFor !== st.driver.runId) { state.signInShownFor = st.driver.runId; showLive(); }   // you sign in here
+      }
       if (st.driver && state.mode === 'live' && mounted()) setDriver(st.driver);   // e.g. a sign-in handed you the wheel
       paintDoor();
       if (mounted()) {
@@ -485,7 +492,7 @@
           state.setupTimer = setTimeout(() => { state.setupTimer = null; refreshLive(); }, 1000);
         }
       } else if (state.follow && started && !first) {
-        showLive();   // FOLLOW: the window opens by itself when an agent starts browsing
+        showLive(true);   // FOLLOW: the window opens by itself when an agent starts browsing (your typing stays put)
       }
     }).catch(() => { /* the station is unreachable: the door simply shows no lamp */ });
   }
@@ -494,27 +501,51 @@
     state.liveTimer = setTimeout(() => { state.liveTimer = null; refreshLive(); }, LIVE_DEBOUNCE_MS);
   }
 
-  function showWindow() {
+  /* MINIMIZED is not closed (release review 2026-09-30): a minimized BROWSER window stays mounted, so the "show" paths
+     used to do nothing visible — and its picture kept streaming, which also kept the station browser from idling out.
+     Any show now restores it, and while it is minimized nothing streams. */
+  function termEl() { return state.ui && state.ui.root && state.ui.root.closest ? state.ui.root.closest('.term') : null; }
+  function isMinimized() { const w = termEl(); return !!(w && w.classList.contains('term-min-hidden')); }
+  function restoreIfMinimized() { if (isMinimized() && typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('browser'); }
+  function watchMinimize() {
+    const w = termEl();
+    if (!w || typeof MutationObserver === 'undefined' || state.ui.minObs) return;
+    state.ui.minObs = new MutationObserver(() => {
+      const hidden = w.classList.contains('term-min-hidden');
+      if (hidden && !state.minimized) { state.minimized = true; stopStreams(); }
+      else if (!hidden && state.minimized) {
+        state.minimized = false;
+        if (state.mode === 'live') startLive(); else if (state.mode === 'watch' && state.watch) startWatch();
+      }
+    });
+    state.ui.minObs.observe(w, { attributes: true, attributeFilter: ['class'] });
+  }
+  /* keepFocus: an open the Commander did not ask for (FOLLOW, an agent starting to browse) must not take the keyboard
+     from wherever they are typing — COMMS above all. */
+  function showWindow(keepFocus) {
     if (typeof StationUI === 'undefined' || !StationUI.openTerm) return false;
-    if (mounted()) return true;
+    if (mounted()) { restoreIfMinimized(); return true; }
+    const doc = root.document;
+    const prev = keepFocus && doc ? doc.activeElement : null;
     StationUI.openTerm('browser');
+    if (prev && doc && prev !== doc.body && prev.isConnected && typeof prev.focus === 'function') { try { prev.focus({ preventScroll: true }); } catch (_) { /* focus is best-effort */ } }
     return mounted();
   }
-  function showPage(t, cause) {
+  function showPage(t, cause, keepFocus) {
     remember(t);
     state.mode = 'page'; state.target = t; state.watch = null;
-    if (mounted()) { loadPage(cause || 'opened'); return true; }
-    return showWindow();
+    if (mounted()) { loadPage(cause || 'opened'); restoreIfMinimized(); return true; }
+    return showWindow(keepFocus);
   }
   function showWatch(a) {
     state.mode = 'watch'; state.watch = { agentId: a.agentId, runId: a.runId, target: a.target };
-    if (mounted()) { startWatch(); return true; }
+    if (mounted()) { restoreIfMinimized(); if (!isMinimized()) startWatch(); return true; }
     return showWindow();
   }
-  function showLive() {
+  function showLive(keepFocus) {
     state.mode = 'live'; state.watch = null;
-    if (mounted()) { startLive(); return true; }
-    return showWindow();
+    if (mounted()) { restoreIfMinimized(); if (!isMinimized()) startLive(); return true; }
+    return showWindow(keepFocus);
   }
 
   // ---------- public ----------
@@ -552,7 +583,7 @@
     if (HTML_RE.test(path) && !(onScreen && path === t.path)) {
       const nt = { agentId, path, source: 'workspace', runId: '' };
       remember(nt);
-      if (state.follow && state.mode !== 'live') { open(nt); return; }
+      if (state.follow && state.mode !== 'live') { showPage(nt, 'opened', true); return; }
       if (mounted()) paintStrip();
       return;
     }
@@ -607,7 +638,7 @@
       + '<div class="set-themes" id="brw-mode">'
       + '<button type="button" class="set-theme" data-mode="window" title="' + esc(MODE_TEXT.window) + '">CHROME WINDOW</button>'
       + '<button type="button" class="set-theme" data-mode="builtin" title="' + esc(MODE_TEXT.builtin) + '">BUILT-IN</button>'
-      + '<button type="button" class="set-theme" data-mode="chrome" title="' + esc(MODE_TEXT.chrome) + '">YOUR CHROME</button>'
+      // YOUR CHROME (your own Chrome via the StarNet extension) is not offered until that extension exists (release review)
       + '</div>'
       + '<p class="set-about dim" id="brw-state" role="status"></p>';
     if (typeof arrange === 'function') { try { arrange(el); } catch (_) { /* plain layout is fine */ } }
@@ -637,12 +668,19 @@
     });
   }
 
+  function stopSignInWatch() { if (state.signInWatch) { clearInterval(state.signInWatch); state.signInWatch = null; } }
+  function watchSignIn() {
+    stopSignInWatch();
+    let n = 0;
+    state.signInWatch = setInterval(() => { if (++n > 600) stopSignInWatch(); else refreshLive(); }, 700);   // ≤7 min
+  }
+
   let busWired = false;
   function init() {
     if (typeof StationUI !== 'undefined' && StationUI.registerWindow) {
       // Closing the window does NOT close the browser: it is the agents' too, and it closes itself when nobody has
       // driven or watched it for ten minutes.
-      StationUI.registerWindow('browser', 'BROWSER', build, { wide: true, className: 'browser-win', onClose: () => { stopStreams(); state.ui = null; } });
+      StationUI.registerWindow('browser', 'BROWSER', build, { wide: true, className: 'browser-win', onClose: () => { stopStreams(); if (state.ui && state.ui.minObs) state.ui.minObs.disconnect(); state.minimized = false; state.ui = null; } });
     }
     if (!busWired && typeof U !== 'undefined' && U.bus && U.bus.on) {
       busWired = true;
@@ -652,10 +690,17 @@
       U.bus.on('agent.tool_call', p => {
         if (!p || !/^browser[._]/.test(String(p.name || ''))) return;
         scheduleLive();
-        // a sign-in is for YOU: show the browser (the page it opens is where you sign in), FOLLOW or not
-        if (/^browser[._]login$/.test(String(p.name))) setTimeout(() => { refreshLive().then(() => showLive()); }, 300);
+        /* a sign-in is for YOU: the browser shows itself when the sign-in actually starts on the shared browser —
+           AFTER you approved it in COMMS (release review 2026-09-30: opening on the tool call popped the window before
+           the question was answered, took the keyboard from COMMS, and stayed open on "driving" if you declined).
+           Ask the station until the sign-in begins or the tool returns. */
+        if (/^browser[._]login$/.test(String(p.name))) watchSignIn();
       });
-      U.bus.on('agent.tool_result', p => { if (p && /^browser[._]/.test(String(p.name || ''))) scheduleLive(); });
+      U.bus.on('agent.tool_result', p => {
+        if (!p || !/^browser[._]/.test(String(p.name || ''))) return;
+        if (/^browser[._]login$/.test(String(p.name))) stopSignInWatch();
+        scheduleLive();
+      });
       ['agent.run.start', 'agent.run.end', 'agent.run.error', 'browser.handoff'].forEach(n => U.bus.on(n, () => scheduleLive()));
     }
     if (root.document) {
