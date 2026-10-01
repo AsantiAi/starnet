@@ -829,6 +829,7 @@ test/station-tools.test.js
 test/team-configure-guard.test.js
 test/agent-config.test.js
 test/station-layout.test.js
+test/station-builder.test.js
 test/code-mode.test.js
 test/output-artifacts.test.js
 test/station-recovery.test.js
@@ -998,6 +999,7 @@ test/line-hop-not-said.test.js
 test/linejobs.test.js
 test/linedraft.test.js
 test/workflows-window.test.js
+test/build-mode-easy.test.js
 test/trigger-sweep.test.js
 test/steptest-restart-spend.test.js
 test/userprops.test.js
