@@ -622,7 +622,7 @@
         const jobId = entry[0], lease = entry[1];
         if (lease.settlement) continue;
         if (maxWallMs > 0 && lease.startedAt != null && nowMs - lease.startedAt > maxWallMs) {
-          try { lease.ac.abort(); } catch (_) {}
+          try { lease.ac.abort(); } catch (e) { failNote('cron.wallclock.abort', e); }
           finishFire(jobId, lease.runId, {
             reason: 'wall-clock-exceeded',
             errMsg: 'run stopped: still running after ' + Math.round(maxWallMs / 60000) + ' min (the routine time limit)', transient: false
