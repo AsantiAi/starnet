@@ -30,7 +30,7 @@
 <link rel="stylesheet" href="css/safety.css">
 <link rel="stylesheet" href="css/tutorial.css">
 <link rel="stylesheet" href="css/workhub.css">
-<link rel="stylesheet" href="css/refit.css"><!-- REFIT build-modal form polish: rides the .refit-guide card, before motion.css so its focus ring layers on top -->
+<link rel="stylesheet" href="css/refit.css"><!-- BUILD MODE build-modal form polish: rides the .refit-guide card, before motion.css so its focus ring layers on top -->
 <!-- motion.css last: the Phase-1 premium motion + feedback layer builds ON TOP of every screen's styles -->
 <link rel="stylesheet" href="css/motion.css">
 <link rel="stylesheet" href="css/asciifx.css"><!-- ASCII-motion kit: decode/dissolve/typewriter vocabulary (asciifx.js); rides motion.css's token layer -->
@@ -43,7 +43,7 @@
 <link rel="stylesheet" href="css/refit-easy.css"><!-- BUILD MODE, easier + more fun (2026-10-01): the library shows its props, the selection card, the editor keys' look -->
 <link rel="stylesheet" href="css/linewatch.css"><!-- LINE WATCH: the crate-inspect card on the live floor + the Workflow panel's TODAY row -->
 <link rel="stylesheet" href="css/deskscreen.css"><!-- DESK SCREEN: click an agent's workstation → its live work -->
-<link rel="stylesheet" href="css/workflow-panel.css"><!-- the DOCKED Workflow panel of REFIT (workflowpanel.js) — rides the refit glass tokens -->
+<link rel="stylesheet" href="css/workflow-panel.css"><!-- the DOCKED Workflow panel of BUILD MODE (workflowpanel.js) — rides the refit glass tokens -->
 <link rel="stylesheet" href="css/workflows-window.css"><!-- WORK › WORKFLOWS (windows/workflows.js): the Workflow panel glass, restated on its own docked window -->
 <link rel="stylesheet" href="css/utility-menus.css?v=1">
 <link rel="stylesheet" href="css/glass-demo.css">
@@ -743,7 +743,7 @@
     <div class="bb-group" data-group="build">
       <button class="bb-grp" data-hint="build" aria-haspopup="menu" aria-expanded="false" title="Shape the station — refit the floor, abilities, channels"><span class="bb-gi">⚒</span>BUILD</button>
       <div class="bb-menu" role="menu">
-        <button class="bb" id="bb-build" data-hint="refit"><span class="bb-i">⌂</span><span class="bb-tx"><b>REFIT STATION</b><small>rooms, corridors, gear &amp; workflow lines</small></span></button>
+        <button class="bb" id="bb-build" data-hint="refit"><span class="bb-i">⌂</span><span class="bb-tx"><b>BUILD MODE</b><small>rooms, corridors, gear &amp; workflow lines</small></span></button>
         <!-- ONE MENU (front doors, 2026-10-01): CONNECT = one window with tabs ABILITIES (the agents' tools OUT — toolsets,
              connectors, skills) · CHANNELS (YOUR way in — Telegram, Slack, Discord). Two tabs, never one card grid. -->
         <button class="bb" id="bb-connect" data-family="connect" data-hint="connect"><span class="bb-i">⇄</span><span class="bb-tx"><b>CONNECT</b><small>tools &amp; apps your agents use, and where you message them</small></span></button>
@@ -814,7 +814,7 @@
 <script src="js/audio.js"></script>
 <script src="js/arcade.js"></script>
 <script src="app/backdrop-bake.js"></script>
-<script src="app/spacebg.js"></script><!-- THE VOID: shared deep-space backdrop (dense starfield + nebulas) — one sky for world.js AND build.js so REFIT never jumps the stars -->
+<script src="app/spacebg.js"></script><!-- THE VOID: shared deep-space backdrop (dense starfield + nebulas) — one sky for world.js AND build.js so BUILD MODE never jumps the stars -->
 <script src="app/terrain.js"></script><!-- THE GROUND: world-space ground layer for a LANDED station — pans AND zooms with the world (a backdrop must not), drawn under the station bake -->
 <script src="app/industrialtextures.js"></script>
 <script src="app/authored-prop-content.js"></script>
@@ -823,7 +823,7 @@
 <script src="app/authored-machine-config.js"></script>
 <script src="app/approved-sheet-effects.js"></script><script src="app/projection-prop-effects.js"></script><script src="app/propremaster.js"></script>
 <script src="app/authored-surface-mounts.js"></script><script src="app/propsprites.js"></script>
-<script src="app/propsearch.js"></script><!-- pure REFIT palette search matcher (flat lookup across all 120 props, both tiers) -->
+<script src="app/propsearch.js"></script><!-- pure BUILD MODE palette search matcher (flat lookup across all 120 props, both tiers) -->
 <script src="app/conveyor.js"></script>
 <script src="app/pipeline.js"></script>
 <script src="app/workflowline.js"></script><!-- pure readings of one conveyor line (run order, how-it-runs sentence, readiness, cost) from the compiled plan — the Workflow panel speaks only through it -->
@@ -989,7 +989,7 @@
 
 <script src="app/equipmenthelp.js"></script>
 <script src="app/stationtemplates.js"></script>
-<script src="app/workflowpanel.js"></script><!-- the DOCKED Workflow panel (REFIT): one card for the whole line, beside the live floor -->
+<script src="app/workflowpanel.js"></script><!-- the DOCKED Workflow panel (BUILD MODE): one card for the whole line, beside the live floor -->
 <script src="app/build.js"></script>
 <script src="app/save.js"></script>
 <script src="app/cloudsavecore.js"></script><!-- pure retry/health brain (unit-tested); MUST load before cloudsave.js -->

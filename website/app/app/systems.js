@@ -36,7 +36,7 @@ const Systems = (() => {
     { id: 'mywork', label: 'MY WORK', group: 'work', sel: '#bb-mywork', terms: ['tasks', 'work', 'deliverables', 'outbox'], start: true, tip: 'Tasks, finished work, work to rate, and ready-made jobs' },
     { id: 'automate', label: 'AUTOMATE', group: 'work', sel: '#bb-automate', terms: ['workflows', 'automation', 'routines', 'loops'], words: ['AUTOMATE', 'AUTOMATION', 'WORKFLOWS', 'WORKFLOW', 'ROUTINE', 'ROUTINES', 'CONVEYOR'], jobs: 3, crew: 2, how: 'when you ask for something on a schedule', tip: 'Workflows, schedules, goal loops and away work' },
     { id: 'quests', label: 'QUESTS', group: 'work', sel: '.bb[data-term="quests"]', terms: ['quests'], start: true, tip: 'Small steps toward your goals, and your progress' },
-    { id: 'refit', label: 'REFIT STATION', group: 'build', sel: '#bb-build', start: true, tip: 'Rooms, gear and workflow lines' },
+    { id: 'refit', label: 'BUILD MODE', group: 'build', sel: '#bb-build', start: true, tip: 'Rooms, gear and workflow lines' },
     { id: 'connect', label: 'CONNECT', group: 'build', sel: '#bb-connect', terms: ['connectors', 'skills', 'messaging'], words: ['ABILITIES', 'CHANNELS'], jobs: 2, how: 'when an agent needs a tool or you mention a chat app', tip: 'Tools and apps your agents use, and where you message them' },
     { id: 'newapp', label: 'NEW APP', group: 'build', sel: '#bb-newapp-build', start: true, tip: 'Describe anything and your crew builds it in its own window' },
     { id: 'manual', label: 'FIELD MANUAL', group: 'system', sel: '.bb[data-term="manual"]', terms: ['manual'], start: true, tip: 'First mission, controls and the station handbook' },

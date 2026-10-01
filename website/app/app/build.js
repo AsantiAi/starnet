@@ -1,4 +1,4 @@
-/* STARNET — build.js : the diegetic full-screen REFIT (build) mode.
+/* STARNET — build.js : the diegetic full-screen BUILD MODE (build) mode.
 
    Toggled from the dock. Dims the live sim and drops the Commander into an in-fiction
    station-editor over the SAME procedural art: pan/zoom camera, phosphor build grid,
@@ -12,7 +12,7 @@
 
 const Build = (() => {
   const TOOLS = [
-    // SELECT is the DEFAULT mode (2026-08-05 interaction reshape): entering REFIT arms NO placement
+    // SELECT is the DEFAULT mode (2026-08-05 interaction reshape): entering BUILD MODE arms NO placement
     // tool — a click INSPECTS the machine under it (its picker/editor/flow card) instead of trying to
     // place something. Key 0, ESC and right-click all return here from any armed tool.
     // labels are WORDS ONLY — the leading symbol each one used to carry (◎ ▦ ═ …) is now a pixel
@@ -145,7 +145,7 @@ const Build = (() => {
   let roomAsk=null;   // a furnish / clear that would take equipment out, waiting on FURNISH ANYWAY (THE ROOM CARD)
   let propSection = 'decoration', propAbility = '', equipmentAgentId = '';
   let buildGroup = 'props';
-  /* WHERE REFIT OPENS (2026-09-27 audit F1/B5): WORK › AUTOMATE › WORKFLOWS opens it straight on the Conveyors tab (openWorkflows), and a
+  /* WHERE BUILD MODE OPENS (2026-09-27 audit F1/B5): WORK › AUTOMATE › WORKFLOWS opens it straight on the Conveyors tab (openWorkflows), and a
      Commander who was building a line last time comes back to the Conveyors tab instead of the furniture catalog. Only that
      tab is remembered: every other session still starts on Props, where the tutorial expects it. */
   let pendingGroup = null;
@@ -189,7 +189,7 @@ const Build = (() => {
   const lineFields = Object.create(null);   // bpId -> { set:Set('tx,ty'), list:[{tx,ty}], runs:[…], edges:[…] }
   const lineFitsMemo = Object.create(null); // bpId -> bool, from the EARLY-EXIT probe (see lineFits)
   /* ---------- THE GEOMETRY VERSION: one explicit invalidation signal (2026-08-08 perf pass) ----------
-     REFIT's frame loop was re-deriving, at 60fps, a pile of answers that can only change when the
+     BUILD MODE's frame loop was re-deriving, at 60fps, a pile of answers that can only change when the
      FLOOR changes: the station bounds, the belt list, every bound bay's capability objects, the
      table-mount resolution for every prop, and the top readout's room/tile census. On a large deck
      that was the frame — bayObjects alone is O(bays × props × rooms).
@@ -223,7 +223,7 @@ const Build = (() => {
   let linkedVer = 0, linkedMemo = false;
   const linkedFloor = () => (linkedVer === geoVer) ? linkedMemo : (linkedVer = geoVer, linkedMemo = !!(station && typeof station.isLinked === 'function' && station.isLinked()));
   /* bayObjects, per (agentId, geometry). Also DEFENSIVE: world.js has always wrapped this call in a
-     try/catch and REFIT called it bare, so one throw took out the whole validation layer (and with
+     try/catch and BUILD MODE called it bare, so one throw took out the whole validation layer (and with
      it every routing callout on the floor) instead of one bay's NO-COMPUTE check. */
   /* PER BAY (station.layout audit 2026-09-28): the router isolates a run's tools by the DOCK it runs at
      (router.stationFor(agentId, dockId) — a desk-less agent's second bay in another room gets THAT room), so a
@@ -249,7 +249,7 @@ const Build = (() => {
   function init(o) { opts = o; }
 
   function open() {
-    makeResumed = false;   // a fresh REFIT session picks up a made-prop job still running in the station
+    makeResumed = false;   // a fresh BUILD MODE session picks up a made-prop job still running in the station
     makeMsg = null; if (makeJob && (makeJob.status === 'done' || makeJob.status === 'failed')) makeJob = null;   // and never greets with an old message
     makeCreditsAsked = false;   // and re-reads the credit state (the player may have just linked or topped up)
     if (running) return;
@@ -261,14 +261,14 @@ const Build = (() => {
        "a draw layer is currently failing" — and one transient throw in a session two hours ago had it
        asserting degradation forever, a state the harness could no longer prove. The rest are staleness:
        propCardKey made re-hovering the same prop after a reopen paint an EMPTY card (the key matched, so
-       the body was never rebuilt), ordersSeenDone chimed completion for steps finished while REFIT was
+       the body was never rebuilt), ordersSeenDone chimed completion for steps finished while BUILD MODE was
        shut, and propQuery reopened the palette silently filtered by a search the Commander can't see. */
     for (const k in layerFailed) delete layerFailed[k];
     propCardKey = null; ordersSeenDone = null; propQuery = ''; lastTier = '';
     propShelfScroll.clear();
     buildGroup = pendingGroup || readLastGroup() || 'props'; pendingGroup = null; propSection = 'decoration'; propAbility = ''; propCat = 'all'; propType = PropSprites.STARTER[0];
     equipmentAgentId = ''; equipmentAccessKey = ''; equipmentAccessView = null; equipmentAccessTicket++;
-    tool = 'select';   // SELECT is the default mode — a fresh REFIT session never opens with a placement tool armed
+    tool = 'select';   // SELECT is the default mode — a fresh BUILD MODE session never opens with a placement tool armed
     escExitArmedAt = 0;   // a fresh session never inherits a half-pressed exit
     ridePending = false; rideAgentId = null; ridePrevReach = null;   // the auto first-ride re-arms (and re-baselines its reach snapshot) from THIS session's compile, never a stale one
     // finish-the-line: fresh session state (the registry itself persists in localStorage) + one seam probe
@@ -315,7 +315,7 @@ const Build = (() => {
     clearTimeout(frameRetryTimer); frameRetryTimer = 0;
     convey = (typeof Conveyor !== 'undefined') ? Conveyor.create({ onDeliver: onBuildDeliver, onAdvance: onBuildAdvance }) : null;
     ghost = (typeof GhostLine !== 'undefined') ? GhostLine.create() : null;   // Phase 3: fresh projection per session
-    testNotes.length = 0;   // never carry a prior session's ride captions into a fresh REFIT
+    testNotes.length = 0;   // never carry a prior session's ride captions into a fresh BUILD MODE
     statSig = zoomSig = '';   // the top readout re-derives from THIS session's station, never a stale signature
     lastFrameTs = 0;
     resize();
@@ -326,7 +326,7 @@ const Build = (() => {
     if (typeof SFX !== 'undefined') SFX.open();
     raf = requestAnimationFrame(frame);
     /* the BUILD menu's own tooltip, armed under a pointer that did not move after the click, used to sit on the glass for the whole
-       session: REFIT opens OVER that button, so its pointerout never fires. The station tooltip hides on a scroll signal. */
+       session: BUILD MODE opens OVER that button, so its pointerout never fires. The station tooltip hides on a scroll signal. */
     try { document.dispatchEvent(new Event('scroll')); } catch (_) {}
   }
 
@@ -337,7 +337,7 @@ const Build = (() => {
     if (raf) cancelAnimationFrame(raf), raf = 0;
     clearTimeout(frameRetryTimer); frameRetryTimer = 0;
     clearTimeout(tipTimer); tipTimer = 0;
-    clearTimeout(rideTimer); rideTimer = 0; ridePending = false;   // a ride can't fire into a closed REFIT
+    clearTimeout(rideTimer); rideTimer = 0; ridePending = false;   // a ride can't fire into a closed BUILD MODE
     if (convey) convey.reset(), convey = null;
     if (ghost) ghost.reset(), ghost = null;
     propThumbs.length = 0; lastThumbTs = 0;   // free the preview tiles' canvases
@@ -591,7 +591,7 @@ const Build = (() => {
   /* MAKE A PROP (player-made props, userprops.js): type any object, StarNet draws it in the station's style on
      StarNet credits, and it joins the catalog under MADE BY YOU as decoration. The status line reads ONLY the job
      state the station reports (step, try n of 3, the cost the cloud actually billed); the job keeps running in
-     the station if REFIT closes, and this panel picks it back up on reopen. */
+     the station if BUILD MODE closes, and this panel picks it back up on reopen. */
   let makeJob = null, makeMsg = null, makeWatching = '';
   let makeBusy = false;      // a paid start (preview, make, side view) is in flight: one at a time, from every door (button, Enter, kit)
   let makeDraft = '', makeFocused = false;   // what is typed survives a palette redraw (a job landing, a chip click)
@@ -773,8 +773,8 @@ const Build = (() => {
     paintMakeStatus();
     return false;
   }
-  // REFIT reopened while the station still has a job in flight: pick it back up instead of forgetting it.
-  let makeResumed = false;   // once per REFIT open: a render must not refetch (and race) the made-prop list
+  // BUILD MODE reopened while the station still has a job in flight: pick it back up instead of forgetting it.
+  let makeResumed = false;   // once per BUILD MODE open: a render must not refetch (and race) the made-prop list
   let makeCredits = null, makeCreditsAsked = false;   // { linked, balanceUsd } from /api/credits; null = not known (show nothing)
   function loadMakeCredits() {
     if (makeCreditsAsked || typeof Harness === 'undefined' || !Harness.api) return;
@@ -814,7 +814,7 @@ const Build = (() => {
         try { seen = JSON.parse(localStorage.getItem('starnet.userprops.seen') || '[]'); } catch (_) { seen = []; }
         const miss = r.recent.find((x) => x && x.status === 'failed' && !seen.includes(x.id));
         if (miss) {
-          makeMsg = { text: 'While REFIT was closed: ' + (miss.noun || 'a prop') + ' \u2014 ' + ((miss.error && miss.error.message) || 'it could not be made.'), tone: 'bad' };
+          makeMsg = { text: 'While BUILD MODE was closed: ' + (miss.noun || 'a prop') + ' \u2014 ' + ((miss.error && miss.error.message) || 'it could not be made.'), tone: 'bad' };
           try { localStorage.setItem('starnet.userprops.seen', JSON.stringify(seen.concat(r.recent.map((x) => x.id)).slice(-50))); } catch (_) { /* per-viewer convenience only */ }
         }
       }
@@ -893,7 +893,7 @@ const Build = (() => {
     inp.onkeydown = (ev) => {
       if (ev.key === 'Enter') { ev.preventDefault(); if (!go.disabled) startPreviewProp(inp.value); return; }
       if (ev.key !== 'Escape') return;
-      ev.stopPropagation();   // like the search field: Escape leaves the field, never closes REFIT behind it
+      ev.stopPropagation();   // like the search field: Escape leaves the field, never closes BUILD MODE behind it
       inp.blur();
     };
     box.querySelector('#refit-makeprop-side').onclick = () => { startMakeSide(); sfx('click'); };
@@ -928,7 +928,7 @@ const Build = (() => {
     };
     inp.onkeydown = (ev) => {
       if (ev.key !== 'Escape') return;
-      ev.stopPropagation();   // a clear must never bubble out and close REFIT behind the Commander
+      ev.stopPropagation();   // a clear must never bubble out and close BUILD MODE behind the Commander
       if (inp.value) { clearSearch(); sfx('click'); }
       else inp.blur();        // an already-empty field hands Escape back to the editor
     };
@@ -1226,7 +1226,7 @@ const Build = (() => {
       finder.onchange=()=>{const p=station.propById(finder.value);if(!p)return;onInspect(p,orientEv());zoom=Math.max(zoom,1);panX=cv.width*.72-(p.x+p.w/2)*T()*zoom;panY=cv.height*.5-(p.y+p.h/2)*T()*zoom;};
       note.insertBefore(finder, note.querySelector('.refit-keyrows'));   // the finder first (it acts), the keys under it (they teach)
     } else if (tool === 'room' || (tool === 'select' && buildGroup === 'rooms')) {
-      /* ROOM TYPE was the last palette in REFIT still made of bare text chips, next to a prop
+      /* ROOM TYPE was the last palette in BUILD MODE still made of bare text chips, next to a prop
          gallery of live animated previews and a material grid painted by the real bake. A room
          kind IS a deck (a hue × a material), so it can preview itself the same honest way every
          other surface here does — through StationBake, so the chip can never promise a floor the
@@ -2593,7 +2593,7 @@ const Build = (() => {
   }
 
   /* ---------- THE CARD STACK (2026-08-07 conveyor audit) ----------
-     Every modal card in REFIT — the first-run guide, the step editor, the workstation picker, the flow /
+     Every modal card in BUILD MODE — the first-run guide, the step editor, the workstation picker, the flow /
      belt / junction / connector / room / door cards — mounts as `.refit-guide` + its own marker class, and
      each one owns a `closeP` that does the work closing it OWES: the step card saves the job brief, the
      flow card saves the line name, the room card saves the rename. Nothing outside those closures could
@@ -2821,11 +2821,11 @@ const Build = (() => {
   /* ---------- first-use guide ---------- */
   function hasSeen() { try { return !!localStorage.getItem(SEEN_KEY); } catch (e) { return false; } }
   function markSeen() { try { localStorage.setItem(SEEN_KEY, '1'); } catch (e) {} }
-  /* TUTORIAL WINS (same coordination dockglow.js uses). The kit-out tour ALWAYS causes the first REFIT open,
+  /* TUTORIAL WINS (same coordination dockglow.js uses). The kit-out tour ALWAYS causes the first BUILD MODE open,
      so this first-run card used to land on top of it every single time: a full-viewport modal that BLOCKS the
      ⚇ PROP button the tour's ring is pulsing on, while teaching a different lesson (rooms/BAYs/belts) than the
      coach bubble floating above it (gear placement). Deferring costs nothing — markSeen() only fires on
-     dismiss, so hasSeen() stays false and the card shows on the next REFIT open, once the tour is out of the
+     dismiss, so hasSeen() stays false and the card shows on the next BUILD MODE open, once the tour is out of the
      way and the Commander is actually building. #refit-help re-opens it on demand either way. */
   function tutorialCoaching() { try { return !!(typeof Tutorial !== 'undefined' && Tutorial.isCoaching && Tutorial.isCoaching()); } catch (e) { return false; } }
   /* THE NAMES THE GUIDE USES ARE READ FROM THE UI ITSELF (2026-09-23 playtest: the guide named a PROPS →
@@ -2853,7 +2853,7 @@ const Build = (() => {
     const G = guideNames();
     g.innerHTML = `
       <div class="refit-guide-card refit-guide-wide" role="dialog" aria-modal="true" aria-labelledby="refit-guide-title">
-        <span class="refit-guide-kicker">REFIT · QUICK GUIDE</span><h3 id="refit-guide-title">Shape your station</h3>
+        <span class="refit-guide-kicker">BUILD MODE · QUICK GUIDE</span><h3 id="refit-guide-title">Shape your station</h3>
         <p class="refit-guide-lead">Add rooms, choose equipment, and make the space your own. When you want a repeatable workflow, connect an inbox, an agent’s bay, and an outbox.</p>
         <div class="refit-steps">
           <div class="refit-step" data-art="room">
@@ -3190,7 +3190,7 @@ const Build = (() => {
   }
   /* the panel's floor marks: the selected part pulses gold; a PAUSED step test parks a pulsing marker on the
      finished dock's OUTBOUND tile (plan.chains[agent].tile — the tile its product really ships from). The
-     REFIT conveyor cannot hold a real crate mid-belt, so no crate is drawn riding: only where it waits. */
+     BUILD MODE conveyor cannot hold a real crate mid-belt, so no crate is drawn riding: only where it waits. */
   function drawWorkflowMarks(t, now) {
     if (wfHighlightId) {
       const p = station.propById(wfHighlightId);
@@ -3591,11 +3591,11 @@ const Build = (() => {
   }
 
   /* ---------- test run (Polish B): send work down your belts with NO bot connected, and watch it sort to the
-     bays right here in REFIT — the build-time payoff + the first thing a tutorial points at.
+     bays right here in BUILD MODE — the build-time payoff + the first thing a tutorial points at.
      THE NARRATED RIDE (2026-07-05): ▸ PREVIEW now teaches the whole two-trip model as it happens — numbered
      captions land at each stage (① enters → ② sorted → ③ delivered to the dock → ④ result ships from the
      dock → ⑤ out), and a delivered test crate spawns a RETURN product crate so the outbound leg shows too.
-     Ephemeral, REFIT-preview only, driven by the same engine decisions real work rides on. ---------- */
+     Ephemeral, BUILD MODE-preview only, driven by the same engine decisions real work rides on. ---------- */
   const testNotes = [];   // {x, y, text, col, t0} — stage captions over the ride (WORLD tiles)
   const NOTE_MS = 3200;
   function note(x, y, text, col) { testNotes.push({ x, y, text, col: col || '#9adcb0', t0: (typeof performance !== 'undefined') ? performance.now() : 0 }); if (testNotes.length > 12) testNotes.shift(); }
@@ -3801,7 +3801,7 @@ const Build = (() => {
   }
 
   /* ---------- THE FIRST CRATE NARRATES ITSELF (2026-08-04 onramp) ----------
-     The first time this station's floor compiles COMPLETE in REFIT — an INTAKE lane actually
+     The first time this station's floor compiles COMPLETE in BUILD MODE — an INTAKE lane actually
      reaching a BOUND bay (valPlan.reach), which is the moment liveTiles first energize a full
      route — the narrated ▸ PREVIEW ride auto-runs once, unprompted. That is exactly the teachable
      moment: the user just bound the agent that powered the line on. Once per station, persisted
@@ -3856,7 +3856,7 @@ const Build = (() => {
     ridePending = false;
     // a beat after the bind flash so the two tips don't stomp each other mid-read. The flag is
     // consumed ONLY WHEN THE RIDE ACTUALLY NARRATES — sendTestBoxes returning true on the reaching
-    // line's own mouth. Closing REFIT inside the beat, or a floor edit that dissolves the line
+    // line's own mouth. Closing BUILD MODE inside the beat, or a floor edit that dissolves the line
     // under it, keeps the one shot (the next compile re-arms via maybeFirstRide).
     rideTimer = setTimeout(() => { rideTimer = 0; if (running && convey && sendTestBoxes(null, true, rideAgentId)) markRide(); }, 700);
   }
@@ -3933,7 +3933,7 @@ const Build = (() => {
     } catch (e) {}
   }
   /* SAMPLE-JOB seam detection (Phase 4 lands in parallel — never hardcode its presence): the card
-     asks `GET /api/routing/sample` once per REFIT session. Present = any real answer that isn't a
+     asks `GET /api/routing/sample` once per BUILD MODE session. Present = any real answer that isn't a
      route-miss (404/405); absent = the router's static 404. An OPTIONS probe is useless here — the
      sidecar 204s OPTIONS on EVERY /api/* path before dispatch (index.js preflight branch). A POST
      probe is forbidden: when the seam exists a POST IS the paid sample dispatch. Fails SAFE: on any
@@ -4160,8 +4160,8 @@ const Build = (() => {
       + (v.reply ? '<div class="fl-result-reply"><span class="fl-result-k">SAID</span> ' + esc(v.reply) + '</div>' : '')
       + '</div>';
   }
-  /* POST THE LINE BEFORE RUNNING IT (2026-08-22). REFIT freezes the world, so the plan the sidecar routes by
-     is the one posted at the LAST REFIT CLOSE — a sample fired right after an edit ran the OLD line while
+  /* POST THE LINE BEFORE RUNNING IT (2026-08-22). BUILD MODE freezes the world, so the plan the sidecar routes by
+     is the one posted at the LAST BUILD MODE CLOSE — a sample fired right after an edit ran the OLD line while
      the floor drew the new one. Now the sample awaits World.syncPlan() (recompile if dirty + the server's
      verdict on the POST) and dispatches only once the sidecar holds THIS floor; a line with blocking
      compiler errors, or a POST the sidecar never answered, is REFUSED with the floor's own nag copy.
@@ -4227,12 +4227,12 @@ const Build = (() => {
   /* PIN ONLY WHEN SOMETHING MOVED (2026-08-08 perf pass). This ran three getBoundingClientRects and
      two style writes on EVERY frame — the writes dirty layout, so the next frame's reads are forced
      layouts, i.e. the loop paid for its own invalidation forever. The card's position is a pure
-     function of a handful of values: the camera, the window, REFIT's own chrome (dock width / card
+     function of a handful of values: the camera, the window, BUILD MODE's own chrome (dock width / card
      size, tracked by uiVer), the text-size zoom, and which line it is anchored to. Sign those; an
      unchanged signature means the pin is already correct and the frame owes it nothing.
      The coach gate CLEARS the signature so the card is always re-pinned when it comes back. */
   let finPosSig = '';
-  let uiVer = 1;   // bumped wherever REFIT's own DOM geometry can move — see bumpUi()
+  let uiVer = 1;   // bumped wherever BUILD MODE's own DOM geometry can move — see bumpUi()
   function bumpUi() { uiVer++; finPosSig = ''; }
   /* the coach's bubble rect (tutorial.js `.tut-coach`, a fixed body child) — VISUAL px. While a coach is up
      the checklist used to vanish entirely; now it STACKS under the bubble (the first-run guide card is the
@@ -4321,12 +4321,12 @@ const Build = (() => {
     finCardEl.style.top = Math.round(y / uiz) + 'px';
   }
   /* the delivery-retirement hook — world.js calls this (WORLD tiles) when a real product crate sinks
-     at an outbox mouth. Works with REFIT closed: resolves the station via opts and maps the tile to
+     at an outbox mouth. Works with BUILD MODE closed: resolves the station via opts and maps the tile to
      its line in a fresh geometry frame. First delivery wins; done is forever (per station+line). */
   function noteLineDelivered(wtx, wty) {
-    /* THE LIVE STATION WINS. This hook fires from world.js with REFIT CLOSED, and close() never nulls the
+    /* THE LIVE STATION WINS. This hook fires from world.js with BUILD MODE CLOSED, and close() never nulls the
        module-level `station` — so preferring it meant the retirement was booked against whatever station
-       the last REFIT session held. Load a different save and the first real delivery retired a line on the
+       the last BUILD MODE session held. Load a different save and the first real delivery retired a line on the
        station you are no longer standing in. opts.getStation() is the app's live station; the stale
        module field is only the fallback for a harness that injected no getter. */
     const live = (opts && typeof opts.getStation === 'function') ? opts.getStation() : null;
@@ -4422,7 +4422,7 @@ const Build = (() => {
     bumpUi();   // the glass moved — every memoized chrome measurement is stale (positionFinCard)
     dpr = window.devicePixelRatio || 1;
     // TEXT SIZE zoom parity with world.js resize(): body.style.zoom shrinks layout px, so bake the
-    // factor back in or the REFIT floor upscales soft. Picking stays rect-ratio-based (canvasPoint).
+    // factor back in or the BUILD MODE floor upscales soft. Picking stays rect-ratio-based (canvasPoint).
     const uiz = (() => { const z = parseFloat(document.body && document.body.style ? document.body.style.zoom : ''); return z > 0 ? z : 1; })();
     cv.width = Math.max(1, Math.round(cv.clientWidth * dpr * uiz));
     cv.height = Math.max(1, Math.round(cv.clientHeight * dpr * uiz));
@@ -5693,7 +5693,7 @@ const Build = (() => {
     const el = root.querySelector('.refit-tier');
     const el2 = root.querySelector('.refit-title');
     [el, el2].forEach(n => { if (!n) return; n.classList.remove('refit-levelup'); void n.offsetWidth; n.classList.add('refit-levelup'); });
-    // NO StationUI.notify (notification diet): the REFIT title flash + the new tier word ARE the announcement.
+    // NO StationUI.notify (notification diet): the BUILD MODE title flash + the new tier word ARE the announcement.
   }
 
   const ESC_EXIT_WINDOW_MS = 2500;
@@ -5724,9 +5724,9 @@ const Build = (() => {
       if (details) { const toggle = details.querySelector('.refit-details-toggle'); toggle.click(); toggle.focus(); return; }
       if (drag || connectFrom || dupe) { selectTool('select'); return; }
       if (selectedPropId || movingPropId || groupIds.length || selectedRoomId) { selectTool('select'); return; }
-      if (typeof WorkflowPanel !== 'undefined' && WorkflowPanel.isOpen()) { WorkflowPanel.close(); return; }   // the docked panel closes (saving) before REFIT does
+      if (typeof WorkflowPanel !== 'undefined' && WorkflowPanel.isOpen()) { WorkflowPanel.close(); return; }   // the docked panel closes (saving) before BUILD MODE does
       if (tool !== 'select') { deselectTool(); return; }                 // then the armed tool → SELECT
-      /* LEAVING IS ITS OWN, EXPLICIT PRESS (2026-09-23 playtest). A bare select-mode ESC used to close REFIT
+      /* LEAVING IS ITS OWN, EXPLICIT PRESS (2026-09-23 playtest). A bare select-mode ESC used to close BUILD MODE
          outright, so the same key that had just deselected something threw you out of build mode on the next
          tap. Now the first bare ESC only ARMS the exit and says so; a second ESC within the window (or the
          SAVE & EXIT button) leaves. Any card, tool or selection still eats ESC first, exactly as before. */
@@ -6066,7 +6066,7 @@ const Build = (() => {
       valPlan = (typeof Pipeline !== 'undefined') ? Pipeline.compileRoutingPlan(cacheGeo) : null;   // cost-safety: recompute the routing plan on every floor edit
       // dead-vs-live belt render mirrors the live world. The plan is compiled in cacheGeo's LOCAL frame but
       // drawConveyor draws station.belts() in WORLD tiles — rebase the live keys by the geo origin or every
-      // REFIT belt would look cold (frame-mismatch, not truth).
+      // BUILD MODE belt would look cold (frame-mismatch, not truth).
       valLive = null;
       if (valPlan && Pipeline.liveTiles) {
         const lv = Pipeline.liveTiles(valPlan), o = (cacheGeo && cacheGeo.origin) || { tx: 0, ty: 0 };
@@ -6093,7 +6093,7 @@ const Build = (() => {
   }
 
   // A browser animation callback has no supervisor: if one draw dependency throws, the callback exits before
-  // the next requestAnimationFrame at the foot of this function and REFIT remains a black overlay forever.
+  // the next requestAnimationFrame at the foot of this function and BUILD MODE remains a black overlay forever.
   // Closing and reopening appeared to "fix" it only because open() started a brand-new loop after the transient
   // startup condition (asset decode/layout/cache warm-up) had passed. Keep the loop host-owned: one bad frame is
   // logged, its derived bake is discarded, and a bounded retry re-measures + re-fits from canonical station state.
@@ -6126,7 +6126,7 @@ const Build = (() => {
 
   /* ---------- ONE BAD LAYER MUST NOT BLANK THE CANVAS ----------
      The frame used to be a single try/catch: any draw dependency that threw skipped EVERY layer
-     after it and then had its bake discarded and retried forever, so REFIT read as a black overlay.
+     after it and then had its bake discarded and retried forever, so BUILD MODE read as a black overlay.
      A real case: a refused sidecar (the page's token dies when the sidecar restarts under it) left
      prop data undefined and PropSprites threw out of drawProps — the light layer, the ghost and
      every label after it never ran, on a loop.
@@ -6199,8 +6199,8 @@ const Build = (() => {
     const t = T();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
-    // The backdrop, shared with the live world (SpaceBG) so entering/exiting REFIT doesn't jump the sky —
-    // same selection, same camera contract (REFIT's zoom is the world's `scale`), so the parallax matches too.
+    // The backdrop, shared with the live world (SpaceBG) so entering/exiting BUILD MODE doesn't jump the sky —
+    // same selection, same camera contract (BUILD MODE's zoom is the world's `scale`), so the parallax matches too.
     // A LANDED station has no sky: the ground layer below covers the frame, so skip the starfield entirely.
     if (typeof Terrain !== 'undefined' && Terrain.active()) {
       ctx.fillStyle = Terrain.baseColor(); ctx.fillRect(0, 0, cv.width, cv.height);
@@ -6213,13 +6213,13 @@ const Build = (() => {
     if (sceneRenderer) sceneRenderer.begin({ geo: cacheGeo, cache, now, scale: zoom,
       panX: panX + ox * zoom, panY: panY + oy * zoom, width: cv.width, height: cv.height,
       reducedMotion: typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches });
-    /* the ground, in world space under the bake — REFIT blits the station at (ox,oy), so the
+    /* the ground, in world space under the bake — BUILD MODE blits the station at (ox,oy), so the
        clearing must be placed there too, not at the origin like the live world.
 
        THE CLEARING'S SIZE COMES FROM THE GEOMETRY, NOT FROM THE BAKE CANVAS. `cache.baseCv` only
        exists on the WHOLE-CANVAS bake; when StationBake.bakeIncremental is available the cache is
        CHUNKED and has no baseCv at all, so reading `.width` off it threw a TypeError out of the
-       draw function before a single pixel of ground or station was painted — REFIT went black.
+       draw function before a single pixel of ground or station was painted — BUILD MODE went black.
        The line below it already knew this (it picks drawBase over drawImage(cache.baseCv) for
        exactly that reason); this call did not. cacheGeo carries COLS/ROWS in tiles on both paths. */
     if (typeof Terrain !== 'undefined' && Terrain.active()) {
@@ -6581,7 +6581,7 @@ const Build = (() => {
     if (!list.length) return;
     PropSprites.setCtx(ctx); PropSprites.setNow(now);
     // MOUNT LIFT — resolved per frame through station.mountOf, the SAME seam world.js draws through.
-    // REFIT is where props are actually placed, so a table-top prop that only lifted in the live world
+    // BUILD MODE is where props are actually placed, so a table-top prop that only lifted in the live world
     // looked, in the one view you judge it from, like it had been dropped INSIDE the table.
     // Authored mounts sort after their whole host, including children on a deep table's far row.
     // …resolved ONCE PER EDIT, not per frame: mountOf is O(props) inside the model (a propById find
@@ -6734,7 +6734,7 @@ const Build = (() => {
      which kills the frame-drift bug that misplaced ghosts on off-origin floors.
      Red = blocking (loop / no default lane / dup agent / dry intake); amber = fixable advice. */
   /* ---------- THE ONE-VOICE LABEL ARBITER (2026-08-05 interaction reshape) ----------
-     Every floating-text layer on the REFIT canvas REGISTERS its labels here instead of painting
+     Every floating-text layer on the BUILD MODE canvas REGISTERS its labels here instead of painting
      directly; the arbiter draws once per frame, after every producer has spoken. The law it
      enforces (Andrew's "clusterfuck of text" verdict): AT MOST one label per anchor region, and a
      lower layer is muted entirely wherever a higher one is live nearby (collision = overlapping
@@ -6780,7 +6780,7 @@ const Build = (() => {
     return y;
   }
   // the role placard for an UNBOUND role-carrying dock: "RESEARCHER — DIGS SOURCES… — CLICK".
-  // One string builder shared by REFIT's validation callout and the live world's nag (world.js
+  // One string builder shared by BUILD MODE's validation callout and the live world's nag (world.js
   // mirrors it through the same WorldModel.bayRoleInfo source so the two never drift).
   function roleLabelFor(p) {
     if (!p || !p.role || p.agentId) return null;
@@ -7653,7 +7653,7 @@ const Build = (() => {
         : '<div class="pc-assign">UNBOUND — click to bind a server</div>';
     } else if (placed && placed.t === 'intake' && placed.label) {
       // a NAMED line's INBOX hover names the line (line naming) — the card is the ONE hover voice in
-      // REFIT (one-voice law), so the fact rides here; the canvas glance covers the card-less contexts.
+      // BUILD MODE (one-voice law), so the fact rides here; the canvas glance covers the card-less contexts.
       assign = '<div class="pc-assign ok">▸ LINE · ' + esc(placed.label) + '</div>';
     }
     // a briefed dock's hover shows its duty line (a glance answer to "what does this step DO?")
@@ -7697,7 +7697,7 @@ const Build = (() => {
     propCard.style.display = 'block';
     placeOverlay(propCard, cx == null ? lastClient.x : cx, cy == null ? lastClient.y : cy, 16, 14, true);   // prefer above-right of the cursor
   }
-  /* position a floating REFIT overlay (the prop card, the action tip) beside the pointer — kept on screen and clear of the docked
+  /* position a floating BUILD MODE overlay (the prop card, the action tip) beside the pointer — kept on screen and clear of the docked
      Workflow panel (2026-09-27 audit P6: the OUTBOX/LOOP cards and the joiner refusal ran off the right edge, and the insert-step
      error hid behind the panel). Reads are VISUAL px (clientX, getBoundingClientRect, innerWidth); style px live in the element's
      zoomed space, so the result is divided by the zoom actually applied above it — once (the uiZoom law, U.elZoom). A card that
@@ -7854,7 +7854,7 @@ const Build = (() => {
   // REQUISITION — place a prop programmatically through the SAME validated path as a hand placement
   // (findPlaceableTile → station.addProp), firing the same flash/chime/first-touch hooks, so the tutorial's
   // "requisition the rest" is a REAL placement (object=capability stays honest — never a flag). Only while
-  // REFIT is open (the kit-out's context); editable/config props are refused (they'd open an editor
+  // BUILD MODE is open (the kit-out's context); editable/config props are refused (they'd open an editor
   // mid-ceremony). Returns { ok, tile? , reason? }.
   function requisition(t) {
     if (!running || !station) return { ok: false, reason: 'not-in-build' };
@@ -7872,11 +7872,11 @@ const Build = (() => {
     return { ok: true, tile };
   }
 
-  // deep-link: open REFIT straight into a placed prop's editor. The live world's "NO AGENT — CLICK"
+  // deep-link: open BUILD MODE straight into a placed prop's editor. The live world's "NO AGENT — CLICK"
   // bay nag lands here, so the fix is one click away from the callout instead of a hunt through modes.
   function openAssign(propId) {
     if (!running) open();     // open() resolves `station` from opts.getStation() — MUST run before the guard
-    if (!station) return;     // (guard-first was a real shipped bug: the click-nag path no-opped on any session that had never opened REFIT)
+    if (!station) return;     // (guard-first was a real shipped bug: the click-nag path no-opped on any session that had never opened BUILD MODE)
     const p = station.propById(propId);
     if (!p) return;
     openPropEditor(propId, p.t, { clientX: (window.innerWidth / 2) | 0, clientY: 120 });   // synthetic anchor for the action tip
@@ -7933,7 +7933,7 @@ const Build = (() => {
   }
 
   /* WORK › AUTOMATE › WORKFLOWS (2026-09-27 audit F1): the conveyor builder had no door named for what people come to do. This one opens
-     REFIT on the Conveyors tab and, when the floor already has a line, docks that line's Workflow panel so its sentence and
+     BUILD MODE on the Conveyors tab and, when the floor already has a line, docks that line's Workflow panel so its sentence and
      steps are the first thing on screen; with no line yet the CONVEYOR LINES library is what shows. */
   function openWorkflows() {
     pendingGroup = 'workflow'; writeLastGroup('workflow');
@@ -7950,7 +7950,7 @@ const Build = (() => {
     if (first && typeof WorkflowPanel !== 'undefined') { try { openFlowCard(first.id); } catch (e) {} }
     else if (!first) { try { selectTool('line'); } catch (e) {} }
   }
-  /* EDIT WORKFLOW (2026-09-30): the WORKFLOWS window's door into the full editor — REFIT open on the floor with THIS line's own
+  /* EDIT WORKFLOW (2026-09-30): the WORKFLOWS window's door into the full editor — BUILD MODE open on the floor with THIS line's own
      Workflow panel on screen (the diagram, every step's instructions, what starts it, its budget, floor edits). */
   function editLine(propId) {
     pendingGroup = 'workflow'; writeLastGroup('workflow');
