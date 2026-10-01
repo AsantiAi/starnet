@@ -167,6 +167,7 @@ const Voice = (() => {
      speaker-toggle tooltip. No permanent latch — a 'no key'/error only cools the neural path off briefly. */
   const TTS_MODEL = 'google/gemini-3.1-flash-tts-preview';
   let neuralColdUntil = 0;        // after a neural error, skip the round-trip (stay silent) until this time (ms)
+  let neuralColdTerminal = false; // true while the cold-off is the long no-key/billing one (a new reply honors only that)
   // how long to cool off after a TRANSIENT neural error. Keep this SHORT: one blip shouldn't rob several
   // replies of the real voice — we retry neural on essentially the next reply.
   const NEURAL_COLD_MS = 4000;
@@ -226,7 +227,7 @@ const Voice = (() => {
     const cls = classifyFallback(reason);
     // The long cold-off is bought by IRRECOVERABILITY, not by the message class: a ladder whose last leg
     // was a timeout or a rate limit is worth retrying in seconds even when an earlier leg said 402.
-    if (!retryableFallback(reason)) neuralColdUntil = Date.now() + BILLING_COLD_MS;
+    if (!retryableFallback(reason)) { neuralColdUntil = Date.now() + BILLING_COLD_MS; neuralColdTerminal = true; }
     if (fbNotified === cls || (cls === 'error' && fbStreak < 3)) return;
     fbNotified = cls;
     // Truthful: there is no "backup voice" anymore — a failed chunk plays nothing and the reply stays
@@ -239,9 +240,9 @@ const Voice = (() => {
   // a chunk actually spoke → the neural path is PROVEN alive, so LIFT the cold-off too. Without this, a
   // single blip's 4s cold-off kept suppressing the rest of the reply (and the next reply's opening words)
   // even though the very next call would have succeeded.
-  function noteNeuralOk() { fbStreak = 0; replyFails = 0; neuralColdUntil = 0; if (fbNotified) { fbNotified = ''; fbMsg = ''; reflectToggle(); } }
+  function noteNeuralOk() { fbStreak = 0; replyFails = 0; neuralColdUntil = 0; neuralColdTerminal = false; if (fbNotified) { fbNotified = ''; fbMsg = ''; reflectToggle(); } }
   // ANY toggle of the speaker button clears all cold-offs and re-probes the neural path fresh (no latch).
-  function clearNeuralCold() { neuralColdUntil = 0; fbStreak = 0; if (fbNotified) { fbNotified = ''; fbMsg = ''; } }
+  function clearNeuralCold() { neuralColdUntil = 0; neuralColdTerminal = false; fbStreak = 0; if (fbNotified) { fbNotified = ''; fbMsg = ''; } }
   function apiKey() { return (typeof Harness !== 'undefined' && Harness.getKey) ? (Harness.getKey() || '') : ''; }
   // Providers whose credential can synthesize the neural voice, in default preference order. The sidecar
   // mirrors this list — Codex (ChatGPT OAuth) is NOT on it because that token has no audio endpoint to call.
@@ -747,8 +748,10 @@ const Voice = (() => {
     // agent stopped dead after its opening words ("it only says the first word", reported 2026-07-28). While a
     // reply is mid-flight we keep asking until THIS reply has failed MID_REPLY_GIVEUP times in a row; only then
     // does the cold-off apply to it. A reply that has not yet attempted anything (replyTried false — i.e. its
-    // OPENING chunk) still honors the cold-off in full, so a dead provider is not hammered once per sentence.
-    if (Date.now() < neuralColdUntil && (!replyTried || replyFails >= MID_REPLY_GIVEUP)) { job.result = Promise.resolve({ kind: 'fail', reason: 'cooldown' }); return; }
+    // OPENING chunk) honors only the LONG cold-off (no credential / empty wallet). A transient 4s cold-off
+    // left by the PREVIOUS reply must not pre-fail this one: that cut the next reply before it began
+    // (2026-10-01 "voice completely absent since 0.10.0"). One opening request per reply is not hammering.
+    if (Date.now() < neuralColdUntil && (replyTried ? replyFails >= MID_REPLY_GIVEUP : neuralColdTerminal)) { job.result = Promise.resolve({ kind: 'fail', reason: 'cooldown' }); return; }
     replyTried = true;
     const seq = job.seq;
     job.result = synthOnce(job)
@@ -766,7 +769,7 @@ const Voice = (() => {
         if (res.kind === 'skip') return res;   // intentional barge-in/teardown cancel — not a failure
         replyFails++;
         // cool the neural path off briefly (noteFallback lengthens this for 'no key'/'credits'); never latch.
-        neuralColdUntil = Date.now() + NEURAL_COLD_MS;
+        neuralColdUntil = Date.now() + NEURAL_COLD_MS; neuralColdTerminal = false;
         console.warn('[voice] neural TTS recovery exhausted:', res.reason);
         noteFallback(res.reason);
         return { kind: 'fail', reason: res.reason };
@@ -809,6 +812,18 @@ const Voice = (() => {
     showInterruption('Speech interrupted — ' + (stage === 'playback_error' ? 'audio playback failed' : 'voice synthesis failed') + '. Full reply remains in chat.');
     if (cb) cb();
   }
+  /* One sentence that survived no retry is SKIPPED, never the whole reply. Stopping the reply here (0.11.1 →
+     0.12.5) bumped the reply token, so every later sentence chat.js streamed was dropped: one provider blip
+     silenced the agent for the rest of the turn — and, via the cold-off, the next turn too (2026-10-01
+     customer report "voice completely absent since 0.10.0"). The reply text is in COMMS; the notice says
+     exactly what was lost, and the next sentence gets its own fresh attempt. */
+  function skipChunk(stage, job, error, advance) {
+    if (job.seq !== speakSeq) return;
+    recordSpeechEvent(stage, { chunk: playIdx, characters: job.text.length, skipped: true,
+      code: String(error && (error.name || error.code) || 'unavailable') });
+    showInterruption('A sentence couldn’t be spoken — ' + (stage === 'playback_error' ? 'audio playback failed' : 'voice synthesis failed') + '. Full reply remains in chat.');
+    advance();
+  }
   function pumpPlay() {
     if (playing) return;
     if (playIdx >= jobs.length) { if (replyClosed && synthIdx >= jobs.length) finishReply(); return; }
@@ -830,9 +845,13 @@ const Voice = (() => {
             if (job.seq !== speakSeq) return;
             recordSpeechEvent('playback_error', { chunk: playIdx, attempt: attempts,
               code: String(error && (error.name || error.code) || 'media_error') });
-            if (attempts < 2 && (!error || error.name !== 'NotAllowedError')) play();
+            const blocked = !!(error && error.name === 'NotAllowedError');
+            if (attempts < 2 && !blocked) play();
             else if (job.opts.mutter) advance();
-            else failReply('playback_error', job, error);
+            // Autoplay blocked = every later sentence would fail too: stop and say so. Anything else is
+            // this one clip — skip it and keep speaking (see skipChunk).
+            else if (blocked) failReply('playback_error', job, error);
+            else skipChunk('playback_error', job, error, advance);
           }, rate, cfg.deep, cfg.shell, () => {
             if (job.seq === speakSeq && !job.opts.mutter) coordinatorEvent('onTiming', { audioStartMs: Math.max(0, Date.now() - job.queuedAt) });
           });
@@ -840,7 +859,7 @@ const Voice = (() => {
         play();
       } else if (res.kind === 'fail') {
         if (job.opts.mutter) advance(); // optional aside must not cancel the requested reply
-        else failReply('synthesis_failure', job);
+        else skipChunk('synthesis_failure', job, null, advance);
       }
       else { advance(); }
     });

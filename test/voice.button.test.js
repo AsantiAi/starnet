@@ -593,11 +593,48 @@ async function opensWithin(t, ms) {
     t.Voice.speakChunk('The failed sentence.', 'agent', {replyToken:token});
     t.Voice.endReply();await tick(30);
     A.eq(requests.length,3,'continuity: synthesis exhaustion bounded to three attempts');
-    A.ok(/Speech interrupted/.test(t.nodes['voice-toggle'].title),'continuity: exhaustion is visible immediately');
+    A.ok(/couldn.t be spoken/.test(t.nodes['voice-toggle'].title),'continuity: exhaustion is visible immediately');
     t.Voice.speakChunk('Late text from the same failed reply.', 'agent', {replyToken:token});
-    A.eq(requests.length,3,'continuity: late producer cannot restart interrupted reply');
+    A.ok(requests.length>3,'continuity: a skipped sentence does not silence the rest of its reply');
     A.ok(t.Voice.speechDiagnostics().some(e=>e.reason==='synthesis_failure'),'continuity: synthesis cutoff is attributed');
     A.ok(!t.Voice.speechDiagnostics().some(e=>JSON.stringify(e).includes('The failed sentence')),'continuity: diagnostics omit reply text');
+  }
+
+  // --- ONE unspeakable sentence must not CUT the rest of the reply, nor the NEXT reply ----------
+  // 2026-10-01 customer report ("the voice has been completely absent since I upgraded from 0.10.0 …
+  // voice cutting"). Since 0.11.1 an exhausted chunk stopped the WHOLE reply (stopSpeaking bumps the
+  // reply token, so chat.js's later sentences were dropped), and the 4s cold-off it armed made the NEXT
+  // reply's opening sentence fail without even asking — that reply was cut before it began. 0.10.0
+  // skipped the bad sentence and kept talking. Contract: skip the sentence (honest notice), keep the
+  // reply, and let a fresh reply try again after a transient failure.
+  {
+    const requests=[], played=[];
+    class PlayedAudio extends AutoEndAudio { play() { played.push(this.src); return super.play(); } }
+    const t=boot({Audio:PlayedAudio,fetch:(url,o)=> {
+      if (!String(url).includes('/api/tts')) return Promise.resolve({ok:true,json:async()=>({})});
+      const text=JSON.parse(o.body).text; requests.push(text);
+      if (/Bad sentence/.test(text)) return Promise.resolve({ok:false,status:503,headers:{get:()=> 'application/json'},json:async()=>({fallback:true,reason:'edge: edge timeout'})});
+      return Promise.resolve({ok:true,headers:{get:()=> 'audio/mpeg'},blob:async()=>({size:128,text})});
+    }});
+    t.sandbox.URL.createObjectURL = blob => blob.text;
+    t.Voice.setSpeakReplies(true);const token=t.Voice.replyToken();
+    t.Voice.speakChunk('Bad sentence that cannot be voiced.', 'agent', {replyToken:token});
+    t.Voice.speakChunk('Second sentence still speaks.', 'agent', {replyToken:token});
+    await tick(30);
+    t.Voice.speakChunk('Third sentence arrives late.', 'agent', {replyToken:token});
+    t.Voice.endReply();
+    await until(()=>!t.Voice.isReplyPending(),1000);
+    A.eq(requests.filter(s=>/Bad sentence/.test(s)).length,3,'cut: the failed sentence still gets its bounded retries');
+    A.eq(played.join('|'),'Second sentence still speaks.|Third sentence arrives late.','cut: one unspeakable sentence is skipped and the REST of the reply is spoken');
+    A.ok(/couldn.t be spoken/i.test(t.nodes['voice-toggle'].title),'cut: the skipped sentence is reported honestly on the speaker');
+    // the very next reply (inside the old 4s cold-off) must ask the sidecar, not die before it begins
+    const before=requests.length;
+    const next=t.Voice.replyToken();
+    t.Voice.speakChunk('Next reply opens normally.', 'agent', {replyToken:next});
+    t.Voice.endReply();
+    await until(()=>!t.Voice.isReplyPending(),1000);
+    A.ok(requests.length>before,'cut: a transient failure never pre-fails the NEXT reply');
+    A.eq(played[played.length-1],'Next reply opens normally.','cut: the next reply is spoken');
   }
 
   // --- Local Live pins one voice AND one serving engine for the whole conversation ------------
@@ -723,14 +760,11 @@ async function opensWithin(t, ms) {
     A.eq(state.tts, 3, 'keyless + edge blip: two bounded retries retain the chunk');
     A.ok(!/needs an OpenRouter, Gemini, or OpenAI credential/.test(String(t.nodes['voice-toggle'].title || '')),
       'keyless + edge blip: the tooltip does NOT demand a credential for a network blip');
-    // the SHORT (4s) cold-off, not the 60s billing one → the next reply re-probes
+    // the SHORT (4s) transient cold-off never pre-fails a NEW reply: the very next reply asks again
+    // (2026-10-01: pre-failing it cut the next reply before it began — "voice completely absent").
     const afterFirst = state.tts;
     t.Voice.speak('second line while still cold', 'agent'); await tick(40);
-    A.eq(state.tts, afterFirst, 'keyless + edge blip: the cold-off is honored while it holds');
-    // Advance only this voice instance's clock past the short cool-off; a 60s billing cool-off still holds.
-    now += 4200;
-    t.Voice.speak('third line after the SHORT cold-off', 'agent'); await tick(40);
-    A.ok(state.tts > afterFirst, 'keyless + edge blip: the cool-off was the 4s transient one, not 60s of dead voice');
+    A.ok(state.tts > afterFirst, 'keyless + edge blip: a transient cool-off never silences the next reply before it asks');
   }
   // ...while a station that genuinely holds no credential AND no floor still gets the honest terminal copy.
   {
