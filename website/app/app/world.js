@@ -6758,6 +6758,11 @@ const World = (() => {
      when there is no honest picture to give (no bake yet, the awakening is still playing). */
   let stillPass = null;
   function renderStill(maxPx, opts) {
+    // A window that has not drawn a frame yet (opened behind other tabs: the browser runs no frames there) has not
+    // built its station either. Build it here, exactly as the first frame would, so the phone still gets a picture.
+    if (!stillPass && station && geo !== undefined) {
+      try { if (geoDirty) rederive(); if (bakeDirty || !cache) rebake(); } catch (e) { try { console.error('[world] still could not build the station:', e); } catch (_) {} }
+    }
     if (stillPass || !cache || !cv || !ctx || !geo || camAnim || kindleArmed || arrivalScene || wakeDark > 0.002) return null;
     const W = cache.baseCv.width, H = cache.baseCv.height;
     if (!(W > 1 && H > 1)) return null;

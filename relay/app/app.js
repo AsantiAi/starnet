@@ -194,7 +194,7 @@
     if ((!S.target || !agentOf(S.target)) && agents().length) S.target = agents()[0].agentId;
     render(true);
     refreshView(); ensurePortraits(); refreshPush().then(() => render(true));
-    await refreshThreads();
+    await Promise.all([refreshThreads(), refreshActivity()]);
     render(true);
   }
 
@@ -209,7 +209,7 @@
       render(true); return;
     }
     if (e.type === 'approval.closed') { S.approvals = S.approvals.filter(a => a.promptId !== e.promptId); render(true); return; }
-    if (e.type === 'run.started') { S.live.set(e.runId, { streamId: e.streamId, agentId: e.agentId, text: '', steps: [], ended: null }); statusSoonish(); if (S.tab === 'activity') activitySoonish(); render(true); return; }
+    if (e.type === 'run.started') { S.live.set(e.runId, { streamId: e.streamId, agentId: e.agentId, text: '', steps: [], ended: null }); statusSoonish(); if (S.tab === 'sessions') activitySoonish(); render(true); return; }
     const L = e.runId && S.live.get(e.runId);
     const showing = L && S.thread && S.thread.streamId === L.streamId;
     if (e.type === 'run.text' && L) { L.text = e.text; if (showing) renderLive(); return; }
@@ -221,17 +221,17 @@
       if (e.error) toast(agentName(e.agentId) + ': ' + e.error, true);
       if (showing) openThread(S.thread.streamId, S.thread.agentId, true);
       refreshThreads().then(() => render(true));
-      if (S.tab === 'activity') activitySoonish();
+      if (S.tab === 'sessions') activitySoonish();
       return;
     }
     if (e.type === 'view.crew') { if (S.view) applyCrew(e.bodies); return; }
     if (e.type === 'station' && e.name === 'agent.tool_call' && e.payload && e.payload.runId && e.payload.name) {
       S.stepOf.set(String(e.payload.runId), String(e.payload.name));
       if (S.stepOf.size > 200) S.stepOf.delete(S.stepOf.keys().next().value);
-      if (S.tab === 'activity') { const n = document.querySelector('[data-step="' + CSS.escape(String(e.payload.runId)) + '"]'); if (n) n.textContent = stepLine(e.payload.name); }
+      if (S.tab === 'sessions') { const n = document.querySelector('[data-step="' + CSS.escape(String(e.payload.runId)) + '"]'); if (n) n.textContent = stepLine(e.payload.name); }
       return;
     }
-    if (e.type === 'station' && (e.name === 'agent.run.start' || e.name === 'agent.run.end')) { statusSoonish(); if (S.tab === 'activity') activitySoonish(); }
+    if (e.type === 'station' && (e.name === 'agent.run.start' || e.name === 'agent.run.end')) { statusSoonish(); if (S.tab === 'sessions') activitySoonish(); }
   }
 
   /* ---------- the station, live ----------
@@ -375,7 +375,8 @@
     const v = S.view;
     hero.frame.hidden = !v; hero.chip.hidden = !v; hero.expand.hidden = !v; hero.empty.hidden = !!v;
     if (!v) {
-      if (S.viewNone) { hero.eb.textContent = 'NO PICTURE YET'; hero.es.textContent = 'Open StarNet on your computer and your station appears here.'; }
+      if (S.viewNone && S.deskOpen) { hero.eb.textContent = 'ALMOST THERE'; hero.es.textContent = 'StarNet is open on your computer but has not drawn your station yet. Bring its window to the front for a moment.'; }
+      else if (S.viewNone) { hero.eb.textContent = 'NO PICTURE YET'; hero.es.textContent = 'Open StarNet on your computer and your station appears here.'; }
       else if (S.linkState === 'open') { hero.eb.textContent = 'LOADING YOUR STATION'; hero.es.textContent = ''; }
       else { hero.eb.textContent = 'STATION OFFLINE'; hero.es.textContent = 'The picture appears when your station is reachable.'; }
       return;
@@ -394,7 +395,7 @@
       const r = await call('view', { have: S.view ? S.view.at : 0 });
       if (!r.ok) return;
       let d = r.data;
-      if (d.none) { S.viewNone = true; return; }
+      if (d.none) { S.viewNone = true; S.deskOpen = !!d.desk; return; }
       S.viewNone = false;
       if (d.same && S.view) { S.view.age0 = Math.max(0, d.now - d.at); S.view.seenAt = Date.now(); return; }
       const first = d, parts = [];
@@ -610,8 +611,8 @@
   function setTab(t) {
     S.tab = t; S.thread = null; S.file = null; S.page = null;
     if (t === 'sessions') refreshThreads().then(() => render(true));
-    if (t === 'activity') refreshActivity().then(() => render(true));
-    if (t === 'station') { refreshView(); refreshThreads().then(() => render(true)); }
+    if (t === 'sessions') refreshActivity().then(() => render(true));
+    if (t === 'station') { refreshView(); Promise.all([refreshThreads(), refreshActivity()]).then(() => render(true)); }
     render();
   }
 
@@ -635,11 +636,11 @@
     const bw = $('bar-well'); bw.hidden = !S.thread; if (S.thread) bw.replaceChildren(well(S.thread.agentId, 'sm'));
     const firstSaid = S.thread && (S.thread.turns || []).find(t => t.role === 'user');
     $('bar-title').textContent = S.thread ? ((openRow && (plain(openRow.title) || plain(openRow.preview))) || (firstSaid && plain(firstSaid.content).slice(0, 80)) || agentName(S.thread.agentId)) : S.file ? (S.file.name || 'FILE') : S.page === 'settings' ? 'SETTINGS'
-      : S.tab === 'sessions' ? 'SESSIONS' : S.tab === 'activity' ? 'ACTIVITY' : ((S.status && S.status.station) || 'STATION');
+      : S.tab === 'sessions' ? 'SESSIONS' :  ((S.status && S.status.station) || 'STATION');
     const sub = $('bar-sub'); sub.hidden = !S.thread;
     if (S.thread) sub.textContent = agentName(S.thread.agentId) + (streamLive(S.thread.streamId) ? ' · working' : '');
     const target = S.thread ? S.thread.agentId : S.target;
-    $('compose').hidden = !(S.thread || (!pushed && S.tab !== 'activity')) || S.linkState === 'removed';
+    $('compose').hidden = !(S.thread || !pushed) || S.linkState === 'removed';
     const to = $('compose-to'); to.replaceChildren(document.createTextNode('TO '), el('b', null, target ? agentName(target) : '—'));
     if (!S.thread && agents().length > 1) to.appendChild(icon('caret'));
     to.disabled = !!S.thread || agents().length < 2;
@@ -653,7 +654,7 @@
     else if (S.page === 'settings') renderSettings(v);
     else if (S.tab === 'station') renderStation(v);
     else if (S.tab === 'sessions') renderSessions(v);
-    else renderActivity(v);
+    else renderSessions(v);
     if (key === prevKey) { v.scrollTop = S.scroll[key] || 0; const c = v.querySelector('.crew'); if (c) c.scrollLeft = crewX; }
     else v.scrollTop = key === 'thread' ? v.scrollHeight : (S.scroll[key] || 0);
   }
@@ -735,19 +736,35 @@
     v.appendChild(el('div', 'note-line', 'Station offline. Showing what it last reported, ' + ago(Date.now() - S.lastOkAt) + ' ago.'));
   }
 
-  function sessionRow(t) {
+  // the newest finished run of each conversation, from the station's run history
+  function lastRunByStream() {
+    const m = new Map();
+    for (const r of (S.activity && S.activity.done) || []) if (r.streamId && !m.has(r.streamId)) m.set(r.streamId, r);
+    return m;
+  }
+  function sessionRow(t, lastRun) {
+    const box = el('div', 'act');
     const row = el('button', 'row'); row.type = 'button';
     row.appendChild(well(t.agentId, 'sm'));
     const tt = el('span', 't');
     tt.appendChild(el('b', null, plain(t.title) || plain(t.preview) || agentName(t.agentId)));
     // the last thing you said, unless it is just the title again (a session titled with its first message)
     const pv = plain(t.preview), same = !pv || !t.title || plain(t.title).slice(0, 40) === pv.slice(0, 40);
-    tt.appendChild(el('span', null, agentName(t.agentId) + (same ? '' : ' · ' + pv)));
+    const live = (streamLive(t.streamId) || ((S.activity && S.activity.live) || []).some(r => r.streamId === t.streamId)) && S.linkState === 'open';
+    const lr = live ? null : lastRun;
+    // under the title: how the latest piece of work went (its result line, or why it stopped), else what you said
+    const line = lr ? (lr.state === 'done' ? plain(lr.result) : lr.state === 'stopped' ? 'Stopped' : 'Did not finish' + (lr.error ? ' · ' + lr.error : '')) : '';
+    tt.appendChild(el('span', lr ? 'why ' + lr.state : null, agentName(t.agentId) + (line ? ' · ' + line : same ? '' : ' · ' + pv)));
     row.appendChild(tt);
-    const live = streamLive(t.streamId) && S.linkState === 'open';
     row.appendChild(el('span', 'd' + (live ? ' work' : ''), live ? 'WORKING' : t.lastAt ? ago(Date.now() - t.lastAt) : ''));
     row.onclick = () => openThread(t.streamId, t.agentId);
-    return row;
+    box.appendChild(row);
+    if (lr && lr.files && lr.files.length) {
+      const fl = el('div', 'act-files');
+      for (const p of lr.files.slice(0, 4)) { const c = el('button', 'file-chip', String(p).split('/').pop()); c.type = 'button'; c.onclick = () => openFile(lr.agentId || t.agentId, p); fl.appendChild(c); }
+      box.appendChild(fl);
+    }
+    return box;
   }
 
   function renderStation(v) {
@@ -783,12 +800,24 @@
     v.appendChild(cs);
     const ss = section('Sessions', false, S.threads.length > 5 ? { text: 'ALL ' + S.threads.length + ' ›', go: () => setTab('sessions') } : null);
     if (!S.threads.length) ss.appendChild(el('div', 'empty', S.linkState === 'open' ? 'No sessions yet. Write a task below to start one.' : 'Waiting for the station…'));
-    else { const l = el('div', 'list'); for (const t of S.threads.slice(0, 5)) l.appendChild(sessionRow(t)); ss.appendChild(l); }
+    else { const l = el('div', 'list'), lr = lastRunByStream(); for (const t of S.threads.slice(0, 5)) l.appendChild(sessionRow(t, lr.get(t.streamId))); ss.appendChild(l); }
     v.appendChild(ss);
   }
 
   function renderSessions(v) {
     staleNote(v);
+    if (S.approvals.length) {
+      const s = section('Needs you · ' + S.approvals.length, true);
+      for (const a of S.approvals) s.appendChild(askCard(a));
+      v.appendChild(s);
+    }
+    const running = (S.activity && S.activity.live) || [];
+    if (running.length) {
+      const s = section('Working now · ' + running.length), l = el('div', 'list');
+      for (const w of running) l.appendChild(activityRow(w, true));
+      s.appendChild(l); v.appendChild(s);
+    }
+    const lr = lastRunByStream();
     const q = el('input', 'search'); q.type = 'search'; q.placeholder = 'Search sessions'; q.value = S.query; q.autocapitalize = 'off'; q.setAttribute('aria-label', 'Search sessions');
     const l = el('div', 'list');
     const fill = () => {
@@ -796,12 +825,13 @@
       const rows = needle ? S.threads.filter(t => [t.title, t.preview, agentName(t.agentId)].join(' ').toLowerCase().indexOf(needle) >= 0) : S.threads;
       l.replaceChildren();
       if (!rows.length) l.appendChild(el('div', 'empty', needle ? 'Nothing matches that.' : S.linkState === 'open' ? 'No sessions yet. Write a task below to start one.' : 'Waiting for the station…'));
-      for (const t of rows) l.appendChild(sessionRow(t));
+      for (const t of rows) l.appendChild(sessionRow(t, lr.get(t.streamId)));
     };
     q.addEventListener('input', () => { S.query = q.value; fill(); });
-    if (S.threads.length > 6 || S.query) v.appendChild(q);
+    const all = section('All sessions' + (S.threads.length ? ' · ' + S.threads.length : ''));
+    if (S.threads.length > 6 || S.query) all.appendChild(q);
     fill();
-    v.appendChild(l);
+    all.appendChild(l); v.appendChild(all);
   }
 
   async function openThread(streamId, agentId, keepScroll) {
@@ -890,25 +920,6 @@
       box.appendChild(fl);
     }
     return box;
-  }
-  function renderActivity(v) {
-    staleNote(v);
-    if (S.approvals.length) {
-      const s = section('Needs you · ' + S.approvals.length, true);
-      for (const a of S.approvals) s.appendChild(askCard(a));
-      v.appendChild(s);
-    }
-    const act = S.activity;
-    if (!act) { v.appendChild(el('div', 'empty', S.linkState === 'open' ? 'Loading…' : 'Waiting for the station…')); return; }
-    if (act.live.length) {
-      const s = section('Working now · ' + act.live.length), l = el('div', 'list');
-      for (const w of act.live) l.appendChild(activityRow(w, true));
-      s.appendChild(l); v.appendChild(s);
-    }
-    const s = section('Earlier'), l = el('div', 'list');
-    if (!act.done.length) l.appendChild(el('div', 'empty', 'Nothing finished yet. Work your crew does shows up here.'));
-    for (const w of act.done) l.appendChild(activityRow(w, false));
-    s.appendChild(l); v.appendChild(s);
   }
 
   async function openFile(agentId, filePath) {
@@ -1062,7 +1073,7 @@
     if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open') openFromPush(e.data.url); });
     setInterval(ping, 20000);
     setInterval(() => { if (document.visibilityState !== 'visible') return; for (const n of document.querySelectorAll('[data-since]')) n.textContent = clock(Date.now() - Number(n.dataset.since)); }, 1000);
-    setInterval(() => { if (looking()) refreshStatus().then(() => { if (S.tab === 'activity' && !S.thread && !S.file && !S.page) return refreshActivity(); }).then(() => { render(true); ensurePortraits(); }); paintLamp(); }, 10000);
+    setInterval(() => { if (looking()) refreshStatus().then(() => { if (S.tab === 'sessions' && !S.thread && !S.file && !S.page) return refreshActivity(); }).then(() => { render(true); ensurePortraits(); }); paintLamp(); }, 10000);
     // the station picture: asked for only while it is on screen, which is also what keeps the desk drawing it
     setInterval(() => {
       const onScreen = !$('viewer').hidden || (S.tab === 'station' && !S.thread && !S.file && !S.page);

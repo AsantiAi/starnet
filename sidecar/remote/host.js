@@ -205,7 +205,9 @@ function makeRemoteHost(d) {
     if (!d.view) return { none: true, now: now() };
     d.view.want();
     const m = d.view.meta();
-    if (!m) return { none: true, now: now() };
+    let desk = false;
+    try { desk = !!(d.deskOpen && d.deskOpen()); } catch (e) { note('remote.host.deskOpen', e); }
+    if (!m) return { none: true, desk, now: now() };
     // `now` is this station's clock at the moment of the answer: the phone works out the picture's age from
     // (now - at), so a phone whose own clock is off still shows the right age
     if (!o.offset && o.have && o.have === m.at) return { at: m.at, now: now(), same: true };

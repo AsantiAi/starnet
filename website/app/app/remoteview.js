@@ -60,6 +60,9 @@ const RemoteView = (() => {
   async function draw() {
     if (!hasWorld()) return false;
     let still = null;
+    // A page that has not drawn a frame yet (a background tab) does not know how its crew look yet: one small
+    // throwaway still WITH the crew draws each of them once, so the crew stream has something true to send.
+    try { if (typeof World.crewFrames === 'function' && !(World.crewFrames() || []).length) World.renderStill(400); } catch (_) {}
     // the room WITHOUT the crew: the phone draws them itself from the crew stream, so they move smoothly
     try { still = World.renderStill(MAX_PX, { noBodies: true }); } catch (_) { still = null; }
     if (!still || !still.canvas) return false;

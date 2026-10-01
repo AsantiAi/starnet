@@ -9998,6 +9998,7 @@ const remoteHost = require('./remote/host.js').makeRemoteHost({
   },
   runOnce: (o) => runOnce(o),
   view: remoteView,
+  deskOpen: () => sse.size() > 1,   // a StarNet page is connected (the phones' own tee is always one listener)
   // how each agent looks (the skin the Commander picked), from the station save the page mirrors here
   crewLooks: () => {
     const save = saveStore.load('agent') || {}, out = {};
