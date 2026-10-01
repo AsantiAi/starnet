@@ -106,7 +106,7 @@ const throwsMsg = async (fn) => { try { await fn(); return ''; } catch (e) { ret
     A.eq(s.armed, false, 'and says honestly whether routines are on');
     const job = jobs.get('job1');
     A.ok(job.name === 'App: AI News Brief' && job.meta.appId === a.id && /app\.publish/.test(job.prompt) && /research today's AI news/.test(job.prompt), 'the routine runs the task and ends by publishing to this app');
-    A.ok(/FIRST call app\.read/.test(job.prompt) && /real date/.test(job.prompt), 'the routine starts by reading the real date (a model assumes its training era)');
+    A.ok(/real date is in your \[RUNTIME\] block/.test(job.prompt) && !/FIRST call app\.read/.test(job.prompt), 'the routine points at the real date in its [RUNTIME] block (no tool call just to learn the date)');
     A.ok(/app\.write the whole new file/.test(job.prompt) && /app\.check/.test(job.prompt), 'an automated update may change the app ITSELF (rewrite + check the page), not only its data');
     A.eq((await apps.describe(a.id)).schedule.task, 'research today\'s AI news', 'describe gives the task back (the AUTO-UPDATE box shows the Commander\'s own words)');
     let desc = await apps.describe(a.id);
@@ -134,6 +134,23 @@ const throwsMsg = async (fn) => { try { await fn(); return ''; } catch (e) { ret
     A.ok(desc.schedule && desc.schedule.missing === true, 'a routine deleted elsewhere reads as missing, never as a live schedule');
     const off = await apps.schedule(a.id, { every: 'off' });
     A.ok(off.off && (await apps.describe(a.id)).schedule === null, '"off" clears the schedule');
+    A.ok((await apps.schedule(a.id, { every: 'off' })).unchanged === true, '"off" when already off changes nothing (no write, no false "turned off")');
+    // EDIT IN PLACE: with the station's cron.update the app's own routine is changed, never replaced (history, pause
+    // and grants stay; a running update is not cancelled) — and any orphan routine of this app is retired
+    told.length = 0;
+    cron.update = async (jid, p) => { const j = jobs.get(jid); if (!j) return { ok: false, error: 'gone' }; Object.assign(j, { schedule: p.schedule, prompt: p.prompt, name: p.name }); return { ok: true, job: j }; };
+    cron.ownedBy = (appId) => [...jobs.values()].filter((j) => j.meta && j.meta.appId === appId).map((j) => j.id);
+    const s1 = await apps.schedule(a.id, { every: 'every 1h', task: 'one' });
+    jobs.set('orphan', { id: 'orphan', name: 'App: AI News Brief', meta: { appId: a.id } });
+    const s2 = await apps.schedule(a.id, { every: 'every 6h', task: 'two' });
+    A.ok(s2.jobId === s1.jobId && jobs.get(s1.jobId).schedule === 'every 6h' && /two/.test(jobs.get(s1.jobId).prompt), 'a second SAVE edits the same routine in place');
+    A.ok(!jobs.has('orphan'), 'an orphan routine of the same app (from a race) is retired');
+    A.ok(told.every((t) => t[0] === 'data'), 'a schedule change refreshes the bar only — it never reloads the open app window');
+    // racing writes are serialized: both land, one routine remains
+    await Promise.all([apps.schedule(a.id, { every: 'every 2h', task: 'race a' }), apps.schedule(a.id, { every: 'every 3h', task: 'race b' })]);
+    A.eq(cron.ownedBy(a.id).length, 1, 'two schedule changes at once leave exactly one routine');
+    await apps.schedule(a.id, { every: 'off' });
+    delete cron.update; delete cron.ownedBy;
 
     // ---- rename / list / remove ----
     await apps.rename(b.id, 'Market Pulse');
