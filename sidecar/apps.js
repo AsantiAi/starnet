@@ -204,7 +204,21 @@ function makeApps(deps) {
   }
 
   // ---- schedule (an ordinary routine; the app remembers which) --------------------------------------------------
-  async function schedule(id, spec) {
+  // ONE schedule change at a time per app: the crew's app.schedule and the Commander's SAVE racing would each
+  // create a routine and retire the same old one — leaving an orphan firing forever
+  const scheduleLocks = new Map();
+  function schedule(id, spec) {
+    const prev = scheduleLocks.get(id) || Promise.resolve();
+    const run = prev.then(() => scheduleNow(id, spec), () => scheduleNow(id, spec));
+    scheduleLocks.set(id, run.then(() => null, () => null));   // the queue only orders; the caller sees the error
+    return run;
+  }
+  // every routine this app owns except `keep` (an orphan from any earlier race) is retired
+  async function retireOthers(id, keep) {
+    if (!cron || typeof cron.ownedBy !== 'function') return;
+    for (const j of cron.ownedBy(id)) if (j !== keep) { try { await cron.remove(j); } catch (e) { note('apps.retire-orphan', e); } }
+  }
+  async function scheduleNow(id, spec) {
     const { meta } = await need(id);
     if (!cron) throw new Error('routines are not available on this station');
     const every = plain(spec && spec.every, 80);
@@ -212,28 +226,40 @@ function makeApps(deps) {
     const old = (meta.schedule && meta.schedule.jobId && ownJob(id, meta.schedule.jobId)) ? meta.schedule.jobId : null;
     const retire = async () => { if (old) { try { await cron.remove(old); } catch (e) { note('apps.replace-routine', e); } } };
     if (!every || /^(?:off|none|never|stop)$/i.test(every)) {
+      if (!meta.schedule && !old) return { off: true, unchanged: true };   // already off: nothing to write or say
       await retire();
+      await retireOthers(id, null);
       meta.schedule = null;
       await writeMeta(id, meta);
-      notify.reload(id, (await record(id) || {}).digest);
+      notify.data(id);
       return { off: true };
     }
     if (!task) throw new Error('say what each refresh should do (`task`), e.g. "gather what the crew finished this week and publish the recap"');
     const prompt = 'Refresh the StarNet app "' + meta.name + '" (app id: ' + id + ').\n\n' +
-      'FIRST call app.read { app: "' + id + '" } (find it with tool.search "app read"): it states TODAY\'s real date — your own sense of the date is out of date. The task is about today.\n\n' +
+      'Today\'s real date is in your [RUNTIME] block — your own sense of the date is out of date; the task is about today.\n\n' +
       'TASK (the Commander\'s own words for every update): ' + task + '\n\n' +
       'Do what the task says. New or current INFORMATION goes in with app.publish (find it with tool.search "app publish"): app "' + id + '", ' +
       'using the SAME key and data shape the app\'s page reads (check with app.read { app: "' + id + '" }). ' +
       'If the task asks the app ITSELF to change — its look, layout, what it shows or how it works — rewrite the page: app.read { app: "' + id + '", path: "index.html" }, then app.write the whole new file, then app.check it; keep everything that already works. ' +
       'An update that neither publishes nor writes did nothing — the Commander sees only what you publish or write.';
-    const out = await cron.create({ name: 'App: ' + meta.name, schedule: every, prompt, agentId: 'agent', meta: { appId: id } });
-    if (!out.ok) throw new Error(out.error || 'the routine could not be created');
-    // the routine must be THIS app's own new one — never an existing routine handed back as a "duplicate"
-    if (out.job.id === old || !out.job.meta || out.job.meta.appId !== id) throw new Error('the routine could not be created (the station answered with another routine)');
-    await retire();
+    const name = 'App: ' + meta.name;
+    let out;
+    if (old && cron.get(old) && typeof cron.update === 'function') {
+      // the app already has its routine: EDIT it in place (its run history, pause and grants stay; a running
+      // update is not cancelled)
+      out = await cron.update(old, { schedule: every, prompt, name });
+      if (!out.ok) throw new Error(out.error || 'the routine could not be changed');
+    } else {
+      out = await cron.create({ name, schedule: every, prompt, agentId: 'agent', meta: { appId: id } });
+      if (!out.ok) throw new Error(out.error || 'the routine could not be created');
+      // the routine must be THIS app's own new one — never an existing routine handed back as a "duplicate"
+      if (out.job.id === old || !out.job.meta || out.job.meta.appId !== id) throw new Error('the routine could not be created (the station answered with another routine)');
+      await retire();
+    }
+    await retireOthers(id, out.job.id);
     meta.schedule = { jobId: out.job.id, every, task };
     await writeMeta(id, meta);
-    notify.reload(id, (await record(id) || {}).digest);   // app.json is part of the page's version: move the open window onto it
+    notify.data(id);   // the bar's status follows; the page itself is unchanged (app.json is not part of its version)
     return { jobId: out.job.id, display: out.job.scheduleDisplay || every, armed: cron.armed() };
   }
 

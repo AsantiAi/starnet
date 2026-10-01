@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "386e1e02bdf2aabf8ca6e2a24c172457aa1e13f0",
+    "sourceCommit": "91abb0ab0e966498c1baa57eb219fd695a140dfa",
     "pathSetSha256": "c6aba28c9ab0146eef8aebbc12d196bf006714b580b24b33d1fc748bcaabc126",
     "files": [
       {
@@ -183,8 +183,8 @@
       },
       {
         "path": "frontend/app/apps.js",
-        "bytes": 32547,
-        "sha256": "c010a25ba9075911b30b377db5ad76f905cff1d726ea2a2c009f64d2fb8add31"
+        "bytes": 33546,
+        "sha256": "c1d84073b3be5a22a8c069415a9bcc6d3452bd900b7dc57d4e2b75a9e0317ada"
       },
       {
         "path": "frontend/app/armconfirm.js",
@@ -323,8 +323,8 @@
       },
       {
         "path": "frontend/app/build.js",
-        "bytes": 516918,
-        "sha256": "0ccf6f43777a695ae3805bf1f78a8f03cd0f2c682d2f7b6ec631747c7f7f105c"
+        "bytes": 511680,
+        "sha256": "5a3268e3844459f4c11747ca585727ac69450cbc4a6d72b607445d36f64ef83d"
       },
       {
         "path": "frontend/app/channels.js",
@@ -743,8 +743,8 @@
       },
       {
         "path": "frontend/app/pluginhost.js",
-        "bytes": 28909,
-        "sha256": "d61301019fd2ee8fc8cd7a5ccb82f620a1c24cf4b7550604df188e48bac99d99"
+        "bytes": 29102,
+        "sha256": "d095c169bad3b2a32756c5d066b392de49d630ae3690a9aad7f73e93f02ff94b"
       },
       {
         "path": "frontend/app/pride.js",
@@ -1233,8 +1233,8 @@
       },
       {
         "path": "frontend/app/userprops.js",
-        "bytes": 13651,
-        "sha256": "b41c5b5ab8424a4f04853907c44d279930be005a603445b7dc666f9743eb0a36"
+        "bytes": 12819,
+        "sha256": "ddc2b3b540d25533b97244843a77196f9fdcfd41bd7894fb2fb9d0bbddd3d132"
       },
       {
         "path": "frontend/app/verdictfollowup.js",
@@ -1398,8 +1398,8 @@
       },
       {
         "path": "frontend/app/worldmodel.js",
-        "bytes": 231402,
-        "sha256": "18a520984ba2767a41296dc07ae83532588c6b595af0a1a487230813630e3a45"
+        "bytes": 231135,
+        "sha256": "06afd07d6e54c63c0f6d5216f80bf7ffcfce8907ef654afff06b1b9bac6cce9d"
       },
       {
         "path": "frontend/app/worldrenderer.js",
@@ -1554,7 +1554,7 @@
       {
         "path": "frontend/css/plugins.css",
         "bytes": 11293,
-        "sha256": "387d760fe9a6c00988d662f1e36dbbbdc79e2aa27655e2951f96975d70f51be2"
+        "sha256": "f73f5824fb65f2c5ed4d03e108717c3fddc91ef2e0d7c524bcad26e3f7417a2e"
       },
       {
         "path": "frontend/css/project-home.css",
