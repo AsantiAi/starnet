@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "c3f7f5051ac271058632b1b908a4443416453fd0",
+    "sourceCommit": "76eba464eeaf16aa46cc9bde6a6a2f6b35f503b1",
     "pathSetSha256": "5e692c5f0c56bc6565c363fb4eb622af3093a911f55496ecdf16c95cad03c8af",
     "files": [
       {
@@ -323,8 +323,8 @@
       },
       {
         "path": "frontend/app/browserstream.js",
-        "bytes": 9167,
-        "sha256": "7c384863b62ed3cc50170cbc489ae78a44660edeaf07c4afce4277b8e11759ac"
+        "bytes": 9273,
+        "sha256": "24a07eb424665c6d8a0961ebac79c8600e4601fd1ab3b1069679af9aaf5435dc"
       },
       {
         "path": "frontend/app/build.js",
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 691620,
-        "sha256": "30a0680fa6b0f1a964ee66315416d1ba6940e37b54a58833e544cce809bdfb20"
+        "bytes": 690695,
+        "sha256": "22d8ac381ed018828c896a9d2dac682fd1538a5f68d72a5d8e75b869312d356e"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -1128,8 +1128,8 @@
       },
       {
         "path": "frontend/app/stationcommands.js",
-        "bytes": 61832,
-        "sha256": "993b72b41b9b3f22d7074f8102e4e40b5346ed878d7ec20b7299e35f7503c1ed"
+        "bytes": 61703,
+        "sha256": "527a92e5906747ad0cf5c2cf4cc42e087b9c448d8feddb71e73ea153fbeb47a0"
       },
       {
         "path": "frontend/app/stationquests.js",
@@ -1153,8 +1153,8 @@
       },
       {
         "path": "frontend/app/stepin.js",
-        "bytes": 24302,
-        "sha256": "dabdeba30bfd3bb2c252c2ffd569e734419dd46cb5be7543b4c5d2e8c476337e"
+        "bytes": 24408,
+        "sha256": "75edbb89a62c7c76101730227506b49d77ba6f450fc8a1496c5d288877b3d1e5"
       },
       {
         "path": "frontend/app/study.js",
@@ -1268,8 +1268,8 @@
       },
       {
         "path": "frontend/app/voice-live.js",
-        "bytes": 95485,
-        "sha256": "c7165575df3e3c9a850f389c324554702e745ebc252244f258bc9f2ee679d639"
+        "bytes": 95947,
+        "sha256": "505b33e33ebf5c8afef12fe73ef686628a40ac96abc2cecee588e991082829aa"
       },
       {
         "path": "frontend/app/voice-stream.js",
@@ -1278,8 +1278,8 @@
       },
       {
         "path": "frontend/app/voice.js",
-        "bytes": 120418,
-        "sha256": "9cd86c1674c8718ad785d211c5f4cd566ca8e143717f278de8c15d6f82a17e99"
+        "bytes": 122530,
+        "sha256": "d5388d0412e06ef377fb3462fb62aab35a8096e07ad61c880083e93efca73b79"
       },
       {
         "path": "frontend/app/waitanchor.js",
@@ -1303,8 +1303,8 @@
       },
       {
         "path": "frontend/app/windows/automation.js",
-        "bytes": 8007,
-        "sha256": "cc1b4cfdb0b4d7bcc70f9bd1e1802a51c5fa9b3aac12890fef90ca0b12462ef4"
+        "bytes": 7222,
+        "sha256": "9c69dab9fc1d40df7533aba0553e5c0d29dc426e216ff43dc76cb6fbb68da51d"
       },
       {
         "path": "frontend/app/windows/connectors.js",
@@ -1338,8 +1338,8 @@
       },
       {
         "path": "frontend/app/windows/routines.js",
-        "bytes": 65185,
-        "sha256": "1858bf2584cf41d1e89a23903d2581ebee058046345a76a5a809f0e6586f424c"
+        "bytes": 62109,
+        "sha256": "aa902d9e42761c8136287b0ff59008b05c30d7258280cf69d7f8924a4091b1cb"
       },
       {
         "path": "frontend/app/windows/trophies.js",
@@ -1363,8 +1363,8 @@
       },
       {
         "path": "frontend/app/workflowtakeoverstore.js",
-        "bytes": 3906,
-        "sha256": "b8c7533eb37ed81df567427c8f7ba7a0c72dcc1a8dcc6fd60f2f0f14ca49c7e7"
+        "bytes": 3819,
+        "sha256": "88adf8fb083dd371b2b19f682021a1789f8a7ff81e0ee5a9400cf86953227775"
       },
       {
         "path": "frontend/app/workhub.js",

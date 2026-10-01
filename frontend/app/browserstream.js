@@ -19,11 +19,12 @@
   const MOVE_MS = 50;
   const BTN = ['left', 'middle', 'right'];
   const mods = e => (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0);
-  /* AltGr (German/French/Nordic @ { } [ ] € …) reaches the page as Ctrl+Alt on Windows. It is TEXT, not a shortcut:
-     without this, those characters never arrived and an email address could not be typed (release review 2026-09-30).
-     A real Ctrl+Alt+letter shortcut still gives the letter itself, so it stays a key. */
+  /* COMPOSED CHARACTERS are TEXT, not shortcuts: AltGr (German/French/Nordic @ { } [ ] € …) reaches the page as
+     Ctrl+Alt on Windows, and macOS Option makes characters too (Option+L = @ on a German Mac, å, ß, ©). Without this
+     those characters never arrived and an email address could not be typed (release review 2026-09-30). A real
+     Ctrl+Alt+letter / Option+letter shortcut gives the plain letter itself, so it stays a key. */
   const altGr = e => !!(e.getModifierState && e.getModifierState('AltGraph'))
-    || !!(e.ctrlKey && e.altKey && !e.metaKey && e.key && e.key.length === 1 && !/^[a-z0-9]$/i.test(e.key));
+    || !!(e.altKey && !e.metaKey && e.key && e.key.length === 1 && !/^[a-z0-9]$/i.test(e.key));
   const keyDown = e => {
     const ag = altGr(e);
     const printable = !!(e.key && e.key.length === 1 && (ag || (!e.ctrlKey && !e.metaKey)));

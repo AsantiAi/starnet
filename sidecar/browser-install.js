@@ -24,7 +24,8 @@ function platformKey(platform, arch) {
   if (platform === 'win32') return arch === 'ia32' ? 'win32' : 'win64';
   if (platform === 'darwin') return arch === 'arm64' ? 'mac-arm64' : 'mac-x64';
   if (platform === 'linux' && arch === 'x64') return 'linux64';
-  return null;   // Chrome for Testing has no build here (e.g. Linux on ARM): the station says so
+  if (platform === 'linux' && arch === 'arm64') return 'linux-arm64';   // listed by Google since 2026 (checked 2026-10-01)
+  return null;   // Chrome for Testing has no build here: the station says so
 }
 function exeInside(key) {
   if (key === 'win64' || key === 'win32') return path.join('chrome-' + key, 'chrome.exe');

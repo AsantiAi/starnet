@@ -1,8 +1,9 @@
 /* Pure admission + completion policy for explicit image-generation tasks.
 
-   STUDIO uses either the linked StarNet cloud (which owns upstream credentials and
-   credit metering) or a separately configured OpenAI/OpenRouter BYOK route. Credentials and
-   endpoints travel together; an ordinary model key cannot authorize another service.
+   STUDIO uses the linked StarNet cloud (which owns upstream credentials and credit metering),
+   a separately configured OpenAI/OpenRouter BYOK route, or the station's ChatGPT sign-in
+   (gpt-image-2 through the Codex Responses image_generation tool, included in the plan).
+   Credentials and endpoints travel together; an ordinary model key cannot authorize another service.
    Completion still depends on the artifact ledger, not the model's prose. */
 'use strict';
 (function (root, factory) {
@@ -58,6 +59,11 @@
     if (providerId === 'openai' && runKey) {
       return { ok: true, provider: 'openai', protocol: 'openai-images', key: runKey, baseUrl: base(input.providerBaseUrl), keySource: 'run' };
     }
+    // The ChatGPT sign-in carries no key: the host hands image.js a token getter, so the route records
+    // only that the plan authorized generation. A run ON the plan renders on it before spending credits.
+    const codexSignedIn = input.codexSignedIn === true;
+    const codexRoute = () => ({ ok: true, provider: 'codex', protocol: 'codex-responses', key: '', baseUrl: base(input.codexBaseUrl), keySource: 'plan' });
+    if (providerId === 'codex' && codexSignedIn) return codexRoute();
     if (managedKey && managedBaseUrl) {
       return { ok: true, provider: 'starnet', protocol: 'openrouter-chat', key: managedKey, baseUrl: managedBaseUrl, keySource: 'managed' };
     }
@@ -67,6 +73,9 @@
     if (providerId !== 'starnet' && String(input.stationOpenAIKey || '').trim()) {
       return { ok: true, provider: 'openai', protocol: 'openai-images', key: String(input.stationOpenAIKey).trim(), baseUrl: base(input.stationOpenAIBaseUrl), keySource: 'station' };
     }
+    // Last resort for any other text run: the station's ChatGPT sign-in. Never for a StarNet-credits run
+    // (same rule as the BYOK keys above: a credits run does not silently move onto another account).
+    if (providerId !== 'starnet' && codexSignedIn) return codexRoute();
     return { ok: false, code: 'media-route-required' };
   }
 
@@ -91,7 +100,7 @@
       return 'Image task blocked: ' + (managed ? 'the StarNet credits connection is unavailable for ' : 'no media connection is configured for ')
         + label(input.providerId, input.model) + '. Open SETTINGS and ' + (managed
           ? 'relink this station to your StarNet account'
-          : 'connect an OpenAI or OpenRouter API key for image generation, or link this station to your StarNet account')
+          : 'sign in to ChatGPT, connect an OpenAI or OpenRouter API key for image generation, or link this station to your StarNet account')
         + ', then retry. No image artifact was produced.';
     }
     return null;
