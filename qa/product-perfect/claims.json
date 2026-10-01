@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "9b69af5a9f14c412b369b7d2e5d5123fb27865ff",
+    "sourceCommit": "065880a305ea782fd971bc23e5d333404e0e9dd2",
     "pathSetSha256": "1ea87b47f1e129f68dd6dc9b6339178332fe0c36f90859da4c220a7cc654d0aa",
     "files": [
       {
@@ -548,8 +548,8 @@
       },
       {
         "path": "frontend/app/hudmode.js",
-        "bytes": 54381,
-        "sha256": "525942f185baa11f0ae83b83d897ff1e8b0b62edf9a9a83fceaaec0524702e93"
+        "bytes": 58645,
+        "sha256": "46008a5530453ae55bf0ed1c3e9630dab8ab110b56f3200c26f46a820bd9386a"
       },
       {
         "path": "frontend/app/industrialtextures.js",
@@ -1378,8 +1378,8 @@
       },
       {
         "path": "frontend/app/world.js",
-        "bytes": 817853,
-        "sha256": "8aecd1336b7c35ea792cca2d6c542e1ccd99e5896e1de1862a0473aceae1d5ab"
+        "bytes": 819170,
+        "sha256": "03a0b68b654eeb0640423cf01c94c7d0a44bc89e2a8201def19977c2773d5c92"
       },
       {
         "path": "frontend/app/worldlab.js",
@@ -1503,8 +1503,8 @@
       },
       {
         "path": "frontend/css/hudmode.css",
-        "bytes": 27909,
-        "sha256": "4b154eee2103910f18c2a091f897c7c1f1a6171884ea35cf50727e2f7361b402"
+        "bytes": 28744,
+        "sha256": "ea4a012b77584d89782d2f2e5cdcc6689d898a858fd9ae8b23cd37287efd97d6"
       },
       {
         "path": "frontend/css/interface.css",
