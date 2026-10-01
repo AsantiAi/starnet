@@ -454,13 +454,43 @@ async function opensWithin(t, ms) {
     gumMode = 'ok';
   }
 
-  // --- a recognizer that fails every time stops the hands-free loop and says why ----------------
-  // Live dictation re-armed a failing engine forever (~every 150ms) while the panel read LISTENING and the
-  // status showed a raw 'mic: network'. Three hard errors in a row end the loop with plain words.
+  // --- a dead provider costs a reply two sentences of attempts, not every sentence ----------------
+  // After MID_REPLY_GIVEUP failed chunks the rest of THIS reply stays quiet (a dead provider was re-asked every
+  // sentence once the 4s cold-off lapsed: 3 attempts each, up to 30s apiece). The next reply starts fresh.
   {
-    const t = boot();
+    const requests = [];
+    let now = Date.now();   // every clock read moves 5s on, so the 4s cold-off has ALWAYS lapsed by the next chunk
+    const t = boot({ Audio: AutoEndAudio, now: () => (now += 5000), fetch: (url, o) => {
+      if (!String(url).includes('/api/tts')) return Promise.resolve({ ok: true, json: async () => ({}) });
+      requests.push(JSON.parse(o.body).text);
+      return Promise.resolve({ ok: false, status: 503, headers: { get: () => 'application/json' }, json: async () => ({ fallback: true, reason: 'edge: edge timeout' }) });
+    } });
+    t.Voice.setSpeakReplies(true);
+    for (let i = 1; i <= 6; i++) t.Voice.speakChunk('Sentence number ' + i + ' of a long reply.', 'agent');
+    t.Voice.endReply();
+    await until(() => !t.Voice.isReplyPending(), 2000);
+    A.eq(requests.length, 6, 'dead provider: two sentences get their bounded attempts, the other four are not re-asked');
+    A.ok(/rest of this reply/.test(t.nodes['voice-toggle'].title), 'dead provider: the notice says the rest of the reply is text-only');
+    const before = requests.length;
+    t.Voice.speakChunk('A brand new reply.', 'agent'); t.Voice.endReply();
+    await until(() => requests.length > before, 1000);
+    A.ok(requests.length > before, 'dead provider: the NEXT reply asks again');
+  }
+
+  // --- a recognizer that fails every time PAUSES the Live mic and says why ----------------------
+  // Live dictation re-armed a failing engine forever (~every 150ms) while the panel read LISTENING and the
+  // status showed a raw 'mic: network'. Three hard errors in a row pause the mic with plain words — and the
+  // reply the Commander is waiting for still speaks (stopConvo's stopSpeaking would have staled its token).
+  {
+    const requests = [];
+    const t = boot({ Audio: AutoEndAudio, fetch: (url, o) => {
+      if (String(url).includes('/api/tts')) { requests.push(JSON.parse(o.body).text); return Promise.resolve({ ok: true, headers: { get: () => 'audio/mpeg' }, blob: async () => ({ size: 128 }) }); }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    } });
+    t.Voice.setSpeakReplies(true);
     const fatal = [];
     t.Voice.startCoordinator({ onState() {}, onTranscript: () => false, onFatal: v => fatal.push(v) }); await tick();
+    const token = t.Voice.replyToken();   // a run is thinking while the mic keeps failing
     for (let i = 0; i < 3; i++) {
       const before = srInstances.length;
       srInstances[srInstances.length - 1].fireError('network');
@@ -471,9 +501,15 @@ async function opensWithin(t, ms) {
     await tick(300);
     A.eq(fatal.length, 1, 'mic errors: the loop reports ONE fatal stop to the Live panel');
     A.ok(/can.t be reached/.test(fatal[0] && fatal[0].message || ''), 'mic errors: the reason is in plain words');
-    A.eq(t.Voice.inVoiceMode(), false, 'mic errors: hands-free stops instead of re-arming forever');
-    A.eq(srInstances.length, instances, 'mic errors: no further recognizer is spawned');
+    A.eq(srInstances.length, instances, 'mic errors: no further recognizer is spawned (the loop is paused)');
     A.ok(!t.statusLog.some(s => /^mic: /.test(String(s))), 'mic errors: no raw engine code reaches the status line');
+    t.Voice.speakChunk('Here is the answer you asked for.', 'agent', { replyToken: token }); t.Voice.endReply();
+    await until(() => requests.length > 0, 1000);
+    A.eq(requests.length, 1, 'mic errors: the pause never cancels the reply the Commander is waiting for');
+    await until(() => !t.Voice.isReplyPending(), 1000);
+    A.eq(srInstances.length, instances, 'mic errors: the reply ending does not re-arm a paused mic');
+    t.Voice.resumeCoordinator(); await until(() => srInstances.length > instances, 1000);
+    A.ok(srInstances.length > instances, 'mic errors: RESUME tries the engine again');
     t.Voice.stopCoordinator();
   }
 
@@ -565,8 +601,9 @@ async function opensWithin(t, ms) {
         setTimeout(() => { if (this.onerror) this.onerror(new Error('decode failed')); }, 25);
         return Promise.resolve();
       }
-      pause() {}
+      pause() { failedPauses++; }
     }
+    let failedPauses = 0;
     let revoked = 0;
     const audioFetch = () => Promise.resolve({
       ok: true,
@@ -585,6 +622,7 @@ async function opensWithin(t, ms) {
     A.ok(states.includes('ready'), 'post-play failure: coordinator returns to ready');
     A.ok(levels.some(level => level === 0), 'post-play failure: live output meter receives its terminal zero');
     A.ok(revoked === 2, 'post-play failure: both bounded playback attempts release their blob URL');
+    A.ok(failedPauses >= 2, 'post-play failure: each failed element is silenced before its retry (no clip resumes over its own replay)');
   }
 
   // --- a FAILED neural chunk NEVER invokes speechSynthesis.speak (robotic path deleted) ---------

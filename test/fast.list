@@ -580,6 +580,8 @@ test/cron.dispatch.test.js
 test/cron.chain.test.js
 test/cron.tick.test.js
 test/cron.hardening.test.js
+test/cron.reliability-ramp.test.js
+test/cron.english.test.js
 test/cron.dst.test.js
 test/cron.durability.test.js
 test/cron.lock.test.js
@@ -780,6 +782,7 @@ test/commander-dossier-css.test.js
 test/comms-responsive-text.test.js
 test/readability.test.js
 test/dossier-skin-accessibility.test.js
+test/dossier-delete-visible.test.js
 test/control-floor-theming.test.js
 test/crew-rail-fit.test.js
 test/brand-wordmark-mask.test.js

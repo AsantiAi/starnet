@@ -534,7 +534,9 @@
         // permanently (+backoff per transient). The first transient of this occurrence stamps the anchor
         // (nextRunAt still holds the advance-before-run value); later retries keep the original.
         next.retryAnchorAt = job.retryAnchorAt || job.nextRunAt || null;
-        next.nextRunAt = iso(now + backoffMs);
+        // RAMPED BACKOFF (2026-10-01): 1×, 3×, 9× the base (90s → 4.5m → 13.5m by default). A fixed 90s burned
+        // all three retries inside ~5 minutes — shorter than most provider blips and network drops it exists for.
+        next.nextRunAt = iso(now + backoffMs * Math.pow(3, Math.min(job.retryCount || 0, 3)));
         next.state = 'error';                  // visible as failing-and-retrying, but still scheduled to fire
         return next;
       }

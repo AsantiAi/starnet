@@ -41,8 +41,10 @@ const WINDOWS_WAV_SCRIPT = [
   '$r.LoadGrammar((New-Object System.Speech.Recognition.DictationGrammar))',
   '$r.SetInputToWaveFile($env:STARNET_NATIVE_STT_WAV)',
   // ONE Recognize() returns ONE phrase (it ends at a pause), so a two-click take "Open the report. Then
-  // summarize it." kept only its first sentence. Read phrase after phrase until the file is spent (null);
-  // the cap bounds a pathological stream. One "conf|text" line per phrase.
+  // summarize it." kept only its first sentence. Read phrase after phrase until Recognize() returns null — at the
+  // end of the file, or (System.Speech's own rule) on a stretch it rejects outright; measured with 1.5s of white
+  // noise between two sentences it still returned both. The cap bounds a pathological stream. One "conf|text"
+  // line per phrase.
   '$n=0',
   "while($n -lt 40 -and $null -ne ($x=$r.Recognize())){$n++;Write-Output ('{0}|{1}' -f [int]($x.Confidence*1000),$x.Text)}",
   '$r.Dispose()'

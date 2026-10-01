@@ -83,6 +83,32 @@ function compose(input) {
       + deferred.map(d => clip(d, 24)).join(', ') + '. Do NOT ask about them. Choose the most sensible reversible default and state it as a correctable assumption in brief_proceed.');
     lines.push('</deferred_decisions>');
   }
+  // AUTOMATION ASK (2026-10-01): the request itself asks for recurring / scheduled / automated work. Live runs
+  // answered "set up automations for my shop" by pitching integrations it did not have and interviewing the
+  // Commander — creating nothing. Only present when the ask is about automation (see automationIntent()).
+  if (input.automationAsk) {
+    lines.push('<automation_request provenance="the current request asks for automation">');
+    lines.push('Turn this into StarNet routines now. Settle the Task Brief with brief_proceed (state your assumptions: focus, times) instead of asking, then call routine_create in the same turn. Do not interview the Commander.');
+    lines.push('- Build routines your own tools can run today (web research, watching public pages, drafting, summaries, checklists, reminders). Never wait on a connection or API key: create the runnable version and mention any upgrade in one line.');
+    lines.push('- A broad goal ("help me run my shop") gets 2-5 distinct routines at sensible times. Plain-English schedules work: "weekdays at 8am", "mondays at 9am", "1st of every month".');
+    lines.push('- Every run must deliver something useful on its own (fresh findings, a ready draft, a short decision list), never a blank template or generic advice. Each prompt is self-contained: task, sources, output format, what to flag. Results come back to this chat by default. Check routine_list first; never duplicate.');
+    lines.push('- End by listing each routine (name, when, what it delivers) and say they can pause or edit them in AUTOMATION › ROUTINES. With no routine_create tool, point them there instead.');
+    lines.push('</automation_request>');
+  }
+  // STANDING WORK (repeat sense, 2026-10-01): this request is the same work the Commander already had completed on
+  // separate earlier days (workflow-takeover.js notice()). The agent may OFFER a routine — never create one unasked.
+  const sw = input.standingWork;
+  if (sw && Number(sw.count) >= 3 && Array.isArray(sw.dates)) {
+    const day = t => { const d = new Date(Number(t)); return isFinite(d.getTime()) ? d.toDateString() : ''; };
+    lines.push('<standing_work_notice provenance="observed: completed task history">');
+    lines.push('The Commander has now asked for this same work ' + Number(sw.count) + ' times on separate days (earlier: '
+      + sw.dates.slice(-4).map(day).filter(Boolean).join('; ') + ').'
+      + (Array.isArray(sw.quotes) && sw.quotes.length ? ' Earlier wording: ' + sw.quotes.map(q => '"' + clip(q, 160) + '"').join(' / ') + '.' : ''));
+    lines.push('Do the current task fully first. Then, at the very END of your reply, offer ONCE in one short sentence to take it off their plate as a standing routine'
+      + (sw.suggest && sw.suggest.display ? ' — suggest ' + clip(sw.suggest.display, 60) + ' (' + clip(sw.suggest.why, 80) + ')' : ' — ask when it should run')
+      + '. Create nothing unless they say yes. On yes: call routine.list, then routine.create with a self-contained prompt (the full instruction, sources, format and choices they made) and the agreed schedule, deliver "origin" so results come back here. If you have no routine.create tool, say AUTOMATION › ROUTINES can set it up in one step. If they decline or ignore it, drop it.');
+    lines.push('</standing_work_notice>');
+  }
   const patterns = Array.isArray(input.patterns) ? input.patterns : [];
   if (patterns.length) {
     lines.push('<observed_task_patterns strength="weak; never override current instructions">');
@@ -92,4 +118,14 @@ function compose(input) {
   return lines.join('\n\n');
 }
 
-module.exports = { compose };
+/* automationIntent(text) — does a request ask for recurring / scheduled / automated work? Deliberately about the
+   ASK ("automate", "every morning", "remind me", "weekly report"), not a topic: "what is cron?" or "summarize
+   this automation article" do not trigger it. Pure. */
+const AUTOMATION_RE = /\b(?:automat(?:e|es|ed|ing|ion|ions)\b(?! (?:article|post|video|tool|software|testing))|set up (?:a |some |an )?(?:routines?|reminders?|schedules?)|(?:make|turn) (?:this|it|that) (?:into )?(?:a )?(?:routine|daily|weekly|recurring|regular)|on a schedule|recurring|remind me|every (?:single )?(?:day|morning|afternoon|evening|night|weekday|weekend|week|month|hour|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d+ ?(?:min(?:ute)?s?|hours?|days?|weeks?))|each (?:day|morning|evening|week|month)|(?:daily|weekly|monthly|nightly|hourly) (?:report|digest|summary|brief|briefing|check|update|recap|reminder|roundup|email|post)s?|keep (?:an eye on|tabs on|track of)|(?:watch|monitor) (?:for|my|the)\b)/i;
+function automationIntent(text) {
+  const s = String(text == null ? '' : text).slice(0, 4000);
+  if (!s.trim() || /^\s*(?:what|how|why|explain)\b[^.?!]*\b(?:cron|automation|routine)s?\b[^.?!]*\?\s*$/i.test(s)) return false;
+  return AUTOMATION_RE.test(s);
+}
+
+module.exports = { compose, automationIntent };
