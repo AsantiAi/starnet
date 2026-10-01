@@ -19395,7 +19395,8 @@ async function runOnceCore(o) {
   // advertises everything, exactly as before this feature — the escape hatch for an operator whose model is
   // one of those, and the A/B control for measuring whether deferral (rather than the model) caused a miss.
   // (`deferralOff` is read once, above at TOOL FOOTPRINT, so the connector/availability deferrals obey it too.)
-  const directDomainWithheld = (name) => !!directDomainTask && (/^team\./.test(name) || /^browser\./.test(name) || name === 'web_search' || name === 'web_request');
+  // web_request stays ADVERTISED (issue #58): the dispatch guard below confines it to the named host + subdomains
+  const directDomainWithheld = (name) => !!directDomainTask && (/^team\./.test(name) || /^browser\./.test(name) || name === 'web_search');
   const deferredNames = new Set((deferralOff ? [] : (resolved.deferred || [])).filter(n => !directDomainWithheld(n)));
   const coreNames = resolved.tools.filter(n => !deferredNames.has(n) && !directDomainWithheld(n));
   const toolDefs = isTask ? registry.wireFormat(registry.list(new Set(coreNames))) : [];
@@ -19512,6 +19513,9 @@ async function runOnceCore(o) {
     }
     if (directDomainTask && directDomainWithheld(c.name)) {
       return { ok: false, isError: true, summary: 'direct-domain-local', content: 'This is a bounded check of the exact host ' + directDomainTask.host + '. Do not delegate, search, browse, or call archives; fetch that host directly with web_fetch.' };
+    }
+    if (directDomainTask && c.name === 'web_request' && !DomainTask.isTargetRequest(c, directDomainTask)) {
+      return { ok: false, isError: true, summary: 'direct-domain-target-only', content: 'This task is about ' + directDomainTask.host + ': web_request may call that host (or its own API subdomains) only.' };
     }
     if (directDomainTask && c.name === 'web_fetch' && !DomainTask.isTargetFetch(c, directDomainTask)) {
       return { ok: false, isError: true, summary: 'direct-domain-target-only', content: 'Fetch only the exact requested host ' + directDomainTask.host + '. Do not try spelling variants or alternate domains unless the Commander asks.' };

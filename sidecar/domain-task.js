@@ -88,6 +88,17 @@
     return urlHost(call.args && call.args.url) === normalizeHost(policy.host);
   }
 
+  /* web_request to the NAMED host (or one of its subdomains — api.printify.com for printify.com) stays available
+     (issue #58). The API-wording carve-out in classify() only helps when the prompt SAYS "api"; a routine like
+     "check my orders on printify.com and summarize" with a granted key still lost the one tool that can call the
+     shop's API, and the agent truthfully reported web_request missing. Any other host stays refused. */
+  function isTargetRequest(call, policy) {
+    if (!call || !policy || policy.kind !== 'direct-domain') return false;
+    if (String(call.name || '').replace(/\./g, '_') !== 'web_request') return false;
+    const h = urlHost(call.args && call.args.url), want = normalizeHost(policy.host);
+    return !!h && !!want && (h === want || h.endsWith('.' + want));
+  }
+
   function isDomainMissing(result) {
     const summary = String((result && result.summary) || '').toLowerCase();
     const content = String((result && result.content) || '').toLowerCase();
@@ -116,7 +127,7 @@
   }
 
   return {
-    classify, hostsOf, normalizeHost, isTargetFetch, isDomainMissing, prompt, stopControl,
+    classify, hostsOf, normalizeHost, isTargetFetch, isTargetRequest, isDomainMissing, prompt, stopControl,
     WORKER_MAX_ITERS, WORKER_MAX_TOOLS, WORKER_MAX_MS
   };
 });
