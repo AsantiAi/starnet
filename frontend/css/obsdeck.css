@@ -1,0 +1,92 @@
+/* OBSERVATION DECK (app/obsdeck.js) — the live station renders edge to edge and the four cabinet
+   panels float over it as one family of frosted sheets (the Build Library / Workflow panel glass).
+   The grid is untouched: #stage-wrap simply spans every cell underneath the others, and the world
+   camera frames the station inside the open gap (World.setViewInset). Off with ?deck=0. HUD MODE
+   owns its own layout, so every rule here stands down under body.hud-mode. */
+body.obs-deck {
+  --od-edge: rgba(var(--ph-rgb), .2);
+  --od-hair: rgba(var(--ph-rgb), .12);
+  --od-glass: linear-gradient(125deg, rgba(var(--ph-bright-rgb), .09), rgba(var(--ph-rgb), .045) 48%, rgba(var(--ph-rgb), .015));
+  --od-sheet: color-mix(in srgb, var(--panel2) 56%, transparent);
+  --od-shadow: 0 12px 36px rgba(0, 0, 0, .4), inset 0 1px rgba(var(--ph-rgb), .08);
+}
+
+/* 1 · the station fills the screen */
+body.obs-deck:not(.hud-mode) #screen-game.active:not(.cinema) { background: #000; }
+body.obs-deck:not(.hud-mode) #screen-game.active:not(.cinema) > #stage-wrap {
+  grid-area: 1 / 1 / -1 / -1;
+  margin: calc(-11px * var(--cz));
+  border-radius: 0; box-shadow: none; background: #000;
+}
+body.obs-deck:not(.hud-mode) #screen-game.active:not(.cinema) > #stage-wrap::before { border-radius: 0; box-shadow: none; }
+body.obs-deck:not(.hud-mode) #screen-game.active:not(.cinema) > :is(#topbar, #left, #bottombar) { position: relative; z-index: 6; }
+
+/* the CINEMA key and the CREW drawer tab live inside the gap, not under a panel */
+body.obs-deck:not(.hud-mode) #screen-game:not(.cinema) #stage-wrap .cam-hud {
+  inset: var(--od-t, 0) var(--od-r, 0) var(--od-b, 0) var(--od-l, 0);
+}
+body.obs-deck:not(.hud-mode) #screen-game:not(.cinema) #stage-wrap #crew-show { left: var(--od-l, 0); }
+
+/* 2 · one sheet material for all four panels */
+body.obs-deck:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar) {
+  background: var(--od-glass), var(--od-sheet);
+  border: 1px solid var(--od-edge);
+  border-radius: 12px;
+  box-shadow: var(--od-shadow);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08);
+  backdrop-filter: blur(18px) saturate(1.08);
+}
+body.obs-deck:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar)::after { display: none; }
+body.obs-deck:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar)::before { opacity: 0; }
+body.obs-deck:not(.hud-mode) #screen-game :is(#left, #chat-panel):focus-within { outline: 0; border-color: rgba(var(--ph-rgb), .38); }
+body.obs-deck:not(.hud-mode) #screen-game #chat-log { background: transparent; }
+
+/* plain headers over a hairline — no gradient strip, no solid bar */
+body.obs-deck:not(.hud-mode) #screen-game :is(#left > h3, #chat-panel > h3) {
+  background: none; box-shadow: none;
+  border-bottom: 1px solid var(--od-hair);
+  border-radius: 12px 12px 0 0;
+  padding: 11px 14px 9px;
+  font-size: 17px; letter-spacing: 2.5px; color: var(--ph-bright);
+}
+body.obs-deck:not(.hud-mode) #screen-game .ws-head { background: none; box-shadow: none; border-bottom: 1px solid var(--od-hair); }
+
+/* 3 · the top rail: a slim sheet, logo left, instruments right */
+body.obs-deck:not(.hud-mode) #screen-game #topbar .tb-stat,
+body.obs-deck:not(.hud-mode) #screen-game #topbar .tb-connection {
+  border: 1px solid var(--od-hair); border-radius: 9px;
+  background: rgba(0, 0, 0, .18); box-shadow: none;
+}
+body.obs-deck:not(.hud-mode) #screen-game #topbar .tb-sep { opacity: 0; }
+
+/* 4 · the dock: a centred floating sheet of glass keys instead of a full-width bar */
+body.obs-deck:not(.hud-mode) #screen-game.active:not(.cinema) > #bottombar {
+  justify-self: center; width: max-content; max-width: 100%;
+  padding-inline: 8px; gap: 6px;
+}
+body.obs-deck:not(.hud-mode) #screen-game #bottombar .widget-rail[data-empty="1"] { flex: 0 0 auto; }
+body.obs-deck:not(.hud-mode) #screen-game #bottombar .bb-grp {
+  min-height: 36px; padding: 6px 15px;
+  font-size: 16px; letter-spacing: 1px;
+  color: var(--ph);
+  border: 1px solid var(--od-edge); border-radius: 8px;
+  background: var(--od-glass);
+  box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb), .07);
+  text-shadow: none;
+}
+body.obs-deck:not(.hud-mode) #screen-game #bottombar .bb-grp:is(:hover, :focus-visible) {
+  color: var(--ph-bright); border-color: rgba(var(--ph-rgb), .45); background: rgba(var(--ph-rgb), .1);
+}
+body.obs-deck:not(.hud-mode) #screen-game #bottombar .bb-grp[aria-expanded="true"] {
+  color: var(--ph-bright); border-color: var(--ph); background: rgba(var(--ph-rgb), .16);
+}
+body.obs-deck:not(.hud-mode) #screen-game #bottombar .bb-right { border-left: 1px solid var(--od-hair); padding-left: 10px; margin-left: 4px; }
+body.obs-deck:not(.hud-mode) #screen-game #bottombar .ctx-gauge { background: none; border: 0; box-shadow: none; }
+
+/* 5 · CREW rows read as cards inside the sheet */
+body.obs-deck:not(.hud-mode) #crew .crew-row { border-radius: 10px; margin: 4px 8px; }
+body.obs-deck:not(.hud-mode) #crew .crew-row:is(:hover, :focus-visible, .selected) {
+  background: linear-gradient(165deg, rgba(var(--ph-rgb), .075), transparent 46%), color-mix(in srgb, var(--panel2) 70%, transparent);
+  border-color: var(--od-edge);
+}
+body.obs-deck:not(.hud-mode) #left #workstreams .ws-row { border-radius: 8px; }
