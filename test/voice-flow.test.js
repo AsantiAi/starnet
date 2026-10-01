@@ -155,7 +155,7 @@ const audio = () => Array.from({length:8}, () => new Float32Array(1000).fill(0.1
   assert.ok(start>0 && end>start);
   function buffer() {
     let now=10000, next=0; const timers=new Map(), chunks=[];
-    const ctx={Voice:{speakChunk:s=>chunks.push(s)},willSpeak:true,speechOwner:()=>true,speakSafe:s=>s,spokenIdx:0,acc:'',name:'agent',speechOpts:{},Date:{now:()=>now},
+    const ctx={closed:0,closeSpeech(){ctx.closed++;},Voice:{speakChunk:s=>chunks.push(s)},willSpeak:true,speechOwner:()=>true,speakSafe:s=>s,spokenIdx:0,acc:'',name:'agent',speechOpts:{},Date:{now:()=>now},
       setTimeout:(fn,ms)=>{timers.set(++next,{fn,at:now+ms});return next;},clearTimeout:id=>timers.delete(id)};
     vm.createContext(ctx);vm.runInContext(chat.slice(start,end)+'\nthis.push=pushSpeech;',ctx);
     return {ctx,chunks,timers,token:s=>{ctx.acc+=s;ctx.push(false);},wait:ms=>{now+=ms;for(const [id,t] of [...timers])if(t.at<=now){timers.delete(id);t.fn();}}};
@@ -170,7 +170,11 @@ const audio = () => Array.from({length:8}, () => new Float32Array(1000).fill(0.1
   c.token('and the final tail');c.ctx.push(true,c.ctx.acc);
   assert.equal(c.chunks.join(''),c.ctx.acc,'final tail preserved exactly once');
   assert.equal(c.timers.size,0,'finalization cancels pending timer');
+  const w=buffer(); w.token('The research is done and filed. ');w.token('Handing it to the writer');
+  w.ctx.push(true,'WRITER RESULT: a completely different text produced down the work line.');
+  assert.equal(w.chunks.join(''),'The research is done and filed. Handing it to the writer','a work line result that replaced the reply is never sliced mid-word — the streamed reply finishes');
   const d=buffer();d.token('Dr. Smith has 3.14 apples, ');assert.equal(d.chunks.length,0,'abbreviation and decimal are not sentence boundaries');
   d.ctx.speechOwner=()=>false;d.wait(1200);assert.equal(d.chunks.length,0,'ownership loss suppresses timer output');
+  assert.equal(d.ctx.closed,1,'ownership loss CLOSES the reply this run opened (Voice never reads speaking forever)');
   console.log('voice-flow: sentence buffering and deadline regressions passed');
 }

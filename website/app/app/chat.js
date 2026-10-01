@@ -8852,13 +8852,26 @@ const Chat = (() => {
     };
     const speechToken = typeof Voice !== 'undefined' && Voice.replyToken ? Voice.replyToken() : undefined;
     const speechOpts = { replyToken: speechToken, agentId: ws.agentId };
+    speechOpts.owner = speechOpts;   // Voice closes a reply only for the producer that owns it
+    // Close THIS run's spoken reply exactly once. If the Commander switches sessions mid-reply, the run stops
+    // feeding speech — but the reply it opened must still close, or Voice reads "speaking" forever (hands-free
+    // never re-opens, the next reply inherits its failures).
+    let speechClosed = false;
+    const closeSpeech = () => {
+      if (speechClosed || !willSpeak || typeof Voice === 'undefined' || !Voice.endReply) return;
+      speechClosed = true; Voice.endReply(undefined, speechOpts);
+    };
     let speechTimer = null, speechPendingSince = 0;
     const pushSpeech = (finalize, finalText) => {
       clearTimeout(speechTimer); speechTimer = null;
       // Ownership is checked again for every chunk. A voice-commanded rebind can happen while an
       // older run is still streaming; none of its late words may leak into the new call owner.
-      if (typeof Voice === 'undefined' || !willSpeak || !speechOwner() || !Voice.speakChunk) return;
-      const src = speakSafe(finalize ? (finalText || acc) : acc);
+      if (typeof Voice === 'undefined' || !willSpeak || !Voice.speakChunk) return;
+      if (!speechOwner()) { closeSpeech(); return; }
+      // spokenIdx is an offset into what was STREAMED. A final text that isn't a continuation of it (a work line's
+      // result replaced the reply) would be sliced mid-word — finish the streamed reply instead.
+      const fin = finalize && finalText && speakSafe(finalText).startsWith(speakSafe(acc).slice(0, spokenIdx)) ? finalText : acc;
+      const src = speakSafe(finalize ? fin : acc);
       const pending = src.slice(spokenIdx);
       if (!pending) return;
       if (finalize) { if (pending.trim()) { Voice.speakChunk(pending, name, speechOpts); spokenIdx = src.length; } return; }
@@ -9258,13 +9271,13 @@ const Chat = (() => {
       // flush any trailing spoken text and CLOSE the speech stream — the last chunk's end re-arms the
       // hands-free mic (this is the heartbeat for spoken turns; onTurnEnd covers silent/no-speech turns).
       clearTimeout(speechTimer); speechTimer = null;
-      if (willSpeak && speechOwner() && typeof Voice !== 'undefined' && Voice.endReply) {
+      if (willSpeak && speechOwner() && !speechClosed && typeof Voice !== 'undefined' && Voice.endReply) {
         pushSpeech(true, finalReply);
         // VOICE-AWARE CHOICES: the choice itself is spoken as a natural question — question text only;
         // the 2-3 options are on-screen chips (reading them out was the "reads every option" glitch).
         if (voiceQuestion && Voice.speakChunk) Voice.speakChunk('Quick question. ' + voiceQuestion, name, speechOpts);
-        Voice.endReply();
       }
+      closeSpeech();
       // hands-free voice mode: the run is done — let Voice re-open the mic for the next turn.
       if ((!liveVoiceCall() || liveVoiceOwns(ws)) && typeof Voice !== 'undefined' && Voice.onTurnEnd) Voice.onTurnEnd();
       // TYPE-AHEAD: the stream just freed — send its next queued follow-up (after this call fully unwinds).
@@ -9343,7 +9356,9 @@ const Chat = (() => {
   /* DISCONNECT (or any teardown) cancels the in-flight billable run: abort the fetch (the sidecar's
      req.on('close') then stops the loop) AND tell the sidecar to kill the run by id — belt-and-suspenders. */
   function abort() {
-    if (typeof Voice !== 'undefined' && Voice.stopConvo) Voice.stopConvo();   // drop hands-free on disconnect
+    // drop hands-free on disconnect — Live Voice included (its own microphone loop stayed hot behind DISCONNECT)
+    if (typeof VoiceLive !== 'undefined' && VoiceLive.isActive && VoiceLive.isActive() && VoiceLive.end) VoiceLive.end();
+    if (typeof Voice !== 'undefined' && Voice.stopConvo) Voice.stopConvo();
     // teardown is a DELIBERATE interrupt, not a dropped connection: flag every in-flight stream interrupted BEFORE
     // aborting so send()'s catch reads `stopped` and stays silent — otherwise the AbortError gets reclassified as a
     // network fault and a spurious "can't reach the sidecar" row is pushed into ws.history + persisted. (A reader

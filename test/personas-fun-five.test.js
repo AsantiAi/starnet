@@ -44,7 +44,7 @@ const setter = app.match(/function setAgentPersona\(agentId, personaId, tuning\)
 const lead = { id: 'lead', personaId: 'composed' }, worker = { id: 'worker', personaId: 'warm' };
 const agents = new Map([['lead', lead], ['worker', worker]]), calls = [];
 const set = new Function('agents', 'agent', 'Personas', 'composeSystemPrompt', 'Chat', 'Voice', 'syncChannels', 'pushRoster', 'persist', setter + '; return setAgentPersona;')(
-  agents, lead, P, a => P.compose(a.personaId, a.voiceTraits, a.customVoice), { setSystem: p => calls.push(['chat', p]) }, { init: () => calls.push(['voice']) }, () => calls.push(['channels']), () => calls.push(['roster']), () => calls.push(['persist']));
+  agents, lead, P, a => P.compose(a.personaId, a.voiceTraits, a.customVoice), { setSystem: p => calls.push(['chat', p]) }, { setPersona: () => calls.push(['voice']), init: () => calls.push(['voice-init-teardown']) }, () => calls.push(['channels']), () => calls.push(['roster']), () => calls.push(['persist']));
 assert.equal(set('worker', 'witty', { traits: { humor: 0 }, custom: 'Use short sentences.' }), true);
 assert.equal(worker.personaId, 'dry'); assert.equal(lead.personaId, 'composed');
 assert.deepEqual(calls.map(c => c[0]), ['roster', 'persist']);
@@ -52,6 +52,9 @@ assert.ok(worker.systemPrompt.includes('HUMOR: No jokes'));
 assert.equal(set('lead', 'hype'), true);
 assert.equal(lead.personaId, 'upbeat');
 assert.ok(calls.some(c => c[0] === 'chat' && c[1] === lead.systemPrompt));
+// the focused agent's voice is re-keyed WITHOUT Voice.init (which tore down a live call mid-sentence)
+assert.ok(calls.some(c => c[0] === 'voice'), 'focused persona change re-keys the voice');
+assert.ok(!calls.some(c => c[0] === 'voice-init-teardown'), 'persona change never re-inits (tears down) the voice session');
 assert.equal(set('missing', 'dry'), false);
 assert.equal(set('lead', 'invalid'), false);
 set('worker', 'unhinged'); assert.equal(worker.voiceTraits.humor, 0, 'preset changes preserve explicit tuning');
