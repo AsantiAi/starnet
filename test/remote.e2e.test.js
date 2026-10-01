@@ -311,6 +311,19 @@ function startMockModel() {
     const c3 = Phone.connect({ base: lan, deviceId: paired2.deviceId, stationPub: pr2.body.stationPub, key: key2 });
     A.eq((await c3.call('status')).ok, true, 'the phone reconnects after a restart with the same station key');
 
+    // 12. E-STOP reaches a phone run: while it works it is on the station's run list (a reconnect keeps the agent
+    //     working on the floor), and the halt aborts it and counts it
+    const held = await c3.call('send', { agentId: 'forge', text: 'slow reply' });
+    A.eq(held.ok, true, 'a held phone task started');
+    await waitUntil(() => !!llm.gate.held, 20000, 'model holding the phone task');
+    const snap = await fx.json('GET', '/api/state/snapshot');
+    A.ok(snap.body.runs.some(r => r.runId === held.data.runId && r.agentId === 'forge' && r.source === 'remote'), 'the phone run is in the station snapshot: ' + JSON.stringify(snap.body.runs).slice(0, 200));
+    const halt = await fx.json('POST', '/api/halt', {});
+    A.ok(halt.status === 200 && halt.body.halted >= 1, 'E-STOP counts the phone run: ' + JSON.stringify(halt.body).slice(0, 160));
+    await waitUntil(async () => (await fx.json('GET', '/api/remote/recent')).body.runs.some(r => r.runId === held.data.runId && r.live === false), 10000, 'phone run ended by E-STOP');
+    A.ok(!(await fx.json('GET', '/api/state/snapshot')).body.runs.some(r => r.runId === held.data.runId), 'and it is off the run list');
+    llm.gate.release();
+
     const offAgain = await fx.json('POST', '/api/remote/enable', { on: false });
     A.eq(offAgain.body.listening, false, 'switching off closes the door');
     let shut = false; try { await c3.call('status'); } catch (_) { shut = true; }

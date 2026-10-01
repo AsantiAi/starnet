@@ -10141,10 +10141,12 @@ function remoteNotify(evt) {
     if (t.unref) t.unref();
     return;
   }
-  if (evt.type === 'run.ended' && evt.streamId && evt.reason !== 'stopped') {
+  if (evt.type === 'run.ended' && evt.streamId && evt.reason !== 'stopped' && evt.reason !== 'cancelled') {
     let last = '';
     try { const turns = transcriptStore.history(evt.streamId, { limit: 4 }) || []; for (let i = turns.length - 1; i >= 0; i--) if (turns[i].role === 'assistant' && typeof turns[i].content === 'string' && turns[i].content.trim()) { last = turns[i].content; break; } }
     catch (e) { failNote('remote.index.pushReply', e); }
+    const qm = /^\s*(?:TASK_QUESTION|FORK):\s*(.+?)\s*\|\|/m.exec(String(last));
+    if (qm && !evt.error) return remotePushSend({ title: remoteAgentName(evt.agentId) + ' has a question', body: qm[1].slice(0, 200), tag: 'run:' + evt.runId, url: '#thread=' + evt.streamId });
     const line = String(last).replace(/[*#`>_]+/g, '').replace(/\s+/g, ' ').trim();
     remotePushSend({ title: remoteAgentName(evt.agentId) + (evt.error ? ' hit a problem' : ' finished'),
       body: (evt.error ? String(evt.error) : line || 'Tap to read the reply').slice(0, 200), tag: 'run:' + evt.runId, url: '#thread=' + evt.streamId });
@@ -10180,7 +10182,17 @@ const remoteHost = require('./remote/host.js').makeRemoteHost({
     return { ok: true, model, provider, key, baseUrl: providerRuntimeBaseUrl(provider, ''), reasoningEffort: resolveReasoningEffort(provider, ident.reasoningEffort),
       system: raw ? withDossier(raw + REMOTE_NOTE, dossierWithGoals()) : withDossier(CRON_PERSONA + REMOTE_NOTE, dossierWithGoals()) };
   },
-  runOnce: (o) => runOnce(o),
+  // A phone run is a station run: it sits in `runs` + `runsMeta` like a group-session turn, so E-STOP (killAll(runs)),
+  // /api/cancel, shutdown and the reconnect snapshot all reach it. Its abort goes through the host's own stop, which owns
+  // the run's controller (and so ends it on the phone as 'stopped').
+  runOnce: async (o) => {
+    const rid = o && o.runId;
+    if (!rid) return runOnce(o);
+    runs.set(rid, { abort: () => { remoteHost.stop({ runId: rid }).catch(e => failNote('remote.run.abort', e)); } });
+    runsMeta.set(rid, { agentId: String(o.agentId || 'agent'), startedAt: Date.now(), source: 'remote', streamId: o.streamId || undefined });
+    try { return await runOnce(o); }
+    finally { runs.delete(rid); runsMeta.delete(rid); }
+  },
   view: remoteView,
   deskOpen: () => sse.size() > 1,   // a StarNet page is connected (the phones' own tee is always one listener)
   // how each agent looks (the skin the Commander picked), from the station save the page mirrors here
@@ -10318,6 +10330,7 @@ async function handleRemoteViewPut(req, res) {
   let b;
   try { b = JSON.parse((await readBodyBuffer(req, 3 * 1024 * 1024, res)).toString('utf8') || '{}'); }
   catch (_) { if (!res.headersSent) respondJson(res, 400, { ok: false, error: 'bad request' }); return; }
+  if (b && b.same === true) { const ok = remoteView.touch(); return respondJson(res, ok ? 200 : 409, { ok }); }   // unchanged room: just say it is current
   const r = remoteView.put(b);
   respondJson(res, r.ok ? 200 : 400, r);
 }
@@ -10326,8 +10339,9 @@ async function handleRemoteViewPut(req, res) {
 async function handleRemoteViewCrew(req, res) {
   if (!remoteDevices.enabled()) return respondJson(res, 409, { ok: false, error: 'Remote is off' });
   let b; try { b = JSON.parse((await readBody(req, 256 * 1024, res)) || '{}') || {}; } catch (_) { if (!res.headersSent) respondJson(res, 400, { ok: false, error: 'bad request' }); return; }
-  const r = remoteView.putCrew(b.bodies);
-  if (r.ok && remoteView.wanted()) remoteBroadcast({ type: 'view.crew', at: r.at, bodies: r.bodies });
+  const r = remoteView.putCrew(b.bodies, b.paused === true);
+  const lookers = remoteView.lookers();
+  if (r.ok && lookers.length) { try { remoteSessions.broadcast({ type: 'view.crew', at: r.at, paused: r.paused, bodies: r.bodies }, lookers); } catch (e) { failNote('remote.index.crewBroadcast', e); } }
   respondJson(res, r.ok ? 200 : 409, { ok: r.ok, error: r.error });
 }
 // POST /api/remote/enable { on } — the switch. Persisted; the LAN door opens or closes with it.
