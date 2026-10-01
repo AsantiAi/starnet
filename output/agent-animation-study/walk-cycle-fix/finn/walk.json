@@ -1,16 +1,81 @@
 {
   "charId": "8e5f8c4a-2f53-453c-9406-3e80406c8eaa",
-  "group": "58c5185f-c46b-4c7e-9a2e-756e3fc7a44b",
-  "template": "walking-8-frames",
+  "group": "26493863-d5b8-42f8-a9e0-34a5d1af4562",
+  "template": "walking",
+  "mode": "skeleton-v3",
+  "frames": 6,
   "rotT": "1789497479",
   "anims": {
-    "south-east": ["e57a9b65-3186-4394-ad7b-cff084aea9d3", "1789632862290"],
-    "north-west": ["f686017e-981c-4462-a8a0-ddb72730205c", "1789632861769"],
-    "north-east": ["45d2ecf4-bf07-41e7-84b9-c95ecf23c7b6", "1789632855237"],
-    "south-west": ["16c9b75a-5aec-478c-8274-f0457c2eb7e0", "1789632812652"],
-    "north": ["fba3c023-dc2d-4e40-86de-8bc419172233", "1789632795077"],
-    "east": ["d2e49630-ee70-4800-9d78-e495feeeaf90", "1789632794690"],
-    "west": ["138344ed-7274-41d9-9ed0-353c01c29aa4", "1789632785064"],
-    "south": ["2ec7daaf-a0e2-428d-84de-5b1fd040f7d1", "1789632783525"]
+    "south": [
+      "0a698049-398e-46c9-afaf-65c4d3a8dd9f",
+      "1790826391795"
+    ],
+    "south-east": [
+      "ad33da79-b79a-489b-a51c-934d6165c646",
+      "1790826658092"
+    ],
+    "east": [
+      "2e372cf5-86f9-43f0-ae40-98b2db298517",
+      "1790824936629"
+    ],
+    "north-east": [
+      "6b7fef93-f986-4901-80f0-090eb50ac2ff",
+      "1790826549140"
+    ],
+    "north": [
+      "26695829-cae8-46af-87dd-db219d9d03e4",
+      "1790826942053"
+    ],
+    "north-west": [
+      "1ba15c26-93d1-4c62-9c6f-4ddf80c35e05",
+      "1790826694845"
+    ],
+    "west": [
+      "9da5a24b-0dd4-4f21-ba9d-8d6822236f91",
+      "1790825085007"
+    ],
+    "south-west": [
+      "9dcbf9fd-0c1f-429b-92dc-6a7d15591fff",
+      "1790826620709"
+    ]
+  },
+  "previous": {
+    "note": "walking-8-frames template (2026-09-17): the template redraws every frame, so arms drifted between drawings (west frame 8 raised a fist to the face)",
+    "group": "58c5185f-c46b-4c7e-9a2e-756e3fc7a44b",
+    "template": "walking-8-frames",
+    "anims": {
+      "south-east": [
+        "e57a9b65-3186-4394-ad7b-cff084aea9d3",
+        "1789632862290"
+      ],
+      "north-west": [
+        "f686017e-981c-4462-a8a0-ddb72730205c",
+        "1789632861769"
+      ],
+      "north-east": [
+        "45d2ecf4-bf07-41e7-84b9-c95ecf23c7b6",
+        "1789632855237"
+      ],
+      "south-west": [
+        "16c9b75a-5aec-478c-8274-f0457c2eb7e0",
+        "1789632812652"
+      ],
+      "north": [
+        "fba3c023-dc2d-4e40-86de-8bc419172233",
+        "1789632795077"
+      ],
+      "east": [
+        "d2e49630-ee70-4800-9d78-e495feeeaf90",
+        "1789632794690"
+      ],
+      "west": [
+        "138344ed-7274-41d9-9ed0-353c01c29aa4",
+        "1789632785064"
+      ],
+      "south": [
+        "2ec7daaf-a0e2-428d-84de-5b1fd040f7d1",
+        "1789632783525"
+      ]
+    }
   }
 }
