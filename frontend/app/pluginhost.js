@@ -191,7 +191,9 @@
     for (const f of frames) { if (f.iframe.contentWindow === ev.source) { entry = f; break; } }
     if (!entry) return;   // not one of ours: never answered
     if (d.n !== entry.nonce) return;   // the frame navigated away from the page we loaded: never answered
-    if (d.m === 'hello') entry.hellos = (entry.hellos || 0) + 1;   // a page of THIS plugin/app loaded (see watchLeave)
+    // a page of THIS plugin/app loaded (see watchLeave) — capped at one ahead of the loads, so a page cannot bank
+    // hellos to cover later navigations of its own
+    if (d.m === 'hello') entry.hellos = Math.min((entry.hellos || 0) + 1, (entry.loads || 0) + 1);
     const fn = Object.prototype.hasOwnProperty.call(METHODS, d.m) ? METHODS[d.m] : null;
     const reply = (ok, v, err) => post(entry, { re: d.id, ok, v: ok ? v : undefined, err: ok ? undefined : String(err || 'refused') });
     if (!fn) return reply(false, null, 'unknown call: ' + d.m);
@@ -208,8 +210,10 @@
      window was open — is the station's no-script 410 page, which also never says hello; a refresh first fixes that
      case). A second time within 15 s leaves the window stopped and says so, neutrally: the host cannot tell an
      escape from a page that will not load, so it accuses nothing.
-     Honest limit: the one request that loaded the foreign page has already been made — what a frame can reach is only
-     its own plugin's/app's data, and it never stays on screen to pose as StarNet. */
+     Honest limits: the one request that loaded the foreign page has already been made — what a frame can reach is
+     only its own plugin's/app's data, and it never stays on screen to pose as StarNet; and a page may send one hello
+     ahead of a navigation (or hand its nonce to a page it opens), so a determined page can stay out of sight for one
+     hop. The guard is about what the Commander SEES in a StarNet window, not a network wall. */
   const leaveLog = new Map();   // window key -> last time its frame was thrown out
   function watchLeave(key, body, entry) {
     entry.iframe.addEventListener('load', () => {
@@ -226,15 +230,14 @@
         if (again) {
           const note = document.createElement('div');
           note.className = 'plugin-gone';
-          note.textContent = name + ' could not stay on its own page, so its window is stopped. Reopen it to try again.';
+          note.textContent = name + ' keeps failing to load its own page, so its window is stopped. Reopen it to try again.';
           body.insertBefore(note, body.firstChild);
-          if (ui && ui.notify) ui.notify(name + ': its window kept leaving its own page — stopped.', 'warn', 'general', { transient: true });
           return;
         }
         // put it back on its LATEST version (the app/plugin list is re-read first, so a changed page loads fresh)
         const reread = entry.app && typeof AppsUI !== 'undefined' && AppsUI.load ? AppsUI.load() : refresh();
         Promise.resolve(reread).catch(() => null).then(() => { if (body.isConnected && !frameFor(body)) build(key, body); });
-        if (ui && ui.notify) ui.notify(name + ': its window showed a page that is not its own — StarNet put the ' + (entry.app ? 'app' : 'plugin') + ' back.', 'warn', 'general', { transient: true });
+        if (ui && ui.notify) ui.notify(name + ' could not load its own page — StarNet reopened it.', 'warn', 'general', { transient: true });
       }, 2500);
     });
   }

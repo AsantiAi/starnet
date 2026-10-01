@@ -999,6 +999,7 @@ test/line-hop-not-said.test.js
 test/linejobs.test.js
 test/linedraft.test.js
 test/workflows-window.test.js
+test/build-mode-easy.test.js
 test/trigger-sweep.test.js
 test/steptest-restart-spend.test.js
 test/userprops.test.js

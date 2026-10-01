@@ -52,7 +52,7 @@ body.glass-demo #screen-game #bottombar .bb-menu .bb.bb-app .bb-tx b,
 body.glass-demo #screen-game #bottombar .bb-menu .bb.bb-app .bb-tx small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body.glass-demo #screen-game #bottombar .bb-menu .bb.bb-app { min-height: 50px; }
 #bottombar .bb-apps-sep { flex: none; height: 1px; margin: 4px 8px; background: var(--gd-edge, rgba(var(--ph-rgb),.24)); }
-#bottombar .bb-apps-more { flex: none; padding: 2px 10px 4px 43px; font: 13px/1.25 'VT323',monospace; color: var(--ph-dim); }
+#bottombar .bb-apps-more { flex: none; padding: 2px 10px 4px 43px; font: 14px/1.25 'VT323',monospace; color: var(--ph-dim); }
 .term.apps-win .app-ready { color: var(--ok); }
 .term.apps-win .app-unbuilt { color: var(--ph-dim); }
 .term.apps-win .app-rename-in { flex: 1 1 auto; min-width: 0; margin-right: 8px; }

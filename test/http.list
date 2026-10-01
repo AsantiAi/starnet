@@ -174,3 +174,4 @@ test/remote.e2e.test.js
 test/remote.relay.e2e.test.js
 test/subscription-stacking.e2e.test.js
 test/subscription-stacking-oauth.e2e.test.js
+test/apps.http.test.js
