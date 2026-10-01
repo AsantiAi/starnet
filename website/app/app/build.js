@@ -615,6 +615,14 @@ const Build = (() => {
     if (!el) return;
     const st = makeStatusText();
     el.textContent = st.text; el.className = 'refit-makeprop-status' + (st.tone ? ' ' + st.tone : '');
+    // the compact row opens when there is something the Commander must see (a running or resumed job, a preview, a
+    // message, a draft): the mount decided before these could arrive
+    const panel = el.closest('.refit-makeprop');
+    if (panel && panel.classList.contains('is-compact') && (makeBusy || makeMsg || makePreview || (makeDraft && makeDraft.trim()) || (makeJob && makeJob.status !== 'done' && makeJob.status !== 'failed'))) {
+      panel.classList.remove('is-compact');
+      const head = panel.querySelector('.refit-makeprop-head');
+      if (head) head.setAttribute('aria-expanded', 'true');
+    }
     const door = root.querySelector('#refit-makeprop-door');
     const cta = root.querySelector('#refit-makeprop-cta');
     const need = !makeCredits ? '' : !makeCredits.linked ? (makeCredits.linkable ? 'link' : '') : !(makeCredits.balanceUsd > 0) ? 'topup' : '';
