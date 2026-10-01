@@ -167,9 +167,18 @@
     for (const p of spec.hallProps || []) { const r = st.addProp({ t: p.t, x: p.x, y: p.y, w: p.w, h: p.h, r: p.r || 0, block: p.block }); if (!r || !r.ok) return refuse('the hallway could not be dressed'); }
     return { ok: true };
   }
+  // a part's second hallway, laid first: the stretch a concourse's spine is lengthened by, deck and planters too
+  function layHall2(st, spec) {
+    if (!spec.hall2) return { ok: true };
+    const h = st.placeHallway({ rect: spec.hall2 }); if (!h || !h.ok) return refuse('the concourse could not be lengthened' + (h && h.msg ? ' (' + h.msg + ')' : ''));
+    if (spec.hall2Deck) { const d = st.setDeck(h.id, spec.hall2Deck); if (!d || !d.ok) return refuse('the concourse floor could not be laid'); }
+    for (const p of spec.hall2Props || []) { const r = st.addProp({ t: p.t, x: p.x, y: p.y, w: p.w, h: p.h, r: p.r || 0, block: p.block }); if (!r || !r.ok) return refuse('the concourse could not be dressed'); }
+    return { ok: true };
+  }
   function buildKit(st, part, WM) {
     const ids = [];
     let roomId = part.roomId || null, hallId = null;
+    const h2 = layHall2(st, part); if (!h2.ok) return h2;
     if (part.hall) { const h = st.placeHallway({ rect: part.hall }); if (!h || !h.ok) return refuse('the hallway could not be laid there' + (h && h.msg ? ' (' + h.msg + ')' : '')); hallId = h.id; }
     if (part.room) {
       const before = new Set(st.rooms().map(r => r.id));
@@ -229,6 +238,7 @@
     const bp = (WM.BLUEPRINTS || []).find(x => x.id === spec.bpId);
     if (!bp) return refuse('unknown line');
     let hallId = null;
+    const h2 = layHall2(st, spec); if (!h2.ok) return h2;
     if (spec.hall) { const h = st.placeHallway({ rect: spec.hall }); if (!h || !h.ok) return refuse('the hallway could not be laid there' + (h && h.msg ? ' (' + h.msg + ')' : '')); hallId = h.id; }
     if (spec.room) {
       const r = st.addRoom({ kind: spec.room.kind, name: spec.room.name, rect: spec.room.rect });
@@ -1926,6 +1936,7 @@
     const ids = [], parts = [];
     for (const part of spec.parts || []) {
       let roomId = part.roomId || null, hallId = null;
+      const h2 = layHall2(st, part); if (!h2.ok) return h2;
       if (part.hall) {
         const r = st.placeHallway({ rect: part.hall }); if (!r || !r.ok) return refuse('the hallway could not be laid there' + (r && r.msg ? ' (' + r.msg + ')' : '')); hallId = r.id;
         if (part.hallDeck) { const d = st.setDeck(hallId, part.hallDeck); if (!d || !d.ok) return refuse('the hallway floor could not be laid'); }
@@ -2072,7 +2083,9 @@
       const minWH = zones.length > 1 ? DESIGN_MIN_MANY : (zones.length || lines.length) ? DESIGN_MIN_ONE : SIZES.medium;
       const tooSmall = () => refuse((given || nth) + ' at ' + sz.size[0] + ' × ' + sz.size[1] + ' is too small for what goes in it: that needs about ' + Math.max(need.w, minWH[0]) + ' × ' + Math.max(need.h, minWH[1]) + '. Leave size out, or ask for a bigger one.');
       if (sz.size && ((need.hardW || need.w) > sz.size[0] || (need.hardH || need.h) > sz.size[1])) return tooSmall();
-      const RW = sz.size ? sz.size[0] : Math.max(need.w, minWH[0]), RH = sz.size ? sz.size[1] : Math.max(need.h, minWH[1]);
+      // a conveyor hall with no size asked is a hall: giant, with floor for the lines to come (as a layout's is)
+      const hallMin = rstyle === 'works' ? SIZES.giant : minWH;
+      const RW = sz.size ? sz.size[0] : Math.max(need.w, minWH[0], hallMin[0]), RH = sz.size ? sz.size[1] : Math.max(need.h, minWH[1], hallMin[1]);
       if (RW > DESIGN_MAX[0] || RH > DESIGN_MAX[1]) return refuse('What goes in ' + (given || nth) + ' needs a ' + RW + ' × ' + RH + ' room, larger than the ' + DESIGN_MAX[0] + ' × ' + DESIGN_MAX[1] + ' StarNet builds at once. Split it into two rooms.');
       const tq = q.beside != null ? roomNamed(probe, q.beside) : { ok: true, room: null };   // no room named: beside whichever keeps the station compact
       if (!tq.ok) return tq;
@@ -2096,6 +2109,7 @@
       let small = false;
       for (const cand of grid.concat(pl.ok ? pl.list : [])) {
         const cp = WM.create(clone(probe.serialize()));
+        if (cand.ext) { const h0 = cp.placeHallway({ rect: cand.ext }); if (!h0 || !h0.ok) { why = why || refuse('the concourse could not be lengthened there'); continue; } cp.setDeck(h0.id, CORRIDOR_DECK); }
         if (cand.hall) { const h = cp.placeHallway({ rect: cand.hall }); if (!h || !h.ok) { why = why || refuse('the hallway could not be laid there'); continue; } }
         const a = cp.addRoom(Object.assign({}, roomSpec, { rect: cand.rect }));
         if (!a || !a.ok) { why = why || refuse('the room could not be added there'); continue; }
@@ -2501,6 +2515,10 @@
   function gridSpots(WM, st, W, H, hangs, exact) {
     const main = mainRoom(st); if (!main) return [];
     const big = W > CELL[0] || H > CELL[1];
+    // a station laid out as a concourse grows down its concourse (its rooms 18 × 10 unless a size was asked)
+    const plain = !exact && W <= CELL[0] && H <= CELL[1];
+    const cs = concourseSlot(st, plain ? 18 : W, plain ? 10 : H, W > SIZES.large[0] || H > SIZES.large[1]);
+    if (cs) return cs;
     let g;
     try { g = diamondGeometry(WM.create(clone(st.serialize())), main.id, [{ i: 0, name: '__grid__', w: exact ? W : Math.max(W, CELL[0]), h: exact ? H : Math.max(H, CELL[1]), big, exact: !!exact }], hangs, { ring: false }); } catch (_) { return []; }
     if (!g || !g.ok || !g.rooms.length || !g.halls.length) return [];
@@ -2509,15 +2527,19 @@
   }
   // a grid room's hallway trimmed like a layout's: the corridor deck, and dressHall's planters and lights
   function gridHallTrim(WM, env, st, cand, kind) {
-    if (!cand || !cand.grid || !cand.hall) return {};
+    if (!cand || !cand.grid) return {};
+    const out = cand.ext ? { hall2: cand.ext, hall2Deck: CORRIDOR_DECK, hall2Props: [] } : {};
+    if (!cand.hall && !cand.ext) return out;
     try {
       const cp = WM.create(clone(st.serialize()));
-      const h = cp.placeHallway({ rect: cand.hall }); if (!h || !h.ok) return {};
-      const r = cp.addRoom({ kind: kind || 'hab', name: '__trim__', rect: cand.rect }); if (!r || !r.ok) return {};
-      if (!cp.setDeck(h.id, CORRIDOR_DECK).ok) return {};
-      const d = dressHall(cp, env, h.id, null);
-      return { hallDeck: CORRIDOR_DECK, hallProps: (d && d.props) || [] };
-    } catch (_) { return {}; }
+      const e = cand.ext ? cp.placeHallway({ rect: cand.ext }) : null; if (cand.ext && (!e || !e.ok)) return out;
+      if (e) cp.setDeck(e.id, CORRIDOR_DECK);
+      const h = cand.hall ? cp.placeHallway({ rect: cand.hall }) : null; if (cand.hall && (!h || !h.ok)) return out;
+      const r = cp.addRoom({ kind: kind || 'hab', name: '__trim__', rect: cand.rect }); if (!r || !r.ok) return out;
+      if (h && cp.setDeck(h.id, CORRIDOR_DECK).ok) { const d = dressHall(cp, env, h.id, null); Object.assign(out, { hallDeck: CORRIDOR_DECK, hallProps: (d && d.props) || [] }); }
+      if (e) { const d2 = dressHall(cp, env, e.id, cand.dir === 'east' || cand.dir === 'west' ? 'north' : 'west'); out.hall2Props = (d2 && d2.props) || []; }
+      return out;
+    } catch (_) { return out; }
   }
   // the station's conveyor halls (a works room, a foundry named for lines), largest clear floor first
   function worksHalls(st) {
@@ -2526,6 +2548,65 @@
       .sort((a, b) => b.free - a.free).map(x => x.r);
   }
   const CONCOURSE_ROOMS = 8;
+  // a concourse's local frame off the hub box B: u along the spine away from the hub, a across it
+  function concourseFrame(B, dir) {
+    const cw = 4, horiz = dir === 'east' || dir === 'west', lo = horiz ? B.y1 : B.x1, hi = horiz ? B.y2 : B.x2, v1 = lo + ((hi - lo + 1 - cw) >> 1), v2 = v1 + cw - 1;
+    const toWorld = (u1, u2, a, b) => dir === 'east' ? { x1: B.x2 + 1 + u1, x2: B.x2 + 1 + u2, y1: a, y2: b } : dir === 'west' ? { x1: B.x1 - 1 - u2, x2: B.x1 - 1 - u1, y1: a, y2: b }
+      : dir === 'south' ? { y1: B.y2 + 1 + u1, y2: B.y2 + 1 + u2, x1: a, x2: b } : { y1: B.y1 - 1 - u2, y2: B.y1 - 1 - u1, x1: a, x2: b };
+    const toLocal = r => dir === 'east' ? { u1: r.x1 - B.x2 - 1, u2: r.x2 - B.x2 - 1, a1: r.y1, a2: r.y2 } : dir === 'west' ? { u1: B.x1 - 1 - r.x2, u2: B.x1 - 1 - r.x1, a1: r.y1, a2: r.y2 }
+      : dir === 'south' ? { u1: r.y1 - B.y2 - 1, u2: r.y2 - B.y2 - 1, a1: r.x1, a2: r.x2 } : { u1: B.y1 - 1 - r.y2, u2: B.y1 - 1 - r.y1, a1: r.x1, a2: r.x2 };
+    return { dir, horiz, v1, v2, toWorld, toLocal };
+  }
+  // the concourse a layout laid off the main room, read back from the floor: its spine (and every stretch that lengthened
+  // it), the rooms down each side, the room at its far end — or null when the station has none
+  function concourseOf(st) {
+    const hub = mainRoom(st); if (!hub) return null;
+    const B = bboxOf(hub), halls = st.rooms().filter(r => r.kind === 'corridor' && r.rects.length === 1);
+    for (const dir of SIDES) {
+      const F = concourseFrame(B, dir), band = l => l.a1 === F.v1 && l.a2 === F.v2;
+      let len = -1;
+      for (const c of halls) { const l = F.toLocal(c.rects[0]); if (l.u1 === 0 && l.u2 >= 11 && band(l)) { len = l.u2 + 1; break; } }
+      if (len < 0) continue;
+      for (let more = true; more;) { more = false; for (const c of halls) { const l = F.toLocal(c.rects[0]); if (l.u1 === len && band(l)) { len = l.u2 + 1; more = true; } } }
+      const left = [], right = [];
+      let end = null;
+      for (const r of st.rooms()) {
+        if (r.kind === 'corridor' || r.id === hub.id || r.rects.length !== 1) continue;
+        const l = F.toLocal(r.rects[0]);
+        if (l.u1 === len && l.a1 <= F.v2 && l.a2 >= F.v1) end = r;
+        else if (l.u1 >= 0 && l.u2 < len && l.a2 === F.v1 - 4) left.push(Object.assign({ room: r }, l));
+        else if (l.u1 >= 0 && l.u2 < len && l.a1 === F.v2 + 4) right.push(Object.assign({ room: r }, l));
+      }
+      left.sort((a, b) => a.u1 - b.u1); right.sort((a, b) => a.u1 - b.u1);
+      return { dir, F, hub, len, left, right, end };
+    }
+    return null;
+  }
+  // the next place down a concourse for a W × H room: across from the room that has no twin yet, else a new pair (the
+  // left side first), or the far end for a big room; with the stretch the spine must be lengthened by, if any
+  function concourseSlot(st, W, H, big) {
+    const con = concourseOf(st); if (!con) return null;
+    const F = con.F, stub = 3, along = 3, e = F.horiz ? { along: W, across: H } : { along: H, across: W };
+    const base = { target: 'the concourse', targetId: con.hub.id, grid: true, concourse: true, dir: con.dir };
+    if (big) {
+      if (con.end) return [];
+      const c = (F.v1 + F.v2) >> 1, a = c - ((e.across - 1) >> 1);
+      return [Object.assign({ rect: F.toWorld(con.len, con.len + e.along - 1, a, a + e.across - 1), hall: null, side: 'at the far end', len: 0 }, base)];
+    }
+    if (con.left.length + con.right.length >= 16) return [];
+    const L = con.left, R = con.right;
+    let side, u1;
+    if (L.length > R.length) { side = 'right'; const m = L[R.length]; u1 = m.u1 + ((m.u2 - m.u1 + 1 - e.along) >> 1); }
+    else if (R.length > L.length) { side = 'left'; const m = R[L.length]; u1 = m.u1 + ((m.u2 - m.u1 + 1 - e.along) >> 1); }
+    else { side = 'left'; u1 = L.length ? Math.max(...L.map(r => r.u2), ...R.map(r => r.u2)) + 1 + along : along; }
+    const u2 = u1 + e.along - 1, hu = u1 + ((e.along - 4) >> 1), need = u2 + 1 + along;
+    if (need > con.len && con.end) return [];   // the room at the far end stops the spine
+    const rect = side === 'left' ? F.toWorld(u1, u2, F.v1 - stub - e.across, F.v1 - stub - 1) : F.toWorld(u1, u2, F.v2 + stub + 1, F.v2 + stub + e.across);
+    const hall = side === 'left' ? F.toWorld(hu, hu + 3, F.v1 - stub, F.v1 - 1) : F.toWorld(hu, hu + 3, F.v2 + 1, F.v2 + stub);
+    const name = side === 'left' ? (F.horiz ? 'north' : 'west') : (F.horiz ? 'south' : 'east');
+    if (neighbourOf(st, rect, [])) return [];   // it would open onto a room nobody asked it to join
+    return [Object.assign({ rect, hall, ext: need > con.len ? F.toWorld(con.len, need - 1, F.v1, F.v2) : null, side: name, len: stub }, base)];
+  }
   function concourseGeometry(B, dir, want) {
     if (want.length > CONCOURSE_ROOMS) return refuse('A concourse holds ' + CONCOURSE_ROOMS + ' rooms (' + want.length + ' were asked).');
     const cw = 4, stub = 3, along = 3;
@@ -2652,6 +2733,17 @@
     if (pattern === 'diamond') for (const q of pr.rooms) if (!q.big) { q.w = CELL[0]; q.h = CELL[1]; }
     if (replace && pr.rooms.some(r => [].concat(...r.lines.map(l => l.staff || []), ...r.zones.map(z => z.staff || [])).some(s => s && /^(new|recruit)/i.test(String(s.agent || ''))))) return refuse('A layout that replaces the station cannot recruit; staff the lines with the crew you have, or recruit after it is built.');
     const hub = live.rooms().find(r => r.id === hubQ.room.id), B = bboxOf(hub);
+    // a concourse that stands grows: its rooms go down it, in its next places, never into a second concourse
+    const con = !replace && pattern === 'concourse' ? concourseOf(live) : null;
+    if (con && con.hub.id === hub.id) {
+      if (L.side != null && L.side !== con.dir) notes.push('The station already has a concourse running ' + con.dir + ', so the new rooms go down it.');
+      const asRooms = L.rooms.map(q => { const o = {}; for (const k of ['name', 'style', 'size', 'lines', 'zones']) if (q && q[k] != null) o[k] = q[k]; return o; });
+      const g = planBuild(doc, { rooms: asRooms }, env);
+      if (!g.ok) return g;
+      g.plan.summary = asRooms.length + (asRooms.length === 1 ? ' more room' : ' more rooms') + ' down the CONCOURSE ' + con.dir + ' from ' + hub.name + ', in its next places: ' + g.plan.summary;
+      g.plan.notes = notes.concat(g.plan.notes || []);
+      return g;
+    }
     const before = floorFacts(live, P);
     // the geometry: the ring round the hub, or the concourse off the side asked (else the first side it fits)
     const dirs = pattern === 'diamond' ? [null] : sd.side ? [sd.side] : SIDES.slice().sort((a, b) => { const free = s => placementsOn(live, hub, s, 12, 8, 3, null, 'hab').list.length ? 0 : 1; return free(a) - free(b); });
@@ -2766,7 +2858,7 @@
     const head = pattern === 'diamond'
       ? (laid.geo.ring ? 'A DIAMOND around ' + hub.name + ': a corridor loop round it with a hallway in from each side, and ' + view.length + ' rooms on an even grid round the loop, each on its own planted, lit hallway. '
         : view.length + (view.length === 1 ? ' room' : ' rooms') + ' on the diamond grid around ' + hub.name + ', each in the next free place of the grid, on its own planted, lit hallway. ')
-      : 'A CONCOURSE ' + laid.dir + ' from ' + hub.name + ': a wide corridor, planted and lit, and ' + view.length + ' rooms. ';
+      : 'A CONCOURSE ' + laid.dir + ' from ' + hub.name + ': a wide corridor, planted and lit, and ' + view.length + (view.length === 1 ? ' room. ' : ' rooms. ');
     const blocking = [].concat(...lines.map(l => l.blocking.map(b => (lines.length > 1 ? (l.label || l.plain) + ': ' : '') + b)));
     const summary = head + (view.length > 4 && pattern === 'diamond' ? 'Every room is 18 × 11 unless it says. ' : '') + roomText.join('. ') + '.'
       + (replace ? ' It replaces everything beyond ' + hub.name + ' (' + wasRooms + (wasRooms === 1 ? ' room' : ' rooms') + ' and ' + wasProps + ' props); ' + hub.name + ', agents and conversations stay, and every agent keeps a desk' + (reseated.length ? ' (' + moves.length + (moves.length === 1 ? ' desk moves' : ' desks move') + ' to ' + reseated.join(', ') + ')' : '') + '. Your current layout is backed up: RESTORE PREVIOUS in Build → Presets brings it back.' : '')

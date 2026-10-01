@@ -1379,6 +1379,35 @@ for (const c of T.catalog) {
     const n9 = SB.planEdit(st.serialize(), { staff: { line: 'BUILD + TEST', steps: [{ step: 9, agent: 'rex' }] } }, E);
     A.ok(!n9.ok && /^step is a number from 1 to 2/.test(n9.error), 'a step that is not there is refused');
   }
+  // A CONCOURSE GROWS IN PLACE (09-30 gap hunt): on a concourse station a new room takes the next place down the same
+  // concourse (across from its twin, then a new pair, the spine lengthened), a big hall the far end, and a concourse asked
+  // again never builds a second one
+  {
+    const st = fresh(), c = SB.planBuild(st.serialize(), { layout: { pattern: 'concourse', rooms: ['lounge', 'library', 'lab'].map(style => ({ style })) } }, E);
+    A.ok(c.ok && /^A CONCOURSE (east|west|north|south) from HOME: a wide corridor, planted and lit, and 3 rooms\./.test(c.plan.summary) && SB.apply(st, c.plan, E).ok, 'fixture: a concourse of three');
+    const one = SB.planBuild(fresh().serialize(), { layout: { pattern: 'concourse', rooms: [{ style: 'lounge' }] } }, E);
+    A.ok(one.ok && /and 1 room\. /.test(one.plan.summary), 'one room is "1 room", not "1 rooms"');
+    const room = n => st.rooms().find(x => x.name === n), spineCount = () => st.rooms().filter(x => x.kind === 'corridor' && x.rects[0] && Math.min(x.rects[0].x2 - x.rects[0].x1, x.rects[0].y2 - x.rects[0].y1) + 1 === 4).length;
+    const lab = room('LAB').rects[0], s0 = spineCount();
+    const gym = SB.planBuild(st.serialize(), { rooms: [{ style: 'gym' }] }, E);
+    A.ok(gym.ok && /^GYM, a new 18 × 10 room (south|north|east|west) of the concourse, through a hallway/.test(gym.plan.summary), 'a plain room goes down the concourse: ' + (gym.error || gym.plan.summary.slice(0, 90)));
+    if (gym.ok) {
+      A.ok(SB.apply(st, gym.plan, E).ok);
+      const g = room('GYM').rects[0];
+      A.ok((g.x1 === lab.x1 && g.x2 === lab.x2) || (g.y1 === lab.y1 && g.y2 === lab.y2), 'across from the LAB, its twin (they share the stretch of the concourse)');
+      A.eq(spineCount(), s0, 'the spine had room: nothing lengthened');
+    }
+    const cafe = SB.planBuild(st.serialize(), { rooms: [{ style: 'cafe' }] }, E);
+    A.ok(cafe.ok && SB.apply(st, cafe.plan, E).ok, 'a fifth room starts a new pair (' + (cafe.error || '') + ')');
+    A.eq(spineCount(), s0 + 1, 'and the spine is lengthened by one stretch for it');
+    A.ok(st.rooms().filter(x => x.kind !== 'corridor').every(x => walks(st, room('HOME'), x)), 'every room walkable down the concourse');
+    const again = SB.planBuild(st.serialize(), { layout: { pattern: 'concourse', rooms: [{ style: 'quarters' }, { style: 'garden' }] } }, E);
+    A.ok(again.ok && /^2 more rooms down the CONCOURSE (east|west|north|south) from HOME, in its next places: /.test(again.plan.summary), 'a concourse asked again grows the one that stands: ' + (again.error || again.plan.summary.slice(0, 100)));
+    if (again.ok) { A.ok(SB.apply(st, again.plan, E).ok); A.ok(st.rooms().filter(x => x.kind === 'corridor').filter(x => { const R = x.rects[0], H = room('HOME').rects[0]; return (R.x1 === H.x2 + 1 || R.x2 === H.x1 - 1 || R.y1 === H.y2 + 1 || R.y2 === H.y1 - 1) && Math.min(R.x2 - R.x1, R.y2 - R.y1) + 1 === 4; }).length === 1, 'and there is still ONE concourse off HOME'); }
+    const hall = SB.planBuild(st.serialize(), { rooms: [{ name: 'Conveyor Hall', style: 'works' }] }, E);
+    A.ok(hall.ok && /^CONVEYOR HALL, a new 36 × 20 room at the far end of the concourse, open to it/.test(hall.plan.summary), 'a conveyor hall is a giant hall at the far end: ' + (hall.error || hall.plan.summary.slice(0, 100)));
+    if (hall.ok) { A.ok(SB.apply(st, hall.plan, E).ok); A.ok(walks(st, room('HOME'), room('CONVEYOR HALL')), 'walkable'); }
+  }
   // a concourse from a crowded station finds a free side, or is refused naming the way forward
   {
     const st = fresh();

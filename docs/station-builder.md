@@ -76,7 +76,11 @@ reliably do this?"); this is those two layouts as patterns StarNet computes. `st
   (tested). Added after Andrew's test: "good at designing the rooms, terrible at judging where to place them… keep
   the diamond shape even with the new rooms".
 - `concourse`: a 4-wide corridor from one side of the hub (`side`, else the first free one), rooms on short halls down
-  both sides, a big room flush on its far end. Up to eight rooms.
+  both sides, a big room flush on its far end. Up to eight rooms. It GROWS IN PLACE (`concourseOf` reads it back from
+  the floor): a concourse asked again, a plain room, a kit or a line's room with no spot named takes its next place —
+  across from the room with no twin yet, else a new pair (left side first), the spine lengthened by a planted stretch
+  when it runs out; a big room (larger than `large`; a conveyor hall is giant unless sized) takes the far end. It never
+  builds a second concourse.
 - A room's `style` is one of 15 whole-room styles (`RoomStyles.ROOMS`: lounge, cozy, games, library, quarters,
   garden, cafe, desks, meeting, lab, workshop, comms, storage, gym, works), also by a word ("arcade", "conveyor
   hall") or, with no style, by the room's name. A room with `lines` is a conveyor hall (works); its lines are
