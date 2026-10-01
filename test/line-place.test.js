@@ -88,7 +88,8 @@ A.ok(placed === WM.BLUEPRINTS.length && placed > drawnFits, 'laid out to fit, ' 
     'a click stamps the drawn tile map where it fits, and lays the same line out there (same cap and tries) where it does not');
   A.ok(/LAID OUT TO FIT HERE/.test(stamp), '…and says which it did');
   const fit = at('  function setLineTileFit(b, bp) {', '  let lineFitSyncT = 0;');
-  A.ok(/queueLineLaid\(bp\.id\)/.test(fit) && /FITS LAID OUT — CLICK THE FLOOR WHERE YOU WANT IT/.test(fit) && /CHECKING WHERE IT FITS/.test(fit), 'a card whose drawn shape fits nowhere asks the engine in the background and says FITS LAID OUT (or NO ROOM once it has answered)');
+  // (2026-09-30: said on the tile's own small line — a line that fits laid out says its steps like any other; "needs more room" once the engine says no)
+  A.ok(/queueLineLaid\(bp\.id\)/.test(fit) && !/fits laid out/.test(fit) && /'needs more room'/.test(fit) && /stat\.dataset\.rest/.test(fit), 'a card whose drawn shape fits nowhere asks the engine in the background, and says NEEDS MORE ROOM only once it has answered no');
   A.ok(/LineEdit\.canPlaceBlueprint\(station, id, lineNearTile\(\)\)/.test(build) && /lineLaidQueue\.length = 0/.test(at('  function clearLineFields() {', '  const lineLaidMemo')), '…one line at a time, forgotten whenever the floor changes');
   A.ok(/g\.laid \? ' — CLICK TO LAY IT OUT HERE'/.test(build), 'a red ghost invites the click only when the line fits laid out');
   A.ok(/const W = Math\.min\(bp\.w, need\.w\) \+ 2, H = Math\.min\(bp\.h, need\.h\) \+ 2;/.test(build), 'MAKE ROOM builds the room the laid-out line needs when that is smaller than the drawn one');

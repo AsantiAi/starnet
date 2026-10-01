@@ -122,6 +122,7 @@ test/routing.persist.e2e.test.js
 test/run-recovery.api.test.js
 test/routing.sample.e2e.test.js
 test/routing.sample-provider.e2e.test.js
+test/routing.fix-suggest.e2e.test.js
 test/routing.sample-stop.e2e.test.js
 test/routing.steptest.e2e.test.js
 test/routing.triggers.e2e.test.js
