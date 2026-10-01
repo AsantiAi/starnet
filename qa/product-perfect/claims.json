@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "246d8be41b1be8fae80ee4d1e2012fd614b25d2a",
+    "sourceCommit": "6eac461a75b0e1e2c57c4c8a5ffcaf6175a4010b",
     "pathSetSha256": "5e692c5f0c56bc6565c363fb4eb622af3093a911f55496ecdf16c95cad03c8af",
     "files": [
       {
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 410767,
-        "sha256": "1970c509d2be46d3416f25156403e1e09da2344678e3827d4408b85001a34089"
+        "bytes": 415951,
+        "sha256": "fdac969b31cbdf63601a5c4e0affacd1d6b02f877b87fc5f496cc0556f719955"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
@@ -538,8 +538,8 @@
       },
       {
         "path": "frontend/app/group-chat.js",
-        "bytes": 39389,
-        "sha256": "cd74112e833398cd964ec24209aa46a4188ef52ce3a329d9d27e82e745bed0d5"
+        "bytes": 39748,
+        "sha256": "23244ff05fa551d244943d4aced119fd850b0821660ca7be20f3f1f7bfe50f8c"
       },
       {
         "path": "frontend/app/harness.js",
@@ -1148,8 +1148,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 783138,
-        "sha256": "738f8e7c657935cb42b1bd100afd74768e82b306c191dca3a5e7471614f15bfc"
+        "bytes": 784489,
+        "sha256": "6e40c2bac3567129fc07f82289444b2c574ff819b3ae21e34c9b0dc87ad00f44"
       },
       {
         "path": "frontend/app/stepin.js",
@@ -1528,8 +1528,8 @@
       },
       {
         "path": "frontend/css/glass-demo.css",
-        "bytes": 35745,
-        "sha256": "bd66b489becebcf3d4e3cb09a4c12870d5b5a61dee286528b5ba2f83c1bfde61"
+        "bytes": 35947,
+        "sha256": "df710d586fb5ad35e1964ac3931406e680ebde371971d357a8a2d05bfa9c844a"
       },
       {
         "path": "frontend/css/hudmode.css",
@@ -1538,8 +1538,8 @@
       },
       {
         "path": "frontend/css/interface.css",
-        "bytes": 29872,
-        "sha256": "8c0d245dee790f8b520d9b61ef28818a3e06eb7e8cc5d874860e364e544b3f9e"
+        "bytes": 31926,
+        "sha256": "89275d7ab540d94745533b11ef242666bb9ecc5839722f22081fddc662299b7a"
       },
       {
         "path": "frontend/css/linewatch.css",
