@@ -18,7 +18,7 @@
     back: 'M10 3L5 8l5 5', close: 'M3.5 3.5l9 9M12.5 3.5l-9 9', send: 'M3 8h9M8.5 4l4 4-4 4', caret: 'M3 5.5l5 5 5-5',
     expand: 'M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5L9 7M2.5 13.5L7 9',
     gear: 'M2 5h7M12 5h2M2 11h2M7 11h7M9 3.5h3v3H9zM4 9.5h3v3H4z',
-    station: 'M2.5 3.5h11v9h-11zM2.5 6.5h11M5.5 9.5h5', sessions: 'M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z', files: 'M4 2.5h5.5l2.5 2.5v8.5H4zM9.5 2.5V5H12'
+    station: 'M2.5 3.5h11v9h-11zM2.5 6.5h11M5.5 9.5h5', sessions: 'M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z', files: 'M4 2.5h5.5l2.5 2.5v8.5H4zM9.5 2.5V5H12', activity: 'M1.5 8.5h3l2-5 3 9 2-4h3'
   };
   function icon(name) {
     const s = document.createElementNS(SVGNS, 'svg');
@@ -33,6 +33,8 @@
     status: null, approvals: [], threads: [], files: [], routines: [],
     tab: 'station', page: null, thread: null, file: null, target: null, query: '',
     live: new Map(),            // runId -> { streamId, agentId, text, steps:[], ended }
+    stepOf: new Map(),
+    drafts: new Map(),           // promptId -> a half-typed answer           // runId -> the tool it is using right now (from the station's feed)
     view: null, viewNone: false, viewBusy: false,   // the station picture: { at, w, h, bodies, url, age0, seenAt }
     portraits: new Map(), portraitBusy: false,      // skin -> image URL (null = none)
     scroll: {}, seen: new Set(), retryMs: 1000, retryTimer: null, arrivedAt: new Map()
@@ -40,6 +42,8 @@
   const LIVE_VIEW_MS = 15000;   // a picture younger than this is "live"
 
   /* ---------- helpers ---------- */
+  const TARGET_KEY = 'starnet.remote.target';
+  function setTarget(id) { S.target = id; try { localStorage.setItem(TARGET_KEY, id); } catch (_) {} }
   function ago(ms) {
     const s = Math.max(0, Math.round(ms / 1000));
     if (s < 60) return s + 's';
@@ -53,7 +57,8 @@
   function agentName(id) { const a = agentOf(id); return (a && a.name) || id || 'AGENT'; }
   const isWorking = (a) => !!a && a.state === 'working' && S.linkState === 'open';
   // a one-line label from text that may carry markdown marks
-  const plain = (t) => String(t == null ? '' : t).replace(/`{1,3}|\*\*|^\s{0,3}#{1,6}\s+/gm, '').replace(/\s+/g, ' ').trim();
+  const plain = (t) => { const q = questionOf(t); return q ? 'Asks: ' + q.question : plainText(t); };
+  const plainText = (t) => String(t == null ? '' : t).replace(/`{1,3}|\*\*|^\s{0,3}#{1,6}\s+/gm, '').replace(/\s+/g, ' ').trim();
   const streamLive = (streamId) => { for (const [, L] of S.live) if (L.streamId === streamId && !L.ended) return true; return false; };
   let toastT = null;
   function toast(msg, bad) {
@@ -73,6 +78,17 @@
       last = m.index + tok.length;
     }
     if (last < s.length) node.appendChild(document.createTextNode(s.slice(last)));
+    for (const n of node.childNodes) if (n.nodeType === 3 && n.nodeValue.indexOf('**') >= 0) n.nodeValue = n.nodeValue.replace(/\*\*/g, '');
+  }
+  /* AN AGENT'S QUESTION. A run that needs the Commander's call ends on a machine line the desk turns into choice chips:
+       TASK_QUESTION: <question> || <option> | <option>      (or "[free text]")      and the same shape for FORK:
+     The phone renders it the same way: the question, and one key per option that answers in the same conversation. */
+  const MARKER_RE = /^\s*(TASK_QUESTION|FORK):\s*(.+?)\s*\|\|\s*(.*)$/m;
+  function questionOf(text) {
+    const m = MARKER_RE.exec(String(text || ''));
+    if (!m) return null;
+    const opts = m[3].split('|').map(x => x.replace(/^[\s★*]+|[\s*]+$/g, '').trim()).filter(x => x && !/^\[free text\]$/i.test(x)).slice(0, 6);
+    return { kind: m[1], question: m[2].trim(), options: opts, before: String(text).slice(0, m.index).trim() };
   }
   function mdNode(text) {
     const root = el('div', 'md');
@@ -177,21 +193,30 @@
   async function ping() {
     if (S.linkState !== 'open') return;
     const t = performance.now();
-    try { await call('ping'); S.latency = Math.round(performance.now() - t); } catch (_) {}
+    try { await S.client.call('ping', {}, 12000); S.latency = Math.round(performance.now() - t); S.lastOkAt = Date.now(); }
+    catch (_) { S.latency = null; S.linkState = 'connecting'; try { S.client.close(); } catch (__) {} scheduleReconnect(); render(true); }
     paintLamp();
   }
 
-  async function refreshStatus() { try { const r = await call('status'); if (r.ok) S.status = r.data; } catch (_) {} }
+  async function refreshStatus() {
+    try {
+      const r = await call('status');
+      if (!r.ok) return;
+      S.status = r.data;
+      const running = new Set((r.data.runs || []).map(x => x.runId));
+      for (const [runId, L] of S.live) if (!L.ended && !running.has(runId) && Date.now() - (L.seenAt || 0) > 4000) L.ended = { runId, reason: 'gone' };
+    } catch (_) {}
+  }
   async function refreshApprovals() { try { const r = await call('approvals'); if (r.ok) { S.approvals = r.data; for (const a of S.approvals) if (!S.arrivedAt.has(a.promptId)) S.arrivedAt.set(a.promptId, Date.now()); } } catch (_) {} }
   async function refreshThreads() { try { const r = await call('threads', { limit: 50 }); if (r.ok) S.threads = r.data; } catch (_) {} }
-  async function refreshFiles() { try { const r = await call('files', { limit: 40 }); if (r.ok) S.files = r.data; } catch (_) {} }
   async function refreshRoutines() { try { const r = await call('routines'); if (r.ok) S.routines = r.data; } catch (_) {} }
   async function refreshAll() {
     await refreshStatus(); await refreshApprovals();
+    if (!S.target) { try { S.target = localStorage.getItem(TARGET_KEY) || null; } catch (_) {} }
     if ((!S.target || !agentOf(S.target)) && agents().length) S.target = agents()[0].agentId;
     render(true);
     refreshView(); ensurePortraits(); refreshPush().then(() => render(true));
-    await refreshThreads();
+    await Promise.all([refreshThreads(), refreshActivity()]);
     render(true);
   }
 
@@ -206,7 +231,7 @@
       render(true); return;
     }
     if (e.type === 'approval.closed') { S.approvals = S.approvals.filter(a => a.promptId !== e.promptId); render(true); return; }
-    if (e.type === 'run.started') { S.live.set(e.runId, { streamId: e.streamId, agentId: e.agentId, text: '', steps: [], ended: null }); statusSoonish(); render(true); return; }
+    if (e.type === 'run.started') { S.live.set(e.runId, { streamId: e.streamId, agentId: e.agentId, text: '', steps: [], ended: null, seenAt: Date.now() }); statusSoonish(); if (S.tab === 'sessions') activitySoonish(); render(true); return; }
     const L = e.runId && S.live.get(e.runId);
     const showing = L && S.thread && S.thread.streamId === L.streamId;
     if (e.type === 'run.text' && L) { L.text = e.text; if (showing) renderLive(); return; }
@@ -218,54 +243,175 @@
       if (e.error) toast(agentName(e.agentId) + ': ' + e.error, true);
       if (showing) openThread(S.thread.streamId, S.thread.agentId, true);
       refreshThreads().then(() => render(true));
+      if (S.tab === 'sessions') activitySoonish();
       return;
     }
-    if (e.type === 'station' && (e.name === 'agent.run.start' || e.name === 'agent.run.end')) statusSoonish();
+    if (e.type === 'view.crew') { if (S.view) { S.crewPaused = !!e.paused; applyCrew(e.bodies); paintHero(); } return; }
+    if (e.type === 'station' && e.name === 'agent.tool_call' && e.payload && e.payload.runId && e.payload.name) {
+      S.stepOf.set(String(e.payload.runId), String(e.payload.name));
+      if (S.stepOf.size > 200) S.stepOf.delete(S.stepOf.keys().next().value);
+      if (S.tab === 'sessions') { const n = document.querySelector('[data-step="' + CSS.escape(String(e.payload.runId)) + '"]'); if (n) n.textContent = stepLine(e.payload.name); }
+      return;
+    }
+    if (e.type === 'station' && (e.name === 'agent.run.start' || e.name === 'agent.run.end')) { statusSoonish(); if (S.tab === 'sessions') activitySoonish(); }
   }
 
-  /* ---------- the station picture ---------- */
+  /* ---------- the station, live ----------
+     The room is a still the desk's own renderer drew (refreshed every few seconds, with the crew left out). The crew
+     are drawn here, on top, from the desk's crew stream: the same sprite drawings the stage is showing, in the same
+     places, a few times a second, and each one glides to its next position between updates, so they move smoothly.
+     A still with the crew baked in (an older desk page) gets nothing drawn on top of it. */
+  const scene = { base: null, crew: new Map(), tracks: new Map(), raf: 0, last: 0 };
+  const TRACK_FPS = { walk: 10, type: 6, talk: 6, drink: 4 };   // tracks the phone animates on its own between updates
+  const trackKey = (key) => String(key || '').replace('.blink.', '.rot.');   // a blink is too short to sample: show the pose
+  function track(key) {
+    const k = trackKey(key);
+    let t = scene.tracks.get(k);
+    if (t) return t;
+    t = { frames: null };
+    scene.tracks.set(k, t);
+    call('sprite', { key: k }).then(async (r) => {
+      if (!r.ok || !r.data || !Array.isArray(r.data.frames)) return;
+      t.frames = await Promise.all(r.data.frames.map((b64) => { const i = new Image(); i.src = 'data:image/png;base64,' + b64; return i.decode().then(() => i); }));
+      kick();
+    }).catch(() => { scene.tracks.delete(k); });
+    return t;
+  }
+  function rectAt(c, now) {
+    const t = Math.min(1, Math.max(0, (now - c.t0) / c.dur)), e = t * (2 - t);
+    return { x: c.from.x + (c.to.x - c.from.x) * e, y: c.from.y + (c.to.y - c.from.y) * e, w: c.to.w, h: c.to.h };
+  }
+  function applyCrew(list) {
+    const now = performance.now(), seen = new Set();
+    for (const b of list || []) {
+      if (!b || !b.agentId || !b.key) continue;
+      seen.add(b.agentId);
+      const to = { x: b.x, y: b.y, w: b.w, h: b.h };
+      let c = scene.crew.get(b.agentId);
+      if (!c) { c = { from: to, to, t0: now, dur: 1, key: b.key, keyAt: now, idx0: b.idx, idx: b.idx }; scene.crew.set(b.agentId, c); }
+      else { c.from = rectAt(c, now); c.to = to; c.t0 = now; c.dur = 260; }
+      if (c.key !== b.key) { c.key = b.key; c.keyAt = now; c.idx0 = b.idx; }
+      c.idx = b.idx;
+      track(c.key);
+    }
+    for (const id of [...scene.crew.keys()]) if (!seen.has(id)) scene.crew.delete(id);
+    kick();
+  }
+  function frameOf(c, t, now) {
+    const n = t.frames.length;
+    if (n < 2) return t.frames[0];
+    const fps = TRACK_FPS[String(c.key).split('.')[1]];
+    const i = fps ? c.idx0 + Math.floor((now - c.keyAt) / (1000 / fps)) : c.idx;
+    return t.frames[((i % n) + n) % n];
+  }
+  // one picture onto one canvas: k = picture px -> CSS px, (ox, oy) = where the picture's corner sits, in CSS px
+  function paintCanvas(cv, cssW, cssH, k, ox, oy) {
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    const W = Math.max(1, Math.round(cssW * dpr)), H = Math.max(1, Math.round(cssH * dpr));
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    const g = cv.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.fillStyle = '#040302'; g.fillRect(0, 0, W, H);
+    g.setTransform(dpr * k, 0, 0, dpr * k, dpr * ox, dpr * oy);
+    g.imageSmoothingEnabled = true; if ('imageSmoothingQuality' in g) g.imageSmoothingQuality = 'high';
+    g.drawImage(scene.base, 0, 0, S.view.w, S.view.h);
+    if (!S.view.crewFree) return;
+    const now = performance.now();
+    const list = [...scene.crew.values()].map(c => [c, rectAt(c, now)]).sort((a, b) => (a[1].y + a[1].h) - (b[1].y + b[1].h));
+    for (const [c, r] of list) {
+      const t = scene.tracks.get(trackKey(c.key));
+      if (t && t.frames && t.frames.length) g.drawImage(frameOf(c, t, now), r.x, r.y, r.w, r.h);
+    }
+  }
+  /* FRAMING. A small station fits the card whole. A big one (a picture spanning far more floor than a phone card
+     can show legibly) is framed on where the crew are, and the frame drifts gently after them. */
+  const HERO_ASPECT = 4 / 3;
+  function bigStation() { return !!(S.view && S.view.scale && S.view.w / S.view.scale > 560); }
+  /* The camera follows ONE crew member: whoever is working (the one who started first), otherwise the one you are
+     talking to. Tap a portrait in CREW and the card turns to them. */
+  function focusAgent() {
+    const working = agents().filter(isWorking).sort((p, q) => (p.since || 0) - (q.since || 0));
+    for (const a of working) if (scene.crew.has(a.agentId)) return a.agentId;
+    if (S.target && scene.crew.has(S.target)) return S.target;
+    const first = agents().find(a => scene.crew.has(a.agentId));
+    return first ? first.agentId : null;
+  }
+  function cropTarget() {
+    const v = S.view, full = { x: 0, y: 0, w: v.w, h: v.h };
+    if (!bigStation() || !v.crewFree || !scene.crew.size) return full;
+    const id = focusAgent(), c = id && scene.crew.get(id);
+    if (!c) return full;
+    const r = rectAt(c, performance.now()), k = v.scale;
+    const w = Math.min(v.w, 330 * k), h = Math.min(v.h, w / HERO_ASPECT);   // about a room and its doorways
+    const cx = r.x + r.w / 2, cy = r.y + r.h * 0.6;
+    return { x: Math.max(0, Math.min(v.w - w, cx - w / 2)), y: Math.max(0, Math.min(v.h - h, cy - h / 2)), w, h };
+  }
+  function heroCrop() {
+    const t = cropTarget(), c = scene.crop;
+    if (!c || !bigStation()) { scene.crop = t; return t; }
+    const e = 0.08, d = Math.abs(t.x - c.x) + Math.abs(t.y - c.y) + Math.abs(t.w - c.w);
+    scene.cropMoving = d > 0.5;
+    if (scene.cropMoving) scene.crop = { x: c.x + (t.x - c.x) * e, y: c.y + (t.y - c.y) * e, w: c.w + (t.w - c.w) * e, h: c.h + (t.h - c.h) * e };
+    return scene.crop;
+  }
+  // is anything on the picture moving? (a glide in progress, a walking/typing crew member, a drifting frame, a finger)
+  function animating(now) {
+    if (scene.cropMoving || viewer.pts.size) return 33;
+    let need = 0;
+    for (const c of scene.crew.values()) {
+      if (now - c.t0 < c.dur) return 33;
+      const fps = TRACK_FPS[String(c.key).split('.')[1]];
+      if (fps) need = Math.max(need, fps);
+    }
+    return need ? Math.max(33, Math.round(1000 / need)) : 0;
+  }
+  function loop(ts) {
+    scene.raf = 0;
+    const viewOn = !$('viewer').hidden && S.view && scene.base;
+    const heroOn = !viewOn && S.view && scene.base && hero.root.isConnected && !hero.frame.hidden;
+    if (!viewOn && !heroOn) return;
+    const every = animating(performance.now());
+    if (document.visibilityState === 'visible' && (scene.dirty || ts - scene.last >= (every || 33))) {
+      scene.last = ts; scene.dirty = false;
+      if (viewOn) { viewerClamp(); paintCanvas(viewer.cv, window.innerWidth, window.innerHeight, viewer.k, viewer.x, viewer.y); }
+      else { const c = heroCrop(), w = hero.frame.clientWidth, k = w / c.w; paintCanvas(hero.cv, w, hero.frame.clientHeight, k, -c.x * k, -c.y * k); }
+    }
+    if (every || scene.dirty) scene.raf = requestAnimationFrame(loop);   // nothing moving: stop until something changes
+  }
+  function kick() { scene.dirty = true; if (!scene.raf) scene.raf = requestAnimationFrame(loop); }
+
   const hero = (() => {
-    const root = el('div', 'hero'), frame = el('div', 'hero-frame'), img = el('img'), marks = el('div'), chip = el('span', 'chip'), dot = el('i'), chipText = el('span');
+    const root = el('div', 'hero'), frame = el('div', 'hero-frame'), cv = el('canvas'), chip = el('span', 'chip'), dot = el('i'), chipText = el('span');
     const expand = el('button', 'icon-btn expand'); expand.type = 'button'; expand.setAttribute('aria-label', 'Open the station view'); expand.appendChild(icon('expand'));
     const empty = el('div', 'hero-empty'), eb = el('b'), es = el('span');
-    img.alt = 'Your station'; chip.appendChild(dot); chip.appendChild(chipText); empty.appendChild(eb); empty.appendChild(es);
-    frame.appendChild(img); frame.appendChild(marks); root.appendChild(frame); root.appendChild(empty); root.appendChild(chip); root.appendChild(expand);
-    return { root, frame, img, marks, chip, chipText, expand, empty, eb, es, shown: '' };
+    cv.setAttribute('role', 'img'); cv.setAttribute('aria-label', 'Your station');
+    chip.appendChild(dot); chip.appendChild(chipText); empty.appendChild(eb); empty.appendChild(es);
+    frame.appendChild(cv); root.appendChild(frame); root.appendChild(empty); root.appendChild(chip); root.appendChild(expand);
+    return { root, frame, cv, chip, chipText, expand, empty, eb, es };
   })();
   const viewAge = () => (S.view ? S.view.age0 + (Date.now() - S.view.seenAt) : Infinity);
-  const viewLive = () => S.linkState === 'open' && viewAge() < LIVE_VIEW_MS;
-  function stampText() { return viewLive() ? 'LIVE' : 'AS OF ' + ago(viewAge()).toUpperCase() + ' AGO'; }
-
-  function markNodes(selId) {
-    const out = [];
-    if (!S.view) return out;
-    for (const b of S.view.bodies || []) {
-      const a = agentOf(b.agentId), working = isWorking(a), sel = b.agentId === selId;
-      if (!working && !sel) continue;
-      const m = el('div', 'mark' + (working ? ' work' : '') + (sel ? ' sel' : ''));
-      m.style.left = (b.x / S.view.w * 100) + '%'; m.style.top = (b.y / S.view.h * 100) + '%';
-      m.appendChild(el('span', null, agentName(b.agentId).toUpperCase()));
-      out.push(m);
-    }
-    return out;
+  const viewLive = () => S.linkState === 'open' && viewAge() < LIVE_VIEW_MS && !(S.view && S.view.crewFree && S.crewPaused);
+  function stampText() {
+    if (S.linkState === 'open' && viewAge() < LIVE_VIEW_MS && S.crewPaused) return 'DESK WINDOW HIDDEN';
+    return viewLive() ? 'LIVE' : 'AS OF ' + ago(viewAge()).toUpperCase() + ' AGO';
   }
+
   function paintHero() {
     const v = S.view;
     hero.frame.hidden = !v; hero.chip.hidden = !v; hero.expand.hidden = !v; hero.empty.hidden = !!v;
     if (!v) {
-      hero.shown = '';
-      if (S.viewNone) { hero.eb.textContent = 'NO PICTURE YET'; hero.es.textContent = 'Open StarNet on your computer and your station appears here.'; }
+      if (S.viewNone && S.deskOpen) { hero.eb.textContent = 'ALMOST THERE'; hero.es.textContent = 'StarNet is open on your computer but has not drawn your station yet. Bring its window to the front for a moment.'; }
+      else if (S.viewNone) { hero.eb.textContent = 'NO PICTURE YET'; hero.es.textContent = 'Open StarNet on your computer and your station appears here.'; }
       else if (S.linkState === 'open') { hero.eb.textContent = 'LOADING YOUR STATION'; hero.es.textContent = ''; }
       else { hero.eb.textContent = 'STATION OFFLINE'; hero.es.textContent = 'The picture appears when your station is reachable.'; }
       return;
     }
-    if (hero.shown !== v.url) { hero.shown = v.url; hero.img.src = v.url; viewer.img.src = v.url; viewer.img.style.width = v.w + 'px'; viewer.img.style.height = v.h + 'px'; }
-    hero.frame.style.aspectRatio = v.w + ' / ' + v.h;
+    hero.frame.style.aspectRatio = bigStation() && v.crewFree ? '4 / 3' : v.w + ' / ' + v.h;
     const live = viewLive();
     hero.root.classList.toggle('stale', !live);
     hero.chip.className = 'chip' + (live ? ' live' : ''); hero.chipText.textContent = stampText();
-    hero.marks.replaceChildren(...markNodes(S.target));
     if (!$('viewer').hidden) paintViewer();
+    kick();
   }
   async function refreshView() {
     if (S.viewBusy || S.linkState !== 'open') return;
@@ -274,9 +420,9 @@
       const r = await call('view', { have: S.view ? S.view.at : 0 });
       if (!r.ok) return;
       let d = r.data;
-      if (d.none) { S.viewNone = true; return; }
+      if (d.none) { S.viewNone = true; S.deskOpen = !!d.desk; return; }
       S.viewNone = false;
-      if (d.same && S.view) { S.view.age0 = Math.max(0, d.now - d.at); S.view.seenAt = Date.now(); return; }
+      if (d.same && S.view) { S.view.age0 = Math.max(0, d.now - (d.checked || d.at)); S.view.seenAt = Date.now(); S.crewPaused = !!d.crewPaused; return; }
       const first = d, parts = [];
       for (let i = 0; i < 12; i++) {
         parts.push(bytesOf(d.data));
@@ -289,31 +435,41 @@
       const pre = new Image(); pre.src = url;
       try { await pre.decode(); } catch (_) { URL.revokeObjectURL(url); return; }
       const old = S.view && S.view.url;
-      S.view = { at: first.at, w: first.w, h: first.h, bodies: first.bodies || [], url, age0: Math.max(0, first.now - first.at), seenAt: Date.now() };
+      if (!S.view || S.view.w !== first.w || S.view.h !== first.h) scene.crop = null;
+      S.view = { at: first.at, w: first.w, h: first.h, scale: Number(first.scale) || 0, bodies: first.bodies || [], crewFree: !!first.crewFree, url, age0: Math.max(0, first.now - (first.checked || first.at)), seenAt: Date.now() };
+      S.crewPaused = !!first.crewPaused;
+      scene.base = pre;
+      if (first.crew && Array.isArray(first.crew.bodies) && !scene.crew.size) applyCrew(first.crew.bodies);
       paintHero();
       if (old) setTimeout(() => URL.revokeObjectURL(old), 1500);
     } catch (_) { /* the link lamp reports a dead link; the picture keeps its age */ }
     finally { S.viewBusy = false; paintHero(); }
   }
-  // nearest crew member to a point in picture pixels, within `reach` picture pixels
+  // the crew member under a point (picture pixels), within `reach` picture pixels of their body
   function bodyNear(px, py, reach) {
     let best = null, bd = reach;
+    if (S.view && S.view.crewFree && scene.crew.size) {
+      const now = performance.now();
+      for (const [id, c] of scene.crew) { const r = rectAt(c, now), d = Math.hypot(r.x + r.w / 2 - px, r.y + r.h * 0.55 - py); if (d < bd && agentOf(id)) { bd = d; best = { agentId: id }; } }
+      return best;
+    }
     for (const b of (S.view && S.view.bodies) || []) { const d = Math.hypot(b.x - px, (b.y - 10) - py); if (d < bd) { bd = d; best = b; } }
     return best && agentOf(best.agentId) ? best : null;
   }
   hero.root.addEventListener('click', (ev) => {
     if (!S.view) return;
-    const r = hero.frame.getBoundingClientRect(), k = S.view.w / r.width;
-    const b = ev.target.closest('.expand') ? null : bodyNear((ev.clientX - r.left) * k, (ev.clientY - r.top) * k, 30 * k);
-    if (b) { S.target = b.agentId; render(); return; }
+    const r = hero.frame.getBoundingClientRect(), c = scene.crop || { x: 0, y: 0, w: S.view.w, h: S.view.h }, k = c.w / r.width;
+    const b = ev.target.closest('.expand') ? null : bodyNear(c.x + (ev.clientX - r.left) * k, c.y + (ev.clientY - r.top) * k, 26 * k);
+    if (b) { setTarget(b.agentId); toast('Talking to ' + agentName(b.agentId)); render(); return; }
     openViewer();
   });
 
   /* ---------- the station, full screen ---------- */
   const viewer = (() => {
-    const stage = $('viewer-stage'), img = el('img'), marks = el('div');
-    img.alt = 'Your station'; stage.appendChild(img); stage.appendChild(marks);
-    return { stage, img, marks, k: 1, x: 0, y: 0, fit: 1, pts: new Map(), sel: null, tap: null, pinch: null, lastTap: 0 };
+    const stage = $('viewer-stage'), cv = el('canvas');
+    cv.setAttribute('role', 'img'); cv.setAttribute('aria-label', 'Your station');
+    stage.appendChild(cv);
+    return { stage, cv, k: 1, x: 0, y: 0, fit: 1, pts: new Map(), sel: null, tap: null, pinch: null, lastTap: 0 };
   })();
   function viewerFit() {
     const W = window.innerWidth, H = window.innerHeight;
@@ -321,18 +477,14 @@
     viewer.k = viewer.fit; viewer.x = (W - S.view.w * viewer.k) / 2; viewer.y = (H - S.view.h * viewer.k) / 2;
   }
   function viewerClamp() {
-    const W = window.innerWidth, H = window.innerHeight, w = S.view.w * viewer.k, h = S.view.h * viewer.k;
+    const W = window.innerWidth, H = window.innerHeight;
     viewer.k = Math.max(viewer.fit, Math.min(Math.max(viewer.fit * 8, 3), viewer.k));
+    const w = S.view.w * viewer.k, h = S.view.h * viewer.k;
     viewer.x = w <= W ? (W - w) / 2 : Math.min(0, Math.max(W - w, viewer.x));
     viewer.y = h <= H ? (H - h) / 2 : Math.min(0, Math.max(H - h, viewer.y));
   }
   function paintViewer() {
     if (!S.view) return;
-    viewerClamp();
-    viewer.stage.style.width = S.view.w + 'px'; viewer.stage.style.height = S.view.h + 'px';
-    viewer.stage.style.transform = 'translate(' + viewer.x + 'px,' + viewer.y + 'px) scale(' + viewer.k + ')';
-    viewer.marks.replaceChildren(...markNodes(viewer.sel));
-    for (const m of viewer.marks.children) m.style.transform = 'scale(' + (1 / viewer.k) + ')';
     const st = $('viewer-stamp'); st.className = 'chip' + (viewLive() ? ' live' : ''); st.replaceChildren(el('i'), el('span', null, stampText()));
     const plate = $('viewer-plate'), a = viewer.sel && agentOf(viewer.sel);
     plate.hidden = !a;
@@ -347,9 +499,19 @@
       b.onclick = () => { S.target = a.agentId; closeViewer(); S.tab = 'station'; S.thread = null; S.file = null; S.page = null; render(); $('compose-text').focus(); };
       plate.replaceChildren(well(a.agentId, 'sm'), t, b);
     }
+    kick();
   }
-  function openViewer() { if (!S.view) return; viewer.sel = null; $('viewer-plate').dataset.key = ''; $('viewer').hidden = false; viewerFit(); paintViewer(); refreshView(); }
-  function closeViewer() { $('viewer').hidden = true; viewer.pts.clear(); viewer.pinch = null; }
+  function openViewer() {
+    if (!S.view) return;
+    viewer.sel = null; $('viewer-plate').dataset.key = ''; $('viewer').hidden = false; viewerFit();
+    const c = scene.crop;
+    if (c && c.w < S.view.w * 0.95) {   // a framed big station: open on the same framing, then pan and zoom from there
+      const W = window.innerWidth, H = window.innerHeight;
+      viewer.k = Math.min(W / c.w, H / c.h); viewer.x = W / 2 - (c.x + c.w / 2) * viewer.k; viewer.y = H / 2 - (c.y + c.h / 2) * viewer.k;
+    }
+    paintViewer(); refreshView();
+  }
+  function closeViewer() { $('viewer').hidden = true; viewer.pts.clear(); viewer.pinch = null; kick(); }
   (function wireViewer() {
     const v = $('viewer');
     $('viewer-close').appendChild(icon('close'));
@@ -367,7 +529,7 @@
       const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
       if (viewer.pts.size === 1) { viewer.x += dx; viewer.y += dy; if (viewer.tap && Math.hypot(e.clientX - viewer.tap.x, e.clientY - viewer.tap.y) > 8) viewer.tap.moved = true; }
       else if (viewer.pts.size === 2 && viewer.pinch) { const [a, b] = [...viewer.pts.values()]; zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, viewer.pinch.k * (Math.hypot(a.x - b.x, a.y - b.y) / viewer.pinch.d)); }
-      paintViewer();
+      kick();   // the canvas repaints on the next frame: nothing heavy happens per touch event
     });
     const up = (e) => {
       if (!viewer.pts.has(e.pointerId)) return;
@@ -376,7 +538,7 @@
       const t = viewer.tap;
       if (viewer.pts.size === 0 && t && !t.moved && Date.now() - t.at < 350) {
         const px = (t.x - viewer.x) / viewer.k, py = (t.y - viewer.y) / viewer.k;
-        const b = bodyNear(px, py, 30 / viewer.k);
+        const b = bodyNear(px, py, 26 / viewer.k);
         if (b) viewer.sel = b.agentId;
         else if (Date.now() - viewer.lastTap < 320) { if (viewer.k > viewer.fit * 1.05) viewerFit(); else zoomAt(t.x, t.y, viewer.k * 2.5); viewer.lastTap = 0; }
         else { viewer.sel = null; viewer.lastTap = Date.now(); }
@@ -385,8 +547,8 @@
       if (viewer.pts.size === 0) viewer.tap = null;
     };
     v.addEventListener('pointerup', up); v.addEventListener('pointercancel', up);
-    v.addEventListener('wheel', (e) => { e.preventDefault(); zoomAt(e.clientX, e.clientY, viewer.k * (e.deltaY < 0 ? 1.15 : 1 / 1.15)); paintViewer(); }, { passive: false });
-    window.addEventListener('resize', () => { if (!v.hidden && S.view) { viewerFit(); paintViewer(); } });
+    v.addEventListener('wheel', (e) => { e.preventDefault(); zoomAt(e.clientX, e.clientY, viewer.k * (e.deltaY < 0 ? 1.15 : 1 / 1.15)); kick(); }, { passive: false });
+    window.addEventListener('resize', () => { if (!v.hidden && S.view) { viewerFit(); kick(); } });
   })();
 
   /* ---------- notifications (Web Push, sent by the station itself) ---------- */
@@ -444,7 +606,7 @@
     const box = el('div', 'glass pad push-card');
     if (sup === 'install') {
       box.appendChild(el('div', 'push-h', 'Get a tap when your crew needs you'));
-      box.appendChild(el('div', 'note-line', 'On iPhone, notifications work once StarNet is on your Home Screen: tap Share, then Add to Home Screen, and open it from there.'));
+      box.appendChild(el('div', 'note-line', 'On iPhone, notifications work in the Home Screen app. Press PAIR A PHONE on your desktop, open the link here, and follow the steps: Copy, Add to Home Screen, Paste.'));
     } else if (sup === 'no') {
       box.appendChild(el('div', 'note-line', 'This browser cannot receive notifications.'));
     } else {
@@ -459,13 +621,19 @@
       row.appendChild(b);
       if (compact && !S.push.on) { const x = el('button', 'btn quiet', 'Not now'); x.type = 'button'; x.onclick = () => { try { localStorage.setItem(nudgeKey, '1'); } catch (_) {} render(); }; row.appendChild(x); }
       box.appendChild(row);
+      if (compact) { box.classList.add('compact'); box.replaceChildren(el('div', 'push-h', 'Get a tap when your crew needs you'), row); }
     }
     return box;
   }
   // a notification tap: '#needs' opens STATION, '#thread=<id>' opens that conversation
-  function openFromPush(url) {
+  async function openFromPush(url) {
     const m = /^#thread=([A-Za-z0-9_-]{1,64})$/.exec(String(url || ''));
-    if (m) { const t = S.threads.find(x => x.streamId === m[1]); openThread(m[1], (t && t.agentId) || S.target); return; }
+    if (m) {
+      let t = S.threads.find(x => x.streamId === m[1]);
+      if (!t) { await refreshThreads(); t = S.threads.find(x => x.streamId === m[1]); }
+      const agentId = (t && t.agentId) || (((S.activity && S.activity.done) || []).find(r => r.streamId === m[1]) || {}).agentId || S.target;
+      openThread(m[1], agentId); return;
+    }
     if (url === '#needs') { closeViewer(); setTab('station'); }
   }
 
@@ -474,8 +642,8 @@
   function setTab(t) {
     S.tab = t; S.thread = null; S.file = null; S.page = null;
     if (t === 'sessions') refreshThreads().then(() => render(true));
-    if (t === 'files') refreshFiles().then(() => render(true));
-    if (t === 'station') { refreshView(); refreshThreads().then(() => render(true)); }
+    if (t === 'sessions') refreshActivity().then(() => render(true));
+    if (t === 'station') { refreshView(); Promise.all([refreshThreads(), refreshActivity()]).then(() => render(true)); }
     render();
   }
 
@@ -499,11 +667,11 @@
     const bw = $('bar-well'); bw.hidden = !S.thread; if (S.thread) bw.replaceChildren(well(S.thread.agentId, 'sm'));
     const firstSaid = S.thread && (S.thread.turns || []).find(t => t.role === 'user');
     $('bar-title').textContent = S.thread ? ((openRow && (plain(openRow.title) || plain(openRow.preview))) || (firstSaid && plain(firstSaid.content).slice(0, 80)) || agentName(S.thread.agentId)) : S.file ? (S.file.name || 'FILE') : S.page === 'settings' ? 'SETTINGS'
-      : S.tab === 'sessions' ? 'SESSIONS' : S.tab === 'files' ? 'FILES' : ((S.status && S.status.station) || 'STATION');
+      : S.tab === 'sessions' ? 'SESSIONS' :  ((S.status && S.status.station) || 'STATION');
     const sub = $('bar-sub'); sub.hidden = !S.thread;
     if (S.thread) sub.textContent = agentName(S.thread.agentId) + (streamLive(S.thread.streamId) ? ' · working' : '');
     const target = S.thread ? S.thread.agentId : S.target;
-    $('compose').hidden = !(S.thread || (!pushed && S.tab !== 'files')) || S.linkState === 'removed';
+    $('compose').hidden = !(S.thread || !pushed) || S.linkState === 'removed';
     const to = $('compose-to'); to.replaceChildren(document.createTextNode('TO '), el('b', null, target ? agentName(target) : '—'));
     if (!S.thread && agents().length > 1) to.appendChild(icon('caret'));
     to.disabled = !!S.thread || agents().length < 2;
@@ -517,7 +685,7 @@
     else if (S.page === 'settings') renderSettings(v);
     else if (S.tab === 'station') renderStation(v);
     else if (S.tab === 'sessions') renderSessions(v);
-    else renderFiles(v);
+    else renderSessions(v);
     if (key === prevKey) { v.scrollTop = S.scroll[key] || 0; const c = v.querySelector('.crew'); if (c) c.scrollLeft = crewX; }
     else v.scrollTop = key === 'thread' ? v.scrollHeight : (S.scroll[key] || 0);
   }
@@ -554,7 +722,7 @@
         opts.appendChild(b);
       }
       if (opts.childNodes.length) box.appendChild(opts);
-      const ta = el('textarea'); ta.rows = 2; ta.placeholder = 'Or type an answer…'; box.appendChild(ta);
+      const ta = el('textarea'); ta.rows = 2; ta.placeholder = 'Or type an answer…'; ta.value = S.drafts.get(a.promptId) || ''; ta.oninput = () => S.drafts.set(a.promptId, ta.value); box.appendChild(ta);
       const row = el('div', 'btns'); const send = el('button', 'btn go', 'Answer'); send.type = 'button';
       send.onclick = () => { if (ta.value.trim()) replyQ(a, ta.value, box); };
       row.appendChild(send); box.appendChild(row);
@@ -563,7 +731,7 @@
       if (a.argsSummary) box.appendChild(el('pre', null, a.argsSummary));
       const row = el('div', 'btns fill');
       const mk = (label, cls, decision) => { const b = el('button', 'btn ' + cls, label); b.type = 'button'; b.onclick = () => decide(a, decision, box); row.appendChild(b); };
-      mk('Once', 'go', 'once'); mk('This session', '', 'session'); mk('Deny', 'no', 'deny');
+      mk('Once', 'go', 'once'); if (!/^path\.trust$/.test(String(a.tool || ''))) mk('This session', '', 'session'); mk('Deny', 'no', 'deny');
       box.appendChild(row);
       box.appendChild(el('div', 'note', 'Arrived ' + clock(Date.now() - arrived) + ' ago. "Always" and full access are set at the desk.'));
     }
@@ -599,17 +767,35 @@
     v.appendChild(el('div', 'note-line', 'Station offline. Showing what it last reported, ' + ago(Date.now() - S.lastOkAt) + ' ago.'));
   }
 
-  function sessionRow(t) {
+  // the newest finished run of each conversation, from the station's run history
+  function lastRunByStream() {
+    const m = new Map();
+    for (const r of (S.activity && S.activity.done) || []) if (r.streamId && !m.has(r.streamId)) m.set(r.streamId, r);
+    return m;
+  }
+  function sessionRow(t, lastRun) {
+    const box = el('div', 'act');
     const row = el('button', 'row'); row.type = 'button';
     row.appendChild(well(t.agentId, 'sm'));
     const tt = el('span', 't');
     tt.appendChild(el('b', null, plain(t.title) || plain(t.preview) || agentName(t.agentId)));
-    tt.appendChild(el('span', null, agentName(t.agentId) + (t.title && t.preview ? ' · ' + plain(t.preview) : '')));
+    // the last thing you said, unless it is just the title again (a session titled with its first message)
+    const pv = plain(t.preview), same = !pv || !t.title || plain(t.title).slice(0, 40) === pv.slice(0, 40);
+    const live = (streamLive(t.streamId) || ((S.activity && S.activity.live) || []).some(r => r.streamId === t.streamId)) && S.linkState === 'open';
+    const lr = live ? null : lastRun;
+    // under the title: how the latest piece of work went (its result line, or why it stopped), else what you said
+    const line = lr ? (lr.state === 'done' ? plain(lr.result) : lr.state === 'stopped' ? 'Stopped' : 'Did not finish' + (lr.error ? ' · ' + lr.error : '')) : '';
+    tt.appendChild(el('span', lr ? 'why ' + lr.state : null, agentName(t.agentId) + (line ? ' · ' + line : same ? '' : ' · ' + pv)));
     row.appendChild(tt);
-    const live = streamLive(t.streamId) && S.linkState === 'open';
     row.appendChild(el('span', 'd' + (live ? ' work' : ''), live ? 'WORKING' : t.lastAt ? ago(Date.now() - t.lastAt) : ''));
     row.onclick = () => openThread(t.streamId, t.agentId);
-    return row;
+    box.appendChild(row);
+    if (lr && lr.files && lr.files.length) {
+      const fl = el('div', 'act-files');
+      for (const p of lr.files.slice(0, 4)) { const c = el('button', 'file-chip', String(p).split('/').pop()); c.type = 'button'; c.onclick = () => openFile(lr.agentId || t.agentId, p); fl.appendChild(c); }
+      box.appendChild(fl);
+    }
+    return box;
   }
 
   function renderStation(v) {
@@ -628,14 +814,16 @@
     if (!list.length) cs.appendChild(el('div', 'empty', S.linkState === 'open' ? 'No agents on this station yet.' : 'Waiting for the station…'));
     else {
       const strip = el('div', 'crew');
-      for (const a of list) {
+      for (const a of list.slice().sort((p, q) => (isWorking(q) ? 1 : 0) - (isWorking(p) ? 1 : 0))) {
         const w = isWorking(a);
         const m = el('button', 'mate' + (S.target === a.agentId ? ' sel' : '') + (w ? ' work' : '')); m.type = 'button';
         const pw = well(a.agentId); if (w) pw.appendChild(el('i', 'dot work'));
         m.appendChild(pw);
         m.appendChild(el('b', null, a.name || a.agentId));
-        m.appendChild(el('em', null, S.linkState !== 'open' ? (a.state || 'idle') : w ? (a.since ? clock(Date.now() - a.since) : 'working') : 'idle'));
-        m.onclick = () => { S.target = a.agentId; render(); };
+        const em = el('em', null, S.linkState !== 'open' ? (a.state || 'idle') : w ? (a.since ? clock(Date.now() - a.since) : 'working') : 'idle');
+        if (w && a.since && S.linkState === 'open') em.dataset.since = a.since;
+        m.appendChild(em);
+        m.onclick = () => { setTarget(a.agentId); render(); kick(); };
         strip.appendChild(m);
       }
       cs.appendChild(strip);
@@ -643,12 +831,24 @@
     v.appendChild(cs);
     const ss = section('Sessions', false, S.threads.length > 5 ? { text: 'ALL ' + S.threads.length + ' ›', go: () => setTab('sessions') } : null);
     if (!S.threads.length) ss.appendChild(el('div', 'empty', S.linkState === 'open' ? 'No sessions yet. Write a task below to start one.' : 'Waiting for the station…'));
-    else { const l = el('div', 'list'); for (const t of S.threads.slice(0, 5)) l.appendChild(sessionRow(t)); ss.appendChild(l); }
+    else { const l = el('div', 'list'), lr = lastRunByStream(); for (const t of S.threads.slice(0, 5)) l.appendChild(sessionRow(t, lr.get(t.streamId))); ss.appendChild(l); }
     v.appendChild(ss);
   }
 
   function renderSessions(v) {
     staleNote(v);
+    if (S.approvals.length) {
+      const s = section('Needs you · ' + S.approvals.length, true);
+      for (const a of S.approvals) s.appendChild(askCard(a));
+      v.appendChild(s);
+    }
+    const running = (S.activity && S.activity.live) || [];
+    if (running.length) {
+      const s = section('Working now · ' + running.length), l = el('div', 'list');
+      for (const w of running) l.appendChild(activityRow(w, true));
+      s.appendChild(l); v.appendChild(s);
+    }
+    const lr = lastRunByStream();
     const q = el('input', 'search'); q.type = 'search'; q.placeholder = 'Search sessions'; q.value = S.query; q.autocapitalize = 'off'; q.setAttribute('aria-label', 'Search sessions');
     const l = el('div', 'list');
     const fill = () => {
@@ -656,12 +856,13 @@
       const rows = needle ? S.threads.filter(t => [t.title, t.preview, agentName(t.agentId)].join(' ').toLowerCase().indexOf(needle) >= 0) : S.threads;
       l.replaceChildren();
       if (!rows.length) l.appendChild(el('div', 'empty', needle ? 'Nothing matches that.' : S.linkState === 'open' ? 'No sessions yet. Write a task below to start one.' : 'Waiting for the station…'));
-      for (const t of rows) l.appendChild(sessionRow(t));
+      for (const t of rows) l.appendChild(sessionRow(t, lr.get(t.streamId)));
     };
     q.addEventListener('input', () => { S.query = q.value; fill(); });
-    if (S.threads.length > 6 || S.query) v.appendChild(q);
+    const all = section('All sessions' + (S.threads.length ? ' · ' + S.threads.length : ''));
+    if (S.threads.length > 6 || S.query) all.appendChild(q);
     fill();
-    v.appendChild(l);
+    all.appendChild(l); v.appendChild(all);
   }
 
   async function openThread(streamId, agentId, keepScroll) {
@@ -679,13 +880,27 @@
     const log = el('div', 'log');
     const turns = S.thread.turns;
     if (!turns) log.appendChild(el('div', 'empty', 'Loading…'));
-    else for (const t of turns) {
-      if (t.role !== 'user' && t.role !== 'assistant') continue;
-      if (!t.content || t.content === 'null') continue;
-      const m = el('div', 'msg ' + (t.role === 'user' ? 'user' : 'agent'));
-      m.appendChild(el('span', 'who', t.role === 'user' ? 'YOU' : agentName(t.agentId || S.thread.agentId).toUpperCase()));
-      m.appendChild(mdNode(t.content));
-      log.appendChild(m);
+    else {
+      const shown = turns.filter(t => (t.role === 'user' || t.role === 'assistant') && t.content && t.content !== 'null');
+      shown.forEach((t, i) => {
+        const m = el('div', 'msg ' + (t.role === 'user' ? 'user' : 'agent'));
+        m.appendChild(el('span', 'who', t.role === 'user' ? 'YOU' : agentName(t.agentId || S.thread.agentId).toUpperCase()));
+        const q = t.role === 'assistant' ? questionOf(t.content) : null;
+        if (!q) { m.appendChild(mdNode(t.content)); log.appendChild(m); return; }
+        if (q.before) m.appendChild(mdNode(q.before));
+        const box = el('div', 'qcard');
+        box.appendChild(el('div', 'q', q.question));
+        // only the newest question can still be answered (anything later means it was answered already)
+        const open = i === shown.length - 1 && !streamLive(S.thread.streamId) && S.linkState === 'open';
+        if (q.options.length) {
+          const row = el('div', 'btns');
+          for (const o of q.options) { const b = el('button', 'btn' + (open ? '' : ' quiet'), o); b.type = 'button'; b.disabled = !open; if (open) b.onclick = () => { $('compose-text').value = o; send(); }; row.appendChild(b); }
+          box.appendChild(row);
+        }
+        if (open) box.appendChild(el('div', 'note-line', q.options.length ? 'Tap an answer, or type your own below.' : 'Type your answer below.'));
+        m.appendChild(box);
+        log.appendChild(m);
+      });
     }
     const mine = S.approvals.filter(a => [...S.live.entries()].some(([rid, L]) => rid === a.runId && L.streamId === S.thread.streamId));
     for (const a of mine) log.appendChild(askCard(a));
@@ -715,24 +930,41 @@
     if (atEnd) v.scrollTop = v.scrollHeight;
   }
 
-  function renderFiles(v) {
-    staleNote(v);
-    const l = el('div', 'list');
-    let n = 0;
-    for (const d of S.files) {
-      for (const f of (d.files || []).slice(0, 4)) {
-        n++;
-        const row = el('button', 'row'); row.type = 'button';
-        row.appendChild(el('span', 'well file', (f.path.split('.').pop() || '').slice(0, 4).toUpperCase()));
-        const t = el('span', 't'); t.appendChild(el('b', null, f.path.split('/').pop())); t.appendChild(el('span', null, (d.agentId ? agentName(d.agentId) : '') + (d.title ? ' · ' + d.title : '')));
-        row.appendChild(t);
-        row.appendChild(el('span', 'd', d.createdAt ? ago(Date.now() - d.createdAt) : ''));
-        row.onclick = () => openFile(d.agentId, f.path);
-        l.appendChild(row);
-      }
+  /* ---------- ACTIVITY: what the station is doing and what it did ----------
+     Straight from the station's run history: what needs you, what is running now, what finished (its result line,
+     how it ended, the files it made). Tapping a piece of work opens its conversation; tapping a file opens it. */
+  async function refreshActivity() { try { const r = await call('activity', { limit: 30 }); if (r.ok) S.activity = r.data; } catch (_) {} }
+  let activityTimer = null;
+  function activitySoonish() { clearTimeout(activityTimer); activityTimer = setTimeout(() => refreshActivity().then(() => render(true)), 500); }
+  const SOURCE = { remote: 'from your phone', interactive: 'at the desk', cron: 'routine', channel: 'from a channel', host: 'autonomy', overseer: 'review' };
+  const stepLine = (name) => 'using ' + String(name || '').replace(/[._]+/g, ' ').trim();
+  function activityRow(w, live) {
+    const box = el('div', 'act' + (live ? ' live' : ''));
+    const row = el(w.streamId ? 'button' : 'div', 'row'); if (w.streamId) row.type = 'button';
+    const pw = well(w.agentId, 'sm'); if (live) pw.appendChild(el('i', 'dot work')); row.appendChild(pw);
+    const t = el('span', 't');
+    t.appendChild(el('b', null, plain(w.title) || (live ? agentName(w.agentId) + ' is working' : 'Work by ' + agentName(w.agentId))));
+    const line = live ? agentName(w.agentId) + (SOURCE[w.source] ? ' · ' + SOURCE[w.source] : '')
+      : w.state === 'done' ? (plain(w.result) || agentName(w.agentId) + ' finished') : w.state === 'stopped' ? 'Stopped' : 'Did not finish' + (w.error ? ' · ' + w.error : '');
+    const sub = el('span', live ? null : 'why ' + w.state, line);
+    if (live) {
+      const L = S.live.get(w.runId), last = L && L.steps.length ? L.steps[L.steps.length - 1].name : S.stepOf.get(w.runId);
+      if (last) sub.textContent = stepLine(last);
+      sub.dataset.step = w.runId;
     }
-    if (!n) l.appendChild(el('div', 'empty', S.linkState === 'open' ? 'Nothing delivered yet. Files your crew hands in show up here.' : 'Waiting for the station…'));
-    v.appendChild(l);
+    t.appendChild(sub);
+    row.appendChild(t);
+    const dd = el('span', 'd' + (live ? ' work' : ''), live ? (w.startedAt ? clock(Date.now() - w.startedAt) : 'NOW') : (w.endedAt ? ago(Date.now() - w.endedAt) : ''));
+    if (live && w.startedAt) dd.dataset.since = w.startedAt;
+    row.appendChild(dd);
+    if (w.streamId) row.onclick = () => openThread(w.streamId, w.agentId);
+    box.appendChild(row);
+    if (w.files && w.files.length) {
+      const fl = el('div', 'act-files');
+      for (const p of w.files.slice(0, 4)) { const c = el('button', 'file-chip', String(p).split('/').pop()); c.type = 'button'; c.onclick = () => openFile(w.agentId, p); fl.appendChild(c); }
+      box.appendChild(fl);
+    }
+    return box;
   }
 
   async function openFile(agentId, filePath) {
@@ -824,7 +1056,7 @@
       const t = el('span', 't'); t.appendChild(el('b', null, a.name || a.agentId));
       t.appendChild(el('span', null, isWorking(a) ? 'working' : 'idle' + (a.model ? ' · ' + a.model : '')));
       row.appendChild(t);
-      row.onclick = () => { S.target = a.agentId; closeSheet(); render(); };
+      row.onclick = () => { setTarget(a.agentId); closeSheet(); render(); };
       l.appendChild(row);
     }
     body.replaceChildren(l);
@@ -842,7 +1074,7 @@
       const r = await call('send', { agentId, text, streamId: S.thread ? S.thread.streamId : undefined });
       if (!r.ok) { toast(r.error, true); return; }
       ta.value = ''; autosize();
-      S.live.set(r.data.runId, S.live.get(r.data.runId) || { streamId: r.data.streamId, agentId, text: '', steps: [], ended: null });
+      S.live.set(r.data.runId, S.live.get(r.data.runId) || { streamId: r.data.streamId, agentId, text: '', steps: [], ended: null, seenAt: Date.now() });
       await openThread(r.data.streamId, agentId);
       refreshThreads();   // so the new session is in the list when you go back
     } catch (e) { toast(e.message, true); }
@@ -852,7 +1084,7 @@
 
   /* ---------- pairing ---------- */
   const DECK = ['bar', 'view', 'tabs'];
-  function showSetup(pairing) { $('setup').hidden = false; $('setup-pairing').hidden = !pairing; $('setup-howto').hidden = !!pairing; for (const id of DECK.concat('compose')) $(id).hidden = true; }
+  function showSetup(pairing) { $('setup').hidden = false; $('setup-install').hidden = true; $('setup-pairing').hidden = !pairing; $('setup-howto').hidden = !!pairing; for (const id of DECK.concat('compose')) $(id).hidden = true; }
   function showDeck() { $('setup').hidden = true; for (const id of DECK) $(id).hidden = false; }
 
   async function pairFrom(blob) {
@@ -870,22 +1102,63 @@
   }
 
   const looking = () => document.visibilityState === 'visible' && S.linkState === 'open';
+  /* GETTING ONTO THE HOME SCREEN. On iPhone a Home Screen app gets its OWN storage, apart from Safari: a phone paired in
+     Safari opens from the Home Screen unpaired, and its one-time code is already spent. So on an iPhone the pairing link
+     does NOT pair in Safari. It walks you through copying the link and adding StarNet to the Home Screen, and the Home
+     Screen app pairs from a single Paste. Everywhere else (Android, desktop) the link pairs straight away. */
+  const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const PAIR_RE = /[#&]pair=([A-Za-z0-9_-]{20,})/;
+  function showInstall(blob) {
+    $('setup').hidden = false; $('setup-install').hidden = false; $('setup-pairing').hidden = true; $('setup-howto').hidden = true;
+    for (const id of DECK.concat('compose')) $(id).hidden = true;
+    const link = location.origin + location.pathname + '#pair=' + blob;
+    const copy = $('install-copy');
+    copy.onclick = async () => {
+      try { await navigator.clipboard.writeText(link); copy.textContent = 'Copied'; copy.classList.add('done'); toast('Link copied. Now add StarNet to your Home Screen.'); }
+      catch (_) { toast('Could not copy here. Use it in Safari instead, or press PAIR A PHONE again.', true); }
+    };
+    $('install-here').onclick = () => pairAndStart(blob);
+  }
+  async function pairAndStart(blob) {
+    try { S.rec = await pairFrom(blob); toast('Paired'); }
+    catch (e) { showSetup(true); $('setup-err').textContent = friendlyPairError(e); $('setup-err').hidden = false; $('setup-retry').hidden = false; return; }
+    startDeck();
+  }
+  function friendlyPairError(e) {
+    const m = String((e && e.message) || e || '');
+    if (/expired|already used/i.test(m)) return 'That pairing link was already used or ran out. On your desktop press PAIR A PHONE again and use the new one.';
+    if (/already paired/i.test(m)) return 'This phone is already paired. If it lost its pairing, remove it on the desktop (SETTINGS → DEVICES) and pair again.';
+    return m || 'Pairing did not work. Press PAIR A PHONE on your desktop for a fresh link.';
+  }
+  async function pasteAndPair() {
+    let text = '';
+    try { text = await navigator.clipboard.readText(); } catch (_) { text = ''; }
+    const m = PAIR_RE.exec(text || '');
+    if (!m) { $('setup-howto').querySelector('details').open = true; toast(text ? 'That is not a StarNet pairing link' : 'Nothing to paste. Copy the pairing link first, or paste it below.', true); return; }
+    pairAndStart(m[1]);
+  }
   async function boot() {
-    const m = /[#&]pair=([A-Za-z0-9_-]+)/.exec(location.hash || '');
+    const m = PAIR_RE.exec(location.hash || '');
     if (m) {
       history.replaceState(null, '', location.pathname);   // the one-time code leaves the address bar at once
-      try { S.rec = await pairFrom(m[1]); toast('Paired'); }
-      catch (e) { showSetup(true); $('setup-err').textContent = e.message; $('setup-err').hidden = false; $('setup-retry').hidden = false; return; }
-    } else {
-      try { S.rec = await RemoteStore.load(); } catch (_) { S.rec = null; }
+      if (isIOS() && !isStandalone()) return showInstall(m[1]);   // pair in the Home Screen app, where it will live
+      return pairAndStart(m[1]);
     }
+    try { S.rec = await RemoteStore.load(); } catch (_) { S.rec = null; }
     if (!S.rec) return showSetup(false);
+    startDeck();
+  }
+  let deckStarted = false;
+  function startDeck() {
+    if (deckStarted) return;
+    deckStarted = true;
     showDeck(); paintLamp(); render(); connect();
     const openHash = /^#(needs|thread=[A-Za-z0-9_-]{1,64})$/.test(location.hash) ? location.hash : '';
     if (openHash) { history.replaceState(null, '', location.pathname); setTimeout(() => openFromPush(openHash), 2500); }
     if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open') openFromPush(e.data.url); });
     setInterval(ping, 20000);
-    setInterval(() => { if (looking()) refreshStatus().then(() => { render(true); ensurePortraits(); }); paintLamp(); }, 10000);
+    setInterval(() => { if (document.visibilityState !== 'visible') return; for (const n of document.querySelectorAll('[data-since]')) n.textContent = clock(Date.now() - Number(n.dataset.since)); }, 1000);
+    setInterval(() => { if (looking()) refreshStatus().then(() => { if (S.tab === 'sessions' && !S.thread && !S.file && !S.page) return refreshActivity(); }).then(() => { render(true); ensurePortraits(); }); paintLamp(); }, 10000);
     // the station picture: asked for only while it is on screen, which is also what keeps the desk drawing it
     setInterval(() => {
       const onScreen = !$('viewer').hidden || (S.tab === 'station' && !S.thread && !S.file && !S.page);
@@ -895,7 +1168,8 @@
 
   $('back').appendChild(icon('back')); $('gear').appendChild(icon('gear')); $('compose-send').appendChild(icon('send'));
   for (const s of document.querySelectorAll('[data-ico]')) s.appendChild(icon(s.dataset.ico));
-  $('setup-go').onclick = () => { const v = $('setup-link').value.trim(); const m = /#pair=([A-Za-z0-9_-]+)/.exec(v); if (!m) { toast('Paste the whole pairing link from the desktop', true); return; } location.hash = 'pair=' + m[1]; location.reload(); };
+  $('setup-go').onclick = () => { const v = $('setup-link').value.trim(); const m = PAIR_RE.exec(v); if (!m) { toast('Paste the whole pairing link from the desktop', true); return; } pairAndStart(m[1]); };
+  $('setup-paste').onclick = pasteAndPair;
   $('setup-retry').onclick = () => location.replace(location.pathname);
   $('compose-send').onclick = send;
   $('compose-to').onclick = openSheet;

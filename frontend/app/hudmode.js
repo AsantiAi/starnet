@@ -140,6 +140,9 @@
       if (s.source) r.source = String(s.source);
       if (s.streamId) r.streamId = String(s.streamId);
       r.internal = s.internal === true;
+      // whether STOP / a direction can reach this run (a work-line step or a channel hub run is not in the
+      // station's stoppable set): the card never offers a control whose 'ok' would be a lie
+      if (typeof s.stoppable === 'boolean') r.stoppable = s.stoppable;
     }
     for (const [id, r] of feed.runs) {
       if (live.has(id)) continue;
@@ -252,7 +255,10 @@
     error: ['fault', 'Needs attention'], budget: ['fault', 'Stopped at the spend cap'], max_iters: ['fault', 'Stopped at the turn limit'],
     refusal: ['fault', 'Refused'], empty: ['fault', 'Ended without a reply']
   };
-  const WORKER_END = { done: ['done', 'Completed'], interrupted: ['stopped', 'Stopped'], error: ['fault', 'Needs attention'] };
+  const WORKER_END = {
+    done: ['done', 'Completed'], interrupted: ['stopped', 'Stopped'], error: ['fault', 'Needs attention'],
+    stale: ['fault', 'Lost when the station restarted'], refused: ['fault', 'Refused']
+  };
 
   function oneLine(v, max) {
     const t = String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
@@ -284,7 +290,10 @@
   function replyOfRun(runId, streamId, streams) {
     for (const s of arr(streams)) {
       if (!s || !(s.id === streamId || arr(s.runIds).includes(runId))) continue;
-      const said = arr(s.history).filter(h => h && h.role === 'assistant' && h.sourceRunId === runId && !h.error).map(h => textOf(h.content)).join('\n\n').trim();
+      // a folded direction streams back as a '[steering] …' line inside the reply text (COMMS draws it as its own
+      // note row): it is the Commander's words, never the agent's result
+      const said = arr(s.history).filter(h => h && h.role === 'assistant' && h.sourceRunId === runId && !h.error)
+        .map(h => textOf(h.content).replace(/(^|\n)\[steering\] [^\n]*/g, '$1')).join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
       if (said) return said.length > 2000 ? said.slice(0, 1999) + '…' : said;
     }
     return '';
@@ -320,7 +329,7 @@
         time: r.startedAt ? fmtElapsed(t - r.startedAt) : '', sortAt: r.startedAt || t,
         task: found.task || TRIGGER_WORDS[r.trigger] || SOURCE_WORDS[r.source] || 'Working on a task',
         result: '', tools: [], outputs: [], directions: [],
-        canSteer: !asking, canStop: true, streamId: found.streamId
+        canSteer: !asking && r.stoppable !== false, canStop: r.stoppable !== false, streamId: found.streamId
       });
       seen.add(r.runId);
     }
@@ -331,7 +340,7 @@
       const endAt = wk.completedAt || wk.updatedAt || 0;
       if (!running && !(endAt && t - endAt <= FINISHED_WINDOW_MS)) continue;
       const asking = running && !!wk.runId && feed.prompts.has(wk.runId);
-      const end = WORKER_END[wk.status] || ['done', String(wk.status || 'Finished')];
+      const end = WORKER_END[wk.status] || ['stopped', wk.status ? 'Ended (' + String(wk.status) + ')' : 'Ended'];
       const w = who(wk.agentId);
       out.push({
         key: 'worker:' + wk.id, kind: 'worker', workerId: wk.id, generation: wk.generation, runId: wk.runId || '',
@@ -401,12 +410,13 @@
       const rect = p && p.rect && ['x', 'y', 'w', 'h'].every(k => isFinite(Number(p.rect[k]))) ? {
         x: Math.round(Number(p.rect.x)), y: Math.round(Number(p.rect.y)), w: Math.round(Number(p.rect.w)), h: Math.round(Number(p.rect.h))
       } : null;
-      return { pinned: !(p && p.pinned === false), rect };
-    } catch (_) { return { pinned: true, rect: null }; }
+      const widget = p && p.widget && ['w', 'h'].every(k => Number(p.widget[k]) > 0) ? { w: Math.round(Number(p.widget.w)), h: Math.round(Number(p.widget.h)) } : null;
+      return { pinned: !(p && p.pinned === false), rect, widget };
+    } catch (_) { return { pinned: true, rect: null, widget: null }; }
   }
 
   function writePrefs(store, prefs) {
-    try { if (store) store.setItem(PREF_KEY, JSON.stringify({ pinned: !!prefs.pinned, rect: prefs.rect || null })); } catch (_) {}
+    try { if (store) store.setItem(PREF_KEY, JSON.stringify({ pinned: !!prefs.pinned, rect: prefs.rect || null, widget: prefs.widget || null })); } catch (_) {}
   }
 
   /* ---------------- desktop bridge (Tauri) ---------------- */
@@ -517,6 +527,14 @@
     return card;
   }
 
+  /* A card with no reply text on this page. The reply may well exist (a routine's, a Telegram thread's, one in a
+     conversation this page has not loaded): say where it is, never that there was none. */
+  function noResultWords(it) {
+    if (it.state === 'live' || it.state === 'ask') return 'Waiting for the agent’s result.';
+    if (it.state === 'stopped') return 'Stopped before it finished.';
+    return it.streamId ? 'Its reply is in the conversation.' : 'Its reply isn’t shown here.';
+  }
+
   function patchCard(card, it) {
     card.item = it;
     card.node.dataset.state = it.state;
@@ -524,7 +542,7 @@
     if (it.color) card.agent.style.color = it.color; else card.agent.style.removeProperty('color');
     setText(card.status, it.status + (it.time ? ' · ' + it.time : ''));
     setText(card.task, it.task);
-    setText(card.result, it.result || (it.state === 'live' || it.state === 'ask' ? 'Waiting for the agent’s result.' : 'No result was recorded.'));
+    setText(card.result, it.result || noResultWords(it));
     setText(card.tools, it.tools.length ? 'Tools used: ' + it.tools.join(', ') : '');
     setText(card.outputs, it.outputs.map(o => 'Output: ' + o).join('\n'));
     setText(card.directions, it.directions.join('\n'));
@@ -587,27 +605,78 @@
   // Point the station's camera at an agent (its own follow-lock: the same one a CREW click makes).
   const WIDGET_ZOOM = 4.5;   // the agent fills the small picture; the station's own lock is 3
   const WIDGET_SEAT_AT = 0.84;   // an agent at its desk: feet low in the frame, so its desk and screen show above it
+  /* The framing: the agent is always shown at the same closeness (4.5, the agent cam Andrew liked); a picture the
+     Commander makes bigger shows MORE STATION round the agent, never a bigger agent (Andrew 09-30: "the agent cam
+     is WAY TOO BIG" — it used to zoom up to a third closer as the window grew). A seated worker moves from low in
+     the small frame (its desk and screen above it) toward the middle of a tall one. */
+  function widgetFraming() {
+    let h = 0; try { h = $('stage-wrap').clientHeight || 0; } catch (_) {}
+    const t = h > WIDGET_VIEW_H ? Math.min(1, (h - WIDGET_VIEW_H) / 210) : 0;
+    return { zoom: WIDGET_ZOOM, seatAt: +(WIDGET_SEAT_AT - 0.18 * t).toFixed(2) };
+  }
+  function cameraOn(id) {
+    try { const d = typeof World !== 'undefined' && World.cameraDbg ? World.cameraDbg() : null; return !d || d.lockId === id; } catch (_) { return true; }
+  }
   function follow(id) {
-    if (!id || S.followId === id) return;
-    S.followId = id;
+    if (!id) return;
+    const fr = widgetFraming(), key = id + '|' + fr.zoom + '|' + fr.seatAt;
+    if (S.followId === id && S.followKey === key && cameraOn(id)) return;
+    S.followId = id; S.followKey = key;
     try {
       if (typeof World === 'undefined' || !World.lockBody) return;
-      if (S.stationZoom == null) { const d = World.cameraDbg && World.cameraDbg(); S.stationZoom = d && d.scale > 0 ? d.scale : 0; }
-      World.lockBody(id, WIDGET_ZOOM, { seatAt: WIDGET_SEAT_AT });
+      keepStationCamera();
+      World.lockBody(id, fr.zoom, { seatAt: fr.seatAt });
     } catch (_) {}
   }
-  // leaving the HUD: the camera keeps watching the same agent, at the zoom the station had
-  function unfollow() {
-    try { if (S.followId && S.stationZoom > 0 && typeof World !== 'undefined' && World.lockBody) World.lockBody(S.followId, S.stationZoom); } catch (_) {}
-    S.stationZoom = null;
+  /* The widget BORROWS the station's camera. Before its first follow it keeps what the station was showing (a
+     free view or a CREW follow, its zoom and where it looked), and leaving the HUD gives exactly that back — the
+     station never comes back zoomed in on whoever the widget last watched. */
+  function keepStationCamera() {
+    if (S.stationCam) return;
+    try { S.stationCam = (typeof World !== 'undefined' && World.cameraState) ? World.cameraState() : null; } catch (_) { S.stationCam = null; }
   }
+  function unfollow() {
+    try { if (S.stationCam && typeof World !== 'undefined' && World.restoreCamera) World.restoreCamera(S.stationCam); } catch (_) {}
+    S.stationCam = null;
+  }
+
+  /* MOVE THE AGENT CAM (Andrew 09-30: "I cant drag the agent cam mode, its just stuck in the top right"). The picture
+     and its rows are what you click, so they are also what you hold: press and move a few pixels and the WINDOW
+     moves (the OS drag, the same one the title bar's drag region uses); a press that does not move stays a click —
+     open ACTIVITY on the picture, watch that agent on a row. Where it is left is where the HUD comes back. */
+  const DRAG_PX = 4;
+  function startWindowDrag() {
+    try {
+      const w = root.__TAURI__ && root.__TAURI__.window;
+      const cur = w && (typeof w.getCurrentWindow === 'function' ? w.getCurrentWindow() : (typeof w.getCurrent === 'function' ? w.getCurrent() : null));
+      if (cur && typeof cur.startDragging === 'function') return Promise.resolve(cur.startDragging()).catch(() => null);
+    } catch (_) {}
+    return invoke('plugin:window|start_dragging', { label: 'main' });
+  }
+  function holdToMove(node) {
+    let down = null;
+    node.addEventListener('pointerdown', e => {
+      down = (S.desktop && e.button === 0 && e.isPrimary !== false) ? { x: e.clientX, y: e.clientY } : null;
+    });
+    node.addEventListener('pointermove', e => {
+      if (!down || !(e.buttons & 1)) { down = null; return; }
+      if (Math.abs(e.clientX - down.x) < DRAG_PX && Math.abs(e.clientY - down.y) < DRAG_PX) return;
+      down = null;
+      S.movedAt = now();   // the click that may follow a drag is not a click
+      startWindowDrag();
+    });
+    const clear = () => { down = null; };
+    node.addEventListener('pointerup', clear);
+    node.addEventListener('pointercancel', clear);
+  }
+  const justMoved = () => now() - (S.movedAt || 0) < 500;
 
   function buildWidget() {
     if (S.widget) return S.widget;
     const g = gameScreen(); if (!g) return null;
     // the view: a click-catcher over the station view (a click on the world would otherwise open a dossier)
     const open = el('button', 'hud-wview'); open.type = 'button';
-    open.setAttribute('aria-label', 'Open activity'); open.title = 'Open activity';
+    open.setAttribute('aria-label', 'Open activity'); open.title = 'Click to open activity · drag to move';
     const box = el('section', 'hud-widget');
     box.id = 'hud-widget';
     box.setAttribute('aria-label', 'StarNet HUD: your agents at work');
@@ -617,9 +686,11 @@
     box.append(rows, more);
     g.insertBefore(box, g.firstChild);
     g.insertBefore(open, g.firstChild);
-    open.addEventListener('click', () => { setView('activity'); });
+    holdToMove(open); holdToMove(rows);
+    open.addEventListener('click', () => { if (!justMoved()) setView('activity'); });
     more.addEventListener('click', () => { setView('activity'); });
     rows.addEventListener('click', e => {
+      if (justMoved()) return;
       const row = e.target && e.target.closest && e.target.closest('[data-agent]');
       if (!row) return;
       S.followPinned = row.getAttribute('data-agent');   // the Commander chose who to watch
@@ -640,6 +711,8 @@
     if (S.followPinned && !plan.tiles.some(x => x.agentId === S.followPinned)) S.followPinned = '';
     const watch = S.followPinned || (plan.tiles[0] && plan.tiles[0].agentId) || '';
     follow(watch);
+    // the station stopped answering: what the rows last knew may be over, so no clock keeps counting it
+    const down = S.feed.snapOk === false;
     const keep = new Set();
     let prev = null;
     for (const tile of plan.tiles) {
@@ -654,13 +727,13 @@
         w.map.set(tile.agentId, v);
       }
       v.node.setAttribute('data-agent', tile.agentId);
-      v.node.dataset.state = tile.state;
+      v.node.dataset.state = down ? 'fault' : tile.state;
       v.node.classList.toggle('on', tile.agentId === watch);
       v.dot.className = 'dot' + (tile.state === 'ask' ? ' alert' : '');
       setText(v.name, tile.name);
       if (tile.color) v.name.style.color = tile.color; else v.name.style.removeProperty('color');
-      setText(v.clock, tile.working ? fmtClock(t - tile.startedAt) : 'ALL QUIET');
-      setText(v.step, tile.step);
+      setText(v.clock, down ? 'NO LINK' : tile.working ? fmtClock(t - tile.startedAt) : 'ALL QUIET');
+      setText(v.step, down ? 'The station is not answering' : tile.step);
       v.node.setAttribute('aria-label', tile.name + (tile.working ? ' · ' + tile.step + ' · running ' + fmtClock(t - tile.startedAt) : ' · all quiet · ' + tile.step) + '. Watch');
       v.node.title = 'Watch ' + tile.name;
       const want = prev ? prev.nextSibling : w.rows.firstChild;
@@ -675,19 +748,43 @@
 
   function stopWidgetFrames() {}
 
-  // the window hugs the widget (the view + its rows), width and height
-  function widgetSize() {
+  /* The widget's window. It opens at the DEFAULT size (a 300x190 picture + its rows); the picture fills whatever
+     the window is, so when the Commander drags the window bigger the station view grows with it — and that
+     size is theirs: it is kept (no auto-fit fights it) and remembered for the next time the HUD opens. */
+  const WIDGET_VIEW_W = 300, WIDGET_VIEW_H = 190;
+  function widgetDefaultSize() {
     try {
-      const a = S.widget.box.getBoundingClientRect(), s = $('stage-wrap').getBoundingClientRect();
-      return { w: Math.ceil(Math.max(a.right, s.right) + 4), h: Math.ceil(Math.max(a.bottom, s.bottom) + 4) };
+      const box = S.widget.box, r = box.getBoundingClientRect();
+      const z = box.offsetWidth > 0 ? r.width / box.offsetWidth : 1;   // the text-size body zoom (visual px per css px)
+      return { w: Math.ceil((WIDGET_VIEW_W + 8) * z), h: Math.ceil((WIDGET_VIEW_H + 12) * z + r.height) };
     } catch (_) { return null; }
   }
-  function fitWidget() {
-    if (!S.active || S.view !== 'widget' || !S.desktop) return;
-    const z = widgetSize(); if (!z) return;
-    if (S.widgetFit && Math.abs(z.w - S.widgetFit.w) < 3 && Math.abs(z.h - S.widgetFit.h) < 3) return;
+  function widgetSize() { return S.widgetUser || widgetDefaultSize(); }
+  function askWidgetSize(z) {
+    if (!z) return Promise.resolve(null);
     S.widgetFit = z;
-    invoke('starnet_hud_fold', { folded: true, height: z.h, width: z.w });
+    S.fitQuietUntil = now() + 900;   // the resize this request causes is ours, not the Commander's
+    return invoke('starnet_hud_fold', { folded: true, height: z.h, width: z.w });
+  }
+  // default-sized: follow the rows (an agent starting or finishing adds or removes one); user-sized: hands off
+  function fitWidget() {
+    if (!S.active || S.view !== 'widget' || !S.desktop || S.widgetUser) return;
+    const z = widgetDefaultSize(); if (!z) return;
+    if (S.widgetFit && Math.abs(z.w - S.widgetFit.w) < 3 && Math.abs(z.h - S.widgetFit.h) < 3) return;
+    askWidgetSize(z);
+  }
+  // a resize we did not ask for, while the widget shows, is the Commander sizing it: keep and remember that size.
+  // Only a REAL window resize counts: the synthetic 'resize' the HUD dispatches after every view change (so the
+  // layout reflows) is untrusted, and the moments around a view change or an entry are quiet.
+  function onWindowResize(e) {
+    if (e && e.isTrusted === false) return;
+    if (!S.active || S.view !== 'widget' || !S.desktop || S.busy || now() < (S.fitQuietUntil || 0)) return;
+    const w = Math.round(root.innerWidth), h = Math.round(root.innerHeight);
+    if (!(w > 0 && h > 0)) return;
+    if (S.widgetFit && Math.abs(w - S.widgetFit.w) < 4 && Math.abs(h - S.widgetFit.h) < 4) return;
+    S.widgetUser = { w, h }; S.widgetFit = S.widgetUser;
+    const prefs = readPrefs(root.localStorage); prefs.widget = S.widgetUser; writePrefs(root.localStorage, prefs);
+    renderWidget();   // the picture changed size: re-frame the agent for it
   }
 
   function buildUi() {
@@ -706,8 +803,8 @@
     // the HUD's hands live in the COMMS header, where the project feed keeps its CREW / ACTIVITY switch
     const ctl = el('span', 'ph-actions hud-ctl');
     const view = el('button', 'btn'); view.type = 'button'; view.id = 'hud-view';
-    const small = el('button', 'btn', 'SMALL'); small.type = 'button'; small.id = 'hud-small';
-    small.title = 'Shrink the HUD to the widget';
+    const small = el('button', 'btn', 'AGENT CAM'); small.type = 'button'; small.id = 'hud-small';
+    small.title = 'Shrink the HUD to the agent cam';
     const pin = el('button', 'btn', 'PIN'); pin.type = 'button'; pin.id = 'hud-pin'; pin.hidden = true;
     const exitBtn = el('button', 'btn', 'STATION'); exitBtn.type = 'button'; exitBtn.id = 'hud-exit';
     exitBtn.title = 'Back to the full station';
@@ -853,6 +950,7 @@
     if (!S.active) return Promise.resolve(false);
     S.view = next === 'chat' ? 'chat' : next === 'widget' ? 'widget' : 'activity';
     if (S.view === 'widget') S.widgetFit = null;
+    S.fitQuietUntil = now() + 900;   // the window is about to change size for this view: that is ours
     applyView();
     render();
     announceLayout();
@@ -861,7 +959,7 @@
       S.foldedH = 0;
       return invoke('starnet_hud_fold', { folded: false, height: null }).then(() => true);
     }
-    if (S.view === 'widget') { const z = widgetSize(); S.widgetFit = z; return invoke('starnet_hud_fold', { folded: true, height: z && z.h, width: z && z.w }).then(() => true); }
+    if (S.view === 'widget') return askWidgetSize(widgetSize()).then(() => true);
     S.foldedH = activityHeight();
     return invoke('starnet_hud_fold', { folded: true, height: S.foldedH, width: null }).then(() => true);
   }
@@ -872,6 +970,8 @@
     S.busy = true;
     const prefs = readPrefs(root.localStorage);
     S.pinned = prefs.pinned;
+    S.widgetUser = prefs.widget || null;   // the size the Commander last gave the widget, if they ever did
+    S.fitQuietUntil = now() + 3000;        // entering reshapes the window several times: none of that is the Commander
     S.view = 'widget';                       // the HUD opens SMALL: the agents at work, a click from everything else
     S.desktop = !!tauriCore(root);
     S.active = true;
@@ -892,12 +992,18 @@
       .then(v => v || (prefs.rect && S.desktop ? invoke('starnet_hud_set', { active: true, pinned: S.pinned }) : v))
       .then(v => { if (v) { S.pinned = !!v.pinned; syncButtons(); } return true; })
       // the shell opened the HUD at its full rect: now hug the widget
-      .then(ok => { const z = widgetSize(); S.widgetFit = z; return invoke('starnet_hud_fold', { folded: true, height: z && z.h, width: z && z.w }).then(() => ok); })
-      .finally(() => { S.busy = false; });
+      .then(ok => askWidgetSize(widgetSize()).then(() => ok))
+      .finally(() => { S.busy = false; if (S.exitAfter) { S.exitAfter = false; exit(); } });
   }
 
   function exit() {
-    if (!S.active || S.busy) return Promise.resolve(false);
+    if (S.busy) { S.exitAfter = true; return Promise.resolve(false); }   // entering: leave right after
+    if (!S.active) {
+      // the page is not in HUD mode, but the shell may still hold the small pinned window (a reload that never
+      // reached the station): hand the window back so it is never stranded tiny and on top
+      if (!tauriCore(root)) return Promise.resolve(false);
+      return invoke('starnet_hud_status').then(v => (v && v.active ? invoke('starnet_hud_set', { active: false }) : null)).then(() => false);
+    }
     S.busy = true;
     return invoke('starnet_hud_set', { active: false })
       .then(v => {
@@ -944,6 +1050,7 @@
       btn.hidden = !tauriCore(root);
       btn.addEventListener('click', () => { enter(); });
     }
+    root.addEventListener('resize', onWindowResize);
     // Ctrl+Shift+H toggles the HUD from anywhere in the app (Alt+H stays the help overlay's).
     doc.addEventListener('keydown', e => {
       if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && (e.code === 'KeyH' || e.key === 'H' || e.key === 'h')) {
@@ -962,8 +1069,9 @@
     // so the page puts its HUD layout back instead of drawing the full station into a tiny frame.
     invoke('starnet_hud_status').then(v => {
       if (!v || !v.active) return;
-      const tryEnter = (n) => { if (inGame()) enter(); else if (n > 0) root.setTimeout(() => tryEnter(n - 1), 500); };
-      tryEnter(40);
+      // the station may take a while to boot; if it never gets there, give the window back rather than strand it
+      const tryEnter = (n) => { if (inGame()) enter(); else if (n > 0) root.setTimeout(() => tryEnter(n - 1), 500); else exit(); };
+      tryEnter(240);
     });
   }
 

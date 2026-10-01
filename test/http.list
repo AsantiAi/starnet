@@ -124,6 +124,8 @@ test/routing.persist.e2e.test.js
 test/run-recovery.api.test.js
 test/routing.sample.e2e.test.js
 test/routing.sample-provider.e2e.test.js
+test/routing.fix-suggest.e2e.test.js
+test/routing.line-jobs.e2e.test.js
 test/routing.sample-stop.e2e.test.js
 test/routing.steptest.e2e.test.js
 test/routing.triggers.e2e.test.js
@@ -165,6 +167,7 @@ test/managed-run-cap.e2e.test.js
 test/workflow-project.e2e.test.js
 test/workflow-project-multibay.e2e.test.js
 test/routing.linestats.e2e.test.js
+test/userprops.e2e.test.js
 test/user-study-loop.http.test.js
 test/starnet-run-id-header.e2e.test.js
 test/model-tiers.http.test.js

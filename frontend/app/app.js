@@ -3231,6 +3231,22 @@ const App = (() => {
     if (World.setOnOutbox) World.setOnOutbox(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('outbox'); });
     if (World.setOnMissionBoard) World.setOnMissionBoard(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('quests'); });   // G1b: click the MISSION BOARD → the QUEST LOG (the board is a projection, never a gate)
     if (World.setOnTrophyCase) World.setOnTrophyCase(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('trophies'); });   // G3b: click the TROPHY CASE → the TROPHY surface (a projection of real completions, never a gate)
+    // a PLUGIN TERMINAL is the plugin's body: a click opens its window. An unbound or turned-off one says so and opens
+    // EXTENSIONS, where plugins are approved — never a dead click.
+    if (World.setOnPluginTerminal) World.setOnPluginTerminal(async (p) => {
+      const pid = p && p.pluginId;
+      const host = typeof PluginHost !== 'undefined' ? PluginHost : null;
+      if (pid && host) { try { await host.refresh(); } catch (_) { /* open() below still uses the last known list */ } }
+      if (pid && host && host.open(pid)) return;
+      if (typeof StationUI === 'undefined') return;
+      const info = pid && host ? host.list().find(x => x.id === pid) : null;
+      const say = !pid ? 'This terminal is not bound to a plugin yet. Bind it in REFIT, or create a plugin in ABILITIES → EXTENSIONS.'
+        : !info ? 'This terminal\'s plugin was removed. Rebind it in REFIT or remove the terminal.'
+        : !info.active ? (info.name || pid) + ' is off' + (info.pending ? ' — it changed since you approved it' : '') + '. Turn it on in ABILITIES → EXTENSIONS.'
+        : (info.name || pid) + ' has no window. Its tools are available to agents in this room.';
+      if (StationUI.notify) StationUI.notify(say, info && info.active ? 'good' : 'warn');
+      if (!(info && info.active) && StationUI.openTerm) StationUI.openTerm('connectors', 'extensions');
+    });
     // DESK SCREEN: click an agent's workstation → the DESK SCREEN window (docked from the bottom like every window) on
     // that agent's computer. The fold starts here so a desk opened mid-run already holds every step this page has seen.
     if (typeof DeskScreen !== 'undefined' && World.setOnDesk) {
@@ -3252,10 +3268,9 @@ const App = (() => {
     // types ARE tables. The model deliberately never imports the catalog, so this injection is the single
     // seam between the two — installed before the station exists so the very first placement is validated.
     if (typeof PropSprites !== 'undefined' && WorldModel.setPropRules) {
-      WorldModel.setPropRules((t) => {
-        const s = PropSprites.spec(t);
-        return s ? { mount: s.mount || null, stack: !!s.stack, surface: !!s.surface, flat: !!s.flat, footprintMigration:s.footprintMigration } : null;
-      });
+      // ruleFor keeps a player-made prop (user_…) even before its art registers, so a slow boot fetch can never
+      // prune paid work out of the save; retired built-in types still come back null and are dropped.
+      WorldModel.setPropRules((t) => PropSprites.ruleFor(t));
     }
     // STATION IDENTITY: did the save we are loading already carry one? (worldmodel stamps meta.createdAt
     // at create AND backfills it on migrate — a stamp that is never SAVED would re-roll on every reload,
@@ -3296,8 +3311,8 @@ const App = (() => {
         bbBuild.onclick = () => { SFX.click(); bbBuild.classList.remove('refit-nudge'); Build.toggle(); if (typeof Tutorial !== 'undefined' && Tutorial.onBuildOpen && Build.isOpen && Build.isOpen()) Tutorial.onBuildOpen(); };
       }
     }
-    const bbWorkflows = el('bb-workflows');
-    if (bbWorkflows) bbWorkflows.onclick = () => { SFX.click(); if (typeof Build !== 'undefined' && Build.openWorkflows) Build.openWorkflows(); };
+    // WORK › WORKFLOWS (2026-09-30) is its own docked window (frontend/app/windows/workflows.js, data-term="workflows"): the dock binds it
+    // like every other window — it no longer opens Build Mode. The full editor is that window's EDIT WORKFLOW key.
     const bbRecruit = el('bb-recruit');
     if (bbRecruit) bbRecruit.onclick = openSummonBay;   // the ONE recruit door — bay carries both verbs (summon new / deploy to current)
 

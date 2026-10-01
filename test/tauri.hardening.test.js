@@ -37,6 +37,10 @@ A.eq((indexHtml.match(/<script\b(?![^>]*\bsrc=)[^>]*>\s*\S/gi) || []).length, 0,
 A.eq((indexHtml.match(/<[a-z][^>]*\son[a-z]+\s*=/gi) || []).length, 0, 'index.html has no inline on*= event handler');
 A.ok(/object-src 'none'/.test(csp), 'CSP disables plugin/object loads');
 A.ok(/frame-ancestors 'none'/.test(csp), 'CSP blocks framing');
+// Plugin windows (2026-09-29): the webview may frame ONLY the sidecar's own loopback port (pinned at launch, like
+// connect-src) — the sandboxed /plugin-ui/ pages. Never a wildcard, never another host.
+const frameSrc = (/frame-src ([^;]*)/.exec(csp) || [])[1] || '';
+A.eq(frameSrc.trim(), 'http://127.0.0.1:*', 'CSP frames only the sidecar loopback port (plugin windows), pinned at launch');
 A.ok(/base-uri 'none'/.test(csp), 'CSP blocks base tag rewriting');
 A.ok(/form-action 'none'/.test(csp), 'CSP blocks form exfiltration');
 

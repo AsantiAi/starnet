@@ -71,7 +71,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   /* LINE TEST (2026-09-29, handed over by the steptest-stuck investigation): a run on a line test's OWN stream — a step
      test's steptest-…, RUN ONE REAL JOB's sample-… (agent.run.start carries streamId) — is real work, but its words live in
      the line's TEST view, not in the agent's COMMS: a Commander who opened COMMS saw nothing and read the row as stuck. The
-     crew row names it LINE TEST and its tip says where it shows and how it stops. */
+     crew row names it LINE TEST and its tip says where it shows and how it stops.
+     (2026-09-30) A sample-… stream is also every job the WORK › WORKFLOWS window sends — real work, not a test — so the row says
+     ON A WORKFLOW and its tip names both places one shows: the WORKFLOWS window, or a step test's TEST view in BUILD. */
   const testRunIds = new Map();      // runId -> agentId, for the live runs that are line tests
   const isLineTestStream = s => /^(steptest|sample)-/.test(String(s || ''));
   function lineTestOnly(id) {        // every live run of this agent is a line test (a mix reads WORKING)
@@ -79,7 +81,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     return n > 0 && n >= (runningAgents.get(id) || 0);
   }
   function dropTestRuns(id) { for (const [r, a] of Array.from(testRunIds)) if (a === id) testRunIds.delete(r); }
-  const LINE_TEST_TIP = 'working on a line test — its steps show in BUILD › the line’s TEST view, not in COMMS; ■ STOP there ends it';
+  const LINE_TEST_TIP = 'working on a workflow — it shows in WORK › WORKFLOWS (a step test: in BUILD › the line’s TEST view), not in COMMS; ■ STOP there ends it';
   let crewLiveWired = false;         // the crew-status live listener is registered exactly once
   let repaintAutonomyDial = null;    // GROWTH Tier 3: the open Settings AUTONOMY panel's paint fn (null when closed) — lets an accepted trust offer repaint the EARNED badge live
   // Same idiom for the open Settings PERMISSIONS panel's per-agent APPROVAL list. The list is painted from
@@ -1542,9 +1544,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       if (live) working++;
       const e = $('#cs-' + a.id);
       if (e) {
-        const status = live ? (a.id === focusedId && act === 'talk' ? 'IN CONVERSATION' : lineTestOnly(a.id) ? 'LINE TEST' : 'WORKING') : 'IDLE';
+        const status = live ? (a.id === focusedId && act === 'talk' ? 'IN CONVERSATION' : lineTestOnly(a.id) ? 'ON A WORKFLOW' : 'WORKING') : 'IDLE';
         if (e.textContent !== status) e.textContent = status;
-        const tip = status === 'LINE TEST' ? LINE_TEST_TIP : '';
+        const tip = status === 'ON A WORKFLOW' ? LINE_TEST_TIP : '';
         if ((e.getAttribute('data-tip') || '') !== tip) { if (tip) e.setAttribute('data-tip', tip); else e.removeAttribute('data-tip'); }
         const row = e.closest('.crew-row');
         row.classList.toggle('selected', a.id === focusedId);

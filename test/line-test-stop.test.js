@@ -96,8 +96,9 @@ A.ok(/else \{ runningAgents\.delete\(id\); runSeenAt\.delete\(id\); dropTestRuns
     $: sel => sel.startsWith('#cs-') ? labels[sel.slice(4)] : null
   });
   vm.runInContext(A.fnBody(station, 'function crewTick()') + '\ncrewTick();', ctx);
-  A.eq([labels.tester.textContent, labels.worker.textContent, labels.idle.textContent], ['LINE TEST', 'WORKING', 'IDLE'], 'a line test reads LINE TEST; other work WORKING; no run IDLE');
-  A.ok(/TEST view/.test(tips.tester || '') && /STOP/.test(tips.tester || '') && !tips.worker, 'the LINE TEST row says where it shows and how it stops; the others carry no such tip');
+  A.eq([labels.tester.textContent, labels.worker.textContent, labels.idle.textContent], ['ON A WORKFLOW', 'WORKING', 'IDLE'], 'a workflow job or a line test reads ON A WORKFLOW; other work WORKING; no run IDLE');
+  A.ok(/WORK › WORKFLOWS/.test(tips.tester || '') && /TEST view/.test(tips.tester || '') && /STOP/.test(tips.tester || '') && !tips.worker,
+    'the ON A WORKFLOW row says where it shows (the WORKFLOWS window, or a step test in the TEST view) and how it stops; the others carry no such tip');
 }
 {
   // lineTestOnly: only when EVERY live run of the agent is a line test

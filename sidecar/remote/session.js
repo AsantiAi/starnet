@@ -29,6 +29,7 @@ function makeSessions(deps) {
   const newId = deps.newId;
   const ttlMs = deps.ttlMs || 10 * 60 * 1000;
   const maxSessions = deps.maxSessions || 64;
+  const perDevice = deps.perDevice || 4;   // one phone holds at most this many live sessions (its newest win)
   const live = new Map();   // sessionId -> session
 
   function hello(h) {
@@ -50,6 +51,8 @@ function makeSessions(deps) {
       });
     } catch (e) { return { ok: false, error: 'bad hello' }; }
     sweep();
+    const mine = Array.from(live.values()).filter(s => s.deviceId === dev.id).sort((a, b) => a.lastAt - b.lastAt);
+    while (mine.length >= perDevice) end(mine.shift().id);   // a phone crowds out only its own older sessions
     if (live.size >= maxSessions) {   // bounded: drop the stalest session rather than grow forever
       let oldest = null;
       for (const s of live.values()) if (!oldest || s.lastAt < oldest.lastAt) oldest = s;
@@ -105,17 +108,20 @@ function makeSessions(deps) {
     s.sink = fn;
     return () => { if (s.sink === fn) s.sink = null; };
   }
-  function broadcast(obj) {
+  // onlyDevices: deliver to these phones only (the crew stream goes only to phones that are looking at the station)
+  function broadcast(obj, onlyDevices) {
     let n = 0;
+    const only = Array.isArray(onlyDevices) ? new Set(onlyDevices) : null;
     for (const s of Array.from(live.values())) {
       if (!s.sink) continue;
+      if (only && !only.has(s.deviceId)) continue;
       if (!get(s.id)) continue;   // expired or revoked
       try { s.sink(sealOut(s, obj, 'ev')); n++; } catch (_) { s.sink = null; }
     }
     return n;
   }
 
-  return { hello, get, openRequest, sealOut, end, endDevice, sweep, list, keep, attachSink, broadcast };
+  return { hello, get, openRequest, sealOut, end, endDevice, sweep, list, keep, attachSink, broadcast, _live: live };
 }
 
 module.exports = { makeSessions };
