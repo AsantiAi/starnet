@@ -7200,6 +7200,17 @@ function nightshiftContextPack() {
    context pack, the quest ranker and the insights route, so every surface reads the SAME record. Gated by the
    personalization pause like every other learned-about-you signal; fail-open to nothing. */
 let _trackRecordMemo = { at: 0, rec: null };
+// runId -> the Commander's verdict, for the CURRENT station generation (the same epoch the rating route stamps).
+// The track record reads it so a finished run the Commander rated `miss` counts as a failure, not a success.
+function ratingVerdictMap() {
+  const out = {};
+  try {
+    const saved = saveStore.load('agent') || null;
+    const epoch = Math.max(1, Math.floor(Number(saved && saved.agent && saved.agent.createdAt) || 1));
+    for (const r of growthRatings.list({ limit: 2000, epoch })) if (r && r.runId) out[r.runId] = r.verdict;
+  } catch (e) { failNote('outcomes.verdicts', e); }
+  return out;
+}
 function stationTrackRecord() {
   try {
     if (!personalizationStore.read().enabled) return null;
@@ -7209,7 +7220,7 @@ function stationTrackRecord() {
        the memo is cleared by nothing and needs to be: it re-folds on its own within the window. */
     const now = Date.now();
     if (_trackRecordMemo.rec && (now - _trackRecordMemo.at) < 30000) return _trackRecordMemo.rec;
-    const rec = Outcomes.fold(runStore.list(null, { limit: 400 }), { now: now });
+    const rec = Outcomes.fold(runStore.list(null, { limit: 400 }), { now: now, verdicts: ratingVerdictMap() });
     _trackRecordMemo = { at: now, rec: rec };
     return rec;
   } catch (_) { return null; }
@@ -24069,7 +24080,7 @@ function serveInsights(req, res) {
        Commander's own run history (none of it is pause-gated), so the record stays visible while personalization
        is paused even though the prompts stop citing it. What a prompt may cite ≠ what the Commander may see. */
     let trackRecord = null;
-    try { const rec = Outcomes.fold(rows, { now: Date.now() }); trackRecord = { decided: rec.decided, windowMs: rec.windowMs, patterns: Outcomes.summary(rec), lines: Outcomes.lines(rec) }; } catch (_) { trackRecord = null; }
+    try { const rec = Outcomes.fold(rows, { now: Date.now(), verdicts: ratingVerdictMap() }); trackRecord = { decided: rec.decided, windowMs: rec.windowMs, patterns: Outcomes.summary(rec), lines: Outcomes.lines(rec) }; } catch (_) { trackRecord = null; }
     json(200, Object.assign(foldInsights(rows, { nowMs: Date.now(), bucketMs: 3600000, buckets: 24 }), { trackRecord }));
   } catch (e) { json(500, readRouteFailure('insights', e)); }   // a zeroed fold would read as "0 runs, $0" — a fabricated telemetry claim
 }
