@@ -220,6 +220,7 @@ const { makeBrowserViews, makeViewRoutes } = require('./browser-view.js');   // 
 // its replay-nonce inbox is a durable JSONL sibling of the other ledgers.
 const { makeRouter } = require('./routing/router.js');
 const { makeChainRunner, effectiveLimits: chainEffectiveLimits } = require('./routing/chain.js');
+const Verdict = require('./routing/verdict.js');   // /api/routing/chain answers the next stage's VERDICT instruction, as hopTurn composes it
 const { makeStepTest } = require('./routing/steptest.js');   // the conveyor STEP-THROUGH TEST engine (/api/routing/steptest)
 const LineJobs = require('./routing/linejobs.js');   // WORKFLOWS — every job sent down a line, kept as one record the window and the OUTBOX open (/api/line-jobs)
 const LineDraft = require('./routing/linedraft.js');   // WORKFLOWS › SET IT UP FOR ME — "what should it make?" → a starter, a name, each step's instructions (/api/routing/line-draft)
@@ -11450,8 +11451,18 @@ function handleRoutingChain(req, res) {
     const lim = chainEffectiveLimits(lineId ? router.lineLimits(lineId) : null, {}, (typeof effectiveCaps.global === 'number' && effectiveCaps.global > 0) ? effectiveCaps.global : null);
     limits = { maxHops: lim.maxHops, maxUsd: lim.maxUsd, maxUsdPerDay: lim.maxUsdPerDay, clamped: lim.clamped, spentToday: lineId ? lineSpend.spentToday(lineId) : 0 };
   } catch (_) { limits = null; }
+  /* `verdict` + `last` (additive, sweep 2026-10-01): the rest of the turn the sidecar's chain runner composes for the next
+     stage (routing/chain.js hopTurn) — the VERDICT-line instruction when its lane meets a verdict-keyed LOOP gate, else
+     whether its reply LEAVES the line. The browser's COMMS work line passed neither, so a line typed into COMMS told its
+     last WRITER to "produce the output for the next stage" (the essay-about-the-report bug) and a reviewer never heard it
+     must end on a VERDICT line. */
+  let verdict = null, last = false;
+  if (next) {
+    try { const g = router.loopGateAfter(next, lineId, nextDock || undefined); verdict = (g && Verdict.isVerdictWord(g.when)) ? Verdict.verdictBrief(g.when) : null; } catch (_) { verdict = null; }
+    if (!verdict) { try { last = !!router.chainShipsToOutbox(next, nextDock || undefined); } catch (_) { last = false; } }
+  }
   res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-  res.end(JSON.stringify({ next: next || null, nextDock: nextDock || null, brief: brief || null, limits: limits }));
+  res.end(JSON.stringify({ next: next || null, nextDock: nextDock || null, brief: brief || null, limits: limits, verdict: verdict || null, last: last }));
 }
 
 /* ---- GET /api/routing/sample — inert feature discovery for the Build Mode finish-the-line card. ---- */

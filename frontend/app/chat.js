@@ -8578,7 +8578,8 @@ const Chat = (() => {
         + '&lineId=' + encodeURIComponent(lineId || '') + (dockId ? '&dockId=' + encodeURIComponent(dockId) : ''), { cache: 'no-store', headers: h });
       if (!r || !r.ok) return null;
       const j = await r.json();
-      return (j && j.next) ? { next: String(j.next), nextDock: (typeof j.nextDock === 'string' && j.nextDock) ? j.nextDock : null, brief: (typeof j.brief === 'string' && j.brief) ? j.brief : null } : null;
+      return (j && j.next) ? { next: String(j.next), nextDock: (typeof j.nextDock === 'string' && j.nextDock) ? j.nextDock : null, brief: (typeof j.brief === 'string' && j.brief) ? j.brief : null,
+        verdict: (typeof j.verdict === 'string' && j.verdict) ? j.verdict : '', last: j.last === true } : null;
     } catch (_) { return null; }   // no floor, no sidecar, no line — the single-stage reply already stands
   }
 
@@ -8648,7 +8649,7 @@ const Chat = (() => {
       // the RECEIVING dock's standing brief rides the shared handoff turn — the same 5th param the sidecar's
       // chain runner passes (sidecar/routing/chain.js) — so the same floor composes the same run here too.
       const prompt = (typeof Pipeline !== 'undefined' && Pipeline.handoffPrompt)
-        ? Pipeline.handoffPrompt(seed.originalText, cur, out.text, hop, nxr.brief) : out.text;
+        ? Pipeline.handoffPrompt(seed.originalText, cur, out.text, hop, nxr.brief, nxr.verdict, nxr.last) : out.text;   // + the VERDICT / LAST-stage parts hopTurn adds (sweep 2026-10-01)
       const hopRow = isActiveWs(ws) ? streamingAgent(who) : null;
       if (hopRow) activeLiveRow = hopRow;
       let hopAcc = '';

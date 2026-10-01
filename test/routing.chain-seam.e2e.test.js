@@ -92,6 +92,10 @@ function boot(port, env, attemptsLeft) {
     const hop = await chainAsk('research-agent', '', lineId);
     A.eq(hop.next, 'writer-agent', 'chained dock -> the downstream agent');
     A.eq(hop.brief, 'Draft the result in press style.', 'and the RECEIVING dock\'s standing brief rides the answer');
+    // sweep 2026-10-01: the rest of hopTurn's turn — the writer's reply LEAVES the line, so the COMMS work line tells it so
+    A.eq([hop.last, hop.verdict], [true, null], 'the answer says the next stage is the LAST (its reply is the result), with no verdict gate');
+    const Chat = require('fs').readFileSync(require('path').join(__dirname, '..', 'frontend', 'app', 'chat.js'), 'utf8');
+    A.ok(/Pipeline\.handoffPrompt\(seed\.originalText, cur, out\.text, hop, nxr\.brief, nxr\.verdict, nxr\.last\)/.test(Chat), 'the COMMS work line composes the same 7-part turn the sidecar chain runner does');
     A.eq(await chainOf('writer-agent', '', lineId), null, 'terminal dock -> null');
     A.eq(await chainOf('no-such-agent', '', lineId), null, 'unknown agent -> null');
 
