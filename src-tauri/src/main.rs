@@ -2736,13 +2736,59 @@ fn post_sidecar_halt(state: &AppState, timeout: Duration) {
     }
 }
 
-/// Bounded drain, then kill: flip `shutting_down` so the guardian never respawns, ask the sidecar to halt all
-/// in-flight work (bounded), then terminate the child. The halt gives unattended runs a clean stop before the
-/// process dies; the kill guarantees no orphan sidecar outlives an explicit Quit.
+/// POST /api/lifecycle/quit: ask the sidecar to run its own graceful shutdown. On Windows `kill_sidecar` ends the
+/// child with TerminateProcess, which no handler in the sidecar can see — so the STATION browser (a real Chrome
+/// window the sidecar started) was left running with its network proxy dead, still holding the durable profile
+/// (2026-09-30 release review). Best-effort and bounded like the halt: a dead sidecar is simply already gone.
+fn post_sidecar_quit(state: &AppState, timeout: Duration) {
+    use std::io::{Read, Write};
+    let body = "{}";
+    let head = format!(
+        "POST /api/lifecycle/quit HTTP/1.1\r\nHost: 127.0.0.1\r\nX-StarNet-Token: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        state.api_token,
+        body.len()
+    );
+    if let Ok(mut s) = TcpStream::connect(("127.0.0.1", state.port)) {
+        let _ = s.set_read_timeout(Some(timeout));
+        let _ = s.set_write_timeout(Some(timeout));
+        let _ = s.write_all(head.as_bytes());
+        let _ = s.write_all(body.as_bytes());
+        let _ = s.flush();
+        let mut buf = [0u8; 64];
+        let _ = s.read(&mut buf);
+    }
+}
+
+/// Ask the sidecar to shut down cleanly (it closes the station browser, flushing its sign-ins, and exits), wait a
+/// bounded moment for it to leave, then `kill_sidecar` ends whatever is left. The kill still guarantees no orphan.
+fn stop_sidecar_gracefully(state: &AppState) {
+    post_sidecar_quit(state, Duration::from_secs(2));
+    let deadline = Instant::now() + Duration::from_millis(3500);
+    while Instant::now() < deadline {
+        let exited = state
+            .sidecar
+            .lock()
+            .ok()
+            .map(|mut guard| match guard.as_mut() {
+                Some(child) => matches!(child.try_wait(), Ok(Some(_))),
+                None => true,
+            })
+            .unwrap_or(true);
+        if exited {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    state.kill_sidecar();
+}
+
+/// Bounded drain, then stop: flip `shutting_down` so the guardian never respawns, ask the sidecar to halt all
+/// in-flight work (bounded), let it shut down cleanly, then terminate the child. The halt gives unattended runs a
+/// clean stop before the process dies; the kill guarantees no orphan sidecar outlives an explicit Quit.
 fn drain_and_kill_sidecar(state: &AppState) {
     state.shutting_down.store(true, Ordering::SeqCst);
     post_sidecar_halt(state, Duration::from_secs(3));
-    state.kill_sidecar();
+    stop_sidecar_gracefully(state);
 }
 
 /// Finish a close decision whose outcome is "keep the supervised process alive in the tray".
@@ -4969,9 +5015,9 @@ fn main() {
                     return;
                 }
                 if let Some(state) = app.try_state::<AppState>() {
-                    // Stop the guardian from respawning before we kill the child.
+                    // Stop the guardian from respawning before we stop the child.
                     state.shutting_down.store(true, Ordering::SeqCst);
-                    state.kill_sidecar();
+                    stop_sidecar_gracefully(state.inner());
                 }
             }
         });

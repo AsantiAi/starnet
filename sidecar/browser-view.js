@@ -102,6 +102,8 @@ function makeBrowserViews(deps) {
     return m;
   }
   const downloadDirFor = typeof deps.downloadDirFor === 'function' ? deps.downloadDirFor : () => null;
+  // where the COMMANDER's own downloads go between runs (their Downloads folder) — never the last agent's jail
+  const commanderDownloadDir = typeof deps.commanderDownloadDir === 'function' ? deps.commanderDownloadDir : () => null;
   const attended = deps.attended || null;   // the session's attendedLogin holder: .prompt is set to the driving run's
   const streamIdleMs = deps.streamIdleMs > 0 ? deps.streamIdleMs : STREAM_IDLE_MS;
   const stationIdleMs = deps.stationIdleMs > 0 ? deps.stationIdleMs : STATION_IDLE_MS;
@@ -217,6 +219,13 @@ function makeBrowserViews(deps) {
     station.driver = null; station.signIn = null;
     if (attended) attended.prompt = undefined;
     if (station.switchPending) { closeStation().catch(swallow('view.mode-switch-close')); return true; }   // the setting changed mid-run
+    /* PRIVACY (release review 2026-09-30): handTo pointed Chrome's downloads at the driving agent's workspace and
+       nothing pointed them back, so a file the Commander downloaded in the shared window afterwards (a bank statement)
+       landed where that agent's later runs — unattended ones too — could read it. Downloads go back to theirs. */
+    const home = commanderDownloadDir();
+    if (home && typeof station.session.handTo === 'function') {
+      Promise.resolve().then(() => station && station.session.handTo({ downloadDir: home })).catch(e => failNote('view.downloads-home', e));
+    }
     touchStation();
     return true;
   }

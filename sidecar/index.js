@@ -4330,6 +4330,8 @@ const browserViews = makeBrowserViews({
   attended: stationBrowserLogin,
   // the driving agent's own jail: a download must land where that agent can read it back
   downloadDirFor: agentId => /^[A-Za-z0-9_-]{1,40}$/.test(String(agentId || '')) ? path.join(WORKSPACES, String(agentId), 'downloads') : null,
+  // …and when the run lets go, the Commander's own downloads go to their Downloads folder again
+  commanderDownloadDir: () => path.join(os.homedir() || '.', 'Downloads'),
   makeStationSession: mode => browserInternals.makeBrowserSession({
     ledger: procLedger,
     // A REAL WINDOW on the Commander's screen (Andrew: it must work like Claude Code / Codex / Hermes): they use it
@@ -10503,6 +10505,7 @@ const ROUTES = [
   { m: 'GET', exact: '/api/state/snapshot', h: handleStateSnapshot },   // reconnect reconciliation (frontend lane consumes it)
   { m: 'GET', exact: '/api/agents/affinity', h: handleAgentAffinity },   // idle-life: the PROVEN social graph the world biases its social beats with
   { m: 'GET', exact: '/api/lifecycle/armed', h: handleLifecycleArmed },   // Lane 4D: tray supervisor's close-decision truth
+  { m: 'POST', exact: '/api/lifecycle/quit', h: handleLifecycleQuit },    // the desktop shell's Quit: shut down cleanly before it kills
   { m: 'GET', exact: '/api/cron', h: handleCronList },
   { m: 'POST', exact: '/api/cron', h: handleCronCreate },
   { m: 'POST', exact: '/api/cron/update', h: handleCronUpdate },
@@ -10998,13 +11001,17 @@ function gracefulShutdown(signal) {
   try { for (const ac of runs.values()) { try { ac.abort(); } catch (_) {} } } catch (_) {}   // abort any in-flight run so it stops spending
   try { if (typeof cronLock !== 'undefined' && cronLock && cronLock.release) cronLock.release(); } catch (_) {}   // drop cron.lock so the next boot's tick isn't wedged
   try { workspaceOwner.release(); } catch (_) {}   // drop the process-wide WORKSPACES owner claim on catchable shutdown
-  // BROWSER/CDP: the per-run browser session is created fresh per run and not retained at module scope (see the
-  // registry build in runOnce), so there is no persistent CDP handle to close here. A Chrome launched by an
-  // in-flight run is aborted via runs.abort() above; a detached window the user is watching is intentionally left
-  // to the user. (If a module-level browser-session registry is added later, close it here.)
+  // BROWSER/CDP: per-run browsers die with their runs (runs.abort() above). The STATION browser (sidecar/browser-view.js)
+  // outlives runs, so it is closed here (release review 2026-09-30: it was left running — a real Chrome window whose
+  // network proxy had died with the sidecar, so every page failed, still holding the durable profile). Browser.close
+  // flushes the profile, so sign-ins made just before quitting are kept; the shutdown deadline still bounds it.
+  let browserClosing = Promise.resolve();
+  try { browserClosing = Promise.resolve(browserViews.closeAll()).catch(e => failNote('shutdown.station-browser', e)); }
+  catch (e) { failNote('shutdown.station-browser', e); }
+  const afterBrowser = fn => Promise.race([browserClosing, new Promise(r => { const t = setTimeout(r, 2500); if (t.unref) t.unref(); })]).then(fn, fn);
   try {
     if (typeof server !== 'undefined' && server && server.close) {
-      server.close(() => { clearTimeout(deadline); process.exit(0); });   // stop accepting; exit once connections drain
+      server.close(() => afterBrowser(() => { clearTimeout(deadline); process.exit(0); }));   // stop accepting; exit once connections drain + the browser closed
       // don't wait on lingering keep-alive sockets — force them closed so close()'s callback fires promptly.
       if (typeof server.closeAllConnections === 'function') { try { server.closeAllConnections(); } catch (_) {} }
     } else { clearTimeout(deadline); process.exit(0); }
@@ -13461,6 +13468,17 @@ function handleLifecycleArmed(req, res) {
   // parseable by every shipped shell parser.
   res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Content-Length': Buffer.byteLength(body) });
   res.end(body);
+}
+
+/* POST /api/lifecycle/quit — the desktop shell is quitting. On Windows the shell ends the sidecar with TerminateProcess
+   (no signal reaches gracefulShutdown), which left the STATION browser running: a real Chrome window whose network proxy
+   had died with the sidecar, every page failing, still holding the durable profile (release review 2026-09-30). The
+   shell now asks first; this answers at once and runs the same gracefulShutdown a SIGTERM would (bounded by its 3 s
+   deadline), and the shell still kills whatever is left after its own wait. Token-gated like every /api route. */
+function handleLifecycleQuit(req, res) {
+  const body = JSON.stringify({ ok: true, shuttingDown: true });
+  res.writeHead(202, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Content-Length': Buffer.byteLength(body) });
+  res.end(body, () => setImmediate(() => gracefulShutdown('desktop-quit')));
 }
 
 /* GET /api/state/snapshot — a RECONNECTION snapshot for the frontend (Lane E). After the SSE bridge drops and

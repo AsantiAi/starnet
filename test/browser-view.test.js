@@ -164,6 +164,17 @@ function rig(extra) {
     A.ok(f.ok && f.page.url === 'https://youtube.com/', 'the Commander opens the window after the run and YouTube is there');
   }
 
+  // ---- PRIVACY: when the run lets go, the Commander's own downloads go to THEIR folder, not the agent's ----
+  {
+    const { made, views } = rig({ commanderDownloadDir: () => '/home/me/Downloads' });
+    const sess = views.sessionForRun({ agentId: 'nova', runId: 'r1', interactive: true });
+    await sess.navigate('https://example.com/');
+    A.eq(made[0].hands[made[0].hands.length - 1].downloadDir, '/ws/nova/downloads', 'while nova drives, downloads land in nova\'s folder');
+    views.releaseRun('r1');
+    await tick(); await tick();
+    A.eq(made[0].hands[made[0].hands.length - 1].downloadDir, '/home/me/Downloads', 'after the run, the Commander\'s downloads go to their own Downloads folder');
+  }
+
   // ---- STOP mid-tool: a late tool call of an ENDED run never takes the wheel back (release review, reproduced) ----
   {
     const { views } = rig();
