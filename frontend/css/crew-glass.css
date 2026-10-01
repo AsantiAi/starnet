@@ -16,16 +16,10 @@ body.glass-demo {
 }
 
 /* ---------- 1 · the sheet ---------- */
-body.glass-demo:not(.hud-mode) #screen-game #left {
-  background: var(--cg-glass), color-mix(in srgb, var(--panel2) 56%, transparent);
-  border: 1px solid var(--cg-edge);
-  border-radius: 12px;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, .4), inset 0 1px rgba(var(--ph-rgb), .08);
-  -webkit-backdrop-filter: blur(18px) saturate(1.08);
-  backdrop-filter: blur(18px) saturate(1.08);
-}
+/* Same face, edge, shadow and glass overlay as COMMS (glass-demo.css) so the two rails sit at one brightness
+   (Andrew 10-01: the lighter translucent wash on the left read as a brightness change). Only the shape differs. */
+body.glass-demo:not(.hud-mode) #screen-game #left { border-radius: 12px; }
 body.glass-demo:not(.hud-mode) #screen-game #left::after { display: none; }
-body.glass-demo:not(.hud-mode) #screen-game #left::before { opacity: 0; }
 body.glass-demo:not(.hud-mode) #screen-game #left:focus-within { outline: 0; border-color: rgba(var(--ph-rgb), .38); }
 
 /* header: CREW + find / hide, the roster total on a caption line under the title */
