@@ -167,7 +167,7 @@ A.ok(/\} else if \(tool === 'room' \|\| \(tool === 'select' && buildGroup === 'r
 A.ok(/\} else if \(tool === 'paint' \|\| \(tool === 'select' && buildGroup === 'surfaces'\)\) \{\n      if \(tool === 'select'\) pal\.addEventListener\('click', armPaintFromBrowse, true\);/.test(pal)
   && /closest\('\.refit-mattile, \.refit-hue'\)\) selectTool\('paint', \{ silent: true \}\);/.test(fn('armPaintFromBrowse')),
   'Surfaces opens on its finishes; the first material or colour picked arms SURFACE with it');
-A.ok(/buildGroup === 'rooms'\) verb = 'Pick a room type, then click or drag on the grid/.test(build) && /buildGroup === 'surfaces'\) verb = 'Pick a finish, then click a room to lay it/.test(build),
+A.ok(/buildGroup === 'rooms'\) verb = 'Pick a room type, then drag on the grid · click a room to resize or furnish it'/.test(build) && /\['Click a room', 'resize · furnish'\]/.test(build) && /buildGroup === 'surfaces'\) verb = 'Pick a finish, then click a room to lay it/.test(build),
   'the status line says what the open tab is for');
 
 /* ---------- 8. drag to lay a row ---------- */
