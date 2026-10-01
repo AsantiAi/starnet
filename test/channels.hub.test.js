@@ -80,6 +80,22 @@ async function run() {
     A.eq(lastRun.messages[2], { role: 'user', content: 'research foo' }, 'newest user turn last');
   }
 
+  // ---- B1. "yes" to the agent's offer is a task: the hub re-asks the REAL classifier with the agent's last reply ----
+  {
+    const { isTaskDirective } = require('../frontend/app/classify.js');
+    const runs = [];
+    const runOnce = async (o) => { runs.push(o); o.emit('agent.run.start', { agentId: o.agentId, runId: o.runId, trigger: 'event', model: o.model }); o.emit('agent.token', { agentId: o.agentId, runId: o.runId, delta: 'ok' }); o.emit('agent.run.end', { agentId: o.agentId, runId: o.runId, reason: 'done', turns: 1, usd: 0 }); };
+    const store = fakeStore();
+    store.hist.set('tg_31', [{ role: 'user', content: 'plan the welcome note' }, { role: 'assistant', content: 'Here is the plan. Want me to draft it?' }]);
+    store.hist.set('tg_32', [{ role: 'user', content: 'thanks for that' }, { role: 'assistant', content: 'Any time. Anything else?' }]);
+    const hub = makeChannelHub({ runOnce, store, send: () => Promise.resolve({ ok: true }), secrets: () => ({ key: 'k', model: 'm' }), classify: isTaskDirective, newId: idGen() });
+    await hub.onInbound(dm('yes please', '31'));
+    A.eq(runs[0].isTask, true, '"yes please" after "want me to draft it?" runs as a task');
+    A.ok(/task/i.test(runs[0].system), '…with the task prompt');
+    await hub.onInbound(dm('yes', '32'));
+    A.eq(runs[1].isTask, false, '"yes" after a plain question stays chat');
+  }
+
   // ---- B2. configured agentId + system: runs as the SAME app agent (shared memory) with its real prompt ----
   {
     const store = fakeStore(); let lastRun = null; const sends = [];

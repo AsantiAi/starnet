@@ -103,4 +103,51 @@ A.ok(VERDICTS_THAT_TEACH.has('ok') && VERDICTS_THAT_TEACH.has('miss') && !VERDIC
   A.eq(makeVerdictReview({ now: () => 1 }).graceMs, 90000, 'default grace is 90s');
 }
 
+// ---- DURABILITY: packets survive a restart (compacted, provider-free) ----
+{
+  const { compactPacket } = require('../sidecar/verdictreview.js');
+  const big = [{ role: 'system', content: 'SYSTEM PROMPT' }, { role: 'user', content: 'write the weekly report' }];
+  for (let i = 0; i < 30; i++) big.push({ role: 'assistant', content: 'x'.repeat(5000), tool_calls: [{ id: 'c' + i, function: { name: 'fs.write', arguments: '{"secret":"sk-live"}' } }] });
+  const provider = { stream() {}, key: 'sk-or-v1-SECRET' };
+  const c = compactPacket({ agentId: 'nova', messages: big, provider, cost: {}, model: 'm/x', loadedSkills: [{ id: 's1', name: 'Brief', body: 'long body' }], unmetered: true, failed: true });
+  A.ok(!('provider' in c) && !('cost' in c), 'no live provider/cost handle is persisted');
+  A.ok(JSON.stringify(c).indexOf('SECRET') < 0 && JSON.stringify(c).indexOf('sk-live') < 0, 'no credential or tool-call arguments reach disk');
+  A.ok(JSON.stringify(c.messages).length < 25000, 'transcript is compacted (' + JSON.stringify(c.messages).length + ' chars)');
+  A.ok(c.messages.every(m => m.role !== 'system'), 'the system prompt is not persisted');
+  A.eq(c.messages[0].role, 'user', 'the directive is kept even when the tail cut it off');
+  A.eq(c.messages[0].content, 'write the weekly report', 'directive text intact');
+  A.eq(c.loadedSkills[0].body, undefined, 'skill refs only, never bodies');
+  A.eq(c.agentId + '/' + c.model + '/' + c.unmetered + '/' + c.failed, 'nova/m/x/true/true', 'review inputs kept');
+
+  // review fixes: the final answer is kept whole (goldens measure it) · a redact fn scrubs every persisted turn
+  const longFinal = 'word '.repeat(3000).trim();   // ~15k chars, well past the 4k per-message cap
+  const withFinal = compactPacket({ messages: [{ role: 'user', content: 'write it' }, { role: 'tool', content: 'KEY=sk-or-v1-abcdef0123456789' }, { role: 'assistant', content: longFinal }] }, t => String(t).replace(/sk-or-v1-[a-z0-9]+/g, '[REDACTED]'));
+  A.eq(withFinal.messages[withFinal.messages.length - 1].content.length, longFinal.length, 'the final answer survives whole');
+  A.ok(JSON.stringify(withFinal).indexOf('sk-or-v1-abcdef') < 0 && JSON.stringify(withFinal).indexOf('[REDACTED]') >= 0, 'a credential a tool read is redacted before disk');
+  const vrR = makeVerdictReview({ now: () => 1, redact: t => String(t).replace(/SECRET\w*/g, '[R]') });
+  let snap = null; const vrS = makeVerdictReview({ now: () => 1, redact: t => String(t).replace(/SECRET\w*/g, '[R]'), onChange: rows => { snap = rows; } });
+  vrS.stash('rr', { agentId: 'a', messages: [{ role: 'user', content: 'go' }, { role: 'assistant', content: 'token SECRET123 used' }] });
+  A.ok(snap && JSON.stringify(snap).indexOf('SECRET123') < 0, 'makeVerdictReview passes its redact to every persisted snapshot');
+  A.ok(vrR && vrS.peek('rr').messages[1].content.indexOf('SECRET123') >= 0, 'the in-RAM packet (for a live review) is untouched');
+
+  let disk = null, t = 1000;
+  const a = makeVerdictReview({ now: () => t, onChange: rows => { disk = JSON.parse(JSON.stringify(rows)); } });
+  a.stash('run-1', { agentId: 'nova', messages: big.slice(0, 3), provider, model: 'm/x' });
+  A.ok(Array.isArray(disk) && disk.length === 1 && disk[0].runId === 'run-1', 'a stash persists');
+  A.ok(!('provider' in disk[0].packet), 'persisted packet is provider-free');
+  // "restart": a fresh instance restores from disk; the verdict still finds its packet
+  t = 5000;
+  const b = makeVerdictReview({ now: () => t, onChange: rows => { disk = JSON.parse(JSON.stringify(rows)); } });
+  A.eq(b.restore(disk), 1, 'restored one packet');
+  A.ok(b.shouldTrigger('run-1', 'miss'), 'a verdict after the restart still triggers the review');
+  const p = b.take('run-1', 'miss');
+  A.ok(p && p.restored === true && !p.provider && p.agentId === 'nova', 'restored packet is marked, with no provider (the host rebuilds one)');
+  A.eq(disk.length, 0, 'taking it persists the removal');
+  // expired rows are not resurrected
+  const c2 = makeVerdictReview({ now: () => 10 * 60 * 60 * 1000, ttlMs: 1000 });
+  A.eq(c2.restore([{ runId: 'old', at: 1, packet: { agentId: 'a', messages: [] } }]), 1, 'restore reads the row…');
+  A.eq(c2.has('old'), false, '…but an expired one is swept, never reviewed');
+  A.eq(c2.restore(null) + c2.restore([{ runId: '', at: 1, packet: {} }, { runId: 'x', packet: {} }]), 0, 'malformed rows are skipped');
+}
+
 A.report('verdictreview');

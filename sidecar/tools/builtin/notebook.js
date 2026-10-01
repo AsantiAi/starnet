@@ -239,7 +239,9 @@
           // store order. k = list.length AND floor:false so ranking never truncates a match the gate already
           // admitted (a substring hit inside a longer token scores zero BM25 — rank's relevance floor would
           // silently drop it from an explicit read the gate said matched).
-          if (rank && list.length > 1) list = rank(list, String(q), { now: clock.now(), k: list.length, floor: false });
+          // projectRoot: rank() drops a project-scoped record unless the run is IN that project — without it, an
+          // explicit read silently lost every project lesson even inside its own project (the gate had admitted it).
+          if (rank && list.length > 1) list = rank(list, String(q), { now: clock.now(), k: list.length, floor: false, projectRoot: (ctx && ctx.projectRoot) || null });
         }
         if (!list.length) return { content: q ? 'No notes match "' + q + '".' : 'Your notebook is empty.', summary: '0 notes' };
         const body = list.map(n => '- [' + n.id + '] ' + n.title + ': ' + n.body).join('\n');
