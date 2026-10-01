@@ -258,6 +258,7 @@ const { makeProjectScan } = require('./projectscan.js');  // NS-5b: bounded harn
 const { makeProjectDiscovery } = require('./project-discovery.js'); // bounded candidate scan; never grants access
 const nightpatch = require('./nightpatch.js');            // NS-5b: pure patch-apply target resolver (never touches an un-blessed root / main)
 const Autopilot = require('../frontend/app/autopilot.js'); // NS-1: the pure, node-exportable anti-slop ACT pipeline (reused, not rewritten)
+const CronHumanMod = require('../frontend/app/cronhuman.js');   // schedule -> plain English for routine tool replies
 const Autonomy = require('../frontend/app/autonomy.js');   // NS-1: the pure posture engine (summary/normalize) — the SERVER reads the same shape the dial writes
 const Interests = require('./interests.js');               // SCOUT lane 1: pure topic-interest engine (EWMA histogram + evidence-grounded extraction)
 const Scout = require('./scout.js');                        // SCOUT lane 2: pure drafting gates + recipe parse + the honest mint ledger
@@ -13678,6 +13679,8 @@ function parseCronScheduleOr400(str, now, tz) {
   if (!sched) {
     const why = (opts && opts.tz != null && !cron.isValidTz(opts.tz))
       ? ('unknown timezone "' + opts.tz + '" — use an IANA zone like America/New_York')
+      : /every other|bi-?weekly|fortnight|every (?:2|two|3|three|4|four) weeks|twice a month/i.test(String(str || ''))
+      ? 'every other week cannot be scheduled — use one weekday ("mondays at 10am") or two dates a month ("the 1st and 15th of every month at 10am"), and tell the Commander which you chose'
       : "couldn't read that schedule — try \"every day at 9am\", \"weekdays at 8:30am\", \"mondays at 6pm\", \"tomorrow at 9am\", \"every 30m\", \"in 2h\" or a cron like \"0 9 * * *\"";
     const e = new Error(why); e.code = 400; throw e;
   }
@@ -18194,6 +18197,13 @@ async function runOnceCore(o) {
   // routine.create/list: the lead can schedule real StarNet ROUTINES through the same cron store the panel uses.
   makeRoutineTools({
     roster: () => agentRoster,
+    // plain-English cadence + next fire on the station's own clock, so the model reports what will really happen
+    describeSchedule: (job) => {
+      const tz = (job && job.schedule && job.schedule.tz) || CRON_HOST_TZ;
+      const when = CronHumanMod.describeDisplay(job && job.scheduleDisplay, { tz });
+      const next = job && job.enabled && job.nextRunAt ? CronHumanMod.describeDisplay('once at ' + job.nextRunAt, { tz }).replace(/^once — /, '') : null;
+      return { when: when ? when + (job.schedule && job.schedule.kind === 'cron' ? ' (' + tz + ')' : '') : null, next };
+    },
     listJobs: () => cronJobs,
     schedulerState: () => cronArmed,
     normalizeProvider: normalizeProviderId,

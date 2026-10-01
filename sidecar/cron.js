@@ -464,6 +464,9 @@
     s = s.replace(/\ba\.m\.?/g, 'am').replace(/\bp\.m\.?/g, 'pm').replace(/(\d)\s+(am|pm)\b/g, '$1$2')
       .replace(/\bo'?clock\b/g, '').replace(/\bnoon\b/g, '12:00pm').replace(/\bmidnight\b/g, '12:00am')
       .replace(/\beach\b/g, 'every').replace(/\beveryday\b/g, 'every day').replace(/\s+/g, ' ');
+    // every-other-week has no cron form; refuse it rather than silently firing weekly ("every other monday"
+    // otherwise matches the Monday rule below). Twice a month is offered as "the 1st and 15th of every month".
+    if (/\bevery other\b|\bbi-?weekly\b|\bfortnight(?:ly)?\b|\bevery (?:2|two|3|three|4|four) weeks\b|\btwice a month\b/.test(s)) return null;
     const pod = (s.match(/\b(morning|afternoon|evening|night|tonight)s?\b/) || [])[1];
     const partOfDay = pod != null ? PART_OF_DAY[pod] : null;
 
@@ -498,6 +501,13 @@
       if (times.length === 1 && /^ ?(at )?\d/.test(s)) return { onceDayOffset: 0, hour: times[0].h, minute: times[0].m, single: true, rollToTomorrow: true };
     }
 
+    // two dates a month: "the 1st and 15th of every month"
+    m = s.match(/\b(\d{1,2})(?:st|nd|rd|th)? and (?:the )?(\d{1,2})(?:st|nd|rd|th)? of (?:every|the|each) month\b/);
+    if (m) {
+      const a = parseInt(m[1], 10), b = parseInt(m[2], 10);
+      if (!(a >= 1 && a <= 31 && b >= 1 && b <= 31) || a === b) return null;
+      return { cron: minute + ' ' + hour + ' ' + Math.min(a, b) + ',' + Math.max(a, b) + ' * *' };
+    }
     // monthly: "1st of every month", "on the 15th of the month", "first day of each month", "monthly on the 3rd"
     m = s.match(/\b(?:on )?(?:the )?(\d{1,2})(?:st|nd|rd|th)?(?: day)? of (?:every|the|each) month\b/) ||
       s.match(/\bmonthly on the (\d{1,2})(?:st|nd|rd|th)?\b/) || s.match(/\bevery month on the (\d{1,2})(?:st|nd|rd|th)?\b/);

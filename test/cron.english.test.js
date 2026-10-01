@@ -39,6 +39,10 @@ const CRON_CASES = [
 ];
 for (const [input, want] of CRON_CASES) A.eq(expr(input), want, '"' + input + '" -> ' + want);
 
+A.eq(expr('the 1st and 15th of every month at 10am'), '0 10 1,15 * *', 'two dates a month');
+for (const biweekly of ['every other monday at 10am', 'biweekly on mondays', 'every 2 weeks at 9am', 'fortnightly', 'twice a month'])
+  A.eq(expr(biweekly), null, 'every-other-week is refused, never silently weekly: "' + biweekly + '"');
+
 // existing grammar is untouched
 A.eq(cron.parseSchedule('every day', NOW).kind, 'interval', '"every day" stays the 24h interval it always was');
 A.eq(cron.parseSchedule('every 30m', NOW).minutes, 30, 'intervals unchanged');

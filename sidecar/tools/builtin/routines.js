@@ -127,13 +127,19 @@
     return { agentId: rosterEntries[0].id, reason: 'used first available agent' };
   }
 
-  function packJob(job) {
+  // describe (injected by the host) turns a job into plain words: { when, next } on the host's wall clock. The model
+  // reports a routine's cadence back to the Commander, and reading `cron 0 10 * * 1` it once told them "bi-weekly".
+  function packJob(job, describe) {
     if (!job) return null;
+    let words = null;
+    try { words = typeof describe === 'function' ? describe(job) : null; } catch (_) { words = null; }
     return {
       id: job.id,
       name: job.name,
       agentId: job.agentId,
       scheduleDisplay: job.scheduleDisplay,
+      when: (words && words.when) || undefined,
+      nextRunLocal: (words && words.next) || undefined,
       enabled: !!job.enabled,
       state: job.state,
       nextRunAt: job.nextRunAt,
@@ -212,6 +218,7 @@
       return schedulerState() ? null : 'the scheduler is DISARMED — nothing fires until it is armed';
     };
     const roster = typeof deps.roster === 'function' ? deps.roster : function () { return new Map(); };
+    const pack = function (job) { return packJob(job, deps.describeSchedule); };
     // W6: the plain anti-retry line + the per-agent "you already maintain: …" summary. Injected so this tool
     // stays node-testable; defaults keep it a no-op when the host doesn't wire the mint ledger.
     const ANTI_RETRY = 'this routine already exists — do not recreate it';
@@ -242,7 +249,7 @@
       run: async (args) => {
         const agentId = clean(args && args.agentId, 80);
         if (agentId && !validId(agentId)) throw new Error('agentId must be one of your station agents');
-        let jobs = (listJobs() || []).map(packJob).filter(Boolean);
+        let jobs = (listJobs() || []).map(pack).filter(Boolean);
         if (agentId) jobs = jobs.filter(j => j.agentId === agentId);
         return { content: JSON.stringify({ schedulerArmed: !!schedulerState(), schedulerHalted: !!schedulerHalted(), schedulerNote: armedNote() || undefined, jobs: jobs }), summary: jobs.length + ' routine(s)' };
       }
@@ -325,7 +332,7 @@
           };
         }
         if (job && job._duplicate) {
-          const existing = packJob(job);
+          const existing = pack(job);
           return {
             content: JSON.stringify({ ok: true, duplicate: true, message: ANTI_RETRY, routedTo: route.agentId, job: existing }),
             summary: 'already exists — did not create a duplicate for ' + route.agentId
@@ -347,7 +354,7 @@
           armError: armError,
           routedTo: route.agentId,
           routingReason: route.reason,
-          job: packJob(job),
+          job: pack(job),
           // W6: the plain "you already maintain: …" reminder so the model tracks what exists across turns.
           maintains: mintSummary(route.agentId) || undefined
         };
@@ -415,7 +422,7 @@
           if (typeof setRoutineEnabled !== 'function') throw new Error('routine pause/resume unavailable');
           const updated = await setRoutineEnabled(job.id, action === 'resume');
           return {
-            content: JSON.stringify({ ok: true, action: action, schedulerArmed: !!schedulerState(), schedulerHalted: !!schedulerHalted(), schedulerNote: armedNote() || undefined, job: packJob(updated || job) }),
+            content: JSON.stringify({ ok: true, action: action, schedulerArmed: !!schedulerState(), schedulerHalted: !!schedulerHalted(), schedulerNote: armedNote() || undefined, job: pack(updated || job) }),
             summary: (action === 'resume' ? 'resumed' : 'paused') + ' routine "' + job.name + '"'
           };
         }
@@ -436,7 +443,7 @@
                 : armed
                   ? 'queued — the scheduler fires this routine on its next tick (within ~1 minute); it has not run yet'
                   : 'queued, but the scheduler is DISARMED so nothing will fire until it is armed',
-              job: packJob(updated || job)
+              job: pack(updated || job)
             }),
             summary: 'queued routine "' + job.name + '" to fire on the next tick' + (armed ? '' : ' (scheduler disarmed)')
           };
@@ -480,7 +487,7 @@
         // TRUTHFUL TELEMETRY: a rewritten prompt drops the routine's unattended grants (host rule, see updateRoutine
         // in index.js) — say so, or the model promises the Commander a routine that will now be locked out.
         const cleared = updated && Array.isArray(updated._grantsCleared) ? updated._grantsCleared : [];
-        const out = { ok: true, action: action, changed: touched, job: packJob(updated || job) };
+        const out = { ok: true, action: action, changed: touched, job: pack(updated || job) };
         if (cleared.length) out.standingGrantsCleared = { grants: cleared, note: 'the new instruction was not approved by the Commander, so its unattended ' + cleared.join('/') + ' grant was removed; the Commander can re-grant it in ROUTINES' };
         return {
           content: JSON.stringify(out),
