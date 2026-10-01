@@ -614,6 +614,25 @@
      Chromium installed. The composition root registers the finder; it is used only when nothing installed exists. */
   let extraChrome = () => null;
   function setExtraChrome(fn) { extraChrome = typeof fn === 'function' ? fn : () => null; }
+  /* macOS EDITING SHORTCUTS (2026-10-01, proving the Mac). On a Mac, Chrome runs Cmd+A/C/X/Z, Cmd/Option+arrows and
+     their deletes in the BROWSER process (AppKit key bindings), which a CDP key event never reaches — Cmd+A would
+     select nothing and Cmd+Z undo nothing in the station browser. CDP's `commands` names the editing command instead
+     (what Puppeteer does on macOS). Elsewhere Blink runs those shortcuts itself from the key event: nothing is added. */
+  const MAC_META_COMMANDS = { a: 'SelectAll', c: 'Copy', x: 'Cut', ArrowLeft: 'MoveToBeginningOfLine', ArrowRight: 'MoveToEndOfLine',
+    ArrowUp: 'MoveToBeginningOfDocument', ArrowDown: 'MoveToEndOfDocument', Backspace: 'DeleteToBeginningOfLine' };
+  const MAC_ALT_COMMANDS = { ArrowLeft: 'MoveWordLeft', ArrowRight: 'MoveWordRight', Backspace: 'DeleteWordBackward', Delete: 'DeleteWordForward' };
+  function macEditingCommands(ev, platform) {
+    if ((platform || process.platform) !== 'darwin' || !ev || ev.type !== 'key' || ev.action === 'up') return null;
+    const m = Number(ev.modifiers) || 0, alt = m & 1, ctrl = m & 2, meta = m & 4, shift = m & 8;
+    const k = String(ev.key || ''), key = k.length === 1 ? k.toLowerCase() : k;
+    const moves = /^(Arrow|Backspace|Delete)/.test(k);
+    let cmd = null;
+    if (meta && !ctrl && !alt) cmd = key === 'z' ? (shift ? 'Redo' : 'Undo') : (MAC_META_COMMANDS[key] || null);
+    else if (alt && !ctrl && !meta) cmd = MAC_ALT_COMMANDS[k] || null;
+    if (!cmd) return null;
+    if (shift && moves && /^Move/.test(cmd)) cmd += 'AndModifySelection';
+    return [cmd];
+  }
   /* WHO HOLDS THIS PROFILE (macOS / Linux). A running Chromium marks its user-data-dir with a SingletonLock symlink
      whose target is "<hostname>-<pid>". A second Chromium started on that profile while the owner is still alive hands
      its command line to the owner and exits ("exited before CDP ownership"). Returns the owner's pid when it is THIS
@@ -2382,6 +2401,8 @@
       }
       if (ev.type === 'key') {
         const base = { key: ev.key, code: ev.code, windowsVirtualKeyCode: ev.keyCode || 0, nativeVirtualKeyCode: ev.keyCode || 0, modifiers: ev.modifiers || 0 };
+        const commands = macEditingCommands(ev, deps.platform);
+        if (commands) base.commands = commands;
         if (ev.action === 'up') await c.send('Input.dispatchKeyEvent', Object.assign({ type: 'keyUp' }, base));
         else if (ev.text) await c.send('Input.dispatchKeyEvent', Object.assign({ type: 'keyDown', text: ev.text, unmodifiedText: ev.text }, base));
         else await c.send('Input.dispatchKeyEvent', Object.assign({ type: 'rawKeyDown' }, base));
@@ -3583,5 +3604,5 @@
     return { tools, session, register(reg) { tools.forEach(t => reg.register(t)); return reg; }, _internals: { assertSafeUrl, assertLoopbackUrl, assertResolvedSafe, isPrivateV4, isPrivateV6, makeBrowserSession, makeCdpDriver, makeDownloadLedger, findChrome, resolveChrome, headlessRequested, SYNTHETIC_INPUT_BOOTSTRAP, CHROME_CANDIDATES } };
   }
 
-  return { makeBrowserTools, _internals: { CdpClient, assertSafeUrl, assertLoopbackUrl, assertResolvedSafe, isPrivateV4, isPrivateV6, makeBrowserSession, makeCdpDriver, makeDownloadLedger, findChrome, resolveChrome, setExtraChrome, needsNoSandbox, profileOwnerPid, headlessRequested, SYNTHETIC_INPUT_BOOTSTRAP, SETTLE_BOOTSTRAP, SETTLE_PROBE, SETTLE_QUIET_POLLS, describeResponse, jsLiteral, normalizeBrowserLocale, detectBrowserVersion, makeLaunchIdentity, browserVersionFrom, cleanBrandRows, makeCdpIdentity, CHROME_CANDIDATES } };
+  return { makeBrowserTools, _internals: { CdpClient, assertSafeUrl, assertLoopbackUrl, assertResolvedSafe, isPrivateV4, isPrivateV6, makeBrowserSession, makeCdpDriver, makeDownloadLedger, findChrome, resolveChrome, setExtraChrome, needsNoSandbox, profileOwnerPid, macEditingCommands, headlessRequested, SYNTHETIC_INPUT_BOOTSTRAP, SETTLE_BOOTSTRAP, SETTLE_PROBE, SETTLE_QUIET_POLLS, describeResponse, jsLiteral, normalizeBrowserLocale, detectBrowserVersion, makeLaunchIdentity, browserVersionFrom, cleanBrandRows, makeCdpIdentity, CHROME_CANDIDATES } };
 });
