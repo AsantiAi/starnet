@@ -3882,7 +3882,8 @@ const App = (() => {
     if (id && id === railAgentFilter) id = null;   // the same crew row again = back to every session
     railAgentFilter = id;
     if (id && railView !== 'sessions') setRailView('sessions', { keepAgentFilter: true });
-    if (id) { railAttentionOnly = false; const q = el('ws-search'); if (q && q.value) { q.value = ''; renderSessionSearch(); } }
+    if (id) railAttentionOnly = false;
+    renderSessionSearch();   // a typed search re-scopes to (or back out of) the chosen agent
     renderRail();
     if (typeof StationUI !== 'undefined' && StationUI.refreshCrew) StationUI.refreshCrew();
     return railAgentFilter;
@@ -4240,7 +4241,8 @@ const App = (() => {
     // matches" while unrelated sessions stayed selectable directly underneath it.
     if (sessions) sessions.hidden = railView !== 'sessions' || !!q;
     if (!q) return;
-    const hits = Workstreams.search(q);
+    // narrowed to one agent, search stays inside that agent's sessions (the chip above still names it)
+    const hits = Workstreams.search(q).filter(hit => { if (!railAgentFilter) return true; const w = Workstreams.get(hit.id); return !!(w && railHasAgent(w, railAgentFilter)); });
     for (const hit of hits) {
       const li = document.createElement('li'); li.className = 'ws-search-hit'; li.tabIndex = 0; li.dataset.id = hit.id;
       const title = document.createElement('b'); title.textContent = hit.title || 'General';
@@ -4526,7 +4528,7 @@ const App = (() => {
     if (railAgentFilter && !(opts && opts.keepAgentFilter)) {
       railAgentFilter = null;
       if (typeof StationUI !== 'undefined' && StationUI.refreshCrew) StationUI.refreshCrew();
-      if (view === railView) { SFX.click(); renderRail(); return; }
+      if (view === railView) { SFX.click(); renderRail(); renderSessionSearch(); return; }
       syncRailAgentChip(0);
     }
     if (view === railView) return;
