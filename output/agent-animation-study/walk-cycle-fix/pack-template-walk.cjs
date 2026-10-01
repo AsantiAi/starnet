@@ -37,8 +37,10 @@ if (fs.existsSync(path.join(base, 'walk.json'))) {
   if (FR % 2) throw Error('walk.json frames must be even (opposite-phase repair pairs frame i with i+FR/2)');
   for (const d of DIRS) {
     rotUrls[d] = `${CDN}${j.charId}/rotations/${d}.png?t=${j.rotT}`;
-    const [anim, t] = j.anims[d] || [];
-    if (!anim) throw Error('walk.json missing ' + d);
+    // "source": "zip" — the frames were unpacked from the character ZIP into raw/ (skel-batch.sh), so there is
+    // no per-direction animation id to build a URL from; download() then only ever finds files already present
+    const [anim, t] = (j.anims || {})[d] || [];
+    if (!anim && j.source !== 'zip') throw Error('walk.json missing ' + d);
     walkUrls[d] = Array.from({ length: FR }, (_, i) => `${CDN}${j.charId}/animations/${anim}/${d}/${i}.png?t=${t}`);
   }
 } else {
@@ -60,6 +62,7 @@ for (const d of DIRS) { if (!rotUrls[d]) throw Error('missing rotation ' + d); i
 
 async function download(url, file) {
   if (fs.existsSync(file)) return;
+  if (url.includes('/animations/undefined/')) throw Error('no frame on disk and no animation id for ' + file);
   const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
   if (!r.ok) throw Error('download ' + r.status + ' ' + url);
   fs.writeFileSync(file, Buffer.from(await r.arrayBuffer()));
