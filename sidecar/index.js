@@ -5810,7 +5810,7 @@ async function deliverCronResult(job, result) {
   }
   else if (mode.indexOf('targets:') === 0) targets.push(...mode.slice(8).split(',').map(s => s.trim()).filter(Boolean));
   else if (cronReturnsToSession(job)) {
-    const out = await stationBridge.request('station.deliver', { sessionId: job.origin.sessionId || job.origin.streamId, sessionTitle: job.origin.sessionTitle || '', text: redact(text), prompt: job.prompt, runId: result.runId, agentId: job.agentId, ts: Date.now() });
+    const out = await stationBridge.request('station.deliver', { sessionId: job.origin.sessionId || job.origin.streamId, streamId: job.origin.streamId || job.origin.sessionId, sessionTitle: job.origin.sessionTitle || '', text: redact(text), prompt: job.prompt, runId: result.runId, agentId: job.agentId, ts: Date.now() });
     return out;
   }
   if (!targets.length) return { ok: true, skipped: true };
@@ -14470,6 +14470,8 @@ async function handleCronRun(req, res) {
       // identical cron.fire/cron.result events, can fetch the real output via /api/transcript?stream=cron-<runId>.
       // Per-run id keeps the seed empty (index.js reconstructs a stream only when messages<=1) — no behavior drift.
       runId: runId, streamId: 'cron-' + runId, surface: 'autonomous', trigger: 'schedule', provider: provider, broadcast: true,
+      // the routine identity the scheduled fire carries (cron-driver.js): its run-history row and routine.notepad key off it
+      cronJobId: job.id, cronJobName: job.name || '',
       // "Follow station default": same effort rule as the scheduled fire (cron-driver.js) — an unpinned agent with
       // no explicit routine model runs on the Overseer's effort along with its model.
       reasoningEffort: (() => { const ri = !(job.model && String(job.model).trim()) ? cronIdentityFor(job.agentId) : null; return ri && ri.followsStation ? ri.reasoningEffort : undefined; })(),
