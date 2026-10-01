@@ -782,6 +782,7 @@ test/commander-dossier-css.test.js
 test/comms-responsive-text.test.js
 test/readability.test.js
 test/dossier-skin-accessibility.test.js
+test/dossier-delete-visible.test.js
 test/control-floor-theming.test.js
 test/crew-rail-fit.test.js
 test/brand-wordmark-mask.test.js
