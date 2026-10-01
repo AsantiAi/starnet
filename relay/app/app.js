@@ -60,6 +60,39 @@
   const plain = (t) => { const q = questionOf(t); return q ? 'Asks: ' + q.question : plainText(t); };
   const plainText = (t) => String(t == null ? '' : t).replace(/`{1,3}|\*\*|^\s{0,3}#{1,6}\s+/gm, '').replace(/\s+/g, ' ').trim();
   const streamLive = (streamId) => { for (const [, L] of S.live) if (L.streamId === streamId && !L.ended) return true; return false; };
+  /* WHAT AN AGENT IS DOING, in plain words: one word for a crew card, a phrase for a row. Read from the name of the
+     step the station last reported for that run (never a raw tool name on screen). */
+  const DOING = [
+    [/^fs\.(write|append|edit|patch|move|rename|delete|remove|mkdir)|^skill\.write/, 'writing', 'writing a file'],
+    [/^fs\./, 'reading', 'reading files'],
+    [/^(shell|terminal)\./, 'running', 'running a command'],
+    [/^spotify/, 'music', 'playing music'],
+    [/^web\.search/, 'searching', 'searching the web'],
+    [/^(web|http)\./, 'reading', 'reading the web'],
+    [/^(browser|computer)/, 'browsing', 'using the browser'],
+    [/^(team|session)\./, 'managing', 'handing work to the crew'],
+    [/^recall/, 'recalling', 'looking back at a conversation'],
+    [/^(notebook|memory)/, 'noting', 'saving a note'],
+    [/^station\./, 'building', 'working on the station'],
+    [/^routine\./, 'planning', 'setting up a routine'],
+    [/^brief\.ask/, 'asking', 'asking you something'],
+    [/^(task|quest|brief)\./, 'planning', 'planning the work'],
+    [/^skill\./, 'reading', 'reading a skill'],
+    [/image|voice|video/, 'making', 'making media'],
+    [/^verify/, 'checking', 'checking its work'],
+    [/^plugin/, 'working', 'using a plugin']
+  ];
+  function doing(name) {
+    const n = String(name || '').toLowerCase().replace(/_+/g, '.');
+    for (const [re, word, phrase] of DOING) if (re.test(n)) return { word, phrase };
+    return { word: 'working', phrase: n ? 'using ' + n.replace(/\.+/g, ' ').trim() : 'working' };
+  }
+  // the newest step the station reported for a run: the phone's own run stream first, then the station's tool events
+  function lastStep(runId) {
+    const L = runId && S.live.get(runId);
+    return (L && L.steps.length ? L.steps[L.steps.length - 1].name : '') || (runId && S.stepOf.get(runId)) || '';
+  }
+
   let toastT = null;
   function toast(msg, bad) {
     const t = $('toast'); t.textContent = msg; t.className = bad ? 'bad' : ''; t.hidden = false;
@@ -235,7 +268,11 @@
     const L = e.runId && S.live.get(e.runId);
     const showing = L && S.thread && S.thread.streamId === L.streamId;
     if (e.type === 'run.text' && L) { L.text = e.text; if (showing) renderLive(); return; }
-    if (e.type === 'run.tool' && L) { L.steps.push({ callId: e.callId, name: e.name, ok: null }); if (showing) renderLive(); return; }
+    if (e.type === 'run.tool' && L) {
+      L.steps.push({ callId: e.callId, name: e.name, ok: null });
+      for (const n of document.querySelectorAll('[data-verb="' + CSS.escape(String(e.runId)) + '"]')) n.textContent = doing(e.name).word;
+      if (showing) renderLive(); return;
+    }
     if (e.type === 'run.step' && L) { const s = L.steps.find(x => x.callId === e.callId && x.ok === null); if (s) s.ok = e.ok; if (showing) renderLive(); return; }
     if (e.type === 'run.ended') {
       if (L) L.ended = e;
@@ -250,7 +287,9 @@
     if (e.type === 'station' && e.name === 'agent.tool_call' && e.payload && e.payload.runId && e.payload.name) {
       S.stepOf.set(String(e.payload.runId), String(e.payload.name));
       if (S.stepOf.size > 200) S.stepOf.delete(S.stepOf.keys().next().value);
-      if (S.tab === 'sessions') { const n = document.querySelector('[data-step="' + CSS.escape(String(e.payload.runId)) + '"]'); if (n) n.textContent = stepLine(e.payload.name); }
+      const rid = CSS.escape(String(e.payload.runId));
+      for (const n of document.querySelectorAll('[data-step="' + rid + '"]')) n.textContent = stepLine(e.payload.name);
+      for (const n of document.querySelectorAll('[data-verb="' + rid + '"]')) n.textContent = doing(e.payload.name).word;
       return;
     }
     if (e.type === 'station' && (e.name === 'agent.run.start' || e.name === 'agent.run.end')) { statusSoonish(); if (S.tab === 'sessions') activitySoonish(); }
@@ -707,6 +746,51 @@
     return box;
   }
 
+  /* A PERMISSION ASK IN PLAIN WORDS. The station sends the tool's name and its arguments (a JSON object, which may be
+     clipped mid-way, or a plain string). The card says what the agent wants to do and shows only the part worth
+     reading (the file's text, the command), never the raw JSON. */
+  function argsOf(s) {
+    s = String(s || '');
+    try { const o = JSON.parse(s); if (o && typeof o === 'object' && !Array.isArray(o)) return o; } catch (_) {}
+    const o = {}, re = /"([A-Za-z_]+)"\s*:\s*"((?:[^"\\]|\\.)*)("?)/g; let m;
+    while ((m = re.exec(s))) {
+      let v = m[2]; try { v = JSON.parse('"' + m[2] + '"'); } catch (_) { v = m[2].replace(/\\n/g, '\n').replace(/\\(["\\])/g, '$1'); }
+      o[m[1]] = v; if (!m[3]) o._cut = true;
+    }
+    return o;
+  }
+  function askWhat(a) {
+    const who = agentName(a.agentId), tool = String(a.tool || ''), t = tool.toLowerCase().replace(/_+/g, '.');
+    const raw = String(a.argsSummary || '').trim(), o = argsOf(raw);
+    const str = (v) => (typeof v === 'string' ? v : v == null ? '' : JSON.stringify(v, null, 1));
+    const cut = (v, n) => { const s = str(v); return s.length > n ? s.slice(0, n) + '…' : s; };
+    const tail = (s) => (s && o._cut ? s + '\n… (cut short by the station)' : s);
+    const file = str(o.path || o.file_path || o.filePath || o.file || o.target);
+    const fileName = file.length > 42 ? file.split(/[\\/]/).pop() : file;
+    const pm = /^plugin__(.+?)__(.+)$/.exec(tool);
+    if (pm) return { line: who + ' wants to use the ' + pm[1] + ' plugin\'s "' + pm[2] + '" tool', detail: tail(listOf(o)) || cut(raw, 600) };
+    if (/^plugin\.submit$/.test(t)) return { line: who + ' wants to install a plugin it built' + (o.id ? ' (' + o.id + ')' : '') + '. It stays off until you approve its code at the desk.', detail: '' };
+    if (t === 'path.trust') return { line: who + ' wants to work with files in ' + (raw || 'a project folder'), detail: '' };
+    if (t === 'browser.login') return { line: who + ' wants to open a browser on your PC so you can log in to ' + (raw || 'a website') + '. You type the password there; the agent never sees it.', detail: '' };
+    if (t === 'browser.login.done') return { line: who + ' is waiting while you log in to ' + (raw || 'the website') + ' on your PC.', detail: '' };
+    if (/^fs\.(write|append)$/.test(t) || (/write|append/.test(t) && file)) return { line: who + ' wants to ' + (/append/.test(t) ? 'add to ' : 'write ') + (fileName || 'a file'), detail: tail(cut(o.content || o.text || o.data, 1200)) };
+    if (/^fs\.(edit|patch)$/.test(t) || (/edit|patch/.test(t) && file)) return { line: who + ' wants to change ' + (fileName || 'a file'), detail: tail(cut(o.new_string || o.newText || o.new || o.patch || o.content, 1200)) };
+    if (/^(shell|terminal)\./.test(t)) return { line: who + ' wants to run a command on your PC', detail: tail(cut(o.command || o.cmd || o.input || o.data, 800)) || cut(raw, 600) };
+    if (/notebook|memory/.test(t)) return { line: who + ' wants to save a note to its memory', detail: tail(cut(o.content || o.text || o.body, 600)) };
+    if (/summon/.test(t)) return { line: who + ' wants to add a new agent to the crew', detail: tail(listOf(o)) };
+    if (/^routine\.create$/.test(t)) return { line: who + ' wants to schedule a routine' + (o.name ? ' "' + o.name + '"' : '') + (o.schedule ? ', ' + o.schedule : ''), detail: tail(cut(o.prompt || o.task || o.instructions, 600)) };
+    if (/^routine\.manage$/.test(t)) return { line: who + ' wants to ' + (o.action || 'change') + ' the routine' + (o.id ? ' "' + o.id + '"' : ''), detail: '' };
+    if (/^station\.build$/.test(t)) return { line: who + ' wants to build on your station. One UNDO in Build mode takes it back.', detail: cut(raw, 900) };
+    if (/^station\.make\.prop$/.test(t)) return { line: who + ' wants to make a new prop: ' + (raw.split('\n')[0] || 'a new prop'), detail: '' };
+    if (/^web\.(request|fetch)$|^http/.test(t)) return { line: who + ' wants to reach ' + (str(o.url) || 'a website'), detail: tail(listOf(o, ['url'])) };
+    return { line: who + ' wants to use ' + (t.replace(/\.+/g, ' ').trim() || 'a tool'), detail: tail(listOf(o)) || cut(raw, 600) };
+  }
+  // the arguments as "name: value" lines, for a tool the card has no words of its own for
+  function listOf(o, skip) {
+    return Object.keys(o).filter(k => k !== '_cut' && !(skip || []).includes(k))
+      .map(k => k + ': ' + (typeof o[k] === 'string' ? o[k] : JSON.stringify(o[k]))).join('\n').slice(0, 900);
+  }
+
   function askCard(a) {
     const box = el('div', 'ask');
     const isQ = a.kind === 'question';
@@ -727,13 +811,16 @@
       send.onclick = () => { if (ta.value.trim()) replyQ(a, ta.value, box); };
       row.appendChild(send); box.appendChild(row);
     } else {
-      box.appendChild(el('div', 'what', agentName(a.agentId) + ' wants to use ' + a.tool));
-      if (a.argsSummary) box.appendChild(el('pre', null, a.argsSummary));
+      const w = askWhat(a);
+      box.appendChild(el('div', 'what', w.line));
+      if (w.detail) box.appendChild(el('pre', null, w.detail));
       const row = el('div', 'btns fill');
       const mk = (label, cls, decision) => { const b = el('button', 'btn ' + cls, label); b.type = 'button'; b.onclick = () => decide(a, decision, box); row.appendChild(b); };
-      mk('Once', 'go', 'once'); if (!/^path\.trust$/.test(String(a.tool || ''))) mk('This session', '', 'session'); mk('Deny', 'no', 'deny');
+      const session = !/^path\.trust$/.test(String(a.tool || ''));
+      mk('Once', 'go', 'once'); if (session) mk('This task', '', 'session'); mk('Deny', 'no', 'deny');
       box.appendChild(row);
-      box.appendChild(el('div', 'note', 'Arrived ' + clock(Date.now() - arrived) + ' ago. "Always" and full access are set at the desk.'));
+      const wait = Date.now() - arrived;
+      box.appendChild(el('div', 'note', 'Asked ' + (wait < 60000 ? 'just now' : ago(wait) + ' ago') + '.' + (session ? ' "This task" lets it do this again until the task ends.' : '') + ' "Always" and full access are set at the desk.'));
     }
     if (S.linkState !== 'open') { for (const b of box.querySelectorAll('button')) b.disabled = true; box.appendChild(el('div', 'note', 'Reconnect to answer. If the station stays unreachable, it denies this on its own after a short wait.')); }
     // it is on a screen a person is looking at: earn the one bounded extension, once
@@ -778,14 +865,21 @@
     const row = el('button', 'row'); row.type = 'button';
     row.appendChild(well(t.agentId, 'sm'));
     const tt = el('span', 't');
-    tt.appendChild(el('b', null, plain(t.title) || plain(t.preview) || agentName(t.agentId)));
-    // the last thing you said, unless it is just the title again (a session titled with its first message)
-    const pv = plain(t.preview), same = !pv || !t.title || plain(t.title).slice(0, 40) === pv.slice(0, 40);
+    // the heading: the session's own title (not when that is just the agent's name), else what you said, else the agent
+    const nm = agentName(t.agentId), t0 = plain(t.title);
+    const ttl = t0 && t0.toLowerCase() !== String(nm).toLowerCase() ? t0 : '';
+    const pv = plain(t.preview), head = ttl || pv || nm;
+    tt.appendChild(el('b', null, head));
+    // the last thing you said, unless the heading already is that (a session titled with its first message)
+    const same = !pv || head === pv || ttl.slice(0, 40) === pv.slice(0, 40);
     const live = (streamLive(t.streamId) || ((S.activity && S.activity.live) || []).some(r => r.streamId === t.streamId)) && S.linkState === 'open';
     const lr = live ? null : lastRun;
     // under the title: how the latest piece of work went (its result line, or why it stopped), else what you said
     const line = lr ? (lr.state === 'done' ? plain(lr.result) : lr.state === 'stopped' ? 'Stopped' : 'Did not finish' + (lr.error ? ' · ' + lr.error : '')) : '';
-    tt.appendChild(el('span', lr ? 'why ' + lr.state : null, agentName(t.agentId) + (line ? ' · ' + line : same ? '' : ' · ' + pv)));
+    const extra = line || (same ? '' : pv);
+    // a heading that is the agent's name already says whose it is: the line under it says what is in it
+    const sub = head === nm ? (extra || (t.turns ? '' : 'No messages yet')) : nm + (extra ? ' · ' + extra : '');
+    if (sub) tt.appendChild(el('span', lr ? 'why ' + lr.state : null, sub));
     row.appendChild(tt);
     row.appendChild(el('span', 'd' + (live ? ' work' : ''), live ? 'WORKING' : t.lastAt ? ago(Date.now() - t.lastAt) : ''));
     row.onclick = () => openThread(t.streamId, t.agentId);
@@ -802,7 +896,6 @@
     staleNote(v);
     paintHero();
     v.appendChild(hero.root);
-    if (S.push.on === false && pushSupport() !== 'no' && !nudgeDismissed()) v.appendChild(pushCard(true));
     if (S.approvals.length) {
       const s = section('Needs you · ' + S.approvals.length, true);
       for (const a of S.approvals) s.appendChild(askCard(a));
@@ -820,19 +913,24 @@
         const pw = well(a.agentId); if (w) pw.appendChild(el('i', 'dot work'));
         m.appendChild(pw);
         m.appendChild(el('b', null, a.name || a.agentId));
-        const em = el('em', null, S.linkState !== 'open' ? (a.state || 'idle') : w ? (a.since ? clock(Date.now() - a.since) : 'working') : 'idle');
-        if (w && a.since && S.linkState === 'open') em.dataset.since = a.since;
+        // working: what it is doing in one word (from the station's newest step), and for how long
+        const step = w ? lastStep(a.runId) : '';
+        const em = el('em', null, S.linkState !== 'open' ? (a.state || 'idle') : w ? (step ? doing(step).word : 'working') : 'idle');
+        if (w && a.runId) em.dataset.verb = a.runId;
         m.appendChild(em);
+        if (w && a.since) { const c = el('em', 'clock', clock(Date.now() - a.since)); c.dataset.since = a.since; m.appendChild(c); }
         m.onclick = () => { setTarget(a.agentId); render(); kick(); };
         strip.appendChild(m);
       }
       cs.appendChild(strip);
     }
     v.appendChild(cs);
-    const ss = section('Sessions', false, S.threads.length > 5 ? { text: 'ALL ' + S.threads.length + ' ›', go: () => setTab('sessions') } : null);
+    // the station shows only where you left off; every session lives on the SESSIONS tab
+    const ss = section('Latest', false, S.threads.length > 1 ? { text: 'ALL ' + S.threads.length + ' ›', go: () => setTab('sessions') } : null);
     if (!S.threads.length) ss.appendChild(el('div', 'empty', S.linkState === 'open' ? 'No sessions yet. Write a task below to start one.' : 'Waiting for the station…'));
-    else { const l = el('div', 'list'), lr = lastRunByStream(); for (const t of S.threads.slice(0, 5)) l.appendChild(sessionRow(t, lr.get(t.streamId))); ss.appendChild(l); }
+    else { const l = el('div', 'list'); l.appendChild(sessionRow(S.threads[0], lastRunByStream().get(S.threads[0].streamId))); ss.appendChild(l); }
     v.appendChild(ss);
+    if (S.push.on === false && pushSupport() !== 'no' && !nudgeDismissed()) v.appendChild(pushCard(true));
   }
 
   function renderSessions(v) {
@@ -918,7 +1016,7 @@
       for (const s of L.steps.slice(-6)) {
         const d = el('div', 'step');
         d.appendChild(el('b', s.ok === false ? 'x' : s.ok === null ? 'w' : null, s.ok === null ? '…' : s.ok ? '✓' : '✕'));
-        d.appendChild(el('span', null, s.name)); box.appendChild(d);
+        d.appendChild(el('span', null, doing(s.name).phrase)); box.appendChild(d);
       }
       if (L.text) { const m = el('div', 'msg agent'); m.appendChild(el('span', 'who', agentName(L.agentId).toUpperCase())); m.appendChild(mdNode(L.text)); box.appendChild(m); }
       const w = el('div', 'working'); w.appendChild(el('i')); w.appendChild(el('span', null, agentName(L.agentId) + ' is working'));
@@ -937,7 +1035,7 @@
   let activityTimer = null;
   function activitySoonish() { clearTimeout(activityTimer); activityTimer = setTimeout(() => refreshActivity().then(() => render(true)), 500); }
   const SOURCE = { remote: 'from your phone', interactive: 'at the desk', cron: 'routine', channel: 'from a channel', host: 'autonomy', overseer: 'review' };
-  const stepLine = (name) => 'using ' + String(name || '').replace(/[._]+/g, ' ').trim();
+  const stepLine = (name) => doing(name).phrase;
   function activityRow(w, live) {
     const box = el('div', 'act' + (live ? ' live' : ''));
     const row = el(w.streamId ? 'button' : 'div', 'row'); if (w.streamId) row.type = 'button';
@@ -948,7 +1046,7 @@
       : w.state === 'done' ? (plain(w.result) || agentName(w.agentId) + ' finished') : w.state === 'stopped' ? 'Stopped' : 'Did not finish' + (w.error ? ' · ' + w.error : '');
     const sub = el('span', live ? null : 'why ' + w.state, line);
     if (live) {
-      const L = S.live.get(w.runId), last = L && L.steps.length ? L.steps[L.steps.length - 1].name : S.stepOf.get(w.runId);
+      const last = lastStep(w.runId);
       if (last) sub.textContent = stepLine(last);
       sub.dataset.step = w.runId;
     }
