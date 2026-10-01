@@ -199,6 +199,23 @@ roles, lines and line edits.
 rooms removed at once 8 → 60, a hallway 40 → 160 tiles (200 round a corner), a designed room 44 × 26 → 96 × 60. The
 bound left is the world model's own: a station spans at most 240 tiles.
 
+## Making new props (StarNet credits)
+
+Added 2026-10-01 ("if the user has StarNet credits… the agent should be able to use that and create props on its own
+using our system"). `station.make_prop { describe, sideView }` is a fourth deferred builder tool (revealed with the
+rest by `tool_search "station builder"`). It runs the station's OWN prop maker, the one REFIT's MAKE A PROP uses
+(`deps.userProps`: `start(noun)` → StarNet's prop pipeline → the job lands in `WORKSPACES/.userprops`), so it needs
+the station linked to StarNet credits and refuses with the link/top-up door otherwise ("Making props uses StarNet
+credits. Link this station under SETTINGS → PROVIDERS first."). It costs StarNet credits, so it is consent-gated and
+taint-locked: the approval card says "Make a new prop with your StarNet credits: "a hot dog stand" (about $0.35, and
+about $0.30 more for its side view)". It waits (up to six minutes, its own `timeoutMs`) for the prop to land, asks the
+page to load the MADE BY YOU library (`station.props_reload` → `UserProps.load()`), and answers the prop's name, id,
+footprint and real cost, with how to place it: `station.plan { add: { room, pieces: ["hot dog stand"] } }` or a REFIT
+`{ op: "place", t: "user_…" }`. `sideView: true` then draws its side view (a second paid step) so it turns; a round
+prop is never charged for one. A failed drawing says why and what the tries spent; one still drawing when the wait
+ends says it will appear in MADE BY YOU. Props already made show as `yours` in `station.map { catalog: true }` and
+cost nothing to place again.
+
 ## Editing what stands
 
 Added 2026-09-30 ("it should be able to build anything the user wants"). `station.plan` with one of these goes to the

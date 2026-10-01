@@ -350,7 +350,7 @@
     const styleText = () => { try { return (styleMenu() || []).map(s => s.id).join(', '); } catch (_) { return ''; } };
     const roomMenu = typeof deps.roomMenu === 'function' ? deps.roomMenu : () => [];
     const roomText = () => { try { return (roomMenu() || []).map(s => s.id + ' (' + s.name + (s.about ? ': ' + s.about : '') + ')').join('; '); } catch (_) { return ''; } };
-    const BUILDER = ['station.map', 'station.plan', 'station.build'];
+    const BUILDER = ['station.map', 'station.plan', 'station.build', 'station.make_prop'];
     const mapTool = {
       name: 'station.map', capability: 'orchestrator', scope: 'read', requiresConsent: false,
       description: 'STATION BUILDER, step 1: see the station floor before you build on it. Every room with its position and size in tiles, its type, what it is joined to (through hallways, or open to it), its machines, furniture and lines, how much floor is clear, which sizes of new room fit on each side, and the floor drawn in characters (a letter per room, + for a hallway; north is the top). '
@@ -398,6 +398,7 @@
           + '{ op: "place", t, x, y, r, m, as } (any piece or machine: intake, bay, filter, merger, splitter, joiner, loop, outbox; r 0 faces south, 1 west, 2 north, 3 east; m: 1 flips; as names it for later edits) · { op: "move", prop, x, y } · { op: "rotate", prop, r } · { op: "mirror", prop } · { op: "delete", prop } · { op: "agent", prop, agent } · { op: "door", prop, state } · '
           + '{ op: "belt", from: [x, y], to: [x, y] } (a straight run) · { op: "unbelt", tiles } · { op: "connect", from: prop, to: prop } (belts one machine into the next) · { op: "role" | "brief" | "label", prop, role | text } · { op: "cap", prop, usd } · { op: "tries", prop, max } · { op: "routes", prop, routes: { tag: side }, def } · { op: "stamp", line, x, y } (a shelf line at an exact spot) · { op: "edit", prop, edit, args } (the Workflow panel\'s own line edits on the line that prop is on: insertStep { from, to, role }, appendStep { after, role }, addBranch, addLoop, addSorter, addRoute, removeStep { id }, moveStep, tidy, addOutbox …). '
           + 'prop is an id from station.map { room }, a name given with as, or a tile [x, y]; room is a name or an as. The first edit that fails refuses the plan and names it with Refit mode\'s reason: fix that edit and plan again. '
+          + 'A piece the catalog does not have: station.make_prop makes it with the Commander\'s StarNet credits, then add or place it by its name. '
           + '8 { undo: true } takes back the lead\'s own last build ("no, undo that"), only while nothing has changed since; repeat it to go back further. '
           + 'It answers a planId and a plain summary: tell the Commander the summary, then call station.build with the planId. If it refuses it says why and what does fit: fix the request and plan again. Never give up after one refusal, and never say something was built that station.build did not report.';
       },
@@ -439,10 +440,63 @@
       }
     };
 
+    /* MAKE A PROP (2026-10-01): a NEW piece the catalog does not have, drawn by StarNet's prop maker in the station's own
+       style (the very pipeline REFIT's MAKE A PROP runs: deps.userProps), paid with the Commander's StarNet credits, so
+       it asks first (the card names the object and the price). It waits for the prop to land, has the page load it into
+       the MADE BY YOU library, and answers its name and id, so station.plan places it like any piece. A side view (so it
+       turns) is a second paid step, asked for with sideView. */
+    const PROP_WAIT_MS = 6 * 60 * 1000, PROP_TICK_MS = 2000;
+    const userProps = deps.userProps && typeof deps.userProps.start === 'function' ? deps.userProps : null;
+    const pause = (ms, signal) => new Promise(res => { const t = setTimeout(res, ms); if (signal && signal.addEventListener) signal.addEventListener('abort', () => { clearTimeout(t); res(); }, { once: true }); });
+    async function waitJob(id, signal) {
+      const until = Date.now() + PROP_WAIT_MS;
+      for (;;) {
+        const j = userProps.job(id);
+        if (j && (j.status === 'done' || j.status === 'failed')) return j;
+        if ((signal && signal.aborted) || Date.now() > until) return j || { id, status: 'running' };
+        await pause(PROP_TICK_MS, signal);
+      }
+    }
+    const makePropTool = {
+      name: 'station.make_prop', capability: 'orchestrator', scope: 'write', requiresConsent: true,
+      // it spends the Commander's StarNet credits: a run that read untrusted content may not
+      taintLocked: true, timeoutMs: PROP_WAIT_MS + 60000,
+      description: 'STATION BUILDER: make a NEW piece of furniture when no catalog piece is what the Commander wants (a hot-dog stand, a robot butler, a neon arcade sign), with the Commander\'s StarNet credits. StarNet\'s prop maker draws it in the station\'s own style; it joins the Commander\'s MADE BY YOU library and then places like any piece: station.plan { add: { room, pieces: ["its name"] } } or a refit { op: "place", t: "its id" }. '
+        + 'It costs StarNet credits (about $0.35 a prop; sideView: true adds about $0.30 for the side view it turns with), needs this station linked to StarNet credits, and asks the Commander first. Look in station.map { catalog: true } first: props already made show as yours, and cost nothing to place again. describe is the object in a few words (under 60 characters). It waits while the prop is drawn (a minute or two) and answers its name and id; if StarNet is still drawing when the wait ends, it says so and the prop appears in MADE BY YOU when it lands.',
+      schema: { type: 'object', properties: { describe: { type: 'string' }, sideView: { type: 'boolean' } }, required: ['describe'] },
+      run: async (args, ctx) => {
+        if (!userProps) return refuse('Making props is not available on this station.');
+        const a = args && typeof args === 'object' ? args : {};
+        const noun = String(a.describe == null ? '' : a.describe).replace(/\s+/g, ' ').trim();
+        const signal = ctx && ctx.signal;
+        const r = await userProps.start(noun);
+        if (!r || !r.ok) return refuse((r && r.message) || 'StarNet could not start that prop.');
+        const j = await waitJob(r.job.id, signal);
+        if (j.status === 'failed') return refuse('StarNet could not make "' + noun + '": ' + ((j.error && j.error.message) || 'it failed') + (Number(j.costUsd) > 0 ? ' (' + '$' + Number(j.costUsd).toFixed(2) + ' was spent on the tries)' : ''));
+        if (j.status !== 'done' || !j.propId) return { content: JSON.stringify({ made: false, stillDrawing: true, jobId: r.job.id, note: 'StarNet is still drawing it. It appears in the MADE BY YOU library when it lands; place it then by its name.' }), summary: 'still drawing ' + noun };
+        const entry = (userProps.list() || []).find(p => p.id === j.propId) || { id: j.propId, label: noun.toUpperCase() };
+        let cost = Number(j.costUsd) || Number(entry.costUsd) || 0, side = false, sideNote = null;
+        if (a.sideView && entry.symmetric) sideNote = 'it is round, so it turns with its own front view (no side view needed)';
+        else if (a.sideView && typeof userProps.startSide === 'function') {
+          const s = await userProps.startSide(entry.id);
+          if (!s || !s.ok) sideNote = 'the side view could not start: ' + ((s && s.message) || 'refused');
+          else { const sj = await waitJob(s.job.id, signal); if (sj.status === 'done') { side = true; cost += Number(sj.costUsd) || 0; } else sideNote = sj.status === 'failed' ? 'the side view failed: ' + ((sj.error && sj.error.message) || 'it failed') : 'the side view is still being drawn'; }
+        }
+        // the page loads it into the catalog, so the builder can place it by its name at once
+        let loaded = false;
+        try { const lo = await ask('station.props_reload', {}); loaded = !!(lo.ok && lo.result && (lo.result.props || []).some(p => p.id === entry.id)); } catch (_) { loaded = false; }
+        const out = { made: true, id: entry.id, name: String(entry.label || '').toLowerCase(), footprint: entry.footprint || null, costUsd: Math.round(cost * 100) / 100, sideView: side, onPage: loaded,
+          place: 'station.plan { add: { room, pieces: ["' + String(entry.label || '').toLowerCase() + '"] } } or a refit { op: "place", t: "' + entry.id + '", x, y' + (side ? ', r' : '') + ' }' };
+        if (sideNote) out.sideNote = sideNote;
+        if (!loaded) out.note = 'The station page did not load it yet (is it open?). It is in MADE BY YOU; reopen the page, then place it.';
+        return { content: JSON.stringify(out), summary: 'made ' + out.name + ' ($' + out.costUsd.toFixed(2) + ')', control: { revealTools: BUILDER } };
+      }
+    };
+
     return {
-      agentConfigTool, agentConfigureTool, layoutTool, mapTool, planTool, buildTool, planSummaryFor,
+      agentConfigTool, agentConfigureTool, layoutTool, mapTool, planTool, buildTool, makePropTool, planSummaryFor,
       listTool, createTool, peekTool, focusTool, taskListTool, taskCreateTool, taskManageTool,
-      register(reg) { [listTool, createTool, peekTool, focusTool, taskListTool, taskCreateTool, taskManageTool, agentConfigTool, agentConfigureTool, layoutTool, mapTool, planTool, buildTool].forEach(t => reg.register(t)); return reg; }
+      register(reg) { [listTool, createTool, peekTool, focusTool, taskListTool, taskCreateTool, taskManageTool, agentConfigTool, agentConfigureTool, layoutTool, mapTool, planTool, buildTool, makePropTool].forEach(t => reg.register(t)); return reg; }
     };
   }
 

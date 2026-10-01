@@ -1657,6 +1657,41 @@ for (const c of T.catalog) {
     A.ok(/plan-e-1/.test(r.content) && r.summary === 'planned an edit', 'an edit of what stands plans through the page: ' + JSON.stringify(req));
     A.eq(calls[calls.length - 1], ['station.plan_edit', { request: req }], 'and reaches the edit planner as it was sent');
   }
+  // MAKE A PROP (Andrew 10-01): the lead makes a new piece with the Commander's StarNet credits through the station's own
+  // prop maker, asks first, waits for it to land, loads it on the page and says how to place it
+  {
+    const made = [], jobs = new Map();
+    const fakeUP = {
+      start: async noun => {
+        if (noun === 'nothing') return { ok: false, code: 'not_linked', message: 'Making props uses StarNet credits. Link this station under SETTINGS → PROVIDERS first.' };
+        const id = 'pj_TEST' + (jobs.size + 1) + 'abcdefgh';
+        if (noun === 'a broken thing') { jobs.set(id, { status: 'failed', error: { code: 'refused', message: 'the drawing never passed its checks' }, costUsd: 0.2 }); return { ok: true, job: { id } }; }
+        const pid = 'user_' + noun.replace(/\W+/g, '_') + '_t1';
+        jobs.set(id, { status: 'done', propId: pid, costUsd: 0.35 });
+        made.push({ id: pid, label: noun.toUpperCase().slice(0, 24), footprint: { w: 2, h: 1 }, costUsd: 0.35, symmetric: noun === 'a round table' });
+        return { ok: true, job: { id } };
+      },
+      startSide: async propId => { const id = 'pj_SIDE' + (jobs.size + 1) + 'abcdefgh'; jobs.set(id, { status: 'done', propId, costUsd: 0.3 }); return { ok: true, job: { id } }; },
+      job: id => Object.assign({ id }, jobs.get(id)),
+      list: () => made
+    };
+    const pbridge = { request: async verb => verb === 'station.props_reload' ? { ok: true, result: { props: made.map(p => ({ id: p.id, label: p.label })) } } : { ok: false, error: 'unknown verb' } };
+    const toolsOf = up => makeStationTools(Object.assign({ station: pbridge, now: () => 1000, planMemo: new Map(), lineMenu: () => [], styleMenu: () => [], roomMenu: () => [], kitMenu: () => [], presetMenu: () => [] }, up ? { userProps: up } : {}));
+    const pt = toolsOf(fakeUP).makePropTool;
+    A.ok(pt && pt.requiresConsent === true && pt.taintLocked === true && pt.timeoutMs > 6 * 60 * 1000, 'make_prop asks first, refuses a tainted run, and may wait for the drawing');
+    const r = await pt.run({ describe: 'hot dog stand', sideView: true }, {});
+    let out = {}; try { out = JSON.parse(r.content); } catch (_) {}
+    A.ok(out.made && out.name === 'hot dog stand' && out.id === 'user_hot_dog_stand_t1' && out.sideView === true && out.costUsd === 0.65 && out.onPage === true && /pieces: \["hot dog stand"\]/.test(out.place) && r.summary === 'made hot dog stand ($0.65)', 'it makes the prop and its side view, loads it on the page, and says how to place it: ' + String(r.content).slice(0, 220));
+    const round = JSON.parse((await pt.run({ describe: 'a round table', sideView: true }, {})).content);
+    A.ok(round.made && round.sideView === false && /it is round, so it turns with its own front view/.test(round.sideNote) && round.costUsd === 0.35, 'a round prop is never charged for a side view');
+    const no = await pt.run({ describe: 'nothing' }, {});
+    A.ok(/^REFUSED: Making props uses StarNet credits\. Link this station under SETTINGS → PROVIDERS first\./.test(no.content), 'without StarNet credits it says how to link them');
+    const bad = await pt.run({ describe: 'a broken thing' }, {});
+    A.ok(/^REFUSED: StarNet could not make "a broken thing": the drawing never passed its checks \(\$0\.20 was spent on the tries\)/.test(bad.content), 'a failed drawing says why and what it spent: ' + bad.content);
+    A.ok(/^REFUSED: Making props is not available on this station\./.test((await toolsOf(null).makePropTool.run({ describe: 'x' }, {})).content), 'a station without the prop maker refuses plainly');
+    const idx = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
+    A.ok(/station\[\._\]make_prop\$\/\.test\(String\(call && call\.name \|\| ''\)\)\) return 'Make a new prop with your StarNet credits: /.test(idx), 'the approval card names the object and its price');
+  }
   {
     const rf = await planT.run({ refit: [{ op: 'place', t: 'tv', x: 2, y: 2 }] }, {});
     A.eq(calls[calls.length - 1], ['station.plan_edit', { request: { refit: [{ op: 'place', t: 'tv', x: 2, y: 2 }] } }], 'a refit plans through the page\'s edit planner as it was sent');
@@ -1679,7 +1714,7 @@ for (const c of T.catalog) {
   // the plan is remembered for the approval card, reveals the next tools, and a refusal travels back as REFUSED
   const p = await planT.run({ line: 'build_test', name: 'SHIP IT' }, {});
   A.ok(memo.has('plan-t-1') && /^\{"planId":"plan-t-1"/.test(p.content) && p.summary === 'planned Build + test (1 to do)', 'the plan is remembered for the approval card');
-  A.eq(p.control, { revealTools: ['station.map', 'station.plan', 'station.build'] }, 'a plan reveals station.build (and the rest of the builder) for the next turn');
+  A.eq(p.control, { revealTools: ['station.map', 'station.plan', 'station.build', 'station.make_prop'] }, 'a plan reveals station.build (and the rest of the builder) for the next turn');
   const card = planSummaryFrom(memo, 'plan-t-1');
   A.ok(/^Build \+ test \("SHIP IT"\) in a new room south of HOME/.test(card) && /Step 1 Engineer \(NOVA\): Build what the incoming request asks for\./.test(card) && /Step 2 Tester \(nobody yet\)/.test(card), 'the card shows the plan\'s own summary and every step\'s instructions');
   A.eq(planSummaryFrom(memo, 'plan-forged'), null, 'an unknown plan id has no card text');

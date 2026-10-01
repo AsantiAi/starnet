@@ -473,6 +473,12 @@ const StationCommands = (() => {
       const p = park(StationBuilder.planEdit(st.serialize(), (a && a.request) || {}, env));
       return { planId: p.planId, summary: p.plan.summary, steps: p.plan.steps, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
     },
+    // a prop the lead just made (station.make_prop): load the MADE BY YOU library so the builder can place it by name
+    'station.props_reload': async () => {
+      if (typeof UserProps === 'undefined' || !UserProps.load) throw new Error('made props are not loaded on this page');
+      const r = await UserProps.load();
+      return { props: ((r && r.props) || []).map(p => ({ id: p.id, label: p.label })) };
+    },
     // "no, undo that": the lead's own last build, only while nothing has changed since
     'station.plan_undo': () => {
       const { st } = builderReady();
