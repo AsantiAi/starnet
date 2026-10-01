@@ -726,27 +726,25 @@
         <button class="bb" data-term="agents"><span class="bb-i">◉</span><span class="bb-tx"><b>AGENTS</b><small>each crew member's dossier — config, memory, record</small></span></button>
         <button class="bb" id="bb-recruit" data-hint="recruit"><span class="bb-i">＋</span><span class="bb-tx"><b>RECRUIT</b><small>grow the crew — summon a class, or re-spec your agent</small></span></button>
         <button class="bb" data-term="commander"><span class="bb-i">◈</span><span class="bb-tx"><b>COMMANDER</b><small>what the station has learned about you</small></span></button>
+        <button class="bb" data-term="quests" data-hint="quest"><span class="bb-i">⚑</span><span class="bb-tx"><b>QUESTS</b><small>your goals, small steps toward them &amp; the station’s progress</small></span></button>
         <button class="bb" data-term="stepin"><span class="bb-i">⇆</span><span class="bb-tx"><b>STEP-IN</b><small>take an agent's browser when it needs you to sign in — and your saved sign-ins</small></span><span id="si-badge" class="badge" style="display:none"></span></button>
       </div>
     </div>
-    <div class="bb-group" data-group="work">
-      <button class="bb-grp" data-hint="work" aria-haspopup="menu" aria-expanded="false" title="The station's work — tasks, recipes, automation, quests"><span class="bb-gi">▤</span>WORK</button>
-      <div class="bb-menu" role="menu">
-        <!-- ONE MENU (front doors, 2026-10-01): the WORK dock is three doors. MY WORK = one window with tabs TASKS ·
-             DELIVERABLES · OUTBOX · RECIPES; AUTOMATE = WORKFLOWS · SCHEDULES · GOAL LOOPS · AWAY WORK (stationui.js
-             FAMILIES). Each tab is still its own window, so every deep link and slash command lands exactly as before. -->
-        <button class="bb" id="bb-mywork" data-family="mywork" data-hint="mywork"><span class="bb-i">☑</span><span class="bb-tx"><b>MY WORK</b><small>tasks, finished work &amp; ready-made jobs</small></span></button>
-        <button class="bb" id="bb-automate" data-family="automate" data-hint="automate"><span class="bb-i">∞</span><span class="bb-tx"><b>AUTOMATE</b><small>workflows, schedules &amp; goal loops</small></span></button>
-        <button class="bb" data-term="quests" data-hint="quest"><span class="bb-i">⚑</span><span class="bb-tx"><b>QUESTS</b><small>small steps toward your goals &amp; recorded progress</small></span></button>
-      </div>
+    <!-- ONE MENU, ONE CLICK (front doors, 2026-10-01 — Andrew's bar): MY WORK, AUTOMATE and CONNECT are the bar itself, not
+         items in a popover. Each opens its window with tabs (stationui.js FAMILIES); QUESTS moved into CREW. -->
+    <div class="bb-group bb-direct" data-group="mywork">
+      <button class="bb-grp" id="bb-mywork" data-family="mywork" data-hint="mywork" title="Your tasks, finished work, work to rate, and ready-made jobs"><span class="bb-gi">☑</span>MY WORK<span id="bb-mywork-badge" class="bb-grp-badge" aria-label="finished work waiting for your rating" hidden></span></button>
+    </div>
+    <div class="bb-group bb-direct" data-group="automate">
+      <button class="bb-grp" id="bb-automate" data-family="automate" data-hint="automate" title="Workflows, schedules, goal loops and away work"><span class="bb-gi">∞</span>AUTOMATE</button>
+    </div>
+    <div class="bb-group bb-direct" data-group="connect">
+      <button class="bb-grp" id="bb-connect" data-family="connect" data-hint="connect" title="Tools and apps your agents use, and where you message them"><span class="bb-gi">⇄</span>CONNECT</button>
     </div>
     <div class="bb-group" data-group="build">
-      <button class="bb-grp" data-hint="build" aria-haspopup="menu" aria-expanded="false" title="Shape the station — refit the floor, abilities, channels"><span class="bb-gi">⚒</span>BUILD</button>
+      <button class="bb-grp" data-hint="build" aria-haspopup="menu" aria-expanded="false" title="Shape the station — Build Mode and new apps"><span class="bb-gi">⚒</span>BUILD</button>
       <div class="bb-menu" role="menu">
         <button class="bb" id="bb-build" data-hint="refit"><span class="bb-i">⌂</span><span class="bb-tx"><b>BUILD MODE</b><small>rooms, corridors, gear &amp; workflow lines</small></span></button>
-        <!-- ONE MENU (front doors, 2026-10-01): CONNECT = one window with tabs ABILITIES (the agents' tools OUT — toolsets,
-             connectors, skills) · CHANNELS (YOUR way in — Telegram, Slack, Discord). Two tabs, never one card grid. -->
-        <button class="bb" id="bb-connect" data-family="connect" data-hint="connect"><span class="bb-i">⇄</span><span class="bb-tx"><b>CONNECT</b><small>tools &amp; apps your agents use, and where you message them</small></span></button>
         <!-- APPS: the way to the FIRST app (the APPS dock itself only appears once one exists) -->
         <button class="bb" id="bb-newapp-build" data-hint="app"><span class="bb-i">＋</span><span class="bb-tx"><b>NEW APP</b><small>describe anything — a dashboard, a tracker, a tool, a game — and your crew builds it in its own window</small></span></button>
       </div>
@@ -794,7 +792,7 @@
 
   <!-- one-time coach teaching the new grouped-dock model; dismissed on first dock open / ✕ (navdock.js) -->
   <div id="nav-coach" class="nav-coach" hidden>
-    <span>Your panels now live in <b>4 docks</b> down here — click one to open it. Talk to your agent up in <b>COMMS ▸</b></span>
+    <span>Everything you run lives on <b>this bar</b> — click a button to open it. Talk to your agent up in <b>COMMS ▸</b></span>
     <!-- systems.js: a fresh station's dock grows as it is used; a returning power user can have it all now -->
     <button id="nav-coach-all" class="nav-coach-x" data-tip="Bring every station system online in the dock now" hidden>SHOW EVERYTHING</button>
     <button id="nav-coach-x" class="nav-coach-x" aria-label="dismiss hint">GOT IT ✕</button>

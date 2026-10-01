@@ -2500,7 +2500,7 @@ body:not(.no-flicker) #screen-game.active { animation: flick 7s infinite; }
 /* STATION SYSTEMS ONLINE (systems.js): on a fresh station a system's dock button is not shown until it comes
    online — nothing is locked, every window still opens from every other door (slash, deep links, quests, the agent,
    QUESTS › Progress). A system that just came online wears NEW until opened; its dock trigger carries a lit dot. */
-.bb-menu .bb[data-offline], .bb-menu .bb[hidden] { display: none; }
+.bb-menu .bb[data-offline], .bb-menu .bb[hidden], #bottombar .bb-group[data-offline] { display: none; }
 .bb-menu .bb[data-fresh] .bb-tx b::after {
   content: 'NEW'; margin-left: 8px; padding: 0 5px; font-size: 11px; letter-spacing: 1px;
   color: var(--ink); background: var(--gold); border-radius: 3px; text-shadow: none;
