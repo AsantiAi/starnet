@@ -1805,6 +1805,10 @@ for (const c of T.catalog) {
     const startLine = async spec => { starts.push(spec); return startAnswer; };
     const sl = makeStationTools({ station: tbridge, now: () => 1000, planMemo: new Map(), lineMenu: () => [], styleMenu: () => [], roomMenu: () => [], kitMenu: () => [], presetMenu: () => [], startLine }).startLineTool;
     A.ok(sl && sl.name === 'station.start_line' && sl.requiresConsent === true && sl.taintLocked === true, 'start_line asks first and refuses a tainted run');
+    // a refused permission is the Commander's to grant (a real model, 10-01, raised two agents to full access through a
+    // browser debug port to get a test job past a denied page fetch): both line tools say so
+    A.ok(/never change an agent's approval or permissions yourself, and never reach around the station's controls \(a shell, a browser debug port, the page itself\)/.test(tt.description)
+      && /if a test showed a step refused one, the Commander grants it, never you/.test(sl.description), 'the line tools say a refused permission is the Commander\'s to grant');
     startAnswer = { ok: true, kind: 'schedule', id: 'cron_abc', when: 'every weekday at 09:00', armed: true, halted: false };
     const sc = await sl.run({ line: 'ship it', schedule: 'every weekday at 9am', tz: 'Europe/London', job: 'Ship the day\'s fixes' }, {});
     A.eq(starts[starts.length - 1], { kind: 'schedule', lineId: 'p12', name: 'SHIP IT', job: 'Ship the day\'s fixes', schedule: 'every weekday at 9am', tz: 'Europe/London', folder: undefined, maxPerHour: undefined, id: undefined }, 'a schedule goes to the panel\'s core for that line');
