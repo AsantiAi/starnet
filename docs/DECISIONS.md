@@ -10,6 +10,15 @@ many of these — they win on any wording conflict.
 
 ## Product
 
+- **Feedback is critical, and it compounds (Andrew, 2026-10-01).** Every like and dislike the
+  Commander gives must persist (survive restarts, no short TTLs, no RAM-only stores) and must reach
+  later prompts, so agents converge on exactly how the Commander wants work done over months. A
+  feedback signal that is logged but never read back is a bug. Shipped shape (`agent/feedback-learning`):
+  a rating + correction becomes one user-confirmed Preference record per rated run
+  (`sidecar/feedbackmemory.js`, origin `feedback`), editable/forgettable in the Memory Core; the
+  newest feedback rides EVERY run, station-wide (taste is about the Commander, not the rated agent);
+  a run rated missed counts as a failure in the track record; rating review packets are durable.
+  Respects the personalization pause. Only words that read as feedback on the work become taste.
 - **StarNet is for beginners and power users.** It is easier for beginners to use, never
   beginner-limited: sandbox freedom, full power from minute one, and no grind/unlock/usage
   walls. User-work quotas default off; users or deployers may opt into limits. Restricted

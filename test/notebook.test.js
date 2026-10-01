@@ -85,6 +85,15 @@ const dcall = (name, args) => ({ id: 'c', name, args, argsRaw: JSON.stringify(ar
     const rp = await reg.dispatch(dcall('notebook.read', { query: 'deploy' }), { agentId: 'ag' });
     A.ok(rp.content.indexOf('notes') < rp.content.indexOf('deploy guide'), 'rank read: a pinned match outranks the strongest BM25 match');
 
+    // PROJECT TIER: a query read inside a project keeps that project's lessons (rank() used to get no projectRoot
+    // and silently dropped every project-scoped match the substring gate had admitted); another project's stay out.
+    store.get('notebook:ag').push(
+      { id: 'note_p1', title: 'Lesson', body: 'deploy registry is flaky in repo A', scope: 'project', projectRoot: 'C:/work/repoA', trust: 0 },
+      { id: 'note_p2', title: 'Lesson', body: 'deploy only after tests in repo B', scope: 'project', projectRoot: 'C:/work/repoB', trust: 0 });
+    const inA = await reg.dispatch(dcall('notebook.read', { query: 'deploy' }), { agentId: 'ag', projectRoot: 'C:/work/repoA' });
+    A.ok(inA.content.indexOf('flaky in repo A') >= 0, 'project read: this project\'s lesson survives the ranked read');
+    A.ok(inA.content.indexOf('repo B') < 0, 'project read: another project\'s lesson stays out');
+
     // WITHOUT an injected ranker the tool still works (store order) — stays dependency-free standalone.
     const store2 = memStore();
     const reg2 = makeRegistry();

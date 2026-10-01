@@ -27,13 +27,34 @@
   // -> CHAT
   const ABOUT_SELF = /^(how are you|how('?s| is) it going|how do you feel|how'?s your day|who are you|what('?s| is) your name|what are you|are you (ok|okay|alright|there|conscious|sentient|alive|real|happy|sure|awake|busy|free))([\s,!.?]+\w+){0,3}[\s!.?]*$/;
 
-  function isTaskDirective(text) {
+  // ctx.priorAgentTurn (optional): the agent's last reply in this conversation — a bare "yes" that answers its offer
+  // to act is the task itself (see isAffirmation/offeredWork below). Absent = the text alone decides, as before.
+  function isTaskDirective(text, ctx) {
     const t = String(text == null ? '' : text).trim().toLowerCase();
     if (!t) return false;
     if (ACTIONABLE.test(t)) return true;            // explicit intent beats a courtesy prefix
+    if (ctx && ctx.priorAgentTurn && isAffirmation(t) && offeredWork(ctx.priorAgentTurn)) return true;   // "yes" to "want me to draft it?"
     if (CHATTY.test(t) || ABOUT_SELF.test(t)) return false;   // greetings / acks / self-questions: no tools, no work framing
     return true;                                    // default: keep TOOLS available (the desk trip is reactive, so an
                                                     // unused toolset stays invisible — a real task is never left tool-less)
+  }
+
+  /* "YES" TO AN OFFER IS A GO (2026-10-01). An ack alone is chat ("thanks", "got it") — but when the agent's last
+     turn OFFERED to do work ("Want me to draft it?", "Shall I go ahead?"), the Commander's "yes" / "sure" / "do it"
+     IS the task directive. Classified as chat it ran with no tools, so the agent could only promise the work.
+     isAffirmation: the WHOLE message is a yes (a few trailing words allowed: "yes please", "sure, go for it").
+     offeredWork: the agent's reply ends on a question that offers to act. Both must hold. */
+  const AFFIRM = /^(y(es|ea|eah|ep|up)?|sure|ok(ay)?|k|alright|please|please do|do it|go( for it| ahead)?|let'?s do it|let'?s go|sounds good|absolutely|definitely|of course|yes please|why not|proceed|continue|carry on)([\s,!.]+(please|do it|go ahead|go for it|sure|yes|that'?d be great|sounds good|let'?s do it|proceed))*[\s!.]*$/;
+  const OFFER = /\b(shall i|should i|want me to|would you like( me)? to|do you want( me)? to|like me to|can i go ahead|ok(ay)? to (go|proceed|start)|go ahead and|ready (for me )?to|i can (go ahead|start|do|draft|write|build|run|set))\b/;
+  function isAffirmation(text) {
+    const t = String(text == null ? '' : text).trim().toLowerCase();
+    return !!t && t.length <= 60 && AFFIRM.test(t);
+  }
+  function offeredWork(agentText) {
+    const t = String(agentText == null ? '' : agentText).trim().toLowerCase();
+    if (!t) return false;
+    const tail = t.slice(-400);                     // the offer is the reply's closing question, not something said mid-way
+    return /\?\s*[)"'*_`]*\s*$/.test(tail) && OFFER.test(tail.slice(tail.lastIndexOf('\n') + 1) || tail);
   }
 
   /* CONTENT TAG — what KIND of work is this, so a FILTER junction can sort it to the right agent's bay.
@@ -67,5 +88,5 @@
      Locked by classify.test.js. */
   function stanceFor(isTask) { return isTask ? 'task' : 'talk'; }
 
-  return { isTaskDirective, getTag, stanceFor };
+  return { isTaskDirective, isAffirmation, offeredWork, getTag, stanceFor };
 });
