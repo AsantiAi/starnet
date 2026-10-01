@@ -1105,7 +1105,9 @@ const WorldModel = (() => {
       if (!r || !r.ok) { restore(undoStack.pop()); emit([], { global: true }); }
       return r;
     }
-    function restore(s) { dropRoomIdx(); doc.rooms = s.rooms; doc.order = s.order; doc.meta = s.meta; doc._nid = s._nid; doc.props = s.props || []; doc.belts = s.belts || {}; doc.edges = s.edges || []; if (s.links === undefined) delete doc.links; else doc.links = Array.isArray(s.links) ? s.links : null; }
+    // undo/redo never restores copies of a player-made prop that was deleted since (its art and catalog row are gone)
+    const keepRestored = (p) => !(propRules && p && typeof p.t === 'string' && p.t.startsWith('user_')) || !!propRules(p.t);
+    function restore(s) { dropRoomIdx(); doc.rooms = s.rooms; doc.order = s.order; doc.meta = s.meta; doc._nid = s._nid; doc.props = (s.props || []).filter(keepRestored); doc.belts = s.belts || {}; doc.edges = s.edges || []; if (s.links === undefined) delete doc.links; else doc.links = Array.isArray(s.links) ? s.links : null; }
     /* `global: true` means THIS EDIT CANNOT BE INVALIDATED BY A RECTANGLE — a listener holding a
        tile-cached render must throw the whole cache away, not just the chunks the rects touch.
        Additive: the field is simply absent on every other mutation, and a listener that ignores it

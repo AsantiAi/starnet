@@ -11868,18 +11868,21 @@ function handleCreditsLinkable(req, res) {
   creditsJson(res, 200, { available: available, cloud: creditsLink.configured(), reason: revoked ? 'link_revoked' : '' });
 }
 
-// ---- player-made props (200-always media contract: failures are {ok:false, code, message}) ----
+// ---- player-made props (200-always JSON contract: failures are {ok:false, code, message}) ----
+// `recent` = jobs settled in the last 24h, so the page can report a failure that happened while REFIT was closed.
 function handleUserPropsList(req, res) {
-  let props = [], jobs = [], deleted = [];
-  try { props = userProps.list(); jobs = userProps.activeJobs(); deleted = userProps.deleted(); } catch (e) { failNote('userprops.list', e); }
-  return respondJson(res, 200, { props, jobs, deleted });
+  let props = [], jobs = [], deleted = [], recent = [];
+  try { props = userProps.list(); jobs = userProps.activeJobs(); deleted = userProps.deleted(); recent = userProps.recentJobs(); } catch (e) { failNote('userprops.list', e); }
+  return respondJson(res, 200, { props, jobs, deleted, recent });
 }
+// The ONE exception to the 200-always contract: this route serves image bytes to a blob fetch, so a bad id is a
+// real 400 and a missing file a real 404 (a 200 JSON body would be decoded as a broken PNG).
 function handleUserPropImage(req, res) {
   const q = new URL(req.url, 'http://x').searchParams;
   const file = userProps.imageFile(q.get('id') || '', q.get('view') || undefined);
   if (!file) return respondJson(res, 400, { error: 'bad prop id' });
   let buf;
-  try { buf = fs.readFileSync(file); } catch (_) { return respondJson(res, 404, { error: 'no such prop' }); }
+  try { buf = fs.readFileSync(file); } catch (e) { if (!(e && e.code === 'ENOENT')) failNote('userprops.image', e); return respondJson(res, 404, { error: 'no such prop' }); }
   res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Length': buf.length });
   return res.end(buf);
 }
@@ -11888,7 +11891,7 @@ async function handleUserPropGenerate(req, res) {
   if (body == null) return respondJson(res, 200, { ok: false, code: 'bad_request', message: 'Could not read that request.' });
   let r;
   try { r = await userProps.start(body.noun, body.previewId); }
-  catch (e) { r = { ok: false, code: 'internal', message: 'The station could not start that prop.' }; }
+  catch (e) { failNote('userprops.generate', e); r = { ok: false, code: 'internal', message: 'The station could not start that prop.' }; }
   return respondJson(res, 200, r);
 }
 async function handleUserPropSide(req, res) {
