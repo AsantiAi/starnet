@@ -237,9 +237,9 @@
         </section>
         <section class="ext-editor mc-form" id="pl-form" aria-label="Create a plugin" hidden>
           <div class="ext-editor-head"><b>Create a plugin</b><button class="bb xs" data-ext-editor="">CANCEL</button></div>
-          <p class="mc-hint">Your starter counts tool calls and logs a total after each run. Edit its code to make it do more.</p>
+          <p class="mc-hint">Your starter comes with its own window, styled like the rest of the station, plus code that counts tool calls each run. Open the window, then edit its files to make it yours.</p>
           <label for="pl-name">Plugin name</label>
-          <input id="pl-name" class="key-input" placeholder="e.g. Run counter" autocomplete="off" maxlength="60">
+          <input id="pl-name" class="key-input" placeholder="e.g. PR Radar" autocomplete="off" maxlength="60">
           <details class="ext-details" id="pl-options"><summary>Optional settings</summary>
             <label for="pl-desc">Description</label>
             <input id="pl-desc" class="key-input" placeholder="A short note about this plugin" autocomplete="off" maxlength="140">
@@ -448,10 +448,39 @@
     }
     // A findings block is DISCLOSURE at the approval moment — the guard is not a boundary, so the Commander
     // has to be able to see what they are about to say yes to.
+    // The sidecar's guard returns a LIST of findings ({ severity, description, file, line }); the old {level, hits}
+    // shape this used to read never existed, so every plugin's findings silently rendered as nothing.
     function extFindings(f) {
+      if (Array.isArray(f)) {
+        if (!f.length) return '<div class="mc-hint">scanner: nothing suspicious found</div>';
+        const rank = { critical: 3, high: 2, medium: 1, low: 0 };
+        const worst = f.reduce((w, x) => (rank[x && x.severity] || 0) > (rank[w] || 0) ? x.severity : w, 'low');
+        const lines = f.slice(0, 6).map(x => esc(String((x && x.description) || 'finding')) + ' <span class="mc-hint">(' + esc(String((x && x.file) || '')) + ':' + esc(String((x && x.line) || '')) + ')</span>').join('<br>');
+        return '<div class="mc-hint">scanner: <b>' + esc(String(f.length)) + ' finding' + (f.length === 1 ? '' : 's') + ' · worst ' + esc(String(worst)) + '</b><br>' + lines +
+          (f.length > 6 ? '<br>…and ' + esc(String(f.length - 6)) + ' more' : '') + '</div>';
+      }
       if (!f || !f.level) return '';
       const hits = Array.isArray(f.hits) && f.hits.length ? ' — ' + f.hits.map(h => esc(String(h))).join(', ') : '';
       return '<div class="mc-hint">scanner: <b>' + esc(String(f.level)) + '</b>' + hits + '</div>';
+    }
+    // A plugin's TOOLS (what its process actually registered) and its terminal in the station — the tools reach an
+    // agent only through that terminal (object = capability), so the row says where it stands or offers to place it.
+    function extTools(p) {
+      const tools = Array.isArray(p.tools) ? p.tools : [];
+      if (!p.active || !tools.length) return '';
+      const host = typeof PluginHost !== 'undefined' ? PluginHost : null;
+      const term = host && host.terminalOf ? host.terminalOf(p.id) : null;
+      return '<div class="mc-hint">Tools: ' + tools.map(t => '<code>' + esc(t) + '</code>').join(' ') + '<br>' +
+        (term ? 'Its terminal stands in the station: agents in that room can use these. Each call asks you first unless you choose Always or Full access.'
+          : 'No terminal in the station yet, so no agent can use these. <button class="bb xs" data-ext="plugin-place" data-id="' + esc(p.id) + '">PLACE TERMINAL</button>') +
+        '</div>';
+    }
+    // A plugin's windows (plugin.json `screens`), openable only while it is approved and live.
+    function extScreens(p) {
+      const list = Array.isArray(p.screens) ? p.screens : [];
+      if (!list.length) return '';
+      if (!p.active) return '<div class="mc-hint">Has ' + list.length + ' window' + (list.length === 1 ? '' : 's') + ' — approve it to open ' + (list.length === 1 ? 'it' : 'them') + '.</div>';
+      return list.map(s => '<button class="bb xs" data-ext="plugin-open" data-id="' + esc(p.id) + '" data-screen="' + esc(s.id) + '">OPEN ' + esc(String(s.title || s.id).toUpperCase()) + '</button>').join('');
     }
 
     // Keep drafts in the DOM while changing editors; never ask for two setups at once.
@@ -522,12 +551,17 @@
           '<span class="mc-state" style="color:' + badge[0] + '">' + badge[1] + '</span></div>' +
           (p.description ? '<div class="mc-hint">' + esc(p.description) + '</div>' : '') +
           (!p.active ? extFindings(p.findings) : '') +
-          '<div class="mc-acts"><button class="bb xs" data-ext="plugin-' + (p.active ? 'revoke' : 'allow') + '" data-id="' + esc(p.id) + '" data-digest="' + esc(p.digest || '') + '">' +
+          '<div class="mc-acts">' + (p.active ? extScreens(p) : '') + '<button class="bb xs" data-ext="plugin-' + (p.active ? 'revoke' : 'allow') + '" data-id="' + esc(p.id) + '" data-digest="' + esc(p.digest || '') + '">' +
           (p.active ? 'TURN OFF' : 'APPROVE &amp; ENABLE') + '</button></div>' +
+          (!p.active ? extScreens(p) : '') +
+          extTools(p) +
+          (p.process && p.process.state === 'crashed' ? '<div class="mc-hint" style="color:var(--bad)">Its code crashed: ' + esc(p.process.error || 'unknown') + '. It restarts on its next use.</div>' : '') +
           '<details class="ext-details"><summary>Details &amp; code</summary>' +
           '<p class="mc-hint">Folder: <code>' + esc(p.id) + '</code> · Version ' + esc(p.version || '0') +
-          '<br>Open its folder to edit the code. Starters use <code>index.js</code>.</p>' +
-          (p.active ? extFindings(p.findings) : '<p class="mc-hint">Enabling loads this code with your computer’s permissions.</p>') +
+          '<br>Open its folder to edit the code. Starters use <code>index.js</code> and <code>ui/index.html</code>.</p>' +
+          (p.active ? extFindings(p.findings) : (p.hasCode === false
+            ? '<p class="mc-hint">Window-only plugin: its pages run sandboxed inside their windows, with no access to your station or computer.</p>'
+            : '<p class="mc-hint">Enabling loads this code with your computer’s permissions.</p>')) +
           '<div class="mc-acts"><button class="bb xs" data-ext="plugin-where" data-id="' + esc(p.id) + '">COPY FOLDER PATH</button>' +
           '<button class="bb xs danger" data-ext-remove="' + esc(p.id) + '">DELETE PLUGIN</button></div>' +
           '<p class="mc-hint">Deleting also removes its code from disk.</p></details></div>';
@@ -538,6 +572,7 @@
           onArm: () => sfx('bad'),
           onConfirm: async () => {
             if (await extPost('/api/plugins/delete', { id: btn.dataset.extRemove }, btn)) {
+              if (typeof PluginHost !== 'undefined') { try { await PluginHost.refresh(); } catch (_) {} }
               const refreshed = await renderExtensions();
               if (refreshed) extSay('Plugin deleted.');
             }
@@ -562,12 +597,31 @@
       // Set AFTER the re-render, never before: renderExtensions() clears the message line to drop stale
       // errors, so a success set inline is wiped the instant it is written (caught live).
       let done = '';
+      let openAfter = '';   // a freshly created plugin opens its window, so the first thing seen is that it works
       if (kind === 'retry') { await renderExtensions(); return; }
       if (kind === 'hook-allow') ok = await extPost('/api/hooks/allow', { event: btn.dataset.event, command: btn.dataset.command }, btn);
       else if (kind === 'hook-revoke') ok = await extPost('/api/hooks/revoke', { event: btn.dataset.event, command: btn.dataset.command }, btn);
       else if (kind === 'hook-delete') ok = await extPost('/api/hooks/delete', { event: btn.dataset.event, command: btn.dataset.command }, btn);
       else if (kind === 'plugin-allow') ok = await extPost('/api/plugins/allow', { id: btn.dataset.id, digest: btn.dataset.digest }, btn);
       else if (kind === 'plugin-revoke') ok = await extPost('/api/plugins/revoke', { id: btn.dataset.id }, btn);
+      else if (kind === 'plugin-place') {
+        const host = typeof PluginHost !== 'undefined' ? PluginHost : null;
+        const r = host ? host.placeTerminal(btn.dataset.id) : { ok: false, msg: 'plugin windows are not available in this build' };
+        if (!r || !r.ok) { extSay('Could not place its terminal: ' + ((r && (r.msg || r.error)) || 'unknown') + '. Place a PLUGIN TERMINAL in REFIT instead.', true); return; }
+        try { sfx('ok'); } catch (_) {}
+        await renderExtensions();
+        extSay('Its terminal now stands in the lead’s room.');
+        return;
+      }
+      else if (kind === 'plugin-open') {
+        const host = typeof PluginHost !== 'undefined' ? PluginHost : null;
+        if (!host) { extSay('plugin windows are not available in this build', true); return; }
+        if (!host.open(btn.dataset.id, btn.dataset.screen)) {
+          await host.refresh();   // approved in another window, or just now: learn about it, then try once more
+          if (!host.open(btn.dataset.id, btn.dataset.screen)) extSay('that window is not available — is the plugin still on?', true);
+        }
+        return;
+      }
       else if (kind === 'hook-add') {
         const ev = body.querySelector('#hk-event'), cmd = body.querySelector('#hk-cmd'), nm = body.querySelector('#hk-name');
         if (!cmd.value.trim()) { extSay('Enter the command you want to run.', true); cmd.focus(); return; }
@@ -583,9 +637,10 @@
           extSay('Use letters or numbers at the start of the folder ID, then letters, numbers, dots, dashes or underscores.', true);
           id.focus(); return;
         }
-        ok = await extPost('/api/plugins/create', { id: id.value.trim(), name: nm.value.trim(), description: ds.value.trim() }, btn);
+        const newId = id.value.trim();
+        ok = await extPost('/api/plugins/create', { id: newId, name: nm.value.trim(), description: ds.value.trim() }, btn);
         if (!ok) body.querySelector('#pl-options').open = true;
-        if (ok) { done = 'Plugin created. Find its code under Details & code.'; id.value = ''; nm.value = ''; ds.value = ''; pluginIdEdited = false; extEditor('', false); }
+        if (ok) { openAfter = newId; done = 'Plugin created and its window opened. Find its code under Details & code.'; id.value = ''; nm.value = ''; ds.value = ''; pluginIdEdited = false; extEditor('', false); }
       }
       else if (kind === 'plugin-where') {
         if (!extPluginDir) { extSay('the station has not reported a plugins folder yet', true); return; }
@@ -595,7 +650,33 @@
         return;
       }
       else return;
-      if (ok) { try { sfx('ok'); } catch (_) {} const refreshed = await renderExtensions(); if (done && refreshed) extSay(done); }
+      if (ok) {
+        try { sfx('ok'); } catch (_) {}
+        // plugin windows follow approval immediately: a turned-off plugin's open window says so, a new one can open
+        if (/^plugin-/.test(kind) && typeof PluginHost !== 'undefined') {
+          try {
+            await PluginHost.refresh();
+            if (openAfter && !PluginHost.open(openAfter)) done = 'Plugin created. Find its code under Details & code.';
+            // INSTALL PLACES THE TERMINAL: a plugin that came up with tools gets its body in the lead's room now,
+            // so "approve" is the only step between writing a tool and the crew being able to use it.
+            const pid = openAfter || (kind === 'plugin-allow' ? btn.dataset.id : '');
+            const p = pid ? PluginHost.list().find(x => x.id === pid) : null;
+            // FIRST TIME ONLY: a terminal the Commander deliberately removed is not put back by a later re-approve
+            // (that would quietly hand the tools back) — the row keeps offering PLACE TERMINAL instead
+            let placedBefore = [];
+            try { placedBefore = JSON.parse(localStorage.getItem('starnet.pluginTerminalsPlaced') || '[]'); } catch (_) { placedBefore = []; }
+            if (p && p.active && Array.isArray(p.tools) && p.tools.length && placedBefore.indexOf(pid) < 0) {
+              const r = PluginHost.placeTerminal(pid);
+              if (r && r.ok) { try { localStorage.setItem('starnet.pluginTerminalsPlaced', JSON.stringify(placedBefore.concat([pid]).slice(-200))); } catch (_) { /* per-browser memory only */ } }
+              const n = p.tools.length + ' tool' + (p.tools.length === 1 ? '' : 's');
+              const note = r && r.ok ? (r.existing ? '' : ' Its terminal now stands in the lead’s room, so the lead can use its ' + n + '.')
+                : ' Its terminal could not be placed (' + ((r && (r.msg || r.error)) || 'unknown') + ') — place a PLUGIN TERMINAL in REFIT.';
+              done = (done || 'Plugin on.') + note;
+            }
+          } catch (_) {}
+        }
+        const refreshed = await renderExtensions(); if (done && refreshed) extSay(done);
+      }
     });
     renderExtensions();
 

@@ -46,6 +46,7 @@
 <link rel="stylesheet" href="css/utility-menus.css?v=1">
 <link rel="stylesheet" href="css/glass-demo.css">
 <link rel="stylesheet" href="css/glass-comms.css">
+<link rel="stylesheet" href="css/plugins.css"><!-- PLUGIN WINDOWS: the station chrome around a plugin's sandboxed page (pluginhost.js) -->
 <link rel="stylesheet" href="css/onboarding.css">
 <link rel="stylesheet" href="css/readability.css"><!-- Shared readable text roles at STANDARD; cabinet and CRT geometry are unchanged. -->
 <link rel="stylesheet" href="css/beat-cards.css"><!-- Transient work cards share glass materials and semantic text sizes. -->
@@ -749,7 +750,19 @@
              skills); CHANNELS = YOUR way in. NAV CONDENSE 2: the SKILLS window merged into ABILITIES (per-agent
              capability readout lives in the AGENTS dossier's SKILLS tab). -->
         <button class="bb" data-term="connectors" data-hint="toolset"><span class="bb-i">⇄</span><span class="bb-tx"><b>ABILITIES</b><small>everything agents can do — toolsets, connectors, skills, your own hooks &amp; plugins</small></span></button>
+        <!-- APPS: the way to the FIRST app (the APPS dock itself only appears once one exists) -->
+        <button class="bb" id="bb-newapp-build" data-hint="app"><span class="bb-i">＋</span><span class="bb-tx"><b>NEW APP</b><small>describe anything — a dashboard, a tracker, a tool, a game — and your crew builds it in its own window</small></span></button>
         <button class="bb" data-term="messaging" data-hint="channel"><span class="bb-i">✉</span><span class="bb-tx"><b>CHANNELS</b><small>your way in — talk to agents from Telegram, Slack, Discord</small></span></button>
+      </div>
+    </div>
+    <!-- APPS (2026-09-29): HIDDEN until the Commander has an app (frontend/app/apps.js syncDock). Then: one entry per
+         app (filled in by apps.js), plus NEW APP and the manage window. -->
+    <div class="bb-group" data-group="apps" hidden>
+      <button class="bb-grp" data-hint="apps" aria-haspopup="menu" aria-expanded="false" title="Your apps — open one, or describe a new one"><span class="bb-gi">▦</span>APPS</button>
+      <div class="bb-menu" role="menu">
+        <div id="bb-apps-items" class="bb-apps-items"></div>
+        <button class="bb" id="bb-newapp" data-hint="app"><span class="bb-i">＋</span><span class="bb-tx"><b>NEW APP</b><small>describe anything — a dashboard, a tracker, a tool, a game — and your crew builds it</small></span></button>
+        <button class="bb" data-term="apps" data-hint="app"><span class="bb-i">▦</span><span class="bb-tx"><b>MANAGE APPS</b><small>refresh, rename or delete the apps your crew built for you</small></span></button>
       </div>
     </div>
     <div class="bb-group" data-group="system">
@@ -826,6 +839,7 @@
 <script src="app/skin-study-tone.js"></script><script src="app/skin-study-preview.js"></script>
 <script src="js/assets.js"></script>
 <script src="app/harness.js"></script>
+<script src="app/userprops.js"></script>
 <script src="app/apiticket.js"></script><!-- scoped short-lived URL tickets: links/tabs/SSE/beacon never carry the master API token (sidecar/apitickets.js verifies) -->
 <script src="app/queryspine.js"></script><!-- keyed Harness.api GET state: in-flight dedupe, last-good truth, TTL + subscriber-owned polling; MUST load before cron consumers -->
 <script src="app/updatecore.js"></script>
@@ -950,6 +964,8 @@
 <script src="app/windows/connectors.js"></script><!-- TOOLSETS & CONNECTORS — toolset kill-switches, MCP manager, catalog + service keys (Spotify flow embedded) -->
 <script src="app/windows/messaging.js"></script><!-- (STEP-IN follows) -->
 <script src="app/stepin.js"></script><!-- STEP-IN — an agent stuck on a sign-in / 2FA / human check hands you its live browser; you drive it, then HAND BACK --><!-- CHANNELS — messaging platforms catalog (Telegram/Discord/Slack/Matrix/Signal cards) -->
+<script src="app/apps.js"></script><!-- APPS: describe it, get it — the APPS window + dock, the bar under each app window, the build/change hand-off to COMMS -->
+<script src="app/pluginhost.js"></script><!-- PLUGIN WINDOWS: an approved plugin's screens as real station windows, a sandboxed frame + the starnet bridge (needs stationui.js + apiticket.js above) -->
 <script src="app/navdock.js"></script>
 <script src="app/emergency-control.js"></script>
 <script src="app/chatresize.js"></script>

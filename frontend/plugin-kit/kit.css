@@ -1,0 +1,206 @@
+/* starnet-kit.css — the STATION LOOK for plugin windows (plugin extensions phase 1, 2026-09-29).
+
+   Injected at the top of every plugin page by the sidecar (/plugin-ui/ route). Everything here is copied from the
+   station's own GLASS recipes (frontend/css/glass-demo.css + style.css tokens) — a plugin built from these classes
+   looks like it shipped with StarNet, and repaints with the station when the Commander changes the phosphor.
+
+   · Tokens: the defaults below are the amber reference build. starnet-kit.js overwrites them on :root with the
+     station's LIVE computed values the moment the window opens and on every theme change.
+   · Everything sits in `@layer starnet`, the lowest layer: any CSS the plugin author writes (unlayered) wins, with
+     no !important and no specificity fights. The kit is the default, never a cage.
+   · Matte glass, no glow. No control is ever left in the browser's own white paint (the station's standing law).
+
+   Class reference (docs/PLUGINS.md has the full list with examples):
+     layout   sn-stack · sn-row-flex · sn-grid · sn-spacer
+     surfaces sn-panel · sn-card · sn-sect (header strip) · sn-list + sn-item · sn-well
+     type     sn-title · sn-label · sn-hint · sn-muted · sn-mono · sn-empty
+     data     sn-stats + sn-stat · sn-table · sn-badge · dot (.ok .warn .bad .off) · sn-progress
+     controls sn-btn (.primary .danger .xs) · sn-input · sn-select · sn-textarea · sn-check · sn-tabs + sn-tab
+     states   sn-loading · sn-error */
+
+@font-face {
+  font-family: 'VT323';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('vt323.woff2') format('woff2');
+}
+
+@layer starnet {
+  :root {
+    --ph: #ffaa33; --ph-bright: #ffd9a3; --ph-dim: #b9791c; --ph-faint: #1e1404; --ink: #190f02;
+    --bg: #030201; --panel: rgba(5, 3, 1, 0.95); --panel2: #0c0704; --text: #eec88f; --gold: #ffd34a;
+    --ph-rgb: 255, 170, 51; --ph-bright-rgb: 255, 228, 180; --gold-rgb: 255, 211, 74;
+    --ok: #7bc88a; --ok-rgb: 123, 200, 138; --bad: #ff5c4d; --bad-rgb: 255, 92, 77; --warn: #ffe97a;
+    --gd-edge: rgba(var(--ph-rgb), .24);
+    --gd-light: rgba(var(--ph-bright-rgb), .13);
+    --gd-face: linear-gradient(165deg, rgba(var(--ph-rgb), .075), transparent 46%), color-mix(in srgb, var(--panel) 92%, transparent);
+    --gd-hover: linear-gradient(120deg, rgba(var(--ph-rgb), .14), rgba(var(--ph-rgb), .035) 70%);
+    --gd-shadow: inset 0 1px 0 var(--gd-light), 0 6px 24px rgba(0, 0, 0, .3);
+    --gd-strip: linear-gradient(180deg, rgba(var(--ph-rgb), .14), rgba(var(--ph-rgb), .025));
+    --fs-0: 11px; --fs-1: 13px; --fs-2: 15px; --fs-3: 18px; --fs-4: 24px; --fs-5: 34px;
+    --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 24px;
+    --r-sm: 3px; --r: 4px; --r-lg: 6px;
+    --t-fast: 120ms; --t-med: 220ms; --ease-soft: cubic-bezier(.4, 0, .2, 1);
+    --sn-font: 'VT323', ui-monospace, 'Consolas', monospace;
+    color-scheme: dark;
+  }
+
+  /* The frame is transparent: the window's own glass is the page's background. */
+  html, body { background: transparent; margin: 0; }
+  body {
+    color: var(--text); font: 18px/1.3 var(--sn-font); letter-spacing: .3px;
+    padding: var(--s-3) var(--s-4) var(--s-4);
+    -webkit-font-smoothing: antialiased;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  /* `hidden` must always hide, even on an element a layout class gives display:flex/grid (an !important in the
+     lowest layer still beats every normal declaration the author writes) */
+  [hidden] { display: none !important; }
+  ::selection { background: rgba(var(--ph-rgb), .35); color: var(--ph-bright); }
+  a { color: var(--ph); text-underline-offset: 3px; }
+  a:hover { color: var(--ph-bright); }
+  :focus-visible { outline: 1px solid var(--ph); outline-offset: 2px; }
+  h1, h2, h3, h4 { font-family: var(--sn-font); font-weight: 400; color: var(--ph-bright); letter-spacing: 1.5px; margin: 0 0 var(--s-2); }
+  h1 { font-size: 30px; } h2 { font-size: 24px; } h3 { font-size: 20px; } h4 { font-size: 18px; color: var(--ph); }
+  p { margin: 0 0 var(--s-2); }
+  hr { border: 0; border-top: 1px solid var(--gd-edge); margin: var(--s-3) 0; }
+  code, pre, .sn-mono { font-family: var(--sn-font); color: var(--ph-bright); }
+  pre { background: rgba(0, 0, 0, .3); border: 1px solid var(--gd-edge); border-radius: var(--r); padding: var(--s-2) var(--s-3); overflow: auto; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(var(--ph-rgb), .22); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(var(--ph-rgb), .38); }
+
+  /* ---- layout ---- */
+  .sn-stack { display: flex; flex-direction: column; gap: var(--s-3); }
+  .sn-row-flex { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; }
+  .sn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--s-2); }
+  .sn-spacer { flex: 1; }
+
+  /* ---- surfaces (glass-demo.css PANEL / HEADER STRIP / CARD recipes) ---- */
+  .sn-panel { background: var(--gd-face); border: 1px solid var(--gd-edge); border-radius: 5px; box-shadow: var(--gd-shadow); padding: var(--s-3); }
+  .sn-card { background: var(--gd-face); border: 1px solid var(--gd-edge); border-radius: var(--r); box-shadow: inset 0 1px 0 var(--gd-light); padding: var(--s-3); }
+  .sn-sect {
+    font: 15px var(--sn-font); letter-spacing: 2px; color: var(--ph-bright); text-transform: uppercase;
+    background: var(--gd-strip); border: 1px solid var(--gd-edge); border-bottom-color: var(--gd-edge);
+    box-shadow: inset 0 1px 0 var(--gd-light); border-radius: var(--r) var(--r) 0 0; padding: 4px 12px; margin: 0;
+  }
+  .sn-sect + .sn-list, .sn-sect + .sn-card, .sn-sect + .sn-well { border-top: 0; border-radius: 0 0 var(--r) var(--r); }
+  .sn-well { background: rgba(0, 0, 0, .25); border: 1px solid var(--gd-edge); border-radius: var(--r); box-shadow: inset 0 1px 6px rgba(0, 0, 0, .5); padding: var(--s-2) var(--s-3); }
+  .sn-list { background: rgba(0, 0, 0, .12); border: 1px solid var(--gd-edge); border-radius: var(--r); padding: 3px 0; list-style: none; margin: 0; }
+  /* ROW (the #crew .crew-row glass recipe): quiet at rest, lit on hover/selection */
+  .sn-item {
+    display: flex; align-items: center; gap: 10px; margin: 3px 4px; padding: 8px 8px; min-width: 0;
+    border: 1px solid transparent; border-radius: var(--r); background: transparent; color: var(--text);
+    transition: background var(--t-fast) var(--ease-soft), border-color var(--t-fast) var(--ease-soft), box-shadow var(--t-fast) var(--ease-soft);
+  }
+  .sn-item:is(:hover, :focus-visible, .sel, [aria-selected="true"]) {
+    background: var(--gd-hover); border-color: var(--gd-edge);
+    box-shadow: inset 0 1px 0 var(--gd-light), 0 2px 8px rgba(0, 0, 0, .2);
+  }
+  .sn-item:focus-visible { outline: 1px solid var(--ph); outline-offset: -2px; }
+  .sn-item > .sn-grow, .sn-item > .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ---- type ---- */
+  .sn-title { font-size: 22px; letter-spacing: 2px; color: var(--ph-bright); }
+  .sn-label { font-size: 14px; letter-spacing: 1.5px; color: var(--ph); text-transform: uppercase; }
+  .sn-hint { font-size: 15px; color: rgba(var(--ph-bright-rgb), .62); }
+  .sn-muted { color: rgba(var(--ph-bright-rgb), .5); }
+  .sn-empty { text-align: center; padding: var(--s-5) var(--s-3); color: rgba(var(--ph-bright-rgb), .55); letter-spacing: 1px; }
+
+  /* ---- data ---- */
+  .sn-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: var(--s-2); }
+  .sn-stat { background: rgba(0, 0, 0, .22); border: 1px solid var(--gd-edge); border-radius: var(--r); box-shadow: inset 0 1px 0 var(--gd-light); padding: 8px 10px; min-width: 0; }
+  .sn-stat b, .sn-stat .v { display: block; font-weight: 400; font-size: 30px; line-height: 1; color: var(--ph-bright); font-variant-numeric: tabular-nums; }
+  .sn-stat span, .sn-stat .k { font-size: 13px; letter-spacing: 1.5px; color: var(--ph); text-transform: uppercase; }
+  .sn-stat.ok b, .sn-stat.ok .v { color: var(--ok); }
+  .sn-stat.bad b, .sn-stat.bad .v { color: var(--bad); }
+  .sn-stat.warn b, .sn-stat.warn .v { color: var(--warn); }
+  .sn-table { width: 100%; border-collapse: collapse; font-size: 17px; }
+  .sn-table th {
+    text-align: left; font-weight: 400; font-size: 14px; letter-spacing: 1.5px; color: var(--ph-bright); text-transform: uppercase;
+    background: var(--gd-strip); border-bottom: 1px solid var(--gd-edge); padding: 5px 10px; white-space: nowrap;
+  }
+  .sn-table td { padding: 6px 10px; border-top: 1px solid rgba(var(--ph-rgb), .1); vertical-align: top; }
+  .sn-table tr:hover td { background: rgba(var(--ph-rgb), .05); }
+  .sn-badge { display: inline-block; font-size: 14px; letter-spacing: 1px; padding: 0 7px; border: 1px solid var(--gd-edge); border-radius: var(--r-sm); background: rgba(0, 0, 0, .3); color: var(--ph); }
+  .sn-badge.ok { color: var(--ok); border-color: rgba(var(--ok-rgb), .4); }
+  .sn-badge.bad { color: var(--bad); border-color: rgba(var(--bad-rgb), .4); }
+  .sn-badge.gold { color: var(--gold); border-color: rgba(var(--gold-rgb), .4); }
+  /* the station's status lamp */
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--ph); }
+  .dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); } .dot.warn { background: var(--warn); }
+  .dot.off { background: transparent; border: 1px solid rgba(var(--ph-rgb), .45); }
+  .sn-progress { height: 6px; background: rgba(0, 0, 0, .35); border: 1px solid var(--gd-edge); border-radius: 3px; overflow: hidden; }
+  .sn-progress > i { display: block; height: 100%; background: var(--ph); width: 0; transition: width var(--t-med) var(--ease-soft); }
+
+  /* ---- controls: the element-level FLOOR first (no bare white control can exist), then the named skins ---- */
+  button, input, select, textarea { font: inherit; color: var(--text); }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="file"]):not([type="image"]), select, textarea {
+    background: rgba(0, 0, 0, .18); border: 1px solid rgba(var(--ph-rgb), .2); border-radius: 8px; color: var(--ph-bright);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, .15);
+    padding: 7px 12px; font-size: 17px; outline: none;
+  }
+  input::placeholder, textarea::placeholder { color: var(--text); opacity: .55; }
+  input:focus, select:focus, textarea:focus { border-color: var(--ph); box-shadow: 0 0 0 2px rgba(var(--ph-rgb), .1); }
+  select {
+    appearance: none; -webkit-appearance: none; padding-right: 26px;
+    background-image: linear-gradient(45deg, transparent 50%, var(--ph) 50%), linear-gradient(135deg, var(--ph) 50%, transparent 50%);
+    background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%; background-size: 5px 5px; background-repeat: no-repeat;
+  }
+  select option { background: var(--panel2); color: var(--text); }
+  input[type="checkbox"], input[type="radio"] { accent-color: var(--ph); }
+  input[type="range"] { accent-color: var(--ph); }
+  /* button-like inputs and the file picker's button wear the same skin as a button (never OS paint) */
+  input[type="color"] { background: rgba(0, 0, 0, .3); border: 1px solid var(--gd-edge); border-radius: var(--r-sm); padding: 2px; height: 28px; }
+  input[type="file"] { color: var(--text); font-size: 16px; }
+  /* KEYS = the station's current glass key (Build Library / workflow panel): 8px glass, lit-glass primary */
+  button, input:is([type="submit"], [type="button"], [type="reset"]) {
+    background: linear-gradient(125deg, rgba(var(--ph-bright-rgb), .09), rgba(var(--ph-rgb), .045) 48%, rgba(var(--ph-rgb), .015));
+    border: 1px solid rgba(var(--ph-rgb), .2); border-radius: 8px; color: var(--ph); cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb), .07);
+  }
+  /* own rule: a pseudo-element an engine does not know would void a whole selector list */
+  ::file-selector-button { font: inherit; background: rgba(0, 0, 0, .22); border: 1px solid var(--gd-edge); border-radius: var(--r-sm); color: var(--ph); cursor: pointer; margin-right: 8px; }
+  ::file-selector-button:hover { color: var(--ph-bright); border-color: var(--ph); }
+  /* THE KEY (the station's glass key: 36px, 8px radius, read at 16px) */
+  .sn-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box; min-height: 36px;
+    font: 16px/1.15 var(--sn-font); letter-spacing: .6px; padding: 7px 14px;
+    color: var(--ph); background: linear-gradient(125deg, rgba(var(--ph-bright-rgb), .09), rgba(var(--ph-rgb), .045) 48%, rgba(var(--ph-rgb), .015));
+    border: 1px solid rgba(var(--ph-rgb), .2); border-radius: 8px; box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb), .07);
+    cursor: pointer; text-decoration: none; white-space: nowrap;
+    transition: color var(--t-fast) var(--ease-soft), background var(--t-fast) var(--ease-soft), border-color var(--t-fast) var(--ease-soft);
+  }
+  .sn-btn:hover:not(:disabled) { color: var(--ph-bright); background: rgba(var(--ph-rgb), .1); border-color: rgba(var(--ph-rgb), .45); }
+  /* the bare-element hover has ZERO specificity, so a named skin (sn-tab, an author's own class) always wins */
+  :where(button, input[type="submit"], input[type="button"], input[type="reset"]):hover:where(:not(:disabled)) { color: var(--ph-bright); background: rgba(var(--ph-rgb), .1); border-color: rgba(var(--ph-rgb), .45); }
+  .sn-btn.primary { color: var(--ph-bright); border-color: var(--ph); background: rgba(var(--ph-rgb), .16); }
+  .sn-btn.primary:hover:not(:disabled) { background: rgba(var(--ph-rgb), .24); border-color: var(--ph); }
+  .sn-btn.danger { color: var(--bad); border-color: rgba(var(--bad-rgb), .35); }
+  .sn-btn.danger:hover:not(:disabled) { color: var(--bad); border-color: var(--bad); background: rgba(var(--bad-rgb), .1); }
+  .sn-btn.xs { min-height: 30px; font-size: 15px; padding: 4px 10px; }
+  .sn-btn:disabled, button:disabled { opacity: .45; cursor: default; }
+  .sn-input, .sn-select, .sn-textarea { width: 100%; }
+  .sn-textarea { min-height: 84px; resize: vertical; line-height: 1.3; }
+  .sn-check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+  .sn-field { display: flex; flex-direction: column; gap: 4px; }
+  .sn-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--gd-edge); margin-bottom: var(--s-3); }
+  .sn-tab {
+    font: 16px var(--sn-font); letter-spacing: 1.5px; color: var(--ph); background: transparent;
+    border: 1px solid transparent; border-bottom: 0; border-radius: var(--r) var(--r) 0 0; padding: 4px 12px; cursor: pointer; margin-bottom: -1px;
+  }
+  .sn-tab:hover { color: var(--ph-bright); background: rgba(var(--ph-rgb), .06); border-color: transparent; }
+  .sn-tab:is(.on, [aria-selected="true"]) { color: var(--ph-bright); background: var(--gd-strip); border-color: var(--gd-edge); box-shadow: inset 0 1px 0 var(--gd-light); }
+
+  /* ---- states ---- */
+  .sn-loading { color: rgba(var(--ph-bright-rgb), .6); letter-spacing: 1px; }
+  .sn-loading::after { content: '…'; animation: sn-blink 1.1s steps(2, end) infinite; }
+  .sn-error { color: var(--bad); border: 1px solid rgba(var(--bad-rgb), .35); background: rgba(var(--bad-rgb), .07); border-radius: var(--r); padding: var(--s-2) var(--s-3); }
+  @keyframes sn-blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) {
+    .sn-loading::after { animation: none; }
+    .sn-item, .sn-btn, .sn-progress > i { transition: none; }
+  }
+}

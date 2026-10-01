@@ -9,11 +9,14 @@ const bytes = fs.readFileSync(path.join(root, manifestFile)), manifest = JSON.pa
 const structure = JSON.parse(fs.readFileSync(path.join(root, 'dev/industrial-textures/prop-structure-manifest.json')));
 const faces = ['s', 'w', 'n', 'e'], views = [];
 for (const spec of P.CATALOG) for (const r of P.facings(spec.id)) {
-  const v = P.viewAt(spec.id, r), face = faces[r], candidates = manifest.props[spec.id]?.views || {};
+  // a row may WEAR another prop's finished art (catalog artId, e.g. the plugin terminal wears the dispatch pylon) — same
+  // lookup the runtime makes (propsprites: PropRemaster.draw(c.artId || c.id, …))
+  const artId = spec.artId || spec.id;
+  const v = P.viewAt(spec.id, r), face = faces[r], candidates = manifest.props[artId]?.views || {};
   const artFace = candidates[face] ? face : (v.turned ? 's' : v.mirror ? (face === 'w' ? 'e' : 'w') : 's');
   const art = candidates[artFace], fp = P.footprintAt(spec.id, r);
   if (!art) throw Error('No art for native view ' + spec.id + ':' + face);
-  const bounds = structure.props[spec.id]?.views?.[face]?.bounds || art.bounds;
+  const bounds = structure.props[artId]?.views?.[face]?.bounds || art.bounds;
   views.push({ key: spec.id + ':' + face, id: spec.id, face, r, label: spec.label,
     category: spec.cat, tier: spec.tier, footprint: fp, bounds,
     placement: spec.mount === 'wall' ? 'wall' : spec.mount === 'surface' || spec.stack ? 'surface' : spec.flat ? 'decal' : 'floor',

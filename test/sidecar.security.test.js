@@ -94,6 +94,9 @@ async function tokenFromIndex(base) {
     A.eq(localIndex.status, 200, 'the loopback Host still loads the app');
     A.eq(localIndex.headers['x-frame-options'], 'SAMEORIGIN', 'the app refuses cross-site framing (X-Frame-Options)');
     A.ok(/frame-ancestors 'self'/.test(localIndex.headers['content-security-policy'] || ''), 'the app refuses cross-site framing (CSP frame-ancestors)');
+    // APPS / plugin windows: a sandboxed page the station frames must never be able to navigate ITSELF to the web
+    // (that is how a poisoned app page would leak what it shows) — the station page only frames its own origin.
+    A.ok(/frame-src 'self' http:\/\/127\.0\.0\.1:\d+ http:\/\/localhost:\d+$/.test(localIndex.headers['content-security-policy'] || ''), 'the station page frames only its own origin (CSP frame-src)');
     A.eq((await rawGet('/', 'localhost:' + port)).status, 200, 'localhost Host is loopback too');
     // The ONE exemption: a line-trigger webhook may arrive through the Commander's own tunnel carrying its public
     // Host. It must reach the trigger's secret check (here: an unknown trigger), never the Host floor.

@@ -2309,7 +2309,12 @@ const Chat = (() => {
   const pendingChips = new Map();      // callId -> chip element awaiting its result (for call→result folding)
   const CHIP_CAP = 600;                // cap on stored expand text length — a long run must not bloat the DOM
   const cap = s => { s = String(s == null ? '' : s); return s.length > CHIP_CAP ? s.slice(0, CHIP_CAP) + '…' : s; };
-  const shortName = n => String(n || 'tool').replace(/^mcp__/, '').replace(/_/g, '.');   // mcp__x__y → x.y, readable
+  const shortName = n => {
+    const s = String(n || 'tool');
+    const pm = /^plugin__(.+?)__(.+)$/.exec(s);   // a PLUGIN tool reads as "<plugin> › <tool>" (whose code, then what)
+    if (pm) return pm[1] + ' › ' + pm[2];
+    return s.replace(/^mcp__/, '').replace(/_/g, '.');   // mcp__x__y → x.y, readable
+  };
   // A1: skill-flavored tool beats. The skill.* tools ride the ordinary agent.tool_call chip, but a raw
   // "skill.view {name:…}" reads as noise. Re-label them in the agent's own voice so the Commander SEES the
   // agent consulting/writing its skillbase — pure rendering over the existing event (no new bus traffic).
@@ -2898,6 +2903,21 @@ const Chat = (() => {
   // session) / deny. Answering resumes the stream automatically.
   function actionPhrase(ev) {
     const t = ev.tool || 'act';
+    // a PLUGIN tool (plugin__<id>__<tool>): say whose code it is before what it does — checked first, so a plugin
+    // tool that happens to be named like a built-in (edit_*, *notebook*) can never borrow a built-in's phrasing
+    const pm = /^plugin__(.+?)__(.+)$/.exec(t);
+    if (pm) {
+      const host = typeof PluginHost !== 'undefined' ? PluginHost : null;
+      const san = (s) => String(s || '').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^[_-]+|[_-]+$/g, '');   // plugin-tools.js sanitizePart
+      const p = host && host.list ? host.list().find(x => x.id === pm[1] || san(x.id) === pm[1]) : null;
+      return 'use the ' + ((p && p.name) || pm[1]) + ' plugin tool “' + pm[2] + '”' + (ev.argsSummary ? ' ' + ev.argsSummary : '');
+    }
+    // the crew INSTALLING a plugin it wrote: say that it stays off until the Commander's own approval
+    if (/^plugin[._]submit$/.test(t)) {
+      let id = '';
+      try { id = JSON.parse(ev.argsSummary || '{}').id || ''; } catch (_) {}
+      return 'install the plugin it built' + (id ? ' “' + id + '”' : '') + ' — it stays OFF until you approve its code in ABILITIES → EXTENSIONS';
+    }
     if (/notebook/.test(t)) return 'save a note to its memory';
     if (/summon/.test(t)) return 'summon a new agent onto the crew' + (ev.argsSummary ? ' (' + ev.argsSummary + ')' : '');
     // NS-5 conversational path trust: a file was referenced OUTSIDE the agent's workspace — "Always" blesses

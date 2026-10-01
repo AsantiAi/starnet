@@ -7,11 +7,19 @@ function savedPlacement(save, agentId) {
   const checked = makeStationStore().validateStationDoc(save.station);
   if (!checked.ok) return [];
   const station = checked.station;
-  const types = station.agentRoomId(agentId)
+  const scoped = !!station.agentRoomId(agentId);
+  const types = scoped
     ? station.bayObjects(agentId)
     : station.props().map(p => station.capForProp(p.t));
-  return [...new Set(types.map(o => typeof o === 'string' ? o : o && o.objectType)
-    .filter(t => t && t !== 'computer' && t !== 'connector'))]
+  const out = [...new Set(types.map(o => typeof o === 'string' ? o : o && o.objectType)
+    .filter(t => t && t !== 'computer' && t !== 'connector' && t !== 'plugin'))]
     .map(objectType => ({ objectType }));
+  // PLUGIN TERMINALS are per-instance like connector portals, but projected from the placement (their binding
+  // names WHICH plugin): keep each bound terminal in scope as { objectType: 'plugin', pluginId }, once per plugin.
+  const plugins = scoped
+    ? station.bayObjects(agentId).filter(o => o && typeof o === 'object' && o.objectType === 'plugin' && o.pluginId).map(o => o.pluginId)
+    : station.props().filter(p => p.t === 'plugin_terminal' && p.pluginId).map(p => p.pluginId);
+  for (const pluginId of new Set(plugins)) out.push({ objectType: 'plugin', pluginId });
+  return out;
 }
 module.exports = { savedPlacement };

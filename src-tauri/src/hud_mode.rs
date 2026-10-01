@@ -34,6 +34,8 @@ const HUD_MIN_H: f64 = 72.0;
 const HUD_WIDGET_MIN_W: f64 = 160.0;
 /// A folded HUD never grows past this (logical px) whatever height the page asks for.
 const HUD_FOLD_MAX_H: f64 = 480.0;
+/// The widget (a fold that carries a width) is the Commander's to size: it may stand taller than a folded feed.
+const HUD_WIDGET_MAX_H: f64 = 1000.0;
 /// The station's normal floor — mirrors `.min_inner_size(960.0, 600.0)` in build_main_window
 /// (test/desktop-hud-mode.test.js keeps the two in step).
 const MAIN_MIN_W: f64 = 960.0;
@@ -136,20 +138,25 @@ pub fn fit_rect(rect: HudRect, area: WorkArea) -> HudRect {
 }
 
 /// The physical height a folded HUD should take for a page-measured deck height (logical px).
-/// A folded width: the page's measured logical width (the widget), never wider than the HUD it folds
-/// from; no width asked = that full width.
+/// A folded width: the page's logical width for the widget (its default, or the size the Commander dragged it
+/// to — which may be WIDER than the HUD it folds from), within the HUD's sane bounds; no width asked = the
+/// full width it folds from.
 pub fn folded_width(logical: Option<f64>, scale: f64, full: u32) -> u32 {
     let s = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
     match logical.filter(|v| v.is_finite() && *v > 0.0) {
-        Some(w) => ((w.clamp(HUD_WIDGET_MIN_W, HUD_SANE_MAX_W) * s).round() as u32).min(full),
+        Some(w) => (w.clamp(HUD_WIDGET_MIN_W, HUD_SANE_MAX_W) * s).round() as u32,
         None => full,
     }
 }
 
 pub fn folded_height(deck_logical: Option<f64>, scale: f64) -> u32 {
+    folded_height_max(deck_logical, scale, HUD_FOLD_MAX_H)
+}
+
+pub fn folded_height_max(deck_logical: Option<f64>, scale: f64, max: f64) -> u32 {
     let s = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
     let h = deck_logical.filter(|v| v.is_finite() && *v > 0.0).unwrap_or(140.0);
-    (h.clamp(HUD_MIN_H, HUD_FOLD_MAX_H) * s).round() as u32
+    (h.clamp(HUD_MIN_H, max) * s).round() as u32
 }
 
 fn main_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
@@ -380,7 +387,8 @@ pub fn starnet_hud_fold(
         }
         // (re-)fit: the widget or the feed grew or shrank while folded
         let w = folded_width(width, scale, g.unfolded_w.unwrap_or(size.width));
-        let _ = win.set_size(PhysicalSize::new(w, folded_height(height, scale)));
+        let max_h = if width.is_some() { HUD_WIDGET_MAX_H } else { HUD_FOLD_MAX_H };
+        let _ = win.set_size(PhysicalSize::new(w, folded_height_max(height, scale, max_h)));
         keep_right(w);
     } else if g.folded {
         let back_h = g
@@ -464,13 +472,21 @@ mod tests {
     }
 
     #[test]
-    fn folded_width_fits_the_widget_but_never_widens() {
+    fn folded_width_fits_the_widget_within_sane_bounds() {
         assert_eq!(folded_width(Some(250.0), 1.0, 400), 250);
         assert_eq!(folded_width(Some(250.0), 1.5, 600), 375);
         assert_eq!(folded_width(Some(40.0), 1.0, 400), 160);
-        assert_eq!(folded_width(Some(900.0), 1.0, 400), 400);
+        assert_eq!(folded_width(Some(593.0), 1.0, 400), 593); // a widget dragged wider than the HUD keeps its width
+        assert_eq!(folded_width(Some(900.0), 1.0, 400), 720); // never past the sane HUD width
         assert_eq!(folded_width(None, 1.0, 400), 400);
         assert_eq!(folded_width(Some(f64::NAN), 2.0, 800), 800);
+    }
+
+    #[test]
+    fn a_widget_may_stand_taller_than_a_folded_feed() {
+        assert_eq!(folded_height_max(Some(700.0), 1.0, HUD_WIDGET_MAX_H), 700);
+        assert_eq!(folded_height_max(Some(5000.0), 1.0, HUD_WIDGET_MAX_H), 1000);
+        assert_eq!(folded_height(Some(700.0), 1.0), 480);
     }
 
     #[test]
