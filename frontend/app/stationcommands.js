@@ -410,6 +410,16 @@ const StationCommands = (() => {
     }
     throw new Error('the picture of ' + of + ' is too big to send: look at one room');
   }
+  async function builderServices(projects, services) {
+    const get = async url => { try { const r = await fetch(url, { cache: 'no-store' }); return r.ok ? await r.json() : null; } catch (_) { return null; } };
+    const out = {};
+    if (projects) { const j = await get('/api/projects'); if (j && Array.isArray(j.projects)) out.projects = j.projects.filter(x => x && x.blessed === true && x.root).map(x => ({ name: x.name || x.label || null, root: x.root })); }
+    if (services) {
+      const c = await get('/api/connectors'); if (c && Array.isArray(c.connectors)) out.connectors = c.connectors.map(x => ({ id: x.id, label: x.label || x.id }));
+      const p = await get('/api/plugins'); if (p && Array.isArray(p.plugins)) out.plugins = p.plugins.filter(x => x && x.active).map(x => ({ id: x.id, name: x.name || x.id }));
+    }
+    return out;
+  }
   function builderReady() {
     const st = typeof App !== 'undefined' && App.station ? App.station() : null;
     if (!st || !st.serialize || !st.transact || !st.roomSpots) throw new Error('the station is not ready yet');
@@ -501,10 +511,15 @@ const StationCommands = (() => {
       return { planId: p.planId, summary: p.plan.summary, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
     },
     // EDIT WHAT STANDS: remove rooms, refurnish a room in another style, or clear a room's furniture
-    'station.plan_edit': (a) => {
+    'station.plan_edit': async (a) => {
       const { st, env } = builderReady();
       if (!StationBuilder.planEdit) throw new Error('this page cannot edit what stands yet; reload it');
-      const p = park(StationBuilder.planEdit(st.serialize(), (a && a.request) || {}, env));
+      const req = (a && a.request) || {};
+      // a refit that sets a line's folder or binds a portal: the trusted projects / connected services / plugins that are on,
+      // read from the sidecar as Build mode reads them, so the plan only ever names what the station has
+      const ops = Array.isArray(req.refit) ? req.refit : [], want = k => ops.some(o => o && typeof o.op === 'string' && o.op.toLowerCase().trim() === k);
+      if (want('folder') || want('bind')) env.services = await builderServices(want('folder'), want('bind'));
+      const p = park(StationBuilder.planEdit(st.serialize(), req, env));
       return { planId: p.planId, summary: p.plan.summary, steps: p.plan.steps, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
     },
     // a prop the lead just made (station.make_prop): load the MADE BY YOU library so the builder can place it by name

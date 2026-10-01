@@ -1525,6 +1525,66 @@ for (const c of T.catalog) {
     A.ok(m.ok && named === 23 + 60 && /… and 7 more edits that change what stands \(7 moves\)/.test(m.plan.summary), 'the card names 83 moves and counts the last 7 (' + named + ' named)');
     A.ok(m.ok && SB.apply(st, m.plan, E).ok && st.props().some(p => p.t === 'plant' && p.x === 30 && p.y === 8), 'and the design builds as planned');
   }
+  // SETTING A LINE UP (Andrew 10-01: "and then also setting up the conveyor systems"): every setting a person has in the
+  // Workflow panel is a refit edit, a junction edit changes only what it names, and a folder or a bind names only what the
+  // station has (resolved when planned, so the build replays exactly what was approved)
+  {
+    const st = fresh(), before = snap(st);
+    const lay = SB.planEdit(st.serialize(), { refit: [{ op: 'hall', x: 18, y: 4, w: 6, h: 3 }, { op: 'room', name: 'Works', kind: 'factory', x: 24, y: 0, w: 36, h: 22 },
+      { op: 'stamp', line: 'gauntlet', x: 26, y: 1 }, { op: 'stamp', line: 'code_foundry', x: 26, y: 11 }, { op: 'place', t: 'connector_portal', x: 54, y: 17 }, { op: 'place', t: 'plugin_terminal', x: 50, y: 17 }] }, E);
+    A.ok(lay.ok && SB.apply(st, lay.plan, E).ok, 'two stock lines laid by hand (' + (lay.error || 'ok') + ')');
+    const g = st.projectGeometry(), comps = E.Pipeline.lineComponents(g), idOf = q => (q && q.id ? q.id : q);
+    const lineOf = t => comps.find(c => (c.props || []).some(q => { const p = st.propById(idOf(q)); return p && p.t === t; }) && (c.props || []).some(q => { const p = st.propById(idOf(q)); return p && p.t === 'joiner'; }) === (t !== 'filter'));
+    const on = (c, t) => (c.props || []).map(q => st.propById(idOf(q))).filter(p => p && p.t === t);
+    const gl = lineOf('loop'), fl = lineOf('filter');
+    A.ok(gl && fl && on(gl, 'joiner').length === 1 && on(fl, 'filter').length === 1, 'the gauntlet has its joiner and loop, the foundry its filter');
+    const loopP = on(gl, 'loop')[0], joinP = on(gl, 'joiner')[0], bayP = on(gl, 'bay')[0], inP = on(gl, 'intake')[0], filtP = on(fl, 'filter')[0];
+    const portal = st.props().find(p => p.t === 'connector_portal'), term = st.props().find(p => p.t === 'plugin_terminal');
+    const loop0 = { done: loopP.done }, filt0 = { def: filtP.def, bufferSize: filtP.bufferSize };
+    const SV = Object.assign({}, E, { services: { projects: [{ name: 'starnet', root: 'C:/code/starnet' }], connectors: [{ id: 'github', label: 'GitHub' }], plugins: [{ id: 'notes-kit', name: 'Notes Kit' }] } });
+    const ops = [
+      { op: 'budget', prop: bayP.id, stages: 12, perJob: 0.5, perDay: 4 },
+      { op: 'hands', prop: bayP.id, text: 'just the summary' },
+      { op: 'loop', prop: loopP.id, passes: 6, until: 'approved', escalate: 'east' },
+      { op: 'tries', prop: loopP.id, max: 3 },
+      { op: 'wait', prop: joinP.id, minutes: 30 },
+      { op: 'routes', prop: filtP.id, routes: { code: 'east' } },
+      { op: 'folder', prop: inP.id, project: 'starnet' },
+      { op: 'bind', prop: portal.id, connector: 'github' },
+      { op: 'bind', prop: term.id, plugin: 'notes kit' }
+    ];
+    const set = SB.planEdit(st.serialize(), { refit: ops }, SV);
+    A.ok(set.ok, 'every line setting plans as one refit (' + (set.error || 'ok') + ')');
+    A.ok(set.ok && /may spend \$4 a day, \$0\.5 a job, through 12 steps/.test(set.plan.summary) && /hands on: "just the summary"/.test(set.plan.summary) && /allows 6 passes, repeats until the verdict is approved, escalates east/.test(set.plan.summary)
+      && /waits up to 30 minutes for every branch/.test(set.plan.summary) && /works in starnet/.test(set.plan.summary) && /gives its room's agents GitHub's tools/.test(set.plan.summary) && /gives its room's agents Notes Kit's tools/.test(set.plan.summary), 'the card says each setting in words');
+    // built with an env that has NO services: the plan carries what it resolved
+    A.ok(set.ok && SB.apply(st, set.plan, E).ok, 'and it builds');
+    const P = id => st.propById(id);
+    A.eq(P(inP.id).limits, { maxHops: 12, maxUsdPerMessage: 0.5, maxUsdPerDay: 4 }, 'the line\'s budget');
+    A.ok(P(bayP.id).hands === 'just the summary', 'the step\'s hand-off');
+    A.ok(P(loopP.id).maxIter === 3 && P(loopP.id).when === 'approved' && P(loopP.id).esc === 'E' && P(loopP.id).done === loop0.done, 'the loop: tries set after it kept its verdict, escalation and exit (' + JSON.stringify({ m: P(loopP.id).maxIter, w: P(loopP.id).when, e: P(loopP.id).esc, d: P(loopP.id).done }) + ')');
+    A.ok(P(joinP.id).timeoutMin === 30, 'the joiner waits 30 minutes');
+    A.ok(P(filtP.id).routes && P(filtP.id).routes.code === 'E' && P(filtP.id).def === filt0.def && P(filtP.id).bufferSize === filt0.bufferSize, 'new routes keep the filter\'s default lane and buffer');
+    A.ok(on(gl, 'intake').every(p => P(p.id).projectRoot === 'C:/code/starnet'), 'the line works in the trusted project');
+    A.ok(P(portal.id).connectorId === 'github' && P(term.id).pluginId === 'notes-kit', 'the portal and the terminal are bound');
+    const det = SB.mapOf(st.serialize(), E, { room: 'Works' }), dp = id => det.ok && det.map.pieces.find(x => x.id === id);
+    A.ok(dp(inP.id).budget.perDay === 4 && dp(bayP.id).hands === 'just the summary' && dp(loopP.id).maxIter === 3 && dp(loopP.id).esc === 'E' && dp(joinP.id).timeoutMin === 30 && dp(inP.id).folder === 'starnet' && dp(portal.id).connectorId === 'github', 'station.map { room } reads every setting back');
+    const sw = SB.planEdit(st.serialize(), { refit: [{ op: 'swap', prop: joinP.id }] }, E);
+    A.ok(sw.ok && /becomes a merger \(the branches take turns\)/.test(sw.plan.summary) && SB.apply(st, sw.plan, E).ok && P(joinP.id).t === 'merger', 'swap turns the joiner into a merger: the branches take turns');
+    // only what the station has
+    for (const [q, re] of [
+      [[{ op: 'folder', prop: inP.id, project: 'C:/Windows' }], /^Edit 1 \(folder\): "C:\/Windows" is not one of the Commander's trusted projects \(starnet\)\. The Commander trusts a folder under PROJECTS first/],
+      [[{ op: 'bind', prop: portal.id, connector: 'slack' }], /^Edit 1 \(bind\): there is no connected service called "slack" \(GitHub\)/],
+      [[{ op: 'bind', prop: portal.id, plugin: 'notes kit' }], /^Edit 1 \(bind\): a connector portal takes a connector/],
+      [[{ op: 'loop', prop: loopP.id, until: 'whenever' }], /^Edit 1 \(loop\): until is approved, revise/],
+      [[{ op: 'wait', prop: loopP.id, minutes: 5 }], /^Edit 1 \(wait\): wait is for a JOINER/],
+      [[{ op: 'budget', prop: bayP.id, stages: 0 }], /^Edit 1 \(budget\): stages is how many steps one job may pass through, 1 to 200/]
+    ]) { const r = SB.planEdit(st.serialize(), { refit: q }, SV); A.ok(!r.ok && re.test(r.error), 'refused: ' + JSON.stringify(q[0]).slice(0, 60) + ' -> ' + (r.error || 'NOT REFUSED').slice(0, 160)); }
+    const noSv = SB.planEdit(st.serialize(), { refit: [{ op: 'folder', prop: inP.id, project: 'starnet' }] }, E);
+    A.ok(!noSv.ok && /could not read the Commander's trusted projects/.test(noSv.error), 'a page that could not read the projects refuses, never guesses');
+    for (let i = 0; i < 3; i++) A.ok(st.undo().ok, 'undo ' + (i + 1));
+    A.eq(snap(st), before, 'three UNDOs take it all back');
+  }
   // a concourse from a crowded station finds a free side, or is refused naming the way forward
   {
     const st = fresh();
