@@ -270,7 +270,7 @@ const StationCommands = (() => {
       if (unread.length && flow.trigger.propId && !anyStart && !flow.cyclic) {
         // a start the page could not read is unknown, not absent: never let "nothing starts it" stand on a failed read
         const unsure = 'What starts it could not be fully read right now (' + unread.join(', ') + ' unavailable)' + (starts.paused.length ? '; paused: ' + starts.paused.join('; ') : '') + '; ';
-        if (segs[0] && /^Nothing starts it/.test(segs[0].s)) segs[0] = { t: 'text', s: unsure };
+        if (segs[0] && /^(Nothing starts it|It runs when you send it a job)/.test(segs[0].s)) segs[0] = { t: 'text', s: unsure };   // (2026-09-30: the short opening too)
         hints = hints.filter(h => !/^nothing starts it/.test(h)).concat(['check what starts this line again: ' + unread.join(', ') + ' could not be read']);
       }
       const step = {}; flow.order.forEach((pid, i) => { step[pid] = i + 1; });
@@ -355,6 +355,22 @@ const StationCommands = (() => {
   }
 
   const VERBS = {
+    /* A crew-written plugin DRAFT's window, previewed (plugin.preview tool): sandboxed, a throwaway store, no backend.
+       The sidecar names the draft, its digest and its screens; PluginHost opens (or reloads) the DRAFT window. */
+    // APPS: the crew rewrote an app's page, or published new data into it — the open window follows at once
+    'app.reload': (a) => {
+      if (typeof AppsUI === 'undefined' || !AppsUI.onReload) throw new Error('apps are not loaded on this page');
+      return AppsUI.onReload(String((a && a.id) || ''), a && a.digest);
+    },
+    'app.data': (a) => {
+      if (typeof AppsUI === 'undefined' || !AppsUI.onData) throw new Error('apps are not loaded on this page');
+      return AppsUI.onData(String((a && a.id) || ''));
+    },
+    'plugin.preview': (a) => {
+      if (typeof PluginHost === 'undefined' || !PluginHost.preview) throw new Error('plugin windows are not loaded on this page');
+      return PluginHost.preview(a || {});
+    },
+
     /* The floor, read-only, for the lead: routing state, every assembly line as the Workflow panel reads it, rooms,
        and workstation holders. Refuses honestly when the station, routing, or the line reader is not loaded. */
     'station.layout': async (a) => {

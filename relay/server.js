@@ -37,7 +37,9 @@ const path = require('path');
 const { makeWsServer } = require('./ws-lite.js');
 
 const LABEL = 'starnet-relay/1';
-const MAX_MSG = 512 * 1024;
+const MAX_MSG = 4 * 1024 * 1024;        // a station frame (a long conversation, a file chunk) may be large…
+const MAX_PHONE_MSG = 256 * 1024;        // …a phone only ever sends small requests
+const TOKENS_WAIT_MS = 5000;             // how long a phone waits for a just-(re)connected station to say who is paired
 const PING_MS = 25000;
 
 function b64u(buf) { return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
@@ -79,12 +81,18 @@ function makeRelay(opts) {
   function send(ws, obj) { try { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); } catch (_) {} }
   function ipOf(req) { return String((req.headers['fly-client-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '')).split(',')[0].trim(); }
 
+  // ONE bad request must never take the relay down: every station and phone rides this single process
   function serveStatic(req, res) {
+    try { serveStaticInner(req, res); }
+    catch (e) { log('bad request ' + String((e && e.message) || e).slice(0, 120)); try { if (!res.headersSent) res.writeHead(400); res.end(); } catch (_) {} }
+  }
+  function serveStaticInner(req, res) {
     const u = new URL(req.url, 'http://relay');
     if (u.pathname === '/healthz') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ ok: true, stations: stations.size })); }
     if (!appDir || req.method !== 'GET') { res.writeHead(404); return res.end(); }
     let rel;
     try { rel = decodeURIComponent(u.pathname); } catch (_) { res.writeHead(400); return res.end(); }
+    if (rel.indexOf('\0') >= 0 || rel.length > 200) { res.writeHead(400); return res.end(); }
     if (rel === '/' || rel === '') rel = '/index.html';
     let abs = extra.get(rel);
     if (!abs || !fs.existsSync(abs)) {
@@ -112,7 +120,8 @@ function makeRelay(opts) {
   const wss = makeWsServer({ maxPayload: MAX_MSG });
 
   server.on('upgrade', (req, socket, head) => {
-    const u = new URL(req.url, 'http://relay');
+    let u;
+    try { u = new URL(req.url, 'http://relay'); } catch (_) { socket.destroy(); return; }
     if (u.pathname !== '/v1/station' && u.pathname !== '/v1/phone') { socket.destroy(); return; }
     wss.handleUpgrade(req, socket, head, (ws) => {
       ws.isAlive = true;
@@ -141,7 +150,7 @@ function makeRelay(opts) {
         rid = ridOf(m.pub);
         const prev = stations.get(rid);
         if (prev) { for (const p of prev.phones.values()) p.close(4404, 'station reconnecting'); prev.ws.close(4410, 'replaced'); }
-        stations.set(rid, { ws, tokens: new Set(), phones: new Map() });
+        stations.set(rid, { ws, tokens: new Set(), tokensReady: false, waiting: [], phones: new Map() });
         send(ws, { t: 'ready', rid });
         log('station online ' + rid);
         return;
@@ -149,7 +158,11 @@ function makeRelay(opts) {
       const st = stations.get(rid);
       if (!st || st.ws !== ws) return;
       if (m.t === 'ping') return send(ws, { t: 'pong' });
-      if (m.t === 'tokens' && Array.isArray(m.hashes)) { st.tokens = new Set(m.hashes.slice(0, 64).map(String)); return; }
+      if (m.t === 'tokens' && Array.isArray(m.hashes)) {
+        st.tokens = new Set(m.hashes.slice(0, 64).map(String));
+        if (!st.tokensReady) { st.tokensReady = true; const w = st.waiting.splice(0); for (const fn of w) { try { fn(); } catch (_) {} } }
+        return;
+      }
       if (m.t === 'to') { const p = st.phones.get(Number(m.conn)); if (p) send(p, m.msg); return; }
       if (m.t === 'kick') { const p = st.phones.get(Number(m.conn)); if (p) p.close(4401, 'revoked'); return; }
     });
@@ -174,19 +187,33 @@ function makeRelay(opts) {
     return e.n <= 10;
   }
 
+  // A station that has just (re)connected has not sent its paired-phone list yet. A phone arriving in that moment
+  // waits for it instead of being told "not paired" (which used to make a healthy phone think it was removed).
   function onPhone(ws, req, u) {
+    const st = stations.get(String(u.searchParams.get('rid') || ''));
+    if (!st) return ws.close(4404, 'station offline');
+    if (st.tokensReady) return admitPhone(ws, req, u, st);
+    const early = [];
+    const hold = (data, isBinary) => { if (early.length < 8) early.push([data, isBinary]); };
+    ws.on('message', hold);
+    let done = false;
+    const go = () => { if (done) return; done = true; clearTimeout(t); ws.off('message', hold); if (ws.readyState !== 1) return; admitPhone(ws, req, u, st, early); };
+    const t = setTimeout(go, TOKENS_WAIT_MS);
+    st.waiting.push(go);
+  }
+  function admitPhone(ws, req, u, st, early) {
     const rid = String(u.searchParams.get('rid') || '');
     const tok = String(u.searchParams.get('tok') || '');
-    const st = stations.get(rid);
-    if (!st) return ws.close(4404, 'station offline');
     const paired = !!tok && st.tokens.has(tokenHash(tok));
     const conn = nextConn++;
     const limit = makeLimiter(30, 60);
     const ip = ipOf(req);
     st.phones.set(conn, ws);
-    send(st.ws, { t: 'open', conn, paired });
-    ws.on('message', (data, isBinary) => {
+    // th = which relay pass this connection showed, so the station can hold the phone to the device that pass belongs to
+    send(st.ws, { t: 'open', conn, paired, th: paired ? tokenHash(tok) : '' });
+    const onMsg = (data, isBinary) => {
       if (isBinary) return;
+      if (data && data.length > MAX_PHONE_MSG) return ws.close(4413, 'too large');
       if (!limit()) return ws.close(4429, 'too fast');
       let msg; try { msg = JSON.parse(String(data)); } catch (_) { return; }
       if (!paired && !(msg && msg.t === 'pair')) return ws.close(4401, 'not paired');
@@ -194,7 +221,9 @@ function makeRelay(opts) {
       const cur = stations.get(rid);
       if (!cur || cur !== st) return ws.close(4404, 'station offline');
       send(st.ws, { t: 'from', conn, msg });
-    });
+    };
+    ws.on('message', onMsg);
+    for (const [d, b] of early || []) onMsg(d, b);
     ws.on('close', () => {
       if (st.phones.get(conn) === ws) { st.phones.delete(conn); send(st.ws, { t: 'gone', conn }); }
     });
@@ -229,6 +258,9 @@ if (require.main === module) {
     extraFiles: { '/vt323.woff2': path.join(__dirname, '..', 'frontend', 'assets', 'fonts', 'vt323.woff2') }
   });
   relay.listen(port).then((p) => console.log('[relay] listening on ' + p));
+  // last line of defence: log and keep switching (a crash would drop every station and phone at once)
+  process.on('uncaughtException', (e) => console.error('[relay] uncaught', e && e.stack || e));
+  process.on('unhandledRejection', (e) => console.error('[relay] unhandled', e && e.stack || e));
   const stop = () => { relay.close().then(() => process.exit(0)); setTimeout(() => process.exit(0), 5000).unref(); };
   process.on('SIGTERM', stop);
   process.on('SIGINT', stop);

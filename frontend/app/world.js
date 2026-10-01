@@ -104,7 +104,7 @@ const World = (() => {
   let fitW = 0, fitH = 0;   // canvas size the last fitCamera() framed against — a fit on a hidden/degenerate stage doesn't count as a real view
   const MINZ = 0.5, MAXZ = 6;
   const clampz = (v, a, b) => v < a ? a : v > b ? b : v;
-  let drag = null, hoverAgent = null, onClick = null, onArcade = null, onOutbox = null, onMissionBoard = null, onTrophyCase = null, onBayAssign = null, onIntakeFeed = null, onIntakeSample = null, onDesk = null, wakeAt = 0;
+  let drag = null, hoverAgent = null, onClick = null, onArcade = null, onOutbox = null, onMissionBoard = null, onTrophyCase = null, onPluginTerminal = null, onBayAssign = null, onIntakeFeed = null, onIntakeSample = null, onDesk = null, wakeAt = 0;
   let camLerp = null;   // {scale,panX,panY} target — a gentle one-on-one framing for voice conversations
   let arrivalScene = null;
   let wakeDark = 0, wakeDarkTarget = 0, awakeFrozen = false;   // the AWAKENING: a darkness veil that lifts to first light, + a freeze so the newborn holds still during its first meeting
@@ -1525,7 +1525,7 @@ const World = (() => {
       hoverBay = (hit || hoverOutbox || hoverCrate) ? null : boundBayAt(wp);   // LINE WATCH: a bound bay's lamp glance
       if (hoverCrate) hoverBeltTile = null;   // one voice: the crate's glance replaces the belt's route tag under it
       hoverPlate = (hit || hoverOutbox || hoverCrate || hoverBay) ? null : lwPlateAt(wp);   // LINE WATCH: an INBOX's whole reading
-      cv.style.cursor = (hit || hoverOutbox || hoverCrate || (hoverBay && failedBayAt(wp)) || arcadeAt(wp) || missionBoardAt(wp) || trophyCaseAt(wp) || unboundBayAt(wp) || intakeSampleAt(wp) || intakeFeedAt(wp) || (onDesk && deskAt(wp))) ? 'pointer' : 'default';   // arcade cabinets + a stacked OUTBOX + the MISSION BOARD + the TROPHY CASE + an unbound BAY + a complete-line INBOX + a starved INTAKE are clickable too
+      cv.style.cursor = (hit || hoverOutbox || hoverCrate || (hoverBay && failedBayAt(wp)) || arcadeAt(wp) || missionBoardAt(wp) || trophyCaseAt(wp) || pluginTerminalAt(wp) || unboundBayAt(wp) || intakeSampleAt(wp) || intakeFeedAt(wp) || (onDesk && deskAt(wp))) ? 'pointer' : 'default';   // arcade cabinets + a stacked OUTBOX + the MISSION BOARD + the TROPHY CASE + an unbound BAY + a complete-line INBOX + a starved INTAKE are clickable too
     });
     cv.addEventListener('mouseup', ev => {
       if (kindleArmed) { kindleHolding = false; return; }   // releasing during the kindle lets the spark ebb
@@ -1562,6 +1562,9 @@ const World = (() => {
       // G3b: the TROPHY CASE opens the trophy surface (honest even when empty — it shows dust, never a dead click)
       const tc = trophyCaseAt(wp);
       if (tc && onTrophyCase) { onTrophyCase(tc); return; }
+      // a PLUGIN TERMINAL opens its plugin's window (or, unbound, the place to bind/install one)
+      const pt = pluginTerminalAt(wp);
+      if (pt && onPluginTerminal) { onPluginTerminal(pt); return; }
       // DESK SCREEN: an agent's workstation opens THAT agent's work — live steps while it runs, its last job at rest
       const dk = onDesk ? deskAt(wp) : null;
       if (dk) { onDesk({ agentId: dk.agentId, propId: dk.propId, clientX: ev.clientX, clientY: ev.clientY }); return; }
@@ -1838,6 +1841,23 @@ const World = (() => {
   // opts.seatAt (optional): where a SEATED body's feet sit in the frame (0..1 of its height). A seated worker
   // faces its desk, which stands ABOVE it on screen; a small frame that keeps the default 0.56 cuts the desk
   // and its screen off. Omitted = 0.56 for every body, byte-identical.
+  /* A BORROWED CAMERA, HANDED BACK (HUD mode, 2026-09-30): cameraState() is what drives the view right now — a
+     session lock (whom, at what zoom) or a free transform, kept as the zoom and the WORLD point at the canvas centre
+     (a canvas resize re-anchors on its centre, so that point survives the window changing size in between);
+     restoreCamera(state) puts exactly that back: the lock, or the free view (the cinecam re-casts on its own). */
+  function cameraState() {
+    const w = cv ? cv.width : 0, h = cv ? cv.height : 0;
+    return { lockId: camLock && camLock.source === 'session' ? camLock.id : null, lockSc: camLock ? camLock.sc : 0, seatAt: camLock && camLock.seatAt ? camLock.seatAt : 0,
+      scale, cx: scale > 0 ? (w / 2 - panX) / scale : 0, cy: scale > 0 ? (h / 2 - panY) / scale : 0 };
+  }
+  function restoreCamera(st) {
+    if (!st || !(st.scale > 0) || camAnim || awakeFrozen) return false;   // the scripted awakening camera owns the transform
+    camLerp = null; camLock = null;
+    if (st.lockId) { lockBody(st.lockId, st.lockSc, st.seatAt ? { seatAt: st.seatAt } : null); if (camLock) return true; }
+    scale = clampz(st.scale, MINZ, MAXZ);
+    if (cv) { panX = cv.width / 2 - st.cx * scale; panY = cv.height / 2 - st.cy * scale; }
+    return true;
+  }
   function lockBody(id, zoom, opts) {
     const b = bodyForAgent(id) || agent;
     if (!b || b.unplaced || !cache || camAnim || awakeFrozen) return;   // nothing to frame yet / the scripted awakening camera owns the transform
@@ -6624,8 +6644,9 @@ const World = (() => {
       return bed ? { y: (bed.y + (bed.h || 1)) * T + 0.5, draw: () => drawSleeper(now, b, bed) }
                  : { y: fallbackY, draw: () => drawAgent(now, b) };
     };
-    if (agent && !agent.unplaced) items.push(bodyItem(agent, rposY()));
-    for (const b of crew) items.push(bodyItem(b, (b.seated ? b.seatPy : b.py)));   // the other agents, at their bays (seated → sort by the cushion pos like the hero's rposY, so a couch-lounging crew body tucks just behind the back-facing couch panel, head over the cap)
+    const crewInScene = !(stillPass && stillPass.noBodies);   // a crew-free still: the phone draws the crew itself, live
+    if (crewInScene && agent && !agent.unplaced) items.push(bodyItem(agent, rposY()));
+    if (crewInScene) for (const b of crew) items.push(bodyItem(b, (b.seated ? b.seatPy : b.py)));   // the other agents, at their bays (seated → sort by the cushion pos like the hero's rposY, so a couch-lounging crew body tucks just behind the back-facing couch panel, head over the cap)
     // A raised doorway stands in front of a body until its feet clear the wall.
     // Use the baked surfaces in the same depth order as props and agents; leaving
     // them only in baseCv made every body paint through the solid jambs.
@@ -6646,7 +6667,7 @@ const World = (() => {
     reviewMark('sceneSetup');
     if (sceneRenderer) sceneRenderer.prepareLight(propLights, { ambient: StationBake.LIGHT.ambient, emission: CRT.emit });
     drawPropShadows();
-    if (sceneRenderer) sceneRenderer.drawGrounding(ctx, [agent, ...crew].filter(b => b && !b.unplaced && !b.seated && !b.lying)
+    if (sceneRenderer && crewInScene) sceneRenderer.drawGrounding(ctx, [agent, ...crew].filter(b => b && !b.unplaced && !b.seated && !b.lying)
       .map(b => ({ x: bodyPosX(b), y: bodyPosY(b), width: 7, height: 20, opacity: .16 })));
     reviewMark('shadows');
     if (sceneRenderer) {
@@ -6662,7 +6683,10 @@ const World = (() => {
       // plate is the resting truth and the caption only a projection, so a caption that would collide sits that pass out.
       const plates = lwDrawOff ? [] : lwPlateBoxes();
       const onPlate = bx => plates.some(p => p.box && bx.x < p.box.x + p.box.w && bx.x + bx.w > p.box.x && bx.y < p.box.y + p.box.h && bx.y + bx.h > p.box.y);
-      ghost.draw(ctx, now, T, 8, plates.length ? (bx, paint) => { if (!onPlate(bx)) paint(); } : null);
+      // (2026-09-30) the caption plate is set at a reading size ON SCREEN — 14px, by pixel ratio and TEXT SIZE — whatever the camera
+      // zoom: at the shared 8 world px a plate grew to twice the NO FEED nag at a close zoom and covered the machines it spoke of
+      const capPx = 14 * (window.devicePixelRatio || 1) * ((typeof U !== 'undefined' && U.uiZoom && U.uiZoom()) || 1) / (scale || 1);
+      ghost.draw(ctx, now, T, capPx, plates.length ? (bx, paint) => { if (!onPlate(bx)) paint(); } : null);
     }
     drawHandoffBoxes(now);   // Stage 2: lead→worker delegation boxes fly over the entities
     drawQueueJam(now);   // the live backlog as a physical jam of waiting crates at the INTAKE (world-space, under the lightmap)
@@ -6756,7 +6780,12 @@ const World = (() => {
      { canvas, width, height, bodies:[{ agentId, name, x, y, working }] } with bodies in still pixels, or null
      when there is no honest picture to give (no bake yet, the awakening is still playing). */
   let stillPass = null;
-  function renderStill(maxPx) {
+  function renderStill(maxPx, opts) {
+    // A window that has not drawn a frame yet (opened behind other tabs: the browser runs no frames there) has not
+    // built its station either. Build it here, exactly as the first frame would, so the phone still gets a picture.
+    if (!stillPass && station && geo !== undefined) {
+      try { if (geoDirty) rederive(); if (bakeDirty || !cache) rebake(); } catch (e) { try { console.error('[world] still could not build the station:', e); } catch (_) {} }
+    }
     if (stillPass || !cache || !cv || !ctx || !geo || camAnim || kindleArmed || arrivalScene || wakeDark > 0.002) return null;
     const W = cache.baseCv.width, H = cache.baseCv.height;
     if (!(W > 1 && H > 1)) return null;
@@ -6770,7 +6799,7 @@ const World = (() => {
     const landed = typeof Terrain !== 'undefined' && Terrain.active();
     let drawn = false;
     cv = off; ctx = g; scale = s; panX = 0; panY = 0; overlaysOn = false;
-    stillPass = { fill: landed ? Terrain.baseColor() : '#040302' };
+    stillPass = { fill: landed ? Terrain.baseColor() : '#040302', noBodies: !!(opts && opts.noBodies) };
     // the wall clock, never the last frame's time: a hidden or minimized window stops its frames, and a stale
     // clock froze every timed effect (a failed run's red desk flash stayed lit in every still)
     try { drawScene(performance.now(), 0); drawn = true; }
@@ -6795,7 +6824,21 @@ const World = (() => {
       agentId: String(b.agentId || b.id || ''), name: String(b.name || ''),
       x: Math.round(bodyPosX(b) * s * k), y: Math.round(bodyPosY(b) * s * k), working: !!b.working
     }));
-    return { canvas: out, width: out.width, height: out.height, bodies };
+    return { canvas: out, width: out.width, height: out.height, bodies, scale: s * k };
+  }
+
+  /* THE CREW AS THE STAGE LAST DREW THEM, for a surface that draws them itself (the phone's live station view):
+     each body's sprite track + frame and the exact rectangle drawBody put it in, in world pixels. Read-only:
+     it reports what was drawn and decides nothing. A body not drawn yet is left out. */
+  function crewFrames() {
+    const out = [];
+    for (const b of [agent, ...crew]) {
+      const p = b && !b.unplaced ? b._poseLast : null;
+      if (!p || !p.key) continue;
+      out.push({ agentId: String(b.agentId || b.id || ''), key: p.key, idx: b._renderFrame | 0,
+        x: p.x, y: p.y, w: p.w, h: p.h, at: p.at || 0, walking: b.state === 'walk', working: !!b.working });
+    }
+    return out;
   }
 
   // ---- CRT SCANLINES + FADE (screen-space, drawn last, OVER the curved feed) --------
@@ -8256,6 +8299,7 @@ const World = (() => {
   }
   function setOnMissionBoard(fn) { onMissionBoard = fn; }   // G1b: click a placed MISSION BOARD → open the quest log
   function setOnTrophyCase(fn) { onTrophyCase = fn; }   // G3b: click a placed TROPHY CASE → open the trophy surface
+  function setOnPluginTerminal(fn) { onPluginTerminal = fn; }   // click a placed PLUGIN TERMINAL → that plugin's window (or why not)
   function setOnDesk(fn) { onDesk = fn; }   // DESK SCREEN: click an agent's workstation → that agent's live work (deskscreen.js)
   // G2.3 — the live uncollected-crate count (ReturnStore's pending ledger). Read per-frame for the
   // OUTBOX sprite stack and by the hit-test below; 0 when the store isn't loaded (headless tests).
@@ -8338,6 +8382,16 @@ const World = (() => {
   // hit-test: a placed TROPHY CASE under a world-space point. Always clickable while placed — the click opens
   // the TROPHY CASE surface (honest even when empty: it shows dust, never a dead affordance). The glass casing
   // sits within its 2×2 footprint; a small down-spill for the base shadow keeps the bottom row clickable.
+  function pluginTerminalAt(wp) {
+    if (!geo || !geo.props) return null;
+    for (const p of geo.props) {
+      if (p.t !== 'plugin_terminal') continue;
+      const x0 = p.x * T, y0 = p.y * T - 2;
+      const x1 = (p.x + (p.w || 1)) * T, y1 = (p.y + (p.h || 2)) * T + 4;
+      if (wp.x >= x0 && wp.x < x1 && wp.y >= y0 && wp.y < y1) return p;
+    }
+    return null;
+  }
   function trophyCaseAt(wp) {
     if (!geo || !geo.props) return null;
     for (const p of geo.props) {
@@ -10673,9 +10727,11 @@ const World = (() => {
     pollFeed: () => pollFeedState(),
     pollShip: () => pollShipStats()
   });
-  return { init, rebake, frameReviewRoom, renderStill, crt: CRT, slagLog: () => (slaglog ? slaglog.recent() : []),
+  return { init, rebake, frameReviewRoom, renderStill, crewFrames, crt: CRT, slagLog: () => (slaglog ? slaglog.recent() : []),
     // LINE WATCH: the Workflow panel pushes the step-test session it polls; reads today's numbers for a line
     noteStepTest, lineStatsFor: id => (lineStats.known ? (lineStats.byLine[id] || null) : null), pollLineStats,
+    // a bay's live state — the lamp's own fold (WORKING only once the sidecar confirmed the run), with how long it has held
+    bayLive: id => { const w = lineWatch(); if (!w || !id) return null; const t = lwNow(), s = w.status(id, t); return Object.assign({}, s, { forMs: s.since != null ? Math.max(0, t - s.since) : null }); },
     _dbgLineWatch: () => ({ setDraw: on => { lwDrawOff = !on; return !lwDrawOff; }, watch: watch ? watch.snapshot() : null, stats: lineStats, status: id => (watch ? watch.status(id, lwNow()) : null),
       crates: () => (convey ? convey.peekBoxes().filter(b => b.payload && !b.payload.ghost).map(b => { const v = CRATE_DIRV[b.dir] || [0, 0]; const wx = (b.x + 0.5) * T + (b.prog - 0.5) * T * v[0], wy = (b.y + 0.5) * T + (b.prog - 0.5) * T * v[1] - 1; return { id: b.id, box: b.payload.box || null, workitemId: b.payload.workitemId || null, runId: b.payload.runId || null, sx: wx * scale + panX, sy: wy * scale + panY }; }) : []),
       bays: () => (routingPlan && routingPlan.dockBays ? routingPlan.dockBays.filter(d => d.agentId).map(d => { const b = bayPlateBox(d); return { propId: d.propId, agentId: d.agentId, sx: b.cx * scale + panX, sy: (d.y + (d.h || 1) / 2) * T * scale + panY, lampX: (b.left + b.width - 4.75) * scale + panX, lampY: (b.top - 0.9) * scale + panY }; }) : []),
@@ -10711,7 +10767,7 @@ const World = (() => {
        floor to the router. `station: false` = no floor loaded (nothing is known). */
     planStatus: () => Object.assign({ station: !!station, pending: !!(station && (geoDirty || !geo)),
       errors: (routingPlan && routingPlan.errors ? routingPlan.errors : []).filter(e => !e.warn), hash: routingPlan ? routingPlan.hash : null }, planPoster.state()),
-    loadStation, spawn, spawnAgent, despawnAgent, setSkin, relabel, setActivityFor, agentRunsLive, dropRun: noteRunEnd, focusBody, lockBody, cameraMode, setFrameCap, setOverlays, setCinecamIdle, setChatFocus, chatFocusPing, start, stop, setActivity, wakeIn, beginAwakening, playArrival, cancelArrival, setWakeProgress, igniteSpark, armKindle, kindleHold, camPushIn, camCreep, camPunch, camPullBack, awakenTurn, truthPulse, beginFlood, collapseFlood, endAwakening, releaseAwakening, say, focusAgent, getActivity: () => activity, getUse: () => (agent ? agent.usingProp : null), setOnClick, setOnArcade, setOnOutbox, setOnMissionBoard, setOnTrophyCase, setOnDesk, setOnBayAssign, setOnIntakeFeed, setOnIntakeSample, refit, pauseBridge, resumeBridge, linkState, _dbgSeedRun, _dbgAgeRun, _dbgReconcile, _dbgSweep, _dbgLinkState, _dbgDropBridge, _dbgCurveState, _dbgLoseCurveContext, _dbgLoseCanvases, _dbgCanvasLoss, _dbgKillStageContext, _dbgStageState, _dbgBeltLegibility, _dbgPropClientPoint, _dbgDeskClientPoint, _dbgSleep, _dbgUseProp, _dbgArrive, _dbgLeisure,
+    loadStation, spawn, spawnAgent, despawnAgent, setSkin, relabel, setActivityFor, agentRunsLive, dropRun: noteRunEnd, focusBody, lockBody, cameraMode, cameraState, restoreCamera, setFrameCap, setOverlays, setCinecamIdle, setChatFocus, chatFocusPing, start, stop, setActivity, wakeIn, beginAwakening, playArrival, cancelArrival, setWakeProgress, igniteSpark, armKindle, kindleHold, camPushIn, camCreep, camPunch, camPullBack, awakenTurn, truthPulse, beginFlood, collapseFlood, endAwakening, releaseAwakening, say, focusAgent, getActivity: () => activity, getUse: () => (agent ? agent.usingProp : null), setOnClick, setOnArcade, setOnOutbox, setOnMissionBoard, setOnTrophyCase, setOnPluginTerminal, setOnDesk, setOnBayAssign, setOnIntakeFeed, setOnIntakeSample, refit, pauseBridge, resumeBridge, linkState, _dbgSeedRun, _dbgAgeRun, _dbgReconcile, _dbgSweep, _dbgLinkState, _dbgDropBridge, _dbgCurveState, _dbgLoseCurveContext, _dbgLoseCanvases, _dbgCanvasLoss, _dbgKillStageContext, _dbgStageState, _dbgBeltLegibility, _dbgPropClientPoint, _dbgDeskClientPoint, _dbgSleep, _dbgUseProp, _dbgArrive, _dbgLeisure,
     // AGENT GROWTH: XpStore pushes pre-computed Xp.compute() snapshots here; pulseLevelUp fires
     // the addressed body's gold ring. The colony headline is the top-bar STATION chip.
     setXp: (agentId, a) => {
@@ -11092,9 +11148,18 @@ const World = (() => {
         : ((station.doc && station.doc().props) || []).map(p => (station.capForProp ? station.capForProp(p.t) : null));
       const out = [], seen = {};
       for (const cap of src) {
-        if (!cap || cap === 'computer' || cap === 'connector') continue;   // compute = freebie; connectors = added server-side
+        if (!cap || cap === 'computer' || cap === 'connector' || cap === 'plugin') continue;   // compute = freebie; connectors = added server-side; plugins below
         if (seen[cap]) continue; seen[cap] = true;
         out.push({ objectType: cap });
+      }
+      // PLUGIN TERMINALS are per-instance (like connector portals) and carry WHICH plugin they are: same room scope
+      // as above — the agent's room when it has one, else the station — one entry per bound plugin.
+      const terminals = (hasBay || (viaBay && viaBay.length))
+        ? viaBay.filter(o => o && typeof o === 'object' && o.objectType === 'plugin' && o.pluginId).map(o => o.pluginId)
+        : ((station.doc && station.doc().props) || []).filter(p => p && p.t === 'plugin_terminal' && p.pluginId).map(p => p.pluginId);
+      for (const pluginId of terminals) {
+        if (seen['plugin:' + pluginId]) continue; seen['plugin:' + pluginId] = true;
+        out.push({ objectType: 'plugin', pluginId });
       }
       return out;
     },

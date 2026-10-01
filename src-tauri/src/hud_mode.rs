@@ -34,6 +34,8 @@ const HUD_MIN_H: f64 = 72.0;
 const HUD_WIDGET_MIN_W: f64 = 160.0;
 /// A folded HUD never grows past this (logical px) whatever height the page asks for.
 const HUD_FOLD_MAX_H: f64 = 480.0;
+/// The widget (a fold that carries a width) is the Commander's to size: it may stand taller than a folded feed.
+const HUD_WIDGET_MAX_H: f64 = 1000.0;
 /// The station's normal floor — mirrors `.min_inner_size(960.0, 600.0)` in build_main_window
 /// (test/desktop-hud-mode.test.js keeps the two in step).
 const MAIN_MIN_W: f64 = 960.0;
@@ -135,21 +137,46 @@ pub fn fit_rect(rect: HudRect, area: WorkArea) -> HudRect {
     }
 }
 
+/// The rect a FOLDED HUD will unfold to: its unfolded size, with the RIGHT edge where the folded one's is
+/// (a fold and an unfold both keep the right edge). Remembering the folded x with the unfolded width walked
+/// the HUD off the right of the screen by the widget's width difference on every exit from the widget.
+pub fn unfolded_rect(folded: HudRect, unfolded_w: Option<u32>, unfolded_h: u32) -> HudRect {
+    let w = unfolded_w.unwrap_or(folded.w);
+    HudRect { x: folded.x + folded.w as i32 - w as i32, y: folded.y, w, h: unfolded_h }
+}
+
+/// Where the station goes back to on exit: where it was, while that is still on a connected monitor; if that
+/// screen is gone (a laptop undocked while the HUD was up), centred on `here` so it never opens off-screen.
+pub fn station_rect_back(saved: HudRect, areas: &[WorkArea], here: Option<WorkArea>) -> HudRect {
+    if areas.is_empty() || rect_reachable(&saved, areas) {
+        return saved;
+    }
+    let Some(a) = here.or_else(|| areas.first().copied()) else { return saved };
+    let w = saved.w.min(a.w);
+    let h = saved.h.min(a.h);
+    HudRect { x: a.x + (a.w - w) as i32 / 2, y: a.y + (a.h - h) as i32 / 2, w, h }
+}
+
 /// The physical height a folded HUD should take for a page-measured deck height (logical px).
-/// A folded width: the page's measured logical width (the widget), never wider than the HUD it folds
-/// from; no width asked = that full width.
+/// A folded width: the page's logical width for the widget (its default, or the size the Commander dragged it
+/// to — which may be WIDER than the HUD it folds from), within the HUD's sane bounds; no width asked = the
+/// full width it folds from.
 pub fn folded_width(logical: Option<f64>, scale: f64, full: u32) -> u32 {
     let s = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
     match logical.filter(|v| v.is_finite() && *v > 0.0) {
-        Some(w) => ((w.clamp(HUD_WIDGET_MIN_W, HUD_SANE_MAX_W) * s).round() as u32).min(full),
+        Some(w) => (w.clamp(HUD_WIDGET_MIN_W, HUD_SANE_MAX_W) * s).round() as u32,
         None => full,
     }
 }
 
 pub fn folded_height(deck_logical: Option<f64>, scale: f64) -> u32 {
+    folded_height_max(deck_logical, scale, HUD_FOLD_MAX_H)
+}
+
+pub fn folded_height_max(deck_logical: Option<f64>, scale: f64, max: f64) -> u32 {
     let s = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
     let h = deck_logical.filter(|v| v.is_finite() && *v > 0.0).unwrap_or(140.0);
-    (h.clamp(HUD_MIN_H, HUD_FOLD_MAX_H) * s).round() as u32
+    (h.clamp(HUD_MIN_H, max) * s).round() as u32
 }
 
 fn main_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
@@ -181,9 +208,11 @@ fn current_rect(win: &tauri::WebviewWindow) -> Option<HudRect> {
     Some(HudRect { x: p.x, y: p.y, w: s.width, h: s.height })
 }
 
+/// Move FIRST, then size: moving onto a monitor with another scale factor makes Windows rescale the window,
+/// so a size set before the move would not be the size that sticks.
 fn apply_rect(win: &tauri::WebviewWindow, r: HudRect) {
-    let _ = win.set_size(PhysicalSize::new(r.w, r.h));
     let _ = win.set_position(PhysicalPosition::new(r.x, r.y));
+    let _ = win.set_size(PhysicalSize::new(r.w, r.h));
 }
 
 /// The rect to open the HUD at: the remembered one if it is still reachable (`true`: it is exactly
@@ -221,12 +250,9 @@ fn view(win: Option<&tauri::WebviewWindow>, g: &Inner) -> HudView {
         _ => false,
     };
     let mut rect = win.and_then(current_rect);
-    if let (Some(r), Some(h)) = (rect.as_mut(), g.unfolded_h) {
+    if let (Some(r), Some(h)) = (rect, g.unfolded_h) {
         if g.folded {
-            r.h = h; // a folded HUD remembers the size it will unfold to
-            if let Some(w) = g.unfolded_w {
-                r.w = w;
-            }
+            rect = Some(unfolded_rect(r, g.unfolded_w, h)); // a folded HUD remembers the rect it will unfold to
         }
     }
     HudView { active: g.active, pinned, folded: g.folded, rect }
@@ -311,11 +337,23 @@ pub fn starnet_hud_set(
     let _ = win.set_always_on_top(false);
     let _ = win.set_min_size(Some(LogicalSize::new(MAIN_MIN_W, MAIN_MIN_H)));
     if let Some(r) = g.restore.take() {
-        if let Some(size) = r.size {
-            let _ = win.set_size(size);
-        }
-        if let Some(position) = r.position {
-            let _ = win.set_position(position);
+        match (r.position, r.size) {
+            (Some(p), Some(sz)) => {
+                let areas: Vec<WorkArea> = win
+                    .available_monitors()
+                    .map(|ms| ms.iter().map(work_area_of).collect())
+                    .unwrap_or_default();
+                let here = win.current_monitor().ok().flatten().map(|m| work_area_of(&m));
+                let back = station_rect_back(HudRect { x: p.x, y: p.y, w: sz.width, h: sz.height }, &areas, here);
+                apply_rect(&win, back);
+            }
+            (Some(p), None) => {
+                let _ = win.set_position(p);
+            }
+            (None, Some(sz)) => {
+                let _ = win.set_size(sz);
+            }
+            (None, None) => {}
         }
         if r.maximized {
             let _ = win.maximize();
@@ -380,7 +418,8 @@ pub fn starnet_hud_fold(
         }
         // (re-)fit: the widget or the feed grew or shrank while folded
         let w = folded_width(width, scale, g.unfolded_w.unwrap_or(size.width));
-        let _ = win.set_size(PhysicalSize::new(w, folded_height(height, scale)));
+        let max_h = if width.is_some() { HUD_WIDGET_MAX_H } else { HUD_FOLD_MAX_H };
+        let _ = win.set_size(PhysicalSize::new(w, folded_height_max(height, scale, max_h)));
         keep_right(w);
     } else if g.folded {
         let back_h = g
@@ -464,13 +503,47 @@ mod tests {
     }
 
     #[test]
-    fn folded_width_fits_the_widget_but_never_widens() {
+    fn folded_width_fits_the_widget_within_sane_bounds() {
         assert_eq!(folded_width(Some(250.0), 1.0, 400), 250);
         assert_eq!(folded_width(Some(250.0), 1.5, 600), 375);
         assert_eq!(folded_width(Some(40.0), 1.0, 400), 160);
-        assert_eq!(folded_width(Some(900.0), 1.0, 400), 400);
+        assert_eq!(folded_width(Some(593.0), 1.0, 400), 593); // a widget dragged wider than the HUD keeps its width
+        assert_eq!(folded_width(Some(900.0), 1.0, 400), 720); // never past the sane HUD width
         assert_eq!(folded_width(None, 1.0, 400), 400);
         assert_eq!(folded_width(Some(f64::NAN), 2.0, 800), 800);
+    }
+
+    #[test]
+    fn a_folded_hud_hands_back_the_rect_it_unfolds_to_with_its_right_edge_kept() {
+        // widget 308 wide whose right edge is at 1904 (x 1596); it folded from a 400-wide HUD
+        let folded = HudRect { x: 1596, y: 16, w: 308, h: 239 };
+        assert_eq!(unfolded_rect(folded, Some(400), 640), HudRect { x: 1504, y: 16, w: 400, h: 640 });
+        // re-entering at that rect and folding again lands on the same right edge: no walk off-screen
+        let again = unfolded_rect(HudRect { x: 1504 + 400 - 308, y: 16, w: 308, h: 239 }, Some(400), 640);
+        assert_eq!(again.x + again.w as i32, 1904);
+        // a widget dragged wider than the HUD it folded from
+        assert_eq!(unfolded_rect(HudRect { x: 1300, y: 16, w: 604, h: 500 }, Some(400), 640).x, 1504);
+        assert_eq!(unfolded_rect(folded, None, 640), HudRect { x: 1596, y: 16, w: 308, h: 640 });
+    }
+
+    #[test]
+    fn the_station_never_comes_back_on_a_monitor_that_is_gone() {
+        let laptop = area(0, 0, 1920, 1040, 1.0);
+        let was = HudRect { x: 2200, y: 100, w: 1600, h: 900 }; // on the unplugged second screen
+        let back = station_rect_back(was, &[laptop], Some(laptop));
+        assert_eq!(back, HudRect { x: 160, y: 70, w: 1600, h: 900 });
+        let big = station_rect_back(HudRect { x: 4000, y: 0, w: 2560, h: 1400 }, &[laptop], Some(laptop));
+        assert_eq!(big, HudRect { x: 0, y: 0, w: 1920, h: 1040 });
+        let here = HudRect { x: 100, y: 100, w: 1200, h: 800 };
+        assert_eq!(station_rect_back(here, &[laptop], Some(laptop)), here); // still reachable: exactly where it was
+        assert_eq!(station_rect_back(was, &[], None), was); // monitors unknown: leave it to the OS
+    }
+
+    #[test]
+    fn a_widget_may_stand_taller_than_a_folded_feed() {
+        assert_eq!(folded_height_max(Some(700.0), 1.0, HUD_WIDGET_MAX_H), 700);
+        assert_eq!(folded_height_max(Some(5000.0), 1.0, HUD_WIDGET_MAX_H), 1000);
+        assert_eq!(folded_height(Some(700.0), 1.0), 480);
     }
 
     #[test]

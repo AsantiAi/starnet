@@ -72,7 +72,18 @@
       // TOOLSETS_META row (never a toggleable family), no capsummary CAPS row (never advertised or nagged).
       // The plan itself still persists through the notebook STORE — this grant is about tool AVAILABILITY,
       // not where the bytes live. (see tools/builtin/todo.js)
-      { capId: 'taskplan', tool: 'todo', scope: 'write', requiresConsent: false, network: false }
+      { capId: 'taskplan', tool: 'todo', scope: 'write', requiresConsent: false, network: false },
+      // PLUGIN AUTHORING (sidecar/tools/builtin/plugin-author.js) is deliberately NOT granted (Andrew 2026-09-30): what
+      // the Commander asks the crew for is an APP (below) — describe it, get it — never a plugin to review and approve.
+      // Plugins stay a power-user path the Commander takes himself in ABILITIES → CREATE / ADVANCED.
+      // APPS: the crew builds and fills the Commander's apps (sidecar/apps.js). Inert by construction — an app page is a
+      // network-less sandbox and its data is whatever a crew run publishes — so nothing here asks first. Deferred.
+      { capId: 'apps', tool: 'app.create', scope: 'write', requiresConsent: false, network: false, deferred: true },
+      { capId: 'apps', tool: 'app.read', scope: 'read', requiresConsent: false, network: false, deferred: true },
+      { capId: 'apps', tool: 'app.write', scope: 'write', requiresConsent: false, network: false, deferred: true },
+      { capId: 'apps', tool: 'app.check', scope: 'read', requiresConsent: false, network: false, deferred: true },
+      { capId: 'apps', tool: 'app.publish', scope: 'write', requiresConsent: false, network: false, deferred: true },
+      { capId: 'apps', tool: 'app.schedule', scope: 'write', requiresConsent: false, network: false, deferred: true }
     ],
     notebook: [
       { capId: 'memory', tool: 'notebook.write', scope: 'write', requiresConsent: false, network: false },   // private sandboxed memory — no consent gate (see notebook.js)
@@ -201,6 +212,10 @@
     // instance's binding ({ connectorId }) selects WHICH server. This empty marker just declares 'connector' a
     // known, placeable capability object so the builder/world can treat it like any other room object.
     connector: [],
+    // PLUGINS: a 'plugin' object (a PLUGIN TERMINAL bound to { pluginId }) is dynamic in exactly the same way — its
+    // grants are the tools that plugin registered (api.tool) in its own process, projected per run by index.js
+    // with the connector trust contract (sidecar/plugin-tools.js). This marker makes it a known room object.
+    plugin: [],
     // WORKBENCH: real code execution (shell.exec). Opt-in per agent by PLACING this object — no object, no shell,
     // exactly like cabinet=files. scope 'execute' so the consent broker's exec-lockout binds it: an autonomous
     // run can NEVER execute off a cached grant (only an interactive human, or frozen FULL_ACCESS, may approve).

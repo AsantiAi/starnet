@@ -18,6 +18,49 @@ const names = { agent: { name: 'NOVA', color: '#4af' }, researcher: { name: 'ORI
 const who = id => names[id] || null;
 const T0 = 1_800_000_000_000;
 
+// ---- HUD QA 2026-09-30: controls only where they work, truthful endings ----
+{
+  const f = H.createFeed();
+  H.applySnapshot(f, { runs: [
+    { runId: 'r-com', agentId: 'agent', startedAt: T0 - 5000, stoppable: true },
+    { runId: 'r-line', agentId: 'researcher', startedAt: T0 - 9000, source: 'host', stoppable: false },
+    { runId: 'r-old', agentId: 'agent', startedAt: T0 - 1000 }
+  ], prompts: [], queues: [] }, T0);
+  const by = id => H.workItems({ feed: f, now: T0 }).find(x => x.runId === id);
+  const st = [{ id: 's1', runIds: ['r9'], history: [{ role: 'user', content: 'Go' }, { role: 'assistant', sourceRunId: 'r9', content: 'Part one.\n[steering] Also list the biggest files\nPart two.' }] }];
+  A.eq(H.replyOfRun('r9', 's1', st), 'Part one.\n\nPart two.', 'a direction echoed into the reply is never shown as the agent\'s result');
+  A.eq(H.replyOfRun('r9', 's1', [{ id: 's1', history: [{ role: 'assistant', sourceRunId: 'r9', content: '\n[steering] 1 steering note arrived as this run was ending and was NOT applied\n' }] }]), '', 'a reply that is only steering echoes is no reply');
+  A.ok(by('r-com').canStop && by('r-com').canSteer, 'a run the station can stop offers STOP and a direction');
+  A.ok(!by('r-line').canStop && !by('r-line').canSteer, 'a work-line step /api/cancel cannot reach offers neither (no "Stop requested." for a stop that never happens)');
+  A.ok(by('r-old').canStop, 'an older station that does not say keeps the controls');
+  const workers = [
+    { id: 'w1', agentId: 'researcher', status: 'stale', prompt: 'Dig up the docs', completedAt: T0 - 1000 },
+    { id: 'w2', agentId: 'researcher', status: 'refused', prompt: 'Do the thing', completedAt: T0 - 2000 },
+    { id: 'w3', agentId: 'researcher', status: 'weird', prompt: 'Other', completedAt: T0 - 3000 }
+  ];
+  const items = H.workItems({ feed: H.createFeed(), workers, now: T0 });
+  const w = id => items.find(x => x.workerId === id);
+  A.eq([w('w1').state, w('w1').status], ['fault', 'Lost when the station restarted'], 'a worker lost to a restart is a fault, not "done"');
+  A.eq([w('w2').state, w('w2').status], ['fault', 'Refused'], 'a refused worker is a fault');
+  A.eq([w('w3').state, w('w3').status], ['stopped', 'Ended (weird)'], 'an ending the HUD does not know is never painted done');
+  const js = fs.readFileSync(path.join(ROOT, 'frontend/app/hudmode.js'), 'utf8');
+  A.ok(!js.includes('No result was recorded') && js.includes("'Its reply isn’t shown here.'") && js.includes("'Its reply is in the conversation.'"),
+    'a finished card with no reply on this page says where the reply is, never that there was none');
+  A.ok(js.includes("setText(v.clock, down ? 'NO LINK'") && js.includes("v.node.dataset.state = down ? 'fault' : tile.state;"), 'the widget stops its clocks and says NO LINK when the station stops answering');
+  A.ok(js.includes('if (S.followId === id && S.followKey === key && cameraOn(id)) return;'), 'a follow the world could not take (or dropped) is retried, never marked done');
+  A.ok(js.includes("if (S.busy) { S.exitAfter = true;") && js.includes("invoke('starnet_hud_status').then(v => (v && v.active ? invoke('starnet_hud_set', { active: false }) : null))") && js.includes('else exit(); };'),
+    'leaving is never dropped: during entry it runs right after, and a page that lost the HUD still hands the window back');
+  A.ok(js.includes('holdToMove(open); holdToMove(rows);') && js.includes('cur.startDragging()') && js.includes("invoke('plugin:window|start_dragging', { label: 'main' })") && js.includes('if (!justMoved()) setView(\'activity\');'),
+    'the agent cam moves: hold the picture or a row and drag the window; a press that does not move stays a click');
+  A.ok(fs.readFileSync(path.join(ROOT, 'src-tauri/capabilities/default.json'), 'utf8').includes('core:window:allow-start-dragging'), 'the window may start an OS drag');
+  const side = fs.readFileSync(path.join(ROOT, 'sidecar/index.js'), 'utf8');
+  A.ok(side.includes('row.stoppable = runs.has(runId);') && side.includes("source: 'host', stoppable: runs.has(runId) }"), 'the snapshot says which runs /api/cancel can reach (additive)');
+  const world = fs.readFileSync(path.join(ROOT, 'frontend/app/world.js'), 'utf8');
+  A.ok(world.includes('function cameraState()') && world.includes('function restoreCamera(st)') && world.includes('cameraState, restoreCamera,'), 'the world hands a borrowed camera back exactly');
+  const rs = fs.readFileSync(path.join(ROOT, 'src-tauri/src/hud_mode.rs'), 'utf8');
+  A.ok(rs.includes('rect = Some(unfolded_rect(r, g.unfolded_w, h));') && rs.includes('let back = station_rect_back('), 'the HUD never walks off-screen on exit, and the station never comes back on a monitor that is gone');
+}
+
 // ---- nothing asserted before the first snapshot ----
 {
   const f = H.createFeed();
@@ -178,12 +221,12 @@ A.eq([H.fmtAgo(10_000), H.fmtAgo(5 * 60_000), H.fmtAgo(2 * 3_600_000)], ['just n
 {
   const mem = new Map();
   const store = { getItem: k => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, String(v)) };
-  A.eq(H.readPrefs(store), { pinned: true, rect: null }, 'defaults: pinned, no remembered rect');
-  H.writePrefs(store, { pinned: false, rect: { x: 10, y: 20, w: 400, h: 640 } });
-  A.eq(H.readPrefs(store), { pinned: false, rect: { x: 10, y: 20, w: 400, h: 640 } }, 'prefs round-trip');
+  A.eq(H.readPrefs(store), { pinned: true, rect: null, widget: null }, 'defaults: pinned, no remembered rect or widget size');
+  H.writePrefs(store, { pinned: false, rect: { x: 10, y: 20, w: 400, h: 640 }, widget: { w: 520, h: 410 } });
+  A.eq(H.readPrefs(store), { pinned: false, rect: { x: 10, y: 20, w: 400, h: 640 }, widget: { w: 520, h: 410 } }, 'prefs round-trip, the widget size the Commander chose included');
   mem.set('starnet.hud', '{not json');
-  A.eq(H.readPrefs(store), { pinned: true, rect: null }, 'corrupt prefs read as defaults');
-  A.eq(H.readPrefs({ getItem() { throw new Error('blocked'); } }), { pinned: true, rect: null }, 'blocked storage reads as defaults');
+  A.eq(H.readPrefs(store), { pinned: true, rect: null, widget: null }, 'corrupt prefs read as defaults');
+  A.eq(H.readPrefs({ getItem() { throw new Error('blocked'); } }), { pinned: true, rect: null, widget: null }, 'blocked storage reads as defaults');
 }
 
 // ---- page wiring ----
@@ -212,12 +255,17 @@ A.eq([H.fmtAgo(10_000), H.fmtAgo(5 * 60_000), H.fmtAgo(2 * 3_600_000)], ['just n
     'every card can be steered and stopped through the routes the station already has');
   A.ok(has(js, 'App.openWorkstream(mine[0].id)', 'Workstreams.get(sid)'), 'OPEN CONVERSATION goes to the conversation that owns the work, else the agent\'s own (never rebinds the blank thread on screen)');
   A.ok(has(js, "S.view = 'widget';", "classList.toggle('hud-view-widget', small)", "setView('activity')"), 'the HUD opens SMALL on the widget, and a click opens ACTIVITY');
-  A.ok(has(js, 'World.lockBody(id, WIDGET_ZOOM, { seatAt: WIDGET_SEAT_AT })', 'if (small) worldStart(true); else { worldStop();', 'World.setFrameCap(capped ? WIDGET_FRAME_MS : 0)') && !js.includes('SPRITES.drawBody'),
+  A.ok(has(js, 'World.lockBody(id, fr.zoom, { seatAt: fr.seatAt })', 'if (small) worldStart(true); else { worldStop();', 'World.setFrameCap(capped ? WIDGET_FRAME_MS : 0)') && !js.includes('SPRITES.drawBody'),
     'the widget is the REAL station (the world renderer, its camera following the agent), never a staged scene; the world runs only while the widget shows it');
   A.ok(css.includes('#screen-game.active > #stage-wrap {') && css.includes('#stage-wrap .cam-hud { display: none !important; }'), 'the widget shows the world alone: no camera frame, no station controls');
   A.ok(css.includes('body:not(.hud-mode) #chat-panel .hud-ctl { display: none !important; }'), 'back in the full station the COMMS header shows none of the HUD controls');
+  A.ok(css.includes('grid-template-rows: minmax(120px, 1fr) auto;') && !/#stage-wrap \{[^}]*width: 300px/.test(css), 'the widget picture fills its window (no fixed 300x190 box)');
+  A.ok(js.includes("root.addEventListener('resize', onWindowResize);") && js.includes('S.widgetUser = { w, h }') && js.includes('S.widgetUser = prefs.widget || null;') && js.includes('|| S.widgetUser) return;'),
+    'a size the Commander drags the widget to is kept (no auto-fit fights it) and remembered');
+  A.ok(js.includes('if (e && e.isTrusted === false) return;'), 'the HUD\'s own synthetic resize (after a view change) is never mistaken for the Commander sizing the widget');
   A.ok(js.includes('World.setOverlays(!capped)'), 'the widget turns the in-world readouts off, and the station gets them back');
-  A.ok(js.includes('World.lockBody(id, WIDGET_ZOOM, { seatAt: WIDGET_SEAT_AT })') && js.includes('World.lockBody(S.followId, S.stationZoom)'), 'the widget frames its agent closer (a seated one with its desk in view) and gives the station its zoom back');
+  A.ok(js.includes('World.lockBody(id, fr.zoom, { seatAt: fr.seatAt })') && js.includes('function widgetFraming()') && js.includes('World.restoreCamera(S.stationCam)') && js.includes('keepStationCamera();'), 'the widget frames its agent closer (a seated one with its desk in view) and gives the station its zoom back');
+  A.ok(js.includes('return { zoom: WIDGET_ZOOM, seatAt:') && !js.includes('Math.min(1.33'), 'a bigger agent cam shows more station, never a bigger agent (Andrew: "WAY TOO BIG")');
   const w2 = read('frontend/app/world.js');
   A.ok(w2.includes('const fy = (camLock.seatAt && (lb.seated || lb.sitting)) ? camLock.seatAt : 0.56;') && w2.includes('function lockBody(id, zoom, opts)'), 'World.lockBody takes an optional seated framing (omitted = 0.56 for every body)');
   A.ok(read('frontend/app/world.js').includes('sc: clampz(zoom > 0 ? zoom : Math.max(scale, 3), MINZ, MAXZ)'), 'World.lockBody takes an optional zoom (omitted = the station rule)');
@@ -228,6 +276,23 @@ A.eq([H.fmtAgo(10_000), H.fmtAgo(5 * 60_000), H.fmtAgo(2 * 3_600_000)], ['just n
   A.ok(has(js, "el('section', 'project-home hud-activity')", "el('details', 'ph-card')"), 'ACTIVITY is the project activity feed markup (so it wears the project feed\'s glass)');
   A.ok(!css.includes('#chat-panel > h3 { display: none') && !css.includes('#chat-input {'), 'COMMS keeps its designed header and composer inside the HUD');
   A.ok(!/background: var\(--ph\)\s*;/.test(css) && !css.includes('0 0 0 2px var(--ph-dim)'), 'no retired CRT chrome: no solid phosphor bar, no phosphor ring');
+  {
+    // Andrew 09-30: the HUD wears the NEWEST glass — the Workflow panel / Build Library sheet, keys and cards
+    const glass = css.slice(css.indexOf('THE NEW GLASS'));
+    A.ok(glass.length > 1000 && has(glass,
+      'html body.hud-mode #chat-panel {\n  border: 1px solid var(--hud-edge); border-radius: 12px;',
+      'backdrop-filter: blur(18px)',
+      "html body.hud-mode #chat-panel::before, html body.hud-mode #chat-panel::after { display: none; }",
+      'background: none; border: 0; border-bottom: 1px solid var(--hud-edge)'),
+      'the HUD is one 12px frosted sheet with a plain header over a hairline — no striped strip, no CRT corner brackets');
+    A.ok(/\.hud-ctl \.btn \{[^}]*min-height: 34px;[^}]*border-radius: 8px;/.test(glass) && /\.ph-controls \.btn \{[^}]*min-height: 36px;[^}]*border-radius: 8px;/.test(glass),
+      'the HUD keys are the Build Library glass key (8px, 34-36px tall), not the old 3px chip');
+    A.ok(/#hud-activity \.ph-card \{[^}]*border-radius: 10px;/.test(glass) && glass.includes('.ph-agent::before') && glass.includes('var(--hud-lamp)'),
+      'each piece of work is a 10px glass card with a housed status lamp');
+    A.ok(!/font(-size)?: 1[0-3]px/.test(glass), 'nothing in the new glass reads under 14px');
+    A.ok(glass.includes(':is(#chat-status, #chat-elapsed) { display: none !important; }'), 'the HUD header never squeezes its keys out of the window');
+    A.ok(js.includes("el('button', 'btn', 'AGENT CAM')") && !js.includes("'btn', 'SMALL')"), 'the key that shrinks the HUD says where it goes: AGENT CAM (Andrew 09-30: not SMALL)');
+  }
   const side = read('sidecar/index.js');
   A.ok(has(side, "source: 'interactive', streamId: streamId || '', internal: internal }", 'if (meta && meta.internal) row.internal = true;') && has(js, 'r.internal || workerRuns.has'),
     'live self-talk is marked by the sidecar and never shown as the Commander\'s work');

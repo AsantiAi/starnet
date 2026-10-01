@@ -133,7 +133,6 @@ const Build = (() => {
   const esc = s => U.esc(s == null ? '' : s);   // one complete impl (escapes & < > " ' — value="…" attrs here stay injection-safe)
   // THE ONE SENTENCE (2026-08-04 onramp): every self-introduction of the belt system leads with this.
   // It also leads the INBOX catalog desc (propsprites.js) and the first-run guide card — keep them aligned.
-  const LINE_SENTENCE = 'Your floor is a flowchart — work arrives at the INBOX, every BAY is an agent doing one step, and the belts you draw are the order the work flows.';
 
   // camera: screen = world*zoom + pan   (world = bake-pixel space, 1 tile = TILE px)
   let zoom = 2, panX = 0, panY = 0;
@@ -554,11 +553,15 @@ const Build = (() => {
   const isSearching = () => (typeof PropSearch !== 'undefined') && PropSearch.active(propQuery);
 
   // what the gallery is showing right now: matches across the WHOLE catalog, or the chosen tab
+  // Props the STATION places for you (a plugin's terminal appears when an approved plugin brings tools) are never
+  // offered in the picker: a Commander placing one by hand would get a terminal bound to nothing.
+  const STATION_PLACED = new Set(['plugin_terminal']);
+  const pickable = (list) => list.filter(c => !STATION_PLACED.has(c.id));
   function propsForGrid() {
-    if (isSearching()) return PropSearch.matchProps(catalog(), propQuery, searchOpts());
-    if (propSection === 'abilities') return propAbility
-      ? catalog().filter(c => capOf(c) === propAbility) : starterProps();
-    const list = catalog().filter(c => sectionOf(c) === propSection && (propCat === 'all' || c.cat === propCat));
+    if (isSearching()) return pickable(PropSearch.matchProps(catalog(), propQuery, searchOpts()));
+    if (propSection === 'abilities') return pickable(propAbility
+      ? catalog().filter(c => capOf(c) === propAbility) : starterProps());
+    const list = pickable(catalog().filter(c => sectionOf(c) === propSection && (propCat === 'all' || c.cat === propCat)));
     if (propSection === 'decoration' && propCat === 'all') {
       const familiar = ['couch','industrial_roundtable','dinerchair','plant','rug','tv','bookshelf','coffee','bunk','easel'];
       const rank = c => { const i = familiar.indexOf(c.id); return i < 0 ? familiar.length : i; };
@@ -1385,13 +1388,13 @@ const Build = (() => {
       });
       pal.appendChild(hueGrid);
     } else if (tool === 'belt') {
-      /* THE ONE SENTENCE (belt-tool idle state): this palette used to be empty, so the first time a
-         user armed the BELT tool the system introduced itself with nothing. Lead with the model. */
+      /* the BELT tool's idle state, in the other tabs' voice — a title and one line, like Rooms' "Make space" (2026-09-30: the
+         paragraph that sat here went; the whole gesture is spelled out in the tool help under the palette) */
       paletteLabel = 'THE LINE';
-      const intro = document.createElement('div');
-      intro.className = 'refit-lineintro';
-      intro.textContent = LINE_SENTENCE;
-      pal.appendChild(intro);
+      const note = document.createElement('div');
+      note.className = 'refit-selectnote';
+      note.innerHTML = '<b>Connect machines</b><span>Click where work starts, then where it goes next.</span>';
+      pal.appendChild(note);
     } else if (tool === 'line' || ((tool === 'select' || tool === 'prop') && buildGroup === 'workflow')) {
       /* THE LINE LIBRARY (v3, 2026-08-30) — one-click whole layouts, now a browsable library.
          Cards keep the v2 anatomy (schematic MINIATURE in the floor's own colour economy, NAME +
@@ -1402,71 +1405,56 @@ const Build = (() => {
          never hand-kept here; an ungrouped blueprint falls into the last section rather than
          vanishing (a card the catalog ships must always be stampable). */
       paletteLabel = 'THE LINE LIBRARY';
-      const intro = document.createElement('div');
-      intro.className = 'refit-lineintro';
-      intro.textContent = LINE_SENTENCE + ' Place single machines, or a whole line, then make it yours.';
-      pal.appendChild(intro);
-      /* BUILD YOUR OWN (conveyor-links phase D): an INBOX, one step and an OUTBOX laid on clear floor in view, with its Workflow
-         panel open — where steps, branches, review loops and sorters are added, every change one UNDO */
-      if (typeof LineEdit !== 'undefined') {
-        const own = document.createElement('button'); own.type = 'button'; own.className = 'bb sm refit-ownline';
-        own.textContent = '▸ BUILD YOUR OWN LINE';
-        own.dataset.tip = 'an INBOX, one step and an OUTBOX, placed in view — then add steps, branches and review loops from its Workflow panel';
-        own.onclick = () => {
-          const r = lineEditRun('newLine', null, {});
-          if (r && r.ok) { sfx('chime'); flashTip(null, 'a new line: INBOX → a step → OUTBOX · UNDO removes it', true); openWorkflowPanel(r.focus); }
-          else { sfx('bad'); flashTip(null, (r && r.msg) || 'there is no clear floor for a new line here', false); }
-        };
-        pal.appendChild(own);
+      /* THE CONVEYORS TAB IN THE LIBRARY'S OWN LOOK (2026-09-30 — Andrew: "the long sentences underneath each machine … I hate it
+         … stop resorting back to the old ugly UI"). Laid out like the Props tab beside it: two section keys (the FURNITURE ·
+         EQUIPMENT · ABILITIES row's look), then a grid of big glass tiles — a line's miniature or a machine's own art, its name,
+         one small line. Every sentence that used to sit under a tile is now its hover tip and its accessible description
+         (simplify = organization: nothing a tile said is gone). */
+      if (tool === 'line') convSection = 'lines';   // an armed line always shows its card and its SET UP row
+      else if (tool === 'prop' && workflowMachines().some(c => c.id === propType)) convSection = 'machines';   // …and an armed machine its tile
+      const secs = document.createElement('nav'); secs.className = 'refit-prop-sections refit-conv-sections'; secs.setAttribute('aria-label', 'Conveyors');
+      for (const [id, label, n] of [['lines', LINES_LABEL, blueprints().length], ['machines', MACHINES_LABEL, workflowMachines().length]]) {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'bb refit-prop-section' + (convSection === id ? ' active' : '');
+        b.dataset.convSection = id; b.setAttribute('aria-pressed', String(convSection === id));
+        b.innerHTML = esc(label) + ' <small>' + n + '</small>';
+        b.onclick = () => { if (convSection === id) return; convSection = id; sfx('click'); if (tool === 'line') selectTool('select', { silent: true }); else renderPalette(); };
+        secs.appendChild(b);
       }
-      /* START FROM INTENT (2026-09-28): the ready-made line with the SHAPE of the Commander's own goal leads the tab — their
-         words quoted, so it is clear why — one click arms it (MAKE ROOM FOR IT when the deck is too small). */
-      const goal = goalLine();
-      if (goal) {
-        const gh = document.createElement('div'); gh.className = 'refit-linegroup refit-palsection refit-goalhd';
-        gh.innerHTML = '<span class="refit-linegroup-nm">FOR YOUR GOAL</span><span class="refit-linegroup-why"></span>';
-        gh.querySelector('.refit-linegroup-why').textContent = '“' + goal.quote + '” — ' + goal.why;
-        pal.appendChild(gh);
-        const gg = document.createElement('div'); gg.className = 'refit-linegrid refit-goalgrid'; gg.setAttribute('aria-label', 'Suggested for your goal');
-        const gb = makeLineTile(goal.bp); gg.appendChild(gb); setLineTileFit(gb, goal.bp);
-        if (tool === 'line' && goal.bp.id === lineType) gg.appendChild(linePrefsEl(goal.bp));
-        pal.appendChild(gg);
-      }
-      pal.appendChild(machinePalette());
-      const lhd = document.createElement('div'); lhd.className = 'refit-linegroup refit-palsection';
-      lhd.innerHTML = '<span class="refit-linegroup-nm">CONVEYOR LINES · ' + blueprints().length + '</span><span class="refit-linegroup-why">whole layouts, pre-wired — stamp one, then assign its bays</span>';
-      pal.appendChild(lhd);
-      const grid = document.createElement('div'); grid.className = 'refit-linegrid';
-      grid.setAttribute('aria-label', 'Line library');
-      const groups = {};
-      const lastWork = LINE_WORK_GROUPS[LINE_WORK_GROUPS.length - 1].id;
-      for (const bp of blueprints()) { const k = LINE_WORK_GROUPS.some(g => g.id === LINE_WORK[bp.id]) ? LINE_WORK[bp.id] : lastWork; (groups[k] = groups[k] || []).push(bp); }
-      const ordered = [];
-      for (const g of LINE_WORK_GROUPS) {
-        if (!groups[g.id] || !groups[g.id].length) continue;
-        ordered.push({ hd: g });
-        for (const bp of groups[g.id]) ordered.push({ bp });
-      }
-      for (const row of ordered) {
-        if (row.hd) {
-          const hd = document.createElement('div'); hd.className = 'refit-linegroup';
-          const nm = document.createElement('span'); nm.className = 'refit-linegroup-nm'; nm.textContent = row.hd.label;
-          const why = document.createElement('span'); why.className = 'refit-linegroup-why'; why.textContent = row.hd.blurb;
-          hd.appendChild(nm); hd.appendChild(why);
-          grid.appendChild(hd);
-          continue;
+      pal.appendChild(secs);
+      if (convSection === 'machines') pal.appendChild(machinePalette());
+      else {
+        /* BUILD YOUR OWN (conveyor-links phase D): an INBOX, one step and an OUTBOX laid on clear floor in view, with its Workflow
+           panel open — where steps, branches, review loops and sorters are added, every change one UNDO */
+        if (typeof LineEdit !== 'undefined') {
+          const own = document.createElement('button'); own.type = 'button'; own.className = 'bb refit-ownline';
+          own.textContent = '＋ BUILD YOUR OWN LINE';
+          own.dataset.tip = 'an INBOX, one step and an OUTBOX, placed in view — then add steps, branches and review loops from its Workflow panel';
+          own.onclick = () => {
+            const r = lineEditRun('newLine', null, {});
+            if (r && r.ok) { sfx('chime'); flashTip(null, 'a new line: INBOX → a step → OUTBOX · UNDO removes it', true); openWorkflowPanel(r.focus); }
+            else { sfx('bad'); flashTip(null, (r && r.msg) || 'there is no clear floor for a new line here', false); }
+          };
+          pal.appendChild(own);
         }
-        const bp = row.bp;
-        const b = makeLineTile(bp);
-        grid.appendChild(b);
-        setLineTileFit(b, bp);   // DECK-FIT HONESTY — and kept current as the floor changes (see setLineTileFit)
-        if (tool === 'line' && bp.id === lineType) grid.appendChild(linePrefsEl(bp));   // the armed card's settings, right under it
+        const grid = document.createElement('div'); grid.className = 'refit-linegrid';
+        grid.setAttribute('aria-label', 'Line library');
+        /* START FROM INTENT (2026-09-28): the ready-made line with the SHAPE of the Commander's own goal leads the shelf; its tip
+           quotes their words so it is clear why — one click arms it (MAKE ROOM FOR IT when the deck is too small) */
+        const goal = goalLine();
+        if (goal) {
+          grid.appendChild(lineGroupHd('FOR YOUR GOAL', 'refit-goalhd'));
+          addLineCell(grid, goal.bp, '“' + goal.quote + '” — ' + goal.why, true);
+        }
+        const groups = {};
+        const lastWork = LINE_WORK_GROUPS[LINE_WORK_GROUPS.length - 1].id;
+        for (const bp of blueprints()) { const k = LINE_WORK_GROUPS.some(g => g.id === LINE_WORK[bp.id]) ? LINE_WORK[bp.id] : lastWork; (groups[k] = groups[k] || []).push(bp); }
+        for (const g of LINE_WORK_GROUPS) {
+          if (!groups[g.id] || !groups[g.id].length) continue;
+          grid.appendChild(lineGroupHd(g.label));
+          for (const bp of groups[g.id]) addLineCell(grid, bp);
+        }
+        pal.appendChild(grid);
       }
-      pal.appendChild(grid);
-      const note = document.createElement('div');
-      note.className = 'refit-linenote';
-      note.textContent = 'Assign agents when you want to run this workflow. One Undo removes a placed layout.';
-      pal.appendChild(note);
     }
     if (pal.querySelector('.refit-linegrid')) pal.scrollTop = propShelfScroll.get('workflow-layouts') || 0;
     /* NAME THE ARMED TOOL IN THE OPTIONS HEADER. The two zones of this dock — the tool you picked
@@ -1547,6 +1535,8 @@ const Build = (() => {
      live art and its one-line purpose (PALETTE_PURPOSE). A pick arms the ordinary PROP placement for
      that machine while the Conveyors tab stays up. */
   const MACHINES_LABEL = 'MACHINES';   // the Conveyors tab's single-machine shelf — the guide + Field Manual name it by this
+  const LINES_LABEL = 'LINES';         // …and its ready-made lines, the section key beside it
+  let convSection = 'lines';           // the Conveyors section up now: 'lines' (BUILD YOUR OWN + the ready-made shelf) or 'machines'
   const MACHINE_ORDER = ['intake', 'bay', 'outbox', 'splitter', 'joiner', 'merger', 'filter', 'loop'];   // JOINER beside MERGER: the pair people confuse
   function workflowMachines() {
     const all = catalog().filter(c => c && c.cat === 'workflow');
@@ -1556,9 +1546,6 @@ const Build = (() => {
   function machinePalette() {
     const wrap = document.createElement('div'); wrap.className = 'refit-machines';
     const ms = workflowMachines();
-    const hd = document.createElement('div'); hd.className = 'refit-linegroup refit-palsection';
-    hd.innerHTML = '<span class="refit-linegroup-nm">' + MACHINES_LABEL + ' · ' + ms.length + '</span><span class="refit-linegroup-why">one piece at a time — place it, then connect it with BELT</span>';
-    wrap.appendChild(hd);
     // grouped the way work meets them (every catalog machine lands in a group; an unknown one joins the last)
     const groupOf = id => { const g = MACHINE_GROUPS.findIndex(x => x[2].indexOf(id) >= 0); return g < 0 ? MACHINE_GROUPS.length - 1 : g; };
     let grid = null, curGroup = -1;
@@ -1567,7 +1554,7 @@ const Build = (() => {
       if (gi !== curGroup) {
         curGroup = gi;
         const gh = document.createElement('div'); gh.className = 'refit-machinegroup';
-        gh.innerHTML = '<span class="nm">' + esc(MACHINE_GROUPS[gi][0]) + '</span><span class="why">' + esc(MACHINE_GROUPS[gi][1]) + '</span>';
+        gh.textContent = MACHINE_GROUPS[gi][0];   // the group's name only (its how-to line rides each tile's tip)
         wrap.appendChild(gh);
         grid = document.createElement('div'); grid.className = 'refit-machinegrid'; grid.setAttribute('aria-label', MACHINE_GROUPS[gi][0] + ' machines');
         wrap.appendChild(grid);
@@ -1576,20 +1563,23 @@ const Build = (() => {
       const on = tool === 'prop' && propType === c.id;
       b.className = 'refit-machinetile' + (on ? ' active' : ''); b.dataset.machine = c.id; b.dataset.prop = c.id;
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
-      const purpose = PALETTE_PURPOSE[c.id] || '';
-      b.setAttribute('aria-label', c.label + (purpose ? ' — ' + purpose : ''));
-      const DW = 44, DH = 34, SS = Math.max(2, Math.min(3, window.devicePixelRatio || 1));
+      const purpose = PALETTE_PURPOSE[c.id] || '', how = MACHINE_GROUPS[gi][1] || '';
+      /* THE TILE IS THE PROPS TAB'S TILE (2026-09-30): the machine's own art, big, its name, and its wiring drawn small under it.
+         The sentence that used to sit under the name is the tile's hover tip (the station tooltip) and its accessible
+         description, with its group's how-to ("drop these ON a belt") beside it. */
+      b.setAttribute('aria-label', c.label);
+      b.setAttribute('aria-description', purpose + (how ? ' — ' + how : ''));
+      b.dataset.tip = c.label + (purpose ? '\n' + purpose : '') + (how ? '\n' + how : '');
+      const DW = 76, DH = 50, SS = Math.max(2, Math.min(3, window.devicePixelRatio || 1)), PAD = 3;   // the prop tile's art well; a tight halo so a small machine still fills it
       const cvEl = document.createElement('canvas'); cvEl.className = 'refit-machinetile-cv';
       cvEl.style.width = DW + 'px'; cvEl.style.height = DH + 'px'; cvEl.width = Math.round(DW * SS); cvEl.height = Math.round(DH * SS);
       const tile = (typeof PropSprites !== 'undefined') ? PropSprites.TILE : 12;
-      const nativeW = c.w * tile + THUMB_PAD * 2, nativeH = c.h * tile + THUMB_PAD * 2;
+      const nativeW = c.w * tile + PAD * 2, nativeH = c.h * tile + PAD * 2;
       const density = typeof PropRemaster !== 'undefined' && PropRemaster.isProjection() ? 4 : 1;
       const off = document.createElement('canvas'); off.width = nativeW * density; off.height = nativeH * density;
-      propThumbs.push({ id: c.id, w: c.w, h: c.h, off, octx: off.getContext('2d'), dctx: cvEl.getContext('2d'), nativeW, nativeH, density, bw: cvEl.width, bh: cvEl.height });
-      const txt = document.createElement('span'); txt.className = 'refit-machinetile-txt';
+      propThumbs.push({ id: c.id, w: c.w, h: c.h, off, octx: off.getContext('2d'), dctx: cvEl.getContext('2d'), nativeW, nativeH, density, bw: cvEl.width, bh: cvEl.height, pad: PAD });
       const nm = document.createElement('span'); nm.className = 'refit-machinetile-nm'; nm.textContent = c.label;
-      const why = document.createElement('span'); why.className = 'refit-machinetile-why'; why.textContent = purpose;
-      txt.append(nm, why); b.append(cvEl, txt);
+      b.append(cvEl, nm);
       if (MACHINE_DIAGRAM[c.id]) b.insertAdjacentHTML('beforeend', machineDiagramSVG(c.id));
       b.onclick = () => {
         propType = c.id;
@@ -1759,7 +1749,7 @@ const Build = (() => {
       o.clearRect(0, 0, th.off.width, th.off.height);
       o.scale(th.density||1,th.density||1);
       o.imageSmoothingEnabled = false;
-      o.translate(THUMB_PAD, THUMB_PAD);
+      o.translate(th.pad != null ? th.pad : THUMB_PAD, th.pad != null ? th.pad : THUMB_PAD);
       PropSprites.setCtx(o); PropSprites.setNow(now);
       PropSprites.draw({ t: th.id, x: 0, y: 0, w: th.w, h: th.h }, true);   // work=true → screens read alive in the preview
       const d = th.dctx, s = Math.min(th.bw / th.nativeW, th.bh / th.nativeH);
@@ -1851,32 +1841,34 @@ const Build = (() => {
   // stamp centered under the cursor (a 17-tile line hung off the click point reads as a misfire)
   const lineOrigin = (bp, tx, ty) => ({ x: tx - (bp.w >> 1), y: ty - (bp.h >> 1) });
   // one-line purposes for the shelf cards — what each line DOES, in station voice
+  /* PLAIN DESCRIPTIONS (2026-09-30 — "the simplest friendliest UI possible, no confusion"): a line's tip says what it does in
+     everyday words — no lanes, gates or doors */
   const LINE_PURPOSE = {
-    front_desk: 'one agent, door to door — work in, answer out',
-    research_line: 'two agents in a row — one digs, the next writes it up',
-    revision_loop: 'a reviewer sends the draft back round until it passes',
-    sorting_office: 'sorts arriving work by content to the right specialist',
-    triage_desk: 'code, research and the rest each get their own specialist',
-    parallel_crew: 'splits one stream across three agents working at once',
-    swarm_synthesis: 'three agents on the same job, one writes the answer',
-    second_opinion: 'two independent takes on the same job, shipped as one',
-    ship_out: 'one agent, straight to the outbox — the minimal line',
-    assembly_line: 'four agents deep — each stage builds on the last',
+    front_desk: 'one agent does each job, start to finish',
+    research_line: 'one agent digs up sources, the next writes the answer',
+    revision_loop: 'one agent drafts, a reviewer sends it back until it is right',
+    sorting_office: 'sends each request to the right specialist, by what it is about',
+    triage_desk: 'coding, research and everything else each go to their own specialist',
+    parallel_crew: 'shares the incoming work between three agents working at once',
+    swarm_synthesis: 'three agents research the same job, one writes the answer',
+    second_opinion: 'two agents take the same job, and their answers are combined into one',
+    ship_out: 'no INBOX: whatever this agent finishes lands in the OUTBOX',
+    assembly_line: 'four agents in a row, each building on the last',
     build_test: 'a builder makes it, a tester sends it back until it passes',
-    code_foundry: 'code is built and review-looped; the rest takes a side lane',
-    gauntlet: 'two takes, one synthesis, and a reviewer holding the door',
-    crucible: 'two review gates in series — approved, then approved again',
-    mission_control: 'sorted three ways, worked in two stages, shipped by one door',
-    deep_dive: 'a research swarm, one write-up, and a reviewer holding the door',
-    allowance_desk: 'a front desk that can never spend more than $5 a day',
-    two_doors: 'two entrances, one desk — each door keeps its own name & budget',
-    load_balancer: 'jobs alternate between two desks; one door ships it all',
-    fire_escape: 'a third lane on the gate — out-of-passes work drops to a fixer',
+    code_foundry: 'coding requests are built and reviewed until they pass; anything else goes to another agent',
+    gauntlet: 'two agents take the job, one combines their answers, and a reviewer checks it',
+    crucible: 'two reviewers in a row: the work has to pass both',
+    mission_control: 'sorts requests three ways, works each in two steps, and ships them all from one place',
+    deep_dive: 'three researchers dig, one writes it up, and a reviewer checks it',
+    allowance_desk: 'one agent, and the line can never spend more than $5 a day',
+    two_doors: 'two ways in (say, a schedule and a chat app), one agent does the work',
+    load_balancer: 'jobs take turns between two agents',
+    fire_escape: 'if the reviewer still is not happy after its tries, a fixer takes over',
   };
   /* PLAIN NAMES (2026-09-28): a card leads with what the line does in everyday words; the catalog's station name
      (REVISION LOOP …) rides beside it as a small tag, so a Commander who knows the old names still finds them. */
   const LINE_PLAIN = {
-    front_desk: 'One agent', allowance_desk: 'One agent, capped', ship_out: 'Straight to outbox', two_doors: 'Two doors, one agent',
+    front_desk: 'One agent', allowance_desk: 'One agent, $5 a day', ship_out: 'Agent work to OUTBOX', two_doors: 'Two ways in',
     revision_loop: 'Draft + review', crucible: 'Two review rounds', fire_escape: 'Review + a fixer',
     build_test: 'Build + test', code_foundry: 'Build + review',
     research_line: 'Research + write', swarm_synthesis: 'Three researchers', deep_dive: 'Deep dive + review', assembly_line: 'Four-step chain',
@@ -1916,6 +1908,12 @@ const Build = (() => {
     const p = linePrefsOf(bp), o = {};
     if (bp.props.some(x => x.t === 'intake')) o.limits = { maxUsdPerDay: p.cap };
     if (p.tries != null) o.maxIter = p.tries;
+    // every step lands with its role's instructions (WorkflowLine.defaultBrief) — part of the same one-undo stamp
+    if (typeof WorkflowLine !== 'undefined' && WorkflowLine.defaultBrief) {
+      const briefs = {};
+      for (const x of bp.props) if (x.t === 'bay' && x.role && !briefs[x.role]) { const d = WorkflowLine.defaultBrief(x.role); if (d) briefs[x.role] = d; }
+      if (Object.keys(briefs).length) o.briefs = briefs;
+    }
     return o;
   }
   function linePrefsEl(bp) {
@@ -1926,8 +1924,7 @@ const Build = (() => {
       + opts.map(([v, t]) => '<button type="button" class="bb sm" data-pref="' + key + '" data-val="' + (v == null ? '' : v) + '" aria-pressed="' + (v === cur) + '">' + esc(t) + '</button>').join('') + '</div>';
     el.innerHTML = '<div class="refit-lineprefs-hd">SET UP BEFORE YOU PLACE</div>'
       + (hasIn ? row('DAILY CAP', LINE_CAPS, p.cap, 'cap') : '')
-      + (p.tries != null ? row('REVIEW TRIES', [1, 2, 3, 4, 5].map(n => [n, String(n)]), p.tries, 'tries') : '')
-      + '<div class="refit-lineprefs-note">Then click the floor to place it. Who works each step comes next, in the panel.</div>';
+      + (p.tries != null ? row('REVIEW TRIES', [1, 2, 3, 4, 5].map(n => [n, String(n)]), p.tries, 'tries') : '');
     el.querySelectorAll('[data-pref]').forEach(b => b.onclick = ev => {
       ev.stopPropagation();
       const v = b.dataset.val === '' ? null : +b.dataset.val;
@@ -2003,7 +2000,7 @@ const Build = (() => {
   }
   function lineSchematic(bp) {
     // per-blueprint tile scale: fill the card's fixed viewport without ever scaling the canvas
-    const S = Math.max(4, Math.min(14, Math.floor(236 / bp.w), Math.floor(64 / bp.h)));
+    const S = Math.max(4, Math.min(12, Math.floor(160 / bp.w), Math.floor(56 / bp.h)));   // (a two-across tile of the line shelf)
     const PAD = 2, u = S >= 12 ? 2 : 1;
     const c = document.createElement('canvas');
     c.className = 'refit-linetile-cv';
@@ -2193,7 +2190,7 @@ const Build = (() => {
     const links = ghostLinks({ props: bp.props.map(p => ({ t: p.t, x: o.x + p.x, y: o.y + p.y, w: p.w, h: p.h })), belts: bp.belts.map(b => ({ x: o.x + b.x, y: o.y + b.y, d: b.d })) });
     const laid = lineLaidFits(bp.id);
     if (laid === undefined && !lineFits(bp.id)) queueLineLaid(bp.id);
-    return { rects, v: station.canPlaceBlueprint(bp.id, o.x, o.y), kind: 'line', label: bp.label, snapped: s.snapped, links, laid: !!(laid && laid.ok) };
+    return { rects, v: station.canPlaceBlueprint(bp.id, o.x, o.y), kind: 'line', label: LINE_PLAIN[bp.id] || bp.label, snapped: s.snapped, links, laid: !!(laid && laid.ok) };
   }
   /* the test job the Workflow panel saved for the line this prop is on (localStorage, per station — the panel's own store),
      plus the line key; read by the live INBOX's COMMS card so ONE REAL JOB runs the Commander's own input (2026-09-27 X1) */
@@ -2222,31 +2219,44 @@ const Build = (() => {
     }
     return null;
   }
-  /* one ready-made line's card (the line library AND the FOR YOUR GOAL card) — its fit is set by setLineTileFit once it is in a grid */
-  function makeLineTile(bp) {
+  /* a shelf section's name, across its grid row — the Props tab's "FURNITURE / 128 ITEMS" voice: a name, never a blurb */
+  function lineGroupHd(label, cls) {
+    const hd = document.createElement('div'); hd.className = 'refit-linegroup' + (cls ? ' ' + cls : '');
+    hd.textContent = label;
+    return hd;
+  }
+  /* one ready-made line in its grid cell: the tile, and under it (only when the deck cannot hold the line) MAKE ROOM FOR IT; the
+     armed line's SET UP row follows across the whole grid */
+  function addLineCell(grid, bp, why, goal) {
+    const cell = document.createElement('div'); cell.className = 'refit-linecell' + (goal ? ' refit-goalcell' : '');
+    const b = makeLineTile(bp, why);
+    cell.appendChild(b); grid.appendChild(cell);
+    setLineTileFit(b, bp);   // DECK-FIT HONESTY — and kept current as the floor changes (see setLineTileFit)
+    if (tool === 'line' && bp.id === lineType) grid.appendChild(linePrefsEl(bp));   // the armed card's settings, right under it
+    return b;
+  }
+  /* one ready-made line's tile (the shelf AND the FOR YOUR GOAL tile) — the line's miniature, its plain name, one small line (its
+     steps and size, or what its fit is: setLineTileFit). What the line is for, the catalog name it ships under and (for the goal
+     tile) the Commander's own words are its hover tip and its accessible description. */
+  function makeLineTile(bp, why) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'refit-linetile' + (tool === 'line' && bp.id === lineType ? ' active' : '');
     b.dataset.line = bp.id;
     b.setAttribute('aria-pressed', tool === 'line' && bp.id === lineType ? 'true' : 'false');
-    b.title = bp.desc;   // adopted by tooltip.js into the station card (never the OS bubble)
+    const name = LINE_PLAIN[bp.id] || bp.label, purpose = LINE_PURPOSE[bp.id] || bp.desc || '';
+    b.dataset.tip = name + (why ? '\n' + why : '') + (purpose ? '\n' + purpose : '');   // one name per line (2026-09-30): the station name is not a second name to learn
+    b.setAttribute('aria-description', (why ? why + ' — ' : '') + purpose);
     const view = document.createElement('span'); view.className = 'refit-linetile-view';
     view.appendChild(lineSchematic(bp));
     b.appendChild(view);
-    const hd = document.createElement('span'); hd.className = 'refit-linetile-hd';
-    const nm = document.createElement('span'); nm.className = 'refit-matname'; nm.textContent = LINE_PLAIN[bp.id] || bp.label;
-    hd.appendChild(nm);
-    if (LINE_PLAIN[bp.id]) { const tg = document.createElement('span'); tg.className = 'refit-linetile-tag'; tg.textContent = bp.label; hd.appendChild(tg); }
-    // footprint + dock count, derived from the catalog (never hand-kept). Mixed VT323 glyphs
-    // ('×', '·') fall back fonts, so the chip is BOX-centred in CSS — never padded by font math.
+    const nm = document.createElement('span'); nm.className = 'refit-matname'; nm.textContent = name;
+    b.appendChild(nm);
+    // steps + footprint, derived from the catalog (never hand-kept); setLineTileFit swaps in the fit when the drawn shape does not fit
     const docks = bp.props.filter(p => p.t === 'bay').length;
     const stat = document.createElement('span'); stat.className = 'refit-linetile-stat';
-    stat.textContent = bp.w + '×' + bp.h + ' · ' + docks + (docks === 1 ? ' DOCK' : ' DOCKS');
-    hd.appendChild(stat);
-    b.appendChild(hd);
-    const why = document.createElement('span'); why.className = 'refit-linetile-why';
-    why.textContent = LINE_PURPOSE[bp.id] || '';
-    b.appendChild(why);
+    stat.textContent = stat.dataset.rest = docks + (docks === 1 ? ' step' : ' steps');
+    b.appendChild(stat);
     b.onclick = () => { lineType = bp.id; selectTool('line'); };
     return b;
   }
@@ -2265,21 +2275,21 @@ const Build = (() => {
     const fits = drawn || !!(laid && laid.ok);
     b.classList.toggle('nofit', !fits);
     b.classList.toggle('laidfit', !drawn && fits);
-    let nf = b.querySelector('.refit-linetile-nofit');
+    // (2026-09-30) the fit is said on the tile's own small line — it used to be a sentence under the tile
+    const stat = b.querySelector('.refit-linetile-stat'), say = t => { if (stat) stat.textContent = t; };
     const next = b.nextElementSibling;
     const make = next && next.classList.contains('refit-linetile-makeroom') ? next : null;
-    if (drawn) { if (nf) nf.remove(); if (make) make.remove(); return; }
-    if (!nf) { nf = document.createElement('span'); nf.className = 'refit-linetile-nofit'; b.appendChild(nf); }
-    if (fits) {   // the drawn shape fits nowhere, but the line does, laid out round what stands here
-      nf.textContent = 'FITS LAID OUT — CLICK THE FLOOR WHERE YOU WANT IT';
+    if (drawn) { say(stat ? stat.dataset.rest || '' : ''); if (make) make.remove(); return; }
+    if (fits) {   // the drawn shape fits nowhere, but the line does, laid out round what stands here (the ghost invites the click)
+      say(stat ? stat.dataset.rest || '' : '');   // (it fits: the tile says its steps, like any other — never the layout engine's words)
       if (make) make.remove();
       return;
     }
     const need = laid && laid.needs ? laid.needs : { w: bp.w, h: bp.h };
-    nf.textContent = laid === undefined ? 'CHECKING WHERE IT FITS…' : 'NO ROOM ON THIS DECK — NEEDS ' + need.w + '×' + need.h + ' OF CLEAR FLOOR';
+    say(laid === undefined ? (stat ? stat.dataset.rest || '' : '') : 'needs more room');   // (the MAKE ROOM FOR IT key under the tile builds a room the size it needs)
     if (laid === undefined) { if (make) make.remove(); return; }
     if (make) return;
-    const mk = document.createElement('button'); mk.type = 'button'; mk.className = 'bb sm refit-linetile-makeroom';
+    const mk = document.createElement('button'); mk.type = 'button'; mk.className = 'bb refit-linetile-makeroom';
     mk.textContent = '＋ MAKE ROOM FOR IT'; mk.setAttribute('aria-label', 'Build a room big enough for ' + bp.label);
     mk.onclick = e => makeRoomFor(bp.id, e);
     b.after(mk);
@@ -2345,7 +2355,7 @@ const Build = (() => {
       // LINE NAMING: a stamp leaves the intake's `label` UNSET (the save carries only what the Commander
       // typed) — but this session remembers which blueprint stamped it, so the intake card's name field
       // can offer the blueprint's name as its placeholder (session-scoped, like lastStampIds).
-      try { for (const id of (res.ids || [])) { const sp = station.propById(id); if (sp && sp.t === 'intake') stampNameOf[id] = bp.label; } } catch (_) {}
+      try { for (const id of (res.ids || [])) { const sp = station.propById(id); if (sp && sp.t === 'intake') stampNameOf[id] = LINE_PLAIN[bp.id] || bp.label; } } catch (_) {}
       if (laidOut) pushFlash((res.ids || []).map(id => station.propById(id)).filter(Boolean).map(p => ({ x1: p.x, y1: p.y, x2: p.x + (p.w || 1) - 1, y2: p.y + (p.h || 1) - 1 })), false);
       else pushFlash(bp.props.map(p => ({ x1: o.x + p.x, y1: o.y + p.y, x2: o.x + p.x + p.w - 1, y2: o.y + p.y + p.h - 1 })), false);
       sfx('chime');
@@ -2360,8 +2370,8 @@ const Build = (() => {
       try { for (const id of (res.ids || [])) { const sp = station.propById(id); if (sp && sp.t === 'bay') { firstBay = sp.id; break; } } } catch (_) {}
       if (firstBay && typeof WorkflowPanel !== 'undefined') {
         try { rebake(); openFlowCard(firstBay); } catch (_) {}
-        flashTip(ev, bp.label + (laidOut ? ' LAID OUT TO FIT HERE' : ' PLACED') + ' — choose who works each BAY in the panel', true);
-      } else flashTip(ev, bp.label + ' STAMPED — now click each BAY to assign an agent', true);
+        flashTip(ev, String(LINE_PLAIN[bp.id] || bp.label).toUpperCase() + (laidOut ? ' LAID OUT TO FIT HERE' : ' PLACED') + ' — pick who works each step in the panel', true);
+      } else flashTip(ev, String(LINE_PLAIN[bp.id] || bp.label).toUpperCase() + ' PLACED — click each step to pick who works it', true);
       if (typeof StationUI !== 'undefined' && StationUI.pokeQuests) { try { StationUI.pokeQuests(); } catch (_) {} }
       // belts just landed — the same first-touch coach a hand-laid run earns (points at ▸ PREVIEW)
       if (typeof Tutorial !== 'undefined' && Tutorial.onBeltPlaced) Tutorial.onBeltPlaced();
@@ -2461,7 +2471,7 @@ const Build = (() => {
         move: 'Drag a room or prop to its new position. Furniture moves with its room.',
         dupe: 'Click the room or prop you want to copy, then click a clear space to place the copy.',
         reclaim: 'Click a room, prop or belt to remove it. Undo brings it back.',
-        belt: 'Click the machine where work starts, then the one it goes to next, and the belt lays itself. Or drag across the floor to lay belt by hand; work flows the way you drag.',
+        belt: 'Click a machine, then the next one: the belt lays itself. Or drag to lay belt by hand.',
         line: 'Choose a conveyor line, then click clear floor to place it. Assign agents after placing.'
       };
       help.querySelector('span').textContent = msg || guidance[tool] || verb;
@@ -2987,6 +2997,7 @@ const Build = (() => {
   // the machines a line is made of — clicking one on the floor opens/selects it in the panel
   const WF_PART = { bay: 1, intake: 1, outbox: 1, loop: 1, joiner: 1, merger: 1, splitter: 1 };
   let wfHighlightId = null, wfPaused = null, wfHostMemo = null, wfKitAuto = false;   // wfKitAuto: the panel minimized the Build Library (and owes it back)
+  let wfArtRev = -1, wfArtAt = 0;   // the authored-art revision the panel's tiles were last painted at (frame(): repaint when it moves)
   /* the HOST the panel is handed: live reads of THIS editor's state (station, compiled plan, camera) and the
      seams it already owns (sample, plan gate, flash/sfx). Lazy getters — the panel never caches a plan. */
   function wfHost() {
@@ -3043,6 +3054,7 @@ const Build = (() => {
       },
       machineDiagram: id => machineDiagramSVG(id),
       machineStill: type => machineStill(type),          // a part's own floor art, for the panel's line diagram
+      bayLive: id => (opts.world && opts.world.bayLive) ? opts.world.bayLive(id) : null,   // a bay's live lamp state (WORKING / WAITING …)
       preview: () => sendTestBoxes(null),               // the TEST view's WATCH IT: the free walkthrough on the floor
       splitModeInfo: id => splitModeInfo(id),            // { mode: 'copy'|'turns', toCopy, toTurns } — the SPLITTER switch
       setSplitMode: (id, mode) => setSplitMode(id, mode), // swaps the JOINER/MERGER where the branches meet (one undo)
@@ -3498,6 +3510,48 @@ const Build = (() => {
     }).catch(() => { rowsEl.innerHTML = '<div class="refit-conn-note">sidecar offline — start it to bind a connector.</div>'; });
   }
 
+  /* PLUGIN TERMINAL binder — the connector portal's card, for plugins: which approved plugin this terminal IS. The list
+     is the sidecar's own (/api/plugins): only a plugin that is ON can be bound, and each row says what it brings. */
+  function openPluginBinder(propId, ev) {
+    if (!root) return;
+    cardCloseAll();
+    const p = station.propById(propId); if (!p || p.t !== 'plugin_terminal') return;
+    const g = document.createElement('div');
+    g.className = 'refit-guide refit-connector-editor';
+    const closeP = () => { if (g.parentNode) g.parentNode.removeChild(g); };
+    cardRegister(g, closeP);
+    g.innerHTML = '<div class="refit-guide-card"><h3>▮ PLUGIN TERMINAL — choose its plugin</h3>'
+      + '<ul><li>This terminal gives its room’s agent the chosen plugin’s <b>tools</b> (each call asks you first, unless you choose Always or Full access).</li>'
+      + '<li>Clicking it in the station opens that plugin’s window.</li></ul>'
+      + '<div class="refit-conn-rows" id="pl-rows">loading…</div>'
+      + '<div class="refit-actions"><button type="button" class="btn-sm" id="pl-unbind">✕ UNBIND</button><button type="button" class="btn-sm" id="pl-cancel">CANCEL</button></div></div>';
+    root.appendChild(g);
+    requestAnimationFrame(() => g.classList.add('refit-swap'));
+    const rowsEl = g.querySelector('#pl-rows');
+    const bind = (id, label) => { const res = station.bindPlugin(propId, id); if (res && res.ok) { sfx('click'); flashTip(ev, 'bound → ' + (label || id), true); closeP(); } else sfx('bad'); };
+    g.querySelector('#pl-unbind').onclick = () => { station.bindPlugin(propId, ''); sfx('click'); flashTip(ev, 'terminal unbound', true); closeP(); };
+    g.querySelector('#pl-cancel').onclick = closeP;
+    g.addEventListener('click', e => { if (e.target === g) closeP(); });
+    if (typeof fetch === 'undefined') { rowsEl.innerHTML = '<div class="refit-conn-note">no sidecar — can’t list plugins here.</div>'; return; }
+    fetch('/api/plugins').then(r => { if (!r.ok) throw new Error('http ' + r.status); return r.json(); }).then(j => {
+      const all = (j && j.plugins) || [];
+      const list = all.filter(x => x.active);
+      const boundOff = p.pluginId ? all.find(x => x.id === p.pluginId && !x.active) : null;
+      const offNote = boundOff ? '<div class="refit-conn-note">Bound to <b>' + esc(boundOff.name || boundOff.id) + '</b>, which is off' + (boundOff.pending ? ' (changed since you approved it)' : '') + ' — turn it on in ⇄ ABILITIES → EXTENSIONS.</div>'
+        : (p.pluginId && !all.some(x => x.id === p.pluginId) ? '<div class="refit-conn-note">Bound to <b>' + esc(p.pluginId) + '</b>, which was removed.</div>' : '');
+      if (!list.length) { rowsEl.innerHTML = offNote + '<div class="refit-conn-note">No plugins are on yet — create or approve one in <b>⇄ ABILITIES → EXTENSIONS</b>, then bind it here.</div>'; return; }
+      rowsEl.innerHTML = list.map(x => {
+        const sel = (x.id === p.pluginId);
+        const tools = Array.isArray(x.tools) ? x.tools.length : 0, wins = Array.isArray(x.screens) ? x.screens.length : 0;
+        const meta = [tools ? tools + ' tool' + (tools === 1 ? '' : 's') : '', wins ? wins + ' window' + (wins === 1 ? '' : 's') : ''].filter(Boolean).join(' · ') || 'hooks only';
+        return '<button type="button" class="bb sm conn-row' + (sel ? ' active' : '') + '" data-id="' + esc(x.id) + '" data-label="' + esc(x.name || x.id) + '">'
+          + '<span class="conn-dot ok">●</span> ' + esc(x.name || x.id) + ' <span class="conn-meta">' + esc(meta) + '</span></button>';
+      }).join('');
+      if (offNote) rowsEl.insertAdjacentHTML('afterbegin', offNote);
+      rowsEl.querySelectorAll('.conn-row').forEach(b => b.onclick = () => bind(b.dataset.id, b.dataset.label));
+    }).catch(() => { rowsEl.innerHTML = '<div class="refit-conn-note">sidecar offline — start it to bind a plugin.</div>'; });
+  }
+
   /* ---------- test run (Polish B): send work down your belts with NO bot connected, and watch it sort to the
      bays right here in REFIT — the build-time payoff + the first thing a tutorial points at.
      THE NARRATED RIDE (2026-07-05): ▸ PREVIEW now teaches the whole two-trip model as it happens — numbered
@@ -3687,6 +3741,8 @@ const Build = (() => {
     }
     return sendTestBoxes(e);
   }
+  // a floor tile's centre in client px (the same mapping the dev hooks' _tileEvent uses) — where a tip about that tile is said
+  const tileClient = (tx, ty) => { const t = T(), r = cv.getBoundingClientRect(); return { clientX: r.left + ((tx + 0.5) * t * zoom + panX) * (r.width / cv.width), clientY: r.top + ((ty + 0.5) * t * zoom + panY) * (r.height / cv.height) }; };
   function sendTestBoxes(ev, auto, agentId) {
     if (!convey) return false;
     // reach-verified mouth first; the doc-order intake only for a MANUAL test on a floor where
@@ -3699,7 +3755,9 @@ const Build = (() => {
     const sorts = !!(valPlan && valPlan.junctions && Object.keys(valPlan.junctions).some(k => valPlan.junctions[k] && valPlan.junctions[k].kind === 'filter'));
     for (const tag of (sorts ? ['code', 'research', 'general'] : ['general'])) convey.enqueueAt(t.x, t.y, { workitemId: 'test-' + (++_testN), tag, preview: 'test ' + tag, test: true });
     note(t.x, t.y, '① WORK COMES IN HERE', '#e8c860');
-    flashTip(ev, auto ? 'LINE COMPLETE — the first crate rides itself. ' + PREVIEW_LABEL + ' › WATCH IT replays it any time' : 'test work riding — watch the loop', true);
+    // the auto ride's word is said by the line's own door on the floor — never at the last pointer spot (that was over the panel)
+    const at = auto ? tileClient(t.x, t.y) : ev;
+    flashTip(at, auto ? 'LINE READY — a test crate rides it now (free: no agent runs). ' + PREVIEW_LABEL + ' › WATCH IT replays it' : 'test work riding — watch the loop', true);
     sfx('click');
     return true;
   }
@@ -3751,6 +3809,8 @@ const Build = (() => {
     for (const a in now) if (!prev[a]) { rideA = a; break; }   // freshly powered line first
     if (!rideA) for (const a in now) { rideA = a; break; }     // else any provably-reaching one
     if (!rideA || !rideMouthFor(rideA)) return;   // complete = an intake lane reaches a bound bay, entered through ITS OWN mouth
+    // …AND every step of that line has an agent (2026-09-30: it announced LINE COMPLETE over the panel while the WRITER had none)
+    if (!(valComps || []).some(c => c.intakes.length && c.bays.some(b => b.agentId === rideA) && c.bays.every(b => b.agentId))) return;
     rideAgentId = rideA;
     ridePending = true;   // armed — frame() fires it once nothing coach-like is up
   }
@@ -4090,7 +4150,17 @@ const Build = (() => {
     finSampleRes = { key, stamp: Date.now(), pending: true, phase: 'post', exampleSignature:options.exampleSignature };   // phase: 'post' (posting line…) → 'run' (running)
     finSig = ''; renderFinCard();
     options.onUpdate?.();
-    const settle = (view, response) => { finSampleRes = { key, stamp: Date.now(), view, exampleSignature:options.exampleSignature, output:response?.replies?.slice(-1)[0] || '' }; finSig = ''; if (running) renderFinCard(); options.onUpdate?.(); sfx(view.ok ? 'chime' : 'bad'); };
+    /* what the server answered is KEPT (2026-09-30 — ease of use): every stage's run (the panel reads each step's own reply from
+       it), the job's stream, and the WHOLE delivered text (the hub delivers it in 4000-character chunks: joined, never just the last
+       one). THE OUTBOX IS TOLD: the panel promised "the result lands in the OUTBOX" but only COMMS' INBOX card folded a delivered
+       row into the OUTBOX's ledger — a job sent from the panel never showed there. Same rule as chat.js: a clean 'done' only. */
+    const settle = (view, response) => {
+      let folded = false;
+      if (view.ok && response && response.delivered && response.delivered.reason === 'done') { try { if (typeof ReturnStore !== 'undefined' && ReturnStore.foldRow) folded = !!ReturnStore.foldRow(response.delivered); } catch (_) {} }
+      finSampleRes = { key, stamp: Date.now(), view, exampleSignature:options.exampleSignature, output: Array.isArray(response?.replies) ? response.replies.join('') : '',
+        runs: Array.isArray(response?.runs) ? response.runs : [], streamId: response?.streamId || null, folded, text: options.text || '' };
+      finSig = ''; if (running) renderFinCard(); options.onUpdate?.(); sfx(view.ok ? 'chime' : 'bad');
+    };
     const bad = reason => ({ ok: false, stages: [], usd: null, reply: '', reason });
     finPlanGate(c).then(gate => {
       if (gate && gate.refuse) { settle(bad(gate.refuse)); return; }
@@ -4761,6 +4831,7 @@ const Build = (() => {
     if (t === 'filter') return typeof WorkflowPanel !== 'undefined' ? openFlowCard(p.id) : openJunctionEditor(p.id, ev);
     if (t === 'airlock') return openDoorPicker(p.id, ev);
     if (t === 'connector_portal') return openConnectorEditor(p.id, ev);
+    if (t === 'plugin_terminal') return openPluginBinder(p.id, ev);
     if (t === 'intake' || t === 'outbox' || t === 'merger' || t === 'splitter' || t === 'joiner' || t === 'loop') return openFlowCard(p.id);
     // no config surface: answer the click honestly instead of doing nothing
     const sp = propSpec(t);
@@ -4768,7 +4839,7 @@ const Build = (() => {
     flashTip(ev, ((sp.label || t) + '').toUpperCase() + ' — MOVE (4) relocates · DELETE (5) removes', true);
   }
   const openPropEditor = (id, t, ev) => { const p = station && station.propById(id); if (p) configureProp(p, ev); };
-  const PROP_EDITABLE = { bay: 1, filter: 1, merger: 1, splitter: 1, joiner: 1, loop: 1, airlock: 1, connector_portal: 1, intake: 1, outbox: 1 };   // merger/splitter = flow card only (no config)
+  const PROP_EDITABLE = { bay: 1, filter: 1, merger: 1, splitter: 1, joiner: 1, loop: 1, airlock: 1, connector_portal: 1, plugin_terminal: 1, intake: 1, outbox: 1 };   // merger/splitter = flow card only (no config)
   const isEditableProp = t => !!PROP_EDITABLE[t] || !!WORKSTATION_TYPES[t];   // a workstation binds an agent + opens its picker on place/click
   function commitPropStamp(d, ev) {
     // CLICK-ON-MACHINE WINS: a click (no drag) on ANY existing prop inspects it instead of attempting
@@ -5516,6 +5587,11 @@ const Build = (() => {
     if (ridePending && !tutorialCoaching() && !(root && root.querySelector('.refit-firstrun, .refit-preset-example, .refit-station-builds'))) fireFirstRide();
     // finish-the-line card: slow re-derive (feed truth changes on the world's poll, not on edits) + per-frame pin
     if (finCardEl && now - finPollTs > 2000) { finPollTs = now; renderFinCard(); }
+    // the authored prop art landed after the Workflow panel painted its tiles: repaint it once the loading settles, so a tile never
+    // keeps the fallback sprite (the machine stills are re-made per remaster revision)
+    const artRev = (typeof PropRemaster !== 'undefined' && PropRemaster.revision) ? PropRemaster.revision() : 0;
+    if (artRev !== wfArtRev) { wfArtRev = artRev; wfArtAt = now; }
+    else if (wfArtAt && now - wfArtAt > 250) { wfArtAt = 0; if (typeof WorkflowPanel !== 'undefined' && WorkflowPanel.isOpen()) WorkflowPanel.refresh(); }
     const hT0 = perfAcc ? performance.now() : 0;
     positionFinCard();
     if (perfAcc) perfAdd('~finCard', performance.now() - hT0);
@@ -6779,7 +6855,7 @@ const Build = (() => {
     // no — the reason on its own line right under them. (Was a DOM tip trailing into a screen corner.)
     const r0 = g.rects[0], w = r0.x2 - r0.x1 + 1, h = r0.y2 - r0.y1 + 1;
     let dims = g.belt ? ('BELT ' + g.dir + ' · ' + Math.max(w, h) + ' LONG')
-      : g.kind === 'line' ? (String(g.label || '').toUpperCase() + (ok ? ' — CLICK TO STAMP' : g.laid ? ' — CLICK TO LAY IT OUT HERE' : ''))   // a red ghost invites the click only when the line fits laid out (2026-09-27 audit B1; phase E)
+      : g.kind === 'line' ? (String(g.label || '').toUpperCase() + (ok ? ' — CLICK TO PLACE' : g.laid ? ' — CLICK TO LAY IT OUT HERE' : ''))   // a red ghost invites the click only when the line fits laid out (2026-09-27 audit B1; phase E)
       : g.move ? ('MOVE ' + (g.dx >= 0 ? '+' : '') + g.dx + ', ' + (g.dy >= 0 ? '+' : '') + g.dy)
       : (tool === 'hall' ? (Math.max(w, h) + ' LONG × ' + Math.min(w, h) + ' WIDE') : (w + ' × ' + h));
     const lines = [dims];
@@ -6872,6 +6948,10 @@ const Build = (() => {
         assign = ri ? '<div class="pc-assign">NEEDS A ' + esc(placed.role) + ' — ' + esc(ri.desc) + ' — click to crew</div>'
           : '<div class="pc-assign">NO AGENT — click to assign</div>';
       }
+    } else if (placed && placed.t === 'plugin_terminal') {
+      assign = placed.pluginId
+        ? '<div class="pc-assign ok">▸ PLUGIN ' + esc(placed.pluginId) + '</div>'
+        : '<div class="pc-assign">UNBOUND — click to choose a plugin</div>';
     } else if (placed && placed.t === 'connector_portal') {
       assign = placed.connectorId
         ? '<div class="pc-assign ok">▸ BOUND ' + esc(placed.connectorId) + '</div>'
@@ -7171,7 +7251,19 @@ const Build = (() => {
     if (first && typeof WorkflowPanel !== 'undefined') { try { openFlowCard(first.id); } catch (e) {} }
     else if (!first) { try { selectTool('line'); } catch (e) {} }
   }
-  const api = { init, open, openWorkflows, testJobForProp, close, toggle, isOpen, requisition, refitNames: guideNames, openAssign, noteLineDelivered, lineOfAgentInfo, nagLabel: code => VAL_LABEL[code] || code,
+  /* EDIT WORKFLOW (2026-09-30): the WORKFLOWS window's door into the full editor — REFIT open on the floor with THIS line's own
+     Workflow panel on screen (the diagram, every step's instructions, what starts it, its budget, floor edits). */
+  function editLine(propId) {
+    pendingGroup = 'workflow'; writeLastGroup('workflow');
+    if (!running) open(); else { buildGroup = 'workflow'; selectTool('select'); }
+    if (!running || !station || !station.propById(propId)) return false;
+    try { rebake(); } catch (e) { /* the frame loop compiles on its next tick; the panel repaints when it does */ }
+    try { openFlowCard(propId); } catch (e) { return false; }
+    return true;
+  }
+  const api = { init, open, openWorkflows, editLine, testJobForProp, close, toggle, isOpen, requisition, refitNames: guideNames, openAssign, noteLineDelivered, lineOfAgentInfo, nagLabel: code => VAL_LABEL[code] || code,
+    // the WORKFLOWS window speaks the shelf's own words and shows the shelf's own art (one name per line, never a second one)
+    lineWords: () => ({ plain: LINE_PLAIN, purpose: LINE_PURPOSE }), lineSchematic: bp => lineSchematic(bp), machineStill: t => machineStill(t),
     nagWhy: valWhy };   // nagLabel: the floor's own nag copy for a compiler code (ROUTINES RUN NOW refusal reads it); nagWhy: the full fix sentence the hover card + Workflow panel say (station.layout reads it)
   if (typeof window !== 'undefined' && window.__STARNET_DEV__) api.__test__ = __test__;
   return api;

@@ -7,7 +7,8 @@
     crew: '<path d="M5 2h5v5H5zM3 14v-4h9v4M12 3h2v4M14 10h1v4"/>',
     work: '<path d="M3 2h10v12H3zM6 5h4M6 8h4M6 11h2"/>',
     build: '<path d="M2 2h8l4 3-2 2-3-2H2zM6 5v9h3V5"/>',
-    system: '<path d="M4 4h8v8H4zM6 6h4v4H6zM6 1v3M10 1v3M6 12v3M10 12v3M1 6h3M1 10h3M12 6h3M12 10h3"/>'
+    system: '<path d="M4 4h8v8H4zM6 6h4v4H6zM6 1v3M10 1v3M6 12v3M10 12v3M1 6h3M1 10h3M12 6h3M12 10h3"/>',
+    apps: '<path d="M2 2h5v5H2zM9 2h5v5H9zM2 9h5v5H2zM9 9h5v5H9z"/>'
   };
   Object.entries(dockIcons).forEach(([group, paths]) => {
     const icon = document.querySelector('#bottombar [data-group="'+group+'"] > .bb-grp .bb-gi');
@@ -35,16 +36,19 @@
     recipes:'M3 2h10v12H3zM6 5h4M6 8h4M6 11h2',
     automation:'M3 6V3h10v4M11 5l2 2 2-2M13 10v3H3V9M1 11l2-2 2 2',
     quests:'M4 14V2h8l-2 3 2 3H4',
+    workflows:'M1 6h3v4H1zM6.5 6h3v4h-3zM12 6h3v4h-3zM4 8h2.5M9.5 8H12',
     refit:'M2 3h12v10H2zM7 3v10M7 8h7',
     connectors:'M3 2v4M7 2v4M2 6h6v4H2zM5 10v3h8V9',
     messaging:'M2 3h12v9H7l-3 2v-2H2zM5 6h6M5 9h4',
     manual:'M8 4L2 2v10l6 2 6-2V2zM8 4v10',
     settings:'M2 4h12M2 8h12M2 12h12M5 2v4M11 6v4M7 10v4',
     updates:'M8 12V2M4 6l4-4 4 4M2 11v3h12v-3',
-    notifs:'M5 3h6v7l2 2H3l2-2zM7 14h2'
+    notifs:'M5 3h6v7l2 2H3l2-2zM7 14h2',
+    apps:'M2 2h5v5H2zM9 2h5v5H9zM2 9h5v5H2zM9 9h5v5H9z',
+    newapp:'M2 2h12v12H2zM8 5v6M5 8h6'
   };
   document.querySelectorAll('#bottombar .bb-menu .bb').forEach(button=>{
-    const key=button.dataset.term || ({'bb-recruit':'recruit','bb-missions':'recipes','bb-build':'refit'})[button.id];
+    const key=button.dataset.term || ({'bb-recruit':'recruit','bb-missions':'recipes','bb-build':'refit','bb-newapp':'newapp','bb-newapp-build':'newapp'})[button.id];
     const icon=button.querySelector('.bb-i');
     if(icon && menuPaths[key]){icon.setAttribute('aria-hidden','true');icon.innerHTML=svgIcon(menuPaths[key]);}
   });
@@ -106,7 +110,9 @@
     // Catalogs need room below their search/category controls on first open.
     // An explicit drag/keyboard height still wins, exactly as for every other sheet.
     const catalog = w.classList.contains('mkt-window') && w.querySelector('.mkt-stage');
-    const preferred = catalog ? Math.max(available * .75, w.offsetHeight - catalog.offsetHeight + 260) : available * .56;
+    // The WORKFLOWS window is a work surface: the job, the step working on it and the whole result want the room (2026-09-30).
+    const work = w.classList.contains('wfw-win');
+    const preferred = catalog ? Math.max(available * .75, w.offsetHeight - catalog.offsetHeight + 260) : work ? available * .8 : available * .56;
     const h = s.expanded ? available : Math.min(available, Math.max(220, s.height || preferred));
     w.style.animation = 'none'; w.style.transform = 'none';
     const geometry = {left:b.x+'px',top:(b.bottom-h)+'px',width:b.width+'px',height:h+'px',maxWidth:b.width+'px',maxHeight:available+'px'};

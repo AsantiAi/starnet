@@ -1669,7 +1669,7 @@
      NOT the user, it is a machine being handed material, so the turn names the line explicitly. Carrying the
      ORIGINAL request as well as the upstream output is load-bearing: a writer handed only research has no
      idea what was asked and invents one. */
-  function handoffPrompt(originalText, fromAgentId, upstream, hop, stageBrief, verdictBrief) {
+  function handoffPrompt(originalText, fromAgentId, upstream, hop, stageBrief, verdictBrief, lastStage) {
     // stageBrief (step editor, 2026-08-05): the RECEIVING dock's standing job brief — optional 5th param so
     // every existing caller composes byte-identical turns. Prompt text only; bounded like the compiled copy.
     // verdictBrief (LOOP verdicts, 2026-08-22): the VERDICT-line instruction for a dock whose lane meets a
@@ -1681,8 +1681,15 @@
       + 'The upstream stage (' + fromAgentId + ') produced:\n' + String(upstream) + '\n\n'
       + (brief ? 'YOUR STANDING BRIEF FOR THIS STATION:\n' + brief + '\n\n' : '')
       + (verdict ? verdict + '\n\n' : '')
-      + 'Do YOUR part of this work and produce the output for the next stage. Do not restate the upstream '
-      + 'output — build on it. Answer with the work itself, not a description of what you would do.';
+      /* lastStage (2026-09-30 — found on a real model): the stage whose reply LEAVES the line is told so. "Produce the output for
+         the next stage … build on it" made a last WRITER asked for three short stories write an essay about "the upstream report".
+         Optional 7th param, same law: every caller that does not pass it composes byte-identical turns. */
+      + (lastStage && !verdict
+        ? 'You are the LAST stage: your reply is the finished result the requester receives. Give them exactly what the original '
+          + 'request asks for — its format, length and tone — using the upstream work above. Answer with the result itself; never '
+          + 'mention stages, the line or the upstream work.'
+        : 'Do YOUR part of this work and produce the output for the next stage. Do not restate the upstream '
+          + 'output — build on it. Answer with the work itself, not a description of what you would do.');
   }
 
   /* parseHandoff(text) -> { stage, original, from } | null — the INVERSE of handoffPrompt, for surfaces that show a work line's
@@ -1694,6 +1701,12 @@
     const m = HANDOFF_RE.exec(String(text == null ? '' : text));
     return m ? { stage: +m[1], original: m[2], from: m[3] } : null;
   }
+  /* isHandoff(text) -> bool — is this turn a work line's HAND-OFF (the frame handoffPrompt writes), however it was cut? Only the
+     frame's fixed opening is read, so a run row's shortened title answers too. A hand-off's words are the LINE's — the step's
+     standing instructions, the upstream stage's work — never the Commander's own: the run-end STUDY and THREAD passes skip such a
+     run (2026-09-30: NOVA quoted a WRITER step's brief back to the Commander as «because you said …»). Pure. */
+  const HANDOFF_HEAD_RE = /^PIPELINE HANDOFF — you are stage \d+ of a work line on this station\./;
+  function isHandoff(text) { return HANDOFF_HEAD_RE.test(String(text == null ? '' : text).replace(/^\s+/, '')); }
   /* stripVerdictLine(text) -> the text without a trailing reviewer VERDICT line (one of its last 3 non-empty lines), for showing
      a work line's result: the line is the loop gate's control signal, not part of the work (R1; sidecar/routing/verdict.js holds
      the gate's own reader). A text that is ONLY the verdict line is returned unchanged. Pure. */
@@ -1870,7 +1883,7 @@
     return rec && typeof rec === 'object' ? rec : null;
   }
 
-  return { rejoinOf, deriveLinks, reconcileLinks, compileRoutingPlan, composeStageBrief, HANDS_LEAD, resolveTarget, lineOf, lineOriginOf, lineLimitsOf, normalizeLineLimits, LINE_LIMIT_DEFAULTS, LINE_LIMIT_CEILINGS, sourceFor, ok, liveTiles, routeFrom, junctionLaneOwners, chainNext, chainStep, fanSiblings, handoffPrompt, parseHandoff, stripVerdictLine, joinPayload, lineComponents, LOOP_MAX_DEFAULT, LOOP_MAX_CEILING,
+  return { rejoinOf, deriveLinks, reconcileLinks, compileRoutingPlan, composeStageBrief, HANDS_LEAD, resolveTarget, lineOf, lineOriginOf, lineLimitsOf, normalizeLineLimits, LINE_LIMIT_DEFAULTS, LINE_LIMIT_CEILINGS, sourceFor, ok, liveTiles, routeFrom, junctionLaneOwners, chainNext, chainStep, fanSiblings, handoffPrompt, parseHandoff, isHandoff, stripVerdictLine, joinPayload, lineComponents, LOOP_MAX_DEFAULT, LOOP_MAX_CEILING,
     // THE DOCK LAYER (multi-bay agents, 2026-09-22) — the dock-keyed truth the agent readings above are views of
     resolveDock, chainNextDock, chainStepDock, fanSiblingsDock, junctionLaneDocks, lineOfDock, lineOriginOfDock, entryDockOf, docksOf, dockOf, agentOfDock: agentOfDockIn, deriveDockLayer, dockLayer, hasDockLayer, stepToAgents, propIdCmp,
     _internals: { DIRV, OPP, LANE_ORDER, key, buildBeltMap, outLanes, inLanes, loopLanes, beltTileNear, ringBelts, junctionAnchor, dirBetween, linkTilesByProp, linkedBeltMap, nextTiles, detectCycle, hashStr, compileChains, compileDockChains, chainCycle, shipFrom, propIdCmp, entryDocksOf, agentChainsView } };

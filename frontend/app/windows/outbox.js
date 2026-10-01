@@ -28,7 +28,7 @@
     const RS = (typeof ReturnStore !== 'undefined') ? ReturnStore : null;
     const rows = (RS && RS.pendingRows) ? RS.pendingRows() : [];
     body.innerHTML =
-      '<header class="utility-head"><h2>Ready to review</h2><p>Work that finished while you were away. Open a result, then decide what comes next.</p></header>' +
+      '<header class="utility-head"><h2>Ready to review</h2><p>Finished work from your lines and routines, including what ran while you were away. Open a result, then decide what comes next.</p></header>' +
       '<div id="ob-list" class="ob-list"></div>' +
       '<div class="row ob-doors" style="margin-top:10px;gap:8px"><button class="bb sm" id="ob-library">LIBRARY · all saved outputs</button><button class="bb sm" id="ob-logbook">AGENT RECORD · run history</button></div>';
     const list = body.querySelector('#ob-list');
@@ -101,7 +101,8 @@
           '<div class="ob-meta">' + esc(agentName(rw.agentId)) + ' · ' + when + usd + '</div>' +
         '</div>' +
         '<div class="ob-body" hidden>' +
-          '<div class="ob-primary"><button type="button" class="consent-btn ob-open">↗ OPEN SESSION</button>' +
+          // a WORKFLOWS job (2026-09-30) opens its own record there: the result, what each step did, NEEDS CHANGES, send it again
+          '<div class="ob-primary">' + (/^sample-/.test(String(rw.streamId || '')) ? '<button type="button" class="consent-btn ob-wf">OPEN IN WORKFLOWS</button>' : '') + '<button type="button" class="consent-btn ob-open">↗ OPEN SESSION</button>' +
             '<button type="button" class="consent-btn ob-fork">⊕ NEW SESSION</button></div>' +
           '<details class="ob-request"><summary class="ob-sec">WHAT YOU ASKED FOR</summary><div class="ob-ask"><span class="loading">loading…</span></div></details>' +
           '<div class="ob-sec">WHAT CAME BACK</div><div class="ob-out"><span class="loading">loading…</span></div>' +
@@ -179,6 +180,15 @@
         b.disabled = false;
         if (!ok) notify('transcript unreachable for that run', 'warn');
         else H.workConversation('outbox');
+      });
+      // OPEN IN WORKFLOWS — a job sent down a work line opens the WORKFLOWS window on its own record (GET /api/line-jobs?stream=)
+      const wfb = row.querySelector('.ob-wf');
+      if (wfb) wfb.addEventListener('click', async ev => {
+        ev.stopPropagation();
+        wfb.disabled = true;
+        const ok = (typeof WorkflowsWindow !== 'undefined' && WorkflowsWindow.openByStream) ? await WorkflowsWindow.openByStream(rw.streamId, 'outbox') : false;
+        wfb.disabled = false;
+        if (!ok) notify('this job’s workflow record is not on the station any more — ↗ OPEN SESSION still reads it', 'warn');
       });
       // ⊕ NEW SESSION — dedicate a fresh chat (same agent) to expanding on this work; the composer
       // is prefilled naming the task so the follow-up ask writes itself. No fabricated turns.

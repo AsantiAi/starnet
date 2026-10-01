@@ -31,7 +31,7 @@ A.ok(/const W = Math\.min\(bp\.w, need\.w\) \+ 2, H = Math\.min\(bp\.h, need\.h\
 A.ok(/touches\(c\.x, c\.y\)/.test(mr) && /station\.addRoom\(\{ kind: 'hab'/.test(mr), 'it only builds a room that touches the station (auto-doors join it)');
 A.ok(/lineType = bp\.id; selectTool\('line'\)/.test(mr) && /UNDO removes the room/.test(mr), 'then arms the line over it and says how to take it back');
 // (phase E: a red ghost of a line that fits LAID OUT invites that click instead — never CLICK TO STAMP)
-A.ok(/\(ok \? ' — CLICK TO STAMP' : g\.laid \? ' — CLICK TO LAY IT OUT HERE' : ''\)/.test(build), 'a red line ghost never says CLICK TO STAMP');
+A.ok(/\(ok \? ' — CLICK TO PLACE' : g\.laid \? ' — CLICK TO LAY IT OUT HERE' : ''\)/.test(build), 'a red line ghost never says CLICK TO PLACE');
 // the real model agrees: a room that touches the starter room is accepted and the blueprint then fits
 {
   const s = WM.create(), z = s.rooms()[0].rects[0];
@@ -49,7 +49,7 @@ A.ok(/\(ok \? ' — CLICK TO STAMP' : g\.laid \? ' — CLICK TO LAY IT OUT HERE'
 /* B2 — the panel opens on the first BAY after a stamp */
 const st = build.slice(build.indexOf('  function stampLine(w, ev) {'), build.indexOf('NO STANDALONE CANVAS INVITATION'));
 A.ok(/let firstBay = null;/.test(st) && /rebake\(\); openFlowCard\(firstBay\)/.test(st), 'a successful stamp compiles and docks the panel on the first BAY');
-A.ok(/choose who works each BAY in the panel/.test(st), '…and the tip points at the panel');
+A.ok(/pick who works each step in the panel/.test(st), '…and the tip points at the panel');
 
 /* T1 — a saved schedule with scheduling OFF is named, and the switch is right there */
 // a REAL compiled line (the panel reads lineFlow's output): a FRONT DESK with its one bay crewed
@@ -71,7 +71,7 @@ const said = W.sentenceText(W.howItRuns(f, { triggers: off, nameOf: a => String(
 // (the station.layout audit, 2026-09-28, folded this into ONE "paused starts" sentence — the fact it must carry is unchanged)
 A.ok(/^Nothing starts it right now \(its routine "news" \(every day at 9:00 AM\) is saved but the scheduler is off\)/.test(said), 'the sentence says it is scheduled but the scheduler is OFF (' + said.slice(0, 110) + ')');
 A.ok(!/no schedule/.test(said), '…never "no schedule"');
-A.ok(/'SCHEDULE · OFF'/.test(panel) && /scheduling is off' : 'no trigger yet'/.test(panel), 'the INBOX node says SCHEDULE · OFF');
+A.ok(/'SCHEDULE · OFF'/.test(panel) && /scheduling is off' : 'no trigger yet(: it runs when you send it a job)?'/.test(panel), 'the INBOX node says SCHEDULE · OFF');
 A.ok(/id="trg-arm">▶ TURN SCHEDULING ON/.test(panel) && /api\('\/api\/cron\/arm', 'POST', \{ enabled: true \}\)/.test(panel), 'the panel carries the switch, on the same route AUTOMATION uses');
 A.ok(/refreshServerFacts\(\);\s*\}\)\.catch/.test(panel.slice(panel.indexOf('const wireArm'), panel.indexOf('const wireArm') + 900)), '…and re-reads the truth after pressing it');
 

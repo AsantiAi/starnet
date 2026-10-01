@@ -217,18 +217,26 @@ body.glass-demo #left .ws-tab.on { text-shadow: none; }
 /* Keep the station view free of decorative targeting marks. */
 body.glass-demo #stage-wrap .cam-hud::before,
 body.glass-demo #stage-wrap .cam-hud::after { content: none; display: none; }
-body.glass-demo #stage-wrap .cam-label {
-  top: 16px; left: 27px; font-size: 12px; letter-spacing: 1px;
-  opacity: .75; color: var(--ph); text-shadow: 0 1px 2px #000;
+/* CAMERA OVERLAY, 09-30 (Andrew: the four corners were ugly → "keep only the cinema button"). The picture
+   carries no camera words or frame marks: the link state already reads in the top bar (UPLINK) and the
+   station's activity lives in COMMS, so the label, LIVE / FEED, AUTO CAM, the event ticker and the ┌┐└┘
+   marks are hidden here (world.js still writes their text; hiding is presentation only). CINEMA stays, as
+   one small glass key (the Build Library sheet glass) in the bottom-right corner.
+   !important: warroom.js sets .cam-mode's display inline every tick. */
+body.glass-demo #stage-wrap :is(.cam-c,.cam-label,.cam-rec,.cam-feed,.cam-mode,.cam-ticker) { display: none !important; }
+body.glass-demo #stage-wrap .cam-cine {
+  box-sizing: border-box; height: 28px; padding: 0 12px; margin: 0;
+  bottom: 16px; right: 16px; cursor: pointer;
+  font: 15px/26px 'VT323',monospace; letter-spacing: .8px; white-space: nowrap;
+  color: var(--ph); opacity: 1; text-shadow: none;
+  background: linear-gradient(125deg,rgba(var(--ph-bright-rgb),.09),rgba(var(--ph-rgb),.045) 48%,rgba(var(--ph-rgb),.015)),rgba(6,4,2,.6);
+  border: 1px solid rgba(var(--ph-rgb),.2); border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb),.07), 0 4px 14px rgba(0,0,0,.3);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
 }
-body.glass-demo #stage-wrap .cam-rec { top: 16px; font-size: 11px; opacity: .7; text-shadow: 0 1px 2px #000; }
-body.glass-demo #stage-wrap .cam-feed {
-  bottom: 16px; left: 27px; padding: 0; border: 0; background: none;
-  font-size: 11px; opacity: .65; text-shadow: 0 1px 2px #000;
-}
-body.glass-demo #stage-wrap .cam-mode {
-  top: 36px; left: 27px; padding: 0; border: 0; background: none;
-  font-size: 11px; opacity: .75; color: var(--ph); text-shadow: 0 1px 2px #000;
+body.glass-demo #stage-wrap .cam-cine:is(:hover,:focus-visible) {
+  color: var(--ph-bright); border-color: rgba(var(--ph-rgb),.45);
+  background: linear-gradient(125deg,rgba(var(--ph-bright-rgb),.16),rgba(var(--ph-rgb),.08) 48%,rgba(var(--ph-rgb),.03)),rgba(6,4,2,.66);
 }
 body.glass-demo #screen-game #bottombar .bb-gi {
   width: 18px; height: 18px; padding: 0; margin: 0; border: 0; opacity: .9;

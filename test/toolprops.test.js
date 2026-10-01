@@ -13,7 +13,7 @@ const map = ToolProps.toolPropType;
 // computer=the compute gate, workbench=dedicated shell/verify events, orchestrator=handoff boxes).
 const EXPECT = {
   computer: null, notebook: 'notebook', cabinet: 'cabinet', dish: 'dish',
-  connector: null, workbench: null, orchestrator: null, studio: 'studio', jukebox: 'jukebox'
+  connector: null, plugin: null /* plugin__<id>__* tools: the plugin terminal, like a connector portal */, workbench: null, orchestrator: null, studio: 'studio', jukebox: 'jukebox'
 };
 for (const [objectType, grants] of Object.entries(CAP_REGISTRY)) {
   A.ok(objectType in EXPECT, 'registry objectType "' + objectType + '" has an expected mapping (update toolprops when the registry grows)');

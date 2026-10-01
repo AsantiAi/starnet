@@ -23,7 +23,8 @@ const { makeDevices } = require('../sidecar/remote/devices.js');
 const { makeApprovals } = require('../sidecar/remote/approvals.js');
 const { makeGateway } = require('../sidecar/remote/gateway.js');
 const { makeRelayClient } = require('../sidecar/remote/relay-client.js');
-const { makeRelay, ridOf } = require('../relay/server.js');
+const { makeRelay, ridOf, tokenHash, LABEL } = require('../relay/server.js');
+const net = require('net');
 const Phone = require('../relay/app/phone-client.js');
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -63,6 +64,53 @@ function wsClose(url) {
         ws.onclose = (ev) => resolve(ev.code);
       });
       A.eq(code, 4401, 'a station that cannot sign for its key is refused');
+    }
+
+    // ONE bad request must never take the relay down (it carries every station and phone)
+    {
+      // a relay that serves the phone app (the crash lived on that path)
+      const appRelay = makeRelay({ appDir: path.join(__dirname, '..', 'relay', 'app'), log: () => {} });
+      const appPort = await appRelay.listen(0, '127.0.0.1');
+      const abase = 'http://127.0.0.1:' + appPort;
+      A.eq((await fetch(abase + '/')).status, 200, 'the phone app is served');
+      const r1 = await fetch(abase + '/%00');
+      A.eq(r1.status, 400, 'a path with a NUL byte is refused, not crashed on');
+      const r2 = await fetch(abase + '/' + 'a'.repeat(400));
+      A.eq(r2.status, 400, 'an absurdly long path is refused');
+      await new Promise((resolve) => {
+        const s = net.connect(appPort, '127.0.0.1', () => s.write('GET //[ HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n'));
+        s.on('close', resolve); s.on('error', resolve); setTimeout(() => { s.destroy(); resolve(); }, 1500);
+      });
+      const h = await fetch(abase + '/healthz').then(r => r.json());
+      A.eq(h.ok, true, 'and the relay is still up afterwards');
+      await appRelay.close();
+    }
+
+    // A phone that arrives while a station has just connected (its paired list not sent yet) WAITS for the list
+    // instead of being told "not paired" (which used to make a healthy phone believe it was removed)
+    {
+      const keys = devices.stationKeys();
+      const sws = new WebSocket(base.replace('http', 'ws') + '/v1/station');
+      const got = [];
+      let rid = null;
+      await new Promise((resolve) => {
+        sws.onmessage = (ev) => {
+          const m = JSON.parse(ev.data);
+          if (m.t === 'challenge') sws.send(JSON.stringify({ t: 'auth', pub: keys.publicRaw, sig: C.b64u(nodeCrypto.sign('sha256', Buffer.from(LABEL + '|' + m.nonce), keys.privateKey)) }));
+          else if (m.t === 'ready') { rid = m.rid; resolve(); }
+          else got.push(m);
+        };
+      });
+      const pws = new WebSocket(base.replace('http', 'ws') + '/v1/phone?rid=' + encodeURIComponent(rid) + '&tok=early-token');
+      await new Promise(r => { pws.onopen = r; });
+      pws.send(JSON.stringify({ t: 'hello', v: 1, deviceId: 'dev_early' }));
+      await sleep(300);
+      A.eq(got.filter(m => m.t === 'open').length, 0, 'the phone is held while the station has not said who is paired');
+      sws.send(JSON.stringify({ t: 'tokens', hashes: [tokenHash('early-token')] }));
+      await waitUntil(() => got.some(m => m.t === 'open') && got.some(m => m.t === 'from'), 3000, 'held phone admitted');
+      A.eq(got.find(m => m.t === 'open').paired, true, 'then admitted as paired, its early hello delivered');
+      try { pws.close(); sws.close(); } catch (_) {}
+      await sleep(100);
     }
 
     rc = makeRelayClient({ url: base, devices, sessions, gateway, crypto: C, now: () => Date.now(), log: () => {} });
@@ -131,6 +179,18 @@ function wsClose(url) {
     const paired2 = await Phone.pairRelay({ relay: base, stationPub: st.publicRaw, pairingId: p2.pairingId, code: p2.code, name: 'Tablet', key: key2 });
     const c2 = Phone.connectRelay({ relay: base, stationPub: st.publicRaw, deviceId: paired2.deviceId, relayToken: paired2.relayToken, key: key2 });
     A.eq((await c2.call('ping')).ok, true, 'second phone linked');
+    // a paired phone cannot say hello as ANOTHER paired phone (its relay pass belongs to its own device)
+    {
+      const rid = ridOf(st.publicRaw);
+      const spoof = new WebSocket(base.replace('http', 'ws') + '/v1/phone?rid=' + encodeURIComponent(rid) + '&tok=' + encodeURIComponent(paired2.relayToken));
+      const ans = await new Promise((resolve) => {
+        spoof.onopen = () => spoof.send(JSON.stringify({ t: 'hello', v: 1, deviceId: paired.deviceId, eph: key2.publicRaw, nonce: 'AAAAAAAAAAAAAAAAAAAAAA' }));
+        spoof.onmessage = (ev) => resolve(JSON.parse(ev.data));
+        setTimeout(() => resolve(null), 4000);
+      });
+      A.eq(ans && ans.t === 'error' && ans.error, 'unknown device', 'a phone using its own pass to speak as another phone is refused');
+      try { spoof.close(); } catch (_) {}
+    }
     const closed2 = [];
     c2.onStatus((s, d) => { if (s === 'closed') closed2.push(d && d.code); });
     await relay.close();

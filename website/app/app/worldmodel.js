@@ -116,6 +116,7 @@ const WorldModel = (() => {
     comms_dish: 'dish', comms_uplink: 'dish', comms_beacon: 'dish',                                                           // a comms dish = web
     gigs_servercart: 'notebook', bridge_relaystack: 'notebook', core: 'notebook',                                            // a server/databank = memory
     connector_portal: 'connector',                                                                                           // a connector portal = an MCP server's live tools (per-instance, bound to a connectorId)
+    plugin_terminal: 'plugin',                                                                                               // a plugin terminal = that plugin's tools (per-instance, bound to a pluginId) + opens its window
     workbench: 'workbench',                                                                                                   // a workbench = shell.exec + verify.run (real code execution, consent-gated)
     studio: 'studio',                                                                                                         // a media studio = image_generate / image_analyze (G1b: image tools finally have a placeable body)
     jukebox: 'jukebox'                                                                                                        // a jukebox = Spotify tools (search/now-playing/play/pause/queue); INERT until Spotify is connected in TOOLSETS
@@ -125,7 +126,7 @@ const WorldModel = (() => {
      placement toast, and the Field Manual all say the SAME word for the same thing (kills DISH-vs-antenna
      drift: a prop, the power it grants, and what the agent then does all match). */
   const CAP_LABEL = {
-    computer: 'COMPUTE', cabinet: 'FILES', dish: 'WEB', notebook: 'MEMORY', connector: 'LIVE TOOLS', workbench: 'TERMINAL', studio: 'IMAGES', jukebox: 'SPOTIFY'
+    computer: 'COMPUTE', cabinet: 'FILES', dish: 'WEB', notebook: 'MEMORY', connector: 'LIVE TOOLS', workbench: 'TERMINAL', studio: 'IMAGES', jukebox: 'SPOTIFY', plugin: 'PLUGIN TOOLS'
   };
   function grantLabelForProp(propType) { const c = CAP_PROP_MAP[propType]; return c ? (CAP_LABEL[c] || c) : null; }   // prop -> plain power word (or null = inert decor)
 
@@ -1915,6 +1916,7 @@ const WorldModel = (() => {
         for (const k of CFG) if (sp[k] != null) cfg[k] = sp[k];
         if (sp.t === 'loop' && ov.maxIter != null) cfg.maxIter = ov.maxIter;
         if (Object.keys(cfg).length) n.cfg = cfg;
+        if (n.t === 'bay' && n.role) { const pb = { t: 'bay', role: n.role }; stampBrief(pb, ov.briefs); if (pb.brief) n.brief = pb.brief; if (pb.hands) n.hands = pb.hands; }
         return n;
       });
       const drawn = bp.props.map((sp, i) => {
@@ -1969,6 +1971,7 @@ const WorldModel = (() => {
             if (n.block === false) p.block = false;
             if (n.role && BAY_ROLES[n.role]) p.role = n.role;
             if (typeof n.agentId === 'string' && n.agentId) p.agentId = n.agentId;
+            if (n.t === 'bay') stampBrief(p, n.role && (n.brief || n.hands) ? { [n.role]: { does: n.brief, hands: n.hands } } : null);
             if (n.t === 'intake' && typeof n.label === 'string' && n.label.trim()) p.label = n.label.trim().slice(0, 48);
             if (n.t === 'intake' && n.limits && typeof n.limits === 'object') {   // through the one normalizer, as a stamp does
               const nl = normalizeLimits(n.limits);
@@ -2425,6 +2428,14 @@ const WorldModel = (() => {
     /* SET UP BEFORE YOU PLACE (2026-09-28): `opts` = { limits, maxIter } from the shelf card. They ride IN the stamp —
        the INBOX's budget through the same normalizer setPropLimits uses, the LOOP's pass cap through the same clamp its
        card uses — inside the ONE snapshot, so one UNDO still removes the whole line. */
+    // a stamped BAY of a role the caller gave instructions for carries them (the bounds setPropBrief / setPropHands keep)
+    function stampBrief(prop, briefs) {
+      const b = prop && prop.t === 'bay' && prop.role && briefs && typeof briefs === 'object' ? briefs[prop.role] : null;
+      if (!b || typeof b !== 'object') return;
+      const does = typeof b.does === 'string' ? b.does.trim().slice(0, 2000) : '', hands = typeof b.hands === 'string' ? b.hands.replace(/\s+/g, ' ').trim().slice(0, 160) : '';
+      if (does && !prop.brief) prop.brief = does;
+      if (hands && !prop.hands) prop.hands = hands;
+    }
     function stampBlueprint(id, tx, ty, opts) {
       const bp = blueprintById(id);
       const v = checkBlueprint(bp, tx, ty);
@@ -2451,6 +2462,7 @@ const WorldModel = (() => {
           if (nl) prop.limits = { maxHops: nl.maxHops, maxUsdPerMessage: nl.maxUsdPerMessage, maxUsdPerDay: nl.maxUsdPerDay };
         }
         if (s.t === 'loop' && ov.maxIter != null) applyJunctionCfg(prop, { maxIter: ov.maxIter });
+        stampBrief(prop, ov.briefs);   // (a shelf line's steps land with their role's instructions — one undo with the line)
         doc.props.push(prop);
         ids.push(prop.id);
         dirty.push({ x1: prop.x, y1: prop.y, x2: prop.x + prop.w - 1, y2: prop.y + prop.h - 1 });
@@ -2665,6 +2677,7 @@ const WorldModel = (() => {
         if (p.timeoutMin) lp.timeoutMin = p.timeoutMin; if (p.maxIter) lp.maxIter = p.maxIter; if (p.done) lp.done = p.done; if (p.when) lp.when = p.when;   // joiner / loop gate config
         if (p.door) lp.door = p.door;   // an AIRLOCK's seal state -> the prop sprite's status light / jam spark
         if (p.connectorId) lp.connectorId = p.connectorId;   // a CONNECTOR PORTAL's bound server -> live state + firing pulse on the sprite
+        if (p.pluginId) lp.pluginId = p.pluginId;            // a PLUGIN TERMINAL's bound plugin -> the click opens that plugin's window
         propsLocal.push(lp);
         if (p.block === false) continue;   // flat decor (rugs / wall panels) never blocks walking
         for (let yy = ly; yy < ly + h; yy++) for (let xx = lx; xx < lx + w; xx++) blockedTiles.add(xx + ',' + yy);
@@ -2938,6 +2951,52 @@ const WorldModel = (() => {
       emit([{ x1: p.x, y1: p.y, x2: p.x + (p.w || 1) - 1, y2: p.y + (p.h || 1) - 1 }]);
       return { ok: true, id: propId, connectorId: p.connectorId || null };
     }
+    // bind/clear the pluginId on a PLUGIN TERMINAL — WHICH plugin's tools it grants and whose window it opens.
+    const PLUGIN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+    function bindPlugin(propId, pluginId) {
+      const p = doc.props.find(q => q.id === propId);
+      if (!p) return fail('NOT_FOUND', 'no such prop');
+      if (p.t !== 'plugin_terminal') return fail('NOT_A_TERMINAL', 'only a plugin terminal can be bound to a plugin');
+      const id = (pluginId == null ? '' : String(pluginId)).trim();
+      if (id && !PLUGIN_ID_RE.test(id)) return fail('BAD_PLUGIN', 'that is not a plugin id');
+      snapshot();
+      if (id) p.pluginId = id; else delete p.pluginId;
+      emit([{ x1: p.x, y1: p.y, x2: p.x + (p.w || 1) - 1, y2: p.y + (p.h || 1) - 1 }]);
+      return { ok: true, id: propId, pluginId: p.pluginId || null };
+    }
+    /* PLACE A PLUGIN'S TERMINAL (install places it — Andrew 2026-09-29): a REAL placed prop, bound to the plugin, in
+       the agent's capability room (desk room, then bay room, then the spawn room). Idempotent: an existing terminal
+       for this plugin anywhere on the station is returned as-is, never duplicated. Scans the room for the first
+       spot the ordinary placement rules accept (walls, doors, walk paths), top rows first so it stands against the
+       wall like the other capability props. Fails honestly when the room is full — the caller says so. */
+    function placePluginTerminal(pluginId, agentId) {
+      const pid = String(pluginId || '').trim();
+      if (!PLUGIN_ID_RE.test(pid)) return fail('BAD_PLUGIN', 'that is not a plugin id');
+      const existing = doc.props.find(p => p.t === 'plugin_terminal' && p.pluginId === pid);
+      if (existing) return { ok: true, existing: true, id: existing.id, x: existing.x, y: existing.y, roomId: roomAt(existing.x, existing.y) };
+      const aid = String(agentId || '').trim();
+      const desk = aid ? doc.props.find(p => SEAT_WORKSTATIONS[p.t] && p.agentId === aid) : null;
+      const roomId = (desk && roomAt(desk.x, desk.y)) || (aid && agentRoomId(aid)) || doc.meta.spawnRoomId;
+      const rm = roomId && doc.rooms[roomId];
+      if (!rm || !Array.isArray(rm.rects) || !rm.rects.length) return fail('NO_ROOM', 'no room to place the terminal in');
+      for (const r of rm.rects) {
+        const midX = Math.floor((r.x1 + r.x2) / 2);
+        const cols = [];
+        for (let d = 0; d <= r.x2 - r.x1; d++) { if (midX + d <= r.x2) cols.push(midX + d); if (d && midX - d >= r.x1) cols.push(midX - d); }
+        for (let y = r.y1; y <= r.y2 - 1; y++) {
+          for (const x of cols) {
+            if (!canPlaceProp('plugin_terminal', x, y, 1, 2).ok) continue;
+            const added = addProp({ t: 'plugin_terminal', x, y, w: 1, h: 2 });
+            if (!added.ok) continue;
+            const p = doc.props.find(q => q.id === added.id);
+            p.pluginId = pid;
+            emit([{ x1: x, y1: y, x2: x, y2: y + 1 }]);
+            return { ok: true, id: added.id, x, y, roomId };
+          }
+        }
+      }
+      return fail('ROOM_FULL', 'no free spot for a terminal in that room');
+    }
     /* set/clear a BAY's standing JOB BRIEF (step editor, 2026-08-05) — what this step does with arriving
        work. PROMPT TEXT ONLY: it rides the compiled plan into run prompts and never changes who runs or
        what tools they hold. Mirrors assignPropAgent's shape; empty clears; bounded at 2000 chars (the
@@ -3113,6 +3172,12 @@ const WorldModel = (() => {
           if (p.connectorId) out.push({ objectType: 'connector', connectorId: p.connectorId });
           continue;
         }
+        if (cap === 'plugin') {
+          // same per-instance rule: a BOUND plugin terminal grants THAT plugin's tools (the sidecar projects them
+          // from the plugin's process, only while its approval covers its code); an unbound one grants nothing.
+          if (p.pluginId) out.push({ objectType: 'plugin', pluginId: p.pluginId });
+          continue;
+        }
         if (seen[cap]) continue;
         seen[cap] = true; out.push(cap);
       }
@@ -3246,7 +3311,7 @@ const WorldModel = (() => {
       },
       // mutations
       addRoom, placeHallway, removeRoom, moveRoom, setFloor, setMaterial, setDeck, setWalls, setHull, paintTiles, renameRoom,
-      addProp, removeProp, moveProp, rotateProp, faceProp, mirrorProp, assignPropAgent, ensureWorkstation, configureJunction, swapJoinerMerger, bindConnector, setDoorState, setPropProject, setPropBrief, setPropRole, setPropHands, setPropLabel, setPropLimits,
+      addProp, removeProp, moveProp, rotateProp, faceProp, mirrorProp, assignPropAgent, ensureWorkstation, configureJunction, swapJoinerMerger, bindConnector, bindPlugin, placePluginTerminal, setDoorState, setPropProject, setPropBrief, setPropRole, setPropHands, setPropLabel, setPropLimits,
       setBelt, removeBelt, removeBelts, placeBeltRun, connectBelt, connectionPreview, hookedBelts, stampBlueprint, insertBayBetween, canInsertBayBetween, transact, lineGraph, applyLineLayout, blueprintGraph,
       // agent-bay binding queries
       propsByType, propsByAgent, pipelineEdges, setPipelineEdges, addPipelineEdge, removePipelineEdge, agentRoomId, bayObjects,
@@ -3308,7 +3373,7 @@ const WorldModel = (() => {
     // lookup is installed (i.e. a real client with the catalog); plain node tests keep every prop.
     if (propRules) doc.props = doc.props.filter(p => !(p && typeof p.t === 'string') || !!propRules(p.t));
     doc.props = doc.props.filter(p => p && typeof p === 'object' && typeof p.t === 'string')
-      .map(p => { const o = { id: p.id || null, t: p.t, x: p.x | 0, y: p.y | 0, w: Math.max(1, p.w | 0 || 1), h: Math.max(1, p.h | 0 || 1) }; if (p.block === false && !LEGACY_WALKABLE_DOCKS[p.t]) o.block = false; if (typeof p.agentId === 'string' && p.agentId) o.agentId = p.agentId; const r0 = cleanRot(p.r); if (r0) o.r = r0; if (p.m) o.m = 1; if (typeof p.role === 'string' && p.role) o.role = p.role.slice(0, 24); if (typeof p.brief === 'string' && p.brief.trim()) o.brief = p.brief.slice(0, 2000); if (p.t === 'bay' && typeof p.hands === 'string' && p.hands.trim()) o.hands = p.hands.slice(0, 160); if (typeof p.label === 'string' && p.label.trim()) o.label = p.label.slice(0, 48); if (p.t === 'intake' && typeof p.projectRoot === 'string' && p.projectRoot.trim()) o.projectRoot = p.projectRoot.trim().slice(0, 4096); if (p.t === 'intake' && p.limits && typeof p.limits === 'object') { const nl = normalizeLimits(p.limits); if (nl) o.limits = { maxHops: nl.maxHops, maxUsdPerMessage: nl.maxUsdPerMessage, maxUsdPerDay: nl.maxUsdPerDay }; } applyJunctionCfg(o, p); if (cleanDoor(p.door)) o.door = p.door; if (typeof p.connectorId === 'string' && p.connectorId.trim()) o.connectorId = p.connectorId.trim(); return o; });
+      .map(p => { const o = { id: p.id || null, t: p.t, x: p.x | 0, y: p.y | 0, w: Math.max(1, p.w | 0 || 1), h: Math.max(1, p.h | 0 || 1) }; if (p.block === false && !LEGACY_WALKABLE_DOCKS[p.t]) o.block = false; if (typeof p.agentId === 'string' && p.agentId) o.agentId = p.agentId; const r0 = cleanRot(p.r); if (r0) o.r = r0; if (p.m) o.m = 1; if (typeof p.role === 'string' && p.role) o.role = p.role.slice(0, 24); if (typeof p.brief === 'string' && p.brief.trim()) o.brief = p.brief.slice(0, 2000); if (p.t === 'bay' && typeof p.hands === 'string' && p.hands.trim()) o.hands = p.hands.slice(0, 160); if (typeof p.label === 'string' && p.label.trim()) o.label = p.label.slice(0, 48); if (p.t === 'intake' && typeof p.projectRoot === 'string' && p.projectRoot.trim()) o.projectRoot = p.projectRoot.trim().slice(0, 4096); if (p.t === 'intake' && p.limits && typeof p.limits === 'object') { const nl = normalizeLimits(p.limits); if (nl) o.limits = { maxHops: nl.maxHops, maxUsdPerMessage: nl.maxUsdPerMessage, maxUsdPerDay: nl.maxUsdPerDay }; } applyJunctionCfg(o, p); if (cleanDoor(p.door)) o.door = p.door; if (typeof p.connectorId === 'string' && p.connectorId.trim()) o.connectorId = p.connectorId.trim(); if (p.t === 'plugin_terminal' && typeof p.pluginId === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(p.pluginId.trim())) o.pluginId = p.pluginId.trim(); return o; });
     // Explicit, pack-owned shrinking only. Keep the rendered centre and floor line;
     // never enlarge obstacles or reinterpret a custom saved size. Idempotent on reload.
     for (const p of doc.props) {
