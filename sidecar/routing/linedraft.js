@@ -59,7 +59,12 @@
         if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
         if (c === '"') inStr = true;
         else if (c === '{') depth++;
-        else if (c === '}' && --depth === 0) { try { const o = JSON.parse(s.slice(i, j + 1)); if (o && typeof o === 'object' && !Array.isArray(o)) return o; } catch (_) {} break; }
+        else if (c === '}' && --depth === 0) {
+          let o = null;
+          try { o = JSON.parse(s.slice(i, j + 1)); } catch (e) { o = null; }   // not JSON (prose in braces): the next '{' is tried
+          if (o && typeof o === 'object' && !Array.isArray(o)) return o;
+          break;
+        }
       }
     }
     return null;
