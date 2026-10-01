@@ -785,6 +785,7 @@ test/dossier-skin-accessibility.test.js
 test/dossier-delete-visible.test.js
 test/control-floor-theming.test.js
 test/crew-rail-fit.test.js
+test/agent-threads-rail.test.js
 test/brand-wordmark-mask.test.js
 test/personalization-authority-wiring.test.js
 test/sprite-loading.test.js
