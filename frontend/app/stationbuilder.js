@@ -1057,6 +1057,29 @@
     const inRoom = live.rooms().find(r => r.id === live.roomAt(intake.x, intake.y));
     return { ok: true, intake, comp, tiles, room: inRoom, label: intake.label || 'the line' };
   }
+  /* A LINE BY ITS NAME, OR BY ANY MACHINE ON IT (station.test_line, 2026-10-01): the compiled line id (the component key,
+     which is the routing plan's lineId), its name and room, and its steps in order with who works each. */
+  function lineRef(doc, env, ref, roomRef) {
+    const WM = env && env.WorldModel, P = env && env.Pipeline;
+    if (!WM || !P || !doc) return refuse('the station builder is not loaded on this page');
+    const live = WM.create(clone(doc));
+    let comp = null, label = null, room = null;
+    const p = typeof ref === 'string' ? live.propById(ref) : null;
+    if (p) {
+      let comps = []; try { comps = P.lineComponents(live.projectGeometry()) || []; } catch (_) { comps = []; }
+      comp = comps.find(c => (c.props || []).some(q => (q && q.id ? q.id : q) === p.id)) || null;
+      if (!comp) return refuse('the ' + pieceName(env, p.t) + ' ' + p.id + ' is not on a line');
+      const ip = live.propById((comp.intakes || [])[0]);
+      label = (ip && ip.label) || 'the line'; room = ip ? live.rooms().find(r => r.id === live.roomAt(ip.x, ip.y)) : null;
+    } else {
+      const ln = lineNamed(live, env, ref, roomRef); if (!ln.ok) return ln;
+      comp = ln.comp; label = ln.label; room = ln.room;
+    }
+    const steps = (comp.bays || []).map(b => live.propById(b && typeof b === 'object' ? (b.propId || b.id) : b)).filter(Boolean)
+      .map(b => ({ id: b.id, role: b.role ? titleCase(b.role) : null, agent: b.agentId ? nameOf(env, b.agentId) : null }));
+    if (!comp.key) return refuse('the line ' + label + ' could not be read');
+    return { ok: true, lineId: comp.key, name: label, room: room ? room.name : null, steps, crewed: steps.filter(s => s.agent).length };
+  }
   function editRemoveLine(live, env, q) {
     const bad = Object.keys(q).filter(k => ['line', 'room'].indexOf(k) < 0); if (bad.length) return refuse('remove { line, room } only takes line and room. Not accepted: ' + bad.slice(0, 6).join(', ') + '.');
     const ln = lineNamed(live, env, q.line, q.room); if (!ln.ok) return ln;
@@ -3259,5 +3282,5 @@
       lineKey: rd.comp ? rd.comp.key : null, ready: rd.ready, blocking: rd.blocking, recruited };
   }
 
-  return { MENU, STEP_KEYS, ROOM_MENU, STYLE_MENU, DESIGN_MENU, ZONE_KEYS, ROOM_KEYS, LINE_KEYS, LAYOUT_KEYS, LAYOUT_ROOM_KEYS, AREAS, SIZES, EDIT_KEYS, catalog, resolveLine, plan, planRoom, planRestyle, planEdit, planUndo, planDesign, planBuild, planLayout, mapOf, roomPlacements, dressRoom, shapeGraph, areaOf, apply, sigOf };
+  return { MENU, STEP_KEYS, ROOM_MENU, STYLE_MENU, DESIGN_MENU, ZONE_KEYS, ROOM_KEYS, LINE_KEYS, LAYOUT_KEYS, LAYOUT_ROOM_KEYS, AREAS, SIZES, EDIT_KEYS, catalog, resolveLine, plan, planRoom, planRestyle, planEdit, planUndo, planDesign, planBuild, planLayout, mapOf, lineRef, roomPlacements, dressRoom, shapeGraph, areaOf, apply, sigOf };
 });

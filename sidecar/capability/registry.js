@@ -307,6 +307,7 @@
       { capId: 'orchestrator', tool: 'station.build', scope: 'write', requiresConsent: true, network: false, deferred: true },
       // MAKE A PROP (2026-10-01): a new piece drawn by StarNet's prop maker, paid with StarNet credits (consent, the card names the price)
       { capId: 'orchestrator', tool: 'station.make_prop', scope: 'write', requiresConsent: true, network: true, deferred: true },
+      { capId: 'orchestrator', tool: 'station.test_line', scope: 'write', requiresConsent: true, network: true, deferred: true },
       // LOOPS: standing objective iteration through loops.json. Both mutations require consent because they
       // create or alter future autonomous work. Model tools never accept the host-run check command.
       { capId: 'orchestrator', tool: 'loop.list', scope: 'read', requiresConsent: false, network: false },

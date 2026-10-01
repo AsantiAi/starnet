@@ -522,6 +522,16 @@ const StationCommands = (() => {
       const p = park(StationBuilder.planEdit(st.serialize(), req, env));
       return { planId: p.planId, summary: p.plan.summary, steps: p.plan.steps, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
     },
+    // a line by name or by a machine on it (station.test_line): the routing plan's lineId and its steps in words
+    'station.line_ref': (a) => {
+      const st = typeof App !== 'undefined' && App.station ? App.station() : null;
+      if (!st || !st.serialize) throw new Error('the station is not ready yet');
+      if (typeof StationBuilder === 'undefined' || !StationBuilder.lineRef || typeof Pipeline === 'undefined') throw new Error('this page cannot read its lines yet; reload it');
+      const crew = (App.agents ? App.agents() : []).map(x => ({ id: x.id, name: x.name }));
+      const r = StationBuilder.lineRef(st.serialize(), { WorldModel, Pipeline, crew, PropSprites: typeof PropSprites !== 'undefined' ? PropSprites : null }, String((a && a.line) || '').slice(0, 80), a && a.room != null ? String(a.room).slice(0, 60) : null);
+      if (!r || !r.ok) throw new Error((r && r.error) || 'that line could not be found');
+      return { lineId: r.lineId, name: r.name, room: r.room, steps: r.steps, crewed: r.crewed };
+    },
     // a prop the lead just made (station.make_prop): load the MADE BY YOU library so the builder can place it by name
     'station.props_reload': async () => {
       if (typeof UserProps === 'undefined' || !UserProps.load) throw new Error('made props are not loaded on this page');

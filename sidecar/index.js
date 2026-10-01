@@ -11566,7 +11566,14 @@ function getSampleHub() {
   return sampleHub;
 }
 async function handleRoutingSample(req, res) {
-  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  const r = await runSampleJob(async () => { const raw = await readBody(req, 1 << 16); return raw && raw.trim() ? (JSON.parse(raw) || {}) : {}; });
+  res.writeHead(r.code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(r.obj));
+}
+/* RUN ONE REAL JOB down a line: the route above (the Workflow panel's TEST, WORKFLOWS' SEND A JOB) and the lead's
+   station.test_line (2026-10-01) both come here, so a test the lead runs is the very job the Commander's button sends:
+   the same one-per-station lock, the same refusals, the same job record in the OUTBOX. Answers { code, obj }. */
+async function runSampleJob(readArgs) {
+  const json = (code, obj) => ({ code, obj });
   // ONE PER STATION — the lock is claimed in this synchronous slice (before any await), so two concurrent
   // posts can never both dispatch. Refusal paths below release it before answering.
   if (sampleInFlight) {
@@ -11576,7 +11583,7 @@ async function handleRoutingSample(req, res) {
   sampleInFlight = { streamId: 'sample-' + crypto.randomUUID().slice(0, 8), workitemId: '', startedAt: Date.now() };
   try {
     let body = {};
-    try { const raw = await readBody(req, 1 << 16); body = raw && raw.trim() ? (JSON.parse(raw) || {}) : {}; }
+    try { body = (await readArgs()) || {}; }
     catch (_) { return json(400, { ok: false, error: 'bad json' }); }   // the finally releases the lock on every exit
     const text = String(body.text == null ? '' : body.text).trim().slice(0, 2000) || SAMPLE_TEXT;
     /* the line this proof is FOR (additive, 2026-08-10): the FINISH card posts { line: c.key } — the same
@@ -18392,6 +18399,7 @@ async function runOnceCore(o) {
     ? overseerStation(o.streamId, runId) : stationBridge, scanText: t => cronGuard.scanRoutinePrompt(t), now: () => Date.now(),
     planMemo: stationPlanMemo, lineMenu: stationLineMenu, kitMenu: stationKitMenu, presetMenu: stationPresetMenu, styleMenu: stationStyleMenu, roomMenu: stationRoomMenu,
     userProps,   // MAKE A PROP: the station's own prop maker (StarNet credits), for station.make_prop
+    runLineJob: args => runSampleJob(async () => args),   // TEST A LINE: the very job SEND A JOB sends, for station.test_line
     // station.layout's HARNESS facts (audit 2026-09-28): the plan the router actually holds, each line's effective
     // budget (the runner's own effectiveLimits), and today's numbers since local midnight (the line plate's window)
     layoutFacts: {
@@ -23181,6 +23189,7 @@ function consentSummary(call) {
   }
   // the station builder: the card shows what the dry run found (the plan's summary + every step's instructions), never the model's words
   if (/^station[._]build$/.test(String(call && call.name || ''))) return stationPlanSummary(stationPlanMemo, a.planId) || 'an unknown or expired plan: it will be refused, and nothing will be built';
+  if (/^station[._]test_line$/.test(String(call && call.name || ''))) return 'the line ' + String(a.line || '').replace(/\s+/g, ' ').trim().slice(0, 48) + ', with this test job: "' + String(a.job || '').replace(/\s+/g, ' ').trim().slice(0, 240) + (String(a.job || '').length > 240 ? '…' : '') + '". It runs the line\'s agents and spends what they spend; the result lands in your OUTBOX.';
   if (/^station[._]make_prop$/.test(String(call && call.name || ''))) return '"' + String(a.describe || '').replace(/\s+/g, ' ').trim().slice(0, 60) + '", drawn with your StarNet credits (about $0.35' + (a.sideView ? ', and about $0.30 more for its side view' : '') + '). It joins your MADE BY YOU library; nothing is placed until a plan says so.';
   if (typeof a.path === 'string' && a.path) return a.path;
   try { const s = JSON.stringify(a); return s.length > 80 ? s.slice(0, 77) + '…' : s; } catch (_) { return ''; }

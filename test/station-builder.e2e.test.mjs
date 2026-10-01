@@ -75,6 +75,8 @@ function startMock() {
         send({ choices: [{ delta: { content: text } }] });
         send({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 12, completion_tokens: 6, total_tokens: 18 } });
       };
+      // a step of a line the lead is TESTING (station_test_line): the job, or the step before it, is in its user turn
+      if ((p.messages || []).some(m => m && m.role === 'user' && /TEST JOB:|LINE STEP DONE/.test(typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))) { mock.lineSteps = (mock.lineSteps || 0) + 1; say('LINE STEP DONE: hello'); res.write('data: [DONE]\n\n'); return res.end(); }
       const pre = ['tool_search'].concat(mock.lookFirst ? ['station_map'] : []), seq = pre.length;   // tool calls before the plan
       if (offered && answered.length === 1) mock.searched.push({ result: answered[0], toolsAfter: null });
       if (offered && answered.length === 1 && mock.searched.length) mock.searched[mock.searched.length - 1].toolsAfter = (p.tools || []).map(t => t && t.function && t.function.name);
@@ -172,6 +174,18 @@ try {
   const run2 = await leadRun(base, token, 'add another build and test line');
   check('a second run completes', run2.status === 200);
   check('with Build mode open, planning is refused in plain words', /^REFUSED: Build mode is open, so the Commander is editing the floor/.test(mock.results[2] || ''), (mock.results[2] || '').slice(0, 160));
+
+  // 4b. TEST A LINE (10-01): the lead sends one real job down the line it built (SEND A JOB's own route) and reads each step back
+  mock.planTool = 'station_test_line'; mock.planArgs = { line: 'SHIP IT', job: 'TEST JOB: write the word hello' };
+  const nRes = mock.results.length, steps0 = mock.lineSteps || 0;
+  const runT = await leadRun(base, token, 'test the SHIP IT line');
+  const tl = mock.results[nRes] || '';
+  let TJ = null; try { TJ = JSON.parse(tl.split('\n')[0]); } catch (_) { TJ = null; }
+  check('station_test_line sends a real job down the line and reads every step back', runT.status === 200 && !!TJ && TJ.line === 'SHIP IT' && TJ.status === 'delivered' && TJ.steps.length >= 2 && TJ.steps.every(s => s.ended === 'done') && (mock.lineSteps || 0) - steps0 >= 2, tl.slice(0, 300));
+  check('what the line delivered comes back fenced as data, not instructions', /\[BEGIN EXTERNAL WEB CONTENT — what the line SHIP IT delivered/.test(tl) && /LINE STEP DONE: hello/.test(tl), tl.slice(-240));
+  const jobs = await fetch(base + '/api/line-jobs', { headers: { 'X-StarNet-Token': token, Origin: base } }).then(r => r.json()).catch(() => null);
+  check('and the job is on record like any SEND A JOB', !!jobs && (jobs.jobs || []).some(j => j.name === 'SHIP IT' && j.status === 'delivered'), JSON.stringify(jobs || {}).slice(0, 240));
+  mock.planTool = 'station_plan';
 
   // 5. one UNDO removes the room, the line and every setting
   const undone = await evalJS(cdp, `(() => { const st = App.station(); const r = st.undo(); return { ok: r && r.ok, rooms: st.rooms().filter(r => r.kind !== 'corridor').map(r => r.name), line: !!st.props().find(p => p.t === 'intake' && p.label === 'SHIP IT') }; })()`);
