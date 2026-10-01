@@ -1963,6 +1963,26 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   // GROWTH tab — the premium agent-growth dossier: XP ladder, a physical satisfaction gauge (honest "—"
   // while calibrating), the milestone trophy case, and the station-prestige rollup. All read off the pure
   // Xp engine; the satisfaction marker rides the agent's own suit colour so it reads as "this unit's measure".
+  /* ONE PROGRESS HOME (front doors, 2026-10-01): the station-wide prestige level is station progress, so it lives in
+     QUESTS › Progress beside the station systems and milestones — not repeated inside every agent's GROWTH tab. */
+  function stationPrestigeHtml() {
+    const sStats = (typeof XpStore !== 'undefined' && XpStore.stationStats) ? XpStore.stationStats() : null;
+    const s = sStats ? Xp.compute(sStats) : null;
+    const nAg = present.length || 1;
+    return s ? (
+      '<div class="gx-station" style="margin-top:18px;">' +
+      '<div class="hd"><span class="badge">●</span><span class="ttl">Station prestige</span><span class="agents">&Sigma; ' + nAg + ' AGENT' + (nAg === 1 ? '' : 'S') + '</span></div>' +
+      '<div class="body">' +
+        '<div class="lv"><div class="gx-lbl" style="font-size:9px;">STATION</div><div class="n">' + s.level + '</div><div class="gx-lbl" style="font-size:9px;">LEVEL</div></div>' +
+        '<div style="flex:1;">' +
+          '<div class="gx-row" style="margin-bottom:6px;"><span class="gx-val" style="font-size:13px;">' + s.xp.toLocaleString() + ' <span class="gx-dim">/</span> ' + Xp.xpForLevel(s.level + 1).toLocaleString() + ' <span class="gx-dim" style="font-size:11px;">XP</span></span><span class="gx-val" style="color:var(--gold);font-size:13px;">' + s.pct + '%</span></div>' +
+          '<div class="gx-trk"><div class="gx-gfill" style="width:' + s.pct + '%;"></div></div>' +
+          '<div class="gx-row" style="margin-top:7px;"><span class="gx-val gx-dim" style="font-size:11px;">' + s.toNext.toLocaleString() + ' XP TO LV ' + (s.level + 1) + '</span>' +
+            '<span class="gx-mono" style="font-size:10px;color:var(--ph-dim);">' + s.positiveFeedback + ' APPROVALS &middot; <span style="color:var(--ph);">' + (s.known ? s.band.toUpperCase() : 'CALIBRATING') + '</span></span></div>' +
+        '</div>' +
+      '</div></div>'
+    ) : '';
+  }
   function agGrowth(a) {
     if (typeof Xp === 'undefined' || !a.stats) return '<div class="ag-growth-empty"><h3>Waiting for growth data</h3><p>Growth metrics unavailable. This agent’s XP and achievements will appear when its activity data is available.</p></div>';
     const g = Xp.compute(a.stats);
@@ -2045,26 +2065,10 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       '<div style="display:flex;align-items:center;gap:6px;"><span class="gl">' + (m.earned ? '&#9733;' : '&#9675;') + '</span><span class="nm">' + m.label + '</span></div>' +
       '<div class="sub">' + (m.earned ? 'EARNED · ' + m.hint : m.hint) + '</div></div>').join('');
     const trophies =
-      '<div class="gx-trohead"><div class="gx-sec" style="flex:1;margin:0;border:0;height:auto;"><span class="gx-ref">▦</span><span class="gx-title">Trophy case</span></div>' +
+      '<div class="gx-trohead"><div class="gx-sec" style="flex:1;margin:0;border:0;height:auto;"><span class="gx-ref">▦</span><span class="gx-title">Achievements</span></div>' +
       '<span class="gx-tag">' + pad2(earned) + ' earned &middot; ' + pad2(locked) + ' to earn</span></div>' +
       '<div class="gx-tros">' + tros + '</div>';
 
-    const sStats = (typeof XpStore !== 'undefined' && XpStore.stationStats) ? XpStore.stationStats() : null;
-    const s = sStats ? Xp.compute(sStats) : null;
-    const nAg = present.length || 1;
-    const station = s ? (
-      '<div class="gx-station" style="margin-top:18px;">' +
-      '<div class="hd"><span class="badge">●</span><span class="ttl">Station prestige</span><span class="agents">&Sigma; ' + nAg + ' AGENT' + (nAg === 1 ? '' : 'S') + '</span></div>' +
-      '<div class="body">' +
-        '<div class="lv"><div class="gx-lbl" style="font-size:9px;">STATION</div><div class="n">' + s.level + '</div><div class="gx-lbl" style="font-size:9px;">LEVEL</div></div>' +
-        '<div style="flex:1;">' +
-          '<div class="gx-row" style="margin-bottom:6px;"><span class="gx-val" style="font-size:13px;">' + s.xp.toLocaleString() + ' <span class="gx-dim">/</span> ' + Xp.xpForLevel(s.level + 1).toLocaleString() + ' <span class="gx-dim" style="font-size:11px;">XP</span></span><span class="gx-val" style="color:var(--gold);font-size:13px;">' + s.pct + '%</span></div>' +
-          '<div class="gx-trk"><div class="gx-gfill" style="width:' + s.pct + '%;"></div></div>' +
-          '<div class="gx-row" style="margin-top:7px;"><span class="gx-val gx-dim" style="font-size:11px;">' + s.toNext.toLocaleString() + ' XP TO LV ' + (s.level + 1) + '</span>' +
-            '<span class="gx-mono" style="font-size:10px;color:var(--ph-dim);">' + s.positiveFeedback + ' APPROVALS &middot; <span style="color:var(--ph);">' + (s.known ? s.band.toUpperCase() : 'CALIBRATING') + '</span></span></div>' +
-        '</div>' +
-      '</div></div>'
-    ) : '';
 
     /* The old gx-head said "AGENT DOSSIER // GROWTH READOUT" + the agent's name + "CLEARANCE LEVEL 04" — inside a
        window titled AGENT DOSSIER, on a tab labelled GROWTH, with the agent selected and named in the left rail,
@@ -2075,7 +2079,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       '<div class="ag-growth-heading"><span class="ag-growth-eyebrow">AGENT PROGRESSION</span><h3>' + esc(a.name || 'Agent') + '</h3><p>' + g.xp.toLocaleString() + ' total XP · ' + earned + ' of ' + cat.length + ' achievements earned</p>' + progression + '</div></div>' +
       (nextMilestone ? '<div class="ag-next-challenge"><span>CHALLENGE TO AIM FOR</span><b>' + nextMilestone.label + '</b><span>' + nextMilestone.hint + '</span></div>' : '') +
       '<div class="ag-growth-section-title">Performance &amp; learning</div><div class="gx-2">' + confidence + reliabilityBlk + practiceBlk + '</div>' +
-      station + '<section class="ag-achievements">' + trophies + '</section></div>';
+      '<p class="ag-growth-station-link">The station’s own level, systems and milestones: <button type="button" class="bb xs" data-open-progress>QUESTS › PROGRESS</button></p>' +
+      '<section class="ag-achievements">' + trophies + '</section></div>';
   }
 
   /* Fill the B3 PRACTICE block for `agentId`. Reads through Harness.agentSkillsRead so a FAILED read renders
@@ -6775,8 +6780,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // (Permissions.PLANS maps 1:1 onto the dial presets) — so they carry the SAME primary words the
       // dial uses. Stored data-level values are unchanged. FULLY AUTONOMOUS stays in the label (it says
       // the stakes plainly). Plain-language line first, house vocabulary second.
-      '<h4 class="ms-h">WHILE YOU’RE AWAY <span class="dim">— how much it starts on its own</span></h4>' +
-      '<p class="set-about perm-lede">Whether it begins anything at all when you are not here. The same WAIT / SUGGEST / BUILD / FREE ladder as AUTONOMY — change it in either place.</p>' +
+      // a pick = AUTONOMY preset + matching standing approvals (PermissionsStore.setLevel) — not a 2nd initiative row
+      '<h4 class="ms-h">ONE-STEP AUTONOMY <span class="dim">— a level plus the approvals it needs</span></h4>' +
+      '<p class="set-about perm-lede">Pick how much agents start on their own while you are away — the same WAIT / SUGGEST / BUILD / FREE ladder as AUTONOMY, plus the standing approvals each level needs, set in one step. AUTONOMY fine-tunes initiative, reach and pace one at a time.</p>' +
       '<p class="set-about perm-lede" id="perm-desc"></p>' +
       '<p class="set-about perm-lede" id="perm-status" aria-live="polite">checking standing approvals…</p>' +
       '<div class="set-themes" id="perm-level">' +
@@ -7143,7 +7149,16 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       { id: 'browser', label: 'BROWSER', glyph: '◎', desc: 'Where the station browser runs: inside StarNet, as its own Chrome window, or in your own Chrome.', build: el => { if (typeof OutputBrowser !== 'undefined' && OutputBrowser.mountSettings) OutputBrowser.mountSettings(el, arrangeSettingsPane); } },
       { id: 'system', label: 'APP & BACKUP', glyph: '⚙', desc: 'Startup, runtime limits, backups, updates, and troubleshooting.', build: frag(secSystem) }
     ];
-    const host = mountConsole(body, 'settings', sections, { search: true, searchPlaceholder: 'search settings…' });
+    // THREE HEADINGS (front doors, 2026-10-01): eleven flat sections read as a wall. The same intent groups ABILITIES
+    // uses — every section, id, deep link and the search are unchanged; the rail just shows one group at a time.
+    const settingsGroups = [
+      { id: 'ai', label: 'AI & COST', sections: ['providers', 'models', 'budget'] },
+      { id: 'agents', label: 'AGENTS', sections: ['autonomy', 'permissions', 'livevoice'] },
+      { id: 'station', label: 'STATION', sections: ['appearance', 'notifs', 'remote', 'browser', 'system'] }
+    ].map(g => Object.assign(g, { sections: g.sections.filter(id => sections.some(s => s.id === id)) }));
+    // any section not named above (a new one landing later) joins STATION rather than vanishing from the rail
+    sections.forEach(s => { if (!settingsGroups.some(g => g.sections.includes(s.id))) settingsGroups[2].sections.push(s.id); });
+    const host = mountConsole(body, 'settings', sections, { search: true, searchPlaceholder: 'search settings…', groups: settingsGroups });
 
     wireProviderActions(host);
     wireKeyActions(host);
@@ -9832,7 +9847,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         + cwHtml + (q.status === 'done' ? '' : rewardHtml) + attestHtml + declineHtml + actionRow + lifeActions + '</div>';
     };
     const meterHtml = m
-      ? '<div class="gx-sec"><span class="gx-title">AGENT GROWTH</span> <span class="gx-tag">Lv ' + m.level + ' &middot; ' + m.pct + '% to next &middot; ' + esc(String(m.confLabel) + ' ' + String(m.band)) + '</span></div>'
+      ? '<div class="gx-sec"><span class="gx-title">AGENT GROWTH</span> <span class="gx-tag">Lv ' + m.level + ' &middot; ' + m.pct + '% to next</span> <button type="button" class="bb xs" data-open-growth>OPEN IN THE DOSSIER</button></div>'
       : '';
     // G4 feature 2 — PROPOSALS: pending autojob proposals the agent pinned to the MISSION BOARD. A distinct
     // amber card with APPROVE (→ the real POST /api/cron) / DECLINE (→ dropped forever). Rendered above OPEN so
@@ -9853,7 +9868,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const milestoneDone = milestones.filter(q => q.status === 'done').length;
     const milestonesHtml = milestones.length
       ? '<details class="q-milestones q-progress-section"><summary><span>Station milestones</span><span class="q-section-count">' + milestoneDone + ' / ' + milestones.length + '</span></summary>'
-        + '<div class="q-section-body"><div class="gx-tros q-grid q-milestone-grid">' + milestones.map(tro).join('') + '</div></div></details>'
+        + '<div class="q-section-body"><div class="gx-tros q-grid q-milestone-grid">' + milestones.map(tro).join('') + '</div>'
+        + '<p class="q-trophy-door"><button type="button" class="bb xs" data-open-trophies>OPEN THE TROPHY CASE</button></p></div></details>'
       : '';
     // Selection is presentation state only. Keep it on the stable window body across background data pokes;
     // if a selected quest completes/disappears, fall back to the first remaining quest in this category.
@@ -9907,7 +9923,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       + '</section><section id="q-view-goals" class="q-view-panel q-journal-planning" role="tabpanel" aria-labelledby="q-tab-goals">'
       + questTrackHtml(arcs) + lifeGoalsHtml() + '<details class="q-refresh-options"><summary>Quest suggestions <span class="q-section-note">Direction &amp; refresh</span></summary>' + questRefreshHtml() + '</details>'
       + '</section><section id="q-view-progress" class="q-view-panel q-journal-progress" role="tabpanel" aria-labelledby="q-tab-progress">'
-      + systemsHtml() + journeyHtml() + milestonesHtml + meterHtml
+      + systemsHtml() + journeyHtml() + stationPrestigeHtml() + milestonesHtml + meterHtml
       + '</section><section id="q-view-completed" class="q-view-panel q-journal-history" role="tabpanel" aria-labelledby="q-tab-completed">'
       + journeyChaptersHtml() + '<div class="gx-tros q-grid q-done">' + (done.map(tro).join('') || '<div class="q-journal-empty"><h3>No completed quests yet</h3><p>Finished quests and their results will appear here.</p></div>') + '</div></section></div>';
     // Stable field identities keep a background refresh from transplanting a draft into another chapter.
@@ -10476,6 +10492,16 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         const k = b.dataset.term, def = BUILDERS[k];
         if (def) toggleTerm(k, def[0], def[1], def[2]);
       }));
+    // ONE PROGRESS HOME doors: an agent's GROWTH points at the station's progress, the station's progress at an agent's
+    // GROWTH and at the TROPHY CASE (until now reachable only by clicking its prop on the floor)
+    document.addEventListener('click', ev => {
+      const b = ev.target && ev.target.closest && ev.target.closest('[data-open-progress],[data-open-growth],[data-open-trophies]');
+      if (!b || !b.closest('#terms')) return;
+      sfx('click');
+      if (b.hasAttribute('data-open-progress')) openTerm('quests', 'progress');
+      else if (b.hasAttribute('data-open-growth')) openTerm('agents', 'growth');
+      else openTerm('trophies');
+    });
     // ONE MENU dock buttons (MY WORK / AUTOMATE / CONNECT): open the menu's last-used tab
     document.querySelectorAll('.bb[data-family]').forEach(b => b.addEventListener('click', () => toggleFamily(b.dataset.family)));
     badges();
