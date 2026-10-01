@@ -1503,10 +1503,27 @@ for (const c of T.catalog) {
       [[{ op: 'delete', room: 'HOME' }], /^Edit 1 \(delete\): HOME is the main room, so it stays/],
       [[{ op: 'room', x: 0, y: 0, w: 10, h: 8 }], /^Edit 1 \(room\): overlaps HOME/],
       [[{ op: 'brief', prop: 'nope', text: 'x' }], /^Edit 1 \(brief\): there is no piece "nope"/],
-      [new Array(401).fill({ op: 'place', t: 'plant', x: 1, y: 1 }), /^That is 401 edits; send up to 400 in one plan/],
+      [new Array(1501).fill({ op: 'place', t: 'plant', x: 1, y: 1 }), /^That is 1501 edits; send up to 1500 in one plan/],
       [[], /^refit is a list of edits/]
     ]) { const r = SB.planEdit(st.serialize(), { refit: q }, E); A.ok(!r.ok && re.test(r.error), 'refit refused: ' + JSON.stringify(q).slice(0, 70) + ' -> ' + (r.error || 'NOT REFUSED').slice(0, 140)); }
     A.eq(snap(st), before, 'no refusal changed anything');
+  }
+  // THE LEAD DESIGNS (Andrew 10-01: "the AI model should have the freedom … full customization from the model to place and
+  // change it how it wants"): a hand-made design of well over the old 400 edits plans in one refit, and its card stays readable
+  {
+    const st = fresh(), many = [];
+    for (let i = 0; i < 1200; i++) many.push(i % 2 ? { op: 'rename', room: 'HOME BASE', name: 'HOME' } : { op: 'rename', room: 'HOME', name: 'HOME BASE' });
+    const r = SB.planEdit(st.serialize(), { refit: many }, E);
+    A.ok(r.ok, '1200 edits plan in one refit (' + (r.error || 'ok') + ')');
+    A.ok(r.ok && /… and 1175 more edits that add or name pieces\./.test(r.plan.summary) && r.plan.summary.length < 4000, 'its card lists the first 25 and counts the rest (' + (r.ok ? r.plan.summary.length : 0) + ' chars)');
+    // past 60 edits that change what stands, the card counts the rest by kind; nothing is silently left out
+    const moves = [{ op: 'room', name: 'Den', kind: 'hab', x: 24, y: 0, w: 30, h: 22 }, { op: 'place', t: 'plant', x: 30, y: 8, as: 'p' }];
+    for (let i = 0; i < 90; i++) moves.push({ op: 'move', prop: 'p', x: i % 2 ? 30 : 32, y: 8 });
+    const m = SB.planEdit(st.serialize(), { refit: moves }, E);
+    A.ok(m.ok, '92 edits of a piece moved about plan (' + (m.error || 'ok') + ')');
+    const named = m.ok ? (m.plan.summary.match(/ moved to /g) || []).length : 0;
+    A.ok(m.ok && named === 23 + 60 && /… and 7 more edits that change what stands \(7 moves\)/.test(m.plan.summary), 'the card names 83 moves and counts the last 7 (' + named + ' named)');
+    A.ok(m.ok && SB.apply(st, m.plan, E).ok && st.props().some(p => p.t === 'plant' && p.x === 30 && p.y === 8), 'and the design builds as planned');
   }
   // a concourse from a crowded station finds a free side, or is refused naming the way forward
   {
@@ -1618,6 +1635,8 @@ for (const c of T.catalog) {
     if (verb === 'station.plan_restyle') return { ok: true, result: { planId: 'plan-s-1', summary: 'Restyle HOME: teal floor. Nothing is added, moved or removed.' } };
     if (verb === 'station.plan_edit') return { ok: true, result: { planId: 'plan-e-1', summary: 'Remove GYM (18 × 11), with the hallway that joined it.' } };
     if (verb === 'station.plan_undo') return { ok: true, result: { planId: 'plan-u-1', summary: 'Undo the last build (GYM): the station goes back exactly as it was before it.' } };
+    if (verb === 'station.map' && args.look === 'Den') return { ok: true, result: { look: 'DEN', mime: 'image/webp', width: 640, height: 420, data: 'UklGRg==', shows: { x1: 23, y1: -1, x2: 54, y2: 22 }, tilePx: 20 } };
+    if (verb === 'station.map' && args.look === 'Void') return { ok: false, error: 'There is no room called "Void". Rooms: HOME, DEN.' };
     if (verb === 'station.map') return { ok: true, result: { main: 'HOME', rooms: [{ name: 'HOME', main: true, w: 18, h: 11 }], hallways: 0, drawing: ['AAAAAAAAAAAAAAAAAA'] } };
     if (verb === 'station.plan_build') return (args.request.rooms || [])[0] && args.request.rooms[0].beside === 'Mars' ? { ok: false, error: 'There is no room called "Mars". Rooms: HOME.' }
       : { ok: true, result: { planId: 'plan-b-1', summary: args.request.layout ? 'A RING around HOME: a corridor loop with a hallway in from each side, planted and lit, and 2 rooms.' : 'CONVEYOR HALL, a new 36 × 20 room east of HOME, through a hallway: empty floor, ready for lines and furniture.', rooms: [{ name: 'CONVEYOR HALL' }], hallways: [], lines: [], steps: [] } };
@@ -1724,6 +1743,17 @@ for (const c of T.catalog) {
   A.ok(lay.summary === 'planned CONVEYOR HALL' && /^A RING around HOME/.test(planSummaryFrom(memo, 'plan-b-1')), 'a layout plan is remembered for the card');
   const mp = await mapT.run({}, {});
   A.ok(/"main":"HOME"/.test(mp.content) && mp.summary === '1 room(s), 0 hallway(s)' && calls[calls.length - 1][0] === 'station.map' && mp.control.revealTools.indexOf('station.plan') >= 0, 'the map rides back from the page and reveals the planner');
+  // LOOK: the lead sees its own work as it renders (a picture rides back as a tool image; a text-only model is told the way round)
+  const lk = await mapT.run({ look: 'Den' }, {});
+  A.ok(Array.isArray(lk.images) && lk.images.length === 1 && lk.images[0].mime === 'image/webp' && lk.images[0].data === 'UklGRg==', 'station.map { look } hands the model the picture');
+  A.ok(/^A picture of DEN as it renders now \(640 x 420 px; it shows tiles x 23-54, y -1-22 with the wall faces above, about 20 px a tile\)\. Judge it as a designer/.test(lk.content) && /station\.map \{ room \}/.test(lk.content) && lk.summary === 'looked at DEN' && !/UklGRg/.test(lk.content), 'with a note that says what it shows, and never the bytes as text');
+  A.eq(calls[calls.length - 1], ['station.map', { look: 'Den' }], 'the page is asked for that room');
+  const lkAll = await mapT.run({ look: 'the whole station' }, {});
+  A.eq(calls[calls.length - 1], ['station.map', { look: true }], 'look: "the whole station" asks for all of it');
+  A.ok(/^REFUSED: The page sent no picture/.test(lkAll.content), 'a reply with no picture is refused, never passed off as one');
+  const lkBad = await mapT.run({ look: 'Void' }, {});
+  A.ok(/^REFUSED: There is no room called "Void"/.test(lkBad.content) && !lkBad.images, 'a room that is not there is refused');
+  A.ok(/station\.map \{ look: the room \}/.test(planT.description) && /^STATION BUILDER, step 2: plan a change to the station floor\. You are the station's designer/.test(planT.description) && !/You never send a position/.test(planT.description) && /up to 1500 in one plan/.test(planT.description) && planT.description.indexOf('DESIGN IT YOURSELF') < planT.description.indexOf('SHORTCUTS'), 'the planner hands the design to the lead: its own refit first, the forms as shortcuts');
   const b = await buildT.run({ planId: 'plan-t-1' }, {});
   A.ok(/"built":true/.test(b.content) && !memo.has('plan-t-1'), 'a build uses the plan once and forgets it');
   const b2 = await buildT.run({ planId: 'plan-t-1' }, {});

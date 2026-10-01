@@ -378,6 +378,38 @@ const StationCommands = (() => {
     for (const e of builderPlans.values()) if (e.plan && e.plan.summary === summary && e.plan.preview && Date.now() - e.at <= PLAN_TTL_MS && (!best || e.at >= best.at)) best = e;
     return best ? best.plan.preview : null;
   }
+  /* LOOK (2026-10-01): the station as it really renders (the scene pass the stage draws: floors, walls, every piece, light),
+     so a model that can see judges its own design and fixes what looks wrong. A room name frames that room up close (one
+     tile round it, walls included); no name frames the whole station. WebP (else JPEG), shrunk until it fits one page
+     answer (the sidecar takes 256 KB). */
+  const LOOK_CHARS = 180000;
+  const blobOfCanvas = (cv, type, q) => new Promise(res => { try { cv.toBlob(b => res(b || null), type, q); } catch (_) { res(null); } });
+  const base64OfBlob = b => new Promise(res => { try { const fr = new FileReader(); fr.onload = () => { const s = String(fr.result || ''); res(s.slice(s.indexOf(',') + 1)); }; fr.onerror = () => res(''); fr.readAsDataURL(b); } catch (_) { res(''); } });
+  async function lookAt(st, env, ref) {
+    if (typeof World === 'undefined' || typeof World.renderStill !== 'function' || typeof World.renderStillOfTiles !== 'function') throw new Error('the station picture is not available on this page');
+    let tiles = null, of = 'the whole station';
+    if (ref) {
+      const d = StationBuilder.mapOf(st.serialize(), env, { room: ref });
+      if (!d || !d.ok) throw new Error((d && d.error) || 'there is no room "' + ref + '"');
+      const rs = d.map.rects || [];
+      tiles = { x1: Math.min(...rs.map(q => q.x)), y1: Math.min(...rs.map(q => q.y)), x2: Math.max(...rs.map(q => q.x + q.w - 1)), y2: Math.max(...rs.map(q => q.y + q.h - 1)) };
+      of = d.map.room;
+    }
+    for (let px = ref ? 1100 : 1400; px >= 400; px = Math.round(px * 0.75)) {
+      const still = tiles ? World.renderStillOfTiles(tiles, px, { noBodies: false }) : World.renderStill(px);
+      if (!still || !still.canvas) throw new Error('the station is not drawn yet (it may still be waking up): look again in a moment');
+      let b = await blobOfCanvas(still.canvas, 'image/webp', 0.82);
+      if (!b || b.type !== 'image/webp') b = await blobOfCanvas(still.canvas, 'image/jpeg', 0.85);
+      if (!b || !/^image\/(webp|jpeg)$/.test(b.type)) throw new Error('this page could not encode the picture');
+      const data = await base64OfBlob(b);
+      if (!data) throw new Error('this page could not encode the picture');
+      if (data.length > LOOK_CHARS) continue;
+      const out = { look: of, mime: b.type, width: still.width, height: still.height, data };
+      if (tiles) Object.assign(out, { shows: { x1: tiles.x1 - 1, y1: tiles.y1 - 1, x2: tiles.x2 + 1, y2: tiles.y2 + 1 }, tilePx: Math.round(still.width / (tiles.x2 - tiles.x1 + 3)) });
+      return out;
+    }
+    throw new Error('the picture of ' + of + ' is too big to send: look at one room');
+  }
   function builderReady() {
     const st = typeof App !== 'undefined' && App.station ? App.station() : null;
     if (!st || !st.serialize || !st.transact || !st.roomSpots) throw new Error('the station is not ready yet');
@@ -445,14 +477,15 @@ const StationCommands = (() => {
     /* THE SPATIAL BUILDER (2026-09-30): the lead SEES the floor (station.map: every room's place and size, what joins what,
        what fits where, the floor drawn in characters) and then says where rooms go in words — beside which room, on which
        side, how big, by a hallway or open plan, empty or filled. StationBuilder.planBuild turns that into tiles. */
-    'station.map': (a) => {
+    'station.map': async (a) => {
       const st = typeof App !== 'undefined' && App.station ? App.station() : null;
       if (!st || !st.serialize || !st.rooms) throw new Error('the station is not ready yet');
       if (typeof StationBuilder === 'undefined' || !StationBuilder.mapOf || typeof WorldModel === 'undefined') throw new Error('the station builder is not loaded on this page');
       const crew = (App.agents ? App.agents() : []).map(x => ({ id: x.id, name: x.name }));
-      const r = StationBuilder.mapOf(st.serialize(), { WorldModel, Pipeline: typeof Pipeline !== 'undefined' ? Pipeline : null, crew,
-        PropSprites: typeof PropSprites !== 'undefined' ? PropSprites : null, RoomStyles: typeof RoomStyles !== 'undefined' ? RoomStyles : null, LineEdit: typeof LineEdit !== 'undefined' ? LineEdit : null },
-        { room: a && a.room != null ? String(a.room) : null, catalog: !!(a && a.catalog) });
+      const env = { WorldModel, Pipeline: typeof Pipeline !== 'undefined' ? Pipeline : null, crew,
+        PropSprites: typeof PropSprites !== 'undefined' ? PropSprites : null, RoomStyles: typeof RoomStyles !== 'undefined' ? RoomStyles : null, LineEdit: typeof LineEdit !== 'undefined' ? LineEdit : null };
+      if (a && a.look != null && a.look !== false) return lookAt(st, env, a.look === true ? null : String(a.look).slice(0, 60));
+      const r = StationBuilder.mapOf(st.serialize(), env, { room: a && a.room != null ? String(a.room) : null, catalog: !!(a && a.catalog) });
       if (!r || !r.ok) throw new Error((r && r.error) || 'the map could not be read');
       return r.map;
     },
