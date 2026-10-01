@@ -140,7 +140,7 @@ const Build = (() => {
 
   // interaction state
   let tool = 'select', kind = 'hab', style = 'cobalt', mat = 'plate', hallWidth = 2, propType = 'war_intelcab', propCat = 'all', propTier = 'functional';
-  let selectedPropId=null, movingPropId=null;
+  let selectedPropId=null, movingPropId=null, positionOpen=false;
   let propSection = 'decoration', propAbility = '', equipmentAgentId = '';
   let buildGroup = 'props';
   /* WHERE REFIT OPENS (2026-09-27 audit F1/B5): WORK › WORKFLOWS opens it straight on the Conveyors tab (openWorkflows), and a
@@ -1111,7 +1111,7 @@ const Build = (() => {
     try { PropSprites.setCtx(o); PropSprites.setNow(0); PropSprites.draw({ t: p.t, x: 0, y: 0, w: p.w || 1, h: p.h || 1, r: p.r | 0, m: p.m ? 1 : 0 }, false); }
     catch (e) { return; }
     finally { if (ctx) PropSprites.setCtx(ctx); }
-    const c = document.createElement('canvas'); c.width = 112; c.height = 72;
+    const c = document.createElement('canvas'); c.width = 84; c.height = 54;   // the card's art well (refit-easy.css .refit-sel-art)
     const d = c.getContext('2d'); d.imageSmoothingEnabled = true; d.imageSmoothingQuality = 'high';
     const s = Math.min(c.width / nativeW, c.height / nativeH), w = Math.round(nativeW * s), h = Math.round(nativeH * s);
     d.drawImage(off, Math.round((c.width - w) / 2), Math.round((c.height - h) / 2), w, h);
@@ -2348,6 +2348,7 @@ const Build = (() => {
       // typed) — but this session remembers which blueprint stamped it, so the intake card's name field
       // can offer the blueprint's name as its placeholder (session-scoped, like lastStampIds).
       try { for (const id of (res.ids || [])) { const sp = station.propById(id); if (sp && sp.t === 'intake') stampNameOf[id] = LINE_PLAIN[bp.id] || bp.label; } } catch (_) {}
+      landProps((res.ids || []).map(id => station.propById(id)).filter(Boolean).sort((a, b) => a.x - b.x || a.y - b.y).map(p => p.id), 70);
       if (laidOut) pushFlash((res.ids || []).map(id => station.propById(id)).filter(Boolean).map(p => ({ x1: p.x, y1: p.y, x2: p.x + (p.w || 1) - 1, y2: p.y + (p.h || 1) - 1 })), false);
       else pushFlash(bp.props.map(p => ({ x1: o.x + p.x, y1: o.y + p.y, x2: o.x + p.x + p.w - 1, y2: o.y + p.y + p.h - 1 })), false);
       sfx('chime');
@@ -4814,8 +4815,11 @@ const Build = (() => {
     }
     if(isEditableProp(p.t))add('CONFIGURE',()=>configureProp(p,orientEv()));
     addKey('DELETE','Del',()=>deleteSelected(orientEv()),'refit-sel-del');
-    const position=document.createElement('details');position.className='refit-position';
-    position.innerHTML='<summary>Position on grid</summary><label>X <input aria-label="Object grid X" type="number" step="1" value="'+p.x+'"></label><label>Y <input aria-label="Object grid Y" type="number" step="1" value="'+p.y+'"></label><button class="bb sm" type="button">APPLY POSITION</button>';
+    // typing an exact tile: its own key in the grid (the arrows nudge; this is for "put it at 12, 4"), the fields only when asked
+    addKey('POSITION','',()=>{positionOpen=!positionOpen;renderSelection();},'refit-sel-pos').setAttribute('aria-expanded',String(positionOpen));
+    if(!positionOpen)return;
+    const position=document.createElement('div');position.className='refit-position';
+    position.innerHTML='<label>X <input aria-label="Object grid X" type="number" step="1" value="'+p.x+'"></label><label>Y <input aria-label="Object grid Y" type="number" step="1" value="'+p.y+'"></label><button class="bb sm" type="button">APPLY POSITION</button>';
     position.querySelector('button').onclick=()=>{
       const inputs=position.querySelectorAll('input'),x=Number(inputs[0].value),y=Number(inputs[1].value);
       if(!Number.isInteger(x)||!Number.isInteger(y)){feedback({ok:false,msg:'Use whole tile coordinates'},orientEv());return;}
@@ -4849,7 +4853,9 @@ const Build = (() => {
   function deleteSelected(ev) {
     const p = station.propById(selectedPropId); if (!p) return false;
     const had = linkedFloor() && isWorkflowType(p.t) && (station.links() || []).some(l => l.from.prop === p.id || l.to.prop === p.id);
+    const was = Object.assign({}, p);
     const res = station.removeProp(p.id);
+    if (res && res.ok) { pushFlash([{ x1: was.x, y1: was.y, x2: was.x + was.w - 1, y2: was.y + was.h - 1 }], true); vanishProp(was); }
     feedback(res, ev, had ? 'removed · its belts stay, loose — nothing rides them until a machine stands where they end · Undo restores it' : 'removed · Undo restores it');
     if (res && res.ok) { selectedPropId = null; movingPropId = null; renderSelection(); setHint(); }
     return true;
@@ -4861,6 +4867,7 @@ const Build = (() => {
     const res = station.addProp(Object.assign({ t: spec.t, x: at.x, y: at.y, w: spec.w, h: spec.h, block: spec.block }, spec.cfg));
     if (res && res.ok) {
       pushFlash([{ x1: at.x, y1: at.y, x2: at.x + spec.w - 1, y2: at.y + spec.h - 1 }], false);
+      landProps([res.id]);
       if (typeof StationUI !== 'undefined' && StationUI.pokeQuests) { try { StationUI.pokeQuests(); } catch (_) {} }
       if (typeof Tutorial !== 'undefined' && Tutorial.onPropPlaced) Tutorial.onPropPlaced(spec.t);
       if (res.id) { selectedPropId = res.id; renderSelection(); }
@@ -4933,6 +4940,7 @@ const Build = (() => {
     if (res && !res.ok) res.msg = placementReason({v:res,rects:[{x1:px,y1:py,x2:px+s.w-1,y2:py+s.h-1}]});
     if (res && res.ok) {
       pushFlash([{ x1: px, y1: py, x2: px + s.w - 1, y2: py + s.h - 1 }], false);
+      landProps([res.id]);
       // a prop just landed → resolve the quest generators + fold NOW, so a station gap this placement closes
       // celebrates on its own edge (fast back-to-back placements can't coalesce it away on the 1s tick).
       if (typeof StationUI !== 'undefined' && StationUI.pokeQuests) { try { StationUI.pokeQuests(); } catch (_) {} }
@@ -4989,7 +4997,7 @@ const Build = (() => {
     const left = mp ? beltsLeftBehind(mp, mp.x + dx, mp.y + dy) : 0;
     const moved = station.moveProp(d.propId, dx, dy);
     feedback(moved, ev, moveMsg(moved, left, okMsg));
-    if(moved && moved.ok){selectedPropId=d.propId;renderSelection();}
+    if(moved && moved.ok){selectedPropId=d.propId;renderSelection();landProps([d.propId]);}
   }
   function commitPaint(d, ev) {
     // WALLS are a whole-room surface — there's no per-tile wall, so a drag means the same thing
@@ -5025,9 +5033,9 @@ const Build = (() => {
     }
     const pid = station.propAt(d.cur.tx, d.cur.ty);   // props sit on top — reclaim them first
     if (pid) {
-      const p = station.propById(pid);
+      const p = station.propById(pid), was = p && Object.assign({}, p);
       const res = station.removeProp(pid);
-      if (res && res.ok) { if (p) pushFlash([{ x1: p.x, y1: p.y, x2: p.x + p.w - 1, y2: p.y + p.h - 1 }], true); flashUndo(); flashTip(ev, 'deleted — UNDO to restore', true); sfx('click'); }
+      if (res && res.ok) { if (p) pushFlash([{ x1: p.x, y1: p.y, x2: p.x + p.w - 1, y2: p.y + p.h - 1 }], true); vanishProp(was); flashUndo(); flashTip(ev, 'deleted — UNDO to restore', true); sfx('click'); }
       else { flashTip(ev, (res && res.msg) || 'blocked'); sfx('bad'); }
       return;
     }
@@ -5080,6 +5088,7 @@ const Build = (() => {
       const res = station.addProp(placement);
       if (res && res.ok) {
         pushFlash(dupeRectsAt(w.tx, w.ty), false);
+        landProps([res.id]);
         if (typeof StationUI !== 'undefined' && StationUI.pokeQuests) { try { StationUI.pokeQuests(); } catch (_) {} }
         const grant = (typeof WorldModel !== 'undefined' && WorldModel.grantLabelForProp) ? WorldModel.grantLabelForProp(dupe.t) : null;
         if (grant) sfx('chime');
@@ -5914,6 +5923,64 @@ const Build = (() => {
      fades, and the body glow decays under both. Eerie, not cute — it is the same construction
      vocabulary the bake and the CRT already speak, no particles and no confetti. */
   const FLASH_MS = 620, MOVE_MS = 760;
+  /* THINGS LAND, THINGS DISSOLVE (2026-10-01 build-mode upgrade — Andrew: "it needs to be easier and more fun to use"). A placed prop
+     used to appear in place, still, under the scan: nothing said it had ARRIVED. Now it is fabricated in the air a tile above its spot
+     and drops into its own shadow — the shadow is already on the deck, the body falls into it and settles with one small bounce and a
+     low thunk. A whole conveyor line drops machine by machine, left to right. A deleted prop is not simply gone: a cut line sweeps
+     down through it and it fades out behind the cut, with a falling hiss. Same eerie construction vocabulary as the scan and the ring
+     (fabrication, not celebration) — no particles, no confetti. Purely drawn: the model has already changed when either plays. */
+  const landings = new Map();   // propId -> start time (a stagger can start it in the future)
+  const LAND_MS = 340, LAND_RISE = 14;   // world px above the spot (a little over a tile)
+  function landProps(ids, stagger) {
+    const t0 = performance.now();
+    (ids || []).filter(Boolean).forEach((id, i) => landings.set(id, t0 + (stagger ? i * stagger : 0)));
+    if (ids && ids.length) sfxLand();
+  }
+  // the drop: falls under gravity for 62% of the time, then one small bounce (y < 0 is up, in world px)
+  function landState(id, now) {
+    const t0 = landings.get(id); if (t0 == null) return null;
+    const k = (now - t0) / LAND_MS;
+    if (k < 0) return { dy: -LAND_RISE, a: 0 };
+    if (k >= 1) { landings.delete(id); return null; }
+    const dy = k < 0.62 ? -LAND_RISE * (1 - (k / 0.62) * (k / 0.62)) : -LAND_RISE * 0.16 * Math.sin(Math.PI * (k - 0.62) / 0.38);
+    return { dy, a: Math.min(1, 0.35 + k * 2.2) };
+  }
+  const vanishing = [];   // { p (a copy), mount, t0 }
+  const VANISH_MS = 380;
+  function vanishProp(p) {
+    if (!p) return;
+    vanishing.push({ p: Object.assign({}, p), mount: (mountMap && mountMap.get(p.id)) || null, t0: performance.now() });
+    sfxVanish();
+  }
+  function drawVanishing(now) {
+    if (!vanishing.length || typeof PropSprites === 'undefined') return;
+    const t = T();
+    for (let i = vanishing.length - 1; i >= 0; i--) {
+      const v = vanishing[i], k = (now - v.t0) / VANISH_MS;
+      if (k >= 1) { vanishing.splice(i, 1); continue; }
+      const p = v.p, top = p.y * t - 2.2 * t, bot = (p.y + (p.h || 1)) * t, cut = top + (bot - top) * k;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(p.x * t - t, cut, ((p.w || 1) + 2) * t, bot - cut + t); ctx.clip();
+      ctx.globalAlpha = Math.max(0, 1 - k * 1.15);
+      try { PropSprites.draw(v.mount ? Object.assign({}, p, { mount: v.mount }) : p, true); } catch (_) {}
+      ctx.restore();
+      // the cut line itself: a phosphor scan sweeping down through the body
+      ctx.save(); ctx.globalAlpha = 0.85 * (1 - k); ctx.fillStyle = 'rgba(255,140,110,1)';
+      ctx.fillRect(p.x * t - 1, cut, (p.w || 1) * t + 2, Math.max(1 / zoom, 1.2 / zoom)); ctx.restore();
+    }
+  }
+  // the feel's two sounds, made from the station's own synth (util.js SFX.voice / SFX.noise): a soft low THUNK as something lands,
+  // a falling hiss as it dematerializes — quiet, short, gated; the plain click stands in where the synth is not loaded
+  let lastLandSfx = 0;
+  function sfxLand() {
+    const n = performance.now(); if (n - lastLandSfx < 80) return; lastLandSfx = n;
+    if (typeof SFX === 'undefined' || !SFX.voice || !SFX.ctx) return;
+    try { if (SFX.noise) SFX.noise({ dur: 0.06, cut: 700, cut2: 160, type: 'lowpass', vol: 0.1 }); SFX.voice({ freq: 140, glide: 62, dur: 0.12, type: 'sine', vol: 0.2, atk: 0.002, cut: 800 }); } catch (_) {}
+  }
+  function sfxVanish() {
+    if (typeof SFX === 'undefined' || !SFX.noise || !SFX.ctx) return;
+    try { SFX.noise({ dur: 0.26, cut: 4200, cut2: 500, type: 'bandpass', q: 1.1, vol: 0.06 }); if (SFX.voice) SFX.voice({ freq: 480, glide: 150, dur: 0.2, type: 'triangle', vol: 0.05, atk: 0.006 }); } catch (_) {}
+  }
   function drawFlashes(now, t) {
     for (let i = flashes.length - 1; i >= 0; i--) {
       const fl = flashes[i], k = (now - fl.t0) / (fl.moves ? MOVE_MS : FLASH_MS);
@@ -6043,8 +6110,14 @@ const Build = (() => {
         if (nm) dp = Object.assign(dp === p ? Object.assign({}, p) : dp, { dockName: nm });
         frameBayLabels.push(dp);
       }
-      PropSprites.draw(dp, true);
+      const land = landings.size ? landState(p.id, now) : null;
+      const lift = !land && tool === 'select' && !drag && hoverPropId === p.id ? -1.5 : 0;   // a hovered prop rises a hair: it can be picked up
+      if (land || lift) {
+        ctx.save(); ctx.translate(0, land ? land.dy : lift); if (land) ctx.globalAlpha = land.a;
+        try { PropSprites.draw(dp, true); } finally { ctx.restore(); }
+      } else PropSprites.draw(dp, true);
     }
+    drawVanishing(now);
   }
   /* 4 tiles = 48px at TILE 12. The worst upward overshoot in the whole prop catalog is 21px above a
      prop's footprint top (masts/crowns; measured over propsprites.js), and SURFACE_RISE adds a few
@@ -7118,6 +7191,8 @@ const Build = (() => {
   }
   const __test__ = {
     isOpen: () => running,
+    // the build feel (2026-10-01): what is landing / dissolving right now — CDP proof reads these mid-animation
+    feel: () => ({ landing: [...landings.keys()], vanishing: vanishing.length, selected: selectedPropId }),
     // the armed tool (select = nothing armed) — CDP proof scripts assert the deselect gestures on this
     tool: () => tool,
     // the live WorldModel — for CDP verify scripts to lay a floor through the REAL validated

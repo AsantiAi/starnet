@@ -7,7 +7,10 @@
      2. the selection card sits ABOVE the library (never hides it), shows the object's art, and every action wears its key;
      3. the editor keys: Delete/Backspace, Ctrl+D (a copy beside it, then selected), Ctrl+C / Ctrl+V (COPY's own pickup), the arrows
         (Shift: five), R/M on the selection — each one ordinary edit, one UNDO;
-     4. the BUILD menu's tooltip never outlives opening REFIT. */
+     4. the BUILD menu's tooltip never outlives opening REFIT;
+     5. THE FEEL: a placed thing drops into its own shadow and settles with a low thunk (a whole line drops machine by machine), a
+        deleted thing dissolves behind a sweeping cut line with a falling hiss, a hovered prop lifts a hair — drawn only (the model
+        has already changed), from the station's own synth, no particles. */
 'use strict';
 const A = require('./_assert.js');
 const fs = require('fs');
@@ -38,7 +41,13 @@ A.ok(/propArtInto\(host\.querySelector\('\.refit-sel-art'\),p\)/.test(sel) && /r
 for (const [label, key] of [['MOVE', 'drag'], ['TURN', 'R'], ['FLIP', 'M'], ['DUPLICATE', 'Ctrl\\+D'], ['COPY', 'Ctrl\\+C'], ['DELETE', 'Del']])
   A.ok(new RegExp("addKey\\('" + label + "','" + key + "'").test(sel), 'the ' + label + ' key wears its shortcut (' + key.replace(/\\/g, '') + ')');
 A.ok(/finally \{ if \(ctx\) PropSprites\.setCtx\(ctx\); \}/.test(fn('propArtInto')), 'drawing the card art hands PropSprites back to the floor canvas');
-A.ok(/\.refit-overlay \.refit-selection-actions \{ display: grid; grid-template-columns: repeat\(2, minmax\(0,1fr\)\); gap: 6px; \}/.test(easy), 'actions in two columns: every key cap fits');
+A.ok(/\.refit-overlay \.refit-selection-actions \{ display: grid; grid-template-columns: repeat\(3, minmax\(0,1fr\)\); gap: 5px; \}/.test(easy)
+  && /@container \(max-width: 380px\) \{ \.refit-overlay \.refit-selection-actions \{ grid-template-columns: repeat\(2, minmax\(0,1fr\)\); \} \}/.test(easy),
+  'actions three to a row, two where the dock is narrow (every key cap fits)');
+A.ok(/c\.width = 84; c\.height = 54;/.test(fn('propArtInto')) && /\.refit-sel-art \{ display: grid; place-items: center; width: 84px; height: 54px;/.test(easy),
+  'the art well is 84x54, drawn at that size (a taller card squeezed the tile grid back to a sliver at 1440x900)');
+A.ok(/addKey\('POSITION','',\(\)=>\{positionOpen=!positionOpen;renderSelection\(\);\},'refit-sel-pos'\)/.test(sel) && /if\(!positionOpen\)return;/.test(sel) && /aria-label="Object grid X"/.test(sel),
+  'typing an exact tile is its own key in the grid; the X / Y fields appear only when asked');
 
 /* ---------- 3. the editor keys ---------- */
 const key = fn('onKey');
@@ -59,5 +68,31 @@ A.ok(/if \(id !== 'select' && !\(o && o\.keepGroup\)\) buildGroup =/.test(build)
 A.ok(/raf = requestAnimationFrame\(frame\);\n[^\n]*\n[^\n]*\n    try \{ document\.dispatchEvent\(new Event\('scroll'\)\); \} catch \(_\) \{\}/.test(build), 'opening REFIT sends the station tooltip its hide signal');
 A.ok(/<link rel="stylesheet" href="css\/refit-easy\.css">/.test(html) && html.indexOf('css/refit-easy.css') > html.indexOf('css/refit-polish.css'), 'the stylesheet loads after the REFIT glass it refines');
 A.ok(/\.refit-library-tabs \.bb:hover::before, \.refit-overlay \.refit-library-tabs \.bb:hover::after/.test(easy), 'the library tabs never wear the old [ ] hover brackets');
+
+/* ---------- 5. the feel ---------- */
+A.ok(/const LAND_MS = 340, LAND_RISE = 14;/.test(build) && /function landProps\(ids, stagger\)/.test(build) && /function landState\(id, now\)/.test(build),
+  'a placed thing lands: dropped from a little over a tile up, 340ms');
+const land = fn('landState');
+A.ok(/k < 0\.62 \? -LAND_RISE \* \(1 - \(k \/ 0\.62\) \* \(k \/ 0\.62\)\)/.test(land) && /-LAND_RISE \* 0\.16 \* Math\.sin/.test(land) && /if \(k >= 1\) \{ landings\.delete\(id\); return null; \}/.test(land),
+  '…it falls under gravity, settles with ONE small bounce, and is forgotten when it has landed');
+A.ok(/const land = landings\.size \? landState\(p\.id, now\) : null;/.test(build) && /hoverPropId === p\.id \? -1\.5 : 0;/.test(build) && /try \{ PropSprites\.draw\(dp, true\); \} finally \{ ctx\.restore\(\); \}/.test(build),
+  'the floor pass draws a landing prop in the air and a hovered one lifted a hair (and always restores the canvas)');
+for (const [where, rx] of [
+  ['the prop tool\'s stamp', /pushFlash\(\[\{ x1: px, y1: py, x2: px \+ s\.w - 1, y2: py \+ s\.h - 1 \}\], false\);\n\s*landProps\(\[res\.id\]\);/],
+  ['COPY\'s stamp', /pushFlash\(dupeRectsAt\(w\.tx, w\.ty\), false\);\n\s*landProps\(\[res\.id\]\);/],
+  ['Ctrl+D', /pushFlash\(\[\{ x1: at\.x, y1: at\.y, x2: at\.x \+ spec\.w - 1, y2: at\.y \+ spec\.h - 1 \}\], false\);\n\s*landProps\(\[res\.id\]\);/],
+  ['a whole line (machine by machine, left to right)', /landProps\(\(res\.ids \|\| \[\]\)\.map\(id => station\.propById\(id\)\)\.filter\(Boolean\)\.sort\(\(a, b\) => a\.x - b\.x \|\| a\.y - b\.y\)\.map\(p => p\.id\), 70\);/],
+  ['a dragged move', /if\(moved && moved\.ok\)\{selectedPropId=d\.propId;renderSelection\(\);landProps\(\[d\.propId\]\);\}/],
+]) A.ok(rx.test(build), 'lands: ' + where);
+A.ok(/vanishProp\(was\); flashUndo\(\);/.test(build) && /vanishProp\(was\); \}/.test(fn('deleteSelected')), 'the DELETE tool and Delete on a selection dissolve what they remove');
+const dv = fn('drawVanishing');
+A.ok(/cut = top \+ \(bot - top\) \* k;/.test(dv) && /ctx\.clip\(\);/.test(dv) && /ctx\.globalAlpha = Math\.max\(0, 1 - k \* 1\.15\);/.test(dv) && /vanishing\.splice\(i, 1\)/.test(dv),
+  '…a cut line sweeps down through it and it fades behind the cut, then is gone');
+A.ok(/drawVanishing\(now\);\n  \}/.test(build), '…drawn after the floor\'s props, every frame it lasts');
+A.ok(/SFX\.voice\(\{ freq: 140, glide: 62,/.test(fn('sfxLand')) && /SFX\.noise\(\{ dur: 0\.26,/.test(fn('sfxVanish')) && /!SFX\.ctx\) return;/.test(fn('sfxLand')) && /!SFX\.ctx\) return;/.test(fn('sfxVanish')),
+  'a low thunk to land, a falling hiss to dissolve — the station\'s own synth, silent until audio is unlocked');
+const feelBlock = build.slice(build.indexOf('THINGS LAND, THINGS DISSOLVE'), build.indexOf('function drawFlashes('));
+A.ok(feelBlock.length > 0 && !/confetti|particle|sparkle/i.test(feelBlock.replace(/no particles, no confetti/, '')), 'eerie, not cute: no particles, no confetti');
+A.ok(/feel: \(\) => \(\{ landing: \[\.\.\.landings\.keys\(\)\], vanishing: vanishing\.length, selected: selectedPropId \}\)/.test(build), 'CDP proof can read what is landing / dissolving mid-animation');
 
 A.report('build-mode-easy.test');

@@ -32,27 +32,33 @@
 .refit-overlay .refit-library-tabs .bb:hover::before, .refit-overlay .refit-library-tabs .bb:hover::after,
 .refit-overlay .refit-selection .bb:hover::before, .refit-overlay .refit-selection .bb:hover::after { content: none; }
 
-/* ---- THE SELECTION CARD: above the library (which now stays), the object's art + name, then its actions wearing their keys */
-.refit-overlay .refit-selection { display: grid; gap: 8px; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--refit-edge);
+/* ---- THE SELECTION CARD: above the library (which now stays), the object's art + name, then its actions wearing their keys.
+   Compact on purpose: at 1440x900 a taller card squeezed the tile grid back to a sliver, so the art is 84x54 and the keys run
+   three to a row (two where the dock is narrow). */
+.refit-overlay .refit-selection { display: grid; gap: 7px; padding: 8px 12px; border: 0; container-type: inline-size; border-bottom: 1px solid var(--refit-edge);
   background: linear-gradient(165deg, rgba(var(--ph-rgb),.075), transparent 46%), color-mix(in srgb, var(--panel2, var(--panel)) 88%, transparent); }
 .refit-overlay .refit-selection[hidden] { display: none; }
-.refit-overlay .refit-sel-head { display: grid; grid-template-columns: 112px minmax(0,1fr) auto; align-items: center; gap: 10px; }
-.refit-overlay .refit-sel-art { display: grid; place-items: center; width: 112px; height: 72px; border-radius: 8px;
+.refit-overlay .refit-sel-head { display: grid; grid-template-columns: 84px minmax(0,1fr) auto; align-items: center; gap: 10px; }
+.refit-overlay .refit-sel-art { display: grid; place-items: center; width: 84px; height: 54px; border-radius: 8px;
   background: radial-gradient(ellipse 72% 70% at 50% 64%, rgba(130,170,150,.12), transparent 76%), rgba(0,0,0,.22); box-shadow: inset 0 0 0 1px var(--refit-edge); }
-.refit-overlay .refit-sel-art canvas { display: block; width: 112px; height: 72px; }
+.refit-overlay .refit-sel-art canvas { display: block; width: 84px; height: 54px; }
 .refit-overlay .refit-sel-name { display: grid; gap: 2px; min-width: 0; }
-.refit-overlay .refit-sel-name b { font-weight: normal; font-size: 18px; line-height: 1.15; letter-spacing: .6px; color: var(--ph-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.refit-overlay .refit-sel-name b { font-weight: normal; font-size: 17px; line-height: 1.15; letter-spacing: .6px; color: var(--ph-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .refit-overlay .refit-sel-name small { font-size: 13px; color: var(--ph-dim); line-height: 1.25; }
-.refit-overlay .refit-selection .refit-sel-x { min-width: 34px; min-height: 34px; padding: 0; border-radius: 8px; }
-.refit-overlay .refit-selection-actions { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 6px; }
-.refit-overlay .refit-selection .refit-sel-act { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 34px; padding: 5px 8px 5px 10px;
-  font-size: 15px; letter-spacing: .5px; border: 1px solid var(--refit-edge); border-radius: 8px; background: var(--refit-glass); box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb),.07); text-shadow: none; }
+.refit-overlay .refit-selection .refit-sel-x { min-width: 32px; min-height: 32px; padding: 0; border-radius: 8px; }
+.refit-overlay .refit-selection-actions { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 5px; }
+@container (max-width: 380px) { .refit-overlay .refit-selection-actions { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+.refit-overlay .refit-selection .refit-sel-act { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-width: 0; min-height: 30px; padding: 4px 6px 4px 8px;
+  font-size: 14px; letter-spacing: .4px; border: 1px solid var(--refit-edge); border-radius: 8px; background: var(--refit-glass); box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb),.07); text-shadow: none; }
 .refit-overlay .refit-selection .refit-sel-act:hover:not(:disabled) { color: var(--ph-bright); border-color: rgba(var(--ph-rgb),.45); background: rgba(var(--ph-rgb),.1); }
-.refit-overlay .refit-selection .refit-sel-act kbd { font: 12px/1 'VT323', monospace; letter-spacing: .3px; color: var(--ph-dim); padding: 2px 5px; border-radius: 4px;
+.refit-overlay .refit-selection .refit-sel-act span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.refit-overlay .refit-selection .refit-sel-act kbd { flex: 0 0 auto; font: 11px/1 'VT323', monospace; letter-spacing: .2px; color: var(--ph-dim); padding: 2px 4px; border-radius: 4px;
   border: 1px solid var(--refit-edge); background: rgba(0,0,0,.25); white-space: nowrap; }
 .refit-overlay .refit-selection .refit-sel-del:hover:not(:disabled) { color: var(--bad); border-color: var(--bad); background: color-mix(in srgb, var(--bad) 8%, transparent); }
 .refit-overlay .refit-selection .refit-sel-del:hover kbd { color: var(--bad); }
-.refit-overlay .refit-selection .refit-position { font-size: 13px; color: var(--ph-dim); }
+.refit-overlay .refit-selection .refit-position { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 14px; color: var(--ph-dim); }
+.refit-overlay .refit-selection .refit-position label { margin: 0; }
+.refit-overlay .refit-selection .refit-sel-pos[aria-expanded="true"] { color: var(--ph-bright); border-color: rgba(var(--ph-rgb),.45); }
 
 @media (prefers-reduced-motion: reduce) {
   .refit-overlay .refit-selection .refit-sel-act { transition: none; }
