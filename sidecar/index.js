@@ -22787,7 +22787,7 @@ function consentSummary(call) {
   }
   // the station builder: the card shows what the dry run found (the plan's summary + every step's instructions), never the model's words
   if (/^station[._]build$/.test(String(call && call.name || ''))) return stationPlanSummary(stationPlanMemo, a.planId) || 'an unknown or expired plan: it will be refused, and nothing will be built';
-  if (/^station[._]make_prop$/.test(String(call && call.name || ''))) return 'Make a new prop with your StarNet credits: "' + String(a.describe || '').replace(/\s+/g, ' ').trim().slice(0, 60) + '" (about $0.35' + (a.sideView ? ', and about $0.30 more for its side view' : '') + '). It joins your MADE BY YOU library; nothing is placed until a plan says so.';
+  if (/^station[._]make_prop$/.test(String(call && call.name || ''))) return '"' + String(a.describe || '').replace(/\s+/g, ' ').trim().slice(0, 60) + '", drawn with your StarNet credits (about $0.35' + (a.sideView ? ', and about $0.30 more for its side view' : '') + '). It joins your MADE BY YOU library; nothing is placed until a plan says so.';
   if (typeof a.path === 'string' && a.path) return a.path;
   try { const s = JSON.stringify(a); return s.length > 80 ? s.slice(0, 77) + '…' : s; } catch (_) { return ''; }
 }

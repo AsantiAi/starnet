@@ -1690,7 +1690,7 @@ for (const c of T.catalog) {
     A.ok(/^REFUSED: StarNet could not make "a broken thing": the drawing never passed its checks \(\$0\.20 was spent on the tries\)/.test(bad.content), 'a failed drawing says why and what it spent: ' + bad.content);
     A.ok(/^REFUSED: Making props is not available on this station\./.test((await toolsOf(null).makePropTool.run({ describe: 'x' }, {})).content), 'a station without the prop maker refuses plainly');
     const idx = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
-    A.ok(/station\[\._\]make_prop\$\/\.test\(String\(call && call\.name \|\| ''\)\)\) return 'Make a new prop with your StarNet credits: /.test(idx), 'the approval card names the object and its price');
+    A.ok(/station\[\._\]make_prop\$\/\.test\(String\(call && call\.name \|\| ''\)\)\) return '"' \+ String\(a\.describe/.test(idx) && /'", drawn with your StarNet credits \(about \$0\.35'/.test(idx), 'the approval card names the object and its price');
   }
   {
     const rf = await planT.run({ refit: [{ op: 'place', t: 'tv', x: 2, y: 2 }] }, {});
