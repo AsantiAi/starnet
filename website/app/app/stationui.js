@@ -823,7 +823,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     if (w.contains(active)) {
       // hand focus to the dock GROUP trigger (always visible), NOT the in-menu item (it lives in a
       // display:none popover when the dock is closed — focusing a hidden node silently drops to <body>).
-      const item = document.querySelector('.bb[data-term="' + CSS.escape(key) + '"]');
+      const fam = familyOf(key);   // a MY WORK / AUTOMATE / CONNECT window's dock door is its menu button
+      const item = document.querySelector('.bb[data-term="' + CSS.escape(key) + '"]') || (fam ? document.querySelector('.bb[data-family="' + fam + '"]') : null);
       const grpBtn = item && item.closest('.bb-group') ? item.closest('.bb-group').querySelector('.bb-grp') : null;
       const target = (grpBtn && grpBtn.offsetParent !== null) ? grpBtn : null;
       try { target ? target.focus() : (active.blur && active.blur()); } catch (_) {}
