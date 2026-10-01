@@ -441,15 +441,15 @@ async function opensWithin(t, ms) {
   {
     const t = boot({ recorder: true });
     gumMode = 'hang';
-    t.Voice.startListening(); await tick();          // take A waits on the prompt
+    t.Voice.startListening(); await until(() => gumPending.length === 1, 2000);   // take A waits on the prompt
     t.Voice.stopListening(); await tick();           // stop before it ever opened
-    t.Voice.startListening(); await tick();          // take B
+    t.Voice.startListening(); await until(() => gumPending.length === 2, 2000);   // take B
     A.eq(gumPending.length, 2, 'race: two permission requests are pending');
     let stoppedA = 0;
-    gumPending[0].res({ getTracks: () => [{ stop() { stoppedA++; } }] }); await tick();   // A's grant lands late
+    gumPending[0].res({ getTracks: () => [{ stop() { stoppedA++; } }] }); await until(() => stoppedA > 0, 2000);   // A's grant lands late
     A.eq(stoppedA, 1, 'race: the late grant for the abandoned take is released (mic not left hot)');
     A.eq(mrInstances.length, 0, 'race: no recorder is built for the abandoned take');
-    gumPending[1].res(fakeStream()); await tick();
+    gumPending[1].res(fakeStream()); await until(() => mrInstances.length > 0, 2000); await tick(30);
     A.eq(mrInstances.length, 1, 'race: exactly one recorder — the live take’s');
     gumMode = 'ok';
   }
