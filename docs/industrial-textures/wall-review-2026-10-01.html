@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>StarNet · Wall material review</title>
+<style>
+:root{color-scheme:dark;--zoom:3;font-family:system-ui,sans-serif;background:#101317;color:#e1e4e8}
+*{box-sizing:border-box}body{max-width:1400px;margin:auto;padding:32px 24px 60px}
+h1{font-size:28px;margin:4px 0 8px}p{color:#9ca5b0;line-height:1.5;margin:0}
+.kicker{color:#c4a76f;text-transform:uppercase;font-size:11px;letter-spacing:2px}
+.controls{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin:24px 0}
+button{font:inherit;padding:9px 14px;background:#222830;border:1px solid #424d5b;color:#e1e4e8;border-radius:5px;cursor:pointer}
+button[aria-pressed=true]{border-color:#c4a76f;background:#363125}label{font-size:13px;display:flex;gap:12px;align-items:center}
+input{accent-color:#c4a76f}output{font-variant-numeric:tabular-nums;min-width:24px}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+article{overflow:hidden;background:#171c22;border:1px solid #2b343f;border-radius:8px}
+.art{display:block;width:100%;aspect-ratio:48/39;object-fit:fill;background:#090b0d}
+h2{padding:14px;font-size:15px;margin:0}
+.repeat{height:calc(39px * var(--zoom));background-size:calc(48px * var(--zoom)) calc(39px * var(--zoom));background-repeat:repeat-x;border-top:1px solid #2b343f;background-color:#080a0c}
+.note{margin-top:22px;font-size:12px;max-width:850px}
+@media(max-width:1000px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){body{padding:20px 12px}.grid{grid-template-columns:1fr}}
+</style>
+<header><div class="kicker">StarNet / material study / 01 October 2026</div>
+<h1>Walls with structure.</h1><p>Six revised finishes and two new wall options, based on the approved station references.</p></header>
+<div class="controls" role="group" aria-label="Artwork comparison">
+<button type="button" id="revised" aria-pressed="true">Revised artwork</button>
+<button type="button" id="original" aria-pressed="false">Original artwork</button>
+<label>Repeat preview scale <input type="range" min="1" max="6" value="3" id="scale" aria-label="Repeat preview scale"><output id="scale-value">3×</output></label>
+</div><main class="grid">
+<article data-id="bulkhead" data-new="false"><img class="art" alt="Bulkhead wall texture"><h2>Bulkhead</h2><div class="repeat" role="img" aria-label="Bulkhead repeated at game scale"></div></article>
+<article data-id="courses" data-new="false"><img class="art" alt="Courses wall texture"><h2>Courses</h2><div class="repeat" role="img" aria-label="Courses repeated at game scale"></div></article>
+<article data-id="panelled" data-new="false"><img class="art" alt="Panel wall texture"><h2>Panel</h2><div class="repeat" role="img" aria-label="Panel repeated at game scale"></div></article>
+<article data-id="ribbed" data-new="false"><img class="art" alt="Ribbed wall texture"><h2>Ribbed</h2><div class="repeat" role="img" aria-label="Ribbed repeated at game scale"></div></article>
+<article data-id="service" data-new="false"><img class="art" alt="Service wall texture"><h2>Service</h2><div class="repeat" role="img" aria-label="Service repeated at game scale"></div></article>
+<article data-id="pipework" data-new="false"><img class="art" alt="Pipework wall texture"><h2>Pipework</h2><div class="repeat" role="img" aria-label="Pipework repeated at game scale"></div></article>
+<article data-id="braced" data-new="true"><img class="art" alt="Braced · new wall texture"><h2>Braced · new</h2><div class="repeat" role="img" aria-label="Braced · new repeated at game scale"></div></article>
+<article data-id="machinery" data-new="true"><img class="art" alt="Machinery · new wall texture"><h2>Machinery · new</h2><div class="repeat" role="img" aria-label="Machinery · new repeated at game scale"></div></article>
+</main><p class="note">The lower strip repeats each bay at its 48 × 39 world-pixel footprint. Room lighting, paint tint, perspective and CRT effects are applied by the app. Braced and Machinery remain visible in both modes. The approved references and original textures are preserved.</p>
+<script>
+const base='../../frontend/assets/industrial/remaster/walls/';
+function show(original){
+ document.querySelectorAll('article').forEach(card=>{
+  const url=base+card.dataset.id+(!original&&card.dataset.new!=='true'?'-v3':'')+'.png';
+  card.querySelector('img').src=url;
+  card.querySelector('.repeat').style.backgroundImage='url("'+url+'")';
+ });
+ document.querySelector('#revised').setAttribute('aria-pressed',String(!original));
+ document.querySelector('#original').setAttribute('aria-pressed',String(original));
+}
+document.querySelector('#revised').addEventListener('click',()=>show(false));
+document.querySelector('#original').addEventListener('click',()=>show(true));
+document.querySelector('#scale').addEventListener('input',event=>{
+ document.documentElement.style.setProperty('--zoom',event.target.value);
+ document.querySelector('#scale-value').value=event.target.value+'×';
+});
+show(false);
+</script></html>
