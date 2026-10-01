@@ -36,14 +36,23 @@ A.ok(W.hasAgent(unknownGroup, 'echo', membersOf) && !W.hasAgent(unknownGroup, 'f
 A.ok(!W.hasAgent({ id: 's3', agentId: 'finn', conversationMode: 'direct' }, 'echo', () => ['echo']),
   'membership is read for GROUP sessions only — a direct session cannot be widened by it');
 A.ok(W.hasAgent(group, 'echo', null) && !W.hasAgent(group, 'finn', null), 'no membership source = lead only');
+// Andrew 10-01: "if finn and nova are in a chat, if i click nova, it should show that session" — the overseer
+// (id 'agent') is a member like any other, even when another agent leads the group.
+const novaFinn = { id: 'g3', agentId: 'finn', conversationMode: 'group' };
+const withNova = id => (id === 'g3' ? ['agent', 'finn'] : null);
+A.ok(W.hasAgent(novaFinn, 'agent', withNova) && W.hasAgent(novaFinn, 'finn', withNova),
+  'a NOVA + FINN group led by FINN lists under NOVA (the overseer) and under FINN');
 A.ok(!W.hasAgent(null, 'finn', membersOf) && !W.hasAgent(direct, '', membersOf), 'empty input is no match');
 
 /* ---- 2. SOURCE-LOCKED wiring ---- */
 const read = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
 const app = read('frontend/app/app.js'), ui = read('frontend/app/stationui.js'), gc = read('frontend/app/group-chat.js');
 
-A.ok(/membersById\.set\(g\.id, g\.members\.slice\(\)\)/.test(gc) && /membersOf: id => membersById\.get\(id\) \|\| null/.test(gc),
+A.ok(/next = g\.members\.slice\(\);\s*membersById\.set\(g\.id, next\);/.test(gc) && /membersOf: id => membersById\.get\(id\) \|\| null/.test(gc),
   'GroupChat records each group\'s members from the backend and exposes membersOf');
+A.ok(/before && before\.join\('\\n'\) !== next\.join\('\\n'\) && typeof App !== 'undefined' && App\.refreshRail\) queueMicrotask\(\(\) => App\.refreshRail\(\)\)/.test(gc),
+  'a member joining or leaving repaints the rail, so the group appears under them without a reload');
+A.ok(/group = result; adopt\(result\); paint\(\);/.test(gc), 'an @mention invite records the new member at once');
 A.ok(/Workstreams\.hasAgent\(w, id, typeof GroupChat !== 'undefined' \? GroupChat\.membersOf : null\)/.test(app),
   'the rail filter reads the shared hasAgent rule with the backend membership');
 A.ok(/\(!railAgentFilter \|\| railHasAgent\(w, railAgentFilter\)\)/.test(app), 'renderRail narrows its rows to the chosen agent');
