@@ -83,5 +83,19 @@ function fakeWs() {
     try { await d.tabs(); } catch (_) { /* the fake browser exits at once */ }
     A.eq(d.ownedPid(), null, 'the driver never reports the pid of a Chromium that has exited');
   }
+  // ---- CHROME'S ERROR PAGE is retried once and reported as a failed load, never as an "unsafe redirect" ----
+  {
+    const lookup = async () => [{ address: '93.184.215.14', family: 4 }];
+    let n = 0;
+    const flaky = { navigate: async u => { n++; return n === 1 ? 'chrome-error://chromewebdata/' : u; }, close: async () => {}, usingPersistentProfile: () => false, tabs: async () => [], alive: () => true };
+    const B1 = makeBrowserTools({ makeDriver: () => flaky, lookup });
+    A.eq(await B1.session.navigate('https://example.com/'), 'https://example.com/', 'a first load that hit Chrome\'s error page is retried and lands');
+    let m = 0;
+    const down = { navigate: async () => { m++; return 'chrome-error://chromewebdata/'; }, close: async () => {}, usingPersistentProfile: () => false, tabs: async () => [], alive: () => true };
+    const B2 = makeBrowserTools({ makeDriver: () => down, lookup });
+    let e = ''; try { await B2.session.navigate('https://example.com/'); } catch (x) { e = x.message; }
+    A.ok(/could not load example\.com/.test(e) && !/redirect/.test(e), 'a page that keeps failing says it did not load, not "unsafe redirect"');
+    A.eq(m, 2, '…after exactly one retry');
+  }
   A.report('browser-dead-browser.test');
 })().catch(e => { console.log('FAIL: browser-dead-browser.test threw - ' + (e && e.stack || e)); process.exit(1); });

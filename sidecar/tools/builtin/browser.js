@@ -2655,6 +2655,16 @@
         if (local && typeof d.allowLocal === 'function') d.allowLocal(u.href);
         finalUrl = await d.navigate(u.href);
       }
+      /* CHROME'S OWN ERROR PAGE is not a redirect (measured 2026-09-30 at 88% CPU: the first load in a just-started
+         window landed on chrome-error://chromewebdata and was reported as "blocked unsafe redirect"). Opening an address
+         is safe to repeat: try once more, then say plainly that the page did not load. */
+      if (finalUrl && /^chrome-error:/i.test(String(finalUrl))) {
+        await sleep(600);
+        finalUrl = await d.navigate(u.href);
+        if (finalUrl && /^chrome-error:/i.test(String(finalUrl))) {
+          throw new Error('could not load ' + u.host + ': the browser showed an error page (the site did not answer, or the network is down)');
+        }
+      }
       if (finalUrl) {
         try {
           validate(finalUrl);
