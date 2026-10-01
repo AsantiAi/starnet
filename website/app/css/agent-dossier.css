@@ -55,7 +55,7 @@
 .agent-dossier .ag-command { border: 0; padding: 0; }
 .agent-dossier .ag-cmd-sec { margin: 0 0 16px; padding: 0; }
 .agent-dossier .ag-cmd-lbl { font-size: 14px; margin-bottom: 12px; }
-.agent-dossier .ag-cmd-danger { padding: 16px; border: 1px solid rgba(255,100,90,.22); border-radius: 9px; margin-top: 20px; }
+.agent-dossier .cf-card.ag-del-card { padding: 16px; border: 1px solid rgba(255,100,90,.22); border-radius: 9px; margin-top: 20px; }
 .agent-dossier .ag-skin-thumb { border-radius: 8px; background: rgba(var(--ph-rgb),.035); box-shadow: none; }
 .agent-dossier .ag-skin-thumb.sel { background: var(--menu-glass); border-color: var(--ph); }
 .agent-dossier :is(.mc-rec,.mc-row) { padding: 16px; border: 1px solid rgba(var(--ph-rgb),.19); border-radius: 10px; background: rgba(0,0,0,.12); box-shadow: none; margin-bottom: 12px; }

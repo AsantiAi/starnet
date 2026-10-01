@@ -2944,6 +2944,16 @@ const Chat = (() => {
     }
     if (/write|append|edit/.test(t)) return 'write ' + (ev.argsSummary || 'a file');
     if (t === 'brief.ask') return 'ask you a quick question about the task';   // clarify card renders its own body
+    // ROUTINES: say WHAT will run and WHEN, never the raw JSON (argsSummary may be clipped mid-object, so read fields
+    // by pattern rather than JSON.parse). "Always" here lets the agent add and change routines without asking.
+    if (/^routine[._](?:create|manage)$/.test(t)) {
+      const s = String(ev.argsSummary || '');
+      const pick = k => { const m = new RegExp('"' + k + '"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"').exec(s); return m ? m[1].replace(/\\(["\\\\])/g, '$1') : ''; };
+      const nm = pick('name'), when = pick('schedule');
+      if (/create$/.test(t)) return 'schedule a routine' + (nm ? ' “' + nm + '”' : '') + (when ? ' — ' + when : '') + ' (results come back here)';
+      const act = pick('action'), ref = pick('id');
+      return (act || 'change') + ' the routine' + (ref ? ' “' + ref + '”' : '') + (when ? ' — ' + when : '');
+    }
     // THE STATION BUILDER (2026-09-29): the card IS the plan — what gets built, where, who works each step. The sidecar
     // sends the plan's own summary (its dry run on a copy of the station), never the model's words.
     if (/^station[._]build$/.test(t)) { const plan = String(ev.argsSummary || '').split('\n')[0] || 'a planned change'; return 'build this on your station: ' + plan + (/\bUNDO\b/.test(plan) ? '' : ' One UNDO in Build mode takes it back.'); }
@@ -3085,10 +3095,12 @@ const Chat = (() => {
     if (p && p.tool === 'brief.ask') return clarifyRow(p, ws);   // a question, not a grade — its own card
     const r = row('agent'); r.d.classList.add('tool'); r.d.classList.add('consent');
     r.body.appendChild(document.createTextNode('▣ ' + name + ' wants to ' + actionPhrase(p) + ' '));
-    if (/^fs[._](?:write|append|edit|patch)$/.test(String(p.tool || ''))) {
+    if (/^(?:fs[._](?:write|append|edit|patch)|routine[._](?:create|manage))$/.test(String(p.tool || ''))) {
       const detail = document.createElement('details'); detail.className = 'consent-payload';
-      const label = document.createElement('summary'); label.textContent = 'Inspect proposed change (secret patterns redacted)';
+      const label = document.createElement('summary');
+      label.textContent = /^routine/.test(String(p.tool)) ? 'What it will do each run' : 'Inspect proposed change (secret patterns redacted)';
       const payload = document.createElement('pre'); payload.textContent = p.argsSummary || '(payload unavailable)';
+      if (/^routine/.test(String(p.tool))) { try { const o = JSON.parse(p.argsSummary || '{}'); if (o.prompt) payload.textContent = String(o.prompt); } catch (_) { /* clipped payload: the raw text above stays */ } }
       detail.appendChild(label); detail.appendChild(payload); r.body.appendChild(detail);
     }
     // the station builder's card: every step's instructions, one click away (the summary line is in the phrase above)

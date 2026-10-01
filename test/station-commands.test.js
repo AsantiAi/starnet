@@ -80,6 +80,16 @@ async function call(env, verb, args) {
   A.ok(out.result.sessions.every(s => s.id && s.agentId), 'every row carries the id and agent a dispatch needs');
 }
 
+// ---- station.deliver from a ROUTINE names its session as sessionId (cron delivery) — it must land (10-01 live bug) ----
+{
+  const env = boot();
+  const ws = env.W.create('news');
+  env.W.switch(env.W.generalId());
+  const out = await call(env, 'station.deliver', { sessionId: ws.id, agentId: 'agent', runId: 'cron-run-1', prompt: 'daily AI news', text: 'top stories…' });
+  A.eq(out.ok, true, 'a routine result addressed by sessionId is delivered');
+  A.eq(out.result.session, 'news', 'into the session the routine was made in');
+}
+
 // ---- station.deliver: the worker's answer lands in the session the Commander named ----
 {
   const env = boot();

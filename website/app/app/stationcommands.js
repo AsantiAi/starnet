@@ -83,7 +83,8 @@ const StationCommands = (() => {
      Substring matching is deliberately forbidden here: an automatic fold must never guess its destination. */
   function resolveDelivery(a) {
     if (typeof Workstreams === 'undefined' || !Workstreams.get || !Workstreams.list) throw new Error('sessions are not ready yet');
-    const id = String((a && a.streamId) || '');
+    // a routine's result names its session as sessionId (cron delivery); a dispatched worker names it streamId
+    const id = String((a && (a.streamId || a.sessionId)) || '');
     const byId = id && Workstreams.get(id);
     if (byId) return { w: byId, resolvedBy: 'id' };
     const title = String((a && a.sessionTitle) || '').trim();

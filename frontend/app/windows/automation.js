@@ -95,6 +95,18 @@
       }
       const agentButton = Array.from(body.querySelectorAll('.rt-agent-btn')).find(b => b.dataset.agent === draft.agentId);
       if (agentButton) agentButton.click();
+      // REPEAT SENSE: a takeover carries the rhythm read off when the Commander actually asked. It only
+      // pre-selects the picker; nothing is scheduled until the existing ADD click.
+      const sug = draft.suggest;
+      if (sug && sug.schedule && body._rtPicker && typeof body._rtPicker.set === 'function') {
+        body._rtPicker.set(String(sug.schedule));
+        const when = body.querySelector('#rt-when');
+        if (when) {
+          const hint = document.createElement('p'); hint.className = 'set-about'; hint.dataset.rtSuggest = '1';
+          hint.textContent = 'Suggested: ' + String(sug.display || sug.schedule) + (sug.why ? ' — ' + String(sug.why) : '') + '. Change it if you like.';
+          when.insertAdjacentElement('beforebegin', hint);
+        }
+      }
       draft = null; // a draft is not a routine; only the existing CREATE click can persist one.
     }
   }

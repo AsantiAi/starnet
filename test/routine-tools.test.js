@@ -439,5 +439,18 @@ const call = (name, args) => ({ id: 'c1', name, args: args || {}, argsRaw: JSON.
   A.eq(updated.attachToSession, false, 'explicit detached local delivery is preserved');
   A.eq(result.job.deliver, 'local', 'read-back reports repaired delivery');
 }
+// Plain-English cadence rides every tool reply (a model read "cron 0 10 * * 1" and told the Commander "bi-weekly").
+{
+  const j = { id: 'w1', name: 'Weekly', agentId: 'agent', scheduleDisplay: 'cron 0 10 * * 1', enabled: true, nextRunAt: '2026-10-05T14:00:00.000Z' };
+  const t = makeRoutineTools({ roster: () => new Map([['agent', {}]]), listJobs: () => [j],
+    describeSchedule: job => ({ when: 'every Monday at 10:00 AM (America/New_York)', next: 'Mon, Oct 5 at 10:00 AM' }) });
+  const listTool = t.listTool;
+  const out = JSON.parse((await listTool.run({}, {})).content);
+  const row = (out.jobs || out.routines || [])[0] || {};
+  A.eq(row.when, 'every Monday at 10:00 AM (America/New_York)', 'routine.list carries the cadence in words');
+  A.eq(row.nextRunLocal, 'Mon, Oct 5 at 10:00 AM', 'and the next fire on the station clock');
+  const bare = makeRoutineTools({ roster: () => new Map(), listJobs: () => [j] }).listTool;
+  A.eq(((JSON.parse((await bare.run({}, {})).content).jobs || [])[0] || {}).when, undefined, 'no describer wired -> no invented words');
+}
 A.report('routine-tools');
 })().catch(e => { console.log('FAIL: routine-tools threw -- ' + (e && e.stack || e)); process.exit(1); });

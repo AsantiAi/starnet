@@ -259,6 +259,7 @@ const { makeProjectScan } = require('./projectscan.js');  // NS-5b: bounded harn
 const { makeProjectDiscovery } = require('./project-discovery.js'); // bounded candidate scan; never grants access
 const nightpatch = require('./nightpatch.js');            // NS-5b: pure patch-apply target resolver (never touches an un-blessed root / main)
 const Autopilot = require('../frontend/app/autopilot.js'); // NS-1: the pure, node-exportable anti-slop ACT pipeline (reused, not rewritten)
+const CronHumanMod = require('../frontend/app/cronhuman.js');   // schedule -> plain English for routine tool replies
 const Autonomy = require('../frontend/app/autonomy.js');   // NS-1: the pure posture engine (summary/normalize) — the SERVER reads the same shape the dial writes
 const Interests = require('./interests.js');               // SCOUT lane 1: pure topic-interest engine (EWMA histogram + evidence-grounded extraction)
 const Scout = require('./scout.js');                        // SCOUT lane 2: pure drafting gates + recipe parse + the honest mint ledger
@@ -809,6 +810,7 @@ const CRON_MAX_RUN_MS = num(ENV('CRON_MAX_RUN_MS'), 480000);   // operational le
 const CRON_MAX_PARALLEL = num(ENV('CRON_MAX_PARALLEL'), 0);
 // terminal failures IN A ROW before a recurring routine auto-pauses (0 = never). Default 5.
 const CRON_MAX_CONSECUTIVE_FAILURES = num(ENV('CRON_MAX_CONSECUTIVE_FAILURES'), 5);
+const CRON_MAX_WALL_MS = num(ENV('CRON_MAX_WALL_MS'), 90 * 60 * 1000);   // hard per-run wall clock for routines (0 = off)
 // NS-0 LEASE HEARTBEAT knobs. The lease sweep + one-shot fireClaim now reclaim on a STALE HEARTBEAT rather than a
 // fixed wall-clock age, so a genuinely-long run that keeps emitting progress fires exactly once (the duplicate-fire
 // fix). CRON_STALENESS_MULT scales maxRunMs into the no-heartbeat staleness ceiling (default 1 = pre-NS-0 timing for
@@ -838,9 +840,12 @@ const CRON_DEFAULT_MODEL = String(ENV('DEFAULT_MODEL') || '').trim();
 const CRON_PERSONA = 'You are an autonomous STARNET station agent running a SCHEDULED routine — no human is watching. '
   + 'Carry out the task with your REAL tools (web search/read, files, memory); ground every factual claim in what the '
   + 'tools actually return and cite sources; save any durable deliverable to your workspace with fs_write. Be concise. '
+  + 'Your final reply IS what the Commander receives (the station delivers it): write the result itself (the reminder, '
+  + 'the brief, the findings), never that you cannot send or deliver it. '
   + 'If there is genuinely nothing new or noteworthy to report this run, reply with EXACTLY "[SILENT]" and nothing else.';
 const CRON_ROUTINE_NOTE = '\n\n[ROUTINE] This is an unattended scheduled routine. Use your normal agent identity, '
-  + 'carry out the saved prompt without waiting for the Commander, and keep the result concise. If there is genuinely '
+  + 'carry out the saved prompt without waiting for the Commander, and keep the result concise. Your final reply IS what '
+  + 'the Commander receives (the station delivers it): write the result itself, never that you cannot send it. If there is genuinely '
   + 'nothing new or noteworthy to report this run, reply with EXACTLY "[SILENT]" and nothing else.';
 // The agent's toolset is NOT a host-side constant — it is projected from the objects placed in the
 // agent's room (CAP_REGISTRY: computer/dish/cabinet/notebook). See handleRun's station + resolveTools.
@@ -5908,7 +5913,7 @@ async function deliverCronResult(job, result) {
   }
   else if (mode.indexOf('targets:') === 0) targets.push(...mode.slice(8).split(',').map(s => s.trim()).filter(Boolean));
   else if (cronReturnsToSession(job)) {
-    const out = await stationBridge.request('station.deliver', { sessionId: job.origin.sessionId || job.origin.streamId, sessionTitle: job.origin.sessionTitle || '', text: redact(text), prompt: job.prompt, runId: result.runId, agentId: job.agentId, ts: Date.now() });
+    const out = await stationBridge.request('station.deliver', { sessionId: job.origin.sessionId || job.origin.streamId, streamId: job.origin.streamId || job.origin.sessionId, sessionTitle: job.origin.sessionTitle || '', text: redact(text), prompt: job.prompt, runId: result.runId, agentId: job.agentId, ts: Date.now() });
     return out;
   }
   if (!targets.length) return { ok: true, skipped: true };
@@ -5998,6 +6003,7 @@ const cronDriver = makeCronDriver({
   providerForJob: (job) => cronProviderFor(job),
   hasCredential: (provider, key) => cronHasCredential(provider, key),
   defaultModel: CRON_DEFAULT_MODEL, maxRunMs: CRON_MAX_RUN_MS, maxConsecutiveFailures: CRON_MAX_CONSECUTIVE_FAILURES,
+  maxWallMs: CRON_MAX_WALL_MS,                             // a run that keeps heartbeating but never ends is stopped here
   // NS-0 lease heartbeat: reclaim on stale-heartbeat, not fixed wall-clock age (a live long run fires exactly once).
   heartbeatStaleMs: CRON_HEARTBEAT_STALE_MS, stalenessMult: CRON_STALENESS_MULT, durableHeartbeatMs: CRON_DURABLE_HEARTBEAT_MS,
   maxParallel: CRON_MAX_PARALLEL,                          // G4.4 global concurrency cap: at most N cron runs in-flight; the rest defer
@@ -6981,6 +6987,26 @@ function handleRecommendationsEval(req, res) {
     json(200, { ok: true, evaluation: RecommendationEval.evaluate(rows, Object.assign({ now: Date.now() }, surface ? { surface } : {})) });
   } catch (e) { json(200, { ok: false, error: (e && e.message) || 'recommendation eval failed' }); }
 }
+/* REPEAT SENSE (2026-10-01): the lead's side of "it noticed I keep asking for this". While a NEW interactive or
+   channel request is prepared, if it is the same work the Commander already had completed on two+ earlier days,
+   the run's context carries a standing-work notice so the agent can offer — once, in its own reply — to make it a
+   routine (routine.create stays consent-gated; nothing is created here). The impression is recorded like a card
+   shown, so the takeover card and the agent never both pitch the same work the same day, and an offer the
+   Commander ignores stops after MAX_OFFERS. Fails open to no notice. */
+function standingWorkNotice(brief, agentId, o) {
+  try {
+    if (!brief || brief.status === 'cancelled' || (o && o.recovery) || !['interactive', 'channel'].includes(brief.source)) return null;
+    if (!personalizationStore.read().enabled) return null;
+    const saved = saveStore.load('agent') || null;
+    const epoch = Math.max(1, Math.floor(Number(saved && saved.agent && saved.agent.createdAt) || 1));
+    const n = WorkflowTakeover.notice({ directive: brief.originalDirective, agentId, projectRoot: (o && o.projectRoot) || '',
+      briefs: taskBriefStore.list({ limit: 500 }).filter(b => b.id !== brief.id), runs: runStore.all(), jobs: cronJobs,
+      ratings: growthRatings.list({ limit: 500, epoch }), state: workflowTakeoverStore.read(), enabled: true, now: Date.now(), redact });
+    if (!n) return null;
+    workflowTakeoverStore.decide(n.id, 'shown', Date.now(), n.core).catch(e => console.warn('[workflow-takeover] notice impression not saved:', (e && e.message) || e));
+    return n;
+  } catch (e) { console.warn('[workflow-takeover] notice failed:', (e && e.message) || e); return null; }
+}
 function workflowTakeoverCandidates(ignoreOffers) {
   const state = workflowTakeoverStore.read();
   const saved = saveStore.load('agent') || null;
@@ -6998,7 +7024,7 @@ async function handleWorkflowTakeovers(req, res) {
     if (!body || !['shown', 'defer', 'never', 'review'].includes(body.action)) return json(400, { ok: false, error: 'invalid workflow decision' });
     const c = workflowTakeoverCandidates(body.action !== 'shown').find(c => c.id === body.id);
     if (!c) return json(409, { ok: false, error: 'This workflow is no longer available. Refresh before setting it up.' });
-    await workflowTakeoverStore.decide(c.id, body.action, Date.now());
+    await workflowTakeoverStore.decide(c.id, body.action, Date.now(), c.core);
     return json(200, { ok: true, candidate: body.action === 'review' ? c : undefined });
   } catch (e) {
     if (!res.headersSent) json(400, { ok: false, error: 'Could not read or save the workflow offer.' });
@@ -10775,6 +10801,7 @@ const ROUTES = [
   { m: 'POST', exact: '/api/cron/arm', h: handleCronArm },
   { m: 'POST', exact: '/api/cron/degraded/clear', h: handleCronDegradedClear },
   { m: 'POST', exact: '/api/cron/run', h: handleCronRun },
+  { m: 'GET', qsplit: '/api/cron/history', h: handleCronHistory },
   // ---- LOOPS (standing objectives): the review gate is /verdict, and it is also the loop's trigger ----
   { m: 'GET', exact: '/api/loops', h: handleLoopsList },
   { m: 'POST', exact: '/api/loops', h: handleLoopsCreate },
@@ -13761,12 +13788,14 @@ async function handleSpotifyDisconnect(req, res) {
 // unparseable string (including impossible cron dates, AND an invalid IANA tz) before it can be persisted —
 // a typo'd tz fails the parse rather than silently firing on UTC (G4.1).
 function parseCronScheduleOr400(str, now, tz) {
-  const opts = (tz != null && tz !== '') ? { tz: String(tz) } : undefined;
+  const opts = (tz != null && tz !== '') ? { tz: String(tz), defaultTz: CRON_HOST_TZ } : { defaultTz: CRON_HOST_TZ };
   const sched = cron.parseSchedule(String(str == null ? '' : str), now, opts);
   if (!sched) {
-    const why = (opts && !cron.isValidTz(opts.tz))
+    const why = (opts && opts.tz != null && !cron.isValidTz(opts.tz))
       ? ('unknown timezone "' + opts.tz + '" — use an IANA zone like America/New_York')
-      : "couldn't read that schedule — try \"every 30m\", \"in 2h\", \"0 9 * * *\", or an ISO timestamp like 2026-07-01T09:00";
+      : /every other|bi-?weekly|fortnight|every (?:2|two|3|three|4|four) weeks|twice a month/i.test(String(str || ''))
+      ? 'every other week cannot be scheduled — use one weekday ("mondays at 10am") or two dates a month ("the 1st and 15th of every month at 10am"), and tell the Commander which you chose'
+      : "couldn't read that schedule — try \"every day at 9am\", \"weekdays at 8:30am\", \"mondays at 6pm\", \"tomorrow at 9am\", \"every 30m\", \"in 2h\" or a cron like \"0 9 * * *\"";
     const e = new Error(why); e.code = 400; throw e;
   }
   return sched;
@@ -14156,6 +14185,31 @@ function handleCronDegradedClear(req, res) {
   }).catch(() => { try { json(400, { error: 'bad request' }); } catch (e) { failNote('cron.degraded.clear.reply', e); } });
 }
 
+// GET /api/cron/history?id=<jobId>&limit=N — one routine's past runs, newest first, straight from the durable run
+// history (runs.jsonl rows stamped with cronJobId; older rows that predate the stamp are matched by the job's own
+// lastRunId so the latest run is never missing). Every field is the row's own record — nothing synthesized.
+function handleCronHistory(req, res) {
+  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  try {
+    const u = new URL(req.url, 'http://x');
+    const id = String(u.searchParams.get('id') || '').slice(0, 100);
+    const limit = Math.max(1, Math.min(50, parseInt(u.searchParams.get('limit'), 10) || 10));
+    const job = id ? cronStore.getJob(cronJobs, id) : null;
+    if (!job) return json(404, { ok: false, error: 'no such routine' });
+    const out = [];
+    const rows = runStore.all();
+    for (let i = rows.length - 1; i >= 0 && out.length < limit; i--) {
+      const r = rows[i];
+      if (!r || !(r.cronJobId === id || (job.lastRunId && r.runId === job.lastRunId))) continue;
+      if (out.some(x => x.runId === r.runId)) continue;
+      out.push({ runId: r.runId, at: r.endedAt || r.ts || 0, startedAt: r.startedAt || 0, durationMs: r.durationMs || 0,
+        reason: r.reason, usd: r.usd || 0, unmetered: !!r.unmetered, toolsOk: r.toolsOk || 0, streamId: r.streamId || '',
+        error: r.error || '', artifacts: (r.artifacts || []).length });
+    }
+    return json(200, { ok: true, id, runs: out });
+  } catch (e) { return json(200, { ok: false, error: 'could not read routine history' }); }
+}
+
 // POST /api/cron — create a routine. body: { name, prompt, schedule:<string>, agentId?, model?, provider?, deliver?, enabled?, repeat?, meta? }
 //   meta (R3): an optional provenance bag, e.g. { recipeId } stamped by the recipe MAKE-ROUTINE flow. Additive.
 function handleCronCreate(req, res) {
@@ -14163,6 +14217,16 @@ function handleCronCreate(req, res) {
   readBody(req, 1 << 16).then(async raw => {
     let body; try { body = JSON.parse(raw) || {}; } catch (e) { return json(400, { error: 'bad json' }); }
     const out = await createCronJobFromSpec(body);
+    /* ARM ON CREATE (routine reliability, 2026-10-01): the panel used to save a routine and then toast "saved, but
+       the scheduler is off — this won't run" — a routine the Commander just made never firing is the most common
+       way a routine "doesn't work". body.arm:true (sent by the CREATE form, same default as routine.create's
+       arm) records the arm intent and starts the timer. A durable E-STOP is respected exactly as the tool path
+       does: intent recorded, timer left down, and the reply says so. */
+    if (body.arm === true && out.body && out.body.ok && out.body.job && !out.body.duplicate && out.body.job.enabled !== false) {
+      try { if (!cronArmed) { saveCronArmed(true); cronArmed = true; if (!cronHalted) armCron(); } }
+      catch (e) { console.warn('[cron] arm-on-create failed:', (e && e.message) || e); }
+    }
+    if (out.body && out.body.ok) out.body.scheduler = { armed: !!cronArmed && !cronHalted, halted: !!cronHalted };
     return json(out.status || 200, out.body);
   }).catch(() => { try { json(400, { error: 'bad request' }); } catch (_) {} });
 }
@@ -14535,6 +14599,8 @@ async function handleCronRun(req, res) {
       // identical cron.fire/cron.result events, can fetch the real output via /api/transcript?stream=cron-<runId>.
       // Per-run id keeps the seed empty (index.js reconstructs a stream only when messages<=1) — no behavior drift.
       runId: runId, streamId: 'cron-' + runId, surface: 'autonomous', trigger: 'schedule', provider: provider, broadcast: true,
+      // the routine identity the scheduled fire carries (cron-driver.js): its run-history row and routine.notepad key off it
+      cronJobId: job.id, cronJobName: job.name || '',
       // "Follow station default": same effort rule as the scheduled fire (cron-driver.js) — an unpinned agent with
       // no explicit routine model runs on the Overseer's effort along with its model.
       reasoningEffort: (() => { const ri = !(job.model && String(job.model).trim()) ? cronIdentityFor(job.agentId) : null; return ri && ri.followsStation ? ri.reasoningEffort : undefined; })(),
@@ -18010,7 +18076,10 @@ async function runOnceCore(o) {
     // recipes.js — the same data the launch chips rendered), so a mid-run question arrives pre-aimed.
     let recipeIntake = [];
     try { const rr = o.recipeId ? Recipes.get(String(o.recipeId)) : null; if (rr && Array.isArray(rr.intake)) recipeIntake = rr.intake; } catch (_) {}
-    taskContextInputs = {brief:taskBrief, goal, patterns, deferredDimensions, recipeIntake};
+    // AUTOMATION ASK: the task's own words (or this turn's) ask for recurring/scheduled work -> the routine playbook rides this run
+    let automationAsk = false;
+    try { automationAsk = CommanderContext.automationIntent(taskBrief.originalDirective) || CommanderContext.automationIntent(latestUserText(messages)); } catch (_) { automationAsk = false; }
+    taskContextInputs = {brief:taskBrief, goal, patterns, deferredDimensions, recipeIntake, standingWork: standingWorkNotice(taskBrief, agentId, o), automationAsk};
     taskContextBlock = commanderEvidenceContext(system || '', taskContextInputs);
   } else if (isTask) {
     // Channels and integrations may not carry a durable taskKey. They still receive the SAME bounded Commander
@@ -18334,6 +18403,13 @@ async function runOnceCore(o) {
   // routine.create/list: the lead can schedule real StarNet ROUTINES through the same cron store the panel uses.
   makeRoutineTools({
     roster: () => agentRoster,
+    // plain-English cadence + next fire on the station's own clock, so the model reports what will really happen
+    describeSchedule: (job) => {
+      const tz = (job && job.schedule && job.schedule.tz) || CRON_HOST_TZ;
+      const when = CronHumanMod.describeDisplay(job && job.scheduleDisplay, { tz });
+      const next = job && job.enabled && job.nextRunAt ? CronHumanMod.describeDisplay('once at ' + job.nextRunAt, { tz }).replace(/^once — /, '') : null;
+      return { when: when ? when + (job.schedule && job.schedule.kind === 'cron' ? ' (' + tz + ')' : '') : null, next };
+    },
     listJobs: () => cronJobs,
     schedulerState: () => cronArmed,
     normalizeProvider: normalizeProviderId,
@@ -20493,7 +20569,7 @@ async function runOnceCore(o) {
         }
       }
       const runEndedAt = Date.now();
-      runStore.record({ runId, parentRunId: o.parentRunId || '', agentId, provider: activeProviderId, reason: ((result && result.reason) || 'done'), clarifying: taskQuestionAsked, turns: finalTurns, tokens: finalTokens, usd: finalUsd, title: title, streamId: o.streamId || '', sessionTitle: o.sessionTitle || '', deliveryPrompt: o.syntheticTrigger ? '' : (o.sessionPrompt || ''), deliveryText, recipeId: o.recipeId || '', projectRoot: o.projectRoot || '', deliverable: deliverableNotes.take(runId), model: finalModel, reasoningEffort, unmetered: runUnmetered && mediaUsd === 0, artifacts: execution.artifactList(), toolsOk: execution.toolsOk(), toolTrace: execution.toolTraceList(), failureStage: execution.failureStage(), failureCode: execution.failureCode(), uncertainMutations: execution.uncertainMutations(), completionEvidence: finalCompletionEvidence, recoveryAttempts: execution.recoveryAttempts(), startedAt: runStartedAt, endedAt: runEndedAt, durationMs: runEndedAt - runStartedAt, identityFallback, internal, surface, recoveryOf: o.recovery ? String(o.recovery.sourceRunId || '') : '', handoffEdited: o.handoffEdited === true, stepTest: o.stepTest === true, lineId: o.lineId || '', dockId: o.dockId || '', taintedBy: execution.taintedBy() || '' });   // execution terminal stays separate from the neutral Task Brief outcome used by progression; recoveryOf links a continuation to the interrupted run it resumed
+      runStore.record({ runId, parentRunId: o.parentRunId || '', agentId, provider: activeProviderId, reason: ((result && result.reason) || 'done'), clarifying: taskQuestionAsked, turns: finalTurns, tokens: finalTokens, usd: finalUsd, title: title, streamId: o.streamId || '', sessionTitle: o.sessionTitle || '', deliveryPrompt: o.syntheticTrigger ? '' : (o.sessionPrompt || ''), deliveryText, recipeId: o.recipeId || '', projectRoot: o.projectRoot || '', deliverable: deliverableNotes.take(runId), model: finalModel, reasoningEffort, unmetered: runUnmetered && mediaUsd === 0, artifacts: execution.artifactList(), toolsOk: execution.toolsOk(), toolTrace: execution.toolTraceList(), failureStage: execution.failureStage(), failureCode: execution.failureCode(), uncertainMutations: execution.uncertainMutations(), completionEvidence: finalCompletionEvidence, recoveryAttempts: execution.recoveryAttempts(), startedAt: runStartedAt, endedAt: runEndedAt, durationMs: runEndedAt - runStartedAt, identityFallback, internal, surface, recoveryOf: o.recovery ? String(o.recovery.sourceRunId || '') : '', handoffEdited: o.handoffEdited === true, stepTest: o.stepTest === true, lineId: o.lineId || '', dockId: o.dockId || '', cronJobId: trigger === 'schedule' ? String(o.cronJobId || '') : '', taintedBy: execution.taintedBy() || '' });   // execution terminal stays separate from the neutral Task Brief outcome used by progression; recoveryOf links a continuation to the interrupted run it resumed
 
       // P0.1/H1.1: persist the full DIALOGUE (not just the outcome) — a durable server-side transcript for EVERY
       // run, incl. headless ones (cron/Telegram/delegated). Append the triggering user directive, then EVERY new
@@ -23098,6 +23174,10 @@ function consentSummary(call) {
   // Approval is the place to inspect the proposed mutation, not the capped run-log digest.
   if (/^fs[._](?:write|append|edit|patch)$/.test(String(call && call.name || ''))) {
     try { return JSON.stringify(redact(a), null, 2); } catch (_) { return '[mutation payload unavailable]'; }
+  }
+  // a routine approval shows what the routine will run every time it fires, not a 77-char clip of it
+  if (/^routine[._](?:create|manage)$/.test(String(call && call.name || ''))) {
+    try { return JSON.stringify(redact(a)).slice(0, 4000); } catch (_) { return '[routine details unavailable]'; }
   }
   // the station builder: the card shows what the dry run found (the plan's summary + every step's instructions), never the model's words
   if (/^station[._]build$/.test(String(call && call.name || ''))) return stationPlanSummary(stationPlanMemo, a.planId) || 'an unknown or expired plan: it will be refused, and nothing will be built';

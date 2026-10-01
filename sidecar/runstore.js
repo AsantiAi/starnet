@@ -303,6 +303,10 @@
       const recoveryOf = str(e.recoveryOf).slice(0, 100);
       if (recoveryOf) entry.recoveryOf = recoveryOf;
       if (e.spendUnknown === true) entry.spendUnknown = true;
+      // ROUTINE HISTORY (additive, 2026-10-01): the scheduled routine this run fired for, so a routine's past runs are
+      // one filter away (GET /api/cron/history). Present only on scheduled runs; every other row stays byte-identical.
+      const cronJobId = str(e.cronJobId).slice(0, 100);
+      if (cronJobId) entry.cronJobId = cronJobId;
       // untrusted-content taint the run ended with (additive; absent on a clean run) — sec-taint 09-25
       const taintedBy = str(e.taintedBy).replace(/\s+/g, ' ').trim().slice(0, 200);
       if (taintedBy) entry.taintedBy = taintedBy;

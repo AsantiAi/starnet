@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "09bc9fa5405187881557777c502d59717e9c5fb1",
+    "sourceCommit": "8e6eb17c03273be050d9add0a1acc06797fa4d23",
     "pathSetSha256": "5e692c5f0c56bc6565c363fb4eb622af3093a911f55496ecdf16c95cad03c8af",
     "files": [
       {
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 690695,
-        "sha256": "22d8ac381ed018828c896a9d2dac682fd1538a5f68d72a5d8e75b869312d356e"
+        "bytes": 691883,
+        "sha256": "8206ff9988b2a0916efb8146dfe1b744c47c01592aaaae378d26e46ff5d4af6b"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -1123,13 +1123,13 @@
       },
       {
         "path": "frontend/app/stationbuilder.js",
-        "bytes": 282049,
-        "sha256": "2a1f13d42dc8142de4dbbda641069494eb6731833a63ae2bab30d1038cc614d2"
+        "bytes": 281378,
+        "sha256": "1370db6b14ab05e11bf98cd7d2667bfacc98840dea0cbdbd0444d7df2c2d472c"
       },
       {
         "path": "frontend/app/stationcommands.js",
-        "bytes": 64560,
-        "sha256": "720f9fc936218902b513032f011f1e12acb3c3fc9dca7840c933077765be4129"
+        "bytes": 61832,
+        "sha256": "993b72b41b9b3f22d7074f8102e4e40b5346ed878d7ec20b7299e35f7503c1ed"
       },
       {
         "path": "frontend/app/stationquests.js",
@@ -1148,8 +1148,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 782765,
-        "sha256": "72f6f5fe47793c0fc1cb1025d79a688016eeb13beaf97f4735f228d972ece3d4"
+        "bytes": 783138,
+        "sha256": "738f8e7c657935cb42b1bd100afd74768e82b306c191dca3a5e7471614f15bfc"
       },
       {
         "path": "frontend/app/stepin.js",
@@ -1303,8 +1303,8 @@
       },
       {
         "path": "frontend/app/windows/automation.js",
-        "bytes": 7222,
-        "sha256": "9c69dab9fc1d40df7533aba0553e5c0d29dc426e216ff43dc76cb6fbb68da51d"
+        "bytes": 8007,
+        "sha256": "cc1b4cfdb0b4d7bcc70f9bd1e1802a51c5fa9b3aac12890fef90ca0b12462ef4"
       },
       {
         "path": "frontend/app/windows/connectors.js",
@@ -1338,8 +1338,8 @@
       },
       {
         "path": "frontend/app/windows/routines.js",
-        "bytes": 62109,
-        "sha256": "aa902d9e42761c8136287b0ff59008b05c30d7258280cf69d7f8924a4091b1cb"
+        "bytes": 65185,
+        "sha256": "1858bf2584cf41d1e89a23903d2581ebee058046345a76a5a809f0e6586f424c"
       },
       {
         "path": "frontend/app/windows/trophies.js",
@@ -1363,8 +1363,8 @@
       },
       {
         "path": "frontend/app/workflowtakeoverstore.js",
-        "bytes": 3819,
-        "sha256": "88adf8fb083dd371b2b19f682021a1789f8a7ff81e0ee5a9400cf86953227775"
+        "bytes": 3906,
+        "sha256": "b8c7533eb37ed81df567427c8f7ba7a0c72dcc1a8dcc6fd60f2f0f14ca49c7e7"
       },
       {
         "path": "frontend/app/workhub.js",
@@ -1408,8 +1408,8 @@
       },
       {
         "path": "frontend/app/world.js",
-        "bytes": 822786,
-        "sha256": "c160a12fc1e64fdadda3e5035b0379ffb0dcfff3d4f0414f773fd922545f93cb"
+        "bytes": 821334,
+        "sha256": "2d83e18ca4e52510c2daec372c2090c5ec7b6284d9ae15e1ae7f4c45de96be06"
       },
       {
         "path": "frontend/app/worldlab.js",
@@ -1478,13 +1478,13 @@
       },
       {
         "path": "frontend/css/agent-dossier.css",
-        "bytes": 15100,
-        "sha256": "1c388e0c1136390a9d22c580af249c26d6975835da344bcb5fd4e734f1de46de"
+        "bytes": 15106,
+        "sha256": "56f3f78a1035e2366630b7d342fe013d7b1eef5b2cbe82cec94cb0608b8098eb"
       },
       {
         "path": "frontend/css/app.css",
-        "bytes": 411962,
-        "sha256": "66c720bbb579a2446a513df9b68fc3ff5c9fd76a6727d00b83e836d4a15c8fb7"
+        "bytes": 411912,
+        "sha256": "560d8f8f56cf51184e7337e0d08b130d25e9f8678cec59c66b02a0d1169c5bde"
       },
       {
         "path": "frontend/css/asciifx.css",
