@@ -43,6 +43,7 @@
       if (!e || !e.objectType) continue;
       const ob = { instanceId: String(e.instanceId || ('extra_' + e.objectType)), objectType: String(e.objectType) };
       if (e.connectorId) ob.connectorId = e.connectorId;
+      if (e.pluginId) ob.pluginId = e.pluginId;   // a PLUGIN TERMINAL carries WHICH plugin (projected only while approved)
       objects.push(ob);
     }
     return objects;
