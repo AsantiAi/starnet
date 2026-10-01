@@ -17826,6 +17826,12 @@ async function runOnceCore(o) {
     let rules = '';
     try { rules = (await projectInstructions.load(cronRoot, true)).text || ''; } catch (_) {}
     system = String(system || '') + '\n' + projectScopeLine(cronRoot, true) + rules;
+    // ONE BASE FOR BOTH TOOLS (issue #60). The prompt line above says file work happens in this folder and
+    // shell.* already defaults its cwd to it (projectCwd), but fs.* only roots relative paths at ctx.projectRoot —
+    // so a routine/loop's `fs.write Working\x.txt` landed in the agent's private workspace while the shell looked
+    // in the project and reported it MISSING. cronRoot is realpath'd and re-proven blessed just above, and fs.*
+    // still re-runs path trust on every resolved target, so this widens nothing.
+    if (cronRoot && !o.projectRoot) o = { ...o, projectRoot: cronRoot };
   }
   const internal = !!o.internal || !!o.outputOnly;   // reason-only self-talk: system prompt stays VERBATIM, no memory/transcript injection
   let isTask = !!o.isTask;
