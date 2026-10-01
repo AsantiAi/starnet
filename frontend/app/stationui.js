@@ -1762,20 +1762,11 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       '<div class="ag-foot-row">on station since <b>' + since + '</b></div>';
   }
 
-  // COMMANDER CONTROLS (dossier BRIEF): change this agent's SKIN and DELETE it. Both use the SAME genesis skin
-  // catalog (DATA.SKINS — single source of truth) and reuse the .skin-thumb visual vocabulary from the create
-  // screen. DELETE is a two-click armed confirm (ArmConfirm) and is disabled — with a stated reason, not a
-  // prompt — for the hero and for the last remaining agent. Wired in wireCommand.
-  function agCommand(a) {
-    const skins = (typeof DATA !== 'undefined' && DATA.SKINS) ? DATA.SKINS : {};
-    // A retired saved ID can alias an approved catalog entry without becoming an extra tile.
-    const cur = (a && a.skin && Object.keys(skins).find(id => skins[id] === skins[a.skin]))
-      || (typeof DATA !== 'undefined' ? DATA.DEFAULT_SKIN : '');
-    const thumbs = Object.keys(skins).map(id => {
-      const sk = skins[id];
-      return '<button type="button" class="skin-thumb ag-skin-thumb' + (id === cur ? ' sel' : '') + '" data-skin="' + esc(id) + '" title="' + esc(sk.name || id) + '" aria-label="' + esc(sk.name || id) + '" aria-pressed="' + (id === cur ? 'true' : 'false') + '">' +
-        '<img src="assets/sprites/' + esc(sk.set) + '/rot_south.png" alt="' + esc(sk.name || id) + '" draggable="false"></button>';
-    }).join('');
+  // DELETE AGENT — its OWN row at the foot of CONFIG, never inside a group. It used to sit in a DANGER block at
+  // the bottom of the collapsed APPEARANCE group, and Commanders kept asking how to delete an agent at all: an
+  // action nobody can find is an action that doesn't exist. Two-click armed confirm (ArmConfirm) and disabled —
+  // with a stated reason, not a prompt — for the hero and for the last remaining agent. Wired in wireCommand.
+  function agDeleteRow(a) {
     // DELETE gating: the hero (orchestrator / id 'agent') is undeletable; so is the last agent on station.
     const isHero = (a && (a.id === 'agent' || a.role === 'orchestrator'));
     const crewCount = (access.config && typeof access.config.crewCount === 'function') ? access.config.crewCount() : present.length;
@@ -1787,6 +1778,22 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         '<span class="ag-del-why">' + esc(disabledReason) + '</span>'
       : '<button class="bb sm ag-del" id="ag-del-btn" title="archive this agent and remove it from the station">✕ DELETE AGENT</button>' +
         '<span class="ag-del-why">work is archived, not erased</span>';
+    return '<div class="cf-card ag-del-card" id="ag-del-card"><div class="ag-del-row">' + delBtn + '</div></div>';
+  }
+
+  // COMMANDER CONTROLS (dossier CONFIG › APPEARANCE): change this agent's SKIN. Uses the SAME genesis skin
+  // catalog (DATA.SKINS — single source of truth) and reuses the .skin-thumb visual vocabulary from the create
+  // screen. Wired in wireCommand. (DELETE lives in agDeleteRow, outside every group.)
+  function agCommand(a) {
+    const skins = (typeof DATA !== 'undefined' && DATA.SKINS) ? DATA.SKINS : {};
+    // A retired saved ID can alias an approved catalog entry without becoming an extra tile.
+    const cur = (a && a.skin && Object.keys(skins).find(id => skins[id] === skins[a.skin]))
+      || (typeof DATA !== 'undefined' ? DATA.DEFAULT_SKIN : '');
+    const thumbs = Object.keys(skins).map(id => {
+      const sk = skins[id];
+      return '<button type="button" class="skin-thumb ag-skin-thumb' + (id === cur ? ' sel' : '') + '" data-skin="' + esc(id) + '" title="' + esc(sk.name || id) + '" aria-label="' + esc(sk.name || id) + '" aria-pressed="' + (id === cur ? 'true' : 'false') + '">' +
+        '<img src="assets/sprites/' + esc(sk.set) + '/rot_south.png" alt="' + esc(sk.name || id) + '" draggable="false"></button>';
+    }).join('');
     // a 44px still of a chunky sprite is unidentifiable, so the picker sits beside a LIVE stage (shared
     // SkinStage) that plays the picked — or merely hovered — skin's real walk cycle big enough to judge.
     // Same vocabulary as the Recruitment Bay's SUMMON stage; wired (mount + hover scrub) in wireCommand.
@@ -1802,8 +1809,6 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
           '<div class="ag-skin-row skin-picker" role="group" aria-label="Agent skin">' + thumbs + '</div>' +
           stage +
         '</div></div>' +
-      '<div class="ag-cmd-sec ag-cmd-danger"><div class="ag-cmd-lbl">DANGER</div>' +
-        '<div class="ag-del-row">' + delBtn + '</div></div>' +
       '</div>';
   }
 
@@ -2310,7 +2315,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
 
        WHAT IT KNOWS  — the four markdown files that literally compose the system prompt.
        HOW IT BEHAVES — the runtime decisions: voice, model, where it runs, whether it asks, the away shift.
-       THE UNIT       — appearance and deletion. Last, because it is the rarest and the most destructive.
+       THE UNIT       — appearance. (DELETE AGENT sits on its own row under every group — see agDeleteRow.)
 
      The per-card "PER-AGENT" badge is retired with the grouping. It appeared on five of nine cards inside a
      window whose title is AGENT DOSSIER and whose left rail names the selected agent — it carried no
@@ -2341,7 +2346,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       CF_GROUPS.map((g, i) => {
         const key = a.id + ':' + g.id;
         return '<details class="cf-group" id="' + g.id + '" data-cf-group="' + esc(key) + '"' + (cfOpen.get(key) ? ' open' : '') + '><summary><span class="cf-group-title">' + g.label + '</span><span class="cf-group-summary">' + esc(summaries[i]) + '</span></summary><div class="cf-group-body">' + content[i] + '</div></details>';
-      }).join('') + '<div class="cf-card" id="ag-away-link"><button class="bb sm" data-away-open>WHILE I’M AWAY → AUTOMATION</button></div>';
+      }).join('') + '<div class="cf-card" id="ag-away-link"><button class="bb sm" data-away-open>WHILE I’M AWAY → AUTOMATION</button></div>' +
+      agDeleteRow(a);
   }
 
   // W3 per-agent AWAY-WORKSHOP surface (rebuilt 2026-07-15 UX audit — the queue was invisible, the cadence
