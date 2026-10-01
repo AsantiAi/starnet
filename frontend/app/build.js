@@ -2454,7 +2454,7 @@ const Build = (() => {
          belt under its own tile, and dropping one onto an existing lane is how every ready-made line is built — the old
          'clear deck tile' copy steered people to empty floor and three hand-wired belts. */
       const JUNC = { splitter: 1, joiner: 1, filter: 1, merger: 1, loop: 1 };
-      verb = (spec ? spec.label + ' · ' : '') + (JUNC[propType] ? 'drop it ON a belt to put it on that line, or on clear floor' : 'click a clear deck tile to place');
+      verb = (spec ? spec.label + ' · ' : '') + (JUNC[propType] ? 'drop it ON a belt to put it on that line, or on clear floor' : 'click a clear deck tile to place' + (rowable(propType) ? ' · drag for a row' : ''));
       const bits = [];
       if (canTurn(propType)) bits.push('R turn (facing ' + FACE_WORD[propFacing(propType)] + ')');
       if (canFlip(propType)) bits.push('M flip' + (propFlipOn(propType) ? ' ✓' : ''));
@@ -4567,7 +4567,7 @@ const Build = (() => {
       if (connectFrom) { connectFrom = null; flashTip(ev, 'connect cancelled', false); return; }
       drag = { mode: 'beltrun', start: w, cur: w, moved: false };
     } else if (tool === 'prop') {
-      drag = { mode: 'propstamp', start: w, cur: w, moved: false };
+      drag = { mode: 'propstamp', start: w, cur: w, moved: false, cx: ev.clientX, cy: ev.clientY };   // cx/cy: a jitter is not a row
     } else if (tool === 'dupe') {
       // click-only tool: first click COPIES what's under the cursor, every later click STAMPS a copy.
       // CLICK-ON-MACHINE WINS: with a copy armed, a click ON an existing machine inspects it instead
@@ -4938,7 +4938,7 @@ const Build = (() => {
   }
   function commitBox(d, ev) {
     const ids = propsInBox(norm(d.start, d.cur));
-    if (!ids.length && !d.add) { setSelection([]); sfx('bad'); flashTip(ev, 'nothing in that box — drag across the things you want'); return; }
+    if (!ids.length) { if (!d.add) setSelection([]); return; }   // an empty box lets go quietly — its badge already said what a box does
     sfx('click');
     setSelection(d.add ? selectionIds().concat(ids) : ids);
   }
@@ -5109,6 +5109,8 @@ const Build = (() => {
       const ep = exist && station.propById(exist);
       if (ep) { onInspect(ep, ev); return; }
     }
+    const row = rowSpots(d);
+    if (row) return commitRow(row, ev);
     const s = propBox(propType, propFacing(propType));   // the TURNED box, not the catalog's
     let px = d.cur.tx, py = d.cur.ty;
     // JUNCTION SNAP (connect-mode UX): a filter/splitter/merger only works ON a line — if it's dropped
@@ -5152,6 +5154,77 @@ const Build = (() => {
     }
     if (res && res.ok) renderEquipmentInfo(propType);
     feedback(res, ev, grant ? ('PLACED · ' + grant + ' equipment') : ('placed ' + ((typeof PropSprites !== 'undefined' && PropSprites.isUserProp && PropSprites.isUserProp(propType)) ? String((PropSprites.spec(propType) || {}).label || 'made prop').toLowerCase() : propType)));   // a made prop's id is internal; say its name
+  }
+  /* DRAG TO LAY A ROW (2026-10-01 build-mode upgrade). With a piece of furniture armed, a drag lays copies from where you pressed
+     to where you let go — along the longer axis, one every footprint — so a row of plants or a line of chairs is one gesture and
+     one UNDO; a spot that is blocked is skipped (its ghost showed red first). Machines and capability gear still place one at a
+     time — each of those is a capability with its own setup. A drag under ~a third of a tile on screen is a click, not a row. */
+  function rowable(t) {
+    return !isWorkflowType(t) && t !== 'airlock' && ((typeof PropSprites === 'undefined' || !PropSprites.spec) || (PropSprites.spec(t) || {}).tier !== 'functional')
+      && !(typeof WorldModel !== 'undefined' && WorldModel.grantLabelForProp && WorldModel.grantLabelForProp(t));
+  }
+  let rowMemo = null;
+  function rowSpots(d) {
+    if (!d || !d.moved || d.cx == null || !rowable(propType)) return null;
+    if (Math.hypot(lastClient.x - d.cx, lastClient.y - d.cy) < 12) return null;
+    const facing = propFacing(propType), key = [geoVer, propType, facing, d.start.tx, d.start.ty, d.cur.tx, d.cur.ty].join('|');
+    if (rowMemo && rowMemo.key === key) return rowMemo.spots;
+    const s = propBox(propType, facing), dx = d.cur.tx - d.start.tx, dy = d.cur.ty - d.start.ty, across = Math.abs(dx) >= Math.abs(dy);
+    const step = across ? s.w : s.h, sign = (across ? dx : dy) < 0 ? -1 : 1, n = Math.min(40, Math.floor(Math.abs(across ? dx : dy) / step) + 1);
+    let spots = null;
+    if (n >= 2) {
+      spots = [];
+      for (let k = 0; k < n; k++) {
+        const x = d.start.tx + (across ? sign * k * step : 0), y = d.start.ty + (across ? 0 : sign * k * step);
+        spots.push({ x, y, w: s.w, h: s.h, v: station.canPlaceProp(propType, x, y, s.w, s.h) });
+      }
+    }
+    rowMemo = { key, spots };
+    return spots;
+  }
+  function commitRow(row, ev) {
+    const pr = propFacing(propType), pm = propFlipOn(propType), block = propSpec(propType).blocks !== false, made = [], laid = [];
+    const res = station.transact(() => {
+      for (const r of row) {
+        const placement = { t: propType, x: r.x, y: r.y, w: r.w, h: r.h, block };
+        if (pr) placement.r = pr;
+        if (pm) placement.m = 1;
+        const a = station.addProp(placement);
+        if (a && a.ok) { made.push(a.id); laid.push({ x1: r.x, y1: r.y, x2: r.x + r.w - 1, y2: r.y + r.h - 1 }); }
+      }
+      return made.length ? { ok: true } : { ok: false, msg: 'every spot on that row is taken — drag along clear floor' };
+    });
+    if (res && res.ok) {
+      pushFlash(laid, false);
+      landProps(made, 45);   // they drop in down the row, in the order it was dragged
+      if (typeof StationUI !== 'undefined' && StationUI.pokeQuests) { try { StationUI.pokeQuests(); } catch (_) {} }
+      if (typeof Tutorial !== 'undefined' && Tutorial.onPropPlaced) Tutorial.onPropPlaced(propType);
+      renderEquipmentInfo(propType);
+    }
+    const skipped = row.length - made.length;
+    feedback(res, ev, 'laid a row of ' + made.length + (skipped ? ' · ' + skipped + ' taken spot' + (skipped === 1 ? '' : 's') + ' skipped' : '') + ' · one Undo takes the row back');
+  }
+  // a row in hand: every spot's art where it will land (a taken one red and faint), and how many the release will lay
+  function drawRowGhost(t, now, g) {
+    const ok = g.row.filter(r => r.v && r.v.ok), pr = propFacing(propType), pm = propFlipOn(propType);
+    ctx.save(); PropSprites.setCtx(ctx); PropSprites.setNow(now);
+    try {
+      for (const r of g.row) {
+        ctx.globalAlpha = r.v && r.v.ok ? 0.62 : 0.22;
+        PropSprites.draw({ t: propType, x: r.x, y: r.y, w: r.w, h: r.h, r: pr, m: pm }, false);
+      }
+    } finally { ctx.restore(); }
+    ctx.lineWidth = 1.5 / zoom;
+    for (const r of g.row) {
+      const good = r.v && r.v.ok, X = r.x * t, Y = r.y * t, W = r.w * t, H = r.h * t;
+      ctx.fillStyle = good ? 'rgba(80,255,140,0.12)' : 'rgba(255,90,80,0.16)'; ctx.fillRect(X, Y, W, H);
+      ctx.strokeStyle = good ? 'rgba(120,255,170,0.9)' : 'rgba(255,120,110,0.9)'; ctx.strokeRect(X + 0.5 / zoom, Y + 0.5 / zoom, W - 1 / zoom, H - 1 / zoom);
+    }
+    let bb = g.rects[0];
+    for (const r of g.rects) bb = { x1: Math.min(bb.x1, r.x1), y1: Math.min(bb.y1, r.y1), x2: Math.max(bb.x2, r.x2), y2: Math.max(bb.y2, r.y2) };
+    const lines = ['ROW OF ' + g.row.length + ' · ' + propLabel(propType)];
+    lines.push(!ok.length ? 'EVERY SPOT IS TAKEN' : ok.length < g.row.length ? 'RELEASE TO LAY ' + ok.length + ' · ' + (g.row.length - ok.length) + ' TAKEN' : 'RELEASE TO LAY ALL ' + ok.length);
+    ghostBadge(t, lines, ok.length > 0, bb);
   }
   function commitBeltRun(d, ev) {
     // CLICK-ON-MACHINE WINS: connectable machines were consumed by the connect flow in onDown; a
@@ -5702,6 +5775,8 @@ const Build = (() => {
       return { rects: [br.rect], v: station.canPlaceBeltRun(drag.start, drag.cur), belt: true, dir: br.dir };
     }
     if (drag.mode === 'propstamp') {
+      const row = rowSpots(drag);
+      if (row) return { rects: row.map(r => ({ x1: r.x, y1: r.y, x2: r.x + r.w - 1, y2: r.y + r.h - 1 })), v: { ok: row.some(r => r.v && r.v.ok) }, kind: 'prop', row };
       const s = propBox(propType, propFacing(propType)), tx = drag.cur.tx, ty = drag.cur.ty;   // ghost shows the TURNED box
       const rect = { x1: tx, y1: ty, x2: tx + s.w - 1, y2: ty + s.h - 1 };
       const links = isWorkflowType(propType) ? ghostLinks({ props: [{ t: propType, x: tx, y: ty, w: s.w, h: s.h }] }) : [];
@@ -7181,6 +7256,7 @@ const Build = (() => {
     const g = ghostInfo();
     if (!g) return;
     if (g.group) { drawGroupGhost(t, now, g); return; }
+    if (g.row) { drawRowGhost(t, now, g); return; }
     // Show the actual art at the exact candidate footprint, including its facing
     // and tabletop lift. The outline still communicates the model's occupied tiles.
     const rr=g.rects[0];
@@ -7241,7 +7317,7 @@ const Build = (() => {
     // (a line that fits laid out: the drawn shape will not go here, but the click lays the same line out round what stands here)
     if (!ok) lines.push(g.kind === 'line' && g.laid ? 'THE DRAWN SHAPE DOES NOT FIT HERE — IT WILL BE LAID OUT TO FIT' : ((footprint && footprint.msg) || placementReason(g)).toUpperCase());
     // the hover preview teaches BOTH gestures: this size on a click, any size on a drag
-    else if (g.stamp) lines.push(g.kind === 'prop' ? 'CLICK TO PLACE' : 'CLICK TO PLACE · DRAG TO SIZE');
+    else if (g.stamp) lines.push(g.kind === 'prop' ? (rowable(propType) ? 'CLICK TO PLACE · DRAG FOR A ROW' : 'CLICK TO PLACE') : 'CLICK TO PLACE · DRAG TO SIZE');
     /* SPACING (2026-09-27 audit B4): a dock hooks every belt in the 1-tile ring around it, so two docks with one empty tile
        between them share that tile — a belt there hooks BOTH, and the job goes nowhere. Said while the ghost is in hand,
        never refused (sandbox law): the Commander may still want them tight. */

@@ -15,7 +15,9 @@
         adds / drops one, Ctrl+A takes the floor; the group moves (drag any member, the arrows), duplicates (Ctrl+D) or goes (Delete)
         as ONE edit — one UNDO, all-or-nothing; a plain click on empty floor lets go, and with nothing selected opens the room;
      7. THE TABS SHOW THEIR THINGS: Rooms opens on its room types and Surfaces on its finishes (a pick arms the tool with it), Edit
-        on the editor's keys as key caps under the object finder — never a title, a sentence and an empty glass. */
+        on the editor's keys as key caps under the object finder — never a title, a sentence and an empty glass;
+     8. DRAG TO LAY A ROW: with furniture armed a drag lays copies from press to release, one every footprint, as ONE undo
+        (taken spots skipped, shown red first); machines and capability gear still place one at a time; a jitter is a click. */
 'use strict';
 const A = require('./_assert.js');
 const fs = require('fs');
@@ -163,5 +165,26 @@ A.ok(/\} else if \(tool === 'paint' \|\| \(tool === 'select' && buildGroup === '
   'Surfaces opens on its finishes; the first material or colour picked arms SURFACE with it');
 A.ok(/buildGroup === 'rooms'\) verb = 'Pick a room type, then click or drag on the grid/.test(build) && /buildGroup === 'surfaces'\) verb = 'Pick a finish, then click a room to lay it/.test(build),
   'the status line says what the open tab is for');
+
+/* ---------- 8. drag to lay a row ---------- */
+const rowable = fn('rowable');
+A.ok(/!isWorkflowType\(t\) && t !== 'airlock'/.test(rowable) && /\.tier !== 'functional'/.test(rowable) && /WorldModel\.grantLabelForProp\(t\)/.test(rowable),
+  'only furniture lays rows: never a line machine, an airlock, functional gear or anything that grants a capability');
+const rs = fn('rowSpots');
+A.ok(/if \(Math\.hypot\(lastClient\.x - d\.cx, lastClient\.y - d\.cy\) < 12\) return null;/.test(rs), 'a jitter across a tile edge is a click, not a row');
+A.ok(/const step = across \? s\.w : s\.h/.test(rs) && /Math\.min\(40, Math\.floor\(Math\.abs\(across \? dx : dy\) \/ step\) \+ 1\)/.test(rs) && /if \(n >= 2\)/.test(rs)
+  && /v: station\.canPlaceProp\(propType, x, y, s\.w, s\.h\)/.test(rs),
+  'a row runs along the longer axis, one copy every footprint (40 at most), each spot asked of the floor');
+A.ok(/drag = \{ mode: 'propstamp', start: w, cur: w, moved: false, cx: ev\.clientX, cy: ev\.clientY \};/.test(build), '…the press remembers where the pointer was');
+const cps = fn('commitPropStamp');
+A.ok(/const row = rowSpots\(d\);\n    if \(row\) return commitRow\(row, ev\);/.test(cps) && cps.indexOf('rowSpots(d)') > cps.indexOf('if (!d.moved)'), 'a drag lays the row; a click still places one (or inspects what it hit)');
+const cr = fn('commitRow');
+A.ok(/const res = station\.transact\(/.test(cr) && /landProps\(made, 45\)/.test(cr) && /taken spot/.test(cr) && /one Undo takes the row back/.test(cr),
+  'the whole row is ONE transact (one UNDO), its copies drop in down the row, and a skipped spot is said');
+A.ok(/'ROW OF ' \+ g\.row\.length/.test(fn('drawRowGhost')) && /RELEASE TO LAY ALL /.test(fn('drawRowGhost')) && /if \(g\.row\) \{ drawRowGhost\(t, now, g\); return; \}/.test(build),
+  'the row ghost shows every spot (taken ones red) and how many the release will lay');
+A.ok(/rowable\(propType\) \? 'CLICK TO PLACE · DRAG FOR A ROW' : 'CLICK TO PLACE'/.test(build) && /'click a clear deck tile to place' \+ \(rowable\(propType\) \? ' · drag for a row' : ''\)/.test(build),
+  'the hover ghost and the status line teach the row where it exists');
+A.ok(/if \(!ids\.length\) \{ if \(!d\.add\) setSelection\(\[\]\); return; \}/.test(fn('commitBox')), 'an empty box lets go quietly (a stray drag on bare floor is not buzzed at)');
 
 A.report('build-mode-easy.test');
