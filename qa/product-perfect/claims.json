@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "c3b3e690b61349c2cbc73e535eb055e9061fe18b",
+    "sourceCommit": "22c1e9d9abff570a10a40a69e0e4b65fc22629f7",
     "pathSetSha256": "4aa3fce402e9ef6d6a65899df919413902cda9e4ecb1a1317fc759e7521434d8",
     "files": [
       {
@@ -333,8 +333,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 686484,
-        "sha256": "9e01caef2872072f6f9162abdac5436b894f97c3dc946cb0b5ba34382f97465b"
+        "bytes": 687058,
+        "sha256": "0f1b9bbcfd94050bc28cee895f0b6a6b6163ead934385b6be67dce6c6f5e75bc"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -1148,8 +1148,8 @@
       },
       {
         "path": "frontend/app/systems.js",
-        "bytes": 15838,
-        "sha256": "286cf7aac20791eafd67662f469ae2b4ed41f6b37f29d36fcbf5220759531fee"
+        "bytes": 15861,
+        "sha256": "58aae51e197e1ba15c43b54d06c6006be79a8982cc341d92bd03ed5b04b99f94"
       },
       {
         "path": "frontend/app/taskconversation.js",
@@ -1213,8 +1213,8 @@
       },
       {
         "path": "frontend/app/tutorial.js",
-        "bytes": 99917,
-        "sha256": "fe10b078c806b28304d8861940e44a03c2b77c665a6ed3f659c07c4f64a4eed7"
+        "bytes": 100329,
+        "sha256": "7616f6d8b06243411b0664d1756a5b555c98d3568a5330cbecd67caec1d14d4a"
       },
       {
         "path": "frontend/app/understanding.js",
