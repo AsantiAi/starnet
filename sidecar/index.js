@@ -830,9 +830,12 @@ const CRON_DEFAULT_MODEL = String(ENV('DEFAULT_MODEL') || '').trim();
 const CRON_PERSONA = 'You are an autonomous STARNET station agent running a SCHEDULED routine — no human is watching. '
   + 'Carry out the task with your REAL tools (web search/read, files, memory); ground every factual claim in what the '
   + 'tools actually return and cite sources; save any durable deliverable to your workspace with fs_write. Be concise. '
+  + 'Your final reply IS what the Commander receives (the station delivers it): write the result itself (the reminder, '
+  + 'the brief, the findings), never that you cannot send or deliver it. '
   + 'If there is genuinely nothing new or noteworthy to report this run, reply with EXACTLY "[SILENT]" and nothing else.';
 const CRON_ROUTINE_NOTE = '\n\n[ROUTINE] This is an unattended scheduled routine. Use your normal agent identity, '
-  + 'carry out the saved prompt without waiting for the Commander, and keep the result concise. If there is genuinely '
+  + 'carry out the saved prompt without waiting for the Commander, and keep the result concise. Your final reply IS what '
+  + 'the Commander receives (the station delivers it): write the result itself, never that you cannot send it. If there is genuinely '
   + 'nothing new or noteworthy to report this run, reply with EXACTLY "[SILENT]" and nothing else.';
 // The agent's toolset is NOT a host-side constant — it is projected from the objects placed in the
 // agent's room (CAP_REGISTRY: computer/dish/cabinet/notebook). See handleRun's station + resolveTools.
@@ -22965,6 +22968,10 @@ function consentSummary(call) {
   // Approval is the place to inspect the proposed mutation, not the capped run-log digest.
   if (/^fs[._](?:write|append|edit|patch)$/.test(String(call && call.name || ''))) {
     try { return JSON.stringify(redact(a), null, 2); } catch (_) { return '[mutation payload unavailable]'; }
+  }
+  // a routine approval shows what the routine will run every time it fires, not a 77-char clip of it
+  if (/^routine[._](?:create|manage)$/.test(String(call && call.name || ''))) {
+    try { return JSON.stringify(redact(a)).slice(0, 4000); } catch (_) { return '[routine details unavailable]'; }
   }
   if (typeof a.path === 'string' && a.path) return a.path;
   try { const s = JSON.stringify(a); return s.length > 80 ? s.slice(0, 77) + '…' : s; } catch (_) { return ''; }
