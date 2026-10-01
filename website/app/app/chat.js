@@ -3082,6 +3082,26 @@ const Chat = (() => {
       btns.appendChild(rest);
     }
     r.body.appendChild(btns);
+    // STARNET REMOTE: a paired phone can answer this question too (the sidecar then puts permission.response on this
+    // run's stream, as for an approval). Settle the card to what happened — it used to keep live options and "awaiting
+    // your answer…" after the run had moved on, and a tap then did nothing while the card claimed it answered.
+    if (typeof U !== 'undefined' && U.bus && U.bus.on && U.bus.off) {
+      const onElsewhere = (resp) => {
+        if (!resp || resp.promptId !== p.promptId) return;
+        U.bus.off('permission.response', onElsewhere);
+        if (decided) return;
+        decided = true;
+        if (ws && typeof Channels !== 'undefined') Channels.clearPending(ws.id, Date.now());
+        if (isActiveWs(ws)) renderPresence();
+        btns.remove();
+        const tag = document.createElement('span');
+        tag.className = 'consent-result' + (resp.decision === 'deny' ? ' err' : '');
+        tag.textContent = resp.decision === 'deny' ? '✕ declined from your phone' : '✓ answered from your phone';
+        r.body.appendChild(tag);
+        syncStatus();
+      };
+      U.bus.on('permission.response', onElsewhere);
+    }
     // Esc = "use your judgment": the reflexive dismiss defers the decision rather than silently denying a
     // question (a deny makes no sense here), matching the end-run card's skip chip semantics.
     r.d.tabIndex = -1;
@@ -8579,7 +8599,8 @@ const Chat = (() => {
         + '&lineId=' + encodeURIComponent(lineId || '') + (dockId ? '&dockId=' + encodeURIComponent(dockId) : ''), { cache: 'no-store', headers: h });
       if (!r || !r.ok) return null;
       const j = await r.json();
-      return (j && j.next) ? { next: String(j.next), nextDock: (typeof j.nextDock === 'string' && j.nextDock) ? j.nextDock : null, brief: (typeof j.brief === 'string' && j.brief) ? j.brief : null } : null;
+      return (j && j.next) ? { next: String(j.next), nextDock: (typeof j.nextDock === 'string' && j.nextDock) ? j.nextDock : null, brief: (typeof j.brief === 'string' && j.brief) ? j.brief : null,
+        verdict: (typeof j.verdict === 'string' && j.verdict) ? j.verdict : '', last: j.last === true } : null;
     } catch (_) { return null; }   // no floor, no sidecar, no line — the single-stage reply already stands
   }
 
@@ -8649,7 +8670,7 @@ const Chat = (() => {
       // the RECEIVING dock's standing brief rides the shared handoff turn — the same 5th param the sidecar's
       // chain runner passes (sidecar/routing/chain.js) — so the same floor composes the same run here too.
       const prompt = (typeof Pipeline !== 'undefined' && Pipeline.handoffPrompt)
-        ? Pipeline.handoffPrompt(seed.originalText, cur, out.text, hop, nxr.brief) : out.text;
+        ? Pipeline.handoffPrompt(seed.originalText, cur, out.text, hop, nxr.brief, nxr.verdict, nxr.last) : out.text;   // + the VERDICT / LAST-stage parts hopTurn adds (sweep 2026-10-01)
       const hopRow = isActiveWs(ws) ? streamingAgent(who) : null;
       if (hopRow) activeLiveRow = hopRow;
       let hopAcc = '';

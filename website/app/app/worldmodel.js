@@ -1146,12 +1146,22 @@ const WorldModel = (() => {
        a failed (or throwing) batch restores that state and re-emits, so nothing half-done ever stays. */
     let batchDepth = 0;
     function transact(fn) {
+      /* A REFUSED batch leaves history exactly as it found it (sweep 2026-10-01): snapshot() clears redo, so a refused
+         group move / Ctrl+D after an undo used to kill Ctrl+Y. And a NESTED batch (applyLineLayout inside apply) never
+         pushed its own slot, yet popped one on failure — the outer batch's (or the user's previous undo). */
+      const nested = batchDepth > 0;
+      const inner = nested ? snap() : null;
+      const redoKept = nested ? null : redoStack.slice();
       snapshot();
       batchDepth++;
       let r;
       try { r = fn(); } catch (e) { r = fail('THREW', String((e && e.message) || e)); }
       finally { batchDepth--; }
-      if (!r || !r.ok) { restore(undoStack.pop()); emit([], { global: true }); }
+      if (!r || !r.ok) {
+        if (nested) restore(inner);
+        else { restore(undoStack.pop()); redoStack.length = 0; Array.prototype.push.apply(redoStack, redoKept); }
+        emit([], { global: true });
+      }
       return r;
     }
     // undo/redo never restores copies of a player-made prop that was deleted since (its art and catalog row are gone)

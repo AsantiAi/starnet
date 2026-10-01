@@ -430,7 +430,8 @@ const DeskScreen = (() => {
 
   // the window builder (StationUI calls it on open, and again when another desk re-targets it)
   function build(body) {
-    const H = StationUI.h, a = H.present[H.sel] || null;
+    // the desk's own target (openDesk), never the dossier's selection; a dock-opened desk falls back to it
+    const H = StationUI.h, a = (H.deskAgentId && H.present.find(x => x && x.id === H.deskAgentId)) || H.present[H.sel] || null;
     if (!a) { body.innerHTML = '<p class="ds-dim">No agent selected.</p>'; return; }
     const same = cur && cur.agentId === a.id;
     cur = { agentId: a.id, name: a.name || a.id, body };

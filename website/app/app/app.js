@@ -4262,6 +4262,9 @@ const App = (() => {
     const attention = el('ws-attention');
     if (attention) attention.onclick = () => {
       railAttentionOnly = !railAttentionOnly;
+      // the count is station-wide, so its list must be too: kept narrowed to one agent, "Waiting for you · 2" for
+      // another agent's sessions opened a BLANK rail with no empty-state line (sweep 2026-10-01)
+      if (railAttentionOnly && railAgentFilter) { railAgentFilter = null; if (typeof StationUI !== 'undefined' && StationUI.refreshCrew) StationUI.refreshCrew(); }
       q.value = ''; renderSessionSearch(); renderRail(); SFX.click();
     };
   }
