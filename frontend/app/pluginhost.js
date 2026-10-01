@@ -191,6 +191,7 @@
     for (const f of frames) { if (f.iframe.contentWindow === ev.source) { entry = f; break; } }
     if (!entry) return;   // not one of ours: never answered
     if (d.n !== entry.nonce) return;   // the frame navigated away from the page we loaded: never answered
+    if (d.m === 'hello') entry.hellos = (entry.hellos || 0) + 1;   // a page of THIS plugin/app loaded (see watchLeave)
     const fn = Object.prototype.hasOwnProperty.call(METHODS, d.m) ? METHODS[d.m] : null;
     const reply = (ok, v, err) => post(entry, { re: d.id, ok, v: ok ? v : undefined, err: ok ? undefined : String(err || 'refused') });
     if (!fn) return reply(false, null, 'unknown call: ' + d.m);
@@ -199,6 +200,45 @@
   }
 
   // ---- the window builder -----------------------------------------------------------------------------------------
+  /* A FRAME THAT LEAVES. Under site isolation (the desktop's WebView2, and Chrome by default) a sandboxed frame that
+     navigates ITSELF is not stopped by the station page's frame-src — measured 2026-09-30: an app page's
+     `location.href = 'https://…'` reached the site on the desktop. Every page we serve carries the kit, and the kit's
+     first act is a 'hello' with the frame's nonce; a page that loads in the frame WITHOUT saying hello is not ours.
+     It is thrown out and the plugin/app put back on its LATEST version (a stale page — the code changed while the
+     window was open — is the station's no-script 410 page, which also never says hello; a refresh first fixes that
+     case). A second time within 15 s leaves the window stopped and says so, neutrally: the host cannot tell an
+     escape from a page that will not load, so it accuses nothing.
+     Honest limit: the one request that loaded the foreign page has already been made — what a frame can reach is only
+     its own plugin's/app's data, and it never stays on screen to pose as StarNet. */
+  const leaveLog = new Map();   // window key -> last time its frame was thrown out
+  function watchLeave(key, body, entry) {
+    entry.iframe.addEventListener('load', () => {
+      entry.loads = (entry.loads || 0) + 1;
+      const n = entry.loads;
+      setTimeout(() => {
+        if (!entry.iframe.isConnected || entry.loads !== n || (entry.hellos || 0) >= n) return;
+        const name = (entry.plugin && entry.plugin.name) || 'This ' + (entry.app ? 'app' : 'plugin');
+        const ui = UI();
+        forget(entry.iframe);
+        entry.iframe.remove();
+        const again = leaveLog.has(key) && Date.now() - leaveLog.get(key) < 15000;
+        leaveLog.set(key, Date.now());
+        if (again) {
+          const note = document.createElement('div');
+          note.className = 'plugin-gone';
+          note.textContent = name + ' could not stay on its own page, so its window is stopped. Reopen it to try again.';
+          body.insertBefore(note, body.firstChild);
+          if (ui && ui.notify) ui.notify(name + ': its window kept leaving its own page — stopped.', 'warn', 'general', { transient: true });
+          return;
+        }
+        // put it back on its LATEST version (the app/plugin list is re-read first, so a changed page loads fresh)
+        const reread = entry.app && typeof AppsUI !== 'undefined' && AppsUI.load ? AppsUI.load() : refresh();
+        Promise.resolve(reread).catch(() => null).then(() => { if (body.isConnected && !frameFor(body)) build(key, body); });
+        if (ui && ui.notify) ui.notify(name + ': its window showed a page that is not its own — StarNet put the ' + (entry.app ? 'app' : 'plugin') + ' back.', 'warn', 'general', { transient: true });
+      }, 2500);
+    });
+  }
+
   function frameFor(body) { return body && body.querySelector ? body.querySelector(':scope > iframe.plugin-frame') : null; }
   function forget(iframe) { for (const f of frames) if (f.iframe === iframe) frames.delete(f); }
 
@@ -259,6 +299,7 @@
     const entry = { key, iframe, plugin: def.plugin, screen: def.screen, draft: !!def.draft, app: !!def.app, nonce: nonce() };
     frames.add(entry);
     iframe.src = url + '#sn=' + entry.nonce;
+    watchLeave(key, body, entry);
     if (keepBar) body.insertBefore(iframe, keepBar); else body.appendChild(iframe);
     if (def.app && typeof AppsUI !== 'undefined' && AppsUI.mountBar) AppsUI.mountBar(body, def.plugin.id);
   }
