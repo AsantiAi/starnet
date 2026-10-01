@@ -3872,10 +3872,7 @@ const App = (() => {
   // or the same crew row again clears it. View state only: never persisted, never touches a stream.
   let railAgentFilter = null;
   function railHasAgent(w, id) {
-    if ((w.agentId || 'agent') === id) return true;
-    if (w.conversationMode !== 'group' || typeof GroupChat === 'undefined' || !GroupChat.membersOf) return false;
-    const members = GroupChat.membersOf(w.id);
-    return !!(members && members.includes(id));
+    return Workstreams.hasAgent(w, id, typeof GroupChat !== 'undefined' ? GroupChat.membersOf : null);
   }
   function setRailAgentFilter(id) {
     id = id && agents.has(String(id)) ? String(id) : null;
