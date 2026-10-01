@@ -799,6 +799,7 @@ const CRON_MAX_RUN_MS = num(ENV('CRON_MAX_RUN_MS'), 480000);   // operational le
 const CRON_MAX_PARALLEL = num(ENV('CRON_MAX_PARALLEL'), 0);
 // terminal failures IN A ROW before a recurring routine auto-pauses (0 = never). Default 5.
 const CRON_MAX_CONSECUTIVE_FAILURES = num(ENV('CRON_MAX_CONSECUTIVE_FAILURES'), 5);
+const CRON_MAX_WALL_MS = num(ENV('CRON_MAX_WALL_MS'), 90 * 60 * 1000);   // hard per-run wall clock for routines (0 = off)
 // NS-0 LEASE HEARTBEAT knobs. The lease sweep + one-shot fireClaim now reclaim on a STALE HEARTBEAT rather than a
 // fixed wall-clock age, so a genuinely-long run that keeps emitting progress fires exactly once (the duplicate-fire
 // fix). CRON_STALENESS_MULT scales maxRunMs into the no-heartbeat staleness ceiling (default 1 = pre-NS-0 timing for
@@ -5899,6 +5900,7 @@ const cronDriver = makeCronDriver({
   providerForJob: (job) => cronProviderFor(job),
   hasCredential: (provider, key) => cronHasCredential(provider, key),
   defaultModel: CRON_DEFAULT_MODEL, maxRunMs: CRON_MAX_RUN_MS, maxConsecutiveFailures: CRON_MAX_CONSECUTIVE_FAILURES,
+  maxWallMs: CRON_MAX_WALL_MS,                             // a run that keeps heartbeating but never ends is stopped here
   // NS-0 lease heartbeat: reclaim on stale-heartbeat, not fixed wall-clock age (a live long run fires exactly once).
   heartbeatStaleMs: CRON_HEARTBEAT_STALE_MS, stalenessMult: CRON_STALENESS_MULT, durableHeartbeatMs: CRON_DURABLE_HEARTBEAT_MS,
   maxParallel: CRON_MAX_PARALLEL,                          // G4.4 global concurrency cap: at most N cron runs in-flight; the rest defer

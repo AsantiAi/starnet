@@ -570,6 +570,7 @@ test/cron.dispatch.test.js
 test/cron.chain.test.js
 test/cron.tick.test.js
 test/cron.hardening.test.js
+test/cron.reliability-ramp.test.js
 test/cron.dst.test.js
 test/cron.durability.test.js
 test/cron.lock.test.js
