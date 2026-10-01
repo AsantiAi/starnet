@@ -36,9 +36,11 @@ const IndustrialTextures = (() => {
   const wallIds = 'bulkhead courses service plating ribbed panelled pipework viewport wainscot hedge'.split(' ');
   const floorArtRevision = new Set(['basalt', 'rubber', 'soft']);
   const floorArtName = id => 'remaster/floors/' + id + (floorArtRevision.has(id) ? '-v2' : '');
+  const wallArtRevision = new Set(['bulkhead', 'courses', 'panelled', 'pipework', 'ribbed', 'service']);
+  const wallArtName = id => 'remaster/walls/' + id + (wallArtRevision.has(id) ? '-v2' : '');
   const names = ['floor', 'wall', 'shell', 'workstation', 'workstation-compact', 'chair-s', 'chair-e', 'chair-n',
     'tactical-table', 'console-bank', 'equipment-bay', 'deck-perimeter',
-    ...floorIds.map(floorArtName), ...wallIds.map(id => 'remaster/walls/' + id),
+    ...floorIds.map(floorArtName), ...wallIds.map(wallArtName),
     'remaster/shell', 'remaster/crown', 'remaster/workstation-e', 'remaster/workstation-n', 'remaster/workstation-compact-n',
     'calibration/crate'];
   const shellMaterials = ['monocoque', 'timber', 'clapboard', 'shingle', 'brick', 'stone', 'stucco', 'curtain', 'hedge', 'thermal', 'insulation', 'heatsink'];
@@ -292,7 +294,7 @@ const IndustrialTextures = (() => {
   }
   function wallImage(id, base) {
     if (id === 'viewport') return null;
-    return wallMaterials.includes(id) ? materialImage('wall-' + id, base, 1.65) : material('remaster/walls/' + (wallIds.includes(id) ? id : 'bulkhead'), base);
+    return wallMaterials.includes(id) ? materialImage('wall-' + id, base, 1.65) : material(wallArtName(wallIds.includes(id) ? id : 'bulkhead'), base);
   }
   function wallStrip(height, id = 'bulkhead', base, opts) {
     if (!enabled()) return null;
