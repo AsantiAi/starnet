@@ -106,6 +106,8 @@ const throwsMsg = async (fn) => { try { await fn(); return ''; } catch (e) { ret
     A.eq(s.armed, false, 'and says honestly whether routines are on');
     const job = jobs.get('job1');
     A.ok(job.name === 'App: AI News Brief' && job.meta.appId === a.id && /app\.publish/.test(job.prompt) && /research today's AI news/.test(job.prompt), 'the routine runs the task and ends by publishing to this app');
+    // a routine's reply is normally its delivery (CRON_ROUTINE_NOTE); an app's update delivers INTO the app
+    A.ok(/THE APP IS THE DELIVERY/.test(job.prompt) && /never put the result in your reply instead/.test(job.prompt), 'the routine is told the app, not its reply, is the delivery');
     A.ok(/real date is in your \[RUNTIME\] block/.test(job.prompt) && !/FIRST call app\.read/.test(job.prompt), 'the routine points at the real date in its [RUNTIME] block (no tool call just to learn the date)');
     A.ok(/app\.write the whole new file/.test(job.prompt) && /app\.check/.test(job.prompt), 'an automated update may change the app ITSELF (rewrite + check the page), not only its data');
     A.eq((await apps.describe(a.id)).schedule.task, 'research today\'s AI news', 'describe gives the task back (the AUTO-UPDATE box shows the Commander\'s own words)');
