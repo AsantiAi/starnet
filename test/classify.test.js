@@ -115,6 +115,12 @@ for (const c of CHATS) A.eq(stanceFor(isTaskDirective(c)), 'talk', 'small talk -
     A.ok(!isAffirmation(n), 'not a bare yes: ' + JSON.stringify(n));
   for (const o of ['Here is the plan. Want me to draft it?', 'Shall I go ahead and send it?', 'Would you like me to create the file?', 'Should I proceed?', 'I can draft the email now — should I?'])
     A.ok(offeredWork(o), 'an offer to act: ' + JSON.stringify(o));
+  A.eq(isTaskDirective('yes', { priorAgentTurn: 'Want me to draft it?' }), true, 'isTaskDirective: "yes" answering an offer is a task');
+  A.eq(isTaskDirective('yes', { priorAgentTurn: 'Anything else?' }), false, 'isTaskDirective: "yes" to a plain question stays chat');
+  A.eq(isTaskDirective('thanks', { priorAgentTurn: 'Want me to draft it?' }), false, 'isTaskDirective: "thanks" is not a yes');
+  A.eq(isTaskDirective('ok thanks', { priorAgentTurn: 'Would you like me to change anything?' }), false, 'isTaskDirective: "ok thanks" is an acknowledgement, not a go');
+  A.eq(offeredWork('Happy to help with anything else?'), false, '"happy to help?" is not an offer to act');
+  A.eq(isTaskDirective('yes'), false, 'isTaskDirective: no context = unchanged');
   for (const o of ['Done! Anything else?', 'I found 3 options:\n1. A\n2. B\nWhich do you prefer?', 'Here it is.', 'Should I have used tabs? Anyway, the file is saved.', '', null])
     A.ok(!offeredWork(o), 'not an offer to act: ' + JSON.stringify(o));
 }
