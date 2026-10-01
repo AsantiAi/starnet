@@ -171,13 +171,21 @@ function makeBrowserViews(deps) {
      only when it actually uses it (its first driving call) — a run that never browses never locks the Commander
      out, and "driving" is only ever said of a run that is. Returns null when the run must use a private browser
      (not interactive, or no station browser on this host). While another run is driving, a driving call throws. */
+  /* A RUN THAT HAS ENDED NEVER TAKES THE WHEEL BACK (release review 2026-09-30, reproduced): the tool registry stops
+     waiting for a tool ~3 s after STOP (or at its timeout) while the tool itself is still running. The run's finally
+     released the browser — then that late tool's next driving call made the ended run the driver again, and nothing
+     ever released it: the Commander's input was refused as "driving" and every later run was told the browser was in
+     use, until the sidecar restarted. Each run's view carries a released flag; releaseRun sets it, and take() refuses. */
+  const runHandles = new Map();   // runId -> the run's identity, while its view is live
   function sessionForRun(info) {
     info = info || {};
     if (!makeSession || info.interactive !== true || !info.runId) return null;
-    const me = { agentId: String(info.agentId || 'agent'), runId: String(info.runId) };
+    const me = { agentId: String(info.agentId || 'agent'), runId: String(info.runId), released: false };
+    runHandles.set(me.runId, me);
     const loginPrompt = typeof info.loginPrompt === 'function' ? info.loginPrompt : undefined;
     // returns null when this run already drives; a promise while it takes the wheel; throws when another run has it
     function take() {
+      if (me.released) throw new Error('this run has ended — it no longer drives the station browser');
       const st = ensureStation();
       if (st.driver && st.driver.runId === me.runId) return null;
       if (st.driver) throw new Error('the station browser is in use by another run right now — retry after it finishes');
@@ -203,6 +211,8 @@ function makeBrowserViews(deps) {
     });
   }
   function releaseRun(runId) {
+    const h = runHandles.get(String(runId || ''));
+    if (h) { h.released = true; runHandles.delete(h.runId); }   // its view can never drive again, even from a late tool
     if (!station || !station.driver || station.driver.runId !== String(runId || '')) return false;
     station.driver = null; station.signIn = null;
     if (attended) attended.prompt = undefined;

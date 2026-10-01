@@ -164,6 +164,23 @@ function rig(extra) {
     A.ok(f.ok && f.page.url === 'https://youtube.com/', 'the Commander opens the window after the run and YouTube is there');
   }
 
+  // ---- STOP mid-tool: a late tool call of an ENDED run never takes the wheel back (release review, reproduced) ----
+  {
+    const { views } = rig();
+    const sess = views.sessionForRun({ agentId: 'nova', runId: 'r1', interactive: true });
+    await sess.navigate('https://slow.example/');
+    views.releaseRun('r1');   // the run's finally ran (STOP / tool timeout) while the tool was still in flight
+    let late = ''; try { await sess.navigate('https://after-stop.example/'); } catch (e) { late = e.message; }
+    A.ok(/run has ended/.test(late), 'the ended run\'s late driving call is refused');
+    A.eq(views.list().station.driver, null, 'nobody is shown driving');
+    const typed = await views.input({ type: 'text', text: 'hi' });
+    A.eq(typed && typed.ok, true, 'the Commander can still type in the browser');
+    const next = views.sessionForRun({ agentId: 'iris', runId: 'r2', interactive: true });
+    await next.navigate('https://next.example/');
+    A.eq(views.list().station.driver.runId, 'r2', 'and the next run can drive it');
+    views.releaseRun('r2');
+  }
+
   // ---- STEP-IN, streaming and idleness ----
   {
     const { clk, made, ho, views } = rig();
