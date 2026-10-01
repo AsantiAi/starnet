@@ -3932,7 +3932,8 @@ const App = (() => {
   const railExpanded = new Set();
   try {
     const saved = JSON.parse(localStorage.getItem('skynet.session-view') || '{}');
-    if (['all', 'automated'].includes(saved.kind)) railKind = saved.kind;
+    // the ALL / AUTOMATED switch was removed (Andrew 10-01): the rail always shows every session; a saved
+    // 'automated' view is ignored so nobody is left on a filter they can no longer change
     if (Array.isArray(saved.expanded)) saved.expanded.slice(0, 200).forEach(k => { if (typeof k === 'string') railExpanded.add(k); });
   } catch (_) {}
   function saveRailView() {

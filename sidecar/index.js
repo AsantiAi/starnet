@@ -10246,7 +10246,27 @@ function remoteAskMessage(row) {
     let q = ''; try { q = String((JSON.parse(row.argsSummary || '{}') || {}).question || ''); } catch (_) { q = ''; }
     return { title: who + ' has a question', body: q.slice(0, 200) || 'Tap to answer', tag: 'ask:' + row.promptId, url: '#needs' };
   }
-  return { title: who + ' needs your OK', body: 'wants to use ' + row.tool, tag: 'ask:' + row.promptId, url: '#needs' };
+  return { title: who + ' needs your OK', body: remoteAskWords(row), tag: 'ask:' + row.promptId, url: '#needs' };
+}
+// a lock screen gets plain words for what the agent wants to do, never a raw tool name or its JSON arguments
+function remoteAskWords(row) {
+  const t = String(row.tool || '').toLowerCase().replace(/_+/g, '.');
+  const raw = String(row.argsSummary || '');
+  const field = (k) => { const m = new RegExp('"' + k + '"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)').exec(raw); return m ? m[1].replace(/\\(["\\\\])/g, '$1').replace(/\\n/g, ' ') : ''; };
+  const file = (field('path') || field('file_path') || field('file')).split(/[\\/]/).pop();
+  if (/^fs\.(write|append)$/.test(t)) return 'wants to write ' + (file || 'a file');
+  if (/^fs\.(edit|patch)$/.test(t)) return 'wants to change ' + (file || 'a file');
+  if (/^(shell|terminal)\./.test(t)) { const c = field('command') || field('cmd'); return 'wants to run a command' + (c ? ': ' + c.slice(0, 120) : ''); }
+  if (t === 'path.trust') return 'wants to work with files in ' + (raw.slice(0, 120) || 'a project folder');
+  if (/^browser\.login/.test(t)) return 'wants you to log in to ' + (raw.slice(0, 80) || 'a website') + ' on your PC';
+  if (/^station\.build$/.test(t)) return 'wants to build on your station';
+  if (/^station\.make\.prop$/.test(t)) return 'wants to make a new prop';
+  if (/^routine\./.test(t)) return 'wants to set up a routine';
+  if (/notebook|memory/.test(t)) return 'wants to save a note to its memory';
+  if (/summon/.test(t)) return 'wants to add a new agent to the crew';
+  if (/^plugin\.submit$/.test(t)) return 'wants to install a plugin it built';
+  if (/^web\.(request|fetch)$/.test(t)) return 'wants to reach ' + (field('url').slice(0, 120) || 'a website');
+  return 'wants to use ' + (t.replace(/\.+/g, ' ').trim() || 'a tool');
 }
 function remoteNotify(evt) {
   if (!evt || !remotePush.subscribed().length) return;

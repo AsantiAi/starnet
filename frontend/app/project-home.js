@@ -47,7 +47,7 @@ const ProjectHome = (() => {
   function close() {
     ++epoch; clearTimeout(timer); root = homeId = '';
     if (panel) { showView(''); actions.hidden = true; updates.remove(); }
-    document.getElementById('comms-title').textContent = '▮ COMMS';
+    document.getElementById('comms-title').textContent = 'COMMS';
     document.getElementById('comms-idbar').classList.remove('ph-project');
   }
   async function open(projectRoot) {

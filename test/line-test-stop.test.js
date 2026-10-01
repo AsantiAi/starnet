@@ -34,7 +34,10 @@ A.ok(/if \(!sampleInFlight\) return json\(409, \{ ok: false, error: 'no sample j
 A.ok(/sampleInFlight\.stopRequested = true;/.test(stopFn), 'it marks the in-flight sample as stopped by the Commander…');
 A.ok(/killAll\(null, \(sampleHub && sampleHub\._internals\) \? sampleHub\._internals\.inflight : null\)/.test(stopFn), '…and kills ONLY the sample hub\'s runs, the way E-STOP does (entry run and every chained stage)');
 A.ok(!/killAll\(runs/.test(stopFn), 'it never touches the browser\'s runs or any other hub');
-const sampleFn = fnBody(sidecar, '\nasync function handleRoutingSample(');
+// the route's core moved into runSampleJob (2026-10-01) so the lead's station.test_line runs the very same job; the route
+// is a thin wrapper over it
+A.ok(/async function handleRoutingSample\(req, res\) \{\n  const r = await runSampleJob\(/.test(sidecar), 'POST /api/routing/sample runs runSampleJob, the one core');
+const sampleFn = fnBody(sidecar, '\nasync function runSampleJob(');
 A.ok(/if \(sampleInFlight\.stopRequested\) return json\(409, \{ ok: false, stopped: true, error: 'stopped before it started — nothing ran\.' \}\);[\s\S]{0,80}const t0 = Date\.now\(\);/.test(sampleFn), 'a stop that lands before the first run starts is honoured: nothing runs, nothing is spent');
 A.ok(/const stopped = !!sampleInFlight\.stopRequested;/.test(sampleFn) && /error: stopped \? 'stopped — you stopped this job before it reached the OUTBOX'/.test(sampleFn) && /stopped \? \{ stopped: true \} : null/.test(sampleFn),
   'a job stopped mid-line answers stopped:true and names the stop — never "the line failed"');
