@@ -5,9 +5,7 @@
   // One small, square-stroke instrument icon set; decorative, so labels remain plain text.
   const dockIcons = {
     crew: '<path d="M5 2h5v5H5zM3 14v-4h9v4M12 3h2v4M14 10h1v4"/>',
-    mywork: '<path d="M2 3h4v4H2zM8 5h6M2 10h4v4H2zM8 12h6"/>',
-    automate: '<path d="M3 6V3h10v4M11 5l2 2 2-2M13 10v3H3V9M1 11l2-2 2 2"/>',
-    connect: '<path d="M3 2v4M7 2v4M2 6h6v4H2zM5 10v3h8V9"/>',
+    work: '<path d="M3 2h10v12H3zM6 5h4M6 8h4M6 11h2"/>',
     build: '<path d="M2 2h8l4 3-2 2-3-2H2zM6 5v9h3V5"/>',
     system: '<path d="M4 4h8v8H4zM6 6h4v4H6zM6 1v3M10 1v3M6 12v3M10 12v3M1 6h3M1 10h3M12 6h3M12 10h3"/>',
     apps: '<path d="M2 2h5v5H2zM9 2h5v5H9zM2 9h5v5H2zM9 9h5v5H9z"/>'
