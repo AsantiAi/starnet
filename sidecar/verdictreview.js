@@ -10,7 +10,9 @@
    same quiet review loop with the verdict in the prompt. `great` never triggers — praise is not a lesson.
 
    Bounded by construction: a capped LRU (oldest evicted), a TTL so a stale packet never reviews a run the
-   Commander rated a day later against a skillbase that has since moved, and take() deletes. Pure + clock-injected
+   Commander rated long after against a skillbase that has since moved, and take() deletes. Durable since
+   2026-10-01: onChange/restore round-trip a compacted, provider-free packet across restarts, and a run that
+   ended in failure (max_iters/budget/refusal) is parked too: a `miss` on failed work is a lesson as well. Pure + clock-injected
    (node-testable); index.js owns the provider objects and the loop. */
 'use strict';
 
@@ -18,17 +20,76 @@ const { note: failNote } = require('./failopen.js');   // a swallowed error stay
 
 const VERDICTS_THAT_TEACH = new Set(['ok', 'miss']);
 
+// compactPacket — the persistable half of a review packet: no provider/cost objects (they are live handles, and a
+// provider can carry a credential), and only the transcript the review prompt can actually read (skillreview's
+// transcript() tail-caps at 12k chars) plus the run's directive, so a packet on disk stays a few KB.
+const PERSIST_CHARS = 16000;
+const PER_MESSAGE_CHARS = 4000;
+function compactPacket(p) {
+  p = p || {};
+  const msgs = Array.isArray(p.messages) ? p.messages : [];
+  const keep = [];
+  let used = 0;
+  for (let i = msgs.length - 1; i >= 0 && used < PERSIST_CHARS; i--) {
+    const m = msgs[i];
+    if (!m || (m.role !== 'user' && m.role !== 'assistant' && m.role !== 'tool')) continue;
+    const c = typeof m.content === 'string' ? m.content.slice(0, PER_MESSAGE_CHARS) : '';
+    const calls = Array.isArray(m.tool_calls) ? m.tool_calls.map(tc => ({ function: { name: String((tc && tc.function && tc.function.name) || '') } })).filter(tc => tc.function.name) : [];
+    if (!c && !calls.length) continue;
+    keep.unshift(calls.length ? { role: m.role, content: c, tool_calls: calls } : { role: m.role, content: c });
+    used += c.length;
+  }
+  // the directive (latest user turn) anchors the review's memory ranking: keep it even when the tail cut it off
+  if (!keep.some(m => m.role === 'user')) {
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i];
+      if (m && m.role === 'user' && typeof m.content === 'string' && m.content.trim()) { keep.unshift({ role: 'user', content: m.content.slice(0, PER_MESSAGE_CHARS) }); break; }
+    }
+  }
+  const skillRefs = list => (Array.isArray(list) ? list : []).map(s => s && ({ id: s.id, target: s.target, name: s.name, summary: s.summary, action: s.action })).filter(Boolean);
+  return {
+    agentId: String(p.agentId || 'agent'), messages: keep, model: p.model ? String(p.model) : '',
+    loadedSkills: skillRefs(p.loadedSkills), managedSkills: skillRefs(p.managedSkills), unmetered: !!p.unmetered, failed: !!p.failed
+  };
+}
+
 function makeVerdictReview(opts) {
   opts = opts || {};
   const cap = Number.isFinite(opts.cap) && opts.cap > 0 ? Math.floor(opts.cap) : 40;
   const ttlMs = Number.isFinite(opts.ttlMs) && opts.ttlMs > 0 ? opts.ttlMs : 6 * 60 * 60 * 1000;
   const now = typeof opts.now === 'function' ? opts.now : () => 0;   // clock is INJECTED (repo determinism law); index.js passes the real one
   const packets = new Map();   // runId -> { at, packet }  (Map keeps insertion order = LRU by arrival)
+  // DURABILITY (2026-10-01): a verdict given after a restart used to find no packet and teach nothing. onChange
+  // hands the caller a compacted, provider-free snapshot to persist; restore() reloads it on boot. A restored
+  // packet has no live provider: the caller rebuilds one for the agent when the review fires.
+  const onChange = typeof opts.onChange === 'function' ? opts.onChange : null;
+  function changed() {
+    if (!onChange) return;
+    try { onChange(snapshot()); } catch (e) { failNote('verdictreview.persist', e); }
+  }
+  function snapshot() {
+    const rows = [];
+    for (const [runId, row] of packets) rows.push({ runId, at: row.at, packet: compactPacket(row.packet) });
+    return rows;
+  }
+  function restore(rows) {
+    let n = 0;
+    for (const r of (Array.isArray(rows) ? rows : [])) {
+      const id = String((r && r.runId) || '').trim();
+      if (!id || !r.packet || typeof r.packet !== 'object' || !Number.isFinite(r.at)) continue;
+      packets.set(id, { at: r.at, packet: Object.assign({}, r.packet, { restored: true }) });
+      n++;
+    }
+    sweep();
+    return n;
+  }
 
   function sweep() {
     const t = now();
+    const before = packets.size;
     for (const [id, row] of packets) if (t - row.at > ttlMs) packets.delete(id);
     while (packets.size > cap) packets.delete(packets.keys().next().value);
+    return packets.size !== before;
   }
 
   // park a run's review packet. Only runs that were NOT already reviewed belong here (the caller decides);
@@ -39,6 +100,7 @@ function makeVerdictReview(opts) {
     packets.delete(id);
     packets.set(id, { at: now(), packet });
     sweep();
+    changed();
     return true;
   }
 
@@ -56,6 +118,7 @@ function makeVerdictReview(opts) {
     const id = String(runId).trim();
     const row = packets.get(id);
     packets.delete(id);
+    changed();
     return row ? row.packet : null;
   }
 
@@ -109,7 +172,7 @@ function makeVerdictReview(opts) {
   // to mint a golden; it never spends the packet — praise is not a review).
   function peek(runId) { sweep(); const row = packets.get(String(runId || '').trim()); return row ? row.packet : null; }
 
-  return { stash, shouldTrigger, take, size, has, cap, ttlMs, arm, correct, holding, peek, graceMs };
+  return { stash, shouldTrigger, take, size, has, cap, ttlMs, arm, correct, holding, peek, graceMs, snapshot, restore };
 }
 
-module.exports = { makeVerdictReview, VERDICTS_THAT_TEACH };
+module.exports = { makeVerdictReview, VERDICTS_THAT_TEACH, compactPacket };

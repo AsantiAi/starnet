@@ -3181,7 +3181,41 @@ function persistSkillNudge() {
   try { saveResilient(SKILL_NUDGE_FILE, { v: 1, counts: Object.fromEntries(skillNudge) }); }
   catch (e) { failNote('skill.nudge.persist', e); }
 }
-const verdictReview = makeVerdictReview({ cap: num(process.env.SKYNET_VERDICT_REVIEW_CAP, 40), ttlMs: num(process.env.SKYNET_VERDICT_REVIEW_TTL_MS, 6 * 60 * 60 * 1000), graceMs: num(process.env.SKYNET_VERDICT_REVIEW_GRACE_MS, 90 * 1000), now: () => Date.now() });
+// The parked review packets are DURABLE (verdict.packets.json, provider-free + compacted): a verdict the Commander
+// gives after a restart still reaches its review. Writes are coalesced (one per second at most) because every task
+// run's end stashes a packet. TTL 72h (was 6h): a rating from the OUTBOX the next day still teaches.
+const VERDICT_PACKETS_FILE = path.join(WORKSPACES, 'verdict.packets.json');
+let _verdictPersistTimer = null, _verdictPersistRows = null;
+function persistVerdictPackets(rows) {
+  _verdictPersistRows = rows;
+  if (_verdictPersistTimer) return;
+  _verdictPersistTimer = setTimeout(() => {
+    _verdictPersistTimer = null;
+    try { saveResilient(VERDICT_PACKETS_FILE, { v: 1, rows: _verdictPersistRows || [] }); }
+    catch (e) { failNote('verdict.packets.persist', e); }
+  }, 1000);
+  if (_verdictPersistTimer.unref) _verdictPersistTimer.unref();
+}
+const verdictReview = makeVerdictReview({ cap: num(process.env.SKYNET_VERDICT_REVIEW_CAP, 40), ttlMs: num(process.env.SKYNET_VERDICT_REVIEW_TTL_MS, 72 * 60 * 60 * 1000), graceMs: num(process.env.SKYNET_VERDICT_REVIEW_GRACE_MS, 90 * 1000), now: () => Date.now(), onChange: persistVerdictPackets });
+try {
+  const savedPackets = loadResilient(VERDICT_PACKETS_FILE, 'verdict-packets');
+  const n = verdictReview.restore(savedPackets && savedPackets.rows);
+  if (n) console.log('[skills] restored ' + n + ' verdict review packet(s)');
+} catch (e) { failNote('verdict.packets.restore', e); }
+// a RESTORED packet carries no live provider (never persisted: it is a live handle that can hold a credential).
+// Rebuild one for the agent's CURRENT run config, exactly as a fresh run would resolve it.
+async function rehydrateReviewJob(job) {
+  if (job.provider) return job;
+  const cfg = sampleRunConfigFor(job.agentId || 'agent');
+  if (!cfg || cfg.ok === false || !cfg.model || (!cfg.configured && !cfg.key)) throw new Error('no model configured for ' + (job.agentId || 'agent'));
+  const providerId = normalizeProvider(cfg.provider);
+  const provider = await providerForRunConfig(cfg, resolveReasoningEffort(providerId, cfg.reasoningEffort));
+  return Object.assign({}, job, {
+    provider, cost: makeCostEngine({ priceOf: provider.priceOf }),
+    model: auxSkillModel(provider, cfg.model),   // the CURRENT config's model: the parked one may belong to a provider since switched away from
+    unmetered: !!((getProviderProfile(providerId) || {}).unmetered)
+  });
+}
 const SKILL_CURATOR_INTERVAL_MS = num(process.env.SKYNET_SKILL_CURATOR_INTERVAL_MS, 24 * 60 * 60 * 1000);
 const SKILL_CURATOR_MAX_COST_USD = num(process.env.SKYNET_SKILL_CURATOR_MAX_USD, 0.12);
 const skillCuratorLastRun = new Map();
@@ -3232,7 +3266,7 @@ async function runBackgroundSkillReview(o) {
     };
     const reviewNotebook = notebookStore.get('notebook:' + agentId);
     const prompt = skillReview.buildPrompt({
-      agentId, runId, messages, verdict, correction,
+      agentId, runId, messages, verdict, correction, failed: !!(o && o.failed),
       loadedSkills: loadedSkills || [],
       managedSkills: managedSkills || [],
       // top-12 by rank() against the run's directive (was: last 12 in raw store order) — the reviewer sees the
@@ -20810,13 +20844,14 @@ async function runOnceCore(o) {
     skillReviewingNow.add(agentId);
     runBackgroundSkillReview({ agentId, runId, messages: result.messages.slice(), provider, model: _auxSkillModel, cost, loadedSkills, managedSkills, unmetered: providerUnmetered }).catch(swallow('aux.skillreview.envelope')).finally(() => { skillReviewingNow.delete(agentId); });
   }
-  if (process.env.SKYNET_SKILL_REVIEW !== '0' && _auxDone && isTask && !internal) {
-    // CONSISTENCY LOOP (2026-08-22): park this real task run's review packet so that if the Commander rates it
+  if (process.env.SKYNET_SKILL_REVIEW !== '0' && (_auxDone || _auxFail) && isTask && !internal) {
+    // CONSISTENCY LOOP (2026-08-22): park this real task run's review packet (a FAILED one too, 2026-10-01: the
+    // rating route accepts max_iters/budget/refusal runs, and their `miss` used to find no packet) so that if the Commander rates it
     // `ok`/`miss` (POST /api/growth/ratings) the SAME quiet review runs again WITH THE VERDICT in the prompt.
     // Parked even when the nudge review above already fired: that pass ran before the verdict existed and is
     // blind to it. The verdict pass is the one that knows the work fell short. Bounded LRU + TTL in verdictreview.js;
     // `great` never spends it; taken once; one extra aux pass per rated-short run, a Commander-initiated signal.
-    verdictReview.stash(runId, { agentId, messages: result.messages.slice(), provider, model: _auxSkillModel, cost, loadedSkills, managedSkills, unmetered: providerUnmetered });
+    verdictReview.stash(runId, { agentId, messages: result.messages.slice(), provider, model: _auxSkillModel, cost, loadedSkills, managedSkills, unmetered: providerUnmetered, failed: !_auxDone });
   }
   if (_auxSpend.has('skill-curator')) {
     runSkillCurator({ agentId, runId, provider, model: _auxSkillModel, cost, unmetered: providerUnmetered }).catch(swallow('aux.skillcurator.envelope'));
@@ -23541,7 +23576,7 @@ async function handleGrowthRatings(req, res) {
     // chip or the next typed message (POST /api/growth/ratings/correction) — rides into the prompt in their words.
     skillReviewArmed = verdictReview.arm(runId, canonical.verdict, (job) => {
       console.log('[skills] verdict-triggered review fired run=' + runId + ' verdict=' + job.verdict + ' by=' + job.firedBy + (job.correction ? ' correction=' + JSON.stringify(job.correction.slice(0, 80)) : ''));
-      runBackgroundSkillReview(job).catch(swallow('aux.skillreview.verdict'));
+      rehydrateReviewJob(job).then(runBackgroundSkillReview).catch(swallow('aux.skillreview.verdict'));
     }, String(body.correction || ''));
     if (skillReviewArmed) console.log('[skills] verdict-triggered review armed run=' + runId + ' verdict=' + canonical.verdict + ' grace=' + verdictReview.graceMs + 'ms');
   }

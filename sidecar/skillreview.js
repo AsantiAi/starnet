@@ -71,7 +71,7 @@
     const correction = str(input.correction).replace(/\s+/g, ' ').trim().slice(0, 600);
     const verdictBlock = (verdict === 'ok' || verdict === 'miss') ? [
       '',
-      'COMMANDER VERDICT ON THIS RUN: ' + (verdict === 'miss' ? 'MISSED the mark' : 'CLOSE, but short of the mark') + '.',
+      'COMMANDER VERDICT ON THIS RUN: ' + (verdict === 'miss' ? 'MISSED the mark' : 'CLOSE, but short of the mark') + '.' + (input.failed ? ' The run also ENDED IN FAILURE before it was rated (it did not finish): capture the approach that would have worked, never the transient error.' : ''),
       (correction ? 'Commander correction, in their words: "' + correction + '"' : 'No written correction was given; infer the gap from the transcript and the verdict.'),
       'Your one job in this pass: make sure the NEXT run of this class of task does not repeat the shortfall.',
       '- Find the skill that governs this class of task (loaded first, then existing umbrellas). Patch it with the concrete rule that would have produced the right output.',
