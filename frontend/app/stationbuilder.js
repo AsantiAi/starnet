@@ -1761,6 +1761,49 @@
     return refuse('There is no clear straight run for a hallway between ' + pair + ': ' + (why || 'nothing fits') + '.');
   }
 
+  /* A HALLWAY ROUND ONE CORNER between two rooms that stand diagonally apart: out of A's wall that faces B across one axis,
+     along to B's column (or row), then into B's wall — tried both ways round (out sideways first, or out of the top or
+     bottom first), the middle of each wall first. Two straight 3-wide runs that meet at the corner square; every check a
+     straight hallway passes: clear wall at both doorways, nothing in the way, standing against no other room. */
+  function hallL(st, A, Bm, hangs) {
+    const a = bboxOf(A), b = bboxOf(Bm), w = 3, pair = A.name + ' and ' + Bm.name;
+    const east = b.x1 > a.x2, west = b.x2 < a.x1, south = b.y1 > a.y2, north = b.y2 < a.y1;
+    if (!(east || west) || !(north || south)) return refuse(pair + ' face each other');
+    const mid = (lo, hi) => { const c = lo + ((hi - lo + 1 - w) >> 1), out = [c]; for (let d = 1; d <= hi - lo; d++) out.push(c - d, c + d); return out.filter(v => v >= lo && v + w - 1 <= hi); };
+    const tries = [];
+    // out of A's east or west wall at row ya, along to B's columns xb, then north or south into B
+    for (const ya of mid(a.y1, a.y2)) for (const xb of mid(b.x1, b.x2)) {
+      const r1 = east ? { x1: a.x2 + 1, x2: xb + w - 1, y1: ya, y2: ya + w - 1 } : { x1: xb, x2: a.x1 - 1, y1: ya, y2: ya + w - 1 };
+      const r2 = south ? { x1: xb, x2: xb + w - 1, y1: ya + w, y2: b.y1 - 1 } : { x1: xb, x2: xb + w - 1, y1: b.y2 + 1, y2: ya - 1 };
+      tries.push({ r1, r2, aSide: east ? 'east' : 'west', aFrom: ya, bSide: south ? 'north' : 'south', bFrom: xb });
+    }
+    // out of A's top or bottom wall at column xa, along to B's rows yb, then east or west into B
+    for (const xa of mid(a.x1, a.x2)) for (const yb of mid(b.y1, b.y2)) {
+      const r1 = south ? { x1: xa, x2: xa + w - 1, y1: a.y2 + 1, y2: yb + w - 1 } : { x1: xa, x2: xa + w - 1, y1: yb, y2: a.y1 - 1 };
+      const r2 = east ? { x1: xa + w, x2: b.x1 - 1, y1: yb, y2: yb + w - 1 } : { x1: b.x2 + 1, x2: xa - 1, y1: yb, y2: yb + w - 1 };
+      tries.push({ r1, r2, aSide: south ? 'south' : 'north', aFrom: xa, bSide: east ? 'west' : 'east', bFrom: yb });
+    }
+    let why = '';
+    for (const t of tries.slice(0, 400)) {
+      const { r1, r2 } = t, len = r => Math.max(r.x2 - r.x1, r.y2 - r.y1) + 1;
+      if (r1.x2 < r1.x1 || r1.y2 < r1.y1 || r2.x2 < r2.x1 || r2.y2 < r2.y1 || len(r2) < 2) continue;
+      if (len(r1) + len(r2) > 60) { why = why || 'they are too far apart (a hallway runs at most 60 tiles round a corner)'; continue; }
+      // the doorways meet each room's own wall, straight, with clear floor behind them
+      const meetA = i => t.aSide === 'east' ? st.roomAt(a.x2, i) === A.id : t.aSide === 'west' ? st.roomAt(a.x1, i) === A.id : t.aSide === 'south' ? st.roomAt(i, a.y2) === A.id : st.roomAt(i, a.y1) === A.id;
+      const meetB = i => t.bSide === 'north' ? st.roomAt(i, b.y1) === Bm.id : t.bSide === 'south' ? st.roomAt(i, b.y2) === Bm.id : t.bSide === 'west' ? st.roomAt(b.x1, i) === Bm.id : st.roomAt(b.x2, i) === Bm.id;
+      let ok = true;
+      for (let i = 0; i < w && ok; i++) ok = meetA(t.aFrom + i) && meetB(t.bFrom + i);
+      if (!ok) { why = why || 'a wall is not straight there'; continue; }
+      if (doorwayBlocked(st, t.aSide, a, t.aFrom, t.aFrom + w - 1, true, hangs)) { why = why || 'furniture in ' + A.name + ' stands against that wall'; continue; }
+      if (doorwayBlocked(st, t.bSide, b, t.bFrom, t.bFrom + w - 1, true, hangs)) { why = why || 'furniture in ' + Bm.name + ' stands against that wall'; continue; }
+      const c = st.canPlaceHallway([r1, r2]);
+      if (!c.ok) { why = why || (/^overlaps /.test(c.msg || '') ? 'something is in the way' : (c.msg || 'it does not fit')); continue; }
+      const nb = neighbourOf(st, r1, [A.id, Bm.id]) || neighbourOf(st, r2, [A.id, Bm.id]);
+      if (nb) { why = why || 'it would stand against ' + nb; continue; }
+      return { ok: true, rects: [r1, r2] };
+    }
+    return refuse('There is no clear run for a hallway between ' + pair + ', straight or round one corner: ' + (why || 'nothing fits') + '.');
+  }
   // a room's zones, checked and measured: each a style or a line, no two on the same part of the room
   function parseZones(list, env, live, notes) {
     const RS = env.RoomStyles, styleMenu = RS.menu().map(s => s.id + ' (' + s.name + ': ' + s.about + ')').join('; ');
@@ -2140,10 +2183,14 @@
       const A = roomNamed(probe, h.from); if (!A.ok) return A;
       const B = roomNamed(probe, h.to); if (!B.ok) return B;
       if (A.room.id === B.room.id) return refuse('A hallway joins two different rooms.');
-      const hb = hallBetween(probe, A.room, B.room, hangsOf(env)); if (!hb.ok) return hb;
-      const r = probe.placeHallway({ rect: hb.rect }); if (!r || !r.ok) return refuse('the hallway could not be laid there');
-      spec.parts.push({ hall: hb.rect, room: null, roomId: null, lines: [], props: [] });
-      halls.push({ from: A.room.name, to: B.room.name, len: Math.max(hb.rect.x2 - hb.rect.x1, hb.rect.y2 - hb.rect.y1) + 1 });
+      let hb = hallBetween(probe, A.room, B.room, hangsOf(env));
+      if (!hb.ok && /do not face each other/.test(hb.error)) hb = hallL(probe, A.room, B.room, hangsOf(env));   // round one corner
+      if (!hb.ok) return hb;
+      const rects = hb.rects || [hb.rect], ids = [];
+      for (const rc of rects) { const r = probe.placeHallway({ rect: rc }); if (!r || !r.ok) return refuse('the hallway could not be laid there'); ids.push(r.id); probe.setDeck(r.id, CORRIDOR_DECK); }
+      // a station corridor like a layout's: the deck, and planters and lights where it is long enough
+      rects.forEach((rc, k) => { const d = dressHall(probe, env, ids[k], null); spec.parts.push({ hall: rc, hallDeck: CORRIDOR_DECK, room: null, roomId: null, lines: [], props: (d && d.props) || [] }); });
+      halls.push({ from: A.room.name, to: B.room.name, corner: rects.length > 1, len: rects.reduce((n, rc) => n + Math.max(rc.x2 - rc.x1, rc.y2 - rc.y1) + 1, 0) });
     }
     const sr = seatRecruits(probe, env, spec, pi => { const p = spec.parts[pi]; return p.roomId || (p.room ? probe.roomAt(p.room.rect.x1, p.room.rect.y1) : null); });
     if (!sr.ok) return sr;
@@ -2195,7 +2242,7 @@
     });
     const equip = equipmentOf(env, equipProps), gains = gainsOf(env, equipProps);
     const blocking = [].concat(...lines.map(l => l.blocking.map(b => (lines.length > 1 ? (l.label || l.plain) + ': ' : '') + b)));
-    const hallText = halls.map(h => 'A new hallway joins ' + h.from + ' and ' + h.to + '.');
+    const hallText = halls.map(h => 'A new hallway' + (h.corner ? ', round one corner,' : '') + ' joins ' + h.from + ' and ' + h.to + '.');
     const summary = roomText.concat(hallText).join(' ')
       + (equip.length ? ' It brings equipment: ' + equip.join(', ') + (gains.length ? '. What agents gain there: ' + gains.join('; ') : '') + '.' : '')
       + (lines.length ? ' ' + (blocking.length ? 'Still to do after building: ' + blocking.join('; ') + '.' : (lines.length > 1 ? 'Its lines will be ready to run.' : 'It will be ready to run.')) : '')

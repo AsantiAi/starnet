@@ -1408,6 +1408,29 @@ for (const c of T.catalog) {
     A.ok(hall.ok && /^CONVEYOR HALL, a new 36 × 20 room at the far end of the concourse, open to it/.test(hall.plan.summary), 'a conveyor hall is a giant hall at the far end: ' + (hall.error || hall.plan.summary.slice(0, 100)));
     if (hall.ok) { A.ok(SB.apply(st, hall.plan, E).ok); A.ok(walks(st, room('HOME'), room('CONVEYOR HALL')), 'walkable'); }
   }
+  // A HALLWAY ROUND ONE CORNER (09-30 gap hunt): two rooms that stand diagonally apart are joined by an L, dressed like
+  // every station corridor; one that cannot be laid says why
+  {
+    const st = fresh(), p0 = SB.planBuild(st.serialize(), { rooms: [{ style: 'lounge', beside: 'HOME', side: 'north', hallway: 6 }, { style: 'library', beside: 'HOME', side: 'east', hallway: 8 }] }, E);
+    A.ok(p0.ok && SB.apply(st, p0.plan, E).ok, 'fixture: a lounge north and a library east of HOME, diagonal to each other (' + (p0.error || '') + ')');
+    const before = snap(st), h0 = st.rooms().filter(x => x.kind === 'corridor').length;
+    const p = SB.planBuild(st.serialize(), { hallways: [{ from: 'LOUNGE', to: 'LIBRARY' }] }, E);
+    A.ok(p.ok && /^A new hallway, round one corner, joins LOUNGE and LIBRARY\./.test(p.plan.summary), 'two diagonal rooms get a hallway round one corner: ' + (p.error || p.plan.summary));
+    if (p.ok) {
+      A.ok(SB.apply(st, p.plan, E).ok);
+      const halls = st.rooms().filter(x => x.kind === 'corridor');
+      A.eq(halls.length, h0 + 2, 'two straight runs that meet at the corner');
+      A.ok(halls.slice(-2).every(h => h.floorStyle === 'onyx' && h.floorMat === 'runner'), 'each a station corridor');
+      const lo = st.rooms().find(x => x.name === 'LOUNGE'), li = st.rooms().find(x => x.name === 'LIBRARY');
+      st.removeRoom(st.rooms().find(x => x.kind === 'corridor' && x.rects[0].x1 === 18 && x.rects[0].y1 === 4).id);   // the straight way round, through HOME, closed
+      A.ok(walks(st, lo, li), 'the LOUNGE walks to the LIBRARY along it');
+      A.ok(st.undo().ok && st.undo().ok); A.eq(snap(st), before, 'one undo takes it back');
+    }
+    const full = fresh(), lay = SB.planBuild(full.serialize(), { layout: { pattern: 'diamond', rooms: ['lounge', 'library', 'garden', 'lab', 'cafe', 'gym'].map(style => ({ style })) } }, E);
+    A.ok(lay.ok && SB.apply(full, lay.plan, E).ok);
+    const blocked = SB.planBuild(full.serialize(), { hallways: [{ from: 'LIBRARY', to: 'CAFE' }] }, E);
+    A.ok(!blocked.ok && /^There is no clear run for a hallway between LIBRARY and CAFE, straight or round one corner: /.test(blocked.error), 'one that cannot be laid says why: ' + blocked.error);
+  }
   // a concourse from a crowded station finds a free side, or is refused naming the way forward
   {
     const st = fresh();
@@ -1531,7 +1554,7 @@ for (const c of T.catalog) {
   A.ok(!tools.planLineTool && !tools.planRoomTool && !tools.planBuildTool && !tools.planRestyleTool, 'one planner, not four');
   // what the planner offers: a whole layout first, then rooms, a line, a kit or preset, zones, a restyle — with the menus
   const d = planT.description;
-  A.ok(/1 LAYOUT, the way to a beautiful station: \{ "layout": \{ "pattern": "diamond" \| "concourse"/.test(d) && /diamond \(the usual one\) = every room on an even grid all round the main room/.test(d) && /To ADD rooms to a diamond later, send a layout again with only the new rooms/.test(d) && /concourse = a wide corridor from one side of the main room/.test(d), 'the planner leads with the diamond, says how to grow it, and offers the concourse');
+  A.ok(/1 LAYOUT, the way to a beautiful station: \{ "layout": \{ "pattern": "diamond" \| "concourse"/.test(d) && /diamond \(the usual one\) = every room on an even grid all round the main room/.test(d) && /To ADD rooms later, send a layout again with only the new rooms: they take the next free places of the same diamond, or go down the same concourse/.test(d) && /concourse = a wide corridor from one side of the main room/.test(d), 'the planner leads with the diamond, says how to grow it, and offers the concourse');
   A.ok(/Room styles: lounge \(a lounge: a TV, a couch on a big rug/.test(d) && /cozy \(a cozy den: a TV, bookshelves/.test(d) && /works \(a conveyor hall: its floor kept for workflow lines/.test(d), 'it lists every whole-room style');
   A.ok(/replace: true lays the whole station out again around the main room/.test(d) && /backed up for RESTORE PREVIOUS/.test(d), 'it says what replace does and that the old layout is backed up');
   A.ok(/size: small 12×8, medium 18×11, large 24×14, giant 36×20/.test(d) && /LINES: .*build_test \(ENGINEER → TESTER\)/.test(d) && /KITS WORKROOM/.test(d) && /PRESETS RESEARCH STATION/.test(d) && /zone styles cozy, lounge/.test(d), 'sizes, lines, kits, presets and zone styles are all on the menu');

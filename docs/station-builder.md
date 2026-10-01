@@ -134,7 +134,9 @@ model still never sends a tile. It **looks**, then says where things go in words
 A room with neither zones nor lines is built **empty**, for the Commander to fill later ("put three lines in the
 conveyor hall" is then `{ into: "Conveyor Hall", lines: [...] }`).
 
-`hallways: [{ from, to }]` lays a straight hallway between two rooms that face each other across a gap, including rooms
+`hallways: [{ from, to }]` lays a hallway between two rooms (straight when they face each other across a gap; round ONE corner, out of one
+room's side wall and into the other's end wall, when they stand diagonally apart: `hallL`), dressed as a station
+corridor, including rooms
 added earlier in the same plan.
 
 What placement guarantees, beyond every plan's checks:
@@ -313,7 +315,8 @@ of furniture itself, so these fields are not accepted: x".
 
 Custom shapes (the plan's phase 4) are built as line zones. The card draws the plan rather than overlaying the live floor.
 
-Not built: rooms do not resize (remove one and build it again the size it should be) and are rectangles; hallways run
-straight, so two rooms that do not face each other cannot be joined directly; a piece is placed where StarNet judges
+Not built: rooms do not resize (the world model has no resize, and rebuilding a room bigger would break its lines'
+links: remove one and build it again the size it should be) and are rectangles; a hallway turns at most one corner; a
+piece is placed where StarNet judges
 best, never at a tile the model names; a line's machines are not edited one by one (restaff it, remove it, or plan a
 new one). The Commander does those in Build mode.
