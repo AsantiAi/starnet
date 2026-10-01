@@ -437,6 +437,16 @@
   }
   function modelOf(id) { const w = find(id); return w ? (w.lastModel || '') : ''; }
 
+  // PER-AGENT THREADS: is this session one of <agentId>'s? A direct session is its bound agent's; a group
+  // session belongs to EVERY member (membersOf(id) → the backend's member ids, or null when not yet known),
+  // so a group lists under each of them. The record only stores the lead, never the members.
+  function hasAgent(w, agentId, membersOf) {
+    if (!w || !agentId) return false;
+    if ((w.agentId || 'agent') === agentId) return true;
+    if (w.conversationMode !== 'group' || typeof membersOf !== 'function') return false;
+    const members = membersOf(w.id);
+    return Array.isArray(members) && members.includes(agentId);
+  }
   // ---------- session power tools: visible search/export + reversible cleanup ----------
   // Only actual Commander/agent dialogue belongs in search or export. Local/system records can contain
   // prompts, recovery markers, tool metadata, or other implementation state and must never leak through
@@ -644,7 +654,7 @@
     appendRun, noteRunEnd, recordDeliverable, addCost, costOf, noteModel, modelOf,
     // the rail's INBOX row reads these directly: the same sys/hidden/internal filter search and
     // export already trust, so the count and the preview can never surface machine chatter.
-    visibleMessages,
+    visibleMessages, hasAgent,
     migrateV1, importTasks,
     LANES
   };

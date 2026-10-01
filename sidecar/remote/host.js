@@ -81,12 +81,14 @@ function makeRemoteHost(d) {
 
   async function threads(o) {
     const out = [], seen = new Set();
+    const names = new Map(agentsList().map(a => [a.agentId, String(a.name || '').toLowerCase()]));
     for (const w of deskSessions()) {
       const agentId = String(w.agentId || 'agent');
       const hist = Array.isArray(w.history) ? w.history.filter(isProse) : [];
       seen.add(w.id);
       if (o.agentId && agentId !== o.agentId) continue;
-      if (!hist.length && !w.title) continue;   // an untouched blank session is noise on a phone
+      // an untouched blank session (no title, or only the agent's own name as one) is noise on a phone
+      if (!hist.length && (!w.title || String(w.title).trim().toLowerCase() === (names.get(agentId) || agentId.toLowerCase()))) continue;
       out.push({ streamId: w.id, agentId, title: w.title ? clip(w.title, 80) : '', turns: hist.length, lastAt: Number(w.lastActiveAt) || 0, preview: lastUserLine(hist), source: 'desk' });
     }
     const rows = d.transcript.streams({ limit: 100, previewChars: 140 }) || [];

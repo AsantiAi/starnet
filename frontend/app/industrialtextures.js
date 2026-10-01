@@ -34,9 +34,11 @@ const IndustrialTextures = (() => {
   let loaded = false;
   const floorIds = 'spine alloy plate panel tile tread soft grate hex plank turf diamond resin ceramic cargo runner treadway meshway basalt parquet rubber slotted terrazzo octile'.split(' ');
   const wallIds = 'bulkhead courses service plating ribbed panelled pipework viewport wainscot hedge'.split(' ');
+  const floorArtRevision = new Set(['basalt', 'rubber', 'soft']);
+  const floorArtName = id => 'remaster/floors/' + id + (floorArtRevision.has(id) ? '-v2' : '');
   const names = ['floor', 'wall', 'shell', 'workstation', 'workstation-compact', 'chair-s', 'chair-e', 'chair-n',
     'tactical-table', 'console-bank', 'equipment-bay', 'deck-perimeter',
-    ...floorIds.map(id => 'remaster/floors/' + id), ...wallIds.map(id => 'remaster/walls/' + id),
+    ...floorIds.map(floorArtName), ...wallIds.map(id => 'remaster/walls/' + id),
     'remaster/shell', 'remaster/crown', 'remaster/workstation-e', 'remaster/workstation-n', 'remaster/workstation-compact-n',
     'calibration/crate'];
   const shellMaterials = ['monocoque', 'timber', 'clapboard', 'shingle', 'brick', 'stone', 'stucco', 'curtain', 'hedge', 'thermal', 'insulation', 'heatsink'];
@@ -223,7 +225,7 @@ const IndustrialTextures = (() => {
   function floor(ctx, X, Y, size, tx, ty, id = 'plate', base, opts) {
     if (!enabled()) return false;
     if (opts && opts.detail === 0) return false;
-    const im = floorMaterials.includes(id) ? materialImage('floor-' + id, base, 1.25) : material('remaster/floors/' + (floorIds.includes(id) ? id : 'plate'), base);
+    const im = floorMaterials.includes(id) ? materialImage('floor-' + id, base, 1.25) : material(floorArtName(floorIds.includes(id) ? id : 'plate'), base);
     if (!im) return false;
     const period = 8;
     ctx.save(); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';

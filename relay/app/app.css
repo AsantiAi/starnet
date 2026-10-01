@@ -104,8 +104,9 @@ main > * { flex: none; }   /* the page scrolls; nothing in it is squeezed to fit
 .mate.sel, .mate:active { background: var(--gd-hover); border-color: var(--gd-edge); box-shadow: inset 0 1px 0 var(--gd-light); }
 .mate:focus-visible { outline: 1px solid var(--ph); outline-offset: -2px; }
 .mate b { font-weight: 400; font-size: 17px; letter-spacing: 1px; color: var(--ph-bright); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: uppercase; }
-.mate em { font-style: normal; font-size: 14px; letter-spacing: .8px; opacity: .6; white-space: nowrap; text-transform: uppercase; }
+.mate em { font-style: normal; font-size: 14px; letter-spacing: .8px; opacity: .6; white-space: nowrap; text-transform: uppercase; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .mate.work em { color: var(--gold); opacity: 1; }
+.mate.work em.clock { color: var(--ph); opacity: .6; font-size: 13px; }
 /* the portrait well (glass-comms .comms-portrait) */
 .well { flex: none; position: relative; width: 52px; height: 62px; display: grid; place-items: center; border: 1px solid var(--gd-edge); border-radius: 4px;
   background: rgba(var(--ph-rgb), .025); box-shadow: inset 0 1px 0 var(--gd-light); color: var(--ph); font-size: 22px; }
@@ -137,7 +138,7 @@ main > * { flex: none; }   /* the page scrolls; nothing in it is squeezed to fit
 .btn.no { color: var(--bad); border-color: rgba(var(--bad-rgb), .45); }
 .btn:disabled { opacity: .45; }
 .btns { display: flex; gap: 7px; flex-wrap: wrap; }
-.btns.fill .btn { flex: 1; }
+.btns.fill .btn { flex: 1; white-space: nowrap; padding-left: 8px; padding-right: 8px; }
 
 /* NEEDS YOU — the gold beat family */
 .ask { padding: 12px; border: 1px solid rgba(var(--gold-rgb), .5); border-radius: 6px; display: flex; flex-direction: column; gap: 9px;
