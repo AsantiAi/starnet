@@ -170,6 +170,9 @@ const audio = () => Array.from({length:8}, () => new Float32Array(1000).fill(0.1
   c.token('and the final tail');c.ctx.push(true,c.ctx.acc);
   assert.equal(c.chunks.join(''),c.ctx.acc,'final tail preserved exactly once');
   assert.equal(c.timers.size,0,'finalization cancels pending timer');
+  const w=buffer(); w.token('The research is done and filed. ');w.token('Handing it to the writer');
+  w.ctx.push(true,'WRITER RESULT: a completely different text produced down the work line.');
+  assert.equal(w.chunks.join(''),'The research is done and filed. Handing it to the writer','a work line result that replaced the reply is never sliced mid-word — the streamed reply finishes');
   const d=buffer();d.token('Dr. Smith has 3.14 apples, ');assert.equal(d.chunks.length,0,'abbreviation and decimal are not sentence boundaries');
   d.ctx.speechOwner=()=>false;d.wait(1200);assert.equal(d.chunks.length,0,'ownership loss suppresses timer output');
   assert.equal(d.ctx.closed,1,'ownership loss CLOSES the reply this run opened (Voice never reads speaking forever)');

@@ -8836,7 +8836,10 @@ const Chat = (() => {
       // older run is still streaming; none of its late words may leak into the new call owner.
       if (typeof Voice === 'undefined' || !willSpeak || !Voice.speakChunk) return;
       if (!speechOwner()) { closeSpeech(); return; }
-      const src = speakSafe(finalize ? (finalText || acc) : acc);
+      // spokenIdx is an offset into what was STREAMED. A final text that isn't a continuation of it (a work line's
+      // result replaced the reply) would be sliced mid-word — finish the streamed reply instead.
+      const fin = finalize && finalText && speakSafe(finalText).startsWith(speakSafe(acc).slice(0, spokenIdx)) ? finalText : acc;
+      const src = speakSafe(finalize ? fin : acc);
       const pending = src.slice(spokenIdx);
       if (!pending) return;
       if (finalize) { if (pending.trim()) { Voice.speakChunk(pending, name, speechOpts); spokenIdx = src.length; } return; }

@@ -875,7 +875,7 @@ const Voice = (() => {
     playing = true;
     pumpSynth();   // keep the prefetch window full while this chunk plays
     job.result.then(res => {
-      if (job.seq !== speakSeq) { playing = false; return; }   // torn down → stop the loop
+      if (job.seq !== speakSeq) return;   // torn down: resetQueue already cleared `playing` — touching it here could free a NEW reply's queue mid-play (double-play)
       const advance = () => { playing = false; playIdx++; pumpPlay(); };
       if (res.kind === 'neural') {
         const cfg = ttsConfig();
