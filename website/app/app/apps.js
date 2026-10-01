@@ -60,13 +60,18 @@
     if (!box) return;
     // each entry reads like every other dock item: the instrument icon, the name, ONE short line (its live status —
     // never the whole description, which is what the manage window is for)
-    const sig = list.map((a) => a.id + '\u0000' + a.name + '\u0000' + dockLine(a)).join('\u0001');
-    if (box.dataset.sig === sig) return;
+    const sig = list.map((a) => a.id + '\u0000' + a.name).join('\u0001');
+    if (box.dataset.sig === sig) {
+      // same apps: only their one-line status moves ("Updated 3m ago") — update the text in place, so a focused
+      // dock item keeps focus and the keyboard model keeps working
+      box.querySelectorAll('.bb-app').forEach((b) => { const a = find(b.dataset.app), sm = b.querySelector('small'); if (a && sm) { const t = dockLine(a); if (sm.textContent !== t) sm.textContent = t; } });
+      return;
+    }
     box.dataset.sig = sig;
     box.textContent = '';
     for (const a of list.slice(0, 12)) {
       const b = document.createElement('button');
-      b.className = 'bb bb-app'; b.type = 'button'; b.setAttribute('role', 'menuitem'); b.dataset.hint = 'app';
+      b.className = 'bb bb-app'; b.type = 'button'; b.setAttribute('role', 'menuitem'); b.dataset.hint = 'app'; b.dataset.app = a.id;
       const i = document.createElement('span'); i.className = 'bb-i'; i.setAttribute('aria-hidden', 'true');
       i.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 3h12v10H2zM2 6h12M4.5 4.5h1M6.5 4.5h1"/></svg>';
       const tx = document.createElement('span'); tx.className = 'bb-tx';
@@ -262,7 +267,7 @@
           '<div class="app-auto-every" role="group" aria-label="How often">' + CADENCES.map((c) => '<button class="apps-btn apps-chip" type="button" aria-pressed="false" data-every="' + c[0] + '">' + c[1] + '</button>').join('') + '</div>' +
           '<label class="app-auto-l">Each update should…</label>' +
           '<textarea class="apps-field app-auto-task" rows="2" maxlength="2000" aria-label="What each update should do" placeholder="e.g. refresh what it shows · add today\'s numbers · give it a new look every Monday"></textarea>' +
-          '<div class="app-auto-acts"><button class="apps-btn primary app-auto-save" type="button">SAVE</button><span class="app-auto-note"></span></div>' +
+          '<div class="app-auto-acts"><button class="apps-btn primary app-auto-save" type="button">SAVE</button><span class="app-auto-note" role="status"></span></div>' +
         '</div>';
       bar.addEventListener('submit', (e) => {
         e.preventDefault();
@@ -285,7 +290,8 @@
   const DEFAULT_TASK = 'Bring it up to date: refresh what it shows with current information.';
   function wireAuto(bar, id) {
     const panel = bar.querySelector('.app-auto'), toggle = bar.querySelector('.app-auto-toggle');
-    const chips = bar.querySelectorAll('.app-auto-every [data-every]'), task = bar.querySelector('.app-auto-task');
+    let chips = bar.querySelectorAll('.app-auto-every [data-every]');
+    const task = bar.querySelector('.app-auto-task');
     const note = bar.querySelector('.app-auto-note'), save = bar.querySelector('.app-auto-save');
     let pick = 'off';
     const press = (every) => { pick = every; chips.forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.every === every))); task.disabled = every === 'off'; };
@@ -294,7 +300,18 @@
       panel.hidden = !open; toggle.setAttribute('aria-expanded', String(open));
       if (!open) return;
       const a = find(id), s = a && a.schedule && !a.schedule.missing ? a.schedule : null;
-      press(s ? (CADENCES.find((c) => c[0] === s.every) ? s.every : s.every) : 'off');
+      const row = bar.querySelector('.app-auto-every');
+      const oldCustom = row.querySelector('.app-auto-custom'); if (oldCustom) oldCustom.remove();
+      if (s && !CADENCES.some((c) => c[0] === s.every)) {
+        // a cadence the chips do not offer (the crew set it, e.g. "0 8 * * *"): shown as its own chip, kept on SAVE
+        const c = document.createElement('button');
+        c.className = 'apps-btn apps-chip app-auto-custom'; c.type = 'button'; c.dataset.every = s.every;
+        c.textContent = 'Custom · ' + String(s.display || s.every).replace(/^every /, '');
+        c.addEventListener('click', () => press(s.every));
+        row.appendChild(c);
+        chips = row.querySelectorAll('[data-every]');
+      }
+      press(s ? s.every : 'off');
       task.value = (s && s.task) || DEFAULT_TASK;
       note.textContent = 'Each update is a crew run on your model.';
     });
@@ -309,8 +326,7 @@
         if (!r.ok || !j.ok) throw new Error((j && j.error) || 'the station could not save that');
         await load();
         panel.hidden = true; toggle.setAttribute('aria-expanded', 'false');
-        notify(pick === 'off' ? 'It no longer updates by itself.' : (find(id) || {}).name + ' updates ' + (j.display || pick) + (j.armed === false ? ' — once routines are on.' : '.'));
-        paintAll(id);
+        paintAll(id);   // said inline: the toggle and the status line under the window now read the new schedule
       } catch (e) { note.textContent = (e && e.message) || String(e); }
       finally { save.disabled = false; }
     });
@@ -318,7 +334,7 @@
   function paintBar(bar, a) {
     if (!bar) return;
     const at = bar.querySelector('.app-auto-toggle');
-    if (at) { const s = a && a.schedule; at.textContent = s && !s.missing ? 'AUTO-UPDATE · ' + String(s.display || s.every).replace(/^every /, '') : 'AUTO-UPDATE'; }
+    if (at) { const s = a && a.schedule; at.textContent = s && !s.missing ? 'AUTO-UPDATE · ' + (s.enabled === false ? 'paused' : String(s.display || s.every).replace(/^every /, '')) : 'AUTO-UPDATE'; }
     bar.querySelector('.app-status').textContent = a ? statusOf(a) : '';
     const s = a && a.schedule, busy = !!(a && refreshing.has(a.id));
     const rf = bar.querySelector('.app-refresh');
@@ -342,7 +358,7 @@
     });
   }
   function refreshBar(id) { return load().then(() => paintAll(id)); }
-  const repaintDock = () => { const box = document.getElementById('bb-apps-items'); if (box) delete box.dataset.sig; syncDock(); };
+  const repaintDock = () => syncDock();   // the status lines update in place (see syncDock)
 
   /* ---- the APPS window ---------------------------------------------------------------------------------------- */
   let listEl = null;
