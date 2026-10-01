@@ -433,7 +433,10 @@ const Marketplace = (() => {
   function renderBar() {
     const bar = root && root.querySelector('#mkt-bar'); if (!bar) return;
     let html = '';
-    if (!(ctx && ctx.mode === 'pick') && hasRecipes()) {
+    // ONE MENU (front doors, 2026-10-01): RECIPES lives in WORK › MY WORK and CLASSES is CREW › RECRUIT, so the bay no
+    // longer carries a CLASSES / RECIPES tab bar — it opens on the library its door asked for (ctx.tab). The markup is
+    // kept behind ctx.bayTabs for any caller that still wants both.
+    if (ctx && ctx.bayTabs && !(ctx.mode === 'pick') && hasRecipes()) {
       const t = (id, label) => '<button class="mkt-tab' + (tab === id ? ' on' : '') + '" role="tab" aria-selected="' +
         (tab === id ? 'true' : 'false') + '" data-tab="' + id + '">' + label + '</button>';
       // NAV CONDENSE (2026-08-04): the tab is labelled CLASSES, not AGENTS — 'AGENTS' already names the
@@ -3736,5 +3739,6 @@ const Marketplace = (() => {
   // Slice 4: let ProspectStore refresh the open bay when a fresh prospect mints (no-op when the bay is closed or
   // not on the grid view — never yanks the user out of the editor).
   function refreshIfOpen() { if (root && view === 'grid') { try { renderStage(); } catch (_) {} } }
-  return { open, close, refreshIfOpen };
+  // currentTab: which library the open bay shows ('recipes' | 'agents') — StationUI files the RECIPES library under MY WORK
+  return { open, close, refreshIfOpen, currentTab: () => (root ? tab : null) };
 })();

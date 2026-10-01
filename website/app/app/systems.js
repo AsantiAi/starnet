@@ -31,16 +31,14 @@ const Systems = (() => {
     { id: 'recruit', label: 'RECRUIT', group: 'crew', sel: '#bb-recruit', words: ['RECRUIT', 'RECRUITMENT BAY'], jobs: 2, how: 'after your second finished job', tip: 'Grow the crew — summon a specialist class' },
     { id: 'commander', label: 'COMMANDER', group: 'crew', sel: '.bb[data-term="commander"]', terms: ['commander'], start: true, tip: 'What the station has learned about you' },
     { id: 'stepin', label: 'STEP-IN', group: 'crew', sel: '.bb[data-term="stepin"]', terms: ['stepin'], words: ['STEP-IN'], how: 'when an agent needs you to take its browser', tip: 'Take an agent’s browser when it needs you to sign in' },
-    { id: 'tasks', label: 'TASKS', group: 'work', sel: '.bb[data-term="tasks"]', terms: ['tasks', 'work'], start: true, tip: 'Track planned and running work' },
-    { id: 'deliverables', label: 'DELIVERABLES', group: 'work', sel: '.bb[data-term="deliverables"]', terms: ['deliverables', 'outbox'], words: ['DELIVERABLES', 'OUTBOX'], jobs: 1, how: 'after your first finished job', tip: 'Everything your crew finished, in one library' },
-    { id: 'recipes', label: 'RECIPES', group: 'work', sel: '#bb-missions', words: ['RECIPES'], jobs: 1, how: 'after your first finished job', tip: 'Ready-made jobs to launch' },
-    { id: 'workflows', label: 'WORKFLOWS', group: 'work', sel: '#bb-workflows', words: ['WORKFLOWS', 'WORKFLOW PANEL', 'CONVEYOR'], jobs: 5, crew: 2, how: 'when a second agent joins your crew', tip: 'Chain agents step by step on conveyor lines' },
-    { id: 'automation', label: 'AUTOMATION', group: 'work', sel: '.bb[data-term="automation"]', terms: ['automation', 'routines', 'loops'], words: ['AUTOMATION', 'ROUTINE', 'ROUTINES'], jobs: 3, how: 'when you ask for something on a schedule', tip: 'Run any job on a schedule, or until it is done' },
+    // ONE MENU (2026-10-01): MY WORK / AUTOMATE / CONNECT are each one dock button over several windows (stationui
+    // FAMILIES) — every member window's key is listed in terms, so opening any of them by any door counts.
+    { id: 'mywork', label: 'MY WORK', group: 'work', sel: '#bb-mywork', terms: ['tasks', 'work', 'deliverables', 'outbox'], start: true, tip: 'Tasks, finished work, work to rate, and ready-made jobs' },
+    { id: 'automate', label: 'AUTOMATE', group: 'work', sel: '#bb-automate', terms: ['workflows', 'automation', 'routines', 'loops'], words: ['AUTOMATE', 'AUTOMATION', 'WORKFLOWS', 'WORKFLOW', 'ROUTINE', 'ROUTINES', 'CONVEYOR'], jobs: 3, crew: 2, how: 'when you ask for something on a schedule', tip: 'Workflows, schedules, goal loops and away work' },
     { id: 'quests', label: 'QUESTS', group: 'work', sel: '.bb[data-term="quests"]', terms: ['quests'], start: true, tip: 'Small steps toward your goals, and your progress' },
     { id: 'refit', label: 'REFIT STATION', group: 'build', sel: '#bb-build', start: true, tip: 'Rooms, gear and workflow lines' },
-    { id: 'abilities', label: 'ABILITIES', group: 'build', sel: '.bb[data-term="connectors"]', terms: ['connectors', 'skills'], words: ['ABILITIES'], jobs: 2, how: 'when an agent needs a tool it lacks', tip: 'Everything agents can do — toolsets, connectors, skills' },
+    { id: 'connect', label: 'CONNECT', group: 'build', sel: '#bb-connect', terms: ['connectors', 'skills', 'messaging'], words: ['ABILITIES', 'CHANNELS'], jobs: 2, how: 'when an agent needs a tool or you mention a chat app', tip: 'Tools and apps your agents use, and where you message them' },
     { id: 'newapp', label: 'NEW APP', group: 'build', sel: '#bb-newapp-build', start: true, tip: 'Describe anything and your crew builds it in its own window' },
-    { id: 'channels', label: 'CHANNELS', group: 'build', sel: '.bb[data-term="messaging"]', terms: ['messaging'], words: ['CHANNELS'], jobs: 3, how: 'when you mention your phone or a chat app', tip: 'Talk to your agents from Telegram, Slack, Discord' },
     { id: 'manual', label: 'FIELD MANUAL', group: 'system', sel: '.bb[data-term="manual"]', terms: ['manual'], start: true, tip: 'First mission, controls and the station handbook' },
     { id: 'settings', label: 'SETTINGS', group: 'system', sel: '.bb[data-term="settings"]', terms: ['settings'], start: true, tip: 'Keys, models, voice, data' },
     { id: 'updates', label: 'UPDATES', group: 'system', sel: '.bb[data-term="updates"]', terms: ['updates'], start: true, tip: 'Version and release notes' },
@@ -75,6 +73,12 @@ const Systems = (() => {
     else state = blank(epoch, o.fresh ? 'staged' : 'all');
     if (!Array.isArray(state.online)) state.online = [];
     if (!Array.isArray(state.fresh)) state.fresh = [];
+    // ONE MENU (2026-10-01) folded eight dock buttons into MY WORK / AUTOMATE / CONNECT: carry a growing dock's
+    // old ids onto the menu that now holds them, so nothing that was online goes dark
+    const FOLD = { tasks: 'mywork', deliverables: 'mywork', recipes: 'mywork', workflows: 'automate', automation: 'automate', abilities: 'connect', channels: 'connect' };
+    const fold = list => Array.from(new Set(list.map(id => FOLD[id] || id).filter(id => BY_ID.has(id))));
+    state.online = fold(state.online); state.fresh = fold(state.fresh);
+    LIST.forEach(s => { if (s.start && !state.online.includes(s.id)) state.online.push(s.id); });
     if (!Array.isArray(state.seenRuns)) state.seenRuns = [];
     save();
     wire();
@@ -151,7 +155,11 @@ const Systems = (() => {
     if (i >= 0) { state.fresh.splice(i, 1); save(); apply(); }
   }
   // door law for windows: StationUI calls this whenever a window opens, whoever opened it
-  function openedTerm(key) { const id = BY_TERM.get(key); if (id) opened(id); }
+  function openedTerm(key) {
+    // the bay window is RECIPES (a MY WORK tab) or the recruit bay, depending on which library it opened on
+    if (key === 'marketplace') { opened(typeof Marketplace !== 'undefined' && Marketplace.currentTab && Marketplace.currentTab() === 'recipes' ? 'mywork' : 'recruit'); return; }
+    const id = BY_TERM.get(key); if (id) opened(id);
+  }
 
   function showEverything() {
     if (!state) return;
@@ -182,8 +190,8 @@ const Systems = (() => {
     if (!staged()) return;
     const t = String(text || '');
     const ids = [];
-    if (SCHEDULE_RX.test(t)) ids.push('automation');
-    if (CHANNEL_RX.test(t)) ids.push('channels');
+    if (SCHEDULE_RX.test(t)) ids.push('automate');
+    if (CHANNEL_RX.test(t)) ids.push('connect');
     growTo(ids.filter(id => !isOnline(id)));
   }
   // door law for agent replies: a system named in CAPITALS (the way the manual teaches agents to name doors)

@@ -56,6 +56,11 @@
       top.querySelector('#auto-init-change').addEventListener('click', () => H.openTerm('settings', 'autonomy'));
     };
     StationUI.h.mountConsole(body, 'automation', sections, { search: false, railTop });
+    // ONE MENU: AUTOMATE's tabs (SCHEDULES / GOAL LOOPS / AWAY WORK) pick the area, so the rail lists only that
+    // area's own pages (e.g. Scheduled jobs + New schedule) instead of repeating the tabs beside them.
+    const area = id => String(id || '').startsWith('routines') ? 'routines' : String(id || '').startsWith('loops') ? 'loops' : String(id || '');
+    const cur = area(H.consoleSection.automation || (sections[0] && sections[0].id));
+    body.querySelectorAll('.con-rail-item').forEach(item => { item.hidden = area(item.dataset.section) !== cur; });
     body.querySelectorAll('.con-rail-item').forEach(item => {
       const hint = document.createElement('span'); hint.className = 'sn-menu-nav-note';
       hint.textContent = hints[item.dataset.section] || ''; item.appendChild(hint);

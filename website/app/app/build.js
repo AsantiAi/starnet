@@ -143,7 +143,7 @@ const Build = (() => {
   let selectedPropId=null, movingPropId=null;
   let propSection = 'decoration', propAbility = '', equipmentAgentId = '';
   let buildGroup = 'props';
-  /* WHERE REFIT OPENS (2026-09-27 audit F1/B5): WORK › WORKFLOWS opens it straight on the Conveyors tab (openWorkflows), and a
+  /* WHERE REFIT OPENS (2026-09-27 audit F1/B5): WORK › AUTOMATE › WORKFLOWS opens it straight on the Conveyors tab (openWorkflows), and a
      Commander who was building a line last time comes back to the Conveyors tab instead of the furniture catalog. Only that
      tab is remembered: every other session still starts on Props, where the tutorial expects it. */
   let pendingGroup = null;
@@ -7175,7 +7175,7 @@ const Build = (() => {
     });
   }
 
-  /* WORK › WORKFLOWS (2026-09-27 audit F1): the conveyor builder had no door named for what people come to do. This one opens
+  /* WORK › AUTOMATE › WORKFLOWS (2026-09-27 audit F1): the conveyor builder had no door named for what people come to do. This one opens
      REFIT on the Conveyors tab and, when the floor already has a line, docks that line's Workflow panel so its sentence and
      steps are the first thing on screen; with no line yet the CONVEYOR LINES library is what shows. */
   function openWorkflows() {

@@ -72,7 +72,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
      test's steptest-…, RUN ONE REAL JOB's sample-… (agent.run.start carries streamId) — is real work, but its words live in
      the line's TEST view, not in the agent's COMMS: a Commander who opened COMMS saw nothing and read the row as stuck. The
      crew row names it LINE TEST and its tip says where it shows and how it stops.
-     (2026-09-30) A sample-… stream is also every job the WORK › WORKFLOWS window sends — real work, not a test — so the row says
+     (2026-09-30) A sample-… stream is also every job the WORK › AUTOMATE › WORKFLOWS window sends — real work, not a test — so the row says
      ON A WORKFLOW and its tip names both places one shows: the WORKFLOWS window, or a step test's TEST view in BUILD. */
   const testRunIds = new Map();      // runId -> agentId, for the live runs that are line tests
   const isLineTestStream = s => /^(steptest|sample)-/.test(String(s || ''));
@@ -81,7 +81,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     return n > 0 && n >= (runningAgents.get(id) || 0);
   }
   function dropTestRuns(id) { for (const [r, a] of Array.from(testRunIds)) if (a === id) testRunIds.delete(r); }
-  const LINE_TEST_TIP = 'working on a workflow — it shows in WORK › WORKFLOWS (a step test: in BUILD › the line’s TEST view), not in COMMS; ■ STOP there ends it';
+  const LINE_TEST_TIP = 'working on a workflow — it shows in WORK › AUTOMATE › WORKFLOWS (a step test: in BUILD › the line’s TEST view), not in COMMS; ■ STOP there ends it';
   let crewLiveWired = false;         // the crew-status live listener is registered exactly once
   let repaintAutonomyDial = null;    // GROWTH Tier 3: the open Settings AUTONOMY panel's paint fn (null when closed) — lets an accepted trust offer repaint the EARNED badge live
   // Same idiom for the open Settings PERMISSIONS panel's per-agent APPROVAL list. The list is painted from
@@ -929,6 +929,122 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     clearTimeout(w._closeArmTimer);
     w._closeArmTimer = setTimeout(() => { if (!w) return; w._closeArmed = false; w._closeArmTimer = 0; const b = w.querySelector('.term-unsaved-bar'); if (b) b.remove(); }, 3000);
   }
+  /* ============== ONE MENU, ONE WINDOW (front doors, 2026-10-01) ==============
+     Andrew: "less different menus … easy for users to do what they want without a million different things,
+     without removing any functionality." Related windows are ONE menu: one dock button, and a tab strip under
+     the window's title that swaps between them in place (same spot, same size) — MY WORK (tasks, finished work,
+     work awaiting a rating, ready-made jobs), AUTOMATE (workflows, schedules, goal loops, away work), CONNECT
+     (abilities, channels). Every member window, alias, deep link and slash command still opens exactly as
+     before (and gets the strip), so nothing is removed and no builder changes. The tabs keep each window's own
+     name — the name the manual, the agents and every error door already use. Never a merged card grid: each
+     tab stays its own distinct surface (the August ABILITIES lesson). */
+  const FAMILIES = {
+    mywork: { label: 'MY WORK', tabs: [
+      { id: 'tasks', k: 'tasks', label: 'TASKS', tip: 'Planned work on the task board — chats and routines live in COMMS' },
+      { id: 'deliverables', k: 'deliverables', label: 'DELIVERABLES', tip: 'Everything your crew finished, with its files' },
+      { id: 'outbox', k: 'outbox', label: 'OUTBOX', tip: 'Finished work waiting for your rating' },
+      { id: 'recipes', k: 'marketplace', label: 'RECIPES', tip: 'Ready-made jobs to start',
+        is: () => typeof Marketplace !== 'undefined' && Marketplace.currentTab && Marketplace.currentTab() === 'recipes',
+        open: () => { if (typeof App !== 'undefined' && App.openRecipes) App.openRecipes(); } }
+    ] },
+    automate: { label: 'AUTOMATE', tabs: [
+      { id: 'workflows', k: 'workflows', label: 'WORKFLOWS', tip: 'Send a job down a line of agents' },
+      { id: 'schedules', k: 'automation', section: 'routines', match: ['routines', 'routines-create'], label: 'SCHEDULES', tip: 'Run any job on a schedule' },
+      { id: 'loops', k: 'automation', section: 'loops', match: ['loops', 'loops-start'], label: 'GOAL LOOPS', tip: 'Repeat a job until it is done' },
+      { id: 'away', k: 'automation', section: 'away', match: ['away'], label: 'AWAY WORK', tip: 'What agents work on between your messages' }
+    ] },
+    connect: { label: 'CONNECT', tabs: [
+      { id: 'abilities', k: 'connectors', label: 'ABILITIES', tip: 'Tools, apps, connectors and skills your agents can use' },
+      { id: 'channels', k: 'messaging', label: 'CHANNELS', tip: 'Talk to your agents from Telegram, Slack, Discord' }
+    ] }
+  };
+  // which menu a window belongs to (marketplace counts only while it is the RECIPES library, not the recruit bay)
+  function familyOf(key) {
+    for (const id of Object.keys(FAMILIES)) {
+      if (FAMILIES[id].tabs.some(t => t.k === key && (!t.is || t.is()))) return id;
+    }
+    return null;
+  }
+  function familyActiveTab(famId, key) {
+    const tabs = FAMILIES[famId].tabs.filter(t => t.k === key);
+    if (tabs.length < 2) return tabs[0] || null;
+    const sec = consoleSection[key];
+    return tabs.find(t => (t.match || []).includes(sec)) || tabs[0];
+  }
+  function rememberFamilyTab(famId, tabId) {
+    if (!store.famLast || typeof store.famLast !== 'object') store.famLast = {};
+    if (store.famLast[famId] === tabId) return;
+    store.famLast[famId] = tabId; save();
+  }
+  function syncFamilyTabs(w, key) {
+    // only the LIVE window speaks for its menu — a window closing behind a tab switch must not re-save its own tab
+    if (!w || open[key] !== w || w.classList.contains('term-closing')) return;
+    const nav = w.querySelector('.fam-tabs'); if (!nav) return;
+    const famId = nav.dataset.family, act = familyActiveTab(famId, key);
+    nav.querySelectorAll('[data-fam-tab]').forEach(b => {
+      const on = !!act && b.dataset.famTab === act.id;
+      b.classList.toggle('on', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); b.tabIndex = on ? 0 : -1;
+    });
+    if (act) rememberFamilyTab(famId, act.id);
+  }
+  function mountFamilyTabs(w, key) {
+    const famId = familyOf(key); if (!famId || !w) return;
+    const fam = FAMILIES[famId];
+    const nav = mkEl('nav', 'fam-tabs'); nav.dataset.family = famId;
+    nav.setAttribute('role', 'tablist'); nav.setAttribute('aria-label', fam.label);
+    nav.innerHTML = '<span class="fam-name" aria-hidden="true">' + esc(fam.label) + '</span>' + fam.tabs.map(t =>
+      '<button type="button" role="tab" class="fam-tab" data-fam-tab="' + esc(t.id) + '" data-tip="' + esc(t.tip) + '">' + esc(t.label) + '</button>').join('');
+    const head = w.querySelector('.term-head'); if (!head) return;
+    head.after(nav);
+    nav.querySelectorAll('[data-fam-tab]').forEach(b => b.addEventListener('click', () => {
+      const tab = fam.tabs.find(t => t.id === b.dataset.famTab); if (tab) { sfx('click'); switchFamilyTab(key, famId, tab); }
+    }));
+    nav.addEventListener('keydown', ev => {
+      const bs = Array.from(nav.querySelectorAll('[data-fam-tab]')), i = bs.indexOf(document.activeElement);
+      const n = ev.key === 'ArrowRight' ? (i + 1) % bs.length : ev.key === 'ArrowLeft' ? (i + bs.length - 1) % bs.length : -1;
+      if (i < 0 || n < 0) return;
+      ev.preventDefault(); bs[n].focus();
+    });
+    // a section change inside the window (AUTOMATION's own rail) moves the lit tab with it
+    w.addEventListener('click', () => setTimeout(() => syncFamilyTabs(w, key), 0));
+    syncFamilyTabs(w, key);
+  }
+  // open one tab of a menu (its own window, at its own section)
+  function openFamilyTab(famId, tab) {
+    rememberFamilyTab(famId, tab.id);
+    if (tab.open) { tab.open(); return; }
+    if (open[tab.k] && tab.section) { consoleSection[tab.k] = tab.section; rerender(tab.k); syncFamilyTabs(open[tab.k], tab.k); if (minimized[tab.k]) restoreTerm(tab.k); return; }
+    openTerm(tab.k, tab.section);
+    if (open[tab.k]) syncFamilyTabs(open[tab.k], tab.k);
+  }
+  // a tab click: the next window takes the current one's place (spot, size, docked height), the current one closes
+  function switchFamilyTab(fromKey, famId, tab) {
+    if (tab.k === fromKey) { openFamilyTab(famId, tab); return; }
+    const w = open[fromKey];
+    if (w && windowDirty(w)) { requestCloseTerm(fromKey); return; }   // unsaved draft: arm the guard, switch nothing
+    if (termPos[fromKey]) termPos[tab.k] = Object.assign({}, termPos[fromKey]); else delete termPos[tab.k];
+    if (termSize[fromKey]) termSize[tab.k] = Object.assign({}, termSize[fromKey]);
+    if (store.termDock && store.termDock[fromKey]) store.termDock[tab.k] = Object.assign({}, store.termDock[fromKey]);
+    save();
+    if (w) closeTerm(fromKey);
+    openFamilyTab(famId, tab);
+  }
+  // the dock button of a menu: open its last-used tab — or, like every dock button, raise / close what is showing
+  function toggleFamily(famId) {
+    const fam = FAMILIES[famId]; if (!fam) return;
+    const showing = Object.keys(open).filter(k => open[k] && !minimized[k] && familyOf(k) === famId);
+    if (showing.length) {
+      const k = showing[0], z = e => (parseInt(e.style.zIndex, 10) || 0);
+      const maxZ = Object.keys(open).filter(x => !minimized[x]).reduce((m, x) => Math.max(m, z(open[x])), 0);
+      if (z(open[k]) < maxZ) { open[k].style.zIndex = U.zTop(); sfx('open'); return; }
+      requestCloseTerm(k); return;
+    }
+    const min = Object.keys(open).find(k => open[k] && minimized[k] && familyOf(k) === famId);
+    if (min) { restoreTerm(min); return; }
+    const last = store.famLast && store.famLast[famId];
+    openFamilyTab(famId, fam.tabs.find(t => t.id === last) || fam.tabs[0]);
+  }
+
   function toggleTerm(key, title, builder, opts) {
     // a minimized window's dock button RESTORES it; a BURIED visible window is RAISED (not closed); only the
     // topmost visible window toggles closed (through the unsaved-draft guard). This kills the "clicked the dock to
@@ -1040,6 +1156,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     $('#terms').appendChild(w);
     open[key] = w;
     placeTerm(w, key);   // land in a cascaded slot (or its remembered spot) — never dead-center pile-up
+    mountFamilyTabs(w, key);   // ONE MENU: a window that belongs to MY WORK / AUTOMATE / CONNECT carries that menu's tabs
     w.addEventListener('mousedown', ev => {
       w.style.zIndex = U.zTop();
       // pull focus into the dialog on a background click so the window-level Esc/Tab handlers keep working —
@@ -1194,6 +1311,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   function rerender(key, swap) { if (open[key]) open[key]._render(swap !== false); }
   function syncBB() {
     document.querySelectorAll('.bb[data-term]').forEach(b => b.classList.toggle('active', !!open[b.dataset.term]));
+    // a menu's dock button is lit while any of its windows is open
+    document.querySelectorAll('.bb[data-family]').forEach(b => b.classList.toggle('active', Object.keys(open).some(k => open[k] && familyOf(k) === b.dataset.family)));
   }
 
   /* ============== CONSOLE MODE — the large two-pane window framework ==============
@@ -4251,7 +4370,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const streams = boardStreams();
     const openMenus = live ? Array.from(body.querySelectorAll('.kb-more[open]')).map(d => d.closest('.kb-card').dataset.id) : [];
     body.innerHTML =
-      '<div class="kb-heading"><header class="kb-header"><h2>Your tasks</h2><p>Plan, start, and review your work.</p></header><div class="work-entry"><button type="button" class="bb sm" data-work-to="outbox">OUTBOX</button><button type="button" class="bb sm" data-work-to="deliverables">DELIVERABLES</button></div></div>' +
+      '<div class="kb-heading"><header class="kb-header"><h2>Your tasks</h2><p>Plan, start, and review your work.</p></header></div>' +   // OUTBOX / DELIVERABLES are this window's MY WORK tabs now (FAMILIES) — no second pair of doors here
       '<div class="kb-add"><input id="kb-in" aria-label="New task" maxlength="80" placeholder="What would you like to get done?" autocomplete="off">' +
       '<button class="bb sm" id="kb-add">ADD TASK</button></div><p class="kb-add-note">Adding saves your plan. Start sends the task to its agent.</p>' +
       '<div class="kb-cols">' +
@@ -10322,6 +10441,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         const k = b.dataset.term, def = BUILDERS[k];
         if (def) toggleTerm(k, def[0], def[1], def[2]);
       }));
+    // ONE MENU dock buttons (MY WORK / AUTOMATE / CONNECT): open the menu's last-used tab
+    document.querySelectorAll('.bb[data-family]').forEach(b => b.addEventListener('click', () => toggleFamily(b.dataset.family)));
     badges();
   }
 
@@ -10497,7 +10618,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   // GROWTH Tier 3: repaint the Settings AUTONOMY panel's EARNED badge if it is open (no-op otherwise — the paint fn
   // queries its own (possibly detached) host nodes, so a closed panel costs nothing). Called after a trust accept.
   const repaintAutonomy = () => { try { if (repaintAutonomyDial) repaintAutonomyDial(); } catch (_) {} };
-  return { init, enter, setRoster, leave, clearRunning, runningCount: () => runningAgents.size, isAgentRunning: (id) => agentLive(id), notify, flashSave, openAgent, openArcade, toggleTerm, openTerm, openDesk, closeTerm, rerender, refreshBoard: refreshBoardLive, pokeQuests, setTheme, getTheme, repaintAutonomy, refreshSystems, registerWindow, h };
+  return { init, enter, setRoster, leave, clearRunning, runningCount: () => runningAgents.size, isAgentRunning: (id) => agentLive(id), notify, flashSave, openAgent, openArcade, toggleTerm, openTerm, openDesk, closeTerm, rerender, refreshBoard: refreshBoardLive, pokeQuests, setTheme, getTheme, repaintAutonomy, refreshSystems, toggleFamily, familyOf, registerWindow, h };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { visibleTerminalRect, clampTerminalSize };
