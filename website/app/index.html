@@ -43,6 +43,7 @@
 <link rel="stylesheet" href="css/linewatch.css"><!-- LINE WATCH: the crate-inspect card on the live floor + the Workflow panel's TODAY row -->
 <link rel="stylesheet" href="css/deskscreen.css"><!-- DESK SCREEN: click an agent's workstation → its live work -->
 <link rel="stylesheet" href="css/workflow-panel.css"><!-- the DOCKED Workflow panel of REFIT (workflowpanel.js) — rides the refit glass tokens -->
+<link rel="stylesheet" href="css/workflows-window.css"><!-- WORK › WORKFLOWS (windows/workflows.js): the Workflow panel glass, restated on its own docked window -->
 <link rel="stylesheet" href="css/utility-menus.css?v=1">
 <link rel="stylesheet" href="css/glass-demo.css">
 <link rel="stylesheet" href="css/glass-comms.css">
@@ -737,7 +738,7 @@
         <button class="bb" data-term="deliverables" data-hint="deliverable"><span class="bb-i">▣</span><span class="bb-tx"><b>DELIVERABLES</b><small>outputs, Workshop builds &amp; cleanup</small></span></button>
         <button class="bb" id="bb-missions" data-hint="recipe"><span class="bb-i">❒</span><span class="bb-tx"><b>RECIPES</b><small>ready-made jobs to launch — they land on TASKS</small></span></button>
         <!-- WORKFLOWS (2026-09-27 audit F1): the conveyor line builder — several agents, one after another — had no door named for it -->
-        <button class="bb" id="bb-workflows" data-hint="workflow"><span class="bb-i">⇶</span><span class="bb-tx"><b>WORKFLOWS</b><small>chain agents step by step on conveyor belts — research, write, review, ship</small></span></button>
+        <button class="bb" id="bb-workflows" data-term="workflows" data-hint="workflow"><span class="bb-i">⇶</span><span class="bb-tx"><b>WORKFLOWS</b><small>send a job down a line of agents — research, write, review</small></span></button>
         <button class="bb" data-term="automation" data-hint="automation"><span class="bb-i">∞</span><span class="bb-tx"><b>AUTOMATION</b><small>routines &amp; loops — any job on a schedule, or repeated until it’s done</small></span></button>
         <button class="bb" data-term="quests" data-hint="quest"><span class="bb-i">⚑</span><span class="bb-tx"><b>QUESTS</b><small>small steps toward your goals &amp; recorded progress</small></span></button>
       </div>
@@ -959,6 +960,7 @@
 <script src="app/windows/logbook.js"></script><!-- LOGBOOK dossier lane — per-agent run history (RUNS · SLAG · INSIGHTS; mounts in the AGENTS dossier). Registration order = dossier tab order: LOGBOOK before RESTORE. -->
 <script src="app/windows/rewind.js"></script><!-- RESTORE dossier lane — per-agent workspace checkpoints, two-step confirmed restore (mounts in the AGENTS dossier) -->
 <script src="app/windows/outbox.js"></script><!-- OUTBOX — FINISHED WORK: uncollected finished runs, readable + rateable accordion -->
+<script src="app/windows/workflows.js"></script><!-- WORK › WORKFLOWS: pick a workflow, send it a job, read the result, change it, send it again — its own docked window, never Build Mode -->
 <script src="app/windows/automation.js"></script><!-- AUTOMATION — the merged ROUTINES+LOOPS console window; owns the window slot + the lane registry the next two files register into -->
 <script src="app/schedpicker.js"></script><!-- the WHEN builder (cadence keys + day chips + clock) the ROUTINES lane mounts; types a real schedule into the same text input the form always posted -->
 <script src="app/windows/routines.js"></script><!-- ROUTINES lane — scheduled autonomous runs (thin CRUD client over /api/cron) -->

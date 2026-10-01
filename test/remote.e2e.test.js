@@ -259,6 +259,14 @@ function startMockModel() {
     A.eq(again.data.same, true, 'an unchanged picture is not sent twice');
     const face = await client.call('portrait', { agentId: 'forge' });
     A.ok(face.ok && face.data.mime === 'image/png' && Buffer.from(face.data.data, 'base64').toString('latin1', 1, 4) === 'PNG', 'the portrait of an agent is a real sprite from the shipped art');
+    const crewPut = await fx.json('POST', '/api/remote/view/crew', { bodies: [{ agentId: 'forge', key: 'approved_robot.walk.south', idx: 1, x: 100, y: 50, w: 6, h: 18, walking: true }] });
+    A.ok(crewPut.status === 200 && crewPut.body.ok, 'the desk page streams where the crew are');
+    const withCrew = await client.call('view', {});
+    A.eq(withCrew.data.crew && withCrew.data.crew.bodies.map(b => b.key), ['approved_robot.walk.south'], 'a phone opening the picture gets the crew positions with it');
+    const trk = await client.call('sprite', { key: 'approved_robot.walk.south' });
+    A.ok(trk.ok && trk.data.frames.length >= 4, 'and the drawings to show them walking');
+    const act = await client.call('activity', { limit: 10 });
+    A.ok(act.ok && Array.isArray(act.data.live) && act.data.done.some(r => r.streamId === 'ws_desk_launch' && r.state === 'done'), 'ACTIVITY lists the finished desk-session task: ' + JSON.stringify(act.data.done.map(r => r.title)).slice(0, 160));
     const stl = await client.call('status');
     A.ok(stl.data.agents.every(a => typeof a.skin === 'string'), 'status says how each agent looks');
 

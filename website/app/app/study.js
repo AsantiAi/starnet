@@ -192,6 +192,10 @@
     const evidenceHay = String(run.directive || '') + '\n' + (Array.isArray(run.messages) ? run.messages.map(m => (m && typeof m.content === 'string') ? m.content : '').join('\n') : '');
     const normEvidence = s => String(s == null ? '' : s).toLowerCase().replace(/\s+/g, ' ').trim();
     const evidenceBlob = normEvidence(evidenceHay);
+    /* ONLY THE COMMANDER'S OWN WORDS ARE SAID BACK AS THEIRS (2026-09-30). A quote found in a reply or a tool result is grounded — it
+       really is in the run — but it is not «you said»: it falls back to the directive receipt below, stamped kind:'directive'. The
+       spoken words are the directive and the run's USER turns (threadmine's user-only rule). */
+    const spokenBlob = normEvidence(String(run.directive || '') + '\n' + (Array.isArray(run.messages) ? run.messages.filter(m => m && m.role === 'user').map(m => (typeof m.content === 'string') ? m.content : '').join('\n') : ''));
     const declined = (Array.isArray(opts.declined) ? opts.declined : []).map(t => String(t).trim()).filter(Boolean);
     const now = clock.now();
     const seen = {};                 // exact-text dedup within the batch (keyed dim+text)
@@ -205,6 +209,8 @@
       // New-format proposals must ground their quote in the real run. Old-format replies remain compatible and
       // fall back to the directive receipt while providers roll onto the stricter prompt.
       if (evidence && (evidence.length < 6 || evidenceBlob.indexOf(normEvidence(evidence)) < 0)) continue;
+      if (evidence && spokenBlob.indexOf(normEvidence(evidence)) < 0) evidence = '';   // in the run, but not in the Commander's words
+      const spoken = !!evidence;
       // FALLBACK GROUNDING: no located quote → cite the run's DIRECTIVE instead, stamped kind:'directive' below so
       // the card never presents a (possibly machine-composed) task as the Commander's own speech. A cut directive
       // ends in an ellipsis so the quote can never read as a complete sentence the Commander never finished.
@@ -238,7 +244,7 @@
       seen[key] = 1; acceptedTexts.push(text);
       proposals.push({
         id: 'study_' + (proposals.length + 1), dim: cand.dim, kind: cand.kind, text: text,
-        evidence: evidence.slice(0, 280), evidenceRef: { runId: run.runId || null, kind: cand.evidence ? 'verbatim' : 'directive' },
+        evidence: evidence.slice(0, 280), evidenceRef: { runId: run.runId || null, kind: spoken ? 'verbatim' : 'directive' },
         source: 'study', sourceRunId: run.runId || null, createdAt: now
       });
       if (proposals.length >= max) break;
