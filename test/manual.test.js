@@ -53,7 +53,7 @@ const { starnetManual } = require('../sidecar/manual.js');
   A.ok(/ABILITIES/.test(m), 'names the ABILITIES window (where platforms are connected)');
   A.ok(/CATALOG/.test(m) && /KEYS/.test(m) && /MCP CONNECTORS/.test(m), 'names the three connect routes');
   A.ok(/CHANNELS/.test(m), 'names the CHANNELS window (inbound messaging)');
-  A.ok(/SETTINGS › PROVIDERS/.test(m), 'separates AI-provider keys from platform keys');
+  A.ok(/SETTINGS › AI & MODELS/.test(m), 'separates AI-provider keys from platform keys');
 
   /* 8) THE PROP RULE DOES NOT APPLY TO CONNECTORS — the defect that produced the "gaslighting". The manual
         used to list CONNECTOR PORTAL under "no prop placed means no power", but capability/office.js rides

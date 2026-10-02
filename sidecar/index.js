@@ -7773,7 +7773,7 @@ function loopPrecheck(loop) {
     }
     const provider = cronProviderFor(loop);
     if (!cronHasCredential(provider, cronKeyFor(provider))) {
-      return { ok: false, reason: 'no credential for ' + (provider || 'the selected provider') + ' — connect it in SETTINGS › PROVIDERS' };
+      return { ok: false, reason: 'no credential for ' + (provider || 'the selected provider') + ' — connect it in SETTINGS › AI & MODELS' };
     }
     return { ok: true };
   } catch (e) { return { ok: false, reason: 'precheck error: ' + ((e && e.message) || e) }; }

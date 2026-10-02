@@ -7,7 +7,7 @@
      - THE DOOR LAW: the moment anything routes the Commander to a system (a window opens, a bay opens, an
        agent's reply names it in capitals), that system comes online — the app never points at a hidden door;
      - QUESTS › Progress lists every system, offline ones included, and any of them can be brought online
-       with one click; SHOW EVERYTHING (here, in SETTINGS › APPEARANCE, on the first dock hint) brings all of
+       with one click; SHOW EVERYTHING (here, in SETTINGS › LOOK & SOUND, on the first dock hint) brings all of
        them online at once.
    A station that already existed when this shipped opens with EVERYTHING online — taking buttons away from
    someone who already uses them would be its own confusion. Only a station whose awakening starts after this
