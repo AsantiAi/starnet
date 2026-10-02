@@ -156,19 +156,31 @@ function makePluginRuntime(deps) {
     if (rec.state === 'running' && rec.child) return rec;
     if (rec.state === 'starting' && rec.ready) { await rec.ready; if (rec.state === 'running') return rec; }
     if (rec.state !== 'crashed') throw new Error('that plugin is ' + rec.state);
-    // never restart code from disk that the Commander has not approved as it is NOW
-    if (verify && !(await verify(id, rec.plugin.digest))) {
-      stop(id);
-      throw new Error('the plugin changed since it was approved — approve it again in ABILITIES → EXTENSIONS');
+    /* SINGLE-FLIGHT RESTART. The crashed check and the respawn are split by `await verify`, so two callers
+       arriving together (two runs' pre_tool_call hooks, a hook + a window call) both respawned: the second
+       child overwrote rec.child, the first was orphaned — stop/revoke/delete never killed it and its jobs ran
+       doubled until the sidecar exited — the first caller's ready promise never settled, and the restart
+       budget burned twice as fast. One restart at a time; everyone else waits on it. */
+    if (!rec.restarting) {
+      rec.restarting = (async () => {
+        // never restart code from disk that the Commander has not approved as it is NOW
+        if (verify && !(await verify(id, rec.plugin.digest))) {
+          stop(id);
+          throw new Error('the plugin changed since it was approved — approve it again in ABILITIES → EXTENSIONS');
+        }
+        if (procs.get(id) === rec && rec.state === 'running' && rec.child) return rec;   // started again while we verified
+        if (procs.get(id) !== rec || rec.state !== 'crashed') throw new Error('that plugin is ' + rec.state);
+        const t = now();
+        rec.restarts = rec.restarts.filter((x) => t - x < RESTART_WINDOW_MS);
+        if (rec.restarts.length >= MAX_RESTARTS) throw new Error('the plugin crashed ' + MAX_RESTARTS + ' times in 5 minutes and is stopped: ' + rec.error);
+        rec.restarts.push(t);
+        onLog(id, '[runtime] restarting after: ' + rec.error);
+        const r = await (spawnRecord(rec.plugin).ready);
+        if (!r || !r.ok) throw new Error('the plugin could not restart: ' + ((r && r.error) || 'unknown'));
+        return procs.get(id);
+      })().finally(() => { rec.restarting = null; });
     }
-    const t = now();
-    rec.restarts = rec.restarts.filter((x) => t - x < RESTART_WINDOW_MS);
-    if (rec.restarts.length >= MAX_RESTARTS) throw new Error('the plugin crashed ' + MAX_RESTARTS + ' times in 5 minutes and is stopped: ' + rec.error);
-    rec.restarts.push(t);
-    onLog(id, '[runtime] restarting after: ' + rec.error);
-    const r = await (spawnRecord(rec.plugin).ready);
-    if (!r || !r.ok) throw new Error('the plugin could not restart: ' + ((r && r.error) || 'unknown'));
-    return procs.get(id);
+    return rec.restarting;
   }
 
   function send(rec, msg, ms, label) {

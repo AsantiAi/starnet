@@ -24,7 +24,7 @@ const WorldSurface = (() => {
     'spine', 'alloy', 'plate', 'panel', 'tile', 'tread', 'soft', 'grate', 'hex',
     'plank', 'turf', 'diamond', 'resin', 'ceramic', 'cargo', 'runner', 'treadway', 'meshway', 'basalt', 'parquet', 'rubber', 'slotted', 'terrazzo', 'octile', 'flightdeck', 'lunar', 'maggrid', 'habitat'
   ]);
-  const WALLS = Object.freeze(['bulkhead', 'courses', 'service', 'plating', 'ribbed', 'panelled', 'pipework', 'pressure', 'radiator', 'utility', 'acoustic']);
+  const WALLS = Object.freeze(['bulkhead', 'courses', 'service', 'plating', 'ribbed', 'panelled', 'pipework', 'pressure', 'radiator', 'utility', 'acoustic', 'braced', 'machinery']);
   const materialSet = new Set(MATERIALS), wallSet = new Set(WALLS);
   const palettes = new Map();
   const remastered = () => typeof IndustrialTextures !== 'undefined' && IndustrialTextures &&
@@ -425,7 +425,7 @@ const WorldSurface = (() => {
     const belt = Math.max(5, Math.round(h * 0.64)), foot = Math.max(belt + 2, h - 5);
     // Four-tile period also matches the geometry renderer's face-strip cache:
     // its side/corner sampling must see the same frame as the straight face.
-    const lx = mod(wx, material === 'panelled' ? 48 : 24);
+    const lx = mod(wx, ['panelled', 'braced', 'machinery'].includes(material) ? 48 : 24);
     // Three value bands make the wall read as vertical construction. Large
     // recessed bays provide room for the occasional rail or service fitting.
     p(0, 0, CELL, 1, pal.deep); p(0, 1, CELL, 2, pal.recess); p(0, 3, CELL, 2, pal.edge);
@@ -440,7 +440,31 @@ const WorldSurface = (() => {
     p(0, foot + 1, CELL, 1, pal.base);                // bevelled kick-plate nose
     p(0, h - 2, CELL, 1, pal.recess); p(0, h - 1, CELL, 1, pal.deep);
 
-    if (material === 'courses') {
+    if (material === 'braced') {
+      // Keep the new wall's broad V readable when authored images are unavailable.
+      for (let y = 6; y < h - 6; y++) {
+        const offset = Math.round((y - 6) / Math.max(1, h - 13) * 17);
+        for (const x of [3 + offset, 41 - offset]) {
+          p(x - lx, y, 5, 1, pal.deep);
+          p(x + 1 - lx, y, 3, 1, pal.edge);
+          p(x + 2 - lx, y, 2, 1, pal.base);
+        }
+      }
+      p(20 - lx, h - 10, 8, 5, pal.recess); p(21 - lx, h - 10, 6, 1, pal.metal);
+    } else if (material === 'machinery') {
+      const cy = Math.round(h * 0.45), radius = Math.max(2, Math.min(11, Math.floor((h - 12) / 2)));
+      for (let dy = -radius; dy <= radius; dy++) {
+        const span = Math.round(Math.sqrt(radius * radius - dy * dy));
+        p(16 - span - lx, cy + dy, span * 2 + 1, 1, pal.deep);
+        p(16 - span - lx, cy + dy, 1, 1, pal.edge);
+        p(16 + span - lx, cy + dy, 1, 1, pal.shade);
+      }
+      for (const y of [cy - 5, cy, cy + 5]) {
+        p(5 - lx, y, 23, 2, pal.base); p(5 - lx, y, 23, 1, pal.metal);
+      }
+      p(32 - lx, 7, 11, Math.max(1, h - 14), pal.recess);
+      for (let y = 8; y < h - 8; y += 4) p(33 - lx, y, 9, 2, pal.edge);
+    } else if (material === 'courses') {
       for (let y = 7, row = 0; y < foot; y += 6, row++) {
         const cx = mod(wx + mod(row, 2) * 12, 24);
         p(0, y, CELL, 1, pal.deep); p(0, y + 1, CELL, 1, pal.fine);

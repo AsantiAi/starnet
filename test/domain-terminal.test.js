@@ -41,6 +41,21 @@ A.ok(DomainTask.classify('Read the latest post on example.com')?.host === 'examp
 A.ok(DomainTask.classify('Read the Stripe API docs at stripe.com')?.host === 'stripe.com', 'reading API DOCS is still a bounded page read');
 A.ok(DomainTask.isTargetFetch({ name: 'web_fetch', args: { url: 'https://www.starnessos.com/docs' } }, p), 'exact-host web_fetch is recognized');
 A.ok(!DomainTask.isTargetFetch({ name: 'web_fetch', args: { url: 'https://starnesos.com' } }, p), 'spelling variants are not silently substituted');
+// ISSUE #58 (residual): a one-host "check my orders on printify.com" routine with a granted key is still a
+// direct-domain task, but web_request to THAT host's API stays usable; any other host is refused.
+{
+  const shop = DomainTask.classify('check my orders on printify.com and summarize them');
+  A.ok(shop && shop.host === 'printify.com', 'a plain one-host "check" is still the bounded direct-domain policy');
+  A.ok(DomainTask.isTargetRequest({ name: 'web_request', args: { url: 'https://api.printify.com/v1/shops.json' } }, shop), 'web_request to the named host\'s API subdomain is allowed');
+  A.ok(DomainTask.isTargetRequest({ name: 'web_request', args: { url: 'https://printify.com/x' } }, shop), 'web_request to the named host itself is allowed');
+  A.ok(!DomainTask.isTargetRequest({ name: 'web_request', args: { url: 'https://evil-printify.com/x' } }, shop), 'a look-alike host is not a subdomain');
+  A.ok(!DomainTask.isTargetRequest({ name: 'web_request', args: { url: 'https://api.stripe.com/v1' } }, shop), 'web_request to another host stays refused');
+  A.ok(!DomainTask.isTargetRequest({ name: 'web_fetch', args: { url: 'https://printify.com' } }, shop), 'only web_request is matched');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
+  const withheld = (src.match(/const directDomainWithheld = [^\n]+/) || [''])[0];
+  A.ok(withheld && withheld.indexOf("'web_request'") < 0, 'the direct-domain policy no longer strips web_request from the advertised tools');
+  A.ok(/c\.name === 'web_request' && !DomainTask\.isTargetRequest\(c, directDomainTask\)/.test(src), 'the dispatch guard confines web_request to the named host');
+}
 A.ok(DomainTask.isDomainMissing({ summary: 'domain not found', content: 'Domain starnessos.com does not resolve (ENOTFOUND).' }), 'ENOTFOUND/NXDOMAIN result is terminal evidence');
 
 const hostSrc = fs.readFileSync(path.join(__dirname, '../sidecar/index.js'), 'utf8');

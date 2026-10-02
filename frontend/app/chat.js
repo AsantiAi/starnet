@@ -1937,6 +1937,7 @@ const Chat = (() => {
       const output = document.createElement('span'); output.className = 'cmsg-starter-output'; output.textContent = 'Result: ' + st.deliverable;
       const arrow = document.createElement('span'); arrow.className = 'cmsg-starter-arrow'; arrow.textContent = '›'; arrow.setAttribute('aria-hidden', 'true');
       b.append(title, detail); if (!st.general) b.appendChild(output); b.appendChild(arrow);
+      b.title = st.description + (st.general ? '' : ' Result: ' + st.deliverable);   // cabinet-clean.css shows the title only; the detail is the tip
       b.addEventListener('click', () => openStarter(st, hint));
       const dismiss = document.createElement('button'); dismiss.type = 'button'; dismiss.className = 'choice cmsg-starter-dismiss';
       dismiss.textContent = 'Not relevant'; dismiss.setAttribute('aria-label', 'Not relevant: ' + st.label);
@@ -1995,7 +1996,7 @@ const Chat = (() => {
      it cannot outlive the desk it asks for, and cannot assert a floor state the station can't prove.
      Anti-nag: it is one system line + the chip row that answers it, in the session that owes the desk, and it is
      silent while that stream is mid-run (the run owns its own DOM; the prompt returns on the next open). */
-  // REFIT can satisfy the prompt while this stream remains open. Its text is a derived floor claim, not history,
+  // BUILD MODE can satisfy the prompt while this stream remains open. Its text is a derived floor claim, not history,
   // so retire both of its DOM rows as soon as the live floor proves the desk now exists. Keep every unrelated
   // system/choice row intact; a broad clearChoices() here would erase whichever real question owns COMMS.
   function retireDeskPrompt() {
@@ -2014,7 +2015,7 @@ const Chat = (() => {
     const prompt = row('system'); prompt.d.classList.add('comms-desk-prompt');
     prompt.body.textContent = who + ' has nowhere to sit yet — it needs a desk of its own before it can take floor work. want to place one?';
     autoscroll();
-    // the chip is the whole point: it opens REFIT already armed on the WORKSTATIONS palette, so the next floor
+    // the chip is the whole point: it opens BUILD MODE already armed on the WORKSTATIONS palette, so the next floor
     // click drops the desk. 'later' just dismisses this view of it — the step is still owed, so the next open
     // of this session says so again (it stops for good the moment the desk exists).
     const chips = choices([{ label: '▤ PLACE ITS DESK', value: 'desk' }, { label: 'later', value: 'later', skip: true }], item => {
@@ -2126,7 +2127,11 @@ const Chat = (() => {
   }
   // command / client-side output (/help, /whoami, version, unknown-command, …). A SYSTEM register — dim, no
   // speaker chip, never copyable — so the station's own words are never mistaken for the agent's speech.
-  function localLine(t) { const r = row('system'); r.body.textContent = t; autoscroll(); return r.d; }
+  function localLine(t) {
+    const r = row('system'); r.body.textContent = t; autoscroll();
+    if (typeof Systems !== 'undefined' && Systems.noticeReply) { try { Systems.noticeReply(t); } catch (_) {} }   // door law: a station line naming a system brings it online
+    return r.d;
+  }
   // the history-cap marker ("…N earlier turns trimmed …") as a dim, centered, hairline-flanked system line —
   // a scrollback boundary, not a dropped record. Reuses the broadcast register's chrome (theme tokens only).
   function trimMarkerLine(t) {
@@ -2959,6 +2964,9 @@ const Chat = (() => {
     if (/^station[._]build$/.test(t)) { const plan = String(ev.argsSummary || '').split('\n')[0] || 'a planned change'; return 'build this on your station: ' + plan + (/\bUNDO\b/.test(plan) ? '' : ' One UNDO in Build mode takes it back.'); }
     // MAKE A PROP (2026-10-01): the card names the object and what it costs in StarNet credits (the sidecar's own words)
     if (/^station[._]make_prop$/.test(t)) return 'make a new prop: ' + (String(ev.argsSummary || '').split('\n')[0] || 'a new prop');
+    // TEST A LINE (2026-10-01): the card names the line and the job it will send (the sidecar's own words)
+    if (/^station[._]test_line$/.test(t)) return 'test ' + (String(ev.argsSummary || '').split('\n')[0] || 'a workflow line');
+    if (/^station[._]start_line$/.test(t)) return 'set what starts ' + (String(ev.argsSummary || '').split('\n')[0] || 'a workflow line');
     return t.replace(/_/g, '.') + (ev.argsSummary ? ' ' + ev.argsSummary : '');
   }
 
@@ -3078,6 +3086,26 @@ const Chat = (() => {
       btns.appendChild(rest);
     }
     r.body.appendChild(btns);
+    // STARNET REMOTE: a paired phone can answer this question too (the sidecar then puts permission.response on this
+    // run's stream, as for an approval). Settle the card to what happened — it used to keep live options and "awaiting
+    // your answer…" after the run had moved on, and a tap then did nothing while the card claimed it answered.
+    if (typeof U !== 'undefined' && U.bus && U.bus.on && U.bus.off) {
+      const onElsewhere = (resp) => {
+        if (!resp || resp.promptId !== p.promptId) return;
+        U.bus.off('permission.response', onElsewhere);
+        if (decided) return;
+        decided = true;
+        if (ws && typeof Channels !== 'undefined') Channels.clearPending(ws.id, Date.now());
+        if (isActiveWs(ws)) renderPresence();
+        btns.remove();
+        const tag = document.createElement('span');
+        tag.className = 'consent-result' + (resp.decision === 'deny' ? ' err' : '');
+        tag.textContent = resp.decision === 'deny' ? '✕ declined from your phone' : '✓ answered from your phone';
+        r.body.appendChild(tag);
+        syncStatus();
+      };
+      U.bus.on('permission.response', onElsewhere);
+    }
     // Esc = "use your judgment": the reflexive dismiss defers the decision rather than silently denying a
     // question (a deny makes no sense here), matching the end-run card's skip chip semantics.
     r.d.tabIndex = -1;
@@ -3349,14 +3377,8 @@ const Chat = (() => {
     // meter, never XP, never a penalty — see xp.js scoreEvent/verdictQuality). Retired permanently after one
     // render via the house one-shot pattern (cf. navcoach.seen / modeldock.seen). Fail-open — a storage
     // block just shows the line again next time, never breaks the control.
-    let coached = false;
-    try { coached = localStorage.getItem(WORKRATE_COACH_KEY) === '1'; } catch (_) {}
-    if (!coached) {
-      const hint = document.createElement('span'); hint.className = 'work-rate-hint';
-      hint.textContent = 'rating trains your agent — the top mark earns XP and builds trust';
-      host.appendChild(hint);
-      try { localStorage.setItem(WORKRATE_COACH_KEY, '1'); } catch (_) {}
-    }
+    // (2026-10-02, Andrew: "we dont want it to be an eye sore") the explainer no longer prints as a line; it is the
+    // thumbs-up's tooltip on every render, so the card stays one summary line + one row of two thumbs.
     const lbl = document.createElement('span'); lbl.className = 'work-rate-label';
     // name the RUN's agent, not whoever the active chat happens to be bound to — the OUTBOX window
     // (and any multi-agent surface) rates crew runs while a different agent is on screen. The verdict
@@ -3366,9 +3388,11 @@ const Chat = (() => {
     const ratedMeta = runMeta(runId);
     const ratedWork = runWork.get(runId);
     const ratedTask = String((ratedMeta && ratedMeta.directive) || (ratedWork && ratedWork.title) || '').replace(/\s+/g, ' ').trim();
-    lbl.textContent = '◈ rate ' + ratee + '’s work — ';
+    lbl.textContent = 'rate ' + ratee + '’s work';
+    // one short line: what was asked + a short, stable run reference (the full task and run id are its tooltip)
     const ref = document.createElement('div'); ref.className = 'work-rate-reference';
-    ref.textContent = (ratedTask ? ratedTask.slice(0, 240) + (ratedTask.length > 240 ? '…' : '') + ' · ' : '') + 'run ' + runId;
+    ref.textContent = (ratedTask ? ratedTask.slice(0, 90) + (ratedTask.length > 90 ? '…' : '') + ' · ' : '') + 'run ' + String(runId).slice(0, 8);
+    ref.title = (ratedTask ? ratedTask + ' · ' : '') + 'run ' + runId;
     host.appendChild(ref);
     const btns = document.createElement('span'); btns.className = 'consent-btns';
     host.appendChild(lbl); host.appendChild(btns);
@@ -3394,14 +3418,22 @@ const Chat = (() => {
       // Rejoin the same arbiter after the rating fades; do not bank work twice or rerun other offers.
       if (verdict === 'great') setTimeout(() => { recommendPass({ agentId, runId }, 'takeover'); }, 2200);
     }
-    function mk(label, cls, verdict, flash, isDeny) {
-      const b = document.createElement('button'); b.className = 'consent-btn' + (cls ? ' ' + cls : ''); b.textContent = label;
+    function mk(label, cls, verdict, flash, isDeny, icon, tip) {
+      const b = document.createElement('button'); b.className = 'consent-btn' + (cls ? ' ' + cls : '');
+      if (icon) { b.innerHTML = icon; b.setAttribute('aria-label', label); b.title = tip || label; }
+      else b.textContent = label;
       b.onclick = () => settle(verdict, flash, isDeny); btns.appendChild(b);
     }
-    // CRT glyphs, not color emoji: ▲ nailed it · ◆ close · ▼ missed (semantics preserved, phosphor-themed)
-    mk('▲ nailed it', 'primary', 'great', '★ +XP', false);
-    mk('◆ close', '', 'ok', 'noted', false);
-    mk('▼ missed', 'deny', 'miss', 'noted', true);
+    // THUMBS (2026-10-02, Andrew: "it should just be thumbs up or thumbs down but with the terminal ASCII style"):
+    // two pixel-grid thumbs drawn on a 16-cell grid (crisp edges, phosphor via currentColor). Up = the top mark
+    // (verdict 'great': size-weighted XP + trust), down = 'miss'. The middle 'ok' verdict is no longer offered here;
+    // the server and XpStore still accept it, so older ratings and other callers are unaffected.
+    const THUMB = '<svg class="thumb-px" viewBox="0 0 16 16" width="18" height="18" shape-rendering="crispEdges" aria-hidden="true" fill="currentColor">'
+      + '<rect x="7" y="1" width="2" height="5"/><rect x="6" y="4" width="1" height="2"/>'
+      + '<rect x="6" y="6" width="8" height="2"/><rect x="6" y="9" width="7" height="2"/><rect x="6" y="12" width="6" height="2"/>'
+      + '<rect x="2" y="6" width="3" height="8"/></svg>';
+    mk('nailed it', 'primary thumb thumb-up', 'great', '★ +XP', false, THUMB, 'nailed it — earns XP and builds trust');
+    mk('missed', 'deny thumb thumb-down', 'miss', 'noted', true, THUMB, 'missed — tell me what to fix next time');
   }
   // STANDALONE rate-the-work beat (when a run produced NO memory proposal) — its own gold-inset row in the ONE
   // post-run slot. Hero-only, mirroring the curiosity/suggestion beats.
@@ -4517,9 +4549,14 @@ const Chat = (() => {
     const head = row('agent'); head.d.classList.add('tool'); head.d.classList.add('turnin'); head.d.classList.add('receipts');
     // ONE header owns the "remembered" claim; each line below is just the memory itself (repeating
     // "◈ remembered:" per line + a bordered box per line is what made the post-run feed read as stacked popups).
-    const cap = document.createElement('div'); cap.className = 'receipt-head';
-    cap.textContent = '◈ remembered · ' + batch.proposals.length;
+    // (2026-10-02, Andrew: "remembered should just show up collapsed") — a toggle header; the list opens on click.
+    const cap = document.createElement('button'); cap.type = 'button'; cap.className = 'receipt-head';
+    cap.setAttribute('aria-expanded', 'false');
+    cap.textContent = 'remembered · ' + batch.proposals.length;
+    const list = document.createElement('div'); list.className = 'receipt-items'; list.hidden = true;
+    cap.onclick = () => { const open = list.hidden; list.hidden = !open; cap.setAttribute('aria-expanded', String(open)); head.d.classList.toggle('open', open); };
     head.body.appendChild(cap);
+    head.body.appendChild(list);
     for (const prop of batch.proposals) {
       const item = document.createElement('div'); item.className = 'receipt-item';
       const kind = document.createElement('span'); kind.className = 'turnin-kind'; kind.textContent = KIND_TAG[prop.kind] || 'NOTE';
@@ -4541,7 +4578,7 @@ const Chat = (() => {
         }
       };
       item.appendChild(kind); item.appendChild(text); item.appendChild(veto);
-      head.body.appendChild(item);
+      list.appendChild(item);
     }
     autoscroll();
   }
@@ -7189,7 +7226,7 @@ const Chat = (() => {
     if (!log) return;
     if (!verdict) { offerTryAgain(); diagAffordance(); return; }
     // ADOPTION (Lane A): every error names its DOOR and opens the exact one. Friendly.actionButton maps the
-    // verdict to { label, run } — capdenied -> REFIT (with the named capability), auth/no-key -> the real key
+    // verdict to { label, run } — capdenied -> BUILD MODE (with the named capability), auth/no-key -> the real key
     // field or "reconnect ChatGPT", model-not-found -> models. One source of truth; no local per-action ladder.
     const btn = (typeof Friendly !== 'undefined' && Friendly.actionButton) ? Friendly.actionButton(verdict) : null;
     if (btn) { choices([{ label: btn.label, value: verdict.action }], () => btn.run()); diagAffordance(verdict); return; }
@@ -8575,7 +8612,8 @@ const Chat = (() => {
         + '&lineId=' + encodeURIComponent(lineId || '') + (dockId ? '&dockId=' + encodeURIComponent(dockId) : ''), { cache: 'no-store', headers: h });
       if (!r || !r.ok) return null;
       const j = await r.json();
-      return (j && j.next) ? { next: String(j.next), nextDock: (typeof j.nextDock === 'string' && j.nextDock) ? j.nextDock : null, brief: (typeof j.brief === 'string' && j.brief) ? j.brief : null } : null;
+      return (j && j.next) ? { next: String(j.next), nextDock: (typeof j.nextDock === 'string' && j.nextDock) ? j.nextDock : null, brief: (typeof j.brief === 'string' && j.brief) ? j.brief : null,
+        verdict: (typeof j.verdict === 'string' && j.verdict) ? j.verdict : '', last: j.last === true } : null;
     } catch (_) { return null; }   // no floor, no sidecar, no line — the single-stage reply already stands
   }
 
@@ -8645,7 +8683,7 @@ const Chat = (() => {
       // the RECEIVING dock's standing brief rides the shared handoff turn — the same 5th param the sidecar's
       // chain runner passes (sidecar/routing/chain.js) — so the same floor composes the same run here too.
       const prompt = (typeof Pipeline !== 'undefined' && Pipeline.handoffPrompt)
-        ? Pipeline.handoffPrompt(seed.originalText, cur, out.text, hop, nxr.brief) : out.text;
+        ? Pipeline.handoffPrompt(seed.originalText, cur, out.text, hop, nxr.brief, nxr.verdict, nxr.last) : out.text;   // + the VERDICT / LAST-stage parts hopTurn adds (sweep 2026-10-01)
       const hopRow = isActiveWs(ws) ? streamingAgent(who) : null;
       if (hopRow) activeLiveRow = hopRow;
       let hopAcc = '';
@@ -8712,6 +8750,9 @@ const Chat = (() => {
     // own triggering turn — that loop simply wasn't running yet when the turn started.
     const goalActiveAtStart = !goalContinuation && typeof GoalLoop !== 'undefined' && (() => { const g = goalOf(activeWs); return !!(g && GoalLoop.isActive(g)); })();
     if (interview) { clearChoices(); interview(text); return; }   // THE AWAKENING owns the input: typed answers retire any stale chip row
+    // STATION SYSTEMS: asking for something on a schedule, or to be reached on a phone/chat app, is the moment
+    // AUTOMATION / CHANNELS join a growing dock (a real user turn only — never a retry or a loop continuation)
+    if (!retry && !goalContinuation && typeof Systems !== 'undefined' && Systems.noticeText) { try { Systems.noticeText(text); } catch (_) {} }
     const runFocusVersion = focusVersion;
     const ws = activeWs;   // CAPTURE the origin stream now — a mid-run switch must not cross-post its cost/files
     if (!ws) return;
@@ -8746,14 +8787,21 @@ const Chat = (() => {
       if (typeof App !== 'undefined' && App.refreshRail) App.refreshRail();
     }
 
-    const isTask = recoveryResume || !!pending || Classify.isTaskDirective(text);
+    // "YES" TO AN OFFER IS A GO: when the agent's last reply offered to do work ("want me to draft it?") a bare
+    // "yes" / "sure" / "do it" is the directive itself — classified as chat it ran tool-less and could only promise.
+    const priorAgentTurn = (() => { for (let i = ws.history.length - 2; i >= 0; i--) { const m = ws.history[i]; if (m && m.role === 'assistant') return typeof m.content === 'string' ? m.content : ''; if (m && m.role === 'user') return ''; } return ''; })();
+    const isTask = recoveryResume || !!pending || Classify.isTaskDirective(text, { priorAgentTurn });
+    // the WORDS of a "yes" are not the work: the task is the agent's offer it accepted. So an accepted offer runs WITH
+    // tools, but never feeds what reads the Commander's own wording (the profile, the recurring-job miner, the intent
+    // offer) — two "yes please" acceptances must not look like a recurring job called "yes please".
+    const acceptedOffer = !!(isTask && Classify.isAffirmation && Classify.isAffirmation(text));
     // INTENT OFFER: a real, fresh directive is the one moment the Commander has stated what they want in their
     // own words — the only honest place to say "there is a class built for exactly this". Gated to genuine new
     // work: never a retry (already offered on the original), never a recipe launch (they came FROM the library),
     // never a goal-loop continuation (the station wrote that text, not the Commander), never a reply to a
     // pending task question. Stage it on this run's metadata so concurrent sessions can never consume each
     // other's offer; the slow post-run arm reads and clears it after the answer and its own choice rows settle.
-    const intentOfferText = (isTask && !retry && !fromRecipe && !goalContinuation && !pending) ? String(text || '') : null;
+    const intentOfferText = (isTask && !acceptedOffer && !retry && !fromRecipe && !goalContinuation && !pending) ? String(text || '') : null;
     // P1 + BELT IS WORK-ONLY (Andrew's ruling 2026-07-05): only a real TASK directive drops an INTAKE ore box
     // on the belt / bumps the queue gauge (mirrors the Telegram admit shape — the sidecar gates on the SAME
     // classifier). Pure chat ("hello") gets its reply with NOTHING on the floor.
@@ -8768,8 +8816,8 @@ const Chat = (() => {
     // count — never the message text. Gated on the user's learning flag inside the store.
     // observe ONLY a genuine new directive — never on RETRY (re-running the same text must not double-count the
     // shape, which would inflate the recurrence signal and let a true one-off wrongly fire the memory beat).
-    if (!retry && isTask && !pending && typeof ProfileStore !== 'undefined') ProfileStore.observeMessage(text);
-    if (!retry && isTask && !pending && typeof MintStore !== 'undefined') MintStore.observe(text);   // notice recurring jobs → propose minting them as one-tap missions
+    if (!retry && isTask && !acceptedOffer && !pending && typeof ProfileStore !== 'undefined') ProfileStore.observeMessage(text);
+    if (!retry && isTask && !acceptedOffer && !pending && typeof MintStore !== 'undefined') MintStore.observe(text);   // notice recurring jobs → propose minting them as one-tap missions
     // CORRECTION CAPTURE (slice 2): the first message to this agent after a short-of-the-mark verdict IS the
     // correction of that run — hand it to the held skill review in the Commander's words (final: fires now) and
     // stamp the new run as correctionOf so the runs ledger can relate them. One message per verdict; a stale
@@ -8782,7 +8830,7 @@ const Chat = (() => {
     // SALIENCE (decision 3): has this task SHAPE recurred? Read AFTER observe so it counts this run (the read itself is
     // safe on retry — it doesn't mutate the count). Passed to the run so the server fires the memory turn-in on
     // recurring work even when a terse exchange otherwise wouldn't, while a basic one-off is left to reflect()'s floor.
-    const recurring = !!(isTask && typeof MintStore !== 'undefined' && MintStore.recurringNow && MintStore.recurringNow(text));
+    const recurring = !!(isTask && !acceptedOffer && typeof MintStore !== 'undefined' && MintStore.recurringNow && MintStore.recurringNow(text));
     // VOICE: the speaker toggle (🔊) controls whether the agent SPEAKS its reply (and in the short,
     // spoken style — voiceModeRules appended below). It does NOT control the desk trip: the walk is driven
     // by REAL tool use (walkToDesk, below), so the speaker setting can't suppress it. When voice is on, a
@@ -9498,6 +9546,9 @@ const Chat = (() => {
     const silent = !!(opts && opts.silent);
     if (typeof segments === 'string') segments = [{ text: segments }];
     if (!log || !Array.isArray(segments)) { if (onDone) onDone(); return () => {}; }
+    // DOOR LAW (systems.js): a scripted station line (the tour, the awakening) that names a dock system in capitals
+    // brings it online as it is said — the station never tells a newcomer to open a button it is still hiding
+    if (typeof Systems !== 'undefined' && Systems.noticeReply) { try { Systems.noticeReply(segments.map(s => (s && s.text) || '').join(' ')); } catch (_) {} }
     const out = streamingAgent();
     let si = 0, ci = 0, finished = false, killed = false;
     function finish() {

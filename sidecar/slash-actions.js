@@ -306,7 +306,7 @@ function makeSlashActions(deps) {
     }
     // "compute" is the gate to spend a model turn at all, not a callable tool — say so rather than listing it.
     lines.push('Every agent can also think and reply (the compute grant); that is not a callable tool.');
-    if (!live.length && !off.length) return say('This agent has no tools yet — place props in REFIT to grant them. ' + lines[lines.length - 2 >= 0 ? lines.length - 2 : 0]);
+    if (!live.length && !off.length) return say('This agent has no tools yet — place props in BUILD MODE to grant them. ' + lines[lines.length - 2 >= 0 ? lines.length - 2 : 0]);
     return card('Tools for this agent (' + live.length + ' active)', lines);
   }
 

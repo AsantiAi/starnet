@@ -72,7 +72,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
      test's steptest-…, RUN ONE REAL JOB's sample-… (agent.run.start carries streamId) — is real work, but its words live in
      the line's TEST view, not in the agent's COMMS: a Commander who opened COMMS saw nothing and read the row as stuck. The
      crew row names it LINE TEST and its tip says where it shows and how it stops.
-     (2026-09-30) A sample-… stream is also every job the WORK › WORKFLOWS window sends — real work, not a test — so the row says
+     (2026-09-30) A sample-… stream is also every job the WORK › AUTOMATE › WORKFLOWS window sends — real work, not a test — so the row says
      ON A WORKFLOW and its tip names both places one shows: the WORKFLOWS window, or a step test's TEST view in BUILD. */
   const testRunIds = new Map();      // runId -> agentId, for the live runs that are line tests
   const isLineTestStream = s => /^(steptest|sample)-/.test(String(s || ''));
@@ -81,7 +81,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     return n > 0 && n >= (runningAgents.get(id) || 0);
   }
   function dropTestRuns(id) { for (const [r, a] of Array.from(testRunIds)) if (a === id) testRunIds.delete(r); }
-  const LINE_TEST_TIP = 'working on a workflow — it shows in WORK › WORKFLOWS (a step test: in BUILD › the line’s TEST view), not in COMMS; ■ STOP there ends it';
+  const LINE_TEST_TIP = 'working on a workflow — it shows in WORK › AUTOMATE › WORKFLOWS (a step test: in BUILD › the line’s TEST view), not in COMMS; ■ STOP there ends it';
   let crewLiveWired = false;         // the crew-status live listener is registered exactly once
   let repaintAutonomyDial = null;    // GROWTH Tier 3: the open Settings AUTONOMY panel's paint fn (null when closed) — lets an accepted trust offer repaint the EARNED badge live
   // Same idiom for the open Settings PERMISSIONS panel's per-agent APPROVAL list. The list is painted from
@@ -107,8 +107,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   // independent bloom dial that also tames the hand-tuned presets. 100 = the shipped look, untouched.
   // `backdrop` is what the station floats in (SpaceBG's registry). 'void' is the shipped sky, so
   // every save that predates this key merges to the exact look it already had.
-  // panelBright (0–100, default 0) is the tube's BRIGHTNESS knob: it lifts the panel glass's black
-  // level toward the phosphor colour (never toward white). 0 = the shipped look, untouched.
+  // panelBright (−100…100, default 0) is the tube's BRIGHTNESS knob: above 0 it lifts the panel glass's black
+  // level toward the phosphor colour (never toward white); below 0 it takes the panels DOWN toward true black
+  // (Andrew 10-01: "it doesnt get dark enough"). 0 = the shipped look, untouched.
   function defaults() { return { theme: 'amber', themeHue: 35, themeSat: 100, themeGlow: 100, panelBright: 0, roomLighting: 'low', textScale: 0, flicker: true, crtGlass: 'full', staticLevel: 100, sound: true, backdrop: 'void', sessionRow: 'compact', keepComputerAwake: false, notifyPrefs: notifyDefaults() }; }
   // Raise overall room exposure without changing the distribution of its lights.
   // Existing saves retain their chosen level; missing values start at LOW.
@@ -289,7 +290,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     // station remains byte-identical to the shipped look. Reads the palette IN FORCE (preset class
     // or custom inline) and writes on <body> — the bezel-var-trap side of the line; THEME_VARS
     // clears these on the next pass so theme switches always re-derive from clean class values.
-    const lift = clampN(s.panelBright, 0, 100, 0) / 100 * 0.16;
+    const knob = clampN(s.panelBright, -100, 100, 0);
+    const lift = Math.max(0, knob) / 100 * 0.16;
+    const dim = Math.max(0, -knob) / 100 * 0.85;   // below 0: the same three ground tokens mix toward black
     if (lift > 0.001) {
       const cs = getComputedStyle(document.body);
       const phRgb = (cs.getPropertyValue('--ph-rgb') || '255, 170, 51').split(',').map(Number);
@@ -305,6 +308,16 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         if (!c) continue;
         const rgb = c.rgb.map((v, i) => Math.round(v + (phRgb[i] - v) * lift));
         document.body.style.setProperty(tok, c.a == null ? rgbHex(rgb) : 'rgba(' + rgb.join(', ') + ', ' + c.a + ')');
+      }
+    } else if (dim > 0.001) {
+      const cs = getComputedStyle(document.body);
+      for (const tok of ['--panel', '--panel2', '--ph-faint']) {
+        const str = (cs.getPropertyValue(tok) || '').trim();
+        const m = /rgba?\(([^)]+)\)/.exec(str);
+        const c = m ? m[1].split(',').map(Number) : (/^#[0-9a-fA-F]{6}$/.test(str) ? hexRgb(str) : null);
+        if (!c) continue;
+        const rgb = c.slice(0, 3).map(v => Math.round(v * (1 - dim)));
+        document.body.style.setProperty(tok, c.length > 3 ? 'rgba(' + rgb.join(', ') + ', ' + c[3] + ')' : rgbHex(rgb));
       }
     }
     // WHERE THE STATION IS. One saved value spans two layers that work opposite ways: a SKY is
@@ -823,7 +836,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     if (w.contains(active)) {
       // hand focus to the dock GROUP trigger (always visible), NOT the in-menu item (it lives in a
       // display:none popover when the dock is closed — focusing a hidden node silently drops to <body>).
-      const item = document.querySelector('.bb[data-term="' + CSS.escape(key) + '"]');
+      const fam = familyOf(key);   // a MY WORK / AUTOMATE / CONNECT window's dock door is its menu button
+      const item = document.querySelector('.bb[data-term="' + CSS.escape(key) + '"]') || (fam ? document.querySelector('.bb[data-family="' + fam + '"]') : null);
       const grpBtn = item && item.closest('.bb-group') ? item.closest('.bb-group').querySelector('.bb-grp') : null;
       const target = (grpBtn && grpBtn.offsetParent !== null) ? grpBtn : null;
       try { target ? target.focus() : (active.blur && active.blur()); } catch (_) {}
@@ -929,6 +943,148 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     clearTimeout(w._closeArmTimer);
     w._closeArmTimer = setTimeout(() => { if (!w) return; w._closeArmed = false; w._closeArmTimer = 0; const b = w.querySelector('.term-unsaved-bar'); if (b) b.remove(); }, 3000);
   }
+  /* ============== ONE MENU, ONE WINDOW (front doors, 2026-10-01) ==============
+     Andrew: "less different menus … easy for users to do what they want without a million different things,
+     without removing any functionality." Related windows are ONE menu: one dock button, and a tab strip under
+     the window's title that swaps between them in place (same spot, same size) — MY WORK (tasks, finished work,
+     work awaiting a rating, ready-made jobs), AUTOMATE (workflows, schedules, goal loops, away work), CONNECT
+     (abilities, channels). Every member window, alias, deep link and slash command still opens exactly as
+     before (and gets the strip), so nothing is removed and no builder changes. The tabs keep each window's own
+     name — the name the manual, the agents and every error door already use. Never a merged card grid: each
+     tab stays its own distinct surface (the August ABILITIES lesson). */
+  const FAMILIES = {
+    mywork: { label: 'MY WORK', tabs: [
+      { id: 'tasks', k: 'tasks', label: 'TASKS', tip: 'Planned work on the task board — chats and routines live in COMMS' },
+      { id: 'deliverables', k: 'deliverables', label: 'DELIVERABLES', tip: 'Everything your crew finished, with its files' },
+      { id: 'outbox', k: 'outbox', label: 'OUTBOX', tip: 'Finished work waiting for your rating' },
+      { id: 'recipes', k: 'marketplace', label: 'RECIPES', tip: 'Ready-made jobs to start',
+        is: () => typeof Marketplace !== 'undefined' && Marketplace.currentTab && Marketplace.currentTab() === 'recipes',
+        open: () => { if (typeof App !== 'undefined' && App.openRecipes) App.openRecipes(); } }
+    ] },
+    automate: { label: 'AUTOMATE', tabs: [
+      { id: 'workflows', k: 'workflows', label: 'WORKFLOWS', tip: 'Send a job down a line of agents' },
+      { id: 'schedules', k: 'automation', section: 'routines', match: ['routines', 'routines-create'], label: 'SCHEDULES', tip: 'Run any job on a schedule' },
+      { id: 'loops', k: 'automation', section: 'loops', match: ['loops', 'loops-start'], label: 'GOAL LOOPS', tip: 'Repeat a job until it is done' },
+      { id: 'away', k: 'automation', section: 'away', match: ['away'], label: 'AWAY WORK', tip: 'What agents work on between your messages' }
+    ] },
+    connect: { label: 'CONNECT', tabs: [
+      { id: 'abilities', k: 'connectors', label: 'ABILITIES', tip: 'Tools, apps, connectors and skills your agents can use' },
+      { id: 'channels', k: 'messaging', label: 'CHANNELS', tip: 'Talk to your agents from Telegram, Slack, Discord' }
+    ] }
+  };
+  // which menu a window belongs to (marketplace counts only while it is the RECIPES library, not the recruit bay)
+  function familyOf(key) {
+    for (const id of Object.keys(FAMILIES)) {
+      if (FAMILIES[id].tabs.some(t => t.k === key && (!t.is || t.is()))) return id;
+    }
+    return null;
+  }
+  function familyActiveTab(famId, key) {
+    const tabs = FAMILIES[famId].tabs.filter(t => t.k === key);
+    if (tabs.length < 2) return tabs[0] || null;
+    const sec = consoleSection[key];
+    return tabs.find(t => (t.match || []).includes(sec)) || tabs[0];
+  }
+  function rememberFamilyTab(famId, tabId) {
+    if (!store.famLast || typeof store.famLast !== 'object') store.famLast = {};
+    if (store.famLast[famId] === tabId) return;
+    store.famLast[famId] = tabId; save();
+  }
+  function syncFamilyTabs(w, key) {
+    // only the LIVE window speaks for its menu — a window closing behind a tab switch must not re-save its own tab
+    if (!w || open[key] !== w || w.classList.contains('term-closing')) return;
+    const nav = w.querySelector('.fam-tabs'); if (!nav) return;
+    const famId = nav.dataset.family, act = familyActiveTab(famId, key);
+    nav.querySelectorAll('[data-fam-tab]').forEach(b => {
+      const on = !!act && b.dataset.famTab === act.id;
+      b.classList.toggle('on', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); b.tabIndex = on ? 0 : -1;
+    });
+    if (act) rememberFamilyTab(famId, act.id);
+  }
+  function mountFamilyTabs(w, key) {
+    const famId = familyOf(key); if (!famId || !w) return;
+    const fam = FAMILIES[famId];
+    const nav = mkEl('nav', 'fam-tabs'); nav.dataset.family = famId;
+    nav.setAttribute('role', 'tablist'); nav.setAttribute('aria-label', fam.label);
+    // the window is named for its MENU (MY WORK / AUTOMATE / CONNECT) — the lit tab says which part is showing,
+    // so the title never changes under the Commander as they move between tabs
+    const titleEl = w.querySelector('.term-title'); if (titleEl) titleEl.textContent = fam.label;
+    const plate = w.querySelector('.term-foot-k'); if (plate) plate.textContent = fam.label;
+    const x = w.querySelector('.term-x'); if (x) x.setAttribute('aria-label', 'Close ' + fam.label);
+    nav.innerHTML = fam.tabs.map(t =>
+      '<button type="button" role="tab" class="fam-tab" data-fam-tab="' + esc(t.id) + '" data-tip="' + esc(t.tip) + '">' + esc(t.label) + '</button>').join('');
+    const head = w.querySelector('.term-head'); if (!head) return;
+    head.after(nav);
+    nav.querySelectorAll('[data-fam-tab]').forEach(b => b.addEventListener('click', () => {
+      const tab = fam.tabs.find(t => t.id === b.dataset.famTab); if (tab) { sfx('click'); switchFamilyTab(key, famId, tab); }
+    }));
+    nav.addEventListener('keydown', ev => {
+      const bs = Array.from(nav.querySelectorAll('[data-fam-tab]')), i = bs.indexOf(document.activeElement);
+      const n = ev.key === 'ArrowRight' ? (i + 1) % bs.length : ev.key === 'ArrowLeft' ? (i + bs.length - 1) % bs.length : -1;
+      if (i < 0 || n < 0) return;
+      ev.preventDefault(); bs[n].focus();
+    });
+    // a section change inside the window (AUTOMATION's own rail) moves the lit tab with it
+    w.addEventListener('click', () => setTimeout(() => syncFamilyTabs(w, key), 0));
+    syncFamilyTabs(w, key);
+  }
+  // open one tab of a menu (its own window, at its own section)
+  function openFamilyTab(famId, tab) {
+    rememberFamilyTab(famId, tab.id);
+    if (tab.open) { tab.open(); return; }
+    if (open[tab.k] && tab.section) { consoleSection[tab.k] = tab.section; rerender(tab.k); syncFamilyTabs(open[tab.k], tab.k); if (minimized[tab.k]) restoreTerm(tab.k); return; }
+    openTerm(tab.k, tab.section);
+    if (open[tab.k]) syncFamilyTabs(open[tab.k], tab.k);
+  }
+  // a tab click: the next window takes the current one's place (spot, size, docked height), the current one closes
+  function switchFamilyTab(fromKey, famId, tab) {
+    if (tab.k === fromKey) { openFamilyTab(famId, tab); return; }
+    const w = open[fromKey];
+    if (w && windowDirty(w)) { requestCloseTerm(fromKey); return; }   // unsaved draft: arm the guard, switch nothing
+    swapInPlace(fromKey, () => openFamilyTab(famId, tab), tab.k);
+  }
+  // the next window takes the current one's spot, size and docked height; the current one closes. toKey is optional
+  // (the opener names it); without it the geometry is carried by key after the open. While the flag is up, the closing
+  // sheet and the opening one skip their travel animations (glass-demo moveSheet + the .term power keyframes), so a
+  // tab reads as a tab, not a close-and-rise.
+  function swapInPlace(fromKey, openNext, toKey) {
+    const carry = k => {
+      if (!k || k === fromKey) return;
+      if (termPos[fromKey]) termPos[k] = Object.assign({}, termPos[fromKey]); else delete termPos[k];
+      if (termSize[fromKey]) termSize[k] = Object.assign({}, termSize[fromKey]);
+      if (store.termDock && store.termDock[fromKey]) store.termDock[k] = Object.assign({}, store.termDock[fromKey]);
+    };
+    carry(toKey);
+    save();
+    document.body.setAttribute('data-fam-switch', '');
+    clearTimeout(swapInPlace._t);
+    swapInPlace._t = setTimeout(() => document.body.removeAttribute('data-fam-switch'), 400);
+    const fam = familyOf(fromKey);
+    const before = new Set(Object.keys(open));
+    if (open[fromKey]) closeTerm(fromKey);
+    openNext();
+    // the opener did not name its window: find the menu window that just appeared and seat it where the old one was
+    if (!toKey) {
+      const k = Object.keys(open).find(x => !before.has(x) && familyOf(x) === fam);
+      if (k && open[k] && termPos[fromKey]) { carry(k); placeTerm(open[k], k); }
+    }
+  }
+  // the dock button of a menu: open its last-used tab — or, like every dock button, raise / close what is showing
+  function toggleFamily(famId) {
+    const fam = FAMILIES[famId]; if (!fam) return;
+    const showing = Object.keys(open).filter(k => open[k] && !minimized[k] && familyOf(k) === famId);
+    if (showing.length) {
+      const k = showing[0], z = e => (parseInt(e.style.zIndex, 10) || 0);
+      const maxZ = Object.keys(open).filter(x => !minimized[x]).reduce((m, x) => Math.max(m, z(open[x])), 0);
+      if (z(open[k]) < maxZ) { open[k].style.zIndex = U.zTop(); sfx('open'); return; }
+      requestCloseTerm(k); return;
+    }
+    const min = Object.keys(open).find(k => open[k] && minimized[k] && familyOf(k) === famId);
+    if (min) { restoreTerm(min); return; }
+    const last = store.famLast && store.famLast[famId];
+    openFamilyTab(famId, fam.tabs.find(t => t.id === last) || fam.tabs[0]);
+  }
+
   function toggleTerm(key, title, builder, opts) {
     // a minimized window's dock button RESTORES it; a BURIED visible window is RAISED (not closed); only the
     // topmost visible window toggles closed (through the unsaved-draft guard). This kills the "clicked the dock to
@@ -948,9 +1104,12 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       requestCloseTerm(key);
       return;
     }
-    // Mode-exclusivity: a dock panel and full-screen REFIT must never be mounted at once.
+    // Mode-exclusivity: a dock panel and full-screen BUILD MODE must never be mounted at once.
     // Opening a panel exits refit first so two features can't stack (see COHERENCE_MATRIX dim T).
     if (typeof Build !== 'undefined' && Build.isOpen && Build.isOpen()) { try { Build.close(); } catch (_) {} }
+    // DOOR LAW (systems.js): whatever opened this window — the dock, a deep link, a quest, the agent — its station
+    // system is online from now on, so the dock never hides a window the Commander has been sent to.
+    if (typeof Systems !== 'undefined' && Systems.openedTerm) { try { Systems.openedTerm(key); } catch (_) {} }
     sfx('open');
     // re-measure the band before the window exists: the desktop titlebar mounts after this module
     // loads, and the rails re-flow on every breakpoint — a stale band would place the first window
@@ -1037,6 +1196,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     $('#terms').appendChild(w);
     open[key] = w;
     placeTerm(w, key);   // land in a cascaded slot (or its remembered spot) — never dead-center pile-up
+    mountFamilyTabs(w, key);   // ONE MENU: a window that belongs to MY WORK / AUTOMATE / CONNECT carries that menu's tabs
     w.addEventListener('mousedown', ev => {
       w.style.zIndex = U.zTop();
       // pull focus into the dialog on a background click so the window-level Esc/Tab handlers keep working —
@@ -1191,6 +1351,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   function rerender(key, swap) { if (open[key]) open[key]._render(swap !== false); }
   function syncBB() {
     document.querySelectorAll('.bb[data-term]').forEach(b => b.classList.toggle('active', !!open[b.dataset.term]));
+    // a menu's dock button is lit while any of its windows is open
+    document.querySelectorAll('.bb[data-family]').forEach(b => b.classList.toggle('active', Object.keys(open).some(k => open[k] && familyOf(k) === b.dataset.family)));
   }
 
   /* ============== CONSOLE MODE — the large two-pane window framework ==============
@@ -1407,6 +1569,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
           Object.keys(panes).forEach(k => {
             panes[k].classList.remove('con-sec-nomatch', 'con-sec-searchshow');
             panes[k].querySelectorAll('.con-hit, .con-miss').forEach(r => r.classList.remove('con-hit', 'con-miss'));
+            panes[k].querySelectorAll('details[data-search-opened]').forEach(d => { d.open = false; delete d.dataset.searchOpened; });   // only the folds search opened
             railItems[k].classList.remove('con-rail-dim', 'con-rail-hit');
           });
           selectSection(activeId, false);
@@ -1441,6 +1604,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
             r.classList.toggle('con-miss', !hit);
             if (hit) hits++;
           });
+          // SEARCH OPENS WHAT IT FINDS: a hit sealed inside a closed fold would be a dead end the search made
+          pane.querySelectorAll('details').forEach(d => { if (!d.open && d.querySelector('.con-hit')) { d.open = true; d.dataset.searchOpened = '1'; } });
           // also let a section match by its own label/desc even if no granular row matched
           const secMatch = hits > 0 || sec.label.toLowerCase().indexOf(q) >= 0 || (sec.desc || '').toLowerCase().indexOf(q) >= 0;
           if (secMatch) matches.push(sec.id);
@@ -1505,7 +1670,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       return;
     }
     ul.innerHTML = present.map((a, i) =>
-      '<li class="crew-row" role="button" tabindex="0" aria-label="Open dossier for ' + esc(a.name || a.id) + '" data-i="' + i + '" data-agent-id="' + esc(a.id) + '" style="--ci:' + i + '">' +
+      '<li class="crew-row" role="button" tabindex="0" aria-label="' + (present.length > 1 ? 'Show sessions with ' + esc(a.name || a.id) + '; Shift+F10 for the dossier" aria-keyshortcuts="Shift+F10' : 'Open dossier for ' + esc(a.name || a.id)) + '" data-i="' + i + '" data-agent-id="' + esc(a.id) + '" style="--ci:' + i + '">' +
       crewPortrait(a) +
       '<span class="dot on"></span>' +
       '<div class="crew-main">' +
@@ -1516,13 +1681,28 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // in-flight work bar: hidden until the row is .working (crewTick toggles it from the real run state).
       // The shimmer (.bar-active) reads as live activity; it's an indeterminate sweep, not a % readout.
       '<div class="crew-prog bar-active" id="cp-' + esc(a.id) + '" aria-hidden="true"><div></div></div>' +
-      '</div></li>').join('');
+      '</div>' +
+      // the dossier stays one step away: this key (or a right-click) opens it; the row itself shows the sessions
+      (present.length > 1 ? '<button type="button" class="crew-dossier" tabindex="-1" aria-label="Open dossier for ' + esc(a.name || a.id) + '" data-tip="Open ' + esc(a.name || a.id) + '&#39;s dossier">DOSSIER</button>' : '') +
+      '</li>').join('');
     // (the head's roster count moved out — #crew-sum below the list already totals the same crew)
     ul.querySelectorAll('.crew-row').forEach(li => {
       if (typeof AgentPortraits !== 'undefined') AgentPortraits.paint(li.querySelector('.crew-portrait img'), present[+li.dataset.i]);
-      li.addEventListener('click', () => { sfx('click'); openAgent(+li.dataset.i); });
+      // PER-AGENT THREADS: a row click narrows the SESSIONS rail to this agent's sessions (again = all of them).
+      // A one-agent station has nothing to narrow — every session is already that agent's — so there the
+      // row keeps opening the dossier, as it always has.
+      li.addEventListener('click', () => {
+        sfx('click');
+        if (present.length > 1 && typeof App !== 'undefined' && App.filterRailByAgent) App.filterRailByAgent(li.dataset.agentId);
+        else openAgent(+li.dataset.i);
+      });
+      li.addEventListener('contextmenu', ev => { ev.preventDefault(); sfx('click'); openAgent(+li.dataset.i); });
+      const dos = li.querySelector('.crew-dossier');
+      if (dos) dos.addEventListener('click', ev => { ev.stopPropagation(); sfx('click'); openAgent(+li.dataset.i); });
       li.addEventListener('keydown', ev => {
         if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); li.click(); }
+        // the row advertises Shift+F10 (aria-keyshortcuts); WKWebView (macOS) fires no contextmenu for it, so handle the key
+        else if (ev.key === 'ContextMenu' || (ev.shiftKey && ev.key === 'F10')) { ev.preventDefault(); sfx('click'); openAgent(+li.dataset.i); }
       });
     });
     crewTick();
@@ -1538,6 +1718,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const act = activity();
     let focusedId = '';
     try { focusedId = (typeof App !== 'undefined' && App.currentAgent && App.currentAgent() || {}).id || ''; } catch (_) {}
+    // the agent whose sessions the rail is narrowed to (App owns it; '' = every session)
+    let railFilter = '';
+    try { railFilter = (typeof App !== 'undefined' && App.railAgentFilter && App.railAgentFilter()) || ''; } catch (_) {}
     let working = 0, visible = 0;
     present.forEach(a => {
       const live = agentLive(a.id);
@@ -1550,6 +1733,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         if ((e.getAttribute('data-tip') || '') !== tip) { if (tip) e.setAttribute('data-tip', tip); else e.removeAttribute('data-tip'); }
         const row = e.closest('.crew-row');
         row.classList.toggle('selected', a.id === focusedId);
+        row.classList.toggle('filtering', !!railFilter && a.id === railFilter);
         const hide = !!crewQuery && !String(a.name || a.id).toLowerCase().includes(crewQuery) && !String(a.id).toLowerCase().includes(crewQuery);
         if (row.hidden !== hide) row.hidden = hide;
         if (!row.hidden) visible++;
@@ -1560,9 +1744,10 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const sum = $('#crew-sum');
     const empty = $('#crew-search-empty');
     if (empty) empty.hidden = !crewQuery || visible > 0;
+    // crewcards.js seats this beside the CREW title ("2 WORKING · 1 IDLE"); the ▮ ▯ marks were fallback-font glyphs
     if (sum) sum.innerHTML =
-      '<span class="pos">▮ ' + working + ' WORKING</span>' +
-      '<span class="dim">▯ ' + (present.length - working) + ' IDLE</span>';
+      '<span class="pos">' + working + ' WORKING</span>' +
+      '<span class="dim">' + (present.length - working) + ' IDLE</span>';
     // #8: keep the canvas's screen-reader live region in sync (the <canvas> itself is opaque to AT).
     // Update only when the text actually changes so the region doesn't spam announcements every tick.
     const stageSum = $('#stage-summary');
@@ -1757,7 +1942,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       '<div class="sec ag-brief-sec"><span class="sec-l">SET UP AS</span><span class="sec-r"></span><span class="sec-nd"></span></div>' +
       agSetupStrip(a) +
       '<div class="sec ag-brief-sec"><span class="sec-l">CAN DO</span><span class="sec-r"></span><span class="sec-nd"></span></div>' +
-      agSkills(a && a.id) +
+      agSkillsBrief(a && a.id) +
       '<div class="ag-foot-row">on station since <b>' + since + '</b></div>';
   }
 
@@ -1814,6 +1999,26 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   // GROWTH tab — the premium agent-growth dossier: XP ladder, a physical satisfaction gauge (honest "—"
   // while calibrating), the milestone trophy case, and the station-prestige rollup. All read off the pure
   // Xp engine; the satisfaction marker rides the agent's own suit colour so it reads as "this unit's measure".
+  /* ONE PROGRESS HOME (front doors, 2026-10-01): the station-wide prestige level is station progress, so it lives in
+     QUESTS › Progress beside the station systems and milestones — not repeated inside every agent's GROWTH tab. */
+  function stationPrestigeHtml() {
+    const sStats = (typeof XpStore !== 'undefined' && XpStore.stationStats) ? XpStore.stationStats() : null;
+    const s = sStats ? Xp.compute(sStats) : null;
+    const nAg = present.length || 1;
+    return s ? (
+      '<div class="gx-station" style="margin-top:18px;">' +
+      '<div class="hd"><span class="badge">●</span><span class="ttl">Station prestige</span><span class="agents">&Sigma; ' + nAg + ' AGENT' + (nAg === 1 ? '' : 'S') + '</span></div>' +
+      '<div class="body">' +
+        '<div class="lv"><div class="gx-lbl" style="font-size:9px;">STATION</div><div class="n">' + s.level + '</div><div class="gx-lbl" style="font-size:9px;">LEVEL</div></div>' +
+        '<div style="flex:1;">' +
+          '<div class="gx-row" style="margin-bottom:6px;"><span class="gx-val" style="font-size:13px;">' + s.xp.toLocaleString() + ' <span class="gx-dim">/</span> ' + Xp.xpForLevel(s.level + 1).toLocaleString() + ' <span class="gx-dim" style="font-size:11px;">XP</span></span><span class="gx-val" style="color:var(--gold);font-size:13px;">' + s.pct + '%</span></div>' +
+          '<div class="gx-trk"><div class="gx-gfill" style="width:' + s.pct + '%;"></div></div>' +
+          '<div class="gx-row" style="margin-top:7px;"><span class="gx-val gx-dim" style="font-size:11px;">' + s.toNext.toLocaleString() + ' XP TO LV ' + (s.level + 1) + '</span>' +
+            '<span class="gx-mono" style="font-size:10px;color:var(--ph-dim);">' + s.positiveFeedback + ' APPROVALS &middot; <span style="color:var(--ph);">' + (s.known ? s.band.toUpperCase() : 'CALIBRATING') + '</span></span></div>' +
+        '</div>' +
+      '</div></div>'
+    ) : '';
+  }
   function agGrowth(a) {
     if (typeof Xp === 'undefined' || !a.stats) return '<div class="ag-growth-empty"><h3>Waiting for growth data</h3><p>Growth metrics unavailable. This agent’s XP and achievements will appear when its activity data is available.</p></div>';
     const g = Xp.compute(a.stats);
@@ -1896,26 +2101,10 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       '<div style="display:flex;align-items:center;gap:6px;"><span class="gl">' + (m.earned ? '&#9733;' : '&#9675;') + '</span><span class="nm">' + m.label + '</span></div>' +
       '<div class="sub">' + (m.earned ? 'EARNED · ' + m.hint : m.hint) + '</div></div>').join('');
     const trophies =
-      '<div class="gx-trohead"><div class="gx-sec" style="flex:1;margin:0;border:0;height:auto;"><span class="gx-ref">▦</span><span class="gx-title">Trophy case</span></div>' +
+      '<div class="gx-trohead"><div class="gx-sec" style="flex:1;margin:0;border:0;height:auto;"><span class="gx-ref">▦</span><span class="gx-title">Achievements</span></div>' +
       '<span class="gx-tag">' + pad2(earned) + ' earned &middot; ' + pad2(locked) + ' to earn</span></div>' +
       '<div class="gx-tros">' + tros + '</div>';
 
-    const sStats = (typeof XpStore !== 'undefined' && XpStore.stationStats) ? XpStore.stationStats() : null;
-    const s = sStats ? Xp.compute(sStats) : null;
-    const nAg = present.length || 1;
-    const station = s ? (
-      '<div class="gx-station" style="margin-top:18px;">' +
-      '<div class="hd"><span class="badge">●</span><span class="ttl">Station prestige</span><span class="agents">&Sigma; ' + nAg + ' AGENT' + (nAg === 1 ? '' : 'S') + '</span></div>' +
-      '<div class="body">' +
-        '<div class="lv"><div class="gx-lbl" style="font-size:9px;">STATION</div><div class="n">' + s.level + '</div><div class="gx-lbl" style="font-size:9px;">LEVEL</div></div>' +
-        '<div style="flex:1;">' +
-          '<div class="gx-row" style="margin-bottom:6px;"><span class="gx-val" style="font-size:13px;">' + s.xp.toLocaleString() + ' <span class="gx-dim">/</span> ' + Xp.xpForLevel(s.level + 1).toLocaleString() + ' <span class="gx-dim" style="font-size:11px;">XP</span></span><span class="gx-val" style="color:var(--gold);font-size:13px;">' + s.pct + '%</span></div>' +
-          '<div class="gx-trk"><div class="gx-gfill" style="width:' + s.pct + '%;"></div></div>' +
-          '<div class="gx-row" style="margin-top:7px;"><span class="gx-val gx-dim" style="font-size:11px;">' + s.toNext.toLocaleString() + ' XP TO LV ' + (s.level + 1) + '</span>' +
-            '<span class="gx-mono" style="font-size:10px;color:var(--ph-dim);">' + s.positiveFeedback + ' APPROVALS &middot; <span style="color:var(--ph);">' + (s.known ? s.band.toUpperCase() : 'CALIBRATING') + '</span></span></div>' +
-        '</div>' +
-      '</div></div>'
-    ) : '';
 
     /* The old gx-head said "AGENT DOSSIER // GROWTH READOUT" + the agent's name + "CLEARANCE LEVEL 04" — inside a
        window titled AGENT DOSSIER, on a tab labelled GROWTH, with the agent selected and named in the left rail,
@@ -1926,7 +2115,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       '<div class="ag-growth-heading"><span class="ag-growth-eyebrow">AGENT PROGRESSION</span><h3>' + esc(a.name || 'Agent') + '</h3><p>' + g.xp.toLocaleString() + ' total XP · ' + earned + ' of ' + cat.length + ' achievements earned</p>' + progression + '</div></div>' +
       (nextMilestone ? '<div class="ag-next-challenge"><span>CHALLENGE TO AIM FOR</span><b>' + nextMilestone.label + '</b><span>' + nextMilestone.hint + '</span></div>' : '') +
       '<div class="ag-growth-section-title">Performance &amp; learning</div><div class="gx-2">' + confidence + reliabilityBlk + practiceBlk + '</div>' +
-      station + '<section class="ag-achievements">' + trophies + '</section></div>';
+      '<p class="ag-growth-station-link">The station’s own level, systems and milestones: <button type="button" class="bb xs" data-open-progress>QUESTS › PROGRESS</button></p>' +
+      '<section class="ag-achievements">' + trophies + '</section></div>';
   }
 
   /* Fill the B3 PRACTICE block for `agentId`. Reads through Harness.agentSkillsRead so a FAILED read renders
@@ -1972,6 +2162,10 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   function agSkills(agentId) {
     return '<div class="ag-effective" data-access-agent="' + esc(agentId || 'agent') + '" role="status">Checking effective access…</div>';
   }
+  // the BRIEF tab's one-line readout of the SAME live /api/toolsets answer CONFIG › ACCESS shows in full
+  function agSkillsBrief(agentId) {
+    return '<div class="ag-effective" data-access-agent="' + esc(agentId || 'agent') + '" data-access-compact role="status">Checking effective access…</div>';
+  }
 
   function loadEffectiveAccess(body, a) {
     const targets = body.querySelectorAll('[data-access-agent]');
@@ -1994,7 +2188,17 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
             '</div><div class="perk-desc">' + esc(t.grantSource || 'No current grant') + '</div></div>').join('') + '</div>' +
           '<p class="sk-note">' + esc(authority.revoke) + ' Service credentials, task-specific permissions and operating-system limits still apply. Unattended jobs have their own grants.</p>' +
           '<button class="bb sm" data-access-manage>MANAGE ABILITIES</button> <button class="bb sm" data-access-settings>STATION PERMISSIONS</button> <button class="bb sm" data-access-refresh>REFRESH ACCESS</button>';
+        // BRIEF's compact line: how many toolsets are ready, which ones, and the approval mode — one jump to the full grid
+        const ready = view.toolsets.filter(x => x.available);
+        const compactHtml = '<p class="ag-can-do"><b>' + ready.length + ' of ' + view.toolsets.length + ' toolsets ready</b>'
+          + (ready.length ? ' · ' + ready.slice(0, 6).map(x => esc(x.label)).join(', ') + (ready.length > 6 ? ' +' + (ready.length - 6) : '') : '')
+          + ' · ' + esc(authority.approvalLabel) + '</p><button class="bb sm" data-access-full>SEE FULL ACCESS</button>';
         targets.forEach(target => {
+          if (typeof target.hasAttribute === 'function' && target.hasAttribute('data-access-compact')) {
+            target.innerHTML = compactHtml;
+            target.querySelector('[data-access-full]').onclick = () => { consoleSection['agents'] = 'config'; sfx('click'); rerender('agents'); };
+            return;
+          }
           target.innerHTML = html;
           target.querySelector('[data-access-manage]').onclick = () => openTerm('connectors', 'toolsets');
           target.querySelector('[data-access-settings]').onclick = () => openTerm('settings', 'permissions');
@@ -2129,13 +2333,16 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
      can arrive from a routine, a night shift, or a messaging channel — and "the agent believes this about me" and
      "someone said this in a group chat" are different claims. 'commander' renders NO chip: the ordinary case must
      stay quiet, or the label becomes noise nobody reads. */
-  const ORIGIN_LABEL = { schedule: '⏱ routine', nightshift: '◈ autonomy', api: '⇄ external app' };
+  // 'feedback' = the Commander's OWN rating / correction of a run (sidecar/feedbackmemory.js): it is theirs, so its
+  // tip must never say it was learned unwatched. 'failure-review' = a lesson from a run that failed.
+  const ORIGIN_LABEL = { schedule: '⏱ routine', nightshift: '◈ autonomy', api: '⇄ external app', feedback: '★ your rating', 'failure-review': '⚠ failed run' };
+  const ORIGIN_TIP = { feedback: 'from your own rating of a run — every agent shapes its work to this', 'failure-review': 'a lesson taken from a run that failed' };
   function originChip(origin) {
     const o = String(origin || 'commander');
     if (o === 'commander') return null;
     const label = ORIGIN_LABEL[o] || (o.indexOf('channel:') === 0 ? '✆ ' + o.slice(8) : o);
     const el = mkEl('span', 'mc-scope'); el.textContent = label;
-    el.title = 'learned on a run you were not watching (' + o + ')';
+    el.title = ORIGIN_TIP[o] || ('learned on a run you were not watching (' + o + ')');
     return el;
   }
 
@@ -2345,7 +2552,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       CF_GROUPS.map((g, i) => {
         const key = a.id + ':' + g.id;
         return '<details class="cf-group" id="' + g.id + '" data-cf-group="' + esc(key) + '"' + (cfOpen.get(key) ? ' open' : '') + '><summary><span class="cf-group-title">' + g.label + '</span><span class="cf-group-summary">' + esc(summaries[i]) + '</span></summary><div class="cf-group-body">' + content[i] + '</div></details>';
-      }).join('') + '<div class="cf-card" id="ag-away-link"><button class="bb sm" data-away-open>WHILE I’M AWAY → AUTOMATION</button></div>' +
+      }).join('') + '<div class="cf-card" id="ag-away-link"><button class="bb sm" data-away-open>WHILE I’M AWAY → AUTOMATE</button></div>' +
       agDeleteRow(a);
   }
 
@@ -3239,10 +3446,14 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
      151px out from under the cursor, on the control you are actively using. The pane scrolls; the chrome holds still. */
   // DESK SCREEN (deskscreen.js registers the 'desk' window): select THIS agent, then open the window from the dock —
   // or, when it is already open, restore it and switch it to this agent (a per-agent window, like the dossier)
+  let deskAgentId = null;   // the agent the DESK window shows (openDesk); independent of the dossier's `sel`
   function openDesk(agentId) {
     const i = present.findIndex(x => x && x.id === agentId);
     if (i < 0 || !BUILDERS.desk) return false;
-    sel = i;
+    /* the desk keeps its OWN target (sweep 2026-10-01): it used to set the shared `sel` the dossier renders from, so
+       opening REX's desk with NOVA's dossier open made the dossier's next rerender (an EDIT, a skin pick, a rename)
+       show REX — and its SAVE wrote to REX. */
+    deskAgentId = String(agentId);
     if (open.desk) { if (minimized.desk) restoreTerm('desk'); rerender('desk'); } else openTerm('desk');
     return true;
   }
@@ -3346,7 +3557,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
      so the two catalogs look and behave the same, search included). Every status a card shows comes from the
      sidecar's /api/skill-market listing: available, installed, built in (our bundled copy IS the published
      version), update, or tampered (its files changed on disk, so agents are not given it). */
-  // gear is named with the REFIT palette's own labels (SK_OBJ_NAME, shared with SKILL LIBRARY), so a card never
+  // gear is named with the BUILD MODE palette's own labels (SK_OBJ_NAME, shared with SKILL LIBRARY), so a card never
   // names an object the Commander can't find
   const skmGear = g => SK_OBJ_NAME[g] || String(g).toUpperCase();
   let skmFilter = 'all';
@@ -3415,7 +3626,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     // ORCHESTRATOR is not a prop — every run the Commander starts carries it (runtimeGranted) — so it never gets one.
     const placeable = missing.filter(g => g !== 'orchestrator');
     const place = placeable.length && (e.status === 'available' || e.status === 'installed' || e.status === 'update')
-      ? '<div class="sk-place-row">' + placeable.map(g => '<button class="sk-place" type="button" data-place="' + esc(g) + '" title="Open REFIT to place ' + skArt(skmGear(g)) + esc(skmGear(g)) + '">→ PLACE ' + esc(skmGear(g)) + '</button>').join('') + '</div>' : '';
+      ? '<div class="sk-place-row">' + placeable.map(g => '<button class="sk-place" type="button" data-place="' + esc(g) + '" title="Open BUILD MODE to place ' + skArt(skmGear(g)) + esc(skmGear(g)) + '">→ PLACE ' + esc(skmGear(g)) + '</button>').join('') + '</div>' : '';
     const result = skmResult && skmResult.slug === e.slug
       ? '<div class="mc-hint skm-result' + (skmResult.ok ? '' : ' skm-result-bad') + '">' + esc(skmResult.text) + '</div>' : '';
     const files = (e.files || []).map(f => '<li><code>' + esc(f.path) + '</code> <span class="dim">' + esc(String(f.bytes)) + ' B</span></li>').join('');
@@ -3587,11 +3798,11 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       });
   }
 
-  // The gear names here are the REFIT palette's own labels (the cabinet cap's representative prop is the INTEL CAB),
+  // The gear names here are the BUILD MODE palette's own labels (the cabinet cap's representative prop is the INTEL CAB),
   // so a "place a …" nudge names something the Commander can actually find in the palette. skArt keeps the article
   // right for a vowel-initial label ("place an INTEL CAB", not "a INTEL CAB").
   const SK_OBJ_NAME = { cabinet: 'INTEL CAB', dish: 'DISH', workbench: 'WORKBENCH', studio: 'STUDIO', notebook: 'NOTEBOOK', jukebox: 'JUKEBOX', computer: 'COMPUTER', orchestrator: 'ORCHESTRATOR', connector: 'CONNECTOR' };
-  // Each capability objectType → the representative placeable prop (CAP_PROP_MAP) and the REFIT palette category tab
+  // Each capability objectType → the representative placeable prop (CAP_PROP_MAP) and the BUILD MODE palette category tab
   // that holds it. Lets a locked skill's "PLACE" button land the user on the exact gear in the real build surface.
   const skArt = (label) => (/^[AEIOU]/.test(String(label || '')) ? 'an ' : 'a ');
   const SK_PLACE = {
@@ -3601,7 +3812,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     studio:   { prop: 'studio',    cat: 'capability' },
     notebook: { prop: 'core',      cat: 'capability' }
   };
-  // Deep-link a locked skill's missing gear into the REAL placement surface: minimize SKILLS, open REFIT, drive its
+  // Deep-link a locked skill's missing gear into the REAL placement surface: minimize SKILLS, open BUILD MODE, drive its
   // palette to the PROP tool → FUNCTIONAL tier → the missing cap's category tab → its prop tile (so the very next
   // floor-click drops it). Mirrors app.js openDeskPlacement() — the honest path, never a fake auto-place. `objType`
   // is a capability objectType (cabinet/dish/workbench/…); `agentName` is only for the guidance toast.
@@ -3612,18 +3823,18 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       notify('Open ⚒ BUILD and place ' + skArt(label) + label + ' to unlock this skill', 'warn'); return;
     }
     // the caller may sit in the ABILITIES console (skill library PLACE) or the dossier's SKILLS tab
-    // (locked capability card) — clear whichever is open so REFIT isn't buried under it.
+    // (locked capability card) — clear whichever is open so BUILD MODE isn't buried under it.
     try { if (open.connectors) minimizeTerm('connectors'); } catch (_) {}
     try { if (open.agents) minimizeTerm('agents'); } catch (_) {}
     try {
-      if (Build.isOpen && Build.isOpen()) { /* already in REFIT */ }
+      if (Build.isOpen && Build.isOpen()) { /* already in BUILD MODE */ }
       else if (Build.open) Build.open();
       else Build.toggle();
-    } catch (_) { notify('Could not open REFIT — open ⚒ BUILD and place ' + skArt(label) + label, 'warn'); return; }
+    } catch (_) { notify('Could not open BUILD MODE — open ⚒ BUILD and place ' + skArt(label) + label, 'warn'); return; }
     notify('Place ' + skArt(label) + label + ' at ' + (agentName || 'the agent') + '’s desk to unlock this skill', 'good');
-    if (!spot) return;   // no known prop mapping — REFIT is open, the toast named the gear; that's the floor of acceptable
+    if (!spot) return;   // no known prop mapping — BUILD MODE is open, the toast named the gear; that's the floor of acceptable
     // Drive the palette to the PROP tool → FUNCTIONAL tier → the missing cap's category tab → its prop tile so the
-    // very next floor-click drops it. REFIT builds its DOM synchronously in open(), so the FIRST pass runs inline
+    // very next floor-click drops it. BUILD MODE builds its DOM synchronously in open(), so the FIRST pass runs inline
     // (works even where rAF is throttled); a few rAF retries then cover any deferred re-render. Each pass clicks only
     // what isn't already active, so it's idempotent + cheap.
     let tries = 0;
@@ -3681,9 +3892,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const reqBadges = (s) => (s.requires || []).length
       ? s.requires.map(r => '<span class="sk-badge ' + (placedSet[r] ? 'have' : 'miss') + '">' + objLabel(r) + '</span>').join('')
       : '<span class="sk-badge free">no gear needed</span>';
-    // one PLACE button per missing object → the real REFIT placement surface (placeGearForSkill).
+    // one PLACE button per missing object → the real BUILD MODE placement surface (placeGearForSkill).
     const placeBtns = (missing) => missing.map(r =>
-      '<button class="sk-place" data-place="' + esc(r) + '" title="Open REFIT to place ' + skArt(objLabel(r)) + esc(objLabel(r)) + '">→ PLACE ' + esc(objLabel(r)) + '</button>').join('');
+      '<button class="sk-place" data-place="' + esc(r) + '" title="Open BUILD MODE to place ' + skArt(objLabel(r)) + esc(objLabel(r)) + '">→ PLACE ' + esc(objLabel(r)) + '</button>').join('');
     let ci = 0;
     const card = (s) => {
       const missing = (s.requires || []).filter(r => !placedSet[r]);
@@ -4254,7 +4465,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const streams = boardStreams();
     const openMenus = live ? Array.from(body.querySelectorAll('.kb-more[open]')).map(d => d.closest('.kb-card').dataset.id) : [];
     body.innerHTML =
-      '<div class="kb-heading"><header class="kb-header"><h2>Your tasks</h2><p>Plan, start, and review your work.</p></header><div class="work-entry"><button type="button" class="bb sm" data-work-to="outbox">OUTBOX</button><button type="button" class="bb sm" data-work-to="deliverables">LIBRARY</button></div></div>' +
+      '<div class="kb-heading"><header class="kb-header"><h2>Your tasks</h2><p>Plan, start, and review your work.</p></header></div>' +   // OUTBOX / DELIVERABLES are this window's MY WORK tabs now (FAMILIES) — no second pair of doors here
       '<div class="kb-add"><input id="kb-in" aria-label="New task" maxlength="80" placeholder="What would you like to get done?" autocomplete="off">' +
       '<button class="bb sm" id="kb-add">ADD TASK</button></div><p class="kb-add-note">Adding saves your plan. Start sends the task to its agent.</p>' +
       '<div class="kb-cols">' +
@@ -6519,7 +6730,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // /api/nightshift/focus + POST/DELETE /api/nightshift/avoid) — one directive, surfaced where the user tunes
       // autonomy, so "tune it" and "aim it" live together. Every line maps to a route field; the cold states are
       // honest, never an invented priority or a fake learned profile.
-      '<h4 class="ms-h">DIRECTION <span class="dim">— where its unattended work should go</span></h4>' +
+      // QUIETER (front doors, 2026-10-01): DIRECTION is set once and rarely revisited — it folds closed under its own
+      // heading. Every control and id is unchanged; settings search opens the fold when a match is inside.
+      '<details class="cf-group set-fold" id="auto-direction-fold"><summary><h4 class="ms-h">DIRECTION <span class="dim">— where its unattended work should go</span></h4></summary>' +
       '<div class="set-sub"><span class="set-sub-k">FOCUS</span><span class="set-sub-d" id="auto-focus">…</span></div>' +
       '<div class="set-row ns-steer"><input id="auto-steer" class="key-input" type="text" autocomplete="off" placeholder="Project folder, thread:&lt;id&gt;, or goal"><button class="bb xs" id="auto-steer-set">SET FOCUS</button><button class="bb xs" id="auto-steer-clear" style="display:none">CLEAR</button></div>' +
       '<div class="mc-hint">a steer outranks learned evidence (~7 days, or until cleared). It only redirects the unattended priority — no new access.</div>' +
@@ -6529,6 +6742,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       '<div class="mc-hint">off-limits holds until you remove it. You can still work there yourself — it only stops the station choosing it unattended.</div>' +
       '<div class="set-sub"><span class="set-sub-k">LEARNED INTERESTS</span><span class="set-sub-d">what it thinks you keep coming back to</span></div>' +
       '<div class="key-list" id="auto-interests"><p class="set-about">reading interests…</p></div>' +
+      '</details>' +
       // LIVE HELPERS — the real background sub-agents (team.spawn) running RIGHT NOW, from GET /api/subagents
       // (server truth; the floor's ghost sprites are the same ledger). STOP rides POST /api/subagents/interrupt —
       // before this row a runaway helper could not be stopped from anywhere in the UI.
@@ -6626,8 +6840,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // (Permissions.PLANS maps 1:1 onto the dial presets) — so they carry the SAME primary words the
       // dial uses. Stored data-level values are unchanged. FULLY AUTONOMOUS stays in the label (it says
       // the stakes plainly). Plain-language line first, house vocabulary second.
-      '<h4 class="ms-h">WHILE YOU’RE AWAY <span class="dim">— how much it starts on its own</span></h4>' +
-      '<p class="set-about perm-lede">Whether it begins anything at all when you are not here. The same WAIT / SUGGEST / BUILD / FREE ladder as AUTONOMY — change it in either place.</p>' +
+      // a pick = AUTONOMY preset + matching standing approvals (PermissionsStore.setLevel) — not a 2nd initiative row
+      '<h4 class="ms-h">ONE-STEP AUTONOMY <span class="dim">— a level plus the approvals it needs</span></h4>' +
+      '<p class="set-about perm-lede">Pick how much agents start on their own while you are away — the same WAIT / SUGGEST / BUILD / FREE ladder as AUTONOMY, plus the standing approvals each level needs, set in one step. AUTONOMY fine-tunes initiative, reach and pace one at a time.</p>' +
       '<p class="set-about perm-lede" id="perm-desc"></p>' +
       '<p class="set-about perm-lede" id="perm-status" aria-live="polite">checking standing approvals…</p>' +
       '<div class="set-themes" id="perm-level">' +
@@ -6722,11 +6937,11 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // CUSTOM PHOSPHOR — hue + saturation derive a full palette live (moving either switches to CUSTOM);
       // GLOW is independent and scales the bloom on EVERY theme, presets included. All instant-save.
       '<h4 class="ms-h">CUSTOM PHOSPHOR <span class="dim">— dial in any colour</span></h4>' +
-      '<p class="set-about">Hue and saturation create a custom color. Glow controls the light around text; brightness lightens the panel glass. Changes preview and save immediately.</p>' +
+      '<p class="set-about">Hue and saturation create a custom color. Glow controls the light around text; brightness takes the panel glass darker (left) or lighter (right). Changes preview and save immediately.</p>' +
       '<label class="set-slider"><span class="set-slider-name">HUE</span><input type="range" id="set-hue" class="set-hue-track" min="0" max="359" step="1" value="' + clampN(s.themeHue, 0, 359, 35) + '"><span class="set-slider-val" id="set-hue-val">' + clampN(s.themeHue, 0, 359, 35) + '°</span></label>' +
       '<label class="set-slider"><span class="set-slider-name">SATURATION</span><input type="range" id="set-sat" min="0" max="100" step="1" value="' + clampN(s.themeSat, 0, 100, 100) + '"><span class="set-slider-val" id="set-sat-val">' + clampN(s.themeSat, 0, 100, 100) + '%</span></label>' +
       '<label class="set-slider"><span class="set-slider-name">GLOW</span><input type="range" id="set-glow" min="0" max="150" step="5" value="' + clampN(s.themeGlow, 0, 150, 100) + '"><span class="set-slider-val" id="set-glow-val">' + clampN(s.themeGlow, 0, 150, 100) + '%</span></label>' +
-      '<label class="set-slider"><span class="set-slider-name">BRIGHTNESS</span><input type="range" id="set-bright" min="0" max="100" step="5" value="' + clampN(s.panelBright, 0, 100, 0) + '"><span class="set-slider-val" id="set-bright-val">' + clampN(s.panelBright, 0, 100, 0) + '%</span></label>' +
+      '<label class="set-slider"><span class="set-slider-name">BRIGHTNESS</span><input type="range" id="set-bright" min="-100" max="100" step="5" value="' + clampN(s.panelBright, -100, 100, 0) + '"><span class="set-slider-val" id="set-bright-val">' + clampN(s.panelBright, -100, 100, 0) + '%</span></label>' +
       '<h4 class="ms-h" id="set-lighting-label">ROOM LIGHTING</h4>' +
       '<p class="set-about">Choose the brightness across your rooms. LOW is softly lit; MEDIUM and HIGH make the whole room brighter.</p>' +
       '<div class="set-themes" id="set-lighting" role="group" aria-labelledby="set-lighting-label">' +
@@ -6768,6 +6983,15 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       ROW_STEPS.map(([v, name, why]) => {
         const cur = resolveSessionRow(s.sessionRow);
         return '<button class="set-theme ' + (cur === v ? 'sel' : '') + '" aria-pressed="' + (cur === v ? 'true' : 'false') + '" data-srow="' + v + '" title="' + why + '">' + name + '</button>';
+      }).join('') +
+      '</div>' +
+      // STATION DOCK (systems.js) — GROW WITH ME adds dock buttons as the station is used; SHOW EVERYTHING puts every
+      // system in the dock now. Either way every window opens from every other door; this only shapes the dock.
+      '<div class="set-row"><span class="dim">STATION DOCK — GROW WITH ME adds a dock button the first time you need it; SHOW EVERYTHING puts every system in the dock now</span></div>' +
+      '<div class="set-themes" id="set-stationdock">' +
+      [['staged', 'GROW WITH ME'], ['all', 'SHOW EVERYTHING']].map(([v, name]) => {
+        const cur = (typeof Systems !== 'undefined' && Systems.staged && Systems.staged()) ? 'staged' : 'all';
+        return '<button class="set-theme ' + (cur === v ? 'sel' : '') + '" aria-pressed="' + (cur === v ? 'true' : 'false') + '" data-sdock="' + v + '">' + name + '</button>';
       }).join('') +
       '</div>' +
       // CRT — its own section, and a LEVEL rather than a named mode. Framing this as an
@@ -6963,17 +7187,15 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     let paintBackdropSwatches = () => {};
 
     const sections = [
-      { id: 'providers', label: 'PROVIDERS', glyph: '⌁', desc: 'Connect an AI service and manage its saved credentials.', build: frag(secProviders) },
+      { id: 'providers', label: 'AI & MODELS', glyph: '⌁', desc: 'Connect an AI service, manage its saved credentials, and choose backup models and defaults for new agents.', build: frag(secProviders + secModels) },
       // ONE WORD: AUTONOMY — the dial and what it did while you were away are one section (the old NIGHT SHIFT
       // section folded in; openTerm maps its id here so an old deep link still lands).
       { id: 'autonomy', label: 'AUTONOMY', glyph: '◈', desc: 'Choose when agents work on their own, where that work goes, and see what they did while you were away.', build: frag(secAutonomy + secAwayActivity) },
       { id: 'permissions', label: 'PERMISSIONS', glyph: '⊘', desc: 'Set access and approval rules for the station or individual agents.', build: frag(secPermissions) },
       { id: 'budget', label: 'SPENDING LIMITS', glyph: '$', desc: 'Set spending limits and review recorded usage.', build: frag(secBudget) },
-      { id: 'models', label: 'MODEL DEFAULTS', glyph: '⇄', desc: 'Choose backup models and defaults for new agents.', build: frag(secModels) },
       // build, not frag: the pane is created lazily when the section is opened, so wiring at MOUNT time
       // ran before this element existed and left the list stuck on its placeholder. Paint it when it is born.
-      { id: 'livevoice', label: 'LIVE VOICE', glyph: '◍', desc: 'Built-in voices for your agents and hands-free conversations.', build: el => { el.innerHTML = secLiveVoice; arrangeSettingsPane(el); wireLiveVoice(el); } },
-      { id: 'appearance', label: 'APPEARANCE', glyph: '☀', desc: 'Room lighting, phosphor colour, CRT effects, and terminal sound.', build: frag(secAppearance), onShow: () => paintBackdropSwatches() },
+      { id: 'appearance', label: 'LOOK & SOUND', glyph: '☀', desc: 'Room lighting, phosphor colour, CRT effects, terminal sound, and your agents’ spoken voices.', build: el => { el.innerHTML = secAppearance + secLiveVoice; arrangeSettingsPane(el); wireLiveVoice(el); }, onShow: () => paintBackdropSwatches() },
       // NAV CONDENSE (2026-08-04) — two label renames, ids untouched (remembered-section keys + wiring
       // bind to the id): 'NOTIFICATIONS' collided with the SYSTEM-dock NOTIFICATIONS panel (inbox vs
       // preferences — same word, two doors), and a 'SYSTEM' section inside SETTINGS inside the SYSTEM
@@ -6982,9 +7204,19 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // STARNET REMOTE: pair a phone and drive the station from anywhere (app/remote-devices.js owns the pane)
       { id: 'remote', label: 'REMOTE', glyph: '▯', desc: 'Pair your phone and control this station from anywhere.', build: el => { if (typeof RemoteDevices !== 'undefined') RemoteDevices.mount(el, arrangeSettingsPane); else el.textContent = 'Remote is not available in this build.'; } },
       // BROWSER: where the station browser lives — built-in / a Chrome window / your Chrome (app/outputbrowser.js owns the pane)
-      { id: 'browser', label: 'BROWSER', glyph: '◎', desc: 'Where the station browser runs: inside StarNet, as its own Chrome window, or in your own Chrome.', build: el => { if (typeof OutputBrowser !== 'undefined' && OutputBrowser.mountSettings) OutputBrowser.mountSettings(el, arrangeSettingsPane); } },
+      { id: 'browser', label: 'BROWSER', glyph: '◎', desc: 'Where the station browser runs: inside StarNet, as its own Chrome window, or in your own Chrome.', build: el => {
+        if (typeof OutputBrowser !== 'undefined' && OutputBrowser.mountSettings) OutputBrowser.mountSettings(el, arrangeSettingsPane);
+        // SAVED SIGN-INS: STEP-IN is no longer a standing dock button, so the sign-ins it keeps get a door here
+        const row = mkEl('div', 'set-row');
+        row.appendChild(mkEl('span', 'dim', 'SAVED SIGN-INS — the browser sign-ins your agents reuse, from times you took the wheel '));
+        const b = mkEl('button', 'bb sm', 'OPEN SAVED SIGN-INS'); b.type = 'button'; b.id = 'set-open-signins';
+        b.addEventListener('click', () => { sfx('click'); openTerm('stepin'); });
+        row.appendChild(b); el.appendChild(row);
+      } },
       { id: 'system', label: 'APP & BACKUP', glyph: '⚙', desc: 'Startup, runtime limits, backups, updates, and troubleshooting.', build: frag(secSystem) }
     ];
+    // ONE PLAIN LIST (Andrew 10-02): no intent-group buttons — a few natural pairs share a page instead (AI & MODELS,
+    // LOOK & SOUND); every old section id still lands through SETTINGS_ALIAS in openTerm.
     const host = mountConsole(body, 'settings', sections, { search: true, searchPlaceholder: 'search settings…' });
 
     wireProviderActions(host);
@@ -7043,7 +7275,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     wireSlider(hueIn, v => { s.theme = 'custom'; s.themeHue = clampN(v, 0, 359, 35); sliderVal('#set-hue-val', s.themeHue + '°'); selCustom(); syncCustomChip(); });
     wireSlider(satIn, v => { s.theme = 'custom'; s.themeSat = clampN(v, 0, 100, 100); sliderVal('#set-sat-val', s.themeSat + '%'); selCustom(); syncCustomChip(); });
     wireSlider(glowIn, v => { s.themeGlow = clampN(v, 0, 150, 100); sliderVal('#set-glow-val', s.themeGlow + '%'); });
-    wireSlider(brightIn, v => { s.panelBright = clampN(v, 0, 100, 0); sliderVal('#set-bright-val', s.panelBright + '%'); });
+    wireSlider(brightIn, v => { s.panelBright = clampN(v, -100, 100, 0); sliderVal('#set-bright-val', s.panelBright + '%'); });
     wireSlider(host.querySelector('#set-static'), v => { s.staticLevel = clampN(v, 0, 200, 100); sliderVal('#set-static-val', s.staticLevel + '%'); });
     const bind = (id, key) => host.querySelector(id).addEventListener('change', ev => { s[key] = ev.target.checked; applySettings(); save(); flashSaved(appMsg()); });
     bind('#set-flicker', 'flicker'); bind('#set-sound', 'sound');
@@ -7082,6 +7314,16 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       s.sessionRow = resolveSessionRow(b.dataset.srow);
       applySettings(); save(); sfx('click');
       syncSessionRow(); flashSaved(appMsg());
+    }));
+    // STATION DOCK chips — the mode lives in systems.js (its own store); switching never takes a button away
+    const sdChips = host.querySelectorAll('#set-stationdock [data-sdock]');
+    sdChips.forEach(b => b.addEventListener('click', () => {
+      if (typeof Systems === 'undefined') return;
+      if (b.dataset.sdock === 'all') Systems.showEverything(); else Systems.growWithMe();
+      sfx('click');
+      const cur = Systems.staged() ? 'staged' : 'all';
+      sdChips.forEach(x => { const on = x.dataset.sdock === cur; x.classList.toggle('sel', on); x.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+      flashSaved(appMsg());
     }));
     // TEXT SIZE chips — instant-apply + persist, same idiom as the theme row above.
     const tsChips = host.querySelectorAll('#set-textsize [data-ts]');
@@ -8320,7 +8562,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     if (backfilled) save();
     const unread = store.notifs.filter(n => !n.read).length;
     const rows = store.notifs.slice().reverse().filter(n => notifView !== 'unread' || !n.read);
-    body.innerHTML = '<header class="utility-head"><h2>Station updates</h2><p>Run results, saved outputs, and updates from your crew.</p></header>' +
+    body.innerHTML = '<header class="utility-head"><h2>Notifications</h2><p>Run results, saved outputs, and alerts from your crew.</p></header>' +
       '<div class="nf-toolbar"><div class="utility-tabs" role="group" aria-label="Show notifications">' +
       '<button type="button" data-nf-view="all" aria-pressed="' + (notifView === 'all') + '">All · ' + store.notifs.length + '</button>' +
       '<button type="button" data-nf-view="unread" aria-pressed="' + (notifView === 'unread') + '">Unread · ' + unread + '</button></div>' +
@@ -8376,6 +8618,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // window meant one notch per 20k tokens — the bar sat on one cell from 5% to 14% and read as stuck.
       // Driven off s.frac, not the rounded s.pct, so the extra resolution is real and not re-quantised.
       const frac = s.known ? s.frac : 0;
+      g.style.setProperty('--ctx-fill', String(Math.max(0, Math.min(1, +frac || 0))));   // cabinet-clean.css draws the cells as one thin bar
       const b = (typeof AsciiFX !== 'undefined' && AsciiFX.barCells)
         ? AsciiFX.barCells(frac, N)
         : { full: 0, half: false, off: N };
@@ -8686,7 +8929,15 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         el.appendChild(mkEl('p', 'cd-privacy', 'Saved locally. Your profile briefing is shared with your agents’ configured models when they work.'));
         addCards(['identity', 'stack', 'people'])(el);
       } },
-      { id: 'goals', label: 'GOALS', glyph: '↗', desc: 'What you want to achieve and where you need help.', build: addCards(['goals', 'pain', 'ambition']) },
+      // GOALS IN ONE PLACE (front doors, 2026-10-01): goals with plans and steps live in QUESTS › Goals; this tab is what the
+      // agents KNOW about your aims and pain points (briefing notes) — named for that, with one door to the real goals.
+      { id: 'goals', label: 'AIMS', glyph: '↗', desc: 'What your agents know about your aims and where you need help. Goals with plans and steps live in QUESTS › Goals.', build: el => {
+        const door = mkEl('p', 'cd-privacy', 'Planning a goal with steps? It lives in QUESTS › Goals. ');
+        const go = mkEl('button', 'bb xs', 'OPEN QUESTS › GOALS'); go.type = 'button';
+        go.addEventListener('click', () => { sfx('click'); openTerm('quests', 'goals'); });
+        door.appendChild(go); el.appendChild(door);
+        addCards(['goals', 'pain', 'ambition'])(el);
+      } },
       { id: 'preferences', label: 'PREFERENCES', glyph: '≡', desc: 'How you like to work, your standing instructions, and your schedule.', build: addCards(['style', 'standing_orders', 'schedule']) },
       { id: 'briefing', label: 'AGENT BRIEFING', glyph: '▤', desc: 'See the exact profile text included in your agents’ briefing.', build: el => {
         el.appendChild(mkEl('p', 'cd-privacy', 'Your profile is stored locally. Its briefing is sent to each agent’s configured model when it works; relevant summaries may also be used for suggestions.'));
@@ -8920,13 +9171,13 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     }
   }
   // §C — the GO destination token for a quest that has a real, already-existing openable surface (never a new
-  // window). null → no GO button. dossier → the Commander dossier; work/build → the TASK BOARD; a floor gap → REFIT.
+  // window). null → no GO button. dossier → the Commander dossier; work/build → the TASK BOARD; a floor gap → BUILD MODE.
   /* WHERE A QUEST IS ACTUALLY DONE. A build/work quest used to send the Commander to the TASK BOARD — a
      board of OTHER work, where the quest itself does not appear and nothing tells you what to do next. The
      work happens in a conversation with an agent, so that is where the button goes: its OWN session, opened
      on the quest, with the ask already typed. The other two destinations were already right and are
-     unchanged: a dossier question is answered in the dossier, a floor gap is fixed in REFIT. */
-  const GO_LABEL = { commander: '▶ ANSWER IT', session: '▶ START QUEST', refit: '▶ OPEN REFIT', recruit: '▶ OPEN RECRUITMENT' };
+     unchanged: a dossier question is answered in the dossier, a floor gap is fixed in BUILD MODE. */
+  const GO_LABEL = { commander: '▶ ANSWER IT', session: '▶ START QUEST', refit: '▶ OPEN BUILD MODE', recruit: '▶ OPEN RECRUITMENT' };
   /* A one-word badge naming WHICH KIND of thing a card is. The log mixes six genuinely different sources —
      a personalized ledger quest, a goal-arc step, a capability gap on your floor, an accepted build, a
      recurring maintenance cause, a dossier question, a milestone — and rendering them identically is what
@@ -9056,7 +9307,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         + '<span class="sub dim">' + (latest.source === 'commander' ? 'You reported this action' : 'Recorded work completion') + ' · ' + esc(qrRel(latest.doneAt)) + '</span>' : '<p>This is a step you chose toward ' + esc(goal.text) + '.</p>')
       + (latest ? '<div class="q-return-actions">' + jump('progress', 'VIEW PROGRESS')
         + (latestWork && latestWork.runId ? '<button class="consent-btn q-step-outputs" data-run="' + esc(latestWork.runId) + '" data-label="' + esc(latest.text) + '">OPEN THIS STEP’S OUTPUTS</button>'
-          : latest.source !== 'commander' ? '<button class="consent-btn q-go" data-dest="deliverables">OPEN OUTPUT LIBRARY</button>' : '') + '</div>' : '') + '</details>';
+          : latest.source !== 'commander' ? '<button class="consent-btn q-go" data-dest="deliverables">OPEN DELIVERABLES</button>' : '') + '</div>' : '') + '</details>';
     const action = next && !brief.inFlight
       ? '<button class="consent-btn q-arc-accept" data-gid="' + esc(goal.id) + '" data-mid="' + esc(next.id) + '">START THIS STEP</button>' : '';
     return '<section class="q-return-card" aria-label="Your next move"><span class="q-ns-eyebrow">YOUR NEXT MOVE · ' + brief.progress.done + ' / ' + brief.progress.total + ' PLANNED STEPS</span>'
@@ -9278,6 +9529,51 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       + lastHtml + disabledNote + '</div>';
   }
 
+  /* STATION SYSTEMS (systems.js) — the dock's map, at the top of QUESTS › Progress. On a growing station it shows
+     what is online and how the rest comes online; every tile opens its system (an offline one comes online as it
+     opens — reveal, never lock). Tiles copy the constellation's star recipe: glyph + name + ONE short stat, the
+     description lives in the hover tip. Counts read Systems.snapshot(), i.e. the dock's real state. */
+  function systemsHtml() {
+    if (typeof Systems === 'undefined' || !Systems.snapshot) return '';
+    const s = Systems.snapshot();
+    const staged = s.mode === 'staged';
+    const pct = s.total ? Math.round(s.online * 100 / s.total) : 0;
+    // the tile wears the SAME icon as its dock button (our own static markup — an SVG instrument icon, or a glyph)
+    const glyphOf = id => {
+      const def = Systems.LIST.find(x => x.id === id);
+      const b = def && def.sel ? document.querySelector('#bottombar ' + def.sel + ' .bb-i') : null;
+      if (!b) return '◇';
+      const svg = b.querySelector('svg');
+      return svg ? svg.outerHTML : esc(b.textContent || '◇');
+    };
+    return '<div class="q-systems q-constellation" id="q-systems"><div class="gx-sec"><span class="gx-title">STATION SYSTEMS</span><span class="gx-tag">'
+      + s.online + ' OF ' + s.total + ' ONLINE</span></div>'
+      + (staged ? '<div class="arc-bar q-bar"><div class="q-bar-fill" style="width:' + pct + '%"></div></div>' : '')
+      + '<div class="q-star-map q-sys-map">' + s.list.map(x =>
+        '<button type="button" class="q-star q-sys' + (x.online ? ' q-star-reached' : ' q-sys-off') + (x.fresh ? ' q-sys-fresh' : '') + '" data-sys="' + esc(x.id) + '" data-tip="'
+        + esc(x.tip + (x.online ? '' : ' — it already works; open it now and it joins your dock')) + '">'
+        + '<span class="q-star-glyph" aria-hidden="true">' + glyphOf(x.id) + '</span><span>' + esc(x.label) + '</span><small>'
+        + (x.online ? (x.fresh ? 'NEW · ' : '') + esc(x.group.toUpperCase()) + ' DOCK' : esc(x.how || 'not in your dock yet')) + '</small></button>').join('')
+      + '</div>'
+      + (staged ? '<p class="sub dim">Your dock grows as you use the station. Every system already works: open any of them here.</p>'
+        + '<div class="q-journey-actions"><button type="button" class="bb sm q-sys-all">SHOW EVERYTHING</button></div>' : '')
+      + '</div>';
+  }
+  function wireSystems(root) {
+    if (!root) return;
+    root.querySelectorAll('.q-sys').forEach(b => b.addEventListener('click', () => { sfx('click'); Systems.openSystem(b.dataset.sys); }));
+    const all = root.querySelector('.q-sys-all');
+    if (all) all.addEventListener('click', () => { sfx('click'); Systems.showEverything(); notify('Every station system is in your dock now. SETTINGS › LOOK & SOUND › STATION DOCK switches it back.', '', undefined, { transient: true }); });
+  }
+  // repaint ONLY the systems block of an open quest log — never the whole window (drafts live there)
+  function refreshSystems() {
+    const w = open.quests; if (!w) return;
+    const cur = w.querySelector('#q-systems'); if (!cur) return;
+    const tmp = mkEl('div'); tmp.innerHTML = systemsHtml();
+    const next = tmp.firstElementChild; if (!next) return;
+    cur.replaceWith(next); wireSystems(next);
+  }
+
   // The three progression tracks stay deliberately separate:
   //   AGENT GROWTH = explicit feedback XP (the existing meter below)
   //   COMMANDER JOURNEY = real-world goal metrics + verified outcomes
@@ -9452,7 +9748,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
           + '<ol class="q-history-line">' + (events.length ? events.map(e => '<li><span class="q-ns-eyebrow">' + esc(e.label.toUpperCase()) + '</span><time>' + esc(e.at ? new Date(e.at).toLocaleDateString() : '') + '</time><p>' + esc(e.text) + '</p></li>').join('') : '<li>The plan is saved. Results and reflections will appear as you work.</li>') + '</ol>'
           + '<button class="consent-btn q-goal-review" data-gid="' + esc(g.id) + '">REFLECT WITH MY CREW</button></details>';
       }).join('')
-      + '<div class="q-journey-actions"><button class="consent-btn q-journey-export">EXPORT JOURNEY NOTES</button><button class="consent-btn q-go" data-dest="deliverables">OPEN OUTPUT LIBRARY</button></div><p class="sub dim">Plans, possibilities, and reflections are saved on this device. Export includes those notes; output files remain in your library.</p></div>';
+      + '<div class="q-journey-actions"><button class="consent-btn q-journey-export">EXPORT JOURNEY NOTES</button><button class="consent-btn q-go" data-dest="deliverables">OPEN DELIVERABLES</button></div><p class="sub dim">Plans, possibilities, and reflections are saved on this device. Export includes those notes; output files remain in your library.</p></div>';
   }
 
   // Stores can repaint synchronously during a write. Resolve submitted fields by their stable ids,
@@ -9572,7 +9868,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         ? '<button class="q-queue" data-qid="' + esc(q.id) + '" title="Build this while I’m away — queue it for the sandbox">◈</button>'
         : '';
       // §C — a GO affordance where a real, openable destination exists (never invents a window): dossier asks →
-      // the Commander dossier; work/build → the TASK BOARD; a floor gap → REFIT. Absent target → no button.
+      // the Commander dossier; work/build → the TASK BOARD; a floor gap → BUILD MODE. Absent target → no button.
       const goDest = questGoDest(q);
       const goBtn = goDest ? '<button class="q-go" data-dest="' + esc(goDest) + '" data-qid="' + esc(q.id) + '" title="Open where you do this next">' + esc(q.executionMode === 'commander' || q.executionMode === 'together' ? '▶ HELP ME PREPARE' : (GO_LABEL[goDest] || 'GO')) + '</button>' : '';
       // §C — EVERY open row answers "what do I do next": the honest completion condition in words.
@@ -9619,7 +9915,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         + cwHtml + (q.status === 'done' ? '' : rewardHtml) + attestHtml + declineHtml + actionRow + lifeActions + '</div>';
     };
     const meterHtml = m
-      ? '<div class="gx-sec"><span class="gx-title">AGENT GROWTH</span> <span class="gx-tag">Lv ' + m.level + ' &middot; ' + m.pct + '% to next &middot; ' + esc(String(m.confLabel) + ' ' + String(m.band)) + '</span></div>'
+      ? '<div class="gx-sec"><span class="gx-title">AGENT GROWTH</span> <span class="gx-tag">Lv ' + m.level + ' &middot; ' + m.pct + '% to next</span> <button type="button" class="bb xs" data-open-growth>OPEN IN THE DOSSIER</button></div>'
       : '';
     // G4 feature 2 — PROPOSALS: pending autojob proposals the agent pinned to the MISSION BOARD. A distinct
     // amber card with APPROVE (→ the real POST /api/cron) / DECLINE (→ dropped forever). Rendered above OPEN so
@@ -9640,7 +9936,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const milestoneDone = milestones.filter(q => q.status === 'done').length;
     const milestonesHtml = milestones.length
       ? '<details class="q-milestones q-progress-section"><summary><span>Station milestones</span><span class="q-section-count">' + milestoneDone + ' / ' + milestones.length + '</span></summary>'
-        + '<div class="q-section-body"><div class="gx-tros q-grid q-milestone-grid">' + milestones.map(tro).join('') + '</div></div></details>'
+        + '<div class="q-section-body"><div class="gx-tros q-grid q-milestone-grid">' + milestones.map(tro).join('') + '</div>'
+        + '<p class="q-trophy-door"><button type="button" class="bb xs" data-open-trophies>OPEN THE TROPHY CASE</button></p></div></details>'
       : '';
     // Selection is presentation state only. Keep it on the stable window body across background data pokes;
     // if a selected quest completes/disappears, fall back to the first remaining quest in this category.
@@ -9694,7 +9991,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       + '</section><section id="q-view-goals" class="q-view-panel q-journal-planning" role="tabpanel" aria-labelledby="q-tab-goals">'
       + questTrackHtml(arcs) + lifeGoalsHtml() + '<details class="q-refresh-options"><summary>Quest suggestions <span class="q-section-note">Direction &amp; refresh</span></summary>' + questRefreshHtml() + '</details>'
       + '</section><section id="q-view-progress" class="q-view-panel q-journal-progress" role="tabpanel" aria-labelledby="q-tab-progress">'
-      + journeyHtml() + milestonesHtml + meterHtml
+      + systemsHtml() + journeyHtml() + stationPrestigeHtml() + milestonesHtml + meterHtml
       + '</section><section id="q-view-completed" class="q-view-panel q-journal-history" role="tabpanel" aria-labelledby="q-tab-completed">'
       + journeyChaptersHtml() + '<div class="gx-tros q-grid q-done">' + (done.map(tro).join('') || '<div class="q-journal-empty"><h3>No completed quests yet</h3><p>Finished quests and their results will appear here.</p></div>') + '</div></section></div>';
     // Stable field identities keep a background refresh from transplanting a draft into another chapter.
@@ -9730,7 +10027,10 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         ev.preventDefault(); viewButtons[next].click(); viewButtons[next].focus();
       });
     });
+    // a deep link (openTerm('quests', 'progress') — the top-bar COMMANDER gauge, NEW SYSTEM ONLINE) lands on its view once
+    if (consoleSection.quests) { body.dataset.questView = consoleSection.quests; delete consoleSection.quests; }
     selectQuestView(body.dataset.questView);
+    wireSystems(body.querySelector('#q-systems'));
     body.querySelectorAll('.q-step-outputs').forEach(b => b.addEventListener('click', () => {
       questOpenOutputs(b.dataset.run, b.dataset.label);
     }));
@@ -10104,7 +10404,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       if (m) { sfx('click'); rerender('quests', false); }
     }));
     // §C — GO: open the existing surface where this quest's next move happens (never a new window). openTerm is
-    // idempotent (restores a minimized panel, no-ops if already open); a floor gap opens REFIT via Build.open.
+    // idempotent (restores a minimized panel, no-ops if already open); a floor gap opens BUILD MODE via Build.open.
     body.querySelectorAll('.q-go').forEach(b => b.addEventListener('click', ev => {
       ev.stopPropagation();
       const d = b.dataset.dest;
@@ -10183,7 +10483,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     // `wide` = wide width only). The old per-window pixel widths (460/540/560/620/640/760/1000) are
     // gone — they made eight windows read as eight unrelated apps. A window earns WIDE only by having
     // a rail, a card grid, or side-by-side columns; everything single-column is a PANEL.
-    commander:['COMMANDER DOSSIER',      buildCommander, { console: true, className: 'commander-console' }],   // focused profile, preferences, briefing, and record sections
+    commander:['YOU · COMMANDER DOSSIER',      buildCommander, { console: true, className: 'commander-console' }],   // focused profile, preferences, briefing, and record sections
     // NAV CONDENSE 2 (2026-08-04): 'skills' is no longer a window key — the skill library/agent-
     // skills sections live in the ABILITIES (connectors) console via AbilityLanes, and per-agent
     // capabilities live in the dossier's SKILLS tab. openTerm keeps the old keys alive as aliases
@@ -10222,9 +10522,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     // hud + window plumbing
     notify, toast, mountConsole, rerender, openTerm, openSignIn, navigateWork, workConversation,
     // deep-link a missing capability object into the REAL placement surface (minimize this console,
-    // open REFIT, arm its palette on the exact prop). The TOOLSETS pane's inert rows use it, so a row
+    // open BUILD MODE, arm its palette on the exact prop). The TOOLSETS pane's inert rows use it, so a row
     // that diagnoses "no dish on station" can also cure it. Shared, never re-implemented: an auto-place
-    // that skipped REFIT would be a fake placement, and the honest path already exists.
+    // that skipped BUILD MODE would be a fake placement, and the honest path already exists.
     placeGearForSkill,
     // shared window fragments (roster switcher for the per-agent windows; dossier memory loader)
     rosterSwitchHtml, wireRosterSwitch, loadMemoryCore, workshopCard, wireWorkshop,
@@ -10233,6 +10533,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     // live core state (read-only views — never reassign through these)
     get present() { return present; },
     get sel() { return sel; },
+    get deskAgentId() { return deskAgentId; },
     get store() { return store; }
   };
 
@@ -10260,6 +10561,18 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         const k = b.dataset.term, def = BUILDERS[k];
         if (def) toggleTerm(k, def[0], def[1], def[2]);
       }));
+    // ONE PROGRESS HOME doors: an agent's GROWTH points at the station's progress, the station's progress at an agent's
+    // GROWTH and at the TROPHY CASE (until now reachable only by clicking its prop on the floor)
+    document.addEventListener('click', ev => {
+      const b = ev.target && ev.target.closest && ev.target.closest('[data-open-progress],[data-open-growth],[data-open-trophies]');
+      if (!b || !b.closest('#terms')) return;
+      sfx('click');
+      if (b.hasAttribute('data-open-progress')) openTerm('quests', 'progress');
+      else if (b.hasAttribute('data-open-growth')) openTerm('agents', 'growth');
+      else openTerm('trophies');
+    });
+    // ONE MENU dock buttons (MY WORK / AUTOMATE / CONNECT): open the menu's last-used tab
+    document.querySelectorAll('.bb[data-family]').forEach(b => b.addEventListener('click', () => toggleFamily(b.dataset.family)));
     badges();
   }
 
@@ -10291,21 +10604,30 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const def = BUILDERS[key]; if (!def) return;
     // the old NIGHT SHIFT settings section is part of AUTONOMY now (ONE WORD: AUTONOMY) — an old link still lands.
     if (key === 'settings' && section === 'nightshift') section = 'autonomy';
+    // ONE PLAIN LIST (10-02): MODEL DEFAULTS lives on AI & MODELS, LIVE VOICE on LOOK & SOUND
+    if (key === 'settings' && (section === 'models' || section === 'livevoice')) section = section === 'models' ? 'providers' : 'appearance';
     // optional section arg (Lane A error-door routing): land the console rail on a specific section — same
     // mechanism as the dossier's "jump to CONFIG" (consoleSection is what mountConsole reads at render).
     if (section) consoleSection[key] = section;
     if (open[key]) { if (minimized[key]) restoreTerm(key); if (section) rerender(key); return; }   // minimized → restore, not duplicate
+    // ONE MENU: a link to a sibling of a menu window that is already showing (OUTBOX → DELIVERABLES, ABILITIES →
+    // CHANNELS, a schedule draft while WORKFLOWS is up) switches that window's tab in place — never a second window
+    const fam = familyOf(key);
+    const sib = fam && Object.keys(open).find(k => k !== key && open[k] && !minimized[k] && !open[k]._closing && familyOf(k) === fam);
+    if (sib && !windowDirty(open[sib])) { swapInPlace(sib, () => toggleTerm(key, def[0], def[1], def[2])); return; }
     toggleTerm(key, def[0], def[1], def[2]);
   }
 
   // Following work should uncover the destination and preserve the source's scroll/draft.
   // Reuse the window manager's suspension, never destroy a form to follow a link.
-  const WORK_LABELS = { tasks: 'TASK BOARD', outbox: 'OUTBOX', deliverables: 'LIBRARY', agents: 'AGENT RECORD' };
+  const WORK_LABELS = { tasks: 'TASK BOARD', outbox: 'OUTBOX', deliverables: 'DELIVERABLES', agents: 'AGENT RECORD' };
   let workTrail = [];
   function navigateWork(from, to, section, back) {
     const alias = TERM_ALIAS[to];
     if (alias) { section = (section && alias.map[section]) || alias.section; to = alias.term; }
     if (!BUILDERS[to]) return;
+    // ONE MENU: two tabs of the same menu (OUTBOX → DELIVERABLES) — the tab strip is the way back, so switch in place
+    if (from !== to && familyOf(from) && familyOf(from) === familyOf(to)) { openTerm(to, section); return; }
     if (!back) {
       if (!workTrail.length || workTrail[workTrail.length - 1].key !== from) workTrail = [{ key: from, section: consoleSection[from] }];
       const prior = workTrail.findIndex(x => x.key === to);
@@ -10435,7 +10757,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   // GROWTH Tier 3: repaint the Settings AUTONOMY panel's EARNED badge if it is open (no-op otherwise — the paint fn
   // queries its own (possibly detached) host nodes, so a closed panel costs nothing). Called after a trust accept.
   const repaintAutonomy = () => { try { if (repaintAutonomyDial) repaintAutonomyDial(); } catch (_) {} };
-  return { init, enter, setRoster, leave, clearRunning, runningCount: () => runningAgents.size, isAgentRunning: (id) => agentLive(id), notify, flashSave, openAgent, openArcade, toggleTerm, openTerm, openDesk, closeTerm, rerender, refreshBoard: refreshBoardLive, pokeQuests, setTheme, getTheme, repaintAutonomy, registerWindow, h };
+  return { init, enter, setRoster, leave, clearRunning, runningCount: () => runningAgents.size, isAgentRunning: (id) => agentLive(id), notify, flashSave, openAgent, refreshCrew: () => crewTick(), openArcade, toggleTerm, openTerm, openDesk, closeTerm, rerender, refreshBoard: refreshBoardLive, pokeQuests, setTheme, getTheme, repaintAutonomy, refreshSystems, toggleFamily, familyOf, registerWindow, h };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { visibleTerminalRect, clampTerminalSize };

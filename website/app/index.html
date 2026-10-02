@@ -30,7 +30,7 @@
 <link rel="stylesheet" href="css/safety.css">
 <link rel="stylesheet" href="css/tutorial.css">
 <link rel="stylesheet" href="css/workhub.css">
-<link rel="stylesheet" href="css/refit.css"><!-- REFIT build-modal form polish: rides the .refit-guide card, before motion.css so its focus ring layers on top -->
+<link rel="stylesheet" href="css/refit.css"><!-- BUILD MODE build-modal form polish: rides the .refit-guide card, before motion.css so its focus ring layers on top -->
 <!-- motion.css last: the Phase-1 premium motion + feedback layer builds ON TOP of every screen's styles -->
 <link rel="stylesheet" href="css/motion.css">
 <link rel="stylesheet" href="css/asciifx.css"><!-- ASCII-motion kit: decode/dissolve/typewriter vocabulary (asciifx.js); rides motion.css's token layer -->
@@ -43,7 +43,7 @@
 <link rel="stylesheet" href="css/refit-easy.css"><!-- BUILD MODE, easier + more fun (2026-10-01): the library shows its props, the selection card, the editor keys' look -->
 <link rel="stylesheet" href="css/linewatch.css"><!-- LINE WATCH: the crate-inspect card on the live floor + the Workflow panel's TODAY row -->
 <link rel="stylesheet" href="css/deskscreen.css"><!-- DESK SCREEN: click an agent's workstation → its live work -->
-<link rel="stylesheet" href="css/workflow-panel.css"><!-- the DOCKED Workflow panel of REFIT (workflowpanel.js) — rides the refit glass tokens -->
+<link rel="stylesheet" href="css/workflow-panel.css"><!-- the DOCKED Workflow panel of BUILD MODE (workflowpanel.js) — rides the refit glass tokens -->
 <link rel="stylesheet" href="css/workflows-window.css"><!-- WORK › WORKFLOWS (windows/workflows.js): the Workflow panel glass, restated on its own docked window -->
 <link rel="stylesheet" href="css/utility-menus.css?v=1">
 <link rel="stylesheet" href="css/glass-demo.css">
@@ -58,6 +58,9 @@
 <link rel="stylesheet" href="css/project-home.css">
 <link rel="stylesheet" href="css/outputbrowser.css">
 <link rel="stylesheet" href="css/stepin.css"><!-- STEP-IN: the Commander takes an agent's live browser (app/stepin.js) -->
+<link rel="stylesheet" href="css/crew-glass.css"><!-- CREW PANEL GLASS: the left rail as a Build Library sheet (plain header, card rows) -->
+<link rel="stylesheet" href="css/cabinet-clean.css"><!-- CABINET CLEAN: one shape + header for every panel, quiet widget pins, the CTX bar, title-only starters -->
+<link rel="stylesheet" href="css/pipglass.css"><!-- PIP-GLASS: glass panels in the Pip-Boy 3000 screen language (phosphor type, curved glass, ticked rules, lit rows, tab-strip dock, segmented gauges) -->
 
 <link rel="stylesheet" href="css/titlebar.css"><!-- custom window chrome (Windows desktop shell): themed titlebar + MIN/MAX/CLOSE; inert unless body.sn-chrome (titlebar.js) -->
 
@@ -579,7 +582,7 @@
   <aside id="left">
     <!-- The head carried an "N AGENTS" count that #crew-sum already implied one panel lower
          ("0 WORKING / 2 IDLE" totals the same roster and says more). Dropped 2026-07-27 — one fact, one place. -->
-    <h3>▮ CREW<span class="crew-h3-right"><button id="crew-search-toggle" class="crew-hide" type="button" title="Find an agent" aria-label="Find an agent" aria-expanded="false" aria-controls="crew-search-wrap">⌕</button><button id="crew-hide" class="crew-hide" type="button" title="Hide the crew rail" aria-label="Hide the crew rail" aria-expanded="true">◂</button></span></h3>
+    <h3>CREW<span class="crew-h3-right"><button id="crew-search-toggle" class="crew-hide" type="button" title="Find an agent" aria-label="Find an agent" aria-expanded="false" aria-controls="crew-search-wrap">⌕</button><button id="crew-hide" class="crew-hide" type="button" title="Hide the crew rail" aria-label="Hide the crew rail" aria-expanded="true">◂</button></span></h3>
     <div id="crew-search-wrap" class="crew-search-wrap" hidden>
       <input id="crew-search" type="search" placeholder="Find an agent…" aria-label="Find an agent by name" autocomplete="off" aria-controls="crew">
       <button id="crew-search-close" type="button" aria-label="Close agent search" title="Close agent search">✕</button>
@@ -599,7 +602,7 @@
            The head above stays SESSIONS/PROJECTS + NEW only (Commander directive, 2026-07-08). -->
       <div id="ws-rail-search" class="ws-rail-search">
         <label><span class="sr-only">Search session titles and transcripts</span><input id="ws-search" type="search" placeholder="⌕ search sessions + transcripts" autocomplete="off"></label>
-        <div id="ws-kind-filter" class="ws-kind-filter" role="group" aria-label="Session view"><button type="button" data-ws-kind="all" aria-pressed="true" title="Show all sessions">ALL</button><button type="button" data-ws-kind="automated" aria-pressed="false" title="Show only automation sessions">AUTOMATED</button></div>
+        
         <ul id="ws-search-results" aria-live="polite"></ul>
       </div>
       <ul id="workstreams"></ul>
@@ -630,7 +633,7 @@
 
   <aside id="chat-panel">
     <div id="comms-resizer" class="col-resizer" title="drag to resize COMMS" role="separator" aria-orientation="vertical" aria-label="Resize COMMS panel"><span class="col-resizer-grip"></span></div>
-    <h3><span id="comms-title">▮ COMMS</span><span class="h3-right"><span class="dim" id="chat-status" role="status" aria-live="polite" aria-atomic="true">offline</span><span class="chat-elapsed" id="chat-elapsed" aria-hidden="true"></span><button id="comms-hud" type="button" hidden aria-label="Open the HUD" title="HUD: fold StarNet into a small panel that stays above your game or video (Ctrl+Shift+H)">HUD</button></span></h3>
+    <h3><span id="comms-title">COMMS</span><span class="h3-right"><span class="dim" id="chat-status" role="status" aria-live="polite" aria-atomic="true">offline</span><span class="chat-elapsed" id="chat-elapsed" aria-hidden="true"></span><button id="comms-hud" type="button" hidden aria-label="Open the HUD" title="HUD: fold StarNet into a small panel that stays above your game or video (Ctrl+Shift+H)">HUD</button></span></h3>
     <!-- AGENT LINE (chat.js): pick which roster agent you're talking to + a truthful readout of that agent's
          current model. The <select> options + the model text are filled from the LIVE roster (App.agents),
          never hardcoded — the header is honest about who's on the line and what they run on. -->
@@ -725,37 +728,31 @@
       <div class="bb-menu" role="menu">
         <button class="bb" data-term="agents"><span class="bb-i">◉</span><span class="bb-tx"><b>AGENTS</b><small>each crew member's dossier — config, memory, record</small></span></button>
         <button class="bb" id="bb-recruit" data-hint="recruit"><span class="bb-i">＋</span><span class="bb-tx"><b>RECRUIT</b><small>grow the crew — summon a class, or re-spec your agent</small></span></button>
-        <button class="bb" data-term="commander"><span class="bb-i">◈</span><span class="bb-tx"><b>COMMANDER</b><small>what the station has learned about you</small></span></button>
-        <button class="bb" data-term="stepin"><span class="bb-i">⇆</span><span class="bb-tx"><b>STEP-IN</b><small>take an agent's browser when it needs you to sign in — and your saved sign-ins</small></span><span id="si-badge" class="badge" style="display:none"></span></button>
+        <button class="bb" data-term="commander"><span class="bb-i">◈</span><span class="bb-tx"><b>YOU</b><small>what the station has learned about you</small></span></button>
+        <!-- STEP-IN shows ONLY while an agent is waiting for you (stepin.js badge); saved sign-ins live in SETTINGS › BROWSER -->
+        <button class="bb" data-term="stepin" hidden><span class="bb-i">⇆</span><span class="bb-tx"><b>STEP-IN</b><small>take an agent's browser when it needs you to sign in — and your saved sign-ins</small></span><span id="si-badge" class="badge" style="display:none"></span></button>
       </div>
     </div>
     <div class="bb-group" data-group="work">
       <button class="bb-grp" data-hint="work" aria-haspopup="menu" aria-expanded="false" title="The station's work — tasks, recipes, automation, quests"><span class="bb-gi">▤</span>WORK</button>
       <div class="bb-menu" role="menu">
-        <!-- WORK menu, one axis per entry (UX confusion audit 2026-07-15): RECIPES = WHAT to run,
-             ROUTINES = WHEN it runs, LOOPS = UNTIL it is done, TASKS = WHERE live work sits,
-             QUESTS = progress only. -->
-
-        <button class="bb" data-term="tasks" data-hint="task"><span class="bb-i">☑</span><span class="bb-tx"><b>TASKS</b><small>track planned work, review results &amp; mark complete</small></span></button>
-        <button class="bb" data-term="deliverables" data-hint="deliverable"><span class="bb-i">▣</span><span class="bb-tx"><b>DELIVERABLES</b><small>outputs, Workshop builds &amp; cleanup</small></span></button>
-        <button class="bb" id="bb-missions" data-hint="recipe"><span class="bb-i">❒</span><span class="bb-tx"><b>RECIPES</b><small>ready-made jobs to launch — they land on TASKS</small></span></button>
-        <!-- WORKFLOWS (2026-09-27 audit F1): the conveyor line builder — several agents, one after another — had no door named for it -->
-        <button class="bb" id="bb-workflows" data-term="workflows" data-hint="workflow"><span class="bb-i">⇶</span><span class="bb-tx"><b>WORKFLOWS</b><small>send a job down a line of agents — research, write, review</small></span></button>
-        <button class="bb" data-term="automation" data-hint="automation"><span class="bb-i">∞</span><span class="bb-tx"><b>AUTOMATION</b><small>routines &amp; loops — any job on a schedule, or repeated until it’s done</small></span></button>
+        <!-- ONE MENU (front doors, 2026-10-01): the WORK dock is three doors. MY WORK = one window with tabs TASKS ·
+             DELIVERABLES · OUTBOX · RECIPES; AUTOMATE = WORKFLOWS · SCHEDULES · GOAL LOOPS · AWAY WORK (stationui.js
+             FAMILIES). Each tab is still its own window, so every deep link and slash command lands exactly as before. -->
+        <button class="bb" id="bb-mywork" data-family="mywork" data-hint="mywork"><span class="bb-i">☑</span><span class="bb-tx"><b>MY WORK</b><small>tasks, finished work &amp; ready-made jobs</small></span></button>
+        <button class="bb" id="bb-automate" data-family="automate" data-hint="automate"><span class="bb-i">∞</span><span class="bb-tx"><b>AUTOMATE</b><small>workflows, schedules &amp; goal loops</small></span></button>
+        <!-- ONE MENU (front doors, 2026-10-01; in WORK since 10-02 — Andrew: it fits work, not Build Mode): CONNECT = one window with tabs ABILITIES (the agents' tools OUT — toolsets,
+             connectors, skills) · CHANNELS (YOUR way in — Telegram, Slack, Discord). Two tabs, never one card grid. -->
+        <button class="bb" id="bb-connect" data-family="connect" data-hint="connect"><span class="bb-i">⇄</span><span class="bb-tx"><b>CONNECT</b><small>tools &amp; apps your agents use, and where you message them</small></span></button>
         <button class="bb" data-term="quests" data-hint="quest"><span class="bb-i">⚑</span><span class="bb-tx"><b>QUESTS</b><small>small steps toward your goals &amp; recorded progress</small></span></button>
       </div>
     </div>
     <div class="bb-group" data-group="build">
-      <button class="bb-grp" data-hint="build" aria-haspopup="menu" aria-expanded="false" title="Shape the station — refit the floor, abilities, channels"><span class="bb-gi">⚒</span>BUILD</button>
+      <button class="bb-grp" data-hint="build" aria-haspopup="menu" aria-expanded="false" title="Shape the station — Build Mode and new apps"><span class="bb-gi">⚒</span>BUILD</button>
       <div class="bb-menu" role="menu">
-        <button class="bb" id="bb-build" data-hint="refit"><span class="bb-i">⌂</span><span class="bb-tx"><b>REFIT STATION</b><small>rooms, corridors, gear &amp; workflow lines</small></span></button>
-        <!-- direction-honest subtitles (audit finding 5): ABILITIES = the agent's tools OUT (switches, connectors,
-             skills); CHANNELS = YOUR way in. NAV CONDENSE 2: the SKILLS window merged into ABILITIES (per-agent
-             capability readout lives in the AGENTS dossier's SKILLS tab). -->
-        <button class="bb" data-term="connectors" data-hint="toolset"><span class="bb-i">⇄</span><span class="bb-tx"><b>ABILITIES</b><small>everything agents can do — toolsets, connectors, skills, your own hooks &amp; plugins</small></span></button>
+        <button class="bb" id="bb-build" data-hint="refit"><span class="bb-i">⌂</span><span class="bb-tx"><b>BUILD MODE</b><small>rooms, corridors, gear &amp; workflow lines</small></span></button>
         <!-- APPS: the way to the FIRST app (the APPS dock itself only appears once one exists) -->
         <button class="bb" id="bb-newapp-build" data-hint="app"><span class="bb-i">＋</span><span class="bb-tx"><b>NEW APP</b><small>describe anything — a dashboard, a tracker, a tool, a game — and your crew builds it in its own window</small></span></button>
-        <button class="bb" data-term="messaging" data-hint="channel"><span class="bb-i">✉</span><span class="bb-tx"><b>CHANNELS</b><small>your way in — talk to agents from Telegram, Slack, Discord</small></span></button>
       </div>
     </div>
     <!-- APPS (2026-09-29): HIDDEN until the Commander has an app (frontend/app/apps.js syncDock). Then: one entry per
@@ -801,7 +798,9 @@
 
   <!-- one-time coach teaching the new grouped-dock model; dismissed on first dock open / ✕ (navdock.js) -->
   <div id="nav-coach" class="nav-coach" hidden>
-    <span>Your panels now live in <b>4 docks</b> down here — click one to open it. Talk to your agent up in <b>COMMS ▸</b></span>
+    <span>Everything you run lives in these <b>4 docks</b> — click one to open it. Talk to your agent up in <b>COMMS ▸</b></span>
+    <!-- systems.js: a fresh station's dock grows as it is used; a returning power user can have it all now -->
+    <button id="nav-coach-all" class="nav-coach-x" data-tip="Bring every station system online in the dock now" hidden>SHOW EVERYTHING</button>
     <button id="nav-coach-x" class="nav-coach-x" aria-label="dismiss hint">GOT IT ✕</button>
     <span class="nav-coach-arrow">▾</span>
   </div>
@@ -819,7 +818,7 @@
 <script src="js/audio.js"></script>
 <script src="js/arcade.js"></script>
 <script src="app/backdrop-bake.js"></script>
-<script src="app/spacebg.js"></script><!-- THE VOID: shared deep-space backdrop (dense starfield + nebulas) — one sky for world.js AND build.js so REFIT never jumps the stars -->
+<script src="app/spacebg.js"></script><!-- THE VOID: shared deep-space backdrop (dense starfield + nebulas) — one sky for world.js AND build.js so BUILD MODE never jumps the stars -->
 <script src="app/terrain.js"></script><!-- THE GROUND: world-space ground layer for a LANDED station — pans AND zooms with the world (a backdrop must not), drawn under the station bake -->
 <script src="app/industrialtextures.js"></script>
 <script src="app/authored-prop-content.js"></script>
@@ -828,7 +827,7 @@
 <script src="app/authored-machine-config.js"></script>
 <script src="app/approved-sheet-effects.js"></script><script src="app/projection-prop-effects.js"></script><script src="app/propremaster.js"></script>
 <script src="app/authored-surface-mounts.js"></script><script src="app/propsprites.js"></script>
-<script src="app/propsearch.js"></script><!-- pure REFIT palette search matcher (flat lookup across all 120 props, both tiers) -->
+<script src="app/propsearch.js"></script><!-- pure BUILD MODE palette search matcher (flat lookup across all 120 props, both tiers) -->
 <script src="app/conveyor.js"></script>
 <script src="app/pipeline.js"></script>
 <script src="app/workflowline.js"></script><!-- pure readings of one conveyor line (run order, how-it-runs sentence, readiness, cost) from the compiled plan — the Workflow panel speaks only through it -->
@@ -973,6 +972,7 @@
 <script src="app/apps.js"></script><!-- APPS: describe it, get it — the APPS window + dock, the bar under each app window, the build/change hand-off to COMMS -->
 <script src="app/pluginhost.js"></script><!-- PLUGIN WINDOWS: an approved plugin's screens as real station windows, a sandboxed frame + the starnet bridge (needs stationui.js + apiticket.js above) -->
 <script src="app/navdock.js"></script>
+<script src="app/systems.js"></script><!-- STATION SYSTEMS ONLINE: a fresh station's dock grows as it is used (reveal, never lock) — init from app.js on game entry -->
 <script src="app/emergency-control.js"></script>
 <script src="app/chatresize.js"></script>
 <script src="app/hudmode.js"></script><!-- HUD MODE: compact always-on-top panel (desktop window ops live in src-tauri/src/hud_mode.rs) -->
@@ -993,7 +993,7 @@
 
 <script src="app/equipmenthelp.js"></script>
 <script src="app/stationtemplates.js"></script>
-<script src="app/workflowpanel.js"></script><!-- the DOCKED Workflow panel (REFIT): one card for the whole line, beside the live floor -->
+<script src="app/workflowpanel.js"></script><!-- the DOCKED Workflow panel (BUILD MODE): one card for the whole line, beside the live floor -->
 <script src="app/build.js"></script>
 <script src="app/save.js"></script>
 <script src="app/cloudsavecore.js"></script><!-- pure retry/health brain (unit-tested); MUST load before cloudsave.js -->
@@ -1072,5 +1072,6 @@
 <script src="app/worldlab.js"></script>
 <script src="app/glass-demo.js"></script>
 <script src="app/glass-comms.js"></script>
+<script src="app/crewcards.js"></script><!-- CREW CARDS: run clock, live step and needs-your-OK frame on the CREW rail rows (css/crew-glass.css) -->
 </body>
 </html>

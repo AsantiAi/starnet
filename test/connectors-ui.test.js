@@ -124,7 +124,7 @@ function fakeStack(tools) {
   const idx = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'index.html'), 'utf8');
 
   // the panel is still reachable + Spotify (the pre-existing card) is untouched
-  A.ok(/data-term="connectors"/.test(idx), 'CONNECTORS panel entry still exists');
+  A.ok(/id="bb-connect" data-family="connect"/.test(idx) && /connect: \{ label: 'CONNECT', tabs: \[\s*\{ id: 'abilities', k: 'connectors'/.test(fs.readFileSync(path.join(__dirname, '..', 'frontend', 'app', 'stationui.js'), 'utf8')), 'the CONNECTORS panel is reached from the dock: WORK › CONNECT opens it as its ABILITIES tab (ONE MENU, 2026-10-01)');
   A.ok(/function buildConnectors/.test(station), 'buildConnectors panel builder present');
   A.ok(/setupSpotify\(body\)/.test(station), 'Spotify card is still wired (not regressed)');
   A.ok(/id="sp-connect"/.test(station), 'Spotify connect control preserved');

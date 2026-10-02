@@ -387,15 +387,15 @@ const StationCommands = (() => {
   const base64OfBlob = b => new Promise(res => { try { const fr = new FileReader(); fr.onload = () => { const s = String(fr.result || ''); res(s.slice(s.indexOf(',') + 1)); }; fr.onerror = () => res(''); fr.readAsDataURL(b); } catch (_) { res(''); } });
   async function lookAt(st, env, ref) {
     if (typeof World === 'undefined' || typeof World.renderStill !== 'function' || typeof World.renderStillOfTiles !== 'function') throw new Error('the station picture is not available on this page');
-    let tiles = null, of = 'the whole station';
+    let tiles = null, of = 'the whole station', issues = null;
     if (ref) {
       const d = StationBuilder.mapOf(st.serialize(), env, { room: ref });
       if (!d || !d.ok) throw new Error((d && d.error) || 'there is no room "' + ref + '"');
       const rs = d.map.rects || [];
       tiles = { x1: Math.min(...rs.map(q => q.x)), y1: Math.min(...rs.map(q => q.y)), x2: Math.max(...rs.map(q => q.x + q.w - 1)), y2: Math.max(...rs.map(q => q.y + q.h - 1)) };
-      of = d.map.room;
+      of = d.map.room; issues = Array.isArray(d.map.issues) ? d.map.issues : [];
     }
-    for (let px = ref ? 1100 : 1400; px >= 400; px = Math.round(px * 0.75)) {
+    for (let px = 1400; px >= 400; px = Math.round(px * 0.75)) {
       const still = tiles ? World.renderStillOfTiles(tiles, px, { noBodies: false }) : World.renderStill(px);
       if (!still || !still.canvas) throw new Error('the station is not drawn yet (it may still be waking up): look again in a moment');
       let b = await blobOfCanvas(still.canvas, 'image/webp', 0.82);
@@ -405,10 +405,21 @@ const StationCommands = (() => {
       if (!data) throw new Error('this page could not encode the picture');
       if (data.length > LOOK_CHARS) continue;
       const out = { look: of, mime: b.type, width: still.width, height: still.height, data };
+      if (issues) out.issues = issues.slice(0, 12);
       if (tiles) Object.assign(out, { shows: { x1: tiles.x1 - 1, y1: tiles.y1 - 1, x2: tiles.x2 + 1, y2: tiles.y2 + 1 }, tilePx: Math.round(still.width / (tiles.x2 - tiles.x1 + 3)) });
       return out;
     }
     throw new Error('the picture of ' + of + ' is too big to send: look at one room');
+  }
+  async function builderServices(projects, services) {
+    const get = async url => { try { const r = await fetch(url, { cache: 'no-store' }); return r.ok ? await r.json() : null; } catch (_) { return null; } };
+    const out = {};
+    if (projects) { const j = await get('/api/projects'); if (j && Array.isArray(j.projects)) out.projects = j.projects.filter(x => x && x.blessed === true && x.root).map(x => ({ name: x.name || x.label || null, root: x.root })); }
+    if (services) {
+      const c = await get('/api/connectors'); if (c && Array.isArray(c.connectors)) out.connectors = c.connectors.map(x => ({ id: x.id, label: x.label || x.id }));
+      const p = await get('/api/plugins'); if (p && Array.isArray(p.plugins)) out.plugins = p.plugins.filter(x => x && x.active).map(x => ({ id: x.id, name: x.name || x.id }));
+    }
+    return out;
   }
   function builderReady() {
     const st = typeof App !== 'undefined' && App.station ? App.station() : null;
@@ -501,11 +512,26 @@ const StationCommands = (() => {
       return { planId: p.planId, summary: p.plan.summary, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
     },
     // EDIT WHAT STANDS: remove rooms, refurnish a room in another style, or clear a room's furniture
-    'station.plan_edit': (a) => {
+    'station.plan_edit': async (a) => {
       const { st, env } = builderReady();
       if (!StationBuilder.planEdit) throw new Error('this page cannot edit what stands yet; reload it');
-      const p = park(StationBuilder.planEdit(st.serialize(), (a && a.request) || {}, env));
+      const req = (a && a.request) || {};
+      // a refit that sets a line's folder or binds a portal: the trusted projects / connected services / plugins that are on,
+      // read from the sidecar as Build mode reads them, so the plan only ever names what the station has
+      const ops = Array.isArray(req.refit) ? req.refit : [], want = k => ops.some(o => o && typeof o.op === 'string' && o.op.toLowerCase().trim() === k);
+      if (want('folder') || want('bind')) env.services = await builderServices(want('folder'), want('bind'));
+      const p = park(StationBuilder.planEdit(st.serialize(), req, env));
       return { planId: p.planId, summary: p.plan.summary, steps: p.plan.steps, notes: p.plan.notes, expiresInMinutes: PLAN_TTL_MS / 60000, next: NEXT_STEP };
+    },
+    // a line by name or by a machine on it (station.test_line): the routing plan's lineId and its steps in words
+    'station.line_ref': (a) => {
+      const st = typeof App !== 'undefined' && App.station ? App.station() : null;
+      if (!st || !st.serialize) throw new Error('the station is not ready yet');
+      if (typeof StationBuilder === 'undefined' || !StationBuilder.lineRef || typeof Pipeline === 'undefined') throw new Error('this page cannot read its lines yet; reload it');
+      const crew = (App.agents ? App.agents() : []).map(x => ({ id: x.id, name: x.name }));
+      const r = StationBuilder.lineRef(st.serialize(), { WorldModel, Pipeline, crew, PropSprites: typeof PropSprites !== 'undefined' ? PropSprites : null }, String((a && a.line) || '').slice(0, 80), a && a.room != null ? String(a.room).slice(0, 60) : null);
+      if (!r || !r.ok) throw new Error((r && r.error) || 'that line could not be found');
+      return { lineId: r.lineId, name: r.name, room: r.room, steps: r.steps, crewed: r.crewed };
     },
     // a prop the lead just made (station.make_prop): load the MADE BY YOU library so the builder can place it by name
     'station.props_reload': async () => {

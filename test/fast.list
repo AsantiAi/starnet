@@ -248,6 +248,7 @@ test/personalization-store.test.js
 test/recruiterstore-readiness.test.js
 test/auxgovernor.test.js
 test/failreview.test.js
+test/feedbackmemory.test.js
 test/embed.test.js
 test/threadstore.test.js
 test/autopilot-threads.test.js
@@ -785,6 +786,7 @@ test/dossier-skin-accessibility.test.js
 test/dossier-delete-visible.test.js
 test/control-floor-theming.test.js
 test/crew-rail-fit.test.js
+test/agent-threads-rail.test.js
 test/brand-wordmark-mask.test.js
 test/personalization-authority-wiring.test.js
 test/sprite-loading.test.js

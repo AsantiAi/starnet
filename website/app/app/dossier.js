@@ -24,7 +24,7 @@
   const DIMS = [
     { key: 'identity',        label: 'Identity',        lead: 'Identity' },
     { key: 'stack',           label: 'Stack & tools',   lead: 'Stack & tools' },
-    { key: 'goals',           label: 'Goals',           lead: 'Goals' },
+    { key: 'goals',           label: 'Aims',            lead: 'Goals' },   // UI label only — QUESTS owns goals-with-plans
     { key: 'style',           label: 'Working style',   lead: 'Working style' },
     { key: 'standing_orders', label: 'Standing orders', lead: 'Standing orders' },
     { key: 'pain',            label: 'Pain points',     lead: 'Pain points (what eats their time / the work they want gone)' },

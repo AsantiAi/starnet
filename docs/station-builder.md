@@ -220,10 +220,92 @@ reading nook off the lounge, your way … then take a look and keep refining" be
 alcove and every piece placed by hand. It looked, saw the back-wall bookshelves sat left of centre and the lounge TV
 crowded the new doorway, refitted both, and looked again.
 
+**Chairs (Andrew 10-02: two chairs under every desk, side chairs turned backwards).** A desk (any workstation) draws
+its own chair the moment an agent works it, so its seat row stays clear: a refit that puts a piece there is refused,
+staffing a desk takes away a chair already standing on its seat, the office styles no longer set chairs at desks (or lamps
+on the bare floor between them), and `station.map { room }` lists `issues` (a piece on a seat, a seat turned away from its
+table). A seat takes `toward: <table>` and the builder works out its facing. A seat placed, moved or turned by hand right
+beside a table or desk without `toward` is turned to face it once every edit is down, and the summary says so. The
+meeting styles' south chairs faced away, and a room dressed with its door on the north wall mirrored its sets without
+turning their pieces. Both are fixed, and a test checks every styled seat against its table.
+
+**Left/right pieces.** A recliner is drawn facing west and recliner_r east. The same goes for the telescope, camera
+rig, weapon rack, heavy bag and bench press. The catalog labels ("recliner ‹ left") read as "the one for the left side",
+and the lounge, cozy and library styles had both recliners backwards. Now:
+- The styles pick the twin by the way it should face.
+- The catalog and the room detail say `faces: west | east`.
+- `toward`, or an `r` of west or east, picks the right twin.
+- `rotate` flips one.
+- The dresser turns a twin set against a side wall to face the room.
+- `issues` flags any seat or twin facing straight into a wall.
+
+`toward` on a piece that cannot turn (a stool) places it as drawn and says so, rather than refusing the plan.
+
+**The 10-02 sweep** (two independent reviews plus a live render of every style):
+- **Seats:** the dresser and named-piece adds keep every desk's seat row clear, including desks they place themselves. The
+  desks and comms styles used to trip the builder's own seat refusal in a narrow room.
+- **Seat side:** the seat row follows world.js exactly (a turned remaster desk seats on its front; `m` swaps west and
+  east).
+- **Mirrored rooms:** a room dressed with its door north mirrors only its chairs, never desks. A set holding the couch,
+  drawn from behind, is never mirrored.
+- **Re-lay groups:** rooms joined open plan move as one, so a line or a bench across the join stays whole. Rooms open to
+  the main room stay with it.
+- **Re-lay sizes:** the grid cell takes the station's own room size (up to 30 × 18), so six small or six large rooms
+  re-lay where they used to be refused.
+- **Re-lay checks:** it refuses if a line would gain a warning, a hallway would lead nowhere, or a piece would stand
+  outside every room.
+- **Wording:** the re-lay card counts the pieces leaving with the old hallways. The refusals name real rooms, not
+  placeholders.
+
 **Limits raised at the same time:** recruits 3 → 12 a plan (still only when the Commander asks), named pieces 16 → 120
 (40 of one kind), rooms in a rooms plan 6 → 24, lines in a room 6 → 16, a diamond 16 → 40 rooms, a concourse 8 → 24,
 rooms removed at once 8 → 60, a hallway 40 → 160 tiles (200 round a corner), a designed room 44 × 26 → 96 × 60. The
 bound left is the world model's own: a station spans at most 240 tiles.
+
+## Conveyor lines: set up, tested, started
+
+Added 2026-10-01 (Andrew: "and what about for conveyor systems, and then also setting up the conveyor systems?"). The
+lead could already build any line (machines, belts, branches, loops, sorters, staff, roles, instructions). It now sets one
+up, tests it and decides what starts it, as a person does in the Workflow panel.
+
+**Set up (REFIT edits)**, each the Workflow panel's own setter:
+
+| Edit | Sets | World-model call |
+| --- | --- | --- |
+| `hands` { prop: a bay, text } | what that step hands on | `setPropHands` |
+| `budget` { prop: any machine on the line, stages, perJob, perDay } | the line's whole budget (`cap` still sets the day) | `setPropLimits` on the line's INBOX |
+| `loop` { prop, passes, until, done, escalate } | max passes; until approved / revise (the reviewer's VERDICT) or code / research / general; the exit and escalation sides | `configureJunction` |
+| `wait` { prop: a joiner, minutes } | how long a JOINER waits for every branch | `configureJunction` |
+| `swap` { prop: a joiner or merger } | JOINER (the splitter copies to each, waits for all) ↔ MERGER (the branches take turns) | `swapJoinerMerger` |
+| `routes` { prop: a filter, routes, def } | what kind of work leaves which side | `configureJunction` |
+| `folder` { prop, project } | the working folder: only a trusted project | `setPropProject` on every INBOX of the line |
+| `bind` { prop: a connector portal or plugin terminal, connector / plugin } | which service's tools its room's agents get | `bindConnector`, `bindPlugin` |
+
+A junction edit changes only what it names (`jcfg` keeps the rest). Before 10-01, `routes` or `tries` replaced the
+junction's whole config, so setting a loop's tries wiped its wait or escalation lane. `folder` and `bind` are resolved
+when the plan is made, against what the page reads from the sidecar (`/api/projects` blessed roots, `/api/connectors`,
+the plugins that are on), and the resolved root or id rides in the plan (`spec.res`), so the build replays exactly what
+the card showed. The model never supplies a raw path or service id. `station.map { room }` reads every one of these
+settings back per piece.
+
+**Test: `station.test_line { line, job, room? }`.** One real job down the line through `runSampleJob`, the core of
+`POST /api/routing/sample`. That route is the Workflow panel's TEST and WORKFLOWS' SEND A JOB, and both now call the
+core. So it has the same one-per-station lock, the same refusals, and the same job record in the OUTBOX.
+- It answers each step in the order it ran (role, agent, how it ended, cost), whether the job reached the OUTBOX, and
+  says plainly when a review loop ran out of passes without an approval.
+- What the line delivered comes back fenced as untrusted data.
+- It asks first: it runs the line's agents and spends what they spend. A line nobody works is refused before anything is
+  sent.
+
+**Start: `station.start_line`.** Each start goes through the core the panel's form posts to. It asks first: from then on
+the line runs unattended, within its budget.
+
+| Call | Creates |
+| --- | --- |
+| `{ line, schedule, tz?, job }` | a `runsLine` routine fired at the line's entry step (`createCronJobFromSpec` + arm on create). The routine's own tripwire scans the job's words. |
+| `{ line, folder, job }` | a folder trigger (the folder jail + baseline). |
+| `{ line, webhook: true, job }` | a webhook trigger. Its key is minted, hashed and dropped: the lead never sees one, and the Commander takes a key from the line's Workflow panel (NEW KEY). |
+| `{ line, off: a trigger id }` | turns a trigger off. A schedule is a routine, and `routine.manage` pauses it. |
 
 ## Making new props (StarNet credits)
 

@@ -172,6 +172,7 @@ const { json: respondJson, readJsonBody, isAgentId } = require('./respond.js'); 
 const { readBody, readBodyBuffer } = require('./http-body.js');
 const { MIME, CHANNEL_UPLOAD_MAX_BYTES, mimeForPath, safeDownloadName, isActiveDeliverable, parseRange } = require('./file-response.js');
 const { reflect, reflectSalient, recordFromProposal, feedbackFor, highStakes } = require('./reflect.js');
+const FeedbackMemory = require('./feedbackmemory.js');   // THE COMMANDER'S TASTE: verdicts + corrections -> durable like/dislike memory
 const Failreview = require('./failreview.js');   // failure-review aux pass: PURE lesson producer for FAILED runs (reflect.js mold)
 const Embed = require('./embed.js');              // memory-compound: the embedding lane of hybrid recall (BM25 + vectors over a configured provider)
 const { swallow, note: failNote, summary: failopenSummary, setClock: failopenSetClock } = require('./failopen.js');    // tagged fail-open: a swallowed error stays visible (throttled warn + counter + diagnostics summary)
@@ -220,6 +221,7 @@ const { makeBrowserViews, makeViewRoutes } = require('./browser-view.js');   // 
 // its replay-nonce inbox is a durable JSONL sibling of the other ledgers.
 const { makeRouter } = require('./routing/router.js');
 const { makeChainRunner, effectiveLimits: chainEffectiveLimits } = require('./routing/chain.js');
+const Verdict = require('./routing/verdict.js');   // /api/routing/chain answers the next stage's VERDICT instruction, as hopTurn composes it
 const { makeStepTest } = require('./routing/steptest.js');   // the conveyor STEP-THROUGH TEST engine (/api/routing/steptest)
 const LineJobs = require('./routing/linejobs.js');   // WORKFLOWS — every job sent down a line, kept as one record the window and the OUTBOX open (/api/line-jobs)
 const LineDraft = require('./routing/linedraft.js');   // WORKFLOWS › SET IT UP FOR ME — "what should it make?" → a starter, a name, each step's instructions (/api/routing/line-draft)
@@ -3180,7 +3182,47 @@ function persistSkillNudge() {
   try { saveResilient(SKILL_NUDGE_FILE, { v: 1, counts: Object.fromEntries(skillNudge) }); }
   catch (e) { failNote('skill.nudge.persist', e); }
 }
-const verdictReview = makeVerdictReview({ cap: num(process.env.SKYNET_VERDICT_REVIEW_CAP, 40), ttlMs: num(process.env.SKYNET_VERDICT_REVIEW_TTL_MS, 6 * 60 * 60 * 1000), graceMs: num(process.env.SKYNET_VERDICT_REVIEW_GRACE_MS, 90 * 1000), now: () => Date.now() });
+// The parked review packets are DURABLE (verdict.packets.json, provider-free + compacted): a verdict the Commander
+// gives after a restart still reaches its review. Writes are coalesced (one per second at most) because every task
+// run's end stashes a packet. TTL 72h (was 6h): a rating from the OUTBOX the next day still teaches.
+const VERDICT_PACKETS_FILE = path.join(WORKSPACES, 'verdict.packets.json');
+let _verdictPersistTimer = null, _verdictPersistRows = null;
+function flushVerdictPackets() {
+  if (!_verdictPersistTimer) return;
+  clearTimeout(_verdictPersistTimer); _verdictPersistTimer = null;
+  try { saveResilient(VERDICT_PACKETS_FILE, { v: 1, rows: _verdictPersistRows || [] }); }
+  catch (e) { failNote('verdict.packets.flush', e); }
+}
+function persistVerdictPackets(rows) {
+  _verdictPersistRows = rows;
+  if (_verdictPersistTimer) return;
+  _verdictPersistTimer = setTimeout(() => {
+    _verdictPersistTimer = null;
+    try { saveResilient(VERDICT_PACKETS_FILE, { v: 1, rows: _verdictPersistRows || [] }); }
+    catch (e) { failNote('verdict.packets.persist', e); }
+  }, 1000);
+  if (_verdictPersistTimer.unref) _verdictPersistTimer.unref();
+}
+const verdictReview = makeVerdictReview({ cap: num(process.env.SKYNET_VERDICT_REVIEW_CAP, 40), ttlMs: num(process.env.SKYNET_VERDICT_REVIEW_TTL_MS, 72 * 60 * 60 * 1000), graceMs: num(process.env.SKYNET_VERDICT_REVIEW_GRACE_MS, 90 * 1000), now: () => Date.now(), onChange: persistVerdictPackets, redact: (t) => redact(t) });
+try {
+  const savedPackets = loadResilient(VERDICT_PACKETS_FILE, 'verdict-packets');
+  const n = verdictReview.restore(savedPackets && savedPackets.rows);
+  if (n) console.log('[skills] restored ' + n + ' verdict review packet(s)');
+} catch (e) { failNote('verdict.packets.restore', e); }
+// a RESTORED packet carries no live provider (never persisted: it is a live handle that can hold a credential).
+// Rebuild one for the agent's CURRENT run config, exactly as a fresh run would resolve it.
+async function rehydrateReviewJob(job) {
+  if (job.provider) return job;
+  const cfg = sampleRunConfigFor(job.agentId || 'agent');
+  if (!cfg || cfg.ok === false || !cfg.model || (!cfg.configured && !cfg.key)) throw new Error('no model configured for ' + (job.agentId || 'agent'));
+  const providerId = normalizeProvider(cfg.provider);
+  const provider = await providerForRunConfig(cfg, resolveReasoningEffort(providerId, cfg.reasoningEffort));
+  return Object.assign({}, job, {
+    provider, cost: makeCostEngine({ priceOf: provider.priceOf }),
+    model: auxSkillModel(provider, cfg.model),   // the CURRENT config's model: the parked one may belong to a provider since switched away from
+    unmetered: !!((getProviderProfile(providerId) || {}).unmetered)
+  });
+}
 const SKILL_CURATOR_INTERVAL_MS = num(process.env.SKYNET_SKILL_CURATOR_INTERVAL_MS, 24 * 60 * 60 * 1000);
 const SKILL_CURATOR_MAX_COST_USD = num(process.env.SKYNET_SKILL_CURATOR_MAX_USD, 0.12);
 const skillCuratorLastRun = new Map();
@@ -3231,7 +3273,7 @@ async function runBackgroundSkillReview(o) {
     };
     const reviewNotebook = notebookStore.get('notebook:' + agentId);
     const prompt = skillReview.buildPrompt({
-      agentId, runId, messages, verdict, correction,
+      agentId, runId, messages, verdict, correction, failed: !!(o && o.failed),
       loadedSkills: loadedSkills || [],
       managedSkills: managedSkills || [],
       // top-12 by rank() against the run's directive (was: last 12 in raw store order) — the reviewer sees the
@@ -7199,6 +7241,17 @@ function nightshiftContextPack() {
    context pack, the quest ranker and the insights route, so every surface reads the SAME record. Gated by the
    personalization pause like every other learned-about-you signal; fail-open to nothing. */
 let _trackRecordMemo = { at: 0, rec: null };
+// runId -> the Commander's verdict, for the CURRENT station generation (the same epoch the rating route stamps).
+// The track record reads it so a finished run the Commander rated `miss` counts as a failure, not a success.
+function ratingVerdictMap() {
+  const out = {};
+  try {
+    const saved = saveStore.load('agent') || null;
+    const epoch = Math.max(1, Math.floor(Number(saved && saved.agent && saved.agent.createdAt) || 1));
+    for (const r of growthRatings.list({ limit: 2000, epoch })) if (r && r.runId) out[r.runId] = r.verdict;
+  } catch (e) { failNote('outcomes.verdicts', e); }
+  return out;
+}
 function stationTrackRecord() {
   try {
     if (!personalizationStore.read().enabled) return null;
@@ -7208,7 +7261,7 @@ function stationTrackRecord() {
        the memo is cleared by nothing and needs to be: it re-folds on its own within the window. */
     const now = Date.now();
     if (_trackRecordMemo.rec && (now - _trackRecordMemo.at) < 30000) return _trackRecordMemo.rec;
-    const rec = Outcomes.fold(runStore.list(null, { limit: 400 }), { now: now });
+    const rec = Outcomes.fold(runStore.list(null, { limit: 400 }), { now: now, verdicts: ratingVerdictMap() });
     _trackRecordMemo = { at: now, rec: rec };
     return rec;
   } catch (_) { return null; }
@@ -7721,7 +7774,7 @@ function loopPrecheck(loop) {
     }
     const provider = cronProviderFor(loop);
     if (!cronHasCredential(provider, cronKeyFor(provider))) {
-      return { ok: false, reason: 'no credential for ' + (provider || 'the selected provider') + ' — connect it in SETTINGS › PROVIDERS' };
+      return { ok: false, reason: 'no credential for ' + (provider || 'the selected provider') + ' — connect it in SETTINGS › AI & MODELS' };
     }
     return { ok: true };
   } catch (e) { return { ok: false, reason: 'precheck error: ' + ((e && e.message) || e) }; }
@@ -10246,7 +10299,27 @@ function remoteAskMessage(row) {
     let q = ''; try { q = String((JSON.parse(row.argsSummary || '{}') || {}).question || ''); } catch (_) { q = ''; }
     return { title: who + ' has a question', body: q.slice(0, 200) || 'Tap to answer', tag: 'ask:' + row.promptId, url: '#needs' };
   }
-  return { title: who + ' needs your OK', body: 'wants to use ' + row.tool, tag: 'ask:' + row.promptId, url: '#needs' };
+  return { title: who + ' needs your OK', body: remoteAskWords(row), tag: 'ask:' + row.promptId, url: '#needs' };
+}
+// a lock screen gets plain words for what the agent wants to do, never a raw tool name or its JSON arguments
+function remoteAskWords(row) {
+  const t = String(row.tool || '').toLowerCase().replace(/_+/g, '.');
+  const raw = String(row.argsSummary || '');
+  const field = (k) => { const m = new RegExp('"' + k + '"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)').exec(raw); return m ? m[1].replace(/\\(["\\\\])/g, '$1').replace(/\\n/g, ' ') : ''; };
+  const file = (field('path') || field('file_path') || field('file')).split(/[\\/]/).pop();
+  if (/^fs\.(write|append)$/.test(t)) return 'wants to write ' + (file || 'a file');
+  if (/^fs\.(edit|patch)$/.test(t)) return 'wants to change ' + (file || 'a file');
+  if (/^(shell|terminal)\./.test(t)) { const c = field('command') || field('cmd'); return 'wants to run a command' + (c ? ': ' + c.slice(0, 120) : ''); }
+  if (t === 'path.trust') return 'wants to work with files in ' + (raw.slice(0, 120) || 'a project folder');
+  if (/^browser\.login/.test(t)) return 'wants you to log in to ' + (raw.slice(0, 80) || 'a website') + ' on your PC';
+  if (/^station\.build$/.test(t)) return 'wants to build on your station';
+  if (/^station\.make\.prop$/.test(t)) return 'wants to make a new prop';
+  if (/^routine\./.test(t)) return 'wants to set up a routine';
+  if (/notebook|memory/.test(t)) return 'wants to save a note to its memory';
+  if (/summon/.test(t)) return 'wants to add a new agent to the crew';
+  if (/^plugin\.submit$/.test(t)) return 'wants to install a plugin it built';
+  if (/^web\.(request|fetch)$/.test(t)) return 'wants to reach ' + (field('url').slice(0, 120) || 'a website');
+  return 'wants to use ' + (t.replace(/\.+/g, ' ').trim() || 'a tool');
 }
 function remoteNotify(evt) {
   if (!evt || !remotePush.subscribed().length) return;
@@ -10273,7 +10346,8 @@ function remoteNotify(evt) {
 const remoteView = require('./remote/view.js').makeRemoteView({ now: () => Date.now() });
 // Web Push sent by this station itself (sidecar/remote/push.js): its own key, the phones' subscriptions
 const remotePush = require('./remote/push.js').makePush({ fs, path, file: path.join(WORKSPACES, '.secrets', 'remote-push.json'), now: () => Date.now(),
-  fetch: (url, o) => fetch(url, Object.assign({}, o, { signal: AbortSignal.timeout(15000) })) });
+  fetch: (url, o) => fetch(url, Object.assign({}, o, { signal: AbortSignal.timeout(15000) })),
+  extraHosts: String(process.env.STARNET_REMOTE_PUSH_HOSTS || '').split(',') });   // tests only: a local fake push service
 const remotePortraits = require('./remote/portraits.js').makePortraits({ fs, path, frontend: FRONTEND });
 const remoteHost = require('./remote/host.js').makeRemoteHost({
   now: () => Date.now(), newId: () => crypto.randomUUID(), broadcast: remoteBroadcast,
@@ -10708,20 +10782,20 @@ const ROUTES = [
   // subscription stacking: extra sign-in accounts beside each OAuth subscription (handleOAuthAccounts)
   { m: 'GET', exact: '/api/auth/codex/accounts', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'accounts') },
   { m: 'POST', exact: '/api/auth/codex/add', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'add') },
-  { m: 'POST', exact: '/api/auth/codex/account-start', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'account-start') },
+  { m: 'POST', qsplit: '/api/auth/codex/account-start', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'account-start') },
   { m: 'POST', exact: '/api/auth/codex/account-poll', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'account-poll') },
   { m: 'POST', exact: '/api/auth/codex/remove', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'remove') },
   { m: 'GET', exact: '/api/auth/grok/accounts', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'accounts') },
   { m: 'POST', exact: '/api/auth/grok/add', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'add') },
-  { m: 'POST', exact: '/api/auth/grok/account-start', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'account-start') },
+  { m: 'POST', qsplit: '/api/auth/grok/account-start', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'account-start') },
   { m: 'POST', exact: '/api/auth/grok/account-poll', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'account-poll') },
   { m: 'POST', exact: '/api/auth/grok/remove', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'remove') },
   { m: 'GET', exact: '/api/auth/kimi/accounts', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'accounts') },
   { m: 'POST', exact: '/api/auth/kimi/add', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'add') },
-  { m: 'POST', exact: '/api/auth/kimi/account-start', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'account-start') },
+  { m: 'POST', qsplit: '/api/auth/kimi/account-start', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'account-start') },
   { m: 'POST', exact: '/api/auth/kimi/account-poll', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'account-poll') },
   { m: 'POST', exact: '/api/auth/kimi/remove', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'remove') },
-  { m: 'GET', exact: '/api/auth/claude-cli/status', h: (req, res) => handleClaudeCliAuth(req, res, 'status') },
+  { m: 'GET', qsplit: '/api/auth/claude-cli/status', h: (req, res) => handleClaudeCliAuth(req, res, 'status') },
   { m: 'POST', exact: '/api/auth/claude-cli/start', h: (req, res) => handleClaudeCliAuth(req, res, 'start') },
   { m: 'POST', exact: '/api/auth/claude-cli/poll', h: (req, res) => handleClaudeCliAuth(req, res, 'poll') },
   { m: 'POST', exact: '/api/auth/claude-cli/code', h: (req, res) => handleClaudeCliAuth(req, res, 'code') },
@@ -11285,6 +11359,7 @@ function gracefulShutdown(signal) {
   // HARD deadline: no matter what hangs, exit within 3s. unref so this timer itself never keeps us alive.
   const deadline = setTimeout(() => { try { console.warn('  · shutdown deadline hit — forcing exit'); } catch (_) {} process.exit(0); }, 3000);
   if (deadline.unref) deadline.unref();
+  try { flushVerdictPackets(); } catch (e) { failNote('verdict.packets.shutdown', e); }   // a rating after the restart must still find its packet
   try { if (typeof cronTimer !== 'undefined' && cronTimer) { clearInterval(cronTimer); } } catch (_) {}
   try { if (typeof nightshiftTimer !== 'undefined' && nightshiftTimer) { clearInterval(nightshiftTimer); } } catch (_) {}   // NS-1: stop the night-shift ticker on shutdown
   try { if (typeof connectorLifecycleTimer !== 'undefined' && connectorLifecycleTimer) { clearInterval(connectorLifecycleTimer); } } catch (_) {}
@@ -11430,8 +11505,18 @@ function handleRoutingChain(req, res) {
     const lim = chainEffectiveLimits(lineId ? router.lineLimits(lineId) : null, {}, (typeof effectiveCaps.global === 'number' && effectiveCaps.global > 0) ? effectiveCaps.global : null);
     limits = { maxHops: lim.maxHops, maxUsd: lim.maxUsd, maxUsdPerDay: lim.maxUsdPerDay, clamped: lim.clamped, spentToday: lineId ? lineSpend.spentToday(lineId) : 0 };
   } catch (_) { limits = null; }
+  /* `verdict` + `last` (additive, sweep 2026-10-01): the rest of the turn the sidecar's chain runner composes for the next
+     stage (routing/chain.js hopTurn) — the VERDICT-line instruction when its lane meets a verdict-keyed LOOP gate, else
+     whether its reply LEAVES the line. The browser's COMMS work line passed neither, so a line typed into COMMS told its
+     last WRITER to "produce the output for the next stage" (the essay-about-the-report bug) and a reviewer never heard it
+     must end on a VERDICT line. */
+  let verdict = null, last = false;
+  if (next) {
+    try { const g = router.loopGateAfter(next, lineId, nextDock || undefined); verdict = (g && Verdict.isVerdictWord(g.when)) ? Verdict.verdictBrief(g.when) : null; } catch (_) { verdict = null; }
+    if (!verdict) { try { last = !!router.chainShipsToOutbox(next, nextDock || undefined); } catch (_) { last = false; } }
+  }
   res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-  res.end(JSON.stringify({ next: next || null, nextDock: nextDock || null, brief: brief || null, limits: limits }));
+  res.end(JSON.stringify({ next: next || null, nextDock: nextDock || null, brief: brief || null, limits: limits, verdict: verdict || null, last: last }));
 }
 
 /* ---- GET /api/routing/sample — inert feature discovery for the Build Mode finish-the-line card. ---- */
@@ -11566,7 +11651,14 @@ function getSampleHub() {
   return sampleHub;
 }
 async function handleRoutingSample(req, res) {
-  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  const r = await runSampleJob(async () => { const raw = await readBody(req, 1 << 16); return raw && raw.trim() ? (JSON.parse(raw) || {}) : {}; });
+  res.writeHead(r.code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(r.obj));
+}
+/* RUN ONE REAL JOB down a line: the route above (the Workflow panel's TEST, WORKFLOWS' SEND A JOB) and the lead's
+   station.test_line (2026-10-01) both come here, so a test the lead runs is the very job the Commander's button sends:
+   the same one-per-station lock, the same refusals, the same job record in the OUTBOX. Answers { code, obj }. */
+async function runSampleJob(readArgs) {
+  const json = (code, obj) => ({ code, obj });
   // ONE PER STATION — the lock is claimed in this synchronous slice (before any await), so two concurrent
   // posts can never both dispatch. Refusal paths below release it before answering.
   if (sampleInFlight) {
@@ -11576,7 +11668,7 @@ async function handleRoutingSample(req, res) {
   sampleInFlight = { streamId: 'sample-' + crypto.randomUUID().slice(0, 8), workitemId: '', startedAt: Date.now() };
   try {
     let body = {};
-    try { const raw = await readBody(req, 1 << 16); body = raw && raw.trim() ? (JSON.parse(raw) || {}) : {}; }
+    try { body = (await readArgs()) || {}; }
     catch (_) { return json(400, { ok: false, error: 'bad json' }); }   // the finally releases the lock on every exit
     const text = String(body.text == null ? '' : body.text).trim().slice(0, 2000) || SAMPLE_TEXT;
     /* the line this proof is FOR (additive, 2026-08-10): the FINISH card posts { line: c.key } — the same
@@ -11673,7 +11765,8 @@ async function handleRoutingSample(req, res) {
       runs = (runStore.list(null, { streamId: streamId, limit: 200 }) || [])   // THIS sample's rows, not the station's newest 50
         .filter(r => r && String(r.streamId || '') === streamId)
         .map(r => ({ runId: r.runId, agentId: r.agentId, reason: r.reason, usd: r.usd, ts: r.ts, title: r.title, streamId: r.streamId, turns: r.turns,
-          dockId: r.dockId || null, lineId: r.lineId || null }));   // (the BAY each stage ran at: the panel names each step's work by it)
+          dockId: r.dockId || null, lineId: r.lineId || null,
+          taintedBy: r.taintedBy || null }));   // (a stage that read untrusted content: whoever reads this job's text inherits it — station.test_line relays it)   // (the BAY each stage ran at: the panel names each step's work by it)
     } catch (_) { runs = []; }
     // Outbound warning text is not delivery evidence. The proof succeeds only when every durable stage
     // outcome is clean, including every hop after the routed entry dock.
@@ -11734,14 +11827,19 @@ async function handleRoutingSample(req, res) {
    server's own answer, never on the click alone. A stop that lands before the first run starts is honoured by the POST
    itself (stopRequested). Same contract as the sample route: behind the launch token, and 409 {ok:false,error} when
    there is nothing to stop — never 404. */
-function handleRoutingSampleStop(_req, res) {
-  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
-  if (!sampleInFlight) return json(409, { ok: false, error: 'no sample job is riding the line — nothing to stop.' });
+function stopSampleJob() {
+  if (!sampleInFlight) return null;
   sampleInFlight.stopRequested = true;
   let halted = 0;
   try { halted = killAll(null, (sampleHub && sampleHub._internals) ? sampleHub._internals.inflight : null); }
   catch (e) { failNote('routing.sample.stop', e); }
-  return json(200, { ok: true, stopped: true, halted: halted, streamId: sampleInFlight.streamId });
+  return { halted, streamId: sampleInFlight.streamId };
+}
+function handleRoutingSampleStop(_req, res) {
+  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  const r = stopSampleJob();
+  if (!r) return json(409, { ok: false, error: 'no sample job is riding the line — nothing to stop.' });
+  return json(200, { ok: true, stopped: true, halted: r.halted, streamId: r.streamId });
 }
 
 /* ---- LINE TRIGGERS (2026-09-23, owner-approved) — /api/routing/triggers[/:id[/secret]] + POST /api/hooks/:id.
@@ -11876,6 +11974,60 @@ function triggerView(v) {
 }
 const triggerJson = (res, code, obj, extra) => { res.writeHead(code, Object.assign({ 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, extra || {})); res.end(JSON.stringify(obj)); };
 function mintTriggerSecret() { const secret = LineTriggers.mintSecret(crypto.randomBytes(32)); return { secret, hash: LineTriggers.hashSecret(secret) }; }
+/* WHAT STARTS A LINE, for the lead (station.start_line, 2026-10-01): a schedule (a runsLine routine fired at the line's
+   entry step), a folder or a webhook trigger, made through the very cores the Workflow panel's forms post to
+   (createCronJobFromSpec + arm on create; LineTriggers.validateInput, the folder jail + baseline, triggerRunner.create),
+   so the same refusals, the same tripwire on the job's words, the same records. A webhook's key is never handed to the
+   model: the Commander takes a new one from the line's Workflow panel. */
+async function startLineFor(spec) {
+  const s = spec || {}, lineId = String(s.lineId || ''), job = String(s.job || '').trim(), name = String(s.name || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  const plan = router.getPlan();
+  if (!plan || !(Array.isArray(plan.lines) ? plan.lines : []).some(l => l && String(l.lineId) === lineId))
+    return { ok: false, error: 'the line ' + (name || lineId) + ' is not armed yet (the station page compiles it as it is built): keep the page open and try again in a moment' };
+  if (s.kind === 'off') {
+    const cur = triggerRunner.get(String(s.id || ''));
+    if (!cur || String(cur.lineId) !== lineId) return { ok: false, error: 'there is no trigger ' + String(s.id || '').slice(0, 40) + ' on ' + name + ' (a schedule is a routine: routine.manage pauses or removes it)' };
+    const r = triggerRunner.update(cur.id, { enabled: false }, {});
+    return r.ok ? { ok: true, kind: 'off', id: cur.id, was: cur.kind } : { ok: false, error: r.error };
+  }
+  if (!job) return { ok: false, error: 'a start needs the job it sends down the line each time' };
+  // the routine tripwire, for EVERY start (a schedule meets it again in createCronJobFromSpec; a trigger's task is the same
+  // standing words): an override or exfil payload is refused before anything is saved
+  { const scan = cronGuard.scanRoutinePrompt(job); if (!scan.ok) return { ok: false, error: scan.error }; }
+  if (s.kind === 'schedule') {
+    const docks = crewedDocksOnLine(plan, lineId);
+    if (!docks.length) return { ok: false, error: 'nobody works the first step of ' + name + ': give it an agent first' };
+    const layer = Pipeline.hasDockLayer(plan) ? Pipeline.dockLayer(plan) : null;
+    const dockId = layer ? docks[0] : null, agentId = layer ? layer.agentOfDock[dockId] : docks[0];
+    const out = await createCronJobFromSpec({ name: (name ? name + ' — ' : '') + (job.length > 48 ? job.slice(0, 45) + '…' : job), prompt: job, schedule: s.schedule, tz: s.tz || undefined,
+      agentId, dockId: dockId || undefined, runsLine: true });
+    const b = out.body || {};
+    if (b.duplicate) return { ok: false, error: 'a similar routine already exists ("' + ((b.job && b.job.name) || '') + '"): nothing new was made' };
+    if (!((out.status || 200) === 200 && b.ok && b.job && b.job.id)) return { ok: false, error: b.error || b.message || 'the schedule was not saved' };
+    try { if (!cronArmed) { saveCronArmed(true); cronArmed = true; if (!cronHalted) armCron(); } } catch (e) { console.warn('[cron] arm-on-create failed:', (e && e.message) || e); }
+    const asked = String(s.schedule || '').replace(/\s+/g, ' ').trim(), shown = String(b.job.scheduleDisplay || '');
+    return { ok: true, kind: 'schedule', id: b.job.id, when: asked + (shown && shown !== asked ? ' (' + shown + ')' : ''), armed: !!cronArmed && !cronHalted, halted: !!cronHalted };
+  }
+  if (s.kind === 'folder' || s.kind === 'webhook') {
+    const v = LineTriggers.validateInput(Object.assign({ kind: s.kind, lineId, name, config: Object.assign({ task: job }, s.kind === 'folder' ? { path: String(s.folder || '') } : {}) },
+      s.maxPerHour != null ? { maxPerHour: s.maxPerHour } : {}), { partial: false });
+    if (!v.ok) return { ok: false, error: v.error };
+    const fields = v.fields, extra = {};
+    if (fields.kind === 'folder') {
+      const pol = await triggerFolderPolicy.check(fields.config.path);
+      if (!pol.ok) return { ok: false, error: pol.error };
+      fields.config.path = pol.path;
+      const base = await triggerWatcher.baseline(pol.path);
+      if (!base.ok) return { ok: false, error: base.error };
+      extra.baselineKeys = base.keys;
+    } else extra.secretHash = mintTriggerSecret().hash;   // the key itself is never kept or handed on
+    const r = triggerRunner.create(fields, extra);
+    if (!r.ok) return { ok: false, error: r.error };
+    const t = triggerView(r.trigger);
+    return { ok: true, kind: s.kind, id: t.id, path: (t.config && t.config.path) || null, maxPerHour: t.maxPerHour, enabled: t.enabled !== false, blockedBy: t.blockedBy || null };
+  }
+  return { ok: false, error: 'a line starts on a schedule, from a folder, or from a webhook' };
+}
 
 /* GET /api/routing/triggers — every trigger (secrets never included), plus what the station can offer. */
 function handleTriggersList(req, res) {
@@ -17417,7 +17569,9 @@ async function handleRun(req, res) {
         // waiting on a question somebody already answered elsewhere.
         const orig = pending.get(promptId);
         if (orig) {
-          const viaRemote = (d) => { orig(d); if (typeof d === 'string') { try { emit('permission.response', { promptId, decision: d === 'once' || d === 'session' ? d : 'deny' }); } catch (e) { failNote('remote.index.deskPermissionResponse', e); } } };
+          // a phone's answer to a QUESTION (brief.ask) is { __clarify, text }: it answers the prompt too, so the desk's card is
+          // told (decision 'once' = answered), not left live on a question the run already moved past (sweep 2026-10-01)
+          const viaRemote = (d) => { orig(d); const decision = typeof d === 'string' ? (d === 'once' || d === 'session' ? d : 'deny') : (d && d.__clarify ? 'once' : null); if (decision) { try { emit('permission.response', { promptId, decision }); } catch (e) { failNote('remote.index.deskPermissionResponse', e); } } };
           viaRemote.extend = orig.extend;
           try { untrack = remoteApprovals.add(Object.assign({ runId, surface: 'desk', finish: viaRemote }, row)); } catch (e) { failNote('remote.index.trackDeskPrompt', e); }
         }
@@ -17748,6 +17902,12 @@ async function runOnceCore(o) {
     let rules = '';
     try { rules = (await projectInstructions.load(cronRoot, true)).text || ''; } catch (_) {}
     system = String(system || '') + '\n' + projectScopeLine(cronRoot, true) + rules;
+    // ONE BASE FOR BOTH TOOLS (issue #60). The prompt line above says file work happens in this folder and
+    // shell.* already defaults its cwd to it (projectCwd), but fs.* only roots relative paths at ctx.projectRoot —
+    // so a routine/loop's `fs.write Working\x.txt` landed in the agent's private workspace while the shell looked
+    // in the project and reported it MISSING. cronRoot is realpath'd and re-proven blessed just above, and fs.*
+    // still re-runs path trust on every resolved target, so this widens nothing.
+    if (cronRoot && !o.projectRoot) o = { ...o, projectRoot: cronRoot };
   }
   const internal = !!o.internal || !!o.outputOnly;   // reason-only self-talk: system prompt stays VERBATIM, no memory/transcript injection
   let isTask = !!o.isTask;
@@ -18354,9 +18514,13 @@ async function runOnceCore(o) {
     getTaskContext: () => {
       const settled = taskBriefState ? commanderEvidenceContext(system || '', Object.assign({},taskContextInputs,{brief:taskBriefState.brief})) : taskContextBlock;
       const notes = notebookStore.get('notebook:' + agentId);
-      const pinned = Array.isArray(notes) ? notes.filter(r => r && r.pinned) : [];
+      // the Commander's taste rides into delegated work too: a worker writes the deliverable the Commander rates
+      const tasteRecs = personalizationStore.read().enabled ? FeedbackMemory.stationTaste(notes, otherAgentNotebooks(agentId)) : [];
+      const tasteIds = new Set(tasteRecs.map(r => r.id).filter(Boolean));
+      const pinned = Array.isArray(notes) ? notes.filter(r => r && r.pinned && !tasteIds.has(r.id)) : [];
       const recalled = renderRecall(rank(pinned, recentUserText(messages), { now: Date.now(), streamId, projectRoot: o.projectRoot || null }), { limit: 1500 });
-      return settled + (recalled.text ? '\n\n' + redact(recalled.text) : '');
+      const taste = renderRecall(tasteRecs, { limit: FeedbackMemory.TASTE_CHARS, header: FeedbackMemory.TASTE_HEADER });
+      return settled + (recalled.text ? '\n\n' + redact(recalled.text) : '') + (taste.text ? '\n\n' + redact(taste.text) : '');
     },
     // A worker shares the LEAD's consent broker (see the `consent` note below), so its own roster APPROVAL clause is
     // the wrong one whenever the two postures differ. Hand orchestration the EFFECTIVE posture so the delegated
@@ -18392,6 +18556,20 @@ async function runOnceCore(o) {
     ? overseerStation(o.streamId, runId) : stationBridge, scanText: t => cronGuard.scanRoutinePrompt(t), now: () => Date.now(),
     planMemo: stationPlanMemo, lineMenu: stationLineMenu, kitMenu: stationKitMenu, presetMenu: stationPresetMenu, styleMenu: stationStyleMenu, roomMenu: stationRoomMenu,
     userProps,   // MAKE A PROP: the station's own prop maker (StarNet credits), for station.make_prop
+    // TEST A LINE: the very job SEND A JOB sends, for station.test_line. A stopped lead run (or the tool's own timeout)
+    // stops ITS job the way the panel's STOP does — it used to ride on, spending, holding the one-per-station lock.
+    runLineJob: (args, signal) => {
+      const before = sampleInFlight;
+      const p = runSampleJob(async () => args);
+      const mine = sampleInFlight !== before ? sampleInFlight : null;   // the lock is claimed synchronously; a 409 claims nothing
+      if (mine && signal) {
+        const stopMine = () => { if (sampleInFlight === mine) stopSampleJob(); };
+        if (signal.aborted) stopMine(); else signal.addEventListener('abort', stopMine, { once: true });
+        p.finally(() => signal.removeEventListener('abort', stopMine)).catch(swallow('station.test_line.unwire'));
+      }
+      return p;
+    },
+    startLine: spec => startLineFor(spec),                 // WHAT STARTS A LINE: the panel's own schedule + trigger cores, for station.start_line
     // station.layout's HARNESS facts (audit 2026-09-28): the plan the router actually holds, each line's effective
     // budget (the runner's own effectiveLimits), and today's numbers since local midnight (the line plate's window)
     layoutFacts: {
@@ -19309,7 +19487,8 @@ async function runOnceCore(o) {
   // advertises everything, exactly as before this feature — the escape hatch for an operator whose model is
   // one of those, and the A/B control for measuring whether deferral (rather than the model) caused a miss.
   // (`deferralOff` is read once, above at TOOL FOOTPRINT, so the connector/availability deferrals obey it too.)
-  const directDomainWithheld = (name) => !!directDomainTask && (/^team\./.test(name) || /^browser\./.test(name) || name === 'web_search' || name === 'web_request');
+  // web_request stays ADVERTISED (issue #58): the dispatch guard below confines it to the named host + subdomains
+  const directDomainWithheld = (name) => !!directDomainTask && (/^team\./.test(name) || /^browser\./.test(name) || name === 'web_search');
   const deferredNames = new Set((deferralOff ? [] : (resolved.deferred || [])).filter(n => !directDomainWithheld(n)));
   const coreNames = resolved.tools.filter(n => !deferredNames.has(n) && !directDomainWithheld(n));
   const toolDefs = isTask ? registry.wireFormat(registry.list(new Set(coreNames))) : [];
@@ -19426,6 +19605,9 @@ async function runOnceCore(o) {
     }
     if (directDomainTask && directDomainWithheld(c.name)) {
       return { ok: false, isError: true, summary: 'direct-domain-local', content: 'This is a bounded check of the exact host ' + directDomainTask.host + '. Do not delegate, search, browse, or call archives; fetch that host directly with web_fetch.' };
+    }
+    if (directDomainTask && c.name === 'web_request' && !DomainTask.isTargetRequest(c, directDomainTask)) {
+      return { ok: false, isError: true, summary: 'direct-domain-target-only', content: 'This task is about ' + directDomainTask.host + ': web_request may call that host (or its own API subdomains) only.' };
     }
     if (directDomainTask && c.name === 'web_fetch' && !DomainTask.isTargetFetch(c, directDomainTask)) {
       return { ok: false, isError: true, summary: 'direct-domain-target-only', content: 'Fetch only the exact requested host ' + directDomainTask.host + '. Do not try spelling variants or alternate domains unless the Commander asks.' };
@@ -20160,15 +20342,31 @@ async function runOnceCore(o) {
   // (a title call crediting memory.used would fake the Memory Core stats).
   if (!internal) try {
     const stored = notebookStore.get('notebook:' + agentId);
-    const recs = o.recovery ? [] : (Array.isArray(stored) ? stored : []);
+    const all = o.recovery ? [] : (Array.isArray(stored) ? stored : []);
+    // THE COMMANDER'S TASTE (feedbackmemory.js): their verdicts + corrections ride EVERY run in a block of their
+    // own. Taste is not topical ("shorter" applies to any deliverable), so BM25's word-overlap floor must not
+    // decide whether it surfaces. Those records leave the ranked pool so they never take a recall slot twice.
+    // station-wide: a correction given to ANY agent is about the Commander, so it shapes this agent's work too
+    // (recovery runs inject nothing at all — see the note above msgs).
+    const tasteRecs = (o.recovery || !personalizationStore.read().enabled) ? [] : FeedbackMemory.stationTaste(all, otherAgentNotebooks(agentId));
+    const tasteIds = new Set(tasteRecs.map(r => r.id).filter(Boolean));
+    const recs = all.filter(r => !(r && tasteIds.has(r.id)));
     const q = recentUserText(convo);   // include restored conversation context on terse post-restart follow-ups
     // memory-compound: the embedding lane (BM25 + vectors) — null => pure BM25, byte-identical to before
     const hv = recs.length ? await hybridVectors({ agentId, recs, query: q, run: { providerId, key: runKey, baseUrl }, runId, cost, unmetered: providerUnmetered }) : null;
     const ranked = rank(recs, q, { now: Date.now(), streamId, projectRoot: o.projectRoot || null, vectors: hv && hv.vectors, queryVec: hv && hv.queryVec });   // M-mem.2b stream boost · project tier: only THIS project's lessons
-    const recall = renderRecall(ranked, { limit: 1500 });
+    const recalled = renderRecall(ranked, { limit: 1500 });
+    const taste = renderRecall(tasteRecs, { limit: FeedbackMemory.TASTE_CHARS, header: FeedbackMemory.TASTE_HEADER });
+    const recall = {
+      text: [recalled.text, taste.text].filter(Boolean).join('\n'),
+      count: recalled.count + taste.count,
+      usedIds: (recalled.usedIds || []).concat(taste.usedIds || [])
+    };
+    recall.chars = recall.text.length;
     if (recall.text) {
       msgs = injectRecall(msgs, redact(recall.text));   // §5.6 belt-and-suspenders: a legacy plaintext note can't reach the provider verbatim
       emit('memory.recall', { agentId, runId, count: recall.count, chars: recall.chars });
+      if (taste.count && DEBUG_CHANNEL_LOGS) console.log('[memory] taste run=' + runId + ' agent=' + agentId + ' records=' + taste.count);
       // M-mem.6: surfacing a record IS a use — fold useCount++ / lastUsedAt back onto the stored record (the
       // reduction that makes the Memory Core stats AND rank()'s recency/trust boosts REAL), then emit. One
       // store write per run (only when something changed); the bumped recs don't affect THIS run's ranking.
@@ -20782,13 +20980,14 @@ async function runOnceCore(o) {
     skillReviewingNow.add(agentId);
     runBackgroundSkillReview({ agentId, runId, messages: result.messages.slice(), provider, model: _auxSkillModel, cost, loadedSkills, managedSkills, unmetered: providerUnmetered }).catch(swallow('aux.skillreview.envelope')).finally(() => { skillReviewingNow.delete(agentId); });
   }
-  if (process.env.SKYNET_SKILL_REVIEW !== '0' && _auxDone && isTask && !internal) {
-    // CONSISTENCY LOOP (2026-08-22): park this real task run's review packet so that if the Commander rates it
+  if (process.env.SKYNET_SKILL_REVIEW !== '0' && (_auxDone || _auxFail) && isTask && !internal) {
+    // CONSISTENCY LOOP (2026-08-22): park this real task run's review packet (a FAILED one too, 2026-10-01: the
+    // rating route accepts max_iters/budget/refusal runs, and their `miss` used to find no packet) so that if the Commander rates it
     // `ok`/`miss` (POST /api/growth/ratings) the SAME quiet review runs again WITH THE VERDICT in the prompt.
     // Parked even when the nudge review above already fired: that pass ran before the verdict existed and is
     // blind to it. The verdict pass is the one that knows the work fell short. Bounded LRU + TTL in verdictreview.js;
     // `great` never spends it; taken once; one extra aux pass per rated-short run, a Commander-initiated signal.
-    verdictReview.stash(runId, { agentId, messages: result.messages.slice(), provider, model: _auxSkillModel, cost, loadedSkills, managedSkills, unmetered: providerUnmetered });
+    verdictReview.stash(runId, { agentId, messages: result.messages.slice(), provider, model: _auxSkillModel, cost, loadedSkills, managedSkills, unmetered: providerUnmetered, failed: !_auxDone });
   }
   if (_auxSpend.has('skill-curator')) {
     runSkillCurator({ agentId, runId, provider, model: _auxSkillModel, cost, unmetered: providerUnmetered }).catch(swallow('aux.skillcurator.envelope'));
@@ -23181,6 +23380,14 @@ function consentSummary(call) {
   }
   // the station builder: the card shows what the dry run found (the plan's summary + every step's instructions), never the model's words
   if (/^station[._]build$/.test(String(call && call.name || ''))) return stationPlanSummary(stationPlanMemo, a.planId) || 'an unknown or expired plan: it will be refused, and nothing will be built';
+  if (/^station[._]start_line$/.test(String(call && call.name || ''))) {
+    const ln = 'the line ' + String(a.line || '').replace(/\s+/g, ' ').trim().slice(0, 48), job = String(a.job || '').replace(/\s+/g, ' ').trim();
+    if (a.off) return ln + ': turn its trigger ' + String(a.off).slice(0, 40) + ' off.';
+    const how = a.schedule ? 'run it ' + String(a.schedule).replace(/\s+/g, ' ').trim().slice(0, 80) + (a.tz ? ' (' + String(a.tz).slice(0, 40) + ')' : '')
+      : a.folder ? 'start it whenever a new file lands in ' + String(a.folder).slice(0, 160) : a.webhook ? 'start it whenever its webhook is called' : 'start it';
+    return ln + ': ' + how + ', with the job: "' + job.slice(0, 240) + (job.length > 240 ? '…' : '') + '". From then on it runs the line\'s agents unattended, within the line\'s budget.';
+  }
+  if (/^station[._]test_line$/.test(String(call && call.name || ''))) return 'the line ' + String(a.line || '').replace(/\s+/g, ' ').trim().slice(0, 48) + ', with this test job: "' + String(a.job || '').replace(/\s+/g, ' ').trim().slice(0, 240) + (String(a.job || '').length > 240 ? '…' : '') + '". It runs the line\'s agents and spends what they spend; the result lands in your OUTBOX.';
   if (/^station[._]make_prop$/.test(String(call && call.name || ''))) return '"' + String(a.describe || '').replace(/\s+/g, ' ').trim().slice(0, 60) + '", drawn with your StarNet credits (about $0.35' + (a.sideView ? ', and about $0.30 more for its side view' : '') + '). It joins your MADE BY YOU library; nothing is placed until a plan says so.';
   if (typeof a.path === 'string' && a.path) return a.path;
   try { const s = JSON.stringify(a); return s.length > 80 ? s.slice(0, 77) + '…' : s; } catch (_) { return ''; }
@@ -23499,17 +23706,25 @@ async function handleGrowthRatings(req, res) {
       }
     } catch (e) { console.warn('[skills] golden mint failed:', (e && e.message) || e); }
   }
+  // THE COMMANDER'S TASTE: a first-time verdict becomes a durable like/dislike memory NOW, independent of the
+  // review packet below (which is RAM, TTL'd, and skill-only). Read the directive before arm() takes the packet.
+  let feedbackMemory = null;
+  if (!result.duplicate) {
+    const fbPacket = verdictReview.peek(runId);
+    const directive = FeedbackMemory.directiveFor([lead.deliveryPrompt, lead.title], fbPacket && fbPacket.messages);
+    feedbackMemory = await recordFeedbackMemory({ agentId: lead.agentId || 'agent', runId, verdict: canonical.verdict, words: String(body.correction || ''), directive });
+  }
   let skillReviewArmed = false;
   if (!result.duplicate && process.env.SKYNET_SKILL_REVIEW !== '0') {
     // ARM, don't fire (slice 2): hold the review for a grace window so the Commander's correction — a follow-up
     // chip or the next typed message (POST /api/growth/ratings/correction) — rides into the prompt in their words.
     skillReviewArmed = verdictReview.arm(runId, canonical.verdict, (job) => {
       console.log('[skills] verdict-triggered review fired run=' + runId + ' verdict=' + job.verdict + ' by=' + job.firedBy + (job.correction ? ' correction=' + JSON.stringify(job.correction.slice(0, 80)) : ''));
-      runBackgroundSkillReview(job).catch(swallow('aux.skillreview.verdict'));
+      rehydrateReviewJob(job).then(runBackgroundSkillReview).catch(swallow('aux.skillreview.verdict'));
     }, String(body.correction || ''));
     if (skillReviewArmed) console.log('[skills] verdict-triggered review armed run=' + runId + ' verdict=' + canonical.verdict + ' grace=' + verdictReview.graceMs + 'ms');
   }
-  return json(200, { ok: true, duplicate: !!result.duplicate, rating: result.rating, skillReviewArmed, goldensMinted });
+  return json(200, { ok: true, duplicate: !!result.duplicate, rating: result.rating, skillReviewArmed, goldensMinted, feedbackMemory });
 }
 // POST /api/growth/ratings/correction { runId, text, final } — the Commander's CORRECTION of a run they rated short
 // (consistency loop, slice 2). Attaches their words to the held verdict review: a follow-up chip (final:false) keeps
@@ -23523,8 +23738,25 @@ async function handleGrowthRatingCorrection(req, res) {
   const runId = String(body.runId || '').trim();
   if (!runId) return json(400, { ok: false, error: 'runId required' });
   const r = verdictReview.correct(runId, String(body.text || ''), body.final === true, String(body.source || ''));
-  if (!r.ok) return json(200, { ok: true, held: false, fired: false, reason: r.reason });
-  return json(200, { ok: true, held: true, fired: !!r.fired });
+  // THE COMMANDER'S TASTE: their words fold into the run's feedback memory whether or not a review was held —
+  // the held review is a RAM packet that a restart or the TTL can lose; the words must not go with it.
+  let feedbackMemory = null;
+  try {
+    const saved = (() => { try { return saveStore.load('agent') || null; } catch (_) { return null; } })();
+    const epoch = Math.max(1, Math.floor(Number(saved && saved.agent && saved.agent.createdAt) || 1));
+    const rating = growthRatings.get(runId, epoch);
+    const lead = rating ? runStore.all().find(row => row && row.runId === runId) : null;
+    // the chat posts the NEXT typed message (within 10 min of a short rating) as the correction; only words that read
+    // as feedback on the work become permanent taste ("now summarize my inbox" is a new task, not a dislike). A chip
+    // or a rating-body correction is explicit and always counts. The held review still gets the words either way.
+    const typed = String(body.source || '') === 'message';
+    if (rating && lead && !lead.internal && typed && !FeedbackMemory.looksLikeFeedback(body.text)) feedbackMemory = { stored: false, reason: 'not feedback on the work' };
+    else if (rating && lead && !lead.internal) {
+      feedbackMemory = await recordFeedbackMemory({ agentId: lead.agentId || 'agent', runId, verdict: rating.verdict, words: String(body.text || ''), directive: lead.deliveryPrompt || lead.title || '' });
+    }
+  } catch (e) { failNote('feedback.correction', e); }
+  if (!r.ok) return json(200, { ok: true, held: false, fired: false, reason: r.reason, feedbackMemory });
+  return json(200, { ok: true, held: true, fired: !!r.fired, feedbackMemory });
 }
 // GET /api/runs?agent=<id>&limit=<n>&since=<ms>[&runId=<id>] — the agent's run history (M-save P4), newest-first.
 // Rows carry the run's `artifacts` ledger (work-visibility); an explicit runId narrows to that single run's
@@ -24032,7 +24264,7 @@ function serveInsights(req, res) {
        Commander's own run history (none of it is pause-gated), so the record stays visible while personalization
        is paused even though the prompts stop citing it. What a prompt may cite ≠ what the Commander may see. */
     let trackRecord = null;
-    try { const rec = Outcomes.fold(rows, { now: Date.now() }); trackRecord = { decided: rec.decided, windowMs: rec.windowMs, patterns: Outcomes.summary(rec), lines: Outcomes.lines(rec) }; } catch (_) { trackRecord = null; }
+    try { const rec = Outcomes.fold(rows, { now: Date.now(), verdicts: ratingVerdictMap() }); trackRecord = { decided: rec.decided, windowMs: rec.windowMs, patterns: Outcomes.summary(rec), lines: Outcomes.lines(rec) }; } catch (_) { trackRecord = null; }
     json(200, Object.assign(foldInsights(rows, { nowMs: Date.now(), bucketMs: 3600000, buckets: 24 }), { trackRecord }));
   } catch (e) { json(500, readRouteFailure('insights', e)); }   // a zeroed fold would read as "0 runs, $0" — a fabricated telemetry claim
 }
@@ -24295,6 +24527,48 @@ function skillNameFromReflection(content) {
 // user validation to reward), and emits the frozen memory.write / deliverable SSE rungs. It does NOT emit
 // memory.feedback — the caller owns that (the semantics differ: keep=+2, edit=+1, silent auto-save=none). Returns
 // { ok, id, kind, skill? } or { ok:false, error }. `opts.source` labels a skill's provenance ('reflection').
+// recordFeedbackMemory — fold one verdict / correction into the rated agent's notebook as the Commander's TASTE
+// (feedbackmemory.js). One record per rated run; a later correction updates that record instead of adding another.
+// User-confirmed by construction (the Commander's own verdict and words) and seeded with Keep-strength trust. Honors
+// the personalization pause like every learning pass. Returns a truthful summary for the route response; never throws.
+// every OTHER agent's notebook (the roster, plus the hero), for the station-wide taste block. Reads go through the
+// durable store's cache; an unreadable notebook contributes nothing and never fails the run.
+function otherAgentNotebooks(agentId) {
+  const ids = new Set(['agent']);
+  for (const id of agentRoster.keys()) ids.add(id);
+  ids.delete(String(agentId || 'agent'));
+  const out = [];
+  for (const id of ids) {
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(String(id))) continue;
+    try { const l = notebookStore.get('notebook:' + id); if (Array.isArray(l) && l.length) out.push(l); }
+    catch (e) { failNote('feedback.taste.read', e); }
+  }
+  return out;
+}
+async function recordFeedbackMemory(o) {
+  o = o || {};
+  const agentId = String(o.agentId || 'agent');
+  try {
+    if (!personalizationStore.read().enabled) return { stored: false, reason: 'personalization-paused' };
+    let out = null;
+    await notebookStore.update('notebook:' + agentId, (stored) => {
+      const r = FeedbackMemory.apply(stored, { runId: o.runId, verdict: o.verdict, words: redact(String(o.words || '')), directive: redact(String(o.directive || '')) },
+        { now: Date.now(), nextId: memcore.nextNoteId, nextTrust: memcore.nextTrust, trustDelta: 2 });
+      if (!r) return undefined;
+      out = r;
+      return r.list;
+    });
+    if (!out) return { stored: false, reason: 'nothing to learn' };
+    chanEmit('memory.write', { agentId, runId: String(o.runId || ''), id: out.rec.id, kind: out.rec.kind, scope: out.rec.scope });
+    try { hookSpine.invoke('on_memory_write', { session_id: String(o.runId || ''), extra: { agent_id: agentId, id: out.rec.id, kind: out.rec.kind, scope: out.rec.scope, source: 'feedback' } }); } catch (e) { failNote('feedback.hook', e); }
+    console.log('[memory] feedback ' + (out.created ? 'saved' : 'updated') + ' run=' + o.runId + ' agent=' + agentId + ' id=' + out.rec.id + ' verdict=' + o.verdict);
+    return { stored: true, id: out.rec.id, created: out.created };
+  } catch (e) {
+    failNote('feedback.memory', e);
+    return { stored: false, reason: 'could not save' };
+  }
+}
+
 async function writeMemoryRecord(agentId, prop, opts) {
   opts = opts || {};
   const content = String(opts.content != null ? opts.content : (prop && prop.content) || '').trim();

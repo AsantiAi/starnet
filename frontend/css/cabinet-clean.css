@@ -1,0 +1,39 @@
+/* CABINET CLEAN (Andrew 10-01: "without changing the interface's orientation, simplify it and make it cleaner
+   while still keeping starnet's core style"). Same layout, same features, same CRT overlay — less noise:
+   · ONE panel language: CREW, COMMS, the top bar, the dock and the station tube share a 10px shape and a plain
+     title over a hairline (CREW set it in crew-glass.css; COMMS follows). The etched corner marks go.
+   · the empty widget rails show a small + key instead of a second and third "PIN A WIDGET" label
+   · COMMS starter cards show their title; the sentence and the result are the hover tip (chat.js b.title) */
+
+/* ---------- one shape ---------- */
+body.glass-demo:not(.hud-mode) #screen-game :is(#topbar, #chat-panel, #bottombar) { border-radius: 10px; }
+body.glass-demo:not(.hud-mode) #screen-game :is(#topbar, #chat-panel, #bottombar)::after { display: none; }
+body.glass-demo:not(.hud-mode) #screen-game:not(.cinema) #stage-wrap,
+body.glass-demo:not(.hud-mode) #screen-game:not(.cinema) #stage-wrap::before { border-radius: 10px; }
+
+/* ---------- one header: COMMS matches CREW ---------- */
+body.glass-demo:not(.hud-mode) #screen-game #chat-panel > h3 {
+  align-items: center;
+  background: none; box-shadow: none;
+  border-bottom: 1px solid rgba(var(--ph-rgb), .12);
+  border-radius: 10px 10px 0 0;
+  padding: 11px 14px 9px;
+  font-size: 17px; letter-spacing: 2.5px; color: var(--ph-bright);
+}
+
+/* ---------- quiet widget pins ---------- */
+body.glass-demo:not(.hud-mode) #screen-game .widget-rail[data-empty="1"] .wg-add {
+  width: 30px; min-width: 30px; height: 30px; padding: 0; gap: 0; border-radius: 8px;
+  color: var(--ph-dim); background: transparent; box-shadow: none; border-color: rgba(var(--ph-rgb), .16);
+}
+body.glass-demo:not(.hud-mode) #screen-game .widget-rail[data-empty="1"] .wg-add::after { content: none; display: none; }
+body.glass-demo:not(.hud-mode) #screen-game .widget-rail[data-empty="1"] .wg-add:is(:hover, :focus-visible, [aria-expanded="true"]) {
+  color: var(--ph-bright); border-color: rgba(var(--ph-rgb), .45); background: rgba(var(--ph-rgb), .1);
+}
+
+/* (the CTX gauge keeps StarNet's own ▮▯ ASCII cells — Andrew 10-01: smoothing it away read as "not starnet") */
+
+/* ---------- COMMS starters: title only, the detail is the tip ---------- */
+body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty .cmsg-starter { min-height: 46px; align-items: center; padding-block: 11px; }
+body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty :is(.cmsg-starter-detail, .cmsg-starter-output) { display: none; }
+body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty .cmsg-starter-arrow { grid-row: 1; }

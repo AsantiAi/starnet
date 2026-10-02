@@ -56,6 +56,9 @@
     if (!group) return;
     group.hidden = !list.length;
     if (!list.length) group.classList.remove('open');
+    // ONE NEW APP DOOR: BUILD carries it only until the APPS dock exists — then it lives in APPS alone
+    const buildNew = document.getElementById('bb-newapp-build');
+    if (buildNew) buildNew.hidden = !!list.length;
     const box = document.getElementById('bb-apps-items');
     if (!box) return;
     // each entry reads like every other dock item: the instrument icon, the name, ONE short line (its live status —
@@ -207,7 +210,7 @@
       const r = await post('/api/cron/arm', { enabled: true });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       notify('Routines are on: your apps refresh on schedule.');
-    } catch (_) { notify('Could not turn routines on — open AUTOMATION to check.', 'warn'); return; }
+    } catch (_) { notify('Could not turn routines on — open WORK › AUTOMATE › SCHEDULES to check.', 'warn'); return; }
     await load(); paintAll();
   }
   async function removeApp(id) {
