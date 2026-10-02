@@ -24,20 +24,25 @@
      (the one backend index), rendered with the library's own markup and opened through its one
      open/preview seam; a run the index doesn't know (a plain conversation) simply shows no FILES
      section — we never invent one. */
+  /* ONE PLACE FOR FINISHED WORK (Andrew 10-02: 'get rid of the outbox as an actual section … it should just be in
+     deliverables and all organized output'): this list is DELIVERABLES' TO REVIEW section — finished runs waiting for
+     your verdict — not a window of its own. openTerm('outbox') / the floor OUTBOX / every old door land there
+     (TERM_ALIAS outbox → deliverables § review). Empty = the section hides; the library below is always there. */
+  const mounted = new Set();
   function buildOutbox(body) {
     const RS = (typeof ReturnStore !== 'undefined') ? ReturnStore : null;
     const rows = (RS && RS.pendingRows) ? RS.pendingRows() : [];
+    mounted.add(body);
+    body.hidden = !rows.length;
     body.innerHTML =
-      '<header class="utility-head"><h2>Ready to review</h2><p>Finished work from your lines and routines, including what ran while you were away. Open a result, then decide what comes next.</p></header>' +
+      '<h4 class="ms-h dlv-review-h">TO REVIEW <span class="dim">— finished work waiting for your verdict (' + rows.length + ')</span></h4>' +
       '<div id="ob-list" class="ob-list"></div>' +
       '<div class="row ob-doors" style="margin-top:10px;gap:8px"><button class="bb sm" id="ob-logbook">AGENT RECORD · run history</button></div>';
     const list = body.querySelector('#ob-list');
     const lb = body.querySelector('#ob-logbook');
-    if (lb) lb.addEventListener('click', () => H.navigateWork('outbox', 'logbook'));
+    if (lb) lb.addEventListener('click', () => H.navigateWork('deliverables', 'logbook'));
     // (ONE MENU: DELIVERABLES is this window's neighbouring MY WORK tab — no second door to it here)
-    function renderEmpty() {
-      list.innerHTML = '<div class="empty-state"><span class="es-glyph">▤</span><b>You’re all caught up</b><span>New results from away work appear here. Your saved outputs are in the DELIVERABLES tab.</span></div>';
-    }
+    function renderEmpty() { list.innerHTML = ''; body.hidden = true; }   // nothing waiting: the section steps aside
     if (!rows.length) { renderEmpty(); return; }
     // agent id → display name via the live roster (raw ids read as debug output)
     const agentName = id => { const a = (Array.isArray(H.present) ? H.present.find(x => x && x.id === id) : null); return (a && a.name) || id || 'agent'; };
@@ -178,14 +183,14 @@
         const ok = (RS && RS.openWork) ? await RS.openWork(rw) : false;
         b.disabled = false;
         if (!ok) notify('transcript unreachable for that run', 'warn');
-        else H.workConversation('outbox');
+        else H.workConversation('deliverables');
       });
       // OPEN IN WORKFLOWS — a job sent down a work line opens the WORKFLOWS window on its own record (GET /api/line-jobs?stream=)
       const wfb = row.querySelector('.ob-wf');
       if (wfb) wfb.addEventListener('click', async ev => {
         ev.stopPropagation();
         wfb.disabled = true;
-        const ok = (typeof WorkflowsWindow !== 'undefined' && WorkflowsWindow.openByStream) ? await WorkflowsWindow.openByStream(rw.streamId, 'outbox') : false;
+        const ok = (typeof WorkflowsWindow !== 'undefined' && WorkflowsWindow.openByStream) ? await WorkflowsWindow.openByStream(rw.streamId, 'deliverables') : false;
         wfb.disabled = false;
         if (!ok) notify('this job’s workflow record is not on the station any more — ↗ OPEN SESSION still reads it', 'warn');
       });
@@ -199,7 +204,7 @@
         persistWS();
         if (typeof App !== 'undefined' && App.openWorkstream) App.openWorkstream(ws.id);
         if (typeof Chat !== 'undefined' && Chat.prefill) Chat.prefill('About the finished “' + title + '” run — ');
-        H.workConversation('outbox');
+        H.workConversation('deliverables');
         sfx('click');
       });
       const rateHost = row.querySelector('.ob-rate');
@@ -214,5 +219,9 @@
     }
   }
 
-  StationUI.registerWindow('outbox', 'OUTBOX — FINISHED WORK', buildOutbox, { console: true, className: 'outbox-win' });   // the OUTBOX prop's click-through: all uncollected finished runs, readable + rateable in place. PANEL shell (one reading column) — see the two-sizes note in style.css
+  // DELIVERABLES mounts this as its TO REVIEW section; ReturnStore refreshes every mounted copy when crates change
+  window.OutboxView = {
+    build: buildOutbox,
+    refresh() { mounted.forEach(el => { if (!el.isConnected) { mounted.delete(el); return; } buildOutbox(el); }); }
+  };
 })();
