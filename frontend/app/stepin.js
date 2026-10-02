@@ -55,14 +55,17 @@ const StepIn = (() => {
     const ended = p.state && ENDED[p.state];
     live = live.filter(h => h.id !== p.id);
     recent = recent.filter(h => h.id !== p.id);
-    if (ended) { recent.unshift(p); recent = recent.slice(0, 8); } else live.push(p);
+    if (ended) { recent.unshift(p); recent = recent.slice(0, 8); settle(p.id); } else live.push(p);
   }
+  // the hand-back (or a cancel) ends the wait: the bell's STEP-IN line leaves NEEDS YOU (it stayed lit for good)
+  function settle(id) { if (typeof StationUI !== 'undefined' && StationUI.settleNotifs) StationUI.settleNotifs('stepin-' + id); }
   function refresh() {
     if (loading) return loading;
     loading = getJson('/api/browser/handoffs').then(r => {
       if (r.status === 200 && r.body && r.body.ok) {
         live = Array.isArray(r.body.live) ? r.body.live : [];
         recent = Array.isArray(r.body.recent) ? r.body.recent : [];
+        for (const h of recent) if (h && h.id) settle(h.id);   // ended while this page was away (or before a restart)
         signins = r.body.signins || signins;
         for (const h of live) seen.add(h.id);
         loaded = true;
@@ -86,7 +89,7 @@ const StepIn = (() => {
     if (typeof StationUI === 'undefined' || !StationUI.notify) return;
     const why = { login: 'sign in', '2fa': 'enter a sign-in code', captcha: 'get past a human check', payment: 'confirm a payment', other: 'help with a page' }[p.reason] || 'help with a page';
     StationUI.notify('STEP-IN: ' + agentName(p.agentId) + ' needs you to ' + why + (p.where ? ' at ' + p.where : '') + ' — click to take its browser', 'gold', undefined, {
-      key: 'stepin-' + p.id, kind: 'needs',
+      key: 'stepin-' + p.id, kind: 'needs', go: { term: 'stepin' },   // a destination, so the bell's line is a door too
       onClick: () => open(p.id)
     });
   }
