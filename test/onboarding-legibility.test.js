@@ -83,7 +83,7 @@ const Glossary = require('../frontend/app/glossary.js');
     'Genesis routes editable setup to the real agent, model, and settings surfaces');
   A.eq(indexSrc.includes('everything here is re-editable later in the Commander Dossier'), false,
     'Genesis no longer sends agent configuration to the Commander Dossier');
-  A.ok(/data-term="tasks"[^>]*>[\s\S]*?<small>[^<]*planned work[^<]*<\/small>/.test(indexSrc),
+  A.ok(/\{ id: 'tasks', k: 'tasks', label: 'TASKS', tip: '[^']*[Pp]lanned work[^']*' \}/.test(stationUiSrc),
     'WORK describes TASKS as planned board work instead of claiming every run lives there');
   A.ok(stationUiSrc.includes('<b>NO TASKS</b>') && /id="kb-in"[^>]*aria-label="New task"/.test(stationUiSrc),
     'TASK BOARD uses task language instead of exposing the internal workstream record name');

@@ -97,6 +97,8 @@ const StepIn = (() => {
     if (b) { b.textContent = n ? String(n) : ''; b.style.display = n ? 'inline-block' : 'none'; }
     const g = document.getElementById('bb-crew-stepin-badge');
     if (g) { g.hidden = !n; g.textContent = n ? String(n) : ''; }
+    // STATION SYSTEMS: an agent waiting for you is the moment STEP-IN joins a growing dock
+    if (n && typeof Systems !== 'undefined' && Systems.growTo) Systems.growTo(['stepin']);
   }
 
   /* ---------------- the view ---------------- */

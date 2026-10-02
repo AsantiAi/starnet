@@ -406,7 +406,7 @@ A.ok(!/onAgentRoomAssigned/.test(build), 'build.js no longer fires a room-assign
 // MISSING (add it in REFIT), and never claims a kit "arrives" at a per-agent workstation.
 const summarySeg = app.slice(app.indexOf('function loadoutSummary('), app.indexOf('function loadoutSummary(') + 900);
 A.ok(/stationGearTypes\(\)/.test(summarySeg), 'loadoutSummary checks the class gear against the STATION (station-wide), not the agent room');
-A.ok(/add .* in REFIT/.test(summarySeg), 'loadoutSummary tells the Commander to add missing station gear in REFIT');
+A.ok(/add .* in BUILD MODE/.test(summarySeg), 'loadoutSummary tells the Commander to add missing station gear in BUILD MODE');
 A.ok(!/arrives when it gets a workstation/.test(app), 'the summon copy no longer promises a kit arrives at a workstation');
 // stationGearTypes reads the station-wide caps (the shared source the run\'s skill availability uses)
 A.ok(/function stationGearTypes\(\)[\s\S]{0,200}World\.stationCaps/.test(app), 'stationGearTypes reads World.stationCaps (station-wide shared gear)');

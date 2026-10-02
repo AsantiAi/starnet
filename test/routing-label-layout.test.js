@@ -40,7 +40,7 @@ const tiny = layout(nags, { ...options, containerFor: () => ({ x: 240, y: 144, w
 assert.equal(tiny.length, 0, 'no unbounded escape when room has no label space; bracket pass remains separate');
 const huge = layout([{ ...nags[0], label: 'A'.repeat(2000) }], { ...options, selected: '20,12' });
 assert.ok(inside(huge[0], viewport));
-assert.ok(huge[0].lines.at(-1).includes('REFIT'), 'extreme authored detail truncation is explicit');
+assert.ok(huge[0].lines.at(-1).includes('BUILD MODE'), 'extreme authored detail truncation is explicit');
 for (const zoom of [.5, 1, 2]) {
   const out = layout(nags, { ...options, zoom, viewport: { x: 0, y: 0, w: 600 / zoom, h: 400 / zoom }, selected: '20,12' });
   assert.ok(out.find(x => x.detail).font * zoom >= 12, 'selected instructions retain readable screen size at overview');

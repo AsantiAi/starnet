@@ -152,7 +152,7 @@ for (const raw of [
   A.eq(v.action, 'refit', 'capdenied routes to REFIT (place the gear), never the SKILLS list');
   A.ok(/WEB ACCESS/.test(v.userMessage), 'the copy names the human power (WEB ACCESS)');
   A.ok(/DISH/.test(v.userMessage), 'the copy names the placeable GEAR (DISH)');
-  A.ok(/REFIT/.test(v.userMessage), 'the copy points at REFIT as the door');
+  A.ok(/BUILD MODE/.test(v.userMessage), 'the copy points at BUILD MODE as the door');
 }
 {
   // a files denial names FILE ACCESS + the INTEL CAB (the real palette prop, not a generic "cabinet")
@@ -173,7 +173,7 @@ for (const raw of [
   A.eq(v.kind, 'capdenied', 'a bare "capdenied" token still classifies');
   A.eq(v.action, 'refit', 'it still routes to REFIT');
   A.eq(v.cap, null, 'no capability could be parsed → cap is null');
-  A.ok(/REFIT/.test(v.userMessage), 'the fallback copy still names REFIT');
+  A.ok(/BUILD MODE/.test(v.userMessage), 'the fallback copy still names BUILD MODE');
   A.ok(!/undefined/.test(v.userMessage), 'the fallback copy never leaks "undefined"');
 }
 
@@ -222,7 +222,7 @@ for (const raw of [
 {
   const cap = friendlyError(new Error('no web — denied'));
   const btn = actionButton(cap);
-  A.ok(btn && /REFIT/i.test(btn.label) && typeof btn.run === 'function', 'a capdenied verdict yields a REFIT button with a run()');
+  A.ok(btn && /BUILD MODE/i.test(btn.label) && typeof btn.run === 'function', 'a capdenied verdict yields a BUILD MODE button with a run()');
   A.eq(actionButton({ action: null, retryable: true }), null, 'a plain-retry verdict yields no action button');
   A.eq(actionButton(null), null, 'a null verdict yields no button (never throws)');
   // run() is safe to call with no globals present (Build/StationUI undefined in node) — must not throw.

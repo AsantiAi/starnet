@@ -328,14 +328,15 @@
       { id: 'catalog', label: 'CATALOG', glyph: '⊞', desc: 'Find a service by name or what you want to do. Choose it to see the setup required; YOUR SERVICES shows saved setups, not a live connection guarantee.', build: frag(secCatalog) },
       { id: 'keys', label: 'SAVED API CONNECTIONS', glyph: '⊟', desc: 'The platform credentials your agents actually hold, plus a safe drop for a custom API the catalog does not list.', build: frag(secKeys) },
       { id: 'mcp', label: 'CONNECTED SERVICES', glyph: '⧉', desc: 'Manage service access, check connection status, and reconnect when needed.', build: frag(secMcp) },
-      { id: 'custom', label: 'CREATE / ADVANCED', glyph: '＋', desc: 'Configure a custom server, API, skill package, hook or plugin.', build: frag('<div class="ab-router-grid"><button class="ab-route" data-ab-to="mcp">Add a custom MCP server</button><button class="ab-route" data-ab-to="keys">Add a custom API key</button><button class="ab-route" data-ab-to="exchange">Import a skill package</button><button class="ab-route" data-ab-to="extensions">Create hooks and plugins</button></div>') },
+      // (ONE DOOR EACH, 2026-10-01: the CREATE / ADVANCED router pane repeated the rail — custom MCP server → CONNECTED
+      // SERVICES, custom API key → SAVED API CONNECTIONS, skill package → SKILL EXCHANGE, hooks/plugins → EXTENSIONS)
       { id: 'extensions', label: 'EXTENSIONS', glyph: '⌥', desc: 'Automate a step or extend StarNet with your own code.', build: frag(secExt) }
     ].concat(lanes.reduce((acc, l) => acc.concat(l.sections), [])), {
       search: true,
       groups: [
         { id: 'installed', label: 'INSTALLED', sections: ['toolsets', 'computer', 'mcp', 'keys', 'agent'] },
         { id: 'discover', label: 'DISCOVER', sections: ['catalog', 'market', 'library'] },
-        { id: 'advanced', label: 'CREATE / ADVANCED', sections: ['custom', 'extensions', 'exchange'] }
+        { id: 'advanced', label: 'CREATE / ADVANCED', sections: ['extensions', 'exchange'] }
       ],
       searchLabel: 'Search abilities',
       searchPlaceholder: 'search a platform, tool or skill — try “notion”…',
@@ -607,7 +608,7 @@
       else if (kind === 'plugin-place') {
         const host = typeof PluginHost !== 'undefined' ? PluginHost : null;
         const r = host ? host.placeTerminal(btn.dataset.id) : { ok: false, msg: 'plugin windows are not available in this build' };
-        if (!r || !r.ok) { extSay('Could not place its terminal: ' + ((r && (r.msg || r.error)) || 'unknown') + '. Place a PLUGIN TERMINAL in REFIT instead.', true); return; }
+        if (!r || !r.ok) { extSay('Could not place its terminal: ' + ((r && (r.msg || r.error)) || 'unknown') + '. Place a PLUGIN TERMINAL in BUILD MODE instead.', true); return; }
         try { sfx('ok'); } catch (_) {}
         await renderExtensions();
         extSay('Its terminal now stands in the lead’s room.');
@@ -670,7 +671,7 @@
               if (r && r.ok) { try { localStorage.setItem('starnet.pluginTerminalsPlaced', JSON.stringify(placedBefore.concat([pid]).slice(-200))); } catch (_) { /* per-browser memory only */ } }
               const n = p.tools.length + ' tool' + (p.tools.length === 1 ? '' : 's');
               const note = r && r.ok ? (r.existing ? '' : ' Its terminal now stands in the lead’s room, so the lead can use its ' + n + '.')
-                : ' Its terminal could not be placed (' + ((r && (r.msg || r.error)) || 'unknown') + ') — place a PLUGIN TERMINAL in REFIT.';
+                : ' Its terminal could not be placed (' + ((r && (r.msg || r.error)) || 'unknown') + ') — place a PLUGIN TERMINAL in BUILD MODE.';
               done = (done || 'Plugin on.') + note;
             }
           } catch (_) {}
@@ -748,7 +749,7 @@
       const inert = availability === 'NEEDS PROP';
       // A DIAGNOSIS WITHOUT A CURE. This span named the exact missing prop and offered nothing to click,
       // so the one row that knows what is wrong was the one row you could not act on. The button hands
-      // off to the same REFIT deep-link the SKILLS library's PLACE uses (arms the palette on the prop),
+      // off to the same BUILD MODE deep-link the SKILLS library's PLACE uses (arms the palette on the prop),
       // which is the honest path: the prop still lands where the Commander puts it.
       const hint = inert
         ? '<span class="ts-inert">no ' + esc(t.object || 'prop') + ' in this agent’s workspace — choose one matching prop for this ability' +
@@ -818,7 +819,7 @@
       tsRefresh();
     });
     // The two non-toggle controls on a toolset row: unfold the rest of the tool chips, and cure an
-    // inert row by deep-linking its missing prop into REFIT.
+    // inert row by deep-linking its missing prop into BUILD MODE.
     tsListEl.addEventListener('click', ev => {
       const more = ev.target.closest('button[data-ts-more]');
       if (more) {
@@ -829,8 +830,8 @@
       const place = ev.target.closest('button[data-ts-place]');
       if (place) {
         sfx('click');
-        // H.placeGearForSkill minimizes this console, opens REFIT and arms the palette on the prop.
-        // No mapping for this objectType still opens REFIT + names the gear in a toast, which is the
+        // H.placeGearForSkill minimizes this console, opens BUILD MODE and arms the palette on the prop.
+        // No mapping for this objectType still opens BUILD MODE + names the gear in a toast, which is the
         // floor of acceptable — never a silent no-op.
         if (typeof H.placeGearForSkill === 'function') H.placeGearForSkill(place.dataset.tsPlace);
         else notify('Open ⚒ BUILD and place a ' + place.dataset.tsPlace + ' to grant these tools', 'warn');

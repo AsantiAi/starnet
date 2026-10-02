@@ -1465,7 +1465,7 @@ for (const c of T.catalog) {
       { op: 'stamp', line: 'build_test', x: 26, y: 13 }
     ].concat(turnable ? [{ op: 'place', t: turnable, x: 46, y: 2, r: 3, as: 'turned' }] : []);
     const p = SB.planEdit(st.serialize(), { refit: ops }, E);
-    A.ok(p.ok && new RegExp('^REFIT, ' + ops.length + ' edits, in order: 1\\. a 6 × 3 hallway at \\(18, 4\\); 2\\. a new 30 × 22 LAB room STUDIO at \\(24, 0\\); ').test(p.plan.summary) && /the bay at \(31, 8\) is told: "Write it up in 200 words\."/.test(p.plan.summary) && /One UNDO in Build mode takes all of it back\.$/.test(p.plan.summary), 'a refit plans every edit, in order, in words (briefs quoted): ' + (p.error || p.plan.summary.slice(0, 200)));
+    A.ok(p.ok && new RegExp('^BUILD MODE, ' + ops.length + ' edits, in order: 1\\. a 6 × 3 hallway at \\(18, 4\\); 2\\. a new 30 × 22 LAB room STUDIO at \\(24, 0\\); ').test(p.plan.summary) && /the bay at \(31, 8\) is told: "Write it up in 200 words\."/.test(p.plan.summary) && /One UNDO in Build mode takes all of it back\.$/.test(p.plan.summary), 'a refit plans every edit, in order, in words (briefs quoted): ' + (p.error || p.plan.summary.slice(0, 200)));
     A.eq(snap(st), before, 'planning changes nothing');
     if (p.ok) {
       const a = SB.apply(st, p.plan, E);

@@ -295,6 +295,16 @@ body:not(.rows-inbox) #workstreams .ws-row.attn > .ws-kebab { grid-area: menu; }
 }
 .term .bb:hover:not(:disabled), .refit-dock .bb:hover:not(:disabled) { border-color: var(--ph-dim); }
 .term .bb:active:not(:disabled), .refit-dock .bb:active:not(:disabled) { box-shadow: var(--ui-well); }
+/* ONE MENU (stationui FAMILIES): MY WORK / AUTOMATE / CONNECT — the menu's tabs under the window title, in the
+   QUEST LOG's tab recipe (segmented glass row, lit tab = glass face + phosphor edge). */
+.fam-tabs { display: flex; align-items: center; flex-shrink: 0; gap: 5px; margin: 8px 12px 0; padding: 4px; border: 1px solid rgba(var(--ph-rgb),.15); border-radius: 9px; background: rgba(0,0,0,.13); overflow-x: auto; }
+/* a tab switch swaps two windows in place: no power-on / power-off keyframes, and the outgoing one is gone at once */
+body[data-fam-switch] #terms .term { animation: none !important; }
+body[data-fam-switch] #terms .term.term-closing { display: none !important; }
+.fam-tabs .fam-tab { flex: 1 1 0; min-width: max-content; font: inherit; font-size: 15px; letter-spacing: 1px; color: var(--ph-dim); padding: 7px 12px; border: 1px solid transparent; border-radius: 6px; background: none; cursor: pointer; white-space: nowrap; }
+.fam-tabs .fam-tab:hover { color: var(--ph-bright); background-color: rgba(var(--ph-rgb),.06); }
+.fam-tabs .fam-tab.on { color: var(--ph-bright); border-color: rgba(var(--ph-rgb),.3); background: linear-gradient(125deg,rgba(var(--ph-bright-rgb),.12),rgba(var(--ph-rgb),.055) 48%,rgba(var(--ph-rgb),.02)); box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb),.1); }
+.fam-tabs .fam-tab:focus-visible { outline: 2px solid var(--ph-bright); outline-offset: 2px; }
 .work-path { display: flex; align-items: center; flex-wrap: wrap; flex-shrink: 0; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--ui-edge); background: var(--panel); }
 .work-path[hidden] { display: none; }
 .work-path button { padding: 5px 7px; border: 1px solid var(--ui-edge); border-radius: 2px; color: var(--ph); background: var(--ui-face); font: 12px 'VT323',monospace; cursor: pointer; }
