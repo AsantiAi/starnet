@@ -2485,7 +2485,8 @@ const StationBake = (() => {
     plating: wallPlating, ribbed: wallRibbed, panelled: wallPanelled,
     viewport: wallViewport, pipework: wallPipework, wainscot: wallWainscot, hedge: wallHedge,
     bulkhead: wallBulkhead, courses: wallCourses, service: wallService,
-    pressure: spaceWall('pressure'), radiator: spaceWall('radiator'), utility: spaceWall('utility'), acoustic: spaceWall('acoustic')
+    pressure: spaceWall('pressure'), radiator: spaceWall('radiator'), utility: spaceWall('utility'), acoustic: spaceWall('acoustic'),
+    braced: spaceWall('braced'), machinery: spaceWall('machinery')
   };
 
   /* ---------------- THE SIDE FACE — the same inner face, seen foreshortened ----------------

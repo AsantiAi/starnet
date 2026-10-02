@@ -1525,6 +1525,42 @@ for (const c of T.catalog) {
     A.ok(m.ok && named === 23 + 60 && /… and 7 more edits that change what stands \(7 moves\)/.test(m.plan.summary), 'the card names 83 moves and counts the last 7 (' + named + ' named)');
     A.ok(m.ok && SB.apply(st, m.plan, E).ok && st.props().some(p => p.t === 'plant' && p.x === 30 && p.y === 8), 'and the design builds as planned');
   }
+  // RE-LAY WHAT STANDS (Andrew 10-02, shown a hand-moved station of overlapping corridors: "unacceptable output and
+  // unshippable"): { rearrange: 'diamond' } puts every room, with everything in it, on the diamond grid, takes up every old
+  // hallway and lays clean corridors (neighbours joined), as one undo
+  {
+    const st = fresh();
+    const grow = SB.planBuild(st.serialize(), { layout: { pattern: 'diamond', rooms: [{ style: 'lounge' }, { style: 'library' }, { style: 'arcade' }, { style: 'garden' }, { name: 'Works', lines: [{ line: 'Build + test' }] }, { style: 'gym' }] } }, E);
+    A.ok(grow.ok && SB.apply(st, grow.plan, E).ok, 'a diamond of six rooms and a conveyor hall (' + (grow.error || 'ok') + ')');
+    // what the lead did by hand: rooms moved one by one, their old corridors left where they were
+    const named = n => st.rooms().find(r => r.name === n), Bof = r => { const R = r.rects[0]; return R; };
+    const lib = named('LIBRARY'), arc = named('ARCADE');
+    const mess = SB.planEdit(st.serialize(), { refit: [{ op: 'move', room: 'LIBRARY', x: Bof(lib).x1 - 30, y: Bof(lib).y1 - 40 }, { op: 'move', room: 'ARCADE', x: Bof(arc).x1 + 40, y: Bof(arc).y1 + 30 }] }, E);
+    A.ok(!mess.ok && /^That would leave (a hallway|\d+ hallways) leading nowhere \(CORRIDOR-\d+ at \(-?\d+, -?\d+\)/.test(mess.error) && /\{ op: "delete", hall: "CORRIDOR-\d+" \}/.test(mess.error) && /\{ rearrange: "diamond" \}/.test(mess.error), 'a refit that strands hallways is refused, naming them and both ways out: ' + (mess.error || 'NOT REFUSED').slice(0, 160));
+    // a station already left that way (rooms moved by hand before this guard)
+    A.ok(st.transact(() => { const a = st.moveRoom(lib.id, -30, -40); return a.ok ? st.moveRoom(arc.id, 40, 30) : a; }).ok, 'two rooms moved away, their corridors left behind');
+    const mapMess = SB.mapOf(st.serialize(), E, {});
+    const lost = mapMess.ok ? mapMess.map.halls.filter(h => h.leadsNowhere) : [];
+    A.ok(mapMess.ok && lost.length >= 1 && mapMess.map.halls.every(h => /^CORRIDOR-\d+$/.test(h.name) && h.w >= 1 && Array.isArray(h.joins)), 'station.map lists every hallway by name and marks the ones leading nowhere (' + lost.map(h => h.name).join(', ') + ')');
+    const take = SB.planEdit(st.serialize(), { refit: [{ op: 'delete', hall: lost[0] && lost[0].name }] }, E);
+    A.ok(take.ok && new RegExp('the hallway ' + (lost[0] && lost[0].name) + ' at \\(-?\\d+, -?\\d+\\) taken up').test(take.plan.summary), 'a hallway is taken up by the name the map gives it: ' + (take.ok ? take.plan.summary.slice(0, 120) : take.error));
+    const before = snap(st), contents = {}, byRoom = s => { const o = {}; for (const r of s.rooms().filter(r => r.kind !== 'corridor')) o[r.id] = s.props().filter(p => s.roomAt(p.x, p.y) === r.id).map(p => p.id + ':' + p.t + ':' + (p.agentId || '')).sort().join(','); return o; };
+    Object.assign(contents, byRoom(st));
+    const lineBefore = st.props().filter(p => p.t === 'bay').map(p => p.id + ':' + (p.agentId || '') + ':' + (p.role || '')).sort().join(',');
+    const re = SB.planEdit(st.serialize(), { rearrange: 'diamond' }, E);
+    A.ok(re.ok && /^RE-LAY the station as a wide diamond round HOME: all 6 rooms move onto an even grid with everything in them \(furniture, lines, desks and agents stay as they are\), the \d+ old hallways are taken up and \d+ new ones laid, planted and lit(, \d+ of them joining neighbouring rooms so the station meshes)?\. One UNDO in Build mode takes all of it back\.$/.test(re.plan.summary), 'the plan says what it does: ' + (re.ok ? re.plan.summary : re.error));
+    A.ok(re.ok && SB.apply(st, re.plan, E).ok, 'and it builds exactly as planned');
+    const after = byRoom(st), roomIds = Object.keys(contents);
+    A.ok(roomIds.every(id => after[id] === contents[id]), 'every room keeps exactly what was in it: the same pieces, ids and agents');
+    A.eq(st.props().filter(p => p.t === 'bay').map(p => p.id + ':' + (p.agentId || '') + ':' + (p.role || '')).sort().join(','), lineBefore, 'the line keeps its machines, staff and roles');
+    const halls = st.rooms().filter(r => r.kind === 'corridor'), zn = id => { const g = st.projectGeometry(), out = new Set(); for (const d of g.doorDefs || []) { const a = st.roomAt(d[0] + g.origin.tx, d[1] + g.origin.ty), b = st.roomAt(d[2] + g.origin.tx, d[3] + g.origin.ty); if (a === id && b && b !== id) out.add(b); if (b === id && a && a !== id) out.add(a); } return out; };
+    A.ok(halls.every(h => zn(h.id).size >= 2), 'every hallway joins two places: nothing leads nowhere (' + halls.filter(h => zn(h.id).size < 2).map(h => h.name).join(', ') + ')');
+    A.ok(halls.every(h => !h.rects.some(R => halls.some(o => o.id !== h.id && o.rects.some(Q => R.x1 <= Q.x2 && Q.x1 <= R.x2 && R.y1 <= Q.y2 && Q.y1 <= R.y2)))), 'no two hallways overlap');
+    A.ok(SB.planEdit(st.serialize(), { rearrange: 'diamond' }, E).ok, 're-laying a re-laid station is fine');
+    A.ok(st.undo().ok && snap(st) === before, 'one UNDO brings the hand-moved station back exactly');
+    A.ok(!SB.planEdit(st.serialize(), { rearrange: 'spiral' }, E).ok, 'only the diamond is offered');
+    for (const shape of ['even', 'tall']) { const p = SB.planEdit(st.serialize(), { rearrange: { shape } }, E); A.ok(p.ok && new RegExp('^RE-LAY the station as ' + (shape === 'even' ? 'a diamond' : 'a tall diamond') + ' round HOME').test(p.plan.summary), shape + ' is offered too: ' + (p.ok ? p.plan.summary.slice(0, 60) : p.error)); }
+  }
   // SETTING A LINE UP (Andrew 10-01: "and then also setting up the conveyor systems"): every setting a person has in the
   // Workflow panel is a refit edit, a junction edit changes only what it names, and a folder or a bind names only what the
   // station has (resolved when planned, so the build replays exactly what was approved)
@@ -1601,6 +1637,9 @@ for (const c of T.catalog) {
     A.ok(st.undo().ok, 'its name comes back');
     const noSv = SB.planEdit(st.serialize(), { refit: [{ op: 'folder', prop: inP.id, project: 'starnet' }] }, E);
     A.ok(!noSv.ok && /could not read the Commander's trusted projects/.test(noSv.error), 'a page that could not read the projects refuses, never guesses');
+    // sweep 2026-10-01: routes only on a FILTER (a bay took routes and "sorted" nothing)
+    const rb = SB.planEdit(st.serialize(), { refit: [{ op: 'routes', prop: bayP.id, routes: { code: 'east' } }] }, SV);
+    A.ok(!rb.ok && /routes is for a FILTER/.test(rb.error), 'routes on a bay is refused, not stored as a sorter that sorts nothing');
     for (let i = 0; i < 4; i++) A.ok(st.undo().ok, 'undo ' + (i + 1));
     A.eq(snap(st), before, 'four UNDOs take it all back');
   }
@@ -1820,6 +1859,9 @@ for (const c of T.catalog) {
     const bad = JSON.parse((await tt.run({ line: 'ship it', job: 'x' }, {})).content.split('\n')[0]);
     A.ok(bad.status === 'problem' && bad.steps[0].ended === 'error' && /did not complete cleanly\. Look at which step ended badly, fix the line, and test again\./.test(bad.verdict), 'a step that failed is named, with what to do');
     answer = { code: 409, obj: { ok: false, error: 'a sample job is already riding the line (started 4s ago) — wait for it to deliver.' } };
+    // a stopped lead run stops ITS test job (sweep 2026-10-01): the run's signal reaches the line runner
+    { let got = null; const ac = new AbortController(); await toolsT(async (body, signal) => { got = signal; return { code: 200, obj: { ok: false, stopped: true, runs: [] } }; }).testLineTool.run({ line: 'ship it', job: 'x' }, { signal: ac.signal });
+      A.ok(got === ac.signal, 'test_line hands the lead run\'s stop signal to the line runner'); }
     A.ok(/^REFUSED: a sample job is already riding the line/.test((await tt.run({ line: 'ship it', job: 'x' }, {})).content), 'one job at a time: the route\'s own refusal');
     A.ok(/^REFUSED: Nobody works the line EMPTY yet/.test((await tt.run({ line: 'empty', job: 'x' }, {})).content), 'a line nobody works is refused before anything is sent');
     A.ok(/^REFUSED: There is no line called "nope"\. Lines: SHIP IT, EMPTY\./.test((await tt.run({ line: 'nope', job: 'x' }, {})).content), 'a line that is not there names the lines that are');
@@ -1849,11 +1891,14 @@ for (const c of T.catalog) {
     const idx2 = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
     A.ok(/if \(!job\) return \{ ok: false, error: 'a start needs the job it sends down the line each time' \};\n[\s\S]{0,260}\{ const scan = cronGuard\.scanRoutinePrompt\(job\); if \(!scan\.ok\) return \{ ok: false, error: scan\.error \}; \}\n  if \(s\.kind === 'schedule'\)/.test(idx2), 'every start (folder and webhook too) meets the routine tripwire before anything is saved');
     A.ok(/startLine: spec => startLineFor\(spec\)/.test(idx2) && /async function startLineFor\(spec\)/.test(idx2) && /createCronJobFromSpec\(\{ name: \(name \? name \+ ' — ' : ''\)/.test(idx2) && /extra\.secretHash = mintTriggerSecret\(\)\.hash;   \/\/ the key itself is never kept or handed on/.test(idx2), 'the tool runs the panel\'s own schedule and trigger cores, and drops a webhook key');
-    A.ok(/station\[\._\]test_line\$\/\.test\(String\(call && call\.name \|\| ''\)\)\) return 'the line ' \+/.test(idx2) && /runLineJob: args => runSampleJob\(async \(\) => args\)/.test(idx2) && /async function handleRoutingSample\(req, res\) \{\n  const r = await runSampleJob\(/.test(idx2), 'the card names the line and the job, and the tool runs SEND A JOB\'s own core');
+    A.ok(/station\[\._\]test_line\$\/\.test\(String\(call && call\.name \|\| ''\)\)\) return 'the line ' \+/.test(idx2) && /runLineJob: \(args, signal\) => \{\s*const before = sampleInFlight;\s*const p = runSampleJob\(async \(\) => args\);/.test(idx2) && /const stopMine = \(\) => \{ if \(sampleInFlight === mine\) stopSampleJob\(\); \};/.test(idx2) && /async function handleRoutingSample\(req, res\) \{\n  const r = await runSampleJob\(/.test(idx2), 'the card names the line and the job, and the tool runs SEND A JOB\'s own core');
   }
   {
     const rf = await planT.run({ refit: [{ op: 'place', t: 'tv', x: 2, y: 2 }] }, {});
     A.eq(calls[calls.length - 1], ['station.plan_edit', { request: { refit: [{ op: 'place', t: 'tv', x: 2, y: 2 }] } }], 'a refit plans through the page\'s edit planner as it was sent');
+    await planT.run({ rearrange: 'diamond' }, {});
+    A.eq(calls[calls.length - 1], ['station.plan_edit', { request: { rearrange: 'diamond' } }], 'a re-lay of the whole station plans through the page\'s edit planner');
+    A.ok(/RESHAPE THE WHOLE STATION[\s\S]{0,200}\{ rearrange: "diamond" \}/.test(planT.description) && /Never reshape a station by moving rooms one by one/.test(planT.description), 'the planner sends a whole-station reshape to the re-lay, never to rooms moved by hand');
     const r = await planT.run({ undo: true }, {});
     A.ok(/plan-u-1/.test(r.content) && r.summary === 'planned an undo', 'an undo plans through the page');
     A.eq(calls[calls.length - 1], ['station.plan_undo', { request: {} }], 'and reaches the undo planner');
@@ -1863,7 +1908,7 @@ for (const c of T.catalog) {
   const n0 = calls.length;
   for (const req of [{ remove: 'GYM', clear: 'LAB' }, { refurnish: { room: 'GYM', style: 'library' }, rooms: [{ style: 'lounge' }] }]) {
     const r = await planT.run(req, {});
-    A.ok(/^REFUSED: remove, refurnish, clear, add, seat, move, staff and refit each go on their own, one edit a plan/.test(r.content), 'an edit mixed with anything else is refused: ' + JSON.stringify(req));
+    A.ok(/^REFUSED: remove, refurnish, clear, add, seat, move, staff, refit and rearrange each go on their own, one edit a plan/.test(r.content), 'an edit mixed with anything else is refused: ' + JSON.stringify(req));
   }
   for (const req of [{}, { name: 'X' }, { restyle: { room: 'HOME' }, kit: 'LIBRARY' }]) {
     const r = await planT.run(req, {});
@@ -1908,5 +1953,26 @@ for (const c of T.catalog) {
   const idx = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
   A.ok(/if \(\/\^station\[\._\]build\$\/\.test\(String\(call && call\.name \|\| ''\)\)\) return stationPlanSummary\(stationPlanMemo, a\.planId\)/.test(idx), 'consentSummary reads the station.build card from the plan memo');
   A.ok(/to change the floor, tool_search "station builder" and claim only what station\.build reports\./.test(idx), 'the lead\'s note says how to reach the builder, and never to claim what it did not report');
+  // sweep 2026-10-01: a misnamed line never resolves to an UNNAMED one (key('') sat inside every name), and a refused
+  // all-or-nothing edit leaves undo/redo exactly as it found them
+  {
+    const st = M.create(M.starterDoc()); st.ensureWorkstation('agent'); st.ensureWorkstation('rex');
+    st.replaceLayout(T.build('software', M, Sprites, st.doc()._nid + 100));
+    const ip = st.props().find(p => p.t === 'intake'); A.ok(st.setPropLabel(ip.id, '').ok, 'fixture: a hand-built line with no name');
+    const ref = SB.lineRef(st.serialize(), env, 'Newsletter', null);
+    A.ok(ref && !ref.ok, '"Newsletter" does not resolve to the unnamed line: ' + JSON.stringify(ref).slice(0, 120));
+    const rm = SB.planEdit(st.serialize(), { remove: { line: 'Newsletter' } }, env);
+    A.ok(!rm.ok && /no line called "Newsletter"/.test(rm.error), 'removing a line that does not exist is refused, never the unnamed one: ' + (rm.error || rm.plan.summary).slice(0, 120));
+
+    const room = st.rooms()[0];
+    A.ok(st.renameRoom(room.id, 'ZZTOP').ok && st.undo().ok && st.canRedo(), 'fixture: an undone edit waiting to be redone');
+    const refused = st.transact(() => ({ ok: false, msg: 'blocked' }));
+    A.ok(!refused.ok && st.canRedo(), 'a refused batch edit keeps redo');
+    A.ok(st.redo().ok && st.rooms()[0].name === 'ZZTOP', 'and Ctrl+Y still redoes the rename');
+    const depthBefore = st.serialize();
+    const outer = st.transact(() => { st.renameRoom(room.id, 'OUTER'); const inner = st.transact(() => { st.renameRoom(room.id, 'INNER'); return { ok: false }; }); return { ok: !inner.ok && st.rooms()[0].name === 'OUTER' }; });
+    A.ok(outer.ok && st.rooms()[0].name === 'OUTER', 'a refused NESTED batch rolls back only itself');
+    A.ok(st.undo().ok && JSON.stringify(st.serialize()) === JSON.stringify(depthBefore) && st.rooms()[0].name === 'ZZTOP', 'one undo takes back the outer batch, and the user\'s earlier rename is still there');
+  }
   A.report('station-builder');
 })();

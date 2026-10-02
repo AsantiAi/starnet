@@ -196,7 +196,9 @@
         failed = String((er && (er.message || er.code)) || 'the response failed');
       }
     }
-    return { image: finalB64 || partialB64, text: text.trim(), failed };
+    // a partial preview frame is a fallback ONLY for a stream that did not fail: a response.failed after a partial is a
+    // failed generation, never a half-drawn image saved and reported as the result (sweep 2026-10-01)
+    return { image: finalB64 || (failed ? '' : partialB64), text: text.trim(), failed };
   }
   // ChatGPT-Account-ID rides the OAuth JWT's own claim (codex-rs auth.rs); a malformed token just omits the header.
   function jwtAccountId(token) {

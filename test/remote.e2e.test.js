@@ -94,7 +94,8 @@ function startMockModel() {
     SKYNET_OPENROUTER_BASE: llm.base, STARNET_OPENROUTER_BASE: llm.base,
     SKYNET_OPENROUTER_KEY: 'sk-or-v1-remote-fake', STARNET_OPENROUTER_KEY: 'sk-or-v1-remote-fake',
     SKYNET_DEFAULT_MODEL: 'test/model', STARNET_DEFAULT_MODEL: 'test/model',
-    STARNET_REMOTE_PORT: String(lanPort), STARNET_REMOTE_LAN: '1', STARNET_REMOTE_RELAY: 'off'
+    STARNET_REMOTE_PORT: String(lanPort), STARNET_REMOTE_LAN: '1', STARNET_REMOTE_RELAY: 'off',
+    STARNET_REMOTE_PUSH_HOSTS: '127.0.0.1'
   } });
   const lan = 'http://' + HOST + ':' + lanPort;
   let client = null;
@@ -277,6 +278,7 @@ function startMockModel() {
     const ecdh = nodeCrypto.createECDH('prime256v1'); ecdh.generateKeys();
     const bsub = { endpoint: 'https://127.0.0.1:9/push/abc', keys: { p256dh: ecdh.getPublicKey().toString('base64url'), auth: nodeCrypto.randomBytes(16).toString('base64url') } };
     A.eq((await client.call('pushOn', { endpoint: 'http://127.0.0.1:9/x', keys: bsub.keys })).ok, false, 'a plain-http push address is refused');
+    A.eq((await client.call('pushOn', { endpoint: 'https://evil.example/collect', keys: bsub.keys })).ok, false, 'a push address that is not a real push service is refused');
     A.eq((await client.call('pushOn', bsub)).ok, true, 'the phone subscribes');
     A.eq((await client.call('pushKey')).data.on, true, 'and the station says so');
     const tp = await client.call('pushTest');

@@ -100,5 +100,15 @@ const I = RemoteSessions._internals;
   A.eq(sessions.size, n, 'an unreachable station changes nothing');
 
   A.eq(I.titleOf(''), 'From your phone', 'an empty title still reads honestly');
+
+  // a QUESTION answered from the phone settles the desk's card too (sweep 2026-10-01): the sidecar tells the run's
+  // stream, and the question card listens the way the approval card does
+  {
+    const rd = p => require('fs').readFileSync(require('path').join(__dirname, '..', p), 'utf8');
+    const idx = rd('sidecar/index.js'), chat = rd('frontend/app/chat.js');
+    A.ok(/const viaRemote = \(d\) => \{ orig\(d\); const decision = typeof d === 'string' \? [^;]+: \(d && d\.__clarify \? 'once' : null\);/.test(idx), 'a phone reply to a question emits permission.response on the desk run');
+    const clar = chat.slice(chat.indexOf('function clarifyRow('), chat.indexOf('function permissionRow('));
+    A.ok(/U\.bus\.on\('permission\.response', onElsewhere\)/.test(clar) && /answered from your phone/.test(clar) && /Channels\.clearPending\(ws\.id, Date\.now\(\)\)/.test(clar), 'the question card settles to "answered from your phone" and stops waiting');
+  }
   A.report('remote-sessions');
 })().catch((e) => { console.log('FAIL: threw ' + (e && e.stack || e)); process.exit(1); });

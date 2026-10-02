@@ -61,12 +61,22 @@ function encrypt(plaintext, uaPublicRaw, authSecret, opts) {
   return Buffer.concat([header, asPublic, body]);
 }
 
+// a phone's push address must belong to a real browser push service (Google, Apple, Mozilla, Microsoft): the station
+// never POSTs to an address a phone made up
+const PUSH_HOSTS = ['fcm.googleapis.com', 'android.googleapis.com', 'push.apple.com', 'push.services.mozilla.com', 'notify.windows.com'];
+function pushHostOk(endpoint, extra) {
+  let host = '';
+  try { host = new URL(endpoint).hostname.toLowerCase(); } catch (_) { return false; }
+  return PUSH_HOSTS.concat(extra || []).some(h => h && (host === h || host.endsWith('.' + h)));
+}
+
 function makePush(deps) {
   const fs = deps.fs, pathMod = deps.path, file = deps.file;
   const now = deps.now;
   if (typeof now !== 'function') throw new Error('makePush needs an injected clock (deps.now)');
   const doFetch = deps.fetch;
   const subject = deps.subject || 'https://starnetos.com';
+  const extraHosts = Array.isArray(deps.extraHosts) ? deps.extraHosts.map(h => String(h).trim().toLowerCase()).filter(Boolean) : [];
   let state = null;
 
   function load() {
@@ -118,7 +128,7 @@ function makePush(deps) {
     if (!id) return { ok: false, error: 'unknown phone' };
     const endpoint = String((sub && sub.endpoint) || '');
     const keys = (sub && sub.keys) || {};
-    if (!ENDPOINT_RE.test(endpoint)) return { ok: false, error: 'that is not a push address this station can use' };
+    if (!ENDPOINT_RE.test(endpoint) || !pushHostOk(endpoint, extraHosts)) return { ok: false, error: 'that is not a push address this station can use' };
     let p256dh, auth;
     try { p256dh = unb64u(keys.p256dh); auth = unb64u(keys.auth); publicFromRaw(p256dh); }
     catch (_) { return { ok: false, error: 'the phone sent unusable push keys' }; }

@@ -172,6 +172,9 @@
     },
     'ui.close': (entry) => { const ui = UI(); if (ui && ui.closeTerm) ui.closeTerm(entry.key); return null; },
     'ui.link': (entry, a) => {
+      // a crew-written DRAFT preview may never carry anything out of the station (index.js draft rule), and an
+      // https link it opens on load could carry whatever the agent embedded in it: drafts open no links (sweep 2026-10-01)
+      if (entry.draft) throw new Error('a draft preview cannot open links — approve the plugin first');
       let u;
       try { u = new URL(String((a && a.url) || '')); } catch (_) { throw new Error('that is not a link'); }
       if (u.protocol !== 'https:') throw new Error('only https:// links can be opened');

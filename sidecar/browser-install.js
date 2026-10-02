@@ -13,6 +13,7 @@
    Pure-ish: fetch, the unpacker and the clock are injected (test/browser-install.test.js). */
 const fs = require('fs');
 const path = require('path');
+const { pipeline: streamPipeline } = require('stream/promises');
 const CP = require('./child-env.js').guardChildProcess(require('child_process'));   // tar / ditto / unzip never inherit station secrets
 const { note: failNote } = require('./failopen.js');
 
@@ -112,13 +113,13 @@ function makeChromiumInstaller(deps) {
     const res = await fetchImpl(u.href);
     if (!res.ok || !res.body) throw new Error('the browser download failed (HTTP ' + res.status + ')');
     st.total = Number(res.headers && res.headers.get && res.headers.get('content-length')) || 0;
-    const out = F.createWriteStream(zipFile);
-    try {
-      for await (const chunk of res.body) {
-        st.received += chunk.length;
-        if (!out.write(chunk)) await new Promise(r => out.once('drain', r));
-      }
-    } finally { await new Promise(r => out.end(r)); }
+    /* pipeline, not a hand-rolled write loop: the old loop never listened for the file stream's 'error', so a
+       full disk (ENOSPC) or an antivirus lock (EPERM) mid-download became an UNCAUGHT exception that exited the
+       whole sidecar — and its 'drain' wait could never resolve. pipeline() rejects, destroys the stream and lets
+       the cleanup below remove the partial file. */
+    await streamPipeline(async function* () {
+      for await (const chunk of res.body) { st.received += chunk.length; yield chunk; }
+    }, F.createWriteStream(zipFile));
     if (st.total && st.received !== st.total) throw new Error('the browser download was cut short (' + st.received + ' of ' + st.total + ' bytes)');
     st.state = 'unpacking';
     F.rmSync(stage, { recursive: true, force: true });

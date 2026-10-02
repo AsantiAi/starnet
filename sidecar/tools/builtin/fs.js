@@ -76,6 +76,16 @@ const { note: failNote } = require('../../failopen');
       return '[mutation receipt: ' + receipt.state + '; attempted ' + receipt.attemptedBytes + ' bytes; written '
         + receipt.writtenBytes + '; verified ' + receipt.verifiedBytes + '; sha256 ' + (receipt.sha256 || 'deleted') + ']';
     }
+    /* WHERE THE BYTES WENT (issue #60). A relative path lands in the project folder when the session is project-
+       scoped and in the agent's PRIVATE workspace otherwise. The receipt proved the bytes but never said which of
+       the two, so a "verified" write into the private workspace read as a write into the project the shell was
+       looking at, and the agent reported files as saved that the shell then found MISSING. Name the location. */
+    function locationLine(rel, abs, ctx) {
+      const r = String(rel == null ? '' : rel);
+      if (P.win32.isAbsolute(r) || P.posix.isAbsolute(r) || /^[A-Za-z]:/.test(r)) return '';
+      const scoped = !!(ctx && typeof ctx.projectRoot === 'string' && ctx.projectRoot.trim());
+      return '\n[location: ' + abs + (scoped ? '' : ' (your private workspace, not a project folder)') + ']';
+    }
     function receiptError(message, receipt) {
       const error = new Error(message + ' ' + receiptLine(receipt));
       error.mutationReceipt = receipt;
@@ -307,7 +317,7 @@ const { note: failNote } = require('../../failopen');
         await stampSeen(aid, abs);                // our own write is the new baseline, so a rewrite never self-trips
         emitDeliverable(ctx, aid, args.path);
         return finishEditDiagnostics(diagnosticTicket,
-          { content: 'Wrote ' + args.path + ' (' + data.length + ' bytes).\n' + receiptLine(receipt), summary: 'wrote ' + args.path + ' (' + kb(data.length) + ')', mutationReceipt: receipt, receipt }, ctx);
+          { content: 'Wrote ' + args.path + ' (' + data.length + ' bytes).\n' + receiptLine(receipt) + locationLine(args.path, abs, ctx), summary: 'wrote ' + args.path + ' (' + kb(data.length) + ')', mutationReceipt: receipt, receipt }, ctx);
       }
     };
 
@@ -450,7 +460,7 @@ const { note: failNote } = require('../../failopen');
         emitDeliverable(ctx, aid, args.path);
         const added = Buffer.byteLength(String(args.content), 'utf8');
         return finishEditDiagnostics(diagnosticTicket,
-          { content: 'Appended to ' + args.path + ' (+' + added + ' bytes, now ' + bytes + ').\n' + receiptLine(receipt), summary: 'appended ' + args.path + ' (+' + kb(added) + ')', mutationReceipt: receipt, receipt }, ctx);
+          { content: 'Appended to ' + args.path + ' (+' + added + ' bytes, now ' + bytes + ').\n' + receiptLine(receipt) + locationLine(args.path, abs, ctx), summary: 'appended ' + args.path + ' (+' + kb(added) + ')', mutationReceipt: receipt, receipt }, ctx);
       }
     };
 
