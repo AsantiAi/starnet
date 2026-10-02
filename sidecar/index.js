@@ -16750,6 +16750,14 @@ async function handleAgentDelete(req, res) {
     return json(500, { ok: false, error: 'could not persist roster removal' });
   }
   const archived = [];
+  // the Commander's taste given on this agent's work outlives the agent: it moves to the hero's notebook BEFORE the
+  // notebook is archived (FeedbackMemory.adoptTaste — a delete used to silently drop every rating it ever got)
+  if (agentId !== 'agent') {
+    try {
+      const departed = notebookStore.get('notebook:' + agentId);
+      await notebookStore.update('notebook:agent', (cur) => FeedbackMemory.adoptTaste(cur, departed, memcore.nextNoteId, agentId) || undefined);
+    } catch (e) { failNote('agent.delete.adoptTaste', e); }
+  }
   try {
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
     const archiveDir = path.join(WORKSPACES, '_archive', agentId + '-' + ts);

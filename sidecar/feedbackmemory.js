@@ -169,4 +169,25 @@ function stationTaste(own, others, opts) {
   return selectTaste(mine.concat(foreign), opts);
 }
 
-module.exports = { ORIGIN, TASTE_HEADER, TASTE_LIMIT, TASTE_CHARS, content, apply, directiveFor, looksLikeFeedback, isTaste, selectTaste, stationTaste };
+/* adoptTaste(heroList, departedList, nextId, from) — DELETING AN AGENT MUST NOT DELETE THE COMMANDER'S TASTE (sweep
+   2026-10-02). Taste is about the Commander, not the agent it was given to, but it lives in that agent's notebook — and
+   agent delete archives the notebook, so every rating ever given on its work silently stopped steering anyone. The
+   departing agent's taste records move into the hero's notebook (new ids there; the same words once) before archive.
+   -> the new hero list, or null when there is nothing to adopt. */
+function adoptTaste(heroList, departedList, nextId, from) {
+  const hero = Array.isArray(heroList) ? heroList.slice() : [];
+  const have = new Set(hero.filter(isTaste).map(r => String(r.content || r.body || '').trim()));
+  let added = 0;
+  for (const r of (Array.isArray(departedList) ? departedList : [])) {
+    if (!isTaste(r)) continue;
+    const text = String(r.content || r.body || '').trim();
+    if (have.has(text)) continue;
+    have.add(text);
+    const id = typeof nextId === 'function' ? nextId(hero) : 'note_' + (hero.length + 1);
+    hero.push(Object.assign({}, r, { id, adoptedFrom: from ? String(from) : undefined, pinned: false }));
+    added++;
+  }
+  return added ? hero : null;
+}
+
+module.exports = { ORIGIN, TASTE_HEADER, TASTE_LIMIT, TASTE_CHARS, content, apply, directiveFor, looksLikeFeedback, isTaste, selectTaste, stationTaste, adoptTaste };
