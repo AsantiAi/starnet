@@ -2181,5 +2181,28 @@ for (const c of T.catalog) {
     A.ok(outer.ok && st.rooms()[0].name === 'OUTER', 'a refused NESTED batch rolls back only itself');
     A.ok(st.undo().ok && JSON.stringify(st.serialize()) === JSON.stringify(depthBefore) && st.rooms()[0].name === 'ZZTOP', 'one undo takes back the outer batch, and the user\'s earlier rename is still there');
   }
+  // sweep 2026-10-02: a piece REACHING into a hallway goes with it (removeRoom drops every piece whose footprint touches
+  // the room) — the re-lay must refuse to cut it, and a hallway delete's card must count and name it
+  {
+    const E3 = Object.assign({}, env, { StationTemplates: T, PropSprites: Sprites, EquipmentHelp: require('../frontend/app/equipmenthelp.js'),
+      RoomStyles: require('../frontend/app/roomstyles.js'), LineLayout: require('../frontend/app/linelayout.js'), LineEdit: require('../frontend/app/lineedit.js') });
+    const mk = () => {
+      const s = M.create(M.starterDoc()); s.ensureWorkstation('agent'); s.ensureWorkstation('rex');
+      const lay = SB.planEdit(s.serialize(), { refit: [{ op: 'hall', x: 18, y: 4, w: 6, h: 3 }, { op: 'room', name: 'Den', kind: 'hab', x: 24, y: 0, w: 18, h: 11 }] }, E3);
+      SB.apply(s, lay.plan, E3);
+      const i = s.addProp({ t: 'intake', x: 9, y: 5, w: 2, h: 2 }), b = s.addProp({ t: 'bay', x: 13, y: 5, w: 2, h: 2 }), o = s.addProp({ t: 'outbox', x: 17, y: 5, w: 2, h: 2 });   // the outbox reaches x=18: the hallway
+      s.connectBelt(i.id, b.id); s.connectBelt(b.id, o.id); s.assignPropAgent(b.id, 'rex');
+      return { s, o };
+    };
+    const a = mk();
+    const re = SB.planEdit(a.s.serialize(), { rearrange: 'diamond' }, E3);
+    A.ok(!re.ok && /stands in a hallway \(outbox at \(17, 5\)\)/.test(re.error), 'a re-lay refuses when a line\'s outbox reaches into a hallway (it used to delete it under a card saying lines stay as they are): ' + (re.error || 'PLANNED'));
+    A.ok(!!a.s.propById(a.o.id), 'and the outbox is still there');
+    const b = mk();
+    const desk = b.s.addProp({ t: 'desk', x: 23, y: 4, w: 2, h: 1 }); b.s.assignPropAgent(desk.id, 'agent');   // straddles the hallway and Den
+    const hall = b.s.rooms().find(r => r.kind === 'corridor');
+    const del = SB.planEdit(b.s.serialize(), { refit: [{ op: 'delete', hall: hall.name }, { op: 'hall', x: 18, y: 7, w: 6, h: 3 }] }, E3);
+    A.ok(del.ok && /with the 2 pieces in or reaching into it \(the outbox, NOVA's desk\)/.test(del.plan.summary), 'a hallway delete counts AND names the desk and machine reaching into it: ' + (del.ok ? del.plan.summary.slice(0, 220) : del.error));
+  }
   A.report('station-builder');
 })();
