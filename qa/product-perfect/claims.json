@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "e3bdfff1514dea154b2b824ad0ce40071210590b",
+    "sourceCommit": "bca9d7fe9443a1af7de64bd14fd176b7ecd2b8c9",
     "pathSetSha256": "390a2a551d88b2597ca4ab3f1acc7ca535b3b978e277a0ed8c0fb507e73e87c0",
     "files": [
       {
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 416964,
-        "sha256": "d125e8fdb00efe293e6677dde7dce25a08f24e27c3393e14ea3859c9465047fb"
+        "bytes": 417342,
+        "sha256": "d2e20208cb721cd0dfe807f9ff69cd128550ec242270b9ab5a22502aef84ec6c"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 693428,
-        "sha256": "52589563671a7a92c50dcc30b9027b775c1d305988dab1769c6019dacd5c20ee"
+        "bytes": 694792,
+        "sha256": "b33bce719eeabd946b93ec27566604cf3d6abd083291b37dfe2efde256e8a428"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -428,8 +428,8 @@
       },
       {
         "path": "frontend/app/deskscreen.js",
-        "bytes": 36978,
-        "sha256": "b0deab98077b37e4e295d5380e4968cc2cf6bc94aab927fb695db93146326baa"
+        "bytes": 37157,
+        "sha256": "1c32fda4d9d1f8b1d83f7a7e7b339d8b1eb2042e5b6ddf7d81367192403c366a"
       },
       {
         "path": "frontend/app/diagnostics.js",
@@ -763,8 +763,8 @@
       },
       {
         "path": "frontend/app/pluginhost.js",
-        "bytes": 29102,
-        "sha256": "d095c169bad3b2a32756c5d066b392de49d630ae3690a9aad7f73e93f02ff94b"
+        "bytes": 29444,
+        "sha256": "1aee9242b88318a1a748c8bc2a68db2b1f99e1fce2245ce4f99f02ba4cbf2989"
       },
       {
         "path": "frontend/app/pride.js",
@@ -1018,8 +1018,8 @@
       },
       {
         "path": "frontend/app/remoteview.js",
-        "bytes": 8455,
-        "sha256": "4d661ba59b8ba78e16d3b36bceec9d381683007066bd0f5209ef37b27620dc2d"
+        "bytes": 8797,
+        "sha256": "36849f2f4c05bb7569c659650691e911dea1785b1387f32024c9b6dff57afd21"
       },
       {
         "path": "frontend/app/resummonstore.js",
@@ -1128,8 +1128,8 @@
       },
       {
         "path": "frontend/app/stationbuilder.js",
-        "bytes": 294437,
-        "sha256": "81844cc53f7801bdb7c12f647029dcf2526492eec48dbdbadc2dc400ed9942dd"
+        "bytes": 294554,
+        "sha256": "f9c8f7f4d490a333b5e004476d7f9eeaa516ebb39e39a8362d5accdb40d4b840"
       },
       {
         "path": "frontend/app/stationcommands.js",
@@ -1153,8 +1153,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 785426,
-        "sha256": "35f5ddc2aadfca704b1f06e29ca0690fe04bd3b5fc3af4da3a8b59e1c5ff7974"
+        "bytes": 786161,
+        "sha256": "0b3437e9a759e272c28af28b471a121c3ba4ce46dc5a08ffd63c039dc70f7565"
       },
       {
         "path": "frontend/app/stepin.js",
@@ -1428,8 +1428,8 @@
       },
       {
         "path": "frontend/app/worldmodel.js",
-        "bytes": 237339,
-        "sha256": "cacdf6266c872c5b4b63b1a4e2d64c3c654fc4b1a205224f4fe2c7a6f35d47c4"
+        "bytes": 237968,
+        "sha256": "df759229604a6c7a0cc225f7fc53d84dc684acb92b25d364303cd311bee41cce"
       },
       {
         "path": "frontend/app/worldrenderer.js",
