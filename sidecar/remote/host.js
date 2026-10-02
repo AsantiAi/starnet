@@ -11,7 +11,7 @@
 
    Events a phone sees:
      run.started  { runId, agentId, streamId }
-     run.text     { runId, text }                 the reply so far (coalesced, at most ~4 per second)
+     run.text     { runId, text } | { runId, at, add }   the reply so far, or what it grew by from `at` (≤ ~4 per second)
      run.tool     { runId, callId, name, summary } a step the agent took
      run.step     { runId, callId, ok, ms }       how that step went
      run.ended    { runId, agentId, streamId, reason, usd, error }
@@ -149,14 +149,25 @@ function makeRemoteHost(d) {
 
     // the reply, coalesced: a phone on cellular gets a few frames a second, not one per token
     let buf = '', timer = null, errMsg = null, reason = null, usd = 0;
-    const flush = () => { timer = null; broadcast({ type: 'run.text', runId, text: clip(buf, 20000) }); };
+    /* The reply only GROWS, so a frame carries only what is new (and where it starts): resending the whole reply four
+       times a second made a long answer cost its full size every quarter second on the station's uplink. Every eighth
+       frame (two seconds) is the whole text again, so a phone that missed a piece is put right at once. */
+    let sent = 0, flushes = 0;
+    const flush = () => {
+      timer = null;
+      const full = clip(buf, 20000);
+      flushes += 1;
+      if (sent > 0 && full.length >= sent && flushes % 8) { if (full.length > sent) broadcast({ type: 'run.text', runId, at: sent, add: full.slice(sent) }); }
+      else broadcast({ type: 'run.text', runId, text: full });
+      sent = full.length;
+    };
     const emit = (name, payload) => {
       const p = payload || {};
       // a delegated worker's lifecycle rides the lead's emit (orchestration forwards it): a worker that errored and
       // was recovered from must not turn THIS run's phone result red — the same runId filter harness.js applies.
       if ((name === 'agent.run.error' || name === 'agent.run.end') && p.runId && p.runId !== runId) return;
       if (name === 'agent.token') { buf += (p.delta || ''); if (!timer) timer = setTimeout(flush, TEXT_FLUSH_MS); }
-      else if (name === 'agent.tool_call') { buf = ''; broadcast({ type: 'run.tool', runId, callId: String(p.callId || ''), name: clip(p.name, 80), summary: clip(p.argsSummary, 400) }); }
+      else if (name === 'agent.tool_call') { buf = ''; sent = 0; broadcast({ type: 'run.tool', runId, callId: String(p.callId || ''), name: clip(p.name, 80), summary: clip(p.argsSummary, 400) }); }
       else if (name === 'agent.tool_result') broadcast({ type: 'run.step', runId, callId: String(p.callId || ''), ok: !!p.ok && !p.isError, ms: Number(p.ms) || 0 });
       else if (name === 'agent.run.error') errMsg = clip(p.message || 'run error', 400);
       else if (name === 'agent.run.end') { reason = p.reason || null; if (typeof p.usd === 'number' && isFinite(p.usd)) usd = Math.max(usd, p.usd); }
