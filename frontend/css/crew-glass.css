@@ -43,6 +43,9 @@ body.glass-demo:not(.hud-mode) #left > h3 #crew-sum:empty { display: none; }
 
 /* ---------- 2 · agent cards ---------- */
 body.glass-demo:not(.hud-mode) #crew { padding: 6px 2px; }
+/* the roster dragged SHUT (leftrail.js) must measure zero: this padding outranks app.css's #crew.shut,
+   so without it the closed list kept a 12px scrolling sliver under the header */
+body.glass-demo:not(.hud-mode) #crew.shut { padding-block: 0; }
 body.glass-demo:not(.hud-mode) #crew .crew-row {
   gap: 11px; margin: 4px 8px; padding: 8px 9px;
   border: 1px solid transparent; border-radius: 10px;

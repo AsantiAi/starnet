@@ -105,6 +105,12 @@ async function rejects(p, re, msg) {
     A.eq(devices.completePairing({ pairingId: p2.pairingId, publicKey: k.publicRaw, name: 'x', proof: proof2 }).ok, false, 'a code expires after 10 minutes');
   }
   const deviceId = devices.list()[0].id;
+  // a phone works with the desk's permissions until it is set to ALWAYS ASK (kept across restarts)
+  A.eq(devices.askFirst(deviceId), false, 'a new phone works with the desk permissions');
+  A.eq(devices.setAskFirst(deviceId, true).ok, true, 'a phone can be set to always ask');
+  A.eq(devices.askFirst(deviceId) && devices.list()[0].askFirst, true, 'and the device list says so');
+  A.eq(devices.setAskFirst(deviceId, false).ok && devices.askFirst(deviceId), false, 'and back');
+  A.eq(devices.setAskFirst('dev_nobody', true).ok, false, 'an unknown phone cannot be set');
 
   /* ---------- 3. sessions: stranger refused, replay refused, revoke ends sessions ---------- */
   {

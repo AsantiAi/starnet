@@ -99,9 +99,12 @@ try {
   await Promise.all([stopChild(chrome, true), stopChild(sidecar)]);
   const resolvedRoot = root.replace(/\\/g, '/');
   if (resolvedRoot.startsWith(tmpdir().replace(/\\/g, '/') + '/') && /starnet-crt-loss-/.test(resolvedRoot)) {
-    for (let attempt = 0; attempt < 10; attempt++) {
+    // Chrome's children can hold chrome_debug.log for seconds after the parent exits on a loaded
+    // Windows box (2s was not enough under a full gate) — the same transient-lock window
+    // stationbake.connections.test.mjs allows, and it still fails if the lock never lifts.
+    for (let attempt = 0; attempt < 50; attempt++) {
       try { rmSync(root, { recursive: true, force: true }); break; }
-      catch (error) { if (attempt === 9) throw error; await sleep(200); }
+      catch (error) { if (!['EBUSY', 'EPERM', 'ENOTEMPTY'].includes(error.code) || attempt === 49) throw error; await sleep(200); }
     }
   }
 }

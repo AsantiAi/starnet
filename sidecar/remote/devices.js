@@ -90,7 +90,7 @@ function makeDevices(deps) {
     return stationCache;
   }
 
-  function publicRow(d) { return { id: d.id, name: d.name, createdAt: d.createdAt, lastSeenAt: d.lastSeenAt || null, fingerprint: C.fingerprint(d.publicKey) }; }
+  function publicRow(d) { return { id: d.id, name: d.name, createdAt: d.createdAt, lastSeenAt: d.lastSeenAt || null, fingerprint: C.fingerprint(d.publicKey), askFirst: d.askFirst === true }; }
   function list() { return load().devices.map(publicRow); }
   function get(id) { const d = load().devices.find(x => x.id === String(id || '')); return d ? { id: d.id, name: d.name, publicKey: d.publicKey } : null; }
 
@@ -131,6 +131,17 @@ function makeDevices(deps) {
     return { ok: true, device: publicRow(device) };
   }
 
+  /* PERMISSIONS FROM A PHONE (Andrew 10-02: "I want full access so I can vibe code on the go"): a phone works with
+     the desk's own permissions — an agent on Full Access acts without asking from the phone too. A phone marked
+     askFirst (set at the desk, per phone) asks before every gated step instead, whatever the agent's setting. */
+  function askFirst(id) { const d = load().devices.find(x => x.id === String(id || '')); return !!(d && d.askFirst === true); }
+  function setAskFirst(id, on) {
+    const s = load();
+    if (!s.devices.some(d => d.id === String(id || ''))) return { ok: false, error: 'no such device' };
+    const devices = s.devices.map(d => d.id === String(id) ? Object.assign({}, d, { askFirst: on === true }) : d);
+    const res = persist(Object.assign({}, s, { devices }));
+    return res.ok ? { ok: true } : { ok: false, error: res.error };
+  }
   function revoke(id) {
     const s = load();
     const next = s.devices.filter(d => d.id !== String(id || ''));
@@ -166,7 +177,7 @@ function makeDevices(deps) {
   function enabled() { return load().enabled === true; }
   function setEnabled(on) { const s = load(); const res = persist(Object.assign({}, s, { enabled: on === true })); return res.ok ? { ok: true } : { ok: false, error: res.error }; }
 
-  return { stationKeys, list, get, startPairing, completePairing, revoke, touch, enabled, setEnabled, issueRelayToken, relayTokenHashes, tokenHashOf, _pairings: pairings };
+  return { stationKeys, list, get, startPairing, completePairing, revoke, askFirst, setAskFirst, touch, enabled, setEnabled, issueRelayToken, relayTokenHashes, tokenHashOf, _pairings: pairings };
 }
 
 module.exports = { makeDevices, CODE_ALPHABET, PAIR_TTL_MS, PAIR_MAX_TRIES };
