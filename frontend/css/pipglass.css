@@ -139,3 +139,17 @@ body.glass-demo:not(.hud-mode) #crew :is(.crew-status, .crew-step), body.glass-d
 body.glass-demo:not(.hud-mode) #crew .crew-row.working .crew-status { color: var(--ph); }
 body.glass-demo:not(.hud-mode) #left .ws-head :is(.ws-tab, #ws-new, #ws-addproject) { color: var(--ph); border-color: rgba(var(--ph-rgb), .4); box-shadow: none; }
 body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty-hint { color: var(--cg-mute); opacity: 1; }
+
+/* ============================================================
+   NO CRT EFFECTS ON THE PANELS (Andrew 10-01: "remove the crt effects … make it look as clean as possible with
+   our aesthetic"). The colour fringe, the phosphor glow on type and the dithered ▒ fields go; a lit row / open
+   tab is a clean flat phosphor tint with a crisp edge. Kept: matte black, crisp shapes, the Pip-Boy ticked rules,
+   the ▮▯ gauge and the ASCII decode. The station's own screen overlay (style.css body::after) is untouched.
+   ============================================================ */
+body.glass-demo:not(.hud-mode) {
+  --pg-glow: none;
+  --pg-glow-soft: none;
+  --pg-dither: linear-gradient(rgba(var(--ph-rgb), .14), rgba(var(--ph-rgb), .14));
+  --pg-dither-gold: linear-gradient(rgba(var(--gold-rgb), .14), rgba(var(--gold-rgb), .14));
+}
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar) :is(h3, .crew-name, .crew-clock, .crew-status, .crew-step, .ws-tab, #ws-new, .ws-row, .bb-grp, .tb-val, .tb-lbl, #status-pill, #crew-sum, .ctx-gauge, .cmsg-empty-line, .cmsg-starter-title) { text-shadow: none; }
