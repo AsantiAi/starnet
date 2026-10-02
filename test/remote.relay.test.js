@@ -86,6 +86,59 @@ function wsClose(url) {
       await appRelay.close();
     }
 
+    // NOBODY CAN EXHAUST THE RELAY BEFORE PROVING ANYTHING. Raw WebSocket frames from an unauthenticated socket:
+    // a flood of empty continuation frames (once grew a list forever and killed the process in about a second),
+    // a big message before a station has signed in, and too many sockets from one address.
+    {
+      const capRelay = makeRelay({ log: () => {}, maxPerIp: 3 });
+      const cport = await capRelay.listen(0, '127.0.0.1');
+      const frameOf = (b0, payload) => {
+        const body = Buffer.from(payload), len = body.length, mask = Buffer.from([7, 1, 9, 3]);
+        let hdr;
+        if (len < 126) hdr = Buffer.from([b0, 0x80 | len]);
+        else if (len < 65536) { hdr = Buffer.alloc(4); hdr[0] = b0; hdr[1] = 0x80 | 126; hdr.writeUInt16BE(len, 2); }
+        else { hdr = Buffer.alloc(10); hdr[0] = b0; hdr[1] = 0x80 | 127; hdr.writeBigUInt64BE(BigInt(len), 2); }
+        for (let i = 0; i < body.length; i++) body[i] ^= mask[i & 3];
+        return Buffer.concat([hdr, mask, body]);
+      };
+      // opens a raw socket, completes the handshake, resolves { s, status, closed() } (closed = the relay hung up)
+      const raw = (p) => new Promise((resolve) => {
+        const s = net.connect(cport, '127.0.0.1', () => s.write('GET ' + p + ' HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n'));
+        let head = '', done = false, closed = false, closeCode = null;
+        s.on('data', (d) => {
+          if (!done) { head += d.toString('latin1'); if (head.indexOf('\r\n\r\n') >= 0) { done = true; resolve({ s, status: Number((/^HTTP\/1\.1 (\d+)/.exec(head) || [])[1]), closed: () => closed, code: () => closeCode }); } return; }
+          if (d[0] === 0x88 && d.length >= 4) closeCode = d.readUInt16BE(2);
+        });
+        s.on('close', () => { closed = true; if (!done) { done = true; resolve({ s, status: 0, closed: () => true, code: () => null }); } });
+        s.on('error', () => {});
+      });
+      const a = await raw('/v1/station');
+      A.eq(a.status, 101, 'a station socket opens');
+      const flood = [frameOf(0x01, 'x')];
+      for (let i = 0; i < 4000; i++) flood.push(frameOf(0x00, ''));
+      a.s.write(Buffer.concat(flood));
+      await waitUntil(() => a.code() !== null || a.closed(), 3000, 'the flood is cut off');
+      A.ok(a.code() === 1009 || a.code() === 1008 || a.closed(), 'a flood of empty continuation frames is cut off (close ' + a.code() + ')');
+      A.eq((await fetch('http://127.0.0.1:' + cport + '/healthz').then(r => r.json())).ok, true, 'and the relay is still up');
+      a.s.destroy();
+
+      const b = await raw('/v1/station');
+      b.s.write(frameOf(0x81, 'y'.repeat(64 * 1024)));
+      await waitUntil(() => b.code() !== null || b.closed(), 3000, 'the big pre-auth frame is refused');
+      A.eq(b.code(), 1009, 'a station that has not signed in may not send a big message');
+      b.s.destroy();
+      await sleep(150);
+
+      const held = [await raw('/v1/station'), await raw('/v1/station'), await raw('/v1/station')];
+      A.ok(held.every(x => x.status === 101), 'three sockets from one address are fine');
+      const over = await raw('/v1/station');
+      A.eq(over.status, 429, 'a fourth from the same address is refused at the door');
+      for (const x of held.concat(over)) x.s.destroy();
+      await sleep(150);
+      A.eq((await raw('/v1/phone?rid=x')).status, 101, 'and once they close, the address may connect again');
+      await capRelay.close();
+    }
+
     // A phone that arrives while a station has just connected (its paired list not sent yet) WAITS for the list
     // instead of being told "not paired" (which used to make a healthy phone believe it was removed)
     {

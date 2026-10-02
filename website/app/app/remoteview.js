@@ -69,9 +69,13 @@ const RemoteView = (() => {
     const enc = await api._internals.encode(still.canvas);
     if (!enc) return false;
     // the same room as last time: nothing to send (the phone keeps the picture it has, and nothing is re-downloaded)
+    // …unless the server no longer HOLDS that picture (a sidecar restart): then its "same" answers not-ok and the full
+    // still goes up below, instead of every later step re-posting "same" while the phone gets no picture at all
     if (enc.data === lastData && stillScale) {
-      try { await fetch('/api/remote/view', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ same: true }) }); } catch (_) {}
-      return true;
+      let held = true;
+      try { const r0 = await fetch('/api/remote/view', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ same: true }) }); held = !!(r0 && r0.ok); } catch (_) {}
+      if (held) return true;
+      lastData = null; stillScale = 0;
     }
     try {
       const r = await fetch('/api/remote/view', { method: 'POST', headers: { 'Content-Type': 'application/json' },

@@ -64,6 +64,27 @@ const fakeUnzip = key => async (zip, dest) => {
     A.ok(inst.status().state === 'failed' && /cut short/.test(inst.status().error), 'status carries the reason for the window');
     fs.rmSync(root, { recursive: true, force: true });
   }
+  // a FULL DISK mid-download fails the install — it used to be an uncaught stream error that exited the sidecar
+  {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sn-binstall-'));
+    const diskFull = Object.assign({}, fs, { createWriteStream: p => {
+      const s = fs.createWriteStream(p);
+      s.write = () => { setImmediate(() => s.destroy(Object.assign(new Error('ENOSPC: no space left on device, write'), { code: 'ENOSPC' }))); return false; };
+      return s;
+    } });
+    let uncaught = null; const onUncaught = e => { uncaught = e; };
+    process.on('uncaughtException', onUncaught);
+    const inst = makeChromiumInstaller({ root, fetchImpl: fakeFetch('win64'), platform: 'win32', arch: 'x64', unzip: fakeUnzip('win64'), fs: diskFull });
+    let err = null;
+    const settled = await Promise.race([inst.ensure().then(() => 'resolved', e => { err = e; return 'rejected'; }), new Promise(r => setTimeout(() => r('HUNG'), 3000))]);
+    await new Promise(r => setTimeout(r, 50));
+    process.removeListener('uncaughtException', onUncaught);
+    A.eq(uncaught, null, 'a disk-full download error is not an uncaught exception (the sidecar stays up)');
+    A.eq(settled, 'rejected', 'a disk-full download rejects instead of hanging on drain');
+    A.ok(err && /ENOSPC/.test(err.message) && inst.status().state === 'failed', 'status says why the browser download failed');
+    A.eq(inst.find(), null, '…and nothing is installed');
+    fs.rmSync(root, { recursive: true, force: true });
+  }
   // a download from anywhere but Google's host is refused
   {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sn-binstall-'));

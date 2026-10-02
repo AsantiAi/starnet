@@ -521,7 +521,7 @@
       description: 'STATION BUILDER: send one real test job down a workflow line and read what came of it: which steps ran and how each ended, what the line delivered, what it cost. It is the very job the Workflow panel\'s SEND A JOB sends (one at a time on the station), so it runs the line\'s agents, spends what they spend, and asks the Commander first. '
         + 'line is the line\'s name (or the id of any machine on it, from station.map { room }); room helps when two lines share a name; job is the work to send, written the way a real job would arrive. Use it after you build or set a line up: if a step failed, went the wrong way or handed on the wrong thing, fix the line with a refit (brief, hands, routes, loop, budget …) and test again. It waits for the job (up to 20 minutes). A step refused a permission (a page fetch, a file write) needs the Commander\'s grant: say which agent needs what and how they grant it, never change an agent\'s approval or permissions yourself, and never reach around the station\'s controls (a shell, a browser debug port, the page itself) to get a job through.',
       schema: { type: 'object', properties: { line: { type: 'string' }, job: { type: 'string' }, room: { type: 'string' } }, required: ['line', 'job'] },
-      run: async (args) => {
+      run: async (args, ctx) => {
         if (!runLineJob) return refuse('Testing lines is not available on this station.');
         const a = args && typeof args === 'object' ? args : {};
         const job = String(a.job == null ? '' : a.job).replace(/\r/g, '').trim();
@@ -532,7 +532,7 @@
         const L = ref.result || {};
         if (!L.crewed) return refuse('Nobody works the line ' + L.name + ' yet: give its steps agents (a refit { op: "agent" }, or { staff }) and test again.');
         let r;
-        try { r = await runLineJob({ line: L.lineId, text: job, name: L.name }); }
+        try { r = await runLineJob({ line: L.lineId, text: job, name: L.name }, ctx && ctx.signal); }
         catch (e) { return refuse('The test job could not be sent: ' + String((e && e.message) || e).slice(0, 200)); }
         const o = (r && r.obj) || {};
         if (r && r.code === 409) return refuse(String(o.error || 'the line could not take a job right now'));

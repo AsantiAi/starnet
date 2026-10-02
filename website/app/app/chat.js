@@ -3082,6 +3082,26 @@ const Chat = (() => {
       btns.appendChild(rest);
     }
     r.body.appendChild(btns);
+    // STARNET REMOTE: a paired phone can answer this question too (the sidecar then puts permission.response on this
+    // run's stream, as for an approval). Settle the card to what happened — it used to keep live options and "awaiting
+    // your answer…" after the run had moved on, and a tap then did nothing while the card claimed it answered.
+    if (typeof U !== 'undefined' && U.bus && U.bus.on && U.bus.off) {
+      const onElsewhere = (resp) => {
+        if (!resp || resp.promptId !== p.promptId) return;
+        U.bus.off('permission.response', onElsewhere);
+        if (decided) return;
+        decided = true;
+        if (ws && typeof Channels !== 'undefined') Channels.clearPending(ws.id, Date.now());
+        if (isActiveWs(ws)) renderPresence();
+        btns.remove();
+        const tag = document.createElement('span');
+        tag.className = 'consent-result' + (resp.decision === 'deny' ? ' err' : '');
+        tag.textContent = resp.decision === 'deny' ? '✕ declined from your phone' : '✓ answered from your phone';
+        r.body.appendChild(tag);
+        syncStatus();
+      };
+      U.bus.on('permission.response', onElsewhere);
+    }
     // Esc = "use your judgment": the reflexive dismiss defers the decision rather than silently denying a
     // question (a deny makes no sense here), matching the end-run card's skip chip semantics.
     r.d.tabIndex = -1;
@@ -8579,7 +8599,8 @@ const Chat = (() => {
         + '&lineId=' + encodeURIComponent(lineId || '') + (dockId ? '&dockId=' + encodeURIComponent(dockId) : ''), { cache: 'no-store', headers: h });
       if (!r || !r.ok) return null;
       const j = await r.json();
-      return (j && j.next) ? { next: String(j.next), nextDock: (typeof j.nextDock === 'string' && j.nextDock) ? j.nextDock : null, brief: (typeof j.brief === 'string' && j.brief) ? j.brief : null } : null;
+      return (j && j.next) ? { next: String(j.next), nextDock: (typeof j.nextDock === 'string' && j.nextDock) ? j.nextDock : null, brief: (typeof j.brief === 'string' && j.brief) ? j.brief : null,
+        verdict: (typeof j.verdict === 'string' && j.verdict) ? j.verdict : '', last: j.last === true } : null;
     } catch (_) { return null; }   // no floor, no sidecar, no line — the single-stage reply already stands
   }
 
@@ -8649,7 +8670,7 @@ const Chat = (() => {
       // the RECEIVING dock's standing brief rides the shared handoff turn — the same 5th param the sidecar's
       // chain runner passes (sidecar/routing/chain.js) — so the same floor composes the same run here too.
       const prompt = (typeof Pipeline !== 'undefined' && Pipeline.handoffPrompt)
-        ? Pipeline.handoffPrompt(seed.originalText, cur, out.text, hop, nxr.brief) : out.text;
+        ? Pipeline.handoffPrompt(seed.originalText, cur, out.text, hop, nxr.brief, nxr.verdict, nxr.last) : out.text;   // + the VERDICT / LAST-stage parts hopTurn adds (sweep 2026-10-01)
       const hopRow = isActiveWs(ws) ? streamingAgent(who) : null;
       if (hopRow) activeLiveRow = hopRow;
       let hopAcc = '';
@@ -8750,14 +8771,21 @@ const Chat = (() => {
       if (typeof App !== 'undefined' && App.refreshRail) App.refreshRail();
     }
 
-    const isTask = recoveryResume || !!pending || Classify.isTaskDirective(text);
+    // "YES" TO AN OFFER IS A GO: when the agent's last reply offered to do work ("want me to draft it?") a bare
+    // "yes" / "sure" / "do it" is the directive itself — classified as chat it ran tool-less and could only promise.
+    const priorAgentTurn = (() => { for (let i = ws.history.length - 2; i >= 0; i--) { const m = ws.history[i]; if (m && m.role === 'assistant') return typeof m.content === 'string' ? m.content : ''; if (m && m.role === 'user') return ''; } return ''; })();
+    const isTask = recoveryResume || !!pending || Classify.isTaskDirective(text, { priorAgentTurn });
+    // the WORDS of a "yes" are not the work: the task is the agent's offer it accepted. So an accepted offer runs WITH
+    // tools, but never feeds what reads the Commander's own wording (the profile, the recurring-job miner, the intent
+    // offer) — two "yes please" acceptances must not look like a recurring job called "yes please".
+    const acceptedOffer = !!(isTask && Classify.isAffirmation && Classify.isAffirmation(text));
     // INTENT OFFER: a real, fresh directive is the one moment the Commander has stated what they want in their
     // own words — the only honest place to say "there is a class built for exactly this". Gated to genuine new
     // work: never a retry (already offered on the original), never a recipe launch (they came FROM the library),
     // never a goal-loop continuation (the station wrote that text, not the Commander), never a reply to a
     // pending task question. Stage it on this run's metadata so concurrent sessions can never consume each
     // other's offer; the slow post-run arm reads and clears it after the answer and its own choice rows settle.
-    const intentOfferText = (isTask && !retry && !fromRecipe && !goalContinuation && !pending) ? String(text || '') : null;
+    const intentOfferText = (isTask && !acceptedOffer && !retry && !fromRecipe && !goalContinuation && !pending) ? String(text || '') : null;
     // P1 + BELT IS WORK-ONLY (Andrew's ruling 2026-07-05): only a real TASK directive drops an INTAKE ore box
     // on the belt / bumps the queue gauge (mirrors the Telegram admit shape — the sidecar gates on the SAME
     // classifier). Pure chat ("hello") gets its reply with NOTHING on the floor.
@@ -8772,8 +8800,8 @@ const Chat = (() => {
     // count — never the message text. Gated on the user's learning flag inside the store.
     // observe ONLY a genuine new directive — never on RETRY (re-running the same text must not double-count the
     // shape, which would inflate the recurrence signal and let a true one-off wrongly fire the memory beat).
-    if (!retry && isTask && !pending && typeof ProfileStore !== 'undefined') ProfileStore.observeMessage(text);
-    if (!retry && isTask && !pending && typeof MintStore !== 'undefined') MintStore.observe(text);   // notice recurring jobs → propose minting them as one-tap missions
+    if (!retry && isTask && !acceptedOffer && !pending && typeof ProfileStore !== 'undefined') ProfileStore.observeMessage(text);
+    if (!retry && isTask && !acceptedOffer && !pending && typeof MintStore !== 'undefined') MintStore.observe(text);   // notice recurring jobs → propose minting them as one-tap missions
     // CORRECTION CAPTURE (slice 2): the first message to this agent after a short-of-the-mark verdict IS the
     // correction of that run — hand it to the held skill review in the Commander's words (final: fires now) and
     // stamp the new run as correctionOf so the runs ledger can relate them. One message per verdict; a stale
@@ -8786,7 +8814,7 @@ const Chat = (() => {
     // SALIENCE (decision 3): has this task SHAPE recurred? Read AFTER observe so it counts this run (the read itself is
     // safe on retry — it doesn't mutate the count). Passed to the run so the server fires the memory turn-in on
     // recurring work even when a terse exchange otherwise wouldn't, while a basic one-off is left to reflect()'s floor.
-    const recurring = !!(isTask && typeof MintStore !== 'undefined' && MintStore.recurringNow && MintStore.recurringNow(text));
+    const recurring = !!(isTask && !acceptedOffer && typeof MintStore !== 'undefined' && MintStore.recurringNow && MintStore.recurringNow(text));
     // VOICE: the speaker toggle (🔊) controls whether the agent SPEAKS its reply (and in the short,
     // spoken style — voiceModeRules appended below). It does NOT control the desk trip: the walk is driven
     // by REAL tool use (walkToDesk, below), so the speaker setting can't suppress it. When voice is on, a

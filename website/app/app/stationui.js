@@ -1536,6 +1536,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       if (dos) dos.addEventListener('click', ev => { ev.stopPropagation(); sfx('click'); openAgent(+li.dataset.i); });
       li.addEventListener('keydown', ev => {
         if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); li.click(); }
+        // the row advertises Shift+F10 (aria-keyshortcuts); WKWebView (macOS) fires no contextmenu for it, so handle the key
+        else if (ev.key === 'ContextMenu' || (ev.shiftKey && ev.key === 'F10')) { ev.preventDefault(); sfx('click'); openAgent(+li.dataset.i); }
       });
     });
     crewTick();
@@ -2147,13 +2149,16 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
      can arrive from a routine, a night shift, or a messaging channel — and "the agent believes this about me" and
      "someone said this in a group chat" are different claims. 'commander' renders NO chip: the ordinary case must
      stay quiet, or the label becomes noise nobody reads. */
-  const ORIGIN_LABEL = { schedule: '⏱ routine', nightshift: '◈ autonomy', api: '⇄ external app' };
+  // 'feedback' = the Commander's OWN rating / correction of a run (sidecar/feedbackmemory.js): it is theirs, so its
+  // tip must never say it was learned unwatched. 'failure-review' = a lesson from a run that failed.
+  const ORIGIN_LABEL = { schedule: '⏱ routine', nightshift: '◈ autonomy', api: '⇄ external app', feedback: '★ your rating', 'failure-review': '⚠ failed run' };
+  const ORIGIN_TIP = { feedback: 'from your own rating of a run — every agent shapes its work to this', 'failure-review': 'a lesson taken from a run that failed' };
   function originChip(origin) {
     const o = String(origin || 'commander');
     if (o === 'commander') return null;
     const label = ORIGIN_LABEL[o] || (o.indexOf('channel:') === 0 ? '✆ ' + o.slice(8) : o);
     const el = mkEl('span', 'mc-scope'); el.textContent = label;
-    el.title = 'learned on a run you were not watching (' + o + ')';
+    el.title = ORIGIN_TIP[o] || ('learned on a run you were not watching (' + o + ')');
     return el;
   }
 
@@ -3257,10 +3262,14 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
      151px out from under the cursor, on the control you are actively using. The pane scrolls; the chrome holds still. */
   // DESK SCREEN (deskscreen.js registers the 'desk' window): select THIS agent, then open the window from the dock —
   // or, when it is already open, restore it and switch it to this agent (a per-agent window, like the dossier)
+  let deskAgentId = null;   // the agent the DESK window shows (openDesk); independent of the dossier's `sel`
   function openDesk(agentId) {
     const i = present.findIndex(x => x && x.id === agentId);
     if (i < 0 || !BUILDERS.desk) return false;
-    sel = i;
+    /* the desk keeps its OWN target (sweep 2026-10-01): it used to set the shared `sel` the dossier renders from, so
+       opening REX's desk with NOVA's dossier open made the dossier's next rerender (an EDIT, a skin pick, a rename)
+       show REX — and its SAVE wrote to REX. */
+    deskAgentId = String(agentId);
     if (open.desk) { if (minimized.desk) restoreTerm('desk'); rerender('desk'); } else openTerm('desk');
     return true;
   }
@@ -10252,6 +10261,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     // live core state (read-only views — never reassign through these)
     get present() { return present; },
     get sel() { return sel; },
+    get deskAgentId() { return deskAgentId; },
     get store() { return store; }
   };
 
