@@ -108,7 +108,12 @@ function boot(opts) {
   // TIME-COMPRESS the long ceilings (12s gUM, 30s hard cap) so the test runs fast; short timers unchanged.
   // Keep the compressed ceiling above the test's successful-audio injection AND its async live-preview
   // round-trip. An aggressively tiny cap can abort a healthy preview before its promise settles on a busy gate.
-  const st = (fn, ms, ...a) => setTimeout(fn, ms >= 30000 ? 200 : (ms >= 1000 ? 50 : ms), ...a);
+  const st = (fn, ms, ...a) => {
+    // Permission-order tests exercise late grants, not expiry. Keep the real 12s ceiling
+    // there: a 50ms simulated prompt can expire between the two grants on a busy gate.
+    if (opts.realPermissionTimeout && ms === 12000) return setTimeout(fn, ms, ...a).unref();
+    return setTimeout(fn, ms >= 30000 ? 200 : (ms >= 1000 ? 50 : ms), ...a);
+  };
   const sandbox = {
     window: win,
     document: { getElementById: id => nodes[id] || null, addEventListener() {} },
@@ -439,7 +444,7 @@ async function opensWithin(t, ms) {
 
   // --- click, stop, click during the permission prompt: the first take never comes alive -------------
   {
-    const t = boot({ recorder: true });
+    const t = boot({ recorder: true, realPermissionTimeout: true });
     gumMode = 'hang';
     t.Voice.startListening(); await until(() => gumPending.length === 1, 2000);   // take A waits on the prompt
     t.Voice.stopListening(); await tick();           // stop before it ever opened
