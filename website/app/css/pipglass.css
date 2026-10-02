@@ -430,3 +430,17 @@ body.glass-demo:not(.hud-mode) #chat-panel .cmsg:is(.turnin, .nudge, .consent) {
 body.glass-demo:not(.hud-mode) #chat-panel :is(.cmsg.turnin, .cmsg.nudge, .cmsg.consent) .consent-btn,
 body.glass-demo:not(.hud-mode) #chat-panel .choice-row .choice,
 body.glass-demo:not(.hud-mode) #chat-panel .workshop-return .ws-pane { border-radius: 5px; }
+
+/* laptop widths narrow the CREW rail to 200px (comms-layout.css): SESSIONS / PROJECTS / + NEW stay on one row */
+@media (max-width: 1440px) {
+  body.glass-demo:not(.hud-mode) #screen-game #left .ws-head { gap: 4px; padding-inline: 6px; }
+  body.glass-demo:not(.hud-mode) #left .ws-head .ws-view { gap: 4px; }
+  body.glass-demo:not(.hud-mode) #left .ws-head .ws-tab,
+  body.glass-demo:not(.hud-mode) #left .ws-head #ws-addproject { padding: 4px 5px; letter-spacing: .2px; }
+}
+@media (max-width: 1440px) {
+  /* at laptop widths + NEW becomes a square + key (its label stays the accessible name; the tooltip names it) */
+  /* font-size 0 must beat readability.css's control floor (!important) — this key shows an icon, its label stays the accessible name */
+  body.glass-demo:not(.hud-mode) #left .ws-head #ws-new { font-size: 0 !important; min-width: 32px; padding: 4px 0; display: inline-flex; align-items: center; justify-content: center; }
+  body.glass-demo:not(.hud-mode) #left .ws-head #ws-new::before { content: '+'; font-size: 20px; line-height: 1; }
+}
