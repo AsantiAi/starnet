@@ -10159,7 +10159,8 @@ const World = (() => {
     U.bus.on('cron.result', p => {
       if (!p) return;
       if (p.outcome === 'failed') hudNote('✕ routine failed' + (p.reason ? ' — ' + p.reason : ''), 'warn', { kind: 'alert', go: { term: 'automation', section: 'routines' } });
-      else if (p.outcome === 'ok') hudNote('◷ routine completed', 'good', { go: { term: 'deliverables', section: 'review' } }, 'cronDigest');
+      // its result is in the routine's HISTORY (AUTOMATE › ROUTINES), never in DELIVERABLES › TO REVIEW, which lists desk runs
+      else if (p.outcome === 'ok') hudNote('◷ routine completed', 'good', { go: { term: 'automation', section: 'routines' } }, 'cronDigest');
     });
     // REWIND: the rare, important "we rolled the workspace back" beat. checkpoint.created is frequent + quiet
     // (the workbench already pulses on shell), so only the restore is toasted.

@@ -90,7 +90,7 @@
        The copy names the meter that was actually spent — the ChatGPT subscription, NOT API billing — and the
        door is PROVIDERS, where a different key or provider can pick the work up now. retryable:false, so the
        row offers no ↻ Try again. */
-    quota_exhausted: { retryable: false, action: 'settings', msg: "This provider's plan allowance is used up — it resets on the provider's own schedule (a ChatGPT subscription resets weekly, not in seconds). To keep working now, switch to another provider or key under SETTINGS → PROVIDERS." },
+    quota_exhausted: { retryable: false, action: 'settings', msg: "This provider's plan allowance is used up — it resets on the provider's own schedule (a ChatGPT subscription resets weekly, not in seconds). To keep working now, switch to another provider or key under SETTINGS → AI & MODELS." },
     // auth: the pure message is context-blind (classify time can't know if ChatGPT is already connected). It names the
     // one honest next step; the action BUTTON (actionButton) tailors the door — "add a key" vs "sign in with ChatGPT".
     auth:          { retryable: false, action: 'settings', msg: 'No model is connected yet — add a provider key (or sign in with ChatGPT) to let it run.' },
@@ -99,12 +99,12 @@
     oauth:         { retryable: false, action: 'settings', msg: 'Your ChatGPT sign-in expired — reconnect it (or add a provider key instead).' },
     // xAI can 403-allowlist the Grok OAuth device flow off for an account — signing in is a dead-end there, so
     // point the user at the xAI (API KEY) provider instead of a doomed reconnect. Door is the PROVIDERS key field.
-    grok_oauth_unavailable: { retryable: false, action: 'settings', msg: "Grok sign-in isn't available on this account yet — xAI hasn't opened the Grok sign-in for it. Add an xAI provider key instead (paste it under SETTINGS → PROVIDERS and pick the XAI provider)." },
+    grok_oauth_unavailable: { retryable: false, action: 'settings', msg: "Grok sign-in isn't available on this account yet — xAI hasn't opened the Grok sign-in for it. Add an xAI provider key instead (paste it under SETTINGS → AI & MODELS and pick the XAI provider)." },
     billing:       { retryable: false, action: 'settings', msg: "Your provider account is out of credit — top it up, then try again." },
     // managed StarNet credits ran out (only reachable when a managed-credit backend is wired). Point at the STORE
     // to top up; a BYOK station never hits this kind (it gets `billing`/`auth` instead).
     // copy names the SAME door the button opens (PROVIDERS) — "the STORE" was a surface that doesn't exist as a button.
-    managed_credit:{ retryable: false, action: 'store',    msg: "You're out of StarNet credits — top up under SETTINGS → PROVIDERS, or connect your own provider key." },
+    managed_credit:{ retryable: false, action: 'store',    msg: "You're out of StarNet credits — top up under SETTINGS → AI & MODELS, or connect your own provider key." },
     // capdenied copy is REBUILT per-error in friendlyError() to name the exact power + gear; this is the fallback
     // when the capability can't be parsed. The door is BUILD MODE (place the gear), NOT the SKILLS list.
     capdenied:     { retryable: false, action: 'refit',    msg: "This task needed a tool this agent doesn't have on station yet — open BUILD MODE to place the gear it's missing." },
@@ -433,8 +433,8 @@
       const userMessage = !nm ? k.msg
         : !signedOut ? ('Your ' + nm + ' sign-in expired — reconnect it (or add a provider key instead).')
         : provider === 'grok'
-          ? "Grok isn't signed in yet — sign in with your SuperGrok or X Premium+ account under SETTINGS → PROVIDERS → GROK (XAI), or add an xAI API key instead."
-          : "Kimi isn't signed in yet — sign in with your Kimi account under SETTINGS → PROVIDERS → KIMI FOR CODING, or add a provider key instead.";
+          ? "Grok isn't signed in yet — sign in with your SuperGrok or X Premium+ account under SETTINGS → AI & MODELS → GROK (XAI), or add an xAI API key instead."
+          : "Kimi isn't signed in yet — sign in with your Kimi account under SETTINGS → AI & MODELS → KIMI FOR CODING, or add a provider key instead.";
       return { userMessage: userMessage, kind: kind, retryable: k.retryable, action: k.action, provider: provider, signedOut: signedOut, raw: raw };
     }
     // auth: say WHICH credential is missing, or that the provider REJECTED one. "No model is connected yet" is only
@@ -444,13 +444,13 @@
       const named = raw.match(/connect an? (.+?) api key\b/i);   // the sidecar guard: providerCredentialError()
       let userMessage = k.msg;
       if (/link this station to a starnet account/.test(low)) {
-        userMessage = "This station isn't linked to StarNet credits yet — link it under SETTINGS → PROVIDERS → STARNET MANAGED, or connect your own provider key.";
+        userMessage = "This station isn't linked to StarNet credits yet — link it under SETTINGS → AI & MODELS → STARNET MANAGED, or connect your own provider key.";
       } else if (named) {
-        userMessage = 'No ' + named[1].trim().replace(/\s+api$/i, '') + ' API key is connected yet — add it under SETTINGS → PROVIDERS, or pick a model from a provider you have already connected.';
+        userMessage = 'No ' + named[1].trim().replace(/\s+api$/i, '') + ' API key is connected yet — add it under SETTINGS → AI & MODELS, or pick a model from a provider you have already connected.';
       } else if (/configure the (.+?) base url/i.test(raw)) {
-        userMessage = 'The ' + raw.match(/configure the (.+?) base url/i)[1].trim() + ' endpoint has no base URL yet — set it under SETTINGS → PROVIDERS.';
+        userMessage = 'The ' + raw.match(/configure the (.+?) base url/i)[1].trim() + ' endpoint has no base URL yet — set it under SETTINGS → AI & MODELS.';
       } else if (!/sidecar http|chatgpt|codex/.test(low) && (REJECTED_KEY_RE.test(low) || /\bhttp (?:400|401|403)\b/.test(low))) {
-        userMessage = 'The provider rejected the API key — check it, or paste a new one under SETTINGS → PROVIDERS.';
+        userMessage = 'The provider rejected the API key — check it, or paste a new one under SETTINGS → AI & MODELS.';
       }
       return { userMessage: userMessage, kind: kind, retryable: k.retryable, action: k.action, raw: raw };
     }
@@ -597,7 +597,7 @@
         return { label: '↻ RELOAD & RECONNECT', run: () => { try { if (typeof location !== 'undefined' && location.reload) location.reload(); } catch (_) {} } };
       case 'store':
         // this door opens the PROVIDERS section (there is no "store") — name it truthfully with a CRT glyph.
-        return { label: '▸ OPEN PROVIDERS', run: () => openSettings('providers') };
+        return { label: '▸ OPEN AI & MODELS', run: () => openSettings('providers') };
       case 'skills':
         return { label: '✦ OPEN SKILL LIBRARY', run: () => { try { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('skills'); } catch (_) {} } };   // 'skills' aliases into ABILITIES ▸ SKILL LIBRARY (NAV CONDENSE 2)
       default:

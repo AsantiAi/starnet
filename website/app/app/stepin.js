@@ -66,6 +66,8 @@ const StepIn = (() => {
         live = Array.isArray(r.body.live) ? r.body.live : [];
         recent = Array.isArray(r.body.recent) ? r.body.recent : [];
         for (const h of recent) if (h && h.id) settle(h.id);   // ended while this page was away (or before a restart)
+        // …or gone from the station altogether (a restart drops its handoffs): a line for a handoff that is not live any more waits on nothing
+        if (typeof StationUI !== 'undefined' && StationUI.waitingNotifKeys) for (const k of StationUI.waitingNotifKeys('stepin-')) if (!live.some(h => 'stepin-' + h.id === k)) StationUI.settleNotifs(k);
         signins = r.body.signins || signins;
         for (const h of live) seen.add(h.id);
         loaded = true;
