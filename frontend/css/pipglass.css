@@ -416,3 +416,17 @@ body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-table :is(th, td) { bor
 body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-table tr:last-child td { border-bottom: 0; }
 body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-table th { background: rgba(var(--ph-rgb), .08); color: var(--ph); letter-spacing: 1px; }
 body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-list li::marker { color: var(--ph); }
+
+/* ============================================================
+   DECISION CARDS (Andrew 10-02, on the north-star question card: "make it look cleaner maybe slightly less so
+   rounded on the edges looks a bit cheap"). The whole beat-card family — nudges, turn-ins, consent — moves from
+   a 10px glowing box to a clean 5px glass card that keeps its gold left edge; its reply chips match.
+   ============================================================ */
+body.glass-demo:not(.hud-mode) #chat-panel .cmsg:is(.turnin, .nudge, .consent) {
+  border-radius: 5px; padding: 13px 15px;
+  border: 1px solid rgba(var(--ph-rgb), .2); border-left: 2px solid rgba(var(--gold-rgb), .62);
+  background: var(--cg-card); box-shadow: none;
+}
+body.glass-demo:not(.hud-mode) #chat-panel :is(.cmsg.turnin, .cmsg.nudge, .cmsg.consent) .consent-btn,
+body.glass-demo:not(.hud-mode) #chat-panel .choice-row .choice,
+body.glass-demo:not(.hud-mode) #chat-panel .workshop-return .ws-pane { border-radius: 5px; }
