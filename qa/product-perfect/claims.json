@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "8ff71a0edd1ba727478cdde88627edac901ded52",
+    "sourceCommit": "7ec600158936a96d2e61bdd828726344d9e49c20",
     "pathSetSha256": "60c61c9c0cad8daa5c2d40f76a912ed04e52667a726032a7b3ab94cad57bfa1e",
     "files": [
       {
@@ -523,8 +523,8 @@
       },
       {
         "path": "frontend/app/glossary.js",
-        "bytes": 10444,
-        "sha256": "c6e815bb4fe62200df8fd9dee701c9b1be28ab11b8acbeccd3a93868c94c4efd"
+        "bytes": 10455,
+        "sha256": "ebd949bc37412bd8f4241004e266f018419108e820a2414e9c135556f9b4ec12"
       },
       {
         "path": "frontend/app/goalloop.js",
@@ -1178,8 +1178,8 @@
       },
       {
         "path": "frontend/app/systems.js",
-        "bytes": 16227,
-        "sha256": "04eba6526d91b7cc07463da0fd735768a05401c61527989781427b0eab14011c"
+        "bytes": 16228,
+        "sha256": "ada297e70253d5a952b8e07c6c9c66e1f81a49eecae4521c4b0d4c8f11db881b"
       },
       {
         "path": "frontend/app/taskconversation.js",
@@ -1243,8 +1243,8 @@
       },
       {
         "path": "frontend/app/tutorial.js",
-        "bytes": 100713,
-        "sha256": "b9538d06af94da11c464bd4b54577e6c5153c78e0316f8a4d562db3ca461d9d0"
+        "bytes": 100725,
+        "sha256": "d699a4fcb25f063fc1bbc32b06eb70acaf5bdf6ac1de8f0044c521e41f117fc7"
       },
       {
         "path": "frontend/app/understanding.js",
@@ -1768,8 +1768,8 @@
       },
       {
         "path": "frontend/index.html",
-        "bytes": 96676,
-        "sha256": "ddb87ea45a628751033ea53fec9eee907b016d064ed8eb425aac385fe99633f1"
+        "bytes": 96667,
+        "sha256": "f85675cf70d3cdca317edfcf4b3e0caf320ff40bdf15670d8123ef7dd5a2db86"
       },
       {
         "path": "frontend/js/arcade.js",
