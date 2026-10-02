@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "12294d6877bc82074cd3a2d51def5ba640502a09",
+    "sourceCommit": "6a013b354609610f01cfd9594a72353fc061348e",
     "pathSetSha256": "60c61c9c0cad8daa5c2d40f76a912ed04e52667a726032a7b3ab94cad57bfa1e",
     "files": [
       {
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 701818,
-        "sha256": "bea2b9a160152987a8736648314c96d5cf98d37a3af9b62eb5911cdd1939234d"
+        "bytes": 702201,
+        "sha256": "d18ca3599b8af499274c40ae324b4fca5db998192db0bb51ec04c3f380fad88b"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -613,8 +613,8 @@
       },
       {
         "path": "frontend/app/leftrail.js",
-        "bytes": 19832,
-        "sha256": "c1304025cd814f6b5e2e9f84731523390f68b673d8d05a4a2bdbfafa1d4e28d7"
+        "bytes": 20715,
+        "sha256": "257ce5bce59da5dc5dae1473990491d976d489eb486cd3dbe1593bb84d889aa5"
       },
       {
         "path": "frontend/app/legacymigrate.js",
@@ -1008,8 +1008,8 @@
       },
       {
         "path": "frontend/app/remote-devices.js",
-        "bytes": 9440,
-        "sha256": "5b8f073bf3eda99feefd92d0637b47d08160dd8be29caa289665f026b5bf3101"
+        "bytes": 10338,
+        "sha256": "06cea627e5afa6e0fe0438495f75247e1a20279ef1c46a14df8828327cb7d3e7"
       },
       {
         "path": "frontend/app/remotesessions.js",
@@ -1533,8 +1533,8 @@
       },
       {
         "path": "frontend/css/crew-glass.css",
-        "bytes": 11381,
-        "sha256": "fc68a981d5fdaefb5bc1590a4c33fa00105bf218d60a05de8a58f5e3e09bb1af"
+        "bytes": 11631,
+        "sha256": "d11e3681fad24bdb8d73fe78dd3e67786d7f1c98470b4d34cd82b749bcaae377"
       },
       {
         "path": "frontend/css/deskscreen.css",
