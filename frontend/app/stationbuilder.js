@@ -1061,7 +1061,10 @@
     // a line is found by ITS name: an unnamed line never answers to a name (an empty label is inside every string)
     if (!key(raw)) return refuse('Say which line: its name (or the id of any machine on it). Lines: ' + (all.length ? all.join(', ') : 'none') + '.');
     let hits = named.filter(p => key(p.label) && key(p.label) === key(raw));
-    if (!hits.length) hits = named.filter(p => key(p.label) && (key(p.label).indexOf(key(raw)) >= 0 || key(raw).indexOf(key(p.label)) >= 0));
+    // …or by whole words of it ("research" finds "Research + write"): letters inside a word never match ("email triage" is not the
+    // line "AI", whose letters sit inside "email" — a schedule or a paid test landed on the wrong line)
+    const words = v => ' ' + key(v) + ' ';
+    if (!hits.length) hits = named.filter(p => key(p.label) && (words(p.label).indexOf(words(raw)) >= 0 || words(raw).indexOf(words(p.label)) >= 0));
     if (!hits.length) return refuse('There is no line called "' + String(raw).slice(0, 40) + '"' + (room ? ' in ' + room.name : '') + '. Lines: ' + (all.length ? all.join(', ') : 'none') + '.');
     if (hits.length > 1) return refuse('More than one line is called ' + (hits[0].label || '"' + raw + '"') + ': say which room it is in (' + hits.map(p => (live.rooms().find(r => r.id === live.roomAt(p.x, p.y)) || {}).name).join(', ') + ').');
     const intake = hits[0], comp = comps.find(c => (c.intakes || []).indexOf(intake.id) >= 0);
@@ -1349,7 +1352,10 @@
       case 'cap': case 'budget': { const t = propRef(o.prop); if (!t.ok) return t; const ip = intakeOf(t.p); if (!ip) return refuse('that piece is not on a line with an inbox');
         const was = Object.assign({}, ip.limits || {}), nx = Object.assign({}, was), off = v => v == null || /^(none|no cap|off|default)$/i.test(String(v));
         const usd = (k, v, what) => { if (v === undefined) return null; if (off(v)) { delete nx[k]; return null; } const n = Number(v); if (!(n > 0 && n <= 10000)) return what + ' is a dollar amount above 0, or null for the default'; nx[k] = n; return null; };
-        const e1 = usd('maxUsdPerDay', op === 'cap' ? (o.usd === undefined ? null : o.usd) : o.perDay, op === 'cap' ? 'cap usd' : 'perDay'); if (e1) return refuse(e1);
+        // a cap names its amount (usd, or the budget's own perDay): one left out took the line's day cap OFF, never asked for
+        const capV = op === 'cap' ? (o.usd !== undefined ? o.usd : o.perDay) : o.perDay;
+        if (op === 'cap' && capV === undefined) return refuse('cap is { op: "cap", prop, usd }: a dollar amount a day, or null for no day cap');
+        const e1 = usd('maxUsdPerDay', capV, op === 'cap' ? 'cap usd' : 'perDay'); if (e1) return refuse(e1);
         if (op === 'budget') { const e2 = usd('maxUsdPerMessage', o.perJob, 'perJob'); if (e2) return refuse(e2); if (o.stages !== undefined) { if (off(o.stages)) delete nx.maxHops; else { const n = Math.round(Number(o.stages)); if (!(n >= 1 && n <= 200)) return refuse('stages is how many steps one job may pass through, 1 to 200'); nx.maxHops = n; } } }
         const r = st.setPropLimits(ip.id, Object.keys(nx).length ? nx : null); if (!r || !r.ok) return refuse(wmMsg(r)); const L2 = r.limits || {};
         const money = (v, per) => v == null ? 'no ' + per + ' cap' : '$' + v + ' a ' + per;

@@ -1870,7 +1870,27 @@ for (const c of T.catalog) {
     A.ok(!typo.ok && /^There is no line called "Newsleter"/.test(typo.error) && !blank.ok && /^Say which line/.test(blank.error), 'a misspelt or empty name finds no line, even with an unnamed one standing: ' + (typo.error || 'FOUND ' + typo.name));
     A.ok(SB.lineRef(st.serialize(), E, inP.id).ok, 'an unnamed line is still found by any machine on it');
     A.ok(st.undo().ok, 'its name comes back');
-    const noSv = SB.planEdit(st.serialize(), { refit: [{ op: 'folder', prop: inP.id, project: 'starnet' }] }, E);
+    // a line is found by whole words of its name, never by letters inside a word ("email" holds "ai": a schedule or a paid test
+    // landed on the line AI)
+    {
+      const ai = SB.planEdit(st.serialize(), { refit: [{ op: 'label', prop: inP.id, text: 'AI' }] }, E);
+      A.ok(ai.ok && SB.apply(st, ai.plan, E).ok, 'fixture: the line is called AI');
+      for (const other of ['email triage', 'Daily news digest', 'Main']) A.ok(!SB.lineRef(st.serialize(), E, other).ok, '"' + other + '" is not the line AI');
+      A.ok(SB.lineRef(st.serialize(), E, 'the AI line').ok && SB.lineRef(st.serialize(), E, 'ai').ok, 'the line AI answers to its own name');
+      const wk = SB.planEdit(st.serialize(), { refit: [{ op: 'label', prop: inP.id, text: 'Weekly digest' }] }, E);
+      A.ok(wk.ok && SB.apply(st, wk.plan, E).ok && SB.lineRef(st.serialize(), E, 'digest').ok && !SB.lineRef(st.serialize(), E, 'dig').ok, 'a whole word of a name finds the line, part of a word does not');
+      A.ok(st.undo().ok && st.undo().ok, 'its old name comes back');
+    }
+    // a cap names its amount: one left out took the day cap OFF; the budget's own perDay key is read as the amount
+    {
+      const bare = SB.planEdit(st.serialize(), { refit: [{ op: 'cap', prop: inP.id }] }, E);
+      A.ok(!bare.ok && /cap is \{ op: "cap", prop, usd \}/.test(bare.error), 'a cap with no amount is refused, never taken off: ' + (bare.error || bare.plan.summary));
+      const per = SB.planEdit(st.serialize(), { refit: [{ op: 'cap', prop: inP.id, perDay: 5 }] }, E);
+      A.ok(per.ok && /may spend \$5 a day/.test(per.plan.summary), 'a cap given perDay caps it at that: ' + (per.error || per.plan.summary.slice(-160)));
+      const off = SB.planEdit(st.serialize(), { refit: [{ op: 'cap', prop: inP.id, usd: null }] }, E);
+      A.ok(off.ok, 'usd: null still takes the cap off, said plainly');
+    }
+    const noSv =SB.planEdit(st.serialize(), { refit: [{ op: 'folder', prop: inP.id, project: 'starnet' }] }, E);
     A.ok(!noSv.ok && /could not read the Commander's trusted projects/.test(noSv.error), 'a page that could not read the projects refuses, never guesses');
     // sweep 2026-10-01: routes only on a FILTER (a bay took routes and "sorted" nothing)
     const rb = SB.planEdit(st.serialize(), { refit: [{ op: 'routes', prop: bayP.id, routes: { code: 'east' } }] }, SV);
