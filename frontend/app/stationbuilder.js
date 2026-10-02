@@ -3298,7 +3298,8 @@
     const o = q && typeof q === 'object' && !Array.isArray(q) ? q : { pattern: q === true ? 'diamond' : q };
     const word = String(o.pattern == null ? 'diamond' : o.pattern).toLowerCase().trim();
     const shapeWord = String(o.shape == null ? (/^(wide|tall|even)$/.test(word) ? word : 'wide') : o.shape).toLowerCase().trim();
-    if (!/^(diamond|ring|grid|wide|tall|even)$/.test(word) || !/^(wide|tall|even)$/.test(shapeWord)) return refuse(HOW);
+    // "ring" / "grid" are not re-lay shapes (they passed and built a diamond anyway — QA 2026-10-02): refuse with the HOW
+    if (!/^(diamond|wide|tall|even)$/.test(word) || !/^(wide|tall|even)$/.test(shapeWord)) return refuse(HOW);
     const links = o.links !== false, shape = shapeWord;
     const live = WM.create(clone(doc)), probe = WM.create(clone(doc)), before = floorFacts(live, P);
     const r = rearrangeOnto(probe, env, { links, shape });
