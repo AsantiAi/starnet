@@ -28,6 +28,7 @@ const STATION_DIRS = [
   'apps',                   // apps/<id> — the Commander's apps (page files + app.json)
   'app-data',               // app-data/<id>.json — each app's published data
   'skill-packages',         // installed skill package generations
+  'skill-market',           // skill-market/ — market installs + installed.json (an agent named "Skill Market" owned it, sweep 10-02)
   'transcript-history-v2'   // durable transcript history
 ];
 const WINDOWS_DEVICES = ['con', 'prn', 'aux', 'nul',
