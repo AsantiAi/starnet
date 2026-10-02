@@ -2987,6 +2987,8 @@ const Chat = (() => {
       TaskConversation.mount(r.body,q,async text=>{
         const result=await Harness.consentAnswer(rid,p.promptId,text,true);
         if(!result || !result.ok)return false;
+        // the question is answered: say so on the bus like the approval card does, or the CREW card and the world pose stay "needs your OK"
+        try{if(typeof U!=='undefined'&&U.bus)U.bus.emit('permission.response',{promptId:p.promptId,decision:'once'});}catch(_){}
         if(ws)Channels.clearPending(ws.id,Date.now());
         if(isActiveWs(ws)){renderPresence();syncStatus();}
         return true;
@@ -3021,6 +3023,9 @@ const Chat = (() => {
       if (decided) return; decided = true;
       const rid = (ws && typeof Channels !== 'undefined') ? Channels.runIdOf(ws.id) : null;
       Harness.consentAnswer(rid, p.promptId, text);
+      // answered: tell the bus, as the approval card does — the CREW card's "needs your OK" frame and the world's
+      // AWAITING pose clear on permission.response, and a question never emitted one (sweep 2026-10-02)
+      try { if (typeof U !== 'undefined' && U.bus) U.bus.emit('permission.response', { promptId: p.promptId, decision: 'once' }); } catch (_) {}
       if (ws && typeof Channels !== 'undefined') Channels.clearPending(ws.id, Date.now());   // the wait never counts as run time
       if (isActiveWs(ws)) renderPresence();
       btns.remove();
@@ -3100,7 +3105,7 @@ const Chat = (() => {
         btns.remove();
         const tag = document.createElement('span');
         tag.className = 'consent-result' + (resp.decision === 'deny' ? ' err' : '');
-        tag.textContent = resp.decision === 'deny' ? '✕ declined from your phone' : '✓ answered from your phone';
+        tag.textContent = resp.expired ? '✕ no answer in time — the agent used its judgment' : resp.decision === 'deny' ? '✕ declined from your phone' : '✓ answered from your phone';
         r.body.appendChild(tag);
         syncStatus();
       };
@@ -3218,7 +3223,7 @@ const Chat = (() => {
         btns.remove();
         const tag = document.createElement('span');
         tag.className = 'consent-result' + (denied ? ' err' : '');
-        tag.textContent = denied ? '✕ denied from your phone' : (resp.decision === 'session' ? '✓ approved for this session from your phone' : '✓ approved once from your phone');
+        tag.textContent = resp.expired ? '✕ no answer in time — denied' : denied ? '✕ denied from your phone' : (resp.decision === 'session' ? '✓ approved for this session from your phone' : '✓ approved once from your phone');
         r.body.appendChild(tag);
         syncStatus();
       };
