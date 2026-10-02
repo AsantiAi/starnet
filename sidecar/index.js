@@ -17906,7 +17906,25 @@ async function runOnce(o) {
    then ignored the run's real end). Every run runOnce drives is registered here from the moment it is admitted
    (past the stream's queue) until it returns; the snapshot merges it. Only real in-flight LINE runs — never a guess. */
 const hostLiveRuns = new Map();   // runId -> { agentId, startedAt, source }
+/* EVERY RUN CAN BE STOPPED BY ITS ID (QA 2026-10-02). POST /api/cancel and /api/run/steer only looked in `runs`, but a
+   scheduled routine fire, a routine/line hop, a line trigger, the step test and the channel hubs drive runOnce with
+   their own run ids and their own AbortControllers — so the desk screen's and HUD's STOP answered 200 and aborted
+   nothing while the run kept spending, and a steer said "already finished" to a run still WORKING. Every run with an
+   id gets a stop handle here for exactly as long as runOnce is driving it; its signal is the caller's signal OR this
+   handle, so a stop by id ends it the same way its owner's own abort would (the owner still sees the run end). */
+const runStopHandles = new Map();   // runId -> AbortController
 async function runOnceTracked(o) {
+  const rid = o && o.runId ? String(o.runId) : '';
+  if (rid && !runStopHandles.has(rid) && typeof AbortSignal.any === 'function') {
+    const kc = new AbortController();
+    runStopHandles.set(rid, kc);
+    o.signal = o.signal ? AbortSignal.any([o.signal, kc.signal]) : kc.signal;
+    try { return await runOnceTrackedBelt(o); }
+    finally { if (runStopHandles.get(rid) === kc) runStopHandles.delete(rid); }
+  }
+  return runOnceTrackedBelt(o);
+}
+async function runOnceTrackedBelt(o) {
   // BELT for the station browser: whatever way a run leaves (a throw before its own cleanup included), it must not
   // stay the browser's "driver" — that would lock the Commander out of their own browser. releaseRun is a no-op for
   // a run that never drove it.
@@ -21826,6 +21844,9 @@ async function handleCancel(req, res) {
   const runId = body.runId;
   const ac = runId && runs.get(runId);
   if (ac) ac.abort();
+  // a routine/line/hub/step-test run is not in `runs`: stop it through its runOnce stop handle (QA 2026-10-02)
+  const kc = runId && runStopHandles.get(String(runId));
+  if (kc) kc.abort();
   res.writeHead(200); res.end('ok');
 }
 
@@ -21840,7 +21861,8 @@ async function handleRunSteer(req, res) {
   let body; try { body = JSON.parse(await readBody(req, 1 << 16)) || {}; } catch (e) { return json(400, { error: 'bad json' }); }
   const runId = String(body.runId || '');
   const text = String(body.text == null ? '' : body.text).trim();
-  const out = steerBufs.post(runId, text, !!runId && runs.has(runId));
+  // in flight = a desk run (`runs`) or any run runOnce is still driving (a routine/line/hub run has a stop handle, QA 2026-10-02)
+  const out = steerBufs.post(runId, text, !!runId && (runs.has(runId) || runStopHandles.has(runId)));
   json(out.status, out.body);
 }
 
