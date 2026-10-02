@@ -294,12 +294,16 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
     for (let i = 0; i < 50 && !emitRef; i++) await new Promise(r => setTimeout(r, 10));
     const tok = async (t) => { emitRef('agent.token', { delta: t }); await new Promise(r => setTimeout(r, 300)); };
     await tok('Hel'); await tok('lo'); await tok(' there');
-    const tx = () => evs.filter(e => e.type === 'run.text');
+    const tx = () => evs.filter(e => e.type === 'run.text' || e.type === 'run.delta');
     A.eq(tx()[0], { type: 'run.text', runId: 'tx-run', text: 'Hel' }, 'the first frame is the text so far');
-    A.eq(tx()[1], { type: 'run.text', runId: 'tx-run', at: 3, add: 'lo' }, 'then only what it grew by, and where that starts');
-    A.eq(tx()[2], { type: 'run.text', runId: 'tx-run', at: 5, add: ' there' }, 'and again');
+    A.eq(tx()[1], { type: 'run.delta', runId: 'tx-run', at: 3, add: 'lo' }, 'then only what it grew by, and where that starts — as its OWN type, so a phone app from before deltas ignores it instead of blanking the reply');
+    A.eq(tx()[2], { type: 'run.delta', runId: 'tx-run', at: 5, add: ' there' }, 'and again');
     for (let i = 0; i < 5; i++) await tok('.');
     A.eq(tx()[7], { type: 'run.text', runId: 'tx-run', text: 'Hello there.....' }, 'every eighth frame is the whole text, so a phone that missed a piece is put right');
+    // a phone app from before deltas (the relay deploys on its own schedule) never blanks the reply: its only handler was
+    // `if (e.type === 'run.text') L.text = e.text`
+    { const old = { text: '' }; const seen = []; for (const e of tx()) { if (e.type === 'run.text') old.text = e.text; seen.push(old.text); }
+      A.ok(seen.every(t => typeof t === 'string') && old.text === 'Hello there.....', 'an older phone app keeps a readable reply on every frame: ' + JSON.stringify(seen)); }
     emitRef('agent.tool_call', { name: 'fs_read', callId: 'c1' }); await tok('Next');
     A.eq(tx()[tx().length - 1], { type: 'run.text', runId: 'tx-run', text: 'Next' }, 'after a tool step the new text starts whole');
     let text = '';

@@ -267,10 +267,10 @@
     if (e.type === 'run.started') { S.live.set(e.runId, { streamId: e.streamId, agentId: e.agentId, text: '', steps: [], ended: null, seenAt: Date.now() }); statusSoonish(); if (S.tab === 'sessions') activitySoonish(); render(true); return; }
     const L = e.runId && S.live.get(e.runId);
     const showing = L && S.thread && S.thread.streamId === L.streamId;
-    if (e.type === 'run.text' && L) {
-      // the whole reply so far, or what it grew by (applied only where it continues what this phone has)
-      if (typeof e.text === 'string') L.text = e.text;
-      else if (typeof e.add === 'string' && (L.text || '').length === e.at) L.text = (L.text || '') + e.add;
+    if ((e.type === 'run.text' || e.type === 'run.delta') && L) {
+      // the whole reply so far (run.text), or what it grew by (run.delta, applied only where it continues what this phone has)
+      if (e.type === 'run.text' && typeof e.text === 'string') L.text = e.text;
+      else if (e.type === 'run.delta' && typeof e.add === 'string' && (L.text || '').length === e.at) L.text = (L.text || '') + e.add;
       else return;
       if (showing) renderLive(); return;
     }
