@@ -261,7 +261,7 @@ const mk = (over) => { const d = deps(over); return { S: makeSlashActions(d), ca
     });
     const r = await S.run('away', 'list');
     A.ok(/2 queued/.test(r.title), 'the listing counts the backlog');
-    A.ok(/built — waiting in OUTBOX/.test(r.lines[1]), 'a finished build is marked as waiting');
+    A.ok(/built — waiting in DELIVERABLES › TO REVIEW/.test(r.lines[1]), 'a finished build is marked as waiting');
     A.ok(r.lines.some(l => /waiting for your keep\/discard/.test(l)), 'pending builds are surfaced');
     A.ok(r.lines.some(l => /Build while away: OFF/.test(l)), 'the grant state is always stated');
   }
@@ -275,7 +275,7 @@ const mk = (over) => { const d = deps(over); return { S: makeSlashActions(d), ca
       }
     });
     const r = await S.run('away', 'list');
-    A.ok(!/waiting in OUTBOX/.test(r.lines[0]), 'a build whose manifest no longer validates is not shown as waiting');
+    A.ok(!/waiting in (OUTBOX|DELIVERABLES)/.test(r.lines[0]), 'a build whose manifest no longer validates is not shown as waiting');
     A.ok(/files are gone/.test(r.lines[0]), 'it says what actually happened to it');
   }
 
@@ -285,7 +285,7 @@ const mk = (over) => { const d = deps(over); return { S: makeSlashActions(d), ca
     const failed = await mk({ workshop: { shiftNow: async () => ({ ok: true, fired: true, reason: 'no-manifest', parked: false }) } })
       .S.run('away', 'now');
     A.eq(failed.ok, false, 'a shift that produced nothing is a failure, not a success');
-    A.ok(!/waits in OUTBOX/.test(failed.text), 'a failed shift never claims work is waiting in OUTBOX');
+    A.ok(!/waits in (OUTBOX|DELIVERABLES)/.test(failed.text), 'a failed shift never claims work is waiting in DELIVERABLES › TO REVIEW');
     A.ok(/nothing usable/.test(failed.text), 'it says the shift produced nothing usable');
     // a PARKED item will never be retried — the user must be told, or the work silently disappears
     const parked = await mk({ workshop: { shiftNow: async () => ({ ok: true, fired: true, reason: 'run-failed', parked: true }) } })
@@ -295,7 +295,7 @@ const mk = (over) => { const d = deps(over); return { S: makeSlashActions(d), ca
     const built = await mk({ workshop: { shiftNow: async () => ({ ok: true, fired: true, reason: 'built', manifest: { title: 'a build-time dashboard' } }) } })
       .S.run('away', 'now');
     A.ok(/a build-time dashboard/.test(built.text), 'a real build names itself from the manifest');
-    A.ok(/OUTBOX/.test(built.text), 'a real build points at OUTBOX');
+    A.ok(/DELIVERABLES › TO REVIEW/.test(built.text), 'a real build points at DELIVERABLES › TO REVIEW (the OUTBOX folded into it)');
   }
 
   {
@@ -307,7 +307,7 @@ const mk = (over) => { const d = deps(over); return { S: makeSlashActions(d), ca
     // legible raw. It must name the door that fixes it.
     const cap = await mk({ workshop: { shiftNow: async () => ({ ok: true, fired: false, reason: 'no-capability' }) } })
       .S.run('away', 'now');
-    A.ok(/PROVIDERS/.test(cap.text), 'a missing credential names where to add one');
+    A.ok(/AI & MODELS/.test(cap.text), 'a missing credential names where to add one');
     // an UNKNOWN code is passed through verbatim rather than swallowed or guessed at
     const odd = await mk({ workshop: { shiftNow: async () => ({ ok: true, fired: false, reason: 'brand-new-code' }) } })
       .S.run('away', 'now');

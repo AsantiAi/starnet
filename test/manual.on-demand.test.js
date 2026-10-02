@@ -32,8 +32,11 @@ const inline = M.MANUAL_SECTIONS.filter(s => s.kind !== 'reference');
 // Re-pinned 2026-09-28 (first-hour fixes) for ONE deliberate text change: the two "ABILITIES › KEYS" directions now
 // name tabs that exist (INSTALLED › SAVED API CONNECTIONS; CREATE / ADVANCED › Add a custom API key). Swapping those
 // two phrases back reproduces the pre-split pin exactly (9269 / 876bf2e4…), so nothing else moved.
-A.eq(full.length, 9366, 'the whole manual keeps its pre-split length (+30: REFIT is named BUILD MODE; +2: SETTINGS › AI & MODELS, 2026-10-02)');
-A.eq(crypto.createHash('sha256').update(full, 'utf8').digest('hex'), 'f41a6663dc84497dc74c348980fda24ff32960e773f26038b6c5a7688b244220',
+// Re-pinned 2026-10-02 (overnight sweep) for ONE deliberate change: NAVIGATION / CONNECTING / TROUBLESHOOTING name the 0.13 dock
+// (MY WORK · AUTOMATE · QUESTS, BUILD MODE · CONNECT · NEW APP, ABILITIES tabs INSTALLED / DISCOVER / CREATE / ADVANCED) — the
+// agent was sending Commanders to 0.12.5 dock buttons that no longer exist.
+A.eq(full.length, 9674, 'the whole manual keeps its length (+30: REFIT is named BUILD MODE; +2: SETTINGS › AI & MODELS; +308: the 0.13 dock, 2026-10-02)');
+A.eq(crypto.createHash('sha256').update(full, 'utf8').digest('hex'), '168648899c6994cb6953b97ad3ca9cd54a71cc854a32d97605ca3d85b1e41193',
   'the whole manual is byte-identical to the literal that shipped before the split');
 
 // ---- B. the sections partition the manual ----

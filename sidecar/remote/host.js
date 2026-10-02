@@ -11,7 +11,10 @@
 
    Events a phone sees:
      run.started  { runId, agentId, streamId }
-     run.text     { runId, text } | { runId, at, add }   the reply so far, or what it grew by from `at` (≤ ~4 per second)
+     run.text     { runId, text }                 the whole reply so far (the first frame, and every eighth)
+     run.delta    { runId, at, add }              what it grew by from `at` (≤ ~4 per second). Its OWN type: a phone app from
+                                                  before deltas ignores it (and catches up on the next whole frame) — as a
+                                                  run.text it read the missing `text` and blanked the reply
      run.tool     { runId, callId, name, summary } a step the agent took
      run.step     { runId, callId, ok, ms }       how that step went
      run.ended    { runId, agentId, streamId, reason, usd, error }
@@ -157,7 +160,7 @@ function makeRemoteHost(d) {
       timer = null;
       const full = clip(buf, 20000);
       flushes += 1;
-      if (sent > 0 && full.length >= sent && flushes % 8) { if (full.length > sent) broadcast({ type: 'run.text', runId, at: sent, add: full.slice(sent) }); }
+      if (sent > 0 && full.length >= sent && flushes % 8) { if (full.length > sent) broadcast({ type: 'run.delta', runId, at: sent, add: full.slice(sent) }); }
       else broadcast({ type: 'run.text', runId, text: full });
       sent = full.length;
     };

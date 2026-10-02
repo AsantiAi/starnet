@@ -8440,6 +8440,23 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   // door, not a dead line. opts.key folds a repeat of the same condition into ONE entry, and settleNotifs(key)
   // marks it handled when the wait ends (answered, run over), so NEEDS YOU never shows a question already gone.
   const NOTIF_KIND_OF = { needsApproval: 'needs', runComplete: 'result', cronDigest: 'result' };
+  /* A desk approval / question waits on a run that lives with THIS page (a desk run dies with its socket). An entry raised
+     in an earlier page life (before a reload or a restart) can never be answered or settled any more, so it leaves NEEDS
+     YOU as handled instead of lighting the badge for good. Entries without a prompt (a question in a finished reply, a
+     loop result, an extension to approve) are re-judged by their own watchers. */
+  const NOTIF_LIFE = uid('life');
+  let notifLivesReaped = false;
+  function reapDeadPrompts() {
+    if (notifLivesReaped) return;
+    notifLivesReaped = true;
+    let n = 0;
+    store.notifs.forEach(r => { if (r && r.kind === 'needs' && !r.done && r.prompt && r.life !== NOTIF_LIFE) { r.done = true; r.read = true; n++; } });
+    if (n) save();
+  }
+  // the keys of entries still waiting on you (a watcher settles the ones whose wait it knows is over)
+  function waitingNotifKeys(prefix) {
+    return store.notifs.filter(r => r && r.kind === 'needs' && !r.done && r.key && (!prefix || r.key.indexOf(prefix) === 0)).map(r => r.key);
+  }
   function notify(text, cls, category, opts) {
     const pref = notifyPrefOf(category);
     if (!pref.show) return;   // this category is muted — honored here, at the real emit point (not decorative)
@@ -8452,6 +8469,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       rec = { id: uid('n'), t: Date.now(), txt: String(text || ''), cls: cls || '', read: false, kind };
       if (go) rec.go = go;
       if (key) rec.key = key;
+      if (opts && opts.prompt) { rec.prompt = String(opts.prompt); rec.life = NOTIF_LIFE; }
       store.notifs.push(rec);
       if (store.notifs.length > 60) store.notifs = store.notifs.slice(-60);
       save(); badges();
@@ -8463,6 +8481,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   }
   function goToNotif(go) {
     if (!go) return false;
+    if (go.ws && typeof Workstreams !== 'undefined' && Workstreams.get && !Workstreams.get(go.ws)) { toast('that session was deleted', 'warn'); return false; }   // the bell stays: it opened nothing
     if (go.ws && typeof App !== 'undefined' && App.openWorkstream) { App.openWorkstream(go.ws); if (open.notifs) workConversation('notifs'); return true; }   // the session is the point: step the bell aside, keep a way back
     if (go.term) { openTerm(go.term, go.section); return true; }
     return false;
@@ -8618,6 +8637,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   const isWaiting = n => n.kind === 'needs' && !n.done;
   function buildNotifs(body) {
     pruneLegacyNotifs();
+    reapDeadPrompts();
     let backfilled = false;
     store.notifs.forEach(n => { if (!n.id) { n.id = uid('n'); backfilled = true; } });
     if (backfilled) save();
@@ -8666,6 +8686,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   }
   // The bell counts what's worth looking at: everyone still waiting on you + anything new that finished or broke.
   function badges() {
+    reapDeadPrompts();
     const n = store.notifs.filter(x => x && x.kind && (isWaiting(x) || !x.read)).length;
     const b = $('#nf-badge');
     if (b) { b.textContent = n || ''; b.style.display = n ? 'inline-block' : 'none'; }
@@ -10604,7 +10625,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     // dom + format primitives
     esc, mkEl, sfx, clock, ts, fmtRel,
     // hud + window plumbing
-    notify, settleNotifs, seenSession, toast, mountConsole, rerender, openTerm, openSignIn, navigateWork, workConversation,
+    notify, settleNotifs, waitingNotifKeys, seenSession, toast, mountConsole, rerender, openTerm, openSignIn, navigateWork, workConversation,
     // deep-link a missing capability object into the REAL placement surface (minimize this console,
     // open BUILD MODE, arm its palette on the exact prop). The TOOLSETS pane's inert rows use it, so a row
     // that diagnoses "no dish on station" can also cure it. Shared, never re-implemented: an auto-place
@@ -10843,7 +10864,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   // GROWTH Tier 3: repaint the Settings AUTONOMY panel's EARNED badge if it is open (no-op otherwise — the paint fn
   // queries its own (possibly detached) host nodes, so a closed panel costs nothing). Called after a trust accept.
   const repaintAutonomy = () => { try { if (repaintAutonomyDial) repaintAutonomyDial(); } catch (_) {} };
-  return { init, enter, setRoster, leave, clearRunning, runningCount: () => runningAgents.size, isAgentRunning: (id) => agentLive(id), notify, settleNotifs, seenSession, flashSave, openAgent, refreshCrew: () => crewTick(), openArcade, toggleTerm, openTerm, openDesk, closeTerm, rerender, refreshBoard: refreshBoardLive, pokeQuests, setTheme, getTheme, repaintAutonomy, refreshSystems, toggleFamily, familyOf, registerWindow, h };
+  return { init, enter, setRoster, leave, clearRunning, runningCount: () => runningAgents.size, isAgentRunning: (id) => agentLive(id), notify, settleNotifs, waitingNotifKeys, seenSession, flashSave, openAgent, refreshCrew: () => crewTick(), openArcade, toggleTerm, openTerm, openDesk, closeTerm, rerender, refreshBoard: refreshBoardLive, pokeQuests, setTheme, getTheme, repaintAutonomy, refreshSystems, toggleFamily, familyOf, registerWindow, h };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { visibleTerminalRect, clampTerminalSize };

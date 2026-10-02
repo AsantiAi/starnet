@@ -94,7 +94,7 @@ for (const raw of [
   A.eq(v.retryable, false, 'an exhausted managed balance is not retryable as-is');
   // 2026-07-15 UX sweep: the copy now names the SAME door the CTA button opens (SETTINGS → PROVIDERS) —
   // "the STORE" was a surface that exists nowhere as a button (the old copy/button mismatch).
-  A.ok(/credit/i.test(v.userMessage) && /providers/i.test(v.userMessage), 'the message names the credit problem and the PROVIDERS door (the same one the button opens)');
+  A.ok(/credit/i.test(v.userMessage) && /AI & MODELS/.test(v.userMessage), 'the message names the credit problem and the AI & MODELS door (the same one the button opens)');
 }
 
 // ---- the "credits unavailable" (service didn't answer) admission message also reads as managed_credit ----
@@ -250,7 +250,7 @@ for (const raw of [
   A.ok(!/wait a few seconds|too many requests/i.test(q.userMessage), 'and the busy-provider copy is gone');
   A.ok(/allowance is used up/i.test(q.userMessage), 'the copy says the allowance is spent');
   A.ok(/weekly/i.test(q.userMessage), 'and names the subscription schedule, not a seconds-scale wait');
-  A.ok(/PROVIDERS/.test(q.userMessage), 'and points at a door that can keep the work moving now');
+  A.ok(/AI & MODELS/.test(q.userMessage), 'and points at a door that can keep the work moving now');
   A.eq(q.action, 'settings', 'the action opens that door');
   const exactReport = friendlyError(Object.assign(new Error('codex http 429 — The usage limit has been reached'), { status: 429 }));
   A.eq(exactReport.kind, 'quota_exhausted', 'the exact Codex diagnostics wording is a spent allowance');

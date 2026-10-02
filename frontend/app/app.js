@@ -5512,7 +5512,8 @@ const App = (() => {
           fetch('/api/plugins').then(r => r.ok ? r.json() : null).catch(() => null)
         ]);
         const waiting = ((h && h.pending) || []).length + (((p && p.plugins) || []).filter(x => x && x.pending).length);
-        if (!waiting || typeof StationUI === 'undefined' || !StationUI.notify) return;
+        if (!h || !p || typeof StationUI === 'undefined' || !StationUI.notify) return;   // a failed read says nothing either way
+        if (!waiting) { if (StationUI.settleNotifs) StationUI.settleNotifs('extensions-pending'); return; }   // approved since: it leaves NEEDS YOU
         StationUI.notify(
           waiting + ' extension' + (waiting === 1 ? '' : 's') + ' awaiting your approval — click to review',
           'warn', 'needsApproval',

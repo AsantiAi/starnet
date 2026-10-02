@@ -3155,7 +3155,8 @@ const Chat = (() => {
     r.d.tabIndex = -1;
     r.d.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); answer('use your judgment', '✓ your call'); } });
     status('awaiting your answer…');
-    if (typeof StationUI !== 'undefined') StationUI.notify(name + ' has a quick question for you' + sessionNote(ws), 'warn', 'needsApproval', ws ? { kind: 'needs', go: { ws: ws.id }, key: 'needs:' + ws.id } : undefined);
+    if (ws && !announcedPrompt(p.promptId, ws) && typeof StationUI !== 'undefined') StationUI.notify(name + ' has a quick question for you' + sessionNote(ws), 'warn', 'needsApproval', { kind: 'needs', go: { ws: ws.id }, key: 'needs:' + ws.id, prompt: p.promptId });
+    else if (!ws && typeof StationUI !== 'undefined') StationUI.notify(name + ' has a quick question for you' + sessionNote(ws), 'warn', 'needsApproval');
     autoscroll();
     const composerBusy = !!(input && (document.activeElement === input || (input.value && input.value.trim())));
     if (!composerBusy) { try { r.d.focus({ preventScroll: true }); } catch (_) { try { r.d.focus(); } catch (_) {} } }
@@ -3274,7 +3275,8 @@ const Chat = (() => {
     r.d.tabIndex = -1;
     r.d.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); decide('deny', '✕ denied', true); } });
     status('awaiting your approval…');
-    if (typeof StationUI !== 'undefined') StationUI.notify(name + ' needs approval to ' + actionPhrase(p), 'warn', 'needsApproval', ws ? { kind: 'needs', go: { ws: ws.id }, key: 'needs:' + ws.id } : undefined);   // P1-8 category: consent prompt
+    if (ws && !announcedPrompt(p.promptId, ws) && typeof StationUI !== 'undefined') StationUI.notify(name + ' needs approval to ' + actionPhrase(p), 'warn', 'needsApproval', { kind: 'needs', go: { ws: ws.id }, key: 'needs:' + ws.id, prompt: p.promptId });
+    else if (!ws && typeof StationUI !== 'undefined') StationUI.notify(name + ' needs approval to ' + actionPhrase(p), 'warn', 'needsApproval');   // P1-8 category: consent prompt
     // FOCUS-STEAL GUARD (P0): a consent prompt must NEVER hijack focus from a Commander who is mid-typing or holds
     // a draft — a stolen focus + a reflexive Enter could approve a file write they never read. Only follow the
     // scroll when they were already at the bottom (honor stick), and only take focus (onto the row CONTAINER, so
@@ -3291,11 +3293,27 @@ const Chat = (() => {
   // session gains a pending consent, fire a clickable toast naming the AGENT + the action; clicking it opens THAT
   // session via the same restore path as a rail-row click (Chat.load re-renders the consent card from the Channels
   // snapshot). Also refresh the rail immediately so the row's NEEDS-YOU marker lands without waiting for the ticker.
+  /* ONE bell entry per prompt, settled wherever the prompt is answered. The desk card settled its own entry, but an answer
+     from the phone, Telegram or voice (permission.response on the bus) left NEEDS YOU "waiting" for good; and re-rendering a
+     pending card (reopening the session) toasted and re-filed the same prompt every time. */
+  const promptNeeds = new Map();   // promptId -> the bell key it was filed under
+  function announcedPrompt(promptId, ws) {
+    if (!promptId || !ws) return false;
+    const id = String(promptId);
+    if (promptNeeds.has(id)) return true;
+    promptNeeds.set(id, 'needs:' + ws.id);
+    if (promptNeeds.size > 200) promptNeeds.delete(promptNeeds.keys().next().value);
+    return false;
+  }
+  if (typeof U !== 'undefined' && U.bus && U.bus.on) U.bus.on('permission.response', (resp) => {
+    const key = resp && resp.promptId != null ? promptNeeds.get(String(resp.promptId)) : null;
+    if (key && typeof StationUI !== 'undefined' && StationUI.settleNotifs) StationUI.settleNotifs(key);
+  });
   function backgroundPermissionNotify(ev, ws) {
     const who = (typeof App !== 'undefined' && App.agentName && App.agentName(ws.agentId || 'agent')) || ws.agentId || 'an agent';
-    if (typeof StationUI !== 'undefined' && StationUI.notify) {
+    if (!announcedPrompt(ev && ev.promptId, ws) && typeof StationUI !== 'undefined' && StationUI.notify) {
       StationUI.notify(who + ' needs approval to ' + actionPhrase(ev) + sessionNote(ws), 'warn', 'needsApproval',
-        { kind: 'needs', go: { ws: ws.id }, key: 'needs:' + ws.id });
+        { kind: 'needs', go: { ws: ws.id }, key: 'needs:' + ws.id, prompt: ev && ev.promptId });
     }
     try { if (typeof App !== 'undefined' && App.refreshRail) App.refreshRail(); } catch (_) {}
   }
@@ -9216,7 +9234,8 @@ const Chat = (() => {
         } else if (postconditionUnmet) {
           if (isActiveWs(ws)) breakLive(), toolLine('⚠ completion was not proven — typed postconditions returned ' + (completionVerdict || 'not_assessed') + ' (' + (effectVerdict || 'no effect evidence') + ')');
           if (typeof StationUI !== 'undefined') StationUI.notify(isActiveWs(ws) ? 'completion needs verification' : whoOf(ws) + ' finished but couldn’t prove it worked' + sessionNote(ws) + ' — check it', 'warn', undefined, isActiveWs(ws) ? undefined : { kind: 'alert', go: { ws: ws.id } });
-        } else if (!isActiveWs(ws) && (!endReason || endReason === 'done' || endReason === 'clarifying') && replyText.trim() && !(thisRunId && notedRuns.has(thisRunId)) && typeof StationUI !== 'undefined') {
+        // (a run that already announced a file still says it has a QUESTION: "made X" alone never told you it waits on you)
+        } else if (!isActiveWs(ws) && (!endReason || endReason === 'done' || endReason === 'clarifying') && replyText.trim() && !(thisRunId && notedRuns.has(thisRunId) && !taskQuestion && endReason !== 'clarifying') && typeof StationUI !== 'undefined') {
           const asks = !!taskQuestion || endReason === 'clarifying';
           // a BACKGROUND session finished (you were elsewhere) — the one beat you'd otherwise miss; the entry opens it
           StationUI.notify(whoOf(ws) + (asks ? ' has a question for you' : ' finished') + sessionNote(ws), asks ? 'warn' : 'good', asks ? 'needsApproval' : 'runComplete',
