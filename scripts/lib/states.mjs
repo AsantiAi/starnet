@@ -194,7 +194,7 @@ export function buildStates() {
     // GET /api/deliverables on open, so give it a wait to let the async rows/toolbar settle
     // before the enumerator probe runs (finding 206d3ceb).
     { name: 'work-deliverables', drive: openSel('[data-term="deliverables"]', 'DELIVERABLES'), wait: 1200 },
-    { name: 'work-recipes',    drive: openSel('#bb-missions', 'RECIPES') },
+    { name: 'work-recipes',    drive: `(() => { ${CLOSE}; const b = document.querySelector('#bb-missions'); if (b) { b.click(); return 'opened:RECIPES'; } if (typeof App !== 'undefined' && App.openRecipes) { App.openRecipes(); return 'opened-via-menu:RECIPES'; } return 'NOTFOUND:RECIPES'; })()` },   // 0.13: MY WORK › RECIPES
     // AUTOMATION replaced the ROUTINES door when ROUTINES+LOOPS merged into one window
     // (nav-condense, 2026-08-04) — keep the canonical post-condense state key so the
     // state enumerator and golden baseline describe the same live surface.
