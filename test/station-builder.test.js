@@ -1772,6 +1772,20 @@ for (const c of T.catalog) {
         A.ok(det.ok && !det.map.issues.length, style + ' (door ' + door + '): nothing to fix: ' + JSON.stringify(det.ok && det.map.issues));
       }
     }
+    // a small working room with its only door north or south still gets its desks: the rows kept clear before the doorway
+    // left no floor for any set (an office 14 × 8 with its door north had none), so only the doorway's lane stays clear then
+    for (const [door, hall, at] of [['north', { x: 7, y: 11, w: 3, h: 6 }, h => ({ x: 0, y: 17 })], ['south', { x: 7, y: -6, w: 3, h: 6 }, h => ({ x: 0, y: -6 - h })]]) {
+      for (const [w, h] of [[14, 8], [20, 8], [14, 7]]) for (const style of ['desks', 'lab', 'comms', 'workshop']) {
+        const st = fresh(), tag = style + ' ' + w + ' × ' + h + ' (door ' + door + ')';
+        const mk = SB.planEdit(st.serialize(), { refit: [Object.assign({ op: 'hall' }, hall), Object.assign({ op: 'room', name: 'Den', kind: 'hab', w, h }, at(h)), { op: 'style', room: 'Den', style }] }, E);
+        if (!mk.ok) { A.ok(false, tag + ': dresses (' + mk.error + ')'); continue; }
+        SB.apply(st, mk.plan, E);
+        const id = st.rooms().find(r => r.name === 'DEN').id, desks = st.props().filter(p => st.roomAt(p.x, p.y) === id && /^(desk2?|console|consoleL|pixelrig|bench)$/.test(p.t));
+        A.ok(desks.length > 0, tag + ': has a place to work');
+        const det = SB.mapOf(st.serialize(), E, { room: 'Den' });
+        A.ok(det.ok && !det.map.issues.length, tag + ': nothing to fix: ' + JSON.stringify(det.ok && det.map.issues));
+      }
+    }
     // stations of small rooms, and of the builder's own large rooms, re-lay too (both were refused past four rooms)
     for (const [tag, w, h] of [['small', 12, 8], ['large', 24, 14]]) {
       const st = fresh();

@@ -2705,9 +2705,12 @@
     const depth = lineWall(rec.feature, featureWall);
     if (rec.front) lineWall(rec.front, flip ? 'north' : 'south');
     // the centrepiece: the largest cluster that fits the floor left, centred, facing the feature wall
-    const top = flip ? R.y1 + 1 + (onWall.north ? 3 : 0) : R.y1 + depth + 1, bottom = flip ? R.y2 - depth - 1 : R.y2 - 1 - (onWall.south ? 2 : 0);
+    // a doorway on the open side first keeps whole rows clear before it; where that leaves no room for any set (an office 8
+    // tall with its door north had no desks), only the doorway's own lane stays clear
     let centred = null;
-    for (const set of rec.centre || []) {
+    for (const roomy of [true, false]) for (const set of rec.centre || []) {
+      if (centred) break;
+      const top = flip ? R.y1 + 1 + (roomy && onWall.north ? 3 : 0) : R.y1 + depth + 1, bottom = flip ? R.y2 - depth - 1 : R.y2 - 1 - (roomy && onWall.south ? 2 : 0);
       if (set.w > W - 2 || set.h > bottom - top + 1) continue;
       const x0 = R.x1 + ((W - set.w) >> 1), y0 = top + ((bottom - top + 1 - set.h) >> 1);
       const tries = [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1], [-2, 0], [2, 0], [-3, 0], [3, 0], [-2, 1], [2, 1], [-2, -1], [2, -1]];
