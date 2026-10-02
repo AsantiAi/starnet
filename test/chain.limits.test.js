@@ -4,6 +4,7 @@
    Pure: fake floor, fake harness, injected clock, in-memory "disk" for the day ledger. */
 'use strict';
 const A = require('./_assert.js');
+const fs = require('fs');
 const { makeChainRunner, effectiveLimits, MAX_HOPS, MAX_CHAIN_USD } = require('../sidecar/routing/chain.js');
 const { makeLineSpend, DAY_MS } = require('../sidecar/routing/line-spend.js');
 const { makeRouter } = require('../sidecar/routing/router.js');
@@ -38,6 +39,24 @@ let T = 0; const clock = () => (T += 10);
     const r2 = await c.advance({ agentId: 'a', text: 'go', limits: { maxUsdPerMessage: 0.25 } });
     A.eq(r2.stopped, 'the line reached its $0.25 limit', 'maxUsdPerMessage replaces the $2.00 constant in the reason');
     A.ok(r2.hops.length < 5, 'and actually stopped the line short');
+  }
+
+  /* ---- QA 2026-10-02: each hop is told what is LEFT of the line's $ ceiling (a lower-only cap for that run) ----
+     The pre-hop check alone let one own-key stage spend far past the line's limit. */
+  {
+    const seen = [];
+    const c = makeChainRunner({ nextAgent: line({ a: 'b', b: 'c', c: 'd' }), now: clock,
+      runAgent: async (call) => { seen.push([call.agentId, call.ceilingUsd]); return { text: call.agentId + ' out', usd: 0.5 }; } });
+    await c.advance({ agentId: 'a', text: 'go', entryUsd: 0.25, limits: { maxUsdPerMessage: 1.5 } });
+    A.eq(seen.map(x => x[0]), ['b', 'c', 'd'], 'three hops start under the line limit');
+    A.ok(Math.abs(seen[0][1] - 1.25) < 1e-9, 'the first hop may spend only what the entry left (got ' + seen[0][1] + ')');
+    A.ok(Math.abs(seen[1][1] - 0.75) < 1e-9, 'the next hop only what is left after that (got ' + seen[1][1] + ')');
+    A.ok(Math.abs(seen[2][1] - 0.25) < 1e-9, 'and the last one only the final quarter (got ' + seen[2][1] + ')');
+    const idx = fs.readFileSync(require('path').join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
+    A.ok(idx.includes("!(runCapUsd <= o.ceilingUsd)) runCapUsd = Math.max(0.01, o.ceilingUsd);") && idx.split('ceilingUsd: h.ceilingUsd').length - 1 === 2,
+      'runOnce lowers its cap to the ceiling (never raises it), and both cron hop runners pass it');
+    const hub = fs.readFileSync(require('path').join(__dirname, '..', 'sidecar', 'channels', 'hub.js'), 'utf8');
+    A.ok(hub.includes('ceilingUsd: h.ceilingUsd'), 'and so does the hub hop runner');
   }
 
   /* ---- the injected per-line reader (the compiled plan's LINE BUDGET) is read by lineId ---- */

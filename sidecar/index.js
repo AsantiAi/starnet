@@ -6140,6 +6140,7 @@ const cronDriver = makeCronDriver({
           baseUrl: hopConfig.baseUrl || '', reasoningEffort: hopConfig.reasoningEffort,
           system: cronSystemFor(h.agentId),
           messages: [{ role: 'user', content: h.text }], agentId: h.agentId, lineId: o.runsLine === true ? router.lineOfAgent(o.agentId, o.dockId ? router.dockOf(o.agentId, o.dockId) : undefined) : null, isTask: true,
+          ceilingUsd: h.ceilingUsd,   // what is left of the line's $ ceiling (lower-only)
           emit: sink, signal: h.signal, runId: hopRunId, streamId: o.streamId,
           surface: 'autonomous', trigger: 'schedule', reflect: true,
           station: router.stationFor(h.agentId, h.dockId) || undefined,   // the hop's OWN bay room (multi-bay)
@@ -14877,6 +14878,7 @@ async function handleCronRun(req, res) {
                 baseUrl: hopConfig.baseUrl || '', reasoningEffort: hopConfig.reasoningEffort,
                 system: cronSystemFor(h.agentId),
                 messages: [{ role: 'user', content: h.text }], agentId: h.agentId, lineId: job.runsLine === true ? router.lineOfAgent(job.agentId, job.dockId ? router.dockOf(job.agentId, job.dockId) : undefined) : null, isTask: true,
+                ceilingUsd: h.ceilingUsd,   // what is left of the line's $ ceiling (lower-only)
                 emit: hopSink, signal: h.signal, runId: hopRunId, streamId: 'cron-' + runId,
                 surface: 'autonomous', trigger: 'schedule', broadcast: true, reflect: true,
                 station: router.stationFor(h.agentId, h.dockId) || undefined,   // the hop's OWN bay room (multi-bay)
@@ -18246,6 +18248,8 @@ async function runOnceCore(o) {
   let runCapUsd = (o.maxCostUsd > 0 && isFinite(o.maxCostUsd)) ? o.maxCostUsd
     : (providerUnmetered ? Infinity
     : ((effectiveCaps.perRun > 0 && isFinite(effectiveCaps.perRun)) ? effectiveCaps.perRun : Infinity));
+  // o.ceilingUsd (a line hop: what is left of the line's $ ceiling) only ever LOWERS the cap (QA 2026-10-02)
+  if (!providerUnmetered && typeof o.ceilingUsd === 'number' && isFinite(o.ceilingUsd) && o.ceilingUsd >= 0 && !(runCapUsd <= o.ceilingUsd)) runCapUsd = Math.max(0.01, o.ceilingUsd);
   // Same rule as o.maxCostUsd for the TURN budget: an explicit caller cap (o.maxIters -- e.g. a delegated
   // worker's ORCH_WORKER_MAX_ITERS) is honored, but may only LOWER the ceiling. Without this the value
   // orchestration.js has always passed was silently dropped and every worker ran the lead's full budget.

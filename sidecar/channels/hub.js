@@ -1914,6 +1914,7 @@
                 baseUrl: hopConfig.baseUrl || hopConfig.base_url || '', reasoningEffort: hopConfig.reasoningEffort || hopConfig.reasoning_effort,
                 system: hopConfig.system || personaFor(h.agentId, rec), messages: hist.map(m => ({ role: m.role, content: m.content })).concat([{ role: 'user', content: h.text }]),
                 agentId: h.agentId, lineId, isTask: true, emit: hopSink, signal: h.signal, runId: hopRunId, trigger: 'event',
+                ceilingUsd: h.ceilingUsd,   // what is left of the line's $ ceiling (lower-only)
                 streamId: canonicalStreamId || undefined,   // the whole line shares one canonical transcript
                 initialTaint: 'upstream agent output',
                 untrustedEntry: lineEntryUntrusted || undefined,   // a hop of a payload-started line stays under the taint lock
