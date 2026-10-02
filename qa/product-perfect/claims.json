@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "55f7599b21a19bc7de87f98910aaa61d887f9a3f",
+    "sourceCommit": "7f4b2634d8612a01627a769537a62e42604c2130",
     "pathSetSha256": "60c61c9c0cad8daa5c2d40f76a912ed04e52667a726032a7b3ab94cad57bfa1e",
     "files": [
       {
@@ -613,8 +613,8 @@
       },
       {
         "path": "frontend/app/leftrail.js",
-        "bytes": 19832,
-        "sha256": "c1304025cd814f6b5e2e9f84731523390f68b673d8d05a4a2bdbfafa1d4e28d7"
+        "bytes": 20715,
+        "sha256": "257ce5bce59da5dc5dae1473990491d976d489eb486cd3dbe1593bb84d889aa5"
       },
       {
         "path": "frontend/app/legacymigrate.js",
@@ -1533,8 +1533,8 @@
       },
       {
         "path": "frontend/css/crew-glass.css",
-        "bytes": 11381,
-        "sha256": "fc68a981d5fdaefb5bc1590a4c33fa00105bf218d60a05de8a58f5e3e09bb1af"
+        "bytes": 11631,
+        "sha256": "d11e3681fad24bdb8d73fe78dd3e67786d7f1c98470b4d34cd82b749bcaae377"
       },
       {
         "path": "frontend/css/deskscreen.css",
