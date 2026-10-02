@@ -23457,7 +23457,7 @@ function consentSummary(call) {
       : a.folder ? 'start it whenever a new file lands in ' + String(a.folder).slice(0, 160) : a.webhook ? 'start it whenever its webhook is called' : 'start it';
     return ln + ': ' + how + ', with the job: "' + job.slice(0, 240) + (job.length > 240 ? '…' : '') + '". From then on it runs the line\'s agents unattended, within the line\'s budget.';
   }
-  if (/^station[._]test_line$/.test(String(call && call.name || ''))) return 'the line ' + String(a.line || '').replace(/\s+/g, ' ').trim().slice(0, 48) + ', with this test job: "' + String(a.job || '').replace(/\s+/g, ' ').trim().slice(0, 240) + (String(a.job || '').length > 240 ? '…' : '') + '". It runs the line\'s agents and spends what they spend; the result lands in your OUTBOX.';
+  if (/^station[._]test_line$/.test(String(call && call.name || ''))) return 'the line ' + String(a.line || '').replace(/\s+/g, ' ').trim().slice(0, 48) + ', with this test job: "' + String(a.job || '').replace(/\s+/g, ' ').trim().slice(0, 240) + (String(a.job || '').length > 240 ? '…' : '') + '". It runs the line\'s agents and spends what they spend; the result lands in DELIVERABLES › TO REVIEW.';
   if (/^station[._]make_prop$/.test(String(call && call.name || ''))) return '"' + String(a.describe || '').replace(/\s+/g, ' ').trim().slice(0, 60) + '", drawn with your StarNet credits (about $0.35' + (a.sideView ? ', and about $0.30 more for its side view' : '') + '). It joins your MADE BY YOU library; nothing is placed until a plan says so.';
   if (typeof a.path === 'string' && a.path) return a.path;
   try { const s = JSON.stringify(a); return s.length > 80 ? s.slice(0, 77) + '…' : s; } catch (_) { return ''; }
