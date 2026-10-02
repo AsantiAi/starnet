@@ -3797,7 +3797,9 @@ const apps = makeApps({
       if (!scan.ok) return { ok: false, error: scan.error };
       let schedule;
       try { schedule = parseCronScheduleOr400(p.schedule, Date.now(), (cur.schedule && cur.schedule.tz) || undefined); } catch (e) { return { ok: false, error: e.message }; }
-      try { await withCronWrite((jobs) => cronStore.updateJob(jobs, id, { schedule, prompt: p.prompt, name: p.name }, { now: Date.now(), defaultTz: CRON_HOST_TZ })); }
+      // GRANTS BIND TO THE APPROVED INSTRUCTION (routine.manage does the same): a crew app.schedule that rewrites a granted
+      // routine's task drops its unattended workbench/connector grants — the Commander re-grants from SCHEDULES (QA 2026-10-02)
+      try { await withCronWrite((jobs) => { const patch = { schedule, prompt: p.prompt, name: p.name }; if (p.byAgent && cronStore.grantsRevokedByAgentEdit(cronStore.getJob(jobs, id), patch).length) patch.unattendedGrants = []; return cronStore.updateJob(jobs, id, patch, { now: Date.now(), defaultTz: CRON_HOST_TZ }); }); }
       catch (e) { return { ok: false, error: (e && e.message) || String(e) }; }
       return { ok: true, job: cronStore.getJob(cronJobs, id) };
     },
@@ -10588,6 +10590,7 @@ async function handleRemoteRevoke(req, res) {
   const r = remoteDevices.revoke(id);
   remoteSessions.endDevice(id);
   if (remoteRelay) remoteRelay.kickDevice(id);
+  if (r.ok) remoteHost.stopDevice(id);   // the runs that phone started stop with it (a lost phone's task never keeps going)
   if (r.ok) { const f = remotePush.forget(id); if (!f.ok) failNote('remote.index.pushForget', new Error(f.error)); }   // a removed phone gets no more notifications
   if (!r.ok) return respondJson(res, r.error === 'no such device' ? 404 : 500, { ok: false, error: r.error });
   respondJson(res, 200, remoteSnapshot());
@@ -18575,7 +18578,7 @@ async function runOnceCore(o) {
       // the Commander's taste rides into delegated work too: a worker writes the deliverable the Commander rates
       const tasteRecs = (personalizationStore.read().enabled && !tasteWithheld) ? FeedbackMemory.stationTaste(notes, otherAgentNotebooks(agentId)) : [];
       const tasteIds = new Set(tasteRecs.map(r => r.id).filter(Boolean));
-      const pinned = Array.isArray(notes) ? notes.filter(r => r && r.pinned && !tasteIds.has(r.id)) : [];
+      const pinned = Array.isArray(notes) ? notes.filter(r => r && r.pinned && !tasteIds.has(r.id) && !(tasteWithheld && r.origin === FeedbackMemory.ORIGIN)) : [];
       const recalled = renderRecall(rank(pinned, recentUserText(messages), { now: Date.now(), streamId, projectRoot: o.projectRoot || null }), { limit: 1500 });
       const taste = renderRecall(tasteRecs, { limit: FeedbackMemory.TASTE_CHARS, header: FeedbackMemory.TASTE_HEADER });
       return settled + (recalled.text ? '\n\n' + redact(recalled.text) : '') + (taste.text ? '\n\n' + redact(taste.text) : '');
@@ -20413,7 +20416,9 @@ async function runOnceCore(o) {
     // (recovery runs inject nothing at all — see the note above msgs).
     const tasteRecs = (o.recovery || tasteWithheld || !personalizationStore.read().enabled) ? [] : FeedbackMemory.stationTaste(all, otherAgentNotebooks(agentId));
     const tasteIds = new Set(tasteRecs.map(r => r.id).filter(Boolean));
-    const recs = all.filter(r => !(r && tasteIds.has(r.id)));
+    // withheld: EVERY feedback record leaves the recall pool, not just the selected taste — a verdict record carries the
+    // Commander's past request ('(on: …)') and ordinary BM25 recall would hand it to a channel guest (QA 2026-10-02)
+    const recs = all.filter(r => !(r && (tasteIds.has(r.id) || (tasteWithheld && r.origin === FeedbackMemory.ORIGIN))));
     const q = recentUserText(convo);   // include restored conversation context on terse post-restart follow-ups
     // memory-compound: the embedding lane (BM25 + vectors) — null => pure BM25, byte-identical to before
     const hv = recs.length ? await hybridVectors({ agentId, recs, query: q, run: { providerId, key: runKey, baseUrl }, runId, cost, unmetered: providerUnmetered }) : null;
@@ -23455,7 +23460,8 @@ function consentSummary(call) {
   if (/^station[._]test_line$/.test(String(call && call.name || ''))) return 'the line ' + String(a.line || '').replace(/\s+/g, ' ').trim().slice(0, 48) + ', with this test job: "' + String(a.job || '').replace(/\s+/g, ' ').trim().slice(0, 240) + (String(a.job || '').length > 240 ? '…' : '') + '". It runs the line\'s agents and spends what they spend; the result lands in your OUTBOX.';
   if (/^station[._]make_prop$/.test(String(call && call.name || ''))) return '"' + String(a.describe || '').replace(/\s+/g, ' ').trim().slice(0, 60) + '", drawn with your StarNet credits (about $0.35' + (a.sideView ? ', and about $0.30 more for its side view' : '') + '). It joins your MADE BY YOU library; nothing is placed until a plan says so.';
   if (typeof a.path === 'string' && a.path) return a.path;
-  try { const s = JSON.stringify(a); return s.length > 80 ? s.slice(0, 77) + '…' : s; } catch (_) { return ''; }
+  // redacted BEFORE the clip: this line reaches the phone's lock screen (remoteAskWords) and a token in a command must never ride along
+  try { const s = JSON.stringify(redact(a)); return s.length > 80 ? s.slice(0, 77) + '…' : s; } catch (_) { return ''; }
 }
 function throttleSearch(registry) {
   const t = registry.get('web_search');

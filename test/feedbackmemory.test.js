@@ -144,4 +144,12 @@ A.eq(block.usedIds.length, 2, 'both count as used');
     && (idx.match(/tasteWithheld/g) || []).length >= 3, 'taste never rides a run a non-owner channel sender or group chat started');
 }
 
+{
+  const idx = require('fs').readFileSync(require('path').join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
+  A.ok(/const recs = all\.filter\(r => !\(r && \(tasteIds\.has\(r\.id\) \|\| \(tasteWithheld && r\.origin === FeedbackMemory\.ORIGIN\)\)\)\);/.test(idx),
+    'QA 10-02: a withheld run (channel guest) drops every feedback record from ordinary recall — a verdict carries the Commander\'s past request');
+  A.ok(/r\.pinned && !tasteIds\.has\(r\.id\) && !\(tasteWithheld && r\.origin === FeedbackMemory\.ORIGIN\)/.test(idx),
+    'QA 10-02: a withheld worker\'s pinned recall drops feedback records too');
+}
+
 A.report("feedbackmemory.test");

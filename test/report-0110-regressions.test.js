@@ -15,6 +15,9 @@ test('file approval preserves every mutation argument beyond the run summary cap
   assert.deepEqual(JSON.parse(ctx.consentSummary({name,args})), args, name);
  }
  assert.equal(ctx.consentSummary({name:'fs.read',args:{path:'sample.txt'}}), 'sample.txt');
+ // QA 10-02: the clipped fallback reaches a phone's lock screen (remoteAskWords) — a token in a command must never ride along
+ const short = ctx.consentSummary({name:'shell.run',args:{command:'curl -H "Authorization: Bearer sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789" https://x'}});
+ assert.ok(!/sk-ant-api03/.test(short) && /redacted/.test(short), 'fallback summary is redacted: ' + short);
 });
 test('rating controls name the originating task and run, even when an older card is shown', () => {
  const nodes=[];

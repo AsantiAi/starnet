@@ -154,6 +154,12 @@ const throwsMsg = async (fn) => { try { await fn(); return ''; } catch (e) { ret
     jobs.set('orphan', { id: 'orphan', name: 'App: AI News Brief', meta: { appId: a.id } });
     const s2 = await apps.schedule(a.id, { every: 'every 6h', task: 'two' });
     A.ok(s2.jobId === s1.jobId && jobs.get(s1.jobId).schedule === 'every 6h' && /two/.test(jobs.get(s1.jobId).prompt), 'a second SAVE edits the same routine in place');
+    { let seenPatch = null; const upd = cron.update; cron.update = async (jid, p) => { seenPatch = p; return upd(jid, p); };
+      await apps.schedule(a.id, { every: 'every 6h', task: 'crew task', byAgent: true });
+      A.ok(seenPatch && seenPatch.byAgent === true && /as the crew set it up/.test(seenPatch.prompt) && !/Commander's own words/.test(seenPatch.prompt), 'QA 10-02: a crew edit reaches the station as the crew (its grants drop) and never claims to be the Commander\'s words');
+      await apps.schedule(a.id, { every: 'every 6h', task: 'two' });
+      A.ok(seenPatch && seenPatch.byAgent === false && /Commander's own words/.test(seenPatch.prompt), 'the Commander\'s own SAVE stays the Commander\'s words');
+      cron.update = upd; }
     A.ok(!jobs.has('orphan'), 'an orphan routine of the same app (from a race) is retired');
     A.ok(told.every((t) => t[0] === 'data'), 'a schedule change refreshes the bar only — it never reloads the open app window');
     // racing writes are serialized: both land, one routine remains
