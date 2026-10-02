@@ -114,6 +114,13 @@ async function waitFor(fn) { for (let n = 0; n < 100; n++) { if (await fn()) ret
     await assert.rejects(api.get(one.id), /not found/);
     api = makeGroupSessions(deps); await api.ready;
     await assert.rejects(api.get(one.id), /not found/);
+    // (sweep 2026-10-02) DELETE MEANS GONE: the stored tombstone keeps none of the conversation (messages, turns,
+    // artifacts with file contents) — they used to stay in group-sessions.json forever
+    const stored = JSON.parse(fs.readFileSync(path.join(root, 'group-sessions.json'), 'utf8'));
+    const tomb = (stored.groups || (stored.value && stored.value.groups) || {})[one.id];
+    assert.ok(tomb && tomb.deleted === true, 'the deleted group is a tombstone');
+    assert.deepEqual([tomb.messages.length, tomb.turns.length, tomb.artifacts.length, tomb.instructions], [0, 0, 0, ''], 'and holds no messages, turns, artifacts or instructions');
+    assert.ok(!JSON.stringify(tomb).includes('Long work'), 'none of its text survives');
     // Explicit invitation is idempotent and never fires a run.
     const invited = await api.create({ members: ['agent'] });
     const beforeInvite = seen.length;

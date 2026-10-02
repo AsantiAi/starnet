@@ -298,7 +298,14 @@ function makeGroupSessions(d) {
     if (abort) abort.abort();
     if (b.action !== 'delete') { kick(id); return publicGroup(get(id)); }
     await workers.get(id);
-    await update(id, g => { g.deleted = true; delete g.deleting; });
+    // DELETE MEANS GONE (sweep 2026-10-02): the tombstone keeps only what dedupe and membership need. The messages, turns,
+    // questions, instructions and artifacts (full file contents) used to stay in group-sessions.json forever — a privacy
+    // leak, and the file every poll of an open group reads kept growing.
+    await update(id, g => {
+      g.deleted = true; delete g.deleting;
+      g.messages = []; g.turns = []; g.artifacts = []; g.questions = []; g.instructions = '';
+      g.deletedAt = d.now();
+    });
     return { deleted: true };
   }
   async function fork(id, b) {
