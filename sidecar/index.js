@@ -12202,21 +12202,26 @@ async function stationOneShot(prompt, tag, failLead) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 120000);
   if (timer && timer.unref) timer.unref();
-  let out = '', usage = null, usd = 0, tokens = 0;
+  let out = '', usage = null, usd = 0, tokens = 0, cost = null;
+  // book whatever usage arrived — on a timeout or a provider error too: those tokens were billed (sweep 2026-10-02)
+  const book = () => {
+    if (!usage || !cost) return;
+    try { const c = cost.reconcile(usage, cfg.model); usd = c.usd || 0; tokens = (c.tokensIn || 0) + (c.tokensOut || 0); } catch (e) { failNote(tag + '.reconcile', e); return; }
+    if (usd) { try { ledger.record({ runId: tag + '-' + crypto.randomUUID(), agentId: 'station', turns: 0, usd, tokens, model: cfg.model, unmetered: !!((getProviderProfile(providerId) || {}).unmetered) }); } catch (e) { failNote(tag + '.ledger', e); } }
+  };
   try {
     const provider = await providerForRunConfig(cfg, reasoningEffort);
-    const cost = makeCostEngine({ priceOf: provider.priceOf });
+    cost = makeCostEngine({ priceOf: provider.priceOf });
     for await (const ev of provider.stream({ model: cfg.model, stream: true, signal: ctrl.signal, reasoningEffort,
       messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }] })) {
       if (ev && ev.type === 'text') out += ev.delta;
       else if (ev && ev.type === 'usage') usage = ev.usage;
     }
-    const c = cost.reconcile(usage, cfg.model);
-    usd = c.usd || 0; tokens = (c.tokensIn || 0) + (c.tokensOut || 0);
   } catch (e) {
+    book();
     return { ok: false, status: 502, error: (failLead || 'the call failed') + ' — ' + String((e && e.message) || e).slice(0, 200) };
   } finally { clearTimeout(timer); }
-  if (usd) { try { ledger.record({ runId: tag + '-' + crypto.randomUUID(), agentId: 'station', turns: 0, usd, tokens, model: cfg.model, unmetered: !!((getProviderProfile(providerId) || {}).unmetered) }); } catch (e) { failNote(tag + '.ledger', e); } }
+  book();
   return { ok: true, out, usd, model: cfg.model };
 }
 async function handleRoutingFixSuggest(req, res) {
