@@ -1657,7 +1657,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       return;
     }
     ul.innerHTML = present.map((a, i) =>
-      '<li class="crew-row" role="button" tabindex="0" aria-label="Open dossier for ' + esc(a.name || a.id) + '" data-i="' + i + '" data-agent-id="' + esc(a.id) + '" style="--ci:' + i + '">' +
+      '<li class="crew-row" role="button" tabindex="0" aria-label="' + (present.length > 1 ? 'Show sessions with ' + esc(a.name || a.id) + '; Shift+F10 for the dossier" aria-keyshortcuts="Shift+F10' : 'Open dossier for ' + esc(a.name || a.id)) + '" data-i="' + i + '" data-agent-id="' + esc(a.id) + '" style="--ci:' + i + '">' +
       crewPortrait(a) +
       '<span class="dot on"></span>' +
       '<div class="crew-main">' +
@@ -1668,11 +1668,24 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // in-flight work bar: hidden until the row is .working (crewTick toggles it from the real run state).
       // The shimmer (.bar-active) reads as live activity; it's an indeterminate sweep, not a % readout.
       '<div class="crew-prog bar-active" id="cp-' + esc(a.id) + '" aria-hidden="true"><div></div></div>' +
-      '</div></li>').join('');
+      '</div>' +
+      // the dossier stays one step away: this key (or a right-click) opens it; the row itself shows the sessions
+      (present.length > 1 ? '<button type="button" class="crew-dossier" tabindex="-1" aria-label="Open dossier for ' + esc(a.name || a.id) + '" data-tip="Open ' + esc(a.name || a.id) + '&#39;s dossier">DOSSIER</button>' : '') +
+      '</li>').join('');
     // (the head's roster count moved out — #crew-sum below the list already totals the same crew)
     ul.querySelectorAll('.crew-row').forEach(li => {
       if (typeof AgentPortraits !== 'undefined') AgentPortraits.paint(li.querySelector('.crew-portrait img'), present[+li.dataset.i]);
-      li.addEventListener('click', () => { sfx('click'); openAgent(+li.dataset.i); });
+      // PER-AGENT THREADS: a row click narrows the SESSIONS rail to this agent's sessions (again = all of them).
+      // A one-agent station has nothing to narrow — every session is already that agent's — so there the
+      // row keeps opening the dossier, as it always has.
+      li.addEventListener('click', () => {
+        sfx('click');
+        if (present.length > 1 && typeof App !== 'undefined' && App.filterRailByAgent) App.filterRailByAgent(li.dataset.agentId);
+        else openAgent(+li.dataset.i);
+      });
+      li.addEventListener('contextmenu', ev => { ev.preventDefault(); sfx('click'); openAgent(+li.dataset.i); });
+      const dos = li.querySelector('.crew-dossier');
+      if (dos) dos.addEventListener('click', ev => { ev.stopPropagation(); sfx('click'); openAgent(+li.dataset.i); });
       li.addEventListener('keydown', ev => {
         if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); li.click(); }
       });
@@ -1690,6 +1703,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const act = activity();
     let focusedId = '';
     try { focusedId = (typeof App !== 'undefined' && App.currentAgent && App.currentAgent() || {}).id || ''; } catch (_) {}
+    // the agent whose sessions the rail is narrowed to (App owns it; '' = every session)
+    let railFilter = '';
+    try { railFilter = (typeof App !== 'undefined' && App.railAgentFilter && App.railAgentFilter()) || ''; } catch (_) {}
     let working = 0, visible = 0;
     present.forEach(a => {
       const live = agentLive(a.id);
@@ -1702,6 +1718,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         if ((e.getAttribute('data-tip') || '') !== tip) { if (tip) e.setAttribute('data-tip', tip); else e.removeAttribute('data-tip'); }
         const row = e.closest('.crew-row');
         row.classList.toggle('selected', a.id === focusedId);
+        row.classList.toggle('filtering', !!railFilter && a.id === railFilter);
         const hide = !!crewQuery && !String(a.name || a.id).toLowerCase().includes(crewQuery) && !String(a.id).toLowerCase().includes(crewQuery);
         if (row.hidden !== hide) row.hidden = hide;
         if (!row.hidden) visible++;
@@ -1712,9 +1729,10 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const sum = $('#crew-sum');
     const empty = $('#crew-search-empty');
     if (empty) empty.hidden = !crewQuery || visible > 0;
+    // crewcards.js seats this beside the CREW title ("2 WORKING · 1 IDLE"); the ▮ ▯ marks were fallback-font glyphs
     if (sum) sum.innerHTML =
-      '<span class="pos">▮ ' + working + ' WORKING</span>' +
-      '<span class="dim">▯ ' + (present.length - working) + ' IDLE</span>';
+      '<span class="pos">' + working + ' WORKING</span>' +
+      '<span class="dim">' + (present.length - working) + ' IDLE</span>';
     // #8: keep the canvas's screen-reader live region in sync (the <canvas> itself is opaque to AT).
     // Update only when the text actually changes so the region doesn't spam announcements every tick.
     const stageSum = $('#stage-summary');
@@ -2300,13 +2318,16 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
      can arrive from a routine, a night shift, or a messaging channel — and "the agent believes this about me" and
      "someone said this in a group chat" are different claims. 'commander' renders NO chip: the ordinary case must
      stay quiet, or the label becomes noise nobody reads. */
-  const ORIGIN_LABEL = { schedule: '⏱ routine', nightshift: '◈ autonomy', api: '⇄ external app' };
+  // 'feedback' = the Commander's OWN rating / correction of a run (sidecar/feedbackmemory.js): it is theirs, so its
+  // tip must never say it was learned unwatched. 'failure-review' = a lesson from a run that failed.
+  const ORIGIN_LABEL = { schedule: '⏱ routine', nightshift: '◈ autonomy', api: '⇄ external app', feedback: '★ your rating', 'failure-review': '⚠ failed run' };
+  const ORIGIN_TIP = { feedback: 'from your own rating of a run — every agent shapes its work to this', 'failure-review': 'a lesson taken from a run that failed' };
   function originChip(origin) {
     const o = String(origin || 'commander');
     if (o === 'commander') return null;
     const label = ORIGIN_LABEL[o] || (o.indexOf('channel:') === 0 ? '✆ ' + o.slice(8) : o);
     const el = mkEl('span', 'mc-scope'); el.textContent = label;
-    el.title = 'learned on a run you were not watching (' + o + ')';
+    el.title = ORIGIN_TIP[o] || ('learned on a run you were not watching (' + o + ')');
     return el;
   }
 
@@ -8579,6 +8600,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // window meant one notch per 20k tokens — the bar sat on one cell from 5% to 14% and read as stuck.
       // Driven off s.frac, not the rounded s.pct, so the extra resolution is real and not re-quantised.
       const frac = s.known ? s.frac : 0;
+      g.style.setProperty('--ctx-fill', String(Math.max(0, Math.min(1, +frac || 0))));   // cabinet-clean.css draws the cells as one thin bar
       const b = (typeof AsciiFX !== 'undefined' && AsciiFX.barCells)
         ? AsciiFX.barCells(frac, N)
         : { full: 0, half: false, off: N };
@@ -10714,7 +10736,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   // GROWTH Tier 3: repaint the Settings AUTONOMY panel's EARNED badge if it is open (no-op otherwise — the paint fn
   // queries its own (possibly detached) host nodes, so a closed panel costs nothing). Called after a trust accept.
   const repaintAutonomy = () => { try { if (repaintAutonomyDial) repaintAutonomyDial(); } catch (_) {} };
-  return { init, enter, setRoster, leave, clearRunning, runningCount: () => runningAgents.size, isAgentRunning: (id) => agentLive(id), notify, flashSave, openAgent, openArcade, toggleTerm, openTerm, openDesk, closeTerm, rerender, refreshBoard: refreshBoardLive, pokeQuests, setTheme, getTheme, repaintAutonomy, refreshSystems, toggleFamily, familyOf, registerWindow, h };
+  return { init, enter, setRoster, leave, clearRunning, runningCount: () => runningAgents.size, isAgentRunning: (id) => agentLive(id), notify, flashSave, openAgent, refreshCrew: () => crewTick(), openArcade, toggleTerm, openTerm, openDesk, closeTerm, rerender, refreshBoard: refreshBoardLive, pokeQuests, setTheme, getTheme, repaintAutonomy, refreshSystems, toggleFamily, familyOf, registerWindow, h };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { visibleTerminalRect, clampTerminalSize };

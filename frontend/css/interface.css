@@ -133,6 +133,13 @@ body {
 #crew .crew-row[hidden] { display: none; }
 #crew .crew-row:hover { transform: none; border-color: var(--ui-edge); background: var(--ui-face); }
 #crew .crew-row.selected { border-color: var(--ui-edge); border-left: 2px solid var(--ph); background: var(--ui-face); box-shadow: inset 0 1px 0 var(--ui-highlight), 0 2px 4px rgba(0,0,0,.3); }
+/* the row whose sessions the rail is showing: a solid edge bar (an edge, never a glow) */
+#crew:has(.crew-row.filtering) .crew-row.selected:not(.filtering):not(:hover) { border-color: transparent; border-bottom-color: rgba(var(--ph-rgb), .08); background: none; box-shadow: none; }
+#crew .crew-row.filtering { border-color: var(--ph-dim); background: var(--ui-face); box-shadow: inset 3px 0 0 var(--ph), inset 0 1px 0 var(--ui-highlight); }
+/* the dossier key: one step from every row, out of the way until the row is pointed at */
+#crew .crew-dossier { position: absolute; bottom: 8px; right: 7px; padding: 2px 6px; font: 12px 'VT323',monospace; letter-spacing: .8px; color: var(--ph-dim); background: rgba(0,0,0,.28); border: 1px solid var(--ui-edge); border-radius: 3px; cursor: pointer; opacity: 0; transition: opacity var(--t-fast) var(--ease-soft); }
+#crew .crew-row:is(:hover,:focus-within,.filtering) .crew-dossier { opacity: 1; }
+#crew .crew-dossier:is(:hover,:focus-visible) { color: var(--ph-bright); border-color: var(--ph); }
 #crew .crew-portrait { width: 35px; height: 43px; }
 #crew .crew-portrait img { width: 27px; height: 33px; object-fit: contain; image-rendering: pixelated; }
 /* SKIN THUMB (AgentPortraits.thumbHTML) — an agent shown by its body wherever a letter used to stand in. The image is
@@ -163,6 +170,18 @@ body {
 .ws-attention[hidden], #ws-attention-clear[hidden] { display: none; }
 .ws-attention:hover, .ws-attention[aria-pressed="true"] { background: rgba(var(--gold-rgb),.12); border-color: var(--gold); }
 #ws-attention-count { margin-left: auto; font-variant-numeric: tabular-nums; }
+/* PER-AGENT THREADS: the chip that names whose sessions the rail shows; one click returns to every session */
+.ws-agent-filter { display: flex; align-items: center; gap: 7px; flex: 0 0 auto; margin: 7px 6px 0; padding: 5px 9px 5px 6px; text-align: left; font: 15px 'VT323',monospace; color: var(--ph-bright); background: rgba(var(--ph-rgb),.08); border: 1px solid var(--ph-dim); border-radius: 3px; cursor: pointer; }
+.ws-agent-filter[hidden] { display: none; }
+.ws-agent-filter:hover { background: rgba(var(--ph-rgb),.14); border-color: var(--ph); }
+.ws-agent-filter:focus-visible { outline: 2px solid var(--ph-bright); outline-offset: 2px; }
+.ws-agent-filter .waf-thumb { width: 18px; height: 22px; }
+.ws-agent-filter .waf-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .5px; }
+.ws-agent-filter .waf-count { margin-left: auto; color: var(--ph-dim); font-variant-numeric: tabular-nums; }
+.ws-agent-filter .waf-clear { color: var(--ph-dim); }
+.ws-agent-filter:hover .waf-clear { color: var(--ph-bright); }
+.ws-agent-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.ws-agent-empty .ws-agent-start { padding: 5px 12px; }
 #left .ws-row.attn .ws-meta { color: var(--gold); padding: 3px 4px; border: 1px solid rgba(var(--gold-rgb),.3); border-radius: 2px; background: rgba(var(--gold-rgb),.06); }
 /* Waiting sessions keep their title readable; the action sits beneath it in compact mode. */
 body:not(.rows-inbox) #workstreams .ws-row.attn { display: grid; grid-template-columns: 7px minmax(0,1fr) auto auto; grid-template-areas: "dot title title pin" ". meta meta menu"; gap: 6px 7px; }

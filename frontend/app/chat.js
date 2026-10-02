@@ -1937,6 +1937,7 @@ const Chat = (() => {
       const output = document.createElement('span'); output.className = 'cmsg-starter-output'; output.textContent = 'Result: ' + st.deliverable;
       const arrow = document.createElement('span'); arrow.className = 'cmsg-starter-arrow'; arrow.textContent = '›'; arrow.setAttribute('aria-hidden', 'true');
       b.append(title, detail); if (!st.general) b.appendChild(output); b.appendChild(arrow);
+      b.title = st.description + (st.general ? '' : ' Result: ' + st.deliverable);   // cabinet-clean.css shows the title only; the detail is the tip
       b.addEventListener('click', () => openStarter(st, hint));
       const dismiss = document.createElement('button'); dismiss.type = 'button'; dismiss.className = 'choice cmsg-starter-dismiss';
       dismiss.textContent = 'Not relevant'; dismiss.setAttribute('aria-label', 'Not relevant: ' + st.label);
@@ -2963,6 +2964,9 @@ const Chat = (() => {
     if (/^station[._]build$/.test(t)) { const plan = String(ev.argsSummary || '').split('\n')[0] || 'a planned change'; return 'build this on your station: ' + plan + (/\bUNDO\b/.test(plan) ? '' : ' One UNDO in Build mode takes it back.'); }
     // MAKE A PROP (2026-10-01): the card names the object and what it costs in StarNet credits (the sidecar's own words)
     if (/^station[._]make_prop$/.test(t)) return 'make a new prop: ' + (String(ev.argsSummary || '').split('\n')[0] || 'a new prop');
+    // TEST A LINE (2026-10-01): the card names the line and the job it will send (the sidecar's own words)
+    if (/^station[._]test_line$/.test(t)) return 'test ' + (String(ev.argsSummary || '').split('\n')[0] || 'a workflow line');
+    if (/^station[._]start_line$/.test(t)) return 'set what starts ' + (String(ev.argsSummary || '').split('\n')[0] || 'a workflow line');
     return t.replace(/_/g, '.') + (ev.argsSummary ? ' ' + ev.argsSummary : '');
   }
 
@@ -8753,14 +8757,21 @@ const Chat = (() => {
       if (typeof App !== 'undefined' && App.refreshRail) App.refreshRail();
     }
 
-    const isTask = recoveryResume || !!pending || Classify.isTaskDirective(text);
+    // "YES" TO AN OFFER IS A GO: when the agent's last reply offered to do work ("want me to draft it?") a bare
+    // "yes" / "sure" / "do it" is the directive itself — classified as chat it ran tool-less and could only promise.
+    const priorAgentTurn = (() => { for (let i = ws.history.length - 2; i >= 0; i--) { const m = ws.history[i]; if (m && m.role === 'assistant') return typeof m.content === 'string' ? m.content : ''; if (m && m.role === 'user') return ''; } return ''; })();
+    const isTask = recoveryResume || !!pending || Classify.isTaskDirective(text, { priorAgentTurn });
+    // the WORDS of a "yes" are not the work: the task is the agent's offer it accepted. So an accepted offer runs WITH
+    // tools, but never feeds what reads the Commander's own wording (the profile, the recurring-job miner, the intent
+    // offer) — two "yes please" acceptances must not look like a recurring job called "yes please".
+    const acceptedOffer = !!(isTask && Classify.isAffirmation && Classify.isAffirmation(text));
     // INTENT OFFER: a real, fresh directive is the one moment the Commander has stated what they want in their
     // own words — the only honest place to say "there is a class built for exactly this". Gated to genuine new
     // work: never a retry (already offered on the original), never a recipe launch (they came FROM the library),
     // never a goal-loop continuation (the station wrote that text, not the Commander), never a reply to a
     // pending task question. Stage it on this run's metadata so concurrent sessions can never consume each
     // other's offer; the slow post-run arm reads and clears it after the answer and its own choice rows settle.
-    const intentOfferText = (isTask && !retry && !fromRecipe && !goalContinuation && !pending) ? String(text || '') : null;
+    const intentOfferText = (isTask && !acceptedOffer && !retry && !fromRecipe && !goalContinuation && !pending) ? String(text || '') : null;
     // P1 + BELT IS WORK-ONLY (Andrew's ruling 2026-07-05): only a real TASK directive drops an INTAKE ore box
     // on the belt / bumps the queue gauge (mirrors the Telegram admit shape — the sidecar gates on the SAME
     // classifier). Pure chat ("hello") gets its reply with NOTHING on the floor.
@@ -8775,8 +8786,8 @@ const Chat = (() => {
     // count — never the message text. Gated on the user's learning flag inside the store.
     // observe ONLY a genuine new directive — never on RETRY (re-running the same text must not double-count the
     // shape, which would inflate the recurrence signal and let a true one-off wrongly fire the memory beat).
-    if (!retry && isTask && !pending && typeof ProfileStore !== 'undefined') ProfileStore.observeMessage(text);
-    if (!retry && isTask && !pending && typeof MintStore !== 'undefined') MintStore.observe(text);   // notice recurring jobs → propose minting them as one-tap missions
+    if (!retry && isTask && !acceptedOffer && !pending && typeof ProfileStore !== 'undefined') ProfileStore.observeMessage(text);
+    if (!retry && isTask && !acceptedOffer && !pending && typeof MintStore !== 'undefined') MintStore.observe(text);   // notice recurring jobs → propose minting them as one-tap missions
     // CORRECTION CAPTURE (slice 2): the first message to this agent after a short-of-the-mark verdict IS the
     // correction of that run — hand it to the held skill review in the Commander's words (final: fires now) and
     // stamp the new run as correctionOf so the runs ledger can relate them. One message per verdict; a stale
@@ -8789,7 +8800,7 @@ const Chat = (() => {
     // SALIENCE (decision 3): has this task SHAPE recurred? Read AFTER observe so it counts this run (the read itself is
     // safe on retry — it doesn't mutate the count). Passed to the run so the server fires the memory turn-in on
     // recurring work even when a terse exchange otherwise wouldn't, while a basic one-off is left to reflect()'s floor.
-    const recurring = !!(isTask && typeof MintStore !== 'undefined' && MintStore.recurringNow && MintStore.recurringNow(text));
+    const recurring = !!(isTask && !acceptedOffer && typeof MintStore !== 'undefined' && MintStore.recurringNow && MintStore.recurringNow(text));
     // VOICE: the speaker toggle (🔊) controls whether the agent SPEAKS its reply (and in the short,
     // spoken style — voiceModeRules appended below). It does NOT control the desk trip: the walk is driven
     // by REAL tool use (walkToDesk, below), so the speaker setting can't suppress it. When voice is on, a
