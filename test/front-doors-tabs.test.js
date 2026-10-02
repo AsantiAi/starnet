@@ -25,4 +25,6 @@ A.ok(/if \(w\._closeArmed \|\| !windowDirty\(w\)\) \{ closeTerm\(key\); return; 
 A.ok(/\[data-access-full\]'\)\.onclick = \(\) => \{ cfOpen\.set\(a\.id \+ ':cf-grp-behaves', true\); consoleSection\['agents'\] = 'config';/.test(ui), 'SEE FULL ACCESS opens the ACCESS group');
 A.ok(/\{ id: 'cf-grp-behaves', label: 'ACCESS' \}/.test(ui) && /const key = a\.id \+ ':' \+ g\.id;[\s\S]{0,200}cfOpen\.get\(key\) \? ' open'/.test(ui), 'the ACCESS group reads its open state from cfOpen by agent + group id');
 
+// a remembered SETTINGS section that was renamed (LIVE VOICE -> LOOK & SOUND, models -> providers) reopens on its new page
+A.ok(/if \(key === 'settings' && \(activeId === 'models' \|\| activeId === 'livevoice'\)\) activeId = activeId === 'models' \? 'providers' : 'appearance';/.test(ui), 'mountConsole applies the same section aliases openTerm does');
 A.report('front-doors-tabs');
