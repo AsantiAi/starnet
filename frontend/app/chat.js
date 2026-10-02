@@ -599,6 +599,9 @@ const Chat = (() => {
       let url = m[0];
       const trail = /[.,;:!?'")\]}>*`]+$/.exec(url); // don't swallow sentence punctuation OR markdown markers (**url**, `url`) trailing the URL
       if (trail) url = url.slice(0, url.length - trail[0].length);
+      // a ')' that CLOSES a '(' inside the URL is part of it (https://en.wikipedia.org/wiki/Foo_(bar) linked to …Foo_(bar, a 404 —
+      // QA 2026-10-02); only an unbalanced ')' is sentence punctuation
+      while (m[0].charAt(url.length) === ')' && (url.split('(').length - 1) > (url.split(')').length - 1)) url += ')';
       if (!url) continue;                            // pathological match (scheme only) — let escape handle it
       out += escapeHtml(s.slice(last, m.index));     // escaped text before the URL
       const safe = escapeHtml(url);                  // escape the URL too (its href + visible text are both safe)
