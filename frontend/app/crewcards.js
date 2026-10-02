@@ -50,11 +50,6 @@
 
   function paint() {
     const now = Date.now();
-    // the COMMANDER XP fraction as a CSS var (topbar.js writes the real % into .tb-xp-fill's width) — the level ring reads it
-    const xpFill = document.querySelector('#tb-station .tb-xp-fill'), station = document.getElementById('tb-station');
-    if (xpFill && station) station.style.setProperty('--xp', String((parseFloat(xpFill.style.width) || 0) / 100));
-    const lv = document.getElementById('gt-station');   // the level ring shows the number topbar.js wrote ("Lv 3" → 3; '—' while unknown)
-    if (lv) { const n = (/\d+/.exec(lv.textContent || '') || ['—'])[0]; if (lv.dataset.lv !== n) lv.dataset.lv = n; }
     document.querySelectorAll('#crew .crew-row[data-agent-id]').forEach((row) => {
       dress(row);
       const live = row.classList.contains('working');
@@ -78,8 +73,6 @@
 
   function wire() {
     seatSummary();
-    // review switch for the top-right instrument candidates (pipglass.css): ?tb=a | b | c — the pick becomes the default
-    try { const t = new URLSearchParams(location.search).get('tb'); document.body.classList.add('tb-' + (/^[abc]$/.test(t || '') ? t : 'a')); } catch (_) { document.body.classList.add('tb-a'); }
     if (typeof U !== 'undefined' && U.bus) {
       U.bus.on('agent.run.start', (p) => { if (p && p.runId && p.agentId) runs.set(String(p.runId), { agentId: String(p.agentId), startedAt: Date.now(), tool: '' }); paint(); });
       U.bus.on('agent.tool_call', (p) => { const r = p && runs.get(String(p.runId)); if (r && p.name) { r.tool = String(p.name); paint(); } });
