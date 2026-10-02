@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "becb99ec4b036665baa1d707ee59f118aee03b4b",
+    "sourceCommit": "8dbe4cc6ae8aaf0232c9e2824679446c5527c3c4",
     "pathSetSha256": "390a2a551d88b2597ca4ab3f1acc7ca535b3b978e277a0ed8c0fb507e73e87c0",
     "files": [
       {
@@ -1008,8 +1008,8 @@
       },
       {
         "path": "frontend/app/remote-devices.js",
-        "bytes": 9352,
-        "sha256": "bbddee9720f4421eb396305442016272e69258e3bcfd393aa7f35399ed502d4d"
+        "bytes": 9440,
+        "sha256": "5b8f073bf3eda99feefd92d0637b47d08160dd8be29caa289665f026b5bf3101"
       },
       {
         "path": "frontend/app/remotesessions.js",
@@ -1038,8 +1038,8 @@
       },
       {
         "path": "frontend/app/roomstyles.js",
-        "bytes": 24981,
-        "sha256": "d066aa847f6c6992e91922be29f7f3250505f2b76f8b9a4b76592ad74c005302"
+        "bytes": 25402,
+        "sha256": "c3f978a8ae42562abbdff0678f6c9b77deaa7338c871190b106db966bee195fb"
       },
       {
         "path": "frontend/app/routinenudgestore.js",
@@ -1128,13 +1128,13 @@
       },
       {
         "path": "frontend/app/stationbuilder.js",
-        "bytes": 319020,
-        "sha256": "53567073ea0b4a14bb9768e07b10f3d92fe1786caf849ac0d5fff7b90dbc7eb8"
+        "bytes": 308494,
+        "sha256": "627814776e1937f45bb2e99d3cb10a7726124537fdf5652eb78bf4cecf3f2310"
       },
       {
         "path": "frontend/app/stationcommands.js",
-        "bytes": 67224,
-        "sha256": "721c260b5bcf915d2a5176d734ee45d0e80ec7ceb3e42d109ebf9bf2c2f6a118"
+        "bytes": 67099,
+        "sha256": "b62e04549a389f260169a4157d1bac7a3d3e285ac4c5b3327d846406bd9b18de"
       },
       {
         "path": "frontend/app/stationquests.js",
