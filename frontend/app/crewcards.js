@@ -72,8 +72,6 @@
   }
 
   function wire() {
-    // review switch for the panel grit candidates (css/grit.css): ?grit=a | b | c
-    try { const g = new URLSearchParams(location.search).get('grit'); if (/^[abc]$/.test(g || '')) document.body.classList.add('grit-' + g); } catch (_) {}
     seatSummary();
     if (typeof U !== 'undefined' && U.bus) {
       U.bus.on('agent.run.start', (p) => { if (p && p.runId && p.agentId) runs.set(String(p.runId), { agentId: String(p.agentId), startedAt: Date.now(), tool: '' }); paint(); });
