@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "960a667f9d5bd5296ba804a64af51ff59985289b",
+    "sourceCommit": "eaf41e43502834f5fa92a80f27ddebd69bf0f131",
     "pathSetSha256": "60c61c9c0cad8daa5c2d40f76a912ed04e52667a726032a7b3ab94cad57bfa1e",
     "files": [
       {
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 418434,
-        "sha256": "9a44f804a305d83f9b1d93b789fdc6577da045ce955e8686aa3f457d166eb46c"
+        "bytes": 418734,
+        "sha256": "43a3109c11370ca38c58215d644ee97740eda9bb3ddfc68ae5c1dfc675d15694"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 695755,
-        "sha256": "34a6ed8b44b134e72b96038772058341be302292c977966ddb2a394b0dc15f3f"
+        "bytes": 698703,
+        "sha256": "88107cff9b22399d895d3ce1d2520c61b7b2074f81ccf3551f1778a504c2f3f0"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -523,8 +523,8 @@
       },
       {
         "path": "frontend/app/glossary.js",
-        "bytes": 10475,
-        "sha256": "5fd50943cfb9172b1d6a9ba56fe5b8272071a9695d44721f88f060e8e647e53b"
+        "bytes": 10507,
+        "sha256": "d735ad1544b3291b3d9487090f6ab7c6709115c6d2108d3913d5e06472e0a1bf"
       },
       {
         "path": "frontend/app/goalloop.js",
@@ -538,8 +538,8 @@
       },
       {
         "path": "frontend/app/goalstore.js",
-        "bytes": 47247,
-        "sha256": "6839b920f6dcda94f82976f299c5f2faeb069262a1869822ab2032d821ac0a60"
+        "bytes": 47302,
+        "sha256": "91a988d1a7434f298719fced02142dc996707794422fd034d0d3887e30113e84"
       },
       {
         "path": "frontend/app/group-chat.js",
@@ -1153,13 +1153,13 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 809072,
-        "sha256": "68de89013e73d70df15b9b09e0fe7a6f681131d4e9ff4ae1d7097a3ba280527d"
+        "bytes": 813903,
+        "sha256": "e1e1e534f98e4d64c41a91bd0a7f875b0adf7642f48675552762ada0e6bf93bd"
       },
       {
         "path": "frontend/app/stepin.js",
-        "bytes": 24845,
-        "sha256": "4b7d4e616a24b320e512264c4cb7d1cbe6a4d4b0dd92c52b120e7ca7c9f24ba5"
+        "bytes": 24860,
+        "sha256": "171abee27b64ded57453e712c4d88827b23e244eb41bbff8ece115de48214a06"
       },
       {
         "path": "frontend/app/study.js",
@@ -1263,8 +1263,8 @@
       },
       {
         "path": "frontend/app/updates.js",
-        "bytes": 22214,
-        "sha256": "aefa28dd8139f1a269bbadac79354b46c55311a7845fa0cf5eaf5123e7e5f084"
+        "bytes": 22321,
+        "sha256": "e60f38dabd6a47f6ea8abbc1daa588dcdec8320a757942e977efe3f53f9025a6"
       },
       {
         "path": "frontend/app/userprops.js",
@@ -1328,8 +1328,8 @@
       },
       {
         "path": "frontend/app/windows/loops.js",
-        "bytes": 49778,
-        "sha256": "d067c1b8fdb712352ece67b61a63c80f58be59c5bc85bf0b858e44709ca6b116"
+        "bytes": 49852,
+        "sha256": "78740efeec91c6f0710461483b59dbd6acace105407e52ed74ea0bb7eb63ec7d"
       },
       {
         "path": "frontend/app/windows/messaging.js",
@@ -1393,8 +1393,8 @@
       },
       {
         "path": "frontend/app/workshopstore.js",
-        "bytes": 39234,
-        "sha256": "b4e657b77fa24eee3ce2dea68a91d1fced90e3eb53b370d4c5a8af76b616ace2"
+        "bytes": 39282,
+        "sha256": "602ed69c6f1349cebfa4af605699faca662aa71ad5c2a5d5d9fe75dd3471b6b2"
       },
       {
         "path": "frontend/app/worksignal.js",
@@ -1418,8 +1418,8 @@
       },
       {
         "path": "frontend/app/world.js",
-        "bytes": 822906,
-        "sha256": "dd0d1db6729aef3e577cb6c462b57d65b7eb799f3e83a2a88b59a01471102ebe"
+        "bytes": 823614,
+        "sha256": "4673f779311990da1d658fbe9809ffc0fe2bb4a3657ac5004bd504b7fb06a561"
       },
       {
         "path": "frontend/app/worldlab.js",
@@ -1688,8 +1688,8 @@
       },
       {
         "path": "frontend/css/utility-menus.css",
-        "bytes": 15104,
-        "sha256": "adc373fde8f13474ea988e19199ed6a6acdc13ea9608dd82dfde47c338fc918e"
+        "bytes": 15978,
+        "sha256": "8dc00c5e74c0dac61d2d8b6ff580fa714a00ec861e806206e607792389564e54"
       },
       {
         "path": "frontend/css/warroom.css",
