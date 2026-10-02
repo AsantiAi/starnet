@@ -188,6 +188,15 @@ const msg = (userId, text, chatType, chatId) => ({ channel: 'telegram', chatId: 
     A.ok(/withholdHostPower: hostPowerWithheld,/.test(idx), 'the verdict rides the host-context connectorAuthority into delegated workers');
     A.ok(!/fullAccess: FULL_ACCESS \|\| masterBypassOn\(\) \|\| agentFullAccessNow\(\)/.test(idx), 'no taint-boundary site reads the raw bypass anymore');
     A.ok(/masterBypass: stationBypassNow\(\), fullAccess: agentFullAccessNow,/.test(idx), 'the run authority gets the withheld-aware bypass');
+    // sweep 2026-10-02: a withheld run (phone, non-owner) can't launder Full Access through STANDING work that fires later
+    A.ok(/if \(hostPowerWithheld && standingWorkEscalates\(c\.name, c\.args\)\) \{\s*return \{ ok: false, isError: true, summary: 'withheld',/.test(idx), 'the dispatch guard refuses standing work from a withheld run');
+    const { standingWorkEscalates } = require('../sidecar/run-origin.js');
+    A.eq([['routine.create', {}], ['routine_create', {}], ['routine.manage', { action: 'run_now' }], ['routine.manage', { action: 'update' }], ['routine.manage', { action: 'resume' }],
+      ['loop.create', {}], ['loop.manage', { action: 'approve' }], ['station.start_line', { line: 'x', schedule: 'daily' }], ['station_start_line', {}], ['station.test_line', { line: 'x', job: 'y' }]]
+      .map(([n, a]) => standingWorkEscalates(n, a)), [true, true, true, true, true, true, true, true, true, true], 'creating, editing, resuming, running now, approving, starting or testing standing work escalates');
+    A.eq([['routine.manage', { action: 'pause' }], ['routine.manage', { action: 'remove' }], ['loop.manage', { action: 'stop' }], ['loop.manage', { action: 'reject' }],
+      ['station.start_line', { line: 'x', off: 'trg_1' }], ['routine.list', {}], ['team.dispatch', {}], ['fs.write', {}]]
+      .map(([n, a]) => standingWorkEscalates(n, a)), [false, false, false, false, false, false, false, false], 'pausing, stopping, removing and reading stay allowed (they only take power away)');
     const hub = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'channels', 'hub.js'), 'utf8');
     A.eq((hub.match(/channelSender: tagSenderRuns, channelSenderOwner: channelSenderOwner/g) || []).length, 2, 'both the entry run and every line hop carry the sender verdict');
     A.ok(/channel: 'dev', [^\n]*\n    ownerSurface: true,/.test(idx) && /channel: 'sample', [^\n]*\n    ownerSurface: true,/.test(idx), 'the local dev and sample hubs are owner surfaces');
