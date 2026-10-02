@@ -302,11 +302,13 @@ const WorkflowsWindow = (() => {
   function putStyleBack(job) {
     const st = stationOf(), d = lastDockOf(job), p = d && st ? st.propById(d) : null;
     const n = (job.notes || []).slice().reverse().find(x => x.kind === 'example' && x.dockId === d);
-    if (!p || !n) return;
-    const r = st.setPropBrief(d, n.was || '');
+    if (!p) { sfx('bad'); notify('the step that made this result is not on the floor any more', 'warn'); return; }
+    // kept in the Workflow panel (★ KEEP AS THE EXAMPLE notes no job): putting it back takes the example block out (the key did nothing)
+    const was = n ? (n.was || '') : String(p.brief || '').replace(/\n*MATCH THIS EXAMPLE of a good result[\s\S]*$/, '').trim();
+    const r = st.setPropBrief(d, was);
     if (!r || !r.ok) { sfx('bad'); return; }
     sfx('click');
-    noteJob(job, { kind: 'putback', dockId: d, role: p.role || '', field: 'does', text: n.was || '', was: p.brief || '' });
+    noteJob(job, { kind: 'putback', dockId: d, role: p.role || '', field: 'does', text: was, was: p.brief || '' });
     schedule();
   }
 
@@ -758,6 +760,6 @@ const WorkflowsWindow = (() => {
   }
   if (UI() && UI().registerWindow) UI().registerWindow('workflows', 'WORKFLOWS', build, { className: 'wfw-win' });
   return { open, openLine: key => open({ view: 'line', line: key, job: null }), openNew: () => open({ view: 'new' }), openByStream, showJob,
-    _state: S, _floor: floor, _pick: pickStarter, _create: create, _send: send, _useFix: useFix, EX_HEAD };   // (the _ seams are test/eval reads)
+    _state: S, _floor: floor, _pick: pickStarter, _create: create, _send: send, _useFix: useFix, _styleKept: styleKept, _putStyleBack: putStyleBack, _exampleBrief: exampleBrief, EX_HEAD };   // (the _ seams are test/eval reads)
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = WorkflowsWindow;

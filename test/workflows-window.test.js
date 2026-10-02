@@ -115,6 +115,14 @@ const tick = () => new Promise(r => setTimeout(r, 15));
     const both = noteBodies();
     A.ok(both.length === 2 && both.some(n => n.field === 'does' && n.text === 'Two facts, one line each.' && n.was === wasDoes) && both.some(n => n.field === 'hands' && n.text === 'Pass the facts only.' && n.was === wasHands), 'a fix that changes both is noted for both: ' + JSON.stringify(both.map(n => [n.field, n.text])));
     WW._useFix(job, 0, true); S.fix = null; S.job = null;
+    // a style kept in the Workflow panel (★ KEEP AS THE EXAMPLE notes no job): STYLE KEPT · PUT IT BACK takes the example out
+    const plain = st.propById(dockId).brief || '';
+    st.setPropBrief(dockId, WW._exampleBrief(plain, job.output));
+    const noNotes = Object.assign({}, job, { notes: [] });
+    A.ok(WW._styleKept(noNotes), 'fixture: the window reads the panel-kept example as STYLE KEPT');
+    WW._putStyleBack(noNotes);
+    A.ok((st.propById(dockId).brief || '') === plain && !WW._styleKept(noNotes), 'PUT IT BACK takes the panel-kept example out (it silently did nothing): ' + JSON.stringify((st.propById(dockId).brief || '').slice(-80)));
+    for (let i = 0; i < 4; i++) await tick();
   }
 
   /* ---------- source locks ---------- */
