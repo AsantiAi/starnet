@@ -268,5 +268,26 @@ function wsClose(url) {
     await relay.close().catch(() => {});
     try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
   }
+  // (sweep 2026-10-02) per-address limits count an IPv6 host by its /64; a data frame is checked WITH the held fragments
+  {
+    const { addrKey } = require('../relay/server.js');
+    A.eq([addrKey('2001:db8:85a3::8a2e:370:7334'), addrKey('2001:db8:85a3:0:ffff::1'), addrKey('::ffff:1.2.3.4'), addrKey('1.2.3.4')],
+      ['2001:db8:85a3:0::/64', '2001:db8:85a3:0::/64', '1.2.3.4', '1.2.3.4'], 'one IPv6 /64 is one address; IPv4-mapped is its IPv4');
+    const { makeWsServer } = require('../relay/ws-lite.js');
+    const EventEmitter = require('events');
+    const wss = makeWsServer({ maxPayload: 1000 });
+    const sock = new EventEmitter(); const wrote = [];
+    sock.write = (b) => { wrote.push(Buffer.from(b)); return true; }; sock.destroy = () => {}; sock.setNoDelay = () => {}; sock.end = () => {};
+    const req = { method: 'GET', headers: { upgrade: 'websocket', 'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==', 'sec-websocket-version': '13' } };
+    let ws = null; wss.handleUpgrade(req, sock, Buffer.alloc(0), (w) => { ws = w; });
+    const frameHdr = (fin, op, len) => { const mask = Buffer.from([1, 2, 3, 4]);
+      const h = len < 126 ? Buffer.from([(fin ? 0x80 : 0) | op, 0x80 | len]) : Buffer.concat([Buffer.from([(fin ? 0x80 : 0) | op, 0x80 | 126]), Buffer.from([len >> 8, len & 255])]);
+      return Buffer.concat([h, mask]); };
+    sock.emit('data', Buffer.concat([frameHdr(false, 0x1, 600), Buffer.alloc(600)]));   // first fragment: 600 of 1000
+    const before = wrote.length;
+    sock.emit('data', frameHdr(true, 0x0, 600));   // a continuation that would take the message to 1200: header only
+    A.ok(wrote.slice(before).some((b) => b[0] === 0x88), 'a fragment that would overflow the message is refused at its header, before its bytes are buffered');
+    A.ok(ws && ws.readyState !== 1, 'and the socket is closed');
+  }
   A.report('remote relay');
 })();
