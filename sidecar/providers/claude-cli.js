@@ -464,7 +464,29 @@
           const tail = stderr.trim().split(/\r?\n/).slice(-3).join(' ').slice(0, 400);
           throw new Error('Claude Code exited with code ' + exitCode + ' before answering' + (tail ? ': ' + tail : ''));
         }
+        const usageChunk = () => {
+          const u = result.usage || {};
+          const uncached = Number(u.input_tokens) || 0, cacheWrite = Number(u.cache_creation_input_tokens) || 0;
+          const cacheRead = Number(u.cache_read_input_tokens) || 0, out = Number(u.output_tokens) || 0;
+          const subscription = apiKeySource === 'none';
+          const reported = Number(result.total_cost_usd);
+          return {
+            type: 'usage',
+            usage: {
+              prompt_tokens: uncached + cacheWrite + cacheRead,
+              completion_tokens: out,
+              total_tokens: uncached + cacheWrite + cacheRead + out,
+              prompt_tokens_details: { cached_tokens: cacheRead, cache_creation_tokens: cacheWrite },
+              reasoning_tokens: 0,
+              // subscription login: nothing is billed per call. API key: the CLI's own billed figure.
+              cost: subscription ? 0 : (isFinite(reported) ? reported : undefined)
+            }
+          };
+        };
         if (result.is_error || (result.subtype && result.subtype !== 'success')) {
+          // a failed turn can still have been BILLED (an API-key sign-in pays for the tokens it used): report what the
+          // CLI's result line says it cost before failing, so the ledger and the caps see it (sweep 2026-10-02)
+          if (result.usage || isFinite(Number(result.total_cost_usd))) yield usageChunk();
           // The CLI tags a lost sign-in on its assistant line ("error":"authentication_failed"). Carry it as a 401 so
           // errorClass files it as `auth` (fail now, say why) instead of `unknown`, which the loop retries for ~105s.
           if (apiError === 'authentication_failed') {
@@ -483,23 +505,7 @@
         }
         if (!sawText && callIndex === 0 && typeof result.result === 'string') yield* emitSplit(splitter.push(result.result));
         yield* emitSplit(splitter.end());
-        const u = result.usage || {};
-        const uncached = Number(u.input_tokens) || 0, cacheWrite = Number(u.cache_creation_input_tokens) || 0;
-        const cacheRead = Number(u.cache_read_input_tokens) || 0, out = Number(u.output_tokens) || 0;
-        const subscription = apiKeySource === 'none';
-        const reported = Number(result.total_cost_usd);
-        yield {
-          type: 'usage',
-          usage: {
-            prompt_tokens: uncached + cacheWrite + cacheRead,
-            completion_tokens: out,
-            total_tokens: uncached + cacheWrite + cacheRead + out,
-            prompt_tokens_details: { cached_tokens: cacheRead, cache_creation_tokens: cacheWrite },
-            reasoning_tokens: 0,
-            // subscription login: nothing is billed per call. API key: the CLI's own billed figure.
-            cost: subscription ? 0 : (isFinite(reported) ? reported : undefined)
-          }
-        };
+        yield usageChunk();
         yield { type: 'done', finishReason: callIndex > 0 ? 'tool_calls' : provider.normalizeFinish(result.stop_reason), truncated: false };
       } finally {
         finished = true;
