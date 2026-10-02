@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "453757133ab818a36f49a79619ec33ab582a9917",
+    "sourceCommit": "92647f0585a178233c69996d894a078c1035c642",
     "pathSetSha256": "e3ac910c8785fe7d62a025dd0def01dc7c9c9a0a8b73348d6823ee33be259f99",
     "files": [
       {
@@ -1153,8 +1153,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 807359,
-        "sha256": "a7fafb386b75d211e73ad4d813384e2f529be022514b921d967a5d4fb67268b0"
+        "bytes": 806695,
+        "sha256": "4e65ee82d91fd7e169b9e77662fb4b26c5ebdcdcd172eb8574e6a63b69988666"
       },
       {
         "path": "frontend/app/stepin.js",
@@ -1178,8 +1178,8 @@
       },
       {
         "path": "frontend/app/systems.js",
-        "bytes": 16225,
-        "sha256": "2b0b79b5126020462cfd79e445df2cb1f3f198e3053338f71836133ce397f5c2"
+        "bytes": 16227,
+        "sha256": "04eba6526d91b7cc07463da0fd735768a05401c61527989781427b0eab14011c"
       },
       {
         "path": "frontend/app/taskconversation.js",
@@ -1318,8 +1318,8 @@
       },
       {
         "path": "frontend/app/windows/connectors.js",
-        "bytes": 144726,
-        "sha256": "61c4b1ba7c3d69eaa8d69aeff1e28976b76a6ea52404d4c30e91c89d94205aa1"
+        "bytes": 144728,
+        "sha256": "0a20abcb7e51b3495dd2d257b02d4d35b72d2477adb4a944262e3dd27daf31a6"
       },
       {
         "path": "frontend/app/windows/logbook.js",
