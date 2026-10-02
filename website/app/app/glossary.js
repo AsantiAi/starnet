@@ -4,7 +4,7 @@
    lowercase station voice, eerie-not-cute, one plain sentence a beginner can act on. Every entry
    is grounded in how the term is ACTUALLY used in the code (marketplace.js / autonomy.js / stationui.js
    / returnstore.js) — not an aspirational definition. Keys are lowercased on lookup, so
-   data-hint="BUILD MODE" and data-hint="refit" resolve the same entry.
+   data-hint="REFIT" and data-hint="refit" resolve the same entry.
 
    UMD: a `Glossary` global in the browser; module.exports under node/tests. No DOM, no deps. */
 'use strict';
@@ -39,8 +39,8 @@
     notification: 'a station alert about work, failure, delivery, or another event that needs your attention.',
     manual:       'the reopenable guide to first steps, the real work loop, gear, wiring, and growth.',
     commander:    'you — the person who directs the station, grants authority, and judges its work.',
-    work:         'MY WORK, AUTOMATE and QUESTS — your jobs, the work that runs on its own, and your progress.',
-    build:        'the dock for shaping the station (BUILD MODE), connecting tools and messaging apps (CONNECT), and new apps.',
+    work:         'MY WORK, AUTOMATE, CONNECT and QUESTS — your jobs, the work that runs on its own, what your agents can reach, and your progress.',
+    build:        'the dock for shaping the station (BUILD MODE) and new apps.',
     system:       'the dock for the manual, settings, updates, and notifications. Agent history and restore points live in each agent’s Record tab.',
     workstream:   'the saved conversation behind a COMMS session; planned task conversations also appear as cards on the TASK BOARD.',
     orchestrator: 'the lead agent you talk to first — new agents inherit its model unless you pick another.',
