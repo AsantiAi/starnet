@@ -18016,6 +18016,9 @@ async function runOnceCore(o) {
      Every other origin (the app, routines/loops/cron, triggers, dev/sample hubs) is unchanged: DECISIONS.md
      "FULL POWER MEANS THE WHOLE LOCAL COMPUTER" and the tested "Full Access follows the agent to its routine". */
   const hostPowerWithheld = hostPowerWithheldFor(o);
+  // the Commander's taste (their past verdicts, "(on: <their past request>)") is theirs: a run a non-owner channel sender
+  // or a group chat started never carries it (sweep 2026-10-02) — host-minted flags only, like hostPowerWithheldFor
+  const tasteWithheld = o.channelSender === true && o.channelSenderOwner !== true;
   // a run STARTED by third-party content (trigger payload / forwarded / attachment entry, and its hops + workers):
   // Full Access no longer lifts its taint lock (run-origin.js entryUntrusted, taint.js postTaintBoundary)
   // A recovery continuation replays its SOURCE run's context, so it inherits the source's untrusted entry from the
@@ -18518,7 +18521,7 @@ async function runOnceCore(o) {
       const settled = taskBriefState ? commanderEvidenceContext(system || '', Object.assign({},taskContextInputs,{brief:taskBriefState.brief})) : taskContextBlock;
       const notes = notebookStore.get('notebook:' + agentId);
       // the Commander's taste rides into delegated work too: a worker writes the deliverable the Commander rates
-      const tasteRecs = personalizationStore.read().enabled ? FeedbackMemory.stationTaste(notes, otherAgentNotebooks(agentId)) : [];
+      const tasteRecs = (personalizationStore.read().enabled && !tasteWithheld) ? FeedbackMemory.stationTaste(notes, otherAgentNotebooks(agentId)) : [];
       const tasteIds = new Set(tasteRecs.map(r => r.id).filter(Boolean));
       const pinned = Array.isArray(notes) ? notes.filter(r => r && r.pinned && !tasteIds.has(r.id)) : [];
       const recalled = renderRecall(rank(pinned, recentUserText(messages), { now: Date.now(), streamId, projectRoot: o.projectRoot || null }), { limit: 1500 });
@@ -20355,7 +20358,7 @@ async function runOnceCore(o) {
     // decide whether it surfaces. Those records leave the ranked pool so they never take a recall slot twice.
     // station-wide: a correction given to ANY agent is about the Commander, so it shapes this agent's work too
     // (recovery runs inject nothing at all — see the note above msgs).
-    const tasteRecs = (o.recovery || !personalizationStore.read().enabled) ? [] : FeedbackMemory.stationTaste(all, otherAgentNotebooks(agentId));
+    const tasteRecs = (o.recovery || tasteWithheld || !personalizationStore.read().enabled) ? [] : FeedbackMemory.stationTaste(all, otherAgentNotebooks(agentId));
     const tasteIds = new Set(tasteRecs.map(r => r.id).filter(Boolean));
     const recs = all.filter(r => !(r && tasteIds.has(r.id)));
     const q = recentUserText(convo);   // include restored conversation context on terse post-restart follow-ups
