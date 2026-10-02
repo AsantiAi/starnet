@@ -4960,6 +4960,8 @@ const Build = (() => {
      the whole edit back: nothing is ever left half-moved. */
   function moveGroupBy(ids, dx, dy) {
     if (!dx && !dy) return { ok: true };
+    // the model moves the group at once (a table under its own lamp, links re-laid after every member has moved)
+    if (typeof station.moveProps === 'function') return station.moveProps(ids, dx, dy);
     const order = ids.map(id => station.propById(id)).filter(Boolean).sort((a, b) => (b.x * dx + b.y * dy) - (a.x * dx + a.y * dy)).map(p => p.id);
     return station.transact(() => {
       let pending = order, last = null;
