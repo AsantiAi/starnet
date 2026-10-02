@@ -12233,11 +12233,20 @@ async function handleRoutingFixSuggest(req, res) {
   catch (_) { return json(400, { ok: false, error: 'bad json' }); }
   const input = LineFix.normalizeInput(body);
   if (!input.ok) return json(400, { ok: false, error: input.error });
+  // NEEDS CHANGES on a WORKFLOWS job is the Commander's dislike of its result: it persists as taste on the agent whose reply came
+  // out, whatever the suggestion call does next (the complaint lived only in the window's memory and reached no later prompt)
+  let feedbackMemory = null;
+  const jobId = String(body.jobId || '');
+  if (LineJobs.isId(jobId)) {
+    const job = LineJobs.get(lineJobs, jobId), last = job && (job.runs || [])[0];
+    if (last && last.runId) feedbackMemory = await recordFeedbackMemory({ agentId: last.agentId || 'agent', runId: last.runId, verdict: 'miss', words: String(body.complaint || ''), directive: job.text || '' });
+  }
+  const fm = feedbackMemory ? { feedbackMemory } : null;
   const call = await stationOneShot(LineFix.buildPrompt(input), 'linefix', 'the suggestion call failed');
-  if (!call.ok) return json(call.status, { ok: false, error: call.error });
+  if (!call.ok) return json(call.status, Object.assign({ ok: false, error: call.error }, fm));
   const parsed = LineFix.parseFixes(call.out, input);
-  if (!parsed.ok) return json(502, { ok: false, error: parsed.error, usd: call.usd, model: call.model });
-  return json(200, { ok: true, diagnosis: parsed.diagnosis, fixes: parsed.fixes, usd: call.usd, model: call.model });
+  if (!parsed.ok) return json(502, Object.assign({ ok: false, error: parsed.error, usd: call.usd, model: call.model }, fm));
+  return json(200, Object.assign({ ok: true, diagnosis: parsed.diagnosis, fixes: parsed.fixes, usd: call.usd, model: call.model }, fm));
 }
 /* POST /api/routing/line-draft {want, starters:[{id, name, purpose, roles:[ROLE…]}]} → { ok, starter, name, briefs:{ROLE: instructions},
    job, usd, model } — WORKFLOWS › SET IT UP FOR ME (2026-09-30): "what should it make?" becomes a line to place, drafted by ONE billed

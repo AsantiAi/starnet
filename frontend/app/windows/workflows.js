@@ -239,7 +239,7 @@ const WorkflowsWindow = (() => {
     if (!steps.length) { sfx('bad'); notify('this job’s steps are not on the floor any more', 'warn'); return; }
     S.fix = { jobId: job.id, open: true, state: 'asking', complaint, fixes: [] };
     blurIn('#wfw-fix-in'); schedule();
-    postJSON('/api/routing/fix-suggest', { complaint, job: job.text || '', result: job.output || '', steps }).then(({ status, j }) => {
+    postJSON('/api/routing/fix-suggest', { complaint, job: job.text || '', result: job.output || '', steps, jobId: job.id || '' }).then(({ status, j }) => {
       if (!S.fix || S.fix.jobId !== job.id) return;
       if (status === 200 && j && j.ok) {
         Object.assign(S.fix, { state: 'done', diagnosis: j.diagnosis || '', usd: j.usd || 0, model: j.model || '',
