@@ -83,7 +83,7 @@ function makeRelay(opts) {
   const pairTries = new Map();  // ip -> { start, n }
 
   function send(ws, obj) { try { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); } catch (_) {} }
-  function ipOf(req) { return String((req.headers['fly-client-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '')).split(',')[0].trim(); }
+  function ipOf(req) { return addrKey(String((req.headers['fly-client-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '')).split(',')[0].trim()); }
 
   // ONE bad request must never take the relay down: every station and phone rides this single process
   function serveStatic(req, res) {
@@ -299,7 +299,22 @@ function makeRelay(opts) {
   return { listen, close, server, _stations: stations };
 }
 
-module.exports = { makeRelay, ridOf, tokenHash, LABEL, MAX_MSG, MAX_PREAUTH_MSG, MAX_PER_IP };
+/* addrKey(ip) — the key every per-address limit counts under. An IPv6 host usually holds a whole /64, so keyed on the
+   full address one machine had effectively unlimited "addresses" (the per-address socket cap and pairing tries meant
+   nothing over IPv6, and the relay has AAAA records). IPv6 counts by its /64; an IPv4-mapped IPv6 address by its IPv4. */
+function addrKey(ip) {
+  let s = String(ip || '').trim().replace(/^\[|\]$/g, '').replace(/%.*$/, '');
+  const v4 = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(s);
+  if (v4) return v4[1];
+  if (s.indexOf(':') < 0) return s;
+  const parts = s.split('::');
+  if (parts.length > 2) return s.toLowerCase();
+  const head = parts[0] ? parts[0].split(':') : [], tail = parts.length === 2 && parts[1] ? parts[1].split(':') : [];
+  const full = parts.length === 2 ? head.concat(new Array(Math.max(0, 8 - head.length - tail.length)).fill('0'), tail) : head;
+  return full.slice(0, 4).map((h) => (h || '0').toLowerCase().replace(/^0+(?=.)/, '')).join(':') + '::/64';
+}
+
+module.exports = { makeRelay, ridOf, tokenHash, addrKey, LABEL, MAX_MSG, MAX_PREAUTH_MSG, MAX_PER_IP };
 
 if (require.main === module) {
   const port = Number(process.env.PORT) || 8799;

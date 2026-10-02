@@ -13,6 +13,7 @@
 
 const GUIDE = [
   'HOW A STARNET APP WORKS (keep to this):',
+  '- A StarNet app lives INSIDE StarNet. If the Commander asked for something to host, ship or run elsewhere (a website for Netlify, a React project, a script, an extension), this was the wrong tool: build real files instead, and tell the Commander this empty app can be removed from APPS.',
   '- The app is ONE page: index.html (put CSS/JS inline or in style.css / app.js beside it). It opens in a StarNet window.',
   '- IT IS THE COMMANDER\'S APP — it can be ANYTHING: a dashboard, a tracker, a calculator, a timer, a game, a canvas toy. If they describe a look, layout, colours, fonts, animation or behaviour, build EXACTLY that with your own CSS/JS/canvas/SVG — their wish beats the station style. Only when they did not say how it should look, make it native:',
   '- DEFAULT LOOK (no look asked for): the station kit is injected automatically — build with its classes so the app looks native: sn-stack · sn-row-flex · sn-grid · sn-panel · sn-card · sn-sect (▮ header strip) + sn-list/sn-item rows · sn-stats/sn-stat (<b>value</b><span>LABEL</span>) · sn-table · sn-badge · dot ok|warn|bad · sn-title · sn-label · sn-hint · sn-muted · sn-btn (.primary .xs) · sn-input · sn-select · sn-tabs/sn-tab.on · sn-empty · sn-loading · sn-error. Colours via var(--ph), rgba(var(--ph-rgb),.2), var(--ok) --bad --warn; the page background stays transparent (the window glass shows through).',
@@ -40,7 +41,11 @@ function makeAppTools(deps) {
   const defs = [
     {
       name: 'app.create',
-      description: 'Create a new StarNet app (a dashboard or tool that lives in its own StarNet window) from a name and a one-line description. Returns its id and how to build it.',
+      description: 'Create a new StarNet app: a dashboard or tool that lives INSIDE StarNet, in its own StarNet window, from a name and a one-line description. Returns its id and how to build it. '
+        // the exclusions name no search words (tool_search matches description substrings, and the hit line shows only the
+        // first sentence): listed as "a website, a React project, a browser extension…", they made tool_search REVEAL
+        // app.create as the top hit for exactly those asks (sweep 2026-10-02). Same meaning, no trigger words.
+        + 'NOT for anything meant to run, be published or be shipped outside StarNet (something to put online, a framework codebase, a standalone program, an add-on for the Commander\'s own web browser, a phone or computer program): build those as real files with the file tools.',
       schema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, description: { type: 'string', description: 'what it should do, in the Commander\'s words' } } },
       scope: 'write',
       run: async (a) => {

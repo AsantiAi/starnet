@@ -118,15 +118,16 @@ async function startSseCollector(url) {
 }
 
 // the two-stage floor from routing.sample.e2e.test.js: INTAKE -> research-agent -> writer-agent -> OUTBOX
+const belt = (x, y, dir) => ({ x, y, dir });
+const GEO = {
+  props: [{ id: 'i', t: 'intake', x: 0, y: 0, w: 1, h: 1 },
+          { id: 'b1', t: 'bay', x: 4, y: 0, w: 1, h: 1, agentId: 'research-agent' },
+          { id: 'b2', t: 'bay', x: 7, y: 0, w: 1, h: 1, agentId: 'writer-agent' },
+          { id: 'o', t: 'outbox', x: 10, y: 0, w: 1, h: 1 }],
+  belts: [belt(1, 0, 'E'), belt(2, 0, 'E'), belt(3, 0, 'E'), belt(5, 0, 'E'), belt(6, 0, 'E'), belt(8, 0, 'E'), belt(9, 0, 'E')]
+};
 function twoStagePlan() {
-  const belt = (x, y, dir) => ({ x, y, dir });
-  const plan = Pipeline.compileRoutingPlan({
-    props: [{ id: 'i', t: 'intake', x: 0, y: 0, w: 1, h: 1 },
-            { id: 'b1', t: 'bay', x: 4, y: 0, w: 1, h: 1, agentId: 'research-agent' },
-            { id: 'b2', t: 'bay', x: 7, y: 0, w: 1, h: 1, agentId: 'writer-agent' },
-            { id: 'o', t: 'outbox', x: 10, y: 0, w: 1, h: 1 }],
-    belts: [belt(1, 0, 'E'), belt(2, 0, 'E'), belt(3, 0, 'E'), belt(5, 0, 'E'), belt(6, 0, 'E'), belt(8, 0, 'E'), belt(9, 0, 'E')]
-  });
+  const plan = Pipeline.compileRoutingPlan(GEO);
   A.ok(Pipeline.ok(plan), 'fixture: the two-stage floor is deployable');
   for (const b of plan.bays.concat(plan.dockBays)) b.objects = ['computer', 'workbench'];
   return plan;
@@ -166,7 +167,8 @@ function twoStagePlan() {
     A.eq(posted.status, 200, 'the two-stage floor deploys');
     sse = await startSseCollector(B + '/api/channels/events?' + sseQuery(token));
     const t0 = Date.now();
-    const riding = call('/api/routing/sample', { text: 'SAMPLE JOB: hang here until someone stops you.' });
+    const line = (Pipeline.lineComponents(GEO) || [])[0].key;   // sent with its line, as the WORKFLOWS window does: the job keeps a record
+    const riding = call('/api/routing/sample', { line, text: 'SAMPLE JOB: hang here until someone stops you.' });
     // wait (bounded) until the entry dock's model call is really hanging at the provider
     for (let i = 0; i < 200 && !mock.hung.size; i++) await sleep(50);
     A.ok(mock.hung.size >= 1, 'fixture: the entry dock\'s model call is in flight and hanging');
@@ -183,6 +185,11 @@ function twoStagePlan() {
       A.ok(settled.j.stopped === true && settled.j.ok === false && settled.j.delivered === null, 'it answers stopped:true, nothing delivered');
       A.ok(/stopped/.test(String(settled.j.error || '')), 'the error names the stop, not a failure of the line: ' + settled.j.error);
       A.ok(Date.now() - t0 < 20000, 'the whole stop took seconds, not a provider timeout');
+      // the job's record says STOPPED, and keeps nothing as its output: the hub's E-STOP courtesy notice was saved as what
+      // the job made (and offered NEEDS CHANGES against)
+      const rec = await fetch(B + '/api/line-jobs/' + settled.j.jobId, { headers }).then(r => r.json());
+      A.ok(rec && rec.job && rec.job.status === 'stopped', 'the job record says stopped: ' + JSON.stringify(rec && rec.job && [rec.job.status, rec.job.error]));
+      A.eq(String((rec && rec.job && rec.job.output) || ''), '', 'nothing is kept as what a stopped job made');
     }
     await sleep(400);
     A.eq(mock.hung.size, 0, 'the hanging provider connection was closed by the stop');
@@ -199,6 +206,21 @@ function twoStagePlan() {
     const starts = sse.events.filter(e => e && e.name === 'agent.run.start').map(e => e.payload || {});
     A.ok(starts.some(p => p.agentId === 'research-agent' && /^sample-/.test(String(p.streamId || ''))),
       'a sample run\'s agent.run.start carries its sample-… streamId: ' + JSON.stringify(starts.map(p => [p.agentId, p.streamId])).slice(0, 300));
+
+    /* ---- 6. an E-STOP mid-job: the record says stopped (not "did not finish cleanly — send it again"), no notice as output ---- */
+    const riding2 = call('/api/routing/sample', { line, text: 'SAMPLE JOB: hang here until someone stops you.' });
+    for (let i = 0; i < 200 && !mock.hung.size; i++) await sleep(50);
+    A.ok(mock.hung.size >= 1, 'fixture: the second job is hanging at the provider');
+    const halt = await call('/api/halt');
+    A.eq(halt.status, 200, 'E-STOP is accepted');
+    const settled2 = await Promise.race([riding2, sleep(15000).then(() => null)]);
+    A.ok(!!settled2 && settled2.j.stopped === true, 'the job answers stopped after an E-STOP: ' + JSON.stringify(settled2 && settled2.j && [settled2.status, settled2.j.error]));
+    if (settled2 && settled2.j.jobId) {
+      const rec2 = await fetch(B + '/api/line-jobs/' + settled2.j.jobId, { headers }).then(r => r.json());
+      A.ok(rec2 && rec2.job && rec2.job.status === 'stopped', 'its record says stopped: ' + JSON.stringify(rec2 && rec2.job && [rec2.job.status, rec2.job.error]));
+      A.ok(!/E-STOP/.test(String((rec2 && rec2.job && rec2.job.output) || '')), 'the E-STOP notice is not kept as its output: ' + JSON.stringify(rec2 && rec2.job && rec2.job.output));
+    } else A.ok(false, 'the E-STOPped job names its record');
+    await call('/api/halt/resume');
   } finally {
     if (sse) sse.close();
     for (const r of mock.hung) { try { r.end(); } catch (_) {} }

@@ -109,6 +109,10 @@ test('player props: generate on credits, land locally, list + serve, survive res
     assert.equal(job && job.status, 'done', JSON.stringify(job));
     assert.match(job.propId, /^user_gumball_machine_[a-z0-9]{6}$/);
     assert.ok(job.costUsd > 0, 'the job reports what the cloud billed');
+    // (sweep 2026-10-02) the charge is booked in the LOCAL ledger too: SPENT TODAY and the $/day limit see it
+    const budget = (await fixture.json('GET', '/api/budget/status')).body;
+    const spent = budget && budget.day && budget.day.usd;
+    assert.ok(Number(spent) >= job.costUsd - 1e-9, 'the Budget panel counts the prop\'s charge in SPENT TODAY: ' + JSON.stringify(budget).slice(0, 300));
 
     const listed = (await fixture.json('GET', '/api/userprops')).body;
     assert.equal(listed.props.length, 1);

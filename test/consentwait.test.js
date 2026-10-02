@@ -144,5 +144,19 @@ async function settled(p) { let v, done = false; p.then(x => { v = x; done = tru
     A.eq(r.v, 'once', 'first settle wins');
   }
 
+  // 7) a prompt nobody answered (timeout) or whose run dropped (abort) tells its surfaces — onAutoDeny — so the desk card
+  //    and the CREW "needs your OK" frame stop asking; an ANSWER never fires it (sweep 2026-10-02)
+  {
+    const clock = makeClock(), pending = new Map(), denied = [];
+    const mk = (id, sig) => makeConsentWait({ pending, signal: sig || makeSignal(), timeoutMs: 1000, extendMs: 5000, uuid: () => id,
+      setTimeoutFn: clock.setTimeout.bind(clock), clearTimeoutFn: clock.clearTimeout.bind(clock), emitPrompt: () => {}, onAutoDeny: (pid) => denied.push(pid) });
+    const pt = mk('t1').ask(); clock.advance(1000);
+    A.eq([(await settled(pt)).v, denied], ['deny', ['t1']], 'a timed-out prompt denies AND announces it');
+    const sig = makeSignal(); const pa = mk('a1', sig).ask(); sig.abort();
+    A.eq([(await settled(pa)).v, denied], ['deny', ['t1', 'a1']], 'a dropped run denies AND announces it');
+    const po = mk('o1').ask(); pending.get('o1')('once'); clock.advance(5000);
+    A.eq([(await settled(po)).v, denied], ['once', ['t1', 'a1']], 'an answered prompt never announces an auto-deny');
+  }
+
   A.report('consentwait');
 })();

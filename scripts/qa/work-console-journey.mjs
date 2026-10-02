@@ -37,6 +37,7 @@ import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { sleep, launchChrome, connectCDP, evalJS, capture, collectDiagnostics } from '../lib/cdp.mjs';
 import { materializeSeedWorkspace, bootSeededSidecar, isUp, waitUp, waitDevReady, DEFAULT_MODEL } from '../lib/seed.mjs';
+import { openTermFallback } from '../lib/states.mjs';
 
 const PORT = process.env.SKYNET_WORK_PORT || '8968';
 const CDP_PORT = Number(process.env.SKYNET_WORK_CDP || 9368);
@@ -92,7 +93,8 @@ function makeAsserter() {
 }
 
 /* ── CDP driving helpers ── */
-const clickSel = (cdp, sel) => evalJS(cdp, `(() => { const el = document.querySelector(${J(sel)}); if (!el) return 'NOTFOUND'; el.click(); return 'clicked'; })()`).catch((e) => 'ERR:' + e.message);
+// a [data-term] key front doors folded into a menu tab opens its window the way the tab does (openTermFallback)
+const clickSel = (cdp, sel) => evalJS(cdp, `(() => { const el = document.querySelector(${J(sel)}); if (!el) return ${openTermFallback(sel)} ? 'opened-via-menu' : 'NOTFOUND'; el.click(); return 'clicked'; })()`).catch((e) => 'ERR:' + e.message);
 async function waitSel(cdp, sel, tries = 40) {
   for (let i = 0; i < tries; i++) { if (await evalJS(cdp, `!!document.querySelector(${J(sel)})`).catch(() => false)) return true; await sleep(150); }
   return false;
@@ -213,9 +215,10 @@ async function journeyRoutines(cdp, A) {
   A.ok('JW-routines/add-posts-cron', filled === 'added' && grew && !!job, 'jobs now ' + ((afterAdd.json && afterAdd.json.jobs || []).length) + ', created id = ' + (job && job.id));
   A.ok('JW-routines/name+prompt-stored', !!job && job.name === NAME && job.prompt === PROMPT, 'stored name=' + J(job && job.name) + ' prompt=' + J(job && job.prompt));
   A.ok('JW-routines/schedule-server-parsed', !!job && job.schedule && job.schedule.kind === 'interval' && Number(job.schedule.minutes) === 30, 'parsed schedule = ' + J(job && job.schedule));
-  // honest "saved but won't fire yet": the SCHEDULER (top-level GET /api/cron `.enabled`, the live cronArmed) is
-  // still disarmed right after creation — the create-confirm tells that truth until ENABLE SCHEDULING is clicked.
-  A.ok('JW-routines/scheduler-off-until-armed', afterAdd.json && afterAdd.json.enabled === false, 'scheduler enabled (cronArmed) = ' + (afterAdd.json && afterAdd.json.enabled) + ' at create time');
+  // "a routine you create fires" (28f91cd4b): the CREATE form arms the scheduler (GET /api/cron `.enabled`, the live
+  // cronArmed) instead of saving a routine that silently never runs. (This journey asserted the old disarmed-at-create
+  // contract until the 0.13 sweep, 2026-10-02.)
+  A.ok('JW-routines/scheduler-armed-on-create', afterAdd.json && afterAdd.json.enabled === true, 'scheduler enabled (cronArmed) = ' + (afterAdd.json && afterAdd.json.enabled) + ' at create time');
   const jobId = job && job.id;
 
   // ACTIVE tab: the row must render from GET /api/cron with the name + cadence + RUN/DISABLE/DELETE actions.
@@ -227,11 +230,16 @@ async function journeyRoutines(cdp, A) {
   })()`).catch(() => ({ present: false }));
   A.ok('JW-routines/active-list-row', rowShown && rowInfo.present && rowInfo.run && rowInfo.toggle && rowInfo.remove, 'row = ' + J(rowInfo));
 
-  // ARM: click ENABLE SCHEDULING → POST /api/cron/arm → GET /api/cron enabled false→true.
+  // ARM TOGGLE, from the armed state create left: DISABLE → POST /api/cron/arm → enabled true→false (label reads
+  // ENABLE), then ENABLE → enabled false→true (label reads DISABLE) — each label from the authoritative read.
+  const pollEnabled = (want) => waitFor(cdp, `(async () => { try { const r = await fetch('/api/cron', { cache: 'no-store' }); const j = await r.json(); return j.enabled === ${want ? 'true' : 'false'}; } catch (_) { return false; } })()`, 40);
+  const offClicked = await clickSel(cdp, '#rt-arm');
+  const disarmed = await pollEnabled(false);
+  const offLabel = await waitFor(cdp, `(() => { const b = document.querySelector('#rt-arm'); return !!b && b.dataset.arm !== '0' && /ENABLE/i.test(b.textContent); })()`, 40);
   const armClicked = await clickSel(cdp, '#rt-arm');
-  const armed = await waitFor(cdp, `(async () => { try { const r = await fetch('/api/cron', { cache: 'no-store' }); const j = await r.json(); return j.enabled === true; } catch (_) { return false; } })()`, 40);
+  const armed = await pollEnabled(true);
   const armState = await cron('/api/cron', 'GET');
-  A.ok('JW-routines/arm-flips-enabled', armClicked === 'clicked' && armed && armState.json && armState.json.enabled === true, 'GET /api/cron enabled = ' + (armState.json && armState.json.enabled));
+  A.ok('JW-routines/arm-flips-enabled', offClicked === 'clicked' && disarmed && offLabel && armClicked === 'clicked' && armed && armState.json && armState.json.enabled === true, 'disable then enable → GET /api/cron enabled = ' + (armState.json && armState.json.enabled));
   const armLabelFlips = await waitFor(cdp, `(() => { const b = document.querySelector('#rt-arm'); return !!b && b.dataset.arm === '0' && /DISABLE/i.test(b.textContent); })()`, 40);
   A.ok('JW-routines/arm-label-authoritative', armLabelFlips, 'rt-arm now reads DISABLE (data-arm=0) from the authoritative read');
 
@@ -258,7 +266,8 @@ async function journeyRecipes(cdp, A) {
   // ensure the agent is idle (launchRecipe no-ops while a run is in flight); the mock completes fast.
   await waitFor(cdp, `!(typeof Chat !== 'undefined' && Chat.isBusy && Chat.isBusy())`, 40);
 
-  const open = await clickSel(cdp, '#bb-missions');
+  // 0.13 front doors: RECIPES is MY WORK's tab (App.openRecipes), not the old #bb-missions dock key
+  const open = await evalJS(cdp, `(() => { const b = document.querySelector('#bb-missions'); if (b) { b.click(); return 'clicked'; } if (typeof App !== 'undefined' && App.openRecipes) { App.openRecipes(); return 'clicked'; } return 'NOTFOUND'; })()`).catch((e) => 'ERR:' + e.message);
   const gridOpen = await waitSel(cdp, '.mkt-card', 40);
   A.ok('JW-recipes/overlay-open', open === 'clicked' && gridOpen, gridOpen ? '.mkt overlay open (.mkt-card present)' : 'marketplace overlay never opened');
 

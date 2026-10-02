@@ -249,6 +249,20 @@ function rig(extra) {
     A.eq((await views.frame('station', 0, 0)).code, 'closed', 'no picture after it closed');
   }
 
+  // ---- the idle clock reads who drives when it runs out: a run that takes the wheel (and a sign-in) inside the idle window keeps
+  //      its STEP-IN picture (the clock remembered the empty seat from the last poll, and stopped the browser's one stream) ----
+  {
+    const { clk, made, ho, views } = rig();
+    await views.open('example.com');
+    A.ok((await views.frame('station', 0, 0)).ok, 'the Commander watches with nobody driving, then closes the window');
+    await views.sessionForRun({ agentId: 'nova', runId: 'r7', interactive: true }).forward();
+    ho.live = true;   // the run hits a sign-in: STEP-IN streams this same browser
+    const stops = made[0].stops;
+    clk.advance(7000); await tick();
+    A.eq(made[0].stops, stops, 'the idle clock leaves the STEP-IN picture running');
+    ho.live = false; views.releaseRun('r7');
+  }
+
   // ---- it NEVER closes under the Commander: only after half an hour with nobody driving or watching ----
   {
     const { clk, made, views } = rig();

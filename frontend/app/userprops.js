@@ -82,8 +82,10 @@ const UserProps = (() => {
     } catch (_) { return false; }
     finally { if (d) URL.revokeObjectURL(d.url); }
   }
-  function load() {
-    if (loading) return loading;
+  // load({ fresh: true }) never reuses a load already in flight: one that started before a prop finished would hand back the
+  // old list, so station.make_prop's reload said the new prop was not on the page (sweep 2026-10-02)
+  function load(opts) {
+    if (loading) return (opts && opts.fresh) ? loading.then(() => load(), () => load()) : loading;
     loading = (async () => {
       const startedAt = seq;
       let j = null;

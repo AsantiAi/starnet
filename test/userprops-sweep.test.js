@@ -94,6 +94,26 @@ const make = (dir, cloud, extra = {}) => makeUserProps({ fs, path, dir, cloud: (
       await up.pollOnce();
       A.eq(up.list().length, 1, 'and it lands');
     }
+    // ---- 3b. (sweep 2026-10-02) an UNANSWERED paid start is polled right away, a second click can't buy a second
+    //      prop, and an expired claim never claims "Nothing was charged" (the cloud may have charged it)
+    {
+      const dir = path.join(root, 'c2', '.userprops');
+      const cloud = fakeCloud();
+      cloud.state.swallow = 1;
+      const timers = [];
+      let t = 1000;
+      const up = make(dir, cloud, { setTimer: (fn, ms) => { timers.push(ms); return 0; }, now: () => t });
+      const r = await up.start('a kettle');
+      A.eq(r.code, 'unreachable', 'fixture: StarNet did not answer the start');
+      A.ok(timers.length >= 1, 'the poller is scheduled at once (it used to wait for the next sidecar boot)');
+      const again = await up.start('a kettle');
+      A.eq([again.code, cloud.state.posts.length], ['busy', 1], 'a second MAKE IT for the same object is refused while the first is unanswered (no second key, no second charge)');
+      cloud.state.swallow = 99;
+      t += 11 * 60 * 1000;
+      await up.pollOnce();
+      const gone = (JSON.parse(fs.readFileSync(path.join(dir, 'recent.json'), 'utf8')).jobs || []).find((j) => j.noun === 'a kettle') || {};
+      A.ok(!/Nothing was charged/.test(JSON.stringify(gone)) && /credit history/.test(JSON.stringify(gone)), 'an expired unanswered start says where a charge would show, never "Nothing was charged": ' + JSON.stringify(gone).slice(0, 200));
+    }
     // ---- 4. a double click on SIDE VIEW is refused atomically; a delete racing it is refused too
     {
       const dir = path.join(root, 'd', '.userprops');

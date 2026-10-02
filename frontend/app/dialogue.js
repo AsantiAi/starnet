@@ -56,6 +56,13 @@ const Dialogue = (() => {
   const sfx = n => { try { if (typeof SFX !== 'undefined' && SFX[n]) SFX[n](); } catch (_) {} };
   const reduceMotion = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (_) { return false; } };
   function seg(text, cps, hold) { return { text: String(text == null ? '' : text), cps: cps || 46, holdAfter: hold || 0 }; }
+  /* THE DOOR LAW (systems.js): a line that names a station system brings it online. COMMS lines already did; the awakening and
+     the quick tour speak HERE, so on a fresh station they sent the Commander to WORK › AUTOMATE › WORKFLOWS (or CONNECT ›
+     ABILITIES) while that dock button was still hidden. */
+  function doorLaw(segs, extra) {
+    if (typeof Systems === 'undefined' || !Systems.noticeReply) return;
+    Systems.noticeReply(segs.map(x => x.text).concat(extra || []).join(' '));
+  }
   function norm(lines) {
     if (lines == null) return [];
     if (typeof lines === 'string') return [seg(lines)];
@@ -233,7 +240,8 @@ const Dialogue = (() => {
       let settled = false;
       const finish = () => { if (settled) return; settled = true; if (pendingSay === finish) pendingSay = null; resolve(); };
       pendingSay = finish;   // teardown (closePanel) or a superseding beat flushes this even mid-type
-      typeInto(norm(lines), () => {
+      const segs = norm(lines); doorLaw(segs);
+      typeInto(segs, () => {
         if (auto) { setTimeout(finish, 260); return; }
         armGate(finish);
       });
@@ -250,7 +258,8 @@ const Dialogue = (() => {
       panel.classList.toggle('fnv-text-first', !!(cfg.allowCustom && cfg.customFirst));
       let settled = false;
       const finishPick = res => { if (settled) return; settled = true; pendingPick = null; clearKeys(); sfx('click'); resolve(res); };
-      typeInto(norm(cfg.lines), () => renderOptions(cfg, finishPick));
+      const segs = norm(cfg.lines); doorLaw(segs, (cfg.options || []).map(o => String((o && o.label) || '')));
+      typeInto(segs, () => renderOptions(cfg, finishPick));
     });
   }
 

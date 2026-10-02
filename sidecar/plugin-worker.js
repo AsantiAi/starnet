@@ -23,6 +23,19 @@ const hookTimeouts = {};      // event -> the longest timeoutMs a handler asked 
 const tools = new Map();      // name -> { def, run }
 const handlers = new Map();   // name -> fn
 const jobs = [];
+let jobTimers = [], jobsPaused = false;
+function startJobs() {
+  if (jobTimers.length) return;
+  for (const j of jobs) {
+    const t = setInterval(() => {
+      if (jobsPaused) return;
+      Promise.resolve().then(() => j.fn()).catch((e) => log('[job] ' + errText(e)));
+    }, j.ms);
+    if (t && typeof t.unref === 'function') t.unref();
+    jobTimers.push(t);
+  }
+}
+function stopJobs() { for (const t of jobTimers) clearInterval(t); jobTimers = []; }
 let registering = false;
 let info = { id: '', name: '' };
 let seq = 0;
@@ -132,12 +145,9 @@ async function onInit(m) {
   try { await register(makeApi()); }
   catch (e) { registering = false; return send({ t: 'ready', ok: false, error: 'register() threw — ' + errText(e) }); }
   registering = false;
-  for (const j of jobs) {
-    const t = setInterval(() => {
-      Promise.resolve().then(() => j.fn()).catch((e) => log('[job] ' + errText(e)));
-    }, j.ms);
-    if (t && typeof t.unref === 'function') t.unref();
-  }
+  // E-STOP pauses background jobs (the station sends jobsPaused at init and { t: 'jobs' } later); hooks keep answering
+  jobsPaused = m.jobsPaused === true;
+  if (!jobsPaused) startJobs();
   send({
     t: 'ready', ok: true,
     subs: Array.from(subs.keys()),
@@ -182,6 +192,7 @@ process.on('message', (m) => {
     if (!fn) return send({ t: 'res', id: m.id, ok: false, err: 'this plugin has no handler named "' + m.name + '"' });
     return void answer(m, () => fn(m.args == null ? null : m.args));
   }
+  if (m.t === 'jobs') { jobsPaused = m.paused === true; if (jobsPaused) stopJobs(); else startJobs(); return; }
   if (m.t === 'stop') { try { process.exit(0); } catch (e) { note('plugins.worker.stop-exit', e); } }
 });
 

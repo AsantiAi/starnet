@@ -240,7 +240,9 @@ function twoStagePlan() {
     const BRIEF_HDR = 'YOUR STANDING BRIEF FOR THIS STATION:';
     const lastUserOf = rq => { const m = [...((rq && rq.messages) || [])].reverse().find(x => x && x.role === 'user'); return String((m && m.content) || ''); };
     const sysOf = rq => ((rq && rq.messages) || []).filter(x => x && x.role === 'system').map(x => String(x.content || '')).join('\n');
-    const entryReq = mock.requests.find(rq => lastUserOf(rq).indexOf('SAMPLE JOB') >= 0 && lastUserOf(rq).indexOf('PIPELINE HANDOFF') < 0);
+    // the station's own background jobs (the quest master reads recent activity, which can quote the sample) are not the
+    // entry dock's run: a race picked one of them now and then
+    const entryReq = mock.requests.find(rq => lastUserOf(rq).indexOf('SAMPLE JOB') >= 0 && lastUserOf(rq).indexOf('PIPELINE HANDOFF') < 0 && sysOf(rq).indexOf('quest master') < 0);
     A.ok(entryReq, 'the entry dock\'s provider request was recorded');
     A.ok(sysOf(entryReq).indexOf(BRIEF_HDR + '\n' + ENTRY_BRIEF) >= 0,
       'the ENTRY dock\'s standing brief rode its run\'s system context: ' + sysOf(entryReq).slice(-160));

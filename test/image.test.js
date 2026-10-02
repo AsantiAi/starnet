@@ -497,6 +497,13 @@ const imageReply = png => jsonResp({ choices: [{ message: { images: [{ image_url
     const partialThenFail = stubFetch(() => sse([{ type: 'response.image_generation_call.partial_image', partial_image_b64: PNG_B64 }, { type: 'response.failed', response: { error: { message: 'content policy' } } }]));
     await rejects(makeImageTools({ openrouter: { provider: 'codex', protocol: 'codex-responses', getToken: async () => jwt }, fsp, pathMod: path, root: ROOT, fetchImpl: partialThenFail }).generateTool.run({ prompt: 'x' }, ctx),
       /ChatGPT image generation failed: content policy/, 'a partial frame followed by response.failed is reported as the failure');
+    // …and so is a partial followed by response.incomplete (a content filter), or a stream cut off with no final event
+    for (const [tag, tail, re] of [['response.incomplete', [{ type: 'response.incomplete', response: { incomplete_details: { reason: 'content_filter' } } }], /stopped before it finished \(content_filter\)/],
+      ['a cut-off stream', [], /stopped before it finished \(the stream ended early\)/]]) {
+      const cut = stubFetch(() => sse([{ type: 'response.image_generation_call.partial_image', partial_image_b64: PNG_B64 }].concat(tail)));
+      await rejects(makeImageTools({ openrouter: { provider: 'codex', protocol: 'codex-responses', getToken: async () => jwt }, fsp, pathMod: path, root: ROOT, fetchImpl: cut }).generateTool.run({ prompt: 'x' }, ctx),
+        re, 'a partial frame then ' + tag + ' is a failed render, never the half-drawn frame saved as the image');
+    }
   }
 
   try { await fsp.rm(ROOT, { recursive: true, force: true }); } catch (_) {}

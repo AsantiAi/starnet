@@ -210,11 +210,13 @@ function makeUserProps(deps) {
     try { r = await request('POST', c.url + endpoint, c.token, { ...body, clientKey: key }, START_TIMEOUT_MS); }
     catch (e) {
       note('userprops.start', e);   // no answer: it may have started. The poller retries with the same key (never a second charge)
+      schedule(POLL_MS);   // ...starting NOW: the poller used to wait for the next sidecar boot, then drop it unasked (sweep 10-02)
       return { ok: false, code: 'unreachable', pendingKey: key, message: 'StarNet did not answer in time. If it started, it will still arrive in MADE BY YOU \u2014 you are never charged twice.' };
     }
     const a = startAnswer(r, what);
     if (!a.ok) {
       if (a.final) await serial(() => writeJson(pendingFile, { jobs: pendingW().filter((j) => j.key !== key) })).catch((e) => note('userprops.unclaim', e));
+      else schedule(POLL_MS);   // a retryable answer (a 5xx): the claim stays and the poller asks again with the same key
       return { ok: false, code: a.code, message: a.message };
     }
     await adopt(key, a.job).catch((e) => note('userprops.adopt', e));   // if this write fails the claim stays and the poller adopts it
@@ -232,7 +234,9 @@ function makeUserProps(deps) {
     if (noun.length > 60) return { ok: false, code: 'too_long', message: 'Keep it under 60 characters.' };
     const pv = previewId ? previews.get(String(previewId)) : null;
     const body = pv && pv.result && pv.noun === noun ? { noun, preview: { size: pv.result.size, sketch: pv.result.sketch } } : { noun };
-    return paidStart({ noun, kind: 'front' }, '/v1/props/generate', body, 'prop making', null);
+    // a start StarNet has not answered yet (same object) is still in flight: a second click must not send a NEW key
+    // (a second charge) — the poller is still asking about the first
+    return paidStart({ noun, kind: 'front' }, '/v1/props/generate', body, 'prop making', (j) => !j.id && (j.kind || 'front') === 'front' && j.noun === noun);
   }
 
   function publicJob(j) {
@@ -328,7 +332,7 @@ function makeUserProps(deps) {
     for (const pj of jobs) {
       // a start the cloud never answered: ask again with the SAME key (the cloud returns the job it may already have)
       if (!pj.id) {
-        if (now() - (Number(pj.startedAt) || 0) > START_RETRY_MS) { await dropPending((j) => j.key === pj.key); remember({ id: pj.key, noun: pj.noun, kind: pj.kind, status: 'failed', error: { code: 'unanswered', message: 'StarNet never confirmed this start, so nothing was made. Nothing was charged.' } }); continue; }
+        if (now() - (Number(pj.startedAt) || 0) > START_RETRY_MS) { await dropPending((j) => j.key === pj.key); remember({ id: pj.key, noun: pj.noun, kind: pj.kind, status: 'failed', error: { code: 'unanswered', message: 'StarNet never confirmed this start, so nothing arrived. If it was charged, the charge shows in your credit history.' } }); continue; }
         let rs;
         try { rs = await request('POST', c.url + pj.endpoint, c.token, { ...(pj.body || { noun: pj.noun }), clientKey: pj.key }, START_TIMEOUT_MS); }
         catch (e) { note('userprops.start.retry', e); continue; }

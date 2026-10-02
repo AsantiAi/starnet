@@ -140,7 +140,11 @@ function makeRemoteHost(d) {
     // the conversation so far: the desk's memory of this session plus anything the station recorded since
     const messages = mergedTurns(streamId, 100).map(m => ({ role: m.role, content: m.content })).concat([{ role: 'user', content: o.text }]);
     let isTask = true;
-    try { if (typeof d.classify === 'function') isTask = !!d.classify(o.text); } catch (e) { note('remote.host.classify', e); }
+    // the agent's last turn rides along, as on COMMS and the channels: "yes" to "want me to draft it?" is a TASK (tools),
+    // not chat that can only promise (sweep 2026-10-02)
+    let priorAgentTurn = '';
+    for (let i = messages.length - 2; i >= 0; i--) if (messages[i] && messages[i].role === 'assistant') { priorAgentTurn = String(messages[i].content || ''); break; }
+    try { if (typeof d.classify === 'function') isTask = !!d.classify(o.text, { priorAgentTurn }); } catch (e) { note('remote.host.classify', e); }
     noteRecent({ runId, agentId: o.agentId, streamId, title: clip(o.text.replace(/\s+/g, ' ').trim(), 80), startedAt: rec.startedAt, endedAt: null, live: true });
 
     // the reply, coalesced: a phone on cellular gets a few frames a second, not one per token

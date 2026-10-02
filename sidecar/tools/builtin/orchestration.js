@@ -288,6 +288,27 @@
     return { projectRoot: source.projectRoot || undefined, workdir: source.workdir || source.projectCwd || undefined };
   }
 
+  // the host-minted restrictions a worker starts under, saved on its durable record (subagents originLimits)
+  function originLimitsOf(ctx) {
+    const a = ctx && ctx.connectorAuthority;
+    if (!a || typeof a !== 'object') return null;
+    let t = ''; try { t = typeof a.taintedBy === 'function' ? String(a.taintedBy() || '') : ''; } catch (_) { t = ''; }
+    return { withholdHostPower: a.withholdHostPower === true, untrustedEntry: a.untrustedEntry === true, withholdTaste: a.withholdTaste === true, taintedBy: t };
+  }
+  /* RESUME NEVER WIDENS (sweep 2026-10-02): team.resume re-runs a stored worker prompt under the RESUMING run's authority.
+     The worker's own origin limits are ORed in, so a prompt written in a phone / non-owner / payload-started run keeps
+     its restrictions however unrestricted the lead that resumes it is. */
+  function resumeConnectorOptions(ctx, rec) {
+    const base = connectorOptions(ctx);
+    const lim = rec && rec.originLimits;
+    if (!lim || !(lim.withholdHostPower || lim.untrustedEntry || lim.withholdTaste || lim.taintedBy)) return base;
+    const a = Object.assign({}, base.connectorAuthority || {});
+    if (lim.withholdHostPower) { a.withholdHostPower = true; a.fullAccess = () => false; }
+    if (lim.untrustedEntry) a.untrustedEntry = true;
+    if (lim.withholdTaste) a.withholdTaste = true;
+    if (lim.taintedBy) { const prev = a.taintedBy; a.taintedBy = () => (typeof prev === 'function' && prev()) || lim.taintedBy; }
+    return { connectorAuthority: a, initialTaint: base.initialTaint || lim.taintedBy || null };
+  }
   function connectorOptions(ctx) {
     // Functions are supplied by the host context, never by tool arguments or a persisted worker record.
     const authority = ctx && ctx.connectorAuthority;
@@ -759,7 +780,7 @@
             if (job.error) return { agentId: job.agentId, reason: 'error', result: job.error };
             // parentRunId: a CANCELLED lead run cancels this worker too (subagents.cancelChildren); a lead that ends
             // normally leaves it running — outliving the call is what background:true is for.
-            return subagents.start({ ...projectOptions(job.sessionContext || ctx), leadId, parentRunId: (ctx && ctx.runId) || '', parentStreamId: deps.coordinateResults === true && ctx && ctx.streamId !== 'global' ? ctx.streamId : '', streamId: job.streamId || '', agentId: job.agentId, prompt: job.prompt, context: job.context, runId: newId(), resultSchema: job.resultSchema }, async (h) => {
+            return subagents.start({ ...projectOptions(job.sessionContext || ctx), leadId, parentRunId: (ctx && ctx.runId) || '', parentStreamId: deps.coordinateResults === true && ctx && ctx.streamId !== 'global' ? ctx.streamId : '', streamId: job.streamId || '', agentId: job.agentId, prompt: job.prompt, context: job.context, runId: newId(), resultSchema: job.resultSchema, originLimits: originLimitsOf(ctx) }, async (h) => {
               const r = await runWorker(job, { runId: h.runId, signal: h.signal, emit: h.emit, steer: h.steer });
               return { status: r.reason === 'done' ? 'done' : 'error', reason: r.reason, result: r.result, usd: r.usd || 0,
                 structuredResult: r.structuredResult, validation: r.validation, repairRunId: r.repairRunId, artifacts: r.artifacts,
@@ -982,7 +1003,7 @@
               structuredResult: r.structuredResult, validation: r.validation, repairRunId: r.repairRunId, artifacts: r.artifacts,
               taintedBy: r.taintedBy || '' };
           };
-          const view = subagents.start({ ...projectOptions(ctx), leadId, parentRunId: (ctx && ctx.runId) || '', parentStreamId: deps.coordinateResults === true && ctx && ctx.streamId !== 'global' ? ctx.streamId : '', agentId: ephemeralId, prompt: prompt, context: task.context, runId: newId(), resultSchema: task.resultSchema }, runner);
+          const view = subagents.start({ ...projectOptions(ctx), leadId, parentRunId: (ctx && ctx.runId) || '', parentStreamId: deps.coordinateResults === true && ctx && ctx.streamId !== 'global' ? ctx.streamId : '', agentId: ephemeralId, prompt: prompt, context: task.context, runId: newId(), resultSchema: task.resultSchema, originLimits: originLimitsOf(ctx) }, runner);
           return { label, view, done, started: true };
         };
 
@@ -1103,7 +1124,7 @@
         const contractedPrompt = openingMessage(rec.prompt || '', handoffContext(rec.context), rec.resultSchema);
         try {
           result = await runOnce({
-            ...projectOptions(ctx, rec), ...connectorOptions(ctx),
+            ...projectOptions(ctx, rec), ...resumeConnectorOptions(ctx, rec),
             key: wire.key, provider: wire.provider, baseUrl: wire.baseUrl,
             reasoningEffort: (ident && ident.reasoningEffort) || reasoningEffort,   // Class Loadouts S1: worker's own class effort (see runWorker)
             model: wire.model,
@@ -1135,7 +1156,7 @@
           const repairRunId = newId();
           const repair = await runOnce({
               outputOnly: true,
-            ...projectOptions(ctx, rec), ...connectorOptions(ctx),
+            ...projectOptions(ctx, rec), ...resumeConnectorOptions(ctx, rec),
             key: wire.key, provider: wire.provider, baseUrl: wire.baseUrl,
             reasoningEffort: (ident && ident.reasoningEffort) || reasoningEffort,
             model: wire.model, system: workerSystem((ident && ident.system) || ''),

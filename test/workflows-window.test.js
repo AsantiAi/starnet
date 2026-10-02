@@ -94,6 +94,37 @@ const tick = () => new Promise(r => setTimeout(r, 15));
   for (let i = 0; i < 8; i++) await tick();
   A.ok(!fetches.some(x => /\/api\/routing\/sample$/.test(x.url)) && S.msg && /nag:CYCLE/.test(S.msg.text), 'a floor with a blocking problem is not sent — the floor\'s own words say why');
 
+  /* ---------- NEEDS CHANGES → USE THIS / PUT IT BACK: each field's note keeps its OWN before and after ---------- */
+  {
+    const step = WW._floor().lines[0].steps[1], dockId = step.id, wasDoes = st.propById(dockId).brief || '', wasHands = st.propById(dockId).hands || '';
+    const noteBodies = () => fetches.filter(x => /\/note$/.test(x.url)).map(x => JSON.parse(x.init.body));
+    replyFor = () => ({ ok: true, job });
+    S.job = job;
+    // a fix that changes only the hand-off
+    S.fix = { jobId: job.id, open: true, state: 'done', fixes: [{ dockId, hands: 'Pass only the final draft.', why: 'shorter hand-off', was: wasDoes, wasHands }] };
+    fetches.length = 0; WW._useFix(job, 0, false); WW._useFix(job, 0, true);
+    for (let i = 0; i < 4; i++) await tick();
+    const hb = noteBodies();
+    A.ok(hb.length === 2 && hb.every(n => n.field === 'hands'), 'a hand-off fix and its put-back are both noted on the hand-off: ' + JSON.stringify(hb.map(n => n.field)));
+    A.ok(hb[1] && hb[1].kind === 'putback' && hb[1].text === wasHands && hb[1].was === 'Pass only the final draft.', 'putting a hand-off back records the OLD HAND-OFF, never the old instructions: ' + JSON.stringify(hb[1]));
+    A.ok((st.propById(dockId).hands || '') === wasHands, 'and the hand-off is back as it was');
+    // a fix that changes both: one note per field
+    S.fix = { jobId: job.id, open: true, state: 'done', fixes: [{ dockId, does: 'Two facts, one line each.', hands: 'Pass the facts only.', why: 'tighter', was: wasDoes, wasHands }] };
+    fetches.length = 0; WW._useFix(job, 0, false);
+    for (let i = 0; i < 4; i++) await tick();
+    const both = noteBodies();
+    A.ok(both.length === 2 && both.some(n => n.field === 'does' && n.text === 'Two facts, one line each.' && n.was === wasDoes) && both.some(n => n.field === 'hands' && n.text === 'Pass the facts only.' && n.was === wasHands), 'a fix that changes both is noted for both: ' + JSON.stringify(both.map(n => [n.field, n.text])));
+    WW._useFix(job, 0, true); S.fix = null; S.job = null;
+    // a style kept in the Workflow panel (★ KEEP AS THE EXAMPLE notes no job): STYLE KEPT · PUT IT BACK takes the example out
+    const plain = st.propById(dockId).brief || '';
+    st.setPropBrief(dockId, WW._exampleBrief(plain, job.output));
+    const noNotes = Object.assign({}, job, { notes: [] });
+    A.ok(WW._styleKept(noNotes), 'fixture: the window reads the panel-kept example as STYLE KEPT');
+    WW._putStyleBack(noNotes);
+    A.ok((st.propById(dockId).brief || '') === plain && !WW._styleKept(noNotes), 'PUT IT BACK takes the panel-kept example out (it silently did nothing): ' + JSON.stringify((st.propById(dockId).brief || '').slice(-80)));
+    for (let i = 0; i < 4; i++) await tick();
+  }
+
   /* ---------- source locks ---------- */
   const html = rd('frontend/index.html'), app = rd('frontend/app/app.js'), build = rd('frontend/app/build.js'), outbox = rd('frontend/app/windows/outbox.js');
   const css = rd('frontend/css/workflows-window.css'), glass = rd('frontend/app/glass-demo.js'), sc = rd('frontend/app/stationcommands.js');

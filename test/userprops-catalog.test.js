@@ -119,4 +119,24 @@ A.ok(calls.some((c) => c[0] === 'scale' && Math.abs(c[1] - 0.5) < 1e-9 && Math.a
   A.ok(/id="refit-makeprop-cta" hidden/.test(src), 'the card starts hidden: nothing is claimed before /api/credits answers');
 }
 
-A.report();
+// (sweep 2026-10-02) a FRESH load never reuses one already in flight: station.make_prop's reload got the list from before
+// the prop finished and said it was not on the page
+(async () => {
+  const lists = [[], [{ id: 'user_new_lamp_abc123', label: 'new lamp' }]];
+  let n = 0, release = null;
+  const hadFetch = global.fetch; const hadPS = global.PropSprites; global.PropSprites = PropSprites;
+  global.fetch = async () => {
+    const mine = lists[Math.min(n++, lists.length - 1)];
+    if (n === 1) await new Promise(r => { release = r; });   // the first load is slow (started before the prop landed)
+    return { ok: true, json: async () => ({ props: mine, jobs: [], recent: [], deleted: [] }) };
+  };
+  const stale = UP.load();
+  const fresh = UP.load({ fresh: true });
+  await new Promise(r => setImmediate(r)); release();
+  const [a, b] = await Promise.all([stale, fresh]);
+  A.eq([a.props.length, b.props.map(p => p.id)], [0, ['user_new_lamp_abc123']], 'a fresh load waits for the one in flight, then asks again (and sees the new prop)');
+  const sc = require('fs').readFileSync(require('path').join(__dirname, '..', 'frontend', 'app', 'stationcommands.js'), 'utf8');
+  A.ok(/'station\.props_reload': async \(\) => \{[\s\S]{0,200}UserProps\.load\(\{ fresh: true \}\)/.test(sc), 'station.props_reload asks for a fresh load');
+  global.fetch = hadFetch; global.PropSprites = hadPS;
+  A.report();
+})();

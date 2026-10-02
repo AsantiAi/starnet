@@ -78,7 +78,9 @@ export const PREPARE_SMOKE_SURFACE = `(async () => {
   for (let i = 0; i < 120; i++) {
     if (document.querySelectorAll('.kb-cols').length === 1) return true;
     const trigger = document.querySelector('[data-term="tasks"]');
+    // 0.13 front doors: TASKS is a tab of MY WORK, not a dock key — open it the way its tab does
     if (trigger) trigger.click();
+    else if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('tasks');
     await new Promise(resolve => setTimeout(resolve, 250));
   }
   return document.querySelectorAll('.kb-cols').length === 1;

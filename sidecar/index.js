@@ -206,7 +206,7 @@ const { makeChannelStore } = require('./channels/store.js');
 const { makeChannelHub, menuCommands, dockSystem } = require('./channels/hub.js');
 const { makeWebhookVerifier } = require('./channels/webhook-auth.js');
 const { admitRelayMessage } = require('./channels/relay-admission.js');   // relay bodies cross the adapter's own owner/group admission
-const { hostPowerWithheldFor, entryUntrusted } = require('./run-origin.js');   // Full Power follows the owner, not the chat (non-owner channel senders never inherit it)
+const { hostPowerWithheldFor, entryUntrusted, standingWorkEscalates } = require('./run-origin.js');   // Full Power follows the owner, not the chat (non-owner channel senders never inherit it)
 const { makePromptRegistry } = require('./channels/prompts.js');   // C6: the bounded token→meaning map behind inline keyboards
 const { makeOpenAiCompat } = require('./openai-compat.js');   // /v1/* OpenAI-compatible surface (external harness ingress)
 const { makeChannelRegistry, wireChannel } = require('./channels/registry.js');   // H6.2: channel descriptors + generic wire-up
@@ -1135,7 +1135,14 @@ const userProps = require('./userprops.js').makeUserProps({
   cloud: () => { const c = resolveCreditsConfig(); return { url: c.url, token: c.apiKey }; },
   fetch: (...a) => globalThis.fetch(...a), now: () => Date.now(),
   writeDurable: (deps, file, data) => writeFileDurable(deps, file, data),
-  onSettled: () => { if (credits.configured()) credits.refresh().catch(swallow('credits.refresh', null)); }
+  // a settled prop's charge (what the cloud billed, front or side view) is booked in the LOCAL ledger too, so SPENT
+  // TODAY, the $/day limit and the Budget panel see it — it used to show only in the cloud's own history (sweep 10-02).
+  // onSettled runs once per job (after its pending claim is dropped), and the row is keyed to the job.
+  onSettled: (pub) => {
+    const usd = Number(pub && pub.costUsd) || 0;
+    if (usd > 0) { try { ledger.record({ runId: 'userprop-' + String(pub.id || ''), agentId: 'station', turns: 0, usd, tokens: 0, model: 'userprop' }); } catch (e) { failNote('userprops.ledger', e); } }
+    if (credits.configured()) credits.refresh().catch(swallow('credits.refresh', null));
+  }
 });
 userProps.resume();
 /* BOOT LINK SELF-HEAL (2026-08-25 stranded-user incident): a reinstall keeps the device token in the OS
@@ -5683,6 +5690,8 @@ function saveCronHalted(halted) {
   if (!r.ok) throw new Error('cron halt durable read-back failed: ' + r.error);
 }
 let cronHalted = loadCronHalted();
+// a station booted while E-STOPped starts its plugins with background jobs paused (their hooks still guard)
+pluginRuntime.setJobsPaused(cronHalted);
 // The ONE resume seam: clear the durable halt and re-arm the live timer when the user's arm intent says so.
 // Called from every explicit resume path so halt-lift semantics can't drift between them.
 function liftCronHalt() {
@@ -5690,6 +5699,7 @@ function liftCronHalt() {
   // Persist FIRST: a failed write must leave this process halted instead of creating a restart-only reversal.
   saveCronHalted(false);
   cronHalted = false;
+  pluginRuntime.setJobsPaused(false);
   if (cronArmed) armCron();
   return true;
 }
@@ -10400,7 +10410,7 @@ const remoteHost = require('./remote/host.js').makeRemoteHost({
   runHistory: (n) => runStore.list(null, { limit: n }),
   // the desk's own sessions (title, agent, history) live in the station save the page mirrors here
   deskSessions: () => { const save = saveStore.load('agent') || {}; return Array.isArray(save.workstreams) ? save.workstreams : []; },
-  classify: (text) => Classify.isTaskDirective(text),   // the SAME task-vs-talk call the desk and the channels make
+  classify: (text, ctx) => Classify.isTaskDirective(text, ctx),   // the SAME task-vs-talk call the desk and the channels make (ctx: the agent's last turn, so "yes" to its offer is a task)
   askConsent: (o) => channelAskConsent(o),
   stopRun: (runId) => { const ac = runs.get(runId); if (!ac) return false; try { ac.abort(); } catch (e) { failNote('remote.index.ac.abort', e); } return true; },
   deliverables: () => deliverableRows(),
@@ -11336,7 +11346,7 @@ function quiesceForProcessFault() {
   });
   // the whole-line SAMPLE hub's run (POST /api/routing/sample) is real spend too — its own containment for the same
   // reason as the triggers above (sampleHub is declared further down this file)
-  contain('sample', () => { killAll(null, (sampleHub && sampleHub._internals) ? sampleHub._internals.inflight : null); });
+  contain('sample', () => { if (sampleInFlight) sampleInFlight.stopRequested = true; killAll(null, (sampleHub && sampleHub._internals) ? sampleHub._internals.inflight : null); });
   contain('groups', () => groupSessions && groupSessions.halt && groupSessions.halt());
   contain('subagents', () => subagents && subagents.interruptAll && subagents.interruptAll());
   contain('shell-background', () => shellBg && shellBg.killAll && shellBg.killAll());
@@ -11629,7 +11639,9 @@ function getSampleHub() {
        bindChats:false makes this hub read and write no binding at all, so the proof proves the same thing on
        run #2 as on run #1 (and on a station that already carries a stale record from before this fix). */
     bindChats: false,
-    send: (chatId, text) => { sampleReplies.push(String(text == null ? '' : text)); if (sampleReplies.length > 20) sampleReplies.shift(); return Promise.resolve({ ok: true }); },
+    // once the job is stopped (■ STOP or E-STOP) nothing more is its output: the hub's "⏹ Stopped — E-STOP was pressed"
+    // courtesy notice (for a real chat) was kept as what the job made, and offered NEEDS CHANGES against
+    send: (chatId, text) => { if (!(sampleInFlight && sampleInFlight.stopRequested)) { sampleReplies.push(String(text == null ? '' : text)); if (sampleReplies.length > 20) sampleReplies.shift(); } return Promise.resolve({ ok: true }); },
     secrets: () => ({}),   // the selected dock owns the configuration, not an ambient provider
     resolveEntryRunConfig: sampleRunConfigFor,
     resolveRunConfig: sampleRunConfigFor,
@@ -12192,21 +12204,26 @@ async function stationOneShot(prompt, tag, failLead) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 120000);
   if (timer && timer.unref) timer.unref();
-  let out = '', usage = null, usd = 0, tokens = 0;
+  let out = '', usage = null, usd = 0, tokens = 0, cost = null;
+  // book whatever usage arrived — on a timeout or a provider error too: those tokens were billed (sweep 2026-10-02)
+  const book = () => {
+    if (!usage || !cost) return;
+    try { const c = cost.reconcile(usage, cfg.model); usd = c.usd || 0; tokens = (c.tokensIn || 0) + (c.tokensOut || 0); } catch (e) { failNote(tag + '.reconcile', e); return; }
+    if (usd) { try { ledger.record({ runId: tag + '-' + crypto.randomUUID(), agentId: 'station', turns: 0, usd, tokens, model: cfg.model, unmetered: !!((getProviderProfile(providerId) || {}).unmetered) }); } catch (e) { failNote(tag + '.ledger', e); } }
+  };
   try {
     const provider = await providerForRunConfig(cfg, reasoningEffort);
-    const cost = makeCostEngine({ priceOf: provider.priceOf });
+    cost = makeCostEngine({ priceOf: provider.priceOf });
     for await (const ev of provider.stream({ model: cfg.model, stream: true, signal: ctrl.signal, reasoningEffort,
       messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }] })) {
       if (ev && ev.type === 'text') out += ev.delta;
       else if (ev && ev.type === 'usage') usage = ev.usage;
     }
-    const c = cost.reconcile(usage, cfg.model);
-    usd = c.usd || 0; tokens = (c.tokensIn || 0) + (c.tokensOut || 0);
   } catch (e) {
+    book();
     return { ok: false, status: 502, error: (failLead || 'the call failed') + ' — ' + String((e && e.message) || e).slice(0, 200) };
   } finally { clearTimeout(timer); }
-  if (usd) { try { ledger.record({ runId: tag + '-' + crypto.randomUUID(), agentId: 'station', turns: 0, usd, tokens, model: cfg.model, unmetered: !!((getProviderProfile(providerId) || {}).unmetered) }); } catch (e) { failNote(tag + '.ledger', e); } }
+  book();
   return { ok: true, out, usd, model: cfg.model };
 }
 async function handleRoutingFixSuggest(req, res) {
@@ -12216,11 +12233,20 @@ async function handleRoutingFixSuggest(req, res) {
   catch (_) { return json(400, { ok: false, error: 'bad json' }); }
   const input = LineFix.normalizeInput(body);
   if (!input.ok) return json(400, { ok: false, error: input.error });
+  // NEEDS CHANGES on a WORKFLOWS job is the Commander's dislike of its result: it persists as taste on the agent whose reply came
+  // out, whatever the suggestion call does next (the complaint lived only in the window's memory and reached no later prompt)
+  let feedbackMemory = null;
+  const jobId = String(body.jobId || '');
+  if (LineJobs.isId(jobId)) {
+    const job = LineJobs.get(lineJobs, jobId), last = job && (job.runs || [])[0];
+    if (last && last.runId) feedbackMemory = await recordFeedbackMemory({ agentId: last.agentId || 'agent', runId: last.runId, verdict: 'miss', words: String(body.complaint || ''), directive: job.text || '' });
+  }
+  const fm = feedbackMemory ? { feedbackMemory } : null;
   const call = await stationOneShot(LineFix.buildPrompt(input), 'linefix', 'the suggestion call failed');
-  if (!call.ok) return json(call.status, { ok: false, error: call.error });
+  if (!call.ok) return json(call.status, Object.assign({ ok: false, error: call.error }, fm));
   const parsed = LineFix.parseFixes(call.out, input);
-  if (!parsed.ok) return json(502, { ok: false, error: parsed.error, usd: call.usd, model: call.model });
-  return json(200, { ok: true, diagnosis: parsed.diagnosis, fixes: parsed.fixes, usd: call.usd, model: call.model });
+  if (!parsed.ok) return json(502, Object.assign({ ok: false, error: parsed.error, usd: call.usd, model: call.model }, fm));
+  return json(200, Object.assign({ ok: true, diagnosis: parsed.diagnosis, fixes: parsed.fixes, usd: call.usd, model: call.model }, fm));
 }
 /* POST /api/routing/line-draft {want, starters:[{id, name, purpose, roles:[ROLE…]}]} → { ok, starter, name, briefs:{ROLE: instructions},
    job, usd, model } — WORKFLOWS › SET IT UP FOR ME (2026-09-30): "what should it make?" becomes a line to place, drafted by ONE billed
@@ -14309,6 +14335,7 @@ function handleCronArm(req, res) {
       try { saveCronHalted(false); }
       catch (e) { return json(500, { error: 'could not persist the cron unhalt: ' + ((e && e.message) || e) }); }
       cronHalted = false;
+      pluginRuntime.setJobsPaused(false);
     }
     cronArmed = want;                                  // live in-memory state (GET /api/cron reflects this)
     if (want) armCron(); else disarmCron();            // start/stop the live tick NOW — a due job fires within one tick
@@ -15577,7 +15604,7 @@ async function handleWorkshopQueue(req, res) {
 // It never invents files or reads unproved paths. Preview hints are an allowlist consumed by the renderer.
 const DELIVERABLE_PREVIEW_MAX = 512 * 1024;
 const DELIVERABLE_IMAGE_MAX = 8 * 1024 * 1024;
-function deliverableFile(agentId, runId, f, workshop) {
+function deliverableFile(agentId, runId, f, workshop, projectRoot) {
   const p = String((f && f.path) || '');
   const bytes = Number.isFinite(f && f.bytes) && f.bytes >= 0 ? Math.floor(f.bytes) : null;
   const ext = path.extname(p).toLowerCase();
@@ -15588,7 +15615,9 @@ function deliverableFile(agentId, runId, f, workshop) {
   const rel = workshop ? ('workshop/' + runId + '/' + p) : p;
   const openUrl = workshop && ext === '.html'
     ? '/workshop-run/' + encodeURIComponent(agentId) + '/' + encodeURIComponent(runId) + '/' + p.split('/').map(encodeURIComponent).join('/')
-    : '/api/file?agent=' + encodeURIComponent(agentId) + '&path=' + encodeURIComponent(rel);
+    : '/api/file?agent=' + encodeURIComponent(agentId) + '&path=' + encodeURIComponent(rel)
+      // a project session wrote its relative paths INSIDE the project: open them there (serveWorkspaceFile ?project=)
+      + (!workshop && projectRoot && p && !path.isAbsolute(p) ? '&project=' + encodeURIComponent(projectRoot) : '');
   return { path: p, bytes, preview, openUrl, sandboxed: workshop && ext === '.html' };
 }
 function deliverableSize(files) {
@@ -15675,7 +15704,7 @@ async function deliverableRows() {
       // The agent NAMED this run's work, so the run is ONE deliverable with N files — not N unrelated rows. The
       // authored title/summary/kind ride as prose; `main` is only honored when it names a file the run actually
       // produced (never trust the model's path — the same rule the Workshop manifest applies to its own file list).
-      const files = arts.filter(a => a.path).map(a => deliverableFile(run.agentId, run.runId, a, false));
+      const files = arts.filter(a => a.path).map(a => deliverableFile(run.agentId, run.runId, a, false, run.projectRoot || ''));
       const main = note.main && files.some(f => f.path === note.main) ? note.main : '';
       rows.push({
         id: 'run:' + run.runId, agentId: run.agentId, runId: run.runId, title: note.title, source: 'run', status: status,
@@ -15690,7 +15719,7 @@ async function deliverableRows() {
     // dressing it up as a description.
     arts.forEach((a, i) => {
       const p = a.path || '';
-      const files = p ? [deliverableFile(run.agentId, run.runId, a, false)] : [];
+      const files = p ? [deliverableFile(run.agentId, run.runId, a, false, run.projectRoot || '')] : [];
       rows.push({ id: 'run:' + run.runId + ':' + i, agentId: run.agentId, runId: run.runId, title: path.basename(p || a.target || (run.title + ' output')), source: 'run', status: status, kind: a.kind, summary: '', authored: false, ask: ask, files, target: a.target || '', size: deliverableSize(files), createdAt: run.ts || 0, updatedAt: run.ts || 0, actions: { open: files.length > 0, keep: false, discard: false } });
     });
   }
@@ -16750,6 +16779,14 @@ async function handleAgentDelete(req, res) {
     return json(500, { ok: false, error: 'could not persist roster removal' });
   }
   const archived = [];
+  // the Commander's taste given on this agent's work outlives the agent: it moves to the hero's notebook BEFORE the
+  // notebook is archived (FeedbackMemory.adoptTaste — a delete used to silently drop every rating it ever got)
+  if (agentId !== 'agent') {
+    try {
+      const departed = notebookStore.get('notebook:' + agentId);
+      await notebookStore.update('notebook:agent', (cur) => FeedbackMemory.adoptTaste(cur, departed, memcore.nextNoteId, agentId) || undefined);
+    } catch (e) { failNote('agent.delete.adoptTaste', e); }
+  }
   try {
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
     const archiveDir = path.join(WORKSPACES, '_archive', agentId + '-' + ts);
@@ -17202,7 +17239,10 @@ async function handleSkillMarketInstall(req, res) {
   if (body === null) return json(400, { ok: false, error: 'bad json' });
   try {
     const r = await skillMarket.install({ slug: body.slug });
-    const on = skillPrefs.set(r.slug, true);
+    // a FIRST install switches it on; an UPDATE keeps the Commander's choice (it used to silently re-enable a skill they
+    // had switched off — for every agent, with no notice). A skill with no choice recorded yet is switched on.
+    const keep = r.action === 'update' && skillPrefs.has(r.slug);
+    const on = keep ? { ok: true, enabled: skillPrefs.get(r.slug) !== false } : skillPrefs.set(r.slug, true);
     json(200, Object.assign({}, r, { enabled: !!(on && on.ok && on.enabled) }));
   } catch (e) { json(400, { ok: false, error: (e && e.message) || 'could not install that skill' }); }
 }
@@ -17561,6 +17601,9 @@ async function handleRun(req, res) {
     return makeConsentWait({
       pending, signal: ac.signal, timeoutMs: CONSENT_TIMEOUT_MS, extendMs: CONSENT_ACK_EXTEND_MS,
       uuid: () => crypto.randomUUID(),
+      // nobody answered in time (or the run dropped): the prompt fail-closed to deny — say so on the run's stream
+      // (expired:true, additive) so the desk card and the CREW frame stop asking
+      onAutoDeny: (promptId) => { try { emit('permission.response', { promptId, decision: 'deny', expired: true }); } catch (e) { failNote('consent.autoDenyResponse', e); } },
       emitPrompt: (promptId) => {
         const row = { promptId, agentId, tool: (fields && fields.tool) || 'tool', scope: (fields && fields.scope) || 'write', argsSummary: (fields && fields.argsSummary) || '' };
         emit('permission.prompt', row);
@@ -18013,6 +18056,12 @@ async function runOnceCore(o) {
      Every other origin (the app, routines/loops/cron, triggers, dev/sample hubs) is unchanged: DECISIONS.md
      "FULL POWER MEANS THE WHOLE LOCAL COMPUTER" and the tested "Full Access follows the agent to its routine". */
   const hostPowerWithheld = hostPowerWithheldFor(o);
+  // the Commander's taste (their past verdicts, "(on: <their past request>)") is theirs: a run a non-owner channel sender
+  // or a group chat started never carries it (sweep 2026-10-02) — host-minted flags only, like hostPowerWithheldFor
+  // …and a worker such a run delegates to inherits it (host-minted withholdTaste on connectorAuthority — never the owner's
+  // own paired phone, which withholdHostPower also covers): the worker's own recall used to add the taste right back
+  const tasteWithheld = (o.channelSender === true && o.channelSenderOwner !== true)
+    || !!(o.connectorAuthority && typeof o.connectorAuthority === 'object' && o.connectorAuthority.withholdTaste === true);
   // a run STARTED by third-party content (trigger payload / forwarded / attachment entry, and its hops + workers):
   // Full Access no longer lifts its taint lock (run-origin.js entryUntrusted, taint.js postTaintBoundary)
   // A recovery continuation replays its SOURCE run's context, so it inherits the source's untrusted entry from the
@@ -18515,7 +18564,7 @@ async function runOnceCore(o) {
       const settled = taskBriefState ? commanderEvidenceContext(system || '', Object.assign({},taskContextInputs,{brief:taskBriefState.brief})) : taskContextBlock;
       const notes = notebookStore.get('notebook:' + agentId);
       // the Commander's taste rides into delegated work too: a worker writes the deliverable the Commander rates
-      const tasteRecs = personalizationStore.read().enabled ? FeedbackMemory.stationTaste(notes, otherAgentNotebooks(agentId)) : [];
+      const tasteRecs = (personalizationStore.read().enabled && !tasteWithheld) ? FeedbackMemory.stationTaste(notes, otherAgentNotebooks(agentId)) : [];
       const tasteIds = new Set(tasteRecs.map(r => r.id).filter(Boolean));
       const pinned = Array.isArray(notes) ? notes.filter(r => r && r.pinned && !tasteIds.has(r.id)) : [];
       const recalled = renderRecall(rank(pinned, recentUserText(messages), { now: Date.now(), streamId, projectRoot: o.projectRoot || null }), { limit: 1500 });
@@ -19142,6 +19191,7 @@ async function runOnceCore(o) {
       // host-minted, never tool-supplied: a worker delegated from a non-owner channel run stays below Full Power
       withholdHostPower: hostPowerWithheld,
       untrustedEntry: untrustedEntryRun,   // host-minted: a worker of a payload-started run keeps the taint lock under Full Access
+      withholdTaste: tasteWithheld,        // host-minted: a worker of a non-owner/group run never receives the Commander's taste
       taintedBy: () => execution.taintedBy() || (typeof o.connectorAuthority?.taintedBy === 'function' ? o.connectorAuthority.taintedBy() : null)
     },
     // HOOKS reach the tool boundary through the dispatch ctx. registry.js consults them AFTER the authority,
@@ -19602,6 +19652,10 @@ async function runOnceCore(o) {
           + 'Do NOT retry it and do NOT report its work as done. Do everything you genuinely can with the tools you were given, '
           + 'then state plainly which step you could not do and why.'
       };
+    }
+    if (hostPowerWithheld && standingWorkEscalates(c.name, c.args)) {
+      return { ok: false, isError: true, summary: 'withheld',
+        content: 'WITHHELD: this run was started from a paired phone or by someone other than the station owner, so it cannot set up or restart work that runs on its own later (a routine, a loop, a line trigger or a line test) — that work would run with the station standing Full Access. Pausing, stopping or removing it is fine. Tell the Commander exactly what to set up so they can do it at the desk; do NOT retry.' };
     }
     if (directDomainTask && directDomainWithheld(c.name)) {
       return { ok: false, isError: true, summary: 'direct-domain-local', content: 'This is a bounded check of the exact host ' + directDomainTask.host + '. Do not delegate, search, browse, or call archives; fetch that host directly with web_fetch.' };
@@ -20348,7 +20402,7 @@ async function runOnceCore(o) {
     // decide whether it surfaces. Those records leave the ranked pool so they never take a recall slot twice.
     // station-wide: a correction given to ANY agent is about the Commander, so it shapes this agent's work too
     // (recovery runs inject nothing at all — see the note above msgs).
-    const tasteRecs = (o.recovery || !personalizationStore.read().enabled) ? [] : FeedbackMemory.stationTaste(all, otherAgentNotebooks(agentId));
+    const tasteRecs = (o.recovery || tasteWithheld || !personalizationStore.read().enabled) ? [] : FeedbackMemory.stationTaste(all, otherAgentNotebooks(agentId));
     const tasteIds = new Set(tasteRecs.map(r => r.id).filter(Boolean));
     const recs = all.filter(r => !(r && tasteIds.has(r.id)));
     const q = recentUserText(convo);   // include restored conversation context on terse post-restart follow-ups
@@ -22118,7 +22172,7 @@ async function handleHaltResume(req, res) {
     armLoops(true);
   });
   attempt('overseer', () => { overseer.resumeReviews(); });
-  attempt('plugins', () => { reloadExtensions().catch((e) => failNote('plugins.resume', e)); });   // E-STOP stopped their processes
+  attempt('plugins', () => { pluginRuntime.setJobsPaused(false); reloadExtensions().catch((e) => failNote('plugins.resume', e)); });   // E-STOP paused their jobs
   const state = haltStatus();
   const ok = !state.halted && Object.keys(errors).length === 0;
   haltJson(res, ok ? 200 : 503, { ok, ...state, errors });
@@ -22152,10 +22206,12 @@ function handleHalt(req, res) {
   // line triggers: every trigger hub's live runs die too, and whatever was waiting in their queues is dropped
   let triggerInflights = [];
   try { triggerRunner.haltAll(); triggerInflights = triggerRunner.inflights(); } catch (e) { failNote('triggers.halt', e); }
-  // plugin processes (their tools, window calls and background jobs) stop with everything else; RESUME restarts them
-  try { pluginRuntime.stopAll().catch((e) => failNote('plugins.halt', e)); } catch (e) { failNote('plugins.halt', e); }
+  // plugins' BACKGROUND JOBS stop with everything else; their processes stay up so a pre_tool_call veto keeps guarding
+  // (killing them made every plugin hook answer "allow" until RESUME). RESUME unpauses the jobs.
+  try { pluginRuntime.setJobsPaused(true); } catch (e) { failNote('plugins.halt', e); }
   // the whole-line SAMPLE hub (POST /api/routing/sample): its entry run AND every stage it chains live in its inflight record
   const sampleInflight = (sampleHub && sampleHub._internals) ? sampleHub._internals.inflight : null;
+  if (sampleInFlight) sampleInFlight.stopRequested = true;   // its record says STOPPED, never "did not finish cleanly — send it again"
   const halted = killAll(runs, tgInflight, dcInflight, ...genericInflights, ...tgBotInflights, devInflight, stepTest ? stepTest.inflight : null, ...triggerInflights, sampleInflight);   // browser runs + ALL channel hub runs, in one kill (see sidecar/halt.js)
   let cronAborted = 0;
   try { cronAborted = cronDriver.abortAllLeases(); } catch (_) {}   // Phase 0: E-STOP also aborts in-flight cron runs (unattended spend)
@@ -23474,7 +23530,23 @@ async function serveWorkspaceFile(req, res) {
     const u = new URL(req.url, 'http://127.0.0.1');
     const agent = u.searchParams.get('agent') || 'agent';
     const rel = u.searchParams.get('path') || '';
-    ({ abs } = await fsJail.resolveInside(agent, rel));   // throws on jail escape / bad agentId / '..'
+    const project = u.searchParams.get('project') || '';
+    if (project) {
+      /* A PROJECT SESSION'S DELIVERABLE (sweep 2026-10-02): its relative path was written inside the project folder, so
+         resolving it in the agent's private workspace OPENED A DIFFERENT FILE (an older same-named one) or a 404. Only a
+         currently BLESSED project root; a relative, '..'-free path whose realpath stays inside it; and the same protected-
+         file floor the agents' own file tools meet (.env, .git …). */
+      const root = fs.realpathSync(String(project));
+      if (!isBlessedRoot(root)) throw new Error('escape: that project is not trusted');
+      if (!rel || rel.indexOf('\0') >= 0 || path.isAbsolute(rel) || /^[A-Za-z]:/.test(rel) || /(^|[\\/])\.\.([\\/]|$)/.test(rel)) throw new Error('illegal path');
+      const real = fs.realpathSync(path.resolve(root, rel));
+      const relOut = path.relative(root, real);
+      if (!relOut || relOut.startsWith('..') || path.isAbsolute(relOut)) throw new Error('escape: outside the project');
+      if (pathTrustCore._internals.hardlineReason(real, real)) throw new Error('escape: a protected file');
+      abs = real;
+    } else {
+      ({ abs } = await fsJail.resolveInside(agent, rel));   // throws on jail escape / bad agentId / '..'
+    }
   } catch (e) {
     const msg = (e && e.message) || '';
     if (/escape|illegal|bad agentId|bad notebook/.test(msg)) { res.writeHead(403); return res.end('forbidden'); }
