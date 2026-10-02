@@ -18,8 +18,8 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "92647f0585a178233c69996d894a078c1035c642",
-    "pathSetSha256": "e3ac910c8785fe7d62a025dd0def01dc7c9c9a0a8b73348d6823ee33be259f99",
+    "sourceCommit": "ddc3839140fb250dde0078b0a5ca259bdc9f8ac3",
+    "pathSetSha256": "60c61c9c0cad8daa5c2d40f76a912ed04e52667a726032a7b3ab94cad57bfa1e",
     "files": [
       {
         "path": "INSTALL.md",
@@ -1153,8 +1153,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 806695,
-        "sha256": "4e65ee82d91fd7e169b9e77662fb4b26c5ebdcdcd172eb8574e6a63b69988666"
+        "bytes": 807585,
+        "sha256": "5a651e08f61c6f690850aaabec4cd517fad22dcba19931f8116949d842c6ddc7"
       },
       {
         "path": "frontend/app/stepin.js",
@@ -1508,8 +1508,8 @@
       },
       {
         "path": "frontend/css/cabinet-clean.css",
-        "bytes": 3243,
-        "sha256": "de5cb7ffaccfa116ffbb69cdf0da0a797004ae328e31c8f746701e96702e499a"
+        "bytes": 2668,
+        "sha256": "fa5db23003914369815ab552153d43a69056a6933d6f44a2fa3c99bce3e172c1"
       },
       {
         "path": "frontend/css/channels.css",
@@ -1600,6 +1600,11 @@
         "path": "frontend/css/panelchrome.css",
         "bytes": 11545,
         "sha256": "eaf34a05e7c47a6a9e82beccf771db6f43f69794091e81edf93408c70f6de7ce"
+      },
+      {
+        "path": "frontend/css/pipglass.css",
+        "bytes": 32423,
+        "sha256": "0a82f9fc4ac1a6951fd99fbb009249b93c64116d1f38d7f6034d4a1e2933c70a"
       },
       {
         "path": "frontend/css/plugins.css",
@@ -1763,8 +1768,8 @@
       },
       {
         "path": "frontend/index.html",
-        "bytes": 96472,
-        "sha256": "0233417ee04df64783826b6b64e52572c6728b5da2fd21666ddf346de19a263a"
+        "bytes": 96676,
+        "sha256": "ddb87ea45a628751033ea53fec9eee907b016d064ed8eb425aac385fe99633f1"
       },
       {
         "path": "frontend/js/arcade.js",
