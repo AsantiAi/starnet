@@ -32,6 +32,7 @@
 
 const http = require('http');
 const crypto = require('crypto');
+const zlib = require('zlib');
 const fs = require('fs');
 const path = require('path');
 const { makeWsServer } = require('./ws-lite.js');
@@ -102,10 +103,18 @@ function makeRelay(opts) {
       abs = path.resolve(appDir, '.' + rel);
       if (abs !== appDir && abs.indexOf(appDir + path.sep) !== 0) { res.writeHead(403); return res.end(); }
     }
-    fs.readFile(abs, (err, buf) => {
-      if (err) { res.writeHead(404); return res.end(); }
-      const ext = path.extname(abs).toLowerCase();
+    let f = loadFile(abs);
+    if (!f) { res.writeHead(404); return res.end(); }
+    const ext = path.extname(abs).toLowerCase();
+    // the service worker names its cache after the exact bytes of the app shell, so every deploy that changes the
+    // app reaches every phone (and a phone never mixes an old script with new markup)
+    if (rel === '/sw.js') f = withShellVersion(f);
+    if (req.headers['if-none-match'] === f.etag) { res.writeHead(304, { ETag: f.etag }); return res.end(); }
+    const gz = f.gz && /\bgzip\b/.test(String(req.headers['accept-encoding'] || ''));
+    {
+      const buf = gz ? f.gz : f.buf;
       res.writeHead(200, {
+        ETag: f.etag, Vary: 'Accept-Encoding', ...(gz ? { 'Content-Encoding': 'gzip' } : {}),
         'Content-Type': MIME[ext] || 'application/octet-stream',
         // the page, its script and its styles are one version: always revalidated, so a phone never runs new markup
         // against an old script. Only the font and icons may be reused from cache.
@@ -116,7 +125,36 @@ function makeRelay(opts) {
         'Permissions-Policy': 'camera=(self), microphone=(), geolocation=()'
       });
       res.end(buf);
-    });
+    }
+  }
+  /* Static files are read once (re-read when they change on disk) and kept gzipped: the phone app is ~180 KB of
+     text, about a quarter of that compressed, which is most of what a first open waits for. */
+  const files = new Map();   // abs -> { mtime, size, buf, gz, etag }
+  function compressible(abs) { return /\.(html|js|css|webmanifest|svg|json)$/i.test(abs); }
+  function packed(buf, abs) {
+    const gz = compressible(abs) ? zlib.gzipSync(buf, { level: 9 }) : null;
+    return { buf, gz: gz && gz.length < buf.length ? gz : null, etag: '"' + crypto.createHash('sha1').update(buf).digest('base64').slice(0, 20) + '"' };
+  }
+  function loadFile(abs) {
+    let st; try { st = fs.statSync(abs); } catch (_) { return null; }
+    if (!st.isFile()) return null;
+    const hit = files.get(abs);
+    if (hit && hit.mtime === st.mtimeMs && hit.size === st.size) return hit;
+    let buf; try { buf = fs.readFileSync(abs); } catch (_) { return null; }
+    const f = Object.assign({ mtime: st.mtimeMs, size: st.size }, packed(buf, abs));
+    if (files.size > 64) files.clear();
+    files.set(abs, f);
+    return f;
+  }
+  const SHELL = ['index.html', 'app.css', 'app.js', 'store.js', 'phone-client.js', 'icon.svg', 'icon-180.png', 'manifest.webmanifest'];
+  let swMemo = { key: '', f: null };
+  function withShellVersion(f) {
+    const h = crypto.createHash('sha256');
+    for (const n of SHELL) { const g = loadFile(path.join(appDir, n)); if (g) h.update(g.etag); }
+    const font = extra.get('/vt323.woff2') || path.join(appDir, 'vt323.woff2'), g = loadFile(font); if (g) h.update(g.etag);
+    const key = f.etag + h.digest('base64');
+    if (swMemo.key !== key) swMemo = { key, f: packed(Buffer.from(String(f.buf).split('%SHELL%').join(b64u(crypto.createHash('sha256').update(key).digest()).slice(0, 12))), 'sw.js') };
+    return swMemo.f;
   }
 
   const server = http.createServer(serveStatic);

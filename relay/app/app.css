@@ -299,3 +299,100 @@ input[type=search]::-webkit-search-cancel-button { display: none; }
 .qcard { margin-top: 8px; padding: 10px 11px; border: 1px solid rgba(var(--gold-rgb), .45); border-radius: 6px; display: flex; flex-direction: column; gap: 9px;
   background: linear-gradient(165deg, rgba(var(--gold-rgb), .07), transparent 55%), color-mix(in srgb, var(--panel2) 65%, transparent); box-shadow: inset 0 1px 0 var(--gd-light); }
 .qcard .q { font-size: 19px; color: var(--ph-bright); line-height: 1.3; }
+
+/* ============================================================
+   THE 0.13 LOOK (Andrew 10-02: "update it to the even newer UI style, slightly less glass"). The desk's settled
+   rule, frontend/css/pipglass.css: GLASS ON THE PANEL, CRT ON THE CONTENT. On a phone the glass is turned down a
+   notch: matte panels (no blur, no sheen band, no amber haze, the faintest tint), 10px panels and 8px cards/keys.
+   The content carries the Pip-Boy screen: phosphor glow with a whisper of colour fringe on titles, a soft glow on
+   secondary type, section rules ending in a tick, the tube's vignette inside each panel, a selection that lights up
+   as a lit bar and blooms, and housed lamps that only say what the station says.
+   ============================================================ */
+body {
+  --gd-edge: rgba(var(--ph-rgb), .26);
+  --gd-light: rgba(var(--ph-bright-rgb), .05);
+  --gd-face: linear-gradient(168deg, rgba(var(--ph-rgb), .045), rgba(var(--ph-rgb), .01) 40%, transparent 60%), color-mix(in srgb, var(--panel2) 94%, transparent);
+  --gd-hover: linear-gradient(120deg, rgba(var(--ph-rgb), .2), rgba(var(--ph-rgb), .07));
+  --gd-comms-edge: rgba(var(--ph-rgb), .18);
+  --cg-card: linear-gradient(165deg, rgba(var(--ph-rgb), .06), transparent 46%), rgba(0, 0, 0, .24);
+  --cg-hair: rgba(var(--ph-rgb), .14);
+  --lit-edge: rgba(var(--ph-rgb), .5);
+  --lit-gold: linear-gradient(120deg, rgba(var(--gold-rgb), .18), rgba(var(--gold-rgb), .05));
+  --bloom: 0 0 14px rgba(var(--ph-rgb), .2);
+  --tube: radial-gradient(ellipse 118% 98% at 50% 45%, transparent 55%, rgba(0, 0, 0, .42) 100%);
+  --pg-glow: -0.45px 0 rgba(255, 64, 48, .2), 0.45px 0 rgba(64, 150, 255, .17), 0 0 6px rgba(var(--ph-rgb), .5);
+  --pg-glow-soft: 0 0 3px rgba(var(--ph-rgb), .33);
+  --pg-line: rgba(var(--ph-rgb), .6);
+  --lamp-house: 0 0 0 1px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .3);
+  background: var(--bg);
+}
+
+/* GLASS (a notch down): the panel — matte face, one crisp edge, the tube's vignette inside, a quiet float shadow */
+.glass { border-radius: 10px; background: var(--tube), var(--gd-face); box-shadow: inset 0 1px 0 var(--gd-light), 0 10px 28px rgba(0, 0, 0, .42); }
+.hero { border-radius: 10px; border-color: rgba(var(--ph-rgb), .3); box-shadow: 0 10px 28px rgba(0, 0, 0, .5); }
+.hero::after { content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+  background: radial-gradient(ellipse 120% 100% at 50% 45%, transparent 62%, rgba(0, 0, 0, .34) 100%); box-shadow: inset 0 0 26px rgba(0, 0, 0, .38); }
+.hero .chip, .hero .expand { z-index: 1; }
+.tabs { background: color-mix(in srgb, var(--panel2) 96%, transparent); border-top-color: rgba(var(--ph-rgb), .2); }
+.sheet { border-radius: 12px 12px 0 0; background: var(--tube), linear-gradient(168deg, rgba(var(--ph-rgb), .045), transparent 50%), var(--panel2); }
+.viewer-plate { border-radius: 10px; background: linear-gradient(168deg, rgba(var(--ph-rgb), .045), transparent 50%), var(--panel2); }
+
+/* cards and keys: 8px, the card fill, a crisp edge */
+.btn, .icon-btn, .send, .file-chip, .row, .step, .well, .msg { border-radius: 8px; }
+.btn, .icon-btn, .send, .file-chip { background: var(--cg-card); border-color: rgba(var(--ph-rgb), .3); box-shadow: inset 0 1px 0 var(--gd-light); }
+.btn:is(:active,:focus-visible), .icon-btn:is(:active,:focus-visible), .send:active, .file-chip:active { background: var(--gd-hover); border-color: var(--lit-edge); box-shadow: var(--bloom); }
+.btn.go { border-color: rgba(var(--ok-rgb), .55); } .btn.no { border-color: rgba(var(--bad-rgb), .5); }
+.btn.quiet { background: transparent; border-color: transparent; box-shadow: none; }
+.chip { border-radius: 6px; background: rgba(0, 0, 0, .55); border-color: rgba(var(--ph-rgb), .3); }
+.compose-row { border-radius: 10px; background: var(--cg-card); border-color: rgba(var(--ph-rgb), .3); }
+.compose-row:focus-within { border-color: var(--lit-edge); box-shadow: var(--bloom); }
+textarea, input[type=text], input[type=search] { border-radius: 8px; border-color: rgba(var(--ph-rgb), .28); }
+#toast { border-radius: 8px; background: var(--panel2); box-shadow: 0 10px 28px rgba(0, 0, 0, .5); }
+
+/* CRT: phosphor type — titles glow with the fringe, secondary type glows softly */
+.bar-title, .label, .mate b, .row .t b, .tab[aria-selected="true"], .push-h, .brand-mark, .fp, .hero-empty b,
+.viewer-plate .t b, .ask .who, .msg .who, .qcard .q, .kv b { text-shadow: var(--pg-glow); }
+.bar-sub, .mate em, .row .t span, .row .d, .chip, .lamp, .compose .to, .step, .working, .note-line, .label .more { text-shadow: var(--pg-glow-soft); }
+.label, .compose .to, .tab, .ask .who, .msg .who { letter-spacing: 1.8px; }
+
+/* CRT: a Pip-Boy section rule — the line runs to the edge and ends in a tick */
+.label::after { height: 8px; align-self: center; margin-top: 7px; background:
+  linear-gradient(var(--pg-line), var(--pg-line)) left top / 100% 1px no-repeat,
+  linear-gradient(var(--pg-line), var(--pg-line)) right top / 1px 8px no-repeat; }
+.label.gold::after { --pg-line: rgba(var(--gold-rgb), .6); background:
+  linear-gradient(var(--pg-line), var(--pg-line)) left top / 100% 1px no-repeat,
+  linear-gradient(var(--pg-line), var(--pg-line)) right top / 1px 8px no-repeat; }
+
+/* CRT: the selection is a lit bar that blooms */
+.row:is(button):is(:active,:focus-visible), .row.sel, .mate.sel, .mate:active, .tab[aria-selected="true"] {
+  background: var(--gd-hover); border-color: var(--lit-edge); box-shadow: var(--bloom); }
+.tab { border-radius: 8px; }
+.tab[aria-selected="true"] { color: var(--ph-bright); }
+.mate { border-radius: 10px; }
+
+/* the portrait well and its housed lamp (the desk's crew cards): idle green, working amber, needs you gold */
+.well { background: rgba(0, 0, 0, .32); border-color: var(--cg-hair); box-shadow: inset 0 2px 6px rgba(0, 0, 0, .45); }
+.well.sm { border-radius: 6px; }
+.well .dot { left: auto; bottom: auto; right: 4px; top: 4px; width: 8px; height: 8px; outline: 0; z-index: 1; box-shadow: var(--lamp-house); }
+.well.sm .dot { right: 3px; top: 3px; width: 7px; height: 7px; }
+.dot.ok { box-shadow: var(--lamp-house), 0 0 5px rgba(var(--ok-rgb), .4); }
+.dot.work { background: var(--ph); box-shadow: var(--lamp-house), 0 0 6px rgba(var(--ph-rgb), .5); }
+.dot.ask { background: var(--gold); box-shadow: var(--lamp-house), 0 0 6px rgba(var(--gold-rgb), .55); }
+.mate.ask { border-color: rgba(var(--gold-rgb), .5); background: var(--lit-gold); }
+.mate.ask em { color: var(--gold); opacity: 1; }
+.lamp i, .chip i { box-shadow: var(--lamp-house); }
+.lamp.ok i, .chip.live i { box-shadow: var(--lamp-house), 0 0 5px rgba(var(--ok-rgb), .45); }
+
+/* NEEDS YOU: the gold card, lit and blooming */
+.ask, .qcard { border-radius: 10px; border-color: rgba(var(--gold-rgb), .55); background: var(--lit-gold), rgba(0, 0, 0, .3);
+  box-shadow: 0 0 14px rgba(var(--gold-rgb), .16); }
+.ask pre, .md pre, .viewer-file pre { border-radius: 8px; border-left: 2px solid var(--ph-dim); background: rgba(0, 0, 0, .34); }
+
+/* CONVERSATION: the agent on a phosphor rail, you on gold (comms.css); replies read like the desk's reports */
+.msg { background: var(--cg-card); border: 1px solid var(--cg-hair); }
+.msg.agent { border-left: 2px solid rgba(var(--ph-rgb), .55); }
+.msg.user { border-right: 2px solid rgba(var(--gold-rgb), .6); }
+.md b { color: var(--ph); text-shadow: 0 0 4px rgba(var(--ph-rgb), .38); }
+.md .h { display: flex; align-items: center; gap: 9px; margin-top: 4px; font-size: .86em; letter-spacing: 2px; color: var(--ph); text-shadow: 0 0 5px rgba(var(--ph-rgb), .4); }
+.md .h::after { content: ""; flex: 1 1 auto; height: 1px; background: rgba(var(--ph-rgb), .32); }
+.md code { border-radius: 4px; background: rgba(var(--ph-rgb), .08); -webkit-box-decoration-break: clone; box-decoration-break: clone; }
