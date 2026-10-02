@@ -2,7 +2,9 @@
 
 ## October 2, 2026 refresh
 
-All 13 shell choices now use new reference-guided artwork: the station armor plus monocoque, timber, clapboard, shingle, brick, stone, stucco, curtain glass, hedge, thermal shield, insulation and heatsink. The station uses `remaster/shell-v2.png`; optional finishes use `shell-<id>-v2.png`. Stable material IDs, paint, lighting, contour clipping and 96-pixel repeat are preserved. Original assets remain available for comparison. Exact prompts and reference provenance are in `docs/industrial-textures/shell-refresh-2026-10-02.prompts.txt`.
+All 15 exterior choices use new reference-guided artwork: station armor, monocoque, timber, clapboard, shingle, brick, stone, stucco, curtain glass, hedge, thermal shield, heatsink, truss, louver and ceramic. The station uses `remaster/shell-v2.png`; optional finishes use `shell-<id>-v2.png`. Paint, lighting, contour clipping and the 96-pixel repeat are preserved. Original assets remain available for comparison. Exact prompts and reference provenance are in `docs/industrial-textures/shell-refresh-2026-10-02.prompts.txt`.
+
+Insulation is an **interior wall only**, using `remaster/walls/insulation.png` (the approved quilted artwork, copied unchanged). Saved exterior insulation selections migrate to thermal armor while retaining explicit exterior paint and existing interior wall choices. Truss, louver and ceramic also have distinct native fallback recipes.
 
 The sections below describe the earlier September generation.
 

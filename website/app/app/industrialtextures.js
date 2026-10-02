@@ -33,7 +33,7 @@ const IndustrialTextures = (() => {
   const detailTargets = new WeakMap(), wallStrips = new Map(), materials = new Map(), emitters = new Map();
   let loaded = false;
   const floorIds = 'spine alloy plate panel tile tread soft grate hex plank turf diamond resin ceramic cargo runner treadway meshway basalt parquet rubber slotted terrazzo octile'.split(' ');
-  const wallIds = 'bulkhead courses service plating ribbed panelled pipework viewport wainscot hedge braced machinery'.split(' ');
+  const wallIds = 'bulkhead courses service plating ribbed panelled pipework viewport wainscot hedge braced machinery insulation'.split(' ');
   const floorArtRevision = new Set(['basalt', 'rubber', 'soft']);
   const floorArtName = id => 'remaster/floors/' + id + (floorArtRevision.has(id) ? '-v2' : '');
   const wallArtRevision = new Set(['bulkhead', 'courses', 'panelled', 'pipework', 'ribbed', 'service']);
@@ -43,7 +43,7 @@ const IndustrialTextures = (() => {
     ...floorIds.map(floorArtName), ...wallIds.map(wallArtName),
     'remaster/shell', 'remaster/crown', 'remaster/workstation-e', 'remaster/workstation-n', 'remaster/workstation-compact-n',
     'calibration/crate'];
-  const shellMaterials = ['monocoque', 'timber', 'clapboard', 'shingle', 'brick', 'stone', 'stucco', 'curtain', 'hedge', 'thermal', 'insulation', 'heatsink'];
+  const shellMaterials = ['monocoque', 'timber', 'clapboard', 'shingle', 'brick', 'stone', 'stucco', 'curtain', 'hedge', 'thermal', 'heatsink', 'truss', 'louver', 'ceramic'];
   const floorMaterials = ['flightdeck', 'lunar', 'maggrid', 'habitat'];
   const wallMaterials = ['pressure', 'radiator', 'utility', 'acoustic'];
   const shellNames = shellMaterials.map(id => 'shell-' + id);
