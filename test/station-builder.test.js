@@ -1745,6 +1745,21 @@ for (const c of T.catalog) {
       A.eq(sig(st), was, 'the line routes as before'); A.eq(Object.keys(st.serialize().belts || {}).length, beltN, 'every belt tile moved with it');
       A.ok(st.undo().ok && snap(st) === before, 'one undo');
     }
+    // two rooms open to each other in an L (nothing across the join) re-lay as two rooms, each reached by a whole hallway:
+    // planned as one box, the hallway met the box's middle, empty floor (refused as unreachable, or a 1-tile mouth)
+    {
+      const edge = (a, b) => { let n = 0; for (const p of a.rects) for (const q of b.rects) { if (p.y2 + 1 === q.y1 || q.y2 + 1 === p.y1) n += Math.max(0, Math.min(p.x2, q.x2) - Math.max(p.x1, q.x1) + 1); if (p.x2 + 1 === q.x1 || q.x2 + 1 === p.x1) n += Math.max(0, Math.min(p.y2, q.y2) - Math.max(p.y1, q.y1) + 1); } return n; };
+      for (const nook of [{ x: 24, y: 11, w: 6, h: 6 }, { x: 34, y: 11, w: 8, h: 6 }]) for (const shape of ['wide', 'tall', 'even']) {
+        const st = fresh(), tag = 'an L (nook at ' + nook.x + ', ' + nook.y + '), ' + shape;
+        const p = SB.planEdit(st.serialize(), { refit: [{ op: 'hall', x: 18, y: 4, w: 6, h: 3 }, { op: 'room', name: 'Den', kind: 'hab', x: 24, y: 0, w: 18, h: 11 }, Object.assign({ op: 'room', name: 'Nook', kind: 'hab' }, nook)] }, E);
+        A.ok(p.ok && SB.apply(st, p.plan, E).ok, tag + ': laid (' + (p.error || 'ok') + ')');
+        const re = SB.planEdit(st.serialize(), { rearrange: { shape } }, E);
+        A.ok(re.ok && SB.apply(st, re.plan, E).ok, tag + ': re-lays (' + (re.error || 'ok') + ')');
+        const rs = st.rooms(), thin = [];
+        for (const h of rs.filter(r => r.kind === 'corridor')) for (const r of rs) if (r.kind !== 'corridor') { const e = edge(h, r); if (e > 0 && e < 3) thin.push(h.name + ' meets ' + r.name + ' on ' + e); }
+        A.eq(thin, [], tag + ': every hallway meets its room with its whole mouth');
+      }
+    }
     // every whole-room style, dressed in a large room with its door north (sets mirrored) and with its door west, leaves
     // nothing a designer would fix: no seat taken, no seat turned from its table, nothing facing straight into a wall
     for (const [door, rect, hall] of [['north', { x: 0, y: 17, w: 24, h: 14 }, { x: 7, y: 11, w: 3, h: 6 }], ['west', { x: 24, y: 0, w: 24, h: 14 }, { x: 18, y: 4, w: 6, h: 3 }]]) {

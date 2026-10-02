@@ -3214,6 +3214,18 @@
       const g = [r], q = [r]; groupOf.set(r.id, g); groups.push(g);
       while (q.length) { const a = q.shift(); for (const b of rooms0) if (!groupOf.has(b.id) && roomsTouch(a, b)) { groupOf.set(b.id, g); g.push(b); q.push(b); } }
     }
+    // a group that is not one rectangle (an L) re-lays as its rooms, each with its own hallway: the diamond's hallway meets
+    // the middle of a group's box, which an L leaves as empty floor (the rooms were then unreachable, or a hallway opened
+    // onto nothing). Only a group a piece stands across, or a belt runs in, stays whole
+    const beltAt = Object.keys(st.serialize().belts || {}).map(k => { const [x, y] = k.split(',').map(Number); return { x, y }; });
+    for (const g of groups.slice()) {
+      if (g.length < 2 || g === groupOf.get(hub.id)) continue;
+      const B = g.map(bboxOf).reduce((a, b) => ({ x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1), x2: Math.max(a.x2, b.x2), y2: Math.max(a.y2, b.y2) }));
+      const tiles = g.reduce((n, r) => n + r.rects.reduce((m, q) => m + (q.x2 - q.x1 + 1) * (q.y2 - q.y1 + 1), 0), 0);
+      if (tiles === (B.x2 - B.x1 + 1) * (B.y2 - B.y1 + 1)) continue;
+      if (st.props().some(p => g.filter(r => touchesRoom(p, r)).length > 1) || beltAt.some(t => g.some(r => touchesRoom(t, r)))) continue;
+      groups.splice(groups.indexOf(g), 1, ...g.map(r => { const one = [r]; groupOf.set(r.id, one); return one; }));
+    }
     const home = groupOf.get(hub.id), HB = bboxOf(hub), hx = (HB.x1 + HB.x2) / 2, hy = (HB.y1 + HB.y2) / 2, area = r => { const B = bboxOf(r); return (B.x2 - B.x1 + 1) * (B.y2 - B.y1 + 1); };
     const order = groups.filter(g => g !== home).map(g => {
       const B = g.map(bboxOf).reduce((a, b) => ({ x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1), x2: Math.max(a.x2, b.x2), y2: Math.max(a.y2, b.y2) }));
