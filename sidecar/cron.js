@@ -455,6 +455,7 @@
       if (m[3] === 'pm' && h < 12) h += 12;
       else if (m[3] === 'am' && h === 12) h = 0;
       else if (!m[3] && h >= 1 && h <= 11 && partOfDay != null && partOfDay >= 14) h += 12;   // "every evening at 7"
+      else if (!m[3] && !m[2] && h === 12 && partOfDay != null && partOfDay >= 21) h = 0;   // "every night at 12" is midnight, never noon
       out.push({ h: h, m: min });
     }
     return out;
@@ -495,6 +496,9 @@
       return { cron: '*/' + n + ' ' + a + '-' + Math.max(a, b - 1) + ' * * ' + dow };
     }
     if (/^ ?(hourly|every hour)\s*$/.test(s)) return { interval: 60 };
+    // a schedule with an END or a START ("until friday", "starting monday", "for a week") has no cron form: it was saved
+    // as the named day alone ("every day at 9am until friday" → Fridays only) or as forever — refuse (sweep 2026-10-02)
+    if (/\buntil\b|\bstarting\b|\bbeginning\b|\bfrom (?:next |this )?(?:sun|mon|tue|wed|thu|fri|sat)|\bfor (?:a|an|one|two|three|\d+) (?:day|week|month|year)s?\b/.test(s)) return null;
     if (/\bevery (\d+ )?(minutes?|mins?|hours?|hrs?|days?)\b/.test(s) && !/\bat\b|am\b|pm\b/.test(s)) return null;   // plain intervals are step 1's job
 
     const times = englishTimes(s, partOfDay);
@@ -532,7 +536,17 @@
 
     // weekly shapes
     let dows = [];
-    if (/\bweekdays?\b|\bmonday (?:to|through|-) friday\b|\bmon-fri\b/.test(s)) dows = [1, 2, 3, 4, 5];
+    // a day RANGE ("monday-friday", "tue to thu", "monday through wednesday") is every day in it — it used to be read
+    // as its two ends ("monday-friday at 9am" saved Monday and Friday only, sweep 2026-10-02)
+    const DAY3 = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+    const range = s.match(/\b(sun|mon|tue|wed|thu|fri|sat)[a-z]* ?(?:-|–|—|to|through|thru) ?(sun|mon|tue|wed|thu|fri|sat)[a-z]*\b/);
+    if (range) {
+      const a = DAY3[range[1]], b = DAY3[range[2]];
+      if (a === b) return null;
+      for (let d = a; ; d = (d + 1) % 7) { dows.push(d); if (d === b) break; }
+      dows.sort((x, y) => x - y);
+    }
+    else if (/\bweekdays?\b|\bmon-fri\b/.test(s)) dows = [1, 2, 3, 4, 5];
     else if (/\bweekends?\b/.test(s)) dows = [0, 6];
     else for (const [re, d] of DOW_WORDS) if (re.test(s)) dows.push(d);
     if (dows.length) return { cron: minute + ' ' + hour + ' * * ' + dows.join(',') };
