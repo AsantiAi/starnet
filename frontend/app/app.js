@@ -4193,6 +4193,9 @@ const App = (() => {
     if (typeof ProjectHome !== 'undefined') ProjectHome.onSession(id);
     if (id === Workstreams.activeId()) return;
     const ws = Workstreams.switch(id); if (!ws) return;
+    // opened from elsewhere (a notification, the COMMS picker, the HUD) onto a session the narrowed rail
+    // doesn't list: show every session again, so the open one is never missing from the rail
+    if (railAgentFilter && !railHasAgent(ws, railAgentFilter)) { railAgentFilter = null; if (typeof StationUI !== 'undefined' && StationUI.refreshCrew) StationUI.refreshCrew(); }
     SFX.click();
     focusAgent(ws.agentId || 'agent');   // the focused agent follows the stream's binding (multi-agent COMMS)
     if (typeof World !== 'undefined' && World.lockBody) World.lockBody(ws.agentId || 'agent');   // Commander PICKED this session → the camera follow-locks its agent (any wheel/drag releases it)
@@ -4284,6 +4287,7 @@ const App = (() => {
         && !(typeof Channels !== 'undefined' && Channels.isBusy(cur.id))
         && Workstreams.setAgent(cur.id, id)) {
       focusAgent(id); if (typeof World !== 'undefined' && World.lockBody) World.lockBody(id);   // explicit agent pick → camera follow-lock
+      if (railAgentFilter && railAgentFilter !== id) { railAgentFilter = null; if (typeof StationUI !== 'undefined' && StationUI.refreshCrew) StationUI.refreshCrew(); }   // the open line must stay on the rail
       Chat.load(cur); refreshUsage(); renderRail(); persist();
       return cur.id;
     }
@@ -4467,8 +4471,9 @@ const App = (() => {
     const ul = el('workstreams'); if (!ul) return;
     const old = ul.querySelector('.ws-arch-row'); if (old) old.remove();
     if (railAttentionOnly) return;
-    let n = 0; for (const w of Workstreams.list({ includeArchived: true })) if (w.archived) n++;
-    if (!n) { railShowArchived = false; return; }
+    // narrowed to one agent, count only that agent's archived sessions — "1 archived" must open onto one
+    let n = 0; for (const w of Workstreams.list({ includeArchived: true })) if (w.archived && (!railAgentFilter || railHasAgent(w, railAgentFilter))) n++;
+    if (!n) { if (!railAgentFilter) railShowArchived = false; return; }
     const li = document.createElement('li');
     li.className = 'ws-arch-row' + (railShowArchived ? ' on' : '');
     li.textContent = railShowArchived ? '▾ hide archived' : '▸ ' + n + ' archived';
