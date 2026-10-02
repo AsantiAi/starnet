@@ -6889,11 +6889,27 @@ const Chat = (() => {
       if (renderQueued) return;
       if (typeof requestAnimationFrame !== 'function' || (typeof document !== 'undefined' && document.hidden)) { flushProse(); autoscroll(); return; }
       renderQueued = true;
-      requestAnimationFrame(() => { if (!renderQueued) return; flushProse(); autoscroll(); });
+      requestAnimationFrame(() => { if (!renderQueued || held) return; flushProse(); autoscroll(); });
+    }
+    /* A POINTER DOWN ON THE LIVE REPLY HOLDS ITS RE-RENDER (QA 2026-10-02). Every frame rebuilt the paragraph, replacing the
+       <a> between mousedown and mouseup — the click landed on .body and a link in a still-streaming reply never opened (and a
+       text selection inside it was wiped). Held until the click has been dispatched, then the queued text lands at once. */
+    let held = false;
+    function holdWhilePressed() {
+      held = true;
+      let safety = null;   // a release outside the window never strands the live reply: the text comes back after 4 s
+      const up = () => {
+        clearTimeout(safety);
+        document.removeEventListener('pointerup', up, true); document.removeEventListener('pointercancel', up, true);
+        setTimeout(() => { held = false; if (renderQueued) { flushProse(); autoscroll(); } }, 0);   // after the click event, never before it
+      };
+      document.addEventListener('pointerup', up, true); document.addEventListener('pointercancel', up, true);
+      safety = setTimeout(up, 4000);
     }
     function open() {
       endToolRail();   // a fresh prose paragraph opening below a rail closes it, so the next tool call starts a NEW rail under this prose (keeps chronological "said → did → said → did")
       seg = row('agent', { stamp: true, who: whoName || null }); raw = '';
+      if (seg.body && seg.body.addEventListener) seg.body.addEventListener('pointerdown', holdWhilePressed);
       caret = document.createElement('span'); caret.className = 'caret'; caret.textContent = '▮';
       seg.d.appendChild(caret);   // caret is a sibling of .body, so re-rendering .body's content never disturbs it
     }

@@ -60,4 +60,14 @@ function harness({ tauri, selection }) {
 }
 function click(h, scope, href) { return h.click(scope, href); }
 
+// QA 2026-10-02: a link in a STILL-STREAMING reply is clickable — a pointer down on the live paragraph holds its per-frame
+// re-render until the click has been dispatched (the <a> used to be replaced between mousedown and mouseup)
+{
+  const sa = src.slice(src.indexOf('  function streamingAgent(whoName) {'), src.indexOf('    function closeSeg() {'));
+  A.ok(sa.includes('requestAnimationFrame(() => { if (!renderQueued || held) return; flushProse(); autoscroll(); });'), 'the frame render skips while the reply is pressed');
+  A.ok(sa.includes("seg.body.addEventListener('pointerdown', holdWhilePressed);"), 'a pointer down on the live paragraph holds it');
+  A.ok(sa.includes("setTimeout(() => { held = false; if (renderQueued) { flushProse(); autoscroll(); } }, 0);") && sa.includes('safety = setTimeout(up, 4000);'),
+    'released only after the click is dispatched, and never held for good');
+}
+
 A.report('prose-links-desktop');
