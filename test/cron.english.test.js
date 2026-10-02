@@ -79,7 +79,9 @@ for (const bad of ['whenever i feel like it', 'last day of every month', 'every 
   'the first monday of every month at 9am' /* the 1st */, 'first monday of the month at 9am' /* every Monday */,
   'the last friday of every month at 5pm' /* the 1st */, '9am on the 15th' /* once, tomorrow */,
   // sweep 2026-10-02: a start or an end has no cron form
-  'every day at 9am until friday' /* Fridays only */, 'every day at 9am starting monday' /* Mondays only */, 'every day at 9am for a week' /* forever */]) {
+  'every day at 9am until friday' /* Fridays only */, 'every day at 9am starting monday' /* Mondays only */, 'every day at 9am for a week' /* forever */,
+  // QA 2026-10-02
+  'every 6 weeks on mondays at 9am' /* weekly */, 'every five weeks at 9am' /* daily */, 'every 15th at 9am' /* daily */, 'every 3rd at noon' /* daily */]) {
   A.eq(cron.parseSchedule(bad, NOW, { defaultTz: TZ }), null, 'refused: "' + bad + '"');
 }
 

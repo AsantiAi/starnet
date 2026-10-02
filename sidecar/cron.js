@@ -467,7 +467,8 @@
       .replace(/\beach\b/g, 'every').replace(/\beveryday\b/g, 'every day').replace(/\s+/g, ' ');
     // every-other-week has no cron form; refuse it rather than silently firing weekly ("every other monday"
     // otherwise matches the Monday rule below). Twice a month is offered as "the 1st and 15th of every month".
-    if (/\bevery other\b|\bbi-?weekly\b|\bfortnight(?:ly)?\b|\bevery (?:2|two|3|three|4|four) weeks\b|\btwice a month\b/.test(s)) return null;
+    // any "every N weeks" with N >= 2 (QA 2026-10-02: "every 6 weeks on mondays at 9am" saved WEEKLY)
+    if (/\bevery other\b|\bbi-?weekly\b|\bfortnight(?:ly)?\b|\bevery (?:[2-9]|[1-9]\d+|two|three|four|five|six|seven|eight|nine|ten) weeks\b|\btwice a month\b/.test(s)) return null;
     // More shapes the rules below would quietly turn into a DIFFERENT schedule than the words the Commander
     // approves on the card (sweep 2026-10-01) — refuse them all, never guess:
     //   "every day except sunday at 9am" saved Sundays ONLY · "every 2 days at 9am" / "every year on jan 1" /
@@ -478,7 +479,8 @@
     if (/\b(?:years?|yearly|annual(?:ly)?|quarters?|quarterly)\b/.test(s)) return null;
     if (/\b(?:first|second|third|fourth|fifth|last|[1-5](?:st|nd|rd|th))\s+(?:sun|mon|tue|wed|thu|fri|sat)/.test(s)) return null;
     if (/\blast\b/.test(s) && /\bmonth/.test(s)) return null;
-    if (/\bon the \d{1,2}(?:st|nd|rd|th)\b/.test(s) && !/\bmonth/.test(s)) return null;
+    // a day-of-month with no month in the words has no safe reading (QA 2026-10-02: "every 15th at 9am" saved DAILY)
+    if (/\b\d{1,2}(?:st|nd|rd|th)\b/.test(s) && !/\bmonth/.test(s)) return null;
     const pod = (s.match(/\b(morning|afternoon|evening|night|tonight)s?\b/) || [])[1];
     const partOfDay = pod != null ? PART_OF_DAY[pod] : null;
 
