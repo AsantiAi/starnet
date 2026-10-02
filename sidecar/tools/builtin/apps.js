@@ -42,7 +42,10 @@ function makeAppTools(deps) {
     {
       name: 'app.create',
       description: 'Create a new StarNet app: a dashboard or tool that lives INSIDE StarNet, in its own StarNet window, from a name and a one-line description. Returns its id and how to build it. '
-        + 'NOT for anything meant to run, be hosted or be shipped outside StarNet — a website to host, a React/Vue/Next project, a script, a browser extension, a mobile or desktop app: build those as real files with the file tools.',
+        // the exclusions name no search words (tool_search matches description substrings, and the hit line shows only the
+        // first sentence): listed as "a website, a React project, a browser extension…", they made tool_search REVEAL
+        // app.create as the top hit for exactly those asks (sweep 2026-10-02). Same meaning, no trigger words.
+        + 'NOT for anything meant to run, be published or be shipped outside StarNet (something to put online, a framework codebase, a standalone program, an add-on for the Commander\'s own web browser, a phone or computer program): build those as real files with the file tools.',
       schema: { type: 'object', required: ['name'], properties: { name: { type: 'string' }, description: { type: 'string', description: 'what it should do, in the Commander\'s words' } } },
       scope: 'write',
       run: async (a) => {

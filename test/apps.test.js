@@ -52,7 +52,11 @@ const throwsMsg = async (fn) => { try { await fn(); return ''; } catch (e) { ret
     // the crew finds app.create by searching "app": its description must keep OUTSIDE builds away (a Netlify site and
     // a React todo became StarNet apps on 10-02 before this line)
     const createDesc = tools.defs.find(d => d.name === 'app.create').description;
-    A.ok(/INSIDE StarNet/.test(createDesc) && /NOT for anything meant to run, be hosted or be shipped outside StarNet/.test(createDesc) && /React/.test(createDesc), 'app.create says it is only for apps inside StarNet, never a site/project/script to ship elsewhere');
+    A.ok(/INSIDE StarNet/.test(createDesc) && /NOT for anything meant to run, be published or be shipped outside StarNet/.test(createDesc) && /framework codebase/.test(createDesc) && /add-on for the Commander's own web browser/.test(createDesc), 'app.create says it is only for apps inside StarNet, never a site/project/script to ship elsewhere');
+    // (sweep 2026-10-02) …without the words people SEARCH for those asks: tool_search matches description substrings and
+    // shows only the first sentence, so "a website, a React project, a browser extension" made it reveal app.create as
+    // the top hit for exactly "browser extension" / "host a site" / "react project"
+    A.ok(!/\b(extensions?|websites?|react|host(ed|ing)?|desktop|site)\b/i.test(createDesc), 'app.create names none of the words a search for an outside build would match: ' + (createDesc.match(/\b(extensions?|websites?|react|host(ed|ing)?|desktop|site)\b/ig) || []).join(','));
     A.eq(slugify('AI News Brief!'), 'ai-news-brief', 'the id comes from the name');
     A.eq(slugify('***'), 'app', 'a name with no letters still gets an id');
 
