@@ -90,6 +90,10 @@ const result = (extra) => Object.assign({ type: 'result', subtype: 'success', is
     A.eq(evs.filter(e => e.type === 'text').map(e => e.delta).join(''), 'Let me look. ', 'prose before the call streams; the block does not');
     const start = evs.find(e => e.type === 'tool_start');
     A.eq(start && start.name, 'fs.read', 'tool_start names the tool');
+    // (sweep 10-02) ids are unique across adapters: a fresh adapter per request used to restart at call_cli_1_0
+    const again = await collect(make({ lines: [init('none'), delta('<tool_call>{"name":"fs.read","arguments":{"path":"b.txt"}}</tool_call>'), result()] }).p, { model: 'sonnet', tools, messages: [{ role: 'user', content: 'read b.txt' }] });
+    const start2 = again.find(e => e.type === 'tool_start');
+    A.ok(start && start2 && /^call_cli_[0-9a-f]{8}_1_0$/.test(start.id) && start.id !== start2.id, 'two requests never reuse a tool-call id: ' + [start && start.id, start2 && start2.id].join(' vs '));
     A.eq(JSON.parse(evs.find(e => e.type === 'tool_args').chunk), { path: 'a.txt' }, 'tool_args carry the JSON arguments');
     A.ok(evs.some(e => e.type === 'tool_done'), 'tool_done closes the call');
     A.eq(evs.find(e => e.type === 'done').finishReason, 'tool_calls', 'a call ends the turn as tool_calls');
@@ -119,6 +123,12 @@ const result = (extra) => Object.assign({ type: 'result', subtype: 'success', is
     const q = make({ lines: [], code: 1, stderr: 'boom' }).p;
     err = null; try { await collect(q, { model: 'sonnet', messages: [{ role: 'user', content: 'x' }] }); } catch (e) { err = e; }
     A.ok(err && /exited with code 1/.test(err.message) && /boom/.test(err.message), 'exit without a result throws with stderr');
+    // (sweep 2026-10-02) a FAILED turn on an API-key sign-in was still billed: its cost is reported before the error
+    const billed = make({ lines: [init('user'), result({ is_error: true, subtype: 'error_during_execution', result: 'overloaded', total_cost_usd: 0.18 })] }).p;
+    const seen = []; err = null;
+    try { for await (const e of billed.stream({ model: 'sonnet', messages: [{ role: 'user', content: 'x' }] })) seen.push(e); } catch (e) { err = e; }
+    const u = seen.find(e => e.type === 'usage');
+    A.ok(err && u && u.usage.cost === 0.18 && u.usage.completion_tokens === 7, 'a failed API-key turn reports its billed cost before it throws');
   }
 
   // G. Stop kills the child and ends without an error or a done.
@@ -154,6 +164,15 @@ const result = (extra) => Object.assign({ type: 'result', subtype: 'success', is
     const none = makeClaudeCliProvider({ spawn: fakeSpawn({}).spawn, fs: { statSync() { throw new Error('ENOENT'); } }, env: { PATH: path.join('nowhere') }, platform: 'linux' });
     err = null; try { await none.listModels(); } catch (e) { err = e; }
     A.ok(err && /not installed/.test(err.message), 'missing CLI lists nothing and says how to install it');
+    // (sweep 2026-10-02) macOS app opened from the Finder: bare PATH, Homebrew/npm `claude` → found, and its JS run by the station's Node
+    const brewCli = '/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js';
+    const fsMac = { statSync(p) { if (String(p).replace(/\\/g, '/') === '/opt/homebrew/bin/claude') return { isFile: () => true }; throw new Error('ENOENT'); },
+      realpathSync(p) { return String(p).replace(/\\/g, '/') === '/opt/homebrew/bin/claude' ? brewCli : p; }, writeFileSync() {}, unlinkSync() {} };
+    const fsp = fakeSpawn({ lines: [{ loggedIn: true, authMethod: 'claude.ai' }], code: 0 });
+    const mac = makeClaudeCliProvider({ spawn: fsp.spawn, fs: fsMac, env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', HOME: '/Users/me' }, platform: 'darwin' });
+    try { await mac.listModels(); } catch (_) {}
+    const first = fsp.calls[0];
+    A.ok(first && first.file === process.execPath && String(first.args[0]).replace(/\\/g, '/') === brewCli, 'a Finder-launched Mac finds the Homebrew/npm claude and runs its cli.js with the station\'s Node: ' + JSON.stringify(first && [first.file, first.args && first.args[0]]));
   }
 
   // K. a lost sign-in (the CLI's real v2.1.284 shape) is an `auth` failure, never a retried `unknown`.

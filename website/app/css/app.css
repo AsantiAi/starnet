@@ -806,6 +806,9 @@ body.no-curve #stage-wrap::before { background: none; box-shadow: none; }
    .turnin-rate / consent-btns flex hosts. */
 .work-rate-hint { flex-basis: 100%; width: 100%; color: var(--ph); font-size: 11px; letter-spacing: .3px; opacity: .8; margin-bottom: 2px; }
 .turnin-rate .consent-btns, .cmsg.work-rate .consent-btns { margin-top: 0; }
+/* the "missed" thumb is the SAME up-pointing pixel SVG, flipped: the flip lived only in the glass skin (pipglass.css, non-HUD),
+   so HUD mode and ?glass=0 showed two identical up-thumbs and a tap on the "up" one on the right filed a miss (sweep 10-02) */
+.thumb-down .thumb-px { transform: rotate(180deg); }
 /* FLAT item row — the card is the only box. A second bordered box inside the gold inset read as
    stacked popups; the item is now a quiet row: soft kind pill + text, evidence + buttons below. */
 .turnin-item {

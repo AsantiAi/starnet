@@ -1256,6 +1256,15 @@ const WorldModel = (() => {
           if (inOld(x, y) && !inNew(x, y)) return fail('CUTS_CONTENTS', 'a ' + p.t + ' would be left off the deck');
       }
       for (const k of Object.keys(doc.belts)) { const q = k.split(','), x = +q[0], y = +q[1]; if (inOld(x, y) && !inNew(x, y)) return fail('CUTS_CONTENTS', 'a belt would be left off the deck'); }
+      // a piece hung on a wall keeps its wall: growing a room over the wall above it left it hanging in mid-floor
+      for (const p of doc.props) {
+        if (ruleOf(p.t).mount !== 'wall') continue;
+        const fp = propFootprint(p);
+        for (let x = fp.x1; x <= fp.x2; x++) {
+          const y = fp.y1 - 1, other = roomAt(x, y);
+          if (!other && inNew(x, y)) return fail('LOSES_WALL', 'a ' + p.t + ' hangs on the wall there: it would be left in mid-floor — move it first');
+        }
+      }
       snapshot();
       const before = rm.rects.slice();
       rm.rects = [nr];
@@ -1570,7 +1579,7 @@ const WorldModel = (() => {
       }
       return null;
     }
-    function checkProp(foot, ignoreId, type) {
+    function checkProp(foot, ignoreId, type, ignoreSet) {
       if (foot.x2 < foot.x1 || foot.y2 < foot.y1) return fail('NO_RECT', 'nothing to place');
       for (let y = foot.y1; y <= foot.y2; y++) for (let x = foot.x1; x <= foot.x2; x++) {
         if (!roomAt(x, y)) return fail('OFF_DECK', 'must sit on a deck');
@@ -1605,7 +1614,7 @@ const WorldModel = (() => {
             const at = propsAtTile(x, y);
             if (!at) continue;
             for (const p of at) {
-              if (p.id === ignoreId) continue;
+              if (p.id === ignoreId || (ignoreSet && ignoreSet.has(p.id))) continue;
               if (host && p.id === host.id) continue;         // its own table is not an obstacle
               if (ruleOf(p.t).flat) continue;                 // standing ON a rug is the point of a rug
               return fail('OVERLAP', 'overlaps a prop');
@@ -1715,6 +1724,45 @@ const WorldModel = (() => {
       const r = relayLinksOf(p, () => { p.x = nx; p.y = ny; });
       emit([before, propFootprint(p)].concat(r.dirty), { staticBakeUnchanged: true });
       return { ok: true, relaid: r.relaid, lost: r.lost };
+    }
+    /* MOVE SEVERAL PIECES AS ONE (Build Mode's group move, sweep 2026-10-02): every member shifts by (dTx, dTy) at once, then
+       each is checked against the floor where it lands, and the belt links of every member are lifted first and re-laid once,
+       after ALL have moved. Members never block each other: the group moves rigidly, so what overlapped before (a lamp on its
+       table) overlaps the same way after. Member by member, a table was refused by its own lamp, and a link re-laid against a
+       neighbour that had not moved yet was lost, depending on the order. One undo; refused, nothing changes. */
+    function moveProps(ids, dTx, dTy) {
+      const ps = Array.from(new Set(ids || [])).map(propById).filter(Boolean);
+      if (!ps.length) return fail('NOT_FOUND', 'no such prop');
+      if (!dTx && !dTy) return { ok: true };
+      return transact(() => {
+        const set = new Set(ps.map(q => q.id)), dirty = ps.map(propFootprint);
+        const L = Array.isArray(doc.links) ? doc.links : [];
+        const mine = L.filter(l => l && l.from && l.to && l.from.prop != null && l.to.prop != null && l.from.prop !== l.to.prop && (set.has(l.from.prop) || set.has(l.to.prop)));
+        const others = L.filter(l => mine.indexOf(l) < 0), keepTile = new Set(), cell = (x, y) => ({ x1: x, y1: y, x2: x, y2: y });
+        for (const l of others) for (const t of (l.path || [])) keepTile.add(beltKey(t.x, t.y));
+        for (const l of mine) for (const t of (l.path || [])) { const k = beltKey(t.x, t.y); if (!keepTile.has(k) && doc.belts[k]) { delete doc.belts[k]; dirty.push(cell(t.x, t.y)); } }
+        for (const q of ps) if (isJunction(q) && mine.some(l => l.from.prop === q.id || l.to.prop === q.id)) { const k = beltKey(q.x, q.y); if (!keepTile.has(k) && doc.belts[k]) { delete doc.belts[k]; dirty.push(cell(q.x, q.y)); } }
+        if (Array.isArray(doc.links)) doc.links = others;
+        for (const q of ps) { q.x += dTx; q.y += dTy; }
+        dropRoomIdx();
+        for (const q of ps) {
+          const v = checkProp(propFootprint(q), q.id, q.t, set);
+          if (!v.ok) return Object.assign({}, v, { prop: q.id });
+          dirty.push(propFootprint(q));
+        }
+        const relaid = [], lost = [], ends = new Set();
+        for (const l of mine) {
+          const A = propById(l.from.prop), B = propById(l.to.prop);
+          const r = (A && B) ? planBelt(A, B, true) : fail('NOT_FOUND', 'no such prop');
+          if (!r.ok) { lost.push({ id: l.id, from: l.from.prop, to: l.to.prop, msg: r.msg }); continue; }
+          for (const d of layBelt(A, B, r, true, l)) dirty.push(d);
+          relaid.push(l.id); ends.add(A.id); ends.add(B.id);
+        }
+        if (lost.length) return { ok: false, error: 'LINK_LOST', msg: 'moving these together would take up a belt link — move those machines one at a time (their belts follow)', lost };
+        for (const id of ends) { const J = propById(id); if (J && isJunction(J)) syncJunctionCfg(J); }
+        emit(dirty, { staticBakeUnchanged: !ps.some(q => q.t === 'airlock') });
+        return { ok: true, relaid };
+      });
     }
     /* lift every link between machine p and another machine (the belt tiles no other link rides), run `mutate` (the move),
        then lay each one again with the connect planner — same two machines, same id, same ports. A junction's own tile
@@ -3475,7 +3523,7 @@ const WorldModel = (() => {
       },
       // mutations
       addRoom, placeHallway, removeRoom, moveRoom, moveRooms, resizeRoom, setRoomKind, setFloor, setMaterial, setDeck, setWalls, setHull, paintTiles, renameRoom,
-      addProp, removeProp, moveProp, rotateProp, faceProp, mirrorProp, assignPropAgent, ensureWorkstation, configureJunction, swapJoinerMerger, bindConnector, bindPlugin, placePluginTerminal, setDoorState, setPropProject, setPropBrief, setPropRole, setPropHands, setPropLabel, setPropLimits,
+      addProp, removeProp, moveProp, moveProps, rotateProp, faceProp, mirrorProp, assignPropAgent, ensureWorkstation, configureJunction, swapJoinerMerger, bindConnector, bindPlugin, placePluginTerminal, setDoorState, setPropProject, setPropBrief, setPropRole, setPropHands, setPropLabel, setPropLimits,
       setBelt, removeBelt, removeBelts, placeBeltRun, connectBelt, connectionPreview, hookedBelts, stampBlueprint, insertBayBetween, canInsertBayBetween, transact, lineGraph, applyLineLayout, blueprintGraph,
       // agent-bay binding queries
       propsByType, propsByAgent, pipelineEdges, setPipelineEdges, addPipelineEdge, removePipelineEdge, agentRoomId, bayObjects,

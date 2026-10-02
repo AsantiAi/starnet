@@ -151,12 +151,15 @@ function makePush(deps) {
   async function sendOne(deviceId, payload) {
     const sub = load().subs[deviceId];
     if (!sub) return { deviceId, ok: false, status: 0 };
+    // the push-service check runs at SEND too: a subscription saved by an older build (before the subscribe check)
+    // must not make the station POST to an address a phone made up (sweep 2026-10-02)
+    if (!ENDPOINT_RE.test(String(sub.endpoint || '')) || !pushHostOk(sub.endpoint, extraHosts)) { unsubscribe(deviceId); return { deviceId, ok: false, status: 0 }; }
     let body;
     try { body = encrypt(Buffer.from(payload), unb64u(sub.p256dh), unb64u(sub.auth)); }
     catch (e) { note('remote.push.encrypt', e); return { deviceId, ok: false, status: 0 }; }
     let status = 0;
     try {
-      const r = await doFetch(sub.endpoint, { method: 'POST', body,
+      const r = await doFetch(sub.endpoint, { method: 'POST', body, redirect: 'manual',   // never followed to another host
         headers: { 'Content-Type': 'application/octet-stream', 'Content-Encoding': 'aes128gcm', TTL: String(TTL_S), Urgency: 'high',
           Authorization: 'vapid t=' + jwtFor(sub.endpoint) + ', k=' + publicKey() } });
       status = r.status;

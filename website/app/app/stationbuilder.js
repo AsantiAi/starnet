@@ -49,6 +49,11 @@
 
   // the card's drawing of a plan (planpreview.js): every room (those the plan adds or changes marked), what it adds, its new belts
   const MACHINE_T = /^(intake|bay|outbox|filter|merger|splitter|joiner|loop)$/;
+  /* ON A ROOM BY FOOTPRINT (sweep 2026-10-02): WorldModel.removeRoom drops every piece whose footprint TOUCHES the room,
+     not only the ones whose top-left tile is on it. Judged by the top-left tile, a desk or an outbox reaching one tile
+     into a hallway passed the re-lay's guard, went uncounted on the card ("furniture, lines, desks and agents stay as
+     they are") — and was deleted. Every count and guard of what a removal takes uses this. */
+  const touchesRoom = (p, room) => !!room && (room.rects || []).some(r => p.x <= r.x2 && p.x + (p.w || 1) - 1 >= r.x1 && p.y <= r.y2 && p.y + (p.h || 1) - 1 >= r.y1);
   const AISLE = 3;   // clear tiles between two lines that share a room, every way (a walkway, and room for each line's plate)
   function previewOf(WM, before, after, zones, markRoomId) {
     const was = new Set(before.order || []), wasProps = new Set((before.props || []).map(p => p.id)), wasBelts = before.belts || {};
@@ -1056,7 +1061,10 @@
     // a line is found by ITS name: an unnamed line never answers to a name (an empty label is inside every string)
     if (!key(raw)) return refuse('Say which line: its name (or the id of any machine on it). Lines: ' + (all.length ? all.join(', ') : 'none') + '.');
     let hits = named.filter(p => key(p.label) && key(p.label) === key(raw));
-    if (!hits.length) hits = named.filter(p => key(p.label) && (key(p.label).indexOf(key(raw)) >= 0 || key(raw).indexOf(key(p.label)) >= 0));
+    // …or by whole words of it ("research" finds "Research + write"): letters inside a word never match ("email triage" is not the
+    // line "AI", whose letters sit inside "email" — a schedule or a paid test landed on the wrong line)
+    const words = v => ' ' + key(v) + ' ';
+    if (!hits.length) hits = named.filter(p => key(p.label) && (words(p.label).indexOf(words(raw)) >= 0 || words(raw).indexOf(words(p.label)) >= 0));
     if (!hits.length) return refuse('There is no line called "' + String(raw).slice(0, 40) + '"' + (room ? ' in ' + room.name : '') + '. Lines: ' + (all.length ? all.join(', ') : 'none') + '.');
     if (hits.length > 1) return refuse('More than one line is called ' + (hits[0].label || '"' + raw + '"') + ': say which room it is in (' + hits.map(p => (live.rooms().find(r => r.id === live.roomAt(p.x, p.y)) || {}).name).join(', ') + ').');
     const intake = hits[0], comp = comps.find(c => (c.intakes || []).indexOf(intake.id) >= 0);
@@ -1322,8 +1330,11 @@
           return st.rooms().find(r => r.kind === 'corridor' && (r.id === ref || r.id === onTile || names[ref] === r.id || (typeof ref === 'string' && norm(r.name) === norm(ref)))) || null; };
         const hall = o.hall != null ? hallOf(o.hall) : hallOf(o.room);
         if (o.hall != null && !hall) return refuse('there is no hallway "' + String(typeof o.hall === 'object' ? JSON.stringify(o.hall) : o.hall).slice(0, 40) + '" (station.map lists every hallway under halls)');
-        if (hall) { const B = bboxOf(hall), n = st.props().filter(p => st.roomAt(p.x, p.y) === hall.id).length; return did(st.removeRoom(hall.id), 'the hallway ' + hall.name + ' at ' + at(B.x1, B.y1) + ' taken up' + (n ? ', with the ' + n + (n === 1 ? ' piece' : ' pieces') + ' in it' : '')); }
-        if (o.room != null) { const t = roomRef(o.room); if (!t.ok) return t; if (isMain(t.room)) return refuse(t.room.name + ' is the main room, so it stays'); const n = st.props().filter(p => st.roomAt(p.x, p.y) === t.room.id).length; return did(st.removeRoom(t.room.id), t.room.name + ' removed, with the ' + n + (n === 1 ? ' piece' : ' pieces') + ' on it'); }
+        // what goes with a removal: every piece TOUCHING it (removeRoom's own rule), and an agent's desk or a line's machine by name
+        const goes = room => { const ps = st.props().filter(p => touchesRoom(p, room)), key = ps.filter(p => p.agentId || MACHINE_T.test(p.t));
+          return { n: ps.length, named: key.length ? ' (' + key.slice(0, 6).map(p => p.agentId ? nameOf(env, p.agentId) + '\'s ' + nm(p.t) : 'the ' + nm(p.t)).join(', ') + (key.length > 6 ? ' …' : '') + ')' : '' }; };
+        if (hall) { const B = bboxOf(hall), g = goes(hall), n = g.n; return did(st.removeRoom(hall.id), 'the hallway ' + hall.name + ' at ' + at(B.x1, B.y1) + ' taken up' + (n ? ', with the ' + n + (n === 1 ? ' piece' : ' pieces') + ' in or reaching into it' + g.named : '')); }
+        if (o.room != null) { const t = roomRef(o.room); if (!t.ok) return t; if (isMain(t.room)) return refuse(t.room.name + ' is the main room, so it stays'); const g = goes(t.room), n = g.n; return did(st.removeRoom(t.room.id), t.room.name + ' removed, with the ' + n + (n === 1 ? ' piece' : ' pieces') + ' on it' + g.named); }
         const t = propRef(o.prop); if (!t.ok) return t; const p = t.p; return did(st.removeProp(p.id), 'the ' + nm(p.t) + ' at ' + at(p.x, p.y) + inRoom(p.x, p.y) + ' removed' + (p.agentId ? ' (it was ' + nameOf(env, p.agentId) + '\'s)' : ''));
       }
       case 'agent': { const t = propRef(o.prop); if (!t.ok) return t; let aid = ''; if (o.agent != null && !/^(nobody|none|no one|clear)$/i.test(String(o.agent))) { const a = agentOf(env, o.agent); if (!a.ok) return a; aid = a.id; } const as = st.assignPropAgent(t.p.id, aid); if (!as || !as.ok) return refuse(wmMsg(as));
@@ -1341,7 +1352,10 @@
       case 'cap': case 'budget': { const t = propRef(o.prop); if (!t.ok) return t; const ip = intakeOf(t.p); if (!ip) return refuse('that piece is not on a line with an inbox');
         const was = Object.assign({}, ip.limits || {}), nx = Object.assign({}, was), off = v => v == null || /^(none|no cap|off|default)$/i.test(String(v));
         const usd = (k, v, what) => { if (v === undefined) return null; if (off(v)) { delete nx[k]; return null; } const n = Number(v); if (!(n > 0 && n <= 10000)) return what + ' is a dollar amount above 0, or null for the default'; nx[k] = n; return null; };
-        const e1 = usd('maxUsdPerDay', op === 'cap' ? (o.usd === undefined ? null : o.usd) : o.perDay, op === 'cap' ? 'cap usd' : 'perDay'); if (e1) return refuse(e1);
+        // a cap names its amount (usd, or the budget's own perDay): one left out took the line's day cap OFF, never asked for
+        const capV = op === 'cap' ? (o.usd !== undefined ? o.usd : o.perDay) : o.perDay;
+        if (op === 'cap' && capV === undefined) return refuse('cap is { op: "cap", prop, usd }: a dollar amount a day, or null for no day cap');
+        const e1 = usd('maxUsdPerDay', capV, op === 'cap' ? 'cap usd' : 'perDay'); if (e1) return refuse(e1);
         if (op === 'budget') { const e2 = usd('maxUsdPerMessage', o.perJob, 'perJob'); if (e2) return refuse(e2); if (o.stages !== undefined) { if (off(o.stages)) delete nx.maxHops; else { const n = Math.round(Number(o.stages)); if (!(n >= 1 && n <= 200)) return refuse('stages is how many steps one job may pass through, 1 to 200'); nx.maxHops = n; } } }
         const r = st.setPropLimits(ip.id, Object.keys(nx).length ? nx : null); if (!r || !r.ok) return refuse(wmMsg(r)); const L2 = r.limits || {};
         const money = (v, per) => v == null ? 'no ' + per + ' cap' : '$' + v + ' a ' + per;
@@ -2697,9 +2711,12 @@
     const depth = lineWall(rec.feature, featureWall);
     if (rec.front) lineWall(rec.front, flip ? 'north' : 'south');
     // the centrepiece: the largest cluster that fits the floor left, centred, facing the feature wall
-    const top = flip ? R.y1 + 1 + (onWall.north ? 3 : 0) : R.y1 + depth + 1, bottom = flip ? R.y2 - depth - 1 : R.y2 - 1 - (onWall.south ? 2 : 0);
+    // a doorway on the open side first keeps whole rows clear before it; where that leaves no room for any set (an office 8
+    // tall with its door north had no desks), only the doorway's own lane stays clear
     let centred = null;
-    for (const set of rec.centre || []) {
+    for (const roomy of [true, false]) for (const set of rec.centre || []) {
+      if (centred) break;
+      const top = flip ? R.y1 + 1 + (roomy && onWall.north ? 3 : 0) : R.y1 + depth + 1, bottom = flip ? R.y2 - depth - 1 : R.y2 - 1 - (roomy && onWall.south ? 2 : 0);
       if (set.w > W - 2 || set.h > bottom - top + 1) continue;
       const x0 = R.x1 + ((W - set.w) >> 1), y0 = top + ((bottom - top + 1 - set.h) >> 1);
       const tries = [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1], [-2, 0], [2, 0], [-3, 0], [3, 0], [-2, 1], [2, 1], [-2, -1], [2, -1]];
@@ -3193,7 +3210,8 @@
     if (!hub) return refuse('There is no main room to lay the station out around.');
     const halls0 = st.rooms().filter(r => r.kind === 'corridor');
     const inHall = (x, y) => { const id = st.roomAt(x, y); return halls0.some(h => h.id === id); };
-    const busy = st.props().find(p => inHall(p.x, p.y) && (MACHINE_T.test(p.t) || p.agentId));
+    const onHall = p => halls0.some(h => touchesRoom(p, h));
+    const busy = st.props().find(p => onHall(p) && (MACHINE_T.test(p.t) || p.agentId));
     if (busy) return refuse('A line or a desk stands in a hallway (' + pieceName(env, busy.t) + ' at (' + busy.x + ', ' + busy.y + ')), so re-laying the station would cut it. Move it into a room first.');
     const belt = Object.keys(st.serialize().belts || {}).find(k => { const [x, y] = k.split(',').map(Number); return inHall(x, y); });
     if (belt) return refuse('A belt runs through a hallway at (' + belt.replace(',', ', ') + '), so re-laying the station would cut its line. Take it up or move the line into a room first.');
@@ -3204,6 +3222,18 @@
       if (groupOf.has(r.id)) continue;
       const g = [r], q = [r]; groupOf.set(r.id, g); groups.push(g);
       while (q.length) { const a = q.shift(); for (const b of rooms0) if (!groupOf.has(b.id) && roomsTouch(a, b)) { groupOf.set(b.id, g); g.push(b); q.push(b); } }
+    }
+    // a group that is not one rectangle (an L) re-lays as its rooms, each with its own hallway: the diamond's hallway meets
+    // the middle of a group's box, which an L leaves as empty floor (the rooms were then unreachable, or a hallway opened
+    // onto nothing). Only a group a piece stands across, or a belt runs in, stays whole
+    const beltAt = Object.keys(st.serialize().belts || {}).map(k => { const [x, y] = k.split(',').map(Number); return { x, y }; });
+    for (const g of groups.slice()) {
+      if (g.length < 2 || g === groupOf.get(hub.id)) continue;
+      const B = g.map(bboxOf).reduce((a, b) => ({ x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1), x2: Math.max(a.x2, b.x2), y2: Math.max(a.y2, b.y2) }));
+      const tiles = g.reduce((n, r) => n + r.rects.reduce((m, q) => m + (q.x2 - q.x1 + 1) * (q.y2 - q.y1 + 1), 0), 0);
+      if (tiles === (B.x2 - B.x1 + 1) * (B.y2 - B.y1 + 1)) continue;
+      if (st.props().some(p => g.filter(r => touchesRoom(p, r)).length > 1) || beltAt.some(t => g.some(r => touchesRoom(t, r)))) continue;
+      groups.splice(groups.indexOf(g), 1, ...g.map(r => { const one = [r]; groupOf.set(r.id, one); return one; }));
     }
     const home = groupOf.get(hub.id), HB = bboxOf(hub), hx = (HB.x1 + HB.x2) / 2, hy = (HB.y1 + HB.y2) / 2, area = r => { const B = bboxOf(r); return (B.x2 - B.x1 + 1) * (B.y2 - B.y1 + 1); };
     const order = groups.filter(g => g !== home).map(g => {
@@ -3223,7 +3253,7 @@
       Object.assign({ cell, reach: true }, opts && (opts.shape === 'wide' || opts.shape === 'tall') ? { order: shapedOrder(opts.shape, 7) } : {}));
     if (!geo.ok) return refuse(String(geo.error).replace(/__R(\d+)/g, (m, i) => order[+i] ? order[+i].name : m).replace('A diamond takes up to four big rooms.', 'A diamond takes up to four rooms bigger than 30 × 18.'));
     // 1. the old hallways go, with what dressed them
-    const hallPieces = st.props().filter(p => inHall(p.x, p.y)).length;
+    const hallPieces = st.props().filter(onHall).length;
     for (const h of halls0) { const x = st.removeRoom(h.id); if (!x || !x.ok) return refuse('the hallway ' + h.name + ' could not be taken up (' + wmMsg(x) + ')'); }
     // 2. every room to its place at once (WorldModel.moveRooms checks only where they all end up: rooms passing each other,
     //    or half a station still far out while the rest has moved in, never block a sound result); rooms open to each other

@@ -158,8 +158,8 @@
       },
       {
         "path": "frontend/app/agentid.js",
-        "bytes": 4161,
-        "sha256": "915c3dcbf202bc369bc5c4608bf3494274a8097eb3970416639525f58bf5d269"
+        "bytes": 4177,
+        "sha256": "70fbbcf5f7d5737becb3339a2a7c7ef63acbae5a14d2e2b9c93282413722237f"
       },
       {
         "path": "frontend/app/agentportraits.js",
@@ -328,8 +328,8 @@
       },
       {
         "path": "frontend/app/build.js",
-        "bytes": 570877,
-        "sha256": "6f7ddb23002cc7208f6019669ef189ef26c61c3d2be69fb759a46adc2e1ec95c"
+        "bytes": 571079,
+        "sha256": "07a0f21268c14622b1748c96003552217ab2182babe6528d4450ad9559e52b04"
       },
       {
         "path": "frontend/app/channels.js",
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 697189,
-        "sha256": "2503b76b39e40f9cd5edb0e2192932b123e80bc097f02dc140fda7fb8f069991"
+        "bytes": 698866,
+        "sha256": "a5bac46bd91874ae1396cf246eceeb7973ca02ebcd3e109536ad4e082a5e6639"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -388,8 +388,8 @@
       },
       {
         "path": "frontend/app/crewcards.js",
-        "bytes": 5376,
-        "sha256": "f30500e98dc75b8b49b7efa8495cb66255f2f223a4fdc5b130117fe237994f85"
+        "bytes": 7409,
+        "sha256": "3b36d47233cdacaa7444c4f86524a6868d16d47a8fe8d314ff65cb9f7af00182"
       },
       {
         "path": "frontend/app/cronhuman.js",
@@ -438,8 +438,8 @@
       },
       {
         "path": "frontend/app/dialogue.js",
-        "bytes": 26027,
-        "sha256": "899effde35a25c4b4f65173d819adbd1d4d14c73c31ff489781661f1daf59941"
+        "bytes": 26672,
+        "sha256": "db332cdc37c814a2350a2ca69eb0ff3ed966eb174994d43f01b0ce08381cf1aa"
       },
       {
         "path": "frontend/app/discoverystore.js",
@@ -1128,13 +1128,13 @@
       },
       {
         "path": "frontend/app/stationbuilder.js",
-        "bytes": 329815,
-        "sha256": "381294d45e8364aa90ae84ab3b755278d952381bd2efaf3065a78639022c2332"
+        "bytes": 332993,
+        "sha256": "d795e234321b71cd8bee30c1631c4b51a906235162d2ff993f2d93364a5e0873"
       },
       {
         "path": "frontend/app/stationcommands.js",
-        "bytes": 67211,
-        "sha256": "5f3835c16e941757391c81f8b128e6f268d138ae1ff59d291f1de22a5d1d8e0f"
+        "bytes": 67226,
+        "sha256": "1b87ee8e113010f32c90157b3bb03d5759fbbe2c1687cc93e48be29118828dc7"
       },
       {
         "path": "frontend/app/stationquests.js",
@@ -1153,8 +1153,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 808320,
-        "sha256": "1c8b30d8aeb3839568991a41292510f45f00e214c946054a8340ce46dd9de48c"
+        "bytes": 809349,
+        "sha256": "66f9fff3f066696756529a724a291fddabb071ca76213e9d9f4f05f34cfd4f2a"
       },
       {
         "path": "frontend/app/stepin.js",
@@ -1243,8 +1243,8 @@
       },
       {
         "path": "frontend/app/tutorial.js",
-        "bytes": 100713,
-        "sha256": "b9538d06af94da11c464bd4b54577e6c5153c78e0316f8a4d562db3ca461d9d0"
+        "bytes": 100719,
+        "sha256": "a29246fd9beaf9d2e2fe81a017bcf70c6b6114441b69193234f4a7c5a6e0ea19"
       },
       {
         "path": "frontend/app/understanding.js",
@@ -1268,8 +1268,8 @@
       },
       {
         "path": "frontend/app/userprops.js",
-        "bytes": 13651,
-        "sha256": "b41c5b5ab8424a4f04853907c44d279930be005a603445b7dc666f9743eb0a36"
+        "bytes": 13949,
+        "sha256": "99fe827eee67a8f2431870e9bb9d070625b067fe8d3c317291430ca4b0b87def"
       },
       {
         "path": "frontend/app/verdictfollowup.js",
@@ -1358,8 +1358,8 @@
       },
       {
         "path": "frontend/app/windows/workflows.js",
-        "bytes": 67089,
-        "sha256": "ec63ef77298d7b3d4ac23df79bb92144d97ab42eec6f0c24a14aed6d027185fe"
+        "bytes": 67687,
+        "sha256": "178759c5c88294a860855ff85a60baf43939d88ee66fe09a1650c01a9dff7e6b"
       },
       {
         "path": "frontend/app/workflowline.js",
@@ -1493,8 +1493,8 @@
       },
       {
         "path": "frontend/css/app.css",
-        "bytes": 413068,
-        "sha256": "75807e5cdd7b97fd9637691a6db3d74337513113abe24928a96ddb768f554d15"
+        "bytes": 413378,
+        "sha256": "e7afd718d75fa12be589844366d94abdaa1aa8474b00149f7414c0e9777aef1a"
       },
       {
         "path": "frontend/css/asciifx.css",

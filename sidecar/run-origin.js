@@ -37,4 +37,24 @@ function entryUntrusted(o) {
   return !!(inherited && typeof inherited === 'object' && inherited.untrustedEntry === true);
 }
 
-module.exports = { hostPowerWithheldFor, entryUntrusted };
+/* STANDING WORK FROM A WITHHELD RUN (sweep 2026-10-02). A run whose host power is withheld (a paired phone, a non-owner
+   channel sender, or any worker they delegate to) could still CREATE or RESTART work that runs later under the station's
+   standing authority — a routine, a loop, a line trigger, a line test — and that later run fires with the agent's Full
+   Access: "a routine that runs in a minute: run this command", approved once on a lost phone, ran with every capability.
+   Nothing about who asked is saved on the job, so the safe line is here: such a run may not set standing work up or
+   start it again; it may still pause, stop or remove it (those only ever take power away). */
+const STANDING_ESCALATES = {
+  'routine.create': () => true,
+  'routine.manage': (a) => ['update', 'resume', 'run_now'].indexOf(String(a && a.action || '')) >= 0,
+  'loop.create': () => true,
+  'loop.manage': (a) => ['update', 'resume', 'approve'].indexOf(String(a && a.action || '')) >= 0,
+  'station.start_line': (a) => !(a && a.off),
+  'station.test_line': () => true
+};
+function standingWorkEscalates(name, args) {
+  const n = String(name || '').replace(/_/g, '.').replace(/^station\.start\.line$/, 'station.start_line').replace(/^station\.test\.line$/, 'station.test_line').replace(/^routine\.run\.now$/, 'routine.run_now');
+  const rule = STANDING_ESCALATES[n] || STANDING_ESCALATES[String(name || '')];
+  return !!(rule && rule(args && typeof args === 'object' ? args : {}));
+}
+
+module.exports = { hostPowerWithheldFor, entryUntrusted, standingWorkEscalates };

@@ -2987,6 +2987,8 @@ const Chat = (() => {
       TaskConversation.mount(r.body,q,async text=>{
         const result=await Harness.consentAnswer(rid,p.promptId,text,true);
         if(!result || !result.ok)return false;
+        // the question is answered: say so on the bus like the approval card does, or the CREW card and the world pose stay "needs your OK"
+        try{if(typeof U!=='undefined'&&U.bus)U.bus.emit('permission.response',{promptId:p.promptId,decision:'once'});}catch(_){}
         if(ws)Channels.clearPending(ws.id,Date.now());
         if(isActiveWs(ws)){renderPresence();syncStatus();}
         return true;
@@ -3021,6 +3023,9 @@ const Chat = (() => {
       if (decided) return; decided = true;
       const rid = (ws && typeof Channels !== 'undefined') ? Channels.runIdOf(ws.id) : null;
       Harness.consentAnswer(rid, p.promptId, text);
+      // answered: tell the bus, as the approval card does — the CREW card's "needs your OK" frame and the world's
+      // AWAITING pose clear on permission.response, and a question never emitted one (sweep 2026-10-02)
+      try { if (typeof U !== 'undefined' && U.bus) U.bus.emit('permission.response', { promptId: p.promptId, decision: 'once' }); } catch (_) {}
       if (ws && typeof Channels !== 'undefined') Channels.clearPending(ws.id, Date.now());   // the wait never counts as run time
       if (isActiveWs(ws)) renderPresence();
       btns.remove();
@@ -3100,7 +3105,7 @@ const Chat = (() => {
         btns.remove();
         const tag = document.createElement('span');
         tag.className = 'consent-result' + (resp.decision === 'deny' ? ' err' : '');
-        tag.textContent = resp.decision === 'deny' ? '✕ declined from your phone' : '✓ answered from your phone';
+        tag.textContent = resp.expired ? '✕ no answer in time — the agent used its judgment' : resp.decision === 'deny' ? '✕ declined from your phone' : '✓ answered from your phone';
         r.body.appendChild(tag);
         syncStatus();
       };
@@ -3218,7 +3223,7 @@ const Chat = (() => {
         btns.remove();
         const tag = document.createElement('span');
         tag.className = 'consent-result' + (denied ? ' err' : '');
-        tag.textContent = denied ? '✕ denied from your phone' : (resp.decision === 'session' ? '✓ approved for this session from your phone' : '✓ approved once from your phone');
+        tag.textContent = resp.expired ? '✕ no answer in time — denied' : denied ? '✕ denied from your phone' : (resp.decision === 'session' ? '✓ approved for this session from your phone' : '✓ approved once from your phone');
         r.body.appendChild(tag);
         syncStatus();
       };
@@ -3357,10 +3362,11 @@ const Chat = (() => {
     // CORRECTION CAPTURE (consistency loop, slice 2): a short-of-the-mark verdict opens a window in which the
     // Commander's next message to this agent is treated as the CORRECTION of that run and handed to the held
     // skill review in their own words (POST /api/growth/ratings/correction). Praise opens nothing.
-    if (saved && saved.ok && !saved.duplicate && (verdict === 'ok' || verdict === 'miss')) lastShortVerdict = { runId: runId, agentId: agentId || 'agent', at: Date.now() };
+    if (saved && saved.ok && !saved.duplicate && (verdict === 'ok' || verdict === 'miss')) lastShortVerdict = { runId: runId, agentId: agentId || 'agent', streamId: ((runMeta(runId) || {}).streamId) || awayStreams.get(runId) || null, at: Date.now() };
     return saved;
   }
-  let lastShortVerdict = null;   // { runId, agentId, at } — the run whose next message is its correction
+  let lastShortVerdict = null;   // { runId, agentId, streamId, at } — the run whose next message (in ITS session) is its correction
+  const awayStreams = new Map();   // runId -> streamId for runs this page did not start (seedAwayWork)
   const CORRECTION_WINDOW_MS = 10 * 60 * 1000;
   function postCorrection(runId, text, final, source) {
     try {
@@ -3549,6 +3555,9 @@ const Chat = (() => {
   // size derives from real recorded turns/spend (turns-1 ≈ tool rounds: each loop turn past the
   // first was a tool round; conservative, never farmable — the row is server-recorded).
   function seedAwayWork(rw) {
+    // an away run's SESSION (OUTBOX rows, routines, runs from before a reload): runMeta only knows this page's own runs,
+    // so a thumbs-down here must still know which session its correction belongs to (sweep 2026-10-02)
+    if (rw && rw.runId && rw.streamId) { awayStreams.set(rw.runId, String(rw.streamId)); if (awayStreams.size > 120) awayStreams.delete(awayStreams.keys().next().value); }
     if (!rw || !rw.runId || runWork.has(rw.runId)) return;
     runWork.set(rw.runId, { toolsOk: Math.max(0, (rw.turns | 0) - 1), delivered: 0, cost: Math.max(0, +rw.usd || 0), agentId: rw.agentId || 'agent' });
     if (runWork.size > 60) runWork.delete(runWork.keys().next().value);
@@ -8823,7 +8832,9 @@ const Chat = (() => {
     // stamp the new run as correctionOf so the runs ledger can relate them. One message per verdict; a stale
     // window (>10 min) is just a new task. Never on retry (the same text re-sent is not a second correction).
     let correctionOf = null;
-    if (!retry && !pending && lastShortVerdict && (ws.agentId || 'agent') === lastShortVerdict.agentId && Date.now() - lastShortVerdict.at < CORRECTION_WINDOW_MS) {
+    // the correction is the next message IN THE RATED RUN'S SESSION: matched by agent alone, a new request typed in
+    // another session to that agent within the window was saved station-wide as a DISLIKED correction (sweep 2026-10-02)
+    if (!retry && !pending && lastShortVerdict && (ws.agentId || 'agent') === lastShortVerdict.agentId && lastShortVerdict.streamId && lastShortVerdict.streamId === ws.id && Date.now() - lastShortVerdict.at < CORRECTION_WINDOW_MS) {
       correctionOf = lastShortVerdict.runId; lastShortVerdict = null;
       postCorrection(correctionOf, text, true, 'message');
     }

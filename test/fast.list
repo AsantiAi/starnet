@@ -420,6 +420,7 @@ test/codex-configured.test.js
 test/crt-glprobe.test.js
 test/crt-context-loss.e2e.test.mjs
 test/dialogue.test.js
+test/dialogue-doorlaw.test.js
 test/wakemind.test.js
 test/curiosity.test.js
 test/verdictfollowup.test.js
@@ -787,6 +788,8 @@ test/dossier-delete-visible.test.js
 test/control-floor-theming.test.js
 test/crew-rail-fit.test.js
 test/agent-threads-rail.test.js
+test/crew-cards.test.js
+test/front-doors-tabs.test.js
 test/brand-wordmark-mask.test.js
 test/personalization-authority-wiring.test.js
 test/sprite-loading.test.js
@@ -1015,6 +1018,7 @@ test/linejobs.test.js
 test/linedraft.test.js
 test/workflows-window.test.js
 test/build-mode-easy.test.js
+test/worldmodel-moveprops.test.js
 test/trigger-sweep.test.js
 test/steptest-restart-spend.test.js
 test/userprops.test.js

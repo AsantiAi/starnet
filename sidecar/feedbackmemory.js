@@ -87,11 +87,13 @@ function apply(list, input, deps) {
   // THE COMMANDER EDITED IT in the Memory Core (content no longer what this module generated): their wording is the
   // truth now — append the new words to it, never regenerate over it.
   // (sticky: once edited, a record is never regenerated again — feedbackEdited survives our own later appends)
-  if (prev && (prev.feedbackEdited || (prev.feedbackGenerated && String(prev.content || prev.body || '') !== prev.feedbackGenerated))) {
+  // Only the COMMANDER's edit counts (confirmation stays user-confirmed through a Memory Core edit). An agent's
+  // notebook.write replaceId leaves it 'inferred': that rewrite is not their wording, so it is regenerated over.
+  if (prev && prev.confirmation === 'user-confirmed' && (prev.feedbackEdited || (prev.feedbackGenerated && String(prev.content || prev.body || '') !== prev.feedbackGenerated))) {
     if (!add) return null;
     const tail = ' · also: "' + add + '"';
     const edited = clean(prev.content || prev.body, EDITED_CHARS - tail.length) + tail;
-    const rec = Object.assign({}, prev, { body: edited, content: edited, feedbackGenerated: edited, feedbackEdited: true, feedbackWords: words, updatedAt: now, lastFeedbackAt: now });
+    const rec = Object.assign({}, prev, { body: edited, content: edited, feedbackGenerated: edited, feedbackEdited: true, feedbackWords: words, updatedAt: now, lastFeedbackAt: now, feedbackAt: now });
     const out = list.slice(); out[at] = rec;
     return { list: out, rec, created: false };
   }
@@ -99,7 +101,7 @@ function apply(list, input, deps) {
   if (!text) return null;
   if (prev && prev.content === text) return null;   // nothing new
   if (prev) {
-    const rec = Object.assign({}, prev, { body: text, content: text, feedbackGenerated: text, feedbackWords: words, updatedAt: now, lastFeedbackAt: now });
+    const rec = Object.assign({}, prev, { body: text, content: text, feedbackGenerated: text, feedbackWords: words, updatedAt: now, lastFeedbackAt: now, feedbackAt: now, confirmation: 'user-confirmed', feedbackEdited: false });
     const out = list.slice(); out[at] = rec;
     return { list: out, rec, created: false };
   }
@@ -112,7 +114,7 @@ function apply(list, input, deps) {
     scope: 'global', streamId: null, projectRoot: null,
     sourceRunId: runId, confirmation: 'user-confirmed', authority: 'reference-only', origin: ORIGIN,
     feedbackVerdict: verdict, feedbackWords: words, feedbackDirective: directive, feedbackGenerated: text,
-    createdAt: now, ts: now, updatedAt: now, lastFeedbackAt: now, lastUsedAt: null, useCount: 0, trust, pinned: false
+    createdAt: now, ts: now, updatedAt: now, lastFeedbackAt: now, feedbackAt: now, lastUsedAt: null, useCount: 0, trust, pinned: false
   };
   return { list: list.concat([rec]), rec, created: true };
 }
@@ -131,13 +133,18 @@ function directiveFor(candidates, messages) {
   return String((Array.isArray(candidates) && candidates.find(c => String(c || '').trim())) || '').trim();
 }
 
-function isTaste(r) { return !!(r && r.origin === ORIGIN && String(r.content || r.body || '').trim()); }
+/* TASTE IS THE COMMANDER'S OWN WORDS (sweep 2026-10-02). notebook.write { replaceId } keeps a record's origin, so an
+   agent (or a page it read) could rewrite a feedback record and have it injected into EVERY agent's runs as "the
+   Commander's own verdicts". A revision the Commander did not confirm is 'inferred': it is not taste. */
+function isTaste(r) { return !!(r && r.origin === ORIGIN && r.confirmation === 'user-confirmed' && String(r.content || r.body || '').trim()); }
 
 // selectTaste(records, opts) -> the newest feedback records (most recently given or updated first), capped.
 function selectTaste(records, opts) {
   opts = opts || {};
   const limit = opts.limit || TASTE_LIMIT;
-  const at = r => Math.max(Number(r.lastFeedbackAt) || 0, Number(r.updatedAt) || 0, Number(r.createdAt || r.ts) || 0);
+  // newest VERDICT first: feedbackAt is written only by apply(); lastFeedbackAt/updatedAt also move when an agent rates
+  // or touches a memory, which pushed the Commander's newest verdict out of the capped block (older records: createdAt)
+  const at = r => Number(r.feedbackAt) || Number(r.createdAt || r.ts) || 0;
   return (Array.isArray(records) ? records : []).filter(isTaste).slice().sort((a, b) => at(b) - at(a)).slice(0, limit);
 }
 
@@ -162,4 +169,25 @@ function stationTaste(own, others, opts) {
   return selectTaste(mine.concat(foreign), opts);
 }
 
-module.exports = { ORIGIN, TASTE_HEADER, TASTE_LIMIT, TASTE_CHARS, content, apply, directiveFor, looksLikeFeedback, isTaste, selectTaste, stationTaste };
+/* adoptTaste(heroList, departedList, nextId, from) — DELETING AN AGENT MUST NOT DELETE THE COMMANDER'S TASTE (sweep
+   2026-10-02). Taste is about the Commander, not the agent it was given to, but it lives in that agent's notebook — and
+   agent delete archives the notebook, so every rating ever given on its work silently stopped steering anyone. The
+   departing agent's taste records move into the hero's notebook (new ids there; the same words once) before archive.
+   -> the new hero list, or null when there is nothing to adopt. */
+function adoptTaste(heroList, departedList, nextId, from) {
+  const hero = Array.isArray(heroList) ? heroList.slice() : [];
+  const have = new Set(hero.filter(isTaste).map(r => String(r.content || r.body || '').trim()));
+  let added = 0;
+  for (const r of (Array.isArray(departedList) ? departedList : [])) {
+    if (!isTaste(r)) continue;
+    const text = String(r.content || r.body || '').trim();
+    if (have.has(text)) continue;
+    have.add(text);
+    const id = typeof nextId === 'function' ? nextId(hero) : 'note_' + (hero.length + 1);
+    hero.push(Object.assign({}, r, { id, adoptedFrom: from ? String(from) : undefined, pinned: false }));
+    added++;
+  }
+  return added ? hero : null;
+}
+
+module.exports = { ORIGIN, TASTE_HEADER, TASTE_LIMIT, TASTE_CHARS, content, apply, directiveFor, looksLikeFeedback, isTaste, selectTaste, stationTaste, adoptTaste };

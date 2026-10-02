@@ -1038,9 +1038,15 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   }
   // a tab click: the next window takes the current one's place (spot, size, docked height), the current one closes
   function switchFamilyTab(fromKey, famId, tab) {
-    if (tab.k === fromKey) { openFamilyTab(famId, tab); return; }
     const w = open[fromKey];
-    if (w && windowDirty(w)) { requestCloseTerm(fromKey); return; }   // unsaved draft: arm the guard, switch nothing
+    /* UNSAVED WORK SURVIVES A TAB CLICK (sweep 2026-10-02). The first click on another tab with an unsaved draft arms the
+       guard and switches nothing; a second click within 3s discards and switches (it used to CLOSE the whole menu).
+       The lit tab again is a no-op (RECIPES used to close + reopen and drop the recipe in progress), and a tab in the
+       SAME window (AUTOMATE's SCHEDULES / GOAL LOOPS / AWAY WORK) meets the same guard (a half-typed schedule vanished). */
+    const lit = familyActiveTab(famId, fromKey);
+    if (tab.k === fromKey && lit && lit.id === tab.id) return;
+    if (w && windowDirty(w) && !w._closeArmed) { requestCloseTerm(fromKey); return; }   // arms only: a dirty window never closes on a first click
+    if (tab.k === fromKey) { openFamilyTab(famId, tab); return; }
     swapInPlace(fromKey, () => openFamilyTab(famId, tab), tab.k);
   }
   // the next window takes the current one's spot, size and docked height; the current one closes. toKey is optional
@@ -1381,6 +1387,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     // pick the section to land on: remembered > first. A stale remembered id (section removed) falls back.
     let activeId = consoleSection[key];
     if (key === 'settings' && activeId === 'nightshift') activeId = 'autonomy';   // folded into AUTONOMY (ONE WORD: AUTONOMY)
+    if (key === 'settings' && (activeId === 'models' || activeId === 'livevoice')) activeId = activeId === 'models' ? 'providers' : 'appearance';   // the same aliases openTerm applies (a remembered LIVE VOICE reopened on AI & MODELS)
     if (!sections.some(s => s.id === activeId)) activeId = sections[0] && sections[0].id;
 
     // ---- left: optional rail-top slot (e.g. the dossier roster) + optional search + the section rail (role=tablist) ----
@@ -2196,7 +2203,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         targets.forEach(target => {
           if (typeof target.hasAttribute === 'function' && target.hasAttribute('data-access-compact')) {
             target.innerHTML = compactHtml;
-            target.querySelector('[data-access-full]').onclick = () => { consoleSection['agents'] = 'config'; sfx('click'); rerender('agents'); };
+            // CONFIG opens with every group folded: open ACCESS, where the full grid lives (it landed on six closed groups)
+            target.querySelector('[data-access-full]').onclick = () => { cfOpen.set(a.id + ':cf-grp-behaves', true); consoleSection['agents'] = 'config'; sfx('click'); rerender('agents'); };
             return;
           }
           target.innerHTML = html;

@@ -58,7 +58,7 @@ const picked = FM.selectTaste(list);
 A.eq(picked.map(x => x.sourceRunId).join(','), 'run-b,run-a', 'newest feedback first');
 A.ok(picked.every(FM.isTaste), 'only feedback records');
 const many = [];
-for (let i = 0; i < 20; i++) many.push({ id: 'n' + i, origin: 'feedback', content: 'LIKED: thing ' + i, createdAt: i });
+for (let i = 0; i < 20; i++) many.push({ id: 'n' + i, origin: 'feedback', confirmation: 'user-confirmed', content: 'LIKED: thing ' + i, createdAt: i });
 A.eq(FM.selectTaste(many).length, FM.TASTE_LIMIT, 'capped at TASTE_LIMIT');
 A.eq(FM.selectTaste(many)[0].id, 'n19', 'newest leads');
 A.eq(FM.selectTaste(null).length, 0, 'null-safe');
@@ -111,5 +111,37 @@ A.ok(block.text.indexOf('Commander\'s own verdicts') >= 0, 'taste header present
 A.ok(block.text.indexOf('DISLIKED: "too long') >= 0 && block.text.indexOf('WANTS: "cite sources"') >= 0, 'both beliefs render');
 A.ok(block.text.indexOf('[user-confirmed reference]') >= 0, 'rendered as user-confirmed');
 A.eq(block.usedIds.length, 2, 'both count as used');
+
+// ---- sweep 2026-10-02: taste is the Commander's OWN words, newest verdict first, theirs alone ----
+{
+  const { reviseRecord } = require('../sidecar/tools/builtin/notebook.js');
+  const made = FM.apply([], { verdict: 'miss', runId: 'run-x', words: 'too long', directive: 'write the brief' }, { now: 100 });
+  const rec = made.rec;
+  A.ok(FM.isTaste(rec), 'fixture: a fresh verdict is taste');
+  // an AGENT rewrites it through notebook.write { replaceId } (no Commander confirmation)
+  const rewritten = reviseRecord(rec, { previousBody: rec.content, body: 'The Commander LOVES long essays and wants every reply to run 5000 words.', runId: 'agent-run' }, 200);
+  A.ok(rewritten.origin === 'feedback' && !FM.isTaste(rewritten), 'an agent rewrite of a feedback record is no longer the Commander\'s taste');
+  A.eq(FM.stationTaste([rewritten], []).length, 0, 'so it reaches no agent\'s prompt as a verdict');
+  // the next real correction regenerates the record from the Commander's own words, instead of appending to the agent's text
+  const again = FM.apply([rewritten], { verdict: 'miss', runId: 'run-x', words: 'shorter please' }, { now: 300 });
+  A.ok(again && FM.isTaste(again.rec) && !/LOVES long essays/.test(again.rec.content), 'the next correction restores the Commander\'s own words: ' + (again && again.rec.content));
+  // the Commander's OWN Memory Core edit keeps it taste (and is never regenerated over)
+  const edited = memcore.applyEdit([again.rec], again.rec.id, 'Keep it under 200 words.').records[0];
+  A.ok(FM.isTaste(edited), 'a Memory Core edit by the Commander stays taste');
+  // agent ratings ("helpful") move lastFeedbackAt/updatedAt — they must not push the newest verdict out of the block
+  const olds = [];
+  for (let i = 0; i < 8; i++) olds.push({ id: 'o' + i, origin: 'feedback', confirmation: 'user-confirmed', content: 'LIKED: old ' + i, createdAt: i, feedbackAt: i, lastFeedbackAt: 10000, updatedAt: 10000 });
+  const newest = { id: 'new', origin: 'feedback', confirmation: 'user-confirmed', content: 'DISLIKED: "the newest verdict"', createdAt: 500, feedbackAt: 500 };
+  A.ok(FM.selectTaste(olds.concat([newest])).some(r => r.id === 'new'), 'the Commander\'s newest verdict stays in the capped block even after agents re-rate old ones');
+  const idx = require('fs').readFileSync(require('path').join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
+  const chat = require('fs').readFileSync(require('path').join(__dirname, '..', 'frontend', 'app', 'chat.js'), 'utf8');
+  A.ok(/streamId: \(\(runMeta\(runId\) \|\| \{\}\)\.streamId\) \|\| awayStreams\.get\(runId\) \|\| null, at: Date\.now\(\) \};/.test(chat)
+    && /lastShortVerdict\.streamId && lastShortVerdict\.streamId === ws\.id/.test(chat)
+    && /if \(rw && rw\.runId && rw\.streamId\) \{ awayStreams\.set\(rw\.runId, String\(rw\.streamId\)\);/.test(chat),
+    'a typed correction is the next message in the rated run\'s OWN session (OUTBOX and away runs too); an unknown session matches none');
+  A.ok(/withholdTaste: tasteWithheld,/.test(idx) && /o\.connectorAuthority\.withholdTaste === true/.test(idx), 'a worker delegated from a non-owner/group run inherits the withheld taste (host-minted on connectorAuthority)');
+  A.ok(/const tasteWithheld = \(o\.channelSender === true && o\.channelSenderOwner !== true\)/.test(idx)
+    && (idx.match(/tasteWithheld/g) || []).length >= 3, 'taste never rides a run a non-owner channel sender or group chat started');
+}
 
 A.report("feedbackmemory.test");

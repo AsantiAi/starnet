@@ -1745,6 +1745,21 @@ for (const c of T.catalog) {
       A.eq(sig(st), was, 'the line routes as before'); A.eq(Object.keys(st.serialize().belts || {}).length, beltN, 'every belt tile moved with it');
       A.ok(st.undo().ok && snap(st) === before, 'one undo');
     }
+    // two rooms open to each other in an L (nothing across the join) re-lay as two rooms, each reached by a whole hallway:
+    // planned as one box, the hallway met the box's middle, empty floor (refused as unreachable, or a 1-tile mouth)
+    {
+      const edge = (a, b) => { let n = 0; for (const p of a.rects) for (const q of b.rects) { if (p.y2 + 1 === q.y1 || q.y2 + 1 === p.y1) n += Math.max(0, Math.min(p.x2, q.x2) - Math.max(p.x1, q.x1) + 1); if (p.x2 + 1 === q.x1 || q.x2 + 1 === p.x1) n += Math.max(0, Math.min(p.y2, q.y2) - Math.max(p.y1, q.y1) + 1); } return n; };
+      for (const nook of [{ x: 24, y: 11, w: 6, h: 6 }, { x: 34, y: 11, w: 8, h: 6 }]) for (const shape of ['wide', 'tall', 'even']) {
+        const st = fresh(), tag = 'an L (nook at ' + nook.x + ', ' + nook.y + '), ' + shape;
+        const p = SB.planEdit(st.serialize(), { refit: [{ op: 'hall', x: 18, y: 4, w: 6, h: 3 }, { op: 'room', name: 'Den', kind: 'hab', x: 24, y: 0, w: 18, h: 11 }, Object.assign({ op: 'room', name: 'Nook', kind: 'hab' }, nook)] }, E);
+        A.ok(p.ok && SB.apply(st, p.plan, E).ok, tag + ': laid (' + (p.error || 'ok') + ')');
+        const re = SB.planEdit(st.serialize(), { rearrange: { shape } }, E);
+        A.ok(re.ok && SB.apply(st, re.plan, E).ok, tag + ': re-lays (' + (re.error || 'ok') + ')');
+        const rs = st.rooms(), thin = [];
+        for (const h of rs.filter(r => r.kind === 'corridor')) for (const r of rs) if (r.kind !== 'corridor') { const e = edge(h, r); if (e > 0 && e < 3) thin.push(h.name + ' meets ' + r.name + ' on ' + e); }
+        A.eq(thin, [], tag + ': every hallway meets its room with its whole mouth');
+      }
+    }
     // every whole-room style, dressed in a large room with its door north (sets mirrored) and with its door west, leaves
     // nothing a designer would fix: no seat taken, no seat turned from its table, nothing facing straight into a wall
     for (const [door, rect, hall] of [['north', { x: 0, y: 17, w: 24, h: 14 }, { x: 7, y: 11, w: 3, h: 6 }], ['west', { x: 24, y: 0, w: 24, h: 14 }, { x: 18, y: 4, w: 6, h: 3 }]]) {
@@ -1755,6 +1770,20 @@ for (const c of T.catalog) {
         SB.apply(st, mk.plan, E);
         const det = SB.mapOf(st.serialize(), E, { room: 'Den' });
         A.ok(det.ok && !det.map.issues.length, style + ' (door ' + door + '): nothing to fix: ' + JSON.stringify(det.ok && det.map.issues));
+      }
+    }
+    // a small working room with its only door north or south still gets its desks: the rows kept clear before the doorway
+    // left no floor for any set (an office 14 × 8 with its door north had none), so only the doorway's lane stays clear then
+    for (const [door, hall, at] of [['north', { x: 7, y: 11, w: 3, h: 6 }, h => ({ x: 0, y: 17 })], ['south', { x: 7, y: -6, w: 3, h: 6 }, h => ({ x: 0, y: -6 - h })]]) {
+      for (const [w, h] of [[14, 8], [20, 8], [14, 7]]) for (const style of ['desks', 'lab', 'comms', 'workshop']) {
+        const st = fresh(), tag = style + ' ' + w + ' × ' + h + ' (door ' + door + ')';
+        const mk = SB.planEdit(st.serialize(), { refit: [Object.assign({ op: 'hall' }, hall), Object.assign({ op: 'room', name: 'Den', kind: 'hab', w, h }, at(h)), { op: 'style', room: 'Den', style }] }, E);
+        if (!mk.ok) { A.ok(false, tag + ': dresses (' + mk.error + ')'); continue; }
+        SB.apply(st, mk.plan, E);
+        const id = st.rooms().find(r => r.name === 'DEN').id, desks = st.props().filter(p => st.roomAt(p.x, p.y) === id && /^(desk2?|console|consoleL|pixelrig|bench)$/.test(p.t));
+        A.ok(desks.length > 0, tag + ': has a place to work');
+        const det = SB.mapOf(st.serialize(), E, { room: 'Den' });
+        A.ok(det.ok && !det.map.issues.length, tag + ': nothing to fix: ' + JSON.stringify(det.ok && det.map.issues));
       }
     }
     // stations of small rooms, and of the builder's own large rooms, re-lay too (both were refused past four rooms)
@@ -1841,7 +1870,27 @@ for (const c of T.catalog) {
     A.ok(!typo.ok && /^There is no line called "Newsleter"/.test(typo.error) && !blank.ok && /^Say which line/.test(blank.error), 'a misspelt or empty name finds no line, even with an unnamed one standing: ' + (typo.error || 'FOUND ' + typo.name));
     A.ok(SB.lineRef(st.serialize(), E, inP.id).ok, 'an unnamed line is still found by any machine on it');
     A.ok(st.undo().ok, 'its name comes back');
-    const noSv = SB.planEdit(st.serialize(), { refit: [{ op: 'folder', prop: inP.id, project: 'starnet' }] }, E);
+    // a line is found by whole words of its name, never by letters inside a word ("email" holds "ai": a schedule or a paid test
+    // landed on the line AI)
+    {
+      const ai = SB.planEdit(st.serialize(), { refit: [{ op: 'label', prop: inP.id, text: 'AI' }] }, E);
+      A.ok(ai.ok && SB.apply(st, ai.plan, E).ok, 'fixture: the line is called AI');
+      for (const other of ['email triage', 'Daily news digest', 'Main']) A.ok(!SB.lineRef(st.serialize(), E, other).ok, '"' + other + '" is not the line AI');
+      A.ok(SB.lineRef(st.serialize(), E, 'the AI line').ok && SB.lineRef(st.serialize(), E, 'ai').ok, 'the line AI answers to its own name');
+      const wk = SB.planEdit(st.serialize(), { refit: [{ op: 'label', prop: inP.id, text: 'Weekly digest' }] }, E);
+      A.ok(wk.ok && SB.apply(st, wk.plan, E).ok && SB.lineRef(st.serialize(), E, 'digest').ok && !SB.lineRef(st.serialize(), E, 'dig').ok, 'a whole word of a name finds the line, part of a word does not');
+      A.ok(st.undo().ok && st.undo().ok, 'its old name comes back');
+    }
+    // a cap names its amount: one left out took the day cap OFF; the budget's own perDay key is read as the amount
+    {
+      const bare = SB.planEdit(st.serialize(), { refit: [{ op: 'cap', prop: inP.id }] }, E);
+      A.ok(!bare.ok && /cap is \{ op: "cap", prop, usd \}/.test(bare.error), 'a cap with no amount is refused, never taken off: ' + (bare.error || bare.plan.summary));
+      const per = SB.planEdit(st.serialize(), { refit: [{ op: 'cap', prop: inP.id, perDay: 5 }] }, E);
+      A.ok(per.ok && /may spend \$5 a day/.test(per.plan.summary), 'a cap given perDay caps it at that: ' + (per.error || per.plan.summary.slice(-160)));
+      const off = SB.planEdit(st.serialize(), { refit: [{ op: 'cap', prop: inP.id, usd: null }] }, E);
+      A.ok(off.ok, 'usd: null still takes the cap off, said plainly');
+    }
+    const noSv =SB.planEdit(st.serialize(), { refit: [{ op: 'folder', prop: inP.id, project: 'starnet' }] }, E);
     A.ok(!noSv.ok && /could not read the Commander's trusted projects/.test(noSv.error), 'a page that could not read the projects refuses, never guesses');
     // sweep 2026-10-01: routes only on a FILTER (a bay took routes and "sorted" nothing)
     const rb = SB.planEdit(st.serialize(), { refit: [{ op: 'routes', prop: bayP.id, routes: { code: 'east' } }] }, SV);
@@ -2032,6 +2081,18 @@ for (const c of T.catalog) {
     const bad = await pt.run({ describe: 'a broken thing' }, {});
     A.ok(/^REFUSED: StarNet could not make "a broken thing": the drawing never passed its checks \(\$0\.20 was spent on the tries\)/.test(bad.content), 'a failed drawing says why and what it spent: ' + bad.content);
     A.ok(/^REFUSED: Making props is not available on this station\./.test((await toolsOf(null).makePropTool.run({ describe: 'x' }, {})).content), 'a station without the prop maker refuses plainly');
+    // the front view and the side view share ONE wait: two full waits outran the tool's own timeout and lost a paid prop's id
+    {
+      let polls = 0, frontPolls = 0;
+      const slowUP = { start: async () => ({ ok: true, job: { id: 'pj_FRONT0001abcdefgh' } }),
+        startSide: async () => ({ ok: true, job: { id: 'pj_SIDE00001abcdefgh' } }),
+        job: id => { polls++; if (/FRONT/.test(id)) return ++frontPolls >= 3 ? { id, status: 'done', propId: 'user_slow_t1', costUsd: 0.35 } : { id, status: 'running' }; return { id, status: 'running' }; },
+        list: () => [{ id: 'user_slow_t1', label: 'SLOW', footprint: { w: 1, h: 1 }, costUsd: 0.35 }] };
+      const slow = makeStationTools({ station: pbridge, now: () => 1000, planMemo: new Map(), lineMenu: () => [], styleMenu: () => [], roomMenu: () => [], kitMenu: () => [], presetMenu: () => [], userProps: slowUP, propWaitMs: 50, propTickMs: 5 }).makePropTool;
+      const sr = JSON.parse((await slow.run({ describe: 'slow thing', sideView: true }, {})).content);
+      A.ok(sr.made && sr.id === 'user_slow_t1' && sr.sideView === false && /still being drawn/.test(sr.sideNote), 'a side view still drawing when the one wait ends: the prop is made and named, its side view said to be coming: ' + JSON.stringify(sr).slice(0, 200));
+      A.ok(polls <= 12, 'both views wait within one budget (10 ticks), not one each: ' + polls + ' polls');
+    }
     const idx = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
     A.ok(/station\[\._\]make_prop\$\/\.test\(String\(call && call\.name \|\| ''\)\)\) return '"' \+ String\(a\.describe/.test(idx) && /'", drawn with your StarNet credits \(about \$0\.35'/.test(idx), 'the approval card names the object and its price');
   }
@@ -2180,6 +2241,29 @@ for (const c of T.catalog) {
     const outer = st.transact(() => { st.renameRoom(room.id, 'OUTER'); const inner = st.transact(() => { st.renameRoom(room.id, 'INNER'); return { ok: false }; }); return { ok: !inner.ok && st.rooms()[0].name === 'OUTER' }; });
     A.ok(outer.ok && st.rooms()[0].name === 'OUTER', 'a refused NESTED batch rolls back only itself');
     A.ok(st.undo().ok && JSON.stringify(st.serialize()) === JSON.stringify(depthBefore) && st.rooms()[0].name === 'ZZTOP', 'one undo takes back the outer batch, and the user\'s earlier rename is still there');
+  }
+  // sweep 2026-10-02: a piece REACHING into a hallway goes with it (removeRoom drops every piece whose footprint touches
+  // the room) — the re-lay must refuse to cut it, and a hallway delete's card must count and name it
+  {
+    const E3 = Object.assign({}, env, { StationTemplates: T, PropSprites: Sprites, EquipmentHelp: require('../frontend/app/equipmenthelp.js'),
+      RoomStyles: require('../frontend/app/roomstyles.js'), LineLayout: require('../frontend/app/linelayout.js'), LineEdit: require('../frontend/app/lineedit.js') });
+    const mk = () => {
+      const s = M.create(M.starterDoc()); s.ensureWorkstation('agent'); s.ensureWorkstation('rex');
+      const lay = SB.planEdit(s.serialize(), { refit: [{ op: 'hall', x: 18, y: 4, w: 6, h: 3 }, { op: 'room', name: 'Den', kind: 'hab', x: 24, y: 0, w: 18, h: 11 }] }, E3);
+      SB.apply(s, lay.plan, E3);
+      const i = s.addProp({ t: 'intake', x: 9, y: 5, w: 2, h: 2 }), b = s.addProp({ t: 'bay', x: 13, y: 5, w: 2, h: 2 }), o = s.addProp({ t: 'outbox', x: 17, y: 5, w: 2, h: 2 });   // the outbox reaches x=18: the hallway
+      s.connectBelt(i.id, b.id); s.connectBelt(b.id, o.id); s.assignPropAgent(b.id, 'rex');
+      return { s, o };
+    };
+    const a = mk();
+    const re = SB.planEdit(a.s.serialize(), { rearrange: 'diamond' }, E3);
+    A.ok(!re.ok && /stands in a hallway \(outbox at \(17, 5\)\)/.test(re.error), 'a re-lay refuses when a line\'s outbox reaches into a hallway (it used to delete it under a card saying lines stay as they are): ' + (re.error || 'PLANNED'));
+    A.ok(!!a.s.propById(a.o.id), 'and the outbox is still there');
+    const b = mk();
+    const desk = b.s.addProp({ t: 'desk', x: 23, y: 4, w: 2, h: 1 }); b.s.assignPropAgent(desk.id, 'agent');   // straddles the hallway and Den
+    const hall = b.s.rooms().find(r => r.kind === 'corridor');
+    const del = SB.planEdit(b.s.serialize(), { refit: [{ op: 'delete', hall: hall.name }, { op: 'hall', x: 18, y: 7, w: 6, h: 3 }] }, E3);
+    A.ok(del.ok && /with the 2 pieces in or reaching into it \(the outbox, NOVA's desk\)/.test(del.plan.summary), 'a hallway delete counts AND names the desk and machine reaching into it: ' + (del.ok ? del.plan.summary.slice(0, 220) : del.error));
   }
   A.report('station-builder');
 })();

@@ -17,6 +17,7 @@
    Pure + injected deps (map, signal, clock, uuid, emit) so the timing semantics are unit-testable with fake
    timers (test/consentwait.test.js) — the REAL sidecar path rides this exact module, not a copy. */
 'use strict';
+const { note } = require('./failopen.js');   // a failing auto-deny announcer is noted, never silent
 
 function makeConsentWait(deps) {
   const pending = deps.pending;                 // Map: promptId -> finish(decision) (handleConsent's lookup)
@@ -27,13 +28,17 @@ function makeConsentWait(deps) {
   const setT = deps.setTimeoutFn || setTimeout;
   const clearT = deps.clearTimeoutFn || clearTimeout;
   const emitPrompt = deps.emitPrompt;           // (promptId) => emit the permission.prompt event
+  // (promptId) => tell the run's surfaces nobody answered: a timeout or a dropped run fail-closes to deny, and the page's
+  // card / CREW frame must not keep asking a question the run already stopped waiting on (sweep 2026-10-02)
+  const onAutoDeny = typeof deps.onAutoDeny === 'function' ? deps.onAutoDeny : null;
 
   // ask() returns a Promise<decision string>; the registered finisher carries .extend() for the ack route.
   function ask() {
     return new Promise((resolve) => {
       const promptId = uuid();
       let settled = false, timer = null, extended = false;
-      function onAbort() { finish('deny'); }
+      function onAbort() { autoDeny(); }
+      function autoDeny() { if (settled) return; finish('deny'); if (onAutoDeny) { try { onAutoDeny(promptId); } catch (e) { note('consent.autoDeny', e); } } }
       function finish(decision) {
         if (settled) return; settled = true;
         pending.delete(promptId);
@@ -46,13 +51,13 @@ function makeConsentWait(deps) {
         if (settled || extended) return false;
         extended = true;
         if (timer) clearT(timer);
-        timer = setT(() => finish('deny'), extendMs);
+        timer = setT(autoDeny, extendMs);
         return true;
       };
       pending.set(promptId, finish);
-      if (signal.aborted) return finish('deny');
+      if (signal.aborted) return finish('deny');   // never shown: nothing to retract
       signal.addEventListener('abort', onAbort, { once: true });
-      timer = setT(() => finish('deny'), timeoutMs);
+      timer = setT(autoDeny, timeoutMs);
       emitPrompt(promptId);
     });
   }

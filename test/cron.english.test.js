@@ -38,6 +38,13 @@ const CRON_CASES = [
   ['every 30 minutes from 9am to 5pm', '*/30 9-16 * * *']
 ];
 for (const [input, want] of CRON_CASES) A.eq(expr(input), want, '"' + input + '" -> ' + want);
+// sweep 2026-10-02: a day RANGE is every day in it (it was read as its two ends: "monday-friday" saved Mon + Fri only),
+// and "night at 12" is midnight (it was noon)
+for (const [input, want] of [
+  ['monday-friday at 9am', '0 9 * * 1,2,3,4,5'], ['Monday–Friday at 9am', '0 9 * * 1,2,3,4,5'], ['mon - fri at 9am', '0 9 * * 1,2,3,4,5'],
+  ['monday through wednesday at 9am', '0 9 * * 1,2,3'], ['tuesday to thursday at 8pm', '0 20 * * 2,3,4'], ['friday to monday at 7am', '0 7 * * 0,1,5,6'],
+  ['every night at 12', '0 0 * * *'], ['every sunday night at 12', '0 0 * * 0'], ['every 2 hours from 9am until 5pm', '0 9-17/2 * * *']
+]) A.eq(expr(input), want, '"' + input + '" -> ' + want);
 
 A.eq(expr('the 1st and 15th of every month at 10am'), '0 10 1,15 * *', 'two dates a month');
 for (const biweekly of ['every other monday at 10am', 'biweekly on mondays', 'every 2 weeks at 9am', 'fortnightly', 'twice a month'])
@@ -70,7 +77,9 @@ for (const bad of ['whenever i feel like it', 'last day of every month', 'every 
   'every weekday except friday' /* Mon-Fri */, 'every 2 days at 9am' /* daily */, 'every 3 days at 8am' /* daily */,
   'every year on jan 1 at 9am' /* daily */, 'every quarter at 9am' /* daily */,
   'the first monday of every month at 9am' /* the 1st */, 'first monday of the month at 9am' /* every Monday */,
-  'the last friday of every month at 5pm' /* the 1st */, '9am on the 15th' /* once, tomorrow */]) {
+  'the last friday of every month at 5pm' /* the 1st */, '9am on the 15th' /* once, tomorrow */,
+  // sweep 2026-10-02: a start or an end has no cron form
+  'every day at 9am until friday' /* Fridays only */, 'every day at 9am starting monday' /* Mondays only */, 'every day at 9am for a week' /* forever */]) {
   A.eq(cron.parseSchedule(bad, NOW, { defaultTz: TZ }), null, 'refused: "' + bad + '"');
 }
 

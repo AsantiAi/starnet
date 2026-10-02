@@ -114,6 +114,22 @@ function startProvider() {
     A.ok(writeResult && /\[location: /.test(writeResult.content), 'the routine fs.write receipt names where the file went');
     A.eq(fs.existsSync(path.join(projectRoot, 'Working', 'routine-proof.txt')) && fs.readFileSync(path.join(projectRoot, 'Working', 'routine-proof.txt'), 'utf8'), 'ROUTINE_IN_PROJECT', 'a routine relative fs.write lands in its project folder, where the shell looks');
     A.ok(!fs.existsSync(path.join(fixture.workspace, 'project-agent', 'Working', 'routine-proof.txt')), 'the routine write did not silently land in the private agent workspace');
+
+    /* (sweep 2026-10-02) DELIVERABLES › OPEN on that file opens THE PROJECT'S copy — it resolved the relative path in the
+       agent's private workspace and served an older same-named file (a decoy proves which one is served). */
+    fs.mkdirSync(path.join(fixture.workspace, 'project-agent', 'Working'), { recursive: true });
+    fs.writeFileSync(path.join(fixture.workspace, 'project-agent', 'Working', 'routine-proof.txt'), 'DECOY_PRIVATE_COPY', 'utf8');
+    const dl = await fixture.json('GET', '/api/deliverables');
+    const items = (dl.body && (dl.body.items || dl.body.deliverables || dl.body.rows)) || [];
+    const file = items.flatMap(it => it.files || []).find(f => f && f.path && /routine-proof\.txt$/.test(String(f.path).replace(/\\/g, '/')));
+    A.ok(file && /[?&]project=/.test(String(file.openUrl)), 'the deliverable link names its project: ' + (file && file.openUrl));
+    const opened = file ? await fixture.request(file.openUrl) : null;
+    A.eq(opened && opened.status === 200 ? await opened.text() : 'HTTP ' + (opened && opened.status), 'ROUTINE_IN_PROJECT', 'OPEN serves the project file, not the same-named one in the private workspace');
+    const enc = encodeURIComponent(path.resolve(projectRoot));
+    A.eq((await fixture.request('/api/file?agent=project-agent&path=..%2Fx&project=' + enc)).status, 403, 'a ".." path under a project is refused');
+    const stranger = fs.mkdtempSync(path.join(os.tmpdir(), 'starnet-not-blessed-')); fs.writeFileSync(path.join(stranger, 'secret.txt'), 'S');
+    A.eq((await fixture.request('/api/file?agent=project-agent&path=secret.txt&project=' + encodeURIComponent(stranger))).status, 403, 'a folder that is not a blessed project serves nothing');
+    try { fs.rmSync(stranger, { recursive: true, force: true }); } catch (_) {}
   } finally {
     await fixture.dispose();
     await new Promise(resolve => provider.server.close(resolve));
