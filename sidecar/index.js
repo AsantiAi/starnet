@@ -11346,7 +11346,7 @@ function quiesceForProcessFault() {
   });
   // the whole-line SAMPLE hub's run (POST /api/routing/sample) is real spend too — its own containment for the same
   // reason as the triggers above (sampleHub is declared further down this file)
-  contain('sample', () => { killAll(null, (sampleHub && sampleHub._internals) ? sampleHub._internals.inflight : null); });
+  contain('sample', () => { if (sampleInFlight) sampleInFlight.stopRequested = true; killAll(null, (sampleHub && sampleHub._internals) ? sampleHub._internals.inflight : null); });
   contain('groups', () => groupSessions && groupSessions.halt && groupSessions.halt());
   contain('subagents', () => subagents && subagents.interruptAll && subagents.interruptAll());
   contain('shell-background', () => shellBg && shellBg.killAll && shellBg.killAll());
@@ -11639,7 +11639,9 @@ function getSampleHub() {
        bindChats:false makes this hub read and write no binding at all, so the proof proves the same thing on
        run #2 as on run #1 (and on a station that already carries a stale record from before this fix). */
     bindChats: false,
-    send: (chatId, text) => { sampleReplies.push(String(text == null ? '' : text)); if (sampleReplies.length > 20) sampleReplies.shift(); return Promise.resolve({ ok: true }); },
+    // once the job is stopped (■ STOP or E-STOP) nothing more is its output: the hub's "⏹ Stopped — E-STOP was pressed"
+    // courtesy notice (for a real chat) was kept as what the job made, and offered NEEDS CHANGES against
+    send: (chatId, text) => { if (!(sampleInFlight && sampleInFlight.stopRequested)) { sampleReplies.push(String(text == null ? '' : text)); if (sampleReplies.length > 20) sampleReplies.shift(); } return Promise.resolve({ ok: true }); },
     secrets: () => ({}),   // the selected dock owns the configuration, not an ambient provider
     resolveEntryRunConfig: sampleRunConfigFor,
     resolveRunConfig: sampleRunConfigFor,
@@ -22200,6 +22202,7 @@ function handleHalt(req, res) {
   try { pluginRuntime.setJobsPaused(true); } catch (e) { failNote('plugins.halt', e); }
   // the whole-line SAMPLE hub (POST /api/routing/sample): its entry run AND every stage it chains live in its inflight record
   const sampleInflight = (sampleHub && sampleHub._internals) ? sampleHub._internals.inflight : null;
+  if (sampleInFlight) sampleInFlight.stopRequested = true;   // its record says STOPPED, never "did not finish cleanly — send it again"
   const halted = killAll(runs, tgInflight, dcInflight, ...genericInflights, ...tgBotInflights, devInflight, stepTest ? stepTest.inflight : null, ...triggerInflights, sampleInflight);   // browser runs + ALL channel hub runs, in one kill (see sidecar/halt.js)
   let cronAborted = 0;
   try { cronAborted = cronDriver.abortAllLeases(); } catch (_) {}   // Phase 0: E-STOP also aborts in-flight cron runs (unattended spend)
