@@ -963,6 +963,7 @@
     const S = env.PropSprites, rm = st.rooms().find(r => r.id === roomId), R = rm.rects[0], placed = [];
     const g0 = st.projectGeometry(), reserve = new Set(), belts = st.serialize().belts || {};
     for (const d of doorTiles(st, g0, roomId)) for (let k = 0; k < 3; k++) reserve.add((d.x + d.dx * k) + ',' + (d.y + d.dy * k));
+    for (const k of deskSeats(st, roomId).keys()) reserve.add(k);   // a desk's seat row: the desk brings its own chair
     const o0 = spawnTile(st.serialize(), g0), walk0 = walkableRooms(st);
     const must = st.props().filter(p => st.roomAt(p.x, p.y) === roomId && p.block !== false && sideReachable(g0, o0, p)).map(p => p.id);
     const cx = (R.x1 + R.x2 + 1) / 2, cy = (R.y1 + R.y2 + 1) / 2;
@@ -1217,7 +1218,7 @@
   const tileRect = o => (o && isFinite(o.x) && isFinite(o.y) && isFinite(o.w) && isFinite(o.h) && o.w >= 1 && o.h >= 1) ? { x1: Math.round(o.x), y1: Math.round(o.y), x2: Math.round(o.x) + Math.round(o.w) - 1, y2: Math.round(o.y) + Math.round(o.h) - 1 } : null;
   const tileOf = v => Array.isArray(v) && v.length === 2 && v.every(n => isFinite(n)) ? { x: Math.round(v[0]), y: Math.round(v[1]) } : v && isFinite(v.x) && isFinite(v.y) ? { x: Math.round(v.x), y: Math.round(v.y) } : null;
   const wmMsg = r => (r && (r.msg || r.error)) || 'it was refused';
-  function refitOne(st, env, o, names, res) {
+  function refitOne(st, env, o, names, res, ctx) {
     const WM = env.WorldModel, S = env.PropSprites, at = (x, y) => '(' + x + ', ' + y + ')';
     if (!o || typeof o !== 'object' || Array.isArray(o) || typeof o.op !== 'string') return refuse('each edit is an object with an op (' + REFIT_OPS + ')');
     const op = o.op.toLowerCase().trim();
@@ -1228,6 +1229,7 @@
       return refuse('there is no piece "' + String(typeof ref === 'object' ? JSON.stringify(ref) : ref).slice(0, 40) + '" (use an id from station.map with { room } detail, a name given with as, or a tile [x, y])'); };
     const nm = t => pieceName(env, t), inRoom = (x, y) => { const id = st.roomAt(x, y), r = id && st.rooms().find(q => q.id === id); return r ? ' in ' + r.name : ''; };
     const did = (r, text) => r && r.ok ? { ok: true, text, res: r } : refuse(wmMsg(r));
+    const targetOf = ref => { if (ref == null) return null; const id = names[ref] || ref, pp = typeof id === 'string' ? st.propById(id) : null; if (pp) return pp; const tt = tileOf(ref); if (!tt) return null; const pid = st.propAt(tt.x, tt.y), q = pid ? st.propById(pid) : null; return q || { x: tt.x, y: tt.y, w: 1, h: 1 }; };
     const isMain = rm => { const m = mainRoom(st), sp = (st.serialize().meta || {}).spawnRoomId; return (m && rm.id === m.id) || rm.id === sp; };
     const jcfg = p => { const c = {}; for (const k of ['routes', 'def', 'bufferSize', 'timeoutMin', 'maxIter', 'done', 'esc', 'when']) if (p[k] != null) c[k] = clone(p[k]); return c; };   // a junction edit changes only what it names
     const intakeOf = p => { if (p.t === 'intake') return p; if (!env.Pipeline || !env.Pipeline.lineComponents) return null; const g = st.projectGeometry(), o0 = g.origin || { tx: 0, ty: 0 }; const c = env.Pipeline.lineComponents(g).find(k => (k.props || []).some(q => (q && q.id ? q.id : q) === p.id)); const id = c && (c.intakes || [])[0]; return id ? st.propById(id) : null; };
@@ -1260,22 +1262,32 @@
         if (!tt && MACHINE_T.test(t)) tt = t;
         if (!tt || !S.spec(tt)) return refuse('there is no piece "' + t.slice(0, 40) + '" (station.map with { catalog: true } lists every piece and its size)');
         const q = tileOf(o); if (!q) return refuse('place needs x and y: the piece\'s top-left tile');
-        const r = o.r == null ? 0 : Math.round(Number(o.r)); if (!(r >= 0 && r <= 3)) return refuse('r is 0 (facing south), 1 (west), 2 (north) or 3 (east)');
+        // toward: what the piece faces (a chair its table, a sofa its screen): the builder works out r, never backwards
+        let r = o.r == null ? 0 : Math.round(Number(o.r));
+        if (o.toward != null) { const tg = targetOf(o.toward); if (!tg) return refuse('toward is a piece (an id, an as, or a tile with a piece on it) or a tile [x, y] for it to face'); const sp0 = S.spec(tt); r = facingToward({ x: q.x, y: q.y, w: sp0.w, h: sp0.h }, tg); }
+        if (!(r >= 0 && r <= 3)) return refuse('r is 0 (facing south), 1 (west), 2 (north) or 3 (east)');
         if (r && S.canRotate && !S.canRotate(tt)) return refuse('a ' + nm(tt) + ' does not turn');
+        if (r && S.facings && S.facings(tt).indexOf(r) < 0) return refuse('a ' + nm(tt) + ' cannot face ' + ['south', 'west', 'north', 'east'][r] + ' (it faces ' + S.facings(tt).map(k => ['south', 'west', 'north', 'east'][k]).join(', ') + ')');
         if (o.m && S.canMirror && !S.canMirror(tt)) return refuse('a ' + nm(tt) + ' does not flip');
         const box = S.footprintAt ? S.footprintAt(tt, r) : null, sp2 = S.spec(tt), w = (box && box.w) || sp2.w, h = (box && box.h) || sp2.h;
         const p = { t: tt, x: q.x, y: q.y, w, h, block: sp2.blocks !== false };
         if (r) p.r = r; if (o.m) p.m = 1; if (tt === 'airlock') p.door = 'closed';
         const a = st.addProp(p); if (!a || !a.ok) return refuse(wmMsg(a));
         if (o.as) names[o.as] = a.id;
+        if (ctx && o.toward != null) ctx.aimed.add(a.id);
         return { ok: true, text: (/^[aeiou]/.test(nm(tt)) ? 'an ' : 'a ') + nm(tt) + ' at ' + at(q.x, q.y) + inRoom(q.x, q.y) + (r ? ', facing ' + ['south', 'west', 'north', 'east'][r] : '') + (o.m ? ', flipped' : '') };
       }
       case 'move': {
         if (o.room != null) { const t = roomRef(o.room); if (!t.ok) return t; if (isMain(t.room)) return refuse(t.room.name + ' is the main room: the station is built round it'); const q = tileOf(o); if (!q) return refuse('move a room with its new top-left x and y'); const B = bboxOf(t.room); return did(st.moveRoom(t.room.id, q.x - B.x1, q.y - B.y1), t.room.name + ' moved to ' + at(q.x, q.y) + ' with everything in it'); }
         const t = propRef(o.prop); if (!t.ok) return t; const q = tileOf(o.to || o); if (!q) return refuse('move a piece with its new top-left x and y'); const p = t.p, from = at(p.x, p.y);
+        if (ctx) ctx.touched.add(p.id);
         return did(st.moveProp(p.id, q.x - p.x, q.y - p.y), 'the ' + nm(p.t) + ' at ' + from + ' moved to ' + at(q.x, q.y) + inRoom(q.x, q.y));
       }
-      case 'rotate': { const t = propRef(o.prop); if (!t.ok) return t; const r = Math.round(Number(o.r)); if (!(r >= 0 && r <= 3)) return refuse('r is 0 (south), 1 (west), 2 (north) or 3 (east)'); if (S.canRotate && !S.canRotate(t.p.t)) return refuse('a ' + nm(t.p.t) + ' does not turn'); const box = S.footprintAt ? S.footprintAt(t.p.t, r) : null; return did(st.faceProp(t.p.id, r, box || undefined), 'the ' + nm(t.p.t) + ' at ' + at(t.p.x, t.p.y) + ' turned to face ' + ['south', 'west', 'north', 'east'][r]); }
+      case 'rotate': { const t = propRef(o.prop); if (!t.ok) return t; let r = Math.round(Number(o.r));
+        if (o.toward != null) { const tg = targetOf(o.toward); if (!tg) return refuse('toward is a piece (an id, an as, or a tile with a piece on it) or a tile [x, y] for it to face'); r = facingToward(t.p, tg); }
+        if (ctx) (o.toward != null ? ctx.aimed : ctx.touched).add(t.p.id);
+        if (!(r >= 0 && r <= 3)) return refuse('r is 0 (south), 1 (west), 2 (north) or 3 (east), or give toward: what it should face'); if (S.canRotate && !S.canRotate(t.p.t)) return refuse('a ' + nm(t.p.t) + ' does not turn');
+        if (S.facings && S.facings(t.p.t).indexOf(r) < 0) return refuse('a ' + nm(t.p.t) + ' cannot face ' + ['south', 'west', 'north', 'east'][r] + ' (it faces ' + S.facings(t.p.t).map(k => ['south', 'west', 'north', 'east'][k]).join(', ') + ')'); const box = S.footprintAt ? S.footprintAt(t.p.t, r) : null; return did(st.faceProp(t.p.id, r, box || undefined), 'the ' + nm(t.p.t) + ' at ' + at(t.p.x, t.p.y) + ' turned to face ' + ['south', 'west', 'north', 'east'][r]); }
       case 'mirror': { const t = propRef(o.prop); if (!t.ok) return t; if (S.canMirror && !S.canMirror(t.p.t)) return refuse('a ' + nm(t.p.t) + ' does not flip'); return did(st.mirrorProp(t.p.id), 'the ' + nm(t.p.t) + ' at ' + at(t.p.x, t.p.y) + ' flipped'); }
       case 'delete': {
         // a hallway by the name a refusal or station.map gives it ("CORRIDOR-1117"), by an `as`, or by a tile on it
@@ -1287,7 +1299,11 @@
         if (o.room != null) { const t = roomRef(o.room); if (!t.ok) return t; if (isMain(t.room)) return refuse(t.room.name + ' is the main room, so it stays'); const n = st.props().filter(p => st.roomAt(p.x, p.y) === t.room.id).length; return did(st.removeRoom(t.room.id), t.room.name + ' removed, with the ' + n + (n === 1 ? ' piece' : ' pieces') + ' on it'); }
         const t = propRef(o.prop); if (!t.ok) return t; const p = t.p; return did(st.removeProp(p.id), 'the ' + nm(p.t) + ' at ' + at(p.x, p.y) + inRoom(p.x, p.y) + ' removed' + (p.agentId ? ' (it was ' + nameOf(env, p.agentId) + '\'s)' : ''));
       }
-      case 'agent': { const t = propRef(o.prop); if (!t.ok) return t; let aid = ''; if (o.agent != null && !/^(nobody|none|no one|clear)$/i.test(String(o.agent))) { const a = agentOf(env, o.agent); if (!a.ok) return a; aid = a.id; } return did(st.assignPropAgent(t.p.id, aid), 'the ' + nm(t.p.t) + ' at ' + at(t.p.x, t.p.y) + (aid ? ' is ' + nameOf(env, aid) + '\'s' : ' has nobody')); }
+      case 'agent': { const t = propRef(o.prop); if (!t.ok) return t; let aid = ''; if (o.agent != null && !/^(nobody|none|no one|clear)$/i.test(String(o.agent))) { const a = agentOf(env, o.agent); if (!a.ok) return a; aid = a.id; } const as = st.assignPropAgent(t.p.id, aid); if (!as || !as.ok) return refuse(wmMsg(as));
+        // a desk seats its agent in its own chair: a chair already standing on its seat would make two, so it goes
+        const gone = [];
+        if (aid && isWorkstation(st, t.p.t)) { const row = seatRow(st.propById(t.p.id) || t.p), isSeat = isSeatPiece(env); for (const q of st.props().slice()) if (isSeat(q.t) && row.some(([x, y]) => x >= q.x && x < q.x + (q.w || 1) && y >= q.y && y < q.y + (q.h || 1))) { const rm = st.removeProp(q.id); if (rm && rm.ok) gone.push('the ' + nm(q.t) + ' at ' + at(q.x, q.y)); } }
+        return { ok: true, text: 'the ' + nm(t.p.t) + ' at ' + at(t.p.x, t.p.y) + (aid ? ' is ' + nameOf(env, aid) + '\'s' : ' has nobody') + (gone.length ? ' (' + gone.join(', ') + ' removed: the desk brings its own chair)' : '') }; }
       case 'door': { const t = propRef(o.prop); if (!t.ok) return t; return did(st.setDoorState(t.p.id, String(o.state || '')), 'the airlock at ' + at(t.p.x, t.p.y) + ' ' + o.state); }
       case 'belt': { const a = tileOf(o.from), b = tileOf(o.to); if (!a || !b) return refuse('a belt is { from: [x, y], to: [x, y] }, one straight run'); return did(st.placeBeltRun({ tx: a.x, ty: a.y }, { tx: b.x, ty: b.y }), 'a belt from ' + at(a.x, a.y) + ' to ' + at(b.x, b.y)); }
       case 'unbelt': { const tiles = (Array.isArray(o.tiles) ? o.tiles : []).map(tileOf).filter(Boolean).map(q => [q.x, q.y]); if (!tiles.length) return refuse('unbelt needs tiles: [[x, y], …]'); return did(st.removeBelts(tiles), tiles.length + ' belt tiles taken up'); }
@@ -1333,12 +1349,24 @@
   }
   // every op in order on `st`; the first that fails refuses, naming it
   function refitAll(st, env, ops, resolved) {
-    const names = {}, texts = [];
+    const names = {}, texts = [], ctx = { aimed: new Set(), touched: new Set() }, byOp = new Map();   // seat id -> the edit that put it there
     for (let i = 0; i < ops.length; i++) {
       let r;
-      try { r = refitOne(st, env, ops[i], names, resolved ? resolved[i] : null); } catch (e) { r = refuse(String((e && e.message) || e)); }
+      const had = new Set(st.props().map(p => p.id)), op = String((ops[i] && ops[i].op) || '').toLowerCase().trim(), touched = new Set(ctx.touched);
+      try { r = refitOne(st, env, ops[i], names, resolved ? resolved[i] : null, ctx); } catch (e) { r = refuse(String((e && e.message) || e)); }
       if (!r.ok) return refuse('Edit ' + (i + 1) + ' (' + String((ops[i] && ops[i].op) || '?').slice(0, 12) + '): ' + r.error.replace(/\.$/, '') + '. Nothing was built; fix that edit and plan again.');
       texts.push(r.text);
+      if (op === 'place') for (const p of st.props()) if (!had.has(p.id)) byOp.set(p.id, i);
+      for (const id of ctx.touched) if (!touched.has(id)) byOp.set(id, i);
+    }
+    // the lead's chairs face their table (Andrew 10-02: "when it places left chair and right chair its always backwards"):
+    // a seat placed, moved or turned by hand right beside a table or desk, and not aimed with toward, is turned to face it
+    // once every edit is down (the table may come after its chairs); the edit that set it says so
+    for (const [id, i] of byOp) {
+      if (ctx.aimed.has(id)) continue;
+      const turn = faceItsTable(st, env, id); if (!turn) continue;
+      const what = 'the ' + pieceName(env, turn.table.t) + ' beside it';
+      texts[i] = String((ops[i] && ops[i].op) || '').toLowerCase().trim() === 'place' ? texts[i].replace(/, facing (south|west|north|east)/, '') + ', facing ' + turn.dir + ' (turned to face ' + what + ')' : texts[i] + ' (then turned ' + turn.dir + ' to face ' + what + ')';
     }
     return { ok: true, texts, names };
   }
@@ -1377,6 +1405,13 @@
       const hs = probe.rooms().filter(r => stranded.indexOf(r.id) >= 0), one = hs.length === 1;
       return refuse('That would leave ' + (one ? 'a hallway' : hs.length + ' hallways') + ' leading nowhere (' + hs.slice(0, 6).map(h => { const B = bboxOf(h); return h.name + ' at (' + B.x1 + ', ' + B.y1 + ')'; }).join(', ') + (hs.length > 6 ? ', …' : '')
         + '): a hallway joins two rooms. Take ' + (one ? 'it' : 'them') + ' up ({ op: "delete", hall: "' + hs[0].name + '" }) or join ' + (one ? 'it' : 'them') + ' to a room; to reshape the whole station, { rearrange: "diamond" } re-lays every room with clean hallways. Nothing was built.');
+    }
+    // nothing new stands on a desk's seat: the desk draws its own chair when an agent works it (Andrew 10-02: two chairs)
+    const seatKey = b => b.piece.id + '@' + b.desk.id, seatsBefore = new Set(blockedSeats(live, env).map(seatKey)), seatHits = blockedSeats(probe, env).filter(b => !seatsBefore.has(seatKey(b)));
+    if (seatHits.length) {
+      const b = seatHits[0], pn = t => pieceName(env, t);
+      return refuse('The ' + pn(b.piece.t) + ' at (' + b.piece.x + ', ' + b.piece.y + ') would stand on the seat of the ' + pn(b.desk.t) + ' at (' + b.desk.x + ', ' + b.desk.y + '): a desk draws its own chair when an agent works it, so its seat row stays clear'
+        + (seatHits.length > 1 ? ' (and ' + (seatHits.length - 1) + ' more like it)' : '') + '. Never place a chair at a desk; put the piece elsewhere. Nothing was built.');
     }
     // what the Commander should know before approving: routing that breaks, rooms nobody can walk into any more
     const after = floorFacts(probe, P), warn = [];
@@ -2557,6 +2592,8 @@
       for (let k = 0; k < 3; k++) reserve.add((d.x + d.dx * k) + ',' + (d.y + d.dy * k));
     }
     const flip = onWall.north > 0 && !onWall.south;   // the feature wall is the south one
+    // ...and a set mirrored north-south turns what faces north or south with it (a chair below its table faces up at it)
+    const flipFacing = (t, r) => flip && (r === 0 || r === 2) && S.canRotate && S.canRotate(t) && (!S.facings || S.facings(t).indexOf(2 - r) >= 0) ? 2 - r : r;
     const belts = st.serialize().belts || {}, placed = [];
     // what already covers each tile: a rug ('flat') may lie under furniture, furniture ('solid') excludes anything but
     // what stands on a table
@@ -2629,7 +2666,7 @@
       const tries = [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1], [-2, 0], [2, 0], [-3, 0], [3, 0], [-2, 1], [2, 1], [-2, -1], [2, -1]];
       for (const [dx, dy] of tries) {
         const ax = x0 + dx, ay = y0 + dy;
-        const ps = set.pieces.map(([t, x, y, facing]) => { const sp = S.spec(t); return sp ? { t, x: ax + x, y: flip ? ay + set.h - y - sp.h : ay + y, r: facing || 0, sp } : null; }).filter(Boolean);
+        const ps = set.pieces.map(([t, x, y, facing]) => { const sp = S.spec(t); return sp ? { t, x: ax + x, y: flip ? ay + set.h - y - sp.h : ay + y, r: flipFacing(t, facing || 0), sp } : null; }).filter(Boolean);
         // every solid piece must have its floor (what stands on a table is checked when its table is down)
         if (ps.some(p => p.sp.blocks !== false && !p.sp.stack && p.sp.mount !== 'surface' && blocks(p.sp, p.x, p.y))) continue;
         const before = placed.length, rank = p => p.sp.flat ? 0 : (p.sp.stack || p.sp.mount === 'surface') ? 2 : 1;
@@ -2996,6 +3033,76 @@
      diamond grid round the main room, nearest rooms first; every old hallway is taken up, the grid's own corridors are
      laid and lit, and grid neighbours are joined so the station meshes instead of branching. Deterministic: the plan runs
      it on a copy, the build runs it again on the station, and the two must match exactly. */
+  /* A DESK BRINGS ITS OWN CHAIR (Andrew 10-02, two chairs side by side under every desk: "the chairs are built in to the
+     desk as long as the agent's assigned"): a workstation (any computer piece) draws a chair on the row in front of it the
+     moment an agent works it, so that row stays clear — a placed chair there means two chairs. The row is the side the desk
+     faces (r: 0 south, 1 west, 2 north, 3 east), and the south row too, where a desk that cannot turn always seats. */
+  const isWorkstation = (st, t) => !!(st && typeof st.capForProp === 'function' && st.capForProp(t) === 'computer');
+  function seatRow(p) {
+    const w = p.w || 1, h = p.h || 1, out = [], r = (p.r | 0) & 3;
+    const row = (side) => { if (side === 0) for (let x = p.x; x < p.x + w; x++) out.push([x, p.y + h]); else if (side === 2) for (let x = p.x; x < p.x + w; x++) out.push([x, p.y - 1]);
+      else if (side === 1) for (let y = p.y; y < p.y + h; y++) out.push([p.x - 1, y]); else for (let y = p.y; y < p.y + h; y++) out.push([p.x + w, y]); };
+    row(0); if (r) row(r);
+    return out;
+  }
+  function deskSeats(st, roomId) {
+    const out = new Map();   // "x,y" -> the desk whose seat it is
+    for (const p of st.props()) if (isWorkstation(st, p.t) && (roomId == null || st.roomAt(p.x, p.y) === roomId)) for (const [x, y] of seatRow(p)) out.set(x + ',' + y, p);
+    return out;
+  }
+  // a solid piece standing on a desk's seat: [{ piece, desk }]
+  function blockedSeats(st, env) {
+    const seats = deskSeats(st, null), out = [];
+    for (const q of st.props()) {
+      if (q.block === false || isWorkstation(st, q.t)) continue;
+      for (let y = q.y; y < q.y + (q.h || 1); y++) for (let x = q.x; x < q.x + (q.w || 1); x++) { const d = seats.get(x + ',' + y); if (d && !out.some(o => o.piece.id === q.id)) out.push({ piece: q, desk: d }); }
+    }
+    return out;
+  }
+  const isSeatPiece = env => t => { const sp = env && env.PropSprites && env.PropSprites.spec ? env.PropSprites.spec(t) : null; return !!(sp && sp.use && sp.use.kind === 'seat'); };
+  // which way a piece at p faces toward target q (r: 0 south, 1 west, 2 north, 3 east)
+  function facingToward(p, q) {
+    const pw = p.w || 1, ph = p.h || 1, qw = q.w || 1, qh = q.h || 1;
+    const dx = (q.x + qw / 2) - (p.x + pw / 2), dy = (q.y + qh / 2) - (p.y + ph / 2);
+    // beside a side (a chair along a long table): face straight into that side, never along the table
+    const overX = p.x < q.x + qw && q.x < p.x + pw, overY = p.y < q.y + qh && q.y < p.y + ph;
+    if (overX && !overY) return dy > 0 ? 0 : 2;
+    if (overY && !overX) return dx > 0 ? 3 : 1;
+    return Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 3 : 1) : (dy > 0 ? 0 : 2);
+  }
+  // q stands right beside p along a side (not only a corner touching): the table a chair is pulled up to
+  function besideSide(p, q) {
+    const pw = p.w || 1, ph = p.h || 1, qw = q.w || 1, qh = q.h || 1;
+    const overX = p.x < q.x + qw && q.x < p.x + pw, overY = p.y < q.y + qh && q.y < p.y + ph;
+    return (overX && (p.y + ph === q.y || q.y + qh === p.y)) || (overY && (p.x + pw === q.x || q.x + qw === p.x));
+  }
+  const isTableFor = (st, env) => q => { const sp = env && env.PropSprites && env.PropSprites.spec ? env.PropSprites.spec(q.t) : null; return !!((sp && sp.surface) || isWorkstation(st, q.t)); };
+  // a seat right beside a table or desk and turned away from every one of them: turn it toward the first it can face
+  function faceItsTable(st, env, id) {
+    const S = env && env.PropSprites, c = st.propById(id);
+    if (!c || !S || !isSeatPiece(env)(c.t) || !(S.canRotate && S.canRotate(c.t))) return null;
+    const near = st.props().filter(q => q.id !== c.id && isTableFor(st, env)(q) && besideSide(c, q)); if (!near.length) return null;
+    const want = near.map(q => facingToward(c, q)), r = (c.r | 0) & 3; if (want.indexOf(r) >= 0) return null;
+    const k = want.findIndex(d => !S.facings || S.facings(c.t).indexOf(d) >= 0); if (k < 0) return null;
+    const box = S.footprintAt ? S.footprintAt(c.t, want[k]) : null, f = st.faceProp(c.id, want[k], box || undefined);
+    return f && f.ok ? { dir: ['south', 'west', 'north', 'east'][want[k]], table: near[k] } : null;
+  }
+  /* WHAT A DESIGNER WOULD SEE WRONG IN A ROOM (the lead's eyes beyond the picture): a piece on a desk's seat, a seat turned
+     away from the table or desk right beside it. Plain sentences, the first few. */
+  function roomIssues(st, env, roomId) {
+    const out = [], nm = t => pieceName(env, t), isSeat = isSeatPiece(env), at = (x, y) => '(' + x + ', ' + y + ')';
+    for (const b of blockedSeats(st, env)) if (st.roomAt(b.piece.x, b.piece.y) === roomId)
+      out.push('the ' + nm(b.piece.t) + ' at ' + at(b.piece.x, b.piece.y) + ' stands on the seat of the ' + nm(b.desk.t) + ' at ' + at(b.desk.x, b.desk.y) + ': a desk draws its own chair when an agent works it, so that makes two. Take it up.');
+    const here = st.props().filter(p => st.roomAt(p.x, p.y) === roomId), S = env && env.PropSprites;
+    for (const c of here) {
+      if (!isSeat(c.t) || !(S && S.canRotate && S.canRotate(c.t))) continue;
+      const near = here.filter(q => q !== c && isTableFor(st, env)(q) && besideSide(c, q));
+      if (!near.length) continue;
+      const want = near.map(q => facingToward(c, q)), r = (c.r | 0) & 3;
+      if (want.indexOf(r) < 0) out.push('the ' + nm(c.t) + ' at ' + at(c.x, c.y) + ' faces ' + ['south', 'west', 'north', 'east'][r] + ', away from the ' + nm(near[0].t) + ' beside it: turn it toward it ({ op: "rotate", prop, toward: the ' + nm(near[0].t) + ' }).');
+    }
+    return out.slice(0, 12);
+  }
   /* HALLWAYS THAT LEAD NOWHERE: a group of hallways (hallways touching each other) that reaches fewer than two rooms. A room
      moved away leaves its hallway like that; a refit that leaves one is refused, and the map marks any that stand. */
   function strandedHalls(st) {
@@ -3317,7 +3424,7 @@
     for (let y = B.y1; y <= B.y2; y++) { let row = ''; for (let x = B.x1; x <= B.x2; x++) row += st.roomAt(x, y) !== r.id ? ' ' : mark[x + ',' + y] || '.'; drawing.push(row); }
     const K = (env.WorldModel.ROOM_KINDS || {})[r.kind] || {};
     return { ok: true, map: { room: r.name, type: K.label || r.kind, rects: r.rects.map(q => ({ x: q.x1, y: q.y1, w: q.x2 - q.x1 + 1, h: q.y2 - q.y1 + 1 })), floor: [r.floorStyle || 'default', r.floorMat || 'default'].join(' / '),
-      pieces, belts: beltList, doorways: doors, drawing, origin: { x: B.x1, y: B.y1 },
+      pieces, belts: beltList, doorways: doors, drawing, origin: { x: B.x1, y: B.y1 }, issues: roomIssues(st, env, r.id),
       legend: 'drawing row 0 is y = ' + B.y1 + ', column 0 is x = ' + B.x1 + '; . clear floor, # a piece, _ a piece you walk over (a rug), A an agent\'s seat, M a workflow machine, = a belt, D a doorway' } };
   }
   function mapOf(doc, env, opts) {
