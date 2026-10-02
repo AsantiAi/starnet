@@ -29,6 +29,11 @@ async function pack(missing = '', classic = false) {
 (async () => {
   const { textures: t, draws, ctx } = await pack();
   assert.equal(t.enabled(), true);
+  for (const name of ['remaster/shell', ...['monocoque', 'timber', 'clapboard', 'shingle', 'brick', 'stone', 'stucco', 'curtain', 'hedge', 'thermal', 'insulation', 'heatsink'].map(id => 'shell-' + id)]) {
+    const asset = 'assets/industrial/' + name + '-v2.png';
+    assert.ok(draws.some(draw => draw.im.url === asset), asset + ' is loaded');
+    assert.ok(fs.existsSync(require('node:path').join(__dirname, '../frontend', asset)), asset + ' ships');
+  }
   const ids = ['monocoque', 'timber', 'clapboard', 'shingle', 'brick', 'stone', 'stucco', 'curtain', 'hedge', 'thermal', 'insulation', 'heatsink'];
   for (const id of ids) {
     assert.ok(t.status().assets.includes('shell-' + id), id + ' loads');
@@ -46,7 +51,7 @@ async function pack(missing = '', classic = false) {
   t.shellPlate(ctx, 0, 0, 96, 96, 'brick', '#203060');
   assert.equal(draws.at(-1).im, cached, 'repeated bakes reuse tinted material');
   assert.equal(t.shell(ctx, 1, 10, 0, 0, null, 'unknown'), false);
-  const failed = await pack('shell-brick');
+  const failed = await pack('shell-brick-v2');
   assert.equal(failed.textures.enabled(), true, 'optional failure preserves main pack');
   assert.equal(failed.textures.shellPlate(failed.ctx, 0, 0, 96, 96, 'brick'), false);
   assert.equal(failed.textures.shellPlate(failed.ctx, 0, 0, 96, 96, 'timber'), true);

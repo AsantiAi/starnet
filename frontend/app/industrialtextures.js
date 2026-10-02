@@ -86,7 +86,10 @@ const IndustrialTextures = (() => {
       resolve();
     };
     img.onerror = () => { failed.push(name); resolve(); };
-    img.src = 'assets/industrial/' + name + '.png';
+    // Stable material/cache IDs, versioned artwork URLs: saved shells retain their
+    // paint and geometry while browser caches fetch the October shell refresh.
+    const artName = name === 'remaster/shell' || shellNames.includes(name) ? name + '-v2' : name;
+    img.src = 'assets/industrial/' + artName + '.png';
   }))).then(() => {
     // Optional material failures fall back per material, without disabling the station pack.
     loaded = !failed.some(name => names.includes(name));
