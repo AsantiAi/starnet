@@ -175,6 +175,40 @@ async function plugin(id, source) {
       await rt3.stopAll();
     }
 
+    // ---- 5a. E-STOP pauses plugin JOBS, not guards (sweep 2026-10-02) ----
+    // A halted station keeps plugin processes answering hooks (a pre_tool_call veto keeps guarding) but runs no
+    // api.every job; a process started while halted starts paused; resume unpauses every running process.
+    {
+      const EventEmitter = require('events');
+      const kids = [];
+      const fakeFork = () => {
+        const c = new EventEmitter(); c.sent = [];
+        c.send = (m) => {
+          c.sent.push(m);
+          if (m.t === 'init') setImmediate(() => c.emit('message', { t: 'ready', ok: true, subs: ['pre_tool_call'], tools: [], handlers: [], jobs: 1 }));
+          if (m.t === 'hook') setImmediate(() => c.emit('message', { t: 'res', id: m.id, ok: true, v: { block: true, reason: 'guard' } }));
+        };
+        c.kill = () => setImmediate(() => c.emit('exit', null, 'SIGTERM'));
+        kids.push(c); return c;
+      };
+      const rt5 = makePluginRuntime({ fork: fakeFork, workerPath: 'x', now: () => Date.now(), onLog: () => {}, jobsPaused: true });
+      await rt5.start({ id: 'guard', name: 'guard', main: 'x', digest: 'd' });
+      A.eq(kids[0].sent[0].jobsPaused, true, 'a plugin started on a halted station starts with its jobs paused');
+      A.eq(await rt5.hook('guard', 'pre_tool_call', {}), { block: true, reason: 'guard' }, 'its pre_tool_call guard still answers while halted');
+      rt5.setJobsPaused(false);
+      A.eq(kids[0].sent.filter(m => m.t === 'jobs').pop(), { t: 'jobs', paused: false }, 'resume unpauses the running process\'s jobs');
+      rt5.setJobsPaused(true);
+      A.eq(kids[0].sent.filter(m => m.t === 'jobs').pop(), { t: 'jobs', paused: true }, 'E-STOP pauses them again without killing the process');
+      A.eq(rt5.list(), ['guard'], 'the process is still running');
+      await rt5.stopAll();
+      const worker = require('fs').readFileSync(path.join(__dirname, '..', 'sidecar', 'plugin-worker.js'), 'utf8');
+      A.ok(/jobsPaused = m\.jobsPaused === true;\s*if \(!jobsPaused\) startJobs\(\);/.test(worker) && /if \(m\.t === 'jobs'\) \{ jobsPaused = m\.paused === true; if \(jobsPaused\) stopJobs\(\); else startJobs\(\); return; \}/.test(worker),
+        'the worker starts no job timers while paused and stops/starts them on { t: jobs }');
+      const idx = require('fs').readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
+      A.ok(/let cronHalted = loadCronHalted\(\);\n[^\n]*\npluginRuntime\.setJobsPaused\(cronHalted\);/.test(idx) && /try \{ pluginRuntime\.setJobsPaused\(true\); \} catch \(e\) \{ failNote\('plugins\.halt', e\); \}/.test(idx) && !/pluginRuntime\.stopAll\(\)\.catch\(\(e\) => failNote\('plugins\.halt'/.test(idx),
+        'E-STOP pauses plugin jobs (never kills the guards) and a boot while halted starts them paused');
+    }
+
     // ---- 5b. two callers hitting a CRASHED plugin restart it ONCE (sweep 2026-10-01) ----
     // They used to both respawn: the first child was orphaned (stop() never killed it, its jobs ran doubled) and the
     // first caller's ready promise never settled.

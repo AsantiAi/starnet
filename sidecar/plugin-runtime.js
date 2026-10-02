@@ -30,6 +30,18 @@ function makePluginRuntime(deps) {
   const rawLog = typeof deps.onLog === 'function' ? deps.onLog : () => {};
   const T = Object.assign({}, DEFAULTS, deps.timeouts || {});
   const procs = new Map();   // id -> record
+  /* E-STOP PAUSES JOBS, NOT GUARDS (sweep 2026-10-02). Killing plugin processes on E-STOP also switched off every
+     plugin's pre_tool_call veto (a hook to a dead process answers null = allow) until RESUME, and a boot or an
+     extension reload while halted respawned them with their background jobs running. Halted, a process keeps
+     answering hooks/tools/window calls but runs no api.every job; new processes start paused too. */
+  let jobsPaused = deps.jobsPaused === true;
+  function setJobsPaused(paused) {
+    jobsPaused = paused === true;
+    for (const rec of procs.values()) {
+      if (rec.child && rec.state === 'running') { try { rec.child.send({ t: 'jobs', paused: jobsPaused }); } catch (e) { note('plugins.runtime.jobs-send', e); } }
+    }
+    return jobsPaused;
+  }
   // The process's working directory is NEUTRAL (never the plugin's own folder): on Windows a folder that is some
   // process's cwd cannot be deleted (EBUSY), which broke DELETE and a replacing plugin.submit while it ran.
   const workerCwd = deps.cwd || undefined;
@@ -95,7 +107,7 @@ function makePluginRuntime(deps) {
       }, T.startMs);
       if (timer && typeof timer.unref === 'function') timer.unref();
     });
-    try { child.send({ t: 'init', id: plugin.id, name: plugin.name, main: plugin.main }); } catch (e) { note('plugins.runtime.init-send', e); }
+    try { child.send({ t: 'init', id: plugin.id, name: plugin.name, main: plugin.main, jobsPaused }); } catch (e) { note('plugins.runtime.init-send', e); }
     return rec;
   }
 
@@ -271,7 +283,7 @@ function makePluginRuntime(deps) {
     return (rec && (rec.state === 'running' || rec.state === 'crashed') && rec.surface) ? Object.assign({ ok: true }, rec.surface) : null;
   }
 
-  return { start, hook, callTool, callHandler, stop, stopAll, status, tools, list, digestOf, surface, hookTimeout: (id, event) => { const s = surface(id); return s && s.hookTimeouts ? Number(s.hookTimeouts[event]) || 0 : 0; } };
+  return { start, hook, callTool, callHandler, stop, stopAll, setJobsPaused, jobsPaused: () => jobsPaused, status, tools, list, digestOf, surface, hookTimeout: (id, event) => { const s = surface(id); return s && s.hookTimeouts ? Number(s.hookTimeouts[event]) || 0 : 0; } };
 }
 
 module.exports = { makePluginRuntime, MAX_RESTARTS, RESTART_WINDOW_MS };

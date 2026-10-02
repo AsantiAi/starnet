@@ -5683,6 +5683,8 @@ function saveCronHalted(halted) {
   if (!r.ok) throw new Error('cron halt durable read-back failed: ' + r.error);
 }
 let cronHalted = loadCronHalted();
+// a station booted while E-STOPped starts its plugins with background jobs paused (their hooks still guard)
+pluginRuntime.setJobsPaused(cronHalted);
 // The ONE resume seam: clear the durable halt and re-arm the live timer when the user's arm intent says so.
 // Called from every explicit resume path so halt-lift semantics can't drift between them.
 function liftCronHalt() {
@@ -5690,6 +5692,7 @@ function liftCronHalt() {
   // Persist FIRST: a failed write must leave this process halted instead of creating a restart-only reversal.
   saveCronHalted(false);
   cronHalted = false;
+  pluginRuntime.setJobsPaused(false);
   if (cronArmed) armCron();
   return true;
 }
@@ -14309,6 +14312,7 @@ function handleCronArm(req, res) {
       try { saveCronHalted(false); }
       catch (e) { return json(500, { error: 'could not persist the cron unhalt: ' + ((e && e.message) || e) }); }
       cronHalted = false;
+      pluginRuntime.setJobsPaused(false);
     }
     cronArmed = want;                                  // live in-memory state (GET /api/cron reflects this)
     if (want) armCron(); else disarmCron();            // start/stop the live tick NOW — a due job fires within one tick
@@ -22136,7 +22140,7 @@ async function handleHaltResume(req, res) {
     armLoops(true);
   });
   attempt('overseer', () => { overseer.resumeReviews(); });
-  attempt('plugins', () => { reloadExtensions().catch((e) => failNote('plugins.resume', e)); });   // E-STOP stopped their processes
+  attempt('plugins', () => { pluginRuntime.setJobsPaused(false); reloadExtensions().catch((e) => failNote('plugins.resume', e)); });   // E-STOP paused their jobs
   const state = haltStatus();
   const ok = !state.halted && Object.keys(errors).length === 0;
   haltJson(res, ok ? 200 : 503, { ok, ...state, errors });
@@ -22170,8 +22174,9 @@ function handleHalt(req, res) {
   // line triggers: every trigger hub's live runs die too, and whatever was waiting in their queues is dropped
   let triggerInflights = [];
   try { triggerRunner.haltAll(); triggerInflights = triggerRunner.inflights(); } catch (e) { failNote('triggers.halt', e); }
-  // plugin processes (their tools, window calls and background jobs) stop with everything else; RESUME restarts them
-  try { pluginRuntime.stopAll().catch((e) => failNote('plugins.halt', e)); } catch (e) { failNote('plugins.halt', e); }
+  // plugins' BACKGROUND JOBS stop with everything else; their processes stay up so a pre_tool_call veto keeps guarding
+  // (killing them made every plugin hook answer "allow" until RESUME). RESUME unpauses the jobs.
+  try { pluginRuntime.setJobsPaused(true); } catch (e) { failNote('plugins.halt', e); }
   // the whole-line SAMPLE hub (POST /api/routing/sample): its entry run AND every stage it chains live in its inflight record
   const sampleInflight = (sampleHub && sampleHub._internals) ? sampleHub._internals.inflight : null;
   const halted = killAll(runs, tgInflight, dcInflight, ...genericInflights, ...tgBotInflights, devInflight, stepTest ? stepTest.inflight : null, ...triggerInflights, sampleInflight);   // browser runs + ALL channel hub runs, in one kill (see sidecar/halt.js)
