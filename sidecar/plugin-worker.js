@@ -158,6 +158,7 @@ async function onInit(m) {
   });
 }
 
+const toolAborts = new Map();   // tool call id -> AbortController (the station's { t:'cancel', ref })
 async function answer(m, fn) {
   try { send({ t: 'res', id: m.id, ok: true, v: plain(await fn()) }); }
   catch (e) { send({ t: 'res', id: m.id, ok: false, err: errText(e) }); }
@@ -185,8 +186,12 @@ process.on('message', (m) => {
   if (m.t === 'tool') {
     const t = tools.get(String(m.name));
     if (!t) return send({ t: 'res', id: m.id, ok: false, err: 'this plugin has no tool named ' + m.name });
-    return void answer(m, () => t.run(m.args || {}, m.ctx || {}));
+    // ctx.signal aborts when the run that called this tool is stopped (STOP / E-STOP): a tool can stop its own work
+    const ac = new AbortController();
+    toolAborts.set(m.id, ac);
+    return void answer(m, () => t.run(m.args || {}, Object.assign({}, m.ctx || {}, { signal: ac.signal }))).finally(() => toolAborts.delete(m.id));
   }
+  if (m.t === 'cancel') { const ac = toolAborts.get(m.ref); if (ac) { toolAborts.delete(m.ref); try { ac.abort(); } catch (e) { note('plugins.worker.cancel', e); } } return; }
   if (m.t === 'call') {
     const fn = handlers.get(String(m.name));
     if (!fn) return send({ t: 'res', id: m.id, ok: false, err: 'this plugin has no handler named "' + m.name + '"' });

@@ -56,7 +56,7 @@ function makePluginToolDefs(o) {
       timeoutMs: 0,
       run: async function (args, ctx) {
         let value;
-        try { value = await o.call(t.name, args || {}, { agentId: ctx && ctx.agentId, runId: ctx && ctx.runId }); }
+        try { value = await o.call(t.name, args || {}, { agentId: ctx && ctx.agentId, runId: ctx && ctx.runId }, ctx && ctx.signal); }
         catch (e) {
           const msg = String((e && e.message) || e || 'the plugin tool failed');
           throw new Error(fence.fenceExternal(msg.slice(0, 4000), 'ERROR from the ' + label + ' plugin'));

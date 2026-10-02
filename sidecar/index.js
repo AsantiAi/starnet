@@ -19030,7 +19030,7 @@ async function runOnceCore(o) {
       const live = (pluginsLoaded.loaded || []).find(p => p.id === pid && p.process);
       if (!live || !(await pluginLoader.approvedRecord(pid))) continue;
       const defs = makePluginToolDefs({ pluginId: pid, pluginName: live.name, tools: pluginRuntime.tools(pid),
-        call: (name, args, ctx) => pluginRuntime.callTool(pid, name, args, ctx) });
+        call: (name, args, ctx, signal) => pluginRuntime.callTool(pid, name, args, ctx, signal) });
       for (const def of defs) {
         registry.register(def, { provenance: 'connector' });   // not host-authored: the connector trust class
         if (resolved.tools.indexOf(def.name) < 0) resolved.tools.push(def.name);

@@ -107,6 +107,7 @@ function makePluginRuntime(deps) {
       }, T.startMs);
       if (timer && typeof timer.unref === 'function') timer.unref();
     });
+    rec.initPaused = jobsPaused;
     try { child.send({ t: 'init', id: plugin.id, name: plugin.name, main: plugin.main, jobsPaused }); } catch (e) { note('plugins.runtime.init-send', e); }
     return rec;
   }
@@ -136,6 +137,9 @@ function makePluginRuntime(deps) {
         return resolve({ ok: false, error: rec.error });
       }
       rec.state = 'running';
+      // E-STOP pressed while this process was starting: setJobsPaused only reaches RUNNING processes, and init carried
+      // the old value — say it now, or its api.every jobs fire until RESUME (QA 2026-10-02)
+      if (rec.initPaused !== jobsPaused) { try { rec.child && rec.child.send({ t: 'jobs', paused: jobsPaused }); } catch (e) { note('plugins.runtime.jobs-ready-send', e); } }
       rec.surface = {
         subs: Array.isArray(m.subs) ? m.subs.map(String) : [],
         hookTimeouts: (m.hookTimeouts && typeof m.hookTimeouts === 'object') ? m.hookTimeouts : {},
@@ -195,18 +199,33 @@ function makePluginRuntime(deps) {
     return rec.restarting;
   }
 
-  function send(rec, msg, ms, label) {
+  /* signal (optional): the RUN's abort signal. A STOP / E-STOP used to wait out a plugin tool to its end (up to the tool
+     timeout) because nothing reached the process (QA 2026-10-02): now the call settles at once as stopped and the
+     process gets { t:'cancel', ref } — the tool's ctx.signal aborts, so a tool that honours it stops its work too. */
+  function send(rec, msg, ms, label, signal) {
     return new Promise((resolve, reject) => {
+      if (signal && signal.aborted) return reject(new Error('stopped'));
       const id = ++rec.seq;
+      let onAbort = null;
+      const done = () => { if (onAbort && signal) { try { signal.removeEventListener('abort', onAbort); } catch (_) {} } };
       const timer = setTimeout(() => {
         if (!rec.pending.has(id)) return;
-        rec.pending.delete(id);
+        rec.pending.delete(id); done();
         reject(new Error(label + ' did not answer within ' + Math.round(ms / 1000) + ' s'));
       }, ms);
       if (timer && typeof timer.unref === 'function') timer.unref();
-      rec.pending.set(id, { resolve, reject, timer });
+      rec.pending.set(id, { resolve: (v) => { done(); resolve(v); }, reject: (e) => { done(); reject(e); }, timer });
+      if (signal) {
+        onAbort = () => {
+          if (!rec.pending.has(id)) return;
+          rec.pending.delete(id); clearTimeout(timer);
+          try { rec.child && rec.child.send({ t: 'cancel', ref: id }); } catch (e) { note('plugins.runtime.cancel-send', e); }
+          reject(new Error('stopped'));
+        };
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
       try { rec.child.send(Object.assign({ id }, msg)); }
-      catch (e) { rec.pending.delete(id); clearTimeout(timer); reject(e); }
+      catch (e) { rec.pending.delete(id); clearTimeout(timer); done(); reject(e); }
     });
   }
 
@@ -225,9 +244,9 @@ function makePluginRuntime(deps) {
     }
     return rec;
   }
-  async function callTool(id, name, args, ctx) {
+  async function callTool(id, name, args, ctx, signal) {
     const rec = await checked(id);
-    return send(rec, { t: 'tool', name, args: args || {}, ctx: ctx || {} }, T.toolMs, 'the plugin tool ' + name);
+    return send(rec, { t: 'tool', name, args: args || {}, ctx: ctx || {} }, T.toolMs, 'the plugin tool ' + name, signal);
   }
   async function callHandler(id, name, args) {
     const rec = await checked(id);

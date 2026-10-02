@@ -209,6 +209,48 @@ async function plugin(id, source) {
         'E-STOP pauses plugin jobs (never kills the guards) and a boot while halted starts them paused');
     }
 
+    // ---- 5a. STOP / E-STOP reach a plugin tool that is already running (QA 2026-10-02) ----
+    // The call used to wait out the tool to its end (up to the tool timeout); nothing told the process.
+    {
+      const slow = await plugin('slow', `
+        module.exports = { register(api) {
+          api.tool({ name: 'wait_forever', description: 'Waits until stopped', readOnly: true, parameters: { type: 'object', properties: {} },
+            run: (args, ctx) => new Promise((resolve) => { ctx.signal.addEventListener('abort', () => { api.store.set('saw', 'aborted').then(() => resolve('stopped by the station')); }); }) });
+        } };`);
+      A.ok((await rt.start(slow)).ok, 'a plugin with a long tool starts');
+      const ac = new AbortController();
+      const t0 = Date.now();
+      const p = rt.callTool('slow', 'wait_forever', {}, { agentId: 'nova', runId: 'r-stop' }, ac.signal);
+      setTimeout(() => ac.abort(), 100);
+      let err = null; try { await p; } catch (e) { err = e; }
+      A.ok(err && /stopped/.test(err.message), 'the call settles as stopped the moment the run is stopped');
+      A.ok(Date.now() - t0 < 1200, 'without waiting out the tool timeout (' + (Date.now() - t0) + ' ms)');
+      for (let i = 0; i < 50 && !storeCalls.some(c => c.id === 'slow' && c.key === 'saw'); i++) await new Promise(r => setTimeout(r, 20));
+      A.ok(storeCalls.some(c => c.id === 'slow' && c.key === 'saw' && c.value === 'aborted'), 'the tool inside the plugin process saw ctx.signal abort');
+      let pre = null; try { await rt.callTool('slow', 'wait_forever', {}, {}, ac.signal); } catch (e) { pre = e; }
+      A.ok(pre && /stopped/.test(pre.message), 'an already-stopped run never starts a plugin tool');
+      await rt.stop('slow');
+    }
+    // ---- 5a'. an E-STOP pressed while a plugin is STILL STARTING reaches it once it is ready ----
+    {
+      const { EventEmitter } = require('events');
+      const kids = [];
+      let release = null;
+      const fakeFork = () => {
+        const c = new EventEmitter(); c.sent = [];
+        c.send = (m) => { c.sent.push(m); if (m.t === 'init') release = () => c.emit('message', { t: 'ready', ok: true, subs: [], tools: [], handlers: [], jobs: 1 }); };
+        c.kill = () => setImmediate(() => c.emit('exit', null, 'SIGTERM'));
+        kids.push(c); return c;
+      };
+      const rt6 = makePluginRuntime({ fork: fakeFork, workerPath: 'x', now: () => Date.now(), onLog: () => {}, jobsPaused: false });
+      const started = rt6.start({ id: 'boot', name: 'boot', main: 'x', digest: 'd' });
+      rt6.setJobsPaused(true);   // E-STOP while it is still starting
+      A.eq(kids[0].sent.filter(m => m.t === 'jobs').length, 0, 'a starting process is not sent the pause yet');
+      release(); await started;
+      A.eq(kids[0].sent.filter(m => m.t === 'jobs').pop(), { t: 'jobs', paused: true }, 'once ready it is told its jobs are paused (they no longer fire until RESUME)');
+      await rt6.stopAll();
+    }
+
     // ---- 5b. two callers hitting a CRASHED plugin restart it ONCE (sweep 2026-10-01) ----
     // They used to both respawn: the first child was orphaned (stop() never killed it, its jobs ran doubled) and the
     // first caller's ready promise never settled.
