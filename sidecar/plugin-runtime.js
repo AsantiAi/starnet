@@ -207,7 +207,7 @@ function makePluginRuntime(deps) {
       if (signal && signal.aborted) return reject(new Error('stopped'));
       const id = ++rec.seq;
       let onAbort = null;
-      const done = () => { if (onAbort && signal) { try { signal.removeEventListener('abort', onAbort); } catch (_) {} } };
+      const done = () => { if (onAbort && signal) { try { signal.removeEventListener('abort', onAbort); } catch (e) { note('plugins.runtime.abort-unlisten', e); } } };
       const timer = setTimeout(() => {
         if (!rec.pending.has(id)) return;
         rec.pending.delete(id); done();
