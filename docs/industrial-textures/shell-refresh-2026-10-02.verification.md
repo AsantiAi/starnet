@@ -1,5 +1,7 @@
 # Shell refresh live review — 2026-10-02
 
+Historical review of the first shell pass. See [the final additions and verification](shell-final-2026-10-02.verification.md) for the current catalog, interior-only insulation and final gate result.
+
 Candidate artwork/source commit: `fc9cad7c7`. Seeded app: `node dev/seed.js --keep` on port 18802, isolated `shell-refresh-1002` workspace.
 
 ## Observed in the running app

@@ -6,6 +6,8 @@ All 15 exterior choices use new reference-guided artwork: station armor, monocoq
 
 Insulation is an **interior wall only**, using `remaster/walls/insulation.png` (the approved quilted artwork, copied unchanged). Saved exterior insulation selections migrate to thermal armor while retaining explicit exterior paint and existing interior wall choices. Truss, louver and ceramic also have distinct native fallback recipes.
 
+The three final addition prompts are recorded in `docs/industrial-textures/shell-final-additions-2026-10-02.prompts.txt`; live verification is in `shell-final-2026-10-02.verification.md` beside it.
+
 The sections below describe the earlier September generation.
 
 Revision notice: brick, thermal shielding and floors were reworked after visual feedback. Current artwork and exact replacement prompts are documented in [MATERIAL-REVISIONS.md](MATERIAL-REVISIONS.md). The original prompts below describe the earlier generation.
