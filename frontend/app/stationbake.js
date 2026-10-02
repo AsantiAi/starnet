@@ -537,7 +537,7 @@ const StationBake = (() => {
   // WorldModel.hullMatOfRoom is the authority — change both.
   const hullMatOf = z => {
     const m = (G && G.hullMatOf) ? G.hullMatOf(z) : null;
-    return HULL_RECIPES[m] ? m : 'station';
+    return m === 'insulation' ? 'thermal' : HULL_RECIPES[m] ? m : 'station';
   };
   // two footprints share a skirt only if they share a SKIN — see the group note in bakeHullExtrusion
   const hullKeyOf = z => { const p = hullPal(z); return hullMatOf(z) + '|' + p.base; };
@@ -2486,7 +2486,7 @@ const StationBake = (() => {
     viewport: wallViewport, pipework: wallPipework, wainscot: wallWainscot, hedge: wallHedge,
     bulkhead: wallBulkhead, courses: wallCourses, service: wallService,
     pressure: spaceWall('pressure'), radiator: spaceWall('radiator'), utility: spaceWall('utility'), acoustic: spaceWall('acoustic'),
-    braced: spaceWall('braced'), machinery: spaceWall('machinery')
+    braced: spaceWall('braced'), machinery: spaceWall('machinery'), insulation: spaceWall('insulation')
   };
 
   /* ---------------- THE SIDE FACE — the same inner face, seen foreshortened ----------------
@@ -3174,10 +3174,22 @@ const StationBake = (() => {
           const joint = (xx + ((row & 1) ? 16 : 0)) % 32;
           if (yy === 0 || joint === 0) tone = pal.seam;
           else if (yy === 1 || joint === 1) tone = pal.lit;
-        } else if (id === 'insulation') {
-          if (xx === 0 || yy === 0) tone = pal.seam;
-          else if (xx === 2 || yy === 2) tone = pal.rim;
-          else if (xx > 4 && xx < 28 && yy === 5 + Math.floor(xx / 8)) tone = pal.lit;
+        } else if (id === 'truss') {
+          const diagonal = ((xx - ((row & 1) ? 30 - yy * 2 : yy * 2)) % 32 + 32) % 32;
+          if (xx < 2 || yy === 0 || diagonal < 2) tone = pal.seam;
+          else if (diagonal < 4) tone = pal.lit;
+          else if (diagonal < 7) tone = pal.rim;
+        } else if (id === 'louver') {
+          const blade = ((yy - Math.floor(Math.abs(xx - 16) / 4)) % 8 + 8) % 8;
+          if (xx < 2 || blade < 2) tone = pal.seam;
+          else if (blade === 2) tone = pal.lit;
+          else if (blade === 3) tone = pal.rim;
+        } else if (id === 'ceramic') {
+          const joint = (xx + ((row & 1) ? 16 : 0)) % 32;
+          if (yy < 2 || joint < 2) tone = pal.seam;
+          else if (yy === 2 || joint === 2) tone = pal.rim;
+          else if (yy === 3 || joint === 3) tone = pal.lit;
+          else if ((joint === 6 || joint === 27) && yy === 6) tone = pal.seam;
         } else {
           if (yy === 0 || xx < 10 && xx % 3 === 0) tone = pal.seam;
           else if (xx < 10 && xx % 3 === 1) tone = pal.lit;
@@ -3192,7 +3204,8 @@ const StationBake = (() => {
   }
   const HULL_RECIPES = {
     station: hullStation, monocoque: hullMonocoque, timber: hullTimber, clapboard: hullClapboard, shingle: hullShingle,
-    brick: hullBrick, stone: hullStone, stucco: hullStucco, curtain: hullCurtain, hedge: hullHedge, thermal: spaceShell('thermal'), insulation: spaceShell('insulation'), heatsink: spaceShell('heatsink')
+    brick: hullBrick, stone: hullStone, stucco: hullStucco, curtain: hullCurtain, hedge: hullHedge, thermal: spaceShell('thermal'), heatsink: spaceShell('heatsink'),
+    truss: spaceShell('truss'), louver: spaceShell('louver'), ceramic: spaceShell('ceramic')
   };
   // Re-clad existing IDs: saved rooms, paint hues, silhouette ownership and the
   // palette chips all keep the same contract. Classic mode / missing artwork
@@ -5182,7 +5195,7 @@ const StationBake = (() => {
     // Navigation hardware belongs to spacecraft cladding, not masonry, timber,
     // plaster, glass buildings or hedges. Filter before joining facade runs so
     // an adjacent spacecraft room cannot place a beacon on a civilian shell.
-    const spacecraft = new Set(['station', 'monocoque', 'thermal', 'insulation', 'heatsink']);
+    const spacecraft = new Set(['station', 'monocoque', 'thermal', 'heatsink', 'truss', 'louver', 'ceramic']);
     const eligible = G.allRects.filter(r => !G.isCorridor(r.z) && spacecraft.has(hullMatOf(r.z)));
     if (!eligible.length) return result;
     if (!baseCv.getContext('2d').getImageData) return result;

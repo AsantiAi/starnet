@@ -148,7 +148,7 @@ async function main() {
   equal(noPaint.draws.length,0,'failed pack leaves every native surface untouched');
   for (const url of pending.requests) {
     const broken=load({fail:url}); await broken.finish();
-    const optional = /\/(?:shell-|floor-|wall-)/.test(url);
+    const optional = /assets\/industrial\/(?:shell-|floor-|wall-)/.test(url);
     equal(broken.api.enabled(),optional,'failure of '+url+' preserves optional-material isolation and the core pack contract');
     equal(broken.api.status().failed.length,1,'individual asset failure remains visible in loader status');
   }

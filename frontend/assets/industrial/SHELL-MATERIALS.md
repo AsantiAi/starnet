@@ -1,5 +1,15 @@
 # Cleaner shell materials
 
+## October 2, 2026 refresh
+
+All 15 exterior choices use new reference-guided artwork: station armor, monocoque, timber, clapboard, shingle, brick, stone, stucco, curtain glass, hedge, thermal shield, heatsink, truss, louver and ceramic. The station uses `remaster/shell-v2.png`; optional finishes use `shell-<id>-v2.png`. Paint, lighting, contour clipping and the 96-pixel repeat are preserved. Original assets remain available for comparison. Exact prompts and reference provenance are in `docs/industrial-textures/shell-refresh-2026-10-02.prompts.txt`.
+
+Insulation is an **interior wall only**, using `remaster/walls/insulation.png` (the approved quilted artwork, copied unchanged). Saved exterior insulation selections migrate to thermal armor while retaining explicit exterior paint and existing interior wall choices. Truss, louver and ceramic also have distinct native fallback recipes.
+
+The three final addition prompts are recorded in `docs/industrial-textures/shell-final-additions-2026-10-02.prompts.txt`; live verification is in `shell-final-2026-10-02.verification.md` beside it.
+
+The sections below describe the earlier September generation.
+
 Revision notice: brick, thermal shielding and floors were reworked after visual feedback. Current artwork and exact replacement prompts are documented in [MATERIAL-REVISIONS.md](MATERIAL-REVISIONS.md). The original prompts below describe the earlier generation.
 
 Generated with the built-in imagegen tool, September 15, 2026. Original output PNGs retained without image postprocessing. Existing shell IDs now use these textures in the industrial pack, with the original procedural recipes retained for classic mode or missing assets. Saved paint colours are applied to normalized texture luminance at runtime; the station's contour mask and exposure still own shell geometry and depth. Full originals are 1254 × 1254; tinted runtime tiles are cached at 576 × 576 (at most 24 colour/material combinations).

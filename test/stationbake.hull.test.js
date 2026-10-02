@@ -269,6 +269,30 @@ for (const id of legacyDoc.order) {
   A.eq(revived.projectGeometry().hullBaseOf(id), null, '...at the shell’s own tone (' + id + ')');
 }
 
+// Retired exterior insulation upgrades safely, without repainting a user's interior.
+legacyDoc.rooms[R].hullMat = 'insulation';
+legacyDoc.rooms[R].hullStyle = 'teal';
+legacyDoc.rooms[R].wallMat = 'machinery';
+legacyDoc.rooms[R].wallStyle = 'cobalt';
+const moved = WorldModel.deserialize(legacyDoc);
+A.eq(moved.hullMatOfRoom(R), 'thermal', 'legacy insulation becomes thermal armor');
+A.eq(moved.doc().rooms[R].hullMat, 'thermal', 'migration persists in the saved document');
+A.eq(moved.hullStyleOfRoom(R), 'teal', 'migration preserves explicit exterior paint');
+A.eq(moved.doc().rooms[R].wallMat, 'machinery', 'migration preserves the chosen interior material');
+A.eq(moved.doc().rooms[R].wallStyle, 'cobalt', 'migration preserves interior paint');
+A.eq(moved.projectGeometry().hullMatOf(R), 'thermal', 'retired shell cannot reach the renderer');
+A.ok(!WorldModel.HULL_ORDER.includes('insulation'), 'insulation is absent from exterior picker');
+A.ok(WorldModel.WALL_ORDER.includes('insulation'), 'insulation is in the interior picker');
+A.eq(moved.setHull(R, { mat: 'insulation' }).error, 'BAD_MAT', 'new exterior insulation selections are rejected');
+A.ok(moved.setWalls(R, { mat: 'insulation', style: 'amber' }).ok, 'insulation can be applied inside');
+for (const mat of ['truss', 'louver', 'ceramic']) {
+  A.ok(moved.setHull(R, { mat, style: 'teal' }).ok, mat + ' can be applied outside');
+  const saved = WorldModel.deserialize(JSON.parse(JSON.stringify(moved.doc())));
+  A.eq(saved.hullMatOfRoom(R), mat, mat + ' survives save/load');
+  A.eq(saved.hullStyleOfRoom(R), 'teal', mat + ' retains custom paint');
+  A.eq(saved.wallMatOfRoom(R), 'insulation', 'interior insulation survives save/load alongside ' + mat);
+}
+
 /* ---------- TWO SKINS MAY NOT FIGHT OVER THE SAME SKIRT PIXEL ----------
    Andrew, 2026-08-06: "if you change multiple shells it will break the whole texture system and
    start glitching out other different separate room textures ... sometimes they half render."
@@ -309,7 +333,7 @@ hullArtCalls.length = 0;
 sample('station', '#30628b');
 A.ok(hullArtCalls[0][1] !== warmHullPaint, 'recolouring the shell reaches the authored texture hooks');
 A.eq(hullArtCalls[0][1], hullArtCalls[1][1], 'recoloured ring and skirt still agree');
-const authoredShells = new Set(['monocoque', 'timber', 'clapboard', 'shingle', 'brick', 'stone', 'stucco', 'curtain', 'hedge', 'thermal', 'insulation', 'heatsink']);
+const authoredShells = new Set(['monocoque', 'timber', 'clapboard', 'shingle', 'brick', 'stone', 'stucco', 'curtain', 'hedge', 'thermal', 'heatsink', 'truss', 'louver', 'ceramic']);
 for (const mid of HULLS.filter(mid => mid !== 'station')) {
   hullArtCalls.length = 0;
   A.eq(sample(mid, '#624a30'), beforeOtherArt.get(mid), mid + ' retains its native recipe when optional art is unavailable');
