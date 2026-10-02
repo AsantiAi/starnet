@@ -3236,6 +3236,13 @@ const skillCuratorLastRun = new Map();
 async function runBackgroundSkillReview(o) {
   const { agentId, runId, messages, provider, model, cost, loadedSkills, managedSkills, verdict, correction } = o || {};
   const unmetered = !!(o && o.unmetered);   // Codex/unmetered parity: mirror reflection/study so a Codex-only user's budget isn't drained by phantom aux spend
+  // a spending cap that is reached stops this paid pass too: a thumbs-down after the daily cap used to fire a review call
+  // anyway (one per rating) — the verdict path reaches here with no budget check of its own (QA 2026-10-02)
+  if (!unmetered) {
+    let blocked = null;
+    try { blocked = budget.check(null, String(agentId || 'agent'), 0, Date.now(), null); } catch (_) { blocked = null; }
+    if (blocked) { console.log('[skills] review skipped run=' + String(runId || '') + ': the spending cap is reached'); return null; }
+  }
   const ac = new AbortController();
   const timer = setTimeout(() => { try { ac.abort(); } catch (_) {} }, SKILL_REVIEW_TIMEOUT_MS);
   const reviewRunId = String(runId || 'run') + '_skill_review';
