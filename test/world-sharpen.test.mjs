@@ -161,9 +161,12 @@ try {
   if (profile) {
     const rel = relative(resolve(tmpdir()), resolve(profile));
     assert.ok(rel && !rel.startsWith('..') && !isAbsolute(rel) && rel.startsWith('starnet-sharpen-parity-'), 'cleanup stays inside its unique test temp directory');
-    for (let attempt = 0; attempt < 10; attempt++) {
+    // Chrome's children can hold chrome_debug.log for seconds after the parent exits on a loaded
+    // Windows box (2s was not enough under a full gate) — the same transient-lock window
+    // stationbake.connections.test.mjs allows, and it still fails if the lock never lifts.
+    for (let attempt = 0; attempt < 50; attempt++) {
       try { rmSync(profile, { recursive: true, force: true }); break; }
-      catch (error) { if (attempt === 9) throw error; await sleep(200); }
+      catch (error) { if (!['EBUSY', 'EPERM', 'ENOTEMPTY'].includes(error.code) || attempt === 49) throw error; await sleep(200); }
     }
   }
 }
