@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "66d7e35f16664fa81c85316a06680ed20134054e",
+    "sourceCommit": "6a013b354609610f01cfd9594a72353fc061348e",
     "pathSetSha256": "60c61c9c0cad8daa5c2d40f76a912ed04e52667a726032a7b3ab94cad57bfa1e",
     "files": [
       {
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 701990,
-        "sha256": "97ee2ebcbde4ff17b315a64370d94c2b099563ad7a032659ee639a85cc53d85f"
+        "bytes": 702201,
+        "sha256": "d18ca3599b8af499274c40ae324b4fca5db998192db0bb51ec04c3f380fad88b"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -613,8 +613,8 @@
       },
       {
         "path": "frontend/app/leftrail.js",
-        "bytes": 19832,
-        "sha256": "c1304025cd814f6b5e2e9f84731523390f68b673d8d05a4a2bdbfafa1d4e28d7"
+        "bytes": 20715,
+        "sha256": "257ce5bce59da5dc5dae1473990491d976d489eb486cd3dbe1593bb84d889aa5"
       },
       {
         "path": "frontend/app/legacymigrate.js",
@@ -713,8 +713,8 @@
       },
       {
         "path": "frontend/app/outputbrowser.js",
-        "bytes": 46279,
-        "sha256": "d315bd7dba9422973c65d3115f46c997cde32e11e140e50b7457addd79d3b96c"
+        "bytes": 46327,
+        "sha256": "1133e62e28ed3904fd823aea6f8271ee337519dd64956f5fafce14f740ae6b0c"
       },
       {
         "path": "frontend/app/overseer-setup.js",
@@ -1008,8 +1008,8 @@
       },
       {
         "path": "frontend/app/remote-devices.js",
-        "bytes": 9440,
-        "sha256": "5b8f073bf3eda99feefd92d0637b47d08160dd8be29caa289665f026b5bf3101"
+        "bytes": 10338,
+        "sha256": "06cea627e5afa6e0fe0438495f75247e1a20279ef1c46a14df8828327cb7d3e7"
       },
       {
         "path": "frontend/app/remotesessions.js",
@@ -1158,8 +1158,8 @@
       },
       {
         "path": "frontend/app/stepin.js",
-        "bytes": 25314,
-        "sha256": "8619cf261c3584e1fc5eed30317e22e33bbf3e9193c5250cde9062c52a06f882"
+        "bytes": 24860,
+        "sha256": "171abee27b64ded57453e712c4d88827b23e244eb41bbff8ece115de48214a06"
       },
       {
         "path": "frontend/app/study.js",
@@ -1318,8 +1318,8 @@
       },
       {
         "path": "frontend/app/windows/connectors.js",
-        "bytes": 145083,
-        "sha256": "c3bf7f41f61e8fee9ae2b09117bb2ace4bb8cfed72be02034f42c088a2836ac0"
+        "bytes": 144728,
+        "sha256": "0a20abcb7e51b3495dd2d257b02d4d35b72d2477adb4a944262e3dd27daf31a6"
       },
       {
         "path": "frontend/app/windows/logbook.js",
@@ -1328,8 +1328,8 @@
       },
       {
         "path": "frontend/app/windows/loops.js",
-        "bytes": 50080,
-        "sha256": "ceb44ecc7d75e592f37c9a37a16f717b3bc596aaa5d3046f8b379c6b09853653"
+        "bytes": 49852,
+        "sha256": "78740efeec91c6f0710461483b59dbd6acace105407e52ed74ea0bb7eb63ec7d"
       },
       {
         "path": "frontend/app/windows/messaging.js",
@@ -1533,8 +1533,8 @@
       },
       {
         "path": "frontend/css/crew-glass.css",
-        "bytes": 11381,
-        "sha256": "fc68a981d5fdaefb5bc1590a4c33fa00105bf218d60a05de8a58f5e3e09bb1af"
+        "bytes": 11631,
+        "sha256": "d11e3681fad24bdb8d73fe78dd3e67786d7f1c98470b4d34cd82b749bcaae377"
       },
       {
         "path": "frontend/css/deskscreen.css",

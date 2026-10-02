@@ -547,6 +547,7 @@ test/comms-history-pin.test.js
 test/comms-deliverable-replay.test.js
 test/composer-paste-limit.test.js
 test/chat-linkify.test.js
+test/chat-code-url-link.test.js
 test/chat-code-copy.test.js
 test/mint.test.js
 test/ctxgauge.test.js

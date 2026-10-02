@@ -87,7 +87,6 @@
 
   const ul = document.getElementById('crew');
   const left = document.getElementById('left');
-  const sumEl = document.getElementById('crew-sum');
   const vseam = document.getElementById('crew-vresizer');
   const crewSearch = document.getElementById('crew-search-wrap');
   const attention = document.getElementById('ws-attention');
@@ -109,7 +108,25 @@
     // offsetTop is measured from the offsetParent, which is #crew itself only if #crew is
     // positioned (then row tops exclude its border) and the shared ancestor otherwise.
     const base = rows[0].offsetParent === ul ? -(parseFloat(cs.borderTopWidth) || 0) : ul.offsetTop;
-    return [].map.call(rows, (r) => (r.offsetTop - base) + r.offsetHeight + padBottom);
+    // The CREW cards (crew-glass) carry a 4px margin, which the old "bottom + list padding" cut
+    // ignored: the last notch left the list 4px taller than its window (a permanent scrollbar
+    // sliver, the ▾ under the card) and every other notch let the NEXT card peek in. So a mid-list
+    // cut ends exactly where the next row's box begins, and only the last one adds the trailing
+    // margin + list padding — which is then the list's whole scrollHeight, so nothing scrolls.
+    return [].map.call(rows, (r, i) => {
+      const next = rows[i + 1];
+      if (next) return next.offsetTop - base;
+      return (r.offsetTop - base) + r.offsetHeight + (parseFloat(getComputedStyle(r).marginBottom) || 0) + padBottom;
+    });
+  }
+
+  // Everything riding between the roster's bottom edge and the seam, MEASURED from the seam itself.
+  // It used to be "#crew-sum's height", which assumed the WORKING/IDLE strip sat under the list —
+  // the CREW cards seat it in the header (crewcards.js seatSummary), so that guess turned into a
+  // -99px error and the drag landed rows away from the cursor.
+  function belowList() {
+    if (!vseam || vseam.hidden) return 0;
+    return Math.max(0, vseam.getBoundingClientRect().top - ul.getBoundingClientRect().bottom);
   }
 
   // TEXT SIZE is a body zoom: rects are VISUAL px while #crew's own px (the cap, clientHeight) are
@@ -126,9 +143,8 @@
 
     // What the column can actually spare.
     const z = zoomOf();
-    const sumH = sumEl ? sumEl.getBoundingClientRect().height : 0;
     const attentionH = attention ? attention.getBoundingClientRect().height : 0;
-    const spare = (left.getBoundingClientRect().bottom - ul.getBoundingClientRect().top - sumH - attentionH) / z - WS_FLOOR;
+    const spare = (left.getBoundingClientRect().bottom - ul.getBoundingClientRect().top - belowList() - attentionH) / z - WS_FLOOR;
 
     // Search temporarily opens a deliberately shut roster, then restores the saved split on close.
     const searching = crewSearch && !crewSearch.hidden;
@@ -202,15 +218,12 @@
       wantRows = Math.max(0, Math.min(n, cuts.length));   // 0 = shut, and 0 is not "unset"
       fitCrew();
     }
-    // Where the cursor is asking the roster's bottom edge to be. The seam sits under the
-    // WORKING/IDLE strip, so everything between #crew's bottom edge and the handle (that strip and
-    // its margin) rides along and comes off the target — measured, never a constant.
+    // Where the cursor is asking the roster's bottom edge to be. Whatever sits between #crew's
+    // bottom edge and the handle rides along and comes off the target — measured, never a constant.
     function rowsAtCursor(clientY) {
       const cuts = rowCuts();
       if (!cuts.length) return 0;
-      const ulR = ul.getBoundingClientRect();
-      const below = sumEl ? (sumEl.getBoundingClientRect().bottom - ulR.bottom) : 0;
-      return rowsAtHeight(cuts, (clientY - ulR.top - below) / zoomOf());
+      return rowsAtHeight(cuts, (clientY - ul.getBoundingClientRect().top - belowList()) / zoomOf());
     }
 
     // pendingRows is null-or-a-count, never 0-as-empty: 0 IS a notch (the roster dragged shut), so
