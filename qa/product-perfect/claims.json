@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "e7b5bca2761cd914a4b61d00818a4e8a716b0036",
+    "sourceCommit": "e25555c49d1f67a77b5943b91a7cced16cf3a153",
     "pathSetSha256": "60c61c9c0cad8daa5c2d40f76a912ed04e52667a726032a7b3ab94cad57bfa1e",
     "files": [
       {
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 418926,
-        "sha256": "dfc35473a979cf7d529f2c1211d2bcc954bb473bb7c99c79a4cb44a7d7664891"
+        "bytes": 419301,
+        "sha256": "65ca21476a17eea43477cf1f240a70acf9eaf5c2e711a6beace0a0053c10afe1"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 703869,
-        "sha256": "6658937ad0ba852af311cae9dd4d1d4e33be06c3e2c3b2784a3f6d9a0c4708af"
+        "bytes": 708039,
+        "sha256": "ffd028b81c7cb8ed01662b4f9e16bd9e45fd37c64c109d0494801b9e3c28cb4b"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -1008,8 +1008,8 @@
       },
       {
         "path": "frontend/app/remote-devices.js",
-        "bytes": 10338,
-        "sha256": "06cea627e5afa6e0fe0438495f75247e1a20279ef1c46a14df8828327cb7d3e7"
+        "bytes": 10419,
+        "sha256": "86793fccc5790fb563dc86589fbfa0125e607d3a2d10242e87850ccb2bcad8c3"
       },
       {
         "path": "frontend/app/remotesessions.js",
@@ -1128,8 +1128,8 @@
       },
       {
         "path": "frontend/app/stationbuilder.js",
-        "bytes": 333008,
-        "sha256": "5487aa431c33b5a53c5dbe77ec9a8cd4ea69c7d9953c5cdaf45976391bb5347c"
+        "bytes": 333123,
+        "sha256": "a45c92a2fb1aca15aa2bb37b473e42a2e8c16b14250d81f6802515f452a98c2a"
       },
       {
         "path": "frontend/app/stationcommands.js",
@@ -1153,8 +1153,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 816529,
-        "sha256": "c47222d5a9ab26a54c84625c1ed65a0150f618b090650156b672defc5cf49e56"
+        "bytes": 816918,
+        "sha256": "482a138147eed48804f6e6bbc03d0a5b7462d94c293f63f2fe9dda79e03b5efb"
       },
       {
         "path": "frontend/app/stepin.js",
