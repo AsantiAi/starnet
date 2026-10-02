@@ -1343,6 +1343,18 @@ const WorldModel = (() => {
           riders: doc.props.filter(p => wholly(propFootprint(p))), belts: Object.keys(doc.belts).filter(k => { const p = k.split(','); return inRoom(+p[0], +p[1]); }) };
       });
       const hits = (a, b) => a.x1 <= b.x2 && a.x2 >= b.x1 && a.y1 <= b.y2 && a.y2 >= b.y1;
+      // a piece across an open join (a bench straddling two flush rooms) rides when every tile of it is in rooms moving by
+      // the same step
+      const rode = new Set(); for (const pl of plans) for (const p of pl.riders) rode.add(p.id);
+      for (const p of doc.props) {
+        if (rode.has(p.id)) continue;
+        const f = propFootprint(p); let step = null, ok = true;
+        for (let y = f.y1; y <= f.y2 && ok; y++) for (let x = f.x1; x <= f.x2 && ok; x++) {
+          const pl = plans.find(q => q.rm.rects.some(r => x >= r.x1 && x <= r.x2 && y >= r.y1 && y <= r.y2));
+          if (!pl || (step && (step.dx !== pl.dx || step.dy !== pl.dy))) ok = false; else if (!step) step = pl;
+        }
+        if (ok && step) { step.riders.push(p); rode.add(p.id); }
+      }
       const finalOf = new Map(plans.map(pl => [pl.rm.id, pl.rects]));
       const all = Object.keys(doc.rooms).map(id => ({ id, rm: doc.rooms[id], rects: finalOf.get(id) || doc.rooms[id].rects }));
       // the span of the station as it will stand
