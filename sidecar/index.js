@@ -12212,6 +12212,9 @@ function providerForRunConfig(c, reasoningEffort) {
    (the Overseer's roster model — what an unpinned specialist runs on), reached through the channel probe's adapter and sign-in seams;
    the spend is reconciled and booked on the ledger like the station's other passes (a failed booking is noted, never swallowed).
    Returns { ok:true, out, usd, model } or { ok:false, status, error }. */
+// the station's one-shot paid calls in flight (NEEDS CHANGES / SET IT UP FOR ME …): E-STOP aborts them too (QA 2026-10-02 —
+// each had its own 120 s controller nothing else could reach)
+const stationOneShots = new Set();
 async function stationOneShot(prompt, tag, failLead) {
   let blocked = null;
   try { blocked = budget.check(null, 'agent', 0, Date.now(), null); } catch (_) { blocked = null; }
@@ -12224,6 +12227,7 @@ async function stationOneShot(prompt, tag, failLead) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 120000);
   if (timer && timer.unref) timer.unref();
+  stationOneShots.add(ctrl);
   let out = '', usage = null, usd = 0, tokens = 0, cost = null;
   // book whatever usage arrived — on a timeout or a provider error too: those tokens were billed (sweep 2026-10-02)
   const book = () => {
@@ -12242,7 +12246,7 @@ async function stationOneShot(prompt, tag, failLead) {
   } catch (e) {
     book();
     return { ok: false, status: 502, error: (failLead || 'the call failed') + ' — ' + String((e && e.message) || e).slice(0, 200) };
-  } finally { clearTimeout(timer); }
+  } finally { clearTimeout(timer); stationOneShots.delete(ctrl); }
   book();
   return { ok: true, out, usd, model: cfg.model };
 }
@@ -22272,6 +22276,7 @@ function handleHalt(req, res) {
   // a phone task accepted a moment ago enters `runs` only on the next tick (host.send's setImmediate): stop it too, so an
   // E-STOP pressed in that gap never lets it start (QA 2026-10-02). Counted once — those not already inside `halted`.
   let phoneAborted = 0;
+  for (const c of Array.from(stationOneShots)) { try { c.abort(); phoneAborted += 1; } catch (e) { failNote('oneshot.estop', e); } }   // a NEEDS CHANGES / SET IT UP call
   try { for (const id of Array.from(remoteHost._remoteRuns.keys())) if (!runs.has(id)) { remoteHost.stop({ runId: id }).catch(e => failNote('remote.estop', e)); phoneAborted += 1; } } catch (e) { failNote('remote.estop', e); }
   let cronAborted = 0;
   try { cronAborted = cronDriver.abortAllLeases(); } catch (_) {}   // Phase 0: E-STOP also aborts in-flight cron runs (unattended spend)
