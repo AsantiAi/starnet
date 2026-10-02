@@ -956,7 +956,6 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     mywork: { label: 'MY WORK', tabs: [
       { id: 'tasks', k: 'tasks', label: 'TASKS', tip: 'Planned work on the task board — chats and routines live in COMMS' },
       { id: 'deliverables', k: 'deliverables', label: 'DELIVERABLES', tip: 'Everything your crew finished, with its files' },
-      { id: 'outbox', k: 'outbox', label: 'OUTBOX', tip: 'Finished work waiting for your rating' },
       { id: 'recipes', k: 'marketplace', label: 'RECIPES', tip: 'Ready-made jobs to start',
         is: () => typeof Marketplace !== 'undefined' && Marketplace.currentTab && Marketplace.currentTab() === 'recipes',
         open: () => { if (typeof App !== 'undefined' && App.openRecipes) App.openRecipes(); } }
@@ -4481,7 +4480,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // hunting HERE, but this board only holds queued directives — finished routine/away runs are
       // readable sessions in COMMS and collectable on the OUTBOX. Shown only when the board is empty
       // (that's exactly when the hunt strands); openTerm('outbox') is the one-click door.
-      (streams.length ? '' : '<div class="win-note" style="margin-top:8px">This board holds tasks you plan here or launch from Recipes and goals. Chats, routines, and while-away runs live as Sessions in COMMS; finished files wait in the <button type="button" class="lb-tx-btn" id="kb-outbox-link">▸ OUTBOX</button>.</div>');
+      (streams.length ? '' : '<div class="win-note" style="margin-top:8px">This board holds tasks you plan here or launch from Recipes and goals. Chats, routines, and while-away runs live as Sessions in COMMS; finished work waits in <button type="button" class="lb-tx-btn" id="kb-outbox-link">▸ DELIVERABLES</button>.</div>');
     // entrance motion belongs to USER-initiated opens only — a background data poke must not re-animate.
     // (body persists across rebuilds, so the class must be actively toggled both ways.)
     body.classList.toggle('kb-live-refresh', live);
@@ -10495,7 +10494,15 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     // the same reason the dossier does: a never-moved window is CSS-centred, so a content-fit box would re-centre
     // itself every time a card's details drawer opens — the row you just clicked would slide out from under you.
     // The `dlv` class owns that height; the card list scrolls inside it.
-    deliverables:['DELIVERABLES',         body => { if (typeof Deliverables !== 'undefined') Deliverables.mount(body); }, { console: true, className: 'dlv-win' }],
+    deliverables:['DELIVERABLES',         body => {
+      if (typeof Deliverables !== 'undefined') Deliverables.mount(body);
+      // TO REVIEW (the old OUTBOX): finished runs waiting for your verdict, above the library — hidden when none
+      const lib = body.querySelector('.dlv'), host = mkEl('section', 'dlv-review');
+      const head = lib && lib.querySelector(':scope > p.muted');
+      if (head) head.after(host); else if (lib) lib.prepend(host); else body.prepend(host);
+      if (typeof OutboxView !== 'undefined' && OutboxView.build) OutboxView.build(host); else host.hidden = true;
+      if (consoleSection.deliverables === 'review') { delete consoleSection.deliverables; if (!host.hidden) setTimeout(() => { try { host.scrollIntoView({ block: 'start' }); } catch (_) {} }, 0); }
+    }, { console: true, className: 'dlv-win' }],
     settings: ['SETTINGS',               buildSettings,  { console: true }],
     notifs:   ['NOTIFICATIONS',          buildNotifs,    { console: true, className: 'notifs-win' }],
     // the FIELD MANUAL codex is owned by tutorial.js (P3); this term just hosts its builder
@@ -10586,6 +10593,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   // ('create' → 'routines-create', 'start'/'active' → 'loops-start'/'loops').
   const TERM_ALIAS = {
     routines: { term: 'automation', section: 'routines', map: { active: 'routines', create: 'routines-create' } },
+    // ONE PLACE FOR FINISHED WORK (10-02): the OUTBOX is DELIVERABLES' TO REVIEW section — every old door lands there
+    outbox:   { term: 'deliverables', section: 'review', map: {} },
     loops:    { term: 'automation', section: 'loops',    map: { active: 'loops', start: 'loops-start' } },
     // NAV CONDENSE 2: three more retired window keys live on as deep links. 'skills' lands on the
     // ABILITIES skill library (its per-agent CAPABILITIES grid moved to the dossier SKILLS tab, so
@@ -10620,7 +10629,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
 
   // Following work should uncover the destination and preserve the source's scroll/draft.
   // Reuse the window manager's suspension, never destroy a form to follow a link.
-  const WORK_LABELS = { tasks: 'TASK BOARD', outbox: 'OUTBOX', deliverables: 'DELIVERABLES', agents: 'AGENT RECORD' };
+  const WORK_LABELS = { tasks: 'TASK BOARD', deliverables: 'DELIVERABLES', agents: 'AGENT RECORD' };
   let workTrail = [];
   function navigateWork(from, to, section, back) {
     const alias = TERM_ALIAS[to];

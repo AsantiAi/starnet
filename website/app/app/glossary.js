@@ -61,7 +61,7 @@
     // the WORK vocabulary, each on ONE axis (UX confusion audit 2026-07-15: recipe=WHAT to run,
     // routine=WHEN it runs, task=WHERE live work sits, quest=progress/suggestions — never a place work lives).
     automation:   'the SCHEDULES, GOAL LOOPS and AWAY WORK tabs of ∞ AUTOMATE — any job on a schedule, one objective repeated until it is done, and what agents do between your messages.',
-    mywork:       'everything you asked for, in one window — TASKS (planned work), DELIVERABLES (what got made), OUTBOX (results waiting for your rating) and RECIPES (ready-made jobs to start).',
+    mywork:       'everything you asked for, in one window — TASKS (planned work), DELIVERABLES (everything that got made, with finished runs waiting for your rating on top) and RECIPES (ready-made jobs to start).',
     automate:     'work that runs without you starting it — WORKFLOWS (a job passed down a line of agents), SCHEDULES (any job on a timer), GOAL LOOPS (repeat until done) and AWAY WORK.',
     connect:      'what your agents can reach — ABILITIES (the tools, apps, connectors and skills they use) and CHANNELS (Telegram, Slack, Discord: your way in to them).',
     routine:      'a recipe or job put on a schedule (every morning, hourly) — WHEN work runs; manage them under ∞ AUTOMATION.',
