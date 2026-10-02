@@ -18045,7 +18045,10 @@ async function runOnceCore(o) {
   const hostPowerWithheld = hostPowerWithheldFor(o);
   // the Commander's taste (their past verdicts, "(on: <their past request>)") is theirs: a run a non-owner channel sender
   // or a group chat started never carries it (sweep 2026-10-02) — host-minted flags only, like hostPowerWithheldFor
-  const tasteWithheld = o.channelSender === true && o.channelSenderOwner !== true;
+  // …and a worker such a run delegates to inherits it (host-minted withholdTaste on connectorAuthority — never the owner's
+  // own paired phone, which withholdHostPower also covers): the worker's own recall used to add the taste right back
+  const tasteWithheld = (o.channelSender === true && o.channelSenderOwner !== true)
+    || !!(o.connectorAuthority && typeof o.connectorAuthority === 'object' && o.connectorAuthority.withholdTaste === true);
   // a run STARTED by third-party content (trigger payload / forwarded / attachment entry, and its hops + workers):
   // Full Access no longer lifts its taint lock (run-origin.js entryUntrusted, taint.js postTaintBoundary)
   // A recovery continuation replays its SOURCE run's context, so it inherits the source's untrusted entry from the
@@ -19175,6 +19178,7 @@ async function runOnceCore(o) {
       // host-minted, never tool-supplied: a worker delegated from a non-owner channel run stays below Full Power
       withholdHostPower: hostPowerWithheld,
       untrustedEntry: untrustedEntryRun,   // host-minted: a worker of a payload-started run keeps the taint lock under Full Access
+      withholdTaste: tasteWithheld,        // host-minted: a worker of a non-owner/group run never receives the Commander's taste
       taintedBy: () => execution.taintedBy() || (typeof o.connectorAuthority?.taintedBy === 'function' ? o.connectorAuthority.taintedBy() : null)
     },
     // HOOKS reach the tool boundary through the dispatch ctx. registry.js consults them AFTER the authority,
