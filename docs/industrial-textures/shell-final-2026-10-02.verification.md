@@ -35,10 +35,17 @@ Seeded app: `node dev/seed.js --keep`, isolated `shell-refresh-1002`, http://127
 - Full combined retry: failed at step 132/1030 in `test/plugin-windows.test.js`, with Windows process exit `3221226505` (`0xC0000409`), without an assertion report. The same plugin test then passed standalone, 76 assertions. This does not establish a successful full gate.
 - The standard 20-minute wrapper timed out twice in the earlier shell pass. These combined runs used the complete canonical `test:fast:raw` manifest under `scripts/timeout.mjs` with a 50-minute process deadline. No filters, skipped assertions or repository timeout changes. Logs: `dev/shell-final-combined-fast.log`, `dev/shell-final-combined-fast-retry.log`.
 
-## Handoff status
+## Integration complete
 
-The texture implementation is committed and verified in the running app. The full repository gate is **not green**, so the branch has **not been merged**, in accordance with AGENTS.md and starnet-merge-ritual. The remaining integration blocker is a successful full gate; passing the failing cases individually is not a substitute.
+Merged into `feat/harness-backend` at **`3ae7f72e18ea390ad894ca6978f956e8a6e0d30d`**, after syncing trunk through `992edef6a`. The merge tree exactly matches the tested candidate `fcaa02afd`.
 
-The local server remains on port 18802 with the saved ceramic exterior and interior insulation. Its last HTTP availability check returned 200. The agent-created browser review tab was closed; a user preview was queued through the app. The worktree is retained because it holds both the unmerged branch and running preview.
+- Pre-merge **`npm run test:fast`: PASS, 1034/1034**, exit 0. Log: `dev/shell-merge-fast-final.log` in the retained texture worktree.
+- Post-merge **`npm run test:fast`: PASS, 1034/1034**, exit 0, run from the integration tree on `3ae7f72e1`. Log: `dev/shell-merge-post-fast.log` in the retained texture worktree.
+- Both completed runs used the standard repository command and its unchanged 20-minute deadline. Earlier failed attempts above are historical.
+- A reproduced Windows test-server startup timeout was addressed in `e7d2b15d8`: the fixture's default startup allowance is 30 seconds on Windows; explicit failure deadlines, health/token assertions and process cleanup remain tested. Fixture tests passed 10 assertions; schema-stamp tests passed 15; both also passed in the complete gates.
+- Live check after trunk synchronization: the saved ceramic exterior, interior insulation and General session were present after restart. SHELL listed 15 choices without insulation; WALLS included insulation.
+- The merge introduces no production backend or shared-contract changes. Existing integration-tree edits to `docs/NEXT.md`, `qa/STATUS.md` and the untracked `-result.txt` were preserved.
+
+The seeded preview was restarted on port 18802 after the gates with the saved ceramic exterior and interior insulation. The worktree is retained to serve that preview and preserve the test logs.
 
 This verifies this texture lane only; it is not a station-wide release-readiness claim.
