@@ -261,7 +261,11 @@ const WorkflowsWindow = (() => {
     if (ok && x.hands != null && st.setPropHands) { const r = st.setPropHands(x.dockId, back ? x.wasHands : x.hands); ok = !!(r && r.ok); }
     if (!ok) { sfx('bad'); notify('this step could not be changed', 'warn'); return; }
     sfx(back ? 'click' : 'chime');   // (the card says it: IN USE, or USE THIS again — no toast over the window's keys)
-    noteJob(job, { kind: back ? 'putback' : 'fix', dockId: x.dockId, role: p.role || '', field: x.does != null ? 'does' : 'hands', text: back ? (x.was || '') : (x.does != null ? x.does : x.hands), was: back ? (x.does != null ? x.does : x.hands) : (x.does != null ? x.was : x.wasHands), why: x.why || '' });
+    // one note per field the fix changed, each with ITS OWN before and after (a hand-off put back saved the old instructions)
+    for (const [field, now, was] of [['does', x.does, x.was], ['hands', x.hands, x.wasHands]]) {
+      if (now == null) continue;
+      noteJob(job, { kind: back ? 'putback' : 'fix', dockId: x.dockId, role: p.role || '', field, text: back ? (was || '') : now, was: back ? now : (was || ''), why: x.why || '' });
+    }
     schedule();
   }
   /* ★ KEEP THIS STYLE: the result becomes the example the line's LAST step (the one whose reply came out) matches every time — written
@@ -754,6 +758,6 @@ const WorkflowsWindow = (() => {
   }
   if (UI() && UI().registerWindow) UI().registerWindow('workflows', 'WORKFLOWS', build, { className: 'wfw-win' });
   return { open, openLine: key => open({ view: 'line', line: key, job: null }), openNew: () => open({ view: 'new' }), openByStream, showJob,
-    _state: S, _floor: floor, _pick: pickStarter, _create: create, _send: send, EX_HEAD };   // (the _ seams are test/eval reads)
+    _state: S, _floor: floor, _pick: pickStarter, _create: create, _send: send, _useFix: useFix, EX_HEAD };   // (the _ seams are test/eval reads)
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = WorkflowsWindow;
