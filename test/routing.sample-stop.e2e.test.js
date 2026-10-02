@@ -191,8 +191,11 @@ function twoStagePlan() {
       A.ok(rec && rec.job && rec.job.status === 'stopped', 'the job record says stopped: ' + JSON.stringify(rec && rec.job && [rec.job.status, rec.job.error]));
       A.eq(String((rec && rec.job && rec.job.output) || ''), '', 'nothing is kept as what a stopped job made');
     }
-    await sleep(400);
-    A.eq(mock.hung.size, 0, 'the hanging provider connection was closed by the stop');
+    // the abort reaches the provider socket promptly, but its close lands on the mock's side a beat later under load: wait for it
+    // (bounded), never a fixed 400ms that a busy machine misses
+    const tClose = Date.now();
+    for (let i = 0; i < 60 && mock.hung.size; i++) await sleep(50);
+    A.eq(mock.hung.size, 0, 'the hanging provider connection was closed by the stop (' + (Date.now() - tClose) + 'ms)');
     const again = await call('/api/routing/sample/stop');
     A.eq(again.status, 409, 'once it has settled there is nothing left to stop');
 
