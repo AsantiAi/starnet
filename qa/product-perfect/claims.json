@@ -2444,15 +2444,15 @@
       "claim": "One coherent visible ledger unifies tasks, deliverables, routines, and past work.",
       "surfaceLocators": [
         {
-          "path": "frontend/index.html",
-          "needle": "DELIVERABLES</b><small>outputs, Workshop builds &amp; cleanup"
+          "path": "frontend/app/stationui.js",
+          "needle": "{ id: 'deliverables', k: 'deliverables', label: 'DELIVERABLES'"
         }
       ],
       "authorityChecks": [
         {
           "kind": "contains",
           "path": "frontend/app/deliverables.js",
-          "needle": "DELIVERABLES / WORKSHOP LIBRARY"
+          "needle": "<h3>DELIVERABLES</h3>"
         },
         {
           "kind": "contains",
