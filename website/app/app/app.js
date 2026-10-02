@@ -639,7 +639,7 @@ const App = (() => {
         if (typeof World !== 'undefined' && World.despawnAgent) World.despawnAgent(id);   // pull its floor body
         // unbind every prop still assigned to the gone agent (its bay above all): a stale bay→agentId binding
         // re-mints a floor body for a DELETED agent on the next floor rederive (ghost crew) and keeps claiming
-        // the dock in REFIT. assignPropAgent fires station.onChange, so the world rederives on its own.
+        // the dock in BUILD MODE. assignPropAgent fires station.onChange, so the world rederives on its own.
         try {
           if (station && station.propsByAgent && station.assignPropAgent) {
             for (const p of station.propsByAgent(id)) station.assignPropAgent(p.id, '');
@@ -975,6 +975,7 @@ const App = (() => {
      specialty. Voice + spend are left untouched — deploy re-shapes the job, not the personality. */
   function openDeployBay(startTab) {
     if (typeof Marketplace === 'undefined' || !agent) return;
+    if (typeof Systems !== 'undefined') Systems.opened(startTab === 'recipes' ? 'mywork' : 'recruit');   // door law (RECIPES is a MY WORK tab)
     SFX.click();
     Marketplace.open({
       mode: 'deploy',
@@ -1158,7 +1159,7 @@ const App = (() => {
     if (activate) {
       // ACTIONABLE FOLLOW-UP (audit B-1): a summoned specialist can't take FLOOR work until it has its own DESK
       // (a seated workstation). The old copy buried this required step in a passing remark ("give it its OWN PC")
-      // with no way to act. Now the agent says it plainly — "desk", never "OWN PC" — and a chip opens REFIT with
+      // with no way to act. Now the agent says it plainly — "desk", never "OWN PC" — and a chip opens BUILD MODE with
       // desk placement teed up. FINALE (Lane D): the toast is ONE line now — the desk requirement + its door move
       // into the diegetic line + chip below (the standing record no longer duplicates the whole instruction).
       _notify(a.name + ' summoned — type to task it now.', 'good');
@@ -1175,7 +1176,7 @@ const App = (() => {
       setTimeout(() => { const ci = el('chat-input'); if (ci && ci.offsetParent !== null) { try { ci.focus(); } catch (_) {} } }, 0);
     } else {
       // say WHERE its desk landed when one was seeded — the Commander needs to be able to go look at it (and
-      // move it in REFIT). Only claimed when the placement actually returned ok; a failed seed says nothing.
+      // move it in BUILD MODE). Only claimed when the placement actually returned ok; a failed seed says nothing.
       // "took the free desk" vs "desk placed": ensureWorkstation may ADOPT an unbound workstation instead of
       // building one, and saying "placed" for a desk that was already there is a small lie about the floor.
       const deskLine = (desk && desk.ok) ? ((desk.adopted ? 'took the free desk' : 'desk placed') + (deskRoom ? ' in ' + deskRoom : '') + '. ') : '';
@@ -1201,16 +1202,16 @@ const App = (() => {
     if (!station || typeof station.propsByAgent !== 'function' || typeof station.capForProp !== 'function') return false;
     try { return !station.propsByAgent(id).some(p => station.capForProp(p.t) === 'computer'); } catch (_) { return false; }
   }
-  // OPEN REFIT WITH DESK PLACEMENT TEED UP — the target of the post-summon "PLACE ITS DESK" chip. Opens the
+  // OPEN BUILD MODE WITH DESK PLACEMENT TEED UP — the target of the post-summon "PLACE ITS DESK" chip. Opens the
   // builder (the same door the ⚒ BUILD dock opens) and, once its DOM is up, drives it to the PROP tool on the
   // WORKSTATIONS category so the very next floor-click drops a desk (a workstation is editable, so it can't be
   // auto-requisitioned — it opens the agent-binding picker on placement; the Commander places + binds it by hand,
-  // which is the honest one desk-per-agent path). Degrades safely: if any control isn't found we still leave REFIT
-  // open on its default tool, which is already a real improvement over the old unclickable "Open REFIT" sentence.
+  // which is the honest one desk-per-agent path). Degrades safely: if any control isn't found we still leave BUILD MODE
+  // open on its default tool, which is already a real improvement over the old unclickable "Open BUILD MODE" sentence.
   function openDeskPlacement() {
     if (typeof Build === 'undefined' || !Build.open) return;
     try { if (!Build.isOpen || !Build.isOpen()) Build.open(); } catch (_) { return; }
-    // REFIT builds its palette synchronously in open()->buildDOM, but retarget across a couple of rAFs to be safe
+    // BUILD MODE builds its palette synchronously in open()->buildDOM, but retarget across a couple of rAFs to be safe
     // against any deferred render. Each pass clicks only what isn't already active, so it's idempotent + cheap.
     let tries = 0;
     const arm = () => {
@@ -1237,7 +1238,7 @@ const App = (() => {
     } catch (_) { return []; }
   }
   // Compose the one-line summon loadout beat from what was ACTUALLY applied: the skills enabled, the effort, and
-  // — honestly — the STATION GEAR the class draws on that the station is MISSING (add it in REFIT for the class to
+  // — honestly — the STATION GEAR the class draws on that the station is MISSING (add it in BUILD MODE for the class to
   // work its best). Present gear needs no callout (it just works). Reads skills/effort off the record applyLoadout
   // wrote. Returns '' when there is nothing to say.
   function loadoutSummary(a, spec) {
@@ -1249,7 +1250,7 @@ const App = (() => {
     if (gear.length) {
       const have = new Set(stationGearTypes());
       const missing = gear.filter(g => !have.has(g));
-      if (missing.length) parts.push('station lacks ' + missing.join(', ') + ' — add ' + (missing.length === 1 ? 'it' : 'them') + ' in REFIT for its full toolkit');
+      if (missing.length) parts.push('station lacks ' + missing.join(', ') + ' — add ' + (missing.length === 1 ? 'it' : 'them') + ' in BUILD MODE for its full toolkit');
     }
     return parts.join(' · ');
   }
@@ -1270,6 +1271,7 @@ const App = (() => {
   }
   function openSummonBayWith(classSeed) {
     if (typeof Marketplace === 'undefined' || !agent) return;
+    if (typeof Systems !== 'undefined') Systems.opened('recruit');   // door law: whoever opened the bay, RECRUIT is online
     SFX.click();
     const go = () => Marketplace.open({
       mode: 'pick', summon: true, concurrentCap: concurrentCap,
@@ -1510,7 +1512,7 @@ const App = (() => {
     });
     // desk:true — this summon IS the answer to "create me an agent", so the worker arrives with the one
     // per-agent prop it needs to sit and work. See summonAgent: the seed is that agent's desk and nothing
-    // else; the Commander can move or reclaim it in REFIT like any placed prop.
+    // else; the Commander can move or reclaim it in BUILD MODE like any placed prop.
     let a = null;
     try { a = summonAgent(spec, { activate: false, desk: true }); } catch (_) { a = null; }
     if (!a) return null;
@@ -3240,8 +3242,8 @@ const App = (() => {
       if (pid && host && host.open(pid)) return;
       if (typeof StationUI === 'undefined') return;
       const info = pid && host ? host.list().find(x => x.id === pid) : null;
-      const say = !pid ? 'This terminal is not bound to a plugin yet. Bind it in REFIT, or create a plugin in ABILITIES → EXTENSIONS.'
-        : !info ? 'This terminal\'s plugin was removed. Rebind it in REFIT or remove the terminal.'
+      const say = !pid ? 'This terminal is not bound to a plugin yet. Bind it in BUILD MODE, or create a plugin in ABILITIES → EXTENSIONS.'
+        : !info ? 'This terminal\'s plugin was removed. Rebind it in BUILD MODE or remove the terminal.'
         : !info.active ? (info.name || pid) + ' is off' + (info.pending ? ' — it changed since you approved it' : '') + '. Turn it on in ABILITIES → EXTENSIONS.'
         : (info.name || pid) + ' has no window. Its tools are available to agents in this room.';
       if (StationUI.notify) StationUI.notify(say, info && info.active ? 'good' : 'warn');
@@ -3256,7 +3258,7 @@ const App = (() => {
       });
       World.setOnDesk(o => DeskScreen.open(o.agentId));
     }
-    if (World.setOnBayAssign) World.setOnBayAssign(pid => { if (typeof Build !== 'undefined' && Build.openAssign) Build.openAssign(pid); });   // belt legibility: click an unbound BAY's "NO AGENT" nag → REFIT opens straight into its agent picker
+    if (World.setOnBayAssign) World.setOnBayAssign(pid => { if (typeof Build !== 'undefined' && Build.openAssign) Build.openAssign(pid); });   // belt legibility: click an unbound BAY's "NO AGENT" nag → BUILD MODE opens straight into its agent picker
     if (World.setOnIntakeFeed) World.setOnIntakeFeed(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('messaging'); });   // belt legibility: click a starved INTAKE's "NO FEED" nag → the CHANNELS panel (wire a real feed)
     if (World.setOnIntakeSample) World.setOnIntakeSample(o => { if (typeof Chat !== 'undefined' && Chat.sampleCard) Chat.sampleCard(o); });   // guided workflow Phase 4: click the INBOX on a COMPLETE line → the RUN-A-SAMPLE-JOB card (POST /api/routing/sample)
     if (opts.awaitingPurpose) World.beginAwakening();        // wake in darkness — the awakening lifts the room to first light (set BEFORE start so there's no flash of the lit room)
@@ -3274,14 +3276,14 @@ const App = (() => {
     }
     // STATION IDENTITY: did the save we are loading already carry one? (worldmodel stamps meta.createdAt
     // at create AND backfills it on migrate — a stamp that is never SAVED would re-roll on every reload,
-    // and every per-station REFIT latch keyed on it would be lost. Read before deserialize mutates it.)
+    // and every per-station BUILD MODE latch keyed on it would be lost. Read before deserialize mutates it.)
     const hadStationId = !!(pendingStationDoc && pendingStationDoc.meta && pendingStationDoc.meta.createdAt);
     station = (pendingStationDoc && pendingStationDoc.rooms) ? WorldModel.deserialize(pendingStationDoc) : WorldModel.create(WorldModel.starterDoc());
     pendingStationDoc = null;
     watchStationSave();
     // THE OVERSEER'S DESK IS A REAL PROP: materialize the starter workstation the world used to merely
     // DRAW (synthetic auto-desk) as a real hero-assigned desk in the doc, BEFORE the world derives its
-    // floor — so bayObjects/REFIT/dossier see the same PC the player sees (kills the fresh-install
+    // floor — so bayObjects/BUILD MODE/dossier see the same PC the player sees (kills the fresh-install
     // "NO COMPUTE beside the visible PC" lie). Idempotent per load; world keeps its synthetic fallback
     // only for the pathological no-space floor.
     if (agent && agent.id && typeof station.ensureWorkstation === 'function') {
@@ -3302,16 +3304,16 @@ const App = (() => {
       Build.init({ getStation: () => station, persist: persist, world: World,
         agents: () => liveAgents().map(a => ({ id: a.id, name: a.name, color: a.color, model: a.model, skin: a.skin || DATA.DEFAULT_SKIN })),   // skin: the Workflow panel shows each agent by its body
         // A workstation can be placed while its owning COMMS stream stays open. Reconcile the derived
-        // "nowhere to sit" row after REFIT commits so the transcript cannot outlive the floor truth.
+        // "nowhere to sit" row after BUILD MODE commits so the transcript cannot outlive the floor truth.
         onClose: () => { if (typeof Chat !== 'undefined' && Chat.retireDeskPrompt) Chat.retireDeskPrompt(); } });
       const bbBuild = el('bb-build');
       if (bbBuild) {
         let seenBuild = false; try { seenBuild = !!localStorage.getItem('starnet.refit.seen'); } catch (e) {}
         if (!seenBuild) bbBuild.classList.add('refit-nudge');   // pulse the dock button until first opened
-        bbBuild.onclick = () => { SFX.click(); bbBuild.classList.remove('refit-nudge'); Build.toggle(); if (typeof Tutorial !== 'undefined' && Tutorial.onBuildOpen && Build.isOpen && Build.isOpen()) Tutorial.onBuildOpen(); };
+        bbBuild.onclick = () => { SFX.click(); bbBuild.classList.remove('refit-nudge'); if (typeof Systems !== 'undefined') Systems.opened('refit'); Build.toggle(); if (typeof Tutorial !== 'undefined' && Tutorial.onBuildOpen && Build.isOpen && Build.isOpen()) Tutorial.onBuildOpen(); };
       }
     }
-    // WORK › WORKFLOWS (2026-09-30) is its own docked window (frontend/app/windows/workflows.js, data-term="workflows"): the dock binds it
+    // WORK › AUTOMATE › WORKFLOWS (2026-09-30) is its own docked window (frontend/app/windows/workflows.js, data-term="workflows"): the dock binds it
     // like every other window — it no longer opens Build Mode. The full editor is that window's EDIT WORKFLOW key.
     const bbRecruit = el('bb-recruit');
     if (bbRecruit) bbRecruit.onclick = openSummonBay;   // the ONE recruit door — bay carries both verbs (summon new / deploy to current)
@@ -3336,6 +3338,11 @@ const App = (() => {
       });
       // Presence is already proven by the live roster, link indicator, and COMMS state. Do not
       // create a fresh persistent notification every time an existing station is reloaded.
+    }
+    // STATION SYSTEMS ONLINE: a station whose awakening starts now grows its dock as it is used; one that was
+    // already awake opens with everything online. Keyed by the hero's epoch so a fresh start grows again.
+    if (typeof Systems !== 'undefined' && Systems.init) {
+      try { Systems.init({ epoch: agent && agent.createdAt != null ? agent.createdAt : 'legacy', fresh: !!(opts && opts.awaitingPurpose), crewCount: () => agents.size }); } catch (e) { console.warn('[systems] init failed', e); }
     }
     // AGENT GROWTH: subscribe XP/Level/Confidence to the real run-outcome bus. Seeds agent.stats +
     // the station rollup, pushes the live numbers to the world HUD, and fires level-up celebrations.
@@ -3785,7 +3792,7 @@ const App = (() => {
       onReturn: () => { try { if (typeof WorkshopStore !== 'undefined' && WorkshopStore.presentOnReturn) WorkshopStore.presentOnReturn(); } catch (_) {} }
     });
     if (typeof Voice !== 'undefined') Voice.init({ name: agent.name, personaId: agent.personaId, resumeCue: !opts.awaitingPurpose });   // mic + this agent's per-persona voice; offer hands-free resume except during the awakening
-    if (typeof ModelDock !== 'undefined') ModelDock.init({ apply: applyQuickModel, identity: () => (agent && agent.id) || '' });
+    if (typeof ModelDock !== 'undefined') ModelDock.init({ apply: applyQuickModel, identity: () => (agent && agent.id) || '', agentName: () => (agent && agent.name) || '' });
     syncChannels();   // if a Telegram bot auto-started from saved config, refresh it to THIS agent's live identity
     pushRoster();     // Stage 2: seed the sidecar with the live crew so the lead can delegate (no-op for a solo station)
     renderRail();
@@ -5640,9 +5647,10 @@ const App = (() => {
     filterRailByAgent: setRailAgentFilter,
     railAgentFilter: () => railAgentFilter,
     // THE POST-SUMMON DESK STEP, owned by the session (chat.js maybeDeskPrompt): the read that decides whether a
-    // stream still owes its agent a workstation, and the door its chip opens (REFIT, armed on WORKSTATIONS).
+    // stream still owes its agent a workstation, and the door its chip opens (BUILD MODE, armed on WORKSTATIONS).
     needsWorkstation: needsWorkstation,
     openDeskPlacement: openDeskPlacement,
+    openRecipes: () => openDeployBay('recipes'),   // WORK › MY WORK › RECIPES tab (stationui FAMILIES)
     openSummonBay: openSummonBay,   // adaptive-recruitment beat: accepting the recruit nudge deep-links into the bay's summon flow
     openClassDossier: openClassDossier,   // intent-offer beat: accepting a class offer opens the bay ON that class's dossier
     openRecipeLaunch: openRecipeLaunch,   // routine-nudge beat (lane D): accepting deep-links into the recipe's SCHEDULE IT form

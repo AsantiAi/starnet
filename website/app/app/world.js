@@ -4,7 +4,7 @@
    procedural bake (stationbake.js), under a pan/zoom camera. The agent has a
    workstation in its spawn room and ACTUALLY WALKS the rooms + corridors — pathing
    through doors via the model's BFS path() — to reach its seat when given a task,
-   then wanders the whole reachable station when idle. Edits made in REFIT build mode
+   then wanders the whole reachable station when idle. Edits made in BUILD MODE build mode
    re-bake the world live (the agent re-homes if the floor under it is reclaimed).
 
    Coordinate frame: everything here is in the bake's LOCAL tile frame (tile*TILE px);
@@ -126,7 +126,7 @@ const World = (() => {
   let floorLiveAt = 0;                                         // when this page's world started running — the boot-quiet window the spawn WELCOME waits out (a roster replay spawns every body at once)
   let kindleArmed = false, kindleP = 0, kindleHolding = false, kindlePeak = 0, kindleDone = null;   // THE KINDLING: the user HOLDS to wake the dormant mind; their attention fills kindleP (0..1) → ignition
   // THE VOID backdrop (dense parallax starfield + nebulas) lives in spacebg.js (SpaceBG.draw),
-  // shared with REFIT (build.js) so entering/exiting build mode never jumps the sky.
+  // shared with BUILD MODE (build.js) so entering/exiting build mode never jumps the sky.
 
   /* reduced-motion (the warroom honesty floor): heavy motion — pulses/blinks — goes steady when the OS
      asks for less motion. Live-read so a runtime setting change is honored without a reload. */
@@ -1335,7 +1335,7 @@ const World = (() => {
                              // couch reads "full" over a physically EMPTY cushion. spawn()-only, same rationale as below.
     beltWatch = null;        // the belt-watch claim is the same shape of module-level claim, held by a body we just dropped
     // …and with it every other scrap of the PREVIOUS agent's session that lives on this page. These reset
-    // here (the per-agent hero (re)spawn), NOT in loadStation — loadStation also runs on a same-agent REFIT,
+    // here (the per-agent hero (re)spawn), NOT in loadStation — loadStation also runs on a same-agent BUILD MODE,
     // where the running economy/belts MUST persist. spawn() runs only on wake/resume, so a refit is untouched.
     if (floor) floor.reset();           // W1: factory-floor economy (spend/slag/yield) — no inherited numbers on a new HUD
     if (slaglog) slaglog.reset();       // W1: wasted-spend post-mortems
@@ -1373,7 +1373,7 @@ const World = (() => {
       pauseUntil: 0, pauseLook: null, pauseCd: 0, yieldCd: 0, lookBackCd: 0,   // CONSIDERED MOVEMENT: brief mid-stroll holds, belt-yield to cargo, the rare double-take
       attn: null, drive: null, driveUntil: 0,   // CONTINUITY OF ATTENTION: the neighbourhood it is currently occupied with (attn) + the drive it is mid-way through satisfying (drive/driveUntil) — see the CONTINUITY block above decideIdle
       stilling: false,   // STILLNESS: true during a real CONTENT=STILL quiet hold (suppresses the ambient swivel + cargo body-track)
-      wakePhase: 0,   // FIRST LIGHT: the wake-ritual sub-beat sequencer (driven by studyUntil; reset on exit + on a REFIT drop)
+      wakePhase: 0,   // FIRST LIGHT: the wake-ritual sub-beat sequencer (driven by studyUntil; reset on exit + on a BUILD MODE drop)
       quirkCd: 0, offbeatCd: 0   // J2: per-body quirk/off-beat gates (read/written via self in maybeQuirk/offbeat) — uniform with the crew init shape; self===agent keeps the hero byte-identical
     };
     self = agent;   // B1: track the hero from birth so engine helpers called BEFORE the first tick (awakening / mouse handlers via setGlance/releaseSeat) act on the hero — self is restored to agent every tick anyway
@@ -1568,7 +1568,7 @@ const World = (() => {
       // DESK SCREEN: an agent's workstation opens THAT agent's work — live steps while it runs, its last job at rest
       const dk = onDesk ? deskAt(wp) : null;
       if (dk) { onDesk({ agentId: dk.agentId, propId: dk.propId, clientX: ev.clientX, clientY: ev.clientY }); return; }
-      // an UNBOUND bay's nag says CLICK — the click opens the assign flow (REFIT bay picker), closing the loop
+      // an UNBOUND bay's nag says CLICK — the click opens the assign flow (BUILD MODE bay picker), closing the loop
       const ub = unboundBayAt(wp);
       if (ub && onBayAssign) { onBayAssign(ub.id); return; }
       // an INBOX on a COMPLETE line offers the sample-job card (PROOF: run one real job through the line).
@@ -1619,7 +1619,7 @@ const World = (() => {
   function start() {
     if (running) return;
     running = true; last = performance.now(); if (!floorLiveAt) floorLiveAt = last;
-    // a floor coming back to life (REFIT exit) re-asks its line numbers NOW — a step test run while the editor held the
+    // a floor coming back to life (BUILD MODE exit) re-asks its line numbers NOW — a step test run while the editor held the
     // floor otherwise waited up to a minute before the INBOX plate counted it (2026-09-28 retest)
     try { if (typeof LineWatch !== 'undefined' && typeof fetch !== 'undefined') lineStatsSoon(); } catch (_) {}
     frame(last);
@@ -6091,7 +6091,7 @@ const World = (() => {
     // body-track: keep the torso turned to a tracked box for a beat after the glance (whole-body attention, eased by glanceCd)
     if (agent.goal == null && agent.state !== 'walk' && agent.trackUntil > now) { const box = nearestBox(); if (box && box.d < 90) agent.dir = dirToward(agent.px, agent.py, box.x, box.y); }
     // self-heal a stuck walker: the walk pose with nowhere to go (target + path both gone —
-    // e.g. a REFIT re-bake cleared the in-flight path, or a path came back empty). The idle
+    // e.g. a BUILD MODE re-bake cleared the in-flight path, or a path came back empty). The idle
     // re-decision below is gated on state !== 'walk', so without this the legs cycle in place
     // forever (moonwalk). Drop to idle and let this same tick re-path / re-summon.
     if (agent.state === 'walk' && !agent.target && (!agent.pathPts || agent.pathIdx >= agent.pathPts.length)) {
@@ -8007,7 +8007,7 @@ const World = (() => {
   function setOnClick(fn) { onClick = fn; }
   function setOnArcade(fn) { onArcade = fn; }
   function setOnOutbox(fn) { onOutbox = fn; }
-  function setOnBayAssign(fn) { onBayAssign = fn; }   // click an UNBOUND bay → open the assign flow (app wires to REFIT's picker)
+  function setOnBayAssign(fn) { onBayAssign = fn; }   // click an UNBOUND bay → open the assign flow (app wires to BUILD MODE's picker)
   function setOnIntakeFeed(fn) { onIntakeFeed = fn; } // click a NO-FEED intake → open the CHANNELS panel (app wires it)
   function setOnIntakeSample(fn) { onIntakeSample = fn; } // click an INBOX on a COMPLETE line → the sample-job card (guided workflow Phase 4)
 
@@ -8026,9 +8026,9 @@ const World = (() => {
   // a bay->OUTBOX ship-out lane is valid and GLOWS instead of nagging (the 2026-07-05 playtest bug class).
   /* PARITY IS A LAW, NOT A HABIT (2026-08-07 conveyor audit). buildRoutingNags does `if (!label) continue`,
      so a compiler code missing from this table is a finding the live world SILENTLY DROPS — the Commander
-     sees a dead line and no reason anywhere on the floor. ORPHAN_JUNCTION was exactly that: REFIT's
+     sees a dead line and no reason anywhere on the floor. ORPHAN_JUNCTION was exactly that: BUILD MODE's
      VAL_LABEL named it, the world said nothing. Every VAL_LABEL key must have an entry here (the wording
-     may differ — REFIT can spell out a gesture the world has no room for); locked by
+     may differ — BUILD MODE can spell out a gesture the world has no room for); locked by
      test/routing-nag-parity.test.js, which reads both tables out of the two source files. */
   const NAG_LABEL = {
     UNBOUND_BAY: 'NO AGENT — CLICK', ORPHAN_BAY: 'NOT ON THE LINE', ORPHAN_SOURCE: 'NO BELT OUT',
@@ -8049,7 +8049,7 @@ const World = (() => {
       let label = NAG_LABEL[e.code];
       if (!label) continue;
       // a ROLE-carrying unbound dock names WHO it wants ("RESEARCHER — DIGS SOURCES… — CLICK") instead
-      // of the bare NO AGENT (guided workflows Phase 1; same WorldModel.BAY_ROLES source REFIT reads).
+      // of the bare NO AGENT (guided workflows Phase 1; same WorldModel.BAY_ROLES source BUILD MODE reads).
       if (e.code === 'UNBOUND_BAY' && e.propId) {
         const rp = byId[e.propId];
         const ri = (rp && rp.role && !rp.agentId && typeof WorldModel !== 'undefined' && WorldModel.bayRoleInfo) ? WorldModel.bayRoleInfo(rp.role) : null;
@@ -8060,7 +8060,7 @@ const World = (() => {
     }
     // beyond the compiler — two silent failure modes the floor must also confess:
     // (a) a BOUND bay whose room grants no computer: routed work arrives and the run can't act (the compute
-    //     gate stays shut). Same bayObjects check as REFIT's NO COMPUTE ghost, now visible in the live world.
+    //     gate stays shut). Same bayObjects check as BUILD MODE's NO COMPUTE ghost, now visible in the live world.
     //     Walks dockBays (EVERY bound bay, belt-hooked or standalone) — a lone dock deserves the same truth.
     if (routingPlan.dockBays && station && typeof station.bayObjects === 'function') {
       for (const b of routingPlan.dockBays) {
@@ -8092,7 +8092,7 @@ const World = (() => {
      even a line that has no schedule at all (that one is simply unfed). A waiting routine belongs to the line its dock
      sits on — or, for a routine addressed to an agent, the dock work addressed to that agent enters at. */
   function schedOffFor(intakeId, plan) {
-    const pl = plan || routingPlan;   // REFIT passes ITS plan: a line stamped this session is not in the frozen world's yet
+    const pl = plan || routingPlan;   // BUILD MODE passes ITS plan: a line stamped this session is not in the frozen world's yet
     if (!feedState.schedOff || !intakeId || !pl || !pl.lineOfProp) return false;
     const line = pl.lineOfProp[intakeId]; if (!line) return false;
     const entry = pl.entryDock || {};
@@ -8228,9 +8228,9 @@ const World = (() => {
         lines = [fitText(text, maxWidth)];
       }
       const capacity = Math.max(1, Math.floor((bounds.h - padding * 2) / rowHeight));
-      // Extreme authored descriptions keep their full text in the existing REFIT
+      // Extreme authored descriptions keep their full text in the existing BUILD MODE
       // selection card. The on-canvas detail explicitly indicates truncation.
-      if (lines.length > capacity) lines = lines.slice(0, capacity - 1).concat([fitText('… SELECT IN REFIT', maxWidth / unit)]);
+      if (lines.length > capacity) lines = lines.slice(0, capacity - 1).concat([fitText('… SELECT IN BUILD MODE', maxWidth / unit)]);
       const w = Math.min(bounds.w, Math.max(...lines.map(widthOf)) + padding * 2), h = lines.length * rowHeight + padding * 2;
       const x = Math.max(bounds.x, Math.min(bounds.x + bounds.w - w, g.prop.x + g.prop.w / 2 - w / 2));
       let y = Math.max(bounds.y, Math.min(bounds.y + bounds.h - h, g.prop.y - h - 2));
@@ -8791,7 +8791,7 @@ const World = (() => {
     routeTagCache = null; hoverBeltTile = null; selectedRoutingTile = null;   // the floor changed — cached positions and answers are stale
     routingNags = buildRoutingNags();
     /* GHOST PROJECTION (Phase 3): re-derive its route data from the SAME plan + geometry this
-       recompile produced. The live world runs it too (not just REFIT): between REFIT sessions this
+       recompile produced. The live world runs it too (not just BUILD MODE): between BUILD MODE sessions this
        is the view the user stares at their half-built line in, and the existing nags say what's
        broken while the ghost shows what the line WOULD do — same local frame, offset {0,0}. */
     if (typeof GhostLine !== 'undefined' && typeof Pipeline !== 'undefined' && Pipeline.lineComponents && geo) {
@@ -9279,7 +9279,7 @@ const World = (() => {
       runIdOf: () => { const c = crateCtx(payload); return (c.run && c.run.runId) || payload.runId || null; },
       runEnded: () => { const c = crateCtx(payload); return !!((c.run && c.run.ended) || payload.outbound); },
       openRun: a => { if (!a || !a.agentId) return; if (onClick) onClick(a.agentId); if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('logbook'); },
-      openWorkflow: f => { if (!f || typeof Build === 'undefined') return; try { if (!Build.isOpen()) Build.open(); if (f.dockId && Build.openAssign) Build.openAssign(f.dockId); } catch (_) { /* REFIT absent: nothing to open */ } }
+      openWorkflow: f => { if (!f || typeof Build === 'undefined') return; try { if (!Build.isOpen()) Build.open(); if (f.dockId && Build.openAssign) Build.openAssign(f.dockId); } catch (_) { /* BUILD MODE absent: nothing to open */ } }
     });
     return true;
   }
@@ -10754,22 +10754,22 @@ const World = (() => {
       bays: () => (routingPlan && routingPlan.dockBays ? routingPlan.dockBays.filter(d => d.agentId).map(d => { const b = bayPlateBox(d); return { propId: d.propId, agentId: d.agentId, sx: b.cx * scale + panX, sy: (d.y + (d.h || 1) / 2) * T * scale + panY, lampX: (b.left + b.width - 4.75) * scale + panX, lampY: (b.top - 0.9) * scale + panY }; }) : []),
       plates: () => (routingPlan && routingPlan.lines && geo ? routingPlan.lines.map(l => { const ip = geo.props.find(q => q.id === (l.intakes && l.intakes[0])); return ip ? { lineId: l.lineId, sx: (ip.x + (ip.w || 1) / 2) * T * scale + panX, sy: ip.y * T * scale + panY } : null; }).filter(Boolean) : []),
       dpr: window.devicePixelRatio || 1 }),
-    // REFIT freezes this world and can display its already-painted station.
+    // BUILD MODE freezes this world and can display its already-painted station.
     // Identity and both invalidation flags prevent borrowing another save or a
     // pre-edit bake. The editor replaces its reference on its first real edit.
     refitBake: st => st === station && !geoDirty && !bakeDirty && cache && geo
       ? { cache, geo } : null,
     // FEED TRUTH accessor (guided workflows): the exact server-proven state the NO FEED nag keys on —
-    // REFIT's finish-the-line card reads THIS, never a parallel poll, so the two can never disagree.
+    // BUILD MODE's finish-the-line card reads THIS, never a parallel poll, so the two can never disagree.
     feedState: () => ({ known: feedState.known, fed: feedState.fed }),
-    // does this INBOX's line wait on a routine saved while scheduling is off? (the floor's SCHEDULE OFF — CLICK) — REFIT's
+    // does this INBOX's line wait on a routine saved while scheduling is off? (the floor's SCHEDULE OFF — CLICK) — BUILD MODE's
     // finish card asks it with ITS OWN compiled plan (plan param), so a line stamped this session answers too
     schedOffFor: (intakeId, plan) => schedOffFor(intakeId, plan),
     // FEED RE-CHECK on demand (2026-08-22): the INBOX card's CREATE ROUTINE path awaits this so the card, the
     // NO FEED nag and the finish checklist flip on the server's answer NOW, not on the next 60s poll / reload.
     pollFeed: () => pollFeedState(),
-    /* PLAN SYNC on demand (run-now ordering, 2026-08-22): REFIT freezes the sim (world.stop), so a floor edit
-       sets geoDirty but the recompile + POST only ran at the NEXT frame — i.e. on REFIT close. A sample / RUN
+    /* PLAN SYNC on demand (run-now ordering, 2026-08-22): BUILD MODE freezes the sim (world.stop), so a floor edit
+       sets geoDirty but the recompile + POST only ran at the NEXT frame — i.e. on BUILD MODE close. A sample / RUN
        NOW fired mid-session therefore ran the LAST POSTED line. Every run trigger awaits THIS first: recompile
        now if the floor is dirty, then resolve with the poster's verdict + the compiled plan's BLOCKING errors
        (the same codes the floor nags with), so the caller can refuse instead of running a stale or broken line. */
@@ -10780,7 +10780,7 @@ const World = (() => {
     },
     /* PLAN SYNC, READ-ONLY (station.layout, 2026-09-28): the facts syncPlan resolves with — the poster's verdict +
        the compiled plan's BLOCKING errors — plus `pending` (the floor changed since its last compile, e.g. while
-       REFIT holds the world frozen), WITHOUT recompiling or posting: a read must never be what sends a half-built
+       BUILD MODE holds the world frozen), WITHOUT recompiling or posting: a read must never be what sends a half-built
        floor to the router. `station: false` = no floor loaded (nothing is known). */
     planStatus: () => Object.assign({ station: !!station, pending: !!(station && (geoDirty || !geo)),
       errors: (routingPlan && routingPlan.errors ? routingPlan.errors : []).filter(e => !e.warn), hash: routingPlan ? routingPlan.hash : null }, planPoster.state()),

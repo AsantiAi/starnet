@@ -48,7 +48,7 @@
     newapp:'M2 2h12v12H2zM8 5v6M5 8h6'
   };
   document.querySelectorAll('#bottombar .bb-menu .bb').forEach(button=>{
-    const key=button.dataset.term || ({'bb-recruit':'recruit','bb-missions':'recipes','bb-build':'refit','bb-newapp':'newapp','bb-newapp-build':'newapp'})[button.id];
+    const key=button.dataset.term || ({'bb-recruit':'recruit','bb-missions':'recipes','bb-build':'refit','bb-newapp':'newapp','bb-newapp-build':'newapp','bb-mywork':'tasks','bb-automate':'automation','bb-connect':'connectors'})[button.id];
     const icon=button.querySelector('.bb-i');
     if(icon && menuPaths[key]){icon.setAttribute('aria-hidden','true');icon.innerHTML=svgIcon(menuPaths[key]);}
   });
@@ -69,7 +69,9 @@
     s.exiting = !showing;
     w.inert = !showing;
     if (showing) seat(w,s);
-    if (reducedMotion.matches) { done(); return; }
+    // a ONE MENU tab switch (stationui switchFamilyTab) swaps windows in place: no sheet travel either way
+    const famSwitch = typeof document !== 'undefined' && !!document.body && document.body.hasAttribute('data-fam-switch');
+    if (reducedMotion.matches || famSwitch) { done(); return; }
     const style = getComputedStyle(w);
     const duration = parseFloat(style.getPropertyValue('--t-med')) || 220;
     w.style.willChange = 'translate, opacity';

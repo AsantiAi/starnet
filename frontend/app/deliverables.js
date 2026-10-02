@@ -234,9 +234,9 @@
     let runFilter = null;
     const openState = { blobUrl: '', previewHost: null };
     const revoke = () => revokePreview(openState);
-    body.innerHTML = '<div class="cfg dlv"><h3>DELIVERABLES / WORKSHOP LIBRARY</h3><p class="muted">Everything your agents actually made, filed under the project it was made for. Open any one to see what you asked for, what came back, and every file it produced. Previews open safely inside StarNet in a browser; desktop OPEN uses your file app.</p>' +
+    body.innerHTML = '<div class="cfg dlv"><h3>DELIVERABLES</h3><p class="muted">Everything your agents actually made, filed under the project it was made for. Open any one to see what you asked for, what came back, and every file it produced. Previews open safely inside StarNet in a browser; desktop OPEN uses your file app.</p>' +
       '<div id="dl-head" class="dlv-head-strip"></div><div id="dl-run-scope" class="cfg-block" hidden></div>' +
-      '<div class="deliverables-toolbar"><input id="dl-query" aria-label="Search deliverables" placeholder="search title, agent, project"><select id="dl-status" aria-label="Filter deliverables"><option value="">ALL STATUS</option><option>pending</option><option>kept</option><option>implemented</option><option>discarded</option><option>produced</option><option>failed</option></select><button class="bb sm" id="dl-refresh">REFRESH</button><button class="bb sm" id="dl-clean">CLEAN OLD RECORDS</button></div>' +
+      '<div class="deliverables-toolbar"><input id="dl-query" aria-label="Search deliverables" placeholder="search title, agent, project"><select id="dl-status" aria-label="Filter deliverables"><option value="">ALL</option><option value="pending">NEEDS A DECISION</option><option value="produced">DONE</option><option value="kept">KEPT</option><option value="implemented">IMPLEMENTED</option><option value="failed">FAILED</option><option value="discarded">DISCARDED</option></select><button class="bb sm" id="dl-refresh">REFRESH</button><button class="bb sm" id="dl-clean">CLEAN OLD RECORDS</button></div>' +
       '<div id="dl-kinds" class="dlv-kinds"></div>' +
       '<div id="dl-msg" class="msg" aria-live="polite"></div><div id="dl-cleanup"></div>' +
       '<div class="dlv-split"><nav id="dl-rail" class="dlv-rail" aria-label="Projects"></nav><div id="dl-list" class="dlv-main"></div></div></div>';

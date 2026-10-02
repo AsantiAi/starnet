@@ -158,7 +158,7 @@ for(const c of T.catalog.filter(c=>c.group==='work')) assert.ok(c.pitch&&c.pitch
   assert.match(build,/if \(ri && ri\.name\) spec\.agentName = ri\.name;/,'summonForRole names a borrowed-class recruit for its step');
   assert.match(build,/inboxBtn\.onclick = \(\) => \{ closeP\(\); try \{ rebake\(\); openFlowCard\(e\.inboxId\); \}/,'the guide\'s Inbox button opens that Inbox in the Workflow panel');
   assert.match(onb,/c\.purposeLabel \? ' — ' \+ c\.purposeLabel/,'the station question labels each choice with its purpose');
-  assert.match(ob,/WORK › WORKFLOWS walks you through who works each step/,'the pick\'s closing line points at WORKFLOWS');
+  assert.match(ob,/WORK › AUTOMATE › WORKFLOWS walks you through who works each step/,'the pick\'s closing line points at WORKFLOWS');
   assert.match(build,/querySelector\('\.refit-firstrun, \.refit-preset-example, \.refit-station-builds'\)\)\) fireFirstRide\(\)/,'the first ride never narrates over the presets dialog or the setup guide (one voice)');
 }
 console.log('station-templates: seven layouts (five work presets with a ready line each, two looks), classic/remastered catalogs, approved home, one-agent and per-agent staffing, purpose-chip recommendations, belt-order steps, loop gates, the setup path, clear entrances, prop access, ownership, undo/redo and persistence PASS');

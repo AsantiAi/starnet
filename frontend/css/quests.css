@@ -133,6 +133,15 @@
 .quests-win .q-star small { color: var(--ph-dim); font-size: 11px; letter-spacing: .5px; }
 .quests-win .q-star-reached { border-color: var(--gold); }
 .quests-win .q-star-reached .q-star-glyph { color: var(--gold); text-shadow: 0 0 16px var(--gold); }
+/* STATION SYSTEMS (systems.js) — the constellation's star tile, wearing each system's dock icon. Offline = dim and
+   dashed (it still opens: clicking brings it online); NEW = gold edge until the Commander opens it. */
+.quests-win .q-sys .q-star-glyph svg { width: 26px; height: 26px; display: block; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: square; stroke-linejoin: miter; }
+.quests-win .q-sys-off { color: var(--ph-dim); border-style: dashed; background: transparent; }
+.quests-win .q-sys-off:hover { color: var(--ph); }
+.quests-win .q-sys.q-star-reached .q-star-glyph { color: var(--ph); text-shadow: none; }
+.quests-win .q-sys.q-star-reached { border-color: rgba(var(--ph-rgb),.35); }
+.quests-win .q-sys.q-sys-fresh { border-color: var(--gold); }
+.quests-win .q-sys.q-sys-fresh .q-star-glyph { color: var(--gold); }
 .quests-win .q-star-empty { grid-column: 1/-1; text-align: center; color: var(--ph-dim); padding: 15px; }
 .quests-win :is(.q-context-editor,.q-reflection-editor,.q-plan-editor) { border-top: 1px solid rgba(var(--ph-rgb),.16); padding: 12px 0 0; margin: 14px 0; }
 .quests-win .q-direction > summary > span:first-of-type,.quests-win .q-chapter > summary > span:first-of-type { flex: 1; min-width: 0; }

@@ -1996,7 +1996,7 @@ const Chat = (() => {
      it cannot outlive the desk it asks for, and cannot assert a floor state the station can't prove.
      Anti-nag: it is one system line + the chip row that answers it, in the session that owes the desk, and it is
      silent while that stream is mid-run (the run owns its own DOM; the prompt returns on the next open). */
-  // REFIT can satisfy the prompt while this stream remains open. Its text is a derived floor claim, not history,
+  // BUILD MODE can satisfy the prompt while this stream remains open. Its text is a derived floor claim, not history,
   // so retire both of its DOM rows as soon as the live floor proves the desk now exists. Keep every unrelated
   // system/choice row intact; a broad clearChoices() here would erase whichever real question owns COMMS.
   function retireDeskPrompt() {
@@ -2015,7 +2015,7 @@ const Chat = (() => {
     const prompt = row('system'); prompt.d.classList.add('comms-desk-prompt');
     prompt.body.textContent = who + ' has nowhere to sit yet — it needs a desk of its own before it can take floor work. want to place one?';
     autoscroll();
-    // the chip is the whole point: it opens REFIT already armed on the WORKSTATIONS palette, so the next floor
+    // the chip is the whole point: it opens BUILD MODE already armed on the WORKSTATIONS palette, so the next floor
     // click drops the desk. 'later' just dismisses this view of it — the step is still owed, so the next open
     // of this session says so again (it stops for good the moment the desk exists).
     const chips = choices([{ label: '▤ PLACE ITS DESK', value: 'desk' }, { label: 'later', value: 'later', skip: true }], item => {
@@ -2127,7 +2127,11 @@ const Chat = (() => {
   }
   // command / client-side output (/help, /whoami, version, unknown-command, …). A SYSTEM register — dim, no
   // speaker chip, never copyable — so the station's own words are never mistaken for the agent's speech.
-  function localLine(t) { const r = row('system'); r.body.textContent = t; autoscroll(); return r.d; }
+  function localLine(t) {
+    const r = row('system'); r.body.textContent = t; autoscroll();
+    if (typeof Systems !== 'undefined' && Systems.noticeReply) { try { Systems.noticeReply(t); } catch (_) {} }   // door law: a station line naming a system brings it online
+    return r.d;
+  }
   // the history-cap marker ("…N earlier turns trimmed …") as a dim, centered, hairline-flanked system line —
   // a scrollback boundary, not a dropped record. Reuses the broadcast register's chrome (theme tokens only).
   function trimMarkerLine(t) {
@@ -7213,7 +7217,7 @@ const Chat = (() => {
     if (!log) return;
     if (!verdict) { offerTryAgain(); diagAffordance(); return; }
     // ADOPTION (Lane A): every error names its DOOR and opens the exact one. Friendly.actionButton maps the
-    // verdict to { label, run } — capdenied -> REFIT (with the named capability), auth/no-key -> the real key
+    // verdict to { label, run } — capdenied -> BUILD MODE (with the named capability), auth/no-key -> the real key
     // field or "reconnect ChatGPT", model-not-found -> models. One source of truth; no local per-action ladder.
     const btn = (typeof Friendly !== 'undefined' && Friendly.actionButton) ? Friendly.actionButton(verdict) : null;
     if (btn) { choices([{ label: btn.label, value: verdict.action }], () => btn.run()); diagAffordance(verdict); return; }
@@ -8737,6 +8741,9 @@ const Chat = (() => {
     // own triggering turn — that loop simply wasn't running yet when the turn started.
     const goalActiveAtStart = !goalContinuation && typeof GoalLoop !== 'undefined' && (() => { const g = goalOf(activeWs); return !!(g && GoalLoop.isActive(g)); })();
     if (interview) { clearChoices(); interview(text); return; }   // THE AWAKENING owns the input: typed answers retire any stale chip row
+    // STATION SYSTEMS: asking for something on a schedule, or to be reached on a phone/chat app, is the moment
+    // AUTOMATION / CHANNELS join a growing dock (a real user turn only — never a retry or a loop continuation)
+    if (!retry && !goalContinuation && typeof Systems !== 'undefined' && Systems.noticeText) { try { Systems.noticeText(text); } catch (_) {} }
     const runFocusVersion = focusVersion;
     const ws = activeWs;   // CAPTURE the origin stream now — a mid-run switch must not cross-post its cost/files
     if (!ws) return;
@@ -9530,6 +9537,9 @@ const Chat = (() => {
     const silent = !!(opts && opts.silent);
     if (typeof segments === 'string') segments = [{ text: segments }];
     if (!log || !Array.isArray(segments)) { if (onDone) onDone(); return () => {}; }
+    // DOOR LAW (systems.js): a scripted station line (the tour, the awakening) that names a dock system in capitals
+    // brings it online as it is said — the station never tells a newcomer to open a button it is still hiding
+    if (typeof Systems !== 'undefined' && Systems.noticeReply) { try { Systems.noticeReply(segments.map(s => (s && s.text) || '').join(' ')); } catch (_) {} }
     const out = streamingAgent();
     let si = 0, ci = 0, finished = false, killed = false;
     function finish() {

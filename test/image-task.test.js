@@ -83,7 +83,7 @@ A.eq(ImageTask.resolveRoute({ providerId: 'codex', codexSignedIn: false }).code,
 A.ok(/sign in to ChatGPT/.test(ImageTask.admissionBlocker({ hasStudio: true, studioEnabled: true, route: { ok: false }, providerId: 'codex', model: 'gpt-5.5' })), 'the blocker names the ChatGPT sign-in as a fix');
 
 const noGear = ImageTask.admissionBlocker({ hasStudio: false, studioEnabled: false, route: direct, providerId: 'openrouter', model: 'x' });
-A.ok(/Open REFIT, place a STUDIO/.test(noGear), 'missing gear names the exact REFIT action');
+A.ok(/Open BUILD MODE, place a STUDIO/.test(noGear), 'missing gear names the exact BUILD MODE action');
 const disabled = ImageTask.admissionBlocker({ hasStudio: true, studioEnabled: false, route: direct });
 A.ok(/MEDIA STUDIO is disabled/.test(disabled) && /ABILITIES > TOOLSETS/.test(disabled), 'disabled STUDIO names the exact toolset action instead of asking for another prop');
 const noRoute = ImageTask.admissionBlocker({ hasStudio: true, studioEnabled: true, route: impossible, providerId: 'gemini', model: 'gemini-2.5-pro' });
