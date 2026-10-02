@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "604c6363f19313037f18304eb102de8bda84ef27",
+    "sourceCommit": "5a4e43dd71f43d1a96cca9863de2d50ee31767ac",
     "pathSetSha256": "390a2a551d88b2597ca4ab3f1acc7ca535b3b978e277a0ed8c0fb507e73e87c0",
     "files": [
       {
@@ -1008,8 +1008,8 @@
       },
       {
         "path": "frontend/app/remote-devices.js",
-        "bytes": 9440,
-        "sha256": "5b8f073bf3eda99feefd92d0637b47d08160dd8be29caa289665f026b5bf3101"
+        "bytes": 9352,
+        "sha256": "bbddee9720f4421eb396305442016272e69258e3bcfd393aa7f35399ed502d4d"
       },
       {
         "path": "frontend/app/remotesessions.js",
@@ -1128,8 +1128,8 @@
       },
       {
         "path": "frontend/app/stationbuilder.js",
-        "bytes": 294554,
-        "sha256": "f9c8f7f4d490a333b5e004476d7f9eeaa516ebb39e39a8362d5accdb40d4b840"
+        "bytes": 308494,
+        "sha256": "627814776e1937f45bb2e99d3cb10a7726124537fdf5652eb78bf4cecf3f2310"
       },
       {
         "path": "frontend/app/stationcommands.js",
@@ -1428,8 +1428,8 @@
       },
       {
         "path": "frontend/app/worldmodel.js",
-        "bytes": 237968,
-        "sha256": "df759229604a6c7a0cc225f7fc53d84dc684acb92b25d364303cd311bee41cce"
+        "bytes": 242160,
+        "sha256": "16e1a89b06a5989b76a0fb9af4273c6f5cae2d29403fa0594be254d9102b0de8"
       },
       {
         "path": "frontend/app/worldrenderer.js",
