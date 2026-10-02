@@ -39,5 +39,9 @@ const rd = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
   A.ok(/key: 'extensions-pending'/.test(app), 'fixture: the app notifies under extensions-pending');
   A.ok(/if \(hooks && plugins && !\(\(hooks\.pending \|\| \[\]\)\.length \+ plugins\.plugins\.filter\(x => x && x\.pending\)\.length\)[\s\S]{0,120}StationUI\.settleNotifs\('extensions-pending'\)/.test(cn), 'the extensions list settles it once both reads say nothing is pending (a failed read never settles it)');
 
+  // a background run that made a file AND ends asking something still puts its question in NEEDS YOU ("made X" alone hid it)
+  const ch = rd('frontend/app/chat.js');
+  A.ok(/!\(thisRunId && notedRuns\.has\(thisRunId\) && !taskQuestion && endReason !== 'clarifying'\)/.test(ch), 'a run that already announced a file is skipped only when it does NOT end on a question');
+
   A.report('bell-settles.test');
 })().catch(e => { console.error(e); process.exit(1); });

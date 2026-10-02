@@ -9162,7 +9162,8 @@ const Chat = (() => {
         } else if (postconditionUnmet) {
           if (isActiveWs(ws)) breakLive(), toolLine('⚠ completion was not proven — typed postconditions returned ' + (completionVerdict || 'not_assessed') + ' (' + (effectVerdict || 'no effect evidence') + ')');
           if (typeof StationUI !== 'undefined') StationUI.notify(isActiveWs(ws) ? 'completion needs verification' : whoOf(ws) + ' finished but couldn’t prove it worked' + sessionNote(ws) + ' — check it', 'warn', undefined, isActiveWs(ws) ? undefined : { kind: 'alert', go: { ws: ws.id } });
-        } else if (!isActiveWs(ws) && (!endReason || endReason === 'done' || endReason === 'clarifying') && replyText.trim() && !(thisRunId && notedRuns.has(thisRunId)) && typeof StationUI !== 'undefined') {
+        // (a run that already announced a file still says it has a QUESTION: "made X" alone never told you it waits on you)
+        } else if (!isActiveWs(ws) && (!endReason || endReason === 'done' || endReason === 'clarifying') && replyText.trim() && !(thisRunId && notedRuns.has(thisRunId) && !taskQuestion && endReason !== 'clarifying') && typeof StationUI !== 'undefined') {
           const asks = !!taskQuestion || endReason === 'clarifying';
           // a BACKGROUND session finished (you were elsewhere) — the one beat you'd otherwise miss; the entry opens it
           StationUI.notify(whoOf(ws) + (asks ? ' has a question for you' : ' finished') + sessionNote(ws), asks ? 'warn' : 'good', asks ? 'needsApproval' : 'runComplete',
