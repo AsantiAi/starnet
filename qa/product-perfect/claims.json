@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "2df9aefc38983716db2556122b795f93b749fb6c",
+    "sourceCommit": "6ef0edf4ee2c2ce011ec254940b2fe5be6368662",
     "pathSetSha256": "60c61c9c0cad8daa5c2d40f76a912ed04e52667a726032a7b3ab94cad57bfa1e",
     "files": [
       {
@@ -438,8 +438,8 @@
       },
       {
         "path": "frontend/app/dialogue.js",
-        "bytes": 26027,
-        "sha256": "899effde35a25c4b4f65173d819adbd1d4d14c73c31ff489781661f1daf59941"
+        "bytes": 26672,
+        "sha256": "db332cdc37c814a2350a2ca69eb0ff3ed966eb174994d43f01b0ce08381cf1aa"
       },
       {
         "path": "frontend/app/discoverystore.js",
@@ -1243,8 +1243,8 @@
       },
       {
         "path": "frontend/app/tutorial.js",
-        "bytes": 100713,
-        "sha256": "b9538d06af94da11c464bd4b54577e6c5153c78e0316f8a4d562db3ca461d9d0"
+        "bytes": 100719,
+        "sha256": "a29246fd9beaf9d2e2fe81a017bcf70c6b6114441b69193234f4a7c5a6e0ea19"
       },
       {
         "path": "frontend/app/understanding.js",
