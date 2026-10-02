@@ -10404,7 +10404,7 @@ const remoteHost = require('./remote/host.js').makeRemoteHost({
     runs.set(rid, { abort: () => { remoteHost.stop({ runId: rid }).catch(e => failNote('remote.run.abort', e)); } });
     runsMeta.set(rid, { agentId: String(o.agentId || 'agent'), startedAt: Date.now(), source: 'remote', streamId: o.streamId || undefined });
     try { return await runOnce(o); }
-    finally { runs.delete(rid); runsMeta.delete(rid); }
+    finally { runs.delete(rid); runsMeta.delete(rid); grantsSession.delete(rid); }   // its session-scoped grants end with it, like every other run
   },
   view: remoteView,
   deskOpen: () => sse.size() > 1,   // a StarNet page is connected (the phones' own tee is always one listener)
@@ -22269,6 +22269,10 @@ function handleHalt(req, res) {
   const sampleInflight = (sampleHub && sampleHub._internals) ? sampleHub._internals.inflight : null;
   if (sampleInFlight) sampleInFlight.stopRequested = true;   // its record says STOPPED, never "did not finish cleanly — send it again"
   const halted = killAll(runs, tgInflight, dcInflight, ...genericInflights, ...tgBotInflights, devInflight, stepTest ? stepTest.inflight : null, ...triggerInflights, sampleInflight);   // browser runs + ALL channel hub runs, in one kill (see sidecar/halt.js)
+  // a phone task accepted a moment ago enters `runs` only on the next tick (host.send's setImmediate): stop it too, so an
+  // E-STOP pressed in that gap never lets it start (QA 2026-10-02). Counted once — those not already inside `halted`.
+  let phoneAborted = 0;
+  try { for (const id of Array.from(remoteHost._remoteRuns.keys())) if (!runs.has(id)) { remoteHost.stop({ runId: id }).catch(e => failNote('remote.estop', e)); phoneAborted += 1; } } catch (e) { failNote('remote.estop', e); }
   let cronAborted = 0;
   try { cronAborted = cronDriver.abortAllLeases(); } catch (_) {}   // Phase 0: E-STOP also aborts in-flight cron runs (unattended spend)
   let beatAborted = 0;
@@ -22322,7 +22326,7 @@ function handleHalt(req, res) {
   catch (e) { overseerHaltPersisted = false; console.warn('[overseer] stop could not persist:', e.message); }
   try { cronLock.release(); } catch (_) {}  // G4.3: drop any cron lock this process holds so an E-STOP mid-tick never wedges the next tick (standalone halt-block addition; G2 will add connectors.close here)
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ halted, cronAborted, beatAborted, loopAborted, terminalStops, nightshiftHaltPersisted, cronHaltPersisted, loopsHaltPersisted, overseerHaltPersisted, state: haltStatus() }));   // honest counts + per-subsystem restart-durability receipts
+  res.end(JSON.stringify({ halted: halted + phoneAborted, cronAborted, beatAborted, loopAborted, terminalStops, nightshiftHaltPersisted, cronHaltPersisted, loopsHaltPersisted, overseerHaltPersisted, state: haltStatus() }));   // honest counts + per-subsystem restart-durability receipts
 }
 
 // POST /api/channels/telegram/connect { token, key?, model, provider? } — the Messaging tab hands over the

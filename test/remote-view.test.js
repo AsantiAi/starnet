@@ -412,5 +412,13 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
     A.ok(on2 && on2.ok !== false, 'an ordinary phone still turns a routine on');
     A.eq(calls, [['job1', false], ['job1', true]], 'only the allowed changes reached the station');
   }
+  // (QA 2026-10-02) the desk side of a phone run: E-STOP reaches one accepted a moment ago (not yet in `runs`), and its
+  // session-scoped grants end with it like every other run's
+  {
+    const idx = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
+    A.ok(idx.includes("for (const id of Array.from(remoteHost._remoteRuns.keys())) if (!runs.has(id)) { remoteHost.stop({ runId: id })")
+      && idx.includes('halted: halted + phoneAborted'), 'E-STOP stops a phone task still on its way into runs, and counts it once');
+    A.ok(idx.includes('finally { runs.delete(rid); runsMeta.delete(rid); grantsSession.delete(rid); }'), 'a phone run drops its session grants when it ends');
+  }
   A.report('remote-view');
 })().catch((e) => { console.log('FAIL: threw ' + (e && e.stack || e)); process.exit(1); });
