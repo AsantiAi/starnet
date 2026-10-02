@@ -1253,6 +1253,15 @@ const WorldModel = (() => {
           if (inOld(x, y) && !inNew(x, y)) return fail('CUTS_CONTENTS', 'a ' + p.t + ' would be left off the deck');
       }
       for (const k of Object.keys(doc.belts)) { const q = k.split(','), x = +q[0], y = +q[1]; if (inOld(x, y) && !inNew(x, y)) return fail('CUTS_CONTENTS', 'a belt would be left off the deck'); }
+      // a piece hung on a wall keeps its wall: growing a room over the wall above it left it hanging in mid-floor
+      for (const p of doc.props) {
+        if (ruleOf(p.t).mount !== 'wall') continue;
+        const fp = propFootprint(p);
+        for (let x = fp.x1; x <= fp.x2; x++) {
+          const y = fp.y1 - 1, other = roomAt(x, y);
+          if (!other && inNew(x, y)) return fail('LOSES_WALL', 'a ' + p.t + ' hangs on the wall there: it would be left in mid-floor — move it first');
+        }
+      }
       snapshot();
       const before = rm.rects.slice();
       rm.rects = [nr];

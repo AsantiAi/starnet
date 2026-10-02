@@ -60,4 +60,16 @@ const add = (st, o) => { const s = Sp.spec(o.t); const r = st.addProp(Object.ass
   }
 }
 
+// 3. a room resize keeps every wall-hung piece on its wall (growing the room north over it left it hanging in mid-floor)
+{
+  const st = WM.create(WM.starterDoc()), rm = st.rooms()[0], R = rm.rects[0];
+  const W = add(st, { t: 'industrial_wallpanel', x: 6, y: R.y1 });
+  const before = JSON.stringify(st.serialize());
+  const grow = st.resizeRoom(rm.id, { x1: R.x1, y1: R.y1 - 3, x2: R.x2, y2: R.y2 });
+  A.ok(grow && !grow.ok && grow.error === 'LOSES_WALL', 'growing the room over a wall-hung piece\'s wall is refused: ' + JSON.stringify(grow));
+  A.eq(JSON.stringify(st.serialize()), before, '…and nothing changed');
+  A.ok(st.resizeRoom(rm.id, { x1: R.x1, y1: R.y1, x2: R.x2 + 3, y2: R.y2 + 2 }).ok, 'growing it east and south (its wall untouched) is fine');
+  const p = st.propById(W); A.ok(st.canPlaceProp(p.t, p.x, p.y, p.w, p.h, p.id).ok, '…and the piece still hangs on its wall');
+}
+
 A.report('worldmodel-moveprops.test');
