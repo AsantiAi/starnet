@@ -395,7 +395,7 @@ const StationCommands = (() => {
       tiles = { x1: Math.min(...rs.map(q => q.x)), y1: Math.min(...rs.map(q => q.y)), x2: Math.max(...rs.map(q => q.x + q.w - 1)), y2: Math.max(...rs.map(q => q.y + q.h - 1)) };
       of = d.map.room; issues = Array.isArray(d.map.issues) ? d.map.issues : [];
     }
-    for (let px = ref ? 1400 : 1400; px >= 400; px = Math.round(px * 0.75)) {
+    for (let px = 1400; px >= 400; px = Math.round(px * 0.75)) {
       const still = tiles ? World.renderStillOfTiles(tiles, px, { noBodies: false }) : World.renderStill(px);
       if (!still || !still.canvas) throw new Error('the station is not drawn yet (it may still be waking up): look again in a moment');
       let b = await blobOfCanvas(still.canvas, 'image/webp', 0.82);
