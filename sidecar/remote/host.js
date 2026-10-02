@@ -182,11 +182,12 @@ function makeRemoteHost(d) {
       system: cred.system, messages, agentId: o.agentId, isTask,
       emit, signal: ac.signal, runId, streamId, trigger: 'event',
       surface: 'interactive', prompt, ownerTrusted: true, floorless: true, broadcast: true, reflect: true,
-      // FULL ACCESS STAYS AT THE DESK (Andrew 2026-10-02): a phone is easier to lose than a PC, so a task sent from one
-      // never inherits an agent's Full Access or the station bypass: anything that needs approval asks on the phone
-      // (once / this task / deny). Standing "always" grants made at the desk still apply. Host-minted, never from text,
-      // and it rides into delegated workers (run-origin.js).
-      connectorAuthority: { withholdHostPower: true },
+      // A PHONE WORKS WITH THE DESK'S PERMISSIONS (Andrew 2026-10-02: "full access so I can vibe code on the go"): an
+      // agent on Full Access acts from the phone without asking, exactly as at the desk. A phone the Commander marked
+      // ALWAYS ASK (desk > Remote > that phone) never inherits Full Access or the station bypass: every gated step asks
+      // on the phone. Host-minted, never from text, and it rides into delegated workers (run-origin.js). If the
+      // setting cannot be read, the phone asks (never more power on an error).
+      connectorAuthority: { withholdHostPower: phoneAsksFirst(o.deviceId) },
       taskKey: 'remote:' + (o.deviceId || 'phone'), taskSource: 'remote'
     })).catch((e) => { errMsg = errMsg || clip((e && e.message) || e, 400); })
       .finally(() => {
@@ -232,6 +233,10 @@ function makeRemoteHost(d) {
     try { dl = (await d.deliverables()) || []; } catch (e) { note('remote.host.shownDeliverables', e); dl = []; }
     for (const r of dl) if (r && r.agentId === agentId) for (const f of Array.isArray(r.files) ? r.files : []) if (f && f.path) set.add(String(f.path));
     return set;
+  }
+  function phoneAsksFirst(deviceId) {
+    if (typeof d.phoneAsksFirst !== 'function') return false;
+    try { return d.phoneAsksFirst(deviceId) === true; } catch (e) { note('remote.host.phoneAsksFirst', e); return true; }
   }
   async function fetchFile(o) {
     if (!agentsList().some(a => a.agentId === o.agentId)) return { ok: false, error: 'unknown file' };   // never make a folder for a made-up agent
