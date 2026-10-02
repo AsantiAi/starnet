@@ -264,11 +264,12 @@ function makeBrowserViews(deps) {
      one typing the password). Opened by the session's onLoginOpen, closed by onLoginClose or when the run lets go. */
   function signInOpen(info) { if (station && station.driver) station.signIn = { host: String((info && info.host) || ''), runId: station.driver.runId }; return !!(station && station.signIn); }
   function signInClose() { if (station) station.signIn = null; }
-  function driving() {
-    if (station && station.signIn) return null;   // signing in: the page is the Commander's
-    const d = station && station.driver;
-    return d ? { ok: false, code: 'driving', agentId: d.agentId, error: 'an agent is driving the browser right now — you can watch, and it hands you the wheel in STEP-IN if it needs you' } : null;
-  }
+  /* THE COMMANDER'S HANDS ARE NEVER REFUSED (Andrew 2026-10-02: "the whole point was for it to be interactive inside
+     of the window"). It used to refuse their clicks, keys, addresses and back/forward while an agent drove — the
+     BROWSER window turned into a view-only mirror for the whole run. Like Claude Code's browser pane, the shared
+     browser now takes the Commander's input at any time; the agent keeps going (its element refs re-find themselves
+     after a page change — withRefRecovery). */
+  function driving() { return null; }
   async function open(raw) {
     if (!makeSession) return { ok: false, error: 'this station cannot open a browser of its own' };
     const addr = resolveAddress(raw);

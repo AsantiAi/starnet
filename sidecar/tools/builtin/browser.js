@@ -2314,8 +2314,32 @@
       if (castMode !== 'screencast' || !castRoot) return;
       try { await castRoot.send('Page.stopScreencast', {}, castSession); } catch (e) { failNote('browser.cast-stop', e); }
     }
+    /* A MINIMIZED STATION WINDOW IS A DEAD PICTURE (Andrew 2026-10-02: "I can't interact with the browser whatsoever from
+       the built in browser, I have to manually 'show window' and then I can control it"). Measured: with the station's
+       Chrome window minimized the page is hidden and renders nothing — the in-app picture sat at 0 frames/s while the
+       Commander's clicks and keys DID land, so the BROWSER window looked like a frozen mirror; SHOW WINDOW un-minimized
+       it, which is why it then "worked". While the in-app picture is in use (a stream runs, or the Commander clicks into
+       it) a minimized window is put back to normal — Windows keeps it behind the active app (no focus steal) and it
+       renders again. Only our own headed window; never an attached browser. */
+    let keepShownBusy = false;
+    async function keepWindowShown() {
+      // only over the connection that is already open: this must NEVER start (revive) a browser the Commander closed
+      if (!headed || attachPort !== null || keepShownBusy || !cdp || cdp.closed || procExited) return false;
+      keepShownBusy = true;
+      try {
+        const c = cdp, sid = activeSession || openerSession || undefined;
+        const w = await c.send('Browser.getWindowForTarget', {}, sid);
+        if (w && w.bounds && w.bounds.windowState === 'minimized') {
+          await c.send('Browser.setWindowBounds', { windowId: w.windowId, bounds: { windowState: 'normal' } }, sid);
+          return true;
+        }
+      } catch (e) { failNote('browser.keep-shown', e); }
+      finally { keepShownBusy = false; }
+      return false;
+    }
     async function streamStart(onFrame) {
       const c = await page();
+      await keepWindowShown();
       castHandler = typeof onFrame === 'function' ? onFrame : null;
       await stopScreencast();
       castOn = true; castSame = 0; castGood = 0;
@@ -2330,6 +2354,7 @@
           castWatch = setInterval(() => {
             if (!castOn || gen !== castGen) { clearInterval(castWatch); castWatch = null; return; }
             ticks++;
+            if (ticks % 3 === 0) keepWindowShown().catch(e => failNote('browser.keep-shown', e));   // minimized while watched (~1.5 s)
             if (castTarget() !== castSession) startScreencast(c, gen).catch(e => failNote('browser.cast-retarget', e));
             if (ticks === 3 && castGood === 0) { failNote('browser.cast-fallback', new Error('no screencast frames')); clearInterval(castWatch); castWatch = null; castMode = null; stopScreencastSafe(); startCaptureLoop(c, gen); }
           }, 500);
@@ -2391,6 +2416,7 @@
       castSame = 0;
       if (castKick && !(ev.type === 'mouse' && ev.action === 'move')) { const k = castKick; castKick = null; setTimeout(k, 60); }
       if (ev.type === 'mouse') {
+        if (ev.action === 'down') await keepWindowShown();   // clicking into the picture of a minimized window: show it first
         const type = ev.action === 'move' ? 'mouseMoved' : ev.action === 'down' ? 'mousePressed' : 'mouseReleased';
         const button = ev.action === 'move' ? (ev.button || 'none') : (ev.button || 'left');
         const buttons = button === 'left' ? 1 : button === 'right' ? 2 : button === 'middle' ? 4 : 0;

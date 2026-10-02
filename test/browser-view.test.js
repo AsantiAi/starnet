@@ -102,11 +102,10 @@ function rig(extra) {
     A.ok(attended.prompt === prompt, 'browser.login asks through the DRIVING run\'s consent channel');
     A.eq(views.list().station.driver.agentId, 'nova', 'the list says who is driving');
 
-    // one driver at a time
-    A.eq((await views.open('example.com')).code, 'driving', 'while the agent drives, a typed address is refused');
-    A.eq((await views.input({ type: 'text', text: 'x' })).code, 'driving', '…and so are the Commander\'s keys');
-    A.eq((await views.nav('back')).code, 'driving', '…and back/forward');
-    A.eq(made[0].inputs.length, 0, 'nothing reached the page');
+    // the Commander's hands are NEVER refused, even while an agent drives (Andrew 2026-10-02: "the whole point was for it
+    // to be interactive inside of the window") — one AGENT driver at a time, but you can always click and type
+    A.eq((await views.input({ type: 'text', text: 'x' })).ok, true, 'while the agent drives, the Commander can still type');
+    A.eq(made[0].inputs.length, 1, '…and it reaches the page');
     const second = views.sessionForRun({ agentId: 'kira', runId: 'r2', interactive: true });
     let busyErr = ''; try { await second.navigate('https://example.org/'); } catch (e) { busyErr = e.message; }
     A.ok(/in use by another run/.test(busyErr), 'a second run cannot drive it while another is: it is told so');
@@ -134,7 +133,7 @@ function rig(extra) {
 
     // now the Commander drives it
     A.ok((await views.input({ type: 'text', text: 'hello' })).ok, 'the Commander types into the same page');
-    A.eq(made[0].inputs[0].text, 'hello', 'it reached the page');
+    A.eq(made[0].inputs[made[0].inputs.length - 1].text, 'hello', 'it reached the page');
     A.eq((await views.input({ type: 'nonsense' })).ok, false, 'an unknown input event is refused');
     await views.open('localhost:5173');
     A.eq(made[0].navs[made[0].navs.length - 1][1], true, 'a loopback address opens in local mode');
