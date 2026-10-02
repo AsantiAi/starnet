@@ -170,14 +170,13 @@
     S.portraitBusy = true;
     try {
       let got = 0;
-      for (const a of agents()) {
+      const want = agents().filter(a => !S.portraits.has(skinKey(a)));
+      for (const a of want) S.portraits.set(skinKey(a), null);
+      await Promise.all(want.map(async (a) => {
         const k = skinKey(a);
-        if (S.portraits.has(k)) continue;
-        S.portraits.set(k, null);
         try { const r = await call('portrait', { agentId: a.agentId }); if (r.ok && r.data && r.data.data) { S.portraits.set(k, await cropSprite(r.data.mime || 'image/png', r.data.data)); got++; } }
-        catch (_) { S.portraits.delete(k); break; }
-        if (got) render(true);
-      }
+        catch (_) { S.portraits.delete(k); }
+      }));
       if (got) render(true);
     } finally { S.portraitBusy = false; }
   }
@@ -244,11 +243,12 @@
   async function refreshThreads() { try { const r = await call('threads', { limit: 50 }); if (r.ok) S.threads = r.data; } catch (_) {} }
   async function refreshRoutines() { try { const r = await call('routines'); if (r.ok) S.routines = r.data; } catch (_) {} }
   async function refreshAll() {
-    await refreshStatus(); await refreshApprovals();
+    refreshView();   // needs nothing else: start the picture first, it is the biggest thing on the screen
+    await Promise.all([refreshStatus(), refreshApprovals()]);
     if (!S.target) { try { S.target = localStorage.getItem(TARGET_KEY) || null; } catch (_) {} }
     if ((!S.target || !agentOf(S.target)) && agents().length) S.target = agents()[0].agentId;
     render(true);
-    refreshView(); ensurePortraits(); refreshPush().then(() => render(true));
+    ensurePortraits(); refreshPush().then(() => render(true));
     await Promise.all([refreshThreads(), refreshActivity()]);
     render(true);
   }
@@ -267,7 +267,13 @@
     if (e.type === 'run.started') { S.live.set(e.runId, { streamId: e.streamId, agentId: e.agentId, text: '', steps: [], ended: null, seenAt: Date.now() }); statusSoonish(); if (S.tab === 'sessions') activitySoonish(); render(true); return; }
     const L = e.runId && S.live.get(e.runId);
     const showing = L && S.thread && S.thread.streamId === L.streamId;
-    if (e.type === 'run.text' && L) { L.text = e.text; if (showing) renderLive(); return; }
+    if (e.type === 'run.text' && L) {
+      // the whole reply so far, or what it grew by (applied only where it continues what this phone has)
+      if (typeof e.text === 'string') L.text = e.text;
+      else if (typeof e.add === 'string' && (L.text || '').length === e.at) L.text = (L.text || '') + e.add;
+      else return;
+      if (showing) renderLive(); return;
+    }
     if (e.type === 'run.tool' && L) {
       L.steps.push({ callId: e.callId, name: e.name, ok: null });
       for (const n of document.querySelectorAll('[data-verb="' + CSS.escape(String(e.runId)) + '"]')) n.textContent = doing(e.name).word;
@@ -283,7 +289,7 @@
       if (S.tab === 'sessions') activitySoonish();
       return;
     }
-    if (e.type === 'view.crew') { if (S.view) { S.crewPaused = !!e.paused; applyCrew(e.bodies); paintHero(); } return; }
+    if (e.type === 'view.crew') { if (S.view) { S.crewPaused = !!e.paused; applyCrew(e.bodies, e.at); paintHero(); } return; }
     if (e.type === 'station' && e.name === 'agent.tool_call' && e.payload && e.payload.runId && e.payload.name) {
       S.stepOf.set(String(e.payload.runId), String(e.payload.name));
       if (S.stepOf.size > 200) S.stepOf.delete(S.stepOf.keys().next().value);
@@ -316,19 +322,56 @@
     }).catch(() => { scene.tracks.delete(k); });
     return t;
   }
-  function rectAt(c, now) {
-    const t = Math.min(1, Math.max(0, (now - c.t0) / c.dur)), e = t * (2 - t);
-    return { x: c.from.x + (c.to.x - c.from.x) * e, y: c.from.y + (c.to.y - c.from.y) * e, w: c.to.w, h: c.to.h };
+  /* SMOOTH MOTION. Positions arrive about five times a second, but the network spaces them unevenly (measured through
+     the live relay: 186 ms typical, 309 ms at the 95th percentile, while the desk sends every 200 ms ±13). Easing
+     toward each newest point made a walker surge and stall five times a second. Instead every point keeps the
+     STATION's own time for it (`at`, stamped where the desk handed it over), mapped onto this phone's clock by the
+     quickest arrival seen, and the crew are drawn a little in the past at constant speed between two real points:
+     the uneven gaps disappear and nothing is invented (the drawing is always between two places they really were).
+     How far behind adapts to the link: on the live relay the points also came in BURSTS (0.8-1 s of nothing, then
+     three or four at once, every few seconds, from the internet path — a local relay showed none), so the delay
+     follows how late points actually run (95th percentile + a margin): about 0.2 s on a clean link, up to 0.8 s on a
+     choppy one, rising at once and settling back slowly. Replayed on recorded live-relay points: lurches while
+     walking fell from 14-19 per walk to 1. */
+  const clockMap = { offs: [], late: [], playout: 240 };
+  function phoneTimeOf(at) {
+    const arrival = performance.now();
+    if (!(at > 0)) return arrival;
+    const m = clockMap;
+    m.offs.push(arrival - at); if (m.offs.length > 40) m.offs.shift();
+    const off = Math.min.apply(null, m.offs);
+    m.late.push(arrival - at - off); if (m.late.length > 40) m.late.shift();
+    const l = m.late.slice().sort((a, b) => a - b), want = Math.max(160, Math.min(800, (l[Math.floor((l.length - 1) * 0.95)] || 0) + 80));
+    m.playout = want > m.playout ? want : m.playout + (want - m.playout) * 0.05;
+    return at + off;
   }
-  function applyCrew(list) {
-    const now = performance.now(), seen = new Set();
+  function rectAt(c, now) {
+    const s = c.samples, rt = now - clockMap.playout;
+    if (rt <= s[0].t) return s[0];
+    for (let i = 1; i < s.length; i++) {
+      if (s[i].t >= rt) {
+        const a = s[i - 1], b = s[i], f = (rt - a.t) / Math.max(1, b.t - a.t);
+        return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, w: b.w, h: b.h };
+      }
+    }
+    return s[s.length - 1];
+  }
+  // still between two points it has not reached yet?
+  const gliding = (c, now) => { const s = c.samples, n = s.length; return n > 1 && now - clockMap.playout < s[n - 1].t && (s[n - 1].x !== s[n - 2].x || s[n - 1].y !== s[n - 2].y); };
+  function applyCrew(list, at) {
+    const now = performance.now(), seen = new Set(), t = phoneTimeOf(at);
     for (const b of list || []) {
       if (!b || !b.agentId || !b.key) continue;
       seen.add(b.agentId);
-      const to = { x: b.x, y: b.y, w: b.w, h: b.h };
+      const to = { t, x: b.x, y: b.y, w: b.w, h: b.h };
       let c = scene.crew.get(b.agentId);
-      if (!c) { c = { from: to, to, t0: now, dur: 1, key: b.key, keyAt: now, idx0: b.idx, idx: b.idx }; scene.crew.set(b.agentId, c); }
-      else { c.from = rectAt(c, now); c.to = to; c.t0 = now; c.dur = 260; }
+      if (!c) { c = { samples: [to], key: b.key, keyAt: now, idx0: b.idx, idx: b.idx }; scene.crew.set(b.agentId, c); }
+      else {
+        const last = c.samples[c.samples.length - 1];
+        // a jump across the station (a room change, a reconnect) is a cut, not a glide
+        if (t <= last.t || Math.hypot(to.x - last.x, to.y - last.y) > Math.max(6, to.h) * 4) c.samples = [to];
+        else { c.samples.push(to); while (c.samples.length > 2 && c.samples[1].t < now - clockMap.playout - 1500) c.samples.shift(); }
+      }
       if (c.key !== b.key) { c.key = b.key; c.keyAt = now; c.idx0 = b.idx; }
       c.idx = b.idx;
       track(c.key);
@@ -398,7 +441,7 @@
     if (scene.cropMoving || viewer.pts.size) return 33;
     let need = 0;
     for (const c of scene.crew.values()) {
-      if (now - c.t0 < c.dur) return 33;
+      if (gliding(c, now)) return 16;   // someone is crossing the room: every display frame
       const fps = TRACK_FPS[String(c.key).split('.')[1]];
       if (fps) need = Math.max(need, fps);
     }
@@ -478,9 +521,10 @@
       S.view = { at: first.at, w: first.w, h: first.h, scale: Number(first.scale) || 0, bodies: first.bodies || [], crewFree: !!first.crewFree, url, age0: Math.max(0, first.now - (first.checked || first.at)), seenAt: Date.now() };
       S.crewPaused = !!first.crewPaused;
       scene.base = pre;
-      if (first.crew && Array.isArray(first.crew.bodies) && !scene.crew.size) applyCrew(first.crew.bodies);
+      if (first.crew && Array.isArray(first.crew.bodies) && !scene.crew.size) applyCrew(first.crew.bodies, first.crew.at);
       paintHero();
       if (old) setTimeout(() => URL.revokeObjectURL(old), 1500);
+      try { RemoteStore.saveView({ blob: new Blob(parts, { type: first.mime }), savedAt: Date.now(), meta: { at: S.view.at, w: S.view.w, h: S.view.h, scale: S.view.scale, bodies: S.view.bodies, crewFree: S.view.crewFree, age0: S.view.age0 } }).catch(() => {}); } catch (_) {}
     } catch (_) { /* the link lamp reports a dead link; the picture keeps its age */ }
     finally { S.viewBusy = false; paintHero(); }
   }
@@ -1250,11 +1294,27 @@
     if (!S.rec) return showSetup(false);
     startDeck();
   }
+  /* The app opens on the last picture this phone saw, at once, stamped with its true age ("AS OF 3M AGO") — never
+     passed off as live — and the fresh one replaces it as soon as the link is up. */
+  async function restoreView() {
+    let v = null;
+    try { v = await RemoteStore.loadView(); } catch (_) { v = null; }
+    if (!v || !v.blob || !v.meta || S.view) return;
+    const url = URL.createObjectURL(v.blob), pre = new Image(); pre.src = url;
+    try { await pre.decode(); } catch (_) { URL.revokeObjectURL(url); return; }
+    if (S.view) { URL.revokeObjectURL(url); return; }   // the fresh one won the race
+    const m = v.meta;
+    S.view = { at: m.at, w: m.w, h: m.h, scale: Number(m.scale) || 0, bodies: m.bodies || [], crewFree: !!m.crewFree, url,
+      age0: Math.max(0, (Number(m.age0) || 0) + (Date.now() - (Number(v.savedAt) || Date.now()))), seenAt: Date.now() };
+    scene.base = pre; scene.crop = null;
+    paintHero();
+  }
   let deckStarted = false;
   function startDeck() {
     if (deckStarted) return;
     deckStarted = true;
     showDeck(); paintLamp(); render(); connect();
+    restoreView();
     const openHash = /^#(needs|thread=[A-Za-z0-9_-]{1,64})$/.test(location.hash) ? location.hash : '';
     if (openHash) { history.replaceState(null, '', location.pathname); setTimeout(() => openFromPush(openHash), 2500); }
     if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.type === 'open') openFromPush(e.data.url); });
@@ -1286,7 +1346,19 @@
   };
   $('gear').onclick = () => { S.page = 'settings'; refreshRoutines().then(() => render(true)); render(); };
   for (const b of document.querySelectorAll('.tab')) b.onclick = () => setTab(b.dataset.tab);
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.rec) { if (S.linkState !== 'open') connect(); else refreshAll(); } });
+  /* BACK IN FRONT. A phone freezes a backgrounded app's socket, and on return it can still look open while it is dead:
+     every call then waited out its 30 s timeout before anything moved. Prove the link with one quick ping, or start a
+     fresh one at once (no back-off: the person is looking right now). Same when the phone gets signal back. */
+  async function resume() {
+    if (!S.rec || document.visibilityState !== 'visible') return;
+    if (S.linkState !== 'open') { if (S.linkState !== 'removed') connect(); return; }
+    const c = S.client;
+    try { await c.call('ping', {}, 2500); if (c === S.client) { S.lastOkAt = Date.now(); refreshAll(); } }
+    catch (_) { if (c === S.client && S.linkState !== 'removed') { S.retryMs = 1000; connect(); } }
+  }
+  document.addEventListener('visibilitychange', resume);
+  window.addEventListener('pageshow', (e) => { if (e.persisted) resume(); });
+  window.addEventListener('online', () => { if (S.rec && S.linkState !== 'open' && S.linkState !== 'removed') { S.retryMs = 1000; connect(); } });
 
   if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
   if (!window.isSecureContext || !(window.crypto && crypto.subtle)) {

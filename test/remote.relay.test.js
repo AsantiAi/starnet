@@ -83,6 +83,21 @@ function wsClose(url) {
       });
       const h = await fetch(abase + '/healthz').then(r => r.json());
       A.eq(h.ok, true, 'and the relay is still up afterwards');
+      // the app is served compressed, with a validator, and its service worker is named after the shell's bytes
+      {
+        const raw = await new Promise((resolve) => require('http').get(abase + '/app.js', { headers: { 'Accept-Encoding': 'gzip' } }, (res) => { const parts = []; res.on('data', d => parts.push(d)); res.on('end', () => resolve({ res, body: Buffer.concat(parts) })); }));
+        A.eq(raw.res.headers['content-encoding'], 'gzip', 'the app script is sent gzipped to a browser that accepts it');
+        const plain = fs.readFileSync(path.join(__dirname, '..', 'relay', 'app', 'app.js'));
+        A.ok(raw.body.length < plain.length / 2, 'at well under half its size (' + raw.body.length + ' of ' + plain.length + ' bytes)');
+        A.ok(require('zlib').gunzipSync(raw.body).equals(plain), 'and it unpacks to the exact file');
+        const etag = raw.res.headers.etag;
+        A.ok(!!etag, 'it carries an ETag');
+        A.eq((await fetch(abase + '/app.js', { headers: { 'If-None-Match': etag } })).status, 304, 'a phone that has it already gets a 304, not the bytes again');
+        const sw = await fetch(abase + '/sw.js').then(r => r.text());
+        A.ok(/const CACHE = 'starnet-remote-[A-Za-z0-9_-]{12}'/.test(sw) && sw.indexOf('%SHELL%') < 0, 'the service worker is served with a fingerprint of the shell in its cache name');
+        const sw2 = await fetch(abase + '/sw.js').then(r => r.text());
+        A.eq(sw2, sw, 'the same shell gives the same name (no needless re-install)');
+      }
       await appRelay.close();
     }
 
