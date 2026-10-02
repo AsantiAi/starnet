@@ -17561,6 +17561,9 @@ async function handleRun(req, res) {
     return makeConsentWait({
       pending, signal: ac.signal, timeoutMs: CONSENT_TIMEOUT_MS, extendMs: CONSENT_ACK_EXTEND_MS,
       uuid: () => crypto.randomUUID(),
+      // nobody answered in time (or the run dropped): the prompt fail-closed to deny — say so on the run's stream
+      // (expired:true, additive) so the desk card and the CREW frame stop asking
+      onAutoDeny: (promptId) => { try { emit('permission.response', { promptId, decision: 'deny', expired: true }); } catch (e) { failNote('consent.autoDenyResponse', e); } },
       emitPrompt: (promptId) => {
         const row = { promptId, agentId, tool: (fields && fields.tool) || 'tool', scope: (fields && fields.scope) || 'write', argsSummary: (fields && fields.argsSummary) || '' };
         emit('permission.prompt', row);
