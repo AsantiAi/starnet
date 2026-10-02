@@ -5,7 +5,7 @@
    2. Shows the station's push notifications. The station encrypts each one to this phone (RFC 8291); the browser
       decrypts it before it arrives here. A tap opens the app on the right screen. */
 'use strict';
-const CACHE = 'starnet-remote-v8';
+const CACHE = 'starnet-remote-v9';
 const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'store.js', 'phone-client.js', 'vt323.woff2', 'icon.svg', 'icon-180.png', 'manifest.webmanifest'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });

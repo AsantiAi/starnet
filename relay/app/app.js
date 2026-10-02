@@ -909,8 +909,12 @@
       const strip = el('div', 'crew');
       for (const a of list.slice().sort((p, q) => (isWorking(q) ? 1 : 0) - (isWorking(p) ? 1 : 0))) {
         const w = isWorking(a);
-        const m = el('button', 'mate' + (S.target === a.agentId ? ' sel' : '') + (w ? ' work' : '')); m.type = 'button';
-        const pw = well(a.agentId); if (w) pw.appendChild(el('i', 'dot work'));
+        // the housed lamp says only what the station says: needs you (an open ask) gold, working amber, idle green;
+        // no lamp while the link is down (the last word could be stale)
+        const asking = S.linkState === 'open' && S.approvals.some(x => x.agentId === a.agentId);
+        const m = el('button', 'mate' + (S.target === a.agentId ? ' sel' : '') + (w ? ' work' : '') + (asking ? ' ask' : '')); m.type = 'button';
+        const pw = well(a.agentId);
+        if (S.linkState === 'open') pw.appendChild(el('i', 'dot ' + (asking ? 'ask' : w ? 'work' : 'ok')));
         m.appendChild(pw);
         m.appendChild(el('b', null, a.name || a.agentId));
         // working: what it is doing in one word (from the station's newest step), and for how long
