@@ -1022,6 +1022,7 @@ test/linedraft.test.js
 test/workflows-window.test.js
 test/build-mode-easy.test.js
 test/worldmodel-moveprops.test.js
+test/buildmode-halls.test.js
 test/trigger-sweep.test.js
 test/steptest-restart-spend.test.js
 test/userprops.test.js
