@@ -7187,7 +7187,15 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // STARNET REMOTE: pair a phone and drive the station from anywhere (app/remote-devices.js owns the pane)
       { id: 'remote', label: 'REMOTE', glyph: '▯', desc: 'Pair your phone and control this station from anywhere.', build: el => { if (typeof RemoteDevices !== 'undefined') RemoteDevices.mount(el, arrangeSettingsPane); else el.textContent = 'Remote is not available in this build.'; } },
       // BROWSER: where the station browser lives — built-in / a Chrome window / your Chrome (app/outputbrowser.js owns the pane)
-      { id: 'browser', label: 'BROWSER', glyph: '◎', desc: 'Where the station browser runs: inside StarNet, as its own Chrome window, or in your own Chrome.', build: el => { if (typeof OutputBrowser !== 'undefined' && OutputBrowser.mountSettings) OutputBrowser.mountSettings(el, arrangeSettingsPane); } },
+      { id: 'browser', label: 'BROWSER', glyph: '◎', desc: 'Where the station browser runs: inside StarNet, as its own Chrome window, or in your own Chrome.', build: el => {
+        if (typeof OutputBrowser !== 'undefined' && OutputBrowser.mountSettings) OutputBrowser.mountSettings(el, arrangeSettingsPane);
+        // SAVED SIGN-INS: STEP-IN is no longer a standing dock button, so the sign-ins it keeps get a door here
+        const row = mkEl('div', 'set-row');
+        row.appendChild(mkEl('span', 'dim', 'SAVED SIGN-INS — the browser sign-ins your agents reuse, from times you took the wheel '));
+        const b = mkEl('button', 'bb sm', 'OPEN SAVED SIGN-INS'); b.type = 'button'; b.id = 'set-open-signins';
+        b.addEventListener('click', () => { sfx('click'); openTerm('stepin'); });
+        row.appendChild(b); el.appendChild(row);
+      } },
       { id: 'system', label: 'APP & BACKUP', glyph: '⚙', desc: 'Startup, runtime limits, backups, updates, and troubleshooting.', build: frag(secSystem) }
     ];
     // THREE HEADINGS (front doors, 2026-10-01): eleven flat sections read as a wall. The same intent groups ABILITIES
@@ -10465,7 +10473,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     // `wide` = wide width only). The old per-window pixel widths (460/540/560/620/640/760/1000) are
     // gone — they made eight windows read as eight unrelated apps. A window earns WIDE only by having
     // a rail, a card grid, or side-by-side columns; everything single-column is a PANEL.
-    commander:['COMMANDER DOSSIER',      buildCommander, { console: true, className: 'commander-console' }],   // focused profile, preferences, briefing, and record sections
+    commander:['YOU · COMMANDER DOSSIER',      buildCommander, { console: true, className: 'commander-console' }],   // focused profile, preferences, briefing, and record sections
     // NAV CONDENSE 2 (2026-08-04): 'skills' is no longer a window key — the skill library/agent-
     // skills sections live in the ABILITIES (connectors) console via AbilityLanes, and per-agent
     // capabilities live in the dossier's SKILLS tab. openTerm keeps the old keys alive as aliases
