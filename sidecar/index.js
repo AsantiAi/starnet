@@ -15593,7 +15593,7 @@ async function handleWorkshopQueue(req, res) {
 // It never invents files or reads unproved paths. Preview hints are an allowlist consumed by the renderer.
 const DELIVERABLE_PREVIEW_MAX = 512 * 1024;
 const DELIVERABLE_IMAGE_MAX = 8 * 1024 * 1024;
-function deliverableFile(agentId, runId, f, workshop) {
+function deliverableFile(agentId, runId, f, workshop, projectRoot) {
   const p = String((f && f.path) || '');
   const bytes = Number.isFinite(f && f.bytes) && f.bytes >= 0 ? Math.floor(f.bytes) : null;
   const ext = path.extname(p).toLowerCase();
@@ -15604,7 +15604,9 @@ function deliverableFile(agentId, runId, f, workshop) {
   const rel = workshop ? ('workshop/' + runId + '/' + p) : p;
   const openUrl = workshop && ext === '.html'
     ? '/workshop-run/' + encodeURIComponent(agentId) + '/' + encodeURIComponent(runId) + '/' + p.split('/').map(encodeURIComponent).join('/')
-    : '/api/file?agent=' + encodeURIComponent(agentId) + '&path=' + encodeURIComponent(rel);
+    : '/api/file?agent=' + encodeURIComponent(agentId) + '&path=' + encodeURIComponent(rel)
+      // a project session wrote its relative paths INSIDE the project: open them there (serveWorkspaceFile ?project=)
+      + (!workshop && projectRoot && p && !path.isAbsolute(p) ? '&project=' + encodeURIComponent(projectRoot) : '');
   return { path: p, bytes, preview, openUrl, sandboxed: workshop && ext === '.html' };
 }
 function deliverableSize(files) {
@@ -15691,7 +15693,7 @@ async function deliverableRows() {
       // The agent NAMED this run's work, so the run is ONE deliverable with N files — not N unrelated rows. The
       // authored title/summary/kind ride as prose; `main` is only honored when it names a file the run actually
       // produced (never trust the model's path — the same rule the Workshop manifest applies to its own file list).
-      const files = arts.filter(a => a.path).map(a => deliverableFile(run.agentId, run.runId, a, false));
+      const files = arts.filter(a => a.path).map(a => deliverableFile(run.agentId, run.runId, a, false, run.projectRoot || ''));
       const main = note.main && files.some(f => f.path === note.main) ? note.main : '';
       rows.push({
         id: 'run:' + run.runId, agentId: run.agentId, runId: run.runId, title: note.title, source: 'run', status: status,
@@ -15706,7 +15708,7 @@ async function deliverableRows() {
     // dressing it up as a description.
     arts.forEach((a, i) => {
       const p = a.path || '';
-      const files = p ? [deliverableFile(run.agentId, run.runId, a, false)] : [];
+      const files = p ? [deliverableFile(run.agentId, run.runId, a, false, run.projectRoot || '')] : [];
       rows.push({ id: 'run:' + run.runId + ':' + i, agentId: run.agentId, runId: run.runId, title: path.basename(p || a.target || (run.title + ' output')), source: 'run', status: status, kind: a.kind, summary: '', authored: false, ask: ask, files, target: a.target || '', size: deliverableSize(files), createdAt: run.ts || 0, updatedAt: run.ts || 0, actions: { open: files.length > 0, keep: false, discard: false } });
     });
   }
@@ -23516,7 +23518,23 @@ async function serveWorkspaceFile(req, res) {
     const u = new URL(req.url, 'http://127.0.0.1');
     const agent = u.searchParams.get('agent') || 'agent';
     const rel = u.searchParams.get('path') || '';
-    ({ abs } = await fsJail.resolveInside(agent, rel));   // throws on jail escape / bad agentId / '..'
+    const project = u.searchParams.get('project') || '';
+    if (project) {
+      /* A PROJECT SESSION'S DELIVERABLE (sweep 2026-10-02): its relative path was written inside the project folder, so
+         resolving it in the agent's private workspace OPENED A DIFFERENT FILE (an older same-named one) or a 404. Only a
+         currently BLESSED project root; a relative, '..'-free path whose realpath stays inside it; and the same protected-
+         file floor the agents' own file tools meet (.env, .git …). */
+      const root = fs.realpathSync(String(project));
+      if (!isBlessedRoot(root)) throw new Error('escape: that project is not trusted');
+      if (!rel || rel.indexOf('\0') >= 0 || path.isAbsolute(rel) || /^[A-Za-z]:/.test(rel) || /(^|[\\/])\.\.([\\/]|$)/.test(rel)) throw new Error('illegal path');
+      const real = fs.realpathSync(path.resolve(root, rel));
+      const relOut = path.relative(root, real);
+      if (!relOut || relOut.startsWith('..') || path.isAbsolute(relOut)) throw new Error('escape: outside the project');
+      if (pathTrustCore._internals.hardlineReason(real, real)) throw new Error('escape: a protected file');
+      abs = real;
+    } else {
+      ({ abs } = await fsJail.resolveInside(agent, rel));   // throws on jail escape / bad agentId / '..'
+    }
   } catch (e) {
     const msg = (e && e.message) || '';
     if (/escape|illegal|bad agentId|bad notebook/.test(msg)) { res.writeHead(403); return res.end('forbidden'); }
