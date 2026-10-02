@@ -20980,6 +20980,11 @@ async function runOnceCore(o) {
   if (_gateScout) _auxCandidates.push('scout');
   if (_gateSkillReview) _auxCandidates.push('skill-review');
   if (_gateCurator) _auxCandidates.push('skill-curator');
+  // A RUN STOPPED BY ITS SPENDING CAP SPENDS NOTHING MORE: every pass below is a paid call, and a run that ended on 'budget' (or an
+  // agent whose cap is reached now) sent its failure review straight to the provider the cap had just stopped
+  let _capReached = !!(result && result.reason === 'budget');
+  if (!_capReached && !providerUnmetered) { try { _capReached = !!budget.check(null, agentId, 0, Date.now(), null); } catch (e) { failNote('aux.budget', e); } }
+  if (_capReached) _auxCandidates.length = 0;
   const _auxBudget = AuxGovernor.parseBudget(process.env.SKYNET_AUX_BUDGET);
   const _auxPlan = AuxGovernor.decide({ candidates: _auxCandidates, budget: _auxBudget, reserved: ['skill-review'] });
   const _auxSpend = new Set(_auxPlan.spend);

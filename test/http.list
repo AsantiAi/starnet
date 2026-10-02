@@ -34,6 +34,7 @@ test/scout.e2e.test.js
 test/auxbudget.e2e.test.js
 test/auxmodel.e2e.test.js
 test/failreview.e2e.test.js
+test/failreview-budget.e2e.test.js
 test/questrefresh.e2e.test.js
 test/e2e.run.test.js
 test/image-task.e2e.test.js
