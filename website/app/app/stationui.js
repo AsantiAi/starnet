@@ -1387,6 +1387,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     // pick the section to land on: remembered > first. A stale remembered id (section removed) falls back.
     let activeId = consoleSection[key];
     if (key === 'settings' && activeId === 'nightshift') activeId = 'autonomy';   // folded into AUTONOMY (ONE WORD: AUTONOMY)
+    if (key === 'settings' && (activeId === 'models' || activeId === 'livevoice')) activeId = activeId === 'models' ? 'providers' : 'appearance';   // the same aliases openTerm applies (a remembered LIVE VOICE reopened on AI & MODELS)
     if (!sections.some(s => s.id === activeId)) activeId = sections[0] && sections[0].id;
 
     // ---- left: optional rail-top slot (e.g. the dossier roster) + optional search + the section rail (role=tablist) ----
