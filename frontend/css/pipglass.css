@@ -153,3 +153,38 @@ body.glass-demo:not(.hud-mode) {
   --pg-dither-gold: linear-gradient(rgba(var(--gold-rgb), .14), rgba(var(--gold-rgb), .14));
 }
 body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar) :is(h3, .crew-name, .crew-clock, .crew-status, .crew-step, .ws-tab, #ws-new, .ws-row, .bb-grp, .tb-val, .tb-lbl, #status-pill, #crew-sum, .ctx-gauge, .cmsg-empty-line, .cmsg-starter-title) { text-shadow: none; }
+
+/* ============================================================
+   BALANCE (Andrew 10-02: "needs a bit more of that glass style back … the perfect balance between the two …
+   SO CLOSE"). The glass returns at roughly half strength while what he called shine and fade stays out:
+   softer corners, a little frosted translucency, a barely-there tint, glass-gradient keys / lit rows, and
+   a faint top edge (about a third of the old top-light). No sheen band, no amber haze, readouts stay bright.
+   ============================================================ */
+body.glass-demo:not(.hud-mode) {
+  --gd-face: linear-gradient(170deg, rgba(var(--ph-rgb), .035), transparent 45%), color-mix(in srgb, var(--panel2) 88%, transparent);
+  --gd-light: rgba(var(--ph-bright-rgb), .045);
+  --gd-hover: linear-gradient(120deg, rgba(var(--ph-rgb), .13), rgba(var(--ph-rgb), .04) 70%);
+  --cg-glass: linear-gradient(125deg, rgba(var(--ph-bright-rgb), .05), rgba(var(--ph-rgb), .025) 48%, rgba(var(--ph-rgb), .01));
+  --cg-card: linear-gradient(165deg, rgba(var(--ph-rgb), .05), transparent 50%), rgba(0, 0, 0, .25);
+  --pg-dither: linear-gradient(120deg, rgba(var(--ph-rgb), .17), rgba(var(--ph-rgb), .06));
+  --pg-dither-gold: linear-gradient(120deg, rgba(var(--gold-rgb), .18), rgba(var(--gold-rgb), .06));
+}
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar) {
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 var(--gd-light), 0 8px 26px rgba(0, 0, 0, .38);
+  -webkit-backdrop-filter: blur(14px) saturate(1.05); backdrop-filter: blur(14px) saturate(1.05);
+}
+body.glass-demo:not(.hud-mode) #screen-game:not(.cinema) #stage-wrap,
+body.glass-demo:not(.hud-mode) #screen-game:not(.cinema) #stage-wrap::before { border-radius: 8px; }
+body.glass-demo:not(.hud-mode) #screen-game :is(#left > h3, #chat-panel > h3) { border-radius: 8px 8px 0 0; }
+body.glass-demo:not(.hud-mode) #crew .crew-row,
+body.glass-demo:not(.hud-mode) #left #workstreams .ws-row,
+body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty .cmsg-starter { border-radius: 6px; }
+body.glass-demo:not(.hud-mode) #crew .crew-portrait { border-radius: 6px; }
+body.glass-demo:not(.hud-mode) #crew .crew-portrait > .dot { border-radius: 50%; width: 8px; height: 8px; }
+body.glass-demo:not(.hud-mode) #left .ws-head :is(.ws-tab, #ws-new, #ws-addproject),
+body.glass-demo:not(.hud-mode) #left #ws-search,
+body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group > .bb-grp,
+body.glass-demo:not(.hud-mode) #screen-game .widget-rail .wg-add { border-radius: 6px; }
+body.glass-demo:not(.hud-mode) #left .ws-head :is(.ws-tab, #ws-new, #ws-addproject) { background: var(--cg-glass); box-shadow: inset 0 1px 0 var(--gd-light); }
+body.glass-demo:not(.hud-mode) #topbar :is(.tb-stat, .tb-connection) { background: var(--cg-card); box-shadow: inset 0 1px 0 var(--gd-light); border-radius: 6px; }
