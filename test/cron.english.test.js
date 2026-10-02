@@ -64,7 +64,13 @@ A.eq(cron.parseSchedule('tomorrow at 9am', NOW, { tz: 'Europe/London' }).runAt, 
 A.eq(cron.parseSchedule('every day at 7am', NOW, { tz: TZ }).tz, TZ, 'tz attached to English cron');
 
 // refusals stay refusals
-for (const bad of ['whenever i feel like it', 'last day of every month', 'every day at 25:00', 'at 9:15 and 5:40 every day', 'sometime next week', '']) {
+for (const bad of ['whenever i feel like it', 'last day of every month', 'every day at 25:00', 'at 9:15 and 5:40 every day', 'sometime next week', '',
+  // sweep 2026-10-01: each of these used to SAVE a different schedule than its words (in brackets)
+  'every day except sunday at 9am' /* Sundays only */, 'every day except weekends at 9am' /* weekends only */,
+  'every weekday except friday' /* Mon-Fri */, 'every 2 days at 9am' /* daily */, 'every 3 days at 8am' /* daily */,
+  'every year on jan 1 at 9am' /* daily */, 'every quarter at 9am' /* daily */,
+  'the first monday of every month at 9am' /* the 1st */, 'first monday of the month at 9am' /* every Monday */,
+  'the last friday of every month at 5pm' /* the 1st */, '9am on the 15th' /* once, tomorrow */]) {
   A.eq(cron.parseSchedule(bad, NOW, { defaultTz: TZ }), null, 'refused: "' + bad + '"');
 }
 

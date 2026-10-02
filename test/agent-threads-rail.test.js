@@ -63,6 +63,12 @@ A.ok(/ws\.id === Workstreams\.generalId\(\) \|\| !Workstreams\.setAgent\(ws\.id,
   '+ NEW while narrowed binds the new session to that agent, never rebinding General');
 A.ok(/Workstreams\.search\(q\)\.filter\(hit => \{ if \(!railAgentFilter\) return true;/.test(app), 'search stays inside the narrowed agent');
 A.ok(/filterRailByAgent: setRailAgentFilter/.test(app), 'App exposes the filter to the roster');
+A.ok(/if \(w\.archived && \(!railAgentFilter \|\| railHasAgent\(w, railAgentFilter\)\)\) n\+\+;/.test(app),
+  'narrowed, the "N archived" row counts only that agent\'s archived sessions (it never promises rows it won\'t show)');
+A.ok(/const ws = Workstreams\.switch\(id\); if \(!ws\) return;\s*\/\/[^\n]*\n[^\n]*\n\s*if \(railAgentFilter && !railHasAgent\(ws, railAgentFilter\)\) \{ railAgentFilter = null;/.test(app),
+  'opening a session from elsewhere that the narrowed rail does not list returns to every session');
+A.ok(/if \(railAgentFilter && railAgentFilter !== id\) \{ railAgentFilter = null;/.test(app),
+  'the COMMS picker rebinding the open blank line to another agent keeps that line on the rail');
 A.ok(!/localStorage\.setItem\([^)]*railAgentFilter/.test(app), 'the narrowed view is view state only — never persisted');
 
 A.ok(/if \(present\.length > 1 && typeof App !== 'undefined' && App\.filterRailByAgent\) App\.filterRailByAgent\(li\.dataset\.agentId\);\s*else openAgent\(\+li\.dataset\.i\);/.test(ui),
@@ -71,5 +77,15 @@ A.ok(/li\.addEventListener\('contextmenu', ev => \{ ev\.preventDefault\(\); sfx\
   'right-click (and Shift+F10) on a crew row opens the dossier');
 A.ok(/present\.length > 1 \? '<button type="button" class="crew-dossier"/.test(ui), 'the DOSSIER key shows only when the click is a filter');
 A.ok(/row\.classList\.toggle\('filtering', !!railFilter && a\.id === railFilter\)/.test(ui), 'the narrowed agent\'s row is marked');
+
+// sweep 2026-10-01
+A.ok(/ev\.key === 'ContextMenu' \|\| \(ev\.shiftKey && ev\.key === 'F10'\)\) \{ ev\.preventDefault\(\); sfx\('click'\); openAgent\(\+li\.dataset\.i\); \}/.test(ui),
+  'Shift+F10 / the menu key open the dossier from the keydown too (WKWebView fires no contextmenu for it)');
+A.ok(/if \(railAttentionOnly && railAgentFilter\) \{ railAgentFilter = null;/.test(app),
+  '"Waiting for you" shows every waiting session — the station-wide count never opens a narrowed, blank rail');
+const desk = read('frontend/app/deskscreen.js');
+A.ok(/deskAgentId = String\(agentId\);/.test(ui) && !/function openDesk\(agentId\) \{[^}]*\bsel = i;/.test(ui) && /get deskAgentId\(\) \{ return deskAgentId; \}/.test(ui),
+  'opening a desk sets the desk\'s own target, never the dossier\'s selection');
+A.ok(/H\.deskAgentId && H\.present\.find\(x => x && x\.id === H\.deskAgentId\)/.test(desk), 'the desk window builds from its own target');
 
 A.report('agent-threads-rail.test');

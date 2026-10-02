@@ -146,8 +146,12 @@ async function rejects(promise, msg) { try { await promise; A.ok(false, msg + ' 
     const PT = makeFsTools({ fsp, pathMod: path, root: ROOT, pathTrust: guard, limits: { writeBytes: 64, readReturn: 1000 } });
     const ctx = { agentId: 'project-agent', projectRoot: project };
     A.eq((await PT.readTool.run({ path: 'incident.log' }, ctx)).content, 'PROJECT_LOG', 'project-scoped fs.read resolves a relative path at projectRoot');
-    await PT.writeTool.run({ path: 'fix.txt', content: 'PROJECT_FIX' }, ctx);
+    const pw = await PT.writeTool.run({ path: 'fix.txt', content: 'PROJECT_FIX' }, ctx);
     A.eq(await fsp.readFile(path.join(project, 'fix.txt'), 'utf8'), 'PROJECT_FIX', 'project-scoped fs.write lands in projectRoot');
+    // issue #60: the receipt names WHERE the bytes went, so a verified write can't hide a wrong base folder
+    A.ok(pw.content.indexOf('[location: ' + path.join(project, 'fix.txt') + ']') >= 0, 'project write receipt names the absolute project location');
+    const privW = await PT.writeTool.run({ path: 'priv.txt', content: 'P' }, { agentId: 'project-agent' });
+    A.ok(/\[location: .*priv\.txt \(your private workspace, not a project folder\)\]/.test(privW.content), 'unscoped write receipt says it landed in the private workspace, not a project');
     A.ok(!fs.existsSync(path.join(ROOT, 'project-agent', 'fix.txt')), 'project write does not silently land in the private workspace');
     A.ok(guarded.some(x => x.scope === 'read') && guarded.some(x => x.scope === 'write'), 'project-relative reads and writes still pass through path trust');
     await rejects(PT.readTool.run({ path: '../outside.txt' }, ctx), 'project-relative traversal remains illegal');

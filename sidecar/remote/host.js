@@ -148,6 +148,9 @@ function makeRemoteHost(d) {
     const flush = () => { timer = null; broadcast({ type: 'run.text', runId, text: clip(buf, 20000) }); };
     const emit = (name, payload) => {
       const p = payload || {};
+      // a delegated worker's lifecycle rides the lead's emit (orchestration forwards it): a worker that errored and
+      // was recovered from must not turn THIS run's phone result red — the same runId filter harness.js applies.
+      if ((name === 'agent.run.error' || name === 'agent.run.end') && p.runId && p.runId !== runId) return;
       if (name === 'agent.token') { buf += (p.delta || ''); if (!timer) timer = setTimeout(flush, TEXT_FLUSH_MS); }
       else if (name === 'agent.tool_call') { buf = ''; broadcast({ type: 'run.tool', runId, callId: String(p.callId || ''), name: clip(p.name, 80), summary: clip(p.argsSummary, 400) }); }
       else if (name === 'agent.tool_result') broadcast({ type: 'run.step', runId, callId: String(p.callId || ''), ok: !!p.ok && !p.isError, ms: Number(p.ms) || 0 });

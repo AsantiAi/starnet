@@ -152,6 +152,24 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
   await I.step();
   A.eq(posts.length, 4, 'a station that lost its picture (restart) gets a new one without a phone asking');
 
+  // an unchanged room says "same" — but a sidecar that no longer HOLDS the picture (restart) answers 409, and the page
+  // must then send the full still instead of re-posting "same" forever (sweep 2026-10-01)
+  {
+    const realFetch = globalThis.fetch; let held = true; const sent = [];
+    globalThis.fetch = async (url, o) => {
+      if (o && o.method === 'POST') { const b = JSON.parse(o.body); sent.push(b.same ? 'same' : 'full'); return { ok: !b.same || held, json: async () => ({ ok: !b.same || held }) }; }
+      return { ok: true, json: async () => ({ ok: true, enabled: true, want: true, at: 1 }) };
+    };
+    still = { canvas: {}, width: 2, height: 2, scale: 1, bodies: [] };
+    I.encode = async () => ({ mime: 'image/webp', data: 'U0FNRQ==' });
+    await I.step(); await I.step();
+    A.eq(sent, ['full', 'same'], 'an unchanged room is only confirmed as the same');
+    held = false; sent.length = 0;
+    await I.step();
+    A.eq(sent, ['same', 'full'], 'a station that lost the picture (409 on "same") gets the full still right away');
+    globalThis.fetch = realFetch;
+  }
+
   answer = null;
   A.eq(await I.step(), I.IDLE_MS, 'an unreachable station: nothing drawn, nothing thrown');
   A.eq(posts.length, 4, 'and nothing sent');
@@ -262,6 +280,26 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
   await I.sendCrew();
   A.eq(crewPosts.length, 1, 'an unchanged crew is not sent again straight away');
   RemoteView.reset();
+
+  // a delegated WORKER's error/end (forwarded onto the lead's emit) must not mark the phone's run failed
+  {
+    const evs = [];
+    const hw = makeRemoteHost({
+      now: () => Date.now(), newId: () => 'lead-run', broadcast: e => evs.push(e),
+      roster: () => [{ agentId: 'lead', name: 'LEAD' }], liveRuns: () => [], transcript: { history: () => [], streams: () => [] },
+      credentials: () => ({ ok: true, key: 'k', model: 'm', provider: 'p' }), askConsent: () => Promise.resolve('deny'),
+      runOnce: async o => {
+        o.emit('agent.run.error', { agentId: 'worker', runId: 'worker-run', message: 'worker provider 500' });
+        o.emit('agent.run.end', { agentId: 'worker', runId: 'worker-run', reason: 'error', usd: 0 });
+        o.emit('agent.run.end', { agentId: 'lead', runId: o.runId, reason: 'done', usd: 0.01 });
+      }
+    });
+    await hw.send({ agentId: 'lead', text: 'do it', streamId: '', deviceId: 'd1' });
+    await new Promise(r => setTimeout(r, 50));
+    const ended = evs.find(e => e.type === 'run.ended');
+    A.ok(ended && ended.reason === 'done' && !ended.error, 'a recovered worker error does not turn the phone run red');
+    A.eq(hw.recentRuns()[0] && hw.recentRuns()[0].ok, true, 'the phone recent row says the lead run succeeded');
+  }
 
   A.report('remote-view');
 })().catch((e) => { console.log('FAIL: threw ' + (e && e.stack || e)); process.exit(1); });
