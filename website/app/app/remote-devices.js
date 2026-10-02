@@ -73,7 +73,7 @@
         cb.onchange = async () => {
           const id = cb.getAttribute('data-askfirst'), on = cb.checked;
           cb.disabled = true;
-          try { snap = await api('/api/remote/device', { deviceId: id, askFirst: on }); say(on ? 'That phone now asks before every step that needs an OK.' : 'That phone now works with this desk’s permissions (agents on full access act without asking).'); paint(); }
+          try { snap = await api('/api/remote/device', { deviceId: id, askFirst: on }); say(on ? 'From its next task, that phone asks before every step that needs an OK (a task it is running now keeps the permissions it started with).' : 'That phone now works with this desk’s permissions (agents on full access act without asking).'); paint(); }
           catch (e) { cb.checked = !on; cb.disabled = false; say(e.message, true); }
         };
       });

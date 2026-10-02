@@ -930,6 +930,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const drafts = w && w.querySelector && w.querySelector('.term-body')?._questDrafts;
     return !!(w && w.querySelector && w.querySelector('textarea[data-dirty="1"]'))
       || !!(w && w.querySelector && w.querySelector('.quests-content input[data-dirty="1"]'))
+      // a one-line composer that holds a draft (TASKS' "What would you like to get done?"): typed text is unsaved work, so a
+      // tab click or ✕ arms the guard instead of dropping it (QA 2026-10-02 — 0.12.5 kept TASKS in its own window)
+      || !!(w && w.querySelectorAll && Array.from(w.querySelectorAll('input[data-draft]')).some(i => String(i.value || '').trim()))
       || !!(drafts && Array.from(drafts.values()).some(d => d.dirty));
   }
   function requestCloseTerm(key) {
@@ -4473,7 +4476,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const openMenus = live ? Array.from(body.querySelectorAll('.kb-more[open]')).map(d => d.closest('.kb-card').dataset.id) : [];
     body.innerHTML =
       '<div class="kb-heading"><header class="kb-header"><h2>Your tasks</h2><p>Plan, start, and review your work.</p></header></div>' +   // OUTBOX / DELIVERABLES are this window's MY WORK tabs now (FAMILIES) — no second pair of doors here
-      '<div class="kb-add"><input id="kb-in" aria-label="New task" maxlength="80" placeholder="What would you like to get done?" autocomplete="off">' +
+      '<div class="kb-add"><input id="kb-in" data-draft aria-label="New task" maxlength="80" placeholder="What would you like to get done?" autocomplete="off">' +
       '<button class="bb sm" id="kb-add">ADD TASK</button></div><p class="kb-add-note">Adding saves your plan. Start sends the task to its agent.</p>' +
       '<div class="kb-cols">' +
       COLS.map(([lane, label]) => {

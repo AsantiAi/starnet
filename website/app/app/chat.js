@@ -599,6 +599,9 @@ const Chat = (() => {
       let url = m[0];
       const trail = /[.,;:!?'")\]}>*`]+$/.exec(url); // don't swallow sentence punctuation OR markdown markers (**url**, `url`) trailing the URL
       if (trail) url = url.slice(0, url.length - trail[0].length);
+      // a ')' that CLOSES a '(' inside the URL is part of it (https://en.wikipedia.org/wiki/Foo_(bar) linked to …Foo_(bar, a 404 —
+      // QA 2026-10-02); only an unbalanced ')' is sentence punctuation
+      while (m[0].charAt(url.length) === ')' && (url.split('(').length - 1) > (url.split(')').length - 1)) url += ')';
       if (!url) continue;                            // pathological match (scheme only) — let escape handle it
       out += escapeHtml(s.slice(last, m.index));     // escaped text before the URL
       const safe = escapeHtml(url);                  // escape the URL too (its href + visible text are both safe)
@@ -628,6 +631,17 @@ const Chat = (() => {
       '<span class="md-pre">' + escapeHtml(lines.join('\n')) + '</span>' +
       '</span>';
   }
+  /* A LABEL THAT IS AN ADDRESS SHOWS WHERE IT REALLY GOES (QA 2026-10-02). [https://bank.com](https://evil.com) read as
+     bank.com and opened evil.com — agent output can be steered by a page the agent read, and the desktop window has no
+     status bar to show a link's target. When the label names a host the target does not have, the target's host follows. */
+  function hostOf(u) {
+    const m = /^(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)(?=[\/:?#]|$)/i.exec(String(u || '').trim());
+    return m ? m[1].toLowerCase() : '';
+  }
+  function linkHostNote(label, href) {
+    const shown = hostOf(label), real = hostOf(href);
+    return (shown && real && shown !== real) ? ' <span class="md-host">(' + escapeHtml(real) + ')</span>' : '';
+  }
   function reportInline(raw) {
     // Tokenize raw text before escaping; generated markup never enters another pass.
     const re = /`([^`\n]+)`|\[([^\]\n]+)\]\((https?:\/\/[^\s<>"']+)\)|\*\*([^*\n]+)\*\*|https?:\/\/[^\s<>"']+/g;
@@ -637,8 +651,10 @@ const Chat = (() => {
       // A code span that IS a URL (`http://localhost:8765`) stays code-styled but clickable: models
       // backtick server addresses constantly, and a dead address costs the user a copy-paste.
       if(m[1]!==undefined){const code='<code class="md-code">'+escapeHtml(m[1])+'</code>';out+=/^https?:\/\/[^\s<>"'`]+$/.test(m[1])?'<a href="'+escapeHtml(m[1])+'" target="_blank" rel="noopener noreferrer">'+code+'</a>':code;}
-      else if(m[2]!==undefined)out+='<a href="'+escapeHtml(m[3])+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(m[2])+'</a>';
-      else if(m[4]!==undefined)out+='<span class="md-b">'+linkify(m[4])+'</span>';   // **http://x** links too (linkify escapes)
+      else if(m[2]!==undefined)out+='<a href="'+escapeHtml(m[3])+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(m[2])+'</a>'+linkHostNote(m[2],m[3]);
+      // bold holds no '*', so its inside can be read again for code, [label](url) and bare links (QA 2026-10-02: **`npm run dev`**
+      // showed its backticks, **[docs](url)** showed '[docs](' around a bare link); reportInline escapes everything it emits
+      else if(m[4]!==undefined)out+='<span class="md-b">'+reportInline(m[4])+'</span>';
       else out+=linkify(m[0]);
       last=re.lastIndex;
     }
@@ -813,6 +829,22 @@ const Chat = (() => {
       });   // at the bottom → retire the pill; scrolled up → a persistent "↓ latest" affordance
       // A real attempt to inspect history wins even during the two-frame settle window.
       ['wheel', 'touchstart', 'pointerdown'].forEach(type => log.addEventListener(type, cancelHistoryPin, { passive: true }));
+    }
+    // LINKS OUTSIDE COMMS (QA 2026-10-02): group chats, a group's .md file preview and the WORKFLOWS results render through
+    // this same renderProse, but the OS-browser hand-off below lives on #chat-log only — so on desktop those links were dead
+    // (a target=_blank <a> goes nowhere under the Tauri window policy). One document-level handler, wired once, covers them.
+    if (typeof document !== 'undefined' && !document.__proseLinksWired) {
+      document.__proseLinksWired = true;
+      document.addEventListener('click', e => {
+        if (e.defaultPrevented || !e.target || !e.target.closest) return;
+        const link = e.target.closest('#gc-log a, #gc-preview a, .wf-md a');
+        if (!link || !/^https?:\/\//i.test(link.getAttribute('href') || '')) return;
+        if (window.getSelection && String(window.getSelection())) { e.preventDefault(); return; }   // ending a text selection never opens a link
+        const invoke = (window.__TAURI__ && window.__TAURI__.core) ? window.__TAURI__.core.invoke : null;
+        if (!invoke) return;   // a plain browser: target=_blank works as is
+        e.preventDefault();
+        invoke('open_external_url', { url: link.href }).catch(() => { if (typeof StationUI !== 'undefined' && StationUI.notify) StationUI.notify('could not open your browser for that link', 'warn'); });
+      });
     }
     // COPY: one delegated click handler for every (current + future) message row's ⧉ button — copies the
     // row's prose, then flashes a ✓ confirm. Wired once per log element so a re-init can't stack handlers.
@@ -4587,7 +4619,10 @@ const Chat = (() => {
     // (2026-10-02, Andrew: "remembered should just show up collapsed") — a toggle header; the list opens on click.
     const cap = document.createElement('button'); cap.type = 'button'; cap.className = 'receipt-head';
     cap.setAttribute('aria-expanded', 'false');
-    cap.textContent = 'remembered · ' + batch.proposals.length;
+    // the count is what is STILL remembered: a forgotten line leaves it (QA 2026-10-02 — "remembered · 3" stood after a forget)
+    let forgotten = 0;
+    const capText = () => { const kept = batch.proposals.length - forgotten; cap.textContent = 'remembered · ' + kept + (forgotten ? ' (' + forgotten + ' forgotten)' : ''); };
+    capText();
     const list = document.createElement('div'); list.className = 'receipt-items'; list.hidden = true;
     cap.onclick = () => { const open = list.hidden; list.hidden = !open; cap.setAttribute('aria-expanded', String(open)); head.d.classList.toggle('open', open); };
     head.body.appendChild(cap);
@@ -4607,6 +4642,7 @@ const Chat = (() => {
           veto.remove();
           item.classList.add('vetoed');
           text.textContent = 'forgotten: ' + prop.content;   // muted state; stays denylisted (Memory Core Restore is the undo)
+          forgotten += 1; capText();
         } else {
           busy = false; veto.disabled = false;
           if (typeof StationUI !== 'undefined') StationUI.notify('could not forget that ' + (prop.kind === 'skill' ? 'skill' : 'memory') + ' - try again', 'warn');
@@ -6884,11 +6920,27 @@ const Chat = (() => {
       if (renderQueued) return;
       if (typeof requestAnimationFrame !== 'function' || (typeof document !== 'undefined' && document.hidden)) { flushProse(); autoscroll(); return; }
       renderQueued = true;
-      requestAnimationFrame(() => { if (!renderQueued) return; flushProse(); autoscroll(); });
+      requestAnimationFrame(() => { if (!renderQueued || held) return; flushProse(); autoscroll(); });
+    }
+    /* A POINTER DOWN ON THE LIVE REPLY HOLDS ITS RE-RENDER (QA 2026-10-02). Every frame rebuilt the paragraph, replacing the
+       <a> between mousedown and mouseup — the click landed on .body and a link in a still-streaming reply never opened (and a
+       text selection inside it was wiped). Held until the click has been dispatched, then the queued text lands at once. */
+    let held = false;
+    function holdWhilePressed() {
+      held = true;
+      let safety = null;   // a release outside the window never strands the live reply: the text comes back after 4 s
+      const up = () => {
+        clearTimeout(safety);
+        document.removeEventListener('pointerup', up, true); document.removeEventListener('pointercancel', up, true);
+        setTimeout(() => { held = false; if (renderQueued) { flushProse(); autoscroll(); } }, 0);   // after the click event, never before it
+      };
+      document.addEventListener('pointerup', up, true); document.addEventListener('pointercancel', up, true);
+      safety = setTimeout(up, 4000);
     }
     function open() {
       endToolRail();   // a fresh prose paragraph opening below a rail closes it, so the next tool call starts a NEW rail under this prose (keeps chronological "said → did → said → did")
       seg = row('agent', { stamp: true, who: whoName || null }); raw = '';
+      if (seg.body && seg.body.addEventListener) seg.body.addEventListener('pointerdown', holdWhilePressed);
       caret = document.createElement('span'); caret.className = 'caret'; caret.textContent = '▮';
       seg.d.appendChild(caret);   // caret is a sibling of .body, so re-rendering .body's content never disturbs it
     }
