@@ -1,0 +1,418 @@
+/* PIP-GLASS (Andrew 10-01). "a fallout pip boy 3000 style … it needs that glassiness, with the pip boy aesthetic",
+   then "still too smooth … more like that black mirror bandersnatch, fallout pip boy, ascii matrix vibe".
+   The panels stay translucent glass; what was SMOOTH (soft gradients, wide blur glows, big round corners) gives
+   way to StarNet's own retro vocabulary — the world's 2026-09-03 "90s Bandersnatch" CRT pass and the ASCII kit:
+     · BANDERSNATCH FRINGE — a faint red / blue split on the phosphor type, the world's colour bleed on the glass
+     · DITHER, NOT GRADIENT — a lit row / open tab is a 1px ordered-dither ▒ field with a crisp 1px edge
+     · CRISP — 4px corners, 1px lines, small tight glows; a curved-glass sheen + tube vignette on each panel
+     · PIP-BOY RULES — section headers sit on a thin rule with end ticks
+     · ASCII — the CTX gauge keeps its ▮▯ cells; dock labels and crew status decode out of glyph-static
+       (AsciiFX.scramble, wired in crewcards.js)
+   No texture or grain over text, no flat-square-invert bars (both rejected). Layout and features untouched. */
+body.glass-demo {
+  --pg-fringe: -0.6px 0 rgba(255, 64, 48, .38), 0.6px 0 rgba(64, 150, 255, .34);
+  --pg-glow: var(--pg-fringe), 0 0 3px rgba(var(--ph-rgb), .5);
+  --pg-glow-soft: -0.5px 0 rgba(255, 64, 48, .22), 0.5px 0 rgba(64, 150, 255, .2), 0 0 2px rgba(var(--ph-rgb), .3);
+  --pg-line: rgba(var(--ph-rgb), .42);
+  --pg-dither: repeating-conic-gradient(rgba(var(--ph-rgb), .2) 0 25%, transparent 0 50%) 0 0 / 2px 2px;
+  --pg-dither-gold: repeating-conic-gradient(rgba(var(--gold-rgb), .22) 0 25%, transparent 0 50%) 0 0 / 2px 2px;
+}
+
+/* ---------- 1 · every panel is a crisp curved phosphor screen ---------- */
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar) { border-radius: 4px; }
+body.glass-demo:not(.hud-mode) #screen-game:not(.cinema) #stage-wrap,
+body.glass-demo:not(.hud-mode) #screen-game:not(.cinema) #stage-wrap::before { border-radius: 4px; }
+body.glass-demo:not(.hud-mode) #screen-game :is(#left > h3, #chat-panel > h3) { border-radius: 4px 4px 0 0; }
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar)::before {
+  content: ''; position: absolute; inset: 0; z-index: 4; pointer-events: none; opacity: 1;
+  border-radius: inherit;
+  background:
+    linear-gradient(176deg, rgba(255, 238, 205, .05), rgba(255, 238, 205, .01) 20%, transparent 30%),
+    radial-gradient(ellipse 125% 105% at 50% 42%, transparent 64%, rgba(0, 0, 0, .4) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 238, 205, .08), inset 0 0 0 1px rgba(0, 0, 0, .5);
+}
+
+/* ---------- 2 · phosphor type with the Bandersnatch fringe ---------- */
+body.glass-demo:not(.hud-mode) #screen-game :is(#left > h3, #chat-panel > h3, #crew .crew-name, #crew .crew-clock, .ws-tab, #ws-new, #bottombar .bb-grp, #topbar .tb-val, #topbar #status-pill, .cmsg-empty-line, .cmsg-starter-title) { text-shadow: var(--pg-glow); }
+body.glass-demo:not(.hud-mode) #screen-game :is(#crew .crew-status, #crew .crew-step, #left .ws-row, #crew-sum, #topbar .tb-lbl, .ctx-gauge) { text-shadow: var(--pg-glow-soft); }
+
+/* ---------- 3 · Pip-Boy section rules: a thin line with end ticks ---------- */
+body.glass-demo:not(.hud-mode) #screen-game :is(#left > h3, #chat-panel > h3) {
+  border-bottom: 0;
+  background:
+    linear-gradient(var(--pg-line), var(--pg-line)) left 10px bottom 0 / calc(100% - 20px) 1px no-repeat,
+    linear-gradient(var(--pg-line), var(--pg-line)) left 10px bottom 0 / 1px 6px no-repeat,
+    linear-gradient(var(--pg-line), var(--pg-line)) right 10px bottom 0 / 1px 6px no-repeat;
+}
+body.glass-demo:not(.hud-mode) #screen-game #left .ws-head {
+  border-block: 0;
+  background:
+    linear-gradient(var(--pg-line), var(--pg-line)) left 10px top 0 / calc(100% - 20px) 1px no-repeat,
+    linear-gradient(var(--pg-line), var(--pg-line)) left 10px top 0 / 1px 6px no-repeat,
+    linear-gradient(var(--pg-line), var(--pg-line)) right 10px top 0 / 1px 6px no-repeat;
+}
+
+/* ---------- 4 · crisp shapes: cards, keys, fields ---------- */
+body.glass-demo:not(.hud-mode) #crew .crew-row,
+body.glass-demo:not(.hud-mode) #left #workstreams .ws-row,
+body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty .cmsg-starter { border-radius: 3px; }
+body.glass-demo:not(.hud-mode) #crew .crew-portrait { border-radius: 3px; }
+body.glass-demo:not(.hud-mode) #crew .crew-portrait > .dot { border-radius: 1px; width: 7px; height: 7px; }
+body.glass-demo:not(.hud-mode) #left .ws-head :is(.ws-tab, #ws-new, #ws-addproject),
+body.glass-demo:not(.hud-mode) #left #ws-search,
+body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group > .bb-grp,
+body.glass-demo:not(.hud-mode) #screen-game .widget-rail .wg-add { border-radius: 3px; }
+
+/* ---------- 5 · the lit row / open tab is a dithered ▒ field with a crisp edge ---------- */
+body.glass-demo:not(.hud-mode) #crew .crew-row:is(.selected, :hover, :focus-visible) {
+  background: var(--pg-dither), rgba(var(--ph-rgb), .06); border-color: rgba(var(--ph-rgb), .55);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .35);
+}
+body.glass-demo:not(.hud-mode) #crew .crew-row.asking {
+  background: var(--pg-dither-gold), rgba(var(--gold-rgb), .06); border-color: rgba(var(--gold-rgb), .65); box-shadow: none;
+}
+body.glass-demo:not(.hud-mode) #left #workstreams .ws-row:is(.sel, :hover, :focus-visible) {
+  background: var(--pg-dither), rgba(var(--ph-rgb), .05); border-color: rgba(var(--ph-rgb), .5); box-shadow: none;
+}
+body.glass-demo:not(.hud-mode) #left .ws-head .ws-tab.on {
+  background: var(--pg-dither), rgba(var(--ph-rgb), .1); border-color: var(--ph); color: var(--ph-bright);
+}
+body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty .cmsg-starter { background: transparent; border-color: rgba(var(--ph-rgb), .16); }
+body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty .cmsg-starter:is(:hover, :focus-visible) {
+  background: var(--pg-dither), rgba(var(--ph-rgb), .05); border-color: rgba(var(--ph-rgb), .55); box-shadow: none;
+}
+
+/* ---------- 6 · the dock is the Pip-Boy tab strip ---------- */
+body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group > .bb-grp {
+  background: transparent; border-color: transparent; box-shadow: none;
+}
+body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group > .bb-grp:is(:hover, :focus-visible) {
+  background: rgba(var(--ph-rgb), .06); border-color: rgba(var(--ph-rgb), .35);
+}
+body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group.open > .bb-grp {
+  color: var(--ph-bright); background: var(--pg-dither), rgba(var(--ph-rgb), .08); border-color: var(--ph); box-shadow: none;
+}
+body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group.has-active > .bb-grp { box-shadow: inset 0 -2px 0 var(--ph); }
+
+/* ---------- 7 · ASCII gauges ---------- */
+body.glass-demo:not(.hud-mode) #topbar #tb-station .tb-xp {
+  height: 3px;
+  background: repeating-linear-gradient(90deg, transparent 0 6px, rgba(5, 3, 1, .95) 6px 8px), rgba(var(--gold-rgb), .18);
+}
+
+/* ============================================================
+   MATTE + CONTRAST (Andrew 10-01: "maybe its not the glass, I think its more so the shininess and fadedness").
+   SHINE was the glass sheen on every panel and the inset top-light every glass surface carries (--gd-light);
+   FADE was the amber haze washed over the panels (the 165deg --gd-face / 125deg glass gradients), dim
+   grey-brown labels and soft glows. Fixed at the TOKENS so panels, keys, cards and windows go matte together:
+   a deep even black, no top-lights, brighter labels and lines, a tight glow and a quieter fringe.
+   ============================================================ */
+body.glass-demo:not(.hud-mode) {
+  --gd-light: transparent;
+  --gd-face: color-mix(in srgb, var(--panel2) 95%, transparent);
+  --gd-hover: rgba(var(--ph-rgb), .12);
+  --gd-edge: rgba(var(--ph-rgb), .34);
+  --gd-shadow: 0 6px 20px rgba(0, 0, 0, .35);
+  --cg-glass: linear-gradient(rgba(0, 0, 0, .32), rgba(0, 0, 0, .32));
+  --cg-card: rgba(0, 0, 0, .3);
+  --cg-edge: rgba(var(--ph-rgb), .34);
+  --cg-hair: rgba(var(--ph-rgb), .22);
+  --cg-mute: color-mix(in srgb, var(--text) 84%, var(--panel2));
+  --pg-line: rgba(var(--ph-rgb), .6);
+  --pg-fringe: -0.5px 0 rgba(255, 64, 48, .22), 0.5px 0 rgba(64, 150, 255, .2);
+  --pg-glow: var(--pg-fringe), 0 0 2px rgba(var(--ph-rgb), .38);
+  --pg-glow-soft: 0 0 1px rgba(var(--ph-rgb), .3);
+  --pg-dither: repeating-conic-gradient(rgba(var(--ph-rgb), .3) 0 25%, transparent 0 50%) 0 0 / 2px 2px;
+  --pg-dither-gold: repeating-conic-gradient(rgba(var(--gold-rgb), .32) 0 25%, transparent 0 50%) 0 0 / 2px 2px;
+}
+/* no sheen, no vignette haze: the panel screen is flat matte black with one crisp edge */
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar)::before { background: none; box-shadow: none; }
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar) {
+  background: var(--gd-face); border-color: var(--gd-edge); box-shadow: var(--gd-shadow);
+}
+/* the content wells lose their faded washes */
+body.glass-demo:not(.hud-mode) #chat-panel #chat-log { background: transparent; }
+body.glass-demo:not(.hud-mode) #topbar :is(.tb-stat, .tb-connection) { background: rgba(0, 0, 0, .3); box-shadow: none; }
+/* brighter readouts */
+body.glass-demo:not(.hud-mode) #screen-game :is(#left > h3, #chat-panel > h3) { color: var(--ph-bright); }
+body.glass-demo:not(.hud-mode) #crew :is(.crew-status, .crew-step), body.glass-demo:not(.hud-mode) #left > h3 #crew-sum { color: var(--cg-mute); }
+body.glass-demo:not(.hud-mode) #crew .crew-row.working .crew-status { color: var(--ph); }
+body.glass-demo:not(.hud-mode) #left .ws-head :is(.ws-tab, #ws-new, #ws-addproject) { color: var(--ph); border-color: rgba(var(--ph-rgb), .4); box-shadow: none; }
+body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty-hint { color: var(--cg-mute); opacity: 1; }
+
+/* ============================================================
+   NO CRT EFFECTS ON THE PANELS (Andrew 10-01: "remove the crt effects … make it look as clean as possible with
+   our aesthetic"). The colour fringe, the phosphor glow on type and the dithered ▒ fields go; a lit row / open
+   tab is a clean flat phosphor tint with a crisp edge. Kept: matte black, crisp shapes, the Pip-Boy ticked rules,
+   the ▮▯ gauge and the ASCII decode. The station's own screen overlay (style.css body::after) is untouched.
+   ============================================================ */
+body.glass-demo:not(.hud-mode) {
+  --pg-glow: none;
+  --pg-glow-soft: none;
+  --pg-dither: linear-gradient(rgba(var(--ph-rgb), .14), rgba(var(--ph-rgb), .14));
+  --pg-dither-gold: linear-gradient(rgba(var(--gold-rgb), .14), rgba(var(--gold-rgb), .14));
+}
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar) :is(h3, .crew-name, .crew-clock, .crew-status, .crew-step, .ws-tab, #ws-new, .ws-row, .bb-grp, .tb-val, .tb-lbl, #status-pill, #crew-sum, .ctx-gauge, .cmsg-empty-line, .cmsg-starter-title) { text-shadow: none; }
+
+/* ============================================================
+   BALANCE (Andrew 10-02: "needs a bit more of that glass style back … the perfect balance between the two …
+   SO CLOSE"). The glass returns at roughly half strength while what he called shine and fade stays out:
+   softer corners, a little frosted translucency, a barely-there tint, glass-gradient keys / lit rows, and
+   a faint top edge (about a third of the old top-light). No sheen band, no amber haze, readouts stay bright.
+   ============================================================ */
+body.glass-demo:not(.hud-mode) {
+  --gd-face: linear-gradient(170deg, rgba(var(--ph-rgb), .035), transparent 45%), color-mix(in srgb, var(--panel2) 88%, transparent);
+  --gd-light: rgba(var(--ph-bright-rgb), .045);
+  --gd-hover: linear-gradient(120deg, rgba(var(--ph-rgb), .13), rgba(var(--ph-rgb), .04) 70%);
+  --cg-glass: linear-gradient(125deg, rgba(var(--ph-bright-rgb), .05), rgba(var(--ph-rgb), .025) 48%, rgba(var(--ph-rgb), .01));
+  --cg-card: linear-gradient(165deg, rgba(var(--ph-rgb), .05), transparent 50%), rgba(0, 0, 0, .25);
+  --pg-dither: linear-gradient(120deg, rgba(var(--ph-rgb), .17), rgba(var(--ph-rgb), .06));
+  --pg-dither-gold: linear-gradient(120deg, rgba(var(--gold-rgb), .18), rgba(var(--gold-rgb), .06));
+}
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar) {
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 var(--gd-light), 0 8px 26px rgba(0, 0, 0, .38);
+  -webkit-backdrop-filter: blur(14px) saturate(1.05); backdrop-filter: blur(14px) saturate(1.05);
+}
+body.glass-demo:not(.hud-mode) #screen-game:not(.cinema) #stage-wrap,
+body.glass-demo:not(.hud-mode) #screen-game:not(.cinema) #stage-wrap::before { border-radius: 8px; }
+body.glass-demo:not(.hud-mode) #screen-game :is(#left > h3, #chat-panel > h3) { border-radius: 8px 8px 0 0; }
+body.glass-demo:not(.hud-mode) #crew .crew-row,
+body.glass-demo:not(.hud-mode) #left #workstreams .ws-row,
+body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty .cmsg-starter { border-radius: 6px; }
+body.glass-demo:not(.hud-mode) #crew .crew-portrait { border-radius: 6px; }
+body.glass-demo:not(.hud-mode) #crew .crew-portrait > .dot { border-radius: 50%; width: 8px; height: 8px; }
+body.glass-demo:not(.hud-mode) #left .ws-head :is(.ws-tab, #ws-new, #ws-addproject),
+body.glass-demo:not(.hud-mode) #left #ws-search,
+body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group > .bb-grp,
+body.glass-demo:not(.hud-mode) #screen-game .widget-rail .wg-add { border-radius: 6px; }
+body.glass-demo:not(.hud-mode) #left .ws-head :is(.ws-tab, #ws-new, #ws-addproject) { background: var(--cg-glass); box-shadow: inset 0 1px 0 var(--gd-light); }
+body.glass-demo:not(.hud-mode) #topbar :is(.tb-stat, .tb-connection) { background: var(--cg-card); box-shadow: inset 0 1px 0 var(--gd-light); border-radius: 6px; }
+
+/* ============================================================
+   MORE OF EACH (Andrew 10-02: "it needs more of the glass style back, but it needs more of the CRT at the same
+   time, it needs both but more of each"). The two live on different layers so neither washes the other out:
+   GLASS = the panel itself (softer 10px shape, frosted translucency + blur, a tinted face, a real top edge,
+   deeper float shadow, glass-gradient cards and keys); CRT = what is ON the screen (phosphor glow on the type,
+   the tube's own vignette inside each panel, a selection that blooms faintly, a whisper of colour fringe on
+   titles). Still no sheen band across the panel and no amber haze over the readouts.
+   ============================================================ */
+body.glass-demo:not(.hud-mode) {
+  /* glass up */
+  --gd-face: linear-gradient(168deg, rgba(var(--ph-rgb), .06), rgba(var(--ph-rgb), .015) 40%, transparent 60%), color-mix(in srgb, var(--panel2) 82%, transparent);
+  --gd-light: rgba(var(--ph-bright-rgb), .08);
+  --cg-glass: linear-gradient(125deg, rgba(var(--ph-bright-rgb), .08), rgba(var(--ph-rgb), .035) 48%, rgba(var(--ph-rgb), .012));
+  --cg-card: linear-gradient(165deg, rgba(var(--ph-rgb), .075), transparent 46%), rgba(0, 0, 0, .22);
+  --pg-dither: linear-gradient(120deg, rgba(var(--ph-rgb), .2), rgba(var(--ph-rgb), .07));
+  --pg-dither-gold: linear-gradient(120deg, rgba(var(--gold-rgb), .22), rgba(var(--gold-rgb), .07));
+  /* CRT up */
+  --pg-glow: -0.4px 0 rgba(255, 64, 48, .16), 0.4px 0 rgba(64, 150, 255, .14), 0 0 5px rgba(var(--ph-rgb), .42);
+  --pg-glow-soft: 0 0 3px rgba(var(--ph-rgb), .26);
+}
+/* GLASS: the panel */
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar) {
+  border-radius: 10px; border-color: rgba(var(--ph-rgb), .28);
+  box-shadow: inset 0 1px 0 var(--gd-light), 0 12px 34px rgba(0, 0, 0, .45);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08); backdrop-filter: blur(18px) saturate(1.08);
+}
+body.glass-demo:not(.hud-mode) #screen-game:not(.cinema) #stage-wrap,
+body.glass-demo:not(.hud-mode) #screen-game:not(.cinema) #stage-wrap::before { border-radius: 10px; }
+body.glass-demo:not(.hud-mode) #screen-game :is(#left > h3, #chat-panel > h3) { border-radius: 10px 10px 0 0; }
+body.glass-demo:not(.hud-mode) #crew .crew-row,
+body.glass-demo:not(.hud-mode) #left #workstreams .ws-row,
+body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty .cmsg-starter,
+body.glass-demo:not(.hud-mode) #crew .crew-portrait { border-radius: 8px; }
+body.glass-demo:not(.hud-mode) #left .ws-head :is(.ws-tab, #ws-new, #ws-addproject),
+body.glass-demo:not(.hud-mode) #left #ws-search,
+body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group > .bb-grp,
+body.glass-demo:not(.hud-mode) #screen-game .widget-rail .wg-add { border-radius: 8px; }
+body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty .cmsg-starter { background: var(--cg-card); border-color: rgba(var(--ph-rgb), .2); }
+
+/* CRT: the screen inside — the tube's vignette, under the type */
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar)::before {
+  background: radial-gradient(ellipse 120% 100% at 50% 45%, transparent 58%, rgba(0, 0, 0, .38) 100%);
+  box-shadow: inset 0 0 26px rgba(0, 0, 0, .4);
+}
+/* CRT: phosphor type (the earlier "no CRT" reset loses to this) */
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar) :is(h3, .crew-name, .crew-clock, .ws-tab, #ws-new, .bb-grp, .tb-val, #status-pill, .cmsg-empty-line, .cmsg-starter-title) { text-shadow: var(--pg-glow); }
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar) :is(.crew-status, .crew-step, .ws-row, .tb-lbl, #crew-sum, .ctx-gauge) { text-shadow: var(--pg-glow-soft); }
+/* CRT: a selection blooms faintly on the glass */
+body.glass-demo:not(.hud-mode) #crew .crew-row:is(.selected, :hover, :focus-visible),
+body.glass-demo:not(.hud-mode) #left #workstreams .ws-row:is(.sel, :hover, :focus-visible),
+body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty .cmsg-starter:is(:hover, :focus-visible),
+body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group.open > .bb-grp { box-shadow: 0 0 12px rgba(var(--ph-rgb), .16), inset 0 1px 0 var(--gd-light); }
+body.glass-demo:not(.hud-mode) #crew .crew-row.asking { box-shadow: 0 0 12px rgba(var(--gold-rgb), .18); }
+
+/* ============================================================
+   NO ASCII EFFECTS (Andrew 10-02: "remove these ASCII effects … feels kind of cheap"). The glyph-static decode is
+   gone from crewcards.js; the CTX gauge's ▮▯ character cells become a clean segmented glass bar fed by the same
+   real fraction (stationui ctxTick → --ctx-fill). Colour still follows its level (idle / warn / crit).
+   ============================================================ */
+body.glass-demo:not(.hud-mode) #bottombar .ctx-gauge .ctx-cells {
+  display: inline-block; width: 92px; height: 6px; border-radius: 3px; vertical-align: middle;
+  font-size: 0; letter-spacing: 0; text-shadow: none;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 8px, rgba(5, 3, 1, .9) 8px 10px),
+    linear-gradient(90deg, currentColor calc(var(--ctx-fill, 0) * 100%), color-mix(in srgb, currentColor 18%, transparent) 0);
+  box-shadow: 0 0 6px color-mix(in srgb, currentColor 30%, transparent), inset 0 0 0 1px rgba(0, 0, 0, .35);
+}
+body.glass-demo:not(.hud-mode) #bottombar .ctx-gauge .ctx-cells > * { display: none; }
+
+/* ============================================================
+   WINDOWS (10-02 touch-up): the dock windows wear the same balance as the panels. Their material token
+   (menu-glass.css --menu-glass: a 125deg ph-bright .14 wash) was the haziest surface left — retuned to the
+   panels' glass card, so Settings, the dossier, Channels, Commander and the catalogs follow at once. The
+   kanban lanes leave their pitch-black wells for the same card, and the decorative window nameplate (a
+   footer repeating the title beside a static dot) steps aside — the window's own header already names it.
+   ============================================================ */
+body.glass-demo:not(.hud-mode) .sn-menu {
+  --menu-glass: linear-gradient(165deg, rgba(var(--ph-rgb), .08), rgba(var(--ph-rgb), .02) 46%, transparent 72%), rgba(0, 0, 0, .2);
+}
+body.glass-demo:not(.hud-mode) .settings-console .prov-card { background: rgba(0, 0, 0, .22); border-color: rgba(var(--ph-rgb), .22); }
+body.glass-demo:not(.hud-mode) .settings-console :is(.settings-group, .prov-card),
+body.glass-demo:not(.hud-mode) .agent-dossier :is(.ag-hero, .ag-mission, .cf-group) { box-shadow: inset 0 1px 0 var(--gd-light); }
+body.glass-demo:not(.hud-mode) .term .kb-col {
+  background: linear-gradient(165deg, rgba(var(--ph-rgb), .06), transparent 46%), rgba(0, 0, 0, .22);
+  border: 1px solid rgba(var(--ph-rgb), .2); border-radius: 8px; box-shadow: inset 0 1px 0 var(--gd-light);
+}
+body.glass-demo:not(.hud-mode) .term .kb-col h4 { border-bottom-color: rgba(var(--ph-rgb), .16); }
+body.glass-demo:not(.hud-mode) .term:not(.pw) .term-foot { display: none; }
+/* the window shell matches the panels' shape and phosphor title */
+body.glass-demo:not(.hud-mode) .term:not(.pw) { border-radius: 10px; }
+body.glass-demo:not(.hud-mode) .term:not(.pw) .term-title { text-shadow: var(--pg-glow); }
+
+/* ============================================================
+   CAM CORNERS (Andrew 10-02, from his mock: "a thin line cam overlay, just thin lines at the corners no words
+   needed"). Four 1px L-marks inset from the station view's edges — a viewfinder, nothing printed. The 09-30 rule
+   that hid the old ┌┐└┘ glyphs and every cam word stays (glass-demo.css); these are drawn lines on
+   .cam-hud::after, so the CINEMA key remains the only control and the BR mark frames it from outside.
+   ============================================================ */
+body.glass-demo:not(.hud-mode) #screen-game #stage-wrap .cam-hud::after {
+  --cm: rgba(var(--ph-rgb), .85); --cl: 34px; --ct: 1px;
+  content: ''; display: block; position: absolute; inset: 10px; pointer-events: none;
+  background:
+    linear-gradient(var(--cm), var(--cm)) left top / var(--cl) var(--ct),
+    linear-gradient(var(--cm), var(--cm)) left top / var(--ct) var(--cl),
+    linear-gradient(var(--cm), var(--cm)) right top / var(--cl) var(--ct),
+    linear-gradient(var(--cm), var(--cm)) right top / var(--ct) var(--cl),
+    linear-gradient(var(--cm), var(--cm)) left bottom / var(--cl) var(--ct),
+    linear-gradient(var(--cm), var(--cm)) left bottom / var(--ct) var(--cl),
+    linear-gradient(var(--cm), var(--cm)) right bottom / var(--cl) var(--ct),
+    linear-gradient(var(--cm), var(--cm)) right bottom / var(--ct) var(--cl);
+  background-repeat: no-repeat;
+}
+/* CINEMA sits inside the bottom-right mark with clear space, never on its lines */
+body.glass-demo:not(.hud-mode) #screen-game #stage-wrap .cam-cine { right: 24px; bottom: 24px; }
+
+/* ============================================================
+   TOP-RIGHT INSTRUMENTS (Andrew 10-02: "make the top right lvl and uplink indicator fit better with the new
+   aesthetic"). Was three housings deep (a dark well holding two boxes) in its own dialect — a dashed XP sliver
+   pinned to the bottom edge, a different border tone, no light on UPLINK. Now: no outer well; each instrument is
+   one glass card like the crew cards; values glow like the panel titles; XP is the same segmented glass bar as
+   the CTX gauge; UPLINK carries a housed lamp keyed to the pill's own state class (written by app.js /
+   stationui.js: '' online · working · standby · down) — so the light only says what the link already says.
+   ============================================================ */
+body.glass-demo:not(.hud-mode) #topbar .tb-stats { background: none; box-shadow: none; padding: 0; gap: 8px; }
+body.glass-demo:not(.hud-mode) #topbar :is(#tb-station, .tb-connection) {
+  min-height: 46px; padding: 7px 14px; border: 1px solid rgba(var(--ph-rgb), .22); border-radius: 8px;
+  background: var(--cg-card); box-shadow: inset 0 1px 0 var(--gd-light);
+}
+body.glass-demo:not(.hud-mode) #topbar #tb-station { border-color: rgba(var(--gold-rgb), .26); grid-template-rows: auto auto auto; row-gap: 2px; }
+body.glass-demo:not(.hud-mode) #topbar #tb-station .tb-lbl,
+body.glass-demo:not(.hud-mode) #topbar #sig { font-size: 11px; letter-spacing: 1.8px; opacity: 1; text-shadow: none; }
+body.glass-demo:not(.hud-mode) #topbar #tb-station .tb-lbl { color: color-mix(in srgb, var(--gold) 75%, var(--panel2)); }
+body.glass-demo:not(.hud-mode) #topbar #sig { color: var(--cg-mute); }
+body.glass-demo:not(.hud-mode) #topbar :is(#tb-station .tb-val, #status-pill) { font-size: 21px; line-height: 1; color: var(--ph-bright); text-shadow: var(--pg-glow); }
+/* XP: the segmented glass bar, in the card's flow under the level (no longer a sliver on the edge) */
+body.glass-demo:not(.hud-mode) #topbar #tb-station .tb-xp {
+  position: relative; left: auto; right: auto; bottom: auto; grid-column: 2; width: 100%; min-width: 64px; height: 5px;
+  border-radius: 3px; overflow: hidden; background: rgba(var(--gold-rgb), .16);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .35);
+}
+body.glass-demo:not(.hud-mode) #topbar #tb-station .tb-xp::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(90deg, transparent 0 8px, rgba(5, 3, 1, .9) 8px 10px);
+}
+body.glass-demo:not(.hud-mode) #topbar #tb-station .tb-xp-fill { background: var(--gold); box-shadow: 0 0 6px rgba(var(--gold-rgb), .45); }
+body.glass-demo:not(.hud-mode) #topbar .tb-station-mark { grid-row: 1 / 4; }
+/* UPLINK: a housed lamp that follows the pill's real state */
+body.glass-demo:not(.hud-mode) #topbar #status-pill { display: flex; align-items: center; gap: 8px; }
+body.glass-demo:not(.hud-mode) #topbar #status-pill::before {
+  content: ''; flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--ok, #7bc88a); box-shadow: 0 0 0 1px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .3), 0 0 6px rgba(123, 200, 138, .35);
+}
+body.glass-demo:not(.hud-mode) #topbar #status-pill.working::before { background: var(--gold); box-shadow: 0 0 0 1px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .3), 0 0 6px rgba(var(--gold-rgb), .4); }
+body.glass-demo:not(.hud-mode) #topbar #status-pill.standby::before { background: var(--ph-dim); box-shadow: 0 0 0 1px rgba(0, 0, 0, .55); }
+body.glass-demo:not(.hud-mode) #topbar #status-pill.down::before { background: var(--link-down, #ff5a4a); box-shadow: 0 0 0 1px rgba(0, 0, 0, .55), 0 0 6px rgba(255, 90, 74, .4); }
+body.glass-demo:not(.hud-mode) #topbar :is(.tb-stats, .tb-status) { align-items: stretch; }
+body.glass-demo:not(.hud-mode) #topbar :is(#tb-station, .tb-connection) { height: 50px; min-height: 50px; box-sizing: border-box; align-content: center; }
+
+/* ============================================================
+   PIP-BOY KNOB +1 (Andrew 10-02: "just ever so slightly a bit more of the fallout pip boy / terminal esq vibe").
+   Nothing new — the existing Pip-Boy/terminal dials each turned one small notch: glow, fringe, ticked rules,
+   the tube vignette inside the panels, the selection bloom, and terminal tracking on the small caps labels.
+   ============================================================ */
+body.glass-demo:not(.hud-mode) {
+  --pg-glow: -0.45px 0 rgba(255, 64, 48, .2), 0.45px 0 rgba(64, 150, 255, .17), 0 0 6px rgba(var(--ph-rgb), .5);
+  --pg-glow-soft: 0 0 3px rgba(var(--ph-rgb), .33);
+  --pg-line: rgba(var(--ph-rgb), .68);
+}
+body.glass-demo:not(.hud-mode) #screen-game :is(#left > h3, #chat-panel > h3) {
+  background:
+    linear-gradient(var(--pg-line), var(--pg-line)) left 10px bottom 0 / calc(100% - 20px) 1px no-repeat,
+    linear-gradient(var(--pg-line), var(--pg-line)) left 10px bottom 0 / 1px 8px no-repeat,
+    linear-gradient(var(--pg-line), var(--pg-line)) right 10px bottom 0 / 1px 8px no-repeat;
+}
+body.glass-demo:not(.hud-mode) #screen-game #left .ws-head {
+  background:
+    linear-gradient(var(--pg-line), var(--pg-line)) left 10px top 0 / calc(100% - 20px) 1px no-repeat,
+    linear-gradient(var(--pg-line), var(--pg-line)) left 10px top 0 / 1px 8px no-repeat,
+    linear-gradient(var(--pg-line), var(--pg-line)) right 10px top 0 / 1px 8px no-repeat;
+}
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar)::before {
+  background: radial-gradient(ellipse 118% 98% at 50% 45%, transparent 55%, rgba(0, 0, 0, .46) 100%);
+  box-shadow: inset 0 0 30px rgba(0, 0, 0, .46);
+}
+body.glass-demo:not(.hud-mode) #crew .crew-row:is(.selected, :hover, :focus-visible),
+body.glass-demo:not(.hud-mode) #left #workstreams .ws-row:is(.sel, :hover, :focus-visible),
+body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty .cmsg-starter:is(:hover, :focus-visible),
+body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group.open > .bb-grp { box-shadow: 0 0 14px rgba(var(--ph-rgb), .2), inset 0 1px 0 var(--gd-light); }
+body.glass-demo:not(.hud-mode) #screen-game :is(#left > h3, #chat-panel > h3) { letter-spacing: 3px; }
+body.glass-demo:not(.hud-mode) #screen-game :is(#crew-sum, #topbar .tb-lbl, #topbar #sig, .cmsg-starter-title, #bottombar .bb-grp) { letter-spacing: 1.6px; }
+
+/* ============================================================
+   COMMS REPLIES (Andrew 10-02: "clean it up esp in the way agents respond … convey output the best way
+   possible"). Measured on a real streamed reply: headings were body-size bright text (no structure), bold was a
+   barely-brighter cream in prose (VT323 has one weight) but underlined in list leads, code blocks scrolled under
+   their copy key, inline code split its box across lines. The conversation layout (agent left on a phosphor rail,
+   Commander right on gold, inverted name chips — comms.css) is untouched; only the reply's typography changes.
+   ============================================================ */
+body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-b { color: var(--ph); text-shadow: 0 0 4px rgba(var(--ph-rgb), .38); }
+body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-list li > .md-b:first-child { text-decoration: none; }
+/* a heading is a Pip-Boy section label: amber small caps on a rule that runs to the edge */
+body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-h {
+  display: flex; align-items: center; gap: 9px;
+  margin: 1.05em 0 .45em; font-size: .86em; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--ph); text-shadow: 0 0 5px rgba(var(--ph-rgb), .4);
+}
+body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-h::after { content: ''; flex: 1 1 auto; height: 1px; background: rgba(var(--ph-rgb), .32); }
+body.glass-demo:not(.hud-mode) #chat-log .cmsg .body > .md-h:first-child { margin-top: .2em; }
+/* inline code keeps its box when it wraps */
+body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-code {
+  padding: 0 5px; border-radius: 4px; border-color: rgba(var(--ph-rgb), .24); background: rgba(var(--ph-rgb), .08);
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+}
+/* a code block wraps inside its glass well; the copy key never sits on top of the text */
+body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-pre-wrap { margin: .55em 0; }
+body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-pre {
+  white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: hidden;
+  padding: 10px 42px 10px 12px; font-size: 14px; line-height: 1.45;
+  background: rgba(0, 0, 0, .3); border: 1px solid rgba(var(--ph-rgb), .22); border-left: 2px solid var(--ph-dim); border-radius: 8px;
+}
+body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-copy { top: 7px; right: 7px; }
+/* tables and lists */
+body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-table-scroll { border: 1px solid rgba(var(--ph-rgb), .2); border-radius: 8px; }
+body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-table :is(th, td) { border: 0; border-bottom: 1px solid rgba(var(--ph-rgb), .14); padding: .35em .7em; }
+body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-table tr:last-child td { border-bottom: 0; }
+body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-table th { background: rgba(var(--ph-rgb), .08); color: var(--ph); letter-spacing: 1px; }
+body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-list li::marker { color: var(--ph); }

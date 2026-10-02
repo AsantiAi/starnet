@@ -107,8 +107,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   // independent bloom dial that also tames the hand-tuned presets. 100 = the shipped look, untouched.
   // `backdrop` is what the station floats in (SpaceBG's registry). 'void' is the shipped sky, so
   // every save that predates this key merges to the exact look it already had.
-  // panelBright (0–100, default 0) is the tube's BRIGHTNESS knob: it lifts the panel glass's black
-  // level toward the phosphor colour (never toward white). 0 = the shipped look, untouched.
+  // panelBright (−100…100, default 0) is the tube's BRIGHTNESS knob: above 0 it lifts the panel glass's black
+  // level toward the phosphor colour (never toward white); below 0 it takes the panels DOWN toward true black
+  // (Andrew 10-01: "it doesnt get dark enough"). 0 = the shipped look, untouched.
   function defaults() { return { theme: 'amber', themeHue: 35, themeSat: 100, themeGlow: 100, panelBright: 0, roomLighting: 'low', textScale: 0, flicker: true, crtGlass: 'full', staticLevel: 100, sound: true, backdrop: 'void', sessionRow: 'compact', keepComputerAwake: false, notifyPrefs: notifyDefaults() }; }
   // Raise overall room exposure without changing the distribution of its lights.
   // Existing saves retain their chosen level; missing values start at LOW.
@@ -289,7 +290,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     // station remains byte-identical to the shipped look. Reads the palette IN FORCE (preset class
     // or custom inline) and writes on <body> — the bezel-var-trap side of the line; THEME_VARS
     // clears these on the next pass so theme switches always re-derive from clean class values.
-    const lift = clampN(s.panelBright, 0, 100, 0) / 100 * 0.16;
+    const knob = clampN(s.panelBright, -100, 100, 0);
+    const lift = Math.max(0, knob) / 100 * 0.16;
+    const dim = Math.max(0, -knob) / 100 * 0.85;   // below 0: the same three ground tokens mix toward black
     if (lift > 0.001) {
       const cs = getComputedStyle(document.body);
       const phRgb = (cs.getPropertyValue('--ph-rgb') || '255, 170, 51').split(',').map(Number);
@@ -305,6 +308,16 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         if (!c) continue;
         const rgb = c.rgb.map((v, i) => Math.round(v + (phRgb[i] - v) * lift));
         document.body.style.setProperty(tok, c.a == null ? rgbHex(rgb) : 'rgba(' + rgb.join(', ') + ', ' + c.a + ')');
+      }
+    } else if (dim > 0.001) {
+      const cs = getComputedStyle(document.body);
+      for (const tok of ['--panel', '--panel2', '--ph-faint']) {
+        const str = (cs.getPropertyValue(tok) || '').trim();
+        const m = /rgba?\(([^)]+)\)/.exec(str);
+        const c = m ? m[1].split(',').map(Number) : (/^#[0-9a-fA-F]{6}$/.test(str) ? hexRgb(str) : null);
+        if (!c) continue;
+        const rgb = c.slice(0, 3).map(v => Math.round(v * (1 - dim)));
+        document.body.style.setProperty(tok, c.length > 3 ? 'rgba(' + rgb.join(', ') + ', ' + c[3] + ')' : rgbHex(rgb));
       }
     }
     // WHERE THE STATION IS. One saved value spans two layers that work opposite ways: a SKY is
@@ -6918,11 +6931,11 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // CUSTOM PHOSPHOR — hue + saturation derive a full palette live (moving either switches to CUSTOM);
       // GLOW is independent and scales the bloom on EVERY theme, presets included. All instant-save.
       '<h4 class="ms-h">CUSTOM PHOSPHOR <span class="dim">— dial in any colour</span></h4>' +
-      '<p class="set-about">Hue and saturation create a custom color. Glow controls the light around text; brightness lightens the panel glass. Changes preview and save immediately.</p>' +
+      '<p class="set-about">Hue and saturation create a custom color. Glow controls the light around text; brightness takes the panel glass darker (left) or lighter (right). Changes preview and save immediately.</p>' +
       '<label class="set-slider"><span class="set-slider-name">HUE</span><input type="range" id="set-hue" class="set-hue-track" min="0" max="359" step="1" value="' + clampN(s.themeHue, 0, 359, 35) + '"><span class="set-slider-val" id="set-hue-val">' + clampN(s.themeHue, 0, 359, 35) + '°</span></label>' +
       '<label class="set-slider"><span class="set-slider-name">SATURATION</span><input type="range" id="set-sat" min="0" max="100" step="1" value="' + clampN(s.themeSat, 0, 100, 100) + '"><span class="set-slider-val" id="set-sat-val">' + clampN(s.themeSat, 0, 100, 100) + '%</span></label>' +
       '<label class="set-slider"><span class="set-slider-name">GLOW</span><input type="range" id="set-glow" min="0" max="150" step="5" value="' + clampN(s.themeGlow, 0, 150, 100) + '"><span class="set-slider-val" id="set-glow-val">' + clampN(s.themeGlow, 0, 150, 100) + '%</span></label>' +
-      '<label class="set-slider"><span class="set-slider-name">BRIGHTNESS</span><input type="range" id="set-bright" min="0" max="100" step="5" value="' + clampN(s.panelBright, 0, 100, 0) + '"><span class="set-slider-val" id="set-bright-val">' + clampN(s.panelBright, 0, 100, 0) + '%</span></label>' +
+      '<label class="set-slider"><span class="set-slider-name">BRIGHTNESS</span><input type="range" id="set-bright" min="-100" max="100" step="5" value="' + clampN(s.panelBright, -100, 100, 0) + '"><span class="set-slider-val" id="set-bright-val">' + clampN(s.panelBright, -100, 100, 0) + '%</span></label>' +
       '<h4 class="ms-h" id="set-lighting-label">ROOM LIGHTING</h4>' +
       '<p class="set-about">Choose the brightness across your rooms. LOW is softly lit; MEDIUM and HIGH make the whole room brighter.</p>' +
       '<div class="set-themes" id="set-lighting" role="group" aria-labelledby="set-lighting-label">' +
@@ -7256,7 +7269,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     wireSlider(hueIn, v => { s.theme = 'custom'; s.themeHue = clampN(v, 0, 359, 35); sliderVal('#set-hue-val', s.themeHue + '°'); selCustom(); syncCustomChip(); });
     wireSlider(satIn, v => { s.theme = 'custom'; s.themeSat = clampN(v, 0, 100, 100); sliderVal('#set-sat-val', s.themeSat + '%'); selCustom(); syncCustomChip(); });
     wireSlider(glowIn, v => { s.themeGlow = clampN(v, 0, 150, 100); sliderVal('#set-glow-val', s.themeGlow + '%'); });
-    wireSlider(brightIn, v => { s.panelBright = clampN(v, 0, 100, 0); sliderVal('#set-bright-val', s.panelBright + '%'); });
+    wireSlider(brightIn, v => { s.panelBright = clampN(v, -100, 100, 0); sliderVal('#set-bright-val', s.panelBright + '%'); });
     wireSlider(host.querySelector('#set-static'), v => { s.staticLevel = clampN(v, 0, 200, 100); sliderVal('#set-static-val', s.staticLevel + '%'); });
     const bind = (id, key) => host.querySelector(id).addEventListener('change', ev => { s[key] = ev.target.checked; applySettings(); save(); flashSaved(appMsg()); });
     bind('#set-flicker', 'flicker'); bind('#set-sound', 'sound');
