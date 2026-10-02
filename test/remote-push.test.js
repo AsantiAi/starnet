@@ -129,5 +129,23 @@ function decrypt(body, ua) {
   A.eq(b64u(out), rfc.result, 'byte-for-byte the RFC 8291 worked example');
 
   try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+  // sweep 2026-10-02: a subscription saved by an OLDER build (before the subscribe-time host check) is re-checked at send
+  {
+    const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'sn-push-old-'));
+    const file2 = path.join(dir2, '.secrets', 'remote-push.json');
+    const sent2 = [];
+    const p2 = makePush({ fs, path, file: file2, now: () => t, fetch: async (url, o) => { sent2.push({ url, o }); return { status: 201 }; } });
+    p2.publicKey();
+    const ua2 = browserSub();
+    A.eq(p2.subscribe('good', { endpoint: 'https://fcm.googleapis.com/fcm/send/abc', keys: { p256dh: b64u(ua2.raw), auth: b64u(ua2.auth) } }).ok, true, 'fixture: a real push address');
+    const st = JSON.parse(fs.readFileSync(file2, 'utf8'));
+    st.subs.old = Object.assign({}, st.subs.good, { endpoint: 'https://attacker.example/collect' });   // what an older build stored
+    fs.writeFileSync(file2, JSON.stringify(st));
+    const p3 = makePush({ fs, path, file: file2, now: () => t, fetch: async (url, o) => { sent2.push({ url, o }); return { status: 201 }; } });
+    await p3.send(['old', 'good'], { title: 'x', body: 'y' });
+    A.ok(!sent2.some(s => /attacker\.example/.test(s.url)), 'the station never POSTs to a stored address that is not a browser push service');
+    A.ok(sent2.some(s => /fcm\.googleapis\.com/.test(s.url) && s.o.redirect === 'manual'), 'a real one still gets its push, and a redirect is never followed');
+    fs.rmSync(dir2, { recursive: true, force: true });
+  }
   A.report('remote push');
 })().catch((e) => { console.log('FAIL: threw ' + (e && e.stack || e)); process.exit(1); });

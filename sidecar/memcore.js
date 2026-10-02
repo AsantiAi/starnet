@@ -140,7 +140,8 @@
     const c = String(content == null ? '' : content);
     let found = false;
     const out = (Array.isArray(records) ? records : []).map(r => {
-      if (!found && r && r.id === id) { found = true; return Object.assign({}, r, { content: c, body: c }); }
+      // the Commander's own edit confirms a feedback record (taste is only their confirmed words — feedbackmemory.isTaste)
+      if (!found && r && r.id === id) { found = true; return Object.assign({}, r, { content: c, body: c }, r.origin === 'feedback' ? { confirmation: 'user-confirmed' } : {}); }
       return r;
     });
     return { records: out, found };

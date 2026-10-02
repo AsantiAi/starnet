@@ -71,6 +71,9 @@ async function rejects(promise, msg, re) {
   A.eq(AgentId.alloc('Codex', new Set()), 'codex-2', 'a custom agent named "Codex" is allocated codex-2');
   A.eq(AgentId.alloc('channels', new Set()), 'channels-2', '"channels" is allocated channels-2');
   A.eq(AgentId.alloc('coder', new Set()), 'coder', 'ordinary class ids are unchanged');
+  A.eq(AgentId.alloc('Skill Market', new Set()), 'skill-market-2', 'an agent named "Skill Market" never owns the market install folder (sweep 10-02)');
+  A.ok(Reserved.RESERVED.has('skill-market') && /path\.join\(WORKSPACES, 'skill-market'\)/.test(fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8')),
+    'the market install folder (WORKSPACES/skill-market) is a reserved station folder');
   A.eq(Array.from(AgentId.RESERVED).sort(), Array.from(Reserved.RESERVED).sort(), 'frontend RESERVED mirrors sidecar/workspace-reserved.js');
   for (const id of AgentId.RESERVED) A.ok(AgentId.RE.test(id) || /^_/.test(id), 'reserved id is expressible in the id grammar: ' + id);
 

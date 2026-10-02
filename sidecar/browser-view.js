@@ -385,6 +385,13 @@ function makeBrowserViews(deps) {
   }
   /* Long-poll for the next picture of `target` ('station' | 'run:<runId>'). Starts the capture on first ask and
      stops it when nobody has asked for streamIdleMs. */
+  // nobody has watched for streamIdleMs: stop the picture, unless a STEP-IN handoff holds this browser NOW. Read who drives at the
+  // moment the clock runs out, never who drove at the last poll: a run that took the wheel (and a sign-in) inside the idle window
+  // had its STEP-IN picture stopped, since the browser has ONE stream
+  function idleOut(target, r, c) {
+    const cur = resolveTarget(target), run = (cur && !cur.error && cur.handoffRun) || r.handoffRun;
+    if ((cur && cur.error === 'handoff') || (run && handoffLive(run))) dropChan(r.key, true); else stopStream(c);
+  }
   async function frame(target, after, budgetMs) {
     const r = resolveTarget(target);
     if (r.error) {
@@ -411,7 +418,7 @@ function makeBrowserViews(deps) {
     c.polls++;
     const release = () => {
       c.polls = Math.max(0, c.polls - 1);
-      if (c.polls === 0 && c.streaming && chans.get(r.key) === c) armIdle(c, () => { if (r.handoffRun && handoffLive(r.handoffRun)) dropChan(r.key, true); else stopStream(c); });
+      if (c.polls === 0 && c.streaming && chans.get(r.key) === c) armIdle(c, () => idleOut(target, r, c));
     };
     const since = Number(after) || 0;
     if (!(c.frame && c.frame.seq > since)) {

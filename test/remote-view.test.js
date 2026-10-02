@@ -303,5 +303,22 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
     A.eq(hw.recentRuns()[0] && hw.recentRuns()[0].ok, true, 'the phone recent row says the lead run succeeded');
   }
 
+  // (sweep 2026-10-02) "yes" to the agent's offer, sent from the phone, is a TASK: the classifier sees the agent's last turn
+  {
+    let seen = null; let ranAsTask = null;
+    const Classify = require('../frontend/app/classify.js');
+    const hy = makeRemoteHost({
+      now: () => Date.now(), newId: () => 'yes-run', broadcast: () => {},
+      roster: () => [{ agentId: 'lead', name: 'LEAD' }], liveRuns: () => [],
+      transcript: { history: () => [{ role: 'user', content: 'the landlord email' }, { role: 'assistant', content: 'Want me to draft the email to your landlord?' }], streams: () => [] },
+      credentials: () => ({ ok: true, key: 'k', model: 'm', provider: 'p' }), askConsent: () => Promise.resolve('deny'),
+      classify: (text, ctx) => { seen = ctx; return Classify.isTaskDirective(text, ctx); },
+      runOnce: async o => { ranAsTask = o.isTask; o.emit('agent.run.end', { agentId: 'lead', runId: o.runId, reason: 'done', usd: 0 }); }
+    });
+    await hy.send({ agentId: 'lead', text: 'yes', streamId: 'remote_lead_yes', deviceId: 'd1' });
+    await new Promise(r => setTimeout(r, 50));
+    A.ok(seen && /draft the email/.test(seen.priorAgentTurn || ''), 'the phone run classifies "yes" with the agent\'s last turn');
+    A.eq(ranAsTask, true, 'so "yes" to its offer runs as a task (with tools), not chat that can only promise');
+  }
   A.report('remote-view');
 })().catch((e) => { console.log('FAIL: threw ' + (e && e.stack || e)); process.exit(1); });

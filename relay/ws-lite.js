@@ -100,6 +100,9 @@ function makeWsServer(opts) {
           len = Number(big); off = 10;
         }
         if (len > ws.maxPayload) return fail(1009, 'too large');
+        // a data frame is checked WITH the fragments already held, before its bytes are buffered: checked alone, a
+        // socket held a full message of fragments plus a full pending frame (~2x maxPayload each) (sweep 2026-10-02)
+        if ((b0 & 0x0f) <= 0x2 && fragLen + len > ws.maxPayload) return fail(1009, 'too large');
         if (buf.length < off + 4 + len) return;
         const t = Date.now();
         frameTokens = Math.min(FRAME_BURST, frameTokens + ((t - frameAt) / 1000) * FRAMES_PER_SEC); frameAt = t;

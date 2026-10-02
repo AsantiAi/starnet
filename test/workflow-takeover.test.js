@@ -120,3 +120,22 @@ console.log('workflow-takeover: repeat sense (paraphrase, guards, notice, cadenc
   assert.equal(CC.compose({ automationAsk: false }), '', 'no ask -> no block');
   console.log('workflow-takeover: automation-ask playbook passed');
 }
+
+// UPGRADE (sweep 2026-10-02): a decision 0.12.5 saved has no core, and its id was idFor([agent, project, signature(text)]).
+// "Don't offer this again" and a snooze from 0.12.5 still hold in 0.13 — the new id rule (the cluster's oldest member) never
+// matched them, so a NEVER was re-offered the day the Commander upgraded.
+{
+  const crypto = require('node:crypto');
+  const legacy = text => 'workflow-' + crypto.createHash('sha256').update(['agent', '', W.signature(text)].join('\n')).digest('hex').slice(0, 24);
+  const x0 = input();
+  assert.ok(W.candidates(x0).length === 1, 'fixture: the workflow is offered');
+  for (const d of [{ never: true }, { until: now + 30 * DAY }]) {
+    for (const text of prompts) {
+      const xi = input(); xi.state = { v: 1, decisions: [Object.assign({ id: legacy(text), offers: 1, at: now - DAY }, d)] };
+      assert.equal(W.candidates(xi).length, 0, 'a 0.12.5 ' + (d.never ? 'NEVER' : 'snooze') + ' (signature of "' + text + '") still holds');
+    }
+  }
+  const other = input(); other.state = { v: 1, decisions: [{ id: legacy('Prepare the quarterly board deck from finance notes'), never: true, offers: 1 }] };
+  assert.equal(W.candidates(other).length, 1, 'a 0.12.5 decision about OTHER work never hides this one');
+  console.log('workflow-takeover: 0.12.5 decisions survive the upgrade');
+}

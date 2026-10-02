@@ -99,12 +99,22 @@ const feedbackRecs = async () => ((await api('/api/memory/records?agent=agent'))
     A.ok(iLike >= 0 && iDislike >= 0, 'both beliefs survive a sidecar restart and reach the prompt');
     A.ok(iLike < iDislike, 'newest feedback leads');
 
+    // 5b. (sweep 2026-10-02) DELETING AN AGENT KEEPS THE COMMANDER'S TASTE given on its work: it moves to the hero
+    const rsc = await run('Write a limerick about the office printer.', 'scribe');
+    const sr = await api('/api/growth/ratings', {runId: rsc.runId, verdict: 'miss', epoch: 1, correction: 'never rhyme printer with sprinter'});
+    A.ok(sr.body.ok && sr.body.feedbackMemory && sr.body.feedbackMemory.stored, 'a correction on the scribe\'s work is stored');
+    const del = await api('/api/agent/delete', {agentId: 'scribe'});
+    A.ok(del.body && del.body.ok, 'the scribe is deleted: ' + JSON.stringify(del.body));
+    A.ok((await feedbackRecs()).some(r => /never rhyme printer with sprinter/.test(r.body)), 'its taste record now lives in the hero\'s notebook');
+    const r4 = await run('Plan the team offsite agenda.');
+    A.ok(r4.prompt.indexOf('never rhyme printer with sprinter') >= 0, 'and still reaches the next run\'s prompt after the delete');
+
     // 6. the personalization pause stops new feedback memories and says so
     A.ok((await api('/api/personalization', {enabled: false})).body.ok, 'personalization paused');
     const paused = await api('/api/growth/ratings', {runId: r3.runId, verdict: 'miss', epoch: 1, correction: 'wrong tone'});
     A.ok(paused.body.ok, 'the rating itself still saves');
     A.eq(paused.body.feedbackMemory && paused.body.feedbackMemory.reason, 'personalization-paused', 'no feedback memory while paused, reported truthfully');
-    A.eq((await feedbackRecs()).length, 2, 'nothing new written while paused');
+    A.eq((await feedbackRecs()).length, 3, 'nothing new written while paused (the two ratings + the one adopted from the deleted scribe)');
   } finally { await stop(); await new Promise(r => mock.close(r)); fs.rmSync(workspace, {recursive: true, force: true}); }
   A.report('feedbackmemory.http');
 })().catch(e => { console.error(e); process.exit(1); });

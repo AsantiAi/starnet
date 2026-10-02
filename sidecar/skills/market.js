@@ -361,7 +361,8 @@ function makeSkillMarket(deps) {
   function uninstall(input) {
     const slug = str(input && input.slug);
     const s = state();
-    if (!s.installed[slug]) throw new Error('"' + slug + '" is not installed from the market');
+    // own keys only: "__proto__" or "constructor" are truthy on any object and read as installed (sweep 10-02)
+    if (!Object.prototype.hasOwnProperty.call(s.installed, slug) || !s.installed[slug]) throw new Error('"' + slug + '" is not installed from the market');
     delete s.installed[slug];
     saveState(s);
     fs.rmSync(path.join(root, slug), { recursive: true, force: true });

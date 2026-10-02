@@ -163,6 +163,11 @@ A.rejects = async (fn, re, label) => { let err = null; try { await fn(); } catch
     m.uninstall({ slug: 'feed-watch' });
     const back = m.mergeLibrary([BUNDLED]).find(x => x.slug === 'feed-watch');
     A.ok(!back.market && back.body === BUNDLED.body, 'uninstalling brings the bundled copy back');
+    // (sweep 10-02) object built-ins are not installed skills
+    for (const slug of ['__proto__', 'constructor', 'toString']) {
+      let threw = null; try { m.uninstall({ slug }); } catch (e) { threw = e; }
+      A.ok(threw && /is not installed from the market/.test(threw.message), 'uninstall("' + slug + '") is refused, never reported ok');
+    }
     await A.rejects(() => client(serve([GRILL]), tmp(), '').listing({}), /turned off/, 'with the market turned off, it says so');
   }
 

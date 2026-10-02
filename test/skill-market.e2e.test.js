@@ -101,6 +101,14 @@ function startMock() {
     row = (await library()).find(s => s.slug === TARGET);
     A.ok(row && row.market && row.enabled, 'after a restart it is still installed and switched on');
 
+    // ---- 4b. (sweep 2026-10-02) an UPDATE keeps the Commander's off switch (it used to silently re-enable it) ----
+    A.eq((await fixture.json('POST', '/api/skills/toggle', { slug: TARGET, enabled: false })).status, 200, 'the Commander switches it off');
+    const upd = await fixture.json('POST', '/api/skill-market/install', { slug: TARGET });
+    A.eq([upd.body.ok, upd.body.action, upd.body.enabled], [true, 'update', false], 'updating it reports it still OFF: ' + JSON.stringify(upd.body).slice(0, 160));
+    row = (await library()).find(s => s.slug === TARGET);
+    A.ok(row && row.market && !row.enabled, 'and the library keeps it switched off');
+    A.eq((await fixture.json('POST', '/api/skills/toggle', { slug: TARGET, enabled: true })).status, 200, 'back on for the steps below');
+
     // ---- 5. a download that differs from the catalog is refused ----
     await fixture.restart({ STARNET_TEST_MARKET_TAMPER: TAMPERED });
     const bad = await fixture.json('POST', '/api/skill-market/install', { slug: TAMPERED });

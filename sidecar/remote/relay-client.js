@@ -35,6 +35,11 @@ function makeRelayClient(d) {
   const url = String(d.url || '').replace(/\/+$/, '');
   let ws = null, state = 'off', rid = null, since = null, lastError = null;
   let retryMs = 1000, retryTimer = null, pingTimer = null, pongTimer = null, stopped = true;
+  /* the backoff resets only after the link has HELD (sweep 2026-10-02): reset on every 'ready', two stations sharing one
+     key (an orphaned old process) replaced each other at the relay (4410) once a second forever, and every phone was
+     dropped each cycle — now a link that dies within STABLE_MS keeps backing off. */
+  const STABLE_MS = 30000;
+  let onlineAt = 0;
   const conns = new Map();   // conn -> { paired, sid, deviceId, detach }
 
   function set(s, err) { state = s; since = now(); if (err !== undefined) lastError = err; }
@@ -102,7 +107,7 @@ function makeRelayClient(d) {
       } catch (e) { lastError = 'could not sign the relay challenge: ' + ((e && e.message) || e); }
       return;
     }
-    if (m.t === 'ready') { rid = m.rid; retryMs = 1000; set('online', null); log('online at the relay'); syncTokens(); return; }
+    if (m.t === 'ready') { rid = m.rid; onlineAt = now(); set('online', null); log('online at the relay'); syncTokens(); return; }
     if (m.t === 'pong') { if (pongTimer) { clearTimeout(pongTimer); pongTimer = null; } return; }
     if (m.t === 'open') { conns.set(Number(m.conn), { paired: !!m.paired, th: String(m.th || ''), sid: null, deviceId: '', detach: null }); return; }
     if (m.t === 'gone') { drop(Number(m.conn)); return; }
@@ -143,6 +148,8 @@ function makeRelayClient(d) {
     ws = null;
     if (stopped) { set('off', null); return; }
     set('offline', msg);
+    if (onlineAt && now() - onlineAt >= STABLE_MS) retryMs = 1000;   // it held: the next drop starts the backoff over
+    onlineAt = 0;
     if (retryTimer) clearTimeout(retryTimer);
     retryTimer = setTimeout(() => { retryTimer = null; connect(); }, retryMs);
     if (retryTimer.unref) retryTimer.unref();

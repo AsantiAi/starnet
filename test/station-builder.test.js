@@ -1548,7 +1548,7 @@ for (const c of T.catalog) {
     Object.assign(contents, byRoom(st));
     const lineBefore = st.props().filter(p => p.t === 'bay').map(p => p.id + ':' + (p.agentId || '') + ':' + (p.role || '')).sort().join(',');
     const re = SB.planEdit(st.serialize(), { rearrange: 'diamond' }, E);
-    A.ok(re.ok && /^RE-LAY the station as a wide diamond round HOME: all 6 rooms move onto an even grid with everything in them \(furniture, lines, desks and agents stay as they are\), the \d+ old hallways are taken up and \d+ new ones laid, planted and lit(, \d+ of them joining neighbouring rooms so the station meshes)?\. One UNDO in Build mode takes all of it back\.$/.test(re.plan.summary), 'the plan says what it does: ' + (re.ok ? re.plan.summary : re.error));
+    A.ok(re.ok && /^RE-LAY the station as a wide diamond round HOME: all 6 rooms move onto an even grid with everything in them \(furniture, lines, desks and agents stay as they are\), the \d+ old hallways are taken up( with the \d+ pieces standing in them)? and \d+ new ones laid, planted and lit(, \d+ of them joining neighbouring rooms so the station meshes)?\. One UNDO in Build mode takes all of it back\.$/.test(re.plan.summary), 'the plan says what it does: ' + (re.ok ? re.plan.summary : re.error));
     A.ok(re.ok && SB.apply(st, re.plan, E).ok, 'and it builds exactly as planned');
     const after = byRoom(st), roomIds = Object.keys(contents);
     A.ok(roomIds.every(id => after[id] === contents[id]), 'every room keeps exactly what was in it: the same pieces, ids and agents');
@@ -1560,6 +1560,241 @@ for (const c of T.catalog) {
     A.ok(st.undo().ok && snap(st) === before, 'one UNDO brings the hand-moved station back exactly');
     A.ok(!SB.planEdit(st.serialize(), { rearrange: 'spiral' }, E).ok, 'only the diamond is offered');
     for (const shape of ['even', 'tall']) { const p = SB.planEdit(st.serialize(), { rearrange: { shape } }, E); A.ok(p.ok && new RegExp('^RE-LAY the station as ' + (shape === 'even' ? 'a diamond' : 'a tall diamond') + ' round HOME').test(p.plan.summary), shape + ' is offered too: ' + (p.ok ? p.plan.summary.slice(0, 60) : p.error)); }
+  }
+  // A DESK BRINGS ITS OWN CHAIR, AND A CHAIR FACES ITS TABLE (Andrew 10-02, two chairs under every desk and side chairs turned
+  // backwards: "the agent doesn't realize that the chairs are built in to the desk as long as the agent's assigned … when it
+  // places left chair and right chair its always backwards")
+  {
+    const st = fresh(), before = snap(st);
+    const room = SB.planEdit(st.serialize(), { refit: [{ op: 'hall', x: 18, y: 4, w: 6, h: 3 }, { op: 'room', name: 'Den', kind: 'hab', x: 24, y: 0, w: 18, h: 11 }, { op: 'place', t: 'desk', x: 34, y: 1, as: 'D' }, { op: 'place', t: 'longtable', x: 27, y: 5, as: 'T' }] }, E);
+    A.ok(room.ok && SB.apply(st, room.plan, E).ok, 'a room with a desk and a table (' + (room.error || 'ok') + ')');
+    const desk = st.props().find(p => p.t === 'desk' && p.x === 34), table = st.props().find(p => p.t === 'longtable');
+    const TW = table.w || 1, TH = table.h || 1;
+    // a chair on the desk's seat is refused, whoever would sit there
+    const onSeat = SB.planEdit(st.serialize(), { refit: [{ op: 'place', t: 'chair', x: desk.x, y: desk.y + (desk.h || 1) }] }, E);
+    A.ok(!onSeat.ok && /^The chair at \(\d+, \d+\) would stand on the seat of the desk at \(34, 1\): a desk draws its own chair when an agent works it, so its seat row stays clear\. Never place a chair at a desk/.test(onSeat.error), 'a chair on a desk\'s seat is refused: ' + (onSeat.error || 'NOT REFUSED').slice(0, 140));
+    // toward: the builder turns a chair to face its table from every side (west of it faces east, east faces west …)
+    const around = [['W', table.x - 1, table.y, 3], ['E', table.x + TW, table.y, 1], ['N', table.x, table.y - 1, 0], ['S', table.x, table.y + TH, 2]];
+    const faced = SB.planEdit(st.serialize(), { refit: around.map(([k, x, y]) => ({ op: 'place', t: 'chair', x, y, toward: table.id, as: 'c' + k })) }, E);
+    A.ok(faced.ok && SB.apply(st, faced.plan, E).ok, 'four chairs placed toward the table (' + (faced.error || 'ok') + ')');
+    for (const [k, x, y, r] of around) { const c = st.props().find(p => p.t === 'chair' && p.x === x && p.y === y); A.ok(c && ((c.r | 0) & 3) === r, 'the chair ' + k + ' of the table faces it (r ' + (c && c.r) + ', wanted ' + r + ')'); }
+    // a chair turned away is seen, and turned back toward its table
+    const west = st.props().find(p => p.t === 'chair' && p.x === table.x - 1);
+    A.ok(st.faceProp(west.id, 1).ok, 'a chair turned away by hand');
+    const det = SB.mapOf(st.serialize(), E, { room: 'Den' });
+    A.ok(det.ok && det.map.issues.some(s => new RegExp('^the chair at \\(' + west.x + ', ' + west.y + '\\) faces west, away from the long table beside it').test(s)), 'station.map { room } sees the chair turned away: ' + JSON.stringify(det.ok && det.map.issues));
+    const back = SB.planEdit(st.serialize(), { refit: [{ op: 'rotate', prop: west.id, toward: table.id }] }, E);
+    A.ok(back.ok && SB.apply(st, back.plan, E).ok && ((st.propById(west.id).r | 0) & 3) === 3, 'rotate toward turns it back to face the table');
+    // a chair that already stood on a desk's seat (an old office) goes when the desk gets its agent
+    A.ok(st.addProp({ t: 'chair', x: desk.x, y: desk.y + (desk.h || 1), w: 1, h: 1, block: true }).ok, 'an old office chair on the desk\'s seat');
+    const det2 = SB.mapOf(st.serialize(), E, { room: 'Den' });
+    A.ok(det2.ok && det2.map.issues.some(s => /^the chair at \(\d+, \d+\) stands on the seat of the desk at \(34, 1\): a desk draws its own chair when an agent works it, so that makes two chairs\. Take it up\.$/.test(s)), 'station.map { room } sees the chair on the desk\'s seat');
+    const seat = SB.planEdit(st.serialize(), { refit: [{ op: 'agent', prop: desk.id, agent: 'rex' }] }, E);
+    A.ok(seat.ok && /is REX's \(the chair at \(\d+, \d+\) removed: the desk brings its own chair\)/.test(seat.plan.summary) && SB.apply(st, seat.plan, E).ok && !st.props().some(p => p.t === 'chair' && p.x === desk.x && p.y === desk.y + (desk.h || 1)), 'staffing the desk takes the extra chair away: ' + (seat.ok ? seat.plan.summary.slice(0, 160) : seat.error));
+    // the office style leaves every desk's seat clear, and automatic placement never takes one
+    const office = SB.planEdit(st.serialize(), { refurnish: { room: 'Den', style: 'office' } }, E);
+    A.ok(office.ok && SB.apply(st, office.plan, E).ok, 'the den furnished as an office (' + (office.error || 'ok') + ')');
+    const den = st.rooms().find(r => r.name === 'DEN' || r.name === 'Den'.toUpperCase()) || st.rooms().find(r => /OFFICE|DEN/.test(r.name));
+    const seats = [];
+    for (const p of st.props()) if (st.roomAt(p.x, p.y) === den.id && /^(desk|desk2)$/.test(p.t)) for (let x = p.x; x < p.x + (p.w || 1); x++) seats.push([x, p.y + (p.h || 1)]);
+    A.ok(seats.length > 0 && seats.every(([x, y]) => { const id = st.propAt(x, y), q = id && st.propById(id); return !q || q.block === false; }), 'every office desk keeps its seat clear (' + seats.length + ' seat tiles)');
+    const more = SB.planEdit(st.serialize(), { add: { room: den.name, pieces: ['six chairs'] } }, E);
+    A.ok(!more.ok || (SB.apply(st, more.plan, E).ok && seats.every(([x, y]) => { const id = st.propAt(x, y), q = id && st.propById(id); return !q || q.t !== 'chair'; })), 'chairs added to the room never land on a desk\'s seat');
+    for (let i = 0; i < 20 && snap(st) !== before && st.canUndo(); i++) st.undo();
+    A.eq(snap(st), before, 'undo takes it all back');
+  }
+  // A CHAIR PULLED UP TO A TABLE FACES IT, whatever r the lead sent: the left and right chairs a model turns backwards are
+  // turned round once every edit is down (the table may come after its chairs), and the summary says so; toward is the
+  // lead's own aim and is never overridden; a chair standing free keeps the r it was given
+  {
+    const st = fresh(), before = snap(st);
+    const base = SB.planEdit(st.serialize(), { refit: [{ op: 'hall', x: 18, y: 4, w: 6, h: 3 }, { op: 'room', name: 'Den', kind: 'hab', x: 24, y: 0, w: 18, h: 11 }] }, E);
+    A.ok(base.ok && SB.apply(st, base.plan, E).ok, 'a room for the table (' + (base.error || 'ok') + ')');
+    const TW = (E.PropSprites.spec('longtable') || {}).w || 1, tx = 28, ty = 5;
+    // the model's usual mistake: r read as "the side it stands on", so west chair r 1, east chair r 3, chairs first
+    const wrong = [{ op: 'place', t: 'chair', x: tx - 1, y: ty, r: 1 }, { op: 'place', t: 'chair', x: tx + TW, y: ty, r: 3 }, { op: 'place', t: 'chair', x: tx, y: ty - 1, r: 2 }, { op: 'place', t: 'chair', x: tx, y: ty + 1, r: 0 },
+      { op: 'place', t: 'chair', x: tx + 8, y: ty, r: 1 }, { op: 'place', t: 'longtable', x: tx, y: ty }];
+    const p = SB.planEdit(st.serialize(), { refit: wrong }, E);
+    A.ok(p.ok, 'chairs placed backwards round a table still plan (' + (p.error || 'ok') + ')');
+    A.ok(p.ok && /1\. a chair at \(27, 5\) in DEN, facing east \(turned to face the long table beside it\)/.test(p.plan.summary) && /2\. a chair at \(\d+, 5\) in DEN, facing west \(turned to face the long table beside it\)/.test(p.plan.summary)
+      && /3\. a chair at \(28, 4\) in DEN, facing south \(turned to face the long table beside it\)/.test(p.plan.summary) && /4\. a chair at \(28, 6\) in DEN, facing north \(turned to face the long table beside it\)/.test(p.plan.summary)
+      && /5\. a chair at \(36, 5\) in DEN, facing west;/.test(p.plan.summary),'the summary says each chair was turned to face the table, and the free one keeps its r: ' + (p.ok ? p.plan.summary.slice(0, 420) : p.error));
+    A.ok(p.ok && SB.apply(st, p.plan, E).ok, 'and it builds exactly as planned');
+    const faceAt = (x, y) => { const id = st.propAt(x, y), c = id && st.propById(id); return c ? (c.r | 0) & 3 : -1; };
+    A.eq([faceAt(tx - 1, ty), faceAt(tx + TW, ty), faceAt(tx, ty - 1), faceAt(tx, ty + 1), faceAt(tx + 8, ty)].join(','), '3,1,0,2,1', 'every chair at the table faces it (east, west, south, north); the free chair faces west as told');
+    const det = SB.mapOf(st.serialize(), E, { room: 'Den' });
+    A.ok(det.ok && !det.map.issues.length, 'and the room shows no issues: ' + JSON.stringify(det.ok && det.map.issues));
+    // a bare rotate that turns a chair away from its table is turned back too; one aimed with toward is the lead's call
+    const westId = st.propAt(tx - 1, ty), rot = SB.planEdit(st.serialize(), { refit: [{ op: 'rotate', prop: westId, r: 1 }] }, E);
+    A.ok(rot.ok && /turned .*\(then turned east to face the long table beside it\)/.test(rot.plan.summary), 'a bare rotate away from the table is turned back: ' + (rot.ok ? rot.plan.summary.slice(0, 200) : rot.error));
+    const aimed = SB.planEdit(st.serialize(), { refit: [{ op: 'rotate', prop: westId, toward: [tx - 6, ty] }] }, E);
+    A.ok(aimed.ok && !/then turned/.test(aimed.plan.summary) && SB.apply(st, aimed.plan, E).ok && faceAt(tx - 1, ty) === 1, 'a chair aimed with toward (at a screen across the room) keeps that aim: ' + (aimed.ok ? aimed.plan.summary.slice(0, 160) : aimed.error));
+    for (let i = 0; i < 20 && snap(st) !== before && st.canUndo(); i++) st.undo();
+    A.eq(snap(st), before, 'undo takes it all back');
+  }
+  // every seat in every room and zone style faces the table or desk it is set beside (the meeting room's south chairs faced
+  // away), and a room dressed with its door on the north wall (the set mirrored north-south) turns its seats with the set
+  {
+    const RS = require('../frontend/app/roomstyles.js'), isSeat = t => { const sp = E.PropSprites.spec(t); return !!(sp && sp.use && sp.use.kind === 'seat'); };
+    const isTable = t => { const sp = E.PropSprites.spec(t); return !!(sp && sp.surface) || /^(desk|desk2|console|consoleL|pixelrig|bench)$/.test(t); };
+    const beside = (p, q) => { const ox = p.x < q.x + q.w && q.x < p.x + p.w, oy = p.y < q.y + q.h && q.y < p.y + p.h; return (ox && (p.y + p.h === q.y || q.y + q.h === p.y)) || (oy && (p.x + p.w === q.x || q.x + q.w === p.x)); };
+    const toward = (p, q) => { const dx = (q.x + q.w / 2) - (p.x + p.w / 2), dy = (q.y + q.h / 2) - (p.y + p.h / 2), ox = p.x < q.x + q.w && q.x < p.x + p.w, oy = p.y < q.y + q.h && q.y < p.y + p.h; if (ox && !oy) return dy > 0 ? 0 : 2; if (oy && !ox) return dx > 0 ? 3 : 1; return Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 3 : 1) : (dy > 0 ? 0 : 2); };
+    const away = [];
+    let seen = 0;
+    const check = (label, pieces) => {
+      const ps = pieces.map(([t, x, y, r]) => { const sp = E.PropSprites.spec(t); return sp ? { t, x, y, r: (r || 0) & 3, w: sp.w, h: sp.h } : null; }).filter(Boolean);
+      for (const c of ps) { if (!isSeat(c.t)) continue; const near = ps.filter(q => q !== c && isTable(q.t) && beside(c, q)); if (!near.length) continue; seen++; if (near.map(q => toward(c, q)).indexOf(c.r) < 0) away.push(label + ' ' + c.t + '@' + c.x + ',' + c.y); }
+    };
+    const walk = (o, path) => { if (!o || typeof o !== 'object') return; if (Array.isArray(o.pieces)) check(path, o.pieces); for (const k of Object.keys(o)) if (k !== 'pieces') walk(o[k], path + '.' + k); };
+    walk(RS.STYLES, 'STYLES'); walk(RS.ROOMS, 'ROOMS');
+    A.ok(seen >= 10 && !away.length, 'every styled seat beside a table faces it (' + seen + ' checked; away: ' + away.join(', ') + ')');
+    // the meeting room dressed with its only door on the north wall: the set is mirrored north-south, its chairs turned with it
+    const st = fresh();
+    const mk = SB.planEdit(st.serialize(), { refit: [{ op: 'room', name: 'Talks', kind: 'hab', x: 0, y: 16, w: 16, h: 10 }, { op: 'hall', x: 7, y: 11, w: 3, h: 5 }] }, E);
+    A.ok(mk.ok && SB.apply(st, mk.plan, E).ok, 'a room below the main room, its door on the north wall (' + (mk.error || 'ok') + ')');
+    const talks = st.rooms().find(r => r.name === 'TALKS');
+    const d = talks && SB.dressRoom(st, E, talks.id, 'meeting');
+    A.ok(d && d.ok && d.featureWall === 'south', 'its feature wall is the south one (' + (d && (d.error || d.featureWall)) + ')');
+    const here = st.props().filter(q => st.roomAt(q.x, q.y) === (talks && talks.id)), chairs = here.filter(q => isSeat(q.t)), tables = here.filter(q => isTable(q.t));
+    const atTable = chairs.filter(c => tables.some(t => beside(c, t)));
+    A.ok(atTable.length >= 2 && atTable.every(c => tables.some(t => beside(c, t) && toward(c, t) === ((c.r | 0) & 3))), 'every chair at the mirrored table faces it (' + atTable.map(c => c.x + ',' + c.y + ' r' + (c.r | 0)).join(' ') + ')');
+  }
+  // LEFT AND RIGHT TWINS (a recliner is drawn facing west, recliner_r east; "recliner ‹ left" read as "the one for the left
+  // side" put both backwards, in the lounge, cozy and library styles too): toward or a west/east r picks the twin that faces
+  // that way, rotate flips one, the catalog and the room detail say which way each faces, and one facing a wall is seen
+  {
+    const SP = E.PropSprites, st = fresh(), before = snap(st);
+    const base = SB.planEdit(st.serialize(), { refit: [{ op: 'hall', x: 18, y: 4, w: 6, h: 3 }, { op: 'room', name: 'Den', kind: 'hab', x: 24, y: 0, w: 18, h: 11 }, { op: 'place', t: 'longtable', x: 31, y: 5, as: 'T' }] }, E);
+    A.ok(base.ok && SB.apply(st, base.plan, E).ok, 'a den with a table (' + (base.error || 'ok') + ')');
+    const table = st.props().find(p => p.t === 'longtable');
+    const tw = SB.planEdit(st.serialize(), { refit: [{ op: 'place', t: 'recliner', x: 28, y: 5, toward: table.id }, { op: 'place', t: 'recliner_r', x: 37, y: 5, toward: table.id }, { op: 'place', t: 'recliner', x: 28, y: 8, r: 3 }, { op: 'place', t: 'recliner', x: 37, y: 8, r: 1 }] }, E);
+    A.ok(tw.ok && /1\. a recliner at \(28, 5\) in DEN, facing east;/.test(tw.plan.summary) && /2\. a recliner at \(37, 5\) in DEN, facing west;/.test(tw.plan.summary), 'the summary says which way each recliner faces: ' + (tw.ok ? tw.plan.summary.slice(0, 260) : tw.error));
+    A.ok(tw.ok && SB.apply(st, tw.plan, E).ok, 'and it builds');
+    const at = (x, y) => st.propById(st.propAt(x, y)) || {};
+    A.eq([at(28, 5).t, at(37, 5).t, at(28, 8).t, at(37, 8).t].join(','), 'recliner_r,recliner,recliner_r,recliner', 'toward (and r east / west) picks the twin that faces that way, whichever was named');
+    A.ok([at(28, 5), at(37, 5), at(28, 8), at(37, 8)].every(p => !p.r && !p.m), 'a twin is placed plain: no r, no flip');
+    // rotate flips a twin, and says when it already faced that way
+    const flip = SB.planEdit(st.serialize(), { refit: [{ op: 'rotate', prop: at(28, 8).id, r: 1 }, { op: 'rotate', prop: at(37, 8).id, toward: [30, 8] }] }, E);
+    A.ok(flip.ok && /the recliner at \(28, 8\) turned to face west/.test(flip.plan.summary) && /the recliner at \(37, 8\) turned to face west \(it already did\)/.test(flip.plan.summary) && SB.apply(st, flip.plan, E).ok && at(28, 8).m === 1, 'rotate turns a twin by flipping it: ' + (flip.ok ? flip.plan.summary.slice(0, 220) : flip.error));
+    A.ok(!SB.planEdit(st.serialize(), { refit: [{ op: 'rotate', prop: at(28, 8).id, r: 2 }] }, E).ok, 'a twin cannot face north');
+    // the catalog and the room detail say which way each faces
+    const cat = SB.mapOf(st.serialize(), E, { catalog: true }), rec = cat.ok && (cat.map.pieces || (cat.map.catalog || {}).pieces || []).find(p => p.t === 'recliner');
+    A.ok(rec && rec.faces === 'west' && (cat.map.pieces || cat.map.catalog.pieces).find(p => p.t === 'recliner_r').faces === 'east', 'the catalog says the recliner faces west and recliner_r east');
+    const det = SB.mapOf(st.serialize(), E, { room: 'Den' }), pc = det.ok ? det.map.pieces : [];
+    A.ok(pc.find(p => p.x === 28 && p.y === 8).faces === 'west' && pc.find(p => p.x === 28 && p.y === 5).faces === 'east', 'the room detail says which way each faces (a flipped one too)');
+    // one facing straight into the wall is seen
+    const wall = SB.planEdit(st.serialize(), { refit: [{ op: 'place', t: 'recliner', x: 24, y: 2 }, { op: 'place', t: 'chair', x: 30, y: 10, r: 0 }] }, E);
+    A.ok(wall.ok && SB.apply(st, wall.plan, E).ok, 'a recliner set west against the west wall, a chair south against the south wall');
+    const iss = (SB.mapOf(st.serialize(), E, { room: 'Den' }).map || {}).issues || [];
+    A.ok(iss.some(s => /^the recliner at \(24, 2\) faces west, straight into the wall: turn it to face the room/.test(s)) && iss.some(s => /^the chair at \(30, 10\) faces south, straight into the wall/.test(s)), 'station.map { room } sees both facing the wall: ' + JSON.stringify(iss));
+    for (let i = 0; i < 20 && snap(st) !== before && st.canUndo(); i++) st.undo();
+    A.eq(snap(st), before, 'undo takes it all back');
+    // the styles' recliners face into their sets: the lounges' and the den's toward the middle, the library pair each other
+    const RS = require('../frontend/app/roomstyles.js'), sideOf = t => t === 'recliner' ? 1 : t === 'recliner_r' ? 3 : null, bad = [];
+    const sets = [['STYLES.lounge', RS.STYLES.lounge.sets], ['ROOMS.lounge', RS.ROOMS.lounge.centre], ['ROOMS.cozy', RS.ROOMS.cozy.centre]];
+    for (const [k, list] of sets) for (const s of list) for (const [t, x] of s.pieces) { const f = sideOf(t); if (f && (f === 3) !== (x + 0.5 < s.w / 2)) bad.push(k + ' ' + t + '@' + x); }
+    for (const s of RS.STYLES.library.sets.concat(RS.ROOMS.library.centre)) { const rs = s.pieces.filter(p => sideOf(p[0])); if (rs.length === 2) { const [a, b] = rs[0][1] < rs[1][1] ? rs : [rs[1], rs[0]]; if (sideOf(a[0]) !== 3 || sideOf(b[0]) !== 1) bad.push('library pair ' + a[0] + '/' + b[0]); } }
+    A.ok(!bad.length, 'every styled recliner faces into its set (' + bad.join(', ') + ')');
+  }
+  // THE SWEEP (10-02, Andrew: "one last sweep and polish"): what two independent reviews found, each pinned
+  {
+    // a style dresses round its own desks' seats: the desks and comms styles in a narrow room with a west door used to be
+    // refused by the builder's own seat rule ("the rack would stand on the seat of the desk"), a refusal the lead could not fix
+    for (const style of ['desks', 'comms', 'lab']) {
+      const st = fresh();
+      const mk = SB.planEdit(st.serialize(), { refit: [{ op: 'hall', x: 18, y: 4, w: 6, h: 3 }, { op: 'room', name: 'Den', kind: 'hab', x: 24, y: 2, w: 10, h: 11 }] }, E);
+      A.ok(mk.ok && SB.apply(st, mk.plan, E).ok, style + ': a narrow room, its door on the west wall');
+      const p = SB.planEdit(st.serialize(), { refit: [{ op: 'style', room: 'Den', style }] }, E);
+      A.ok(p.ok, style + ': the style dresses it without tripping the seat rule (' + (p.error || 'ok') + ')');
+      if (p.ok) { SB.apply(st, p.plan, E); const det = SB.mapOf(st.serialize(), E, { room: 'Den' }); A.ok(det.ok && !det.map.issues.some(s => /seat of the/.test(s)), style + ': and no piece stands on a desk\'s seat: ' + JSON.stringify(det.ok && det.map.issues)); }
+    }
+    // pieces added by name keep off the seat of a desk added in the same breath, and chairs added beside a table face it
+    {
+      const st = fresh();
+      A.ok(SB.apply(st, SB.planEdit(st.serialize(), { refit: [{ op: 'hall', x: 18, y: 4, w: 6, h: 3 }, { op: 'room', name: 'Den', kind: 'hab', x: 24, y: 2, w: 8, h: 6 }] }, E).plan, E).ok, 'a small room');
+      for (const pieces of [['two desks', 'four bookshelves'], ['three consoles', 'five crates']]) {
+        const p = SB.planEdit(st.serialize(), { add: { room: 'Den', pieces } }, E);
+        if (!p.ok) { A.ok(/no clear spot/i.test(p.error), pieces.join(' + ') + ': refused only for room: ' + p.error); continue; }
+        A.ok(SB.apply(st, p.plan, E).ok, pieces.join(' + ') + ': added');
+        const det = SB.mapOf(st.serialize(), E, { room: 'Den' });
+        A.ok(det.ok && !det.map.issues.some(s => /seat of the/.test(s)), pieces.join(' + ') + ': nothing on a seat: ' + JSON.stringify(det.ok && det.map.issues));
+        st.undo();
+      }
+    }
+    // toward on a piece that cannot turn is an aim, not a refusal: a stool stands as drawn and the card says so
+    {
+      const st = fresh();
+      const p = SB.planEdit(st.serialize(), { refit: [{ op: 'hall', x: 18, y: 4, w: 6, h: 3 }, { op: 'room', name: 'Den', kind: 'hab', x: 24, y: 0, w: 18, h: 11 }, { op: 'place', t: 'longtable', x: 30, y: 5, as: 'T' }, { op: 'place', t: 'stool', x: 33, y: 5, toward: 'T' }] }, E);
+      A.ok(p.ok && /a stool at \(33, 5\) in DEN \(it does not turn that way, so it stands as drawn\)/.test(p.plan.summary), 'a stool aimed at a table is placed as drawn: ' + (p.ok ? p.plan.summary.slice(-220) : p.error));
+    }
+    // a re-lay keeps rooms joined open plan together: the line across the join, and the bench straddling it, stay whole;
+    // furniture in the old hallways is counted on the card
+    {
+      const st = fresh(), sig = s => { const m = {}; for (const e of P.compileRoutingPlan(s.projectGeometry()).errors || []) m[e.code] = (m[e.code] || 0) + 1; return JSON.stringify(m); };
+      const p = SB.planEdit(st.serialize(), { refit: [{ op: 'hall', x: 18, y: 4, w: 6, h: 3 }, { op: 'room', name: 'Line A', kind: 'factory', x: 24, y: 0, w: 18, h: 11 }, { op: 'room', name: 'Line B', kind: 'factory', x: 42, y: 0, w: 14, h: 11 },
+        { op: 'place', t: 'intake', x: 36, y: 5 }, { op: 'place', t: 'bay', x: 47, y: 5 }, { op: 'belt', from: [38, 6], to: [46, 6] }, { op: 'place', t: 'industrial_bench', x: 41, y: 9 },
+        { op: 'hall', x: 7, y: 11, w: 3, h: 5 }, { op: 'room', name: 'Nook', kind: 'hab', x: 3, y: 16, w: 12, h: 8 }, { op: 'place', t: 'plant', x: 19, y: 4 }] }, E);
+      A.ok(p.ok && SB.apply(st, p.plan, E).ok, 'two factory rooms open to each other with a line across the join (' + (p.error || 'ok') + ')');
+      const before = snap(st), was = sig(st), beltN = Object.keys(st.serialize().belts || {}).length;
+      const re = SB.planEdit(st.serialize(), { rearrange: 'diamond' }, E);
+      A.ok(re.ok && / with the piece standing in them /.test(re.plan.summary), 'the re-lay plans, and says the hallway piece goes: ' + (re.ok ? re.plan.summary : re.error));
+      A.ok(re.ok && SB.apply(st, re.plan, E).ok, 'and builds');
+      const ra = st.rooms().find(r => r.name === 'LINE A').rects[0], rb = st.rooms().find(r => r.name === 'LINE B').rects[0], bench = st.props().find(q => q.t === 'industrial_bench');
+      A.ok(rb.x1 === ra.x2 + 1 && rb.y1 === ra.y1, 'the two rooms still stand flush, open to each other');
+      A.ok(bench && st.roomAt(bench.x, bench.y) && st.roomAt(bench.x + (bench.w || 1) - 1, bench.y), 'the bench across the join moved with them');
+      A.eq(sig(st), was, 'the line routes as before'); A.eq(Object.keys(st.serialize().belts || {}).length, beltN, 'every belt tile moved with it');
+      A.ok(st.undo().ok && snap(st) === before, 'one undo');
+    }
+    // two rooms open to each other in an L (nothing across the join) re-lay as two rooms, each reached by a whole hallway:
+    // planned as one box, the hallway met the box's middle, empty floor (refused as unreachable, or a 1-tile mouth)
+    {
+      const edge = (a, b) => { let n = 0; for (const p of a.rects) for (const q of b.rects) { if (p.y2 + 1 === q.y1 || q.y2 + 1 === p.y1) n += Math.max(0, Math.min(p.x2, q.x2) - Math.max(p.x1, q.x1) + 1); if (p.x2 + 1 === q.x1 || q.x2 + 1 === p.x1) n += Math.max(0, Math.min(p.y2, q.y2) - Math.max(p.y1, q.y1) + 1); } return n; };
+      for (const nook of [{ x: 24, y: 11, w: 6, h: 6 }, { x: 34, y: 11, w: 8, h: 6 }]) for (const shape of ['wide', 'tall', 'even']) {
+        const st = fresh(), tag = 'an L (nook at ' + nook.x + ', ' + nook.y + '), ' + shape;
+        const p = SB.planEdit(st.serialize(), { refit: [{ op: 'hall', x: 18, y: 4, w: 6, h: 3 }, { op: 'room', name: 'Den', kind: 'hab', x: 24, y: 0, w: 18, h: 11 }, Object.assign({ op: 'room', name: 'Nook', kind: 'hab' }, nook)] }, E);
+        A.ok(p.ok && SB.apply(st, p.plan, E).ok, tag + ': laid (' + (p.error || 'ok') + ')');
+        const re = SB.planEdit(st.serialize(), { rearrange: { shape } }, E);
+        A.ok(re.ok && SB.apply(st, re.plan, E).ok, tag + ': re-lays (' + (re.error || 'ok') + ')');
+        const rs = st.rooms(), thin = [];
+        for (const h of rs.filter(r => r.kind === 'corridor')) for (const r of rs) if (r.kind !== 'corridor') { const e = edge(h, r); if (e > 0 && e < 3) thin.push(h.name + ' meets ' + r.name + ' on ' + e); }
+        A.eq(thin, [], tag + ': every hallway meets its room with its whole mouth');
+      }
+    }
+    // every whole-room style, dressed in a large room with its door north (sets mirrored) and with its door west, leaves
+    // nothing a designer would fix: no seat taken, no seat turned from its table, nothing facing straight into a wall
+    for (const [door, rect, hall] of [['north', { x: 0, y: 17, w: 24, h: 14 }, { x: 7, y: 11, w: 3, h: 6 }], ['west', { x: 24, y: 0, w: 24, h: 14 }, { x: 18, y: 4, w: 6, h: 3 }]]) {
+      for (const style of RS.ROOM_ORDER) {
+        const st = fresh();
+        const mk = SB.planEdit(st.serialize(), { refit: [Object.assign({ op: 'hall' }, hall), Object.assign({ op: 'room', name: 'Den', kind: 'hab' }, rect), { op: 'style', room: 'Den', style }] }, E);
+        if (!mk.ok) { A.ok(false, style + ' (door ' + door + '): dresses (' + mk.error + ')'); continue; }
+        SB.apply(st, mk.plan, E);
+        const det = SB.mapOf(st.serialize(), E, { room: 'Den' });
+        A.ok(det.ok && !det.map.issues.length, style + ' (door ' + door + '): nothing to fix: ' + JSON.stringify(det.ok && det.map.issues));
+      }
+    }
+    // a small working room with its only door north or south still gets its desks: the rows kept clear before the doorway
+    // left no floor for any set (an office 14 × 8 with its door north had none), so only the doorway's lane stays clear then
+    for (const [door, hall, at] of [['north', { x: 7, y: 11, w: 3, h: 6 }, h => ({ x: 0, y: 17 })], ['south', { x: 7, y: -6, w: 3, h: 6 }, h => ({ x: 0, y: -6 - h })]]) {
+      for (const [w, h] of [[14, 8], [20, 8], [14, 7]]) for (const style of ['desks', 'lab', 'comms', 'workshop']) {
+        const st = fresh(), tag = style + ' ' + w + ' × ' + h + ' (door ' + door + ')';
+        const mk = SB.planEdit(st.serialize(), { refit: [Object.assign({ op: 'hall' }, hall), Object.assign({ op: 'room', name: 'Den', kind: 'hab', w, h }, at(h)), { op: 'style', room: 'Den', style }] }, E);
+        if (!mk.ok) { A.ok(false, tag + ': dresses (' + mk.error + ')'); continue; }
+        SB.apply(st, mk.plan, E);
+        const id = st.rooms().find(r => r.name === 'DEN').id, desks = st.props().filter(p => st.roomAt(p.x, p.y) === id && /^(desk2?|console|consoleL|pixelrig|bench)$/.test(p.t));
+        A.ok(desks.length > 0, tag + ': has a place to work');
+        const det = SB.mapOf(st.serialize(), E, { room: 'Den' });
+        A.ok(det.ok && !det.map.issues.length, tag + ': nothing to fix: ' + JSON.stringify(det.ok && det.map.issues));
+      }
+    }
+    // stations of small rooms, and of the builder's own large rooms, re-lay too (both were refused past four rooms)
+    for (const [tag, w, h] of [['small', 12, 8], ['large', 24, 14]]) {
+      const st = fresh();
+      for (let i = 0; i < 6; i++) { const b = SB.planBuild(st.serialize(), { rooms: [{ name: tag + ' ' + i, size: { w, h } }] }, E); A.ok(b.ok && SB.apply(st, b.plan, E).ok, tag + ' room ' + i + ' built (' + (b.error || 'ok') + ')'); }
+      const re = SB.planEdit(st.serialize(), { rearrange: 'diamond' }, E);
+      A.ok(re.ok && SB.apply(st, re.plan, E).ok, 'six ' + tag + ' rooms re-lay (' + (re.error || 'ok') + ')');
+      const rs = st.rooms();
+      A.ok(!rs.some(a => rs.some(b => a.id < b.id && a.rects.some(p => b.rects.some(q => p.x1 <= q.x2 && q.x1 <= p.x2 && p.y1 <= q.y2 && q.y1 <= p.y2)))), tag + ': no two rooms overlap');
+    }
   }
   // SETTING A LINE UP (Andrew 10-01: "and then also setting up the conveyor systems"): every setting a person has in the
   // Workflow panel is a refit edit, a junction edit changes only what it names, and a folder or a bind names only what the
@@ -1635,7 +1870,27 @@ for (const c of T.catalog) {
     A.ok(!typo.ok && /^There is no line called "Newsleter"/.test(typo.error) && !blank.ok && /^Say which line/.test(blank.error), 'a misspelt or empty name finds no line, even with an unnamed one standing: ' + (typo.error || 'FOUND ' + typo.name));
     A.ok(SB.lineRef(st.serialize(), E, inP.id).ok, 'an unnamed line is still found by any machine on it');
     A.ok(st.undo().ok, 'its name comes back');
-    const noSv = SB.planEdit(st.serialize(), { refit: [{ op: 'folder', prop: inP.id, project: 'starnet' }] }, E);
+    // a line is found by whole words of its name, never by letters inside a word ("email" holds "ai": a schedule or a paid test
+    // landed on the line AI)
+    {
+      const ai = SB.planEdit(st.serialize(), { refit: [{ op: 'label', prop: inP.id, text: 'AI' }] }, E);
+      A.ok(ai.ok && SB.apply(st, ai.plan, E).ok, 'fixture: the line is called AI');
+      for (const other of ['email triage', 'Daily news digest', 'Main']) A.ok(!SB.lineRef(st.serialize(), E, other).ok, '"' + other + '" is not the line AI');
+      A.ok(SB.lineRef(st.serialize(), E, 'the AI line').ok && SB.lineRef(st.serialize(), E, 'ai').ok, 'the line AI answers to its own name');
+      const wk = SB.planEdit(st.serialize(), { refit: [{ op: 'label', prop: inP.id, text: 'Weekly digest' }] }, E);
+      A.ok(wk.ok && SB.apply(st, wk.plan, E).ok && SB.lineRef(st.serialize(), E, 'digest').ok && !SB.lineRef(st.serialize(), E, 'dig').ok, 'a whole word of a name finds the line, part of a word does not');
+      A.ok(st.undo().ok && st.undo().ok, 'its old name comes back');
+    }
+    // a cap names its amount: one left out took the day cap OFF; the budget's own perDay key is read as the amount
+    {
+      const bare = SB.planEdit(st.serialize(), { refit: [{ op: 'cap', prop: inP.id }] }, E);
+      A.ok(!bare.ok && /cap is \{ op: "cap", prop, usd \}/.test(bare.error), 'a cap with no amount is refused, never taken off: ' + (bare.error || bare.plan.summary));
+      const per = SB.planEdit(st.serialize(), { refit: [{ op: 'cap', prop: inP.id, perDay: 5 }] }, E);
+      A.ok(per.ok && /may spend \$5 a day/.test(per.plan.summary), 'a cap given perDay caps it at that: ' + (per.error || per.plan.summary.slice(-160)));
+      const off = SB.planEdit(st.serialize(), { refit: [{ op: 'cap', prop: inP.id, usd: null }] }, E);
+      A.ok(off.ok, 'usd: null still takes the cap off, said plainly');
+    }
+    const noSv =SB.planEdit(st.serialize(), { refit: [{ op: 'folder', prop: inP.id, project: 'starnet' }] }, E);
     A.ok(!noSv.ok && /could not read the Commander's trusted projects/.test(noSv.error), 'a page that could not read the projects refuses, never guesses');
     // sweep 2026-10-01: routes only on a FILTER (a bay took routes and "sorted" nothing)
     const rb = SB.planEdit(st.serialize(), { refit: [{ op: 'routes', prop: bayP.id, routes: { code: 'east' } }] }, SV);
@@ -1753,7 +2008,7 @@ for (const c of T.catalog) {
     if (verb === 'station.plan_restyle') return { ok: true, result: { planId: 'plan-s-1', summary: 'Restyle HOME: teal floor. Nothing is added, moved or removed.' } };
     if (verb === 'station.plan_edit') return { ok: true, result: { planId: 'plan-e-1', summary: 'Remove GYM (18 × 11), with the hallway that joined it.' } };
     if (verb === 'station.plan_undo') return { ok: true, result: { planId: 'plan-u-1', summary: 'Undo the last build (GYM): the station goes back exactly as it was before it.' } };
-    if (verb === 'station.map' && args.look === 'Den') return { ok: true, result: { look: 'DEN', mime: 'image/webp', width: 640, height: 420, data: 'UklGRg==', shows: { x1: 23, y1: -1, x2: 54, y2: 22 }, tilePx: 20 } };
+    if (verb === 'station.map' && args.look === 'Den') return { ok: true, result: { look: 'DEN', mime: 'image/webp', width: 640, height: 420, data: 'UklGRg==', shows: { x1: 23, y1: -1, x2: 54, y2: 22 }, tilePx: 20, issues: ['the chair at (30, 4) faces west, away from the long table beside it: turn it toward it.'] } };
     if (verb === 'station.map' && args.look === 'Void') return { ok: false, error: 'There is no room called "Void". Rooms: HOME, DEN.' };
     if (verb === 'station.map') return { ok: true, result: { main: 'HOME', rooms: [{ name: 'HOME', main: true, w: 18, h: 11 }], hallways: 0, drawing: ['AAAAAAAAAAAAAAAAAA'] } };
     if (verb === 'station.plan_build') return (args.request.rooms || [])[0] && args.request.rooms[0].beside === 'Mars' ? { ok: false, error: 'There is no room called "Mars". Rooms: HOME.' }
@@ -1826,6 +2081,18 @@ for (const c of T.catalog) {
     const bad = await pt.run({ describe: 'a broken thing' }, {});
     A.ok(/^REFUSED: StarNet could not make "a broken thing": the drawing never passed its checks \(\$0\.20 was spent on the tries\)/.test(bad.content), 'a failed drawing says why and what it spent: ' + bad.content);
     A.ok(/^REFUSED: Making props is not available on this station\./.test((await toolsOf(null).makePropTool.run({ describe: 'x' }, {})).content), 'a station without the prop maker refuses plainly');
+    // the front view and the side view share ONE wait: two full waits outran the tool's own timeout and lost a paid prop's id
+    {
+      let polls = 0, frontPolls = 0;
+      const slowUP = { start: async () => ({ ok: true, job: { id: 'pj_FRONT0001abcdefgh' } }),
+        startSide: async () => ({ ok: true, job: { id: 'pj_SIDE00001abcdefgh' } }),
+        job: id => { polls++; if (/FRONT/.test(id)) return ++frontPolls >= 3 ? { id, status: 'done', propId: 'user_slow_t1', costUsd: 0.35 } : { id, status: 'running' }; return { id, status: 'running' }; },
+        list: () => [{ id: 'user_slow_t1', label: 'SLOW', footprint: { w: 1, h: 1 }, costUsd: 0.35 }] };
+      const slow = makeStationTools({ station: pbridge, now: () => 1000, planMemo: new Map(), lineMenu: () => [], styleMenu: () => [], roomMenu: () => [], kitMenu: () => [], presetMenu: () => [], userProps: slowUP, propWaitMs: 50, propTickMs: 5 }).makePropTool;
+      const sr = JSON.parse((await slow.run({ describe: 'slow thing', sideView: true }, {})).content);
+      A.ok(sr.made && sr.id === 'user_slow_t1' && sr.sideView === false && /still being drawn/.test(sr.sideNote), 'a side view still drawing when the one wait ends: the prop is made and named, its side view said to be coming: ' + JSON.stringify(sr).slice(0, 200));
+      A.ok(polls <= 12, 'both views wait within one budget (10 ticks), not one each: ' + polls + ' polls');
+    }
     const idx = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
     A.ok(/station\[\._\]make_prop\$\/\.test\(String\(call && call\.name \|\| ''\)\)\) return '"' \+ String\(a\.describe/.test(idx) && /'", drawn with your StarNet credits \(about \$0\.35'/.test(idx), 'the approval card names the object and its price');
   }
@@ -1933,6 +2200,7 @@ for (const c of T.catalog) {
   A.ok(Array.isArray(lk.images) && lk.images.length === 1 && lk.images[0].mime === 'image/webp' && lk.images[0].data === 'UklGRg==', 'station.map { look } hands the model the picture');
   A.ok(/^A picture of DEN as it renders now \(640 x 420 px; it shows tiles x 23-54, y -1-22 with the wall faces above, about 20 px a tile\)\. Judge it as a designer/.test(lk.content) && /station\.map \{ room \}/.test(lk.content) && lk.summary === 'looked at DEN' && !/UklGRg/.test(lk.content), 'with a note that says what it shows, and never the bytes as text');
   A.eq(calls[calls.length - 1], ['station.map', { look: 'Den' }], 'the page is asked for that room');
+  A.ok(/ Issues StarNet sees in this room \(fix every one\): the chair at \(30, 4\) faces west, away from the long table beside it/.test(lk.content), 'a room look carries the issues StarNet sees beside the picture');
   const lkAll = await mapT.run({ look: 'the whole station' }, {});
   A.eq(calls[calls.length - 1], ['station.map', { look: true }], 'look: "the whole station" asks for all of it');
   A.ok(/^REFUSED: The page sent no picture/.test(lkAll.content), 'a reply with no picture is refused, never passed off as one');
@@ -1973,6 +2241,29 @@ for (const c of T.catalog) {
     const outer = st.transact(() => { st.renameRoom(room.id, 'OUTER'); const inner = st.transact(() => { st.renameRoom(room.id, 'INNER'); return { ok: false }; }); return { ok: !inner.ok && st.rooms()[0].name === 'OUTER' }; });
     A.ok(outer.ok && st.rooms()[0].name === 'OUTER', 'a refused NESTED batch rolls back only itself');
     A.ok(st.undo().ok && JSON.stringify(st.serialize()) === JSON.stringify(depthBefore) && st.rooms()[0].name === 'ZZTOP', 'one undo takes back the outer batch, and the user\'s earlier rename is still there');
+  }
+  // sweep 2026-10-02: a piece REACHING into a hallway goes with it (removeRoom drops every piece whose footprint touches
+  // the room) — the re-lay must refuse to cut it, and a hallway delete's card must count and name it
+  {
+    const E3 = Object.assign({}, env, { StationTemplates: T, PropSprites: Sprites, EquipmentHelp: require('../frontend/app/equipmenthelp.js'),
+      RoomStyles: require('../frontend/app/roomstyles.js'), LineLayout: require('../frontend/app/linelayout.js'), LineEdit: require('../frontend/app/lineedit.js') });
+    const mk = () => {
+      const s = M.create(M.starterDoc()); s.ensureWorkstation('agent'); s.ensureWorkstation('rex');
+      const lay = SB.planEdit(s.serialize(), { refit: [{ op: 'hall', x: 18, y: 4, w: 6, h: 3 }, { op: 'room', name: 'Den', kind: 'hab', x: 24, y: 0, w: 18, h: 11 }] }, E3);
+      SB.apply(s, lay.plan, E3);
+      const i = s.addProp({ t: 'intake', x: 9, y: 5, w: 2, h: 2 }), b = s.addProp({ t: 'bay', x: 13, y: 5, w: 2, h: 2 }), o = s.addProp({ t: 'outbox', x: 17, y: 5, w: 2, h: 2 });   // the outbox reaches x=18: the hallway
+      s.connectBelt(i.id, b.id); s.connectBelt(b.id, o.id); s.assignPropAgent(b.id, 'rex');
+      return { s, o };
+    };
+    const a = mk();
+    const re = SB.planEdit(a.s.serialize(), { rearrange: 'diamond' }, E3);
+    A.ok(!re.ok && /stands in a hallway \(outbox at \(17, 5\)\)/.test(re.error), 'a re-lay refuses when a line\'s outbox reaches into a hallway (it used to delete it under a card saying lines stay as they are): ' + (re.error || 'PLANNED'));
+    A.ok(!!a.s.propById(a.o.id), 'and the outbox is still there');
+    const b = mk();
+    const desk = b.s.addProp({ t: 'desk', x: 23, y: 4, w: 2, h: 1 }); b.s.assignPropAgent(desk.id, 'agent');   // straddles the hallway and Den
+    const hall = b.s.rooms().find(r => r.kind === 'corridor');
+    const del = SB.planEdit(b.s.serialize(), { refit: [{ op: 'delete', hall: hall.name }, { op: 'hall', x: 18, y: 7, w: 6, h: 3 }] }, E3);
+    A.ok(del.ok && /with the 2 pieces in or reaching into it \(the outbox, NOVA's desk\)/.test(del.plan.summary), 'a hallway delete counts AND names the desk and machine reaching into it: ' + (del.ok ? del.plan.summary.slice(0, 220) : del.error));
   }
   A.report('station-builder');
 })();

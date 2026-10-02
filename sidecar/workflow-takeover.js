@@ -153,9 +153,15 @@ function normalize(raw) {
 }
 // A decision follows the WORK, not only its id: a cluster's id moves when its oldest occasion ages out of the
 // window, and "don't offer this again" must still hold for the same workflow asked a fourth time.
-function decisionFor(state, id, c, agentId, project) {
+// A decision saved by 0.12.5 has no core, and its id was the WORDS' signature (idFor([agent, project, signature(text)])): it
+// still answers for the same request, or a "don't offer this again" (or a snooze) was forgotten on upgrade.
+function legacyIds(agentId, project, texts) {
+  return texts.map(t => signature(t)).filter(Boolean).map(sig => idFor([agentId, project, sig].join('\n')));
+}
+function decisionFor(state, id, c, agentId, project, legacy) {
   return state.decisions.find(d => d.id === id) ||
-    state.decisions.find(d => d.core && d.core.agentId === agentId && d.core.project === project && similar(d.core, c)) || null;
+    state.decisions.find(d => d.core && d.core.agentId === agentId && d.core.project === project && similar(d.core, c)) ||
+    (legacy && legacy.length ? state.decisions.find(d => !d.core && legacy.indexOf(d.id) >= 0) : null) || null;
 }
 function blocked(decision, now) {
   return !!(decision && (decision.never || decision.until > now || decision.offers >= MAX_OFFERS));
@@ -227,7 +233,7 @@ function candidates(input) {
     if (occasions.length < 3) continue;
     const last = occasions[occasions.length - 1];
     const id = idFor([k.agentId, k.project, k.rows[0].b.id || k.rows[0].r.runId].join('\n'));
-    if (blocked(decisionFor(state, id, last.c, k.agentId, k.project), now)) continue;
+    if (blocked(decisionFor(state, id, last.c, k.agentId, k.project, legacyIds(k.agentId, k.project, k.rows.map(x => x.text))), now)) continue;
     if (jobs.some(j => j && j.meta && j.meta.workflowTakeoverId === id) || jobCovers(jobs, last.b.agentId, last.c, last.text)) continue;
     const evidence = occasions.slice(-6).map(x => ({ briefId: x.b.id, runId: x.r.runId, at: x.at, quote: clip(x.text, 400) }));
     const answers = (last.b.questions || []).filter(q => q.answer).map(q => '- ' + clip(redact(q.text), 240) + ': ' + clip(redact(q.answer), 500));
@@ -267,7 +273,7 @@ function notice(input) {
   if (jobCovers(jobs, agentId, c, text)) return null;
   // Same id rule as candidates() (the oldest member); decisionFor also matches by core when clustering differs.
   const id = idFor([agentId, project, rows[0].b.id || rows[0].r.runId].join('\n'));
-  if (blocked(decisionFor(state, id, c, agentId, project), now)) return null;
+  if (blocked(decisionFor(state, id, c, agentId, project, legacyIds(agentId, project, rows.map(x => x.text).concat([text]))), now)) return null;
   const times = prior.map(o => o.at).concat([now]);
   return { id, count: prior.length + 1, dates: prior.map(o => o.at), suggest: suggestCadence(times),
     quotes: prior.slice(-3).map(o => clip(o.text, 160)), core: Object.assign({}, c, { agentId, project }) };
