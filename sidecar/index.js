@@ -18436,14 +18436,21 @@ async function runOnceCore(o) {
     if (typeof auxVisionProvider.supportsImages === 'function' && !auxVisionProvider.supportsImages()) throw new Error('no vision route: this agent\'s model runs through Claude Code, which cannot see images — connect an OpenRouter key in SETTINGS › AI & MODELS for image analysis');
     const ac = new AbortController();
     const t = setTimeout(() => { try { ac.abort(); } catch (_) {} }, Math.max(5000, Number(req && req.timeoutMs) || 55000));
+    // the RUN's stop ends this call too (it ran on for up to 55 s after STOP), and its usage is booked like any media
+    // spend — it reached neither the ledger nor the caps before (QA 2026-10-02)
+    const callSignal = (signal && typeof AbortSignal.any === 'function') ? AbortSignal.any([ac.signal, signal]) : ac.signal;
+    let usage = null;
     try {
       let out = '';
-      for await (const ev of auxVisionProvider.stream({ model, messages: (req && req.messages) || [], signal: ac.signal, stream: true })) {
+      for await (const ev of auxVisionProvider.stream({ model, messages: (req && req.messages) || [], signal: callSignal, stream: true })) {
         if (ev && ev.type === 'text' && ev.delta) out += ev.delta;
-        else if (ev && ev.type === 'done') break;
+        else if (ev && ev.type === 'usage') usage = ev.usage;   // read to the end: a provider's usage can arrive after its done
       }
       return out;
-    } finally { clearTimeout(t); }
+    } finally {
+      clearTimeout(t);
+      if (usage) { try { recordMediaUsage(usage, model); } catch (e) { failNote('aux.vision.usage', e); } }
+    }
   };
   const imageTools = makeImageTools({ openrouter: studioRoute.ok ? { apiKey: studioRoute.key, model, baseUrl: studioRoute.baseUrl, provider: studioRoute.provider, protocol: studioRoute.protocol,
     getToken: studioRoute.protocol === 'codex-responses' ? ensureCodexAccessToken : undefined,

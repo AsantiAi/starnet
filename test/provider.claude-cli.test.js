@@ -227,6 +227,8 @@ const result = (extra) => Object.assign({ type: 'result', subtype: 'success', is
     const aux = idx.slice(idx.indexOf('const auxVisionCall = async (req) => {'), idx.indexOf('const imageTools = makeImageTools('));
     A.ok(/!auxVisionProvider\.supportsImages\(\)\) throw new Error\('no vision route/.test(aux) && aux.indexOf('supportsImages') < aux.indexOf('.stream('),
       'the aux vision route refuses a provider that cannot see images BEFORE asking it to describe one');
+    A.ok(/AbortSignal.any([ac.signal, signal])/.test(aux) && /signal: callSignal/.test(aux), 'QA 10-02: the aux vision call ends when its run is stopped');
+    A.ok(/ev.type === 'usage') usage = ev.usage/.test(aux) && /recordMediaUsage(usage, model)/.test(aux) && !/type === 'done') break/.test(aux), 'QA 10-02: its usage is booked like media spend (read to the end of the stream)');
   }
   A.report('provider.claude-cli.test');
 })().catch(e => { console.log('FAIL: provider.claude-cli.test threw -- ' + (e && e.stack || e)); process.exit(1); });
