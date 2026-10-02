@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "b7cee4ea026620ecd93f75e5ebd3c9346261962c",
+    "sourceCommit": "8151f966cf0bbcbaf41f080de0da2c9dae9e7957",
     "pathSetSha256": "390a2a551d88b2597ca4ab3f1acc7ca535b3b978e277a0ed8c0fb507e73e87c0",
     "files": [
       {
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 416565,
-        "sha256": "a82a5bccf00a460677af2a93def85ff8996b58cfe9eb95a6cd4eb6a43ea32fc1"
+        "bytes": 416187,
+        "sha256": "de722c28aab04fbf72655f5d07a380d54708aa7f3d73551a15e6601add365e4e"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 694792,
-        "sha256": "b33bce719eeabd946b93ec27566604cf3d6abd083291b37dfe2efde256e8a428"
+        "bytes": 693428,
+        "sha256": "52589563671a7a92c50dcc30b9027b775c1d305988dab1769c6019dacd5c20ee"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -428,8 +428,8 @@
       },
       {
         "path": "frontend/app/deskscreen.js",
-        "bytes": 37157,
-        "sha256": "1c32fda4d9d1f8b1d83f7a7e7b339d8b1eb2042e5b6ddf7d81367192403c366a"
+        "bytes": 36978,
+        "sha256": "b0deab98077b37e4e295d5380e4968cc2cf6bc94aab927fb695db93146326baa"
       },
       {
         "path": "frontend/app/diagnostics.js",
@@ -543,8 +543,8 @@
       },
       {
         "path": "frontend/app/group-chat.js",
-        "bytes": 39748,
-        "sha256": "23244ff05fa551d244943d4aced119fd850b0821660ca7be20f3f1f7bfe50f8c"
+        "bytes": 40272,
+        "sha256": "56681080cfa0b6bedcd904bc7f6bf3ebfe842b51439159750139bb99f308a813"
       },
       {
         "path": "frontend/app/harness.js",
@@ -563,8 +563,8 @@
       },
       {
         "path": "frontend/app/industrialtextures.js",
-        "bytes": 32476,
-        "sha256": "2519aafcab4fcacce12cb024b0b1e8dcf95c48e100ce8c70128cd8f8f6dfd947"
+        "bytes": 32665,
+        "sha256": "543890874f769b760fad3317b9bca33f9c739ed21e5dfdaf3c3b59eac45a7d8c"
       },
       {
         "path": "frontend/app/intake.js",
@@ -763,8 +763,8 @@
       },
       {
         "path": "frontend/app/pluginhost.js",
-        "bytes": 29444,
-        "sha256": "1aee9242b88318a1a748c8bc2a68db2b1f99e1fce2245ce4f99f02ba4cbf2989"
+        "bytes": 29102,
+        "sha256": "d095c169bad3b2a32756c5d066b392de49d630ae3690a9aad7f73e93f02ff94b"
       },
       {
         "path": "frontend/app/pride.js",
@@ -1018,8 +1018,8 @@
       },
       {
         "path": "frontend/app/remoteview.js",
-        "bytes": 8797,
-        "sha256": "36849f2f4c05bb7569c659650691e911dea1785b1387f32024c9b6dff57afd21"
+        "bytes": 8455,
+        "sha256": "4d661ba59b8ba78e16d3b36bceec9d381683007066bd0f5209ef37b27620dc2d"
       },
       {
         "path": "frontend/app/resummonstore.js",
@@ -1123,13 +1123,13 @@
       },
       {
         "path": "frontend/app/stationbake.js",
-        "bytes": 363645,
-        "sha256": "70f2a02d53ed65fd10185604556ad7f088b21c3ce4ec494c7502ed449fb678e7"
+        "bytes": 363713,
+        "sha256": "785869e8ca1fc1c08b1c89f0090a6bc4aa3d22094d10a2584f255d7ba5fb60bd"
       },
       {
         "path": "frontend/app/stationbuilder.js",
-        "bytes": 294554,
-        "sha256": "f9c8f7f4d490a333b5e004476d7f9eeaa516ebb39e39a8362d5accdb40d4b840"
+        "bytes": 294437,
+        "sha256": "81844cc53f7801bdb7c12f647029dcf2526492eec48dbdbadc2dc400ed9942dd"
       },
       {
         "path": "frontend/app/stationcommands.js",
@@ -1153,8 +1153,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 786161,
-        "sha256": "0b3437e9a759e272c28af28b471a121c3ba4ce46dc5a08ffd63c039dc70f7565"
+        "bytes": 785426,
+        "sha256": "35f5ddc2aadfca704b1f06e29ca0690fe04bd3b5fc3af4da3a8b59e1c5ff7974"
       },
       {
         "path": "frontend/app/stepin.js",
@@ -1428,8 +1428,8 @@
       },
       {
         "path": "frontend/app/worldmodel.js",
-        "bytes": 237843,
-        "sha256": "550670497815c1ef4b4a9e483097ad99d8fffa0b369e0813274cc9925f781c51"
+        "bytes": 237339,
+        "sha256": "cacdf6266c872c5b4b63b1a4e2d64c3c654fc4b1a205224f4fe2c7a6f35d47c4"
       },
       {
         "path": "frontend/app/worldrenderer.js",
@@ -1438,8 +1438,8 @@
       },
       {
         "path": "frontend/app/worldsurface.js",
-        "bytes": 38406,
-        "sha256": "78a93375a184be75454d5e7b0c2a296fcfb86b1d6b9ba3a3e99c12dc8cbb2b15"
+        "bytes": 39672,
+        "sha256": "3fc7ae0913ddeb8c38923866c23f047ca78ef856a7af19261e462451debcbd0b"
       },
       {
         "path": "frontend/app/xp.js",

@@ -253,8 +253,10 @@ const WorldModel = (() => {
     radiator: { label: 'RADIATOR', suggest: 'hull' },
     utility: { label: 'UTILITY', suggest: 'cobalt' },
     acoustic: { label: 'PADDED', suggest: 'ash' },
+    braced: { label: 'BRACED', suggest: null },
+    machinery: { label: 'MACHINERY', suggest: null },
   };
-  const WALL_ORDER = ['bulkhead', 'courses', 'service', 'plating', 'ribbed', 'panelled', 'viewport', 'pipework', 'wainscot', 'hedge', 'pressure', 'radiator', 'utility', 'acoustic'];
+  const WALL_ORDER = ['bulkhead', 'courses', 'service', 'plating', 'ribbed', 'panelled', 'viewport', 'pipework', 'wainscot', 'hedge', 'pressure', 'radiator', 'utility', 'acoustic', 'braced', 'machinery'];
 
   /* the HULL material catalog — THE THIRD SURFACE AXIS (2026-08-05, Andrew, circling the outside
      edges of five rooms in a screenshot: "the outer walls are not customizable... for users who
