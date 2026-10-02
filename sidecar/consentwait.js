@@ -17,6 +17,7 @@
    Pure + injected deps (map, signal, clock, uuid, emit) so the timing semantics are unit-testable with fake
    timers (test/consentwait.test.js) — the REAL sidecar path rides this exact module, not a copy. */
 'use strict';
+const { note } = require('./failopen.js');   // a failing auto-deny announcer is noted, never silent
 
 function makeConsentWait(deps) {
   const pending = deps.pending;                 // Map: promptId -> finish(decision) (handleConsent's lookup)
@@ -37,7 +38,7 @@ function makeConsentWait(deps) {
       const promptId = uuid();
       let settled = false, timer = null, extended = false;
       function onAbort() { autoDeny(); }
-      function autoDeny() { if (settled) return; finish('deny'); if (onAutoDeny) { try { onAutoDeny(promptId); } catch (_) {} } }
+      function autoDeny() { if (settled) return; finish('deny'); if (onAutoDeny) { try { onAutoDeny(promptId); } catch (e) { note('consent.autoDeny', e); } } }
       function finish(decision) {
         if (settled) return; settled = true;
         pending.delete(promptId);
