@@ -294,6 +294,34 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
   }
 }
 
+// ---- (sweep 2026-10-02) team.resume NEVER WIDENS: a worker started under restrictions (phone / non-owner / payload)
+// resumed later by an UNRESTRICTED lead keeps them — its stored prompt never runs with Full Access ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sk-orch-resume-limits-'));
+  try {
+    const subagents = makeSubagentManager({ fs, pathMod: path, file: path.join(root, 'subagents.json'), clock: { now: () => 1000 }, emit: () => {}, newId: counter() });
+    const first = subagents.start({ leadId: 'lead', agentId: 'researcher', prompt: 'from a phone', runId: 'run_p',
+      originLimits: { withholdHostPower: true, untrustedEntry: true, withholdTaste: true, taintedBy: 'web_fetch' } }, async () => new Promise(() => {}));
+    await tick();
+    subagents.interrupt(first.id, 'lead');
+    const reloaded = makeSubagentManager({ fs, pathMod: path, file: path.join(root, 'subagents.json'), clock: { now: () => 1001 }, emit: () => {}, newId: counter() });
+    const ro = fakeRunOnce(async () => ({ reason: 'done', messages: [{ role: 'assistant', content: 'resumed' }], usd: 0 }));
+    const roster = new Map([['researcher', { system: 'R' }]]);
+    const { resumeTool } = makeOrchestrationTools({ runOnce: ro, roster: () => roster, key: 'k', model: 'm', newId: counter(), subagents: reloaded });
+    // the resuming lead is UNRESTRICTED: full access, no taint
+    const leadAuthority = { withholdHostPower: false, untrustedEntry: false, fullAccess: () => true, taintedBy: () => null };
+    await resumeTool.run({ id: first.id }, { agentId: 'lead', emit: () => {}, connectorAuthority: leadAuthority });
+    await tick(); await tick();
+    const a = ro.calls[0] && ro.calls[0].connectorAuthority;
+    A.ok(a && a.withholdHostPower === true && a.untrustedEntry === true && a.withholdTaste === true && a.fullAccess() === false && a.taintedBy() === 'web_fetch',
+      'a resumed worker keeps the restrictions it started under, whoever resumes it: ' + JSON.stringify(a && { w: a.withholdHostPower, u: a.untrustedEntry, t: a.withholdTaste }));
+    A.eq(ro.calls[0].initialTaint, 'web_fetch', 'and starts tainted, as it was');
+    A.ok(leadAuthority.withholdHostPower === false, 'the resuming lead\'s own authority object is not mutated');
+  } finally {
+    try { fs.rmSync(root, { recursive: true, force: true }); } catch (_) {}
+  }
+}
+
 // ---- capability gate: team.dispatch is denied without the orchestrator grant, runs with it ----
 {
   const ro = fakeRunOnce();

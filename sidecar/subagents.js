@@ -133,6 +133,8 @@
         // the worker run's host-proven untrusted-content taint ('' = clean). team.subagents relays it with the
         // result text so the polling lead latches it too (sec-taint 09-25)
         taintedBy: r.taintedBy || '',
+        // the restrictions it started under (sticky; team.resume ORs them into the resuming run's authority)
+        originLimits: r.originLimits || null,
         artifacts: Array.isArray(r.artifacts) ? r.artifacts.slice(-40) : [],
         steerHistory: Array.isArray(r.steerHistory) ? r.steerHistory.slice(-40) : [],
         attempts: r.attempts || 0, startedAt: r.startedAt || 0, updatedAt: r.updatedAt || 0,
@@ -218,6 +220,11 @@
       }
       return count;
     }
+    function mergeOriginLimits(a, b) {
+      a = a || {}; b = b || {};
+      return { withholdHostPower: !!(a.withholdHostPower || b.withholdHostPower), untrustedEntry: !!(a.untrustedEntry || b.untrustedEntry),
+        withholdTaste: !!(a.withholdTaste || b.withholdTaste), taintedBy: String(a.taintedBy || b.taintedBy || '').slice(0, 200) };
+    }
     function upsertStart(meta) {
       const id = meta.id ? safeId(meta.id, 'subagent id') : safeId(newId(), 'subagent id');
       const t = now();
@@ -240,6 +247,10 @@
         // The run that started THIS generation (a lead's team.dispatch/team.spawn, or the run that called
         // team.resume). A cancelled parent run cascades to it (cancelChildren); '' = no parent run to follow.
         parentRunId: String(meta.parentRunId || '').slice(0, 120),
+        // the restrictions the worker STARTED under (host-minted, from the starting run's authority): sticky across
+        // generations and only ever widened toward MORE restriction, so a later team.resume from an unrestricted lead
+        // can never run a phone/non-owner/payload-started worker's prompt with Full Access (sweep 2026-10-02)
+        originLimits: mergeOriginLimits(old && old.originLimits, meta.originLimits),
         cancelledBy: '',
         stalledAfterMs: 0,
         status: 'running',
