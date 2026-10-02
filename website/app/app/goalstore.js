@@ -584,7 +584,7 @@ const GoalStore = (() => {
   // step edges already celebrate via QuestState; this is the capstone for the goal itself.
   function celebrateGoalDone() {
     try { if (typeof SFX === 'object' && SFX.quest) SFX.quest(); } catch (_) {}
-    try { if (typeof StationUI !== 'undefined' && StationUI.notify) StationUI.notify('◆ goal achieved — your outcome has been recorded.', 'gold'); } catch (_) {}
+    try { if (typeof StationUI !== 'undefined' && StationUI.notify) StationUI.notify('◆ goal achieved — your outcome has been recorded.', 'gold', undefined, { kind: 'result', go: { term: 'quests' } }); } catch (_) {}
     noteGoalDone();
   }
   // the evidence line folded onto a completed milestone: prefer a real run summary, else name the milestone.

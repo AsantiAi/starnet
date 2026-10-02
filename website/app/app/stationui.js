@@ -197,7 +197,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     try { localStorage.setItem(KEY, JSON.stringify(store)); lastSaveOk = true; return true; }
     catch (_) {
       const wasSaved = lastSaveOk; lastSaveOk = false;
-      if (wasSaved) try { notify('Could not save local settings. Changes may be lost when you restart.', 'warn'); } catch (_) {}
+      if (wasSaved) try { notify('Could not save local settings. Changes may be lost when you restart.', 'warn', undefined, { kind: 'alert', key: 'settings-save-failed' }); } catch (_) {}
       return false;
     }
   }
@@ -8419,17 +8419,60 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   // a recovery can never leave a stale red outage card on screen. transient (notification diet, 2026-08-18)
   // shows the toast but skips the persistent NOTIFICATIONS record — for one-tap confirmations of an action
   // the Commander just performed ("copied", "archived"): confirming NOW is useful, filing it in the bell as
-  // unread history is clutter. Everything else remains history.
+  // unread history is clutter.
+  // NOTIFICATIONS THAT MEAN SOMETHING (Andrew 10-02: "keep the notifications, but actually make it more useful
+  // instead of meaningless"): the bell keeps only what you'd want AFTER the moment — kind 'needs' (an agent is
+  // waiting on you), 'result' (work finished while you were elsewhere) and 'alert' (something stopped or broke).
+  // A caller opts in with opts.kind (or a category, which implies one); every other call is a toast and nothing
+  // more — the ~270 "✓ saved / pick a schedule first" confirmations never pile up as unread history again.
+  // opts.go = where the entry leads ({ ws } a session, or { term, section } a window) — every kept entry is a
+  // door, not a dead line. opts.key folds a repeat of the same condition into ONE entry, and settleNotifs(key)
+  // marks it handled when the wait ends (answered, run over), so NEEDS YOU never shows a question already gone.
+  const NOTIF_KIND_OF = { needsApproval: 'needs', runComplete: 'result', cronDigest: 'result' };
   function notify(text, cls, category, opts) {
     const pref = notifyPrefOf(category);
     if (!pref.show) return;   // this category is muted — honored here, at the real emit point (not decorative)
-    if (!(opts && opts.transient)) {
-      store.notifs.push({ id: uid('n'), t: Date.now(), txt: String(text || ''), cls: cls || '', read: false });
+    const kind = (opts && opts.kind) || NOTIF_KIND_OF[category] || '';
+    const go = (opts && opts.go) || null;
+    let rec = null;
+    if (kind && !(opts && opts.transient)) {
+      const key = (opts && opts.key) || '';
+      if (key) store.notifs = store.notifs.filter(n => !(n.key === key && !n.done));   // one entry per live condition
+      rec = { id: uid('n'), t: Date.now(), txt: String(text || ''), cls: cls || '', read: false, kind };
+      if (go) rec.go = go;
+      if (key) rec.key = key;
+      store.notifs.push(rec);
       if (store.notifs.length > 60) store.notifs = store.notifs.slice(-60);
       save(); badges();
       if (open.notifs) rerender('notifs');
     }
-    toast(String(text || ''), cls || '', pref.sound, opts);
+    let tOpts = opts;
+    if (go && !(opts && opts.onClick)) tOpts = Object.assign({}, opts, { onClick: () => openNotif(rec, go) });
+    toast(String(text || ''), cls || '', pref.sound, tOpts);
+  }
+  function goToNotif(go) {
+    if (!go) return false;
+    if (go.ws && typeof App !== 'undefined' && App.openWorkstream) { App.openWorkstream(go.ws); return true; }
+    if (go.term) { openTerm(go.term, go.section); return true; }
+    return false;
+  }
+  function openNotif(rec, go) {
+    if (rec && !rec.read) { rec.read = true; save(); badges(); if (open.notifs) rerender('notifs'); }
+    return goToNotif(go || (rec && rec.go));
+  }
+  // The wait is over (answered, denied, the run ended): the entry stays in the history as handled, leaves NEEDS YOU.
+  function settleNotifs(key) {
+    if (!key) return;
+    let n = 0;
+    store.notifs.forEach(r => { if (r.key === key && !r.done) { r.done = true; r.read = true; n++; } });
+    if (n) { save(); badges(); if (open.notifs) rerender('notifs'); }
+  }
+  // Opening a session reads everything that pointed at it (the notification WAS the session; you're in it now).
+  function seenSession(wsId) {
+    if (!wsId) return;
+    let n = 0;
+    store.notifs.forEach(r => { if (!r.read && r.go && r.go.ws === wsId) { r.read = true; n++; } });
+    if (n) { save(); badges(); if (open.notifs) rerender('notifs'); }
   }
   // A caller that leads with an ALL-CAPS token + colon ("MODEL: gpt / high") is naming a READOUT,
   // not writing a sentence — that prefix becomes the card's engraved label and the rest becomes the
@@ -8555,41 +8598,64 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     else body.innerHTML = '<div class="fb-empty">UPDATE CENTER UNAVAILABLE.<br><span>Restart the desktop app and try again.</span></div>';
   }
   let notifView = 'all';
+  // Entries from before 10-02 carry no kind: they were the toast-shaped confirmations the bell no longer keeps.
+  function pruneLegacyNotifs() {
+    const before = store.notifs.length;
+    store.notifs = store.notifs.filter(n => n && n.kind);
+    if (store.notifs.length !== before) save();
+  }
+  const isWaiting = n => n.kind === 'needs' && !n.done;
   function buildNotifs(body) {
+    pruneLegacyNotifs();
     let backfilled = false;
     store.notifs.forEach(n => { if (!n.id) { n.id = uid('n'); backfilled = true; } });
     if (backfilled) save();
-    const unread = store.notifs.filter(n => !n.read).length;
-    const rows = store.notifs.slice().reverse().filter(n => notifView !== 'unread' || !n.read);
-    body.innerHTML = '<header class="utility-head"><h2>Notifications</h2><p>Run results, saved outputs, and alerts from your crew.</p></header>' +
+    // NEEDS YOU first (an agent is waiting on you — stays until it's answered or the run ends), then everything
+    // that finished or went wrong, newest first. Every entry with a destination is a door: click = go there.
+    const waiting = store.notifs.filter(isWaiting).reverse();
+    const rest = store.notifs.filter(n => !isWaiting(n));
+    const unread = rest.filter(n => !n.read).length;
+    const rows = rest.slice().reverse().filter(n => notifView !== 'unread' || !n.read);
+    const row = (n, i) => {
+      const sev = severityOf(n.cls);
+      const door = !!(n.go && (n.go.ws || n.go.term));
+      const tag = n.kind === 'needs' ? (n.done ? 'Handled' : 'Waiting on you') : (n.kind === 'result' ? 'Finished' : 'Alert');
+      return '<div class="nf ' + esc(n.cls || '') + ' sev-' + sev + ' nf-k-' + esc(n.kind || 'alert') + (n.read ? ' read' : '') + (door ? ' nf-door' : '') + '" style="--ci:' + i + '" data-nid="' + esc(n.id) + '"' +
+        (door ? ' role="button" tabindex="0" title="Open where this happened"' : '') + '>' +
+        '<span class="nf-sev" aria-hidden="true">' + esc(SEV_GLYPH[sev]) + '</span>' +
+        '<div class="nf-copy"><div class="nf-meta"><span class="nf-kind">' + tag + '</span><span class="nf-ts">' + notifStamp(n.t) + '</span>' +
+        (!n.read ? '<span class="nf-unread">New</span>' : '') + '</div><span class="nf-txt">' + esc(n.txt) + '</span>' +
+        (door ? '<span class="nf-go">OPEN ▸</span>' : '') + '</div>' +
+        '<button class="nf-x" data-nid="' + esc(n.id) + '" title="Dismiss notification" aria-label="Dismiss ' + esc(n.txt) + '">✕</button></div>';
+    };
+    body.innerHTML = '<header class="utility-head"><h2>Notifications</h2><p>What needs you, and what finished or went wrong while you were elsewhere. Click one to go there.</p></header>' +
+      (waiting.length ? '<section class="nf-needs"><h4 class="ms-h">NEEDS YOU <span class="dim">— ' + waiting.length + ' waiting</span></h4><div class="nf-list nf-list-needs">' + waiting.map(row).join('') + '</div></section>' : '') +
       '<div class="nf-toolbar"><div class="utility-tabs" role="group" aria-label="Show notifications">' +
-      '<button type="button" data-nf-view="all" aria-pressed="' + (notifView === 'all') + '">All · ' + store.notifs.length + '</button>' +
-      '<button type="button" data-nf-view="unread" aria-pressed="' + (notifView === 'unread') + '">Unread · ' + unread + '</button></div>' +
+      '<button type="button" data-nf-view="all" aria-pressed="' + (notifView === 'all') + '">All · ' + rest.length + '</button>' +
+      '<button type="button" data-nf-view="unread" aria-pressed="' + (notifView === 'unread') + '">New · ' + unread + '</button></div>' +
       '<button class="bb sm" id="nf-clear"' + (!unread ? ' disabled' : '') + '>MARK ALL READ</button></div>' +
-      '<div class="nf-list">' + (rows.length ? rows.map((n, i) => {
-        const sev = severityOf(n.cls);
-        return '<div class="nf ' + esc(n.cls || '') + ' sev-' + sev + (n.read ? ' read' : '') + '" style="--ci:' + i + '">' +
-          '<span class="nf-sev" aria-hidden="true">' + esc(SEV_GLYPH[sev]) + '</span>' +
-          '<div class="nf-copy"><div class="nf-meta"><span class="nf-ts">' + notifStamp(n.t) + '</span>' +
-          (!n.read ? '<span class="nf-unread">Unread</span>' : '') + '</div><span class="nf-txt">' + esc(n.txt) + '</span></div>' +
-          '<button class="nf-x" data-nid="' + esc(n.id) + '" title="Dismiss notification" aria-label="Dismiss ' + esc(n.txt) + '">✕</button></div>';
-      }).join('') : '<div class="empty-state"><span class="es-glyph">▮</span><b>' + (notifView === 'unread' ? 'You’re all caught up' : 'No notifications yet') + '</b><span>' + (notifView === 'unread' ? 'Switch to All to see earlier updates.' : 'Updates appear here as you use the station.') + '</span></div>') + '</div>';
+      '<div class="nf-list">' + (rows.length ? rows.map(row).join('') : '<div class="empty-state"><span class="es-glyph">▮</span><b>' + (notifView === 'unread' ? 'You’re all caught up' : 'Nothing yet') + '</b><span>' + (notifView === 'unread' ? 'Switch to All to see earlier ones.' : 'When an agent needs your OK, or work finishes while you’re elsewhere, it lands here.') + '</span></div>') + '</div>';
     body.querySelectorAll('[data-nf-view]').forEach(b => b.addEventListener('click', () => {
       notifView = b.dataset.nfView; buildNotifs(body);
       const selected = body.querySelector('[data-nf-view="' + notifView + '"]'); if (selected) selected.focus();
     }));
     body.querySelector('#nf-clear').addEventListener('click', () => {
-      store.notifs.forEach(n => n.read = true); save(); rerender('notifs'); badges(); sfx('click');
+      store.notifs.forEach(n => { if (!isWaiting(n)) n.read = true; }); save(); rerender('notifs'); badges(); sfx('click');
     });
-    // Records carry no destination; do not imply an unsupported click-through.
+    body.querySelectorAll('.nf.nf-door').forEach(el => {
+      const go = () => { const n = store.notifs.find(x => x.id === el.dataset.nid); if (n) { sfx('click'); openNotif(n); } };
+      el.addEventListener('click', go);
+      el.addEventListener('keydown', ev => { if (ev.target === el && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); go(); } });
+    });
     body.querySelectorAll('.nf-x').forEach(b => b.addEventListener('click', ev => {
       ev.stopPropagation();
       store.notifs = store.notifs.filter(x => x.id !== b.dataset.nid);
       save(); badges(); rerender('notifs'); sfx('click');
     }));
   }
+  // The bell counts what's worth looking at: everyone still waiting on you + anything new that finished or broke.
   function badges() {
-    const n = store.notifs.filter(x => !x.read).length;
+    const n = store.notifs.filter(x => x && x.kind && (isWaiting(x) || !x.read)).length;
     const b = $('#nf-badge');
     if (b) { b.textContent = n || ''; b.style.display = n ? 'inline-block' : 'none'; }
   }
@@ -10341,7 +10407,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       if (r && r.ok) { sfx('click'); }
       // ARM-STATE truth: acceptPending reports {disarmed:{text}} when the scheduler that fires this
       // routine is off — surface it here too (the Dialogue flow already does), never approve-and-silence.
-      if (r && r.ok && r.disarmed && r.disarmed.text) notify(r.disarmed.text, 'warn');
+      if (r && r.ok && r.disarmed && r.disarmed.text) notify(r.disarmed.text, 'warn', undefined, { kind: 'alert', go: { term: 'automation', section: 'routines' } });
       rerender('quests', false);
     }));
     body.querySelectorAll('.q-prop-no').forEach(b => b.addEventListener('click', ev => {
@@ -10527,7 +10593,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     // dom + format primitives
     esc, mkEl, sfx, clock, ts, fmtRel,
     // hud + window plumbing
-    notify, toast, mountConsole, rerender, openTerm, openSignIn, navigateWork, workConversation,
+    notify, settleNotifs, seenSession, toast, mountConsole, rerender, openTerm, openSignIn, navigateWork, workConversation,
     // deep-link a missing capability object into the REAL placement surface (minimize this console,
     // open BUILD MODE, arm its palette on the exact prop). The TOOLSETS pane's inert rows use it, so a row
     // that diagnoses "no dish on station" can also cure it. Shared, never re-implemented: an auto-place
@@ -10683,7 +10749,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   function wireNotifyLive() {
     if (notifyLiveWired || typeof U === 'undefined' || !U.bus) return;
     notifyLiveWired = true;
-    U.bus.on('notify', s => { if (typeof s === 'string' && s) notify(s, 'gold', 'cronDigest'); });
+    U.bus.on('notify', s => { if (typeof s === 'string' && s) notify(s, 'gold', 'cronDigest', { go: { term: 'automation', section: 'away' } }); });
   }
 
   // called when entering the game room with the live agent(s)
@@ -10766,7 +10832,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   // GROWTH Tier 3: repaint the Settings AUTONOMY panel's EARNED badge if it is open (no-op otherwise — the paint fn
   // queries its own (possibly detached) host nodes, so a closed panel costs nothing). Called after a trust accept.
   const repaintAutonomy = () => { try { if (repaintAutonomyDial) repaintAutonomyDial(); } catch (_) {} };
-  return { init, enter, setRoster, leave, clearRunning, runningCount: () => runningAgents.size, isAgentRunning: (id) => agentLive(id), notify, flashSave, openAgent, refreshCrew: () => crewTick(), openArcade, toggleTerm, openTerm, openDesk, closeTerm, rerender, refreshBoard: refreshBoardLive, pokeQuests, setTheme, getTheme, repaintAutonomy, refreshSystems, toggleFamily, familyOf, registerWindow, h };
+  return { init, enter, setRoster, leave, clearRunning, runningCount: () => runningAgents.size, isAgentRunning: (id) => agentLive(id), notify, settleNotifs, seenSession, flashSave, openAgent, refreshCrew: () => crewTick(), openArcade, toggleTerm, openTerm, openDesk, closeTerm, rerender, refreshBoard: refreshBoardLive, pokeQuests, setTheme, getTheme, repaintAutonomy, refreshSystems, toggleFamily, familyOf, registerWindow, h };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { visibleTerminalRect, clampTerminalSize };

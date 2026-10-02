@@ -152,7 +152,7 @@ const Updates = (() => {
         state.update = r.update;
         state.phase = 'available';
         if (CORE.shouldNotify(prefs, r.update.version, Date.now(), !!r.update.critical)) {
-          notify((r.update.critical ? 'Critical update' : 'StarNet update') + ' v' + r.update.version + ' is ready in Update Center', r.update.critical ? 'warn' : 'gold');
+          notify((r.update.critical ? 'Critical update' : 'StarNet update') + ' v' + r.update.version + ' is ready in Update Center', r.update.critical ? 'warn' : 'gold', undefined, { kind: r.update.critical ? 'alert' : 'result', key: 'update-ready', go: { term: 'updates' } });
           prefs = CORE.recordNotified(prefs, r.update.version);
         }
       } else {
