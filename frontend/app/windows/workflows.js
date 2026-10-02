@@ -1,4 +1,4 @@
-/* STARNET — windows/workflows.js : WORK › WORKFLOWS (2026-09-30 — Andrew: "the easiest conveyor system we can possibly put together.
+/* STARNET — windows/workflows.js : WORK › AUTOMATE › WORKFLOWS (2026-09-30 — Andrew: "the easiest conveyor system we can possibly put together.
    It should be clear as day to the user how to use it").
 
    ONE PATH, in its own docked window — never inside Build Mode:

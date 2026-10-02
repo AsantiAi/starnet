@@ -740,7 +740,8 @@
   const saveSeen = (s) => { try { localStorage.setItem(SEEN_KEY, JSON.stringify([...s].slice(-400))); } catch (_) {} };
 
   function paintBadge(n) {
-    const btn = document.querySelector('.bb[data-term="automation"]');
+    // ONE MENU: AUTOMATION is a tab of WORK › AUTOMATE now — the badge rides the AUTOMATE dock button
+    const btn = document.querySelector('#bb-automate') || document.querySelector('.bb[data-term="automation"]');
     if (!btn) return;
     let dot = btn.querySelector('.lp-badge');
     if (!n) { if (dot) dot.remove(); return; }

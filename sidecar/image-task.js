@@ -90,7 +90,7 @@
   function admissionBlocker(input) {
     input = input || {};
     if (!input.hasStudio) {
-      return 'Image task blocked: this agent has no STUDIO. Open REFIT, place a STUDIO in this agent\'s room, and retry. No image artifact was produced.';
+      return 'Image task blocked: this agent has no STUDIO. Open BUILD MODE, place a STUDIO in this agent\'s room, and retry. No image artifact was produced.';
     }
     if (!input.studioEnabled) {
       return 'Image task blocked: a STUDIO is present, but MEDIA STUDIO is disabled for this run. Enable MEDIA STUDIO in ABILITIES > TOOLSETS (and include studio in the routine toolsets if this run is restricted), then retry. No image artifact was produced.';

@@ -920,7 +920,7 @@ const Onboarding = (() => {
     try { r = S.apply(pick.id); } catch (_) { r = null; }
     if (!running) return;
     await Dialogue.say([seg(r && r.ok
-      ? 'done. the ' + pick.name.toLowerCase() + ' is built, and its line is waiting for a crew: WORK › WORKFLOWS walks you through who works each step.'
+      ? 'done. the ' + pick.name.toLowerCase() + ' is built, and its line is waiting for a crew: WORK › AUTOMATE › WORKFLOWS walks you through who works each step.'
       : 'i couldn’t build that station here, so we’ll keep one room. you can try again in BUILD › Presets.', 44, 360)]);
   }
 

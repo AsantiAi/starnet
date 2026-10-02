@@ -311,7 +311,7 @@
     // TERMINAL/MEMORY is minutes away (the awakening flows straight into it), so the possibility-space teacher
     // was forbidden from teaching the possibilities. CONDITIONAL offers are honest: a plan phrased on wiring
     // claims nothing the agent can't reach, and the grabbed offer only executes after the gear exists.
-    else lines.push('You have NO tools wired yet. The Commander can grant you real powers in minutes by placing gear in REFIT — FILES, the WEB, a TERMINAL, MEMORY. An offer may lean on those powers IF it is phrased as starting once the gear is wired ("once you wire me the web, i could …"). Never claim to reach a power before it is placed; any offer for right now, unconditioned, must be pure reasoning/writing/planning work only.');
+    else lines.push('You have NO tools wired yet. The Commander can grant you real powers in minutes by placing gear in BUILD MODE — FILES, the WEB, a TERMINAL, MEMORY. An offer may lean on those powers IF it is phrased as starting once the gear is wired ("once you wire me the web, i could …"). Never claim to reach a power before it is placed; any offer for right now, unconditioned, must be pure reasoning/writing/planning work only.');
     if (exclude.length) lines.push('They already passed on these — offer DIFFERENT ones: ' + exclude.map(quote).join('; '));
     lines.push('Hard rules: every offer must be honestly doable here, small enough to start tonight, specific to THEIR life, phrased as what YOU would do ("i could …"). Reply with EXACTLY these lines, then any BELIEF lines:');
     lines.push('OFFER1: <the strongest offer. Under 160 characters.>');

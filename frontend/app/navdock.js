@@ -14,7 +14,8 @@
   if (!groups.length) return;
 
   // the menuitem buttons inside a group's popover (role=menuitem; see index.html .bb-menu)
-  const itemsOf = g => Array.from(g.querySelectorAll('.bb-menu .bb')).filter(item => !item.hidden);
+  // (an item whose station system is not online yet carries data-offline — systems.js — and is skipped too)
+  const itemsOf = g => Array.from(g.querySelectorAll('.bb-menu .bb')).filter(item => !item.hidden && !item.hasAttribute('data-offline'));
 
   /* The four triggers wrap onto different rows on phone-width stations, so a fixed
      left:0 popover cannot be made viewport-safe with one CSS alignment. Clamp the open

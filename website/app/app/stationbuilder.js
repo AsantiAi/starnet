@@ -1201,9 +1201,9 @@
       summary: 'Staff the line ' + ln.label + ': ' + out.map(r => 'step ' + r.step + ' (' + r.role + ')' + (r.agent ? ' → ' + r.agent : '') + (r.instructions ? (r.agent ? ', with' : ' gets') + ' new instructions' : '')).join('; ') + '. '
         + (rd.ready ? 'It will be ready to run.' : 'Still to do after: ' + rd.blocking.join('; ') + '.') + ' Nothing on the floor moves; one UNDO in Build mode puts the crew back.' };
   }
-  /* ================= REFIT: the Commander's own tools, op by op =================
+  /* ================= BUILD MODE: the Commander's own tools, op by op =================
      Every op names exact WORLD tiles (as station.map reports them: x grows east, y grows south) and is run by the very
-     world-model call Refit mode makes for that tool, so it passes or fails on Refit mode's own checks. Props and rooms
+     world-model call Build Mode makes for that tool, so it passes or fails on Build Mode's own checks. Props and rooms
      made earlier in the same plan are named with `as` and used by that name. Ops run in order; the first that fails
      refuses the whole plan, naming it. */
   // the edits a long refit's card always names, and what it calls them when it has to count them
@@ -1395,7 +1395,7 @@
       shown = list.slice(0, 25).map(x => x.t).concat(named.map(x => x.t), over.length ? ['… and ' + over.length + ' more edits that change what stands (' + Object.keys(counts).map(k => counts[k] + ' ' + k).join(', ') + ')'] : [],
         rest.length > keep.length ? ['… and ' + (rest.length - keep.length) + ' more edits that add or name pieces'] : []);
     }
-    const summary = 'REFIT, ' + ops.length + (ops.length === 1 ? ' edit' : ' edits') + ', in order: ' + shown.join('; ') + '.' + (warn.length ? ' Heads-up: ' + warn.join('; ') + '.' : '') + ' One UNDO in Build mode takes all of it back.';
+    const summary = 'BUILD MODE, ' + ops.length + (ops.length === 1 ? ' edit' : ' edits') + ', in order: ' + shown.join('; ') + '.' + (warn.length ? ' Heads-up: ' + warn.join('; ') + '.' : '') + ' One UNDO in Build mode takes all of it back.';
     return { ok: true, plan: { floorSig: sigOf(doc), resultSig: sigOf(probe.serialize()), spec: { kind: 'refit', ops: clone(ops), res: clone(resolved) }, summary, notes: warn, steps: [], line: null, where: 'a refit of ' + ops.length + (ops.length === 1 ? ' edit' : ' edits'), rooms: [],
       preview: previewOf(WM, doc, probe.serialize(), [], null) } };
   }
@@ -3292,7 +3292,7 @@
   /* THE MAP (station.map): what the lead needs to SEE before it builds — every room's place and size, what joins it to
      what, what stands in it, which sizes of room fit on each of its sides, and the floor drawn in characters. x grows
      east, y grows south; north is the back wall (the top). Pure: it reads a doc and changes nothing. */
-  // everything a REFIT edit can name: every piece (its type, size and rules), room types, floors, walls, bay roles, lines, line edits
+  // everything a BUILD MODE edit can name: every piece (its type, size and rules), room types, floors, walls, bay roles, lines, line edits
   function catalogOf(env) {
     const WM = env.WorldModel, S = env.PropSprites, RS = env.RoomStyles;
     const pieces = ((S && S.CATALOG) || []).map(c => { const sp = S.spec(c.id) || {}, rule = (S.ruleFor && S.ruleFor(c.id)) || {}; const o = { t: c.id, name: String(c.label || c.id).toLowerCase(), w: c.w, h: c.h, cat: c.cat };

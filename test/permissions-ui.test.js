@@ -15,7 +15,7 @@ let n = 0; const ok = (c, m) => { assert.ok(c, m); n++; };
 // that flatness is exactly what made the pane unreadable before the 08-05 spacing pass.
 ok(/<h4 class="ms-h">EACH CREW MEMBER/.test(src), 'the crew list is a real section header');
 ok(/<h4 class="ms-h">FULL POWER — WHOLE STATION/.test(src), 'the master override is a real section header');
-ok(/<h4 class="ms-h">WHILE YOU’RE AWAY/.test(src), 'unattended-level header is a real section header');
+ok(/<h4 class="ms-h">ONE-STEP AUTONOMY/.test(src), 'unattended-level header is a real section header (ONE-STEP AUTONOMY: a level plus its approvals)');
 ok(/<h4 class="ms-h">STANDING APPROVALS/.test(src), 'standing-approvals header is a real section header');
 // Block NUMBERS are gone. They forced the reader to hold a cross-reference ("overridden by block 2")
 // and they only existed because the pane made a newcomer walk all four blocks in order.
@@ -48,12 +48,12 @@ ok(/<details class="perm-fold" id="perm-advanced">/.test(src) && /<summary>Safe 
 // really revocable. Locking this stops a future "tidy-up" from burying them again.
 {
   const fold = src.slice(src.indexOf('id="perm-advanced"'), src.indexOf('const secBudget'));
-  for (const h of ['FULL POWER — WHOLE STATION', 'WHILE YOU’RE AWAY', 'STANDING APPROVALS'])
+  for (const h of ['FULL POWER — WHOLE STATION', 'ONE-STEP AUTONOMY', 'STANDING APPROVALS'])
     ok(!fold.includes(h), 'NOT hidden in ADVANCED: ' + h);
   ok(fold.includes('perm-exec-policy'), 'the idle-cell policy IS in ADVANCED');
   ok(!/<details/.test(fold.slice(fold.indexOf('perm-advanced') + 5)), 'no nested disclosure inside ADVANCED');
 }
-ok(/id="perm-crew"[\s\S]{0,1600}<h4 class="ms-h">FULL POWER — WHOLE STATION[\s\S]{0,900}<h4 class="ms-h">WHILE YOU’RE AWAY[\s\S]{0,1600}<h4 class="ms-h">STANDING APPROVALS/.test(src),
+ok(/id="perm-crew"[\s\S]{0,1600}<h4 class="ms-h">FULL POWER — WHOLE STATION[\s\S]{0,900}<h4 class="ms-h">ONE-STEP AUTONOMY[\s\S]{0,1600}<h4 class="ms-h">STANDING APPROVALS/.test(src),
   'the pane runs crew → override → while-away → standing approvals, in that order');
 // TIER 2 MUST STAY VISIBLE. Folding the per-agent rows away over-corrected: a posture can only set
 // every agent the SAME way, so the "except this one" control may never hide behind a disclosure.
