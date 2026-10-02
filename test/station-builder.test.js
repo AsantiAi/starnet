@@ -2081,6 +2081,18 @@ for (const c of T.catalog) {
     const bad = await pt.run({ describe: 'a broken thing' }, {});
     A.ok(/^REFUSED: StarNet could not make "a broken thing": the drawing never passed its checks \(\$0\.20 was spent on the tries\)/.test(bad.content), 'a failed drawing says why and what it spent: ' + bad.content);
     A.ok(/^REFUSED: Making props is not available on this station\./.test((await toolsOf(null).makePropTool.run({ describe: 'x' }, {})).content), 'a station without the prop maker refuses plainly');
+    // the front view and the side view share ONE wait: two full waits outran the tool's own timeout and lost a paid prop's id
+    {
+      let polls = 0, frontPolls = 0;
+      const slowUP = { start: async () => ({ ok: true, job: { id: 'pj_FRONT0001abcdefgh' } }),
+        startSide: async () => ({ ok: true, job: { id: 'pj_SIDE00001abcdefgh' } }),
+        job: id => { polls++; if (/FRONT/.test(id)) return ++frontPolls >= 3 ? { id, status: 'done', propId: 'user_slow_t1', costUsd: 0.35 } : { id, status: 'running' }; return { id, status: 'running' }; },
+        list: () => [{ id: 'user_slow_t1', label: 'SLOW', footprint: { w: 1, h: 1 }, costUsd: 0.35 }] };
+      const slow = makeStationTools({ station: pbridge, now: () => 1000, planMemo: new Map(), lineMenu: () => [], styleMenu: () => [], roomMenu: () => [], kitMenu: () => [], presetMenu: () => [], userProps: slowUP, propWaitMs: 50, propTickMs: 5 }).makePropTool;
+      const sr = JSON.parse((await slow.run({ describe: 'slow thing', sideView: true }, {})).content);
+      A.ok(sr.made && sr.id === 'user_slow_t1' && sr.sideView === false && /still being drawn/.test(sr.sideNote), 'a side view still drawing when the one wait ends: the prop is made and named, its side view said to be coming: ' + JSON.stringify(sr).slice(0, 200));
+      A.ok(polls <= 12, 'both views wait within one budget (10 ticks), not one each: ' + polls + ' polls');
+    }
     const idx = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
     A.ok(/station\[\._\]make_prop\$\/\.test\(String\(call && call\.name \|\| ''\)\)\) return '"' \+ String\(a\.describe/.test(idx) && /'", drawn with your StarNet credits \(about \$0\.35'/.test(idx), 'the approval card names the object and its price');
   }

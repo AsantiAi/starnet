@@ -459,15 +459,18 @@
        it asks first (the card names the object and the price). It waits for the prop to land, has the page load it into
        the MADE BY YOU library, and answers its name and id, so station.plan places it like any piece. A side view (so it
        turns) is a second paid step, asked for with sideView. */
-    const PROP_WAIT_MS = 6 * 60 * 1000, PROP_TICK_MS = 2000;
+    const PROP_WAIT_MS = Number(deps.propWaitMs) > 0 ? Number(deps.propWaitMs) : 6 * 60 * 1000, PROP_TICK_MS = Number(deps.propTickMs) > 0 ? Number(deps.propTickMs) : 2000;
     const userProps = deps.userProps && typeof deps.userProps.start === 'function' ? deps.userProps : null;
     const pause = (ms, signal) => new Promise(res => { const t = setTimeout(res, ms); if (signal && signal.addEventListener) signal.addEventListener('abort', () => { clearTimeout(t); res(); }, { once: true }); });
-    async function waitJob(id, signal) {
+    // ONE wait for the whole call (the front view and the side view share it): two 6-minute waits outran the tool's own 7-minute
+    // timeout, which aborted a paid prop as "effect unknown" with no id handed back
+    async function waitJob(id, signal, left) {
       // counted in ticks, not wall-clock time (tools never read the clock: lint-determinism)
-      for (let tick = 0; ; tick++) {
+      for (;;) {
         const j = userProps.job(id);
         if (j && (j.status === 'done' || j.status === 'failed')) return j;
-        if ((signal && signal.aborted) || tick >= PROP_WAIT_MS / PROP_TICK_MS) return j || { id, status: 'running' };
+        if ((signal && signal.aborted) || left.ticks <= 0) return j || { id, status: 'running' };
+        left.ticks--;
         await pause(PROP_TICK_MS, signal);
       }
     }
@@ -485,7 +488,8 @@
         const signal = ctx && ctx.signal;
         const r = await userProps.start(noun);
         if (!r || !r.ok) return refuse((r && r.message) || 'StarNet could not start that prop.');
-        const j = await waitJob(r.job.id, signal);
+        const left = { ticks: Math.ceil(PROP_WAIT_MS / PROP_TICK_MS) };
+        const j = await waitJob(r.job.id, signal, left);
         if (j.status === 'failed') return refuse('StarNet could not make "' + noun + '": ' + ((j.error && j.error.message) || 'it failed') + (Number(j.costUsd) > 0 ? ' (' + '$' + Number(j.costUsd).toFixed(2) + ' was spent on the tries)' : ''));
         if (j.status !== 'done' || !j.propId) return { content: JSON.stringify({ made: false, stillDrawing: true, jobId: r.job.id, note: 'StarNet is still drawing it. It appears in the MADE BY YOU library when it lands; place it then by its name.' }), summary: 'still drawing ' + noun };
         const entry = (userProps.list() || []).find(p => p.id === j.propId) || { id: j.propId, label: noun.toUpperCase() };
@@ -494,7 +498,7 @@
         else if (a.sideView && typeof userProps.startSide === 'function') {
           const s = await userProps.startSide(entry.id);
           if (!s || !s.ok) sideNote = 'the side view could not start: ' + ((s && s.message) || 'refused');
-          else { const sj = await waitJob(s.job.id, signal); if (sj.status === 'done') { side = true; cost += Number(sj.costUsd) || 0; } else sideNote = sj.status === 'failed' ? 'the side view failed: ' + ((sj.error && sj.error.message) || 'it failed') : 'the side view is still being drawn'; }
+          else { const sj = await waitJob(s.job.id, signal, left); if (sj.status === 'done') { side = true; cost += Number(sj.costUsd) || 0; } else sideNote = sj.status === 'failed' ? 'the side view failed: ' + ((sj.error && sj.error.message) || 'it failed') : 'the side view is still being drawn'; }
         }
         // the page loads it into the catalog, so the builder can place it by its name at once
         let loaded = false;
