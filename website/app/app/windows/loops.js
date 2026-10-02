@@ -770,6 +770,8 @@
       }
     }
     paintBadge(waiting);
+    // every result reviewed: the bell's "waiting on your review" leaves NEEDS YOU (it stayed lit for good)
+    if (!waiting && typeof StationUI !== 'undefined' && StationUI.settleNotifs) StationUI.settleNotifs('loops-review');
     saveSeen(seen);
     // announce at most one line per sweep — N new candidates at once is one event to a human, not N.
     if (fresh.length && typeof StationUI !== 'undefined' && StationUI.h && StationUI.h.notify) {
