@@ -10403,7 +10403,7 @@ const remoteHost = require('./remote/host.js').makeRemoteHost({
   runHistory: (n) => runStore.list(null, { limit: n }),
   // the desk's own sessions (title, agent, history) live in the station save the page mirrors here
   deskSessions: () => { const save = saveStore.load('agent') || {}; return Array.isArray(save.workstreams) ? save.workstreams : []; },
-  classify: (text) => Classify.isTaskDirective(text),   // the SAME task-vs-talk call the desk and the channels make
+  classify: (text, ctx) => Classify.isTaskDirective(text, ctx),   // the SAME task-vs-talk call the desk and the channels make (ctx: the agent's last turn, so "yes" to its offer is a task)
   askConsent: (o) => channelAskConsent(o),
   stopRun: (runId) => { const ac = runs.get(runId); if (!ac) return false; try { ac.abort(); } catch (e) { failNote('remote.index.ac.abort', e); } return true; },
   deliverables: () => deliverableRows(),
