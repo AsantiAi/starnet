@@ -10120,7 +10120,7 @@ const World = (() => {
       // toast is skipped. Budget/step-limit/refusal deaths keep it: nothing else announces those.
       if (typeof StationUI !== 'undefined' && StationUI.notify && r !== 'error') {
         const clean = s => String(s || '').replace(/\bspend\b/ig, 'run resources').replace(/\bdollars?\b/ig, 'limits');
-        StationUI.notify('⚠ SLAG (a run died with nothing to show) · ' + clean(SlagLog.line(diag)), 'warn');
+        StationUI.notify('⚠ a run ended with nothing to show · ' + clean(SlagLog.line(diag)), 'warn', undefined, { kind: 'alert', go: { term: 'agents', section: 'record' } });
       }
       enqueueSlag(diag, p && p.agentId, p);
     });
@@ -10158,8 +10158,8 @@ const World = (() => {
     // it means a clean run whose reply was exactly the [SILENT] marker (the routine chose to report nothing).
     U.bus.on('cron.result', p => {
       if (!p) return;
-      if (p.outcome === 'failed') hudNote('✕ routine failed' + (p.reason ? ' — ' + p.reason : ''), 'warn');
-      else if (p.outcome === 'ok') hudNote('◷ routine completed', 'good', undefined, 'cronDigest');
+      if (p.outcome === 'failed') hudNote('✕ routine failed' + (p.reason ? ' — ' + p.reason : ''), 'warn', { kind: 'alert', go: { term: 'automation', section: 'routines' } });
+      else if (p.outcome === 'ok') hudNote('◷ routine completed', 'good', { go: { term: 'deliverables', section: 'review' } }, 'cronDigest');
     });
     // REWIND: the rare, important "we rolled the workspace back" beat. checkpoint.created is frequent + quiet
     // (the workbench already pulses on shell), so only the restore is toasted.
@@ -10215,12 +10215,13 @@ const World = (() => {
       if (state === 'up') {
         if (!unhealthyChannels.delete(raw)) return;   // initial/steady health stays quiet
         hudNote('✓ ' + name + ' reconnected', 'good', { key: toastKey });
+        try { if (StationUI.settleNotifs) StationUI.settleNotifs(toastKey); } catch (_) {}   // the outage entry is handled
         return;
       }
       if (state !== 'down' && state !== 'error') return;
       unhealthyChannels.add(raw);
       const why = p.detail ? ' — ' + String(p.detail) : '';
-      hudNote((state === 'error' ? '⚠ ' + name + ' connection needs attention' : '⚠ ' + name + ' connection down') + why, 'bad', { key: toastKey });
+      hudNote((state === 'error' ? '⚠ ' + name + ' connection needs attention' : '⚠ ' + name + ' connection down') + why, 'bad', { key: toastKey, kind: 'alert', go: { term: 'messaging' } });
     });
     // G0.5 BUDGET MADE VISIBLE: budget.threshold was alarm-audio only. The payload is the frozen
     // { scope: run|day|global, usd, cap } triple (sidecar/budget.js, one emit per scope+band crossing
@@ -10230,8 +10231,8 @@ const World = (() => {
       const usd = +p.usd, cap = +p.cap;
       const scopeWord = p.scope === 'run' ? 'this run' : (p.scope === 'day' ? 'today' : 'the global pool');
       const money = v => U.usd(v);
-      if (usd >= cap) hudNote('⛔ budget cap hit for ' + scopeWord + ' — ' + money(usd) + ' of ' + money(cap), 'warn');
-      else hudNote('⚠ budget warning for ' + scopeWord + ' — ' + money(usd) + ' of ' + money(cap) + ' (' + Math.round(usd / cap * 100) + '%)', 'warn');
+      if (usd >= cap) hudNote('⛔ budget cap hit for ' + scopeWord + ' — ' + money(usd) + ' of ' + money(cap), 'warn', { kind: 'alert', key: 'budget:' + p.scope, go: { term: 'settings', section: 'budget' } });
+      else hudNote('⚠ budget warning for ' + scopeWord + ' — ' + money(usd) + ' of ' + money(cap) + ' (' + Math.round(usd / cap * 100) + '%)', 'warn', { kind: 'alert', key: 'budget:' + p.scope, go: { term: 'settings', section: 'budget' } });
     });
     // LOW CREDITS MADE VISIBLE (2026-07-25): the balance the user BOUGHT is running out. Distinct from
     // budget.threshold above — that is spend against a cap they set; this is money running down. Fired once
@@ -10240,8 +10241,8 @@ const World = (() => {
     U.bus.on('credits.low', p => {
       if (!p || !isFinite(+p.balanceUsd)) return;
       const bal = U.usd(+p.balanceUsd);
-      if (p.exhausted) hudNote('⛔ out of credits — ' + bal + ' left; managed runs will refuse until you add more', 'warn');
-      else hudNote('⚠ credits running low — ' + bal + ' left, under the ' + U.usd(+p.thresholdUsd) + ' a run can reserve', 'warn');
+      if (p.exhausted) hudNote('⛔ out of credits — ' + bal + ' left; managed runs will refuse until you add more', 'warn', { kind: 'alert', key: 'credits', go: { term: 'settings', section: 'providers' } });
+      else hudNote('⚠ credits running low — ' + bal + ' left, under the ' + U.usd(+p.thresholdUsd) + ' a run can reserve', 'warn', { kind: 'alert', key: 'credits', go: { term: 'settings', section: 'providers' } });
     });
     // G0.4 CAPDENIED MADE VISIBLE: the run genuinely STOPPED at the capability gate (loop.js emits this
     // before ending the run) — flash the acting agent's desk red + say it plainly. Today this was
@@ -10249,7 +10250,7 @@ const World = (() => {
     U.bus.on('capdenied', p => {
       flashDesk(p && p.agentId, '#ff4a3d');
       const need = (p && p.need) || 'capability';
-      hudNote('⛔ run blocked — ' + (need === 'compute' ? 'no computer in its room' : ('missing ' + need)), 'warn');
+      hudNote('⛔ run blocked — ' + (need === 'compute' ? 'no computer in its room' : ('missing ' + need)), 'warn', { kind: 'alert' });
     });
     // G0.8 RUN-ERROR DISTRESS: the run died mid-flight (model call / dispatcher / loop guard). The chat
     // panel already prints the message; now the FLOOR reacts too — the red desk strobe + one short flat

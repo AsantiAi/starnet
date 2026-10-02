@@ -2300,6 +2300,10 @@ const Chat = (() => {
     r.body.textContent = text; autoscroll();
   }
   function brief(s) { s = String(s || ''); return s.length > 56 ? s.slice(0, 53) + '…' : s; }
+  // NOTIFICATIONS THAT MEAN SOMETHING (10-02): a kept entry names WHO and WHAT, and opens the session it's about.
+  const whoOf = ws => (typeof App !== 'undefined' && App.agentName && App.agentName((ws && ws.agentId) || 'agent')) || (ws && ws.agentId) || 'an agent';
+  const sessionNote = ws => { const t = ws && String(ws.title || '').trim(); return t ? ' — ' + brief(t) : ''; };
+  const notedRuns = new Set();   // a background run that already announced a deliverable doesn't announce 'finished' again
   function fmtMs(ms) { return ms < 1000 ? ms + 'ms' : (ms / 1000).toFixed(1) + 's'; }   // 8423 → '8.4s'
 
   /* ── COMMS-PREMIUM · TOOL CHIPS ──────────────────────────────────────────────────────────────────────
@@ -3018,6 +3022,7 @@ const Chat = (() => {
     const btns = document.createElement('span'); btns.className = 'consent-btns';
     let decided = false;
     function answer(text, doneLabel) {
+      if (ws && typeof StationUI !== 'undefined' && StationUI.settleNotifs) StationUI.settleNotifs('needs:' + ws.id);   // answered: leaves NEEDS YOU
       if (decided) return; decided = true;
       const rid = (ws && typeof Channels !== 'undefined') ? Channels.runIdOf(ws.id) : null;
       Harness.consentAnswer(rid, p.promptId, text);
@@ -3111,7 +3116,7 @@ const Chat = (() => {
     r.d.tabIndex = -1;
     r.d.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); answer('use your judgment', '✓ your call'); } });
     status('awaiting your answer…');
-    if (typeof StationUI !== 'undefined') StationUI.notify(name + ' has a quick question for you', 'warn', 'needsApproval');
+    if (typeof StationUI !== 'undefined') StationUI.notify(name + ' has a quick question for you' + sessionNote(ws), 'warn', 'needsApproval', ws ? { kind: 'needs', go: { ws: ws.id }, key: 'needs:' + ws.id } : undefined);
     autoscroll();
     const composerBusy = !!(input && (document.activeElement === input || (input.value && input.value.trim())));
     if (!composerBusy) { try { r.d.focus({ preventScroll: true }); } catch (_) { try { r.d.focus(); } catch (_) {} } }
@@ -3146,6 +3151,7 @@ const Chat = (() => {
     const btns = document.createElement('span'); btns.className = 'consent-btns';
     let decided = false;
     async function decide(decision, doneLabel, isDeny) {
+      if (ws && typeof StationUI !== 'undefined' && StationUI.settleNotifs) StationUI.settleNotifs('needs:' + ws.id);   // decided: leaves NEEDS YOU
       if (decided) return; decided = true;
       for (const b of btns.querySelectorAll('button')) b.disabled = true;
       const rid = (ws && typeof Channels !== 'undefined') ? Channels.runIdOf(ws.id) : null;
@@ -3229,7 +3235,7 @@ const Chat = (() => {
     r.d.tabIndex = -1;
     r.d.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); decide('deny', '✕ denied', true); } });
     status('awaiting your approval…');
-    if (typeof StationUI !== 'undefined') StationUI.notify(name + ' needs approval to ' + actionPhrase(p), 'warn', 'needsApproval');   // P1-8 category: consent prompt
+    if (typeof StationUI !== 'undefined') StationUI.notify(name + ' needs approval to ' + actionPhrase(p), 'warn', 'needsApproval', ws ? { kind: 'needs', go: { ws: ws.id }, key: 'needs:' + ws.id } : undefined);   // P1-8 category: consent prompt
     // FOCUS-STEAL GUARD (P0): a consent prompt must NEVER hijack focus from a Commander who is mid-typing or holds
     // a draft — a stolen focus + a reflexive Enter could approve a file write they never read. Only follow the
     // scroll when they were already at the bottom (honor stick), and only take focus (onto the row CONTAINER, so
@@ -3249,8 +3255,8 @@ const Chat = (() => {
   function backgroundPermissionNotify(ev, ws) {
     const who = (typeof App !== 'undefined' && App.agentName && App.agentName(ws.agentId || 'agent')) || ws.agentId || 'an agent';
     if (typeof StationUI !== 'undefined' && StationUI.notify) {
-      StationUI.notify(who + ' needs approval to ' + actionPhrase(ev) + ' — click here to answer', 'warn', 'needsApproval',
-        { onClick: () => { try { if (typeof App !== 'undefined' && App.openWorkstream) App.openWorkstream(ws.id); } catch (_) {} } });
+      StationUI.notify(who + ' needs approval to ' + actionPhrase(ev) + sessionNote(ws), 'warn', 'needsApproval',
+        { kind: 'needs', go: { ws: ws.id }, key: 'needs:' + ws.id });
     }
     try { if (typeof App !== 'undefined' && App.refreshRail) App.refreshRail(); } catch (_) {}
   }
@@ -9019,7 +9025,7 @@ const Chat = (() => {
             // visible in the on-screen transcript (inline row above + recap card below), the toast is a third
             // copy that also parks over the composer — suppress it. A BACKGROUND-stream deliverable isn't shown
             // anywhere on screen, so its toast is the only signal → keep it.
-            if (!isActiveWs(ws) && typeof StationUI !== 'undefined') StationUI.notify((mk === 'file' ? 'saved ' : 'made ') + ev.title, 'gold', 'runComplete');   // P1-8 category: run produced a deliverable
+            if (!isActiveWs(ws) && typeof StationUI !== 'undefined') { if (thisRunId) notedRuns.add(thisRunId); StationUI.notify(whoOf(ws) + (mk === 'file' ? ' saved ' : ' made ') + ev.title, 'gold', 'runComplete', { kind: 'result', go: { ws: ws.id } }); }   // P1-8 category: run produced a deliverable
           }
         },
         // EL-11: EVERY prompt now reaches a human surface — the active stream renders the inline consent card;
@@ -9066,7 +9072,8 @@ const Chat = (() => {
         // the run DIED in flight — settle its outcome (task-board truth: a dead run can never wear the DONE
         // chip). Guarded on thisRunId: no run started → nothing was filed, nothing to settle.
         if (thisRunId && typeof Workstreams !== 'undefined' && Workstreams.noteRunEnd) Workstreams.noteRunEnd(ws.id, thisRunId, false);
-        if (typeof StationUI !== 'undefined') StationUI.notify(brief(v.userMessage), 'warn');
+        if (typeof StationUI !== 'undefined') StationUI.notify(isActiveWs(ws) ? brief(v.userMessage) : whoOf(ws) + ' hit a problem' + sessionNote(ws) + ': ' + brief(v.userMessage), 'warn', undefined, isActiveWs(ws) ? undefined : { kind: 'alert', go: { ws: ws.id } });
+        if (typeof StationUI !== 'undefined' && StationUI.settleNotifs) StationUI.settleNotifs('needs:' + ws.id);   // the run is over: nothing is waiting on you any more
         if (isActiveWs(ws)) resolvePresence(ws, { error: true });   // COMMS-PREMIUM: presence card resolves red
         if (isActiveWs(ws)) offerRetry(v);   // RETRY: context-aware recovery chip (retry / Settings / SKILLS / none)
         }
@@ -9123,7 +9130,9 @@ const Chat = (() => {
           // a budget stop's honest door is the BUDGET settings section, not a doomed retry (the same cap fires
           // again immediately); every other stop keeps the plain retry chip.
           if (isActiveWs(ws)) { if (endReason === 'budget') offerBudgetDoor(); else offerTryAgain(); }
-          if (typeof StationUI !== 'undefined') StationUI.notify('run stopped: ' + endReason, 'warn');
+          if (typeof StationUI !== 'undefined') StationUI.notify(isActiveWs(ws) ? 'run stopped: ' + endReason
+            : whoOf(ws) + ' stopped' + sessionNote(ws) + ' — ' + (endReason === 'budget' ? 'hit a spending limit' : endReason === 'max_iters' ? 'reached the step limit; say "continue" to keep going' : endReason === 'cancelled' ? 'cancelled' : endReason),
+            'warn', undefined, isActiveWs(ws) || endReason === 'cancelled' ? undefined : { kind: 'alert', go: { ws: ws.id } });
         } else if (cutShort) {
           // distinct honest "cut short" recap: the reply is truncated/filtered, not a clean delivery.
           if (isActiveWs(ws)) breakLive(), toolLine('⏹ ' + (finishReason === 'content_filter'
@@ -9132,10 +9141,17 @@ const Chat = (() => {
           if (typeof StationUI !== 'undefined') StationUI.notify('reply cut short: ' + finishReason, 'warn');
         } else if (postconditionUnmet) {
           if (isActiveWs(ws)) breakLive(), toolLine('⚠ completion was not proven — typed postconditions returned ' + (completionVerdict || 'not_assessed') + ' (' + (effectVerdict || 'no effect evidence') + ')');
-          if (typeof StationUI !== 'undefined') StationUI.notify('completion needs verification', 'warn');
+          if (typeof StationUI !== 'undefined') StationUI.notify(isActiveWs(ws) ? 'completion needs verification' : whoOf(ws) + ' finished but couldn’t prove it worked' + sessionNote(ws) + ' — check it', 'warn', undefined, isActiveWs(ws) ? undefined : { kind: 'alert', go: { ws: ws.id } });
+        } else if (!isActiveWs(ws) && (!endReason || endReason === 'done' || endReason === 'clarifying') && replyText.trim() && !(thisRunId && notedRuns.has(thisRunId)) && typeof StationUI !== 'undefined') {
+          const asks = !!taskQuestion || endReason === 'clarifying';
+          // a BACKGROUND session finished (you were elsewhere) — the one beat you'd otherwise miss; the entry opens it
+          StationUI.notify(whoOf(ws) + (asks ? ' has a question for you' : ' finished') + sessionNote(ws), asks ? 'warn' : 'good', asks ? 'needsApproval' : 'runComplete',
+            asks ? { kind: 'needs', go: { ws: ws.id }, key: 'needs:' + ws.id } : { kind: 'result', go: { ws: ws.id } });
         }
         // a CLEAN end that hit an unwired connector mid-run: the reply already says "not connected" — the chip is
         // the door. Only on a clean end: a stopped run owns the slot with its retry/budget chip above.
+        if (thisRunId) notedRuns.delete(thisRunId);
+        if (!taskQuestion && endReason !== 'clarifying' && typeof StationUI !== 'undefined' && StationUI.settleNotifs) StationUI.settleNotifs('needs:' + ws.id);   // the run is over: its approvals/questions are no longer waiting
         if (!taskQuestion && (!endReason || endReason === 'done')) offerConnectorDoor(thisRunId, ws);
         if (taskQuestion || endReason === 'clarifying') holdConnectorDoor(thisRunId, ws);   // the question owns the slot (parsed here, or restored from the store below); its card carries the door
         // GOLDEN-RUN DRIFT (2026-08-22): a recipe-launched run is compared by the sidecar against that recipe's own
@@ -9154,7 +9170,7 @@ const Chat = (() => {
                 seen.push(drift.latestRunId); try { localStorage.setItem('starnet.recipeDrift.notified', JSON.stringify(seen.slice(-50))); } catch (_) {}
                 const name = (typeof Recipes !== 'undefined' && Recipes.get && Recipes.get(rid)) ? Recipes.get(rid).name : rid;
                 const first = drift.signals[0];
-                StationUI.notify('⚠ recipe drift: ' + name + ' — ' + (first ? first.detail : 'this run differs from its last ' + drift.baselineRuns), 'bad');
+                StationUI.notify('⚠ recipe drift: ' + name + ' — ' + (first ? first.detail : 'this run differs from its last ' + drift.baselineRuns), 'bad', undefined, { kind: 'alert', go: { ws: ws.id } });
               })
               .catch(() => {});
           }, 1500);

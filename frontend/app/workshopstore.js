@@ -548,7 +548,7 @@ const WorkshopStore = (() => {
     if (!opened) try {
       if (typeof StationUI !== 'undefined' && StationUI.notify) {
         const jump = () => { try { if (typeof App !== 'undefined' && App.openWorkstream) App.openWorkstream(sessionIdOf(runId)); } catch (_) {} };
-        StationUI.notify('✦ built while you were away: ' + String(m.title || 'a deliverable') + ' — click to review it', 'gold', 'cronDigest', { onClick: jump });
+        StationUI.notify('✦ built while you were away: ' + String(m.title || 'a deliverable') + ' — click to review it', 'gold', 'cronDigest', { onClick: jump, kind: 'result', go: { ws: sessionIdOf(runId) } });
       }
     } catch (_) {}
     try { if (typeof World !== 'undefined' && World.say) World.say('✦ finished a build — it’s waiting in its own session'); } catch (_) {}   // ambient in-world cue, same family as the desk-draft delivery

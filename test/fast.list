@@ -565,6 +565,7 @@ test/roster-track.test.js
 test/chat-prompt-diet.test.js
 test/returns.test.js
 test/outbox-window.test.js
+test/notifications-useful.test.js
 test/quest-log-window.test.js
 test/personas-fun-five.test.js
 test/pride.test.js

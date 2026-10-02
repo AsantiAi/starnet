@@ -36,7 +36,7 @@
     update:       'a new StarNet build; the UPDATES panel shows the version and its verified delivery state.',
     restore:      'return an agent’s workspace files to a saved restore point without rewriting unrelated station data.',
     logbook:      'this agent’s durable run history — what ran, how it ended, and what it cost.',
-    notification: 'a station alert about work, failure, delivery, or another event that needs your attention.',
+    notification: 'an agent waiting on you, work that finished while you were elsewhere, or something that stopped — click one to go there.',
     manual:       'the reopenable guide to first steps, the real work loop, gear, wiring, and growth.',
     commander:    'you — the person who directs the station, grants authority, and judges its work.',
     work:         'MY WORK, AUTOMATE and QUESTS — your jobs, the work that runs on its own, and your progress.',
