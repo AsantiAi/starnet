@@ -49,6 +49,10 @@ const throwsMsg = async (fn) => { try { await fn(); return ''; } catch (e) { ret
 (async () => {
   try {
     A.throws(() => makeApps({ fsp, path, dir: DIR }), 'apps without an injected clock is refused');
+    // the crew finds app.create by searching "app": its description must keep OUTSIDE builds away (a Netlify site and
+    // a React todo became StarNet apps on 10-02 before this line)
+    const createDesc = tools.defs.find(d => d.name === 'app.create').description;
+    A.ok(/INSIDE StarNet/.test(createDesc) && /NOT for anything meant to run, be hosted or be shipped outside StarNet/.test(createDesc) && /React/.test(createDesc), 'app.create says it is only for apps inside StarNet, never a site/project/script to ship elsewhere');
     A.eq(slugify('AI News Brief!'), 'ai-news-brief', 'the id comes from the name');
     A.eq(slugify('***'), 'app', 'a name with no letters still gets an id');
 
