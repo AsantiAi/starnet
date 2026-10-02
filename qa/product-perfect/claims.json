@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "669661b284762c64068eaebd53149869bdd34ea2",
+    "sourceCommit": "960a667f9d5bd5296ba804a64af51ff59985289b",
     "pathSetSha256": "60c61c9c0cad8daa5c2d40f76a912ed04e52667a726032a7b3ab94cad57bfa1e",
     "files": [
       {
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 695751,
-        "sha256": "04d56ce09307c1f35ff61cb1ef896b570044d937868a4e81ece43d914ff4ce73"
+        "bytes": 695755,
+        "sha256": "34a6ed8b44b134e72b96038772058341be302292c977966ddb2a394b0dc15f3f"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -523,8 +523,8 @@
       },
       {
         "path": "frontend/app/glossary.js",
-        "bytes": 10455,
-        "sha256": "ebd949bc37412bd8f4241004e266f018419108e820a2414e9c135556f9b4ec12"
+        "bytes": 10475,
+        "sha256": "5fd50943cfb9172b1d6a9ba56fe5b8272071a9695d44721f88f060e8e647e53b"
       },
       {
         "path": "frontend/app/goalloop.js",
@@ -1033,8 +1033,8 @@
       },
       {
         "path": "frontend/app/returnstore.js",
-        "bytes": 14184,
-        "sha256": "062a89e25aaf7ba2d5d076780bafd741d96f7aa0ff1c0ce1a8ea2f045772a41b"
+        "bytes": 14234,
+        "sha256": "b9c31d7050e2bed57f70f9bed977466d68b5c498d1ce7747a51bcf6e8a923b86"
       },
       {
         "path": "frontend/app/roomstyles.js",
@@ -1153,8 +1153,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 808320,
-        "sha256": "1c8b30d8aeb3839568991a41292510f45f00e214c946054a8340ce46dd9de48c"
+        "bytes": 809072,
+        "sha256": "68de89013e73d70df15b9b09e0fe7a6f681131d4e9ff4ae1d7097a3ba280527d"
       },
       {
         "path": "frontend/app/stepin.js",
@@ -1338,8 +1338,8 @@
       },
       {
         "path": "frontend/app/windows/outbox.js",
-        "bytes": 17340,
-        "sha256": "55abe0d14de974eb7d6d44c943fc18108dcb0215dcd56e3e4f99bf3328e87c74"
+        "bytes": 17708,
+        "sha256": "9702f06b8c4e09df5bfda75525327b1f133af47ec80c4e724fc3e8173e48f629"
       },
       {
         "path": "frontend/app/windows/rewind.js",
@@ -1688,8 +1688,8 @@
       },
       {
         "path": "frontend/css/utility-menus.css",
-        "bytes": 14705,
-        "sha256": "a7bec77f481f650cf52b74f001c6b1f8625d74bbc724ebeafdf96be883ee2803"
+        "bytes": 15104,
+        "sha256": "adc373fde8f13474ea988e19199ed6a6acdc13ea9608dd82dfde47c338fc918e"
       },
       {
         "path": "frontend/css/warroom.css",
