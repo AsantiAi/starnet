@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "bbb77df465d229dfd6b7cd44fafd54afe1d6efa3",
+    "sourceCommit": "453757133ab818a36f49a79619ec33ab582a9917",
     "pathSetSha256": "e3ac910c8785fe7d62a025dd0def01dc7c9c9a0a8b73348d6823ee33be259f99",
     "files": [
       {
@@ -523,8 +523,8 @@
       },
       {
         "path": "frontend/app/glossary.js",
-        "bytes": 10460,
-        "sha256": "fe12f8505525fff06d7e0f749987a2db164bae54af3b74cfcafb92a2b031fcb1"
+        "bytes": 10444,
+        "sha256": "c6e815bb4fe62200df8fd9dee701c9b1be28ab11b8acbeccd3a93868c94c4efd"
       },
       {
         "path": "frontend/app/goalloop.js",
@@ -1153,13 +1153,13 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 806799,
-        "sha256": "afd5d0afddc84f0da8e49c769a288e0ba203794008822b4cbfc43230d5837935"
+        "bytes": 807359,
+        "sha256": "a7fafb386b75d211e73ad4d813384e2f529be022514b921d967a5d4fb67268b0"
       },
       {
         "path": "frontend/app/stepin.js",
-        "bytes": 24591,
-        "sha256": "b8552bb5aa2091ae8d2e0019a88a16ff740058b32b0d417a0a048742cd58b3a0"
+        "bytes": 24845,
+        "sha256": "4b7d4e616a24b320e512264c4cb7d1cbe6a4d4b0dd92c52b120e7ca7c9f24ba5"
       },
       {
         "path": "frontend/app/study.js",
@@ -1178,8 +1178,8 @@
       },
       {
         "path": "frontend/app/systems.js",
-        "bytes": 16232,
-        "sha256": "37c5c305ae7e1ad39348a1625a61cfd68c6e431197f80e9985b4e817e34c2e6d"
+        "bytes": 16225,
+        "sha256": "2b0b79b5126020462cfd79e445df2cb1f3f198e3053338f71836133ce397f5c2"
       },
       {
         "path": "frontend/app/taskconversation.js",
@@ -1243,8 +1243,8 @@
       },
       {
         "path": "frontend/app/tutorial.js",
-        "bytes": 100725,
-        "sha256": "d699a4fcb25f063fc1bbc32b06eb70acaf5bdf6ac1de8f0044c521e41f117fc7"
+        "bytes": 100713,
+        "sha256": "b9538d06af94da11c464bd4b54577e6c5153c78e0316f8a4d562db3ca461d9d0"
       },
       {
         "path": "frontend/app/understanding.js",
@@ -1763,8 +1763,8 @@
       },
       {
         "path": "frontend/index.html",
-        "bytes": 96289,
-        "sha256": "4d3b7b356cfb5a96adf71c9e5db79e6fe8aba2742158caaf5d638b4d0712893f"
+        "bytes": 96472,
+        "sha256": "0233417ee04df64783826b6b64e52572c6728b5da2fd21666ddf346de19a263a"
       },
       {
         "path": "frontend/js/arcade.js",
