@@ -22,13 +22,13 @@
       ] },
     lounge: { name: 'a lounge', about: 'a TV, a couch, recliners and a side table', words: ['tv', 'movie', 'movies', 'living', 'sofa', 'couch'],
       sets: [
-        { w: 8, h: 6, pieces: [['tv', 2, 0], ['plant', 0, 0], ['plant', 7, 0], ['rug', 2, 1], ['recliner', 1, 2, 3], ['recliner_r', 6, 2, 1], ['couch', 1, 4], ['sidetable', 6, 4]] },
+        { w: 8, h: 6, pieces: [['tv', 2, 0], ['plant', 0, 0], ['plant', 7, 0], ['rug', 2, 1], ['recliner_r', 1, 2], ['recliner', 6, 2], ['couch', 1, 4], ['sidetable', 6, 4]] },
         { w: 6, h: 4, pieces: [['tv', 1, 0], ['rug_small', 1, 1], ['couch', 0, 3], ['plant', 5, 3]] },
       ] },
     library: { name: 'a reading nook', about: 'bookshelves, a recliner on a rug, a side table and a book stack', words: ['reading', 'books', 'book', 'study', 'quiet'],
       sets: [
-        { w: 8, h: 5, pieces: [['bookshelf', 0, 0], ['bookshelf', 2, 0], ['bookshelf', 4, 0], ['tallplant', 7, 0], ['rug_small', 2, 2], ['recliner', 1, 3, 3], ['sidetable', 6, 3], ['bookstack', 7, 4]] },
-        { w: 6, h: 4, pieces: [['bookshelf', 0, 0], ['bookshelf', 2, 0], ['plant', 5, 0], ['recliner', 1, 2, 3], ['sidetable', 3, 2], ['bookstack', 4, 3]] },
+        { w: 8, h: 5, pieces: [['bookshelf', 0, 0], ['bookshelf', 2, 0], ['bookshelf', 4, 0], ['tallplant', 7, 0], ['rug_small', 2, 2], ['recliner_r', 1, 3], ['sidetable', 6, 3], ['bookstack', 7, 4]] },
+        { w: 6, h: 4, pieces: [['bookshelf', 0, 0], ['bookshelf', 2, 0], ['plant', 5, 0], ['recliner_r', 1, 2], ['sidetable', 3, 2], ['bookstack', 4, 3]] },
       ] },
     desks: { name: 'work desks', about: 'desks (each seats its own agent)', words: ['desk', 'office', 'workspace', 'work', 'workstations', 'computers'],
       sets: [
@@ -116,13 +116,13 @@
     lounge: { name: 'a lounge', about: 'a TV, a couch on a big rug, recliners, lamps, a fish tank, a fridge, beanbags', kind: 'quarters', deck: { style: 'walnut', mat: 'plank' }, walls: { mat: 'wainscot' },
       feature: { left: ['bookshelf'], centre: ['tv'], right: ['fishtank'] },
       centre: [
-        { w: 11, h: 5, pieces: [['rug_large', 3, 0], ['lowtable', 4, 2], ['couch', 3, 4], ['recliner', 1, 1, 3], ['recliner_r', 9, 1, 1], ['sidetable', 1, 3], ['lavalamp', 1, 3], ['sidetable', 9, 3], ['plasmaglobe', 9, 3]] },
-        { w: 7, h: 4, pieces: [['rug_small', 2, 0], ['couch', 1, 3], ['sidetable', 0, 3], ['lavalamp', 0, 3], ['recliner', 6, 1, 1]] }],
+        { w: 11, h: 5, pieces: [['rug_large', 3, 0], ['lowtable', 4, 2], ['couch', 3, 4], ['recliner_r', 1, 1], ['recliner', 9, 1], ['sidetable', 1, 3], ['lavalamp', 1, 3], ['sidetable', 9, 3], ['plasmaglobe', 9, 3]] },
+        { w: 7, h: 4, pieces: [['rug_small', 2, 0], ['couch', 1, 3], ['sidetable', 0, 3], ['lavalamp', 0, 3], ['recliner', 6, 1]] }],
       corners: ['tallplant', 'monstera', 'plant', 'plant'], sides: ['quarters_minifridge', 'beanbag', 'coffee', 'beanbag'] },
     cozy: { name: 'a cozy den', about: 'a TV, bookshelves, a couch and beanbags on a rug, lamps, a guitar, a radio', kind: 'quarters', deck: { style: 'oak', mat: 'plank' }, walls: { mat: 'wainscot' },
       feature: { left: ['bookshelf', 'bookshelf'], centre: ['tv'], right: ['fishtank'] },
       centre: [
-        { w: 9, h: 5, pieces: [['rug_large', 2, 0], ['beanbag', 3, 1], ['beanbag', 5, 1], ['couch', 2, 4], ['sidetable', 1, 4], ['lavalamp', 1, 4], ['sidetable', 7, 4], ['plasmaglobe', 7, 4], ['recliner', 0, 2, 3]] },
+        { w: 9, h: 5, pieces: [['rug_large', 2, 0], ['beanbag', 3, 1], ['beanbag', 5, 1], ['couch', 2, 4], ['sidetable', 1, 4], ['lavalamp', 1, 4], ['sidetable', 7, 4], ['plasmaglobe', 7, 4], ['recliner_r', 0, 2]] },
         { w: 6, h: 4, pieces: [['rug_small', 1, 0], ['couch', 0, 3], ['sidetable', 5, 3], ['lavalamp', 5, 3]] }],
       corners: ['tallplant', 'monstera', 'plant', 'terrarium'], sides: ['beanbag', 'guitar', 'coffee', 'radio'] },
     games: { name: 'an arcade', about: 'arcade cabinets, pinballs, a jukebox, a pool table, a vending machine, speakers', kind: 'hab', deck: { style: 'violet', mat: 'hex' }, walls: { mat: 'acoustic' },
@@ -134,8 +134,8 @@
     library: { name: 'a library', about: 'walls of bookshelves, a reading nook with recliners, a study table, a telescope', kind: 'quarters', deck: { style: 'oak', mat: 'parquet' }, walls: { mat: 'panelled' },
       feature: { left: ['bookshelf', 'bookshelf', 'bookshelf'], right: ['bookshelf', 'bookshelf', 'bookshelf'] },
       centre: [
-        { w: 12, h: 3, pieces: [['rug', 0, 0], ['recliner', 0, 1, 3], ['sidetable', 1, 1], ['desklamp', 1, 1], ['recliner_r', 3, 1, 1], ['industrial_roundtable', 8, 1], ['dinerchair', 7, 1, 3], ['dinerchair', 10, 1, 1], ['bookstack', 9, 0]] },
-        { w: 6, h: 3, pieces: [['rug_small', 0, 0], ['recliner', 1, 1, 3], ['sidetable', 2, 1], ['bookstack', 5, 1]] }],
+        { w: 12, h: 3, pieces: [['rug', 0, 0], ['recliner_r', 0, 1], ['sidetable', 1, 1], ['desklamp', 1, 1], ['recliner', 3, 1], ['industrial_roundtable', 8, 1], ['dinerchair', 7, 1, 3], ['dinerchair', 10, 1, 1], ['bookstack', 9, 0]] },
+        { w: 6, h: 3, pieces: [['rug_small', 0, 0], ['recliner_r', 1, 1], ['sidetable', 2, 1], ['bookstack', 5, 1]] }],
       corners: ['tallplant', 'monstera', 'terrarium', 'plant'], sides: ['telescope', 'bookstack', 'terrarium', 'plant'] },
     quarters: { name: 'sleeping quarters', about: 'four beds, a locker bank, bedside tables and lamps, a cryopod', kind: 'quarters', deck: { style: 'verdant', mat: 'soft' }, walls: { mat: 'wainscot' },
       feature: { left: ['bunk', 'bunk'], centre: ['quarters_lockerbank'], right: ['bunk', 'bunk'] },
