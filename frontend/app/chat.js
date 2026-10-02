@@ -4588,7 +4588,10 @@ const Chat = (() => {
     // (2026-10-02, Andrew: "remembered should just show up collapsed") — a toggle header; the list opens on click.
     const cap = document.createElement('button'); cap.type = 'button'; cap.className = 'receipt-head';
     cap.setAttribute('aria-expanded', 'false');
-    cap.textContent = 'remembered · ' + batch.proposals.length;
+    // the count is what is STILL remembered: a forgotten line leaves it (QA 2026-10-02 — "remembered · 3" stood after a forget)
+    let forgotten = 0;
+    const capText = () => { const kept = batch.proposals.length - forgotten; cap.textContent = 'remembered · ' + kept + (forgotten ? ' (' + forgotten + ' forgotten)' : ''); };
+    capText();
     const list = document.createElement('div'); list.className = 'receipt-items'; list.hidden = true;
     cap.onclick = () => { const open = list.hidden; list.hidden = !open; cap.setAttribute('aria-expanded', String(open)); head.d.classList.toggle('open', open); };
     head.body.appendChild(cap);
@@ -4608,6 +4611,7 @@ const Chat = (() => {
           veto.remove();
           item.classList.add('vetoed');
           text.textContent = 'forgotten: ' + prop.content;   // muted state; stays denylisted (Memory Core Restore is the undo)
+          forgotten += 1; capText();
         } else {
           busy = false; veto.disabled = false;
           if (typeof StationUI !== 'undefined') StationUI.notify('could not forget that ' + (prop.kind === 'skill' ? 'skill' : 'memory') + ' - try again', 'warn');
