@@ -1561,6 +1561,104 @@ for (const c of T.catalog) {
     A.ok(!SB.planEdit(st.serialize(), { rearrange: 'spiral' }, E).ok, 'only the diamond is offered');
     for (const shape of ['even', 'tall']) { const p = SB.planEdit(st.serialize(), { rearrange: { shape } }, E); A.ok(p.ok && new RegExp('^RE-LAY the station as ' + (shape === 'even' ? 'a diamond' : 'a tall diamond') + ' round HOME').test(p.plan.summary), shape + ' is offered too: ' + (p.ok ? p.plan.summary.slice(0, 60) : p.error)); }
   }
+  // A DESK BRINGS ITS OWN CHAIR, AND A CHAIR FACES ITS TABLE (Andrew 10-02, two chairs under every desk and side chairs turned
+  // backwards: "the agent doesn't realize that the chairs are built in to the desk as long as the agent's assigned … when it
+  // places left chair and right chair its always backwards")
+  {
+    const st = fresh(), before = snap(st);
+    const room = SB.planEdit(st.serialize(), { refit: [{ op: 'hall', x: 18, y: 4, w: 6, h: 3 }, { op: 'room', name: 'Den', kind: 'hab', x: 24, y: 0, w: 18, h: 11 }, { op: 'place', t: 'desk', x: 34, y: 1, as: 'D' }, { op: 'place', t: 'longtable', x: 27, y: 5, as: 'T' }] }, E);
+    A.ok(room.ok && SB.apply(st, room.plan, E).ok, 'a room with a desk and a table (' + (room.error || 'ok') + ')');
+    const desk = st.props().find(p => p.t === 'desk' && p.x === 34), table = st.props().find(p => p.t === 'longtable');
+    const TW = table.w || 1, TH = table.h || 1;
+    // a chair on the desk's seat is refused, whoever would sit there
+    const onSeat = SB.planEdit(st.serialize(), { refit: [{ op: 'place', t: 'chair', x: desk.x, y: desk.y + (desk.h || 1) }] }, E);
+    A.ok(!onSeat.ok && /^The chair at \(\d+, \d+\) would stand on the seat of the desk at \(34, 1\): a desk draws its own chair when an agent works it, so its seat row stays clear\. Never place a chair at a desk/.test(onSeat.error), 'a chair on a desk\'s seat is refused: ' + (onSeat.error || 'NOT REFUSED').slice(0, 140));
+    // toward: the builder turns a chair to face its table from every side (west of it faces east, east faces west …)
+    const around = [['W', table.x - 1, table.y, 3], ['E', table.x + TW, table.y, 1], ['N', table.x, table.y - 1, 0], ['S', table.x, table.y + TH, 2]];
+    const faced = SB.planEdit(st.serialize(), { refit: around.map(([k, x, y]) => ({ op: 'place', t: 'chair', x, y, toward: table.id, as: 'c' + k })) }, E);
+    A.ok(faced.ok && SB.apply(st, faced.plan, E).ok, 'four chairs placed toward the table (' + (faced.error || 'ok') + ')');
+    for (const [k, x, y, r] of around) { const c = st.props().find(p => p.t === 'chair' && p.x === x && p.y === y); A.ok(c && ((c.r | 0) & 3) === r, 'the chair ' + k + ' of the table faces it (r ' + (c && c.r) + ', wanted ' + r + ')'); }
+    // a chair turned away is seen, and turned back toward its table
+    const west = st.props().find(p => p.t === 'chair' && p.x === table.x - 1);
+    A.ok(st.faceProp(west.id, 1).ok, 'a chair turned away by hand');
+    const det = SB.mapOf(st.serialize(), E, { room: 'Den' });
+    A.ok(det.ok && det.map.issues.some(s => new RegExp('^the chair at \\(' + west.x + ', ' + west.y + '\\) faces west, away from the long table beside it').test(s)), 'station.map { room } sees the chair turned away: ' + JSON.stringify(det.ok && det.map.issues));
+    const back = SB.planEdit(st.serialize(), { refit: [{ op: 'rotate', prop: west.id, toward: table.id }] }, E);
+    A.ok(back.ok && SB.apply(st, back.plan, E).ok && ((st.propById(west.id).r | 0) & 3) === 3, 'rotate toward turns it back to face the table');
+    // a chair that already stood on a desk's seat (an old office) goes when the desk gets its agent
+    A.ok(st.addProp({ t: 'chair', x: desk.x, y: desk.y + (desk.h || 1), w: 1, h: 1, block: true }).ok, 'an old office chair on the desk\'s seat');
+    const det2 = SB.mapOf(st.serialize(), E, { room: 'Den' });
+    A.ok(det2.ok && det2.map.issues.some(s => /^the chair at \(\d+, \d+\) stands on the seat of the desk at \(34, 1\): a desk draws its own chair when an agent works it, so that makes two\. Take it up\.$/.test(s)), 'station.map { room } sees the chair on the desk\'s seat');
+    const seat = SB.planEdit(st.serialize(), { refit: [{ op: 'agent', prop: desk.id, agent: 'rex' }] }, E);
+    A.ok(seat.ok && /is REX's \(the chair at \(\d+, \d+\) removed: the desk brings its own chair\)/.test(seat.plan.summary) && SB.apply(st, seat.plan, E).ok && !st.props().some(p => p.t === 'chair' && p.x === desk.x && p.y === desk.y + (desk.h || 1)), 'staffing the desk takes the extra chair away: ' + (seat.ok ? seat.plan.summary.slice(0, 160) : seat.error));
+    // the office style leaves every desk's seat clear, and automatic placement never takes one
+    const office = SB.planEdit(st.serialize(), { refurnish: { room: 'Den', style: 'office' } }, E);
+    A.ok(office.ok && SB.apply(st, office.plan, E).ok, 'the den furnished as an office (' + (office.error || 'ok') + ')');
+    const den = st.rooms().find(r => r.name === 'DEN' || r.name === 'Den'.toUpperCase()) || st.rooms().find(r => /OFFICE|DEN/.test(r.name));
+    const seats = [];
+    for (const p of st.props()) if (st.roomAt(p.x, p.y) === den.id && /^(desk|desk2)$/.test(p.t)) for (let x = p.x; x < p.x + (p.w || 1); x++) seats.push([x, p.y + (p.h || 1)]);
+    A.ok(seats.length > 0 && seats.every(([x, y]) => { const id = st.propAt(x, y), q = id && st.propById(id); return !q || q.block === false; }), 'every office desk keeps its seat clear (' + seats.length + ' seat tiles)');
+    const more = SB.planEdit(st.serialize(), { add: { room: den.name, pieces: ['six chairs'] } }, E);
+    A.ok(!more.ok || (SB.apply(st, more.plan, E).ok && seats.every(([x, y]) => { const id = st.propAt(x, y), q = id && st.propById(id); return !q || q.t !== 'chair'; })), 'chairs added to the room never land on a desk\'s seat');
+    for (let i = 0; i < 20 && snap(st) !== before && st.canUndo(); i++) st.undo();
+    A.eq(snap(st), before, 'undo takes it all back');
+  }
+  // A CHAIR PULLED UP TO A TABLE FACES IT, whatever r the lead sent: the left and right chairs a model turns backwards are
+  // turned round once every edit is down (the table may come after its chairs), and the summary says so; toward is the
+  // lead's own aim and is never overridden; a chair standing free keeps the r it was given
+  {
+    const st = fresh(), before = snap(st);
+    const base = SB.planEdit(st.serialize(), { refit: [{ op: 'hall', x: 18, y: 4, w: 6, h: 3 }, { op: 'room', name: 'Den', kind: 'hab', x: 24, y: 0, w: 18, h: 11 }] }, E);
+    A.ok(base.ok && SB.apply(st, base.plan, E).ok, 'a room for the table (' + (base.error || 'ok') + ')');
+    const TW = (E.PropSprites.spec('longtable') || {}).w || 1, tx = 28, ty = 5;
+    // the model's usual mistake: r read as "the side it stands on", so west chair r 1, east chair r 3, chairs first
+    const wrong = [{ op: 'place', t: 'chair', x: tx - 1, y: ty, r: 1 }, { op: 'place', t: 'chair', x: tx + TW, y: ty, r: 3 }, { op: 'place', t: 'chair', x: tx, y: ty - 1, r: 2 }, { op: 'place', t: 'chair', x: tx, y: ty + 1, r: 0 },
+      { op: 'place', t: 'chair', x: tx + 8, y: ty, r: 1 }, { op: 'place', t: 'longtable', x: tx, y: ty }];
+    const p = SB.planEdit(st.serialize(), { refit: wrong }, E);
+    A.ok(p.ok, 'chairs placed backwards round a table still plan (' + (p.error || 'ok') + ')');
+    A.ok(p.ok && /1\. a chair at \(27, 5\) in DEN, facing east \(turned to face the long table beside it\)/.test(p.plan.summary) && /2\. a chair at \(\d+, 5\) in DEN, facing west \(turned to face the long table beside it\)/.test(p.plan.summary)
+      && /3\. a chair at \(28, 4\) in DEN, facing south \(turned to face the long table beside it\)/.test(p.plan.summary) && /4\. a chair at \(28, 6\) in DEN, facing north \(turned to face the long table beside it\)/.test(p.plan.summary)
+      && /5\. a chair at \(36, 5\) in DEN, facing west;/.test(p.plan.summary),'the summary says each chair was turned to face the table, and the free one keeps its r: ' + (p.ok ? p.plan.summary.slice(0, 420) : p.error));
+    A.ok(p.ok && SB.apply(st, p.plan, E).ok, 'and it builds exactly as planned');
+    const faceAt = (x, y) => { const id = st.propAt(x, y), c = id && st.propById(id); return c ? (c.r | 0) & 3 : -1; };
+    A.eq([faceAt(tx - 1, ty), faceAt(tx + TW, ty), faceAt(tx, ty - 1), faceAt(tx, ty + 1), faceAt(tx + 8, ty)].join(','), '3,1,0,2,1', 'every chair at the table faces it (east, west, south, north); the free chair faces west as told');
+    const det = SB.mapOf(st.serialize(), E, { room: 'Den' });
+    A.ok(det.ok && !det.map.issues.length, 'and the room shows no issues: ' + JSON.stringify(det.ok && det.map.issues));
+    // a bare rotate that turns a chair away from its table is turned back too; one aimed with toward is the lead's call
+    const westId = st.propAt(tx - 1, ty), rot = SB.planEdit(st.serialize(), { refit: [{ op: 'rotate', prop: westId, r: 1 }] }, E);
+    A.ok(rot.ok && /turned .*\(then turned east to face the long table beside it\)/.test(rot.plan.summary), 'a bare rotate away from the table is turned back: ' + (rot.ok ? rot.plan.summary.slice(0, 200) : rot.error));
+    const aimed = SB.planEdit(st.serialize(), { refit: [{ op: 'rotate', prop: westId, toward: [tx - 6, ty] }] }, E);
+    A.ok(aimed.ok && !/then turned/.test(aimed.plan.summary) && SB.apply(st, aimed.plan, E).ok && faceAt(tx - 1, ty) === 1, 'a chair aimed with toward (at a screen across the room) keeps that aim: ' + (aimed.ok ? aimed.plan.summary.slice(0, 160) : aimed.error));
+    for (let i = 0; i < 20 && snap(st) !== before && st.canUndo(); i++) st.undo();
+    A.eq(snap(st), before, 'undo takes it all back');
+  }
+  // every seat in every room and zone style faces the table or desk it is set beside (the meeting room's south chairs faced
+  // away), and a room dressed with its door on the north wall (the set mirrored north-south) turns its seats with the set
+  {
+    const RS = require('../frontend/app/roomstyles.js'), isSeat = t => { const sp = E.PropSprites.spec(t); return !!(sp && sp.use && sp.use.kind === 'seat'); };
+    const isTable = t => { const sp = E.PropSprites.spec(t); return !!(sp && sp.surface) || /^(desk|desk2|console|consoleL|pixelrig|bench)$/.test(t); };
+    const beside = (p, q) => { const ox = p.x < q.x + q.w && q.x < p.x + p.w, oy = p.y < q.y + q.h && q.y < p.y + p.h; return (ox && (p.y + p.h === q.y || q.y + q.h === p.y)) || (oy && (p.x + p.w === q.x || q.x + q.w === p.x)); };
+    const toward = (p, q) => { const dx = (q.x + q.w / 2) - (p.x + p.w / 2), dy = (q.y + q.h / 2) - (p.y + p.h / 2), ox = p.x < q.x + q.w && q.x < p.x + p.w, oy = p.y < q.y + q.h && q.y < p.y + p.h; if (ox && !oy) return dy > 0 ? 0 : 2; if (oy && !ox) return dx > 0 ? 3 : 1; return Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 3 : 1) : (dy > 0 ? 0 : 2); };
+    const away = [];
+    let seen = 0;
+    const check = (label, pieces) => {
+      const ps = pieces.map(([t, x, y, r]) => { const sp = E.PropSprites.spec(t); return sp ? { t, x, y, r: (r || 0) & 3, w: sp.w, h: sp.h } : null; }).filter(Boolean);
+      for (const c of ps) { if (!isSeat(c.t)) continue; const near = ps.filter(q => q !== c && isTable(q.t) && beside(c, q)); if (!near.length) continue; seen++; if (near.map(q => toward(c, q)).indexOf(c.r) < 0) away.push(label + ' ' + c.t + '@' + c.x + ',' + c.y); }
+    };
+    const walk = (o, path) => { if (!o || typeof o !== 'object') return; if (Array.isArray(o.pieces)) check(path, o.pieces); for (const k of Object.keys(o)) if (k !== 'pieces') walk(o[k], path + '.' + k); };
+    walk(RS.STYLES, 'STYLES'); walk(RS.ROOMS, 'ROOMS');
+    A.ok(seen >= 10 && !away.length, 'every styled seat beside a table faces it (' + seen + ' checked; away: ' + away.join(', ') + ')');
+    // the meeting room dressed with its only door on the north wall: the set is mirrored north-south, its chairs turned with it
+    const st = fresh();
+    const mk = SB.planEdit(st.serialize(), { refit: [{ op: 'room', name: 'Talks', kind: 'hab', x: 0, y: 16, w: 16, h: 10 }, { op: 'hall', x: 7, y: 11, w: 3, h: 5 }] }, E);
+    A.ok(mk.ok && SB.apply(st, mk.plan, E).ok, 'a room below the main room, its door on the north wall (' + (mk.error || 'ok') + ')');
+    const talks = st.rooms().find(r => r.name === 'TALKS');
+    const d = talks && SB.dressRoom(st, E, talks.id, 'meeting');
+    A.ok(d && d.ok && d.featureWall === 'south', 'its feature wall is the south one (' + (d && (d.error || d.featureWall)) + ')');
+    const here = st.props().filter(q => st.roomAt(q.x, q.y) === (talks && talks.id)), chairs = here.filter(q => isSeat(q.t)), tables = here.filter(q => isTable(q.t));
+    const atTable = chairs.filter(c => tables.some(t => beside(c, t)));
+    A.ok(atTable.length >= 2 && atTable.every(c => tables.some(t => beside(c, t) && toward(c, t) === ((c.r | 0) & 3))), 'every chair at the mirrored table faces it (' + atTable.map(c => c.x + ',' + c.y + ' r' + (c.r | 0)).join(' ') + ')');
+  }
   // SETTING A LINE UP (Andrew 10-01: "and then also setting up the conveyor systems"): every setting a person has in the
   // Workflow panel is a refit edit, a junction edit changes only what it names, and a folder or a bind names only what the
   // station has (resolved when planned, so the build replays exactly what was approved)
@@ -1753,7 +1851,7 @@ for (const c of T.catalog) {
     if (verb === 'station.plan_restyle') return { ok: true, result: { planId: 'plan-s-1', summary: 'Restyle HOME: teal floor. Nothing is added, moved or removed.' } };
     if (verb === 'station.plan_edit') return { ok: true, result: { planId: 'plan-e-1', summary: 'Remove GYM (18 × 11), with the hallway that joined it.' } };
     if (verb === 'station.plan_undo') return { ok: true, result: { planId: 'plan-u-1', summary: 'Undo the last build (GYM): the station goes back exactly as it was before it.' } };
-    if (verb === 'station.map' && args.look === 'Den') return { ok: true, result: { look: 'DEN', mime: 'image/webp', width: 640, height: 420, data: 'UklGRg==', shows: { x1: 23, y1: -1, x2: 54, y2: 22 }, tilePx: 20 } };
+    if (verb === 'station.map' && args.look === 'Den') return { ok: true, result: { look: 'DEN', mime: 'image/webp', width: 640, height: 420, data: 'UklGRg==', shows: { x1: 23, y1: -1, x2: 54, y2: 22 }, tilePx: 20, issues: ['the chair at (30, 4) faces west, away from the long table beside it: turn it toward it.'] } };
     if (verb === 'station.map' && args.look === 'Void') return { ok: false, error: 'There is no room called "Void". Rooms: HOME, DEN.' };
     if (verb === 'station.map') return { ok: true, result: { main: 'HOME', rooms: [{ name: 'HOME', main: true, w: 18, h: 11 }], hallways: 0, drawing: ['AAAAAAAAAAAAAAAAAA'] } };
     if (verb === 'station.plan_build') return (args.request.rooms || [])[0] && args.request.rooms[0].beside === 'Mars' ? { ok: false, error: 'There is no room called "Mars". Rooms: HOME.' }
@@ -1933,6 +2031,7 @@ for (const c of T.catalog) {
   A.ok(Array.isArray(lk.images) && lk.images.length === 1 && lk.images[0].mime === 'image/webp' && lk.images[0].data === 'UklGRg==', 'station.map { look } hands the model the picture');
   A.ok(/^A picture of DEN as it renders now \(640 x 420 px; it shows tiles x 23-54, y -1-22 with the wall faces above, about 20 px a tile\)\. Judge it as a designer/.test(lk.content) && /station\.map \{ room \}/.test(lk.content) && lk.summary === 'looked at DEN' && !/UklGRg/.test(lk.content), 'with a note that says what it shows, and never the bytes as text');
   A.eq(calls[calls.length - 1], ['station.map', { look: 'Den' }], 'the page is asked for that room');
+  A.ok(/ Issues StarNet sees in this room \(fix every one\): the chair at \(30, 4\) faces west, away from the long table beside it/.test(lk.content), 'a room look carries the issues StarNet sees beside the picture');
   const lkAll = await mapT.run({ look: 'the whole station' }, {});
   A.eq(calls[calls.length - 1], ['station.map', { look: true }], 'look: "the whole station" asks for all of it');
   A.ok(/^REFUSED: The page sent no picture/.test(lkAll.content), 'a reply with no picture is refused, never passed off as one');

@@ -387,15 +387,15 @@ const StationCommands = (() => {
   const base64OfBlob = b => new Promise(res => { try { const fr = new FileReader(); fr.onload = () => { const s = String(fr.result || ''); res(s.slice(s.indexOf(',') + 1)); }; fr.onerror = () => res(''); fr.readAsDataURL(b); } catch (_) { res(''); } });
   async function lookAt(st, env, ref) {
     if (typeof World === 'undefined' || typeof World.renderStill !== 'function' || typeof World.renderStillOfTiles !== 'function') throw new Error('the station picture is not available on this page');
-    let tiles = null, of = 'the whole station';
+    let tiles = null, of = 'the whole station', issues = null;
     if (ref) {
       const d = StationBuilder.mapOf(st.serialize(), env, { room: ref });
       if (!d || !d.ok) throw new Error((d && d.error) || 'there is no room "' + ref + '"');
       const rs = d.map.rects || [];
       tiles = { x1: Math.min(...rs.map(q => q.x)), y1: Math.min(...rs.map(q => q.y)), x2: Math.max(...rs.map(q => q.x + q.w - 1)), y2: Math.max(...rs.map(q => q.y + q.h - 1)) };
-      of = d.map.room;
+      of = d.map.room; issues = Array.isArray(d.map.issues) ? d.map.issues : [];
     }
-    for (let px = ref ? 1100 : 1400; px >= 400; px = Math.round(px * 0.75)) {
+    for (let px = ref ? 1400 : 1400; px >= 400; px = Math.round(px * 0.75)) {
       const still = tiles ? World.renderStillOfTiles(tiles, px, { noBodies: false }) : World.renderStill(px);
       if (!still || !still.canvas) throw new Error('the station is not drawn yet (it may still be waking up): look again in a moment');
       let b = await blobOfCanvas(still.canvas, 'image/webp', 0.82);
@@ -405,6 +405,7 @@ const StationCommands = (() => {
       if (!data) throw new Error('this page could not encode the picture');
       if (data.length > LOOK_CHARS) continue;
       const out = { look: of, mime: b.type, width: still.width, height: still.height, data };
+      if (issues) out.issues = issues.slice(0, 12);
       if (tiles) Object.assign(out, { shows: { x1: tiles.x1 - 1, y1: tiles.y1 - 1, x2: tiles.x2 + 1, y2: tiles.y2 + 1 }, tilePx: Math.round(still.width / (tiles.x2 - tiles.x1 + 3)) });
       return out;
     }

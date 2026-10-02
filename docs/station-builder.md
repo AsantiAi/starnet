@@ -220,6 +220,15 @@ reading nook off the lounge, your way … then take a look and keep refining" be
 alcove and every piece placed by hand. It looked, saw the back-wall bookshelves sat left of centre and the lounge TV
 crowded the new doorway, refitted both, and looked again.
 
+**Chairs (Andrew 10-02: two chairs under every desk, side chairs turned backwards).** A desk (any workstation) draws
+its own chair the moment an agent works it, so its seat row stays clear: a refit that puts a piece there is refused,
+staffing a desk takes away a chair already standing on its seat, the office styles no longer set chairs at desks (or lamps
+on the bare floor between them), and `station.map { room }` lists `issues` (a piece on a seat, a seat turned away from its
+table). A seat takes `toward: <table>` and the builder works out its facing. A seat placed, moved or turned by hand right
+beside a table or desk without `toward` is turned to face it once every edit is down, and the summary says so. The
+meeting styles' south chairs faced away, and a room dressed with its door on the north wall mirrored its sets without
+turning their pieces. Both are fixed, and a test checks every styled seat against its table.
+
 **Limits raised at the same time:** recruits 3 → 12 a plan (still only when the Commander asks), named pieces 16 → 120
 (40 of one kind), rooms in a rooms plan 6 → 24, lines in a room 6 → 16, a diamond 16 → 40 rooms, a concourse 8 → 24,
 rooms removed at once 8 → 60, a hallway 40 → 160 tiles (200 round a corner), a designed room 44 × 26 → 96 × 60. The
