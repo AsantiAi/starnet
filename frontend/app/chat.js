@@ -631,6 +631,17 @@ const Chat = (() => {
       '<span class="md-pre">' + escapeHtml(lines.join('\n')) + '</span>' +
       '</span>';
   }
+  /* A LABEL THAT IS AN ADDRESS SHOWS WHERE IT REALLY GOES (QA 2026-10-02). [https://bank.com](https://evil.com) read as
+     bank.com and opened evil.com — agent output can be steered by a page the agent read, and the desktop window has no
+     status bar to show a link's target. When the label names a host the target does not have, the target's host follows. */
+  function hostOf(u) {
+    const m = /^(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)(?=[\/:?#]|$)/i.exec(String(u || '').trim());
+    return m ? m[1].toLowerCase() : '';
+  }
+  function linkHostNote(label, href) {
+    const shown = hostOf(label), real = hostOf(href);
+    return (shown && real && shown !== real) ? ' <span class="md-host">(' + escapeHtml(real) + ')</span>' : '';
+  }
   function reportInline(raw) {
     // Tokenize raw text before escaping; generated markup never enters another pass.
     const re = /`([^`\n]+)`|\[([^\]\n]+)\]\((https?:\/\/[^\s<>"']+)\)|\*\*([^*\n]+)\*\*|https?:\/\/[^\s<>"']+/g;
@@ -640,8 +651,10 @@ const Chat = (() => {
       // A code span that IS a URL (`http://localhost:8765`) stays code-styled but clickable: models
       // backtick server addresses constantly, and a dead address costs the user a copy-paste.
       if(m[1]!==undefined){const code='<code class="md-code">'+escapeHtml(m[1])+'</code>';out+=/^https?:\/\/[^\s<>"'`]+$/.test(m[1])?'<a href="'+escapeHtml(m[1])+'" target="_blank" rel="noopener noreferrer">'+code+'</a>':code;}
-      else if(m[2]!==undefined)out+='<a href="'+escapeHtml(m[3])+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(m[2])+'</a>';
-      else if(m[4]!==undefined)out+='<span class="md-b">'+linkify(m[4])+'</span>';   // **http://x** links too (linkify escapes)
+      else if(m[2]!==undefined)out+='<a href="'+escapeHtml(m[3])+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(m[2])+'</a>'+linkHostNote(m[2],m[3]);
+      // bold holds no '*', so its inside can be read again for code, [label](url) and bare links (QA 2026-10-02: **`npm run dev`**
+      // showed its backticks, **[docs](url)** showed '[docs](' around a bare link); reportInline escapes everything it emits
+      else if(m[4]!==undefined)out+='<span class="md-b">'+reportInline(m[4])+'</span>';
       else out+=linkify(m[0]);
       last=re.lastIndex;
     }

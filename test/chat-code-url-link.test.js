@@ -23,7 +23,7 @@ const escSrc = /const HTML_ESC = \{[^}]*\};/.exec(src);
 A.ok(escSrc, 'chat.js still defines HTML_ESC');
 // eslint-disable-next-line no-new-func
 const reportInline = new Function(escSrc[0] + '\n' + extract('escapeHtml') + '\n' + extract('linkify') + '\n' +
-  extract('reportInline') + '\nreturn reportInline;')();
+  extract('hostOf') + '\n' + extract('linkHostNote') + '\n' + extract('reportInline') + '\nreturn reportInline;')();
 
 function hrefOf(html) { const m = /href="([^"]*)"/.exec(html); return m && m[1]; }
 
@@ -50,5 +50,28 @@ out = reportInline('`http://x.test/"onmouseover="alert(1)`');
 A.ok(out.indexOf('"onmouseover') === -1, 'a quote in a code span cannot break out of href');
 out = reportInline('**<b>x</b> http://example.com**');
 A.ok(out.indexOf('<b>') === -1 && out.indexOf('&lt;b&gt;') !== -1, 'bold text stays HTML-escaped');
+
+// QA 2026-10-02: bold's inside is read again — code, [label](url) and bare links inside **…** render, never raw markers
+{
+  const b1 = reportInline('run **`npm run dev`** now');
+  A.ok(b1.includes('<span class="md-b"><code class="md-code">npm run dev</code></span>') && !b1.includes('`'), 'a code span inside bold renders as code (no raw backticks): ' + b1);
+  const b2 = reportInline('**[docs](https://x.com/a)**');
+  A.ok(b2 === '<span class="md-b"><a href="https://x.com/a" target="_blank" rel="noopener noreferrer">docs</a></span>', 'a markdown link inside bold is one link with its label: ' + b2);
+  const b3 = reportInline('**see https://x.com/a b**');
+  A.ok(b3.includes('<span class="md-b">see <a href="https://x.com/a"'), 'a bare URL inside bold still links: ' + b3);
+  const b4 = reportInline('**<img src=x onerror=alert(1)>**');
+  A.ok(!b4.includes('<img') && b4.includes('&lt;img'), 'bold content stays escaped');
+}
+// QA 2026-10-02: a label that names a different host than its target shows where the link really goes
+{
+  const l1 = reportInline('[https://bank.com](https://evil.com/login)');
+  A.ok(l1.includes('>https://bank.com</a> <span class="md-host">(evil.com)</span>'), 'a mismatched address label is followed by the real host: ' + l1);
+  const l2 = reportInline('[github.com/foo](https://github.com/foo)');
+  A.ok(!l2.includes('md-host'), 'a label on the same host gets no note');
+  const l3 = reportInline('[the docs](https://evil.com)');
+  A.ok(!l3.includes('md-host'), 'a plain-word label gets no note');
+  const l4 = reportInline('[www.bank.com](https://bank.com)');
+  A.ok(!l4.includes('md-host'), 'www. is the same host');
+}
 
 A.report('chat-code-url-link.test');
