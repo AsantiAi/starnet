@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "6b7a87bc71283b4daaf37aa8ad9c0d57fef66f98",
+    "sourceCommit": "66d7e35f16664fa81c85316a06680ed20134054e",
     "pathSetSha256": "60c61c9c0cad8daa5c2d40f76a912ed04e52667a726032a7b3ab94cad57bfa1e",
     "files": [
       {
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 701818,
-        "sha256": "bea2b9a160152987a8736648314c96d5cf98d37a3af9b62eb5911cdd1939234d"
+        "bytes": 701990,
+        "sha256": "97ee2ebcbde4ff17b315a64370d94c2b099563ad7a032659ee639a85cc53d85f"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -1158,8 +1158,8 @@
       },
       {
         "path": "frontend/app/stepin.js",
-        "bytes": 24860,
-        "sha256": "171abee27b64ded57453e712c4d88827b23e244eb41bbff8ece115de48214a06"
+        "bytes": 25314,
+        "sha256": "8619cf261c3584e1fc5eed30317e22e33bbf3e9193c5250cde9062c52a06f882"
       },
       {
         "path": "frontend/app/study.js",
@@ -1318,8 +1318,8 @@
       },
       {
         "path": "frontend/app/windows/connectors.js",
-        "bytes": 144728,
-        "sha256": "0a20abcb7e51b3495dd2d257b02d4d35b72d2477adb4a944262e3dd27daf31a6"
+        "bytes": 145083,
+        "sha256": "c3bf7f41f61e8fee9ae2b09117bb2ace4bb8cfed72be02034f42c088a2836ac0"
       },
       {
         "path": "frontend/app/windows/logbook.js",
@@ -1328,8 +1328,8 @@
       },
       {
         "path": "frontend/app/windows/loops.js",
-        "bytes": 49852,
-        "sha256": "78740efeec91c6f0710461483b59dbd6acace105407e52ed74ea0bb7eb63ec7d"
+        "bytes": 50080,
+        "sha256": "ceb44ecc7d75e592f37c9a37a16f717b3bc596aaa5d3046f8b379c6b09853653"
       },
       {
         "path": "frontend/app/windows/messaging.js",
