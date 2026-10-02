@@ -154,6 +154,15 @@ const result = (extra) => Object.assign({ type: 'result', subtype: 'success', is
     const none = makeClaudeCliProvider({ spawn: fakeSpawn({}).spawn, fs: { statSync() { throw new Error('ENOENT'); } }, env: { PATH: path.join('nowhere') }, platform: 'linux' });
     err = null; try { await none.listModels(); } catch (e) { err = e; }
     A.ok(err && /not installed/.test(err.message), 'missing CLI lists nothing and says how to install it');
+    // (sweep 2026-10-02) macOS app opened from the Finder: bare PATH, Homebrew/npm `claude` → found, and its JS run by the station's Node
+    const brewCli = '/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js';
+    const fsMac = { statSync(p) { if (String(p).replace(/\\/g, '/') === '/opt/homebrew/bin/claude') return { isFile: () => true }; throw new Error('ENOENT'); },
+      realpathSync(p) { return String(p).replace(/\\/g, '/') === '/opt/homebrew/bin/claude' ? brewCli : p; }, writeFileSync() {}, unlinkSync() {} };
+    const fsp = fakeSpawn({ lines: [{ loggedIn: true, authMethod: 'claude.ai' }], code: 0 });
+    const mac = makeClaudeCliProvider({ spawn: fsp.spawn, fs: fsMac, env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', HOME: '/Users/me' }, platform: 'darwin' });
+    try { await mac.listModels(); } catch (_) {}
+    const first = fsp.calls[0];
+    A.ok(first && first.file === process.execPath && String(first.args[0]).replace(/\\/g, '/') === brewCli, 'a Finder-launched Mac finds the Homebrew/npm claude and runs its cli.js with the station\'s Node: ' + JSON.stringify(first && [first.file, first.args && first.args[0]]));
   }
 
   // K. a lost sign-in (the CLI's real v2.1.284 shape) is an `auth` failure, never a retried `unknown`.

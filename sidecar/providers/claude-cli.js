@@ -229,7 +229,21 @@
         const native = path.join(env.HOME, '.local', 'bin', 'claude');   // the native installer's home on macOS/Linux
         if (isFile(native)) bin = native;
       }
+      /* An app opened from the macOS Finder gets a bare PATH (/usr/bin:/bin:/usr/sbin:/sbin): Homebrew and `npm -g`
+         installs were never found and the card said "not installed" (sweep 2026-10-02). Look where they live too. */
+      if (!bin && platform !== 'win32') {
+        for (const dir of ['/opt/homebrew/bin', '/usr/local/bin', env.HOME ? path.join(env.HOME, '.npm-global', 'bin') : '']) {
+          if (dir && isFile(path.join(dir, 'claude'))) { bin = path.join(dir, 'claude'); break; }
+        }
+      }
       if (!bin) return null;
+      // an npm-installed `claude` is a link to a JS file with a `#!/usr/bin/env node` line — and that bare PATH has no
+      // `node` either: run the script with the station's own Node instead of trusting the shebang
+      if (platform !== 'win32' && typeof fs.realpathSync === 'function') {
+        let real = '';
+        try { real = fs.realpathSync(bin); } catch (_) { real = ''; }
+        if (/\.(c|m)?js$/i.test(real)) return { file: process.execPath, pre: [real] };
+      }
       if (/\.(cmd|bat)$/i.test(bin)) {
         const cli = path.join(path.dirname(bin), 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js');
         if (isFile(cli)) return { file: process.execPath, pre: [cli] };
