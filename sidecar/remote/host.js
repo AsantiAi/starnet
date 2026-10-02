@@ -192,8 +192,27 @@ function makeRemoteHost(d) {
     }));
   }
 
+  /* A PHONE READS WHAT THE STATION SHOWED IT, nothing else: a file inside that agent's own workspace (a relative
+     path), or a file outside it only when one of that agent's runs or deliverables recorded it (the file chips the
+     phone was given). A free-form absolute path is refused even under a folder the agents may use at the desk. */
+  const isAbsPath = (p) => /^([A-Za-z]:|[\\/])/.test(String(p || ''));
+  async function shownPaths(agentId) {
+    const set = new Set();
+    let rows = [];
+    try { rows = (d.runHistory && d.runHistory(300)) || []; } catch (e) { note('remote.host.shownRuns', e); rows = []; }
+    for (const r of rows) {
+      if (!r || r.agentId !== agentId) continue;
+      for (const a of Array.isArray(r.artifacts) ? r.artifacts : []) if (a && a.path) set.add(String(a.path).slice(0, 300));
+      if (r.deliverable && r.deliverable.main) set.add(String(r.deliverable.main).slice(0, 300));
+    }
+    let dl = [];
+    try { dl = (await d.deliverables()) || []; } catch (e) { note('remote.host.shownDeliverables', e); dl = []; }
+    for (const r of dl) if (r && r.agentId === agentId) for (const f of Array.isArray(r.files) ? r.files : []) if (f && f.path) set.add(String(f.path));
+    return set;
+  }
   async function fetchFile(o) {
     if (!agentsList().some(a => a.agentId === o.agentId)) return { ok: false, error: 'unknown file' };   // never make a folder for a made-up agent
+    if (isAbsPath(o.path) && !(await shownPaths(o.agentId)).has(String(o.path))) return { ok: false, error: 'unknown file' };
     return d.readFile(o.agentId, o.path, o.offset, o.length);
   }
 

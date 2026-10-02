@@ -209,6 +209,24 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
   A.ok(/#59$/.test(th[th.length - 1].content) && th.length < 60, 'the newest turns are the ones kept');
   // a file read for an agent that does not exist makes nothing
   A.eq((await hl.fetchFile({ agentId: 'ghost', path: 'x.txt', offset: 0, length: 10 })).ok, false, 'no file read (and no folder) for a made-up agent');
+  // a phone reads only what the station showed it: the agent's own workspace, or a file a run/deliverable recorded
+  {
+    const reads = [];
+    const hf = makeRemoteHost({ now: () => now, newId: () => 'r', broadcast: () => {}, roster: () => [{ agentId: 'forge', name: 'FORGE' }], liveRuns: () => [],
+      transcript: { streams: () => [], history: () => [] }, deskSessions: () => [],
+      runHistory: () => [{ runId: 'h1', agentId: 'forge', artifacts: [{ path: 'C:\\proj\\out\\report.md' }] }, { runId: 'h2', agentId: 'scout', artifacts: [{ path: 'C:\\proj\\scout.md' }] }],
+      deliverables: async () => [{ id: 'd1', agentId: 'forge', files: [{ path: '/home/me/proj/plan.pdf' }] }],
+      readFile: async (agentId, p) => { reads.push(p); return { ok: true, path: p }; } });
+    const fetchOk = async (p) => (await hf.fetchFile({ agentId: 'forge', path: p, offset: 0, length: 10 })).ok !== false;
+    A.eq(await fetchOk('notes/today.md'), true, 'a file in the agent\'s own workspace is readable');
+    A.eq(await fetchOk('C:\\proj\\out\\report.md'), true, 'a file one of its runs recorded is readable');
+    A.eq(await fetchOk('/home/me/proj/plan.pdf'), true, 'a file one of its deliverables lists is readable');
+    A.eq(await fetchOk('C:\\proj\\.secrets\\keys.json'), false, 'any other absolute path is refused, even in a folder agents may use');
+    A.eq(await fetchOk('C:\\proj\\scout.md'), false, 'another agent\'s file is not reachable by naming this agent');
+    A.eq(await fetchOk('\\\\server\\share\\x.txt'), false, 'a network path is refused');
+    A.eq(await fetchOk('/etc/passwd'), false, 'a posix absolute path is refused');
+    A.eq(reads.some(p => /secrets|scout|passwd|server/.test(p)), false, 'and none of those ever reached the disk');
+  }
 
   /* ---------- 6. ACTIVITY: running now + what finished, from the run history ---------- */
   history = [

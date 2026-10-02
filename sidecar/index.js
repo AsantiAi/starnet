@@ -10345,7 +10345,8 @@ function remoteNotify(evt) {
 const remoteView = require('./remote/view.js').makeRemoteView({ now: () => Date.now() });
 // Web Push sent by this station itself (sidecar/remote/push.js): its own key, the phones' subscriptions
 const remotePush = require('./remote/push.js').makePush({ fs, path, file: path.join(WORKSPACES, '.secrets', 'remote-push.json'), now: () => Date.now(),
-  fetch: (url, o) => fetch(url, Object.assign({}, o, { signal: AbortSignal.timeout(15000) })) });
+  fetch: (url, o) => fetch(url, Object.assign({}, o, { signal: AbortSignal.timeout(15000) })),
+  extraHosts: String(process.env.STARNET_REMOTE_PUSH_HOSTS || '').split(',') });   // tests only: a local fake push service
 const remotePortraits = require('./remote/portraits.js').makePortraits({ fs, path, frontend: FRONTEND });
 const remoteHost = require('./remote/host.js').makeRemoteHost({
   now: () => Date.now(), newId: () => crypto.randomUUID(), broadcast: remoteBroadcast,
