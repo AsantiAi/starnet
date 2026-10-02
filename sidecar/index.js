@@ -18432,6 +18432,8 @@ async function runOnceCore(o) {
   let auxVisionProvider = null;
   const auxVisionCall = async (req) => {
     if (!auxVisionProvider) throw new Error('session provider not ready');
+    // a provider that cannot take an image (Claude Code CLI) would answer about a picture it never saw (QA 2026-10-02)
+    if (typeof auxVisionProvider.supportsImages === 'function' && !auxVisionProvider.supportsImages()) throw new Error('no vision route: this agent\'s model runs through Claude Code, which cannot see images — connect an OpenRouter key in SETTINGS › AI & MODELS for image analysis');
     const ac = new AbortController();
     const t = setTimeout(() => { try { ac.abort(); } catch (_) {} }, Math.max(5000, Number(req && req.timeoutMs) || 55000));
     try {
