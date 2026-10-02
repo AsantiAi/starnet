@@ -27,4 +27,8 @@ A.ok(/\{ id: 'cf-grp-behaves', label: 'ACCESS' \}/.test(ui) && /const key = a\.i
 
 // a remembered SETTINGS section that was renamed (LIVE VOICE -> LOOK & SOUND, models -> providers) reopens on its new page
 A.ok(/if \(key === 'settings' && \(activeId === 'models' \|\| activeId === 'livevoice'\)\) activeId = activeId === 'models' \? 'providers' : 'appearance';/.test(ui), 'mountConsole applies the same section aliases openTerm does');
+// the rating card's "missed" thumb is the up-thumb SVG flipped: the flip must hold in EVERY skin (HUD mode, ?glass=0),
+// not only inside the glass skin, or both thumbs point up and the right-hand one files a miss (sweep 10-02)
+const appCss = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'css', 'app.css'), 'utf8');
+A.ok(/^\.thumb-down \.thumb-px \{ transform: rotate\(180deg\); \}/m.test(appCss), 'app.css flips the down-thumb unscoped');
 A.report('front-doors-tabs');
