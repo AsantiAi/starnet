@@ -90,6 +90,10 @@ const result = (extra) => Object.assign({ type: 'result', subtype: 'success', is
     A.eq(evs.filter(e => e.type === 'text').map(e => e.delta).join(''), 'Let me look. ', 'prose before the call streams; the block does not');
     const start = evs.find(e => e.type === 'tool_start');
     A.eq(start && start.name, 'fs.read', 'tool_start names the tool');
+    // (sweep 10-02) ids are unique across adapters: a fresh adapter per request used to restart at call_cli_1_0
+    const again = await collect(make({ lines: [init('none'), delta('<tool_call>{"name":"fs.read","arguments":{"path":"b.txt"}}</tool_call>'), result()] }).p, { model: 'sonnet', tools, messages: [{ role: 'user', content: 'read b.txt' }] });
+    const start2 = again.find(e => e.type === 'tool_start');
+    A.ok(start && start2 && /^call_cli_[0-9a-f]{8}_1_0$/.test(start.id) && start.id !== start2.id, 'two requests never reuse a tool-call id: ' + [start && start.id, start2 && start2.id].join(' vs '));
     A.eq(JSON.parse(evs.find(e => e.type === 'tool_args').chunk), { path: 'a.txt' }, 'tool_args carry the JSON arguments');
     A.ok(evs.some(e => e.type === 'tool_done'), 'tool_done closes the call');
     A.eq(evs.find(e => e.type === 'done').finishReason, 'tool_calls', 'a call ends the turn as tool_calls');

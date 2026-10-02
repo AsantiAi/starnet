@@ -341,6 +341,10 @@
     const clock = (opts.clock && typeof opts.clock.now === 'function') ? opts.clock : null;
     let status = null, statusAt = 0, statusPromise = null;
     let seq = 0;
+    // tool-call ids are unique per ADAPTER, not just per turn: the factory builds a fresh adapter per request (and per
+    // account on a usage-limit switch), so "call_cli_1_0" repeated in one transcript — a fallback to a provider that
+    // requires unique tool ids would reject the conversation (sweep 2026-10-02)
+    const idTag = require('crypto').randomBytes(4).toString('hex');
 
     function removeFile(p) {
       try { fs.unlinkSync(p); } catch (e) { if (!e || e.code !== 'ENOENT') failNote('claudecli.sysprompt.unlink', e); }
@@ -431,7 +435,7 @@
           const call = parseCall(body);
           if (!call) { yield { type: 'text', delta: CALL_OPEN + body + CALL_CLOSE }; continue; }
           const index = callIndex++;
-          yield { type: 'tool_start', index, id: 'call_cli_' + turn + '_' + index, name: call.name };
+          yield { type: 'tool_start', index, id: 'call_cli_' + idTag + '_' + turn + '_' + index, name: call.name };
           yield { type: 'tool_args', index, chunk: call.args };
           yield { type: 'tool_done', index };
         }
