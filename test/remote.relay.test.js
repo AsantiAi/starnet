@@ -268,6 +268,22 @@ function wsClose(url) {
     await relay.close().catch(() => {});
     try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
   }
+  // (sweep 2026-10-02) a link that is replaced right after 'ready' (two stations on one key: close 4410) keeps backing
+  // off — the backoff used to reset on every 'ready', so they swapped once a second forever and dropped every phone
+  {
+    let clock = 1000;
+    const socks = [];
+    class FakeWS { constructor() { socks.push(this); setImmediate(() => { if (this.onopen) this.onopen(); this.onmessage({ data: JSON.stringify({ t: 'ready', rid: 'r1' }) }); setImmediate(() => this.onclose({ code: 4410, reason: 'replaced' })); }); } send() {} close() {} }
+    const rc2 = makeRelayClient({ url: 'ws://relay.test', devices: { stationKeys() { return {}; }, relayTokenHashes() { return []; } }, sessions: {}, gateway: {}, crypto: C, WebSocketImpl: FakeWS, now: () => clock, log: () => {} });
+    rc2.start();
+    await new Promise(r => setTimeout(r, 30));
+    const first = rc2.info().retryInMs;
+    clock += 2000;   // reconnects before it ever held STABLE_MS
+    await new Promise(r => setTimeout(r, first + 200));
+    const second = rc2.info().retryInMs;
+    A.ok(first === 1000 && second === 2000, 'a link replaced right after ready keeps backing off (1s then 2s), never a 1s loop: ' + first + ' then ' + second);
+    rc2.stop();
+  }
   // (sweep 2026-10-02) per-address limits count an IPv6 host by its /64; a data frame is checked WITH the held fragments
   {
     const { addrKey } = require('../relay/server.js');
