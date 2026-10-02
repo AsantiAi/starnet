@@ -634,9 +634,11 @@ const Chat = (() => {
     let out='',last=0,m;
     while((m=re.exec(raw))) {
       out+=escapeHtml(raw.slice(last,m.index));
-      if(m[1]!==undefined)out+='<code class="md-code">'+escapeHtml(m[1])+'</code>';
+      // A code span that IS a URL (`http://localhost:8765`) stays code-styled but clickable: models
+      // backtick server addresses constantly, and a dead address costs the user a copy-paste.
+      if(m[1]!==undefined){const code='<code class="md-code">'+escapeHtml(m[1])+'</code>';out+=/^https?:\/\/[^\s<>"'`]+$/.test(m[1])?'<a href="'+escapeHtml(m[1])+'" target="_blank" rel="noopener noreferrer">'+code+'</a>':code;}
       else if(m[2]!==undefined)out+='<a href="'+escapeHtml(m[3])+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(m[2])+'</a>';
-      else if(m[4]!==undefined)out+='<span class="md-b">'+escapeHtml(m[4])+'</span>';
+      else if(m[4]!==undefined)out+='<span class="md-b">'+linkify(m[4])+'</span>';   // **http://x** links too (linkify escapes)
       else out+=linkify(m[0]);
       last=re.lastIndex;
     }
