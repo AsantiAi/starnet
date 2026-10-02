@@ -220,6 +220,43 @@ reading nook off the lounge, your way … then take a look and keep refining" be
 alcove and every piece placed by hand. It looked, saw the back-wall bookshelves sat left of centre and the lounge TV
 crowded the new doorway, refitted both, and looked again.
 
+**Chairs (Andrew 10-02: two chairs under every desk, side chairs turned backwards).** A desk (any workstation) draws
+its own chair the moment an agent works it, so its seat row stays clear: a refit that puts a piece there is refused,
+staffing a desk takes away a chair already standing on its seat, the office styles no longer set chairs at desks (or lamps
+on the bare floor between them), and `station.map { room }` lists `issues` (a piece on a seat, a seat turned away from its
+table). A seat takes `toward: <table>` and the builder works out its facing. A seat placed, moved or turned by hand right
+beside a table or desk without `toward` is turned to face it once every edit is down, and the summary says so. The
+meeting styles' south chairs faced away, and a room dressed with its door on the north wall mirrored its sets without
+turning their pieces. Both are fixed, and a test checks every styled seat against its table.
+
+**Left/right pieces.** A recliner is drawn facing west and recliner_r east. The same goes for the telescope, camera
+rig, weapon rack, heavy bag and bench press. The catalog labels ("recliner ‹ left") read as "the one for the left side",
+and the lounge, cozy and library styles had both recliners backwards. Now:
+- The styles pick the twin by the way it should face.
+- The catalog and the room detail say `faces: west | east`.
+- `toward`, or an `r` of west or east, picks the right twin.
+- `rotate` flips one.
+- The dresser turns a twin set against a side wall to face the room.
+- `issues` flags any seat or twin facing straight into a wall.
+
+`toward` on a piece that cannot turn (a stool) places it as drawn and says so, rather than refusing the plan.
+
+**The 10-02 sweep** (two independent reviews plus a live render of every style):
+- **Seats:** the dresser and named-piece adds keep every desk's seat row clear, including desks they place themselves. The
+  desks and comms styles used to trip the builder's own seat refusal in a narrow room.
+- **Seat side:** the seat row follows world.js exactly (a turned remaster desk seats on its front; `m` swaps west and
+  east).
+- **Mirrored rooms:** a room dressed with its door north mirrors only its chairs, never desks. A set holding the couch,
+  drawn from behind, is never mirrored.
+- **Re-lay groups:** rooms joined open plan move as one, so a line or a bench across the join stays whole. Rooms open to
+  the main room stay with it.
+- **Re-lay sizes:** the grid cell takes the station's own room size (up to 30 × 18), so six small or six large rooms
+  re-lay where they used to be refused.
+- **Re-lay checks:** it refuses if a line would gain a warning, a hallway would lead nowhere, or a piece would stand
+  outside every room.
+- **Wording:** the re-lay card counts the pieces leaving with the old hallways. The refusals name real rooms, not
+  placeholders.
+
 **Limits raised at the same time:** recruits 3 → 12 a plan (still only when the Commander asks), named pieces 16 → 120
 (40 of one kind), rooms in a rooms plan 6 → 24, lines in a room 6 → 16, a diamond 16 → 40 rooms, a concourse 8 → 24,
 rooms removed at once 8 → 60, a hallway 40 → 160 tiles (200 round a corner), a designed room 44 × 26 → 96 × 60. The
