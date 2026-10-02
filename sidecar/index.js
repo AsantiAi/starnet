@@ -17214,7 +17214,10 @@ async function handleSkillMarketInstall(req, res) {
   if (body === null) return json(400, { ok: false, error: 'bad json' });
   try {
     const r = await skillMarket.install({ slug: body.slug });
-    const on = skillPrefs.set(r.slug, true);
+    // a FIRST install switches it on; an UPDATE keeps the Commander's choice (it used to silently re-enable a skill they
+    // had switched off — for every agent, with no notice). A skill with no choice recorded yet is switched on.
+    const keep = r.action === 'update' && skillPrefs.has(r.slug);
+    const on = keep ? { ok: true, enabled: skillPrefs.get(r.slug) !== false } : skillPrefs.set(r.slug, true);
     json(200, Object.assign({}, r, { enabled: !!(on && on.ok && on.enabled) }));
   } catch (e) { json(400, { ok: false, error: (e && e.message) || 'could not install that skill' }); }
 }
