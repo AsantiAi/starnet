@@ -3362,10 +3362,10 @@ const Chat = (() => {
     // CORRECTION CAPTURE (consistency loop, slice 2): a short-of-the-mark verdict opens a window in which the
     // Commander's next message to this agent is treated as the CORRECTION of that run and handed to the held
     // skill review in their own words (POST /api/growth/ratings/correction). Praise opens nothing.
-    if (saved && saved.ok && !saved.duplicate && (verdict === 'ok' || verdict === 'miss')) lastShortVerdict = { runId: runId, agentId: agentId || 'agent', at: Date.now() };
+    if (saved && saved.ok && !saved.duplicate && (verdict === 'ok' || verdict === 'miss')) lastShortVerdict = { runId: runId, agentId: agentId || 'agent', streamId: ((runMeta(runId) || {}).streamId) || null, at: Date.now() };
     return saved;
   }
-  let lastShortVerdict = null;   // { runId, agentId, at } — the run whose next message is its correction
+  let lastShortVerdict = null;   // { runId, agentId, streamId, at } — the run whose next message (in ITS session) is its correction
   const CORRECTION_WINDOW_MS = 10 * 60 * 1000;
   function postCorrection(runId, text, final, source) {
     try {
@@ -8828,7 +8828,9 @@ const Chat = (() => {
     // stamp the new run as correctionOf so the runs ledger can relate them. One message per verdict; a stale
     // window (>10 min) is just a new task. Never on retry (the same text re-sent is not a second correction).
     let correctionOf = null;
-    if (!retry && !pending && lastShortVerdict && (ws.agentId || 'agent') === lastShortVerdict.agentId && Date.now() - lastShortVerdict.at < CORRECTION_WINDOW_MS) {
+    // the correction is the next message IN THE RATED RUN'S SESSION: matched by agent alone, a new request typed in
+    // another session to that agent within the window was saved station-wide as a DISLIKED correction (sweep 2026-10-02)
+    if (!retry && !pending && lastShortVerdict && (ws.agentId || 'agent') === lastShortVerdict.agentId && (!lastShortVerdict.streamId || lastShortVerdict.streamId === ws.id) && Date.now() - lastShortVerdict.at < CORRECTION_WINDOW_MS) {
       correctionOf = lastShortVerdict.runId; lastShortVerdict = null;
       postCorrection(correctionOf, text, true, 'message');
     }

@@ -134,6 +134,9 @@ A.eq(block.usedIds.length, 2, 'both count as used');
   const newest = { id: 'new', origin: 'feedback', confirmation: 'user-confirmed', content: 'DISLIKED: "the newest verdict"', createdAt: 500, feedbackAt: 500 };
   A.ok(FM.selectTaste(olds.concat([newest])).some(r => r.id === 'new'), 'the Commander\'s newest verdict stays in the capped block even after agents re-rate old ones');
   const idx = require('fs').readFileSync(require('path').join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
+  const chat = require('fs').readFileSync(require('path').join(__dirname, '..', 'frontend', 'app', 'chat.js'), 'utf8');
+  A.ok(/lastShortVerdict = \{ runId: runId, agentId: agentId \|\| 'agent', streamId: \(\(runMeta\(runId\) \|\| \{\}\)\.streamId\) \|\| null, at: Date\.now\(\) \};/.test(chat)
+    && /\(!lastShortVerdict\.streamId \|\| lastShortVerdict\.streamId === ws\.id\)/.test(chat), 'a typed correction is the next message in the rated run\'s OWN session, not any session with that agent');
   A.ok(/const tasteWithheld = o\.channelSender === true && o\.channelSenderOwner !== true;/.test(idx)
     && (idx.match(/tasteWithheld/g) || []).length >= 3, 'taste never rides a run a non-owner channel sender or group chat started');
 }
