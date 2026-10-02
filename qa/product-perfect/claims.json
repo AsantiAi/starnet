@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "5a4e43dd71f43d1a96cca9863de2d50ee31767ac",
+    "sourceCommit": "8dbe4cc6ae8aaf0232c9e2824679446c5527c3c4",
     "pathSetSha256": "390a2a551d88b2597ca4ab3f1acc7ca535b3b978e277a0ed8c0fb507e73e87c0",
     "files": [
       {
@@ -1008,8 +1008,8 @@
       },
       {
         "path": "frontend/app/remote-devices.js",
-        "bytes": 9352,
-        "sha256": "bbddee9720f4421eb396305442016272e69258e3bcfd393aa7f35399ed502d4d"
+        "bytes": 9440,
+        "sha256": "5b8f073bf3eda99feefd92d0637b47d08160dd8be29caa289665f026b5bf3101"
       },
       {
         "path": "frontend/app/remotesessions.js",
