@@ -35,8 +35,8 @@ const inline = M.MANUAL_SECTIONS.filter(s => s.kind !== 'reference');
 // Re-pinned 2026-10-02 (overnight sweep) for ONE deliberate change: NAVIGATION / CONNECTING / TROUBLESHOOTING name the 0.13 dock
 // (MY WORK · AUTOMATE · QUESTS, BUILD MODE · CONNECT · NEW APP, ABILITIES tabs INSTALLED / DISCOVER / CREATE / ADVANCED) — the
 // agent was sending Commanders to 0.12.5 dock buttons that no longer exist.
-A.eq(full.length, 9775, 'the whole manual keeps its length (+30: REFIT is named BUILD MODE; +2: SETTINGS › AI & MODELS; +409: the 0.13 dock, 2026-10-02)');
-A.eq(crypto.createHash('sha256').update(full, 'utf8').digest('hex'), 'e07d617ad8c0649d7098a3bd0edf823d66b2f6a0ed3cc954529fcc12d7a707b8',
+A.eq(full.length, 9674, 'the whole manual keeps its length (+30: REFIT is named BUILD MODE; +2: SETTINGS › AI & MODELS; +308: the 0.13 dock, 2026-10-02)');
+A.eq(crypto.createHash('sha256').update(full, 'utf8').digest('hex'), '168648899c6994cb6953b97ad3ca9cd54a71cc854a32d97605ca3d85b1e41193',
   'the whole manual is byte-identical to the literal that shipped before the split');
 
 // ---- B. the sections partition the manual ----

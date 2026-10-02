@@ -45,9 +45,8 @@ const NAV_COMMS =
   '- COMMS: the chat panel. The Commander types a request and hits Enter to task the focused agent. ' +
   'Clicking an agent (or its crew-manifest row) focuses it, so messages and new work go to that agent.\n';
 const NAV_AUTOMATION =
-  '- AUTOMATE (dock, in the WORK group): one menu of tabs — WORKFLOWS (send a job down a line of agents), SCHEDULES ' +
-  '(scheduled work), GOAL LOOPS (one objective repeated until done), AWAY WORK (what agents work on between messages). ' +
-  'SCHEDULES creates StarNet routines/cron jobs that wake agents inside the harness. Do not tell the Commander to use OS crontab, ' +
+  '- AUTOMATE (dock, WORK group): tabs WORKFLOWS, SCHEDULES (scheduled work), GOAL LOOPS (one objective repeated ' +
+  'until done), AWAY WORK. SCHEDULES creates StarNet routines/cron jobs that wake agents inside the harness. Do not tell the Commander to use OS crontab, ' +
   'Python background scripts, or Windows Task Scheduler for StarNet routines.\n';
 const NAV_REST =
   '- MY WORK (dock, in the WORK group): TASKS (the project board; cards are real workstreams, and assigning one opens ' +
@@ -106,7 +105,7 @@ const CONNECTING =
   '2. SAVED API CONNECTIONS — no connector exists, but the platform has a REST API. The Commander pastes its API key; you ' +
   'then call the API yourself with web_request (or curl in your shell), referencing the key by its ' +
   'environment-variable NAME. This route works for ANY platform, listed or not — it is the universal fallback.\n' +
-  '3. CONNECTED SERVICES — the Commander already knows the URL of an MCP server; they paste it there directly.\n' +
+  '3. CONNECTED SERVICES — the Commander already knows the URL of an MCP server; they paste it directly.\n' +
   'Some platforms are reached THROUGH another connector rather than directly (their card says so and offers ' +
   'a “VIA …” jump) — Jira/Confluence remains on its verified Zapier route until StarNet proves an authenticated ' +
   'tool call through Atlassian\'s newer direct OAuth endpoint; discovery alone is not connection proof. Google ' +
@@ -152,9 +151,8 @@ const SECTIONS = [
   { id: 'about', kind: 'orientation', lead: '', title: 'What this manual is', text: ABOUT },
   { id: 'live-state', kind: 'rule', lead: '', title: 'LIVE HARNESS STATE', text: LIVE_STATE },
   { id: 'navigation', kind: 'reference', lead: '\n', title: 'NAVIGATION', text: NAV_HEAD + NAV_COMMS + NAV_AUTOMATION + NAV_REST,
-    summary: 'every window and control the Commander uses — COMMS, AUTOMATE (WORKFLOWS, SCHEDULES, GOAL LOOPS, AWAY WORK), '
-      + 'MY WORK (TASKS, DELIVERABLES, RECIPES), the DOCK groups (WORK, BUILD, CREW), CONNECT › ABILITIES and its tabs (INSTALLED, '
-      + 'DISCOVER, CREATE / ADVANCED), CONNECT › CHANNELS, SETTINGS › AI & MODELS, BUILD MODE, the Recruitment Bay, the APPROVALS hotspot.' },
+    summary: 'every window and control the Commander uses — COMMS, MY WORK, AUTOMATE, the DOCK, CONNECT › ABILITIES and '
+      + 'CHANNELS, SETTINGS › AI & MODELS, BUILD MODE, the Recruitment Bay, the APPROVALS hotspot.' },
   { id: 'props', kind: 'reference', lead: '\n', title: 'OBJECT = CAPABILITY', text: PROPS,
     summary: 'OBJECT = CAPABILITY — a prop placed in an agent\'s BAY room grants it a real power, and no prop means no '
       + 'power: WORKSTATION → COMPUTE, DISH → WEB, INTEL CAB → FILES, WORKBENCH → TERMINAL, SERVER CART → MEMORY, '
