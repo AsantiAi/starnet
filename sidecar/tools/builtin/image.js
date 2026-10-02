@@ -179,7 +179,7 @@
   // wins; a partial frame is kept only as a fallback. Liberal on event shape: the backend ships image events newer
   // than any SDK knows.
   function parseCodexImageStream(raw) {
-    let finalB64 = '', partialB64 = '', text = '', failed = '';
+    let finalB64 = '', partialB64 = '', text = '', failed = '', completed = false;
     for (const block of String(raw || '').split(/\r?\n\r?\n/)) {
       const data = block.split(/\r?\n/).filter(l => l.startsWith('data:')).map(l => l.slice(5).trim()).join('\n');
       if (!data || data === '[DONE]') continue;
@@ -195,10 +195,16 @@
         const er = (ev.response && ev.response.error) || ev.error || ev;
         failed = String((er && (er.message || er.code)) || 'the response failed');
       }
+      if (ev.type === 'response.incomplete') {
+        const why = ev.response && ev.response.incomplete_details && ev.response.incomplete_details.reason;
+        failed = 'the render stopped before it finished' + (why ? ' (' + String(why).slice(0, 80) + ')' : '');
+      }
+      if (ev.type === 'response.completed') completed = true;
     }
-    // a partial preview frame is a fallback ONLY for a stream that did not fail: a response.failed after a partial is a
-    // failed generation, never a half-drawn image saved and reported as the result (sweep 2026-10-01)
-    return { image: finalB64 || (failed ? '' : partialB64), text: text.trim(), failed };
+    // a partial preview frame is a fallback ONLY for a stream that COMPLETED: a response.failed or response.incomplete after a
+    // partial, or a stream cut off with no final event, is a failed render, never a half-drawn image saved as the result
+    if (!finalB64 && partialB64 && !completed && !failed) failed = 'the render stopped before it finished (the stream ended early)';
+    return { image: finalB64 || (completed && !failed ? partialB64 : ''), text: text.trim(), failed };
   }
   // ChatGPT-Account-ID rides the OAuth JWT's own claim (codex-rs auth.rs); a malformed token just omits the header.
   function jwtAccountId(token) {
