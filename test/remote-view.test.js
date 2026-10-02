@@ -326,7 +326,7 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
   {
     const evs = []; let seenOpts = null;
     const hw = makeRemoteHost({
-      now: () => Date.now(), newId: () => 'lead-run', broadcast: e => evs.push(e),
+      now: () => Date.now(), newId: () => 'lead-run', broadcast: e => evs.push(e), phoneAsksFirst: () => false,
       roster: () => [{ agentId: 'lead', name: 'LEAD' }], liveRuns: () => [], transcript: { history: () => [], streams: () => [] },
       credentials: () => ({ ok: true, key: 'k', model: 'm', provider: 'p' }), askConsent: () => Promise.resolve('deny'),
       runOnce: async o => {
@@ -360,6 +360,57 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
     await new Promise(r => setTimeout(r, 50));
     A.ok(seen && /draft the email/.test(seen.priorAgentTurn || ''), 'the phone run classifies "yes" with the agent\'s last turn');
     A.eq(ranAsTask, true, 'so "yes" to its offer runs as a task (with tools), not chat that can only promise');
+  }
+
+  // (QA 2026-10-02) a host built without the ALWAYS ASK reader gives the phone NO host power (never more power on a missing wire)
+  {
+    let seen = null;
+    const hm = makeRemoteHost({
+      now: () => Date.now(), newId: () => 'nowire-run', broadcast: () => {},
+      roster: () => [{ agentId: 'lead', name: 'LEAD' }], liveRuns: () => [], transcript: { history: () => [], streams: () => [] },
+      credentials: () => ({ ok: true, key: 'k', model: 'm', provider: 'p' }), askConsent: () => Promise.resolve('deny'),
+      runOnce: async o => { seen = o; o.emit('agent.run.end', { agentId: 'lead', runId: o.runId, reason: 'done', usd: 0 }); }
+    });
+    await hm.send({ agentId: 'lead', text: 'do it', streamId: '', deviceId: 'd1' });
+    for (let i = 0; i < 50 && !seen; i++) await new Promise(r => setTimeout(r, 10));
+    A.eq(require('../sidecar/run-origin.js').hostPowerWithheldFor(seen), true, 'no ALWAYS ASK reader wired: the phone asks');
+  }
+
+  // (QA 2026-10-02) REMOVING a phone stops the runs it started; another phone's run keeps going
+  {
+    let n = 0; const signals = {};
+    const hr = makeRemoteHost({
+      now: () => Date.now(), newId: () => 'rv-' + (++n), broadcast: () => {}, phoneAsksFirst: () => false,
+      roster: () => [{ agentId: 'lead', name: 'LEAD' }], liveRuns: () => [], transcript: { history: () => [], streams: () => [] },
+      credentials: () => ({ ok: true, key: 'k', model: 'm', provider: 'p' }), askConsent: () => Promise.resolve('deny'),
+      runOnce: async o => { signals[o.runId] = o.signal; await new Promise(r => o.signal.addEventListener('abort', r)); }
+    });
+    await hr.send({ agentId: 'lead', text: 'long task', streamId: '', deviceId: 'lost-phone' });
+    await hr.send({ agentId: 'lead', text: 'other task', streamId: '', deviceId: 'my-phone' });
+    for (let i = 0; i < 50 && Object.keys(signals).length < 2; i++) await new Promise(r => setTimeout(r, 10));
+    A.eq(hr.stopDevice('lost-phone'), 1, 'stopDevice aborts the one run the removed phone started');
+    A.ok(signals['rv-1'].aborted && !signals['rv-2'].aborted, 'the removed phone\'s run stops; the other phone\'s run keeps going');
+    A.eq(hr.stopDevice(''), 0, 'an empty device id stops nothing');
+    hr.stopDevice('my-phone');
+  }
+
+  // (QA 2026-10-02) an ALWAYS ASK phone may pause a routine but never switch one back on (it would fire with standing Full Access)
+  {
+    const calls = [];
+    const mk = (asks) => makeRemoteHost({
+      now: () => Date.now(), newId: () => 'r', broadcast: () => {}, phoneAsksFirst: () => asks,
+      roster: () => [], liveRuns: () => [], transcript: { history: () => [], streams: () => [] },
+      setRoutine: async (jobId, enabled) => { calls.push([jobId, enabled]); return { ok: true }; }
+    });
+    const gw = makeGateway({ host: mk(true), now: () => Date.now() });
+    const on = await gw.call({ verb: 'routine', args: { jobId: 'job1', enabled: true } }, { deviceId: 'd1' });
+    A.ok(on && on.ok === false && /ALWAYS ASK/.test(String(on.error || '')), 'an ALWAYS ASK phone is refused turning a routine back on, and told why');
+    const off = await gw.call({ verb: 'routine', args: { jobId: 'job1', enabled: false } }, { deviceId: 'd1' });
+    A.ok(off && off.ok !== false, 'it may still pause one');
+    const gw2 = makeGateway({ host: mk(false), now: () => Date.now() });
+    const on2 = await gw2.call({ verb: 'routine', args: { jobId: 'job1', enabled: true } }, { deviceId: 'd2' });
+    A.ok(on2 && on2.ok !== false, 'an ordinary phone still turns a routine on');
+    A.eq(calls, [['job1', false], ['job1', true]], 'only the allowed changes reached the station');
   }
   A.report('remote-view');
 })().catch((e) => { console.log('FAIL: threw ' + (e && e.stack || e)); process.exit(1); });

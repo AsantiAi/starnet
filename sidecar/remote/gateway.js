@@ -169,11 +169,11 @@ function makeGateway(deps) {
 
     async routines() { return good(await host.routines()); },
 
-    async routine(a) {
+    async routine(a, ctx) {
       const jobId = id(a.jobId);
       if (!jobId) return bad('unknown routine');
       if (typeof a.enabled !== 'boolean') return bad('say whether the routine should be on or off');
-      const r = await host.setRoutine({ jobId, enabled: a.enabled });
+      const r = await host.setRoutine({ jobId, enabled: a.enabled, deviceId: (ctx && ctx.deviceId) || '' });
       return r && r.ok ? good(r) : bad((r && r.error) || 'that routine could not be changed');
     }
   };

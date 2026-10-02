@@ -235,7 +235,7 @@ function makeRemoteHost(d) {
     return set;
   }
   function phoneAsksFirst(deviceId) {
-    if (typeof d.phoneAsksFirst !== 'function') return false;
+    if (typeof d.phoneAsksFirst !== 'function') return true;   // no way to read the setting = the phone asks (never more power on a missing wire)
     try { return d.phoneAsksFirst(deviceId) === true; } catch (e) { note('remote.host.phoneAsksFirst', e); return true; }
   }
   async function fetchFile(o) {
@@ -253,7 +253,23 @@ function makeRemoteHost(d) {
     }));
   }
 
-  async function setRoutine(o) { return d.setRoutine(o.jobId, o.enabled); }
+  /* A phone set to ALWAYS ASK may pause a routine but never switch one back on: a resumed routine fires later under the
+     agent's standing (Full Access) authority, which that phone is not allowed to hand out — the same line
+     run-origin.js standingWorkEscalates draws for tool calls (QA 2026-10-02). */
+  async function setRoutine(o) {
+    if (o.enabled === true && phoneAsksFirst(o.deviceId)) return { ok: false, error: 'this phone is set to ALWAYS ASK, so it can pause routines but not switch them back on — turn it on at the desk' };
+    return d.setRoutine(o.jobId, o.enabled);
+  }
+
+  /* A REMOVED phone's work stops with it: revoking a phone (a lost or stolen one) aborts every run it started, which
+     otherwise kept going with whatever permissions it began with (QA 2026-10-02). Returns how many it stopped. */
+  function stopDevice(deviceId) {
+    const id = String(deviceId || '');
+    if (!id) return 0;
+    let n = 0;
+    for (const r of remoteRuns.values()) if (r.deviceId === id) { try { r.ac.abort(); n += 1; } catch (e) { note('remote.host.stopDevice', e); } }
+    return n;
+  }
 
   /* THE STATION VIEW. The desk page draws the still (the sidecar has no renderer); this hands it to a phone in
      sealed chunks and notes that a phone is looking, which is what makes the desk keep it fresh. The phone gets
@@ -326,7 +342,7 @@ function makeRemoteHost(d) {
 
   function liveRemoteRuns() { return Array.from(remoteRuns, ([runId, r]) => ({ runId, agentId: r.agentId, startedAt: r.startedAt, source: 'remote' })); }
 
-  return { status, threads, thread, send, stop, files, fetchFile, routines, setRoutine, view, portrait, sprite, activity, liveRemoteRuns, recentRuns, _remoteRuns: remoteRuns };
+  return { status, threads, thread, send, stop, stopDevice, files, fetchFile, routines, setRoutine, view, portrait, sprite, activity, liveRemoteRuns, recentRuns, _remoteRuns: remoteRuns };
 }
 
 module.exports = { makeRemoteHost };
