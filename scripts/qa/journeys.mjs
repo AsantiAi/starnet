@@ -59,7 +59,7 @@ import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import { sleep, launchChrome, connectCDP, evalJS, capture, collectDiagnostics } from '../lib/cdp.mjs';
 import { materializeSeedWorkspace, bootSeededSidecar, isUp, waitUp, waitDevReady, DEFAULT_MODEL } from '../lib/seed.mjs';
-import { closeOnly, openSel } from '../lib/states.mjs';
+import { closeOnly, openSel, openTermFallback } from '../lib/states.mjs';
 import { messageContentText } from '../lib/message-content.mjs';
 import { makeLedger, fingerprintOf } from './ledger.mjs';
 
@@ -275,7 +275,8 @@ function makeAsserter() {
 }
 
 /* ─────────────────────────── CDP driving helpers ─────────────────────────── */
-const clickSel = (cdp, sel) => evalJS(cdp, `(() => { const el = document.querySelector(${J(sel)}); if (!el) return 'NOTFOUND'; el.click(); return 'clicked'; })()`).catch((e) => 'ERR:' + e.message);
+// a [data-term] key front doors folded into a menu tab opens its window the way the tab does (openTermFallback)
+const clickSel = (cdp, sel) => evalJS(cdp, `(() => { const el = document.querySelector(${J(sel)}); if (!el) return ${openTermFallback(sel)} ? 'opened-via-menu' : 'NOTFOUND'; el.click(); return 'clicked'; })()`).catch((e) => 'ERR:' + e.message);
 async function waitSel(cdp, sel, tries = 30) {
   for (let i = 0; i < tries; i++) { const ok = await evalJS(cdp, `!!document.querySelector(${J(sel)})`).catch(() => false); if (ok) return true; await sleep(200); }
   return false;

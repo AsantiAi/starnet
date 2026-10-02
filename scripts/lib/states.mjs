@@ -31,9 +31,14 @@ export const CLOSE = `(() => {
 })()`;
 
 // Open a dock panel by a STABLE selector (id or [data-term]); reports NOTFOUND if absent.
+// 0.13 FRONT DOORS: TASKS, DELIVERABLES, AUTOMATION, ABILITIES and CHANNELS are no longer dock keys — each is a TAB of
+// one menu (MY WORK / AUTOMATE / CONNECT). A [data-term="x"] key that is gone opens window x the way its tab does
+// (StationUI.openTerm), so every state and journey still reaches the same window (sweep 2026-10-02).
+export const openTermFallback = (sel) => `(() => { const m = /^\\[data-term="([a-z-]+)"\\]$/.exec(${JSON.stringify(sel)}); if (!m || typeof StationUI === 'undefined' || !StationUI.openTerm) return false; StationUI.openTerm(m[1]); return true; })()`;
 export const openSel = (sel, label) => `(() => {
   ${CLOSE};
   const el = document.querySelector(${JSON.stringify(sel)});
+  if (!el && ${openTermFallback(sel)}) return 'opened-via-menu:' + ${JSON.stringify(label || sel)};
   if (!el) return 'NOTFOUND:' + ${JSON.stringify(sel)};
   try { el.click(); } catch (e) { return 'CLICK_ERR:' + e.message; }
   return 'opened:' + ${JSON.stringify(label || sel)};
