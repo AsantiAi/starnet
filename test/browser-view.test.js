@@ -345,6 +345,15 @@ function rig(extra) {
     views.releaseRun('r1');
     await tick();
     A.eq(made[1].closed, 1, 'it switches when that run lets go');
+    // QA 2026-10-02: switched away and BACK while an agent drives — nothing is pending, the browser stays open
+    await views.open('example.com');
+    const live = made[made.length - 1];
+    await views.sessionForRun({ agentId: 'nova', runId: 'r9', interactive: true }).forward();
+    A.eq((await views.setMode('window')).applied, false, 'a switch away waits for the driving run');
+    A.eq((await views.setMode('builtin')).applied, true, 'switching back means nothing is pending');
+    views.releaseRun('r9');
+    await tick();
+    A.eq(live.closed, 0, 'so the browser is NOT closed when the run lets go');
     // YOUR CHROME without the extension: honest fallback
     const r3 = await views.setMode('chrome');
     A.ok(r3.ok && r3.mode === 'chrome' && r3.effective === 'window' && r3.chromeAvailable === false, 'YOUR CHROME is saved, but runs as a Chrome window until the extension is paired — and says so');

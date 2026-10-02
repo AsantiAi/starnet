@@ -344,9 +344,12 @@ function makeBrowserViews(deps) {
     if (BROWSER_MODES.indexOf(String(m || '')) < 0) return { ok: false, error: 'unknown browser mode' };
     writeMode(want);
     let applied = true;
-    if (station && station.mode !== effectiveMode()) {
-      if (station.driver) { station.switchPending = true; applied = false; }
-      else await closeStation();
+    if (station) {
+      const differs = station.mode !== effectiveMode();
+      // switched away and back while an agent drives: nothing is pending any more (QA 2026-10-02 — the flag was only ever
+      // set, so the browser still closed when the run let go)
+      if (station.driver) { station.switchPending = differs; applied = !differs; }
+      else if (differs) await closeStation();
     }
     return Object.assign({ ok: true, applied }, settings());
   }
