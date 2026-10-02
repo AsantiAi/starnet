@@ -23074,8 +23074,30 @@ async function handleProviderProbe(req, res) {
     // stamping VERIFIED off its hardcoded fallback. Only live-fetched models count as evidence here.
     const liveModels = models.filter(m => !(m && m.fallback));
     const catalogAvailable = liveModels.length > 0;
-    const credentialVerified = catalogAvailable && (!providerRequiresKey(id) || profile.modelsRequireAuth !== false);
-    json({ provider: id, reachable: catalogAvailable, catalogAvailable, credentialVerified });
+    const key = providerRuntimeKey(id, String(body.key || ''));
+    // An optional custom key still needs proof: a public catalog cannot authenticate it.
+    // Keyless local endpoints retain their existing health semantics without buying inference.
+    let credentialVerified = catalogAvailable && (profile.modelsRequireAuth !== false || (!providerRequiresKey(id) && !key));
+    let credentialError = '';
+    if (profile.credentialProbePath && key) {
+      // Re-check the current credential at the same authenticated endpoint used when saving it.
+      // OpenRouter's public/cached catalog alone can never prove or disprove this key.
+      const baseUrl = providerRuntimeBaseUrl(id, body.baseUrl || body.base_url || '') || profile.baseUrl;
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15000); if (timer.unref) timer.unref();
+      try {
+        const response = await globalThis.fetch(String(baseUrl).replace(/\/$/, '') + profile.credentialProbePath, {
+          signal: ctrl.signal, redirect: 'error', headers: { Authorization: 'Bearer ' + key, Accept: 'application/json' }
+        });
+        credentialVerified = response.ok;
+        if (!response.ok) credentialError = 'credential probe HTTP ' + response.status;
+        if (response.body) await response.body.cancel();
+      } catch (_) {
+        credentialVerified = false;
+        credentialError = ctrl.signal.aborted ? 'credential verification timed out' : 'credential verification failed';
+      } finally { clearTimeout(timer); }
+    }
+    json({ provider: id, reachable: catalogAvailable, catalogAvailable, credentialVerified, ...(credentialError ? { error: credentialError } : {}) });
   } catch (e) {
     json({ provider: id, reachable: false, catalogAvailable: false, credentialVerified: false, error: (e && e.message) || 'provider probe failed', code: (e && e.code) || '' });
   }
