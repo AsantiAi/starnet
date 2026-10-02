@@ -8452,7 +8452,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   }
   function goToNotif(go) {
     if (!go) return false;
-    if (go.ws && typeof App !== 'undefined' && App.openWorkstream) { App.openWorkstream(go.ws); return true; }
+    if (go.ws && typeof App !== 'undefined' && App.openWorkstream) { App.openWorkstream(go.ws); if (open.notifs) workConversation('notifs'); return true; }   // the session is the point: step the bell aside, keep a way back
     if (go.term) { openTerm(go.term, go.section); return true; }
     return false;
   }
@@ -10695,7 +10695,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
 
   // Following work should uncover the destination and preserve the source's scroll/draft.
   // Reuse the window manager's suspension, never destroy a form to follow a link.
-  const WORK_LABELS = { tasks: 'TASK BOARD', deliverables: 'DELIVERABLES', agents: 'AGENT RECORD' };
+  const WORK_LABELS = { tasks: 'TASK BOARD', deliverables: 'DELIVERABLES', agents: 'AGENT RECORD', notifs: 'NOTIFICATIONS' };
   let workTrail = [];
   function navigateWork(from, to, section, back) {
     const alias = TERM_ALIAS[to];
