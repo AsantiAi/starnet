@@ -22,10 +22,10 @@ A.ok(Systems.staged() && !Systems.isOnline('automate') && !Systems.isOnline('con
 const onb = rd('frontend/app/onboarding.js'), tut = rd('frontend/app/tutorial.js');
 const built = 'done. the software studio is built, and its line is waiting for a crew: WORK › AUTOMATE › WORKFLOWS walks you through who works each step.';
 A.ok(onb.indexOf("its line is waiting for a crew: WORK › AUTOMATE › WORKFLOWS walks you through who works each step.") >= 0, 'fixture: the awakening still says it');
-A.ok(/WORK › AUTOMATE › WORKFLOWS/.test(tut) && /WORK › CONNECT › ABILITIES/.test(tut), 'fixture: the tour still names both');
+A.ok(/WORK › AUTOMATE › WORKFLOWS/.test(tut) && /(WORK|BUILD) › CONNECT/.test(tut) && /ABILITIES/.test(tut), 'fixture: the tour still names both (CONNECT sits under WORK or BUILD: the door law matches the system word, not the menu)');
 Systems.noticeReply(built);
 A.ok(Systems.isOnline('automate'), 'the awakening line brings AUTOMATE online, so the button it names is there');
-Systems.noticeReply('An ability is missing. Open WORK › CONNECT › ABILITIES to equip it.');
+Systems.noticeReply('An ability is missing. Open BUILD › CONNECT › ABILITIES to equip it.');
 A.ok(Systems.isOnline('connect'), 'the tour line naming ABILITIES brings CONNECT online');
 
 // Dialogue speaks every say() and node() line (and a node's option labels) through the door law
