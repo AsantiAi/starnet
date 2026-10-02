@@ -88,7 +88,7 @@ const ReturnStore = (() => {
       return;
     }
     // an already-open OUTBOX window re-renders with the fresh crates (no-op when closed)
-    try { if (typeof StationUI !== 'undefined' && StationUI.rerender) StationUI.rerender('outbox'); } catch (_) {}
+    try { if (typeof OutboxView !== 'undefined' && OutboxView.refresh) OutboxView.refresh(); } catch (_) {}   // DELIVERABLES › TO REVIEW
     if (!rows.length || fired) return;
     fired = true;
     if (typeof Chat !== 'undefined' && Chat.awayDigest) Chat.awayDigest(rows.slice(0, Returns.DIGEST_CAP), { onRated: resolve, openWork: openWork });
@@ -201,7 +201,7 @@ const ReturnStore = (() => {
     }]);
     save();
     // an already-open OUTBOX window re-renders with the fresh crate (no-op when closed)
-    try { if (typeof StationUI !== 'undefined' && StationUI.rerender) StationUI.rerender('outbox'); } catch (_) {}
+    try { if (typeof OutboxView !== 'undefined' && OutboxView.refresh) OutboxView.refresh(); } catch (_) {}   // DELIVERABLES › TO REVIEW
     return true;
   }
 

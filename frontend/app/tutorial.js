@@ -263,10 +263,10 @@ const Tutorial = (() => {
     const caps = equipmentInScope();
     const purposes = { cabinet: 'FILES — read and write files', dish: 'WEB — search and browse', workbench: 'TERMINAL — run commands and checks', notebook: 'MEMORY — save and retrieve notes', studio: 'MEDIA — create and analyze images' };
     const placed = Object.keys(purposes).filter(c => caps && caps.includes(c));
-    const summary = caps === null ? 'i couldn’t read the equipment in my area. check WORK › CONNECT › ABILITIES for current access.'
+    const summary = caps === null ? 'i couldn’t read the equipment in my area. check BUILD › CONNECT › ABILITIES for current access.'
       : placed.length === 5 ? 'all five essentials are already placed in my area.'
       : placed.length ? 'here’s the equipment currently in my area. this station has been customized; you can start with what’s here.'
-      : 'there’s no essential equipment in my area. you can still chat with me; WORK › CONNECT › ABILITIES shows current access.';
+      : 'there’s no essential equipment in my area. you can still chat with me; BUILD › CONNECT › ABILITIES shows current access.';
     Dialogue.open({ name: agentName, tour: true });
     if (Dialogue.setStage) Dialogue.setStage('QUICK TOUR · 1 OF 2', 'Your equipment');
     Dialogue.node({
@@ -785,7 +785,7 @@ const Tutorial = (() => {
     const ids = connectOffers(goalTexts());
     const items = ids.map(id => ({ label: '⧉ ' + (CONNECT_LABEL[id] || id), value: id }))
       .concat([{ label: 'Show me how to connect platforms', value: 'guide' }, { label: 'not now', value: 'skip', skip: true, quiet: true }]);
-    say([seg('want to connect an app you already use? choose one below, or open the connection guide. you can find apps in WORK › CONNECT › ABILITIES › CATALOG, and messaging platforms in WORK › CONNECT › CHANNELS.', 44, 0)], () => {
+    say([seg('want to connect an app you already use? choose one below, or open the connection guide. you can find apps in BUILD › CONNECT › ABILITIES › CATALOG, and messaging platforms in BUILD › CONNECT › CHANNELS.', 44, 0)], () => {
       const row = Chat.choices(items, item => {
         if (!item || item.skip) return done();
         if (item.value === 'guide') { showPlatformConnections(); return; }
@@ -970,7 +970,7 @@ const Tutorial = (() => {
     tickBrief('build');
     watchConnectors(1);
     showCoach('connector', '#refit-palette',
-      'that’s a connector portal. connect the service in WORK › CONNECT › ABILITIES › CATALOG first; placing a portal does not sign you in. the connection guide is in SYSTEM › FIELD MANUAL › CONNECT PLATFORMS.');
+      'that’s a connector portal. connect the service in BUILD › CONNECT › ABILITIES › CATALOG first; placing a portal does not sign you in. the connection guide is in SYSTEM › FIELD MANUAL › CONNECT PLATFORMS.');
   }
   function onLevelUp() {
     tickBrief('level');
@@ -989,8 +989,8 @@ const Tutorial = (() => {
     { k: 'build',     label: 'Place a piece of gear in BUILD MODE' },
     { k: 'belt',      label: 'Lay a conveyor belt' },
     // Keep old portal-placement progress stored, but never reinterpret it as a verified account connection.
-    { k: 'platform',  label: 'Connect a work app (WORK › CONNECT › ABILITIES)' },
-    { k: 'channel',   label: 'Connect a messaging channel (WORK › CONNECT › CHANNELS)' },
+    { k: 'platform',  label: 'Connect a work app (BUILD › CONNECT › ABILITIES)' },
+    { k: 'channel',   label: 'Connect a messaging channel (BUILD › CONNECT › CHANNELS)' },
     { k: 'level',     label: 'Grow a crew member to Level 2' }
   ];
   const briefDone = k => !!state.brief[k];
@@ -1134,7 +1134,7 @@ const Tutorial = (() => {
     const apps = kind === 'apps';
     return '<details class="platform-guide" data-platform-guide="' + kind + '"' + (guidedPlatform === kind ? ' open' : '') + '>'
       + '<summary>' + (apps ? 'Connect a work app — step by step' : 'Chat from another platform — step by step') + '</summary>'
-      + '<p class="fm-note">Find this again: <b>WORK › CONNECT › ' + (apps ? 'ABILITIES › CATALOG' : 'CHANNELS') + '</b>.</p>'
+      + '<p class="fm-note">Find this again: <b>BUILD › CONNECT › ' + (apps ? 'ABILITIES › CATALOG' : 'CHANNELS') + '</b>.</p>'
       + '<ol><li>' + (apps ? 'Use Search abilities above to find your app. Its card shows the setup it needs.' : 'Choose your platform in the list. Its setup guide explains where to get the details it needs.') + '</li>'
       + '<li>' + (apps ? 'Use the card’s action. SIGN IN opens account authorization; API key asks for a key from that service. Follow any setup instructions and review the access requested.' : 'Follow that platform’s setup instructions, then use its CONNECT action. Complete pairing if the platform asks for it.') + '</li>'
       + '<li>' + (apps ? 'Check the status beside the service. A saved key is not a tested connection. If setup fails, read the message there before retrying.' : 'Check the platform’s status, then send your agent a message there. Seeing the reply is your end-to-end check.') + '</li></ol>'
@@ -1154,8 +1154,8 @@ const Tutorial = (() => {
     if (tab === 'CONNECT PLATFORMS') {
       return '<p class="fm-lead">Bring the apps you already use into your station. What would you like to connect?</p>'
         + '<div class="fm-map">'
-        + fmEntry('WORK APPS', 'Let your agent work with your apps', 'Use your mail, calendar, documents and other services from COMMS. Browse the current catalog to see what is available.<br><b>WORK › CONNECT › ABILITIES › CATALOG</b><div class="fm-actions"><button type="button" class="fm-action" data-platform-start="apps">SHOW ME WHERE TO CONNECT APPS ↗</button></div>')
-        + fmEntry('MESSAGING', 'Talk to your agent from another platform', 'Connect a messaging platform so you can chat with your agent there. Each platform has its own setup guide.<br><b>WORK › CONNECT › CHANNELS</b><div class="fm-actions"><button type="button" class="fm-action" data-platform-start="messaging">SHOW ME WHERE TO CONNECT MESSAGING ↗</button></div>')
+        + fmEntry('WORK APPS', 'Let your agent work with your apps', 'Use your mail, calendar, documents and other services from COMMS. Browse the current catalog to see what is available.<br><b>BUILD › CONNECT › ABILITIES › CATALOG</b><div class="fm-actions"><button type="button" class="fm-action" data-platform-start="apps">SHOW ME WHERE TO CONNECT APPS ↗</button></div>')
+        + fmEntry('MESSAGING', 'Talk to your agent from another platform', 'Connect a messaging platform so you can chat with your agent there. Each platform has its own setup guide.<br><b>BUILD › CONNECT › CHANNELS</b><div class="fm-actions"><button type="button" class="fm-action" data-platform-start="messaging">SHOW ME WHERE TO CONNECT MESSAGING ↗</button></div>')
         + '</div><p class="fm-note">For example, using Slack as a work tool and chatting with your agent from Slack are different connections. Choose the path for what you want to do.</p>'
         + '<p class="fm-note">You can connect one now or return whenever you need it: <b>SYSTEM › FIELD MANUAL › CONNECT PLATFORMS</b>. Connecting accounts is optional.</p>'
         + fmAction('comms', 'I’LL CONNECT LATER');
@@ -1217,7 +1217,7 @@ const Tutorial = (() => {
         + '<div class="fm-route"><span>INBOX<small>work arrives</small></span><i aria-hidden="true">→</i><span>BAY<small>agent + instructions</small></span><i aria-hidden="true">→</i><span>OUTBOX<small>output leaves</small></span></div>'
         + fmEntry('01', 'Place the stations', 'In BUILD MODE, open <b>' + e(R.tab) + ' › ' + e(R.machinesShelf) + '</b> and place an INBOX, BAY, and OUTBOX. Click the BAY: the <b>Workflow panel</b> docks beside the floor — assign an agent and define its step. Its room needs a computer.')
         + fmEntry('02', 'Connect the route', 'Press <kbd>' + e(R.beltKey) + '</kbd> for ' + e(R.belt) + '. <b>Click one machine, then another</b> to lay a connection automatically; dragging lays tiles by hand. Connect INBOX → BAY, then BAY → OUTBOX. Inspect the route and fix any flagged breaks.')
-        + fmEntry('03', 'Give the line a source', 'Click the INBOX: its Workflow panel answers <b>What starts this line?</b> — add a schedule there, or a message on a connected channel (<b>WORK › CONNECT › CHANNELS</b> connects the platforms; <b>WORK › AUTOMATE</b> manages routines and loops). An inbox marked <b>NO FEED</b> has nothing feeding it yet.')
+        + fmEntry('03', 'Give the line a source', 'Click the INBOX: its Workflow panel answers <b>What starts this line?</b> — add a schedule there, or a message on a connected channel (<b>BUILD › CONNECT › CHANNELS</b> connects the platforms; <b>WORK › AUTOMATE</b> manages routines and loops). An inbox marked <b>NO FEED</b> has nothing feeding it yet.')
         + fmEntry('TEST', 'Rehearse, then test for real', '<b>' + e(R.preview) + '</b> in the BUILD MODE top bar (or in any line’s Workflow panel) opens one TEST with three modes. <b>WATCH IT</b> is free: a crate rides the route and no agent runs. <b>STEP THROUGH</b> runs the real agents one step at a time and pauses at every hand-off so you can read or edit what moves on; nothing is delivered. <b>RUN ONE REAL JOB</b> runs it end to end and the result lands in the OUTBOX.')
         + fmEntry('BRANCHES', 'Add steps when you need them', junctions.map(m => '<b>' + e(m.label) + '</b>: ' + e(m.purpose) + '.').join(' ') + ' Assign agents to bays, not to belt tiles.')
         + fmMission('Start with a layout', 'In BUILD MODE, press <kbd>' + e(R.lineKey) + '</kbd> or open <b>' + e(R.tab) + ' › ' + e(R.lines) + '</b>: ' + (typeof R.lineCount === 'number' ? R.lineCount + ' ' : '') + 'ready-made layouts. Stamp one, then inspect its bays and feed before running your job.')
@@ -1235,7 +1235,7 @@ const Tutorial = (() => {
     return '<p class="fm-lead">When the station stalls, follow the evidence. Start with the message beside the job.</p>'
       + fmEntry('NO REPLY', 'Check the connection', 'Open <b>SYSTEM › SETTINGS</b> and check the selected provider’s sign-in or key. Check the agent’s model in COMMS. Read the error before retrying; a missing connection needs fixing first.')
       + fmEntry('WAITING', 'Look for a decision', 'Return to the job’s COMMS session. Answer a context question or approve or deny the pending action. An unanswered question is not a running tool.')
-      + fmEntry('MISSING TOOL', 'Check ability &amp; reach', 'Inspect the agent in <b>CREW › AGENTS</b>. In <b>WORK › CONNECT › ABILITIES</b>, check toolsets and connector status. Equipment, permissions, service sign-in, and operating-system access each affect what can run.')
+      + fmEntry('MISSING TOOL', 'Check ability &amp; reach', 'Inspect the agent in <b>CREW › AGENTS</b>. In <b>BUILD › CONNECT › ABILITIES</b>, check toolsets and connector status. Equipment, permissions, service sign-in, and operating-system access each affect what can run.')
       + fmEntry('COLD LINE', 'Inspect feed, bay, and route', 'In BUILD MODE, check the inbox feed, bay assignment, room computer, and belt connections. A sample crate moving does not establish that a real job ran.')
       + fmEntry('WHERE IS IT?', 'Find the session or output', 'Return to <b>COMMS › Sessions</b> for the conversation. Open <b>WORK › MY WORK › DELIVERABLES</b> for generated files and apps. Check <b>TASKS</b> if it was planned board work.')
       + fmEntry('STOP', 'Interrupt work', 'Use the stop control in COMMS for the current run. Stopping a run does not undo actions it already completed; inspect the result before starting again.')

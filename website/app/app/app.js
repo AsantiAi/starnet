@@ -1565,7 +1565,7 @@ const App = (() => {
     if (doc && typeof CloudSave !== 'undefined') CloudSave.push(doc);   // durable write-through to the sidecar (debounced, best-effort)
     if (rosterPushFailed) pushRoster();   // a prior roster POST failed — retry it opportunistically on this persist
     if (!doc) {
-      if (!saveFailureNotified && typeof StationUI !== 'undefined') StationUI.notify('Could not save station changes. Keep this window open and free storage before trying again.', 'warn');
+      if (!saveFailureNotified && typeof StationUI !== 'undefined') StationUI.notify('Could not save station changes. Keep this window open and free storage before trying again.', 'warn', undefined, { kind: 'alert', key: 'save-failed' });
       saveFailureNotified = true;
       return false;
     }
@@ -3715,7 +3715,7 @@ const App = (() => {
         // (no Chat yet), so the same draft is never announced twice (toast + nudge was the "pushy" double).
         // World.say stays: an ambient in-world cue, not a popup. The return digest recaps everything anyway.
         const canNudge = typeof Chat !== 'undefined' && Chat.nudge;
-        if (!canNudge && typeof StationUI !== 'undefined' && StationUI.notify) StationUI.notify((didWrite ? 'wrote a file while you were away: ' : 'drafted while you were away: ') + d.title, 'gold', 'cronDigest');   // P1-8 category: autonomous run
+        if (!canNudge && typeof StationUI !== 'undefined' && StationUI.notify) StationUI.notify((didWrite ? 'wrote a file while you were away: ' : 'drafted while you were away: ') + d.title, 'gold', 'cronDigest', { go: { term: 'automation', section: 'away' } });   // P1-8 category: autonomous run
         if (typeof World !== 'undefined' && World.say) World.say(didWrite ? '✦ saved a file to your workspace' : '✦ left a draft on your desk');
         if (canNudge) Chat.nudge(
           didWrite
@@ -3778,7 +3778,7 @@ const App = (() => {
         // richer than a toast (show me / undo) and it fires at the same instant the toast used to, saying the
         // SAME sentence. The toast is now only the FALLBACK when the nudge can't render (no Chat), so the
         // Commander's first interaction back is greeted once, not twice.
-        if ((typeof Chat === 'undefined' || !Chat.nudge) && typeof StationUI !== 'undefined' && StationUI.notify) StationUI.notify('while you were away (' + mins + 'm): ' + headline, 'gold', 'cronDigest');   // P1-8 category: autonomous digest
+        if ((typeof Chat === 'undefined' || !Chat.nudge) && typeof StationUI !== 'undefined' && StationUI.notify) StationUI.notify('while you were away (' + mins + 'm): ' + headline, 'gold', 'cronDigest', { go: { term: 'deliverables', section: 'review' } });   // P1-8 category: autonomous digest
         // DEFERRED a beat: this fires from the capture phase of the Commander's first pointerdown/keydown back.
         // Posting the nudge synchronously would clearNudge()/clearChoices() an in-flight answer on a live beat
         // (e.g. the per-draft "show me" chip) mid-press — the very tap that woke the digest would be eaten.
@@ -4197,6 +4197,7 @@ const App = (() => {
   // switching mid-run is fine now: each workstream keeps its own run-state in Channels (channels.js) and
   // Chat.load re-renders the in-flight stream on switch — the run you left keeps streaming in the background.
   function switchWorkstream(id) {
+    if (typeof StationUI !== 'undefined' && StationUI.seenSession) StationUI.seenSession(id);   // you're in it now: its notifications are read
     if (typeof ProjectHome !== 'undefined') ProjectHome.onSession(id);
     if (id === Workstreams.activeId()) return;
     const ws = Workstreams.switch(id); if (!ws) return;
@@ -5513,7 +5514,7 @@ const App = (() => {
         StationUI.notify(
           waiting + ' extension' + (waiting === 1 ? '' : 's') + ' awaiting your approval — click to review',
           'warn', 'needsApproval',
-          { onClick: () => { try { StationUI.openTerm('connectors', 'extensions'); } catch (_) {} } }
+          { kind: 'needs', key: 'extensions-pending', go: { term: 'connectors', section: 'extensions' } }
         );
       } catch (_) { /* a station that cannot answer is a station with nothing to approve yet */ }
     })();

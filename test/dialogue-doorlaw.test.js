@@ -2,7 +2,7 @@
 
    On a fresh station the dock grows with use (systems.js): AUTOMATE and CONNECT start hidden. A line that names a system brings it
    online — but only COMMS lines did. The awakening ("its line is waiting for a crew: WORK › AUTOMATE › WORKFLOWS …") and the quick
-   tour ("open WORK › AUTOMATE › WORKFLOWS", "WORK › CONNECT › ABILITIES") speak through Dialogue.say / Dialogue.node, so they sent a
+   tour ("open WORK › AUTOMATE › WORKFLOWS", "BUILD › CONNECT › ABILITIES") speak through Dialogue.say / Dialogue.node, so they sent a
    brand-new Commander to a dock button that was not there. Dialogue now applies the door law to every line it speaks. */
 'use strict';
 const A = require('./_assert.js');
@@ -22,7 +22,7 @@ A.ok(Systems.staged() && !Systems.isOnline('automate') && !Systems.isOnline('con
 const onb = rd('frontend/app/onboarding.js'), tut = rd('frontend/app/tutorial.js');
 const built = 'done. the software studio is built, and its line is waiting for a crew: WORK › AUTOMATE › WORKFLOWS walks you through who works each step.';
 A.ok(onb.indexOf("its line is waiting for a crew: WORK › AUTOMATE › WORKFLOWS walks you through who works each step.") >= 0, 'fixture: the awakening still says it');
-A.ok(/WORK › AUTOMATE › WORKFLOWS/.test(tut) && /(WORK|BUILD) › CONNECT/.test(tut) && /ABILITIES/.test(tut), 'fixture: the tour still names both (CONNECT sits under WORK or BUILD: the door law matches the system word, not the menu)');
+A.ok(/WORK › AUTOMATE › WORKFLOWS/.test(tut) && /BUILD › CONNECT › ABILITIES/.test(tut), 'fixture: the tour still names both');
 Systems.noticeReply(built);
 A.ok(Systems.isOnline('automate'), 'the awakening line brings AUTOMATE online, so the button it names is there');
 Systems.noticeReply('An ability is missing. Open BUILD › CONNECT › ABILITIES to equip it.');

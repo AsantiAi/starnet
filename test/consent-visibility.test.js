@@ -38,7 +38,7 @@ const F = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
   A.ok(/StationUI\.notify\(/.test(fnBody.slice(0, 2000)), 'backgroundPermissionNotify: fires StationUI.notify');
   A.ok(/needsApproval/.test(fnBody.slice(0, 2000)), 'backgroundPermissionNotify: uses the needsApproval category (mutable pref honored)');
   A.ok(/App\.agentName|agentName\(/.test(fnBody.slice(0, 2000)), 'backgroundPermissionNotify: names the AGENT (not the focused hero)');
-  A.ok(/openWorkstream\(\s*ws\.id\s*\)/.test(fnBody.slice(0, 2000)),
+  A.ok(/openWorkstream\(\s*ws\.id\s*\)|go:\s*\{\s*ws:\s*ws\.id\s*\}/.test(fnBody.slice(0, 2000)),
     'backgroundPermissionNotify: clicking opens THAT session (the rail-row restore path re-renders the consent card)');
   A.ok(/App\.refreshRail\(\)/.test(fnBody.slice(0, 2000)), 'backgroundPermissionNotify: refreshes the rail so the row marker shows instantly');
   // the browser attests the prompt is now human-visible → the sidecar may extend the deny deadline (FIX 1c).

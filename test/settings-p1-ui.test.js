@@ -67,9 +67,9 @@ ok(/function notify\(text, cls, category(, opts)?\)/.test(ui), 'P1-8: notify() t
 ok(/if \(!pref\.show\) return/.test(ui), 'P1-8: a muted category is DROPPED at the emit point (honored, not decorative)');
 ok(/notifyPrefOf\(/.test(ui), 'P1-8: notify() reads the persisted prefs');
 // the three key call sites are actually TAGGED with categories
-ok(/'needsApproval'\)/.test(chat), 'P1-8: the consent prompt notify is tagged needsApproval');
-ok(/'runComplete'\)/.test(chat), 'P1-8: a run-produced-a-deliverable notify is tagged runComplete');
-ok(/'cronDigest'\)/.test(appjs), 'P1-8: the while-you-were-away digest is tagged cronDigest');
+ok(/'needsApproval'[,)]/.test(chat), 'P1-8: the consent prompt notify is tagged needsApproval');
+ok(/'runComplete'[,)]/.test(chat), 'P1-8: a run-produced-a-deliverable notify is tagged runComplete');
+ok(/'cronDigest'[,)]/.test(appjs), 'P1-8: the while-you-were-away digest is tagged cronDigest');
 
 // ---- P1-9 advanced runtime knobs ----
 ok(/Runtime limits\s*<span class="dim">/.test(ui), 'P1-9: SETTINGS has an ADVANCED card');

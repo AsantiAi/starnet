@@ -86,7 +86,7 @@ const StepIn = (() => {
     if (typeof StationUI === 'undefined' || !StationUI.notify) return;
     const why = { login: 'sign in', '2fa': 'enter a sign-in code', captcha: 'get past a human check', payment: 'confirm a payment', other: 'help with a page' }[p.reason] || 'help with a page';
     StationUI.notify('STEP-IN: ' + agentName(p.agentId) + ' needs you to ' + why + (p.where ? ' at ' + p.where : '') + ' — click to take its browser', 'gold', undefined, {
-      key: 'stepin-' + p.id,
+      key: 'stepin-' + p.id, kind: 'needs',
       onClick: () => open(p.id)
     });
   }

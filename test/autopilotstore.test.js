@@ -102,7 +102,7 @@ A.ok(/value:\s*'undo'/.test(appSrc), 'B3: the undo action is wired into the welc
   A.ok(/if \(!canNudge && typeof StationUI[\s\S]{0,80}StationUI\.notify\)/.test(presentSeg), 'present(): the toast fires ONLY when the nudge cannot (fallback, not a duplicate)');
   const digestSeg = appSrc.slice(iDigest, iDigest + 4500);
   A.ok(/if \(\(typeof Chat === 'undefined' \|\| !Chat\.nudge\) && typeof StationUI/.test(digestSeg), 'digest(): the toast fires ONLY when the welcome-back nudge cannot (fallback, not a duplicate)');
-  A.ok(/'cronDigest'\)/.test(presentSeg) && /'cronDigest'\)/.test(digestSeg), 'both fallback toasts stay tagged cronDigest (P1-8 category mute still works)');
+  A.ok(/'cronDigest'[,)]/.test(presentSeg) && /'cronDigest'[,)]/.test(digestSeg), 'both fallback toasts stay tagged cronDigest (P1-8 category mute still works)');
 }
 
 /* ---------- A2: the ACT branch — anti-slop pipeline → draft on the desk ---------- */

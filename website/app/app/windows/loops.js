@@ -776,7 +776,7 @@
       const f = fresh[0];
       StationUI.h.notify(fresh.length === 1
         ? '∞ ' + (f.l.name || 'a loop') + ' has work for you — #' + f.p.n + ' ' + (f.p.title || '')
-        : '∞ ' + fresh.length + ' loop results are waiting on your review', 'good');
+        : '∞ ' + fresh.length + ' loop results are waiting on your review', 'good', undefined, { kind: 'needs', key: 'loops-review', go: { term: 'loops' } });
     }
   }
   // first sweep after boot settles, then a slow heartbeat — this is a notifier, not a live view.

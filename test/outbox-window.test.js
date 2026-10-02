@@ -24,13 +24,19 @@ const app = read('frontend/app/app.js');
 const world = read('frontend/app/world.js');
 const css = read('frontend/css/app.css');
 
-/* ---- the window exists and is the chute's click-through ---- */
-A.ok(/registerWindow\('outbox',\s*'OUTBOX — FINISHED WORK',\s*buildOutbox/.test(station), 'the OUTBOX window registers itself (StationUI.registerWindow → the same BUILDERS slot)');
-A.ok(/setOnOutbox\(\(\)\s*=>\s*\{[^}]*openTerm\('outbox'\)/.test(app), "the world's OUTBOX click opens the window (never the old one-crate beat)");
+/* ---- ONE PLACE FOR FINISHED WORK (Andrew 10-02): the list is DELIVERABLES' TO REVIEW section, not a window ----
+   Every old door (the chute, the digest, chat) still says openTerm('outbox'); the alias lands it in DELIVERABLES. */
+const stationui = read('frontend/app/stationui.js');
+A.ok(!/registerWindow\('outbox'/.test(station), 'OUTBOX is no longer a window of its own (no second place for finished work)');
+A.ok(/window\.OutboxView = \{[\s\S]{0,80}build: buildOutbox/.test(station), 'the list exports OutboxView.build for DELIVERABLES to mount');
+A.ok(/outbox:\s*\{ term: 'deliverables', section: 'review'/.test(stationui), "TERM_ALIAS routes 'outbox' to DELIVERABLES § review");
+A.ok(/deliverables:\['DELIVERABLES',[\s\S]{0,600}OutboxView\.build\(host\)/.test(stationui), 'the DELIVERABLES window mounts TO REVIEW above its library');
+A.ok(!/\{ id: 'outbox', k: 'outbox'/.test(stationui), 'MY WORK carries no OUTBOX tab');
+A.ok(/setOnOutbox\(\(\)\s*=>\s*\{[^}]*openTerm\('outbox'\)/.test(app), "the world's OUTBOX click opens finished work (never the old one-crate beat)");
 A.ok(!/reviewNext\(\)/.test(app), 'app.js no longer drives the one-crate-at-a-time review beat from the chute');
 
 /* ---- collapsed row = title + real-output description + meta, and NOTHING else ---- */
-const buildFn = station.slice(station.indexOf('function buildOutbox'), station.indexOf('StationUI.registerWindow('));
+const buildFn = station.slice(station.indexOf('function buildOutbox'), station.indexOf('window.OutboxView = {'));
 A.ok(buildFn.length > 200, 'buildOutbox body located');
 A.ok(/ReturnStore\.pendingRows/.test(buildFn) || /RS\.pendingRows/.test(buildFn), 'rows come only from the durable pending ledger (ReturnStore.pendingRows)');
 const headHtml = /'<div class="ob-head"[\s\S]*?<\/div>'\s*\+\s*'<div class="ob-body"/.exec(buildFn);
@@ -62,12 +68,13 @@ const emptyBody = {
 };
 // This builder contains quoted regex literals; use its registration boundary rather
 // than fnBody's deliberately limited brace scanner.
-vm.runInNewContext(buildFn + '\nbuildOutbox(body);', {
+vm.runInNewContext('const mounted = new Set();\n' + buildFn + '\nbuildOutbox(body);', {
   body: emptyBody, ReturnStore: { pendingRows: () => [] }, H: { navigateWork: (...args) => navCalls.push(args) }
 });
+A.eq(emptyBody.hidden, true, 'nothing waiting = the TO REVIEW section steps aside (the library below is always there)');
 doorClicks['#ob-logbook']();
-A.eq(navCalls, [['outbox', 'logbook']],
-  'the run-history door preserves its source for return navigation (DELIVERABLES is the neighbouring MY WORK tab, so no second door)');
+A.eq(navCalls, [['deliverables', 'logbook']],
+  'the run-history door returns to DELIVERABLES (where TO REVIEW lives), never a dead OUTBOX window');
 A.ok(!('#ob-library' in doorClicks), 'no DELIVERABLES door duplicating the MY WORK tab');
 A.ok(/class="consent-btn ob-open">↗ OPEN/.test(buildFn), 'action: ↗ OPEN (test it in the session)');
 A.ok(/class="consent-btn ob-fork">⊕ NEW SESSION/.test(buildFn), 'action: ⊕ NEW SESSION (expand on this)');
@@ -90,7 +97,7 @@ A.ok(/\bawayRate\b/.test(chat.slice(chat.lastIndexOf('return {'))), 'Chat export
 /* ---- store contract: ledger copies, openWork joins, open window stays fresh ---- */
 A.ok(/function pendingRows\(\)[^\n]*\n?.*Object\.assign\(\{\}, r\)/.test(rstore) || /pendingRows[\s\S]{0,200}Object\.assign\(\{\}, r\)/.test(rstore), 'pendingRows hands out COPIES (a render can never mutate durable state)');
 A.ok(/revive:\s*true/.test(rstore), 'openWork adopt rides revive:true (the tombstone lane’s ONE deliberate revive path)');
-A.ok(/rerender\('outbox'\)/.test(rstore), 'a digest fold re-renders an already-open OUTBOX window (no stale list)');
+A.ok(/OutboxView\.refresh\(\)/.test(rstore), 'a digest fold refreshes every mounted TO REVIEW section (no stale list)');
 A.ok(/\bpendingRows\b/.test(rstore.slice(rstore.lastIndexOf('return {'))), 'ReturnStore exports pendingRows');
 
 /* ---- world: the chute is always clickable while placed; hover names the click ---- */
