@@ -60,21 +60,8 @@
       row.classList.toggle('has-clock', !!ct);
       row.classList.toggle('asking', st.asking);
       const sx = st.asking ? 'needs your OK' : st.tool ? toolLabel(st.tool) : '';
-      if (step && step.textContent !== sx) { step.textContent = sx; decode(step); }
-      // a new status label (crewTick's WORKING / IDLE / IN CONVERSATION) resolves out of glyph-static too
-      const status = row.querySelector('.crew-status');
-      if (status && row.dataset.cardStatus !== status.textContent) {
-        if (row.dataset.cardStatus) decode(status);
-        row.dataset.cardStatus = status.textContent;
-      }
+      if (step && step.textContent !== sx) step.textContent = sx;
     });
-  }
-
-  // ASCII decode (pipglass.css): the station's own scramble, short, and never stacked on a line still resolving
-  function decode(el, ms) {
-    if (!el || typeof AsciiFX === 'undefined' || !AsciiFX.scramble || el.classList.contains('afx-scrambling')) return;
-    if (!el.textContent.trim()) return;
-    try { AsciiFX.scramble(el, { duration: ms || 320 }); } catch (_) {}
   }
 
   // the roster total moves up under the CREW title: "2 WORKING · 1 IDLE" (the same element, its writer unchanged)
@@ -86,8 +73,6 @@
 
   function wire() {
     seatSummary();
-    // the dock reads as the Pip-Boy tab strip: a label decodes when you point at it
-    document.querySelectorAll('#bottombar .bb-group > .bb-grp').forEach((b) => b.addEventListener('mouseenter', () => decode(b, 260)));
     if (typeof U !== 'undefined' && U.bus) {
       U.bus.on('agent.run.start', (p) => { if (p && p.runId && p.agentId) runs.set(String(p.runId), { agentId: String(p.agentId), startedAt: Date.now(), tool: '' }); paint(); });
       U.bus.on('agent.tool_call', (p) => { const r = p && runs.get(String(p.runId)); if (r && p.name) { r.tool = String(p.name); paint(); } });
