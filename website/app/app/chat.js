@@ -3362,10 +3362,11 @@ const Chat = (() => {
     // CORRECTION CAPTURE (consistency loop, slice 2): a short-of-the-mark verdict opens a window in which the
     // Commander's next message to this agent is treated as the CORRECTION of that run and handed to the held
     // skill review in their own words (POST /api/growth/ratings/correction). Praise opens nothing.
-    if (saved && saved.ok && !saved.duplicate && (verdict === 'ok' || verdict === 'miss')) lastShortVerdict = { runId: runId, agentId: agentId || 'agent', streamId: ((runMeta(runId) || {}).streamId) || null, at: Date.now() };
+    if (saved && saved.ok && !saved.duplicate && (verdict === 'ok' || verdict === 'miss')) lastShortVerdict = { runId: runId, agentId: agentId || 'agent', streamId: ((runMeta(runId) || {}).streamId) || awayStreams.get(runId) || null, at: Date.now() };
     return saved;
   }
   let lastShortVerdict = null;   // { runId, agentId, streamId, at } — the run whose next message (in ITS session) is its correction
+  const awayStreams = new Map();   // runId -> streamId for runs this page did not start (seedAwayWork)
   const CORRECTION_WINDOW_MS = 10 * 60 * 1000;
   function postCorrection(runId, text, final, source) {
     try {
@@ -3554,6 +3555,9 @@ const Chat = (() => {
   // size derives from real recorded turns/spend (turns-1 ≈ tool rounds: each loop turn past the
   // first was a tool round; conservative, never farmable — the row is server-recorded).
   function seedAwayWork(rw) {
+    // an away run's SESSION (OUTBOX rows, routines, runs from before a reload): runMeta only knows this page's own runs,
+    // so a thumbs-down here must still know which session its correction belongs to (sweep 2026-10-02)
+    if (rw && rw.runId && rw.streamId) { awayStreams.set(rw.runId, String(rw.streamId)); if (awayStreams.size > 120) awayStreams.delete(awayStreams.keys().next().value); }
     if (!rw || !rw.runId || runWork.has(rw.runId)) return;
     runWork.set(rw.runId, { toolsOk: Math.max(0, (rw.turns | 0) - 1), delivered: 0, cost: Math.max(0, +rw.usd || 0), agentId: rw.agentId || 'agent' });
     if (runWork.size > 60) runWork.delete(runWork.keys().next().value);
@@ -8830,7 +8834,7 @@ const Chat = (() => {
     let correctionOf = null;
     // the correction is the next message IN THE RATED RUN'S SESSION: matched by agent alone, a new request typed in
     // another session to that agent within the window was saved station-wide as a DISLIKED correction (sweep 2026-10-02)
-    if (!retry && !pending && lastShortVerdict && (ws.agentId || 'agent') === lastShortVerdict.agentId && (!lastShortVerdict.streamId || lastShortVerdict.streamId === ws.id) && Date.now() - lastShortVerdict.at < CORRECTION_WINDOW_MS) {
+    if (!retry && !pending && lastShortVerdict && (ws.agentId || 'agent') === lastShortVerdict.agentId && lastShortVerdict.streamId && lastShortVerdict.streamId === ws.id && Date.now() - lastShortVerdict.at < CORRECTION_WINDOW_MS) {
       correctionOf = lastShortVerdict.runId; lastShortVerdict = null;
       postCorrection(correctionOf, text, true, 'message');
     }
