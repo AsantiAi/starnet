@@ -288,7 +288,7 @@ body.glass-demo:not(.hud-mode) .term:not(.pw) .term-title { text-shadow: var(--p
    .cam-hud::after, so the CINEMA key remains the only control and the BR mark frames it from outside.
    ============================================================ */
 body.glass-demo:not(.hud-mode) #screen-game #stage-wrap .cam-hud::after {
-  --cm: rgba(var(--ph-rgb), .85); --cl: 56px; --ct: 1px;
+  --cm: rgba(var(--ph-rgb), .85); --cl: 34px; --ct: 1px;
   content: ''; display: block; position: absolute; inset: 10px; pointer-events: none;
   background:
     linear-gradient(var(--cm), var(--cm)) left top / var(--cl) var(--ct),
@@ -301,3 +301,5 @@ body.glass-demo:not(.hud-mode) #screen-game #stage-wrap .cam-hud::after {
     linear-gradient(var(--cm), var(--cm)) right bottom / var(--ct) var(--cl);
   background-repeat: no-repeat;
 }
+/* CINEMA sits inside the bottom-right mark with clear space, never on its lines */
+body.glass-demo:not(.hud-mode) #screen-game #stage-wrap .cam-cine { right: 24px; bottom: 24px; }
