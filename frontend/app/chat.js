@@ -814,6 +814,22 @@ const Chat = (() => {
       // A real attempt to inspect history wins even during the two-frame settle window.
       ['wheel', 'touchstart', 'pointerdown'].forEach(type => log.addEventListener(type, cancelHistoryPin, { passive: true }));
     }
+    // LINKS OUTSIDE COMMS (QA 2026-10-02): group chats, a group's .md file preview and the WORKFLOWS results render through
+    // this same renderProse, but the OS-browser hand-off below lives on #chat-log only — so on desktop those links were dead
+    // (a target=_blank <a> goes nowhere under the Tauri window policy). One document-level handler, wired once, covers them.
+    if (typeof document !== 'undefined' && !document.__proseLinksWired) {
+      document.__proseLinksWired = true;
+      document.addEventListener('click', e => {
+        if (e.defaultPrevented || !e.target || !e.target.closest) return;
+        const link = e.target.closest('#gc-log a, #gc-preview a, .wf-md a');
+        if (!link || !/^https?:\/\//i.test(link.getAttribute('href') || '')) return;
+        if (window.getSelection && String(window.getSelection())) { e.preventDefault(); return; }   // ending a text selection never opens a link
+        const invoke = (window.__TAURI__ && window.__TAURI__.core) ? window.__TAURI__.core.invoke : null;
+        if (!invoke) return;   // a plain browser: target=_blank works as is
+        e.preventDefault();
+        invoke('open_external_url', { url: link.href }).catch(() => { if (typeof StationUI !== 'undefined' && StationUI.notify) StationUI.notify('could not open your browser for that link', 'warn'); });
+      });
+    }
     // COPY: one delegated click handler for every (current + future) message row's ⧉ button — copies the
     // row's prose, then flashes a ✓ confirm. Wired once per log element so a re-init can't stack handlers.
     if (log && !log.__copyWired) {
