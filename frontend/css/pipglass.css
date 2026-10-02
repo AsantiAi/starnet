@@ -1,32 +1,42 @@
-/* PIP-GLASS (Andrew 10-01: "a fallout pip boy 3000 style. Right now its too glassy, it needs that glassiness,
-   with the pip boy aesthetic"). The glass panels stay — rounded, frosted — and take on the Pip-Boy screen's
-   language: each panel is a curved phosphor screen (a glass sheen across its top, the tube's vignette at its
-   edges), type that glows like phosphor, headers drawn as a thin rule with end ticks, the selected row lit as a
-   translucent phosphor bar, the dock read as the Pip-Boy's tab strip, gauges in segments like HP / AP.
-   NOT the flat-square-invert register (that lane was abandoned, and the hard CRT pass of 10-01 was rejected):
-   no square corners, no solid inverted bars, no texture or grain over text. Layout and features untouched. */
+/* PIP-GLASS (Andrew 10-01). "a fallout pip boy 3000 style … it needs that glassiness, with the pip boy aesthetic",
+   then "still too smooth … more like that black mirror bandersnatch, fallout pip boy, ascii matrix vibe".
+   The panels stay translucent glass; what was SMOOTH (soft gradients, wide blur glows, big round corners) gives
+   way to StarNet's own retro vocabulary — the world's 2026-09-03 "90s Bandersnatch" CRT pass and the ASCII kit:
+     · BANDERSNATCH FRINGE — a faint red / blue split on the phosphor type, the world's colour bleed on the glass
+     · DITHER, NOT GRADIENT — a lit row / open tab is a 1px ordered-dither ▒ field with a crisp 1px edge
+     · CRISP — 4px corners, 1px lines, small tight glows; a curved-glass sheen + tube vignette on each panel
+     · PIP-BOY RULES — section headers sit on a thin rule with end ticks
+     · ASCII — the CTX gauge keeps its ▮▯ cells; dock labels and crew status decode out of glyph-static
+       (AsciiFX.scramble, wired in crewcards.js)
+   No texture or grain over text, no flat-square-invert bars (both rejected). Layout and features untouched. */
 body.glass-demo {
-  --pg-glow: 0 0 6px rgba(var(--ph-rgb), .45), 0 0 1px rgba(var(--ph-rgb), .7);
-  --pg-glow-soft: 0 0 4px rgba(var(--ph-rgb), .28);
-  --pg-line: rgba(var(--ph-rgb), .38);
-  --pg-lit: linear-gradient(90deg, rgba(var(--ph-rgb), .2), rgba(var(--ph-rgb), .08));
+  --pg-fringe: -0.6px 0 rgba(255, 64, 48, .38), 0.6px 0 rgba(64, 150, 255, .34);
+  --pg-glow: var(--pg-fringe), 0 0 3px rgba(var(--ph-rgb), .5);
+  --pg-glow-soft: -0.5px 0 rgba(255, 64, 48, .22), 0.5px 0 rgba(64, 150, 255, .2), 0 0 2px rgba(var(--ph-rgb), .3);
+  --pg-line: rgba(var(--ph-rgb), .42);
+  --pg-dither: repeating-conic-gradient(rgba(var(--ph-rgb), .2) 0 25%, transparent 0 50%) 0 0 / 2px 2px;
+  --pg-dither-gold: repeating-conic-gradient(rgba(var(--gold-rgb), .22) 0 25%, transparent 0 50%) 0 0 / 2px 2px;
 }
 
-/* ---------- 1 · every panel is a curved phosphor screen ---------- */
+/* ---------- 1 · every panel is a crisp curved phosphor screen ---------- */
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar) { border-radius: 4px; }
+body.glass-demo:not(.hud-mode) #screen-game:not(.cinema) #stage-wrap,
+body.glass-demo:not(.hud-mode) #screen-game:not(.cinema) #stage-wrap::before { border-radius: 4px; }
+body.glass-demo:not(.hud-mode) #screen-game :is(#left > h3, #chat-panel > h3) { border-radius: 4px 4px 0 0; }
 body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar)::before {
   content: ''; position: absolute; inset: 0; z-index: 4; pointer-events: none; opacity: 1;
   border-radius: inherit;
   background:
-    linear-gradient(176deg, rgba(255, 238, 205, .055), rgba(255, 238, 205, .012) 22%, transparent 34%),
-    radial-gradient(ellipse 125% 105% at 50% 42%, transparent 62%, rgba(0, 0, 0, .42) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 238, 205, .07), inset 0 0 22px rgba(0, 0, 0, .35);
+    linear-gradient(176deg, rgba(255, 238, 205, .05), rgba(255, 238, 205, .01) 20%, transparent 30%),
+    radial-gradient(ellipse 125% 105% at 50% 42%, transparent 64%, rgba(0, 0, 0, .4) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 238, 205, .08), inset 0 0 0 1px rgba(0, 0, 0, .5);
 }
 
-/* ---------- 2 · phosphor type ---------- */
-body.glass-demo:not(.hud-mode) #screen-game :is(#left > h3, #chat-panel > h3, #crew .crew-name, #crew .crew-clock, .ws-tab.on, #bottombar .bb-grp, #topbar .tb-val, #topbar #status-pill, .cmsg-empty-line) { text-shadow: var(--pg-glow); }
-body.glass-demo:not(.hud-mode) #screen-game :is(#crew .crew-status, #crew .crew-step, #left .ws-row, .cmsg-starter-title, #topbar .tb-lbl) { text-shadow: var(--pg-glow-soft); }
+/* ---------- 2 · phosphor type with the Bandersnatch fringe ---------- */
+body.glass-demo:not(.hud-mode) #screen-game :is(#left > h3, #chat-panel > h3, #crew .crew-name, #crew .crew-clock, .ws-tab, #ws-new, #bottombar .bb-grp, #topbar .tb-val, #topbar #status-pill, .cmsg-empty-line, .cmsg-starter-title) { text-shadow: var(--pg-glow); }
+body.glass-demo:not(.hud-mode) #screen-game :is(#crew .crew-status, #crew .crew-step, #left .ws-row, #crew-sum, #topbar .tb-lbl, .ctx-gauge) { text-shadow: var(--pg-glow-soft); }
 
-/* ---------- 3 · headers: a thin rule with end ticks (the Pip-Boy section line) ---------- */
+/* ---------- 3 · Pip-Boy section rules: a thin line with end ticks ---------- */
 body.glass-demo:not(.hud-mode) #screen-game :is(#left > h3, #chat-panel > h3) {
   border-bottom: 0;
   background:
@@ -42,45 +52,49 @@ body.glass-demo:not(.hud-mode) #screen-game #left .ws-head {
     linear-gradient(var(--pg-line), var(--pg-line)) right 10px top 0 / 1px 6px no-repeat;
 }
 
-/* ---------- 4 · the selected row is a lit phosphor bar ---------- */
+/* ---------- 4 · crisp shapes: cards, keys, fields ---------- */
+body.glass-demo:not(.hud-mode) #crew .crew-row,
+body.glass-demo:not(.hud-mode) #left #workstreams .ws-row,
+body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty .cmsg-starter { border-radius: 3px; }
+body.glass-demo:not(.hud-mode) #crew .crew-portrait { border-radius: 3px; }
+body.glass-demo:not(.hud-mode) #crew .crew-portrait > .dot { border-radius: 1px; width: 7px; height: 7px; }
+body.glass-demo:not(.hud-mode) #left .ws-head :is(.ws-tab, #ws-new, #ws-addproject),
+body.glass-demo:not(.hud-mode) #left #ws-search,
+body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group > .bb-grp,
+body.glass-demo:not(.hud-mode) #screen-game .widget-rail .wg-add { border-radius: 3px; }
+
+/* ---------- 5 · the lit row / open tab is a dithered ▒ field with a crisp edge ---------- */
 body.glass-demo:not(.hud-mode) #crew .crew-row:is(.selected, :hover, :focus-visible) {
-  background: var(--pg-lit); border-color: rgba(var(--ph-rgb), .5);
-  box-shadow: 0 0 10px rgba(var(--ph-rgb), .12), inset 0 0 12px rgba(var(--ph-rgb), .06);
+  background: var(--pg-dither), rgba(var(--ph-rgb), .06); border-color: rgba(var(--ph-rgb), .55);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .35);
 }
 body.glass-demo:not(.hud-mode) #crew .crew-row.asking {
-  background: linear-gradient(90deg, rgba(var(--gold-rgb), .2), rgba(var(--gold-rgb), .07));
-  border-color: rgba(var(--gold-rgb), .6); box-shadow: 0 0 10px rgba(var(--gold-rgb), .14);
+  background: var(--pg-dither-gold), rgba(var(--gold-rgb), .06); border-color: rgba(var(--gold-rgb), .65); box-shadow: none;
 }
 body.glass-demo:not(.hud-mode) #left #workstreams .ws-row:is(.sel, :hover, :focus-visible) {
-  background: var(--pg-lit); border-color: rgba(var(--ph-rgb), .45);
+  background: var(--pg-dither), rgba(var(--ph-rgb), .05); border-color: rgba(var(--ph-rgb), .5); box-shadow: none;
 }
-/* COMMS starters read as a Pip-Boy list: rows that light up, not boxed cards */
-body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty .cmsg-starter { background: transparent; border-color: rgba(var(--ph-rgb), .14); }
+body.glass-demo:not(.hud-mode) #left .ws-head .ws-tab.on {
+  background: var(--pg-dither), rgba(var(--ph-rgb), .1); border-color: var(--ph); color: var(--ph-bright);
+}
+body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty .cmsg-starter { background: transparent; border-color: rgba(var(--ph-rgb), .16); }
 body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty .cmsg-starter:is(:hover, :focus-visible) {
-  background: var(--pg-lit); border-color: rgba(var(--ph-rgb), .5); box-shadow: 0 0 10px rgba(var(--ph-rgb), .1);
+  background: var(--pg-dither), rgba(var(--ph-rgb), .05); border-color: rgba(var(--ph-rgb), .55); box-shadow: none;
 }
 
-/* ---------- 5 · the dock is the Pip-Boy tab strip ---------- */
+/* ---------- 6 · the dock is the Pip-Boy tab strip ---------- */
 body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group > .bb-grp {
   background: transparent; border-color: transparent; box-shadow: none;
 }
 body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group > .bb-grp:is(:hover, :focus-visible) {
-  background: rgba(var(--ph-rgb), .07); border-color: rgba(var(--ph-rgb), .3);
+  background: rgba(var(--ph-rgb), .06); border-color: rgba(var(--ph-rgb), .35);
 }
 body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group.open > .bb-grp {
-  color: var(--ph-bright); background: var(--pg-lit); border-color: rgba(var(--ph-rgb), .6);
-  box-shadow: 0 0 12px rgba(var(--ph-rgb), .14);
+  color: var(--ph-bright); background: var(--pg-dither), rgba(var(--ph-rgb), .08); border-color: var(--ph); box-shadow: none;
 }
-body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group.has-active > .bb-grp { box-shadow: inset 0 -2px 0 var(--ph), 0 0 10px rgba(var(--ph-rgb), .1); }
+body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group.has-active > .bb-grp { box-shadow: inset 0 -2px 0 var(--ph); }
 
-/* ---------- 6 · gauges in segments (HP / AP) ---------- */
-body.glass-demo:not(.hud-mode) #bottombar .ctx-gauge .ctx-cells {
-  width: 96px; height: 7px; border-radius: 2px;
-  background:
-    repeating-linear-gradient(90deg, transparent 0 7px, rgba(5, 3, 1, .95) 7px 9px),
-    linear-gradient(90deg, currentColor calc(var(--ctx-fill, 0) * 100%), color-mix(in srgb, currentColor 20%, transparent) 0);
-  box-shadow: 0 0 6px color-mix(in srgb, currentColor 35%, transparent);
-}
+/* ---------- 7 · ASCII gauges ---------- */
 body.glass-demo:not(.hud-mode) #topbar #tb-station .tb-xp {
   height: 3px;
   background: repeating-linear-gradient(90deg, transparent 0 6px, rgba(5, 3, 1, .95) 6px 8px), rgba(var(--gold-rgb), .18);
