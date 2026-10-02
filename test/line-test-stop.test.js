@@ -101,7 +101,7 @@ A.ok(/else \{ runningAgents\.delete\(id\); runSeenAt\.delete\(id\); dropTestRuns
   });
   vm.runInContext(A.fnBody(station, 'function crewTick()') + '\ncrewTick();', ctx);
   A.eq([labels.tester.textContent, labels.worker.textContent, labels.idle.textContent], ['ON A WORKFLOW', 'WORKING', 'IDLE'], 'a workflow job or a line test reads ON A WORKFLOW; other work WORKING; no run IDLE');
-  A.ok(/WORK › WORKFLOWS/.test(tips.tester || '') && /TEST view/.test(tips.tester || '') && /STOP/.test(tips.tester || '') && !tips.worker,
+  A.ok(/WORK › AUTOMATE › WORKFLOWS/.test(tips.tester || '') && /TEST view/.test(tips.tester || '') && /STOP/.test(tips.tester || '') && !tips.worker,
     'the ON A WORKFLOW row says where it shows (the WORKFLOWS window, or a step test in the TEST view) and how it stops; the others carry no such tip');
 }
 {

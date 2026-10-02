@@ -97,6 +97,11 @@ const StepIn = (() => {
     if (b) { b.textContent = n ? String(n) : ''; b.style.display = n ? 'inline-block' : 'none'; }
     const g = document.getElementById('bb-crew-stepin-badge');
     if (g) { g.hidden = !n; g.textContent = n ? String(n) : ''; }
+    // the CREW dock carries STEP-IN only while an agent is actually waiting for you (Andrew 10-02: no standing button)
+    const item = document.querySelector('#bottombar .bb[data-term="stepin"]');
+    if (item && item.hidden === !!n) item.hidden = !n;
+    // STATION SYSTEMS: an agent waiting for you is the moment STEP-IN joins a growing dock
+    if (n && typeof Systems !== 'undefined' && Systems.growTo) Systems.growTo(['stepin']);
   }
 
   /* ---------------- the view ---------------- */

@@ -19,7 +19,7 @@ A.ok(/panelBright: 0,/.test(uiSrc), "defaults() seeds panelBright: 0 — a save 
 A.ok(/panelBright: store\.settings\.panelBright/.test(uiSrc), 'backup export carries panelBright (settings round-trip through backup/restore)');
 
 /* ---- the lift math: capped, accent-directed, ground-tokens only ---- */
-const liftBlock = /const lift = clampN\(s\.panelBright, 0, 100, 0\) \/ 100 \* (0\.\d+);[\s\S]*?for \(const tok of \[([^\]]+)\]\)/.exec(uiSrc);
+const liftBlock = /const knob = clampN\(s\.panelBright, -100, 100, 0\);\s*const lift = Math\.max\(0, knob\) \/ 100 \* (0\.\d+);[\s\S]*?for \(const tok of \[([^\]]+)\]\)/.exec(uiSrc);
 A.ok(liftBlock, 'applySettings carries the BRIGHTNESS lift block (clamped slider → capped mix factor)');
 const CAP = liftBlock ? Number(liftBlock[1]) : 1;
 A.ok(CAP <= 0.25, 'the lift is hard-capped at ≤25% of the way to the accent (got ' + CAP + ') — panels can never trend toward white');
@@ -41,6 +41,9 @@ A.ok(!/documentElement\.style\.setProperty/.test(uiSrc), 'no token is ever writt
 
 /* ---- the control renders and wires ---- */
 A.ok(/id="set-bright"/.test(uiSrc), 'the BRIGHTNESS slider renders in Settings › APPEARANCE');
-A.ok(/wireSlider\(brightIn, v => \{ s\.panelBright = clampN\(v, 0, 100, 0\)/.test(uiSrc), 'the slider instant-applies + clamps + persists through the shared wireSlider idiom');
+A.ok(/wireSlider\(brightIn, v => \{ s\.panelBright = clampN\(v, -100, 100, 0\)/.test(uiSrc), 'the slider instant-applies + clamps + persists through the shared wireSlider idiom');
+/* ---- below 0 the panels go DOWN toward black (Andrew 10-01: "it doesnt get dark enough") ---- */
+A.ok(/id="set-bright" min="-100"/.test(uiSrc), 'the BRIGHTNESS slider reaches below 0');
+A.ok(/const dim = Math\.max\(0, -knob\) \/ 100 \* 0\.\d+;/.test(uiSrc) && /Math\.round\(v \* \(1 - dim\)\)/.test(uiSrc), 'below 0 the three ground tokens mix toward black, never toward a colour');
 
 A.report('panel-brightness');

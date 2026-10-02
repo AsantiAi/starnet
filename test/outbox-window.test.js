@@ -65,9 +65,10 @@ const emptyBody = {
 vm.runInNewContext(buildFn + '\nbuildOutbox(body);', {
   body: emptyBody, ReturnStore: { pendingRows: () => [] }, H: { navigateWork: (...args) => navCalls.push(args) }
 });
-doorClicks['#ob-library'](); doorClicks['#ob-logbook']();
-A.eq(navCalls, [['outbox', 'deliverables'], ['outbox', 'logbook']],
-  'the library and run-history doors preserve their source for return navigation');
+doorClicks['#ob-logbook']();
+A.eq(navCalls, [['outbox', 'logbook']],
+  'the run-history door preserves its source for return navigation (DELIVERABLES is the neighbouring MY WORK tab, so no second door)');
+A.ok(!('#ob-library' in doorClicks), 'no DELIVERABLES door duplicating the MY WORK tab');
 A.ok(/class="consent-btn ob-open">↗ OPEN/.test(buildFn), 'action: ↗ OPEN (test it in the session)');
 A.ok(/class="consent-btn ob-fork">⊕ NEW SESSION/.test(buildFn), 'action: ⊕ NEW SESSION (expand on this)');
 A.ok(/closeOthers\(/.test(buildFn), 'accordion: opening a row closes the others');

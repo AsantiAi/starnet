@@ -801,7 +801,7 @@
           // ("saved, but the scheduler is off — this won't run until you enable scheduling"). Built for exactly this.
           if (r && r.scheduler) schedulerArmed = !!r.scheduler.armed;   // the create reply carries the live arm state
           const arm = (typeof AutoJobs !== 'undefined' && AutoJobs.armStateLine) ? AutoJobs.armStateLine(schedulerArmed) : null;
-          if (r && r.scheduler && r.scheduler.halted) notify('routine "' + (name || 'unnamed') + '" saved — the scheduler is on E-STOP, so nothing fires until you resume it in ROUTINES', 'warn');
+          if (r && r.scheduler && r.scheduler.halted) notify('routine "' + (name || 'unnamed') + '" saved — the scheduler is on E-STOP, so nothing fires until you resume it in AUTOMATE › SCHEDULES', 'warn');
           else if (arm) notify('routine "' + (name || 'unnamed') + '" ' + arm.text, 'warn');
           else notify('routine "' + (name || 'unnamed') + '" scheduled for ' + agentLabel(agentId || 'agent'), 'good');
           sfx('click');

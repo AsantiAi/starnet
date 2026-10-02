@@ -213,7 +213,7 @@ const F = (err, status, opts) => friendlyError(err, status, opts);
   A.eq(v.retryable, false, 'capdenied not retryable');
   A.eq(v.action, 'refit', 'capdenied points at REFIT (place the gear), not the SKILLS list');
   A.eq(v.cap, 'web', 'capdenied parses the missing capability off the raw message');
-  A.ok(/WEB ACCESS/.test(v.userMessage) && /DISH/.test(v.userMessage) && /REFIT/.test(v.userMessage), 'capdenied headline names the power (WEB ACCESS), the gear (DISH), and the door (REFIT)');
+  A.ok(/WEB ACCESS/.test(v.userMessage) && /DISH/.test(v.userMessage) && /BUILD MODE/.test(v.userMessage), 'capdenied headline names the power (WEB ACCESS), the gear (DISH), and the door (BUILD MODE)');
   A.eq(F(new Error('capdenied: terminal')).kind, 'capdenied', 'literal capdenied token -> capdenied');
 
   // timeout vs user-abort: a user cancel is a quiet, non-retryable "Stopped."; a real timeout is retryable.

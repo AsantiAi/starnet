@@ -839,6 +839,20 @@ const ModelDock = (() => {
     const chrome = ensureChipChrome();
     if (providerEl) providerEl.textContent = providerLabel(p);
     if (currentEl) currentEl.textContent = current ? modelLabel({ id: current }) : 'NO MODEL';
+    // SCOPE (front doors): the model pickers change different things — say which one THIS is. The dock writes the
+    // FOCUSED agent's own model (applyQuickModel → agent.model, the same pin as its AGENTS › CONFIG). The Overseer's
+    // pin IS the station default every unpinned agent follows (focusWire / stationDefaultWire), so focused on the
+    // Overseer this picker sets the station default; focused on a specialist it pins that specialist only.
+    const head = currentEl && currentEl.parentElement;
+    if (head) {
+      let scope = el('model-dock-scope');
+      if (!scope) { scope = document.createElement('span'); scope.id = 'model-dock-scope'; scope.className = 'model-dock-scope'; head.appendChild(scope); }
+      let who = '', id = '';
+      try { who = String((opts.agentName && opts.agentName()) || '').trim(); id = String((opts.identity && opts.identity()) || ''); } catch (_) {}
+      scope.textContent = id === 'agent'
+        ? 'STATION DEFAULT · agents without their own model follow it'
+        : 'MODEL FOR ' + (who ? who.toUpperCase() : 'THIS AGENT') + ' ONLY · same as its AGENTS › CONFIG';
+    }
     const effort = ensureCurrentEffort();
     const item = currentModelItem();
     if (chip) chip.textContent = effortShown(effort, item).label;

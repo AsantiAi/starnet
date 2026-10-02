@@ -96,7 +96,7 @@ const QuestRefreshStore = (() => {
     let shown = null;
     if (!busy && typeof Chat.nudge === 'function') {
       if (typeof SFX !== 'undefined' && SFX.idea) { try { SFX.idea(); } catch (_) {} }
-      const line = '◆ your north star looks like: “' + ns.text + '”. is that the direction to steer your quests by?';
+      const line = 'your north star looks like: “' + ns.text + '”. is that the direction to steer your quests by?';
       shown = Chat.nudge(line, [{ label: 'Confirm ✓', value: 'yes' }, { label: 'Not quite', value: 'no' }, { label: 'Open QUEST LOG', value: 'log', skip: true }], choice => {
         if (choice && choice.value === 'yes') { verdict('confirm').then(afterVerdict); }
         else if (choice && choice.value === 'no') { verdict('decline').then(afterVerdict); }
