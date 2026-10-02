@@ -2323,13 +2323,14 @@
        renders again. Only our own headed window; never an attached browser. */
     let keepShownBusy = false;
     async function keepWindowShown() {
-      if (!headed || attachPort !== null || keepShownBusy || !cdp) return false;
+      // only over the connection that is already open: this must NEVER start (revive) a browser the Commander closed
+      if (!headed || attachPort !== null || keepShownBusy || !cdp || cdp.closed || procExited) return false;
       keepShownBusy = true;
       try {
-        const c = await page();
-        const w = await c.send('Browser.getWindowForTarget', {});
+        const c = cdp, sid = activeSession || openerSession || undefined;
+        const w = await c.send('Browser.getWindowForTarget', {}, sid);
         if (w && w.bounds && w.bounds.windowState === 'minimized') {
-          await c.send('Browser.setWindowBounds', { windowId: w.windowId, bounds: { windowState: 'normal' } });
+          await c.send('Browser.setWindowBounds', { windowId: w.windowId, bounds: { windowState: 'normal' } }, sid);
           return true;
         }
       } catch (e) { failNote('browser.keep-shown', e); }
