@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "015713aa37cbe2d1b168b2b1d8369f25e889532f",
+    "sourceCommit": "2745c6646a8688008178486929ae95647e3c1883",
     "pathSetSha256": "390a2a551d88b2597ca4ab3f1acc7ca535b3b978e277a0ed8c0fb507e73e87c0",
     "files": [
       {
@@ -1038,8 +1038,8 @@
       },
       {
         "path": "frontend/app/roomstyles.js",
-        "bytes": 24981,
-        "sha256": "d066aa847f6c6992e91922be29f7f3250505f2b76f8b9a4b76592ad74c005302"
+        "bytes": 24956,
+        "sha256": "3360a7072c44bc5bf572879dee12abde6d9b2ad7a168e4d74690a2df3411b51a"
       },
       {
         "path": "frontend/app/routinenudgestore.js",
@@ -1128,13 +1128,13 @@
       },
       {
         "path": "frontend/app/stationbuilder.js",
-        "bytes": 319020,
-        "sha256": "53567073ea0b4a14bb9768e07b10f3d92fe1786caf849ac0d5fff7b90dbc7eb8"
+        "bytes": 329800,
+        "sha256": "0826baf7599928f8b7f8a7d5d7be24278f45a87906bc90e6926ff09b759404dc"
       },
       {
         "path": "frontend/app/stationcommands.js",
-        "bytes": 67224,
-        "sha256": "721c260b5bcf915d2a5176d734ee45d0e80ec7ceb3e42d109ebf9bf2c2f6a118"
+        "bytes": 67211,
+        "sha256": "5f3835c16e941757391c81f8b128e6f268d138ae1ff59d291f1de22a5d1d8e0f"
       },
       {
         "path": "frontend/app/stationquests.js",
@@ -1428,8 +1428,8 @@
       },
       {
         "path": "frontend/app/worldmodel.js",
-        "bytes": 242160,
-        "sha256": "16e1a89b06a5989b76a0fb9af4273c6f5cae2d29403fa0594be254d9102b0de8"
+        "bytes": 242938,
+        "sha256": "c4f93138e057c34c12e105d3275d28abe2d20a8999256a843ef28eb45b26725b"
       },
       {
         "path": "frontend/app/worldrenderer.js",
