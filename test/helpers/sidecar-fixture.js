@@ -70,7 +70,9 @@ class SidecarFixture {
     this.entry = opts.entry || DEFAULT_ENTRY;
     this.args = Array.isArray(opts.args) ? opts.args.slice() : [];
     this.env = Object.assign({}, opts.env || {});
-    this.timeoutMs = Number(opts.timeoutMs) || 9000;
+    // Windows cold boots can exceed nine seconds while several isolated gates compete for disk.
+    // This bounds startup only; health/token checks and explicit timeout-failure scenarios still apply.
+    this.timeoutMs = Number(opts.timeoutMs) || (process.platform === 'win32' ? 30000 : 9000);
     this.bindRetries = Number.isInteger(opts.bindRetries) ? Math.max(0, opts.bindRetries) : 3;
     this.portAllocator = opts.portAllocator || allocatePort;
     this.acquireToken = opts.acquireToken !== false;

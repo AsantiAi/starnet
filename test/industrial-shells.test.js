@@ -29,12 +29,22 @@ async function pack(missing = '', classic = false) {
 (async () => {
   const { textures: t, draws, ctx } = await pack();
   assert.equal(t.enabled(), true);
-  const ids = ['monocoque', 'timber', 'clapboard', 'shingle', 'brick', 'stone', 'stucco', 'curtain', 'hedge', 'thermal', 'insulation', 'heatsink'];
+  for (const name of ['remaster/shell', ...['monocoque', 'timber', 'clapboard', 'shingle', 'brick', 'stone', 'stucco', 'curtain', 'hedge', 'thermal', 'heatsink', 'truss', 'louver', 'ceramic'].map(id => 'shell-' + id)]) {
+    const asset = 'assets/industrial/' + name + '-v2.png';
+    assert.ok(draws.some(draw => draw.im.url === asset), asset + ' is loaded');
+    assert.ok(fs.existsSync(require('node:path').join(__dirname, '../frontend', asset)), asset + ' ships');
+  }
+  const ids = ['monocoque', 'timber', 'clapboard', 'shingle', 'brick', 'stone', 'stucco', 'curtain', 'hedge', 'thermal', 'heatsink', 'truss', 'louver', 'ceramic'];
   for (const id of ids) {
     assert.ok(t.status().assets.includes('shell-' + id), id + ' loads');
     assert.equal(t.shellPlate(ctx, 0, 0, 96, 96, id, '#403020'), true);
     assert.equal(t.shell(ctx, 3, 40, -17, -9, [0, 2, 5], id, '#403020'), true);
   }
+  assert.equal(t.shellPlate(ctx, 0, 0, 96, 96, 'insulation'), false, 'insulation is no longer an exterior texture');
+  assert.ok(t.status().assets.includes('remaster/walls/insulation'), 'interior insulation ships in the wall pack');
+  assert.equal(t.supportsWall('insulation'), true);
+  assert.equal(t.wall(ctx, 0, 0, 12, 30, -1, 'insulation', '#603020'), true);
+  assert.ok(t.wallStrip(30, 'insulation', '#603020'), 'insulation also renders on side faces and corners');
   t.shellPlate(ctx, 0, 0, 96, 96, 'brick', '#603020');
   const red = draws.at(-1).im.tint;
   t.shellPlate(ctx, 0, 0, 96, 96, 'brick', '#203060');
@@ -46,7 +56,7 @@ async function pack(missing = '', classic = false) {
   t.shellPlate(ctx, 0, 0, 96, 96, 'brick', '#203060');
   assert.equal(draws.at(-1).im, cached, 'repeated bakes reuse tinted material');
   assert.equal(t.shell(ctx, 1, 10, 0, 0, null, 'unknown'), false);
-  const failed = await pack('shell-brick');
+  const failed = await pack('shell-brick-v2');
   assert.equal(failed.textures.enabled(), true, 'optional failure preserves main pack');
   assert.equal(failed.textures.shellPlate(failed.ctx, 0, 0, 96, 96, 'brick'), false);
   assert.equal(failed.textures.shellPlate(failed.ctx, 0, 0, 96, 96, 'timber'), true);

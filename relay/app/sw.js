@@ -5,18 +5,22 @@
    2. Shows the station's push notifications. The station encrypts each one to this phone (RFC 8291); the browser
       decrypts it before it arrives here. A tap opens the app on the right screen. */
 'use strict';
-const CACHE = 'starnet-remote-v8';
+const CACHE = 'starnet-remote-%SHELL%';   // the relay writes in a fingerprint of the shell's exact bytes
 const SHELL = ['./', 'index.html', 'app.css', 'app.js', 'store.js', 'phone-client.js', 'vt323.woff2', 'icon.svg', 'icon-180.png', 'manifest.webmanifest'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
-// network first (a new version reaches the phone as soon as it is online), the cached shell when offline
+/* CACHE FIRST: the app opens from the phone itself, instantly, with no trip to the relay. A new version still arrives
+   at once: the browser re-checks this file on every open, the relay names CACHE after the shell's exact bytes, so a
+   changed app is a changed worker, which installs the whole new shell in one piece (never new markup with an old
+   script) and takes over; the next open runs it. */
 self.addEventListener('fetch', (e) => {
   const u = new URL(e.request.url);
   if (e.request.method !== 'GET' || u.origin !== location.origin) return;
-  e.respondWith(fetch(e.request).then((r) => {
-    if (r.ok && SHELL.some(p => u.pathname.endsWith('/' + p.replace('./', '')) || (p === './' && u.pathname.endsWith('/')))) { const copy = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
+  if (!SHELL.some(p => u.pathname.endsWith('/' + p.replace('./', '')) || (p === './' && u.pathname.endsWith('/')))) return;
+  e.respondWith(caches.open(CACHE).then(c => c.match(e.request, { ignoreSearch: true }).then(hit => hit || fetch(e.request).then((r) => {
+    if (r.ok) c.put(e.request, r.clone());
     return r;
-  }).catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || caches.match('index.html'))));
+  }))).catch(() => caches.match('index.html')));
 });
 
 // every push is shown (a push that shows nothing gets the subscription revoked on some phones); the tag makes a

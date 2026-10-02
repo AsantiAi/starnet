@@ -255,8 +255,9 @@ const WorldModel = (() => {
     acoustic: { label: 'PADDED', suggest: 'ash' },
     braced: { label: 'BRACED', suggest: null },
     machinery: { label: 'MACHINERY', suggest: null },
+    insulation: { label: 'INSULATION', suggest: 'amber' },
   };
-  const WALL_ORDER = ['bulkhead', 'courses', 'service', 'plating', 'ribbed', 'panelled', 'viewport', 'pipework', 'wainscot', 'hedge', 'pressure', 'radiator', 'utility', 'acoustic', 'braced', 'machinery'];
+  const WALL_ORDER = ['bulkhead', 'courses', 'service', 'plating', 'ribbed', 'panelled', 'viewport', 'pipework', 'wainscot', 'hedge', 'pressure', 'radiator', 'utility', 'acoustic', 'braced', 'machinery', 'insulation'];
 
   /* the HULL material catalog — THE THIRD SURFACE AXIS (2026-08-05, Andrew, circling the outside
      edges of five rooms in a screenshot: "the outer walls are not customizable... for users who
@@ -293,10 +294,12 @@ const WorldModel = (() => {
   };
   Object.assign(HULL_MATERIALS, {
     thermal: { label: 'THERMAL', suggest: 'hull', blurb: 'dark carbon thermal shielding with interlocking armor panels' },
-    insulation: { label: 'INSULATION', suggest: 'amber', blurb: 'quilted orbital insulation with restrained foil folds' },
-    heatsink: { label: 'HEATSINK', suggest: 'hull', blurb: 'radiator fins between calm graphite cladding panels' }
+    heatsink: { label: 'HEATSINK', suggest: 'hull', blurb: 'radiator fins between calm graphite cladding panels' },
+    truss: { label: 'TRUSS', suggest: 'hull', blurb: 'diagonal structural braces over recessed armor' },
+    louver: { label: 'LOUVER', suggest: 'hull', blurb: 'deep chevron intake blades in armored frames' },
+    ceramic: { label: 'CERAMIC', suggest: 'bone', blurb: 'pale ceramic-composite plates with graphite joints' }
   });
-  const HULL_ORDER = ['station', 'monocoque', 'timber', 'clapboard', 'shingle', 'brick', 'stone', 'stucco', 'curtain', 'hedge', 'thermal', 'insulation', 'heatsink'];
+  const HULL_ORDER = ['station', 'monocoque', 'timber', 'clapboard', 'shingle', 'brick', 'stone', 'stucco', 'curtain', 'hedge', 'thermal', 'heatsink', 'truss', 'louver', 'ceramic'];
 
   /* room categories — a capability-zone label + a default floor (hue + material). kind drives
      nothing behavioural yet (capability mapping is a later pass); it tags the zone + seeds the
@@ -352,7 +355,7 @@ const WorldModel = (() => {
   };
   /* THE AUTHORITY on a room's exterior shell (stationbake's HULL_RECIPES fallback is only for
      geometry arriving without one). Defaults to `station` so nothing already built moves. */
-  const hullMatOfRoom = rm => (rm && HULL_MATERIALS[rm.hullMat]) ? rm.hullMat : 'station';
+  const hullMatOfRoom = rm => rm && rm.hullMat === 'insulation' ? 'thermal' : (rm && HULL_MATERIALS[rm.hullMat]) ? rm.hullMat : 'station';
   /* A HULL'S HUE, or null for "the shell's own tone". Explicit paint wins; otherwise the material's
      own suggested hue (see the HULL_MATERIALS note on why this binds in the model and the wall
      axis's `suggest` does not). A CORRIDOR follows the room it connects only in spirit — it takes
@@ -3568,6 +3571,8 @@ const WorldModel = (() => {
       // the hull axis is additive the same way — absent means `station` at the shell's own tone,
       // which is exactly what every pre-axis room already renders as.
       if (!FLOOR_STYLES[rm.hullStyle]) rm.hullStyle = null;
+      // Insulation belongs inside. Retire old exterior selections without changing interior walls or explicit paint.
+      if (rm.hullMat === 'insulation') rm.hullMat = 'thermal';
       if (!HULL_MATERIALS[rm.hullMat]) rm.hullMat = null;
     }
     // props are additive (v1 docs predate them); make the read paths total over any blob.

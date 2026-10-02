@@ -5,7 +5,9 @@
 
      await RemoteStore.load()        -> { key:{ privateKey, publicRaw }, station:{ ... } } | null
      await RemoteStore.save(record)
-     await RemoteStore.forget() */
+     await RemoteStore.forget()
+     RemoteStore.saveView({ blob, meta }) / loadView()   the last station picture, so the app opens on it at once
+                                                          (shown with its true age until a fresh one arrives) */
 (function (root) {
   'use strict';
   const DB = 'starnet-remote', OS = 'kv', K = 'pairing';
@@ -32,6 +34,8 @@
   root.RemoteStore = {
     load: () => tx('readonly', s => s.get(K)).then(v => v || null),
     save: (rec) => tx('readwrite', s => s.put(rec, K)),
-    forget: () => tx('readwrite', s => s.delete(K))
+    forget: () => tx('readwrite', s => { s.delete('view'); return s.delete(K); }),
+    saveView: (v) => tx('readwrite', s => s.put(v, 'view')),
+    loadView: () => tx('readonly', s => s.get('view')).then(v => v || null)
   };
 }(typeof self !== 'undefined' ? self : this));

@@ -281,6 +281,33 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
   A.eq(crewPosts.length, 1, 'an unchanged crew is not sent again straight away');
   RemoteView.reset();
 
+  // the reply streams as what it GREW by, with the whole text again every eighth frame (and after a tool step)
+  {
+    const evs = []; let emitRef = null; let release = null;
+    const hs = makeRemoteHost({
+      now: () => Date.now(), newId: () => 'tx-run', broadcast: e => evs.push(e),
+      roster: () => [{ agentId: 'lead', name: 'LEAD' }], liveRuns: () => [], transcript: { history: () => [], streams: () => [] },
+      credentials: () => ({ ok: true, key: 'k', model: 'm', provider: 'p' }), askConsent: () => Promise.resolve('deny'),
+      runOnce: async o => { emitRef = o.emit; await new Promise(r => { release = r; }); o.emit('agent.run.end', { agentId: 'lead', runId: o.runId, reason: 'done', usd: 0 }); }
+    });
+    await hs.send({ agentId: 'lead', text: 'go', streamId: '', deviceId: 'd1' });
+    for (let i = 0; i < 50 && !emitRef; i++) await new Promise(r => setTimeout(r, 10));
+    const tok = async (t) => { emitRef('agent.token', { delta: t }); await new Promise(r => setTimeout(r, 300)); };
+    await tok('Hel'); await tok('lo'); await tok(' there');
+    const tx = () => evs.filter(e => e.type === 'run.text');
+    A.eq(tx()[0], { type: 'run.text', runId: 'tx-run', text: 'Hel' }, 'the first frame is the text so far');
+    A.eq(tx()[1], { type: 'run.text', runId: 'tx-run', at: 3, add: 'lo' }, 'then only what it grew by, and where that starts');
+    A.eq(tx()[2], { type: 'run.text', runId: 'tx-run', at: 5, add: ' there' }, 'and again');
+    for (let i = 0; i < 5; i++) await tok('.');
+    A.eq(tx()[7], { type: 'run.text', runId: 'tx-run', text: 'Hello there.....' }, 'every eighth frame is the whole text, so a phone that missed a piece is put right');
+    emitRef('agent.tool_call', { name: 'fs_read', callId: 'c1' }); await tok('Next');
+    A.eq(tx()[tx().length - 1], { type: 'run.text', runId: 'tx-run', text: 'Next' }, 'after a tool step the new text starts whole');
+    let text = '';
+    for (const e of tx()) { if (typeof e.text === 'string') text = e.text; else if (text.length === e.at) text += e.add; }
+    A.eq(text, 'Next', 'a phone applying the frames in order ends with exactly the text');
+    release();
+  }
+
   // a delegated WORKER's error/end (forwarded onto the lead's emit) must not mark the phone's run failed
   {
     const evs = []; let seenOpts = null;

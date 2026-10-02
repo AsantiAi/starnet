@@ -24,7 +24,7 @@ const WorldSurface = (() => {
     'spine', 'alloy', 'plate', 'panel', 'tile', 'tread', 'soft', 'grate', 'hex',
     'plank', 'turf', 'diamond', 'resin', 'ceramic', 'cargo', 'runner', 'treadway', 'meshway', 'basalt', 'parquet', 'rubber', 'slotted', 'terrazzo', 'octile', 'flightdeck', 'lunar', 'maggrid', 'habitat'
   ]);
-  const WALLS = Object.freeze(['bulkhead', 'courses', 'service', 'plating', 'ribbed', 'panelled', 'pipework', 'pressure', 'radiator', 'utility', 'acoustic', 'braced', 'machinery']);
+  const WALLS = Object.freeze(['bulkhead', 'courses', 'service', 'plating', 'ribbed', 'panelled', 'pipework', 'pressure', 'radiator', 'utility', 'acoustic', 'braced', 'machinery', 'insulation']);
   const materialSet = new Set(MATERIALS), wallSet = new Set(WALLS);
   const palettes = new Map();
   const remastered = () => typeof IndustrialTextures !== 'undefined' && IndustrialTextures &&
@@ -440,7 +440,18 @@ const WorldSurface = (() => {
     p(0, foot + 1, CELL, 1, pal.base);                // bevelled kick-plate nose
     p(0, h - 2, CELL, 1, pal.recess); p(0, h - 1, CELL, 1, pal.deep);
 
-    if (material === 'braced') {
+    if (material === 'insulation') {
+      // Soft quilted pads stay inside the structural crown and kick plate.
+      for (let y = 6; y < h - 6; y += 10) {
+        const padH = Math.min(9, h - 6 - y);
+        p(0, y, CELL, 1, pal.recess);
+        p(1, y + 1, 10, padH - 1, pal.raised);
+        p(2, y + 2, 8, 1, pal.fine);
+        p(1, y + 1, 1, padH - 1, pal.edge);
+        p(10, y + 2, 1, padH - 2, pal.shade);
+        p(5, y + 4, 2, 1, pal.soft);
+      }
+    } else if (material === 'braced') {
       // Keep the new wall's broad V readable when authored images are unavailable.
       for (let y = 6; y < h - 6; y++) {
         const offset = Math.round((y - 6) / Math.max(1, h - 13) * 17);
