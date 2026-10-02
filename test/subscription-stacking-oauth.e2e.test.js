@@ -154,6 +154,15 @@ function boot(port, env, attemptsLeft) {
     A.eq((await get('/api/auth/codex/accounts')).accounts.length, 1, 'only the primary row remains');
     A.eq((await post('/api/auth/codex/remove', { account: '../codex' })).code, 'account_not_found', 'a forged id reaches nothing');
     A.eq((await post('/api/auth/codex/account-poll', { device_auth_id: 'nope' })).code, 'login_not_found', 'an unknown device login is refused');
+    // SIGN IN AGAIN posts its account in the QUERY (codexsignin.js signIn). The route used to be an exact-URL match,
+    // so every re-sign fell through to the static server's 404 and the button said "could not start sign-in".
+    for (const p of ['codex', 'grok', 'kimi']) {
+      const r = await fetch(B() + '/api/auth/' + p + '/account-start?account=no-such-acct', { method: 'POST', headers: H() });
+      const j = await r.json().catch(() => null);
+      A.eq(j && j.code, 'account_not_found', p + ' account-start?account= reaches the sign-in handler (not the static 404)');
+    }
+    const cs = await fetch(B() + '/api/auth/claude-cli/status?account=no-such-acct', { headers: H() });
+    A.eq(((await cs.json().catch(() => null)) || {}).code, 'account_not_found', 'claude-cli status?account= reaches its handler');
   } finally {
     try { child.kill(); } catch (_) {}
     try { mock.server.close(); } catch (_) {}

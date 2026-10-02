@@ -27,6 +27,12 @@ function frame(opcode, payload) {
   return Buffer.concat([head, payload]);
 }
 
+/* A flood of frames costs the relay memory and CPU whether or not they ever complete a message (empty continuation
+   frames used to pile up forever: one connection could exhaust the process in about a second). So every connection
+   has a FRAME budget checked in the parser itself, and a message may be split into at most MAX_FRAGS frames. */
+const MAX_FRAGS = 256;
+const FRAMES_PER_SEC = 1000, FRAME_BURST = 2000;
+
 function makeWsServer(opts) {
   const maxPayload = (opts && opts.maxPayload) || 1024 * 1024;
   const clients = new Set();
@@ -43,6 +49,8 @@ function makeWsServer(opts) {
     socket.setNoDelay(true);
     const ws = new EventEmitter();
     ws.readyState = 1;
+    ws.maxPayload = maxPayload;   // the server may tighten this per connection (e.g. before a station proves its key)
+    let frameTokens = FRAME_BURST, frameAt = Date.now();
     let buf = head && head.length ? Buffer.from(head) : Buffer.alloc(0);
     let frags = [], fragOp = 0, fragLen = 0, closeSent = false, closeEmitted = false;
 
@@ -88,11 +96,15 @@ function makeWsServer(opts) {
         else if (len === 127) {
           if (buf.length < 10) return;
           const big = buf.readBigUInt64BE(2);
-          if (big > BigInt(maxPayload)) return fail(1009, 'too large');
+          if (big > BigInt(ws.maxPayload)) return fail(1009, 'too large');
           len = Number(big); off = 10;
         }
-        if (len > maxPayload) return fail(1009, 'too large');
+        if (len > ws.maxPayload) return fail(1009, 'too large');
         if (buf.length < off + 4 + len) return;
+        const t = Date.now();
+        frameTokens = Math.min(FRAME_BURST, frameTokens + ((t - frameAt) / 1000) * FRAMES_PER_SEC); frameAt = t;
+        if (frameTokens < 1) return fail(1008, 'too many frames');
+        frameTokens -= 1;
         const mask = buf.subarray(off, off + 4);
         const payload = Buffer.from(buf.subarray(off + 4, off + 4 + len));
         for (let i = 0; i < payload.length; i++) payload[i] ^= mask[i & 3];
@@ -118,7 +130,8 @@ function makeWsServer(opts) {
           fragOp = op;
         } else return fail(1002, 'unknown opcode');
         fragLen += payload.length;
-        if (fragLen > maxPayload) return fail(1009, 'too large');
+        if (fragLen > ws.maxPayload) return fail(1009, 'too large');
+        if (frags.length >= MAX_FRAGS) return fail(1009, 'too many fragments');
         frags.push(payload);
         if (fin) {
           const data = frags.length === 1 ? frags[0] : Buffer.concat(frags);
@@ -130,6 +143,8 @@ function makeWsServer(opts) {
     }
 
     socket.on('data', (d) => { if (failed) return; buf = buf.length ? Buffer.concat([buf, d]) : d; parse(); });
+    // the HTTP server keeps upgraded sockets half-open: a peer that hangs up (FIN) only fires 'end', so end it here
+    socket.on('end', () => destroy(1006, ''));
     socket.on('close', () => destroy(1006, ''));
     socket.on('error', () => destroy(1006, ''));
     clients.add(ws);
@@ -140,4 +155,4 @@ function makeWsServer(opts) {
   return { handleUpgrade, clients };
 }
 
-module.exports = { makeWsServer };
+module.exports = { makeWsServer, MAX_FRAGS, FRAMES_PER_SEC, FRAME_BURST };

@@ -12,6 +12,7 @@
 const { note } = require('../failopen.js');
 
 const MAX_BYTES = 256 * 1024;
+const TRACK_BYTES = 400 * 1024;
 
 function makePortraits(deps) {
   const fs = deps.fs, path = deps.path, frontend = deps.frontend;
@@ -66,10 +67,11 @@ function makePortraits(deps) {
     if (list && list.length) {
       const root = path.join(frontend, 'assets', 'sprites');
       const frames = [];
+      let total = 0;   // one track rides one sealed frame through the relay (its cap is 1 MB): keep it well under
       for (const rel of list) {
         const abs = path.resolve(root, String(rel));
         if (abs.indexOf(root + path.sep) !== 0 || !/\.png$/i.test(abs)) { frames.length = 0; break; }
-        try { const buf = fs.readFileSync(abs); if (buf.length > MAX_BYTES) { frames.length = 0; break; } frames.push(buf.toString('base64')); }
+        try { const buf = fs.readFileSync(abs); total += buf.length; if (buf.length > MAX_BYTES || total > TRACK_BYTES) { frames.length = 0; break; } frames.push(buf.toString('base64')); }
         catch (e) { note('remote.portraits.frame', e); frames.length = 0; break; }
       }
       if (frames.length) out = { key: k, mime: 'image/png', frames };

@@ -29,8 +29,9 @@ function fnBody(src, head) {
 
 /* ---------- 1. the sidecar: a stop for THIS sample only ---------- */
 A.ok(/\{ m: 'POST', exact: '\/api\/routing\/sample\/stop', h: handleRoutingSampleStop \}/.test(sidecar), 'POST /api/routing/sample/stop is in the route table (behind the same token gate as every /api route)');
-const stopFn = fnBody(sidecar, '\nfunction handleRoutingSampleStop(');
-A.ok(/if \(!sampleInFlight\) return json\(409, \{ ok: false, error: 'no sample job is riding the line/.test(stopFn), 'nothing riding the line → 409 {ok:false,error} (never a route-miss)');
+// the stop core is shared with station.test_line (a stopped lead run stops its test job): read both
+const stopFn = fnBody(sidecar, '\nfunction stopSampleJob(') + fnBody(sidecar, '\nfunction handleRoutingSampleStop(');
+A.ok(/if \(!sampleInFlight\) return null;[\s\S]*if \(!r\) return json\(409, \{ ok: false, error: 'no sample job is riding the line/.test(stopFn), 'nothing riding the line → 409 {ok:false,error} (never a route-miss)');
 A.ok(/sampleInFlight\.stopRequested = true;/.test(stopFn), 'it marks the in-flight sample as stopped by the Commander…');
 A.ok(/killAll\(null, \(sampleHub && sampleHub\._internals\) \? sampleHub\._internals\.inflight : null\)/.test(stopFn), '…and kills ONLY the sample hub\'s runs, the way E-STOP does (entry run and every chained stage)');
 A.ok(!/killAll\(runs/.test(stopFn), 'it never touches the browser\'s runs or any other hub');

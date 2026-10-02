@@ -37,8 +37,11 @@ const path = require('path');
 const { makeWsServer } = require('./ws-lite.js');
 
 const LABEL = 'starnet-relay/1';
-const MAX_MSG = 4 * 1024 * 1024;        // a station frame (a long conversation, a file chunk) may be large…
+const MAX_MSG = 1024 * 1024;            // a station frame (a 180 KB conversation, a 256 KB chunk, sealed + base64) stays well under this…
 const MAX_PHONE_MSG = 256 * 1024;        // …a phone only ever sends small requests
+const MAX_PREAUTH_MSG = 16 * 1024;     // …and before a station has proven its key it may send only a small auth message
+const MAX_CONNS = 20000;                 // every socket this process holds
+const MAX_PER_IP = 64;                   // sockets from one address (phones behind one carrier NAT share an address)
 const TOKENS_WAIT_MS = 5000;             // how long a phone waits for a just-(re)connected station to say who is paired
 const PING_MS = 25000;
 
@@ -118,12 +121,22 @@ function makeRelay(opts) {
 
   const server = http.createServer(serveStatic);
   const wss = makeWsServer({ maxPayload: MAX_MSG });
+  const perIp = new Map();
 
   server.on('upgrade', (req, socket, head) => {
     let u;
     try { u = new URL(req.url, 'http://relay'); } catch (_) { socket.destroy(); return; }
     if (u.pathname !== '/v1/station' && u.pathname !== '/v1/phone') { socket.destroy(); return; }
+    // one address (or everyone together) can only hold so many sockets: a flood of connections is refused at the door
+    const ip = ipOf(req);
+    if (wss.clients.size >= MAX_CONNS || (perIp.get(ip) || 0) >= (o.maxPerIp || MAX_PER_IP)) {
+      try { socket.end('HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n'); } catch (_) {}
+      return;
+    }
     wss.handleUpgrade(req, socket, head, (ws) => {
+      perIp.set(ip, (perIp.get(ip) || 0) + 1);
+      ws.on('close', () => { const n = (perIp.get(ip) || 1) - 1; if (n > 0) perIp.set(ip, n); else perIp.delete(ip); });
+      ws.maxPayload = u.pathname === '/v1/station' ? MAX_PREAUTH_MSG : MAX_PHONE_MSG;
       ws.isAlive = true;
       ws.on('pong', () => { ws.isAlive = true; });
       if (u.pathname === '/v1/station') onStation(ws, req);
@@ -147,6 +160,7 @@ function makeRelay(opts) {
           if (!ok) return ws.close(4401, 'bad signature');
         } catch (_) { return ws.close(4401, 'bad auth'); }
         clearTimeout(authTimer);
+        ws.maxPayload = MAX_MSG;   // a proven station may now send full-size frames
         rid = ridOf(m.pub);
         const prev = stations.get(rid);
         if (prev) { for (const p of prev.phones.values()) p.close(4404, 'station reconnecting'); prev.ws.close(4410, 'replaced'); }
@@ -247,7 +261,7 @@ function makeRelay(opts) {
   return { listen, close, server, _stations: stations };
 }
 
-module.exports = { makeRelay, ridOf, tokenHash, LABEL };
+module.exports = { makeRelay, ridOf, tokenHash, LABEL, MAX_MSG, MAX_PREAUTH_MSG, MAX_PER_IP };
 
 if (require.main === module) {
   const port = Number(process.env.PORT) || 8799;

@@ -221,6 +221,7 @@ const { makeBrowserViews, makeViewRoutes } = require('./browser-view.js');   // 
 // its replay-nonce inbox is a durable JSONL sibling of the other ledgers.
 const { makeRouter } = require('./routing/router.js');
 const { makeChainRunner, effectiveLimits: chainEffectiveLimits } = require('./routing/chain.js');
+const Verdict = require('./routing/verdict.js');   // /api/routing/chain answers the next stage's VERDICT instruction, as hopTurn composes it
 const { makeStepTest } = require('./routing/steptest.js');   // the conveyor STEP-THROUGH TEST engine (/api/routing/steptest)
 const LineJobs = require('./routing/linejobs.js');   // WORKFLOWS — every job sent down a line, kept as one record the window and the OUTBOX open (/api/line-jobs)
 const LineDraft = require('./routing/linedraft.js');   // WORKFLOWS › SET IT UP FOR ME — "what should it make?" → a starter, a name, each step's instructions (/api/routing/line-draft)
@@ -10345,7 +10346,8 @@ function remoteNotify(evt) {
 const remoteView = require('./remote/view.js').makeRemoteView({ now: () => Date.now() });
 // Web Push sent by this station itself (sidecar/remote/push.js): its own key, the phones' subscriptions
 const remotePush = require('./remote/push.js').makePush({ fs, path, file: path.join(WORKSPACES, '.secrets', 'remote-push.json'), now: () => Date.now(),
-  fetch: (url, o) => fetch(url, Object.assign({}, o, { signal: AbortSignal.timeout(15000) })) });
+  fetch: (url, o) => fetch(url, Object.assign({}, o, { signal: AbortSignal.timeout(15000) })),
+  extraHosts: String(process.env.STARNET_REMOTE_PUSH_HOSTS || '').split(',') });   // tests only: a local fake push service
 const remotePortraits = require('./remote/portraits.js').makePortraits({ fs, path, frontend: FRONTEND });
 const remoteHost = require('./remote/host.js').makeRemoteHost({
   now: () => Date.now(), newId: () => crypto.randomUUID(), broadcast: remoteBroadcast,
@@ -10780,20 +10782,20 @@ const ROUTES = [
   // subscription stacking: extra sign-in accounts beside each OAuth subscription (handleOAuthAccounts)
   { m: 'GET', exact: '/api/auth/codex/accounts', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'accounts') },
   { m: 'POST', exact: '/api/auth/codex/add', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'add') },
-  { m: 'POST', exact: '/api/auth/codex/account-start', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'account-start') },
+  { m: 'POST', qsplit: '/api/auth/codex/account-start', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'account-start') },
   { m: 'POST', exact: '/api/auth/codex/account-poll', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'account-poll') },
   { m: 'POST', exact: '/api/auth/codex/remove', h: (req, res) => handleOAuthAccounts(req, res, 'codex', 'remove') },
   { m: 'GET', exact: '/api/auth/grok/accounts', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'accounts') },
   { m: 'POST', exact: '/api/auth/grok/add', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'add') },
-  { m: 'POST', exact: '/api/auth/grok/account-start', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'account-start') },
+  { m: 'POST', qsplit: '/api/auth/grok/account-start', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'account-start') },
   { m: 'POST', exact: '/api/auth/grok/account-poll', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'account-poll') },
   { m: 'POST', exact: '/api/auth/grok/remove', h: (req, res) => handleOAuthAccounts(req, res, 'grok', 'remove') },
   { m: 'GET', exact: '/api/auth/kimi/accounts', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'accounts') },
   { m: 'POST', exact: '/api/auth/kimi/add', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'add') },
-  { m: 'POST', exact: '/api/auth/kimi/account-start', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'account-start') },
+  { m: 'POST', qsplit: '/api/auth/kimi/account-start', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'account-start') },
   { m: 'POST', exact: '/api/auth/kimi/account-poll', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'account-poll') },
   { m: 'POST', exact: '/api/auth/kimi/remove', h: (req, res) => handleOAuthAccounts(req, res, 'kimi', 'remove') },
-  { m: 'GET', exact: '/api/auth/claude-cli/status', h: (req, res) => handleClaudeCliAuth(req, res, 'status') },
+  { m: 'GET', qsplit: '/api/auth/claude-cli/status', h: (req, res) => handleClaudeCliAuth(req, res, 'status') },
   { m: 'POST', exact: '/api/auth/claude-cli/start', h: (req, res) => handleClaudeCliAuth(req, res, 'start') },
   { m: 'POST', exact: '/api/auth/claude-cli/poll', h: (req, res) => handleClaudeCliAuth(req, res, 'poll') },
   { m: 'POST', exact: '/api/auth/claude-cli/code', h: (req, res) => handleClaudeCliAuth(req, res, 'code') },
@@ -11503,8 +11505,18 @@ function handleRoutingChain(req, res) {
     const lim = chainEffectiveLimits(lineId ? router.lineLimits(lineId) : null, {}, (typeof effectiveCaps.global === 'number' && effectiveCaps.global > 0) ? effectiveCaps.global : null);
     limits = { maxHops: lim.maxHops, maxUsd: lim.maxUsd, maxUsdPerDay: lim.maxUsdPerDay, clamped: lim.clamped, spentToday: lineId ? lineSpend.spentToday(lineId) : 0 };
   } catch (_) { limits = null; }
+  /* `verdict` + `last` (additive, sweep 2026-10-01): the rest of the turn the sidecar's chain runner composes for the next
+     stage (routing/chain.js hopTurn) — the VERDICT-line instruction when its lane meets a verdict-keyed LOOP gate, else
+     whether its reply LEAVES the line. The browser's COMMS work line passed neither, so a line typed into COMMS told its
+     last WRITER to "produce the output for the next stage" (the essay-about-the-report bug) and a reviewer never heard it
+     must end on a VERDICT line. */
+  let verdict = null, last = false;
+  if (next) {
+    try { const g = router.loopGateAfter(next, lineId, nextDock || undefined); verdict = (g && Verdict.isVerdictWord(g.when)) ? Verdict.verdictBrief(g.when) : null; } catch (_) { verdict = null; }
+    if (!verdict) { try { last = !!router.chainShipsToOutbox(next, nextDock || undefined); } catch (_) { last = false; } }
+  }
   res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-  res.end(JSON.stringify({ next: next || null, nextDock: nextDock || null, brief: brief || null, limits: limits }));
+  res.end(JSON.stringify({ next: next || null, nextDock: nextDock || null, brief: brief || null, limits: limits, verdict: verdict || null, last: last }));
 }
 
 /* ---- GET /api/routing/sample — inert feature discovery for the Build Mode finish-the-line card. ---- */
@@ -11815,14 +11827,19 @@ async function runSampleJob(readArgs) {
    server's own answer, never on the click alone. A stop that lands before the first run starts is honoured by the POST
    itself (stopRequested). Same contract as the sample route: behind the launch token, and 409 {ok:false,error} when
    there is nothing to stop — never 404. */
-function handleRoutingSampleStop(_req, res) {
-  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
-  if (!sampleInFlight) return json(409, { ok: false, error: 'no sample job is riding the line — nothing to stop.' });
+function stopSampleJob() {
+  if (!sampleInFlight) return null;
   sampleInFlight.stopRequested = true;
   let halted = 0;
   try { halted = killAll(null, (sampleHub && sampleHub._internals) ? sampleHub._internals.inflight : null); }
   catch (e) { failNote('routing.sample.stop', e); }
-  return json(200, { ok: true, stopped: true, halted: halted, streamId: sampleInFlight.streamId });
+  return { halted, streamId: sampleInFlight.streamId };
+}
+function handleRoutingSampleStop(_req, res) {
+  const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  const r = stopSampleJob();
+  if (!r) return json(409, { ok: false, error: 'no sample job is riding the line — nothing to stop.' });
+  return json(200, { ok: true, stopped: true, halted: r.halted, streamId: r.streamId });
 }
 
 /* ---- LINE TRIGGERS (2026-09-23, owner-approved) — /api/routing/triggers[/:id[/secret]] + POST /api/hooks/:id.
@@ -17552,7 +17569,9 @@ async function handleRun(req, res) {
         // waiting on a question somebody already answered elsewhere.
         const orig = pending.get(promptId);
         if (orig) {
-          const viaRemote = (d) => { orig(d); if (typeof d === 'string') { try { emit('permission.response', { promptId, decision: d === 'once' || d === 'session' ? d : 'deny' }); } catch (e) { failNote('remote.index.deskPermissionResponse', e); } } };
+          // a phone's answer to a QUESTION (brief.ask) is { __clarify, text }: it answers the prompt too, so the desk's card is
+          // told (decision 'once' = answered), not left live on a question the run already moved past (sweep 2026-10-01)
+          const viaRemote = (d) => { orig(d); const decision = typeof d === 'string' ? (d === 'once' || d === 'session' ? d : 'deny') : (d && d.__clarify ? 'once' : null); if (decision) { try { emit('permission.response', { promptId, decision }); } catch (e) { failNote('remote.index.deskPermissionResponse', e); } } };
           viaRemote.extend = orig.extend;
           try { untrack = remoteApprovals.add(Object.assign({ runId, surface: 'desk', finish: viaRemote }, row)); } catch (e) { failNote('remote.index.trackDeskPrompt', e); }
         }
@@ -17883,6 +17902,12 @@ async function runOnceCore(o) {
     let rules = '';
     try { rules = (await projectInstructions.load(cronRoot, true)).text || ''; } catch (_) {}
     system = String(system || '') + '\n' + projectScopeLine(cronRoot, true) + rules;
+    // ONE BASE FOR BOTH TOOLS (issue #60). The prompt line above says file work happens in this folder and
+    // shell.* already defaults its cwd to it (projectCwd), but fs.* only roots relative paths at ctx.projectRoot —
+    // so a routine/loop's `fs.write Working\x.txt` landed in the agent's private workspace while the shell looked
+    // in the project and reported it MISSING. cronRoot is realpath'd and re-proven blessed just above, and fs.*
+    // still re-runs path trust on every resolved target, so this widens nothing.
+    if (cronRoot && !o.projectRoot) o = { ...o, projectRoot: cronRoot };
   }
   const internal = !!o.internal || !!o.outputOnly;   // reason-only self-talk: system prompt stays VERBATIM, no memory/transcript injection
   let isTask = !!o.isTask;
@@ -18531,7 +18556,19 @@ async function runOnceCore(o) {
     ? overseerStation(o.streamId, runId) : stationBridge, scanText: t => cronGuard.scanRoutinePrompt(t), now: () => Date.now(),
     planMemo: stationPlanMemo, lineMenu: stationLineMenu, kitMenu: stationKitMenu, presetMenu: stationPresetMenu, styleMenu: stationStyleMenu, roomMenu: stationRoomMenu,
     userProps,   // MAKE A PROP: the station's own prop maker (StarNet credits), for station.make_prop
-    runLineJob: args => runSampleJob(async () => args),   // TEST A LINE: the very job SEND A JOB sends, for station.test_line
+    // TEST A LINE: the very job SEND A JOB sends, for station.test_line. A stopped lead run (or the tool's own timeout)
+    // stops ITS job the way the panel's STOP does — it used to ride on, spending, holding the one-per-station lock.
+    runLineJob: (args, signal) => {
+      const before = sampleInFlight;
+      const p = runSampleJob(async () => args);
+      const mine = sampleInFlight !== before ? sampleInFlight : null;   // the lock is claimed synchronously; a 409 claims nothing
+      if (mine && signal) {
+        const stopMine = () => { if (sampleInFlight === mine) stopSampleJob(); };
+        if (signal.aborted) stopMine(); else signal.addEventListener('abort', stopMine, { once: true });
+        p.finally(() => signal.removeEventListener('abort', stopMine)).catch(swallow('station.test_line.unwire'));
+      }
+      return p;
+    },
     startLine: spec => startLineFor(spec),                 // WHAT STARTS A LINE: the panel's own schedule + trigger cores, for station.start_line
     // station.layout's HARNESS facts (audit 2026-09-28): the plan the router actually holds, each line's effective
     // budget (the runner's own effectiveLimits), and today's numbers since local midnight (the line plate's window)
@@ -19450,7 +19487,8 @@ async function runOnceCore(o) {
   // advertises everything, exactly as before this feature — the escape hatch for an operator whose model is
   // one of those, and the A/B control for measuring whether deferral (rather than the model) caused a miss.
   // (`deferralOff` is read once, above at TOOL FOOTPRINT, so the connector/availability deferrals obey it too.)
-  const directDomainWithheld = (name) => !!directDomainTask && (/^team\./.test(name) || /^browser\./.test(name) || name === 'web_search' || name === 'web_request');
+  // web_request stays ADVERTISED (issue #58): the dispatch guard below confines it to the named host + subdomains
+  const directDomainWithheld = (name) => !!directDomainTask && (/^team\./.test(name) || /^browser\./.test(name) || name === 'web_search');
   const deferredNames = new Set((deferralOff ? [] : (resolved.deferred || [])).filter(n => !directDomainWithheld(n)));
   const coreNames = resolved.tools.filter(n => !deferredNames.has(n) && !directDomainWithheld(n));
   const toolDefs = isTask ? registry.wireFormat(registry.list(new Set(coreNames))) : [];
@@ -19567,6 +19605,9 @@ async function runOnceCore(o) {
     }
     if (directDomainTask && directDomainWithheld(c.name)) {
       return { ok: false, isError: true, summary: 'direct-domain-local', content: 'This is a bounded check of the exact host ' + directDomainTask.host + '. Do not delegate, search, browse, or call archives; fetch that host directly with web_fetch.' };
+    }
+    if (directDomainTask && c.name === 'web_request' && !DomainTask.isTargetRequest(c, directDomainTask)) {
+      return { ok: false, isError: true, summary: 'direct-domain-target-only', content: 'This task is about ' + directDomainTask.host + ': web_request may call that host (or its own API subdomains) only.' };
     }
     if (directDomainTask && c.name === 'web_fetch' && !DomainTask.isTargetFetch(c, directDomainTask)) {
       return { ok: false, isError: true, summary: 'direct-domain-target-only', content: 'Fetch only the exact requested host ' + directDomainTask.host + '. Do not try spelling variants or alternate domains unless the Commander asks.' };

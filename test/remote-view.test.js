@@ -152,6 +152,24 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
   await I.step();
   A.eq(posts.length, 4, 'a station that lost its picture (restart) gets a new one without a phone asking');
 
+  // an unchanged room says "same" — but a sidecar that no longer HOLDS the picture (restart) answers 409, and the page
+  // must then send the full still instead of re-posting "same" forever (sweep 2026-10-01)
+  {
+    const realFetch = globalThis.fetch; let held = true; const sent = [];
+    globalThis.fetch = async (url, o) => {
+      if (o && o.method === 'POST') { const b = JSON.parse(o.body); sent.push(b.same ? 'same' : 'full'); return { ok: !b.same || held, json: async () => ({ ok: !b.same || held }) }; }
+      return { ok: true, json: async () => ({ ok: true, enabled: true, want: true, at: 1 }) };
+    };
+    still = { canvas: {}, width: 2, height: 2, scale: 1, bodies: [] };
+    I.encode = async () => ({ mime: 'image/webp', data: 'U0FNRQ==' });
+    await I.step(); await I.step();
+    A.eq(sent, ['full', 'same'], 'an unchanged room is only confirmed as the same');
+    held = false; sent.length = 0;
+    await I.step();
+    A.eq(sent, ['same', 'full'], 'a station that lost the picture (409 on "same") gets the full still right away');
+    globalThis.fetch = realFetch;
+  }
+
   answer = null;
   A.eq(await I.step(), I.IDLE_MS, 'an unreachable station: nothing drawn, nothing thrown');
   A.eq(posts.length, 4, 'and nothing sent');
@@ -209,6 +227,24 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
   A.ok(/#59$/.test(th[th.length - 1].content) && th.length < 60, 'the newest turns are the ones kept');
   // a file read for an agent that does not exist makes nothing
   A.eq((await hl.fetchFile({ agentId: 'ghost', path: 'x.txt', offset: 0, length: 10 })).ok, false, 'no file read (and no folder) for a made-up agent');
+  // a phone reads only what the station showed it: the agent's own workspace, or a file a run/deliverable recorded
+  {
+    const reads = [];
+    const hf = makeRemoteHost({ now: () => now, newId: () => 'r', broadcast: () => {}, roster: () => [{ agentId: 'forge', name: 'FORGE' }], liveRuns: () => [],
+      transcript: { streams: () => [], history: () => [] }, deskSessions: () => [],
+      runHistory: () => [{ runId: 'h1', agentId: 'forge', artifacts: [{ path: 'C:\\proj\\out\\report.md' }] }, { runId: 'h2', agentId: 'scout', artifacts: [{ path: 'C:\\proj\\scout.md' }] }],
+      deliverables: async () => [{ id: 'd1', agentId: 'forge', files: [{ path: '/home/me/proj/plan.pdf' }] }],
+      readFile: async (agentId, p) => { reads.push(p); return { ok: true, path: p }; } });
+    const fetchOk = async (p) => (await hf.fetchFile({ agentId: 'forge', path: p, offset: 0, length: 10 })).ok !== false;
+    A.eq(await fetchOk('notes/today.md'), true, 'a file in the agent\'s own workspace is readable');
+    A.eq(await fetchOk('C:\\proj\\out\\report.md'), true, 'a file one of its runs recorded is readable');
+    A.eq(await fetchOk('/home/me/proj/plan.pdf'), true, 'a file one of its deliverables lists is readable');
+    A.eq(await fetchOk('C:\\proj\\.secrets\\keys.json'), false, 'any other absolute path is refused, even in a folder agents may use');
+    A.eq(await fetchOk('C:\\proj\\scout.md'), false, 'another agent\'s file is not reachable by naming this agent');
+    A.eq(await fetchOk('\\\\server\\share\\x.txt'), false, 'a network path is refused');
+    A.eq(await fetchOk('/etc/passwd'), false, 'a posix absolute path is refused');
+    A.eq(reads.some(p => /secrets|scout|passwd|server/.test(p)), false, 'and none of those ever reached the disk');
+  }
 
   /* ---------- 6. ACTIVITY: running now + what finished, from the run history ---------- */
   history = [
@@ -244,6 +280,28 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
   await I.sendCrew();
   A.eq(crewPosts.length, 1, 'an unchanged crew is not sent again straight away');
   RemoteView.reset();
+
+  // a delegated WORKER's error/end (forwarded onto the lead's emit) must not mark the phone's run failed
+  {
+    const evs = []; let seenOpts = null;
+    const hw = makeRemoteHost({
+      now: () => Date.now(), newId: () => 'lead-run', broadcast: e => evs.push(e),
+      roster: () => [{ agentId: 'lead', name: 'LEAD' }], liveRuns: () => [], transcript: { history: () => [], streams: () => [] },
+      credentials: () => ({ ok: true, key: 'k', model: 'm', provider: 'p' }), askConsent: () => Promise.resolve('deny'),
+      runOnce: async o => {
+        seenOpts = o;
+        o.emit('agent.run.error', { agentId: 'worker', runId: 'worker-run', message: 'worker provider 500' });
+        o.emit('agent.run.end', { agentId: 'worker', runId: 'worker-run', reason: 'error', usd: 0 });
+        o.emit('agent.run.end', { agentId: 'lead', runId: o.runId, reason: 'done', usd: 0.01 });
+      }
+    });
+    await hw.send({ agentId: 'lead', text: 'do it', streamId: '', deviceId: 'd1' });
+    await new Promise(r => setTimeout(r, 50));
+    A.eq(seenOpts && require('../sidecar/run-origin.js').hostPowerWithheldFor(seenOpts), true, 'a phone task never inherits Full Access: it asks on the phone');
+    const ended = evs.find(e => e.type === 'run.ended');
+    A.ok(ended && ended.reason === 'done' && !ended.error, 'a recovered worker error does not turn the phone run red');
+    A.eq(hw.recentRuns()[0] && hw.recentRuns()[0].ok, true, 'the phone recent row says the lead run succeeded');
+  }
 
   A.report('remote-view');
 })().catch((e) => { console.log('FAIL: threw ' + (e && e.stack || e)); process.exit(1); });

@@ -54,6 +54,10 @@ function decrypt(body, ua) {
   A.eq(push.subscribe('', ok).ok, false, 'a subscription needs a paired phone');
   A.eq(push.subscribe('d1', Object.assign({}, ok, { endpoint: 'http://evil.test/x' })).ok, false, 'a plain-http endpoint is refused');
   A.eq(push.subscribe('d1', Object.assign({}, ok, { endpoint: 'file:///etc/passwd' })).ok, false, 'a non-web endpoint is refused');
+  A.eq(push.subscribe('d1', Object.assign({}, ok, { endpoint: 'https://attacker.example/x' })).ok, false, 'an https address that is not a browser push service is refused');
+  A.eq(push.subscribe('d1', Object.assign({}, ok, { endpoint: 'https://push.apple.com.attacker.example/x' })).ok, false, 'a look-alike host is refused');
+  A.eq(push.subscribe('d9', Object.assign({}, ok, { endpoint: 'https://fcm.googleapis.com/fcm/send/abc' })).ok, true, 'the Google push service is accepted');
+  push.unsubscribe('d9');
   A.eq(push.subscribe('d1', { endpoint: ok.endpoint, keys: { p256dh: 'AAAA', auth: b64u(ua.auth) } }).ok, false, 'a bad phone key is refused');
   A.eq(push.subscribe('d1', { endpoint: ok.endpoint, keys: { p256dh: ok.keys.p256dh, auth: 'AAAA' } }).ok, false, 'a bad auth secret is refused');
   A.eq(push.subscribe('d1', ok).ok, true, 'a real subscription is kept');

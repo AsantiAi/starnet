@@ -234,6 +234,9 @@ function serve(handler, url, method) {
     A.ok(!(await pstore.op('p1', 'drop', 'notes')).ok, 'an unknown operation is refused');
     const persisted = JSON.parse(fs.readFileSync(path.join(DIR, 'data', 'p1.json'), 'utf8'));
     A.eq(persisted, {}, 'the store is on disk (durable), with the deleted key gone');
+    // a crew-written DRAFT preview opens no links (an https link it opens on load could carry what the agent embedded)
+    const hostSrc = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'app', 'pluginhost.js'), 'utf8');
+    A.ok(/'ui\.link': \(entry, a\) => \{[\s\S]{0,400}if \(entry\.draft\) throw new Error\('a draft preview cannot open links/.test(hostSrc), 'ui.link refuses a draft preview before it opens anything');
   } finally {
     await fsp.rm(DIR, { recursive: true, force: true });
   }
