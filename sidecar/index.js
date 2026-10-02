@@ -8986,6 +8986,19 @@ async function runQuestRefreshCycle(why) {
       questRefreshNote({ outcome: 'skipped', reason: 'not enough is known yet (empty dossier, no goal, no activity) — the refresh waits for the station to learn more' });
       return;
     }
+    // Standalone auxiliary calls bypass runAgentLoop, so enforce its cross-run spending boundary here too.
+    // A manual refresh changes the cadence, not the spending authority; only an explicit budget resume does.
+    if (!((getProviderProfile(providerId) || {}).unmetered)) {
+      let blocked;
+      try { blocked = budget.check(null, 'station', 0, Date.now(), null); }
+      catch (_) { blocked = { unknown: true }; }
+      if (blocked) {
+        questRefreshNote({ outcome: 'skipped', reason: blocked.unknown
+          ? 'spend history is unavailable — restore accounting before refreshing quests'
+          : 'spending cap reached (' + blocked.scope + ') — resume spending or raise the cap before refreshing quests' });
+        return;
+      }
+    }
     // evidence exists → NOW pay for the provider (codex token fetch is a network hop; never spend it on a cold save).
     let provider = extraAccountProviderFor(providerId, baseUrl);   // subscription stacking: first live sign-in
     if (provider) { /* an extra sign-in carries the refresh */ }
