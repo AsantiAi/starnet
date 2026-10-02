@@ -188,3 +188,57 @@ body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group > .bb-grp,
 body.glass-demo:not(.hud-mode) #screen-game .widget-rail .wg-add { border-radius: 6px; }
 body.glass-demo:not(.hud-mode) #left .ws-head :is(.ws-tab, #ws-new, #ws-addproject) { background: var(--cg-glass); box-shadow: inset 0 1px 0 var(--gd-light); }
 body.glass-demo:not(.hud-mode) #topbar :is(.tb-stat, .tb-connection) { background: var(--cg-card); box-shadow: inset 0 1px 0 var(--gd-light); border-radius: 6px; }
+
+/* ============================================================
+   MORE OF EACH (Andrew 10-02: "it needs more of the glass style back, but it needs more of the CRT at the same
+   time, it needs both but more of each"). The two live on different layers so neither washes the other out:
+   GLASS = the panel itself (softer 10px shape, frosted translucency + blur, a tinted face, a real top edge,
+   deeper float shadow, glass-gradient cards and keys); CRT = what is ON the screen (phosphor glow on the type,
+   the tube's own vignette inside each panel, a selection that blooms faintly, a whisper of colour fringe on
+   titles). Still no sheen band across the panel and no amber haze over the readouts.
+   ============================================================ */
+body.glass-demo:not(.hud-mode) {
+  /* glass up */
+  --gd-face: linear-gradient(168deg, rgba(var(--ph-rgb), .06), rgba(var(--ph-rgb), .015) 40%, transparent 60%), color-mix(in srgb, var(--panel2) 82%, transparent);
+  --gd-light: rgba(var(--ph-bright-rgb), .08);
+  --cg-glass: linear-gradient(125deg, rgba(var(--ph-bright-rgb), .08), rgba(var(--ph-rgb), .035) 48%, rgba(var(--ph-rgb), .012));
+  --cg-card: linear-gradient(165deg, rgba(var(--ph-rgb), .075), transparent 46%), rgba(0, 0, 0, .22);
+  --pg-dither: linear-gradient(120deg, rgba(var(--ph-rgb), .2), rgba(var(--ph-rgb), .07));
+  --pg-dither-gold: linear-gradient(120deg, rgba(var(--gold-rgb), .22), rgba(var(--gold-rgb), .07));
+  /* CRT up */
+  --pg-glow: -0.4px 0 rgba(255, 64, 48, .16), 0.4px 0 rgba(64, 150, 255, .14), 0 0 5px rgba(var(--ph-rgb), .42);
+  --pg-glow-soft: 0 0 3px rgba(var(--ph-rgb), .26);
+}
+/* GLASS: the panel */
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar) {
+  border-radius: 10px; border-color: rgba(var(--ph-rgb), .28);
+  box-shadow: inset 0 1px 0 var(--gd-light), 0 12px 34px rgba(0, 0, 0, .45);
+  -webkit-backdrop-filter: blur(18px) saturate(1.08); backdrop-filter: blur(18px) saturate(1.08);
+}
+body.glass-demo:not(.hud-mode) #screen-game:not(.cinema) #stage-wrap,
+body.glass-demo:not(.hud-mode) #screen-game:not(.cinema) #stage-wrap::before { border-radius: 10px; }
+body.glass-demo:not(.hud-mode) #screen-game :is(#left > h3, #chat-panel > h3) { border-radius: 10px 10px 0 0; }
+body.glass-demo:not(.hud-mode) #crew .crew-row,
+body.glass-demo:not(.hud-mode) #left #workstreams .ws-row,
+body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty .cmsg-starter,
+body.glass-demo:not(.hud-mode) #crew .crew-portrait { border-radius: 8px; }
+body.glass-demo:not(.hud-mode) #left .ws-head :is(.ws-tab, #ws-new, #ws-addproject),
+body.glass-demo:not(.hud-mode) #left #ws-search,
+body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group > .bb-grp,
+body.glass-demo:not(.hud-mode) #screen-game .widget-rail .wg-add { border-radius: 8px; }
+body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty .cmsg-starter { background: var(--cg-card); border-color: rgba(var(--ph-rgb), .2); }
+
+/* CRT: the screen inside — the tube's vignette, under the type */
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar)::before {
+  background: radial-gradient(ellipse 120% 100% at 50% 45%, transparent 58%, rgba(0, 0, 0, .38) 100%);
+  box-shadow: inset 0 0 26px rgba(0, 0, 0, .4);
+}
+/* CRT: phosphor type (the earlier "no CRT" reset loses to this) */
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar) :is(h3, .crew-name, .crew-clock, .ws-tab, #ws-new, .bb-grp, .tb-val, #status-pill, .cmsg-empty-line, .cmsg-starter-title) { text-shadow: var(--pg-glow); }
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar) :is(.crew-status, .crew-step, .ws-row, .tb-lbl, #crew-sum, .ctx-gauge) { text-shadow: var(--pg-glow-soft); }
+/* CRT: a selection blooms faintly on the glass */
+body.glass-demo:not(.hud-mode) #crew .crew-row:is(.selected, :hover, :focus-visible),
+body.glass-demo:not(.hud-mode) #left #workstreams .ws-row:is(.sel, :hover, :focus-visible),
+body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty .cmsg-starter:is(:hover, :focus-visible),
+body.glass-demo:not(.hud-mode) #screen-game #bottombar .bb-group.open > .bb-grp { box-shadow: 0 0 12px rgba(var(--ph-rgb), .16), inset 0 1px 0 var(--gd-light); }
+body.glass-demo:not(.hud-mode) #crew .crew-row.asking { box-shadow: 0 0 12px rgba(var(--gold-rgb), .18); }
