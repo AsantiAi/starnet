@@ -444,3 +444,62 @@ body.glass-demo:not(.hud-mode) #chat-panel .workshop-return .ws-pane { border-ra
   body.glass-demo:not(.hud-mode) #left .ws-head #ws-new { font-size: 0 !important; min-width: 32px; padding: 4px 0; display: inline-flex; align-items: center; justify-content: center; }
   body.glass-demo:not(.hud-mode) #left .ws-head #ws-new::before { content: '+'; font-size: 20px; line-height: 1; }
 }
+
+/* ============================================================
+   TOP-RIGHT INSTRUMENTS v2 (Andrew 10-02: "it needs a new fixed better version I dont like it"). Three takes for
+   review (crewcards.js sets body.tb-a|b|c from ?tb=, default a); the picked one stays, the others go.
+     A · STATUS STRIP — one glass capsule: LVL readout + segmented XP │ uplink lamp + state (Pip-Boy status bar)
+     B · BARE READOUTS — no housing at all: glowing terminal readouts in the bar with one thin divider
+     C · LEVEL RING — the level number inside a circular XP ring; the uplink as lamp + state beside it
+   Every value still comes from the same writers (topbar.js level/XP, app.js + stationui.js pill state).
+   ============================================================ */
+/* shared reset: the cards from the earlier pass step aside */
+body.glass-demo:is(.tb-a, .tb-b, .tb-c):not(.hud-mode) #topbar :is(#tb-station, .tb-connection) {
+  height: auto; min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; border-radius: 0;
+}
+body.glass-demo:is(.tb-a, .tb-b, .tb-c):not(.hud-mode) #topbar .tb-stats { display: flex; align-items: center; gap: 0; }
+body.glass-demo:is(.tb-a, .tb-b, .tb-c):not(.hud-mode) #topbar .tb-link-mark { display: none; }
+body.glass-demo:is(.tb-a, .tb-b, .tb-c):not(.hud-mode) #topbar #save-dot { position: static; margin-left: 8px; }
+body.glass-demo:is(.tb-a, .tb-b, .tb-c):not(.hud-mode) #topbar .tb-link-copy { flex-direction: row; align-items: center; gap: 10px; }
+body.glass-demo:is(.tb-a, .tb-b, .tb-c):not(.hud-mode) #topbar .tb-status { padding-left: 16px; margin-left: 16px; border-left: 1px solid rgba(var(--ph-rgb), .28); align-self: stretch; display: flex; align-items: center; }
+body.glass-demo:is(.tb-a, .tb-b, .tb-c):not(.hud-mode) #topbar .tb-connection { min-width: 0; }
+
+/* A + B: the level as one readout line — [shield] COMMANDER  LV 1  ▮▮▮▯ */
+body.glass-demo:is(.tb-a, .tb-b):not(.hud-mode) #topbar #tb-station { display: flex; align-items: center; gap: 10px; }
+body.glass-demo:is(.tb-a, .tb-b):not(.hud-mode) #topbar .tb-station-mark { width: 20px; height: 22px; }
+body.glass-demo:is(.tb-a, .tb-b):not(.hud-mode) #topbar #tb-station .tb-xp { width: 72px; min-width: 72px; height: 6px; }
+/* A: one glass capsule holds both */
+body.glass-demo.tb-a:not(.hud-mode) #topbar .tb-stats {
+  height: 42px; padding: 0 16px; border: 1px solid rgba(var(--ph-rgb), .24); border-radius: 8px;
+  background: var(--cg-card); box-shadow: inset 0 1px 0 var(--gd-light);
+}
+/* B: nothing housed — the readouts sit straight on the bar */
+body.glass-demo.tb-b:not(.hud-mode) #topbar .tb-stats { height: 42px; padding: 0 6px; }
+
+/* C: the level ring */
+body.glass-demo.tb-c:not(.hud-mode) #topbar #tb-station { display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto; column-gap: 10px; align-items: center; }
+body.glass-demo.tb-c:not(.hud-mode) #topbar .tb-station-mark { display: none; }
+body.glass-demo.tb-c:not(.hud-mode) #topbar #tb-station .tb-val {
+  grid-row: 1 / 3; grid-column: 1; width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 0 !important; position: relative;
+  background:
+    radial-gradient(closest-side, var(--panel2) 78%, transparent 80% 100%),
+    conic-gradient(var(--gold) calc(var(--xp, 0) * 360deg), rgba(var(--gold-rgb), .18) 0);
+  box-shadow: 0 0 10px rgba(var(--gold-rgb), .18);
+}
+body.glass-demo.tb-c:not(.hud-mode) #topbar #tb-station .tb-val::after {
+  content: attr(data-lv); font-size: 19px; color: var(--ph-bright); text-shadow: var(--pg-glow); line-height: 1;
+}
+body.glass-demo.tb-c:not(.hud-mode) #topbar #tb-station .tb-lbl { grid-column: 2; grid-row: 1; }
+body.glass-demo.tb-c:not(.hud-mode) #topbar #tb-station .tb-xp { display: none; }
+body.glass-demo.tb-c:not(.hud-mode) #topbar #tb-station::after {
+  content: 'LEVEL'; grid-column: 2; grid-row: 2; font-size: 15px; letter-spacing: 2px; color: var(--ph-bright); text-shadow: var(--pg-glow);
+}
+/* A + B layout fix: an explicit grid — [shield] | COMMANDER over LV 1 | segmented XP */
+body.glass-demo:is(.tb-a, .tb-b):not(.hud-mode) #topbar #tb-station {
+  display: grid; grid-template-columns: auto auto auto; grid-template-rows: auto auto; column-gap: 12px; row-gap: 2px; align-items: center;
+}
+body.glass-demo:is(.tb-a, .tb-b):not(.hud-mode) #topbar #tb-station .tb-station-mark { grid-column: 1; grid-row: 1 / 3; }
+body.glass-demo:is(.tb-a, .tb-b):not(.hud-mode) #topbar #tb-station .tb-lbl { grid-column: 2; grid-row: 1; }
+body.glass-demo:is(.tb-a, .tb-b):not(.hud-mode) #topbar #tb-station .tb-val { grid-column: 2; grid-row: 2; }
+body.glass-demo:is(.tb-a, .tb-b):not(.hud-mode) #topbar #tb-station .tb-xp { grid-column: 3; grid-row: 1 / 3; align-self: center; }
