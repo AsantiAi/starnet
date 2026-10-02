@@ -146,48 +146,92 @@
   }
 
   /* Streaming splitter: passes prose through as soon as it cannot be the start of a <tool_call> block, and
-     captures each complete block's body. */
+     captures each complete block's body. `items` is the same output IN ORDER, plus a { start: name } the moment an
+     open block's tool name has streamed in — the adapter announces the call then, not when the block closes.
+     WHY (2026-10-02 report, reproduced live): a turn that writes a game is one fs_write block holding the whole file.
+     The CLI streamed it for minutes while the adapter yielded NOTHING until the closing tag, so the run read
+     "waiting for 6:15" with no sign of life. A native provider shows its tool call as soon as it starts. */
+  const NAME_SCAN = 400;   // the tool name leads its block; past this many chars without one, stop looking
+  function announcedName(buf) {
+    const head = buf.slice(0, NAME_SCAN);
+    const at = head.search(/"arguments"\s*:/);   // never read a "name" field from inside the arguments
+    const m = /"name"\s*:\s*"((?:[^"\\]|\\.){1,200})"/.exec(at >= 0 ? head.slice(0, at) : head);
+    return m ? m[1].trim() : '';
+  }
   function makeCallSplitter() {
-    let buf = '', inCall = false;
+    let buf = '', inCall = false, named = false, scan = 0;
+    function addText(out, s) {
+      if (!s) return;
+      out.text += s;
+      const last = out.items[out.items.length - 1];
+      if (last && last.text != null) last.text += s; else out.items.push({ text: s });
+    }
     function drain(out) {
       for (;;) {
         if (!inCall) {
           const at = buf.indexOf(CALL_OPEN);
-          if (at >= 0) { out.text += buf.slice(0, at); buf = buf.slice(at + CALL_OPEN.length); inCall = true; continue; }
+          if (at >= 0) { addText(out, buf.slice(0, at)); buf = buf.slice(at + CALL_OPEN.length); inCall = true; named = false; scan = 0; continue; }
           let keep = 0;
           for (let k = Math.min(CALL_OPEN.length - 1, buf.length); k > 0; k--) {
             if (buf.endsWith(CALL_OPEN.slice(0, k))) { keep = k; break; }
           }
-          out.text += buf.slice(0, buf.length - keep);
+          addText(out, buf.slice(0, buf.length - keep));
           buf = buf.slice(buf.length - keep);
           return out;
         }
-        const end = buf.indexOf(CALL_CLOSE);
-        if (end < 0) return out;
-        out.calls.push(buf.slice(0, end));
+        if (!named) {
+          const name = announcedName(buf);
+          if (name) { named = true; out.items.push({ start: name }); }
+          else if (buf.length > NAME_SCAN) named = null;   // no name up front: the block is judged when it closes
+        }
+        // resume the close-tag search where the last one stopped: a file-sized block is scanned once, not per delta
+        const end = buf.indexOf(CALL_CLOSE, scan);
+        if (end < 0) { scan = Math.max(0, buf.length - (CALL_CLOSE.length - 1)); return out; }
+        const body = buf.slice(0, end);
+        out.calls.push(body); out.items.push({ body, closed: true });
         buf = buf.slice(end + CALL_CLOSE.length);
-        inCall = false;
+        inCall = false; named = false; scan = 0;
       }
     }
     return {
-      push(delta) { buf += String(delta || ''); return drain({ text: '', calls: [] }); },
-      // A block the model never closed still counts as a call when its body parses; otherwise it is prose.
+      push(delta) { buf += String(delta || ''); return drain({ text: '', calls: [], items: [] }); },
+      // A block the model never closed still counts as a call when it was announced or its body parses; otherwise prose.
       end() {
-        const out = { text: '', calls: [] };
-        if (inCall) { if (parseCall(buf)) out.calls.push(buf); else out.text += CALL_OPEN + buf; }
-        else out.text += buf;
-        buf = ''; inCall = false;
+        const out = { text: '', calls: [], items: [] };
+        if (inCall) {
+          if (named === true || parseCall(buf)) { out.calls.push(buf); out.items.push({ body: buf, closed: false }); }
+          else addText(out, CALL_OPEN + buf);
+        } else addText(out, buf);
+        buf = ''; inCall = false; named = false; scan = 0;
         return out;
       }
     };
   }
 
   function parseCall(body) {
-    let j;
-    try { j = JSON.parse(String(body || '').trim()); } catch (_) { return null; }
+    const raw = String(body || '').trim();
+    let j = null;
+    try { j = JSON.parse(raw); } catch (_) {
+      // A file-sized call's commonest slip is a raw newline or tab inside a string. The shared repair ladder escapes
+      // those; a repair that had to CLOSE an open string means the call was cut off, and that is never accepted.
+      try {
+        const d = require('./sanitize.js').repairToolCallArgumentsDetailed(raw);
+        if (d && !d.closedOpenString) j = JSON.parse(d.text);
+      } catch (_) { j = null; }
+    }
     if (!j || typeof j !== 'object' || typeof j.name !== 'string' || !j.name.trim()) return null;
     const args = j.arguments != null ? j.arguments : (j.input != null ? j.input : {});
     return { name: j.name.trim(), args: typeof args === 'string' ? args : JSON.stringify(args) };
+  }
+  /* An ANNOUNCED call whose body will not parse (cut off by the output limit, or broken past repair) still goes to the
+     loop as that call, its arguments text handed over as written: the loop's own repair ladder fixes it or refuses it
+     with a reason the model reads ("NOT executed — reissue it complete"). It used to be dumped as prose, which put a
+     whole game's source into the chat and wrote no file. */
+  function looseCall(body, name) {
+    const s = String(body || '');
+    const at = s.search(/"arguments"\s*:/);
+    const args = at >= 0 ? s.slice(at).replace(/^"arguments"\s*:\s*/, '').replace(/\}\s*$/, '').trim() : '';
+    return { name, args: args || '{}' };
   }
 
   /* The local-CLI plumbing the provider AND the sign-in driver share: find the binary, build its station-free env,
@@ -429,13 +473,21 @@
 
       const splitter = makeCallSplitter();
       let callIndex = 0, sawText = false, result = null, apiKeySource = null, apiError = '';
+      const callId = index => 'call_cli_' + idTag + '_' + turn + '_' + index;
+      let open = null;   // the call a tool_start already announced, whose block has not closed yet
       function* emitSplit(part) {
-        if (part.text) { sawText = true; yield { type: 'text', delta: part.text }; }
-        for (const body of part.calls) {
-          const call = parseCall(body);
-          if (!call) { yield { type: 'text', delta: CALL_OPEN + body + CALL_CLOSE }; continue; }
-          const index = callIndex++;
-          yield { type: 'tool_start', index, id: 'call_cli_' + idTag + '_' + turn + '_' + index, name: call.name };
+        for (const it of part.items) {
+          if (it.text != null) { if (it.text) { sawText = true; yield { type: 'text', delta: it.text }; } continue; }
+          if (it.start) {
+            open = { index: callIndex++, name: it.start };
+            yield { type: 'tool_start', index: open.index, id: callId(open.index), name: it.start };
+            continue;
+          }
+          const was = open; open = null;
+          const call = parseCall(it.body) || (was ? looseCall(it.body, was.name) : null);
+          if (!call) { sawText = true; yield { type: 'text', delta: CALL_OPEN + it.body + (it.closed ? CALL_CLOSE : '') }; continue; }
+          const index = was ? was.index : callIndex++;
+          if (!was) yield { type: 'tool_start', index, id: callId(index), name: call.name };
           yield { type: 'tool_args', index, chunk: call.args };
           yield { type: 'tool_done', index };
         }

@@ -115,6 +115,33 @@ const result = (extra) => Object.assign({ type: 'result', subtype: 'success', is
     A.eq(sp.push('a <tool_call>not json').text + sp.end().text, 'a <tool_call>not json', 'an unclosed, unparseable block stays prose');
   }
 
+  // E2. a file-sized call is ANNOUNCED while it streams (2026-10-02: "waiting for 6:15", nothing shown, while the CLI
+  //     wrote a whole game into one fs_write block), never dumped as prose when it ends broken.
+  {
+    const sp = _internals.makeCallSplitter();
+    const mid = sp.push('<tool_call>{"name": "fs_write", "arguments": {"path": "index.html", "content": "<html>');
+    A.eq(mid.items.map(i => i.start || (i.text != null ? 'text' : 'body')), ['fs_write'], 'the tool name starts the call before its block closes');
+    A.eq(sp.push('</html>"}}</tool_call>').items.map(i => i.closed), [true], 'the close follows as the body');
+    const nested = _internals.makeCallSplitter().push('<tool_call>{"arguments": {"name": "inner", "x": 1');
+    A.eq(nested.items.length, 0, 'a "name" inside the arguments never announces a call');
+
+    const tools = [{ type: 'function', function: { name: 'fs_write', description: 'write', parameters: { type: 'object' } } }];
+    const req = { model: 'opus', tools, messages: [{ role: 'user', content: 'make a game' }] };
+    const ordered = await collect(make({ lines: [init('none'), delta('Building it. <tool_call>{"name":"fs_write","arguments":{"path":"a.html","content":"x"}}</tool_call> Done.'), result()] }).p, req);
+    A.eq(ordered.filter(e => e.type !== 'usage' && e.type !== 'done').map(e => e.type), ['text', 'tool_start', 'tool_args', 'tool_done', 'text'], 'prose and calls keep their order');
+
+    // a raw newline inside a string (the commonest slip in a big write) is repaired into a real call
+    const raw = await collect(make({ lines: [init('none'), delta('<tool_call>{"name":"fs_write","arguments":{"path":"a.html","content":"<p>\n</p>"}}</tool_call>'), result()] }).p, req);
+    const rawArgs = raw.find(e => e.type === 'tool_args');
+    A.eq(rawArgs && JSON.parse(rawArgs.chunk), { path: 'a.html', content: '<p>\n</p>' }, 'a raw newline in a string is repaired, not dumped as prose');
+
+    // the output limit cut the call off: it still reaches the loop as that call (the loop refuses a cut-off value)
+    const cut = await collect(make({ lines: [init('none'), delta('<tool_call>{"name":"fs_write","arguments":{"path":"a.html","content":"<html><body>'), result({ stop_reason: 'max_tokens' })] }).p, req);
+    A.ok(!cut.some(e => e.type === 'text' && /<html>/.test(e.delta)), 'a cut-off file is never pasted into the chat');
+    const cutArgs = cut.find(e => e.type === 'tool_args');
+    A.ok(cut.some(e => e.type === 'tool_start' && e.name === 'fs_write') && cutArgs && /^\{"path":"a.html","content":"<html><body>/.test(cutArgs.chunk), 'a cut-off call reaches the loop with its arguments as written');
+  }
+
   // F. failures are errors, never a silent empty delivery.
   {
     const { p } = make({ lines: [init('none'), result({ is_error: true, subtype: 'success', result: 'Claude AI usage limit reached' })] });
