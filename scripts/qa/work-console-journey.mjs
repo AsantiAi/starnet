@@ -135,13 +135,13 @@ async function journeyOutboxFootnote(cdp, A) {
     return { cards, linkPresent: !!link, linkText: link ? link.textContent.trim() : '' };
   })()`).catch(() => ({ cards: -1, linkPresent: false, linkText: '' }));
   A.ok('JW-outbox/empty-board-no-cards', empty.cards === 0, 'kb-card count = ' + empty.cards);
-  A.ok('JW-outbox/footnote-present-when-empty', empty.linkPresent && /OUTBOX/.test(empty.linkText), 'kb-outbox-link text = ' + J(empty.linkText));
+  A.ok('JW-outbox/footnote-present-when-empty', empty.linkPresent && /DELIVERABLES/.test(empty.linkText), 'kb-outbox-link text = ' + J(empty.linkText));
 
-  // click the footnote → the OUTBOX window must open (openTerm('outbox') → "OUTBOX — FINISHED WORK").
+  // click the footnote → DELIVERABLES opens (the OUTBOX folded into it as TO REVIEW, 10-02).
   const clicked = await clickSel(cdp, '#kb-outbox-link');
   A.ok('JW-outbox/footnote-clickable', clicked === 'clicked', 'click → ' + clicked);
-  const outboxOpen = await waitFor(cdp, `Array.from(document.querySelectorAll('.term')).some(t => /OUTBOX/.test(t.textContent) && /FINISHED WORK/i.test(t.textContent))`, 40);
-  A.ok('JW-outbox/click-opens-outbox', outboxOpen, outboxOpen ? 'OUTBOX — FINISHED WORK window opened' : 'no OUTBOX window after click');
+  const outboxOpen = await waitFor(cdp, `Array.from(document.querySelectorAll('.term')).some(t => /DELIVERABLES/.test(t.textContent))`, 40);
+  A.ok('JW-outbox/click-opens-outbox', outboxOpen, outboxOpen ? 'DELIVERABLES window opened' : 'no DELIVERABLES window after click');
 
   // add ONE task through the real board input → the footnote must vanish (render condition flips).
   await closeAllTerms(cdp);
