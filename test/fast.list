@@ -420,6 +420,7 @@ test/codex-configured.test.js
 test/crt-glprobe.test.js
 test/crt-context-loss.e2e.test.mjs
 test/dialogue.test.js
+test/dialogue-doorlaw.test.js
 test/wakemind.test.js
 test/curiosity.test.js
 test/verdictfollowup.test.js
