@@ -1324,6 +1324,58 @@ const WorldModel = (() => {
       return { ok: true };
     }
 
+    /* MOVE SEVERAL ROOMS AT ONCE (the lead builder's re-lay, 2026-10-02): each room carries its contents exactly as moveRoom
+       does (every prop wholly on it, every belt tile on it, its floor paint), but only the FINAL arrangement is checked:
+       rooms passing each other on the way, or a station briefly wider than the span while half its rooms have moved, never
+       block a re-lay whose result is sound. Checked before anything changes, then applied as one undo slot. */
+    function moveRooms(moves) {
+      const list = (Array.isArray(moves) ? moves : []).filter(m => m && doc.rooms[m.id] && (Math.round(+m.dx || 0) || Math.round(+m.dy || 0)));
+      if (!list.length) return { ok: true, moved: 0 };
+      if (new Set(list.map(m => m.id)).size !== list.length) return fail('BAD_MOVE', 'a room is moved twice');
+      const plans = list.map(m => {
+        const rm = doc.rooms[m.id], dx = Math.round(+m.dx || 0), dy = Math.round(+m.dy || 0);
+        const inRoom = (x, y) => rm.rects.some(r => x >= r.x1 && x <= r.x2 && y >= r.y1 && y <= r.y2);
+        const wholly = f => { for (let y = f.y1; y <= f.y2; y++) for (let x = f.x1; x <= f.x2; x++) if (!inRoom(x, y)) return false; return true; };
+        return { rm, dx, dy, rects: rm.rects.map(r => ({ x1: r.x1 + dx, y1: r.y1 + dy, x2: r.x2 + dx, y2: r.y2 + dy })),
+          riders: doc.props.filter(p => wholly(propFootprint(p))), belts: Object.keys(doc.belts).filter(k => { const p = k.split(','); return inRoom(+p[0], +p[1]); }) };
+      });
+      const hits = (a, b) => a.x1 <= b.x2 && a.x2 >= b.x1 && a.y1 <= b.y2 && a.y2 >= b.y1;
+      const finalOf = new Map(plans.map(pl => [pl.rm.id, pl.rects]));
+      const all = Object.keys(doc.rooms).map(id => ({ id, rm: doc.rooms[id], rects: finalOf.get(id) || doc.rooms[id].rects }));
+      // the span of the station as it will stand
+      let mnx = Infinity, mny = Infinity, mxx = -Infinity, mxy = -Infinity;
+      for (const z of all) for (const r of z.rects) { mnx = Math.min(mnx, r.x1); mny = Math.min(mny, r.y1); mxx = Math.max(mxx, r.x2); mxy = Math.max(mxy, r.y2); }
+      if (mxx - mnx + 1 > MAX_SPAN || mxy - mny + 1 > MAX_SPAN) return fail('TOO_FAR', 'too far from the station');
+      // no moved room lands on another room (moved or not)
+      for (const pl of plans) for (const z of all) if (z.id !== pl.rm.id && pl.rects.some(r => z.rects.some(q => hits(r, q)))) return fail('OVERLAP', (pl.rm.name || pl.rm.id) + ' would overlap ' + (z.rm.name || z.id));
+      // nothing that stays (a piece or a belt riding no moved room) is left inside a moved room's new floor
+      const riding = new Set(), beltOf = new Map();
+      for (const pl of plans) { for (const p of pl.riders) riding.add(p.id); for (const k of pl.belts) beltOf.set(k, pl); }
+      for (const pl of plans) {
+        for (const p of doc.props) if (!riding.has(p.id) && pl.rects.some(r => hits(r, propFootprint(p)))) return fail('OVERLAP', 'a piece at (' + p.x + ', ' + p.y + ') is in the way of ' + (pl.rm.name || pl.rm.id));
+        for (const k in doc.belts) { if (beltOf.has(k)) continue; const p = k.split(','), t = { x1: +p[0], y1: +p[1], x2: +p[0], y2: +p[1] }; if (pl.rects.some(r => hits(r, t))) return fail('OVERLAP', 'a belt at (' + p[0] + ', ' + p[1] + ') is in the way of ' + (pl.rm.name || pl.rm.id)); }
+      }
+      snapshot();
+      const dirty = [];
+      for (const pl of plans) {
+        dirty.push(...pl.rm.rects, ...pl.rects);
+        pl.rm.rects = pl.rects;
+        if (pl.rm.floorPaint && Object.keys(pl.rm.floorPaint).length) {
+          const np = {};
+          for (const k in pl.rm.floorPaint) { const p = k.split(',').map(Number); np[(p[0] + pl.dx) + ',' + (p[1] + pl.dy)] = pl.rm.floorPaint[k]; }
+          pl.rm.floorPaint = np;
+        }
+        for (const p of pl.riders) { p.x += pl.dx; p.y += pl.dy; }
+      }
+      if (beltOf.size) {
+        const nb = {};
+        for (const k in doc.belts) { const pl = beltOf.get(k); if (!pl) { nb[k] = doc.belts[k]; continue; } const p = k.split(','); nb[beltKey(+p[0] + pl.dx, +p[1] + pl.dy)] = doc.belts[k]; }
+        doc.belts = nb;
+      }
+      emit(dirty);
+      return { ok: true, moved: plans.length };
+    }
+
     function setFloor(id, styleId) {
       const rm = doc.rooms[id];
       if (!rm) return fail('NOT_FOUND', 'no such room');
@@ -3407,7 +3459,7 @@ const WorldModel = (() => {
         return surfaceHostFor(propFootprint(propById(p.id) || p), p.id) ? 'surface' : null;
       },
       // mutations
-      addRoom, placeHallway, removeRoom, moveRoom, resizeRoom, setRoomKind, setFloor, setMaterial, setDeck, setWalls, setHull, paintTiles, renameRoom,
+      addRoom, placeHallway, removeRoom, moveRoom, moveRooms, resizeRoom, setRoomKind, setFloor, setMaterial, setDeck, setWalls, setHull, paintTiles, renameRoom,
       addProp, removeProp, moveProp, rotateProp, faceProp, mirrorProp, assignPropAgent, ensureWorkstation, configureJunction, swapJoinerMerger, bindConnector, bindPlugin, placePluginTerminal, setDoorState, setPropProject, setPropBrief, setPropRole, setPropHands, setPropLabel, setPropLimits,
       setBelt, removeBelt, removeBelts, placeBeltRun, connectBelt, connectionPreview, hookedBelts, stampBlueprint, insertBayBetween, canInsertBayBetween, transact, lineGraph, applyLineLayout, blueprintGraph,
       // agent-bay binding queries
