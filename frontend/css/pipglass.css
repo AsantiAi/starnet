@@ -99,3 +99,43 @@ body.glass-demo:not(.hud-mode) #topbar #tb-station .tb-xp {
   height: 3px;
   background: repeating-linear-gradient(90deg, transparent 0 6px, rgba(5, 3, 1, .95) 6px 8px), rgba(var(--gold-rgb), .18);
 }
+
+/* ============================================================
+   MATTE + CONTRAST (Andrew 10-01: "maybe its not the glass, I think its more so the shininess and fadedness").
+   SHINE was the glass sheen on every panel and the inset top-light every glass surface carries (--gd-light);
+   FADE was the amber haze washed over the panels (the 165deg --gd-face / 125deg glass gradients), dim
+   grey-brown labels and soft glows. Fixed at the TOKENS so panels, keys, cards and windows go matte together:
+   a deep even black, no top-lights, brighter labels and lines, a tight glow and a quieter fringe.
+   ============================================================ */
+body.glass-demo:not(.hud-mode) {
+  --gd-light: transparent;
+  --gd-face: color-mix(in srgb, var(--panel2) 95%, transparent);
+  --gd-hover: rgba(var(--ph-rgb), .12);
+  --gd-edge: rgba(var(--ph-rgb), .34);
+  --gd-shadow: 0 6px 20px rgba(0, 0, 0, .35);
+  --cg-glass: linear-gradient(rgba(0, 0, 0, .32), rgba(0, 0, 0, .32));
+  --cg-card: rgba(0, 0, 0, .3);
+  --cg-edge: rgba(var(--ph-rgb), .34);
+  --cg-hair: rgba(var(--ph-rgb), .22);
+  --cg-mute: color-mix(in srgb, var(--text) 84%, var(--panel2));
+  --pg-line: rgba(var(--ph-rgb), .6);
+  --pg-fringe: -0.5px 0 rgba(255, 64, 48, .22), 0.5px 0 rgba(64, 150, 255, .2);
+  --pg-glow: var(--pg-fringe), 0 0 2px rgba(var(--ph-rgb), .38);
+  --pg-glow-soft: 0 0 1px rgba(var(--ph-rgb), .3);
+  --pg-dither: repeating-conic-gradient(rgba(var(--ph-rgb), .3) 0 25%, transparent 0 50%) 0 0 / 2px 2px;
+  --pg-dither-gold: repeating-conic-gradient(rgba(var(--gold-rgb), .32) 0 25%, transparent 0 50%) 0 0 / 2px 2px;
+}
+/* no sheen, no vignette haze: the panel screen is flat matte black with one crisp edge */
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar)::before { background: none; box-shadow: none; }
+body.glass-demo:not(.hud-mode) #screen-game :is(#left, #chat-panel, #topbar, #bottombar) {
+  background: var(--gd-face); border-color: var(--gd-edge); box-shadow: var(--gd-shadow);
+}
+/* the content wells lose their faded washes */
+body.glass-demo:not(.hud-mode) #chat-panel #chat-log { background: transparent; }
+body.glass-demo:not(.hud-mode) #topbar :is(.tb-stat, .tb-connection) { background: rgba(0, 0, 0, .3); box-shadow: none; }
+/* brighter readouts */
+body.glass-demo:not(.hud-mode) #screen-game :is(#left > h3, #chat-panel > h3) { color: var(--ph-bright); }
+body.glass-demo:not(.hud-mode) #crew :is(.crew-status, .crew-step), body.glass-demo:not(.hud-mode) #left > h3 #crew-sum { color: var(--cg-mute); }
+body.glass-demo:not(.hud-mode) #crew .crew-row.working .crew-status { color: var(--ph); }
+body.glass-demo:not(.hud-mode) #left .ws-head :is(.ws-tab, #ws-new, #ws-addproject) { color: var(--ph); border-color: rgba(var(--ph-rgb), .4); box-shadow: none; }
+body.glass-demo:not(.hud-mode) #chat-panel .cmsg-empty-hint { color: var(--cg-mute); opacity: 1; }
