@@ -2331,13 +2331,16 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
      can arrive from a routine, a night shift, or a messaging channel — and "the agent believes this about me" and
      "someone said this in a group chat" are different claims. 'commander' renders NO chip: the ordinary case must
      stay quiet, or the label becomes noise nobody reads. */
-  const ORIGIN_LABEL = { schedule: '⏱ routine', nightshift: '◈ autonomy', api: '⇄ external app' };
+  // 'feedback' = the Commander's OWN rating / correction of a run (sidecar/feedbackmemory.js): it is theirs, so its
+  // tip must never say it was learned unwatched. 'failure-review' = a lesson from a run that failed.
+  const ORIGIN_LABEL = { schedule: '⏱ routine', nightshift: '◈ autonomy', api: '⇄ external app', feedback: '★ your rating', 'failure-review': '⚠ failed run' };
+  const ORIGIN_TIP = { feedback: 'from your own rating of a run — every agent shapes its work to this', 'failure-review': 'a lesson taken from a run that failed' };
   function originChip(origin) {
     const o = String(origin || 'commander');
     if (o === 'commander') return null;
     const label = ORIGIN_LABEL[o] || (o.indexOf('channel:') === 0 ? '✆ ' + o.slice(8) : o);
     const el = mkEl('span', 'mc-scope'); el.textContent = label;
-    el.title = 'learned on a run you were not watching (' + o + ')';
+    el.title = ORIGIN_TIP[o] || ('learned on a run you were not watching (' + o + ')');
     return el;
   }
 
@@ -7178,17 +7181,15 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     let paintBackdropSwatches = () => {};
 
     const sections = [
-      { id: 'providers', label: 'PROVIDERS', glyph: '⌁', desc: 'Connect an AI service and manage its saved credentials.', build: frag(secProviders) },
+      { id: 'providers', label: 'AI & MODELS', glyph: '⌁', desc: 'Connect an AI service, manage its saved credentials, and choose backup models and defaults for new agents.', build: frag(secProviders + secModels) },
       // ONE WORD: AUTONOMY — the dial and what it did while you were away are one section (the old NIGHT SHIFT
       // section folded in; openTerm maps its id here so an old deep link still lands).
       { id: 'autonomy', label: 'AUTONOMY', glyph: '◈', desc: 'Choose when agents work on their own, where that work goes, and see what they did while you were away.', build: frag(secAutonomy + secAwayActivity) },
       { id: 'permissions', label: 'PERMISSIONS', glyph: '⊘', desc: 'Set access and approval rules for the station or individual agents.', build: frag(secPermissions) },
       { id: 'budget', label: 'SPENDING LIMITS', glyph: '$', desc: 'Set spending limits and review recorded usage.', build: frag(secBudget) },
-      { id: 'models', label: 'MODEL DEFAULTS', glyph: '⇄', desc: 'Choose backup models and defaults for new agents.', build: frag(secModels) },
       // build, not frag: the pane is created lazily when the section is opened, so wiring at MOUNT time
       // ran before this element existed and left the list stuck on its placeholder. Paint it when it is born.
-      { id: 'livevoice', label: 'LIVE VOICE', glyph: '◍', desc: 'Built-in voices for your agents and hands-free conversations.', build: el => { el.innerHTML = secLiveVoice; arrangeSettingsPane(el); wireLiveVoice(el); } },
-      { id: 'appearance', label: 'APPEARANCE', glyph: '☀', desc: 'Room lighting, phosphor colour, CRT effects, and terminal sound.', build: frag(secAppearance), onShow: () => paintBackdropSwatches() },
+      { id: 'appearance', label: 'LOOK & SOUND', glyph: '☀', desc: 'Room lighting, phosphor colour, CRT effects, terminal sound, and your agents’ spoken voices.', build: el => { el.innerHTML = secAppearance + secLiveVoice; arrangeSettingsPane(el); wireLiveVoice(el); }, onShow: () => paintBackdropSwatches() },
       // NAV CONDENSE (2026-08-04) — two label renames, ids untouched (remembered-section keys + wiring
       // bind to the id): 'NOTIFICATIONS' collided with the SYSTEM-dock NOTIFICATIONS panel (inbox vs
       // preferences — same word, two doors), and a 'SYSTEM' section inside SETTINGS inside the SYSTEM
@@ -7197,19 +7198,20 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // STARNET REMOTE: pair a phone and drive the station from anywhere (app/remote-devices.js owns the pane)
       { id: 'remote', label: 'REMOTE', glyph: '▯', desc: 'Pair your phone and control this station from anywhere.', build: el => { if (typeof RemoteDevices !== 'undefined') RemoteDevices.mount(el, arrangeSettingsPane); else el.textContent = 'Remote is not available in this build.'; } },
       // BROWSER: where the station browser lives — built-in / a Chrome window / your Chrome (app/outputbrowser.js owns the pane)
-      { id: 'browser', label: 'BROWSER', glyph: '◎', desc: 'Where the station browser runs: inside StarNet, as its own Chrome window, or in your own Chrome.', build: el => { if (typeof OutputBrowser !== 'undefined' && OutputBrowser.mountSettings) OutputBrowser.mountSettings(el, arrangeSettingsPane); } },
+      { id: 'browser', label: 'BROWSER', glyph: '◎', desc: 'Where the station browser runs: inside StarNet, as its own Chrome window, or in your own Chrome.', build: el => {
+        if (typeof OutputBrowser !== 'undefined' && OutputBrowser.mountSettings) OutputBrowser.mountSettings(el, arrangeSettingsPane);
+        // SAVED SIGN-INS: STEP-IN is no longer a standing dock button, so the sign-ins it keeps get a door here
+        const row = mkEl('div', 'set-row');
+        row.appendChild(mkEl('span', 'dim', 'SAVED SIGN-INS — the browser sign-ins your agents reuse, from times you took the wheel '));
+        const b = mkEl('button', 'bb sm', 'OPEN SAVED SIGN-INS'); b.type = 'button'; b.id = 'set-open-signins';
+        b.addEventListener('click', () => { sfx('click'); openTerm('stepin'); });
+        row.appendChild(b); el.appendChild(row);
+      } },
       { id: 'system', label: 'APP & BACKUP', glyph: '⚙', desc: 'Startup, runtime limits, backups, updates, and troubleshooting.', build: frag(secSystem) }
     ];
-    // THREE HEADINGS (front doors, 2026-10-01): eleven flat sections read as a wall. The same intent groups ABILITIES
-    // uses — every section, id, deep link and the search are unchanged; the rail just shows one group at a time.
-    const settingsGroups = [
-      { id: 'ai', label: 'AI & COST', sections: ['providers', 'models', 'budget'] },
-      { id: 'agents', label: 'AGENTS', sections: ['autonomy', 'permissions', 'livevoice'] },
-      { id: 'station', label: 'STATION', sections: ['appearance', 'notifs', 'remote', 'browser', 'system'] }
-    ].map(g => Object.assign(g, { sections: g.sections.filter(id => sections.some(s => s.id === id)) }));
-    // any section not named above (a new one landing later) joins STATION rather than vanishing from the rail
-    sections.forEach(s => { if (!settingsGroups.some(g => g.sections.includes(s.id))) settingsGroups[2].sections.push(s.id); });
-    const host = mountConsole(body, 'settings', sections, { search: true, searchPlaceholder: 'search settings…', groups: settingsGroups });
+    // ONE PLAIN LIST (Andrew 10-02): no intent-group buttons — a few natural pairs share a page instead (AI & MODELS,
+    // LOOK & SOUND); every old section id still lands through SETTINGS_ALIAS in openTerm.
+    const host = mountConsole(body, 'settings', sections, { search: true, searchPlaceholder: 'search settings…' });
 
     wireProviderActions(host);
     wireKeyActions(host);
@@ -9555,7 +9557,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     if (!root) return;
     root.querySelectorAll('.q-sys').forEach(b => b.addEventListener('click', () => { sfx('click'); Systems.openSystem(b.dataset.sys); }));
     const all = root.querySelector('.q-sys-all');
-    if (all) all.addEventListener('click', () => { sfx('click'); Systems.showEverything(); notify('Every station system is in your dock now. SETTINGS › APPEARANCE › STATION DOCK switches it back.', '', undefined, { transient: true }); });
+    if (all) all.addEventListener('click', () => { sfx('click'); Systems.showEverything(); notify('Every station system is in your dock now. SETTINGS › LOOK & SOUND › STATION DOCK switches it back.', '', undefined, { transient: true }); });
   }
   // repaint ONLY the systems block of an open quest log — never the whole window (drafts live there)
   function refreshSystems() {
@@ -10475,7 +10477,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     // `wide` = wide width only). The old per-window pixel widths (460/540/560/620/640/760/1000) are
     // gone — they made eight windows read as eight unrelated apps. A window earns WIDE only by having
     // a rail, a card grid, or side-by-side columns; everything single-column is a PANEL.
-    commander:['COMMANDER DOSSIER',      buildCommander, { console: true, className: 'commander-console' }],   // focused profile, preferences, briefing, and record sections
+    commander:['YOU · COMMANDER DOSSIER',      buildCommander, { console: true, className: 'commander-console' }],   // focused profile, preferences, briefing, and record sections
     // NAV CONDENSE 2 (2026-08-04): 'skills' is no longer a window key — the skill library/agent-
     // skills sections live in the ABILITIES (connectors) console via AbilityLanes, and per-agent
     // capabilities live in the dossier's SKILLS tab. openTerm keeps the old keys alive as aliases
@@ -10595,6 +10597,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
     const def = BUILDERS[key]; if (!def) return;
     // the old NIGHT SHIFT settings section is part of AUTONOMY now (ONE WORD: AUTONOMY) — an old link still lands.
     if (key === 'settings' && section === 'nightshift') section = 'autonomy';
+    // ONE PLAIN LIST (10-02): MODEL DEFAULTS lives on AI & MODELS, LIVE VOICE on LOOK & SOUND
+    if (key === 'settings' && (section === 'models' || section === 'livevoice')) section = section === 'models' ? 'providers' : 'appearance';
     // optional section arg (Lane A error-door routing): land the console rail on a specific section — same
     // mechanism as the dossier's "jump to CONFIG" (consoleSection is what mountConsole reads at render).
     if (section) consoleSection[key] = section;

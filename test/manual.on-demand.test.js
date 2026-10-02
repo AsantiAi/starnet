@@ -32,8 +32,8 @@ const inline = M.MANUAL_SECTIONS.filter(s => s.kind !== 'reference');
 // Re-pinned 2026-09-28 (first-hour fixes) for ONE deliberate text change: the two "ABILITIES › KEYS" directions now
 // name tabs that exist (INSTALLED › SAVED API CONNECTIONS; CREATE / ADVANCED › Add a custom API key). Swapping those
 // two phrases back reproduces the pre-split pin exactly (9269 / 876bf2e4…), so nothing else moved.
-A.eq(full.length, 9364, 'the whole manual keeps its pre-split length (+30: REFIT is named BUILD MODE, 2026-10-01)');
-A.eq(crypto.createHash('sha256').update(full, 'utf8').digest('hex'), 'fcd4df398749c240e8eeea0057868230889c5d4f7bbba10fb4747441131d924c',
+A.eq(full.length, 9366, 'the whole manual keeps its pre-split length (+30: REFIT is named BUILD MODE; +2: SETTINGS › AI & MODELS, 2026-10-02)');
+A.eq(crypto.createHash('sha256').update(full, 'utf8').digest('hex'), 'f41a6663dc84497dc74c348980fda24ff32960e773f26038b6c5a7688b244220',
   'the whole manual is byte-identical to the literal that shipped before the split');
 
 // ---- B. the sections partition the manual ----

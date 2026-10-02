@@ -728,8 +728,9 @@
       <div class="bb-menu" role="menu">
         <button class="bb" data-term="agents"><span class="bb-i">◉</span><span class="bb-tx"><b>AGENTS</b><small>each crew member's dossier — config, memory, record</small></span></button>
         <button class="bb" id="bb-recruit" data-hint="recruit"><span class="bb-i">＋</span><span class="bb-tx"><b>RECRUIT</b><small>grow the crew — summon a class, or re-spec your agent</small></span></button>
-        <button class="bb" data-term="commander"><span class="bb-i">◈</span><span class="bb-tx"><b>COMMANDER</b><small>what the station has learned about you</small></span></button>
-        <button class="bb" data-term="stepin"><span class="bb-i">⇆</span><span class="bb-tx"><b>STEP-IN</b><small>take an agent's browser when it needs you to sign in — and your saved sign-ins</small></span><span id="si-badge" class="badge" style="display:none"></span></button>
+        <button class="bb" data-term="commander"><span class="bb-i">◈</span><span class="bb-tx"><b>YOU</b><small>what the station has learned about you</small></span></button>
+        <!-- STEP-IN shows ONLY while an agent is waiting for you (stepin.js badge); saved sign-ins live in SETTINGS › BROWSER -->
+        <button class="bb" data-term="stepin" hidden><span class="bb-i">⇆</span><span class="bb-tx"><b>STEP-IN</b><small>take an agent's browser when it needs you to sign in — and your saved sign-ins</small></span><span id="si-badge" class="badge" style="display:none"></span></button>
       </div>
     </div>
     <div class="bb-group" data-group="work">
@@ -740,16 +741,16 @@
              FAMILIES). Each tab is still its own window, so every deep link and slash command lands exactly as before. -->
         <button class="bb" id="bb-mywork" data-family="mywork" data-hint="mywork"><span class="bb-i">☑</span><span class="bb-tx"><b>MY WORK</b><small>tasks, finished work &amp; ready-made jobs</small></span></button>
         <button class="bb" id="bb-automate" data-family="automate" data-hint="automate"><span class="bb-i">∞</span><span class="bb-tx"><b>AUTOMATE</b><small>workflows, schedules &amp; goal loops</small></span></button>
+        <!-- ONE MENU (front doors, 2026-10-01; in WORK since 10-02 — Andrew: it fits work, not Build Mode): CONNECT = one window with tabs ABILITIES (the agents' tools OUT — toolsets,
+             connectors, skills) · CHANNELS (YOUR way in — Telegram, Slack, Discord). Two tabs, never one card grid. -->
+        <button class="bb" id="bb-connect" data-family="connect" data-hint="connect"><span class="bb-i">⇄</span><span class="bb-tx"><b>CONNECT</b><small>tools &amp; apps your agents use, and where you message them</small></span></button>
         <button class="bb" data-term="quests" data-hint="quest"><span class="bb-i">⚑</span><span class="bb-tx"><b>QUESTS</b><small>small steps toward your goals &amp; recorded progress</small></span></button>
       </div>
     </div>
     <div class="bb-group" data-group="build">
-      <button class="bb-grp" data-hint="build" aria-haspopup="menu" aria-expanded="false" title="Shape the station — refit the floor, abilities, channels"><span class="bb-gi">⚒</span>BUILD</button>
+      <button class="bb-grp" data-hint="build" aria-haspopup="menu" aria-expanded="false" title="Shape the station — Build Mode and new apps"><span class="bb-gi">⚒</span>BUILD</button>
       <div class="bb-menu" role="menu">
         <button class="bb" id="bb-build" data-hint="refit"><span class="bb-i">⌂</span><span class="bb-tx"><b>BUILD MODE</b><small>rooms, corridors, gear &amp; workflow lines</small></span></button>
-        <!-- ONE MENU (front doors, 2026-10-01): CONNECT = one window with tabs ABILITIES (the agents' tools OUT — toolsets,
-             connectors, skills) · CHANNELS (YOUR way in — Telegram, Slack, Discord). Two tabs, never one card grid. -->
-        <button class="bb" id="bb-connect" data-family="connect" data-hint="connect"><span class="bb-i">⇄</span><span class="bb-tx"><b>CONNECT</b><small>tools &amp; apps your agents use, and where you message them</small></span></button>
         <!-- APPS: the way to the FIRST app (the APPS dock itself only appears once one exists) -->
         <button class="bb" id="bb-newapp-build" data-hint="app"><span class="bb-i">＋</span><span class="bb-tx"><b>NEW APP</b><small>describe anything — a dashboard, a tracker, a tool, a game — and your crew builds it in its own window</small></span></button>
       </div>

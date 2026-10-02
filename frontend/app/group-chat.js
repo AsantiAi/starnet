@@ -29,7 +29,13 @@ const GroupChat = (() => {
   // under EVERY member, so it reads this instead of the workstream's single agentId (the lead).
   const membersById = new Map();
   function adopt(g) {
-    if (g && Array.isArray(g.members)) membersById.set(g.id, g.members.slice());
+    if (g && Array.isArray(g.members)) {
+      const before = membersById.get(g.id), next = g.members.slice();
+      membersById.set(g.id, next);
+      // a member joined or left: whoever's sessions the rail is showing must gain (or lose) this group now, not
+      // after a reload. Deferred so the record below is updated first; unchanged members never repaint.
+      if (before && before.join('\n') !== next.join('\n') && typeof App !== 'undefined' && App.refreshRail) queueMicrotask(() => App.refreshRail());
+    }
     let ws = Workstreams.get(g.id) || Workstreams.adopt({ id: g.id, title: g.title, agentId: g.leadId, kind: 'chat', conversationMode: 'group', lane: 'active' });
     if (ws) {
       ws.conversationMode = 'group'; ws.agentId = g.leadId; ws.title = g.title;
@@ -310,7 +316,7 @@ const GroupChat = (() => {
         if (!member) {
           const result = await api({ op: 'invite', id, agentId: a.id });
           if (active?.id !== id) return;
-          group = result; paint();
+          group = result; adopt(result); paint();   // record the new member now, so the rail lists the group under them
         }
         if (input.value !== original) { e.replaceChildren(); return; }
         const start = pos - match[1].length - 1;

@@ -288,7 +288,7 @@
       { glyph: '✉', term: 'messaging', title: 'Message your agent from Telegram or Slack',
         blurb: 'Connect a chat account so you can give your agent work from there. Opens CHANNELS.' },
       { glyph: '◈', term: 'settings', section: 'providers', title: 'Add an AI model provider',
-        blurb: 'Anthropic, OpenAI, OpenRouter keys and sign-ins live in SETTINGS › PROVIDERS.' }
+        blurb: 'Anthropic, OpenAI, OpenRouter keys and sign-ins live in SETTINGS › AI & MODELS.' }
     ];
     const secRouter =
       '<details class="ab-router" id="ab-router">' +

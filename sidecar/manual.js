@@ -64,7 +64,7 @@ const NAV_REST =
   '- ✉ CHANNELS (dock): connect Telegram, Discord, Slack, Matrix, or Signal so the Commander can ' +
   'message agents FROM those apps. This is the INBOUND direction and is NOT where a platform becomes ' +
   'an agent tool — that is ABILITIES.\n' +
-  '- SETTINGS › PROVIDERS: the AI model providers and their keys (OpenRouter, Anthropic, ChatGPT ' +
+  '- SETTINGS › AI & MODELS: the AI model providers and their keys (OpenRouter, Anthropic, ChatGPT ' +
   'sign-in, …). Model keys live here, platform keys live in ABILITIES (INSTALLED › SAVED API CONNECTIONS) — do not confuse them.\n' +
   '- BUILD MODE: the full-screen station builder. Lay out rooms, paint decks, and place props/bays. This is ' +
   'where capabilities are granted — you give an agent a power by placing the matching prop in its room.\n' +
@@ -154,7 +154,7 @@ const SECTIONS = [
   { id: 'navigation', kind: 'reference', lead: '\n', title: 'NAVIGATION', text: NAV_HEAD + NAV_COMMS + NAV_AUTOMATION + NAV_REST,
     summary: 'every window and control the Commander uses — COMMS, AUTOMATION (ROUTINES + LOOPS), TASKS, the DOCK '
       + '(⚒ BUILD, RECRUIT/SUMMON), ⇄ ABILITIES and its sections (TOOLSETS, CATALOG, KEYS, MCP CONNECTORS, EXTENSIONS, '
-      + 'SKILL LIBRARY, AGENT SKILLS), ✉ CHANNELS, SETTINGS › PROVIDERS, BUILD MODE, the Recruitment Bay, the APPROVALS hotspot.' },
+      + 'SKILL LIBRARY, AGENT SKILLS), ✉ CHANNELS, SETTINGS › AI & MODELS, BUILD MODE, the Recruitment Bay, the APPROVALS hotspot.' },
   { id: 'props', kind: 'reference', lead: '\n', title: 'OBJECT = CAPABILITY', text: PROPS,
     summary: 'OBJECT = CAPABILITY — a prop placed in an agent\'s BAY room grants it a real power, and no prop means no '
       + 'power: WORKSTATION → COMPUTE, DISH → WEB, INTEL CAB → FILES, WORKBENCH → TERMINAL, SERVER CART → MEMORY, '
