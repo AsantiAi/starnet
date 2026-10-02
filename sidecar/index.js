@@ -1135,7 +1135,14 @@ const userProps = require('./userprops.js').makeUserProps({
   cloud: () => { const c = resolveCreditsConfig(); return { url: c.url, token: c.apiKey }; },
   fetch: (...a) => globalThis.fetch(...a), now: () => Date.now(),
   writeDurable: (deps, file, data) => writeFileDurable(deps, file, data),
-  onSettled: () => { if (credits.configured()) credits.refresh().catch(swallow('credits.refresh', null)); }
+  // a settled prop's charge (what the cloud billed, front or side view) is booked in the LOCAL ledger too, so SPENT
+  // TODAY, the $/day limit and the Budget panel see it — it used to show only in the cloud's own history (sweep 10-02).
+  // onSettled runs once per job (after its pending claim is dropped), and the row is keyed to the job.
+  onSettled: (pub) => {
+    const usd = Number(pub && pub.costUsd) || 0;
+    if (usd > 0) { try { ledger.record({ runId: 'userprop-' + String(pub.id || ''), agentId: 'station', turns: 0, usd, tokens: 0, model: 'userprop' }); } catch (e) { failNote('userprops.ledger', e); } }
+    if (credits.configured()) credits.refresh().catch(swallow('credits.refresh', null));
+  }
 });
 userProps.resume();
 /* BOOT LINK SELF-HEAL (2026-08-25 stranded-user incident): a reinstall keeps the device token in the OS
