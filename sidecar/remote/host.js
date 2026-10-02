@@ -167,6 +167,11 @@ function makeRemoteHost(d) {
       system: cred.system, messages, agentId: o.agentId, isTask,
       emit, signal: ac.signal, runId, streamId, trigger: 'event',
       surface: 'interactive', prompt, ownerTrusted: true, floorless: true, broadcast: true, reflect: true,
+      // FULL ACCESS STAYS AT THE DESK (Andrew 2026-10-02): a phone is easier to lose than a PC, so a task sent from one
+      // never inherits an agent's Full Access or the station bypass: anything that needs approval asks on the phone
+      // (once / this task / deny). Standing "always" grants made at the desk still apply. Host-minted, never from text,
+      // and it rides into delegated workers (run-origin.js).
+      connectorAuthority: { withholdHostPower: true },
       taskKey: 'remote:' + (o.deviceId || 'phone'), taskSource: 'remote'
     })).catch((e) => { errMsg = errMsg || clip((e && e.message) || e, 400); })
       .finally(() => {

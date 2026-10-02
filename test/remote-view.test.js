@@ -283,12 +283,13 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
 
   // a delegated WORKER's error/end (forwarded onto the lead's emit) must not mark the phone's run failed
   {
-    const evs = [];
+    const evs = []; let seenOpts = null;
     const hw = makeRemoteHost({
       now: () => Date.now(), newId: () => 'lead-run', broadcast: e => evs.push(e),
       roster: () => [{ agentId: 'lead', name: 'LEAD' }], liveRuns: () => [], transcript: { history: () => [], streams: () => [] },
       credentials: () => ({ ok: true, key: 'k', model: 'm', provider: 'p' }), askConsent: () => Promise.resolve('deny'),
       runOnce: async o => {
+        seenOpts = o;
         o.emit('agent.run.error', { agentId: 'worker', runId: 'worker-run', message: 'worker provider 500' });
         o.emit('agent.run.end', { agentId: 'worker', runId: 'worker-run', reason: 'error', usd: 0 });
         o.emit('agent.run.end', { agentId: 'lead', runId: o.runId, reason: 'done', usd: 0.01 });
@@ -296,6 +297,7 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
     });
     await hw.send({ agentId: 'lead', text: 'do it', streamId: '', deviceId: 'd1' });
     await new Promise(r => setTimeout(r, 50));
+    A.eq(seenOpts && require('../sidecar/run-origin.js').hostPowerWithheldFor(seenOpts), true, 'a phone task never inherits Full Access: it asks on the phone');
     const ended = evs.find(e => e.type === 'run.ended');
     A.ok(ended && ended.reason === 'done' && !ended.error, 'a recovered worker error does not turn the phone run red');
     A.eq(hw.recentRuns()[0] && hw.recentRuns()[0].ok, true, 'the phone recent row says the lead run succeeded');

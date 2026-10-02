@@ -26,7 +26,7 @@
       '<h4 class="ms-h">REMOTE <span class="dim">— your station, from your phone</span></h4>' +
       '<p class="set-about">Pair a phone and it can see your crew, send tasks, answer approvals and open what your agents made, from anywhere. ' +
       'Everything between the phone and this computer is encrypted end to end: the StarNet relay in the middle passes sealed messages it cannot read. ' +
-      'A phone can approve a step once or for the session. Standing grants and full access are only ever set here, at the desk.</p>' +
+      'A phone can approve a step once or for that task, and a task sent from a phone asks before acting even when the agent has full access here. Standing grants and full access are only ever set here, at the desk.</p>' +
       '<label class="set-row"><input type="checkbox" id="rmt-on"> REMOTE ON <span class="dim" id="rmt-on-note">— checking…</span></label>' +
       '<p class="set-about" id="rmt-link"></p>' +
       '<div class="set-save"><button class="bb sm" id="rmt-pair" type="button" disabled>PAIR A PHONE</button></div>' +
