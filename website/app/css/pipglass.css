@@ -510,3 +510,105 @@ body.glass-demo:not(.hud-mode) #chat-panel .receipts .receipt-head[aria-expanded
 body.glass-demo:not(.hud-mode) #chat-panel .receipts .receipt-head:is(:hover, :focus-visible) { color: var(--ph-bright); }
 body.glass-demo:not(.hud-mode) #chat-panel .receipts .receipt-items { margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(var(--ph-rgb), .14); }
 body.glass-demo:not(.hud-mode) #chat-panel .receipts .receipt-items[hidden] { display: none; }
+
+/* ============================================================
+   INBOX SESSION ROWS (Andrew 10-02: "improve the UI for the inbox sessions. They just look a bit cheap").
+   Measured on the live rail: every row was a bordered box (a wall of boxes), the read lamp an empty square
+   that read as a checkbox, the agent kicker flipped nova/NOVA, the pin a fallback-font star, and the excerpt
+   stopped after three words. Now the rows speak the CREW card's language: quiet at rest, a glass card only
+   when selected or hovered, the crew card's housed round lamp on the kicker line, a two-line title and a two-line
+   excerpt. Every lamp state stays (colour + rhythm); the meta still names reply/approval in words.
+   ============================================================ */
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams { gap: 2px; padding: 6px 4px 8px; }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row {
+  position: relative; margin: 0 6px; min-height: 0; padding: 10px 11px 11px;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "dot   agent pin   meta"
+    "title title title title"
+    "recpt recpt recpt recpt";
+  row-gap: 3px; column-gap: 7px;
+  border: 1px solid transparent; border-radius: 8px; background: transparent; box-shadow: none;
+}
+/* a hairline between resting rows, inset to the row's padding; it steps aside around a lit card */
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row + .ws-row::before {
+  content: ''; position: absolute; left: 11px; right: 11px; top: -2px; height: 1px; background: rgba(var(--ph-rgb), .1);
+  pointer-events: none;
+}
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row:is(.sel, :hover, :focus-visible)::before,
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row:is(.sel, :hover, :focus-visible) + .ws-row::before { opacity: 0; }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row:is(:hover, :focus-visible) {
+  background: rgba(var(--ph-rgb), .045); border-color: rgba(var(--ph-rgb), .14); box-shadow: none;
+}
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row.sel {
+  background: var(--cg-card); border-color: var(--cg-edge);
+  box-shadow: 0 0 14px rgba(var(--ph-rgb), .14), inset 0 1px 0 var(--gd-light);
+}
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row.attn:not(.sel) {
+  background: linear-gradient(165deg, rgba(var(--gold-rgb), .08), transparent 55%); border-color: rgba(var(--gold-rgb), .32);
+}
+
+/* the lamp: the crew card's housed round lamp, centred on the kicker line */
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot {
+  justify-self: center; align-self: center; flex: none; width: 8px; height: 8px; margin: 0;
+  border: 0; border-radius: 50%; overflow: visible;
+  color: color-mix(in srgb, var(--text) 26%, var(--panel2)); background: currentColor; box-shadow: var(--cg-lamp);
+  opacity: 1; animation: none;
+}
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot::before,
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot::after { content: none; }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot.unseen { color: var(--gold); box-shadow: var(--cg-lamp), 0 0 6px rgba(var(--gold-rgb), .55); }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot.working { color: var(--ph-bright); box-shadow: var(--cg-lamp), 0 0 6px rgba(var(--ph-rgb), .6); animation: wsPulse 1.15s ease-in-out infinite; }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot.connecting { color: transparent; background: transparent; box-shadow: none; outline: 1px dashed var(--ph-dim); outline-offset: -1px; }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot.reply { color: var(--gold); box-shadow: var(--cg-lamp), 0 0 6px rgba(var(--gold-rgb), .6); animation: wsPulseUrgent .72s ease-in-out infinite; }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot.approval { color: var(--bad); box-shadow: var(--cg-lamp), 0 0 6px color-mix(in srgb, var(--bad) 60%, transparent); animation: wsPulseUrgent .72s ease-in-out infinite; }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot.failed { color: var(--bad); box-shadow: var(--cg-lamp); animation: gd-session-failure 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot { animation: none; }
+}
+
+/* kicker line: AGENT ........ 42m  (one case, one tracking, whatever the row's state) */
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-agent {
+  align-self: center; font: 13px/1.1 'VT323', monospace; letter-spacing: 1.6px; text-transform: uppercase;
+  color: var(--cg-mute); opacity: 1;
+}
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row:is(.sel, .busy) .ws-agent { color: var(--ph); }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-meta {
+  align-self: center; font: 14px/1 'VT323', monospace; letter-spacing: .5px; font-variant-numeric: tabular-nums;
+  color: var(--cg-mute); opacity: 1;
+}
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row.busy > .ws-meta { color: var(--ph-bright); }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-dot.unseen ~ .ws-meta { color: var(--gold); }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row.attn > .ws-meta {
+  padding: 0; border: 0; background: none; color: var(--gold); letter-spacing: .3px;
+}
+/* a row that needs you puts "Approval needed" / "Reply needed" on its own line under the kicker: beside the
+   agent it squeezed the name to a sliver, and on its own it reads as the call to action it is */
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row.attn {
+  grid-template-areas:
+    "dot   agent pin   menu"
+    "meta  meta  meta  meta"
+    "title title title title"
+    "recpt recpt recpt recpt";
+}
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row.attn > .ws-meta { justify-self: start; }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row.attn:not(.renaming) > .ws-meta { display: block; }   /* hover shows ⋯ in its own cell; the row never jumps */
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row.attn > .ws-kebab { grid-area: menu; }
+/* the pin: a drawn gold bookmark, not a fallback-font star */
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-pin {
+  align-self: center; width: 7px; height: 10px; overflow: hidden; color: transparent; font-size: 0; text-shadow: none;
+  background: var(--gold); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0 100%); opacity: .85;
+}
+
+/* title: two lines at most, read rows calmer than unread / selected ones */
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-title {
+  margin-top: 1px; line-height: 1.15; letter-spacing: .3px; color: color-mix(in srgb, var(--text) 80%, var(--panel2));
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: normal;
+}
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row:is(.sel, .unread, .attn) .ws-title { color: var(--ph-bright); }
+/* excerpt: a real sentence (two lines), not a three-word stub */
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-receipt {
+  font: 15px/1.25 'VT323', monospace; letter-spacing: .2px; color: var(--cg-mute); opacity: 1; text-shadow: none;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: normal;
+}
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row:is(.sel, .unread) .ws-receipt { color: color-mix(in srgb, var(--text) 82%, var(--panel2)); }
