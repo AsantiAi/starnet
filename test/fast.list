@@ -98,6 +98,7 @@ test/desktop-voice-bundle.test.js
 test/transcript.compaction.e2e.test.js
 test/provider.anthropic.test.js
 test/provider.claude-cli.test.js
+test/claude-cli-text-protocol.test.js
 test/provider-accounts.test.js
 test/claude-cli-login.test.js
 test/claude-cli-signin-engine.test.js

@@ -131,6 +131,12 @@
     return '<invoke name="' + String(name || '') + '">\n' + body + '</invoke>';
   }
 
+  /* A tool result is outside text (a web page, a file, an email): a "</tool_result><user>…" inside it closed the result and
+     opened a turn that read as the Commander's own (sweep 2026-10-03). Every transcript or call tag in it is written
+     with &lt; so it stays text; the native API keeps roles apart structurally, this text transcript has to do it here. */
+  const TRANSCRIPT_TAG_RE = /<(\/?)((?:[A-Za-z_][\w-]*:)?(?:tool_result|user|assistant|system_note|conversation|function_calls|invoke|parameter|tool_call))(?=[\s>/]|$)/gi;
+  const inertTags = s => String(s).replace(TRANSCRIPT_TAG_RE, '&lt;$1$2');
+
   /* Leading system messages become the CLI system prompt; everything after is rendered as a tagged transcript
      on stdin (later system messages stay in place as notes, like the native Anthropic adapter keeps them). */
   function buildPrompt(messages, tools) {
@@ -149,7 +155,7 @@
     for (const m of rest) {
       if (m.role === 'user') lines.push('<user>\n' + textOf(m.content) + '\n</user>');
       else if (m.role === 'system') lines.push('<system_note>\n' + textOf(m.content) + '\n</system_note>');
-      else if (m.role === 'tool') lines.push('<tool_result id="' + String(m.tool_call_id || '') + '">\n' + textOf(m.content) + '\n</tool_result>');
+      else if (m.role === 'tool') lines.push('<tool_result id="' + String(m.tool_call_id || '') + '">\n' + inertTags(textOf(m.content)) + '\n</tool_result>');
       else if (m.role === 'assistant') {
         let body = textOf(m.content);
         const calls = [];
@@ -183,8 +189,13 @@
   const OPEN_RE = new RegExp('<tool_call>|<' + PFX + 'function_calls>|<' + PFX + 'invoke\\s+name="([^"]{1,200})"\\s*>');
   const INVOKE_CLOSE_RE = new RegExp('</' + PFX + 'invoke>', 'g');
   const WRAP_CLOSE_RE = new RegExp('^</' + PFX + 'function_calls>');
-  const PARAM_RE = new RegExp('<' + PFX + 'parameter\\s+name="([^"]{1,200})"\\s*>([\\s\\S]*?)</' + PFX + 'parameter>', 'g');
-  const OPEN_PARAM_RE = new RegExp('<' + PFX + 'parameter\\s+name="([^"]{1,200})"\\s*>([\\s\\S]*)$');
+  // A value is written RAW, so it may itself contain "</parameter>" (a doc about this format, an XML file): it ends only at
+  // the "</parameter>" that another <parameter> or the end of the call follows. The old first-match cut such a file short
+  // and handed the stub over as a complete call (sweep 2026-10-03).
+  const PARAM_OPEN_SRC = '<' + PFX + 'parameter\\s+name="([^"]{1,200})"\\s*>';
+  const PARAM_OPEN_RE = new RegExp(PARAM_OPEN_SRC);
+  const PARAM_END_RE = new RegExp('</' + PFX + 'parameter>(?=\\s*(?:<' + PFX + 'parameter\\s+name="[^"]{1,200}"\\s*>|$))', 'g');
+  const BLOCK_NEXT_RE = new RegExp('^(?:<' + PFX + 'invoke\\s+name="|</' + PFX + 'function_calls>)');
   const NAME_SCAN = 400;   // a <tool_call>'s name leads its JSON; past this many chars without one, stop looking
   const HOLD = 80;         // a trailing '<…' this short with no '>' yet may still become a call tag: hold it back
   function announcedName(buf) {
@@ -197,8 +208,22 @@
     const enabled = !(opts && opts.enabled === false);
     // mode: 'prose' | 'call' (inside one call) | 'next' (a call or <function_calls> just passed: another call, or the end?)
     let buf = '', mode = 'prose', kind = '', named = false, scan = 0, calls = 0, stopped = false;
+    /* CODE IS NOT A CALL (sweep 2026-10-03): a reply that SHOWS the call format in a code fence or inline code ran it — a
+       fenced example fs_delete deleted the file, and `<invoke name="shell">` in a sentence swallowed the rest of the
+       reply as a call. The prose that has gone out is tracked for an open ``` fence or ` span; a call tag inside one is
+       text. inBlock: inside <function_calls>, whose own close ends it — so a "</invoke>" inside a value is not the end. */
+    let fence = false, tick = false, inBlock = false;
+    function track(s) {
+      for (let i = 0; i < s.length; i++) {
+        if (s.charCodeAt(i) === 96 && s.startsWith('```', i)) { fence = !fence; tick = false; i += 2; continue; }
+        const c = s[i];
+        if (c === '\n') tick = false;
+        else if (c === '`' && !fence) tick = !tick;
+      }
+    }
     function addText(out, s) {
       if (!s) return;
+      track(s);
       out.text += s;
       const last = out.items[out.items.length - 1];
       if (last && last.text != null) last.text += s; else out.items.push({ text: s });
@@ -212,15 +237,19 @@
           const m = enabled ? OPEN_RE.exec(buf) : null;
           if (m) {
             addText(out, buf.slice(0, m.index));
+            if (fence || tick) { addText(out, m[0]); buf = buf.slice(m.index + m[0].length); continue; }   // shown, not called
+            if (buf.slice(0, m.index).trim()) inBlock = false;
             buf = buf.slice(m.index + m[0].length);
             if (m[0] === CALL_OPEN) { mode = 'call'; kind = 'json'; named = false; scan = 0; continue; }
-            if (m[1] == null) { mode = 'next'; continue; }   // <function_calls>: its calls follow
+            if (m[1] == null) { mode = 'next'; inBlock = true; continue; }   // <function_calls>: its calls follow
             mode = 'call'; kind = 'invoke'; named = true; scan = 0;
             out.items.push({ start: m[1].trim() });
             continue;
           }
           let keep = 0;
           if (enabled) { const lt = buf.lastIndexOf('<'); if (lt >= 0 && couldOpen(buf.slice(lt))) keep = buf.length - lt; }
+          // a run of backticks at the end may be the start of a fence still arriving: hold it so the fence is read whole
+          if (enabled) { const bt = /`+$/.exec(buf.slice(0, buf.length - keep)); if (bt) keep += bt[0].length; }
           addText(out, buf.slice(0, buf.length - keep));
           buf = buf.slice(buf.length - keep);
           return out;
@@ -239,10 +268,17 @@
             buf = buf.slice(end + CALL_CLOSE.length);
           } else {
             INVOKE_CLOSE_RE.lastIndex = scan;
-            const c = INVOKE_CLOSE_RE.exec(buf);
-            if (!c) { scan = Math.max(0, buf.length - HOLD); return out; }
-            out.items.push({ body: buf.slice(0, c.index), kind, closed: true });
-            buf = buf.slice(c.index + c[0].length);
+            let c, close = null;
+            while ((c = INVOKE_CLOSE_RE.exec(buf))) {
+              if (!inBlock) { close = c; break; }
+              // inside <function_calls> the call ends at the </invoke> that another call or the block's close follows
+              const after = buf.slice(c.index + c[0].length).replace(/^\s+/, '');
+              if (!after || (after[0] === '<' && couldOpen(after) && !BLOCK_NEXT_RE.test(after))) { scan = c.index; return out; }   // still arriving
+              if (BLOCK_NEXT_RE.test(after)) { close = c; break; }
+            }
+            if (!close) { scan = Math.max(scan, buf.length - HOLD); return out; }
+            out.items.push({ body: buf.slice(0, close.index), kind, closed: true });
+            buf = buf.slice(close.index + close[0].length);
           }
           calls++; mode = 'next'; continue;
         }
@@ -251,12 +287,13 @@
         if (!ws) return out;
         if (WRAP_CLOSE_RE.test(ws)) {
           if (calls) return stop(out);
-          buf = ws.replace(WRAP_CLOSE_RE, ''); mode = 'prose'; continue;   // an empty block: nothing to run
+          buf = ws.replace(WRAP_CLOSE_RE, ''); mode = 'prose'; inBlock = false; continue;   // an empty block: nothing to run
         }
         const m = OPEN_RE.exec(ws);
         if (m && m.index === 0) { buf = ws; mode = 'prose'; continue; }   // the prose branch opens it at once
         if (ws[0] === '<' && couldOpen(ws)) return out;                   // '<inv…' or '</function_c…' still arriving
         if (calls) return stop(out);
+        inBlock = false;
         addText(out, '<function_calls>' + buf); buf = ''; mode = 'prose';  // a <function_calls> with no call was prose
         return out;
       }
@@ -268,7 +305,10 @@
         const out = { text: '', items: [], stop: false };
         if (!stopped) {
           if (mode === 'call') {
-            if (kind === 'invoke' || named === true || parseCall(buf)) out.items.push({ body: buf, kind, closed: false });
+            // a block whose stream ended before </function_calls>: its call ends at the LAST </invoke> written
+            const lastClose = kind === 'invoke' && inBlock ? buf.lastIndexOf('</invoke>') : -1;
+            if (lastClose >= 0) out.items.push({ body: buf.slice(0, lastClose), kind, closed: true });
+            else if (kind === 'invoke' || named === true || parseCall(buf)) out.items.push({ body: buf, kind, closed: false });
             else addText(out, CALL_OPEN + buf);
           } else if (mode === 'prose') addText(out, buf);
         }
@@ -317,10 +357,16 @@
      and refuses it ("NOT executed — reissue it complete") instead of writing half a file. */
   function invokeCall(name, body, props, closed) {
     const args = {};
-    let m, last = 0;
-    PARAM_RE.lastIndex = 0;
-    while ((m = PARAM_RE.exec(body))) { args[m[1]] = paramValue(m[2], props && props[m[1]]); last = PARAM_RE.lastIndex; }
-    const open = closed ? null : OPEN_PARAM_RE.exec(body.slice(last));
+    let rest = String(body || ''), m, open = null;
+    while ((m = PARAM_OPEN_RE.exec(rest))) {
+      const from = m.index + m[0].length;
+      PARAM_END_RE.lastIndex = from;
+      const e = PARAM_END_RE.exec(rest);
+      // a value with no end: cut off by the output limit (or never closed) — handed over OPEN so the loop refuses it
+      if (!e) { open = [null, m[1], rest.slice(from)]; break; }
+      args[m[1]] = paramValue(rest.slice(from, e.index), props && props[m[1]]);
+      rest = rest.slice(e.index + e[0].length);
+    }
     if (!open) return { name, args: JSON.stringify(args) };
     const head = JSON.stringify(args).slice(0, -1);
     return { name, args: head + (head.length > 1 ? ',' : '') + JSON.stringify(open[1]) + ':' + JSON.stringify(open[2]).slice(0, -1) };
@@ -467,6 +513,19 @@
     return { spawn, fs, os, path, env, platform, isFile, command, notInstalled, notSignedIn, childEnv, killTree, authStatus, logout };
   }
 
+  // the CLI's own model names and aliases -> the list-rate table's ids (an alias follows the newest of its family)
+  const ALIAS = { opus: 'claude-opus-5-5', sonnet: 'claude-sonnet-5-5', haiku: 'claude-haiku-4-5-20251001' };
+  function estimateUsd(u, model) {
+    try {
+      const id = String(model || '').replace(/\[1m\]$/i, '');
+      const prices = require('./prices.js');
+      const p = prices.priceOf('anthropic', ALIAS[id] || id);
+      if (!p) return NaN;
+      const uncached = Number(u.input_tokens) || 0, write = Number(u.cache_creation_input_tokens) || 0, read = Number(u.cache_read_input_tokens) || 0;
+      const c = p.cache || { read: 1, write: 1 };
+      return ((uncached + read * c.read + write * c.write) * p.in + (Number(u.output_tokens) || 0) * p.out) / 1e6;
+    } catch (_) { return NaN; }
+  }
   function makeClaudeCliProvider(opts) {
     opts = opts || {};
     const host = makeCliHost(opts);
@@ -571,6 +630,7 @@
       }
       let callIndex = 0, sawText = false, result = null, apiKeySource = null, apiError = '';
       let blockDone = false, streamUsage = null;   // the call block ended the turn (see the reader's STOP)
+      let outChars = 0;   // what the model wrote this turn: the floor for its output tokens when the stop cut the count short
       const callId = index => 'call_cli_' + idTag + '_' + turn + '_' + index;
       let open = null;   // the call a tool_start already announced, whose block has not closed yet
       function* emitSplit(part) {
@@ -610,6 +670,7 @@
           try { j = JSON.parse(line); } catch (_) { continue; }
           if (j.type === 'system' && j.subtype === 'init') apiKeySource = j.apiKeySource == null ? null : String(j.apiKeySource);
           else if (j.type === 'stream_event' && j.event && j.event.type === 'content_block_delta' && j.event.delta && j.event.delta.type === 'text_delta') {
+            outChars += String(j.event.delta.text || '').length;
             const part = splitter.push(j.event.delta.text);
             yield* emitSplit(part);
             if (part.stop) { blockDone = true; break; }
@@ -642,7 +703,13 @@
           // The calls are complete; the rest of this generation is the model guessing at results. `finally` ends the
           // child, so no result line comes: book what the stream itself reported (the input side is exact; output is
           // the last count the stream gave, which can run short of the tokens spent before the stop).
-          result = { usage: streamUsage || {}, total_cost_usd: NaN };
+          // COST TRUTH ON A STOP (sweep 2026-10-03): no result line means no billed figure, and the stream's last output
+          // count is usually 1 (message_delta never came). An API-key sign-in IS billed for this turn, so it is priced
+          // from the list-rate table with output floored at ~4 characters a token — it booked $0 and the caps never saw
+          // a tool-calling turn. A subscription stays $0 (nothing is billed per call).
+          const su = Object.assign({}, streamUsage || {});
+          su.output_tokens = Math.max(Number(su.output_tokens) || 0, Math.ceil(outChars / 4));
+          result = { usage: su, total_cost_usd: apiKeySource === 'none' ? NaN : estimateUsd(su, req.model) };
           yield usageChunk();
           yield { type: 'done', finishReason: 'tool_calls', truncated: false };
           return;
@@ -698,5 +765,5 @@
     };
   }
 
-  return { makeClaudeCliProvider, makeCliHost, _internals: { buildPrompt, makeCallSplitter, parseCall, toolsPrompt, MODELS } };
+  return { makeClaudeCliProvider, makeCliHost, _internals: { buildPrompt, makeCallSplitter, parseCall, invokeCall, estimateUsd, toolsPrompt, MODELS } };
 });
