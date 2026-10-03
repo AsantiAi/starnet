@@ -16,18 +16,29 @@
    (transport.google.js TOOLS) through the same wire-name function the registry uses — exact names, no prefix
    guessing. Sensitive-tier services (Calendar, Docs, Sheets, send-only Gmail) are not affected.
 
+   MAILBOX ACCESS WITHOUT OAUTH (extraRestricted): the Gmail app-password connector (transport.gmail-imap.js) reads
+   the same mail over IMAP. It never asks Google for an OAuth scope, but it is the same mailbox-read data, so it is
+   classified exactly like restricted Gmail — by its saved endpoint, with its own exact tool list.
+
    Not covered (derived content, see docs/GOOGLE_REVIEW_BUILD.md): an assistant's own prose that restates a
    message, memory notes or files the agent wrote from Google content. */
 const WITHHELD = '[Withheld: this Gmail / Google Drive result stays on this computer and is never sent to StarNet Managed. '
   + 'Switch this agent to your own model provider to work with it.]';
 
-function makeGoogleRelayGuard({ googleClient, tools, mcpToolName, configs }) {
+function makeGoogleRelayGuard({ googleClient, tools, mcpToolName, configs, extraRestricted }) {
   if (!googleClient || !tools || typeof mcpToolName !== 'function' || typeof configs !== 'function') {
     throw new Error('google-relay-guard requires { googleClient, tools, mcpToolName, configs }');
   }
+  // [{ service, matches(cfg) -> bool, tools: [{ name }] }] — non-OAuth mailbox connectors held to the restricted rule.
+  const extras = Array.isArray(extraRestricted) ? extraRestricted.filter(x => x && x.service && typeof x.matches === 'function') : [];
   function restrictedService(cfg) {
+    for (const x of extras) { try { if (x.matches(cfg)) return x.service; } catch (_) {} }
     const svc = googleClient.serviceOf(cfg);
     return svc && googleClient.SERVICES[svc] && googleClient.SERVICES[svc].tier === 'restricted' ? svc : null;
+  }
+  function toolsOf(svc) {
+    const x = extras.find(e => e.service === svc);
+    return (x ? x.tools : tools[svc]) || [];
   }
   // connector id -> restricted service, from the live saved configs (read at call time, never cached).
   function restrictedConnectors() {
@@ -40,7 +51,7 @@ function makeGoogleRelayGuard({ googleClient, tools, mcpToolName, configs }) {
   }
   function restrictedToolNames() {
     const names = new Set();
-    for (const [id, svc] of restrictedConnectors()) for (const t of (tools[svc] || [])) names.add(mcpToolName(id, t.name));
+    for (const [id, svc] of restrictedConnectors()) for (const t of toolsOf(svc)) names.add(mcpToolName(id, t.name));
     return names;
   }
   // LIVE: may this room object's connector be projected into a run on this provider?
