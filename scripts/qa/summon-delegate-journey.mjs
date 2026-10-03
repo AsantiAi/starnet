@@ -121,8 +121,9 @@ try {
   await evalJS(cdp, `(() => { window.__RAF = 0; const t = () => { window.__RAF++; requestAnimationFrame(t); }; requestAnimationFrame(t); return 1; })()`);
   await sleep(1000);
   ck('booted to the live floor with rAF running', Number(await evalJS(cdp, 'window.__RAF')) > 10);
-  const before = JSON.parse(await evalJS(cdp, `JSON.stringify({ props: Build.__test__.station().props().length, bodies: window.__SKYNET_TEST__.bodies().map(b => b.id) })`));
-  ck('baseline: the hero alone, with its starter desk', before.bodies.length === 1 && before.props === 1, J(before));
+  const before = JSON.parse(await evalJS(cdp, `JSON.stringify({ props: Build.__test__.station().props().length, desks: Build.__test__.station().props().filter(p => p.t === 'desk').map(p => p.agentId || '-'), bodies: window.__SKYNET_TEST__.bodies().map(b => b.id) })`));
+  // the 0.13 starter station carries more than the desk (cabinet, server cart, dish, workbench, studio, plants): the rule is ONE desk, the hero's
+  ck('baseline: the hero alone, with its starter desk', before.bodies.length === 1 && before.desks.length === 1 && before.desks[0] === 'agent', J(before));
 
   // run-lifecycle bus traffic — the delegation pose is driven by tool_call(team.dispatch) setting
   // delegateLead, then the WORKER's agent.run.start triggering handoff().
