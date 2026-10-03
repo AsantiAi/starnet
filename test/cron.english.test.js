@@ -81,8 +81,17 @@ for (const bad of ['whenever i feel like it', 'last day of every month', 'every 
   // sweep 2026-10-02: a start or an end has no cron form
   'every day at 9am until friday' /* Fridays only */, 'every day at 9am starting monday' /* Mondays only */, 'every day at 9am for a week' /* forever */,
   // QA 2026-10-02
-  'every 6 weeks on mondays at 9am' /* weekly */, 'every five weeks at 9am' /* daily */, 'every 15th at 9am' /* daily */, 'every 3rd at noon' /* daily */]) {
+  'every 6 weeks on mondays at 9am' /* weekly */, 'every five weeks at 9am' /* daily */, 'every 15th at 9am' /* daily */, 'every 3rd at noon' /* daily */,
+  // sweep 2026-10-02 (review of the QA lane): every count of weeks or days but one, and a day-of-month the monthly rule cannot place
+  'every few weeks at 9am' /* daily */, 'every several weeks at 9am' /* daily */, 'every few days at 9am' /* daily */,
+  'every twelve weeks on monday at 9am' /* weekly */, 'every eleven weeks on mondays' /* weekly */, 'every second week on monday' /* weekly */,
+  'every couple of weeks on monday' /* weekly */, 'every 3 week on monday' /* weekly */, 'every 2 wks on monday' /* weekly */,
+  'the 15th monthly at 9am' /* the 1st */]) {
   A.eq(cron.parseSchedule(bad, NOW, { defaultTz: TZ }), null, 'refused: "' + bad + '"');
 }
+
+// '15th of the month' is a MONTHLY schedule, never a one-off today
+A.eq(expr('15th of the month at 9am'), '0 9 15 * *', '"15th of the month at 9am" is monthly on the 15th');
+A.eq(expr('every 1 week on monday at 9am'), '0 9 * * 1', 'one week is still weekly');
 
 A.report('cron.english');

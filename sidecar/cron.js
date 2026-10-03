@@ -476,6 +476,9 @@
     //   "the last friday of every month" saved the 1st · "9am on the 15th" saved a one-shot tomorrow.
     if (/\b(?:except|excluding|but not|other than|apart from)\b/.test(s)) return null;
     if (/\bevery (?:[2-9]|[1-9]\d+|two|three|four|five|six|seven|ten) days?\b/.test(s)) return null;
+    // ANY count of weeks or days but one has no cron form (sweep 2026-10-02: "every few weeks" / "every few days" saved DAILY,
+    // "every twelve weeks on monday" / "every second week" / "every 2 wks" / "every 3 week" saved WEEKLY)
+    if (/\bevery (?:[2-9]|[1-9]\d+|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|few|several|couple(?: of)?|second|third|fourth|fifth|sixth) (?:weeks?|wks?|days?)\b/.test(s)) return null;
     if (/\b(?:years?|yearly|annual(?:ly)?|quarters?|quarterly)\b/.test(s)) return null;
     if (/\b(?:first|second|third|fourth|fifth|last|[1-5](?:st|nd|rd|th))\s+(?:sun|mon|tue|wed|thu|fri|sat)/.test(s)) return null;
     if (/\blast\b/.test(s) && /\bmonth/.test(s)) return null;
@@ -510,7 +513,7 @@
     const minute = times.length ? String(times[0].m) : '0';
 
     // one-shots: tomorrow / today / tonight / next <day> / on <day> (singular, no "every")
-    const every = /\bevery\b|\bdaily\b|\bweekly\b|\bmonthly\b|\bweekdays\b|\bweekends\b|\b(mon|tues|wednes|thurs|fri|satur|sun)days\b/.test(s);
+    const every = /\bevery\b|\bof (?:the|each) month\b|\bdaily\b|\bweekly\b|\bmonthly\b|\bweekdays\b|\bweekends\b|\b(mon|tues|wednes|thurs|fri|satur|sun)days\b/.test(s);
     if (!every) {
       if (/\btomorrow\b/.test(s)) return { onceDayOffset: 1, hour: parseInt(hour, 10), minute: parseInt(minute, 10), single: times.length <= 1 };
       if (/\b(today|tonight|this (morning|afternoon|evening))\b/.test(s)) return { onceDayOffset: 0, hour: parseInt(hour, 10), minute: parseInt(minute, 10), single: times.length <= 1, strictToday: true };
@@ -531,6 +534,7 @@
     const ordWord = s.match(/\b(first|second|third|fourth|fifth|tenth|fifteenth|twentieth)(?: day)? of (?:every|the|each) month\b/);
     if (m || ordWord || /\bmonthly\b|\bevery month\b/.test(s)) {
       if (/\blast day\b/.test(s)) return null;               // cron has no "last day of month"; refuse, never guess
+      if (!m && !ordWord && /\b\d{1,2}(?:st|nd|rd|th)\b/.test(s)) return null;   // "the 15th monthly" saved the 1st: refuse, never guess
       const dom = m ? parseInt(m[1], 10) : ordWord ? ORD_WORDS[ordWord[1]] : 1;
       if (!(dom >= 1 && dom <= 31)) return null;
       return { cron: minute + ' ' + hour + ' ' + dom + ' * *' };
