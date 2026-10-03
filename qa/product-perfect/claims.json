@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "e58003f8873796095d4a561793791fda628b7a30",
+    "sourceCommit": "8ed43e1718ebdbd81888e1fe9c3ad708fbde9214",
     "pathSetSha256": "69557b650ba864c7feca1f652d8ced6433f5239e587cdf6a9368c966a54f4c65",
     "files": [
       {
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 419829,
-        "sha256": "1d586a548baf69ec2dee8fb6c4970c025cf6432c242270237e11b06007b62d00"
+        "bytes": 420834,
+        "sha256": "5504847113d0369b083987f19320db7839db7af5f4a26b72a3af4572943cfca8"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
