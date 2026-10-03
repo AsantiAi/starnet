@@ -1467,7 +1467,9 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       item.dataset.section = sec.id;
       item.setAttribute('role', 'tab');
       item.id = 'con-tab-' + key + '-' + sec.id;
-      item.innerHTML = '<span class="con-rail-glyph" aria-hidden="true">' + (sec.glyph || '▪') + '</span>' +
+      // one drawn icon set (railicons.js) — the old symbol glyph stays only when no icon matches the section
+      const railIcon = (typeof RailIcons !== 'undefined' && RailIcons.forSection) ? RailIcons.forSection(sec.label, sec.id) : null;
+      item.innerHTML = '<span class="con-rail-glyph' + (railIcon ? ' has-ico' : '') + '" aria-hidden="true">' + (railIcon || sec.glyph || '▪') + '</span>' +
         '<span class="con-rail-label">' + esc(sec.label) + '</span>';
       item.addEventListener('click', () => selectSection(sec.id, true));
       (tabsTop ? topTabs : rail).appendChild(item);
