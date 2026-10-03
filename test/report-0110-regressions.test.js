@@ -15,6 +15,9 @@ test('file approval preserves every mutation argument beyond the run summary cap
   assert.deepEqual(JSON.parse(ctx.consentSummary({name,args})), args, name);
  }
  assert.equal(ctx.consentSummary({name:'fs.read',args:{path:'sample.txt'}}), 'sample.txt');
+ // QA 10-02: the clipped fallback reaches a phone's lock screen (remoteAskWords) — a token in a command must never ride along
+ const short = ctx.consentSummary({name:'shell.run',args:{command:'curl -H "Authorization: Bearer sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789" https://x'}});
+ assert.ok(!/sk-ant-api03/.test(short) && /redacted/.test(short), 'fallback summary is redacted: ' + short);
 });
 test('rating controls name the originating task and run, even when an older card is shown', () => {
  const nodes=[];
@@ -60,3 +63,12 @@ test('a delayed rating for the preceding run cannot appear below newer work in t
 });
 
 test('delayed memory decks do not reintroduce a superseded rating',()=>{assert.match(extract(chat,'function renderTurninBatch(', '    const state ='),/!ratingRunSuperseded\(batch.runId\)/);});
+
+test('QA 10-02: a skill review (also fired by a rating) checks the spending cap before it spends', () => {
+ const src = extract(backend, 'async function runBackgroundSkillReview(o)', 'async function runSkillCurator');
+ const gate = src.indexOf("budget.check(null, String(agentId || 'agent'), 0, Date.now(), null)");
+ assert.ok(gate > 0, 'the review asks the budget first');
+ assert.ok(gate < src.indexOf('new AbortController()'), 'before any provider work starts');
+ assert.ok(/if \(blocked\) \{[^}]*return null; \}/.test(src), 'a reached cap returns without a paid call');
+ assert.ok(/if \(!unmetered\) \{/.test(src.slice(0, gate)), 'an unmetered provider is not gated by a cap it never spends against');
+});

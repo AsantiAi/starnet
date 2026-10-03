@@ -23,7 +23,7 @@ A.ok(escSrc, 'chat.js still defines HTML_ESC');
 // eslint-disable-next-line no-new-func
 const renderMarkdown = new Function(
   escSrc[0] + '\n' + extract('escapeHtml') + '\n' + extract('linkify') + '\n' +
-  extract('mdInline') + '\n' + extract('reportInline') + '\n' + extract('renderFence') + '\n' + extract('renderMarkdown') +
+  extract('mdInline') + '\n' + extract('hostOf') + '\n' + extract('linkHostNote') + '\n' + extract('reportInline') + '\n' + extract('renderFence') + '\n' + extract('renderMarkdown') +
   '\nreturn renderMarkdown;'
 )();
 

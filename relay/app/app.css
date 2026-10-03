@@ -396,3 +396,6 @@ textarea, input[type=text], input[type=search] { border-radius: 8px; border-colo
 .md .h { display: flex; align-items: center; gap: 9px; margin-top: 4px; font-size: .86em; letter-spacing: 2px; color: var(--ph); text-shadow: 0 0 5px rgba(var(--ph-rgb), .4); }
 .md .h::after { content: ""; flex: 1 1 auto; height: 1px; background: rgba(var(--ph-rgb), .32); }
 .md code { border-radius: 4px; background: rgba(var(--ph-rgb), .08); -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+
+/* a long conversation opens on its newest page; the older part loads above, a page at a time */
+.log > .earlier { align-self: center; font-size: 15px; min-height: 36px; text-shadow: var(--pg-glow-soft); }

@@ -240,7 +240,7 @@
     } catch (_) {}
   }
   async function refreshApprovals() { try { const r = await call('approvals'); if (r.ok) { S.approvals = r.data; for (const a of S.approvals) if (!S.arrivedAt.has(a.promptId)) S.arrivedAt.set(a.promptId, Date.now()); } } catch (_) {} }
-  async function refreshThreads() { try { const r = await call('threads', { limit: 50 }); if (r.ok) S.threads = r.data; } catch (_) {} }
+  async function refreshThreads() { try { const r = await call('threads', { limit: 300 }); if (r.ok) S.threads = r.data; } catch (_) {} }
   async function refreshRoutines() { try { const r = await call('routines'); if (r.ok) S.routines = r.data; } catch (_) {} }
   async function refreshAll() {
     refreshView();   // needs nothing else: start the picture first, it is the biggest thing on the screen
@@ -267,10 +267,10 @@
     if (e.type === 'run.started') { S.live.set(e.runId, { streamId: e.streamId, agentId: e.agentId, text: '', steps: [], ended: null, seenAt: Date.now() }); statusSoonish(); if (S.tab === 'sessions') activitySoonish(); render(true); return; }
     const L = e.runId && S.live.get(e.runId);
     const showing = L && S.thread && S.thread.streamId === L.streamId;
-    if (e.type === 'run.text' && L) {
-      // the whole reply so far, or what it grew by (applied only where it continues what this phone has)
-      if (typeof e.text === 'string') L.text = e.text;
-      else if (typeof e.add === 'string' && (L.text || '').length === e.at) L.text = (L.text || '') + e.add;
+    if ((e.type === 'run.text' || e.type === 'run.delta') && L) {
+      // the whole reply so far (run.text), or what it grew by (run.delta, applied only where it continues what this phone has)
+      if (e.type === 'run.text' && typeof e.text === 'string') L.text = e.text;
+      else if (e.type === 'run.delta' && typeof e.add === 'string' && (L.text || '').length === e.at) L.text = (L.text || '') + e.add;
       else return;
       if (showing) renderLive(); return;
     }
@@ -1017,14 +1017,43 @@
     S.file = null; S.page = null; S.target = agentId;
     const v = $('view'), atEnd = v.scrollHeight - v.scrollTop - v.clientHeight < 80;
     render();
-    try { const r = await call('thread', { streamId, limit: 80 }); if (r.ok && S.thread && S.thread.streamId === streamId) S.thread.turns = r.data; } catch (e) { toast(e.message, true); }
+    // a refresh keeps every page already loaded (it re-reads as many turns as are on screen, at least the newest 80)
+    const want = Math.max(80, (same && S.thread.turns && S.thread.turns.length) || 0);
+    try {
+      const r = await call('thread', { streamId, limit: Math.min(200, want), page: true });
+      if (r.ok && S.thread && S.thread.streamId === streamId) {
+        const d = r.data;
+        if (Array.isArray(d)) { S.thread.turns = d; S.thread.earlier = 0; }   // an older station answers with the bare list
+        else { S.thread.turns = d.turns || []; S.thread.earlier = Number(d.earlier) || 0; }
+      }
+    } catch (e) { toast(e.message, true); }
     render();
     if (!keepScroll || atEnd) v.scrollTop = v.scrollHeight;
   }
 
+  // the older part of a long conversation, a page at a time, above what is on screen
+  async function loadEarlier(btn) {
+    const t = S.thread; if (!t || !t.turns) return;
+    btn.disabled = true; btn.textContent = 'Loading…';
+    try {
+      const r = await call('thread', { streamId: t.streamId, limit: 80, before: t.turns.length, page: true });
+      if (r.ok && S.thread === t && r.data && Array.isArray(r.data.turns)) {
+        const v = $('view'), fromBottom = v.scrollHeight - v.scrollTop;
+        t.turns = r.data.turns.concat(t.turns); t.earlier = Number(r.data.earlier) || 0;
+        render(); v.scrollTop = v.scrollHeight - fromBottom;   // keep the reader where they were
+        return;
+      }
+    } catch (e) { toast(e.message, true); }
+    btn.disabled = false; btn.textContent = 'Show earlier';
+  }
   function renderThread(v) {
     const log = el('div', 'log');
     const turns = S.thread.turns;
+    if (turns && S.thread.earlier > 0) {
+      const b = el('button', 'btn quiet earlier', 'Show earlier · ' + S.thread.earlier); b.type = 'button';
+      b.onclick = () => loadEarlier(b);
+      log.appendChild(b);
+    }
     if (!turns) log.appendChild(el('div', 'empty', 'Loading…'));
     else {
       const shown = turns.filter(t => (t.role === 'user' || t.role === 'assistant') && t.content && t.content !== 'null');

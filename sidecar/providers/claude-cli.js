@@ -691,6 +691,9 @@
       // The CLI reports its own billed cost per turn (see COST TRUTH above); there is no list-rate table here.
       priceOf() { return null; },
       supportsTools() { return true; },
+      // the CLI's text input has no image channel (textOf replaces an image with a note): a caller that needs the model to
+      // SEE an image must ask first — image_analyze used to report a confident description of a picture never sent
+      supportsImages() { return false; },
       reasoningEfforts() { return EFFORTS.slice(); }
     };
   }

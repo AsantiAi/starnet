@@ -537,7 +537,7 @@
         if (!model || (!usingCodex && !key && !hasStoredKey)) {
           sfx('bad'); setMsg(msgEl, '✕ connect your agent\'s provider + model in SETTINGS first', '');
           // deep-link door: land Settings on PROVIDERS so a beginner can fix it in one hop (pattern: openTerm section).
-          const link = document.createElement('button'); link.className = 'ch-door'; link.textContent = 'open SETTINGS → PROVIDERS';
+          const link = document.createElement('button'); link.className = 'ch-door'; link.textContent = 'open SETTINGS → AI & MODELS';
           link.addEventListener('click', () => { try { openTerm('settings', 'providers'); } catch (_) {} });
           msgEl.appendChild(document.createTextNode(' ')); msgEl.appendChild(link);
           return;

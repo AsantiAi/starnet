@@ -4365,11 +4365,25 @@ const Build = (() => {
     cardCloseAll();
     selectRoom(roomId);
   }
+  /* A HALLWAY JOINS TWO ROOMS (the station builder's rule, now Build Mode's too): a room move, nudge, resize or delete that
+     leaves a hallway leading nowhere is refused and nothing changes — Build Mode stranded hallways the builder refuses. A
+     hallway already stranded before the edit is not this edit's doing. One edit, one undo (transact). */
+  function keepsHalls(op) {
+    if (typeof StationBuilder === 'undefined' || !StationBuilder.strandedHalls || typeof station.transact !== 'function') return op();
+    const before = new Set(StationBuilder.strandedHalls(station));
+    return station.transact(() => {
+      const r = op(); if (!r || !r.ok) return r;
+      const now = StationBuilder.strandedHalls(station).filter(id => !before.has(id));
+      if (!now.length) return r;
+      const h = station.roomById(now[0]);
+      return { ok: false, error: 'STRANDS_HALL', msg: ((h && h.name) || 'A hallway') + ' would lead nowhere · keep it joined to two rooms, or delete the hallway first' };
+    });
+  }
   // the ONE room-removal path the card and the DELETE tool both take (flash, undo nudge, honest refusal)
   function doDeleteRoom(roomId, ev) {
     const rm = station.roomById(roomId);
     const on = rm ? station.props().filter(p => rm.rects.some(r => p.x <= r.x2 && p.x + (p.w || 1) - 1 >= r.x1 && p.y <= r.y2 && p.y + (p.h || 1) - 1 >= r.y1)).map(p => Object.assign({}, p)) : [];
-    const res = station.removeRoom(roomId);
+    const res = keepsHalls(() => station.removeRoom(roomId));
     if (res && res.ok) { if (rm) pushFlash(rm.rects, true); on.forEach(p => vanishProp(p)); flashUndo(); flashTip(ev, 'deleted — UNDO to restore', true); sfx('click'); }
     else if (res && res.error === 'SPAWN_ROOM') { flashTip(ev, 'spawn room — can’t delete (try MOVE)'); sfx('bad'); }
     else { flashTip(ev, (res && res.msg) || 'blocked'); sfx('bad'); }
@@ -4700,7 +4714,7 @@ const Build = (() => {
     const rm = station.roomById(d.roomId);
     const s = snapMoveDelta(rm, d.cur.tx - d.start.tx, d.cur.ty - d.start.ty);
     if (!s.dx && !s.dy) { hideTip(); return; }
-    feedback(station.moveRoom(d.roomId, s.dx, s.dy), ev, 'relocated');
+    feedback(keepsHalls(() => station.moveRoom(d.roomId, s.dx, s.dy)), ev, 'relocated');
   }
   function propSpec(id) { return (typeof PropSprites !== 'undefined' && PropSprites.spec(id)) || { w: 1, h: 1 }; }
   /* ---------- PROP ORIENTATION (R / shift+R turn · M flip) ----------
@@ -5153,7 +5167,7 @@ const Build = (() => {
   function nudgeRoom(dx, dy, ev) {
     const rm = station.roomById(selectedRoomId); if (!rm) return;
     const from = rm.rects.map(r => Object.assign({}, r));
-    const res = station.moveRoom(rm.id, dx, dy);
+    const res = keepsHalls(() => station.moveRoom(rm.id, dx, dy));
     if (res && res.ok) { snapTick('move'); pushMoves(from.map(r => ({ from: r, to: { x1: r.x1 + dx, y1: r.y1 + dy, x2: r.x2 + dx, y2: r.y2 + dy } }))); renderSelection(); }
     else { sfx('bad'); flashTip(ev, (res && res.msg) || 'blocked — the room did not move'); }
   }
@@ -5213,7 +5227,7 @@ const Build = (() => {
     const nr = resizedRect(d), r0 = rm.rects[0];
     if (!nr || (nr.x1 === r0.x1 && nr.y1 === r0.y1 && nr.x2 === r0.x2 && nr.y2 === r0.y2)) { hideTip(); return; }
     const pre = resizeCheck(rm, nr);
-    const res = pre && pre.ok ? station.resizeRoom(rm.id, nr) : pre;
+    const res = pre && pre.ok ? keepsHalls(() => station.resizeRoom(rm.id, nr)) : pre;
     feedback(res, ev, 'resized to ' + (nr.x2 - nr.x1 + 1) + ' × ' + (nr.y2 - nr.y1 + 1) + ' · Undo puts it back');
     if (res && res.ok) { pushFlash([nr], false); renderSelection(); }
   }

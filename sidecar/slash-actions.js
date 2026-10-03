@@ -202,7 +202,7 @@ function makeSlashActions(deps) {
   // beginner is a dead end: true, but unactionable. Translate the known ones and name the next step; an
   // unrecognized code still passes through verbatim rather than being swallowed or guessed at.
   const SHIFT_REASONS = {
-    'no-capability': 'this agent has no model credential it can build with yet — add a key in SETTINGS → PROVIDERS',
+    'no-capability': 'this agent has no model credential it can build with yet — add a key in SETTINGS → AI & MODELS',
     'empty-backlog': 'there is nothing queued to build — /away <what to build> adds one',
     'not-granted': '"build while away" is off for this agent — /away on to turn it on',
     'bad-agent': 'that agent id is not one of your station agents',
@@ -234,11 +234,11 @@ function makeSlashActions(deps) {
       const ready = Array.isArray(st.pendingIds) ? st.pendingIds.map(String) : null;
       const isReady = (it) => it && it.builtRunId && (ready ? ready.indexOf(String(it.builtRunId)) !== -1 : false);
       const lines = items.map((it, i) => (i + 1) + '. ' + String((it && (it.title || it.detail)) || '(untitled)').slice(0, 120)
-        + (isReady(it) ? '  [built — waiting in OUTBOX]'
+        + (isReady(it) ? '  [built — waiting in DELIVERABLES › TO REVIEW]'
           : (it && it.builtRunId ? '  [was built, but its files are gone]' : '')));
       if (!items.length) lines.push('(nothing queued — /away <what to build> adds one)');
       if ((st.backlog || []).length > items.length) lines.push('… and ' + ((st.backlog || []).length - items.length) + ' more.');
-      if (st.pending) lines.push('' + st.pending + ' finished build' + (st.pending === 1 ? '' : 's') + ' waiting for your keep/discard — open OUTBOX.');
+      if (st.pending) lines.push('' + st.pending + ' finished build' + (st.pending === 1 ? '' : 's') + ' waiting for your keep/discard — open MY WORK › DELIVERABLES (TO REVIEW).');
       lines.push('Build while away: ' + (st.granted ? 'ON' : 'OFF') + '.');
       return card('Away workshop — ' + (st.backlog || []).length + ' queued', lines);
     }
@@ -266,7 +266,7 @@ function makeSlashActions(deps) {
           + (r.parked ? '. That item is now parked and will NOT be retried — /away <the same idea> to queue it again.' : '.'));
       }
       const title = (r.manifest && r.manifest.title) ? String(r.manifest.title).slice(0, 80) : '';
-      return say('Away shift built' + (title ? ' "' + title + '"' : ' a deliverable') + '. It waits in OUTBOX for keep or discard.');
+      return say('Away shift built' + (title ? ' "' + title + '"' : ' a deliverable') + '. It waits in DELIVERABLES › TO REVIEW for keep or discard.');
     }
 
     // Anything else is the thing to build.

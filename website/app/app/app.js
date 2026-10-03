@@ -4093,8 +4093,10 @@ const App = (() => {
     }).join('');
     if (!rows.length && railAgentFilter && !railAttentionOnly) {
       const a = agents.get(railAgentFilter), name = U.esc((a && (a.name || a.id)) || railAgentFilter);
+      // an agent whose sessions are all ARCHIVED has had sessions: never "yet" above "▸ 2 archived" (QA 2026-10-02)
+      let archivedHere = 0; for (const w of Workstreams.list({ includeArchived: true })) if (w.archived && railHasAgent(w, railAgentFilter)) archivedHere++;
       ul.innerHTML = '<li class="proj-empty ws-agent-empty" role="presentation"><span role="status">No '
-        + (railKind === 'automated' ? 'automation ' : '') + 'sessions with ' + name + ' yet.</span>'
+        + (railKind === 'automated' ? 'automation ' : '') + (archivedHere ? 'open sessions with ' + name + ' — ' + archivedHere + ' archived below.' : 'sessions with ' + name + ' yet.') + '</span>'
         + '<button type="button" class="btn ws-agent-start">START ONE</button></li>';
       const start = ul.querySelector('.ws-agent-start'); if (start) start.onclick = () => newWorkstream();
     } else if (!rows.length && railKind === 'automated' && !railAttentionOnly) {
@@ -5510,7 +5512,8 @@ const App = (() => {
           fetch('/api/plugins').then(r => r.ok ? r.json() : null).catch(() => null)
         ]);
         const waiting = ((h && h.pending) || []).length + (((p && p.plugins) || []).filter(x => x && x.pending).length);
-        if (!waiting || typeof StationUI === 'undefined' || !StationUI.notify) return;
+        if (!h || !p || typeof StationUI === 'undefined' || !StationUI.notify) return;   // a failed read says nothing either way
+        if (!waiting) { if (StationUI.settleNotifs) StationUI.settleNotifs('extensions-pending'); return; }   // approved since: it leaves NEEDS YOU
         StationUI.notify(
           waiting + ' extension' + (waiting === 1 ? '' : 's') + ' awaiting your approval — click to review',
           'warn', 'needsApproval',

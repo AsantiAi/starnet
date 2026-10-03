@@ -488,6 +488,9 @@ function makeChainRunner(o) {
       // its own lane: it gets the original message, not a handoff turn.
       const turn = entryBranch ? String(originalText || '') : hopTurn({ handoffText, stageBrief, loopGateAfter, lastStage, originalText, from: cur.agentId, upstream: out.text, hop, target: target.agentId, targetDock: target.dockId, lineId });
       const call = { agentId: target.agentId, text: turn, hop, from: entryBranch ? null : cur.agentId, signal: s.signal, workitemId };
+      // what is LEFT of the line's $ ceiling rides the hop as a lower-only cap: the pre-hop check alone let one own-key stage
+      // spend far past the line's limit ("within one hop's spend" — QA 2026-10-02)
+      call.ceilingUsd = Math.max(0, lim.maxUsd - spent);
       if (target.dockId) { call.dockId = target.dockId; call.fromDock = entryBranch ? null : cur.dockId; }
       if (lineId) call.lineId = lineId;   // LINE WATCH (additive): the host stamps the hop's run row with its line
       try { r = await runAgent(call); }

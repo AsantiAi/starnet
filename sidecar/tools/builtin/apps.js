@@ -139,7 +139,7 @@ function makeAppTools(deps) {
       scope: 'write',
       run: async (a) => {
         const { id } = await apps.need(a.app);
-        const r = await apps.schedule(id, { every: a.every, task: a.task });
+        const r = await apps.schedule(id, { every: a.every, task: a.task, byAgent: true });   // a crew edit: a changed task drops the routine's unattended grants
         if (r.off) return { content: 'The app no longer refreshes on a schedule.', summary: 'app schedule off' };
         return {
           content: 'Scheduled: ' + r.display + '.' + (r.armed === false ? ' NOTE: routines are switched OFF on this station, so it will not fire until the Commander turns them on — the app window offers a TURN ON button. Do the first refresh yourself now.' : ' Do the first refresh yourself now so the app has content.'),

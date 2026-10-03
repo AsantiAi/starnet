@@ -49,4 +49,12 @@ A.eq(hrefOf(out), 'https://example.com/a_b*c/path', 'mid-URL * survives; only TR
 out = linkify('<b>x</b> http://example.com');
 A.ok(out.indexOf('&lt;b&gt;') !== -1 && out.indexOf('<b>') === -1, 'non-URL text stays HTML-escaped');
 
+// QA 2026-10-02: a ')' that closes a '(' inside the URL belongs to it; an unbalanced one is sentence punctuation
+A.eq(hrefOf(linkify('see https://en.wikipedia.org/wiki/Foo_(bar) for more')), 'https://en.wikipedia.org/wiki/Foo_(bar)', 'a balanced paren stays in the link (it was cut to …Foo_(bar, a 404)');
+A.eq(hrefOf(linkify('(see https://example.com/a)')), 'https://example.com/a', 'a URL wrapped in parentheses still drops the closing one');
+A.eq(hrefOf(linkify('read https://en.wikipedia.org/wiki/Foo_(bar).')), 'https://en.wikipedia.org/wiki/Foo_(bar)', 'a balanced paren then a full stop keeps the paren and drops the stop');
+out = linkify('(https://en.wikipedia.org/wiki/Foo_(bar))');
+A.eq(hrefOf(out), 'https://en.wikipedia.org/wiki/Foo_(bar)', 'nested: the inner pair is the URL\'s, the outer close is the sentence\'s');
+A.ok(/<\/a>\)$/.test(out), 'and the outer close stays as text after the link');
+
 A.report('chat-linkify.test');

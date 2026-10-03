@@ -525,6 +525,9 @@
       const results = await Promise.allSettled([read('/api/hooks', 'hooks'), read('/api/plugins', 'plugins')]);
       const hooks = results[0].status === 'fulfilled' ? results[0].value : null;
       const plugins = results[1].status === 'fulfilled' ? results[1].value : null;
+      // nothing left to approve: the bell's "extensions awaiting your approval" leaves NEEDS YOU (it stayed lit for good)
+      if (hooks && plugins && !((hooks.pending || []).length + plugins.plugins.filter(x => x && x.pending).length)
+        && typeof StationUI !== 'undefined' && StationUI.settleNotifs) StationUI.settleNotifs('extensions-pending');
       extPluginDir = plugins ? plugins.dir || '' : '';
       body.querySelector('#pl-where').hidden = !extPluginDir || !plugins.plugins.length;
       const unavailable = label => '<div class="mc-hint">Could not load ' + label + '. <button class="bb xs" data-ext="retry">TRY AGAIN</button></div>';

@@ -1,5 +1,6 @@
 /* node test/provider.claude-cli.test.js - the local Claude CLI provider seam (no real `claude` is spawned). */
 'use strict';
+const fs = require('fs');
 const A = require('./_assert.js');
 const { EventEmitter } = require('events');
 const path = require('path');
@@ -284,5 +285,17 @@ const result = (extra) => Object.assign({ type: 'result', subtype: 'success', is
     A.eq([cls.reason, cls.retryable, cls.shouldRotateCredential], ['quota_exhausted', false, true], 'errorClass rotates to the next account instead of retrying');
   }
 
+  // QA 2026-10-02: the CLI cannot see images, and says so — image_analyze's session fallback asks before it answers
+  {
+    const { makeClaudeCliProvider } = require('../sidecar/providers/claude-cli.js');
+    const p = makeClaudeCliProvider({ clock: { now: () => Date.now() } });
+    A.eq(typeof p.supportsImages === 'function' ? p.supportsImages() : 'missing', false, 'the Claude Code provider reports it has no image channel');
+    const idx = fs.readFileSync(require('path').join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
+    const aux = idx.slice(idx.indexOf('const auxVisionCall = async (req) => {'), idx.indexOf('const imageTools = makeImageTools('));
+    A.ok(/!auxVisionProvider\.supportsImages\(\)\) throw new Error\('no vision route/.test(aux) && aux.indexOf('supportsImages') < aux.indexOf('.stream('),
+      'the aux vision route refuses a provider that cannot see images BEFORE asking it to describe one');
+    A.ok(aux.includes('AbortSignal.any([ac.signal, signal])') && aux.includes('signal: callSignal'), 'QA 10-02: the aux vision call ends when its run is stopped');
+    A.ok(aux.includes("ev.type === 'usage') usage = ev.usage") && aux.includes('recordMediaUsage(usage, model)') && !aux.includes("ev.type === 'done') break"), 'QA 10-02: its usage is booked like media spend (read to the end of the stream)');
+  }
   A.report('provider.claude-cli.test');
 })().catch(e => { console.log('FAIL: provider.claude-cli.test threw -- ' + (e && e.stack || e)); process.exit(1); });

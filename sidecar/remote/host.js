@@ -11,7 +11,10 @@
 
    Events a phone sees:
      run.started  { runId, agentId, streamId }
-     run.text     { runId, text } | { runId, at, add }   the reply so far, or what it grew by from `at` (≤ ~4 per second)
+     run.text     { runId, text }                 the whole reply so far (the first frame, and every eighth)
+     run.delta    { runId, at, add }              what it grew by from `at` (≤ ~4 per second). Its OWN type: a phone app from
+                                                  before deltas ignores it (and catches up on the next whole frame) — as a
+                                                  run.text it read the missing `text` and blanked the reply
      run.tool     { runId, callId, name, summary } a step the agent took
      run.step     { runId, callId, ok, ms }       how that step went
      run.ended    { runId, agentId, streamId, reason, usd, error }
@@ -61,37 +64,103 @@ function makeRemoteHost(d) {
     try { list = (d.deskSessions && d.deskSessions()) || []; } catch (e) { note('remote.host.deskSessions', e); list = []; }
     return Array.isArray(list) ? list.filter(w => w && typeof w.id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(w.id) && !w.archived && w.conversationMode !== 'group') : [];
   }
+  const STATION_TURNS = 2000;
   function stationTurns(streamId, limit) {
-    try { return (d.transcript.history(streamId, { limit: limit || 200 }) || []).filter(isProse); }
+    try { return (d.transcript.history(streamId, { limit: limit || STATION_TURNS }) || []).filter(isProse); }
     catch (e) { note('remote.host.stationTurns', e); return []; }
   }
-  // desk history first (it is the longer memory), then station turns the desk has not merged yet
-  function mergedTurns(streamId, limit) {
+  /* ONE CONVERSATION, TWO COPIES: the desk's save (its own order, its status lines) and the station's transcript
+     (every turn any run recorded, from the desk, the phone, a channel). A phone used to take the desk copy and add
+     only station turns NEWER than its last line — so once the desk saved anything later, every phone turn before it
+     vanished ("session history disappears", Andrew 10-02 on the road). Now the phone merges exactly the way the desk
+     does (frontend/app/chat.js mergeCanonicalHistory, copied here; keep the two in step): the desk's rows keep their
+     order, a station turn with a twin enriches it, and a turn the desk never saw is inserted after the last row a
+     station turn matched. Nothing is dropped and nothing is reordered. */
+  function mergeCanonical(local, turns) {
+    const runParts = new Map();
+    for (const turn of Array.isArray(turns) ? turns : []) {
+      if (!turn || turn.role !== 'assistant' || !turn.sourceRunId) continue;
+      const text = String(turn.content || '');
+      if (!text.trim()) continue;
+      const parts = runParts.get(String(turn.sourceRunId)) || [];
+      parts.push(text); runParts.set(String(turn.sourceRunId), parts);
+    }
+    const committedAggregate = (row, runId) => {
+      if (row.role !== 'assistant' || row.rowId || row.stopped || row.error || (row.attachments && row.attachments.length)) return false;
+      const parts = runParts.get(runId) || [], text = String(row.content || '');
+      for (let start = 0; start < parts.length - 1; start++) {
+        if (!text.startsWith(parts[start])) continue;
+        let joined = parts[start];
+        for (let end = start + 1; end < parts.length; end++) {
+          joined += parts[end];
+          if (joined === text) return true;
+          if (joined.length >= text.length) break;
+        }
+      }
+      return false;
+    };
+    const kept = [], buckets = new Map();
+    let userRunId = '';
+    for (const row of Array.isArray(local) ? local : []) {
+      if (row && row.sys) { if (!row.transcriptPending) kept.push({ row, key: null }); continue; }
+      if (!row || (row.role !== 'user' && row.role !== 'assistant')) continue;
+      if (row.role === 'user') userRunId = String(row.sourceRunId || '');
+      if (committedAggregate(row, String(row.sourceRunId || userRunId))) continue;
+      if (row.role === 'assistant' && !String(row.content == null ? '' : row.content).trim()) continue;
+      const key = row.role + '\u0000' + String(row.content || '');
+      const q = buckets.get(key) || []; q.push(kept.length); buckets.set(key, q);
+      kept.push({ row, key });
+    }
+    const internalTranscriptPrompt = text => /^Shared conversation context \(/.test(text) || /^\[BEGIN EXTERNAL SCREEN CAPTURE/.test(text);
+    const inserts = new Map();
+    let anchor = -1;
+    for (const turn of Array.isArray(turns) ? turns : []) {
+      if (!turn || (turn.role !== 'user' && turn.role !== 'assistant')) continue;
+      const content = String(turn.content == null ? '' : turn.content);
+      if (turn.role === 'assistant' && !content.trim()) continue;
+      const key = turn.role + '\u0000' + content;
+      const q = buckets.get(key), idx = (q && q.length) ? q.shift() : -1;
+      if (idx >= 0) {
+        const prior = kept[idx].row;
+        kept[idx].row = Object.assign({}, turn, prior, { role: turn.role, content, ts: turn.ts != null ? turn.ts : prior.ts });
+        anchor = idx;
+        continue;
+      }
+      if (turn.role === 'user' && internalTranscriptPrompt(content)) continue;
+      const list = inserts.get(anchor) || []; list.push(Object.assign({}, turn, { role: turn.role, content })); inserts.set(anchor, list);
+    }
+    const merged = [];
+    for (const turn of inserts.get(-1) || []) merged.push(turn);
+    for (let i = 0; i < kept.length; i++) {
+      merged.push(kept[i].row);
+      for (const turn of inserts.get(i) || []) merged.push(turn);
+    }
+    return merged;
+  }
+  // the whole conversation, prose only, oldest first
+  function mergedTurns(streamId) {
     const w = deskSessions().find(x => x.id === streamId);
-    const base = w && Array.isArray(w.history) ? w.history.filter(isProse) : [];
-    const st = stationTurns(streamId, 200);
-    if (!base.length) return st.slice(-(limit || 200));
-    const seen = new Set(base.map(m => m.rowId).filter(x => x != null));
-    const lastTs = base.reduce((t, m) => Math.max(t, Number(m.ts) || 0), 0);
-    const tail = base.slice(-4).map(m => m.role + '\u0000' + m.content);
-    const extra = st.filter(m => !(m.rowId != null && seen.has(m.rowId)) && (Number(m.ts) || 0) > lastTs && tail.indexOf(m.role + '\u0000' + m.content) < 0);
-    return base.concat(extra).slice(-(limit || 200));
+    const local = w && Array.isArray(w.history) ? w.history : [];
+    const st = stationTurns(streamId);
+    return (local.length ? mergeCanonical(local, st) : st).filter(isProse);
   }
   const lastUserLine = (turns) => { for (let i = turns.length - 1; i >= 0; i--) if (turns[i].role === 'user') return clip(turns[i].content.replace(/\s+/g, ' ').trim(), 140); return ''; };
 
   async function threads(o) {
     const out = [], seen = new Set();
     const names = new Map(agentsList().map(a => [a.agentId, String(a.name || '').toLowerCase()]));
+    const rows = d.transcript.streams({ limit: 500, previewChars: 140 }) || [];
+    const stationHas = new Set(rows.filter(r => Number(r.turns) > 0).map(r => r.streamId));
     for (const w of deskSessions()) {
       const agentId = String(w.agentId || 'agent');
       const hist = Array.isArray(w.history) ? w.history.filter(isProse) : [];
       seen.add(w.id);
       if (o.agentId && agentId !== o.agentId) continue;
-      // an untouched blank session (no title, or only the agent's own name as one) is noise on a phone
-      if (!hist.length && (!w.title || String(w.title).trim().toLowerCase() === (names.get(agentId) || agentId.toLowerCase()))) continue;
+      // an untouched blank session (no title, or only the agent's own name as one, and nothing recorded anywhere) is
+      // noise on a phone; one whose turns live only in the station's record (the desk never opened it since) is not
+      if (!hist.length && !stationHas.has(w.id) && (!w.title || String(w.title).trim().toLowerCase() === (names.get(agentId) || agentId.toLowerCase()))) continue;
       out.push({ streamId: w.id, agentId, title: w.title ? clip(w.title, 80) : '', turns: hist.length, lastAt: Number(w.lastActiveAt) || 0, preview: lastUserLine(hist), source: 'desk' });
     }
-    const rows = d.transcript.streams({ limit: 100, previewChars: 140 }) || [];
     for (const r of rows) {
       if (seen.has(r.streamId)) {   // the station may have newer turns than the desk save: surface the later time
         const row = out.find(x => x.streamId === r.streamId);
@@ -108,13 +177,19 @@ function makeRemoteHost(d) {
     return out.slice(0, o.limit);
   }
 
-  // newest turns first into a byte budget, so a long conversation always fits one sealed frame through the relay
+  /* A PAGE OF A CONVERSATION: the newest `limit` turns before the newest `before` ones, within a byte budget so it
+     always fits one sealed frame through the relay. A phone that asks for pages ({ page: true }) is also told how
+     many older turns remain, and pulls them with SHOW EARLIER, so a long conversation is never cut off. */
   const THREAD_BUDGET = 180 * 1024;
   async function thread(o) {
-    const rows = mergedTurns(o.streamId, o.limit).map(r => ({ role: r.role, agentId: r.agentId || null, ts: r.ts || null, content: clip(r.content, 20000) }));
+    const all = mergedTurns(o.streamId);
+    const end = Math.max(0, all.length - (Number(o.before) || 0));
+    const rows = all.slice(Math.max(0, end - (o.limit || 60)), end).map(r => ({ role: r.role, agentId: r.agentId || null, ts: r.ts || null, content: clip(r.content, 20000) }));
     let used = 0, keep = rows.length;
     for (let i = rows.length - 1; i >= 0; i--) { used += Buffer.byteLength(rows[i].content) + 80; if (used > THREAD_BUDGET && i < rows.length - 1) break; keep = i; }
-    return rows.slice(keep);
+    const page = rows.slice(keep);
+    if (!o.page) return page;
+    return { turns: page, earlier: end - page.length, total: all.length };
   }
 
   // what the desk needs to show a phone conversation as one of its own sessions (GET /api/remote/recent)
@@ -157,7 +232,7 @@ function makeRemoteHost(d) {
       timer = null;
       const full = clip(buf, 20000);
       flushes += 1;
-      if (sent > 0 && full.length >= sent && flushes % 8) { if (full.length > sent) broadcast({ type: 'run.text', runId, at: sent, add: full.slice(sent) }); }
+      if (sent > 0 && full.length >= sent && flushes % 8) { if (full.length > sent) broadcast({ type: 'run.delta', runId, at: sent, add: full.slice(sent) }); }
       else broadcast({ type: 'run.text', runId, text: full });
       sent = full.length;
     };
@@ -182,11 +257,12 @@ function makeRemoteHost(d) {
       system: cred.system, messages, agentId: o.agentId, isTask,
       emit, signal: ac.signal, runId, streamId, trigger: 'event',
       surface: 'interactive', prompt, ownerTrusted: true, floorless: true, broadcast: true, reflect: true,
-      // FULL ACCESS STAYS AT THE DESK (Andrew 2026-10-02): a phone is easier to lose than a PC, so a task sent from one
-      // never inherits an agent's Full Access or the station bypass: anything that needs approval asks on the phone
-      // (once / this task / deny). Standing "always" grants made at the desk still apply. Host-minted, never from text,
-      // and it rides into delegated workers (run-origin.js).
-      connectorAuthority: { withholdHostPower: true },
+      // A PHONE WORKS WITH THE DESK'S PERMISSIONS (Andrew 2026-10-02: "full access so I can vibe code on the go"): an
+      // agent on Full Access acts from the phone without asking, exactly as at the desk. A phone the Commander marked
+      // ALWAYS ASK (desk > Remote > that phone) never inherits Full Access or the station bypass: every gated step asks
+      // on the phone. Host-minted, never from text, and it rides into delegated workers (run-origin.js). If the
+      // setting cannot be read, the phone asks (never more power on an error).
+      connectorAuthority: { withholdHostPower: phoneAsksFirst(o.deviceId) },
       taskKey: 'remote:' + (o.deviceId || 'phone'), taskSource: 'remote'
     })).catch((e) => { errMsg = errMsg || clip((e && e.message) || e, 400); })
       .finally(() => {
@@ -233,6 +309,10 @@ function makeRemoteHost(d) {
     for (const r of dl) if (r && r.agentId === agentId) for (const f of Array.isArray(r.files) ? r.files : []) if (f && f.path) set.add(String(f.path));
     return set;
   }
+  function phoneAsksFirst(deviceId) {
+    if (typeof d.phoneAsksFirst !== 'function') return true;   // no way to read the setting = the phone asks (never more power on a missing wire)
+    try { return d.phoneAsksFirst(deviceId) === true; } catch (e) { note('remote.host.phoneAsksFirst', e); return true; }
+  }
   async function fetchFile(o) {
     if (!agentsList().some(a => a.agentId === o.agentId)) return { ok: false, error: 'unknown file' };   // never make a folder for a made-up agent
     if (isAbsPath(o.path) && !(await shownPaths(o.agentId)).has(String(o.path))) return { ok: false, error: 'unknown file' };
@@ -248,7 +328,23 @@ function makeRemoteHost(d) {
     }));
   }
 
-  async function setRoutine(o) { return d.setRoutine(o.jobId, o.enabled); }
+  /* A phone set to ALWAYS ASK may pause a routine but never switch one back on: a resumed routine fires later under the
+     agent's standing (Full Access) authority, which that phone is not allowed to hand out — the same line
+     run-origin.js standingWorkEscalates draws for tool calls (QA 2026-10-02). */
+  async function setRoutine(o) {
+    if (o.enabled === true && phoneAsksFirst(o.deviceId)) return { ok: false, error: 'this phone is set to ALWAYS ASK, so it can pause routines but not switch them back on — turn it on at the desk' };
+    return d.setRoutine(o.jobId, o.enabled);
+  }
+
+  /* A REMOVED phone's work stops with it: revoking a phone (a lost or stolen one) aborts every run it started, which
+     otherwise kept going with whatever permissions it began with (QA 2026-10-02). Returns how many it stopped. */
+  function stopDevice(deviceId) {
+    const id = String(deviceId || '');
+    if (!id) return 0;
+    let n = 0;
+    for (const r of remoteRuns.values()) if (r.deviceId === id) { try { r.ac.abort(); n += 1; } catch (e) { note('remote.host.stopDevice', e); } }
+    return n;
+  }
 
   /* THE STATION VIEW. The desk page draws the still (the sidecar has no renderer); this hands it to a phone in
      sealed chunks and notes that a phone is looking, which is what makes the desk keep it fresh. The phone gets
@@ -321,7 +417,7 @@ function makeRemoteHost(d) {
 
   function liveRemoteRuns() { return Array.from(remoteRuns, ([runId, r]) => ({ runId, agentId: r.agentId, startedAt: r.startedAt, source: 'remote' })); }
 
-  return { status, threads, thread, send, stop, files, fetchFile, routines, setRoutine, view, portrait, sprite, activity, liveRemoteRuns, recentRuns, _remoteRuns: remoteRuns };
+  return { status, threads, thread, send, stop, stopDevice, files, fetchFile, routines, setRoutine, view, portrait, sprite, activity, liveRemoteRuns, recentRuns, _remoteRuns: remoteRuns };
 }
 
 module.exports = { makeRemoteHost };

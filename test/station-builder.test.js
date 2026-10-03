@@ -1547,6 +1547,8 @@ for (const c of T.catalog) {
     const before = snap(st), contents = {}, byRoom = s => { const o = {}; for (const r of s.rooms().filter(r => r.kind !== 'corridor')) o[r.id] = s.props().filter(p => s.roomAt(p.x, p.y) === r.id).map(p => p.id + ':' + p.t + ':' + (p.agentId || '')).sort().join(','); return o; };
     Object.assign(contents, byRoom(st));
     const lineBefore = st.props().filter(p => p.t === 'bay').map(p => p.id + ':' + (p.agentId || '') + ':' + (p.role || '')).sort().join(',');
+    // QA 2026-10-02: a shape word the re-lay cannot build is refused with the HOW ("ring"/"grid" passed and built a diamond)
+    for (const w of ['ring', 'grid']) { const bad = SB.planEdit(st.serialize(), { rearrange: w }, E); A.ok(!bad.ok && /rearrange re-lays every room on the diamond grid/.test(bad.error || ''), 'rearrange "' + w + '" is refused with the HOW: ' + String(bad.error || 'NOT REFUSED').slice(0, 80)); }
     const re = SB.planEdit(st.serialize(), { rearrange: 'diamond' }, E);
     A.ok(re.ok && /^RE-LAY the station as a wide diamond round HOME: all 6 rooms move onto an even grid with everything in them \(furniture, lines, desks and agents stay as they are\), the \d+ old hallways are taken up( with the \d+ pieces standing in them)? and \d+ new ones laid, planted and lit(, \d+ of them joining neighbouring rooms so the station meshes)?\. One UNDO in Build mode takes all of it back\.$/.test(re.plan.summary), 'the plan says what it does: ' + (re.ok ? re.plan.summary : re.error));
     A.ok(re.ok && SB.apply(st, re.plan, E).ok, 'and it builds exactly as planned');

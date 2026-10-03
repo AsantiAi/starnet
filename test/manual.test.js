@@ -34,7 +34,10 @@ const { starnetManual } = require('../sidecar/manual.js');
   // 5) the user-facing surfaces are named so the agent points at the right control
   A.ok(/BUILD MODE/.test(m), 'names BUILD MODE (the builder)');
   A.ok(/COMMS/.test(m), 'names COMMS (where you task an agent)');
-  A.ok(/ROUTINES/.test(m), 'names ROUTINES (built-in scheduled work)');
+  A.ok(/SCHEDULES/.test(m), 'names SCHEDULES (built-in scheduled work, AUTOMATE)');
+  // the 0.13 dock (sweep 2026-10-02): every menu path the agent tells the Commander exists — no 0.12.5 dock buttons
+  A.ok(!/⇄ ABILITIES|✉ CHANNELS|AUTOMATION \(dock|MCP CONNECTORS|Add a custom API key|BUILD STATION/.test(m), 'names no 0.12.5 dock button or removed tab');
+  A.ok(/CONNECT › ABILITIES/.test(m) && /CONNECT › CHANNELS/.test(m) && /MY WORK/.test(m) && /AUTOMATE/.test(m), 'names the 0.13 menus');
   A.ok(/Recruitment Bay/.test(m), 'names the Recruitment Bay (summon)');
   A.ok(/APPROVAL/.test(m), 'names APPROVAL/APPROVALS');
 
@@ -51,7 +54,7 @@ const { starnetManual } = require('../sidecar/manual.js');
         Bay/APPROVALS and NEVER the window where platforms are actually connected, so a model asked "how do I
         connect X" had nothing true to say and invented a menu path. These assertions pin the surfaces. */
   A.ok(/ABILITIES/.test(m), 'names the ABILITIES window (where platforms are connected)');
-  A.ok(/CATALOG/.test(m) && /KEYS/.test(m) && /MCP CONNECTORS/.test(m), 'names the three connect routes');
+  A.ok(/CATALOG/.test(m) && /SAVED API CONNECTIONS/.test(m) && /CONNECTED SERVICES/.test(m), 'names the three connect routes, by the tabs on screen');
   A.ok(/CHANNELS/.test(m), 'names the CHANNELS window (inbound messaging)');
   A.ok(/SETTINGS › AI & MODELS/.test(m), 'separates AI-provider keys from platform keys');
 

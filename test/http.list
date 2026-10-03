@@ -34,6 +34,7 @@ test/scout.e2e.test.js
 test/auxbudget.e2e.test.js
 test/auxmodel.e2e.test.js
 test/failreview.e2e.test.js
+test/failreview-budget.e2e.test.js
 test/questrefresh.e2e.test.js
 test/e2e.run.test.js
 test/image-task.e2e.test.js
@@ -63,6 +64,7 @@ test/e2e.connector-readback.test.js
 test/recipe-drift.http.test.js
 test/cron.api.test.js
 test/cron.run-now.e2e.test.js
+test/cancel-host-run.e2e.test.js
 test/cron.station-default.e2e.test.js
 test/cron.degraded.e2e.test.js
 test/routing.chain-seam.e2e.test.js
@@ -105,6 +107,7 @@ test/verify.run.test.js
 test/browser.gauntlet.e2e.test.js
 test/browser-screencast-restart.e2e.test.js
 test/browser-mac-keys.e2e.test.js
+test/browser-minimized-window.e2e.test.js
 test/browser.stepin.e2e.test.js
 test/servicekeys.http.test.js
 test/servicekeys.shell.e2e.test.js

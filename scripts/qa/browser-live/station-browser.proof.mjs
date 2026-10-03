@@ -244,13 +244,12 @@ try {
   ok('station truth: the agent is the driver once it uses the browser', !!drv, JSON.stringify(drv));
   const watching = await until(() => ui().then(u => u && u.mode === 'live' && /example\.com/.test(u.url) && u.pic ? u : null), 30000);
   ok('the open window shows the agent\'s navigation live (example.com)', !!watching, JSON.stringify(watching || await ui()));
-  ok('it says the AGENT is driving, and your controls are off', watching && /NOVA/i.test(watching.who) && /is driving/.test(watching.note) && watching.backOff === true, watching && (watching.who + ' | ' + watching.note));
+  ok('it says the AGENT is using it — and your controls stay ON (you can click and type alongside)', watching && /NOVA/i.test(watching.who) && /is using the browser/.test(watching.note) && /click and type/.test(watching.note) && watching.backOff === false, watching && (watching.who + ' | ' + watching.note + ' | backOff ' + watching.backOff));
   ok('the door lamp is lit while the agent drives', !!(await until(() => evalJS(cdp, "document.getElementById('comms-browser').classList.contains('live')"), 10000)));
   await shot('shared-agent-driving');
-  await type('127.0.0.1:' + site.port);
-  const refusedTake = await until(() => evalJS(cdp, Q('.ob-note') + '.textContent').then(t => /is driving the browser right now/.test(t) ? t : null), 10000);
-  ok('while the agent drives, your typed address is refused, in plain words', !!refusedTake, refusedTake);
-  ok('…and the page did not move', /example\.com/.test((await view().then(() => evalJS(cdp, "fetch('/api/browser/view/frame?target=station&after=0').then(r=>r.json()).then(j=>j.page&&j.page.url)")))));
+  // your hands while the agent drives: a key reaches the page (accepted, never "driving")
+  const handsWhileDriving = await evalJS(cdp, "fetch('/api/browser/view/input',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({events:[{type:'key',action:'down',key:'Shift',code:'ShiftLeft',keyCode:16,modifiers:8},{type:'key',action:'up',key:'Shift',code:'ShiftLeft',keyCode:16,modifiers:0}]})}).then(async r=>({status:r.status, body: await r.json().catch(()=>null)}))");
+  ok('while the agent drives, YOUR clicks and keys still reach the page (not refused)', handsWhileDriving && handsWhileDriving.status === 200 && !(handsWhileDriving.body && handsWhileDriving.body.code === 'driving'), JSON.stringify(handsWhileDriving));
   // the run ends
   await until(() => evalJS(cdp, "((document.getElementById('chat-log')||{}).innerText||'').split('RUN COMPLETE').length - 1").then(n => n >= sends ? true : null), 120000, 500);
   const after = await until(() => view().then(v => v.station.driver === null ? v.station : null), 20000, 400);

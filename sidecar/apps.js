@@ -235,9 +235,13 @@ function makeApps(deps) {
       return { off: true };
     }
     if (!task) throw new Error('say what each refresh should do (`task`), e.g. "gather what the crew finished this week and publish the recap"');
-    const prompt = 'Refresh the StarNet app "' + meta.name + '" (app id: ' + id + ').\n\n' +
+    // a crew edit that leaves the TASK as it was (only `every` changed) is no rewrite: the routine keeps its exact prompt, so it
+    // keeps its grants and the Commander's words stay theirs (review 2026-10-02 — the label alone used to read as a new prompt)
+    const crewRewrite = !!(spec && spec.byAgent) && !(meta.schedule && meta.schedule.task === task);
+    const keptJob = (old && meta.schedule && meta.schedule.task === task) ? cron.get(old) : null;
+    const prompt = (spec && spec.byAgent && keptJob && typeof keptJob.prompt === 'string') ? keptJob.prompt : 'Refresh the StarNet app "' + meta.name + '" (app id: ' + id + ').\n\n' +
       'Today\'s real date is in your [RUNTIME] block — your own sense of the date is out of date; the task is about today.\n\n' +
-      'TASK (the Commander\'s own words for every update): ' + task + '\n\n' +
+      (crewRewrite ? 'TASK (what each update should do, as the crew set it up): ' : 'TASK (the Commander\'s own words for every update): ') + task + '\n\n' +
       'Do what the task says. New or current INFORMATION goes in with app.publish (find it with tool.search "app publish"): app "' + id + '", ' +
       'using the SAME key and data shape the app\'s page reads (check with app.read { app: "' + id + '" }). ' +
       'If the task asks the app ITSELF to change — its look, layout, what it shows or how it works — rewrite the page: app.read { app: "' + id + '", path: "index.html" }, then app.write the whole new file, then app.check it; keep everything that already works. ' +
@@ -248,7 +252,7 @@ function makeApps(deps) {
     if (old && cron.get(old) && typeof cron.update === 'function') {
       // the app already has its routine: EDIT it in place (its run history, pause and grants stay; a running
       // update is not cancelled)
-      out = await cron.update(old, { schedule: every, prompt, name });
+      out = await cron.update(old, { schedule: every, prompt, name, byAgent: crewRewrite });
       if (!out.ok) throw new Error(out.error || 'the routine could not be changed');
     } else {
       out = await cron.create({ name, schedule: every, prompt, agentId: 'agent', meta: { appId: id } });

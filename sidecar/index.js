@@ -3236,6 +3236,13 @@ const skillCuratorLastRun = new Map();
 async function runBackgroundSkillReview(o) {
   const { agentId, runId, messages, provider, model, cost, loadedSkills, managedSkills, verdict, correction } = o || {};
   const unmetered = !!(o && o.unmetered);   // Codex/unmetered parity: mirror reflection/study so a Codex-only user's budget isn't drained by phantom aux spend
+  // a spending cap that is reached stops this paid pass too: a thumbs-down after the daily cap used to fire a review call
+  // anyway (one per rating) — the verdict path reaches here with no budget check of its own (QA 2026-10-02)
+  if (!unmetered) {
+    let blocked = null;
+    try { blocked = budget.check(null, String(agentId || 'agent'), 0, Date.now(), null); } catch (_) { blocked = null; }
+    if (blocked) { console.log('[skills] review skipped run=' + String(runId || '') + ': the spending cap is reached'); return null; }
+  }
   const ac = new AbortController();
   const timer = setTimeout(() => { try { ac.abort(); } catch (_) {} }, SKILL_REVIEW_TIMEOUT_MS);
   const reviewRunId = String(runId || 'run') + '_skill_review';
@@ -3797,7 +3804,9 @@ const apps = makeApps({
       if (!scan.ok) return { ok: false, error: scan.error };
       let schedule;
       try { schedule = parseCronScheduleOr400(p.schedule, Date.now(), (cur.schedule && cur.schedule.tz) || undefined); } catch (e) { return { ok: false, error: e.message }; }
-      try { await withCronWrite((jobs) => cronStore.updateJob(jobs, id, { schedule, prompt: p.prompt, name: p.name }, { now: Date.now(), defaultTz: CRON_HOST_TZ })); }
+      // GRANTS BIND TO THE APPROVED INSTRUCTION (routine.manage does the same): a crew app.schedule that rewrites a granted
+      // routine's task drops its unattended workbench/connector grants — the Commander re-grants from SCHEDULES (QA 2026-10-02)
+      try { await withCronWrite((jobs) => { const patch = { schedule, prompt: p.prompt, name: p.name }; if (p.byAgent && cronStore.grantsRevokedByAgentEdit(cronStore.getJob(jobs, id), patch).length) patch.unattendedGrants = []; return cronStore.updateJob(jobs, id, patch, { now: Date.now(), defaultTz: CRON_HOST_TZ }); }); }
       catch (e) { return { ok: false, error: (e && e.message) || String(e) }; }
       return { ok: true, job: cronStore.getJob(cronJobs, id) };
     },
@@ -6113,6 +6122,7 @@ const cronDriver = makeCronDriver({
       const hs = { buf: '', errMsg: null, usd: 0 };
       const sink = (name, payload) => {
         const p = payload || {};
+        if (name === 'agent.run.end' && p && p.reason === 'cancelled') hs.stopped = true;   // STOP on this step: the line stops here, never hands its half answer on
         if (name === 'agent.token') { hs.buf += (p.delta || ''); return; }
         if (name === 'agent.tool_call') hs.buf = '';
         if (name === 'agent.run.error') hs.errMsg = p.message || 'run error';
@@ -6131,6 +6141,7 @@ const cronDriver = makeCronDriver({
           baseUrl: hopConfig.baseUrl || '', reasoningEffort: hopConfig.reasoningEffort,
           system: cronSystemFor(h.agentId),
           messages: [{ role: 'user', content: h.text }], agentId: h.agentId, lineId: o.runsLine === true ? router.lineOfAgent(o.agentId, o.dockId ? router.dockOf(o.agentId, o.dockId) : undefined) : null, isTask: true,
+          ceilingUsd: h.ceilingUsd,   // what is left of the line's $ ceiling (lower-only)
           emit: sink, signal: h.signal, runId: hopRunId, streamId: o.streamId,
           surface: 'autonomous', trigger: 'schedule', reflect: true,
           station: router.stationFor(h.agentId, h.dockId) || undefined,   // the hop's OWN bay room (multi-bay)
@@ -6147,7 +6158,7 @@ const cronDriver = makeCronDriver({
         });
       } catch (e) { hs.errMsg = hs.errMsg || ('run failed: ' + ((e && e.message) || e)); }
       finally { runsMeta.delete(hopRunId); }
-      return { text: hs.buf, usd: hs.usd, error: hs.errMsg };
+      return { text: hs.buf, usd: hs.usd, error: hs.errMsg || (hs.stopped ? 'stopped by you' : null) };
     }
   })
 });
@@ -10361,6 +10372,7 @@ const remotePush = require('./remote/push.js').makePush({ fs, path, file: path.j
 const remotePortraits = require('./remote/portraits.js').makePortraits({ fs, path, frontend: FRONTEND });
 const remoteHost = require('./remote/host.js').makeRemoteHost({
   now: () => Date.now(), newId: () => crypto.randomUUID(), broadcast: remoteBroadcast,
+  phoneAsksFirst: (deviceId) => remoteDevices.askFirst(deviceId),   // that phone was set to ALWAYS ASK at the desk
   roster: () => [...agentRoster].map(([agentId, a]) => ({ agentId, name: a.name, model: a.model, provider: a.provider })),
   liveRuns: () => {
     const out = [];
@@ -10393,7 +10405,7 @@ const remoteHost = require('./remote/host.js').makeRemoteHost({
     runs.set(rid, { abort: () => { remoteHost.stop({ runId: rid }).catch(e => failNote('remote.run.abort', e)); } });
     runsMeta.set(rid, { agentId: String(o.agentId || 'agent'), startedAt: Date.now(), source: 'remote', streamId: o.streamId || undefined });
     try { return await runOnce(o); }
-    finally { runs.delete(rid); runsMeta.delete(rid); }
+    finally { runs.delete(rid); runsMeta.delete(rid); grantsSession.delete(rid); }   // its session-scoped grants end with it, like every other run
   },
   view: remoteView,
   deskOpen: () => sse.size() > 1,   // a StarNet page is connected (the phones' own tee is always one listener)
@@ -10573,6 +10585,13 @@ async function handleRemotePair(req, res) {
   respondJson(res, 200, { ok: true, pairingId: p.pairingId, code: p.code, stationId: p.stationId, stationPub: p.stationPub, fingerprint: p.fingerprint,
     expiresAt: p.expiresAt, urls, relay: remoteRelay ? REMOTE_RELAY_URL : null, pairBlob: blob, pairUrl });
 }
+// POST /api/remote/device { deviceId, askFirst } — this phone asks before every gated step (true) or works with the desk's permissions
+async function handleRemoteDevice(req, res) {
+  let b; try { b = JSON.parse(await readBody(req, 1024)) || {}; } catch (_) { return respondJson(res, 400, { ok: false, error: 'bad request' }); }
+  const r = remoteDevices.setAskFirst(String(b.deviceId || ''), b.askFirst === true);
+  if (!r.ok) return respondJson(res, r.error === 'no such device' ? 404 : 500, { ok: false, error: r.error });
+  respondJson(res, 200, remoteSnapshot());
+}
 // POST /api/remote/revoke { deviceId } — forget a phone; its live sessions end at once
 async function handleRemoteRevoke(req, res) {
   let b; try { b = JSON.parse(await readBody(req, 1024)) || {}; } catch (_) { return respondJson(res, 400, { ok: false, error: 'bad request' }); }
@@ -10580,6 +10599,7 @@ async function handleRemoteRevoke(req, res) {
   const r = remoteDevices.revoke(id);
   remoteSessions.endDevice(id);
   if (remoteRelay) remoteRelay.kickDevice(id);
+  if (r.ok) remoteHost.stopDevice(id);   // the runs that phone started stop with it (a lost phone's task never keeps going)
   if (r.ok) { const f = remotePush.forget(id); if (!f.ok) failNote('remote.index.pushForget', new Error(f.error)); }   // a removed phone gets no more notifications
   if (!r.ok) return respondJson(res, r.error === 'no such device' ? 404 : 500, { ok: false, error: r.error });
   respondJson(res, 200, remoteSnapshot());
@@ -10760,7 +10780,8 @@ const ROUTES = [
   { m: 'GET', exact: '/api/remote', h: handleRemoteStatus },          // STARNET REMOTE: on/off, where it listens, paired + connected phones
   { m: 'POST', exact: '/api/remote/enable', h: handleRemoteEnable },  // the switch (persisted); opens/closes the LAN door
   { m: 'POST', exact: '/api/remote/pair', h: handleRemotePair },      // one-time pairing code for ONE phone (10 min)
-  { m: 'POST', exact: '/api/remote/revoke', h: handleRemoteRevoke },  // forget a phone; its sessions end at once
+  { m: 'POST', exact: '/api/remote/revoke', h: handleRemoteRevoke },
+  { m: 'POST', exact: '/api/remote/device', h: handleRemoteDevice },    // one phone: ALWAYS ASK, or the desk's own permissions  // forget a phone; its sessions end at once
   { m: 'POST', exact: '/api/budget/caps', h: handleBudgetCaps },
   { m: 'POST', exact: '/api/budget/resume', h: handleBudgetResume },
   { m: 'GET', exact: '/api/fallback/chain', h: handleFallbackStatus },
@@ -12192,6 +12213,9 @@ function providerForRunConfig(c, reasoningEffort) {
    (the Overseer's roster model — what an unpinned specialist runs on), reached through the channel probe's adapter and sign-in seams;
    the spend is reconciled and booked on the ledger like the station's other passes (a failed booking is noted, never swallowed).
    Returns { ok:true, out, usd, model } or { ok:false, status, error }. */
+// the station's one-shot paid calls in flight (NEEDS CHANGES / SET IT UP FOR ME …): E-STOP aborts them too (QA 2026-10-02 —
+// each had its own 120 s controller nothing else could reach)
+const stationOneShots = new Set();
 async function stationOneShot(prompt, tag, failLead) {
   let blocked = null;
   try { blocked = budget.check(null, 'agent', 0, Date.now(), null); } catch (_) { blocked = null; }
@@ -12204,6 +12228,7 @@ async function stationOneShot(prompt, tag, failLead) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 120000);
   if (timer && timer.unref) timer.unref();
+  stationOneShots.add(ctrl);
   let out = '', usage = null, usd = 0, tokens = 0, cost = null;
   // book whatever usage arrived — on a timeout or a provider error too: those tokens were billed (sweep 2026-10-02)
   const book = () => {
@@ -12222,7 +12247,7 @@ async function stationOneShot(prompt, tag, failLead) {
   } catch (e) {
     book();
     return { ok: false, status: 502, error: (failLead || 'the call failed') + ' — ' + String((e && e.message) || e).slice(0, 200) };
-  } finally { clearTimeout(timer); }
+  } finally { clearTimeout(timer); stationOneShots.delete(ctrl); }
   book();
   return { ok: true, out, usd, model: cfg.model };
 }
@@ -14841,6 +14866,7 @@ async function handleCronRun(req, res) {
             const hopSink = (name, payload) => {
               try { emit(name, payload); } catch (_) {}
               const p = payload || {};
+              if (name === 'agent.run.end' && p && p.reason === 'cancelled') hs.stopped = true;   // STOP on this step: the line stops here, never hands its half answer on
               if (name === 'agent.token') hs.buf += (p.delta || '');
               else if (name === 'agent.tool_call') hs.buf = '';
               else if (name === 'agent.run.error') hs.errMsg = p.message || 'run error';
@@ -14858,6 +14884,7 @@ async function handleCronRun(req, res) {
                 baseUrl: hopConfig.baseUrl || '', reasoningEffort: hopConfig.reasoningEffort,
                 system: cronSystemFor(h.agentId),
                 messages: [{ role: 'user', content: h.text }], agentId: h.agentId, lineId: job.runsLine === true ? router.lineOfAgent(job.agentId, job.dockId ? router.dockOf(job.agentId, job.dockId) : undefined) : null, isTask: true,
+                ceilingUsd: h.ceilingUsd,   // what is left of the line's $ ceiling (lower-only)
                 emit: hopSink, signal: h.signal, runId: hopRunId, streamId: 'cron-' + runId,
                 surface: 'autonomous', trigger: 'schedule', broadcast: true, reflect: true,
                 station: router.stationFor(h.agentId, h.dockId) || undefined,   // the hop's OWN bay room (multi-bay)
@@ -14875,7 +14902,7 @@ async function handleCronRun(req, res) {
               });
             } catch (e) { hs.errMsg = hs.errMsg || ('run failed: ' + ((e && e.message) || e)); }
             finally { runsMeta.delete(hopRunId); }
-            return { text: hs.buf, usd: hs.usd, error: hs.errMsg };
+            return { text: hs.buf, usd: hs.usd, error: hs.errMsg || (hs.stopped ? 'stopped by you' : null) };
           }
         });
         if (line && String(line.text || '').trim()) state.buf = line.text;
@@ -17894,7 +17921,29 @@ async function runOnce(o) {
    then ignored the run's real end). Every run runOnce drives is registered here from the moment it is admitted
    (past the stream's queue) until it returns; the snapshot merges it. Only real in-flight LINE runs — never a guess. */
 const hostLiveRuns = new Map();   // runId -> { agentId, startedAt, source }
+/* EVERY RUN CAN BE STOPPED BY ITS ID (QA 2026-10-02). POST /api/cancel and /api/run/steer only looked in `runs`, but a
+   scheduled routine fire, a routine/line hop, a line trigger, the step test and the channel hubs drive runOnce with
+   their own run ids and their own AbortControllers — so the desk screen's and HUD's STOP answered 200 and aborted
+   nothing while the run kept spending, and a steer said "already finished" to a run still WORKING. Every run with an
+   id gets a stop handle here for exactly as long as runOnce is driving it; its signal is the caller's signal OR this
+   handle, so a stop by id ends it the same way its owner's own abort would (the owner still sees the run end). */
+const runStopHandles = new Map();   // runId -> AbortController
 async function runOnceTracked(o) {
+  const rid = o && o.runId ? String(o.runId) : '';
+  // a DELEGATED worker (parentRunId / its own o.steer) is not given one: the subagent manager owns its stop (interrupt,
+  // cancelChildren) and it reads steering from its own generation-bound buffer — a desk STOP/STEER by its id would bypass
+  // the manager and a steer would be answered "Sent" and never read (review 2026-10-02)
+  const delegated = !!(o && (o.parentRunId || typeof o.steer === 'function'));
+  if (rid && !delegated && !runStopHandles.has(rid) && typeof AbortSignal.any === 'function') {
+    const kc = new AbortController();
+    runStopHandles.set(rid, kc);
+    o.signal = o.signal ? AbortSignal.any([o.signal, kc.signal]) : kc.signal;
+    try { return await runOnceTrackedBelt(o); }
+    finally { if (runStopHandles.get(rid) === kc) runStopHandles.delete(rid); }
+  }
+  return runOnceTrackedBelt(o);
+}
+async function runOnceTrackedBelt(o) {
   // BELT for the station browser: whatever way a run leaves (a throw before its own cleanup included), it must not
   // stay the browser's "driver" — that would lock the Commander out of their own browser. releaseRun is a no-op for
   // a run that never drove it.
@@ -18209,6 +18258,8 @@ async function runOnceCore(o) {
   let runCapUsd = (o.maxCostUsd > 0 && isFinite(o.maxCostUsd)) ? o.maxCostUsd
     : (providerUnmetered ? Infinity
     : ((effectiveCaps.perRun > 0 && isFinite(effectiveCaps.perRun)) ? effectiveCaps.perRun : Infinity));
+  // o.ceilingUsd (a line hop: what is left of the line's $ ceiling) only ever LOWERS the cap (QA 2026-10-02)
+  if (!providerUnmetered && typeof o.ceilingUsd === 'number' && isFinite(o.ceilingUsd) && o.ceilingUsd >= 0 && !(runCapUsd <= o.ceilingUsd)) runCapUsd = Math.max(0.01, o.ceilingUsd);
   // Same rule as o.maxCostUsd for the TURN budget: an explicit caller cap (o.maxIters -- e.g. a delegated
   // worker's ORCH_WORKER_MAX_ITERS) is honored, but may only LOWER the ceiling. Without this the value
   // orchestration.js has always passed was silently dropped and every worker ran the lead's full budget.
@@ -18395,16 +18446,25 @@ async function runOnceCore(o) {
   let auxVisionProvider = null;
   const auxVisionCall = async (req) => {
     if (!auxVisionProvider) throw new Error('session provider not ready');
+    // a provider that cannot take an image (Claude Code CLI) would answer about a picture it never saw (QA 2026-10-02)
+    if (typeof auxVisionProvider.supportsImages === 'function' && !auxVisionProvider.supportsImages()) throw new Error('no vision route: this agent\'s model runs through Claude Code, which cannot see images — connect an OpenRouter key in SETTINGS › AI & MODELS for image analysis');
     const ac = new AbortController();
     const t = setTimeout(() => { try { ac.abort(); } catch (_) {} }, Math.max(5000, Number(req && req.timeoutMs) || 55000));
+    // the RUN's stop ends this call too (it ran on for up to 55 s after STOP), and its usage is booked like any media
+    // spend — it reached neither the ledger nor the caps before (QA 2026-10-02)
+    const callSignal = (signal && typeof AbortSignal.any === 'function') ? AbortSignal.any([ac.signal, signal]) : ac.signal;
+    let usage = null;
     try {
       let out = '';
-      for await (const ev of auxVisionProvider.stream({ model, messages: (req && req.messages) || [], signal: ac.signal, stream: true })) {
+      for await (const ev of auxVisionProvider.stream({ model, messages: (req && req.messages) || [], signal: callSignal, stream: true })) {
         if (ev && ev.type === 'text' && ev.delta) out += ev.delta;
-        else if (ev && ev.type === 'done') break;
+        else if (ev && ev.type === 'usage') usage = ev.usage;   // read to the end: a provider's usage can arrive after its done
       }
       return out;
-    } finally { clearTimeout(t); }
+    } finally {
+      clearTimeout(t);
+      if (usage) { try { recordMediaUsage(usage, model); } catch (e) { failNote('aux.vision.usage', e); } }
+    }
   };
   const imageTools = makeImageTools({ openrouter: studioRoute.ok ? { apiKey: studioRoute.key, model, baseUrl: studioRoute.baseUrl, provider: studioRoute.provider, protocol: studioRoute.protocol,
     getToken: studioRoute.protocol === 'codex-responses' ? ensureCodexAccessToken : undefined,
@@ -18566,7 +18626,7 @@ async function runOnceCore(o) {
       // the Commander's taste rides into delegated work too: a worker writes the deliverable the Commander rates
       const tasteRecs = (personalizationStore.read().enabled && !tasteWithheld) ? FeedbackMemory.stationTaste(notes, otherAgentNotebooks(agentId)) : [];
       const tasteIds = new Set(tasteRecs.map(r => r.id).filter(Boolean));
-      const pinned = Array.isArray(notes) ? notes.filter(r => r && r.pinned && !tasteIds.has(r.id)) : [];
+      const pinned = Array.isArray(notes) ? notes.filter(r => r && r.pinned && !tasteIds.has(r.id) && !(tasteWithheld && r.origin === FeedbackMemory.ORIGIN)) : [];
       const recalled = renderRecall(rank(pinned, recentUserText(messages), { now: Date.now(), streamId, projectRoot: o.projectRoot || null }), { limit: 1500 });
       const taste = renderRecall(tasteRecs, { limit: FeedbackMemory.TASTE_CHARS, header: FeedbackMemory.TASTE_HEADER });
       return settled + (recalled.text ? '\n\n' + redact(recalled.text) : '') + (taste.text ? '\n\n' + redact(taste.text) : '');
@@ -18991,7 +19051,7 @@ async function runOnceCore(o) {
       const live = (pluginsLoaded.loaded || []).find(p => p.id === pid && p.process);
       if (!live || !(await pluginLoader.approvedRecord(pid))) continue;
       const defs = makePluginToolDefs({ pluginId: pid, pluginName: live.name, tools: pluginRuntime.tools(pid),
-        call: (name, args, ctx) => pluginRuntime.callTool(pid, name, args, ctx) });
+        call: (name, args, ctx, signal) => pluginRuntime.callTool(pid, name, args, ctx, signal) });
       for (const def of defs) {
         registry.register(def, { provenance: 'connector' });   // not host-authored: the connector trust class
         if (resolved.tools.indexOf(def.name) < 0) resolved.tools.push(def.name);
@@ -20404,7 +20464,9 @@ async function runOnceCore(o) {
     // (recovery runs inject nothing at all — see the note above msgs).
     const tasteRecs = (o.recovery || tasteWithheld || !personalizationStore.read().enabled) ? [] : FeedbackMemory.stationTaste(all, otherAgentNotebooks(agentId));
     const tasteIds = new Set(tasteRecs.map(r => r.id).filter(Boolean));
-    const recs = all.filter(r => !(r && tasteIds.has(r.id)));
+    // withheld: EVERY feedback record leaves the recall pool, not just the selected taste — a verdict record carries the
+    // Commander's past request ('(on: …)') and ordinary BM25 recall would hand it to a channel guest (QA 2026-10-02)
+    const recs = all.filter(r => !(r && (tasteIds.has(r.id) || (tasteWithheld && r.origin === FeedbackMemory.ORIGIN))));
     const q = recentUserText(convo);   // include restored conversation context on terse post-restart follow-ups
     // memory-compound: the embedding lane (BM25 + vectors) — null => pure BM25, byte-identical to before
     const hv = recs.length ? await hybridVectors({ agentId, recs, query: q, run: { providerId, key: runKey, baseUrl }, runId, cost, unmetered: providerUnmetered }) : null;
@@ -20980,6 +21042,11 @@ async function runOnceCore(o) {
   if (_gateScout) _auxCandidates.push('scout');
   if (_gateSkillReview) _auxCandidates.push('skill-review');
   if (_gateCurator) _auxCandidates.push('skill-curator');
+  // A RUN STOPPED BY ITS SPENDING CAP SPENDS NOTHING MORE: every pass below is a paid call, and a run that ended on 'budget' (or an
+  // agent whose cap is reached now) sent its failure review straight to the provider the cap had just stopped
+  let _capReached = !!(result && result.reason === 'budget');
+  if (!_capReached && !providerUnmetered) { try { _capReached = !!budget.check(null, agentId, 0, Date.now(), null); } catch (e) { failNote('aux.budget', e); } }
+  if (_capReached) _auxCandidates.length = 0;
   const _auxBudget = AuxGovernor.parseBudget(process.env.SKYNET_AUX_BUDGET);
   const _auxPlan = AuxGovernor.decide({ candidates: _auxCandidates, budget: _auxBudget, reserved: ['skill-review'] });
   const _auxSpend = new Set(_auxPlan.spend);
@@ -21812,6 +21879,9 @@ async function handleCancel(req, res) {
   const runId = body.runId;
   const ac = runId && runs.get(runId);
   if (ac) ac.abort();
+  // a routine/line/hub/step-test run is not in `runs`: stop it through its runOnce stop handle (QA 2026-10-02)
+  const kc = runId && runStopHandles.get(String(runId));
+  if (kc) kc.abort();
   res.writeHead(200); res.end('ok');
 }
 
@@ -21826,7 +21896,8 @@ async function handleRunSteer(req, res) {
   let body; try { body = JSON.parse(await readBody(req, 1 << 16)) || {}; } catch (e) { return json(400, { error: 'bad json' }); }
   const runId = String(body.runId || '');
   const text = String(body.text == null ? '' : body.text).trim();
-  const out = steerBufs.post(runId, text, !!runId && runs.has(runId));
+  // in flight = a desk run (`runs`) or any run runOnce is still driving (a routine/line/hub run has a stop handle, QA 2026-10-02)
+  const out = steerBufs.post(runId, text, !!runId && (runs.has(runId) || runStopHandles.has(runId)));
   json(out.status, out.body);
 }
 
@@ -22213,6 +22284,11 @@ function handleHalt(req, res) {
   const sampleInflight = (sampleHub && sampleHub._internals) ? sampleHub._internals.inflight : null;
   if (sampleInFlight) sampleInFlight.stopRequested = true;   // its record says STOPPED, never "did not finish cleanly — send it again"
   const halted = killAll(runs, tgInflight, dcInflight, ...genericInflights, ...tgBotInflights, devInflight, stepTest ? stepTest.inflight : null, ...triggerInflights, sampleInflight);   // browser runs + ALL channel hub runs, in one kill (see sidecar/halt.js)
+  // a phone task accepted a moment ago enters `runs` only on the next tick (host.send's setImmediate): stop it too, so an
+  // E-STOP pressed in that gap never lets it start (QA 2026-10-02). Counted once — those not already inside `halted`.
+  let phoneAborted = 0;
+  for (const c of Array.from(stationOneShots)) { try { c.abort(); phoneAborted += 1; } catch (e) { failNote('oneshot.estop', e); } }   // a NEEDS CHANGES / SET IT UP call
+  try { for (const id of Array.from(remoteHost._remoteRuns.keys())) if (!runs.has(id)) { remoteHost.stop({ runId: id }).catch(e => failNote('remote.estop', e)); phoneAborted += 1; } } catch (e) { failNote('remote.estop', e); }
   let cronAborted = 0;
   try { cronAborted = cronDriver.abortAllLeases(); } catch (_) {}   // Phase 0: E-STOP also aborts in-flight cron runs (unattended spend)
   let beatAborted = 0;
@@ -22266,7 +22342,7 @@ function handleHalt(req, res) {
   catch (e) { overseerHaltPersisted = false; console.warn('[overseer] stop could not persist:', e.message); }
   try { cronLock.release(); } catch (_) {}  // G4.3: drop any cron lock this process holds so an E-STOP mid-tick never wedges the next tick (standalone halt-block addition; G2 will add connectors.close here)
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ halted, cronAborted, beatAborted, loopAborted, terminalStops, nightshiftHaltPersisted, cronHaltPersisted, loopsHaltPersisted, overseerHaltPersisted, state: haltStatus() }));   // honest counts + per-subsystem restart-durability receipts
+  res.end(JSON.stringify({ halted: halted + phoneAborted, cronAborted, beatAborted, loopAborted, terminalStops, nightshiftHaltPersisted, cronHaltPersisted, loopsHaltPersisted, overseerHaltPersisted, state: haltStatus() }));   // honest counts + per-subsystem restart-durability receipts
 }
 
 // POST /api/channels/telegram/connect { token, key?, model, provider? } — the Messaging tab hands over the
@@ -23443,10 +23519,11 @@ function consentSummary(call) {
       : a.folder ? 'start it whenever a new file lands in ' + String(a.folder).slice(0, 160) : a.webhook ? 'start it whenever its webhook is called' : 'start it';
     return ln + ': ' + how + ', with the job: "' + job.slice(0, 240) + (job.length > 240 ? '…' : '') + '". From then on it runs the line\'s agents unattended, within the line\'s budget.';
   }
-  if (/^station[._]test_line$/.test(String(call && call.name || ''))) return 'the line ' + String(a.line || '').replace(/\s+/g, ' ').trim().slice(0, 48) + ', with this test job: "' + String(a.job || '').replace(/\s+/g, ' ').trim().slice(0, 240) + (String(a.job || '').length > 240 ? '…' : '') + '". It runs the line\'s agents and spends what they spend; the result lands in your OUTBOX.';
+  if (/^station[._]test_line$/.test(String(call && call.name || ''))) return 'the line ' + String(a.line || '').replace(/\s+/g, ' ').trim().slice(0, 48) + ', with this test job: "' + String(a.job || '').replace(/\s+/g, ' ').trim().slice(0, 240) + (String(a.job || '').length > 240 ? '…' : '') + '". It runs the line\'s agents and spends what they spend; the result lands in DELIVERABLES › TO REVIEW.';
   if (/^station[._]make_prop$/.test(String(call && call.name || ''))) return '"' + String(a.describe || '').replace(/\s+/g, ' ').trim().slice(0, 60) + '", drawn with your StarNet credits (about $0.35' + (a.sideView ? ', and about $0.30 more for its side view' : '') + '). It joins your MADE BY YOU library; nothing is placed until a plan says so.';
   if (typeof a.path === 'string' && a.path) return a.path;
-  try { const s = JSON.stringify(a); return s.length > 80 ? s.slice(0, 77) + '…' : s; } catch (_) { return ''; }
+  // redacted BEFORE the clip: this line reaches the phone's lock screen (remoteAskWords) and a token in a command must never ride along
+  try { const s = JSON.stringify(redact(a)); return s.length > 80 ? s.slice(0, 77) + '…' : s; } catch (_) { return ''; }
 }
 function throttleSearch(registry) {
   const t = registry.get('web_search');

@@ -547,6 +547,7 @@ test/comms-history-pin.test.js
 test/comms-deliverable-replay.test.js
 test/composer-paste-limit.test.js
 test/chat-linkify.test.js
+test/chat-code-url-link.test.js
 test/chat-code-copy.test.js
 test/mint.test.js
 test/ctxgauge.test.js
@@ -567,6 +568,7 @@ test/chat-prompt-diet.test.js
 test/returns.test.js
 test/outbox-window.test.js
 test/notifications-useful.test.js
+test/bell-settles.test.js
 test/quest-log-window.test.js
 test/personas-fun-five.test.js
 test/pride.test.js
@@ -752,6 +754,7 @@ test/channels.setup-guide.test.js
 test/channels.hub.test.js
 test/channels.forwarded-taint.test.js
 test/channels.workline-transcript.test.js
+test/line-hop-stop.test.js
 test/cross-surface-continuity.test.js
 test/channels.outbox.test.js
 test/channels.commands.test.js
@@ -1020,6 +1023,7 @@ test/linedraft.test.js
 test/workflows-window.test.js
 test/build-mode-easy.test.js
 test/worldmodel-moveprops.test.js
+test/buildmode-halls.test.js
 test/trigger-sweep.test.js
 test/steptest-restart-spend.test.js
 test/userprops.test.js
@@ -1034,3 +1038,7 @@ test/remote.relay.test.js
 test/remote-sessions.test.js
 test/remote-view.test.js
 test/remote-push.test.js
+test/prose-links-desktop.test.js
+test/comms-receipts-count.test.js
+test/rail-agent-empty-archived.test.js
+test/run-stop-handles.test.js

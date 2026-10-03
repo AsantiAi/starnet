@@ -152,7 +152,7 @@
         }),
         // the station refuses input while an agent drives (409): the picture is then simply view-only
         send: events => postJson('/api/browser/view/input', { events }),
-        canType: () => !state.driver || !!state.driver.signIn,
+        canType: () => true,   // the Commander's hands are never refused (sidecar/browser-view.js driving)
         onLeave: () => { try { ui.url.focus(); } catch (_) { /* focus is best-effort */ } } });
     }
     setTimeout(watchMinimize, 0);   // once the window is in place
@@ -208,7 +208,7 @@
     if (su && su.state === 'failed' && !station().open) return 'Could not set up a browser on this computer: ' + su.error;
     const win = station().visible ? ' It is open in its own window too (SHOW WINDOW).' : '';
     if (d && d.signIn) return 'Sign in here: click the page and type. The agent is waiting and never sees what you type. Click Done in COMMS when you have finished.';
-    if (d) return agentLabel(d.agentId) + ' is driving the browser. You\'re watching; it hands you the wheel in STEP-IN if it needs you.' + win;
+    if (d) return agentLabel(d.agentId) + ' is using the browser. You can click and type in it too.' + win;
     return 'The station browser, shared by you and your agents.' + (station().visible ? ' Use it in its own window, or click this live view to type in it.' : ' Click the page to type in it.') + (station().remembered ? ' Sign-ins are saved.' : '');
   }
   function setDriver(d) {
@@ -233,7 +233,7 @@
       ui.url.value = m === 'page' && t ? t.path : (m === 'watch' || m === 'live') && state.page ? (state.page.url || '') : '';
     }
     ui.url.title = m === 'page' && t ? t.path + (t.source === 'workshop' ? ' (workshop)' : '') : (state.page && state.page.title) || '';
-    const yours = m === 'live' && (!d || !!d.signIn);
+    const yours = m === 'live';   // the shared browser always takes your hands, agent or not
     ui.front.hidden = !(m === 'live' && station().visible);
     ui.back.disabled = ui.fwd.disabled = !yours || state.busy;
     ui.reload.disabled = !(m === 'page' || yours) || state.busy;

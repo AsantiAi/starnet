@@ -22,6 +22,17 @@ A.ok(!/if \(w && windowDirty\(w\)\) \{ requestCloseTerm\(fromKey\); return; \}/.
 const rc = ui.slice(ui.indexOf('function requestCloseTerm('), ui.indexOf('function requestCloseTerm(') + 400);
 A.ok(/if \(w\._closeArmed \|\| !windowDirty\(w\)\) \{ closeTerm\(key\); return; \}/.test(rc), 'requestCloseTerm closes only an armed or clean window');
 
+// QA 2026-10-02: a typed one-line draft (TASKS' composer) is unsaved work too — run the REAL windowDirty on fake windows
+{
+  const wd = ui.slice(ui.indexOf('function windowDirty(w) {'), ui.indexOf('function requestCloseTerm('));
+  const vm = require('vm');
+  const ctx = {}; vm.createContext(ctx); vm.runInContext(wd, ctx);
+  const win = (draftValue) => ({ querySelector: () => null, querySelectorAll: (sel) => (sel === 'input[data-draft]' && draftValue != null ? [{ value: draftValue }] : []) });
+  A.eq(ctx.windowDirty(win('send the invoice to Sam')), true, 'a typed task in the TASKS composer arms the guard (a tab click no longer drops it)');
+  A.eq(ctx.windowDirty(win('   ')), false, 'an empty composer is clean');
+  A.eq(ctx.windowDirty(win(null)), false, 'a window without a draft input is clean');
+  A.ok(/<input id="kb-in" data-draft /.test(ui), 'the TASKS composer is marked as a draft input');
+}
 A.ok(/\[data-access-full\]'\)\.onclick = \(\) => \{ cfOpen\.set\(a\.id \+ ':cf-grp-behaves', true\); consoleSection\['agents'\] = 'config';/.test(ui), 'SEE FULL ACCESS opens the ACCESS group');
 A.ok(/\{ id: 'cf-grp-behaves', label: 'ACCESS' \}/.test(ui) && /const key = a\.id \+ ':' \+ g\.id;[\s\S]{0,200}cfOpen\.get\(key\) \? ' open'/.test(ui), 'the ACCESS group reads its open state from cfOpen by agent + group id');
 

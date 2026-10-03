@@ -225,6 +225,52 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
   const bytes = Buffer.byteLength(JSON.stringify(th));
   A.ok(bytes < 200 * 1024, 'a 540 KB conversation comes back under 200 KB (' + Math.round(bytes / 1024) + ' KB)');
   A.ok(/#59$/.test(th[th.length - 1].content) && th.length < 60, 'the newest turns are the ones kept');
+
+  /* SESSION HISTORY NEVER DISAPPEARS (Andrew 10-02, testing on the road: "sometimes session history disappears").
+     Reproduction: you write from the phone, the desk later saves a newer turn of the same session without having
+     merged yours — the phone used to keep only station turns NEWER than the desk's last line, so yours vanished. */
+  {
+    const desk = [
+      { role: 'user', content: 'plan the launch', ts: 100 }, { role: 'assistant', content: 'Here is the plan.', ts: 110 },
+      { role: 'system', sys: true, content: '■ RUN COMPLETE' },
+      { role: 'user', content: 'and the budget?', ts: 500 }, { role: 'assistant', content: 'About $40.', ts: 510 }
+    ];
+    const station = [
+      { role: 'user', content: 'plan the launch', ts: 100, rowId: 1 }, { role: 'assistant', content: 'Here is the plan.', ts: 110, rowId: 2 },
+      { role: 'user', content: 'from my phone: add a teaser', ts: 300, rowId: 3 }, { role: 'assistant', content: 'Teaser added.', ts: 310, rowId: 4 },
+      { role: 'user', content: 'and the budget?', ts: 500, rowId: 5 }, { role: 'assistant', content: 'About $40.', ts: 510, rowId: 6 }
+    ];
+    const hm = makeRemoteHost({ now: () => now, newId: () => 'r', broadcast: () => {}, roster: () => [{ agentId: 'nova', name: 'NOVA' }], liveRuns: () => [],
+      transcript: { streams: () => [{ streamId: 'ws_launch', turns: 6, lastAt: 510, preview: '' }], history: () => station },
+      deskSessions: () => [{ id: 'ws_launch', agentId: 'nova', title: 'Launch', history: desk, lastActiveAt: 510 }] });
+    const turns = (await hm.thread({ streamId: 'ws_launch', limit: 60 })).map(t => t.content);
+    A.eq(turns, ['plan the launch', 'Here is the plan.', 'from my phone: add a teaser', 'Teaser added.', 'and the budget?', 'About $40.'],
+      'a phone turn the desk never merged stays in its place, even after the desk saved newer turns');
+  }
+  // a long conversation is never cut off: it comes in pages, and the phone is told how many older turns remain
+  {
+    const many = []; for (let i = 0; i < 230; i++) many.push({ role: i % 2 ? 'assistant' : 'user', content: 'turn ' + i, ts: i, rowId: i + 1 });
+    const hp = makeRemoteHost({ now: () => now, newId: () => 'r', broadcast: () => {}, roster: () => [], liveRuns: () => [],
+      transcript: { streams: () => [], history: () => many }, deskSessions: () => [] });
+    const p1 = await hp.thread({ streamId: 'big', limit: 80, page: true });
+    A.eq([p1.turns.length, p1.turns[0].content, p1.turns[79].content, p1.earlier, p1.total], [80, 'turn 150', 'turn 229', 150, 230], 'the first page is the newest 80, with 150 older ones to come');
+    const p2 = await hp.thread({ streamId: 'big', limit: 80, before: 80, page: true });
+    A.eq([p2.turns[0].content, p2.turns[79].content, p2.earlier], ['turn 70', 'turn 149', 70], 'SHOW EARLIER brings the 80 before those');
+    const p3 = await hp.thread({ streamId: 'big', limit: 80, before: 160, page: true });
+    A.eq([p3.turns.length, p3.turns[0].content, p3.earlier], [70, 'turn 0', 0], 'and the last page reaches the very first turn');
+    A.ok(Array.isArray(await hp.thread({ streamId: 'big', limit: 80 })), 'an older phone (no pages) still gets the bare list');
+  }
+  // the sessions list holds every session (it stopped at 50), and a session the desk never opened is still listed
+  {
+    const desks = []; for (let i = 0; i < 120; i++) desks.push({ id: 'ws_' + i, agentId: 'nova', title: 'Session ' + i, history: [{ role: 'user', content: 'q' + i, ts: i }], lastActiveAt: i });
+    desks.push({ id: 'ws_quiet', agentId: 'nova', title: 'NOVA', history: [], lastActiveAt: 5 });
+    const hs2 = makeRemoteHost({ now: () => now, newId: () => 'r', broadcast: () => {}, roster: () => [{ agentId: 'nova', name: 'NOVA' }], liveRuns: () => [],
+      transcript: { streams: () => [{ streamId: 'ws_quiet', agentId: 'nova', turns: 2, lastAt: 999, preview: 'what I asked from the phone' }], history: () => [] },
+      deskSessions: () => desks });
+    const list = await hs2.threads({ limit: 300 });
+    A.eq(list.length, 121, 'all 121 sessions are listed');
+    A.ok(list.some(t => t.streamId === 'ws_quiet' && t.preview === 'what I asked from the phone'), 'a session whose turns live only in the station record is not hidden as blank');
+  }
   // a file read for an agent that does not exist makes nothing
   A.eq((await hl.fetchFile({ agentId: 'ghost', path: 'x.txt', offset: 0, length: 10 })).ok, false, 'no file read (and no folder) for a made-up agent');
   // a phone reads only what the station showed it: the agent's own workspace, or a file a run/deliverable recorded
@@ -294,12 +340,16 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
     for (let i = 0; i < 50 && !emitRef; i++) await new Promise(r => setTimeout(r, 10));
     const tok = async (t) => { emitRef('agent.token', { delta: t }); await new Promise(r => setTimeout(r, 300)); };
     await tok('Hel'); await tok('lo'); await tok(' there');
-    const tx = () => evs.filter(e => e.type === 'run.text');
+    const tx = () => evs.filter(e => e.type === 'run.text' || e.type === 'run.delta');
     A.eq(tx()[0], { type: 'run.text', runId: 'tx-run', text: 'Hel' }, 'the first frame is the text so far');
-    A.eq(tx()[1], { type: 'run.text', runId: 'tx-run', at: 3, add: 'lo' }, 'then only what it grew by, and where that starts');
-    A.eq(tx()[2], { type: 'run.text', runId: 'tx-run', at: 5, add: ' there' }, 'and again');
+    A.eq(tx()[1], { type: 'run.delta', runId: 'tx-run', at: 3, add: 'lo' }, 'then only what it grew by, and where that starts — as its OWN type, so a phone app from before deltas ignores it instead of blanking the reply');
+    A.eq(tx()[2], { type: 'run.delta', runId: 'tx-run', at: 5, add: ' there' }, 'and again');
     for (let i = 0; i < 5; i++) await tok('.');
     A.eq(tx()[7], { type: 'run.text', runId: 'tx-run', text: 'Hello there.....' }, 'every eighth frame is the whole text, so a phone that missed a piece is put right');
+    // a phone app from before deltas (the relay deploys on its own schedule) never blanks the reply: its only handler was
+    // `if (e.type === 'run.text') L.text = e.text`
+    { const old = { text: '' }; const seen = []; for (const e of tx()) { if (e.type === 'run.text') old.text = e.text; seen.push(old.text); }
+      A.ok(seen.every(t => typeof t === 'string') && old.text === 'Hello there.....', 'an older phone app keeps a readable reply on every frame: ' + JSON.stringify(seen)); }
     emitRef('agent.tool_call', { name: 'fs_read', callId: 'c1' }); await tok('Next');
     A.eq(tx()[tx().length - 1], { type: 'run.text', runId: 'tx-run', text: 'Next' }, 'after a tool step the new text starts whole');
     let text = '';
@@ -308,11 +358,25 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
     release();
   }
 
+  // a phone set to ALWAYS ASK never inherits Full Access; a setting that cannot be read asks too
+  for (const [asks, want, label] of [[() => true, true, 'a phone marked ALWAYS ASK never inherits Full Access'], [() => { throw new Error('unreadable'); }, true, 'a setting that cannot be read means the phone asks'], [() => false, false, 'an ordinary phone works with the desk permissions']]) {
+    let seen = null;
+    const ha = makeRemoteHost({
+      now: () => Date.now(), newId: () => 'ask-run', broadcast: () => {}, phoneAsksFirst: asks,
+      roster: () => [{ agentId: 'lead', name: 'LEAD' }], liveRuns: () => [], transcript: { history: () => [], streams: () => [] },
+      credentials: () => ({ ok: true, key: 'k', model: 'm', provider: 'p' }), askConsent: () => Promise.resolve('deny'),
+      runOnce: async o => { seen = o; o.emit('agent.run.end', { agentId: 'lead', runId: o.runId, reason: 'done', usd: 0 }); }
+    });
+    await ha.send({ agentId: 'lead', text: 'do it', streamId: '', deviceId: 'd1' });
+    for (let i = 0; i < 50 && !seen; i++) await new Promise(r => setTimeout(r, 10));
+    A.eq(require('../sidecar/run-origin.js').hostPowerWithheldFor(seen), want, label);
+  }
+
   // a delegated WORKER's error/end (forwarded onto the lead's emit) must not mark the phone's run failed
   {
     const evs = []; let seenOpts = null;
     const hw = makeRemoteHost({
-      now: () => Date.now(), newId: () => 'lead-run', broadcast: e => evs.push(e),
+      now: () => Date.now(), newId: () => 'lead-run', broadcast: e => evs.push(e), phoneAsksFirst: () => false,
       roster: () => [{ agentId: 'lead', name: 'LEAD' }], liveRuns: () => [], transcript: { history: () => [], streams: () => [] },
       credentials: () => ({ ok: true, key: 'k', model: 'm', provider: 'p' }), askConsent: () => Promise.resolve('deny'),
       runOnce: async o => {
@@ -324,7 +388,7 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
     });
     await hw.send({ agentId: 'lead', text: 'do it', streamId: '', deviceId: 'd1' });
     await new Promise(r => setTimeout(r, 50));
-    A.eq(seenOpts && require('../sidecar/run-origin.js').hostPowerWithheldFor(seenOpts), true, 'a phone task never inherits Full Access: it asks on the phone');
+    A.eq(seenOpts && require('../sidecar/run-origin.js').hostPowerWithheldFor(seenOpts), false, 'a phone works with the desk permissions: a Full Access agent acts without asking');
     const ended = evs.find(e => e.type === 'run.ended');
     A.ok(ended && ended.reason === 'done' && !ended.error, 'a recovered worker error does not turn the phone run red');
     A.eq(hw.recentRuns()[0] && hw.recentRuns()[0].ok, true, 'the phone recent row says the lead run succeeded');
@@ -346,6 +410,66 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
     await new Promise(r => setTimeout(r, 50));
     A.ok(seen && /draft the email/.test(seen.priorAgentTurn || ''), 'the phone run classifies "yes" with the agent\'s last turn');
     A.eq(ranAsTask, true, 'so "yes" to its offer runs as a task (with tools), not chat that can only promise');
+  }
+
+  // (QA 2026-10-02) a host built without the ALWAYS ASK reader gives the phone NO host power (never more power on a missing wire)
+  {
+    let seen = null;
+    const hm = makeRemoteHost({
+      now: () => Date.now(), newId: () => 'nowire-run', broadcast: () => {},
+      roster: () => [{ agentId: 'lead', name: 'LEAD' }], liveRuns: () => [], transcript: { history: () => [], streams: () => [] },
+      credentials: () => ({ ok: true, key: 'k', model: 'm', provider: 'p' }), askConsent: () => Promise.resolve('deny'),
+      runOnce: async o => { seen = o; o.emit('agent.run.end', { agentId: 'lead', runId: o.runId, reason: 'done', usd: 0 }); }
+    });
+    await hm.send({ agentId: 'lead', text: 'do it', streamId: '', deviceId: 'd1' });
+    for (let i = 0; i < 50 && !seen; i++) await new Promise(r => setTimeout(r, 10));
+    A.eq(require('../sidecar/run-origin.js').hostPowerWithheldFor(seen), true, 'no ALWAYS ASK reader wired: the phone asks');
+  }
+
+  // (QA 2026-10-02) REMOVING a phone stops the runs it started; another phone's run keeps going
+  {
+    let n = 0; const signals = {};
+    const hr = makeRemoteHost({
+      now: () => Date.now(), newId: () => 'rv-' + (++n), broadcast: () => {}, phoneAsksFirst: () => false,
+      roster: () => [{ agentId: 'lead', name: 'LEAD' }], liveRuns: () => [], transcript: { history: () => [], streams: () => [] },
+      credentials: () => ({ ok: true, key: 'k', model: 'm', provider: 'p' }), askConsent: () => Promise.resolve('deny'),
+      runOnce: async o => { signals[o.runId] = o.signal; await new Promise(r => o.signal.addEventListener('abort', r)); }
+    });
+    await hr.send({ agentId: 'lead', text: 'long task', streamId: '', deviceId: 'lost-phone' });
+    await hr.send({ agentId: 'lead', text: 'other task', streamId: '', deviceId: 'my-phone' });
+    for (let i = 0; i < 50 && Object.keys(signals).length < 2; i++) await new Promise(r => setTimeout(r, 10));
+    A.eq(hr.stopDevice('lost-phone'), 1, 'stopDevice aborts the one run the removed phone started');
+    A.ok(signals['rv-1'].aborted && !signals['rv-2'].aborted, 'the removed phone\'s run stops; the other phone\'s run keeps going');
+    A.eq(hr.stopDevice(''), 0, 'an empty device id stops nothing');
+    hr.stopDevice('my-phone');
+  }
+
+  // (QA 2026-10-02) an ALWAYS ASK phone may pause a routine but never switch one back on (it would fire with standing Full Access)
+  {
+    const calls = [];
+    const mk = (asks) => makeRemoteHost({
+      now: () => Date.now(), newId: () => 'r', broadcast: () => {}, phoneAsksFirst: () => asks,
+      roster: () => [], liveRuns: () => [], transcript: { history: () => [], streams: () => [] },
+      setRoutine: async (jobId, enabled) => { calls.push([jobId, enabled]); return { ok: true }; }
+    });
+    const gw = makeGateway({ host: mk(true), now: () => Date.now() });
+    const on = await gw.call({ verb: 'routine', args: { jobId: 'job1', enabled: true } }, { deviceId: 'd1' });
+    A.ok(on && on.ok === false && /ALWAYS ASK/.test(String(on.error || '')), 'an ALWAYS ASK phone is refused turning a routine back on, and told why');
+    const off = await gw.call({ verb: 'routine', args: { jobId: 'job1', enabled: false } }, { deviceId: 'd1' });
+    A.ok(off && off.ok !== false, 'it may still pause one');
+    const gw2 = makeGateway({ host: mk(false), now: () => Date.now() });
+    const on2 = await gw2.call({ verb: 'routine', args: { jobId: 'job1', enabled: true } }, { deviceId: 'd2' });
+    A.ok(on2 && on2.ok !== false, 'an ordinary phone still turns a routine on');
+    A.eq(calls, [['job1', false], ['job1', true]], 'only the allowed changes reached the station');
+  }
+  // (QA 2026-10-02) the desk side of a phone run: E-STOP reaches one accepted a moment ago (not yet in `runs`), and its
+  // session-scoped grants end with it like every other run's
+  {
+    const idx = fs.readFileSync(path.join(__dirname, '..', 'sidecar', 'index.js'), 'utf8');
+    A.ok(idx.includes("for (const id of Array.from(remoteHost._remoteRuns.keys())) if (!runs.has(id)) { remoteHost.stop({ runId: id })")
+      && idx.includes('halted: halted + phoneAborted'), 'E-STOP stops a phone task still on its way into runs, and counts it once');
+    A.ok(idx.includes('finally { runs.delete(rid); runsMeta.delete(rid); grantsSession.delete(rid); }'), 'a phone run drops its session grants when it ends');
+    A.ok(idx.includes('stationOneShots.add(ctrl);') && idx.includes('stationOneShots.delete(ctrl); }') && idx.includes('for (const c of Array.from(stationOneShots)) { try { c.abort();'), 'E-STOP also aborts a NEEDS CHANGES / SET IT UP FOR ME call in flight');
   }
   A.report('remote-view');
 })().catch((e) => { console.log('FAIL: threw ' + (e && e.stack || e)); process.exit(1); });
