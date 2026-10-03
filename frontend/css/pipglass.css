@@ -661,3 +661,8 @@ body.glass-demo:not(.hud-mode) .term select { background-color: rgba(0, 0, 0, .2
 /* catalog badges (official / community / site) at 10-11px */
 body.glass-demo:not(.hud-mode) .term :is(.cc-badge, .cc-home, .sec-tag, .key-stat) { font-size: 12px; }
 body.glass-demo:not(.hud-mode) .term :is(.cc-details, .cc-alternatives, .q-cw, .wfw-sec) { border-radius: 8px; }
+
+/* RAIL ICONS (railicons.js): the drawn 16px line icons sit in the rail's icon column, phosphor via currentColor */
+body.glass-demo .con-rail-glyph.has-ico { display: inline-grid; place-items: center; width: 18px; height: 18px; font-size: 0; line-height: 0; }
+body.glass-demo .con-rail-glyph .rail-ico { display: block; width: 16px; height: 16px; }
+body.glass-demo .con-rail-item.con-toptab .con-rail-glyph.has-ico { width: 16px; margin-right: 2px; }
