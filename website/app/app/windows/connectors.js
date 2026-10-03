@@ -1220,13 +1220,16 @@
       const cardId = e.catalogId || e.id;
       const chip = e.platformApi && e.unattendedSupported === false
         ? ['', 'manual setup', 'var(--gold)']
+        : e.appPassword ? ['', 'app password', 'var(--gold)']
         : (e.signInAvailable === false ? ['', e.releaseDeferred ? 'deferred' : 'sign-in unavailable', 'var(--gold)'] : (CC_CHIP[e.authType] || CC_CHIP.none));
       const origin = e.googleApi ? '<span class="cc-badge cc-official" title="StarNet connector using Google’s APIs">STARNET · GOOGLE API</span>' : e.platformApi
         ? '<span class="cc-badge cc-official" title="first-party REST API documented by the vendor">✓ official API</span>'
         : (e.official ? '<span class="cc-badge cc-official" title="first-party server, run by the vendor">✓ official</span>'
                       : '<span class="cc-badge cc-community" title="community-run server">community</span>');
       let action;
-      if (e.installed) action = '<button class="bb xs" data-cc-act="manage" data-id="' + esc(cardId) + '">MANAGE SERVICE</button>';
+      if (e.installed) action = '<button class="bb xs" data-cc-act="manage" data-id="' + esc(cardId) + '">MANAGE SERVICE</button>' +
+        // a rejected or revoked app password is fixed HERE (the login error says so): re-open the same form
+        (e.appPassword ? '<button class="bb xs" data-cc-act="key" data-id="' + esc(cardId) + '">NEW APP PASSWORD</button>' : '');
       else if (e.platformApi) action = '<button class="bb xs" data-cc-act="platform" data-id="' + esc(cardId) + '">SET UP API KEY</button>';
       else if (e.googleApi && e.signInAvailable === false) action =
         '<button class="bb xs" disabled>' + (e.releaseDeferred ? 'DEFERRED' : 'GOOGLE SIGN-IN UNAVAILABLE') + '</button>';
@@ -1236,12 +1239,20 @@
           // url-less oauth entry reachable through an aggregator: a LIVE jump to that card, never a mute dead button.
           ? '<button class="bb xs" data-cc-act="via" data-id="' + esc(cardId) + '" data-via="' + esc(e.via) + '" title="no direct endpoint — jump to the connector that reaches it">▸ VIA ' + esc(e.via.toUpperCase()) + '</button>'
           : '<button class="bb xs" data-cc-act="soon" disabled title="not directly wired yet — see the note">SOON</button>');   // an oauth entry with no endpoint and no aggregator is honestly not sign-in-able
-      else if (e.authType === 'apikey') action = '<button class="bb xs" data-cc-act="key" data-id="' + esc(cardId) + '">SET UP API KEY</button>';
+      else if (e.authType === 'apikey') action = '<button class="bb xs" data-cc-act="key" data-id="' + esc(cardId) + '">' + (e.appPassword ? 'SET UP APP PASSWORD' : 'SET UP API KEY') + '</button>';
       else action = '<button class="bb sm" data-cc-act="add" data-id="' + esc(cardId) + '">+ ADD</button>';
       const keyDelivery = e.keyHeader
         ? '<code>' + esc(e.keyHeader) + ': &hellip;</code>'
         : '<code>Authorization: Bearer &hellip;</code>';
-      const keyField = (e.authType === 'apikey' || e.deviceFlow) && !e.platformApi
+      const keyField = e.appPassword
+        ? '<div class="cc-key cc-apppw" style="display:none"><div class="mc-hint">1. Turn on 2-Step Verification for your Google account. <a href="https://myaccount.google.com/signinoptions/two-step-verification" target="_blank" rel="noopener">2-Step Verification ↗</a>' +
+            '<br>2. Create an app password (any name, for example StarNet). <a href="' + esc(e.homepage || 'https://myaccount.google.com/apppasswords') + '" target="_blank" rel="noopener">Create app password ↗</a>' +
+            '<br>3. Enter your Gmail address and the 16-letter app password, then choose CONNECT.</div>' +
+            '<input type="text" inputmode="email" class="key-input" data-cc-addr="' + esc(cardId) + '" aria-label="Gmail address" placeholder="you@gmail.com" autocomplete="off" spellcheck="false">' +
+            '<input type="password" class="key-input" data-cc-key="' + esc(cardId) + '" aria-label="Google app password" placeholder="16-letter app password" autocomplete="off" spellcheck="false">' +
+            '<div class="mc-hint">This uses an app password, not Google sign-in. StarNet talks to Gmail directly from this computer (IMAP and SMTP); the password is saved with your other connector credentials on this computer and never shown again.' +
+            'Mail read through this connection is never sent to StarNet Managed. On a work or school account, an administrator can turn app passwords off. Remove the connection or revoke the app password in your Google account at any time.</div></div>'
+        : (e.authType === 'apikey' || e.deviceFlow) && !e.platformApi
         ? '<div class="cc-key" style="display:none"><div class="mc-hint">1. Open your ' + esc(e.name) + ' account and create an API key or token. ' + (e.homepage ? '<a href="' + esc(e.homepage) + '" target="_blank" rel="noopener">Open ' + esc(e.name) + ' ↗</a>' : '') + '<br>2. Paste it below, then choose CONNECT.</div><input type="password" class="key-input" data-cc-key="' + esc(cardId) + '" aria-label="' + esc(e.name) + ' API key or token" placeholder="' + esc(e.name) + ' API key / token" autocomplete="off" spellcheck="false">' +
             '<div class="mc-hint">Stored locally by the sidecar, sent as ' + keyDelivery + ', never displayed again.</div></div>'
         : '';
@@ -1263,6 +1274,7 @@
       const setupHint = e.installed ? 'Setup saved — manage access or reconnect.'
         : e.signInAvailable === false ? (e.signInMessage || 'Sign-in is unavailable in this build.')
         : e.platformApi ? (e.unattendedSupported === false ? 'Manual setup required. See the service instructions before adding a key.' : 'Requires an API key from your account. Guided setup opens the key form.')
+        : e.appPassword ? 'Needs a Google app password.'
         : e.authType === 'apikey' ? 'Requires an API key or token from your account.'
         : e.authType === 'oauth' ? (e.url ? 'Sign in in your browser, then return here to check the connection.' : 'Connect through the service shown below.')
         : e.local ? 'Start the local service first, then connect.' : 'No account credentials needed.';
@@ -1273,7 +1285,7 @@
           ' style="--ci:' + (ci || 0) + '">' +
           '<div class="cc-head">' + ccSeal(e) + '<div class="cc-identity"><b>' + esc(e.name) + '</b>' +
             '<span class="cc-chip" style="color:' + chip[2] + '" title="' + esc(chip[1]) + '">' + (chip[0] ? chip[0] + ' ' : '') + esc(chip[1]) + '</span></div></div>' +
-          '<div class="cc-blurb dim">' + esc(e.blurb) + '</div>' + '<details class="cc-details"><summary>Connection details</summary><div class="cc-details-body">' + clientField + origin + presets + platformMeta + (e.installed ? '<div class="mc-hint">' + (e.releaseDeferred ? 'Saved connection retained. Open Manage Service to view or remove it.' : 'Setup saved. Open Manage Service to check access or reconnect.') + '</div>' : '') + '</div></details>' + keyField +
+          (e.appPassword ? '<div class="cc-blurb dim" data-tip="' + esc(e.blurb) + '">IMAP · SMTP · app password</div>' : '<div class="cc-blurb dim">' + esc(e.blurb) + '</div>') + '<details class="cc-details"><summary>Connection details</summary><div class="cc-details-body">' + clientField + origin + presets + platformMeta + (e.installed ? '<div class="mc-hint">' + (e.releaseDeferred ? 'Saved connection retained. Open Manage Service to view or remove it.' : 'Setup saved. Open Manage Service to check access or reconnect.') + '</div>' : '') + '</div></details>' + keyField +
           '<div class="mc-hint cc-setup-hint">' + esc(setupHint) + '</div>' +
           '<div class="cc-acts">' + action + home + '</div>' + (e.deviceFlow && !e.installed ? '<details><summary>Use a personal access token instead</summary><button class="bb xs" data-cc-act="key" data-id="' + esc(cardId) + '">SET UP TOKEN</button></details>' : '') +
         '</div>';
@@ -1291,7 +1303,7 @@
     // Editorial picks, not a claim about measured customer usage. Move rather than duplicate
     // cards so sign-in progress, search results and saved-service counts have one owner.
     function ccPopularGroups(groups) {
-      const picks = ['gmail', 'google-drive', 'google-calendar', 'notion', 'github', 'canva', 'linear', 'stripe', 'asana', 'clickup'];
+      const picks = ['gmail', 'gmail-app-password', 'google-drive', 'google-calendar', 'notion', 'github', 'canva', 'linear', 'stripe', 'asana', 'clickup'];
       const entries = groups.flatMap(g => g.connectors);
       const popular = picks.map(id => entries.find(e => e.id === id && !e.platformApi && e.signInAvailable !== false && !e.releaseDeferred && e.url)).filter(Boolean).slice(0, 8);
       const selected = new Set(popular);
@@ -1618,9 +1630,16 @@
         const card = ev.target.closest('.cc-card');
         const wrap = card && card.querySelector('.cc-key');
         const input = wrap && wrap.querySelector('input[data-cc-key]');
+        const addrIn = wrap && wrap.querySelector('input[data-cc-addr]');
         // the class (not the inline style) is what menu-glass.css's :has() keys on: a :has() reading [style] re-checks on every inline-style write in the page
-        if (wrap && wrap.style.display === 'none') { wrap.style.display = ''; wrap.classList.add('cc-key-open'); btn.textContent = '▶ CONNECT'; if (input) input.focus(); sfx('tick'); return; }
-        const token = ((input && input.value) || '').trim();
+        if (wrap && wrap.style.display === 'none') { wrap.style.display = ''; wrap.classList.add('cc-key-open'); btn.textContent = '▶ CONNECT'; if (addrIn || input) (addrIn || input).focus(); sfx('tick'); return; }
+        let token = ((input && input.value) || '').trim();
+        if (addrIn) {
+          const addr = (addrIn.value || '').trim();
+          if (!addr || !token) { sfx('bad'); ccMsgEl.classList.remove('ok'); ccMsgEl.textContent = 'enter your Gmail address and the 16-letter app password first'; return; }
+          token = addr + ':' + token.replace(/\s+/g, '');
+          input.value = '';   // the password never lingers in the page
+        }
         if (!token) { sfx('bad'); ccMsgEl.classList.remove('ok'); ccMsgEl.textContent = 'paste the API key first'; return; }
         btn.disabled = true; await ccInstall(id, token);
       }

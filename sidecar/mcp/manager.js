@@ -335,12 +335,14 @@
         if (!isCurrent()) return { ok: false, state: 'down', toolCount: 0, superseded: true };
         if (c.connecting === attempt) c.connecting = null;
         c.tools = []; c.resources = []; c.prompts = [];
-        if (AUTH_401.test((e && e.message) || '')) {
+        if (AUTH_401.test((e && e.message) || '') || (e && e.authRejected === true)) {
           // THE SERVER IS THE AUTHORITY ON AUTH: a 401 handshake means this credential is dead, and backoff
           // cannot mint a new one — reconnect-hammering a 401 just burns the attempt cap (the reported Wix/Gmail
           // failure mode). Honest terminal state; sign-in / a token edit reconfigures and recovers.
+          // A non-HTTP transport (the Gmail app-password IMAP adapter) flags `authRejected` and carries its own
+          // plain-language fix in the message, which is shown instead of the generic HTTP 401 text.
           c.authRequired = true;
-          setState(c, 'error', authDetail(c));
+          setState(c, 'error', (e && e.authRejected === true && e.message) || authDetail(c));
           return { ok: false, state: 'error', toolCount: 0, error: c.detail, authRequired: true };
         }
         setState(c, 'error', (e && e.message) || String(e));
@@ -486,12 +488,12 @@
         ? 'reauthentication required — the server rejected this connector\'s sign-in (HTTP 401); sign in again'
         : 'authentication rejected (HTTP 401) — update this connector\'s token';
     }
-    function markAuthRequired(c) {
+    function markAuthRequired(c, detail) {
       bumpEpoch(c);                                             // stale death callbacks from this connection are void
       teardown(c);                                              // clears the reconnect timer + closes client/transport
       c.tools = []; c.resources = []; c.prompts = [];
       c.authRequired = true;
-      setState(c, 'error', authDetail(c));
+      setState(c, 'error', detail || authDetail(c));
       // deliberately NO scheduleReconnect: backoff cannot mint a credential. Sign-in (reconfigure) or a manual
       // Reload with a fixed token recovers — connect() clears authRequired on the next accepted handshake.
     }
@@ -604,6 +606,8 @@
         return r;
       } catch (e) {
         const msg = (e && e.message) || '';
+        // a non-HTTP adapter's own auth verdict (Gmail app password): terminal, with its own fix text, no refresh dance
+        if (e && e.authRejected === true) { markAuthRequired(c, msg); throw e; }
         if (AUTH_401.test(msg)) {
           const reauthError = () => new Error('connector "' + c.id + '" needs reauthentication — the server rejected its credential (HTTP 401); sign in to it again');
           const reconnectedSince = () => c._epoch !== epochAtCall && c.client && c.state === 'up';

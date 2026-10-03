@@ -1,0 +1,166 @@
+'use strict';
+/* sidecar/mcp/mail-parse.js — a small, bounded RFC 5322 / MIME reader for mail fetched over IMAP.
+
+   Enough to turn a raw message into what an agent needs: decoded headers (RFC 2047 encoded words), the readable
+   text (text/plain preferred, else text/html reduced to text), and an attachment inventory (name, type, size —
+   never the bytes). Tolerates truncated input (a capped fetch) and caps recursion depth and part count. */
+
+const MAX_DEPTH = 8;
+const MAX_PARTS = 200;
+
+function decodeCharset(buf, charset) {
+  const cs = String(charset || 'utf-8').trim().toLowerCase().replace(/^"|"$/g, '');
+  try { return new TextDecoder(cs === 'us-ascii' || cs === 'ascii' ? 'utf-8' : cs, { fatal: false }).decode(buf); }
+  catch (_) { return buf.toString('latin1'); }
+}
+
+function decodeQP(text) {
+  const s = String(text).replace(/=\r?\n/g, '');
+  const bytes = [];
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '=' && /^[0-9A-Fa-f]{2}$/.test(s.slice(i + 1, i + 3))) { bytes.push(parseInt(s.slice(i + 1, i + 3), 16)); i += 2; }
+    else { const b = Buffer.from(c, 'latin1'); bytes.push(b[0]); }
+  }
+  return Buffer.from(bytes);
+}
+
+// RFC 2047: =?charset?B|Q?text?=  (adjacent encoded words separated only by whitespace are joined)
+function decodeWords(value) {
+  return String(value || '')
+    .replace(/(=\?[^?]+\?[BbQq]\?[^?]*\?=)\s+(?==\?)/g, '$1')
+    .replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, (all, cs, enc, txt) => {
+      try {
+        const buf = enc.toUpperCase() === 'B' ? Buffer.from(txt, 'base64') : decodeQP(txt.replace(/_/g, ' '));
+        return decodeCharset(buf, cs.replace(/\*.*$/, ''));
+      } catch (_) { return all; }
+    });
+}
+
+function splitHeaderBody(buf) {
+  let i = buf.indexOf('\r\n\r\n'), skip = 4;
+  const j = buf.indexOf('\n\n');
+  if (i < 0 || (j >= 0 && j < i)) { i = j; skip = 2; }
+  if (i < 0) return { head: headText(buf), body: Buffer.alloc(0) };
+  return { head: headText(buf.slice(0, i)), body: buf.slice(i + skip) };
+}
+// Raw 8-bit header bytes are usually UTF-8 (RFC 6532); fall back to latin1 only when they are not valid UTF-8.
+function headText(b) { const u = b.toString('utf8'); return u.includes('�') ? b.toString('latin1') : u; }
+
+function parseHeaders(headText) {
+  const out = [];
+  const lines = String(headText).split(/\r?\n/);
+  for (const line of lines) {
+    if (/^[ \t]/.test(line) && out.length) { out[out.length - 1].value += ' ' + line.trim(); continue; }
+    const m = /^([^:\s]+):\s?(.*)$/.exec(line);
+    if (m) out.push({ name: m[1].toLowerCase(), value: m[2] });
+  }
+  return out;
+}
+function header(headers, name) { const h = headers.find(x => x.name === name); return h ? h.value : ''; }
+
+// Content-Type / Content-Disposition: value; k=v; k="v"; filename*=UTF-8''...
+function parseParams(value) {
+  const parts = String(value || '').split(';');
+  const main = parts.shift().trim().toLowerCase();
+  const params = {};
+  for (const p of parts) {
+    const m = /^\s*([^=\s]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^;]*))/.exec(p);
+    if (!m) continue;
+    let k = m[1].toLowerCase(), v = m[2] != null ? m[2].replace(/\\(.)/g, '$1') : (m[3] || '').trim();
+    if (/\*$/.test(k) || /\*\d+\*?$/.test(k)) {
+      // RFC 2231 extended value: charset'lang'%XX-encoded (only the first segment carries the charset)
+      const ext = /^([^']*)'[^']*'(.*)$/.exec(v);
+      const pct = s => Buffer.from(s.replace(/%([0-9A-Fa-f]{2})|([\s\S])/g, (a, hex, ch) => hex ? String.fromCharCode(parseInt(hex, 16)) : ch), 'latin1');
+      v = decodeCharset(pct(ext ? ext[2] : v), ext ? (ext[1] || 'utf-8') : 'utf-8');
+      k = k.replace(/\*\d*\*?$/, '');
+      params[k] = (params[k] && /\*\d/.test(m[1]) ? params[k] : '') + v;
+    } else if (!(k in params)) params[k] = v;
+  }
+  return { value: main, params };
+}
+
+function decodeBody(buf, encoding) {
+  const enc = String(encoding || '').trim().toLowerCase();
+  if (enc === 'base64') return Buffer.from(buf.toString('latin1').replace(/[^A-Za-z0-9+/=]/g, ''), 'base64');
+  if (enc === 'quoted-printable') return decodeQP(buf.toString('latin1'));
+  return buf;
+}
+
+function htmlToText(html) {
+  return String(html)
+    .replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|tr|li|h[1-6])>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'")
+    .replace(/&#(\d+);/g, (_, n) => { try { return String.fromCodePoint(Number(n)); } catch (e) { return ' '; } })
+    .replace(/[ \t\f\v]+/g, ' ').replace(/\n\s*\n\s*\n+/g, '\n\n').trim();
+}
+
+function splitMultipart(body, boundary) {
+  const text = body.toString('latin1');
+  const delim = '--' + boundary;
+  const parts = [];
+  let pos = text.indexOf(delim);
+  if (pos < 0) return parts;
+  for (;;) {
+    let start = pos + delim.length;
+    if (text.startsWith('--', start)) break;                  // closing delimiter
+    const eol = text.indexOf('\n', start);
+    if (eol < 0) break;
+    start = eol + 1;
+    const nextAt = text.indexOf('\n' + delim, start);
+    const end = nextAt < 0 ? text.length : (text[nextAt - 1] === '\r' ? nextAt - 1 : nextAt);
+    parts.push(body.slice(start, Math.max(start, end)));
+    if (nextAt < 0 || parts.length >= MAX_PARTS) break;           // truncated input: keep what arrived
+    pos = nextAt + 1;
+  }
+  return parts;
+}
+
+function walk(buf, state, depth) {
+  if (depth > MAX_DEPTH || state.parts >= MAX_PARTS) return;
+  state.parts++;
+  const { head, body } = splitHeaderBody(buf);
+  const headers = parseHeaders(head);
+  const ct = parseParams(header(headers, 'content-type') || 'text/plain');
+  const disp = parseParams(header(headers, 'content-disposition'));
+  const filename = decodeWords(disp.params.filename || ct.params.name || '');
+  if (/^multipart\//.test(ct.value) && ct.params.boundary) {
+    for (const p of splitMultipart(body, ct.params.boundary)) walk(p, state, depth + 1);
+    return;
+  }
+  if (ct.value === 'message/rfc822' && disp.value !== 'attachment') { walk(body, state, depth + 1); return; }
+  const isText = /^text\/(plain|html)$/.test(ct.value);
+  if (isText && disp.value !== 'attachment' && !filename) {
+    const text = decodeCharset(decodeBody(body, header(headers, 'content-transfer-encoding')), ct.params.charset);
+    (ct.value === 'text/plain' ? state.plain : state.html).push(text);
+    return;
+  }
+  const decoded = decodeBody(body, header(headers, 'content-transfer-encoding'));
+  state.attachments.push({ filename: filename || '(unnamed)', mimeType: ct.value, size: decoded.length });
+}
+
+/* parseMessage(buf, { maxText }) -> { headers: {from,to,cc,subject,date,messageId,replyTo}, text, textTruncated, attachments } */
+function parseMessage(raw, opts) {
+  const maxText = Math.max(200, Number(opts && opts.maxText) || 100000);
+  const buf = Buffer.isBuffer(raw) ? raw : Buffer.from(String(raw || ''), 'utf8');
+  const { head } = splitHeaderBody(buf);
+  const hs = parseHeaders(head);
+  const state = { plain: [], html: [], attachments: [], parts: 0 };
+  walk(buf, state, 0);
+  let text = state.plain.length ? state.plain.join('\n\n') : htmlToText(state.html.join('\n'));
+  text = text.replace(/\r\n/g, '\n').trim();
+  const textTruncated = text.length > maxText;
+  if (textTruncated) text = text.slice(0, maxText);
+  const h = n => decodeWords(header(hs, n));
+  return {
+    headers: { from: h('from'), to: h('to'), cc: h('cc'), replyTo: h('reply-to'), subject: h('subject'), date: h('date'), messageId: h('message-id') },
+    text, textTruncated, attachments: state.attachments.slice(0, 100)
+  };
+}
+
+function snippetOf(text, n) { return String(text || '').replace(/\s+/g, ' ').trim().slice(0, n || 200); }
+
+module.exports = { parseMessage, parseHeaders, parseParams, decodeWords, decodeQP, htmlToText, snippetOf };
