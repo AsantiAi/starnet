@@ -225,6 +225,52 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
   const bytes = Buffer.byteLength(JSON.stringify(th));
   A.ok(bytes < 200 * 1024, 'a 540 KB conversation comes back under 200 KB (' + Math.round(bytes / 1024) + ' KB)');
   A.ok(/#59$/.test(th[th.length - 1].content) && th.length < 60, 'the newest turns are the ones kept');
+
+  /* SESSION HISTORY NEVER DISAPPEARS (Andrew 10-02, testing on the road: "sometimes session history disappears").
+     Reproduction: you write from the phone, the desk later saves a newer turn of the same session without having
+     merged yours — the phone used to keep only station turns NEWER than the desk's last line, so yours vanished. */
+  {
+    const desk = [
+      { role: 'user', content: 'plan the launch', ts: 100 }, { role: 'assistant', content: 'Here is the plan.', ts: 110 },
+      { role: 'system', sys: true, content: '■ RUN COMPLETE' },
+      { role: 'user', content: 'and the budget?', ts: 500 }, { role: 'assistant', content: 'About $40.', ts: 510 }
+    ];
+    const station = [
+      { role: 'user', content: 'plan the launch', ts: 100, rowId: 1 }, { role: 'assistant', content: 'Here is the plan.', ts: 110, rowId: 2 },
+      { role: 'user', content: 'from my phone: add a teaser', ts: 300, rowId: 3 }, { role: 'assistant', content: 'Teaser added.', ts: 310, rowId: 4 },
+      { role: 'user', content: 'and the budget?', ts: 500, rowId: 5 }, { role: 'assistant', content: 'About $40.', ts: 510, rowId: 6 }
+    ];
+    const hm = makeRemoteHost({ now: () => now, newId: () => 'r', broadcast: () => {}, roster: () => [{ agentId: 'nova', name: 'NOVA' }], liveRuns: () => [],
+      transcript: { streams: () => [{ streamId: 'ws_launch', turns: 6, lastAt: 510, preview: '' }], history: () => station },
+      deskSessions: () => [{ id: 'ws_launch', agentId: 'nova', title: 'Launch', history: desk, lastActiveAt: 510 }] });
+    const turns = (await hm.thread({ streamId: 'ws_launch', limit: 60 })).map(t => t.content);
+    A.eq(turns, ['plan the launch', 'Here is the plan.', 'from my phone: add a teaser', 'Teaser added.', 'and the budget?', 'About $40.'],
+      'a phone turn the desk never merged stays in its place, even after the desk saved newer turns');
+  }
+  // a long conversation is never cut off: it comes in pages, and the phone is told how many older turns remain
+  {
+    const many = []; for (let i = 0; i < 230; i++) many.push({ role: i % 2 ? 'assistant' : 'user', content: 'turn ' + i, ts: i, rowId: i + 1 });
+    const hp = makeRemoteHost({ now: () => now, newId: () => 'r', broadcast: () => {}, roster: () => [], liveRuns: () => [],
+      transcript: { streams: () => [], history: () => many }, deskSessions: () => [] });
+    const p1 = await hp.thread({ streamId: 'big', limit: 80, page: true });
+    A.eq([p1.turns.length, p1.turns[0].content, p1.turns[79].content, p1.earlier, p1.total], [80, 'turn 150', 'turn 229', 150, 230], 'the first page is the newest 80, with 150 older ones to come');
+    const p2 = await hp.thread({ streamId: 'big', limit: 80, before: 80, page: true });
+    A.eq([p2.turns[0].content, p2.turns[79].content, p2.earlier], ['turn 70', 'turn 149', 70], 'SHOW EARLIER brings the 80 before those');
+    const p3 = await hp.thread({ streamId: 'big', limit: 80, before: 160, page: true });
+    A.eq([p3.turns.length, p3.turns[0].content, p3.earlier], [70, 'turn 0', 0], 'and the last page reaches the very first turn');
+    A.ok(Array.isArray(await hp.thread({ streamId: 'big', limit: 80 })), 'an older phone (no pages) still gets the bare list');
+  }
+  // the sessions list holds every session (it stopped at 50), and a session the desk never opened is still listed
+  {
+    const desks = []; for (let i = 0; i < 120; i++) desks.push({ id: 'ws_' + i, agentId: 'nova', title: 'Session ' + i, history: [{ role: 'user', content: 'q' + i, ts: i }], lastActiveAt: i });
+    desks.push({ id: 'ws_quiet', agentId: 'nova', title: 'NOVA', history: [], lastActiveAt: 5 });
+    const hs2 = makeRemoteHost({ now: () => now, newId: () => 'r', broadcast: () => {}, roster: () => [{ agentId: 'nova', name: 'NOVA' }], liveRuns: () => [],
+      transcript: { streams: () => [{ streamId: 'ws_quiet', agentId: 'nova', turns: 2, lastAt: 999, preview: 'what I asked from the phone' }], history: () => [] },
+      deskSessions: () => desks });
+    const list = await hs2.threads({ limit: 300 });
+    A.eq(list.length, 121, 'all 121 sessions are listed');
+    A.ok(list.some(t => t.streamId === 'ws_quiet' && t.preview === 'what I asked from the phone'), 'a session whose turns live only in the station record is not hidden as blank');
+  }
   // a file read for an agent that does not exist makes nothing
   A.eq((await hl.fetchFile({ agentId: 'ghost', path: 'x.txt', offset: 0, length: 10 })).ok, false, 'no file read (and no folder) for a made-up agent');
   // a phone reads only what the station showed it: the agent's own workspace, or a file a run/deliverable recorded

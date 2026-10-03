@@ -63,13 +63,13 @@ function makeGateway(deps) {
     async threads(a) {
       const agentId = a.agentId == null || a.agentId === '' ? '' : id(a.agentId);
       if (a.agentId && !agentId) return bad('unknown agent');
-      return good(await host.threads({ agentId, limit: clampInt(a.limit, 1, 50, 20) }));
+      return good(await host.threads({ agentId, limit: clampInt(a.limit, 1, 300, 20) }));
     },
 
     async thread(a) {
       const streamId = String(a.streamId || '');
       if (!STREAM_RE.test(streamId)) return bad('unknown conversation');
-      return good(await host.thread({ streamId, limit: clampInt(a.limit, 1, 200, 60) }));
+      return good(await host.thread({ streamId, limit: clampInt(a.limit, 1, 200, 60), before: clampInt(a.before, 0, 100000, 0), page: a.page === true }));
     },
 
     async send(a, ctx) {
