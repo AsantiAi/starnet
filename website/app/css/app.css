@@ -3247,6 +3247,11 @@ body.rows-inbox #workstreams .ws-kebab { grid-area: meta; }
 #chat-panel h3 #chat-status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 /* Idle "online" is noise in the COMMS header (Andrew 09-28): only run-state and link faults show. */
 #chat-panel h3 #chat-status.status-idle { display: none; }
+/* In-flight run state lives ONLY in the transcript's presence card (WORKING + tool + time). The header
+   copy (spinner + "working…"/"thinking…" + elapsed) was a duplicate — Andrew 10-03, asked 5×: never in the
+   header. Faults (stopping / station unreachable) still show here. */
+#chat-panel h3 #chat-status:is(.status-thinking, .status-working, .status-connecting, .status-approval),
+#chat-panel h3 #chat-elapsed { display: none !important; }
 #chat-status.status-thinking { color: var(--ph-bright); text-shadow: 0 0 7px var(--ph-glow2); }
 /* pre-confirmation: the sidecar hasn't acknowledged the run yet — dimmer than thinking (an honest "in transit") */
 #chat-status.status-connecting { color: var(--ph); opacity: .8; }
