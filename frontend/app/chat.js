@@ -579,10 +579,20 @@ const Chat = (() => {
   // COMMS-PREMIUM — a subtle HH:MM stamp for a transmission-card header. The stored history carries no
   // per-message time, so replayed history gets NO stamp (never fabricate one); only rows created live at
   // render time get a real wall-clock stamp. Pure presentation, dim + right-aligned in the header row.
-  function fmtClock(d) {
+  // 12-hour clock (Andrew 10-03: "military time is NONSENSE"). A stamp from an earlier day carries its date —
+  // "Yesterday 9:14 PM" / "Oct 1, 9:14 PM" — so an old turn's bare clock is never read as today's.
+  const CLOCK_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function fmtClock(d, nowMs) {
     d = d || new Date();
+    if (isNaN(d.getTime())) return '';
     const h = d.getHours(), m = d.getMinutes();
-    return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+    const clock = ((h % 12) || 12) + ':' + (m < 10 ? '0' : '') + m + ' ' + (h < 12 ? 'AM' : 'PM');
+    const now = new Date(nowMs == null ? Date.now() : nowMs);
+    const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const daysAgo = Math.round((day(now) - day(d)) / 86400000);
+    if (daysAgo === 0) return clock;
+    if (daysAgo === 1) return 'Yesterday ' + clock;
+    return CLOCK_MONTHS[d.getMonth()] + ' ' + d.getDate() + (d.getFullYear() !== now.getFullYear() ? ' ' + d.getFullYear() : '') + ', ' + clock;
   }
 
   // LINKIFY (XSS-safe): model output is untrusted, so we NEVER assign raw model text to innerHTML. Instead we
@@ -2098,7 +2108,7 @@ const Chat = (() => {
     // stored turn's REAL recorded time, or falsy for a legacy turn that carries no time — in which case we render
     // NO stamp rather than fabricate the current clock (the module's own rule + truthful telemetry).
     const stampVal = opts && opts.stamp;
-    if (stampVal) {
+    if (stampVal && (stampVal === true || !isNaN(new Date(stampVal).getTime()))) {
       const head = document.createElement('span'); head.className = 'cmsg-head';
       const ts = document.createElement('span'); ts.className = 'cmsg-ts';
       ts.textContent = fmtClock(stampVal === true ? null : new Date(stampVal));

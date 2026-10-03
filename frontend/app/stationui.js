@@ -390,8 +390,8 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   /* ---------- time ---------- */
   function clock(ts) {
     const d = new Date(ts || Date.now());
-    const p = n => (n < 10 ? '0' : '') + n;
-    return p(d.getHours()) + ':' + p(d.getMinutes());
+    const h = d.getHours(), m = d.getMinutes();   // 12-hour clock — never military time (Andrew 10-03)
+    return ((h % 12) || 12) + ':' + (m < 10 ? '0' : '') + m + ' ' + (h < 12 ? 'AM' : 'PM');
   }
   const ts = t => '<span class="ts">[' + clock(t) + ']</span>';
   const NF_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
