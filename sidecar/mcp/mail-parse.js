@@ -87,11 +87,41 @@ function decodeBody(buf, encoding) {
   return buf;
 }
 
+/* ONE LINEAR PASS over the tags (sweep 2026-10-03). The regexes this replaces were QUADRATIC on hostile input: an HTML mail of
+   240 KB of "<" took 18 s, and up to the 4 MiB read cap is over an hour — synchronous, so the whole sidecar (E-STOP, every run,
+   every route) froze when an agent read one crafted email. Same text out: a <script>/<style>/<head> with its closing tag goes
+   whole; one with no closing tag is just a tag; <br> and the end of a block are line breaks; any other tag is a space; "<>" and a
+   "<" with no ">" after it stay text. A closing-tag search is remembered per name, so a run of opening tags never rescans. */
+function stripTags(src) {
+  const s = String(src), lower = s.toLowerCase(), n = s.length, out = [], closeAt = Object.create(null);
+  const closeOf = (name, from) => {
+    const c = closeAt[name];
+    if (c && (c.at < 0 || c.at >= from)) return c.at;
+    const at = lower.indexOf('</' + name, from);
+    closeAt[name] = { at };
+    return at;
+  };
+  let i = 0;
+  while (i < n) {
+    const lt = s.indexOf('<', i);
+    if (lt < 0) { out.push(s.slice(i)); break; }
+    out.push(s.slice(i, lt));
+    const gt = s.indexOf('>', lt + 1);
+    if (gt < 0) { out.push(s.slice(lt)); break; }
+    if (gt === lt + 1) { out.push('<>'); i = gt + 1; continue; }
+    const m = /^\s*(\/?)\s*([a-zA-Z][a-zA-Z0-9]*)/.exec(s.slice(lt + 1, Math.min(gt, lt + 40)));
+    const closing = !!(m && m[1]), name = m ? m[2].toLowerCase() : '';
+    if (!closing && (name === 'script' || name === 'style' || name === 'head')) {
+      const end = closeOf(name, gt + 1), endGt = end < 0 ? -1 : s.indexOf('>', end);
+      if (endGt >= 0) { out.push(' '); i = endGt + 1; continue; }
+    }
+    out.push(name === 'br' ? '\n' : (closing && /^(p|div|tr|li|h[1-6])$/.test(name)) ? '\n' : ' ');
+    i = gt + 1;
+  }
+  return out.join('');
+}
 function htmlToText(html) {
-  return String(html)
-    .replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, ' ')
-    .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|tr|li|h[1-6])>/gi, '\n')
-    .replace(/<[^>]+>/g, ' ')
+  return stripTags(html)
     .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
     .replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'")
     .replace(/&#(\d+);/g, (_, n) => { try { return String.fromCodePoint(Number(n)); } catch (e) { return ' '; } })
