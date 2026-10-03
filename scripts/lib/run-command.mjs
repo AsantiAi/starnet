@@ -10,7 +10,9 @@ export function coerceTimeoutMs(value, fallback = DEFAULT_TIMEOUT_MS) {
 // Full fast and HTTP gates have 20-minute child watchdogs. Outer runners allow
 // teardown headroom so they retain the child's final failure receipt.
 export function npmGateTimeoutMs(script, override) {
-  return coerceTimeoutMs(override || (script === 'test:http' || script === 'test:fast' ? 1260000 : 900000));
+  // the suites outgrew 20 min (fast ~45, http ~60 by 0.13): the wrapper timeouts in package.json are 50 / 60 min, and the outer
+  // cap leaves each a minute to report — the Guardian's http step was always killed mid-list, so it could never go green
+  return coerceTimeoutMs(override || (script === 'test:http' ? 3660000 : script === 'test:fast' ? 3060000 : 900000));
 }
 
 export function normalizeCommand(cmd) {
