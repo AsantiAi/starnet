@@ -635,8 +635,12 @@ const Chat = (() => {
      bank.com and opened evil.com — agent output can be steered by a page the agent read, and the desktop window has no
      status bar to show a link's target. When the label names a host the target does not have, the target's host follows. */
   function hostOf(u) {
-    const m = /^(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)(?=[\/:?#]|$)/i.exec(String(u || '').trim());
-    return m ? m[1].toLowerCase() : '';
+    const t = String(u || '').trim();
+    const m = /^(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)*\.([a-z]{2,24}))(?=[\/:?#]|$)/i.exec(t);
+    if (!m) return '';
+    // a bare dotted word is a host only when it ends like one: never a version (v0.12.5) or a file name (README.md, app.js)
+    if (!/^(?:https?:\/\/|www\.)/i.test(t) && /^(?:md|txt|js|mjs|cjs|ts|tsx|jsx|json|py|rb|go|rs|java|kt|c|h|cpp|cs|php|html?|css|scss|xml|ya?ml|toml|ini|cfg|conf|lock|log|csv|tsv|pdf|png|jpe?g|gif|svg|webp|mp[34]|wav|zip|tar|gz|exe|dll|sh|ps1|bat|env|sql|db)$/i.test(m[2])) return '';
+    return m[1].toLowerCase();
   }
   function linkHostNote(label, href) {
     const shown = hostOf(label), real = hostOf(href);

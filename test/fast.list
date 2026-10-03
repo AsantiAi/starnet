@@ -1041,3 +1041,4 @@ test/remote-push.test.js
 test/prose-links-desktop.test.js
 test/comms-receipts-count.test.js
 test/rail-agent-empty-archived.test.js
+test/run-stop-handles.test.js

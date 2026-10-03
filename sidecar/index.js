@@ -17930,7 +17930,11 @@ const hostLiveRuns = new Map();   // runId -> { agentId, startedAt, source }
 const runStopHandles = new Map();   // runId -> AbortController
 async function runOnceTracked(o) {
   const rid = o && o.runId ? String(o.runId) : '';
-  if (rid && !runStopHandles.has(rid) && typeof AbortSignal.any === 'function') {
+  // a DELEGATED worker (parentRunId / its own o.steer) is not given one: the subagent manager owns its stop (interrupt,
+  // cancelChildren) and it reads steering from its own generation-bound buffer — a desk STOP/STEER by its id would bypass
+  // the manager and a steer would be answered "Sent" and never read (review 2026-10-02)
+  const delegated = !!(o && (o.parentRunId || typeof o.steer === 'function'));
+  if (rid && !delegated && !runStopHandles.has(rid) && typeof AbortSignal.any === 'function') {
     const kc = new AbortController();
     runStopHandles.set(rid, kc);
     o.signal = o.signal ? AbortSignal.any([o.signal, kc.signal]) : kc.signal;
