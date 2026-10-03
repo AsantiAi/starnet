@@ -62,6 +62,8 @@
       consentKey: typeof def.consentKey === 'string' && def.consentKey ? def.consentKey : null,
       // revoked once the run has read untrusted content (taint.js) — for tools that PERSIST text another run obeys
       taintLocked: def.taintLocked === true,
+      // never approved by a cached grant, never left behind as one, and Full Access keeps its taint lock (permissions.js, taint.js)
+      freshConsent: def.freshConsent === true,
       timeoutMs: def.timeoutMs || 0,
       preconditions: normalizePreconditions(def.preconditions),
       run: def.run || (async () => { throw new Error('tool "' + def.name + '" has no run()'); })

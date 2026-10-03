@@ -49,7 +49,11 @@ const STANDING_ESCALATES = {
   'loop.create': () => true,
   'loop.manage': (a) => ['update', 'resume', 'approve'].indexOf(String(a && a.action || '')) >= 0,
   'station.start_line': (a) => !(a && a.off),
-  'station.test_line': () => true
+  'station.test_line': () => true,
+  // widening the station's leash (Full Power, FULL agents, caps, trusted folders, hook code) is the desk's call
+  'station.power': () => true,
+  // pointing the night shift at a project (or back at one) sets up work that runs later under standing authority
+  'station.control': (a) => (a && a.action === 'nightshift.focus' && !(a.args && a.args.clear)) || (a && a.action === 'nightshift.avoid' && !!(a.args && a.args.allow))
 };
 function standingWorkEscalates(name, args) {
   const n = String(name || '').replace(/_/g, '.').replace(/^station\.start\.line$/, 'station.start_line').replace(/^station\.test\.line$/, 'station.test_line').replace(/^routine\.run\.now$/, 'routine.run_now');

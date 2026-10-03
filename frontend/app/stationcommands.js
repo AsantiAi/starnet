@@ -158,9 +158,9 @@ const StationCommands = (() => {
       return { agent: x.name, reach: p, applies: 'next run' };
     }
     if (act === 'agent.away_work') {
-      if (!cfg.setWorkshop || !await cfg.setWorkshop(x.id, !!a.on)) throw new Error('the station did not record the away-work change');
-      await proveCrewSaved(x.id, r => r && !!r.workshop === !!a.on, 'the away-work change');
-      return { agent: x.name, awayWork: !!a.on };
+      if (!cfg.setWorkshop || !await cfg.setWorkshop(x.id, a.on === true)) throw new Error('the station did not record the away-work change');
+      await proveCrewSaved(x.id, r => r && !!r.workshop === (a.on === true), 'the away-work change');
+      return { agent: x.name, awayWork: a.on === true };
     }
     if (act === 'agent.delete') {
       if (x.id === 'agent' || x.role === 'orchestrator') throw new Error(x.name + ' is the Overseer and cannot be deleted');

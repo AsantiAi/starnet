@@ -107,7 +107,8 @@
     // downstream of such an entry (host-minted, sidecar/run-origin.js entryUntrusted). There the Commander never
     // typed the job at all, so "zero prompts" would hand the payload's author the terminal. Owner-typed runs keep
     // the override exactly as before, including one that later read a web page.
-    if (opts.fullAccess === true && opts.untrustedEntry !== true) return { allow: true, needsConfirmation: false, oneShot: false };
+    // ...and never for a fresh-consent tool (station.power): a run that read a page asks before it widens the leash
+    if (opts.fullAccess === true && opts.untrustedEntry !== true && tool.freshConsent !== true) return { allow: true, needsConfirmation: false, oneShot: false };
     if (opts.surface !== 'interactive' || opts.hasPrompt !== true) return { allow: false, needsConfirmation: false, oneShot: false };
     if (opts.decision == null) return { allow: false, needsConfirmation: true, oneShot: false };
     const allow = /^(?:once|session|always|full)$/i.test(String(opts.decision || ''));

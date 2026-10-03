@@ -17652,6 +17652,7 @@ async function handleRun(req, res) {
         // finisher and then tells this run's page (permission.response on its own stream), so the floor stops
         // waiting on a question somebody already answered elsewhere.
         const orig = pending.get(promptId);
+        if (orig && fields && fields.fresh) orig.freshConsent = true;   // handleConsent: a "full" here approves this call only
         if (orig) {
           // a phone's answer to a QUESTION (brief.ask) is { __clarify, text }: it answers the prompt too, so the desk's card is
           // told (decision 'once' = answered), not left live on a question the run already moved past (sweep 2026-10-01)
@@ -17663,7 +17664,7 @@ async function handleRun(req, res) {
     }).ask().then((v) => { if (untrack) untrack(); return v; });
   }
   function promptConsent(call, tool) {
-    return askHuman({ tool: call.name, scope: (tool && tool.scope) || 'write', argsSummary: consentSummary(call) });
+    return askHuman({ tool: call.name, scope: (tool && tool.scope) || 'write', argsSummary: consentSummary(call), fresh: !!(tool && tool.freshConsent === true) });
   }
   // NS-5: the "work in <root>? always/once/no" channel — the SAME permission.prompt mechanism, so the browser's
   // existing consent card answers it (Always = record a standing path grant; Approve once = this access only;
@@ -21196,6 +21197,8 @@ async function handleConsent(req, res) {
   const meta = finish ? runsMeta.get(body.runId) : null;
   const agentId = meta && meta.agentId;
   let persisted = true;
+  // a fresh-consent card (station.power) offers no Full access key; a forged "full" answers this one call only
+  if (finish && decision === 'full' && finish.freshConsent === true) decision = 'once';
   if (finish && decision === 'full') {
     persisted = persistAgentFullAccess(agentId);
     if (!persisted) decision = 'deny';

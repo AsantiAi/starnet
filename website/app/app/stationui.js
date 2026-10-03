@@ -7906,7 +7906,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
             // meaning AND the exact key — never one without the other.
             const r = (typeof Permissions !== 'undefined' && Permissions.grantRow) ? Permissions.grantRow(k) : { title: k, detail: '', note: '' };
             const head = r.detail ? (esc(r.title) + ' <span class="dim">' + esc(r.detail) + '</span>') : esc(r.title);
-            rows.push('<div class="set-row"><span>' + head +
+            rows.push('<div class="set-row"><span class="perm-label">' + head +
               (r.note ? ' <span class="dim">— ' + esc(r.note) + '</span>' : '') +
               ' <span class="dim">— ' + esc(pwhen(snap, k)) + '</span></span>' +
               ' <button class="bb sm danger" data-perm-revoke="' + esc(k) + '">✕ REVOKE</button></div>');

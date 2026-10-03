@@ -94,7 +94,7 @@ A.ok(/unknown station change/.test(cardFor({ action: 'nope' })), 'an unknown act
 {
   const s = stubs();
   const t = make(s);
-  await t.controlTool.run({ action: 'deliverable.decide', args: { agent: 'agent', runId: 'r1', decision: 'keep', destPath: 'C:\\Windows\\System32' } });
+  await t.powerTool.run({ action: 'deliverable.decide', args: { agent: 'agent', runId: 'r1', decision: 'keep', destPath: 'C:\\Windows\\System32' } });
   A.eq(JSON.stringify(s.routes[0].body), JSON.stringify({ agentId: 'agent', runId: 'r1', decision: 'keep' }), '⛔ a keep never forwards a destination path');
   const bad = await t.controlTool.run({ action: 'deliverable.decide', args: { runId: 'r1', decision: 'delete-everything' } });
   A.ok(refused(bad), 'an unknown decision is refused');
@@ -107,7 +107,7 @@ A.ok(/unknown station change/.test(cardFor({ action: 'nope' })), 'an unknown act
   A.eq(s.pages.length, 0, 'the page was never asked');
   r = await t.controlTool.run({ action: 'agent.model', args: { agent: 'NOVA', model: 'x/y', provider: 'openrouter' } });
   A.ok(!refused(r), 'a connected provider is fine');
-  A.eq(JSON.stringify(s.pages[0]), JSON.stringify({ verb: 'station.control', args: { action: 'agent.model', agent: 'NOVA', model: 'x/y', provider: 'openrouter' } }), 'page actions ride station.control with their args');
+  A.eq(JSON.stringify(s.pages[0]), JSON.stringify({ verb: 'station.control', args: { agent: 'NOVA', model: 'x/y', provider: 'openrouter', action: 'agent.model' } }), 'page actions ride station.control with their args (the approved action last, so an args.action can never swap it)');
 }
 
 // ---- route actions call exactly their button's route ----
@@ -120,7 +120,7 @@ A.ok(/unknown station change/.test(cardFor({ action: 'nope' })), 'an unknown act
     ['control', 'learning.wipe', {}, 'DELETE', '/api/personalization', undefined],
     ['control', 'connector.remove', { id: 'github' }, 'POST', '/api/connectors/remove', { id: 'github' }],
     ['control', 'ability.set', { id: 'web search', on: false }, 'POST', '/api/toolsets/web%20search', { enabled: false }],
-    ['control', 'skill.install', { slug: 'pdf' }, 'POST', '/api/skill-market/install', { slug: 'pdf' }],
+    ['power', 'skill.install', { slug: 'pdf' }, 'POST', '/api/skill-market/install', { slug: 'pdf' }],
     ['control', 'app.rename', { id: 'a1', name: 'Tracker' }, 'POST', '/api/apps/rename', { id: 'a1', name: 'Tracker' }],
     ['control', 'project.untrust', { root: 'C:\\p' }, 'POST', '/api/permissions/revoke', { key: 'path:C:\\p' }],
     ['control', 'nightshift.avoid', { ref: 'C:\\p', allow: true }, 'DELETE', '/api/nightshift/avoid?ref=C%3A%5Cp', undefined],

@@ -209,8 +209,11 @@
       // for exactly cabinet:write / notebook:write on a granted agent. No grant → the tiers below run unchanged.
       if (workshopWritable(call, tool)) return { allow: true, scope: scope, reason: 'workshop grant — build things while away' };
       if (credentialedAutonomy(call, tool)) return { allow: true, scope: scope, reason: 'unattended grant on this platform key' };
-      // 3. CACHE — a prior session/permanent grant for this danger class.
-      if (granted(dangerKey(tool))) return { allow: true, scope: scope, reason: 'previously granted' };
+      // 3. CACHE — a prior session/permanent grant for this danger class. Never for a FRESH-CONSENT tool (sweep 2026-10-03):
+      // widening the station's own leash (station.power: Full Power, FULL agents, caps, trusted folders, hook code) is a
+      // card the Commander answers per call when they are in ASK — one "always" used to approve every later escalation.
+      // Full Access (tier 2) is the Commander's zero-prompt posture and still covers it; taint.js keeps the lock on it.
+      if (!(tool && tool.freshConsent === true) && granted(dangerKey(tool))) return { allow: true, scope: scope, reason: 'previously granted' };
       // 4. RESOLVE.
       if (scope === 'read' && !networkOf(call, tool)) return { allow: true, scope: scope, reason: 'read-only, non-network' };
       if (surface === 'autonomous') return { allow: false, scope: scope, reason: SILENCE };
@@ -228,6 +231,10 @@
       const scope = scopeOf(tool);
       const key = dangerKey(tool);
       if (decision === 'once') return { allow: true, scope: scope, reason: 'granted once' };
+      // a fresh-consent tool never leaves a standing grant behind: any yes approves this one call only
+      if (tool && tool.freshConsent === true) {
+        return /^(?:session|always|full)$/.test(String(decision)) ? { allow: true, scope: scope, reason: 'granted once' } : { allow: false, scope: scope, reason: 'denied' };
+      }
       if (decision === 'session') { sessionSet(true).add(key); return { allow: true, scope: scope, reason: 'granted for session' }; }
       if (decision === 'always') {
         // fail-closed: commit the grant ONLY if it durably persisted (a thrown persist denies).

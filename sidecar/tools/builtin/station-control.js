@@ -40,7 +40,8 @@
   const q = s => '"' + clip(s, 60) + '"';
   const onOff = v => v === true || v === 'on' || v === 'true';
   const enc = encodeURIComponent;
-  const REACH_WIDE = ['trusted-project', 'this-computer'];
+  // fail closed: any reach that is not one of the three NARROW ones is an escalation (a new or misspelled one included)
+  const REACH_NARROW = ['station-gear', 'safe-cell', 'remote-ssh'];
 
   /* THE CATALOG. Each action: what it takes (`takes`, shown to the model), its tier (`power(args)` true = station.power
      only), the card's sentence (`card(args)`, host-written — never the model's own words), and `run(args, env)`.
@@ -54,9 +55,9 @@
   def('agent.personality', { page: true, takes: '{agent, personality}', card: a => 'give ' + q(a.agent) + ' the ' + clip(a.personality, 30) + ' personality.' });
   def('agent.rename', { page: true, takes: '{agent, name}', card: a => 'rename ' + q(a.agent) + ' to ' + q(a.name) + '.' });
   def('agent.skin', { page: true, takes: '{agent, skin}', card: a => 'change ' + q(a.agent) + '\'s look to the ' + clip(a.skin, 30) + ' skin.' });
-  def('agent.approval', { page: true, takes: '{agent, mode: ask|full}', power: a => a.mode === 'full',
+  def('agent.approval', { page: true, takes: '{agent, mode: ask|full}', power: a => a.mode != null && a.mode !== 'ask',
     card: a => a.mode === 'full' ? 'put ' + q(a.agent) + ' on FULL POWER: it acts without asking you first, every run from now on.' : 'make ' + q(a.agent) + ' ask you before it acts.' });
-  def('agent.reach', { page: true, takes: '{agent, reach: station-gear|safe-cell|remote-ssh|trusted-project|this-computer}', power: a => REACH_WIDE.indexOf(a.reach) >= 0,
+  def('agent.reach', { page: true, takes: '{agent, reach: station-gear|safe-cell|remote-ssh|trusted-project|this-computer}', power: a => a.reach != null && REACH_NARROW.indexOf(a.reach) < 0,
     card: a => 'set ' + q(a.agent) + '\'s reach to ' + clip(a.reach, 30) + (a.reach === 'this-computer' ? ': files and terminal anywhere on this computer.' : a.reach === 'trusted-project' ? ': files and terminal in your trusted projects.' : '.') });
   def('agent.away_work', { page: true, takes: '{agent, on}', power: a => onOff(a.on),
     card: a => onOff(a.on) ? 'let ' + q(a.agent) + ' build things in its own workspace while you are away.' : 'stop ' + q(a.agent) + ' building while you are away.' });
@@ -131,12 +132,12 @@
   // ---- connections, abilities, skills ----
   def('connector.remove', { takes: '{id}', card: a => 'disconnect and remove the connector ' + q(a.id) + '.', run: (a, env) => env.route('POST', '/api/connectors/remove', { id: a.id }) });
   def('connector.refresh', { takes: '{id}', card: a => 'reconnect the connector ' + q(a.id) + '.', run: (a, env) => env.route('POST', '/api/connectors/refresh', { id: a.id }) });
-  def('ability.set', { takes: '{id (a toolset id from station.settings connections), on}', card: a => 'switch the ' + q(a.id) + ' abilities ' + (onOff(a.on) ? 'on' : 'off') + ' for the whole station.',
+  def('ability.set', { takes: '{id (a toolset id from station.settings connections), on}', power: a => onOff(a.on), card: a => 'switch the ' + q(a.id) + ' abilities ' + (onOff(a.on) ? 'on' : 'off') + ' for the whole station.',
     run: (a, env) => env.route('POST', '/api/toolsets/' + enc(String(a.id || '')), { enabled: onOff(a.on) }) });
   def('skill.set', { takes: '{slug, on}', card: a => 'switch the skill ' + q(a.slug) + ' ' + (onOff(a.on) ? 'on' : 'off') + '.', run: (a, env) => env.route('POST', '/api/skills/toggle', { slug: a.slug, enabled: onOff(a.on) }) });
-  def('skill.install', { takes: '{slug}', card: a => 'install ' + q(a.slug) + ' from the Skill Market (a verified package).', run: (a, env) => env.route('POST', '/api/skill-market/install', { slug: a.slug }) });
+  def('skill.install', { takes: '{slug}', power: () => true, card: a => 'install ' + q(a.slug) + ' from the Skill Market (a verified package).', run: (a, env) => env.route('POST', '/api/skill-market/install', { slug: a.slug }) });
   def('skill.uninstall', { takes: '{slug}', card: a => 'uninstall the market skill ' + q(a.slug) + '.', run: (a, env) => env.route('POST', '/api/skill-market/uninstall', { slug: a.slug }) });
-  def('key.set', { takes: '{id, on}', card: a => (onOff(a.on) ? 'enable' : 'disable') + ' the saved API key ' + q(a.id) + '.', run: (a, env) => env.route('POST', '/api/servicekeys/toggle', { id: a.id, enabled: onOff(a.on) }) });
+  def('key.set', { takes: '{id, on}', power: a => onOff(a.on), card: a => (onOff(a.on) ? 'enable' : 'disable') + ' the saved API key ' + q(a.id) + '.', run: (a, env) => env.route('POST', '/api/servicekeys/toggle', { id: a.id, enabled: onOff(a.on) }) });
   def('key.unattended', { takes: '{id, on}', power: a => onOff(a.on), card: a => onOff(a.on) ? 'let routines spend the API key ' + q(a.id) + ' while nobody is watching.' : 'stop routines using the API key ' + q(a.id) + ' unattended.',
     run: (a, env) => env.route('POST', '/api/servicekeys/autonomy', { id: a.id, autonomous: onOff(a.on) }) });
   def('key.remove', { takes: '{id}', card: a => 'delete the saved API key ' + q(a.id) + '.', run: (a, env) => env.route('POST', '/api/servicekeys/remove', { id: a.id }) });
@@ -160,11 +161,22 @@
   def('project.untrust', { takes: '{root}', card: a => 'stop trusting the folder ' + clip(a.root, 160) + '.', run: (a, env) => env.route('POST', '/api/permissions/revoke', { key: 'path:' + String(a.root || '') }) });
   def('checkpoint.restore', { takes: '{agent, snapshot}', card: a => 'rewind ' + q(a.agent || 'agent') + '\'s workspace to the checkpoint ' + clip(a.snapshot, 40) + ' (an undo point is saved first).',
     run: (a, env) => env.route('POST', '/api/checkpoint/restore', { agentId: a.agent || 'agent', snapshotId: a.snapshot }) });
-  def('deliverable.decide', { takes: '{agent, runId, decision: keep|discard|later}', card: a => ({ keep: 'KEEP', discard: 'DISCARD', later: 'leave for later' }[a.decision] || 'decide on') + ' the away-work deliverable ' + clip(a.runId, 40) + ' from ' + q(a.agent || 'agent') + '.',
+  def('deliverable.decide', { takes: '{agent, runId, decision: keep|discard|later}', power: a => a.decision === 'keep', card: a => ({ keep: 'KEEP', discard: 'DISCARD', later: 'leave for later' }[a.decision] || 'decide on') + ' the away-work deliverable ' + clip(a.runId, 40) + ' from ' + q(a.agent || 'agent') + '.',
     // destPath is deliberately never forwarded: the route copies files to any path it is given
     run: (a, env) => ['keep', 'discard', 'later'].indexOf(a.decision) < 0 ? refusal('decision is keep, discard or later')
       : env.route('POST', '/api/workshop/decide', { agentId: a.agent || 'agent', runId: a.runId, decision: a.decision }) });
 
+  /* ONE reading of the args, used by the tier check, the card's runner AND the page (sweep 2026-10-03). They read the
+     same values differently before: the tier check took {on:"off"} as off (ordinary) while the page's !!a.on took it
+     as ON, and " this-computer" missed the escalation list while the page trimmed it — both turned an escalation into
+     an ordinary approval. And the args' own "action" overrode the approved one on the way to the page. */
+  function normArgs(a) {
+    const o = Object.assign({}, a);
+    delete o.action;
+    if ('on' in o) o.on = onOff(o.on);
+    for (const k of ['reach', 'mode', 'decision']) if (typeof o[k] === 'string') o[k] = o[k].trim().toLowerCase();
+    return o;
+  }
   function pick(o, keys) { const out = {}; for (const k of keys) if (o && Object.prototype.hasOwnProperty.call(o, k)) out[k] = o[k]; return out; }
   function refusal(error) { return { status: 409, json: { error }, refused: true }; }
 
@@ -174,7 +186,7 @@
   function cardFor(args) {
     const spec = A[String((args && args.action) || '')];
     if (!spec) return 'make an unknown station change (it will be refused, and nothing will change)';
-    const a = (args && args.args && typeof args.args === 'object') ? args.args : {};
+    const a = normArgs((args && args.args && typeof args.args === 'object') ? args.args : {});
     try { return spec.card(a).replace(/\.$/, ''); } catch (_) { return 'make the station change ' + spec.name; }
   }
 
@@ -253,14 +265,17 @@
     function makeChange(name, consentKey, isPower) {
       return {
         name, capability: 'orchestrator', consentKey, taintLocked: true, scope: 'write', requiresConsent: true, timeoutMs: 45000,
+        // in ASK an escalation is a card per call (no cached "always" approves it, none is left behind), and a Full Access
+        // run that read outside content asks before it widens the leash (permissions.js, taint.js)
+        freshConsent: isPower,
         description: isPower
-          ? 'ESCALATE a station setting for the Commander — only what widens access or spending: agent.approval full, agent.reach trusted-project/this-computer, agent.away_work on, fullpower.set on, budget.set, budget.resume, autonomy.set, scheduler.set on, permission.grant, key.unattended on, project.trust, plugin.approve, hook.approve. Only when the Commander asked for it in this conversation; refused on runs nobody is watching. Same {action, args} as station.control.'
+          ? 'ESCALATE a station setting for the Commander — only what widens access or spending: agent.approval full, agent.reach trusted-project/this-computer, agent.away_work on, fullpower.set on, budget.set, budget.resume, autonomy.set, scheduler.set on, permission.grant, key.unattended on, key.set on, ability.set on, skill.install, deliverable.decide keep, project.trust, plugin.approve, hook.approve. Only when the Commander asked for it in this conversation; refused on runs nobody is watching. Same {action, args} as station.control.'
           : 'CHANGE a station setting for the Commander when they ask — the same change their button makes, proven saved. {action, args}: agent.model|personality|rename|skin|approval|reach|away_work|delete, session.rename|pin|archive|delete, look.set, fallback.set, permission.revoke, fullpower.set off, nightshift.focus|avoid, memory.forget|pin|edit|reset|settings, learning.set|wipe, connector.remove|refresh, ability.set, skill.set|install|uninstall, key.set|remove, spotify.disconnect, channels.notify, app.delete|rename, project.untrust, checkpoint.restore, deliverable.decide. station.settings section "actions" lists what each takes; read the current value first. Widening access or spending goes through station.power instead.',
         schema: { type: 'object', required: ['action'], properties: { action: { type: 'string', enum: Object.keys(A) }, args: { type: 'object' } } },
         run: async (input) => {
           const spec = A[String((input && input.action) || '')];
           if (!spec) return refuse('there is no station action "' + clip(input && input.action, 40) + '"; station.settings section "actions" lists them');
-          const a = (input && input.args && typeof input.args === 'object' && !Array.isArray(input.args)) ? input.args : {};
+          const a = normArgs((input && input.args && typeof input.args === 'object' && !Array.isArray(input.args)) ? input.args : {});
           const escalates = !!spec.power(a);
           if (escalates && !isPower) return refuse(spec.name + ' with these values widens what agents may do or spend: call station.power with the same {action, args} (the Commander approves it separately)');
           if (isPower && !escalates) return refuse(spec.name + ' with these values does not widen access: use station.control');
@@ -268,7 +283,7 @@
           if (spec.name === 'agent.model' && a.model && a.provider && providerReady && !providerReady(String(a.provider))) {
             return refuse('the provider "' + clip(a.provider, 30) + '" is not connected on this station (no key or sign-in): the Commander connects it in Settings › AI & MODELS first');
           }
-          const r = spec.page ? await page('station.control', Object.assign({ action: spec.name }, a)) : await spec.run(a, env);
+          const r = spec.page ? await page('station.control', Object.assign({}, a, { action: spec.name })) : await spec.run(a, env);
           if (!r || r.status >= 400 || r.refused) return refuse(errorOf(r));
           return { content: shape({ done: spec.name, result: r.json }), summary: spec.name };
         }

@@ -74,11 +74,33 @@ function startMock() {
   });
   return new Promise(r => server.listen(0, '127.0.0.1', () => { mock.server = server; mock.base = 'http://127.0.0.1:' + server.address().port + '/api/v1'; r(mock); }));
 }
-async function leadRun(base, token, prompt) {
-  const res = await fetch(base + '/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-StarNet-Token': token, Origin: base },
+// answer(prompt) -> decision: every permission.prompt on the run's own stream is answered through /api/consent, the way the desk card does
+async function leadRun(base, token, prompt, answer) {
+  const headers = { 'Content-Type': 'application/json', 'X-StarNet-Token': token, Origin: base };
+  const res = await fetch(base + '/api/run', { method: 'POST', headers,
     body: JSON.stringify({ key: 'sk-or-v1-fake', model: 'test/model', agentId: 'agent', isTask: true, messages: [{ role: 'user', content: MARK + ' ' + prompt }] }) });
-  const text = await res.text();
-  return { status: res.status, events: text.split('\n').map(l => { try { return JSON.parse(l); } catch (_) { return null; } }).filter(Boolean) };
+  const events = [], prompts = [];
+  const reader = res.body.getReader(), dec = new TextDecoder();
+  let buf = '', runId = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let nl;
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
+      let ev = null; try { ev = JSON.parse(line); } catch (_) {}
+      if (!ev) continue;
+      events.push(ev);
+      if (ev.name === 'agent.run.start') runId = ev.payload.runId;
+      if (ev.name === 'permission.prompt') {
+        prompts.push(ev.payload);
+        const decision = answer ? answer(ev.payload) : 'deny';
+        fetch(base + '/api/consent', { method: 'POST', headers, body: JSON.stringify({ runId, promptId: ev.payload.promptId, decision }) }).catch(() => {});
+      }
+    }
+  }
+  return { status: res.status, events, prompts };
 }
 const api = async (base, token, method, path, body) => {
   const r = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json', 'X-StarNet-Token': token, Origin: base }, body: body ? JSON.stringify(body) : undefined });
@@ -140,6 +162,8 @@ try {
     { name: 'station_control', args: { action: 'agent.model', args: { agent: 'agent', model: 'test/model2', provider: 'openrouter' } } } // 15
   ];
   const run = await leadRun(base, token, 'rename yourself Atlas, tidy my sessions, go green and bigger text, pause learning, cap spending at $7 a day, remove the researcher');
+  // Full Access is the Commander's zero-prompt posture: the untainted run (the $7 cap included) raised no card
+  check('Full Access: no approval card on an untainted run', run.prompts.length === 0, JSON.stringify(run.prompts.map(x => x.tool)));
   const end = run.events.filter(e => e.name === 'agent.run.end').pop();
   check('the lead run completes', run.status === 200 && !!end && end.payload.reason === 'done', JSON.stringify(end && end.payload && end.payload.reason));
   const R = mock.results;
@@ -221,6 +245,7 @@ try {
   check('three approval cards appeared in COMMS', cards.length === 3, cards.length + ' cards');
   check('card 1 names the look change in the station\'s own words', /NOVA wants to change the station's look/.test(cards[0] || ''), (cards[0] || '').slice(0, 300));
   check('card 2 names the new $9 daily cap', /wants to set your spending limits: perDay \$9/.test(cards[1] || ''), (cards[1] || '').slice(0, 300));
+  check('⛔ an escalation card offers Approve once / Deny only (no Always, no Full access)', [1, 2].every(i => !/\bAlways\b|Full access/.test(cards[i] || '')) && /\bAlways\b/.test(cards[0] || ''), JSON.stringify(cards.map(c => (c || '').slice(-60))));
   check('card 3 names Full Power for what it is', /FULL POWER: every agent acts on this computer without asking/.test(cards[2] || ''), (cards[2] || '').slice(0, 300));
   for (let i = 0; i < 60 && mock.results.length < mock.script.length; i++) await sleep(500);
   check('the approved look landed', await evalJS(cdp, 'StationUI.getTheme()') === 'blue');

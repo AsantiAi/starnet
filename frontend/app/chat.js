@@ -3247,6 +3247,10 @@ const Chat = (() => {
     } else if (p.tool === 'browser.login.done') {
       mk('Done — I\'ve logged in', 'once', '', '✓ done', false);
       mk('Cancel', 'deny', 'deny', '✕ cancelled', true);
+    } else if (p.tool === 'station.power') {
+      // widening the station's leash is answered fresh every time (permissions.js tier 1.5): no Always, no Full access
+      mk('Approve once', 'once', '', '✓ approved once', false);
+      mk('Deny', 'deny', 'deny', '✕ denied', true);
     } else {
       mk('Approve once', 'once', '', '✓ approved once', false);
       mk('Always', 'always', '', '✓ always allowed', false);
