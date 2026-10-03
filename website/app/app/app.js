@@ -129,6 +129,13 @@ const App = (() => {
     if (!logo || !anchor || !bar) return;
     const game = el('screen-game');
     if (!game || !game.classList.contains('active')) return;   // hidden screens have no geometry
+    // ...and neither does a hidden MARK. REFIT (body.refit-on) and HUD mode display:none #logo
+    // while the game screen stays active, so a resize in there (window drag, TEXT SIZE, fullscreen)
+    // used to measure a 0×0 box: the anchor collapsed to 0px (the widget rail slid into the
+    // seat) and the correction pass below read got=0 and parked the mark at 2× its seat — on top
+    // of the CREW header once it came back (2026-10-03 report). Leave the last good seat alone;
+    // the ResizeObserver below re-seats the moment the mark renders again.
+    if (!logo.getClientRects().length) return;
     anchor.style.width = logo.offsetWidth + 'px';
     // TEXT SIZE coordinate law (stationui.js uiZoom): rects are VISUAL px, but #logo's style.left/
     // top are its OWN layout px — divide by whatever zoom it actually renders at, or on any station
@@ -191,6 +198,12 @@ const App = (() => {
     if (typeof setTimeout === 'function') setTimeout(run, 120);
   }
   if (typeof window !== 'undefined') window.addEventListener('resize', positionLogo);
+  // display:none → shown (leaving REFIT / HUD) moves no window and fires no resize, but it does
+  // take the mark's box from 0×0 to its real size — which is exactly what a ResizeObserver reports.
+  if (typeof document !== 'undefined' && typeof ResizeObserver === 'function') {
+    const logoEl = el('logo');
+    if (logoEl) new ResizeObserver(() => positionLogo()).observe(logoEl);
+  }
   // One watcher covers the whole window lifecycle: childList = open/close, style = drag + resize
   // + placeTerm, class = minimize/restore. animationend catches the power-on scale settling, which
   // moves no attribute and so fires no mutation of its own.
