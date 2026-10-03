@@ -84,16 +84,33 @@ function validate(def, args) {
    body travels base64 so no line of user text can be read as a header or boundary. */
 const MAILBOX = /[^\s<>@",;]+@[^\s<>@",;]+\.[^\s<>@",;]+/.source;
 const ADDRESS = new RegExp('^(?:' + MAILBOX + '|' + /[^<>@\r\n",;]{0,200} ?</.source + MAILBOX + '>)$');
+/* RFC 2047 encoded-words for non-ASCII header text: each word at most 64 characters (39 UTF-8 bytes of base64, split on
+   a character boundary), folded onto continuation lines, so a header line stays under 78. One unfolded word used to carry a whole long subject (a 330
+   character word on a 341 character line; past ~740 bytes it broke the 998 limit) and display names went out as raw
+   UTF-8 the SMTP session never negotiated (10-03). */
+function encodedWords(text) {
+  const words = [];
+  let chunk = '';
+  for (const ch of String(text)) {
+    if (Buffer.byteLength(chunk + ch, 'utf8') > 39) { words.push(chunk); chunk = ''; }
+    chunk += ch;
+  }
+  if (chunk || !words.length) words.push(chunk);
+  return words.map(w => '=?UTF-8?B?' + Buffer.from(w, 'utf8').toString('base64') + '?=').join('\r\n ');
+}
+const headerText = t => /^[\x20-\x7e]*$/.test(t) ? t : encodedWords(t);
 function addressList(list, field) {
   return list.map(v => {
     const t = String(v).trim();
-    if (/[\r\n]/.test(t) || !ADDRESS.test(t)) throw new Error('Invalid ' + field + ' address');
-    return t;
+    if (/[\x00-\x1f\x7f]/.test(t) || !ADDRESS.test(t)) throw new Error('Invalid ' + field + ' address');
+    const named = /^(.*?) ?<([^<>]+)>$/.exec(t);
+    if (!named || /^[\x20-\x7e]*$/.test(named[1])) return t;
+    return encodedWords(named[1].trim()) + ' <' + named[2] + '>';
   }).join(', ');
 }
 function mimeMessage(a) {
   if (/[\r\n]/.test(a.subject)) throw new Error('Subject cannot contain line breaks');
-  const subject = /^[\x20-\x7e]*$/.test(a.subject) ? a.subject : '=?UTF-8?B?' + Buffer.from(a.subject, 'utf8').toString('base64') + '?=';
+  const subject = headerText(a.subject);
   const head = ['To: ' + addressList(a.to, 'to')];
   if (a.cc && a.cc.length) head.push('Cc: ' + addressList(a.cc, 'cc'));
   if (a.bcc && a.bcc.length) head.push('Bcc: ' + addressList(a.bcc, 'bcc'));

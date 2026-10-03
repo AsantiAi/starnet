@@ -60,8 +60,11 @@ function tokenize(text, literals) {
       while (i < text.length) {
         const c = text[i];
         if (depth === 0 && (c === ' ' || c === ')' || c === '(' || c === NUL)) break;
-        if (c === '[') depth++;
-        else if (c === ']') depth = Math.max(0, depth - 1);
+        // a [section] only opens on BODY[ / BINARY[ (and their .PEEK/.SIZE forms) or a [response code] at the atom's
+        // start: "[" is legal INSIDE an atom, so a flag or label like foo[ used to swallow the rest of the response and
+        // fail the whole FETCH ("unclosed list") — one such message broke list_recent / search for the mailbox (10-03)
+        if (c === '[' && (depth > 0 || s === '' || /^(?:BODY|BINARY)(?:\.PEEK|\.SIZE)?$/i.test(s))) depth++;
+        else if (c === ']' && depth > 0) depth--;
         s += c; i++;
       }
       out.push(s.toUpperCase() === 'NIL' ? null : s);
