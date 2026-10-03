@@ -10371,6 +10371,7 @@ const remotePush = require('./remote/push.js').makePush({ fs, path, file: path.j
   extraHosts: String(process.env.STARNET_REMOTE_PUSH_HOSTS || '').split(',') });   // tests only: a local fake push service
 const remotePortraits = require('./remote/portraits.js').makePortraits({ fs, path, frontend: FRONTEND });
 const remoteHost = require('./remote/host.js').makeRemoteHost({
+  redact: (s) => redact(s),   // the desk save is raw: its turns are redacted before they merge or leave for the relay
   now: () => Date.now(), newId: () => crypto.randomUUID(), broadcast: remoteBroadcast,
   phoneAsksFirst: (deviceId) => remoteDevices.askFirst(deviceId),   // that phone was set to ALWAYS ASK at the desk
   roster: () => [...agentRoster].map(([agentId, a]) => ({ agentId, name: a.name, model: a.model, provider: a.provider })),

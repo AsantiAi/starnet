@@ -138,11 +138,16 @@ function makeRemoteHost(d) {
     return merged;
   }
   // the whole conversation, prose only, oldest first
-  function mergedTurns(streamId) {
+  /* The desk save is raw; the station transcript is redacted when it is written. Redact the desk copy first, so a turn holding a
+     secret-shaped token is ONE turn (the two copies' keys match) and its raw text never reaches the relay. */
+  const redactText = (t) => { try { return typeof d.redact === 'function' ? String(d.redact(String(t))) : String(t); } catch (e) { note('remote.host.redact', e); return String(t); } };
+  // limit: the newest N turns (a phone SEND hands the model at most 100, as it always did; a page reads them all)
+  function mergedTurns(streamId, limit) {
     const w = deskSessions().find(x => x.id === streamId);
-    const local = w && Array.isArray(w.history) ? w.history : [];
+    const local = (w && Array.isArray(w.history) ? w.history : []).map(r => (r && typeof r.content === 'string') ? Object.assign({}, r, { content: redactText(r.content) }) : r);
     const st = stationTurns(streamId);
-    return (local.length ? mergeCanonical(local, st) : st).filter(isProse);
+    const all = (local.length ? mergeCanonical(local, st) : st).filter(isProse);
+    return Number(limit) > 0 ? all.slice(-Number(limit)) : all;
   }
   const lastUserLine = (turns) => { for (let i = turns.length - 1; i >= 0; i--) if (turns[i].role === 'user') return clip(turns[i].content.replace(/\s+/g, ' ').trim(), 140); return ''; };
 

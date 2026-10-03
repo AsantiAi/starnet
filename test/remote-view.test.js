@@ -247,6 +247,30 @@ const jpeg = () => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.
     A.eq(turns, ['plan the launch', 'Here is the plan.', 'from my phone: add a teaser', 'Teaser added.', 'and the budget?', 'About $40.'],
       'a phone turn the desk never merged stays in its place, even after the desk saved newer turns');
   }
+  /* (sweep 2026-10-02, review of ac17da7ce) a phone SEND hands the model at most the newest 100 turns, as it always did — the merge
+     lost the limit and sent the whole desk save plus up to 2000 station turns — and a desk turn holding a secret is redacted before
+     it merges: the station copy is redacted at write, so the raw desk copy doubled the turn and went to the relay. */
+  {
+    const { redact } = require('../sidecar/context.js');
+    const KEY = 'sk-or-v1-' + 'abcdef'.repeat(7);
+    const long = []; for (let i = 0; i < 260; i++) long.push({ role: i % 2 ? 'assistant' : 'user', content: 'line ' + i, ts: i, rowId: i + 1 });
+    let ran = null;
+    const hl = makeRemoteHost({ now: () => now, newId: () => 'run-hist', broadcast: () => {}, roster: () => [{ agentId: 'nova', name: 'NOVA' }], liveRuns: () => [],
+      credentials: () => ({ ok: true, provider: 'openrouter', model: 'm', key: 'k' }), runOnce: async (o) => { ran = o; },
+      transcript: { streams: () => [], history: () => long }, deskSessions: () => [] });
+    await hl.send({ agentId: 'nova', streamId: 'ws_long', text: 'and now?' });
+    for (let i = 0; i < 4 && !ran; i++) await new Promise(r => setImmediate(r));
+    A.ok(ran && Array.isArray(ran.messages) && ran.messages.length === 101 && ran.messages[0].content === 'line 160' && ran.messages[100].content === 'and now?',
+      'a phone send hands the model the newest 100 turns plus the new message, never the whole session: ' + (ran && ran.messages && ran.messages.length));
+    const desk = [{ role: 'user', content: 'use ' + KEY + ' for it', ts: 100 }, { role: 'assistant', content: 'Done.', ts: 110 }];
+    const station = [{ role: 'user', content: redact('use ' + KEY + ' for it'), ts: 100, rowId: 1 }, { role: 'assistant', content: 'Done.', ts: 110, rowId: 2 }];
+    const hr = makeRemoteHost({ now: () => now, newId: () => 'r', broadcast: () => {}, roster: () => [{ agentId: 'nova', name: 'NOVA' }], liveRuns: () => [], redact,
+      transcript: { streams: () => [{ streamId: 'ws_key', turns: 2, lastAt: 110, preview: '' }], history: () => station },
+      deskSessions: () => [{ id: 'ws_key', agentId: 'nova', title: 'Key', history: desk, lastActiveAt: 110 }] });
+    const kt = (await hr.thread({ streamId: 'ws_key', limit: 60 })).map(t => t.content);
+    A.eq(kt.length, 2, 'a turn holding a secret is ONE turn on the phone, not the desk copy and the station copy: ' + JSON.stringify(kt));
+    A.ok(kt.every(t => t.indexOf(KEY) < 0), 'and the raw key never leaves for the relay');
+  }
   // a long conversation is never cut off: it comes in pages, and the phone is told how many older turns remain
   {
     const many = []; for (let i = 0; i < 230; i++) many.push({ role: i % 2 ? 'assistant' : 'user', content: 'turn ' + i, ts: i, rowId: i + 1 });
