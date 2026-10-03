@@ -309,8 +309,8 @@
     const types = Array.isArray(t) ? t : (t ? [t] : []);
     if (types.indexOf('string') >= 0) return raw;
     const s = raw.trim();
-    if (types.length || /^(?:[[{"]|-?\d|true$|false$|null$)/.test(s)) { try { return JSON.parse(s); } catch (_) {} }
-    return raw;
+    if (!types.length && !/^(?:[[{"]|-?\d|true$|false$|null$)/.test(s)) return raw;
+    try { return JSON.parse(s); } catch (_) { return raw; }   // not JSON after all: hand the text over, the tool validates it
   }
   /* An <invoke> body -> { name, args } (args = a JSON string, as the loop takes it). A call the output limit cut off
      inside a parameter is handed over with that value still OPEN, so the loop's repair ladder sees a cut-off value
