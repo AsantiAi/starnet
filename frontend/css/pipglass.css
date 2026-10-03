@@ -580,3 +580,41 @@ body.glass-demo:not(.hud-mode) .term :is(.bb.sm, .bb.xs):is(:hover, :focus-visib
 /* NOTIFICATIONS: the timestamp sat glued to the text */
 body.glass-demo:not(.hud-mode) .term .nf .ts { margin-right: 10px; color: var(--cg-mute); }
 body.glass-demo:not(.hud-mode) .term .nf { border-radius: 6px; }
+
+/* ============================================================
+   WINDOW SIDE MENUS (Andrew 10-02 on ABILITIES: "I think this can honestly be improved"). Every item stays (the
+   August 8→3 condense was rejected) — only the presentation changes:
+   · the intent groups (INSTALLED / DISCOVER / CREATE) = ONE segmented glass capsule, not three loose rows
+   · a hairline, then the sections as compact one-line rows: fixed icon column, ellipsis, tight rhythm
+   · selection = the lit row the CREW / SESSIONS rails use, not a separate card with a bar
+   Applies to every window rail built by StationUI (ABILITIES, SETTINGS, COMMANDER, CHANNELS, AUTOMATE …).
+   ============================================================ */
+body.glass-demo:not(.hud-mode) .term.sn-menu .con-intents {
+  display: flex; flex-direction: column; gap: 0; margin: 0 0 12px; padding: 3px;
+  border: 1px solid rgba(var(--ph-rgb), .24); border-radius: 8px; background: rgba(0, 0, 0, .22);
+}
+body.glass-demo:not(.hud-mode) .term.sn-menu .con-intent {
+  min-height: 32px; padding: 6px 10px; border: 1px solid transparent; border-radius: 6px; background: transparent;
+  font-size: 14px !important; letter-spacing: 1.2px; color: var(--cg-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+body.glass-demo:not(.hud-mode) .term.sn-menu .con-intent:hover { color: var(--ph-bright); background: rgba(var(--ph-rgb), .07); }
+body.glass-demo:not(.hud-mode) .term.sn-menu .con-intent[aria-pressed="true"] {
+  color: var(--ph-bright); border-color: rgba(var(--ph-rgb), .45); background: var(--pg-dither, rgba(var(--ph-rgb), .14));
+  box-shadow: 0 0 10px rgba(var(--ph-rgb), .14); text-shadow: var(--pg-glow-soft);
+}
+body.glass-demo:not(.hud-mode) .term.sn-menu .con-intents + .con-rail-list { padding-left: 0; border-top: 1px solid rgba(var(--ph-rgb), .16); padding-top: 10px; }
+body.glass-demo:not(.hud-mode) .term.sn-menu .con-rail-item:not(.con-toptab) {
+  grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 0 10px;
+  min-height: 36px; padding: 7px 10px; margin-bottom: 3px;
+  border: 1px solid transparent; border-left-width: 1px; border-radius: 6px; background: transparent; box-shadow: none;
+}
+body.glass-demo:not(.hud-mode) .term.sn-menu .con-rail-item:not(.con-toptab) .con-rail-label {
+  font-size: 14px; letter-spacing: .6px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis;
+}
+body.glass-demo:not(.hud-mode) .term.sn-menu .con-rail-item:not(.con-toptab) .con-rail-glyph { width: 18px; text-align: center; opacity: .75; }
+body.glass-demo:not(.hud-mode) .term.sn-menu .con-rail-item:not(.con-toptab):hover { border-color: rgba(var(--ph-rgb), .28); background: rgba(var(--ph-rgb), .06); }
+body.glass-demo:not(.hud-mode) .term.sn-menu .con-rail-item:not(.con-toptab):is(.active, [aria-selected="true"]) {
+  color: var(--ph-bright); border-color: rgba(var(--ph-rgb), .5); background: var(--pg-dither, rgba(var(--ph-rgb), .14));
+  box-shadow: 0 0 12px rgba(var(--ph-rgb), .16); text-shadow: var(--pg-glow-soft);
+}
+body.glass-demo:not(.hud-mode) .term.sn-menu .con-rail-item:not(.con-toptab):is(.active, [aria-selected="true"]) .con-rail-glyph { opacity: 1; }
