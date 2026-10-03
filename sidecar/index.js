@@ -137,7 +137,9 @@ let googleRelayGuardInstance = null;
 function googleRelayGuard() {
   if (!googleRelayGuardInstance) googleRelayGuardInstance = require('./mcp/google-relay-guard.js').makeGoogleRelayGuard({
     googleClient: require('./mcp/google-client.js'), tools: require('./mcp/transport.google.js').TOOLS,
-    mcpToolName: require('./mcp/translate.js').mcpToolName, configs: () => connectorConfigs
+    mcpToolName: require('./mcp/translate.js').mcpToolName, configs: () => connectorConfigs,
+    // Gmail over an app password (IMAP) is the same mailbox data: held to the restricted rule by its endpoint.
+    extraRestricted: [{ service: gmailImapTransport.ID, matches: cfg => !!cfg && gmailImapTransport.productForUrl(String(cfg.url || '')) === gmailImapTransport.ID, tools: gmailImapTransport.TOOLS }]
   });
   return googleRelayGuardInstance;
 }
@@ -234,6 +236,7 @@ const { makeFolderWatcher, makeFolderPolicy, lineOutputError } = require('./rout
 const { makeConnectorManager } = require('./mcp/manager.js');
 const { makeHttpTransport } = require('./mcp/transport.http.js');
 const googleApiTransport = require('./mcp/transport.google.js');
+const gmailImapTransport = require('./mcp/transport.gmail-imap.js');   // Gmail via app password (IMAP/SMTP), no OAuth
 const googleClientConfig = require('./mcp/google-client.js');
 const { makeStdioTransport } = require('./mcp/transport.stdio.js');
 const mcpSchemaCache = require('./mcp/schema-cache.js');
@@ -5273,6 +5276,8 @@ function stationSecretValues() { return collectSecretValues([
   { keyed: Object.values(oauthProviders).map(p => p && p.tokens) },
   { keyed: connectorOauth },
   { keyed: connectorConfigs, allUnder: ['headers', 'env'] },
+  // the Gmail app password ALONE (its token is 'address:password'; the whole token is listed above)
+  { values: (connectorConfigs || []).map(gmailImapTransport.passwordOf) },
   { keyed: serviceKeys }
 ]); }
 setKnownSecretSource(stationSecretValues);
@@ -5315,6 +5320,7 @@ const connectors = makeConnectorManager({
     if (connectorStorageError) throw new Error(connectorStorageError);
     if (googleConnectorDeferred(cfg)) throw new Error(googleDeferredMessage(cfg));
     if (cfg && cfg.transport === 'http' && googleApiTransport.productForUrl(cfg.url)) return googleApiTransport.makeGoogleTransport(cfg);
+    if (cfg && cfg.transport === 'http' && gmailImapTransport.productForUrl(cfg.url)) return gmailImapTransport.makeGmailImapTransport(Object.assign({}, cfg, { now: () => Date.now() }));
     if (!cfg || cfg.transport !== 'stdio') return makeHttpTransport(cfg);
     const aid = String(cfg.agentId || '');
     const issue = mcpStdioIsolationError(cfg); if (issue) throw new Error(issue);
@@ -10372,6 +10378,7 @@ const remotePush = require('./remote/push.js').makePush({ fs, path, file: path.j
   extraHosts: String(process.env.STARNET_REMOTE_PUSH_HOSTS || '').split(',') });   // tests only: a local fake push service
 const remotePortraits = require('./remote/portraits.js').makePortraits({ fs, path, frontend: FRONTEND });
 const remoteHost = require('./remote/host.js').makeRemoteHost({
+  redact: (s) => redact(s),   // the desk save is raw: its turns are redacted before they merge or leave for the relay
   now: () => Date.now(), newId: () => crypto.randomUUID(), broadcast: remoteBroadcast,
   phoneAsksFirst: (deviceId) => remoteDevices.askFirst(deviceId),   // that phone was set to ALWAYS ASK at the desk
   roster: () => [...agentRoster].map(([agentId, a]) => ({ agentId, name: a.name, model: a.model, provider: a.provider })),
@@ -13543,6 +13550,12 @@ async function handleConnectorUpsert(req, res) {
     for (const k of Object.keys(body.headers)) headers[String(k)] = String(body.headers[k] == null ? '' : body.headers[k]);
   }
   let token = transport === 'http' && !oauth ? (('token' in body && body.token !== '') ? String(body.token) : (sameService ? (prev.token || '') : '')) : '';
+  // Gmail app password: store ONE canonical 'address:password' (spaces Google shows are stripped) or refuse plainly.
+  // The refusal names the format only, never the value.
+  if (transport === 'http' && gmailImapTransport.productForUrl(url) && 'token' in body && body.token !== '') {
+    try { token = gmailImapTransport.normalizeCredential(token); }
+    catch (e) { return json(400, { ok: false, saved: false, connected: false, code: 'GMAIL_APP_PASSWORD_INVALID', error: e.message }); }
+  }
   if (oauth) {
     for (const k of Object.keys(headers)) if (String(k).toLowerCase() === 'authorization') delete headers[k];
   }

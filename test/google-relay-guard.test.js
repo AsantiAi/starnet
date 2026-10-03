@@ -71,5 +71,30 @@ A.eq(wrapped.priceOf(), 1, 'other provider methods pass through');
   A.ok(/normalizeProvider\(opts\.provider\) === 'starnet' \? googleRelayGuard\(\)\.guardProvider\(built\) : built/.test(src), 'StarNet Managed providers are wrapped');
   A.eq((src.match(/selectProviderRaw\(/g) || []).length, 1, 'nothing else builds a provider around the guard');
   A.ok(/toolDefsForObjects\(projectableObjects\)/.test(src) && /googleRelayGuard\(\)\.projectable\(/.test(src), 'connector projection consults the guard');
+
+  /* F. Gmail via APP PASSWORD (IMAP, no OAuth) is the same mailbox data: restricted by its saved endpoint */
+  const imapGmail = require('../sidecar/mcp/transport.gmail-imap.js');
+  const extra = [{ service: imapGmail.ID, matches: c => imapGmail.productForUrl(String(c.url || '')) === imapGmail.ID, tools: imapGmail.TOOLS }];
+  const apConfigs = [
+    { id: 'gmail-app-password', url: imapGmail.ENDPOINT, transport: 'http', token: 'me@example.com:abcdefghijklmnop' },
+    { id: 'work-mail', url: imapGmail.ENDPOINT, transport: 'http' },                                     // custom id, same endpoint
+    { id: 'lookalike', url: 'https://imap.gmail.com/', transport: 'http' }                                 // not the adapter
+  ];
+  const apGuard = makeGoogleRelayGuard({ googleClient: google, tools: TOOLS, mcpToolName, configs: () => apConfigs, extraRestricted: extra });
+  A.eq([...apGuard.restrictedConnectors().keys()].sort(), ['gmail-app-password', 'work-mail'], 'app-password Gmail is restricted by endpoint, whatever its id');
+  A.eq(apGuard.projectable('gmail-app-password', 'starnet'), false, 'StarNet Managed is not offered app-password Gmail');
+  A.eq(apGuard.projectable('work-mail', 'starnet'), false, 'nor a custom-id copy');
+  A.eq(apGuard.projectable('gmail-app-password', 'openrouter'), true, 'own-key providers keep it');
+  for (const t of imapGmail.TOOLS) A.ok(apGuard.restrictedToolNames().has(mcpToolName('gmail-app-password', t.name)), 'restricted tool: ' + t.name);
+  const apRead = mcpToolName('gmail-app-password', 'read_message');
+  const apOut = apGuard.scrub([
+    { role: 'assistant', content: '', tool_calls: [{ id: 'm1', type: 'function', function: { name: apRead, arguments: '{}' } }] },
+    { role: 'tool', tool_call_id: 'm1', content: 'IMAP SECRET BODY' }
+  ]);
+  A.ok(apOut.withheld === 1 && !JSON.stringify(apOut.messages).includes('IMAP SECRET BODY'), 'an app-password Gmail result is withheld from the relay copy');
+  const noExtra = makeGoogleRelayGuard({ googleClient: google, tools: TOOLS, mcpToolName, configs: () => apConfigs });
+  A.eq(noExtra.projectable('gmail-app-password', 'starnet'), true, 'control: without extraRestricted the guard would NOT cover it (so the wiring is load-bearing)');
+  A.ok(/extraRestricted: \[\{ service: gmailImapTransport\.ID, matches: cfg => .*gmailImapTransport\.productForUrl\(/.test(src), 'index.js wires the app-password connector into the guard');
+  A.ok(/gmailImapTransport\.passwordOf/.test(src), 'index.js lists the bare app password as a known secret for redaction');
   A.report('google-relay-guard.test');
 })().catch(e => { console.error(e); process.exit(1); });

@@ -164,6 +164,15 @@
       aliases: ['gmail send', 'send email', 'email', 'gmail'],
       staticOauth: GOOGLE_OAUTH(['https://www.googleapis.com/auth/gmail.send']),
       blurb: 'Send plain-text email from your Gmail account after you approve each message. Cannot read, search, or draft mail. Sign in with Google to connect your account.' },
+    /* Gmail through a Google APP PASSWORD (IMAP + SMTP from this computer, transport.gmail-imap.js). No OAuth, so it
+       works while Google's verification of StarNet's OAuth app is pending (restricted Gmail scopes are hard-blocked
+       for unverified apps). The owner's own mail-client credential: needs 2-Step Verification; a Workspace admin can
+       disable app passwords. Mailbox read => held to the restricted relay rule (google-relay-guard.js extraRestricted).
+       Not googleApi: no Google sign-in, no deferral. The card never claims Google verification. */
+    { id: 'gmail-app-password', name: 'Gmail (app password)', category: 'Productivity', authType: 'apikey', transport: 'http',
+      url: 'https://imap.gmail.com/#app-password', official: false, appPassword: true, homepage: 'https://myaccount.google.com/apppasswords',
+      aliases: ['gmail', 'google mail', 'email', 'imap', 'smtp', 'app password', 'gmail app password', 'gsuite', 'google workspace'],
+      blurb: 'Search, read, draft and send Gmail with a Google app password. Mail goes between this computer and Gmail directly (IMAP and SMTP); no Google sign-in screen is involved. Needs 2-Step Verification on your Google account.' },
     { id: 'google-drive', name: 'Google Drive', category: 'Productivity', authType: 'oauth', transport: 'http',
       url: 'https://www.googleapis.com/drive/v3', googleApi: true, official: false, homepage: 'https://drive.google.com',
       aliases: ['google', 'google drive', 'gdrive', 'drive', 'gsuite', 'g suite', 'google workspace'],
@@ -420,7 +429,7 @@
     return {
       id: e.id, name: e.name, category: e.category, authType: e.authType, transport: e.transport,
       url: e.url || '', googleApi: !!e.googleApi, deviceFlow: !!e.deviceFlow, official: !!e.official, homepage: e.homepage || '', blurb: e.blurb || '',
-      via: e.via || '', keyHeader: e.keyHeader || '', local: !!e.local, installable: isInstallable(e),
+      via: e.via || '', keyHeader: e.keyHeader || '', local: !!e.local, appPassword: !!e.appPassword, installable: isInstallable(e),
       // staticOauth: fixed OAuth endpoints for an AS with no dynamic registration (Google). Deep-cloned.
       staticOauth: e.staticOauth ? {
         authorizationServer: e.staticOauth.authorizationServer,

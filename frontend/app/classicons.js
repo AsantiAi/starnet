@@ -270,8 +270,8 @@
   };
   let brandInstance = 0;
   function brandIcon(entry) {
-    // gmail-send is the send-only Gmail card: same brand, narrower scope.
-    const id = String(typeof entry === 'string' ? entry : (entry && entry.id) || '').replace(/^platform:/, '').replace(/^gmail-send$/, 'gmail');
+    // gmail-send (send only) and gmail-app-password (IMAP/SMTP) are Gmail cards: same brand, different access.
+    const id = String(typeof entry === 'string' ? entry : (entry && entry.id) || '').replace(/^platform:/, '').replace(/^gmail-(send|app-password)$/, 'gmail');
     const layout = BRAND_LAYOUT[id];
     if (!layout) return BRAND_LOGOS[id] || null;
     const filterId = 'brand-ink-' + (++brandInstance);

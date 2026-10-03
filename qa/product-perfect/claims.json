@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "62912087fb9475fe38e566868bd91e9ea0f312e0",
+    "sourceCommit": "602ed773fa118cdae2d364dd2084a8132ff1b5b6",
     "pathSetSha256": "69557b650ba864c7feca1f652d8ced6433f5239e587cdf6a9368c966a54f4c65",
     "files": [
       {
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 422292,
-        "sha256": "546b7e63fcde2f4d9900a5ccfd80bdc13fd2de1d8ab38329014ae361147105cd"
+        "bytes": 420834,
+        "sha256": "5504847113d0369b083987f19320db7839db7af5f4a26b72a3af4572943cfca8"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 708746,
-        "sha256": "a2c744f262337f0bc19d074032b2b6ca4fa79fd0f346fdfed2752aeefa0a44c4"
+        "bytes": 708496,
+        "sha256": "1133731eacc2b5bda7d700d7f38a7c458d9afd62be22025a97deb700747ef358"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -348,8 +348,8 @@
       },
       {
         "path": "frontend/app/classicons.js",
-        "bytes": 139583,
-        "sha256": "9cfbe3fbba407f35721c0d79d970d33db6d36219d86cb13706d49d4f2e703e24"
+        "bytes": 139635,
+        "sha256": "fc12fdbb44e85afe635f60cb0625d3e5ea6ec6586a3f4f82d5df1b22598cc176"
       },
       {
         "path": "frontend/app/classify.js",
@@ -1138,8 +1138,8 @@
       },
       {
         "path": "frontend/app/stationcommands.js",
-        "bytes": 79261,
-        "sha256": "04c40ee9e06e4228a230afd221e6120ae63cb6a03940510d14d86e4e42224bd2"
+        "bytes": 67226,
+        "sha256": "1b87ee8e113010f32c90157b3bb03d5759fbbe2c1687cc93e48be29118828dc7"
       },
       {
         "path": "frontend/app/stationquests.js",
@@ -1158,8 +1158,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 823260,
-        "sha256": "bc8235a7b150b3958d9a0f6fe6082cc0d55f13b798a33f33fdf342186af1d48e"
+        "bytes": 818691,
+        "sha256": "4f80060d887bd7bf0a005fe017e3c1e26736fda609636fa72193d8ab8d08860a"
       },
       {
         "path": "frontend/app/stepin.js",
@@ -1323,8 +1323,8 @@
       },
       {
         "path": "frontend/app/windows/connectors.js",
-        "bytes": 145278,
-        "sha256": "c709c412862bd9c6de1a75421d6a067276676a37953df7b4caa4034ba64e01d7"
+        "bytes": 147838,
+        "sha256": "4f2803b26556482b26c9b581329148d20ebc0f1b085c028be34a7279bf8f8874"
       },
       {
         "path": "frontend/app/windows/logbook.js",
