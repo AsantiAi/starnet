@@ -666,3 +666,95 @@ body.glass-demo:not(.hud-mode) .term :is(.cc-details, .cc-alternatives, .q-cw, .
 body.glass-demo .con-rail-glyph.has-ico { display: inline-grid; place-items: center; width: 18px; height: 18px; font-size: 0; line-height: 0; }
 body.glass-demo .con-rail-glyph .rail-ico { display: block; width: 16px; height: 16px; }
 body.glass-demo .con-rail-item.con-toptab .con-rail-glyph.has-ico { width: 16px; margin-right: 2px; }
+
+   INBOX SESSION ROWS (Andrew 10-02: "they just look a bit cheap", then on the first pass: "the name is too
+   small, and the box is too big", then "the name should be on top"). Two lines, like a mail inbox: the AGENT'S
+   NAME on top in its own colour (as on its CREW card) with the time, the session title under it (two lines at
+   most). The latest message is the row's hover tip (app.js
+   railRowTip), never a sentence under the name. Rows rest quiet on hairlines; only the selected one is a
+   card. The lamp is the crew card's housed round lamp, every state kept by colour + rhythm; a row that needs
+   you says "Approval needed" / "Reply needed" in gold where the time sits.
+   ============================================================ */
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams { gap: 1px; padding: 4px 4px 8px; }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row {
+  position: relative; margin: 0 6px; min-height: 0; padding: 7px 10px 8px;
+  grid-template-columns: 8px minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "dot agent pin   meta"
+    ".   title title title";
+  row-gap: 1px; column-gap: 8px; align-items: center;
+  border: 1px solid transparent; border-radius: 8px; background: transparent; box-shadow: none;
+}
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-receipt { display: none; }
+/* a hairline between resting rows; it steps aside around a lit card */
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row + .ws-row::before {
+  content: ''; position: absolute; left: 10px; right: 10px; top: -1px; height: 1px; background: rgba(var(--ph-rgb), .1);
+  pointer-events: none;
+}
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row:is(.sel, :hover, :focus-visible)::before,
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row:is(.sel, :hover, :focus-visible) + .ws-row::before { opacity: 0; }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row:is(:hover, :focus-visible) {
+  background: rgba(var(--ph-rgb), .05); border-color: transparent; box-shadow: none;
+}
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row.sel {
+  background: rgba(var(--ph-rgb), .1); border-color: rgba(var(--ph-rgb), .3);
+  box-shadow: inset 0 1px 0 var(--gd-light);
+}
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row.attn:not(.sel) {
+  background: linear-gradient(165deg, rgba(var(--gold-rgb), .08), transparent 60%); border-color: rgba(var(--gold-rgb), .3);
+}
+
+/* the lamp: the crew card's housed round lamp, beside the agent's name */
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot {
+  justify-self: center; align-self: center; flex: none; width: 8px; height: 8px; margin: 0;
+  border: 0; border-radius: 50%; overflow: visible;
+  color: color-mix(in srgb, var(--text) 26%, var(--panel2)); background: currentColor; box-shadow: var(--cg-lamp);
+  opacity: 1; animation: none;
+}
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot::before,
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot::after { content: none; }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot.unseen { color: var(--gold); box-shadow: var(--cg-lamp), 0 0 6px rgba(var(--gold-rgb), .55); }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot.working { color: var(--ph-bright); box-shadow: var(--cg-lamp), 0 0 6px rgba(var(--ph-rgb), .6); animation: wsPulse 1.15s ease-in-out infinite; }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot.connecting { color: transparent; background: transparent; box-shadow: none; outline: 1px dashed var(--ph-dim); outline-offset: -1px; }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot.reply { color: var(--gold); box-shadow: var(--cg-lamp), 0 0 6px rgba(var(--gold-rgb), .6); animation: wsPulseUrgent .72s ease-in-out infinite; }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot.approval { color: var(--bad); box-shadow: var(--cg-lamp), 0 0 6px color-mix(in srgb, var(--bad) 60%, transparent); animation: wsPulseUrgent .72s ease-in-out infinite; }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot.failed { color: var(--bad); box-shadow: var(--cg-lamp); animation: gd-session-failure 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot { animation: none; }
+}
+
+/* line 2: the session's title, full width, two lines at most */
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-title {
+  margin: 0; font-size: 17px !important; line-height: 1.2; letter-spacing: .3px;
+  color: color-mix(in srgb, var(--text) 86%, var(--panel2));
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: normal; overflow-wrap: anywhere;
+}
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row:is(.sel, .unread, .attn) .ws-title { color: var(--ph-bright); }
+
+/* line 1: AGENT ........ (pin) 2h — the name is the row's headline, in the agent's colour (inline, from app.js) */
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-agent {
+  min-width: 0; font: 19px/1.15 'VT323', monospace; letter-spacing: 1.2px; text-transform: uppercase; color: var(--ph); opacity: 1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: var(--pg-glow-soft);
+}
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-meta {
+  font: 15px/1.2 'VT323', monospace; letter-spacing: .4px; font-variant-numeric: tabular-nums;
+  color: var(--cg-mute); opacity: 1;
+}
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row.busy > .ws-meta { color: var(--ph-bright); }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-dot.unseen ~ .ws-meta { color: var(--gold); }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row.attn > .ws-meta { padding: 0; border: 0; background: none; color: var(--gold); }
+/* the pin: a drawn gold bookmark, not a fallback-font star */
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-pin {
+  width: 7px; height: 10px; overflow: hidden; color: transparent; font-size: 0; text-shadow: none;
+  background: var(--gold); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0 100%); opacity: .85;
+}
+/* a row that needs you keeps the agent's whole name and puts the call to action on a line of its own */
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row.attn {
+  grid-template-areas:
+    "dot agent pin   menu"
+    ".   title title title"
+    ".   meta  meta  meta";
+}
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row.attn > .ws-meta { justify-self: start; }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row.attn:not(.renaming) > .ws-meta { display: block; }
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row.attn > .ws-kebab { grid-area: menu; }
