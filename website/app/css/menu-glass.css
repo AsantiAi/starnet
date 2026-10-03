@@ -138,9 +138,9 @@
 .sn-menu .cc-card > .cc-details { flex: 0 0 auto; }
 .sn-menu .cc-card > .cc-acts { flex: 0 0 auto; min-height: 36px; margin-top: 0; }
 .sn-menu .cc-card:has(> .cc-details[open]),
-.sn-menu .cc-card:has(> .cc-key:not([style*="none"])) { height: auto; min-height: 320px; }
+.sn-menu .cc-card:has(> .cc-key.cc-key-open) { height: auto; min-height: 320px; }
 .sn-menu .cc-card:has(> .cc-details[open]) > .cc-blurb,
-.sn-menu .cc-card:has(> .cc-key:not([style*="none"])) > .cc-blurb { display: block; overflow: visible; flex: 1 0 auto; }
+.sn-menu .cc-card:has(> .cc-key.cc-key-open) > .cc-blurb { display: block; overflow: visible; flex: 1 0 auto; }
 
 /* Skill library: matching glass surfaces with readable controls and instructions. */
 .sn-menu #sk-lib .sk-card { margin-bottom: 14px; border: 1px solid rgba(var(--ph-rgb), .22); border-radius: 12px; background: var(--menu-glass); box-shadow: inset 0 1px 0 rgba(var(--ph-bright-rgb), .1); }

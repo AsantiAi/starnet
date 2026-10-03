@@ -1618,7 +1618,8 @@
         const card = ev.target.closest('.cc-card');
         const wrap = card && card.querySelector('.cc-key');
         const input = wrap && wrap.querySelector('input[data-cc-key]');
-        if (wrap && wrap.style.display === 'none') { wrap.style.display = ''; btn.textContent = '▶ CONNECT'; if (input) input.focus(); sfx('tick'); return; }
+        // the class (not the inline style) is what menu-glass.css's :has() keys on: a :has() reading [style] re-checks on every inline-style write in the page
+        if (wrap && wrap.style.display === 'none') { wrap.style.display = ''; wrap.classList.add('cc-key-open'); btn.textContent = '▶ CONNECT'; if (input) input.focus(); sfx('tick'); return; }
         const token = ((input && input.value) || '').trim();
         if (!token) { sfx('bad'); ccMsgEl.classList.remove('ok'); ccMsgEl.textContent = 'paste the API key first'; return; }
         btn.disabled = true; await ccInstall(id, token);
