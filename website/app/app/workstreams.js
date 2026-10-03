@@ -610,7 +610,9 @@
   function automationOf(w) {
     if (w.automation) return w.automation;
     if (String(w.id).startsWith('cron-')) return { kind: 'routine', id: '', name: 'Scheduled run' };
-    if (String(w.id).startsWith('workshop-')) return { kind: 'workshop', id: w.agentId, name: 'Away builds' };
+    // (2026-10-02, Andrew: the 'Away builds' rail fold is old UI) — an away build stays tagged as automation, but with
+    // no group id it lists as an ordinary session row, never folded under a header
+    if (String(w.id).startsWith('workshop-')) return { kind: 'workshop', id: '', name: 'Away build' };
     if (w.goalLoop) return { kind: 'loop', id: w.id, name: w.title || 'Goal loop' };
     return null;
   }

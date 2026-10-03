@@ -679,7 +679,7 @@ const Marketplace = (() => {
       html += '<div class="mkt-grid mkt-rows">' + customs.map(cardHTML).join('') + buildTile + '</div>';
     }
 
-    html += sectH('▮ CLASS ROSTER');
+    html += sectH('CLASS ROSTER');
     // truthful telemetry: an EMPTY catalog means the shared catalog script failed to load (a wiring
     // fault), not "no matches" — say so loudly instead of rendering a quietly blank roster.
     if (!allBuiltins.length) html += '<div class="mkt-empty">⚠ the class catalog failed to load (shared/specialties.js unreachable) — the built-in roster is unavailable. Restart the app; if it persists, this build is mis-wired.</div>';
@@ -790,7 +790,7 @@ const Marketplace = (() => {
     // YOUR RECIPES leads the library whenever you HAVE any — the Commander's own work is not an appendix to a
     // 50-card catalog. With none saved, the invitation stays below the library where it reads as a next step.
     if (customs.length) html += yours('top', '');
-    const libLabel = catFilter === 'all' ? '▮ RECIPE LIBRARY' : ('▮ ' + (CAT_LABEL[catFilter] || catFilter) + ' RECIPES');
+    const libLabel = catFilter === 'all' ? 'RECIPE LIBRARY' : ((CAT_LABEL[catFilter] || catFilter) + ' RECIPES');
     html += '<div class="mkt-sect-h">' + libLabel + '</div>';
     html += builtins.length ? '<div class="mkt-grid mkt-rows">' + builtins.map(recipeCardHTML).join('') + '</div>'
       : '<div class="mkt-empty">no recipes match your ' + (query ? 'search' : 'filter') + '.</div>';
