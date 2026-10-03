@@ -364,6 +364,7 @@ const { makeVerifyTool } = require('./tools/builtin/verify.js');    // the workb
 const { makeLspManager } = require('./lsp-manager.js');             // lazy installed-language-server edit diagnostics
 const { makeOrchestrationTools } = require('./tools/builtin/orchestration.js');   // Stage 2: team.dispatch (lead->worker delegation)
 const { makeStationTools, planSummaryFrom: stationPlanSummary } = require('./tools/builtin/station.js');               // session verbs (list/create/focus) over the station bridge
+const { makeStationControlTools, cardFor: stationControlCard } = require('./tools/builtin/station-control.js');      // station.settings/control/power: the lead changes the station for the Commander
 const { makeRoutineTools } = require('./tools/builtin/routines.js'); // ROUTINES: agent-created StarNet cron jobs
 const { makeLoopTools } = require('./tools/builtin/loops.js');       // LOOPS: model-facing durable standing-objective controls
 const { makeCommsTools } = require('./tools/builtin/comms.js');      // COMMS: outbound reach — an agent messages a connected chat
@@ -18687,6 +18688,13 @@ async function runOnceCore(o) {
         return { maxHops: lim.maxHops, maxUsdPerMessage: lim.maxUsd, maxUsdPerDay: lim.maxUsdPerDay, clamped: lim.clamped }; },
       today: () => { const d = new Date(); d.setHours(0, 0, 0, 0); return lineStatsSnapshot(d.getTime()); }
     } }).register(registry);
+  // station.settings / station.control / station.power: the lead reads and changes the station's settings for the
+  // Commander — page-owned ones over the same bridge as above, server-owned ones through this sidecar's OWN route table
+  // in-process (callOwnRoute), so a change from chat runs exactly the validators and stores its button runs.
+  makeStationControlTools({ station: require('./overseer.js').isCoordinatorRun({ ...o, agentId, surface })
+    ? overseerStation(o.streamId, runId) : stationBridge, route: callOwnRoute, surface, ownerTrusted,
+    providerReady: pid => { const id = normalizeProviderId(pid); return providerHasCredential(id, providerRuntimeKey(id, ''), providerRuntimeBaseUrl(id, '')); }
+  }).register(registry);
   // routine.create/list: the lead can schedule real StarNet ROUTINES through the same cron store the panel uses.
   makeRoutineTools({
     roster: () => agentRoster,
@@ -20195,7 +20203,7 @@ async function runOnceCore(o) {
     teamNote += '\n• CREW CONFIGURATION: use team.config to read Dossier documents, then team.configure to edit the requested agent by exact ID. '
       + 'A notebook entry does not update another agent\'s Purpose or standing orders. Report a change only after the tool confirms it was saved. '
       + 'Dossier Purpose and standing orders describe the ongoing role; Bay briefs add the workflow-stage job. '
-      + 'A Dossier or notebook edit changes no Bay, brief or floor; to change the floor, tool_search "station builder" and claim only what station.build reports. '
+      + 'A Dossier or notebook edit changes no Bay, brief or floor; to change the floor, tool_search "station builder" and claim only what station.build reports; to change any setting the Commander asks for, tool_search "station settings". '
       + 'To explain or troubleshoot Bays and assembly lines (what runs, in what order, what starts a line, why a step is not running), read station.layout first and quote its status; never answer from memory.';
     /* SESSIONS (2026-07-30): the lead can also RUN the station's sessions — and the peek rule exists because
        of a live failure: asked "what did the researcher do?", a lead with no way to read the other session
@@ -23498,6 +23506,36 @@ async function handleClaudeCliAuth(req, res, verb) {
 }
 
 /* ------------------------------- helpers ------------------------------- */
+/* callOwnRoute(method, url, body) -> { status, json, text } — one of THIS sidecar's own /api routes, run in-process
+   through the same route table a click reaches (dispatchRoute), for station.control/station.settings. The request is a
+   plain stream carrying the JSON body (readBody needs only data/end events); the response is captured instead of sent.
+   It sits past the HTTP edge (Host/Origin/token): the caller is a host-registered tool whose catalog builds every path
+   and body itself — no model-chosen path ever reaches this. */
+function callOwnRoute(method, url, body) {
+  const { Readable } = require('node:stream');
+  const payload = body === undefined ? '' : JSON.stringify(body);
+  const req = Readable.from(payload ? [Buffer.from(payload, 'utf8')] : []);
+  req.method = method; req.url = url; req.headers = { 'content-type': 'application/json', host: '127.0.0.1' };
+  return new Promise(resolve => {
+    let status = 200, settled = false;
+    const chunks = [];
+    const finish = out => { if (!settled) { settled = true; resolve(out); } };
+    const res = {
+      headersSent: false, statusCode: 200,
+      writeHead(code) { status = code; this.statusCode = code; this.headersSent = true; return this; },
+      setHeader() {}, getHeader() { return undefined; }, on() { return this; }, once() { return this; },
+      write(c) { if (c != null) chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(String(c))); this.headersSent = true; return true; },
+      end(c) {
+        if (c != null) chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(String(c)));
+        const text = Buffer.concat(chunks).toString('utf8');
+        let json = null; try { json = text ? JSON.parse(text) : null; } catch (_) {}
+        finish({ status, json, text: json ? '' : text.slice(0, 400) });
+      }
+    };
+    Promise.resolve().then(() => dispatchRoute(req, res))
+      .catch(e => finish({ status: 500, json: { error: 'the station failed: ' + ((e && e.message) || e) } }));
+  });
+}
 // a short, human-readable summary of WHAT a consent prompt is approving — the file path for fs.* (what the user
 // actually cares about), else the compact args. Never echoes secrets (redact() also runs on the emitted event).
 function consentSummary(call) {
@@ -23519,6 +23557,8 @@ function consentSummary(call) {
       : a.folder ? 'start it whenever a new file lands in ' + String(a.folder).slice(0, 160) : a.webhook ? 'start it whenever its webhook is called' : 'start it';
     return ln + ': ' + how + ', with the job: "' + job.slice(0, 240) + (job.length > 240 ? '…' : '') + '". From then on it runs the line\'s agents unattended, within the line\'s budget.';
   }
+  // station.control / station.power: the catalog's own sentence for the change (sidecar/tools/builtin/station-control.js)
+  if (/^station[._](?:control|power)$/.test(String(call && call.name || ''))) return stationControlCard(redact(a));
   if (/^station[._]test_line$/.test(String(call && call.name || ''))) return 'the line ' + String(a.line || '').replace(/\s+/g, ' ').trim().slice(0, 48) + ', with this test job: "' + String(a.job || '').replace(/\s+/g, ' ').trim().slice(0, 240) + (String(a.job || '').length > 240 ? '…' : '') + '". It runs the line\'s agents and spends what they spend; the result lands in DELIVERABLES › TO REVIEW.';
   if (/^station[._]make_prop$/.test(String(call && call.name || ''))) return '"' + String(a.describe || '').replace(/\s+/g, ' ').trim().slice(0, 60) + '", drawn with your StarNet credits (about $0.35' + (a.sideView ? ', and about $0.30 more for its side view' : '') + '). It joins your MADE BY YOU library; nothing is placed until a plan says so.';
   if (typeof a.path === 'string' && a.path) return a.path;

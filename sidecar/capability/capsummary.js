@@ -86,8 +86,11 @@ function summarizeCapabilities(resolved, opts) {
   if (missing.length) {
     note += '- You do NOT have: ' + missing.join(', ') + '.\n';
     if (interactive) {
+      // the LEAD holds the station builder (2026-10-02): it places the missing object itself rather than sending the
+      // Commander into Build mode — the builder's own approval card is the Commander's yes, and the power arrives on
+      // the next run (the floor decides each run's grants)
       note += 'If the Commander asks for something you lack, do NOT claim, promise, or pretend to do it. Say plainly you can\'t yet, ' +
-        'and name the object to place to grant it: ' +
+        (capIds.has('orchestrator') ? 'and offer to place it yourself (station builder add; they approve; works from their next message): ' : 'and name the object to place to grant it: ') +
         lackCore.map((c) => c.have + ' -> place ' + c.object).join('; ') + '. ' +
         'You can always think and reply; that needs nothing.\n';
     } else if (ownerTrusted) {

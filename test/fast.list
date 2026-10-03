@@ -848,6 +848,7 @@ test/lint-determinism.js
 test/station-bridge.test.js
 test/station-commands.test.js
 test/station-tools.test.js
+test/station-control.test.js
 test/team-configure-guard.test.js
 test/agent-config.test.js
 test/station-layout.test.js

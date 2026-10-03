@@ -10861,10 +10861,64 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
   }
   function getTheme() { return store.settings.theme; }
 
+  /* LOOK & SOUND from chat (station.control): the Settings › LOOK & SOUND controls without the clicks. Every key is
+     checked against the same steps/ranges the controls offer; then the same `apply + save` they run. Returns what is
+     now in force (read back from the store) and whether the browser kept it; an unknown key or value refuses the whole
+     change, so nothing half-applies. */
+  function lookOptions() {
+    const bds = typeof SpaceBG === 'undefined' ? [] : [].concat(SpaceBG.list()).concat(typeof Terrain === 'undefined' || !Terrain.list ? [] : Terrain.list());
+    return { theme: THEMES.map(([n]) => n).concat('custom'), themeHue: '0-359', themeSat: '0-100', themeGlow: '0-150', panelBright: '-100-100',
+      roomLighting: ROOM_LIGHTING_STEPS.map(([id]) => id), textScale: TEXT_SCALES.map(([v, n]) => v + ' (' + n + ')'), flicker: 'true|false',
+      crtGlass: GLASS_STEPS.map(([id]) => id), staticLevel: '0-200', sound: 'true|false', backdrop: bds.map(b => b.id), sessionRow: ROW_STEPS.map(([id]) => id),
+      notifyPrefs: Object.keys(notifyDefaults()).join('|') + ': true|false' };
+  }
+  function lookNow() {
+    const s = store.settings, out = {};
+    ['theme', 'themeHue', 'themeSat', 'themeGlow', 'panelBright', 'roomLighting', 'textScale', 'flicker', 'crtGlass', 'staticLevel', 'sound', 'backdrop', 'sessionRow'].forEach(k => { out[k] = s[k]; });
+    out.notifyPrefs = Object.assign({}, s.notifyPrefs);
+    return out;
+  }
+  function setLook(patch) {
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('say which look settings to change');
+    const opts = lookOptions(), next = {}, num = (k, lo, hi) => {
+      const v = Number(patch[k]); if (!isFinite(v) || v < lo || v > hi) throw new Error(k + ' must be a number from ' + lo + ' to ' + hi); next[k] = Math.round(v);
+    };
+    const pick = (k, list) => { const v = String(patch[k]); if (list.indexOf(v) < 0) throw new Error(k + ' must be one of: ' + list.join(', ')); next[k] = v; };
+    const bool = k => { if (typeof patch[k] !== 'boolean') throw new Error(k + ' must be true or false'); next[k] = patch[k]; };
+    for (const k of Object.keys(patch)) {
+      if (k === 'theme') pick(k, opts.theme);
+      else if (k === 'themeHue') num(k, 0, 359);
+      else if (k === 'themeSat') num(k, 0, 100);
+      else if (k === 'themeGlow') num(k, 0, 150);
+      else if (k === 'panelBright') num(k, -100, 100);
+      else if (k === 'staticLevel') num(k, 0, 200);
+      else if (k === 'roomLighting') pick(k, ROOM_LIGHTING_STEPS.map(([id]) => id));
+      else if (k === 'crtGlass') pick(k, GLASS_STEPS.map(([id]) => id));
+      else if (k === 'sessionRow') pick(k, ROW_STEPS.map(([id]) => id));
+      else if (k === 'backdrop') pick(k, opts.backdrop);
+      else if (k === 'textScale') { const v = Number(patch[k]); if (!TEXT_SCALES.some(([n]) => n === v)) throw new Error('textScale must be one of: ' + TEXT_SCALES.map(([n, l]) => n + ' (' + l + ')').join(', ')); next[k] = v; }
+      else if (k === 'flicker' || k === 'sound') bool(k);
+      else if (k === 'notifyPrefs') {
+        const np = patch[k]; if (!np || typeof np !== 'object') throw new Error('notifyPrefs takes { runComplete, needsApproval, cronDigest, sound } as true/false');
+        const d = notifyDefaults(); next[k] = Object.assign({}, store.settings.notifyPrefs);
+        for (const nk of Object.keys(np)) { if (!(nk in d) || typeof np[nk] !== 'boolean') throw new Error('notifyPrefs.' + nk + ' is not an alert setting (use ' + Object.keys(d).join(', ') + ' as true/false)'); next[k][nk] = np[nk]; }
+      } else throw new Error('"' + k + '" is not a look setting (use ' + Object.keys(opts).join(', ') + ')');
+    }
+    if (next.theme && next.theme !== 'custom' && PRESET_HS[next.theme] && next.themeHue == null && next.themeSat == null) { next.themeHue = PRESET_HS[next.theme][0]; next.themeSat = PRESET_HS[next.theme][1]; }
+    Object.assign(store.settings, next);
+    applySettings();
+    const kept = save();
+    try { if (typeof App !== 'undefined' && App.refreshRail && next.sessionRow) App.refreshRail(); } catch (_) {}
+    try { rerender('settings'); } catch (_) {}   // an open SETTINGS window repaints its chips to what is now in force
+    let durable = false;
+    try { const r = JSON.parse(localStorage.getItem(KEY)); durable = !!(r && r.settings && Object.keys(next).every(k => JSON.stringify(r.settings[k]) === JSON.stringify(next[k]))); } catch (_) {}
+    return { changed: Object.keys(next), now: lookNow(), saved: kept && durable };
+  }
+
   // GROWTH Tier 3: repaint the Settings AUTONOMY panel's EARNED badge if it is open (no-op otherwise — the paint fn
   // queries its own (possibly detached) host nodes, so a closed panel costs nothing). Called after a trust accept.
   const repaintAutonomy = () => { try { if (repaintAutonomyDial) repaintAutonomyDial(); } catch (_) {} };
-  return { init, enter, setRoster, leave, clearRunning, runningCount: () => runningAgents.size, isAgentRunning: (id) => agentLive(id), notify, settleNotifs, waitingNotifKeys, seenSession, flashSave, openAgent, refreshCrew: () => crewTick(), openArcade, toggleTerm, openTerm, openDesk, closeTerm, rerender, refreshBoard: refreshBoardLive, pokeQuests, setTheme, getTheme, repaintAutonomy, refreshSystems, toggleFamily, familyOf, registerWindow, h };
+  return { init, enter, setRoster, leave, clearRunning, runningCount: () => runningAgents.size, isAgentRunning: (id) => agentLive(id), notify, settleNotifs, waitingNotifKeys, seenSession, flashSave, openAgent, refreshCrew: () => crewTick(), openArcade, toggleTerm, openTerm, openDesk, closeTerm, rerender, refreshBoard: refreshBoardLive, pokeQuests, setTheme, getTheme, setLook, lookNow, lookOptions, repaintAutonomy, refreshSystems, toggleFamily, familyOf, registerWindow, h };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { visibleTerminalRect, clampTerminalSize };

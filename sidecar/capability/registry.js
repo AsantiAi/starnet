@@ -309,6 +309,13 @@
       { capId: 'orchestrator', tool: 'station.make_prop', scope: 'write', requiresConsent: true, network: true, deferred: true },
       { capId: 'orchestrator', tool: 'station.test_line', scope: 'write', requiresConsent: true, network: true, deferred: true },
       { capId: 'orchestrator', tool: 'station.start_line', scope: 'write', requiresConsent: true, network: false, deferred: true },
+      /* STATION CONTROL (2026-10-02): the Commander's settings, read and changed from chat — the crew's model/approval/reach/
+         personality/name/skin, sessions, the look, spending, autonomy, memory, connectors, skills, apps, projects. Deferred
+         (found by tool_search "settings"): a settings change is something the Commander asks for, not a headline every run
+         needs. station.power holds only the escalations, in its own consent class, refused on unattended runs. */
+      { capId: 'orchestrator', tool: 'station.settings', scope: 'read', requiresConsent: false, network: false, deferred: true },
+      { capId: 'orchestrator', tool: 'station.control', scope: 'write', requiresConsent: true, network: false, deferred: true },
+      { capId: 'orchestrator', tool: 'station.power', scope: 'write', requiresConsent: true, network: false, deferred: true },
       // LOOPS: standing objective iteration through loops.json. Both mutations require consent because they
       // create or alter future autonomous work. Model tools never accept the host-run check command.
       { capId: 'orchestrator', tool: 'loop.list', scope: 'read', requiresConsent: false, network: false },
