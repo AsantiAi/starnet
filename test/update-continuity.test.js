@@ -35,6 +35,17 @@ const { spawnSync } = require('node:child_process');
     const recoloured = paint(prior, '#7bc88a');
     A.eq(same(C.adoptAssignedSuitColors(coloured, recoloured), recoloured), false, 'a change to an existing colour is never hidden');
     A.eq(same(C.adoptAssignedSuitColors(coloured, coloured), coloured), true, 'an unchanged colour compares equal');
+    // the top-level lead record (0.13 gives a lead with no valid colour the gold suit)
+    const leadless = { local: { agent: { id: 'agent' }, agents: [] } };
+    const gold = { local: { agent: { id: 'agent', color: '#ffd34a' }, agents: [] } };
+    A.eq(same(C.adoptAssignedSuitColors(leadless, gold), gold), true, 'a lead with no colour may take the gold suit');
+    A.eq(same(C.adoptAssignedSuitColors(leadless, { local: { agent: { id: 'agent', color: '#123456' }, agents: [] } }), { local: { agent: { id: 'agent', color: '#123456' }, agents: [] } }), false, 'a lead given a non-palette colour still fails');
+    // the station schema 1 -> 2 step
+    const v1 = { local: { station: { version: 1, props: [{ id: 'd' }] } } };
+    const v2 = { local: { station: { version: 2, props: [{ id: 'd' }], links: [] } } };
+    A.eq(same(C.adoptStationSchemaV2(v1, v2), v2), true, 'station schema 1 -> 2 with an empty links list is the expected migration');
+    A.eq(same(C.adoptStationSchemaV2(v1, { local: { station: { version: 2, props: [], links: [] } } }), { local: { station: { version: 2, props: [], links: [] } } }), false, 'a station that lost a prop still fails');
+    A.eq(same(C.adoptStationSchemaV2(v1, { local: { station: { version: 2, props: [{ id: 'd' }], links: [{ from: 'a', to: 'b' }] } } }), { local: { station: { version: 2, props: [{ id: 'd' }], links: [{ from: 'a', to: 'b' }] } } }), false, 'invented links still fail');
     const suits = /const SUITS = (\[[^\]]+\])/.exec(fs.readFileSync(path.join(__dirname, '../frontend/app/app.js'), 'utf8'));
     A.ok(suits, 'app.js still declares the crew SUITS palette');
     A.eq(suits ? JSON.parse(suits[1].replace(/'/g, '"')) : null, C.CREW_SUITS.slice(), 'verifier palette matches the app crew SUITS');

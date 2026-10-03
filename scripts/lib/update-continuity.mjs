@@ -33,6 +33,26 @@ export function adoptAssignedSuitColors(before, after) {
       const match = next.agents.find(candidate => candidate && candidate.id === agent.id);
       if (match && CREW_SUITS.includes(String(match.color || '').toLowerCase())) agent.color = match.color;
     }
+    // the save's top-level lead record gets the same hydration (0.13: the lead with no valid colour is given the
+    // lead's gold, which is the palette's last suit) — the same rule, the same palette, nothing else is adopted
+    const lead = prior.agent, nextLead = next.agent;
+    if (lead && nextLead && lead.id === nextLead.id && !HEX_COLOR.test(String(lead.color || ''))
+      && CREW_SUITS.includes(String(nextLead.color || '').toLowerCase())) lead.color = nextLead.color;
+  }
+  return out;
+}
+
+// The station save's schema 1 → 2 step (0.13, frontend/app/worldmodel.js STATION_VERSION): the version number moves
+// to 2 and a save with no workflow links gains an EMPTY links list. A copy of `before` that takes exactly that step;
+// a station that lost or gained props, or gained real links, still fails the comparison.
+export function adoptStationSchemaV2(before, after) {
+  const out = structuredClone(before);
+  for (const key of ['local', 'durable']) {
+    const prior = out && out[key] && out[key].station, next = after && after[key] && after[key].station;
+    if (!prior || !next || typeof prior !== 'object' || typeof next !== 'object') continue;
+    if (prior.version !== 1 || next.version !== 2) continue;
+    prior.version = 2;
+    if (prior.links === undefined && Array.isArray(next.links) && next.links.length === 0) prior.links = [];
   }
   return out;
 }
