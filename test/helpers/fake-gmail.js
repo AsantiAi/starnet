@@ -148,6 +148,8 @@ function startFakeImap(opts) {
         let rows = [];
         if (fm[1]) { const uids = fm[2].split(',').map(Number); rows = box.map((x, i) => [i + 1, x]).filter(([, x]) => uids.includes(x.uid)); }
         else { const [a, b] = fm[2].split(':').map(Number); rows = box.map((x, i) => [i + 1, x]).filter(([s]) => s >= a && s <= (b || a)); }
+        // a real server may interleave an UNSOLICITED flag update (another client marked mail read)
+        if (opts.unsolicited) sock.write('* 1 FETCH (FLAGS (\\Seen))' + CRLF);
         for (const [s, x] of rows) sock.write(fetchOne(s, x, items));
         return ok('Success');
       }

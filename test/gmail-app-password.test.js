@@ -157,6 +157,15 @@ const textOf = r => r && r.result && r.result.content && r.result.content[0].tex
     A.ok(smtpErr && smtpErr.kind === 'timeout', 'a silent SMTP server times out');
     await smHang.close();
 
+    /* F2. an unsolicited FETCH (flag change made elsewhere) interleaved in a response is ignored */
+    const noisy = await startFakeImap({ user: USER, pass: PASS, unsolicited: true });
+    const callNoisy = rpc(G.makeGmailImapTransport({ url: G.ENDPOINT, token: USER + ':' + PASS, timeoutMs: 5000, imap: { connect: tcp(noisy.port, sockets) } }));
+    const noisyList = JSON.parse(textOf(await callNoisy('tools/call', { name: 'list_recent', arguments: {} })));
+    A.eq(noisyList.messages.map(m => m.subject), ['Café plans', 'Quarterly numbers'], 'list_recent ignores an unsolicited FETCH row');
+    const noisyRead = JSON.parse(textOf(await callNoisy('tools/call', { name: 'read_message', arguments: { messageId: noisyList.messages[1].id } })));
+    A.eq(noisyRead.subject, 'Quarterly numbers', 'read_message picks the row for its own UID');
+    await noisy.close();
+
     /* G. byte cap: a session that receives more than its cap is cut off */
     const big = await startFakeImap({ user: USER, pass: PASS, messages: [{ uid: 1, msgid: '5', thrid: '5', flags: [], labels: [], inbox: true, raw: 'Subject: big\r\n\r\n' + 'x'.repeat(200 * 1024) }] });
     const s = await imap.openSession({ connect: tcp(big.port, sockets), maxBytes: 64 * 1024, timeoutMs: 3000 });

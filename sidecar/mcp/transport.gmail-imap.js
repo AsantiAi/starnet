@@ -165,7 +165,7 @@ function makeGmailImapTransport(opts) {
     const { exists } = await session.examine(mailbox);
     if (!exists) return [];
     const rows = await session.fetch(Math.max(1, exists - max + 1) + ':' + exists, SUMMARY_ITEMS, false);
-    return rows.sort((a, b) => b.seq - a.seq).map(r => summarize(r.attrs));
+    return rows.filter(r => r.attrs.UID != null).sort((a, b) => b.seq - a.seq).map(r => summarize(r.attrs));
   }
 
   async function search(session, query, max) {
@@ -189,7 +189,8 @@ function makeGmailImapTransport(opts) {
     const uids = await session.uidSearch(['X-GM-MSGID', dec]);
     if (!uids.length) return { error: 'No message with id ' + messageId + ' in All Mail (it may be in Spam or Trash, or deleted).' };
     const rows = await session.fetch(String(uids[0]), '(UID X-GM-MSGID X-GM-THRID X-GM-LABELS FLAGS INTERNALDATE RFC822.SIZE BODY.PEEK[]<0.' + READ_CAP + '>)', true);
-    const attrs = (rows[0] || {}).attrs || {};
+    // the row for OUR uid — an unsolicited FETCH (a flag change made elsewhere) can arrive in the same response
+    const attrs = (rows.find(r => Number(r.attrs.UID) === uids[0]) || {}).attrs || {};
     const bk = attrKey(attrs, 'BODY[]');
     if (!bk) return { error: 'Gmail returned no content for message ' + messageId };
     const size = Number(attrs['RFC822.SIZE']) || 0;
