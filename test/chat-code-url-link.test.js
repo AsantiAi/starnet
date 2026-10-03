@@ -72,6 +72,12 @@ A.ok(out.indexOf('<b>') === -1 && out.indexOf('&lt;b&gt;') !== -1, 'bold text st
   A.ok(!l3.includes('md-host'), 'a plain-word label gets no note');
   const l4 = reportInline('[www.bank.com](https://bank.com)');
   A.ok(!l4.includes('md-host'), 'www. is the same host');
+  // review 10-02: a version or a file name is not a host
+  for (const label of ['v0.12.5', 'README.md', 'app.js', 'release-notes.txt']) {
+    A.ok(!reportInline('[' + label + '](https://github.com/x/y)').includes('md-host'), '"' + label + '" gets no host note');
+  }
+  A.ok(reportInline('[docs.evil.io](https://github.com/x)').includes('(github.com)'), 'a real bare domain label still does');
+  A.ok(reportInline('[https://README.md](https://github.com/x)').includes('(github.com)'), 'and so does anything written as an address');
 }
 
 A.report('chat-code-url-link.test');
