@@ -18,8 +18,8 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "80da13d195fe89387dd630b05d5fddb1818b6996",
-    "pathSetSha256": "60c61c9c0cad8daa5c2d40f76a912ed04e52667a726032a7b3ab94cad57bfa1e",
+    "sourceCommit": "449102d5fc54dfde90f31b1f6662d90868d79f03",
+    "pathSetSha256": "69557b650ba864c7feca1f652d8ced6433f5239e587cdf6a9368c966a54f4c65",
     "files": [
       {
         "path": "INSTALL.md",
@@ -907,6 +907,11 @@
         "sha256": "2c36e9bc8c546a3cff632f1187f7028ec7f5de80a7a9606e530a7e80a67d1541"
       },
       {
+        "path": "frontend/app/railicons.js",
+        "bytes": 6417,
+        "sha256": "894ca33ca613dcfa129d7aadfeb1b8fc2e6be95246f16049f36f2d224a5ba57f"
+      },
+      {
         "path": "frontend/app/recipe-catalog/business.js",
         "bytes": 23994,
         "sha256": "1cc7c326d5785c9e9a3d24661ebd98c165bc0bee407b8c0e528667dd1651cd58"
@@ -1153,8 +1158,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 816918,
-        "sha256": "482a138147eed48804f6e6bbc03d0a5b7462d94c293f63f2fe9dda79e03b5efb"
+        "bytes": 817210,
+        "sha256": "5911a51770a393349420cbe7b8b9c6916586075acbc78c7ce5f534ea67f6619d"
       },
       {
         "path": "frontend/app/stepin.js",
@@ -1603,8 +1608,8 @@
       },
       {
         "path": "frontend/css/pipglass.css",
-        "bytes": 54859,
-        "sha256": "473870e63a9c3641f8ac0c7d4de6ecee8af0cc0c8669b4059746b9dcdf5b88cb"
+        "bytes": 55311,
+        "sha256": "1af545a0ea71857967a080d94ab0d0aef07463f2692cfaa4ef0a89278bb8c6cc"
       },
       {
         "path": "frontend/css/plugins.css",
@@ -1768,8 +1773,8 @@
       },
       {
         "path": "frontend/index.html",
-        "bytes": 96667,
-        "sha256": "f85675cf70d3cdca317edfcf4b3e0caf320ff40bdf15670d8123ef7dd5a2db86"
+        "bytes": 96784,
+        "sha256": "cbf9310bdca8c86e9e27cdf67951a83191f5fb9b8ce534126af8dd5060e3de1c"
       },
       {
         "path": "frontend/js/arcade.js",
