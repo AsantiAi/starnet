@@ -513,8 +513,9 @@ body.glass-demo:not(.hud-mode) #chat-panel .receipts .receipt-items[hidden] { di
 
 /* ============================================================
    INBOX SESSION ROWS (Andrew 10-02: "they just look a bit cheap", then on the first pass: "the name is too
-   small, and the box is too big"). Two lines: the session's NAME is the headline (18px, full width, two lines
-   at most), the agent and the time sit under it. The latest message is the row's hover tip (app.js
+   small, and the box is too big", then "the name should be on top"). Two lines, like a mail inbox: the AGENT'S
+   NAME on top in its own colour (as on its CREW card) with the time, the session title under it (two lines at
+   most). The latest message is the row's hover tip (app.js
    railRowTip), never a sentence under the name. Rows rest quiet on hairlines; only the selected one is a
    card. The lamp is the crew card's housed round lamp, every state kept by colour + rhythm; a row that needs
    you says "Approval needed" / "Reply needed" in gold where the time sits.
@@ -524,9 +525,9 @@ body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row {
   position: relative; margin: 0 6px; min-height: 0; padding: 7px 10px 8px;
   grid-template-columns: 8px minmax(0, 1fr) auto auto;
   grid-template-areas:
-    "dot title title title"
-    ".   agent pin   meta";
-  row-gap: 2px; column-gap: 8px; align-items: center;
+    "dot agent pin   meta"
+    ".   title title title";
+  row-gap: 1px; column-gap: 8px; align-items: center;
   border: 1px solid transparent; border-radius: 8px; background: transparent; box-shadow: none;
 }
 body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-receipt { display: none; }
@@ -548,9 +549,9 @@ body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row.attn:not(.s
   background: linear-gradient(165deg, rgba(var(--gold-rgb), .08), transparent 60%); border-color: rgba(var(--gold-rgb), .3);
 }
 
-/* the lamp: the crew card's housed round lamp, level with the name's first line */
+/* the lamp: the crew card's housed round lamp, beside the agent's name */
 body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot {
-  justify-self: center; align-self: start; flex: none; width: 8px; height: 8px; margin: 7px 0 0;
+  justify-self: center; align-self: center; flex: none; width: 8px; height: 8px; margin: 0;
   border: 0; border-radius: 50%; overflow: visible;
   color: color-mix(in srgb, var(--text) 26%, var(--panel2)); background: currentColor; box-shadow: var(--cg-lamp);
   opacity: 1; animation: none;
@@ -567,17 +568,18 @@ body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot.f
   body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot { animation: none; }
 }
 
-/* line 1: the session's name, full width, two lines at most */
+/* line 2: the session's title, full width, two lines at most */
 body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-title {
-  margin: 0; font-size: 18px !important; line-height: 1.2; letter-spacing: .3px;
+  margin: 0; font-size: 17px !important; line-height: 1.2; letter-spacing: .3px;
   color: color-mix(in srgb, var(--text) 86%, var(--panel2));
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: normal; overflow-wrap: anywhere;
 }
 body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row:is(.sel, .unread, .attn) .ws-title { color: var(--ph-bright); }
 
-/* line 2: AGENT ........ (pin) 2h */
+/* line 1: AGENT ........ (pin) 2h — the name is the row's headline, in the agent's colour (inline, from app.js) */
 body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-agent {
-  font: 15px/1.2 'VT323', monospace; letter-spacing: 1px; text-transform: uppercase; color: var(--ph); opacity: 1;
+  min-width: 0; font: 19px/1.15 'VT323', monospace; letter-spacing: 1.2px; text-transform: uppercase; color: var(--ph); opacity: 1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: var(--pg-glow-soft);
 }
 body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-meta {
   font: 15px/1.2 'VT323', monospace; letter-spacing: .4px; font-variant-numeric: tabular-nums;
@@ -594,8 +596,8 @@ body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-pin {
 /* a row that needs you keeps the agent's whole name and puts the call to action on a line of its own */
 body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row.attn {
   grid-template-areas:
-    "dot title title title"
-    ".   agent pin   menu"
+    "dot agent pin   menu"
+    ".   title title title"
     ".   meta  meta  meta";
 }
 body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row.attn > .ws-meta { justify-self: start; }
