@@ -135,10 +135,14 @@ try {
 
   // 1. the lead plans a line from the fixed menu, then builds exactly that plan (full access: no approval card here)
   mock.planTool = 'station_plan'; mock.planArgs = { line: 'Build + test', name: 'SHIP IT', steps: [{ step: 1, agent: 'lead' }, { step: 2, agent: 'lead' }], dailyCap: 5 };
+  const req0 = mock.requests.length;   // only THIS run's requests are its own
   const run1 = await leadRun(base, token, 'make me a new room with a line that builds features and tests them');
   const end1 = run1.events.filter(e => e.name === 'agent.run.end').pop();
   check('the lead run completes', run1.status === 200 && !!end1 && end1.payload.reason === 'done', JSON.stringify(end1 && end1.payload && end1.payload.reason));
-  const leadReq = mock.requests.find(r => JSON.stringify(r.messages || []).indexOf('builds features and tests them') >= 0) || {};
+  /* the LEAD's first turn: it is offered tool_search (every loop turn is). A background model call carrying the same words and no
+     tools could finish uploading first under gate load and be read as the lead's (3 of 17 gates failed here, never solo). */
+  const offered = r => (r.tools || []).some(t => t && t.function && t.function.name === 'tool_search');
+  const leadReq = mock.requests.slice(req0).find(r => offered(r) && JSON.stringify(r.messages || []).indexOf('builds features and tests them') >= 0) || {};
   const offeredNames = JSON.stringify(leadReq.tools || []);
   check('the builder is deferred: not on the wire at first, but named in the prompt as there to find', ['station_map', 'station_plan', 'station_build'].every(n => offeredNames.indexOf('"' + n + '"') < 0) && ['station_map', 'station_plan', 'station_build'].every(n => JSON.stringify(leadReq.messages || []).indexOf(n) >= 0), offeredNames.slice(0, 120));
   const found = mock.searched[0] || {};
