@@ -109,11 +109,78 @@ const result = (extra) => Object.assign({ type: 'result', subtype: 'success', is
       { role: 'tool', tool_call_id: 'c1', content: 'milk' }
     ], [{ type: 'function', function: { name: 'fs.read', parameters: {} } }]);
     A.ok(/^sys\n\n# Tools/.test(built.system), 'system prompt keeps the host system text, then the tool protocol');
-    A.ok(built.input.indexOf('<tool_call>{"id":"c1","name":"fs.read","arguments":{"path":"a.txt"}}</tool_call>') >= 0, 'prior call rendered');
+    A.ok(built.input.indexOf('<function_calls>\n<invoke name="fs.read">\n<parameter name="path">a.txt</parameter>\n</invoke>\n</function_calls>') >= 0, 'prior call rendered in the format the model is asked to write');
+    A.ok(/<function_calls>/.test(built.system) && /write nothing more/.test(built.system), 'the tool protocol asks for the model\'s own call format and a stop after the block');
     A.ok(built.input.indexOf('<tool_result id="c1">\nmilk\n</tool_result>') >= 0, 'prior result rendered');
     A.ok(/No tools are available in this turn/.test(_internals.toolsPrompt([])), 'a toolless (chat) turn says so, so the model never improvises tool markup');
     const sp = _internals.makeCallSplitter();
     A.eq(sp.push('a <tool_call>not json').text + sp.end().text, 'a <tool_call>not json', 'an unclosed, unparseable block stays prose');
+  }
+
+  // E2. a file-sized call is ANNOUNCED while it streams (2026-10-02: "waiting for 6:15", nothing shown, while the CLI
+  //     wrote a whole game into one fs_write block), never dumped as prose when it ends broken.
+  {
+    const sp = _internals.makeCallSplitter();
+    const mid = sp.push('<tool_call>{"name": "fs_write", "arguments": {"path": "index.html", "content": "<html>');
+    A.eq(mid.items.map(i => i.start || (i.text != null ? 'text' : 'body')), ['fs_write'], 'the tool name starts the call before its block closes');
+    A.eq(sp.push('</html>"}}</tool_call>').items.map(i => i.closed), [true], 'the close follows as the body');
+    const nested = _internals.makeCallSplitter().push('<tool_call>{"arguments": {"name": "inner", "x": 1');
+    A.eq(nested.items.length, 0, 'a "name" inside the arguments never announces a call');
+
+    const tools = [{ type: 'function', function: { name: 'fs_write', description: 'write', parameters: { type: 'object' } } }];
+    const req = { model: 'opus', tools, messages: [{ role: 'user', content: 'make a game' }] };
+    const ordered = await collect(make({ lines: [init('none'), delta('Building it. <tool_call>{"name":"fs_write","arguments":{"path":"a.html","content":"x"}}</tool_call>'), delta('\n<tool_call>{"name":"fs_write","arguments":{"path":"b.html","content":"y"}}</tool_call>'), result()] }).p, req);
+    A.eq(ordered.filter(e => e.type !== 'usage' && e.type !== 'done').map(e => e.type), ['text', 'tool_start', 'tool_args', 'tool_done', 'tool_start', 'tool_args', 'tool_done'], 'prose then back-to-back calls keep their order');
+
+    // a raw newline inside a string (the commonest slip in a big write) is repaired into a real call
+    const raw = await collect(make({ lines: [init('none'), delta('<tool_call>{"name":"fs_write","arguments":{"path":"a.html","content":"<p>\n</p>"}}</tool_call>'), result()] }).p, req);
+    const rawArgs = raw.find(e => e.type === 'tool_args');
+    A.eq(rawArgs && JSON.parse(rawArgs.chunk), { path: 'a.html', content: '<p>\n</p>' }, 'a raw newline in a string is repaired, not dumped as prose');
+
+    // the output limit cut the call off: it still reaches the loop as that call (the loop refuses a cut-off value)
+    const cut = await collect(make({ lines: [init('none'), delta('<tool_call>{"name":"fs_write","arguments":{"path":"a.html","content":"<html><body>'), result({ stop_reason: 'max_tokens' })] }).p, req);
+    A.ok(!cut.some(e => e.type === 'text' && /<html>/.test(e.delta)), 'a cut-off file is never pasted into the chat');
+    const cutArgs = cut.find(e => e.type === 'tool_args');
+    A.ok(cut.some(e => e.type === 'tool_start' && e.name === 'fs_write') && cutArgs && /^\{"path":"a.html","content":"<html><body>/.test(cutArgs.chunk), 'a cut-off call reaches the loop with its arguments as written');
+  }
+
+  // E3. THE MODEL'S OWN FORMAT + THE STOP (2026-10-02 report: a game written as <invoke name="fs_write"> blocks was
+  //     pasted into the chat, nothing ran, and the model kept writing calls until it said every result came back empty).
+  {
+    const tools = [
+      { type: 'function', function: { name: 'fs_write', description: 'write', parameters: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } } } } },
+      { type: 'function', function: { name: 'brief', description: 'brief', parameters: { type: 'object', properties: { objective: { type: 'string' }, assumptions: { type: 'array' }, count: { type: 'integer' } } } } }
+    ];
+    const req = { model: 'opus', tools, messages: [{ role: 'user', content: 'make a game' }] };
+    const file = '/* game */\nconst a = "q";\nif (a < 2 && b > 1) {}\n';
+    // the CLI is still generating when the block ends (no exit, no result line): only the stop can end this turn
+    const nativeLines = [init('none'),
+      delta('On it.\n\n<function_calls>\n<invoke name="brief">\n<parameter name="objective">A "fun" game</parameter>\n<parameter name="assumptions">["three.js", "first person"]</parameter>\n<parameter name="count">8</parameter>\n</invoke>\n<inv'),
+      delta('oke name="fs_write">\n<parameter name="path">game/core.js</parameter>\n<parameter name="content">' + file + '</parameter>\n</invoke>\n</function_calls>'),
+      delta('\n\n<invoke name="shell_exec">\n<parameter name="cmd">node tests/bot.js</parameter>\n</invoke>\nEvery tool result came back empty.')];
+    const native = make(call => { for (const l of nativeLines) call.child.stdout.emit('data', JSON.stringify(l) + '\n'); return { hang: true }; }, { idleMs: 3000 });
+    const evs = await collect(native.p, req);
+    A.eq(evs.filter(e => e.type === 'text').map(e => e.delta).join(''), 'On it.\n\n', 'only the prose before the block is shown: no call markup reaches the chat');
+    A.eq(evs.filter(e => e.type === 'tool_start').map(e => e.name), ['brief', 'fs_write'], 'both calls in the block run; the guess written after it does not');
+    const args = evs.filter(e => e.type === 'tool_args').map(e => JSON.parse(e.chunk));
+    A.eq(args[0], { objective: 'A "fun" game', assumptions: ['three.js', 'first person'], count: 8 }, 'string values stay raw; arrays and numbers parse as JSON');
+    A.eq(args[1], { path: 'game/core.js', content: file }, 'a file arrives exactly as written: quotes, < and > untouched');
+    A.eq(evs.find(e => e.type === 'done').finishReason, 'tool_calls', 'the block ends the turn as tool_calls');
+    A.ok(native.calls[0].killed, 'the CLI is stopped at the end of the block instead of writing on');
+
+    // no <function_calls> wrapper: the first thing after the call that is not another call ends the turn
+    const bare = await collect(make({ lines: [init('none'), delta('<invoke name="fs_write">\n<parameter name="path">a.txt</parameter>\n<parameter name="content">hi</parameter>\n</invoke>\n\nI have to stop: every result came back empty.'), result()] }).p, req);
+    A.eq([bare.filter(e => e.type === 'tool_start').length, bare.filter(e => e.type === 'text').length], [1, 0], 'a bare call runs and the guess after it is dropped');
+
+    // the output limit cut a native call off inside its content: the value reaches the loop still open (it is refused)
+    const cut = await collect(make({ lines: [init('none'), delta('<function_calls>\n<invoke name="fs_write">\n<parameter name="path">a.html</parameter>\n<parameter name="content"><html><body>'), result({ stop_reason: 'max_tokens' })] }).p, req);
+    const cutArgs = cut.find(e => e.type === 'tool_args');
+    A.ok(cutArgs && cutArgs.chunk === '{"path":"a.html","content":"<html><body>', 'a cut-off native call is handed over with its value open: ' + (cutArgs && cutArgs.chunk));
+    A.ok(!cut.some(e => e.type === 'text'), 'a cut-off native call is never pasted into the chat');
+
+    // a toolless (chat) turn reads no calls at all: markup there is shown as written
+    const chat = await collect(make({ lines: [init('none'), delta('Use <invoke name="x"> like this.'), result()] }).p, { model: 'opus', tools: [], messages: [{ role: 'user', content: 'hi' }] });
+    A.eq(chat.filter(e => e.type === 'text').map(e => e.delta).join(''), 'Use <invoke name="x"> like this.', 'a chat turn never turns prose into a call');
   }
 
   // F. failures are errors, never a silent empty delivery.
