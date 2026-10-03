@@ -140,14 +140,14 @@ const textOf = r => r && r.result && r.result.content && r.result.content[0].tex
 
     /* F. timeouts: a silent server, and a server that stalls after login */
     const hang = await startFakeImap({ hang: true });
-    const trHang = G.makeGmailImapTransport({ url: G.ENDPOINT, token: USER + ':' + PASS, timeoutMs: 2000, imap: { connect: tcp(hang.port, sockets) } });
+    const trHang = G.makeGmailImapTransport({ now: () => 0, url: G.ENDPOINT, token: USER + ':' + PASS, timeoutMs: 2000, imap: { connect: tcp(hang.port, sockets) } });
     const t0 = Date.now(); let hangErr = null;
     try { await rpc(trHang)('initialize', {}); } catch (e) { hangErr = e; }
     A.ok(hangErr && /did not respond in time/.test(hangErr.message), 'a silent IMAP server times out: ' + (hangErr && hangErr.message));
     A.ok(Date.now() - t0 < 4000, 'within the configured deadline');
     await hang.close();
     const stall = await startFakeImap({ user: USER, pass: PASS, stallAfterLogin: true });
-    const trStall = G.makeGmailImapTransport({ url: G.ENDPOINT, token: USER + ':' + PASS, timeoutMs: 2000, imap: { connect: tcp(stall.port, sockets) } });
+    const trStall = G.makeGmailImapTransport({ now: () => 0, url: G.ENDPOINT, token: USER + ':' + PASS, timeoutMs: 2000, imap: { connect: tcp(stall.port, sockets) } });
     let stallErr = null; try { await rpc(trStall)('initialize', {}); } catch (e) { stallErr = e; }
     A.ok(stallErr && /did not respond in time/.test(stallErr.message), 'a stall mid-session times out');
     await stall.close();
@@ -159,7 +159,7 @@ const textOf = r => r && r.result && r.result.content && r.result.content[0].tex
 
     /* F2. an unsolicited FETCH (flag change made elsewhere) interleaved in a response is ignored */
     const noisy = await startFakeImap({ user: USER, pass: PASS, unsolicited: true });
-    const callNoisy = rpc(G.makeGmailImapTransport({ url: G.ENDPOINT, token: USER + ':' + PASS, timeoutMs: 5000, imap: { connect: tcp(noisy.port, sockets) } }));
+    const callNoisy = rpc(G.makeGmailImapTransport({ now: () => 0, url: G.ENDPOINT, token: USER + ':' + PASS, timeoutMs: 5000, imap: { connect: tcp(noisy.port, sockets) } }));
     const noisyList = JSON.parse(textOf(await callNoisy('tools/call', { name: 'list_recent', arguments: {} })));
     A.eq(noisyList.messages.map(m => m.subject), ['Café plans', 'Quarterly numbers'], 'list_recent ignores an unsolicited FETCH row');
     const noisyRead = JSON.parse(textOf(await callNoisy('tools/call', { name: 'read_message', arguments: { messageId: noisyList.messages[1].id } })));

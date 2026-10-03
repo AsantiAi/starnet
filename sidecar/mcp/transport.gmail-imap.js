@@ -112,7 +112,9 @@ function makeGmailImapTransport(opts) {
   const timeoutMs = Math.max(2000, Math.min(600000, Number(opts.timeoutMs) || 60000));
   const imapOpts = Object.assign({ host: IMAP_HOST, port: IMAP_PORT }, opts.imap || {});
   const smtpOpts = Object.assign({ host: SMTP_HOST, port: SMTP_PORT }, opts.smtp || {});
-  const now = typeof opts.now === 'function' ? opts.now : () => Date.now();
+  // the clock is injected by the host (sidecar/index.js) — backend modules never read ambient time (lint-determinism)
+  if (typeof opts.now !== 'function') throw new Error('makeGmailImapTransport requires an injected now() clock');
+  const now = opts.now;
   const newId = typeof opts.newId === 'function' ? opts.newId : () => crypto.randomUUID();
   const token = opts.token;
   let receive = () => {}, closed = false, boxes = null;

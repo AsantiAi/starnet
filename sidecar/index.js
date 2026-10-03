@@ -5319,7 +5319,7 @@ const connectors = makeConnectorManager({
     if (connectorStorageError) throw new Error(connectorStorageError);
     if (googleConnectorDeferred(cfg)) throw new Error(googleDeferredMessage(cfg));
     if (cfg && cfg.transport === 'http' && googleApiTransport.productForUrl(cfg.url)) return googleApiTransport.makeGoogleTransport(cfg);
-    if (cfg && cfg.transport === 'http' && gmailImapTransport.productForUrl(cfg.url)) return gmailImapTransport.makeGmailImapTransport(cfg);
+    if (cfg && cfg.transport === 'http' && gmailImapTransport.productForUrl(cfg.url)) return gmailImapTransport.makeGmailImapTransport(Object.assign({}, cfg, { now: () => Date.now() }));
     if (!cfg || cfg.transport !== 'stdio') return makeHttpTransport(cfg);
     const aid = String(cfg.agentId || '');
     const issue = mcpStdioIsolationError(cfg); if (issue) throw new Error(issue);
