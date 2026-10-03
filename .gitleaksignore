@@ -90,3 +90,10 @@ eae4248a82dbe17c4a1eebada1c3759cb0402f61:test/redact.known-values.test.js:slack-
 99a6dccb9a947be703515dd39c1502900932e28a:test/shell.fg-ledger.test.js:curl-auth-header:102
 # The comment above first quoted one of those fixtures, which the history scan then read as a key in this file.
 1b01aae6c5aa7224b92a1ce029c73ff9aa99a4ea:.gitleaksignore:generic-api-key:85
+# v0.13.0 push (2026-10-03): the WebSocket RFC 6455 sample handshake key, the Web Push RFC 8291 example auth secret,
+# and a fake key-shaped string in a redaction test. Reviewed: protocol test vectors and fixtures, not credentials.
+00e66ce4e3c0bb6addaa0460cd14bc51ef0f5575:test/remote.relay.test.js:generic-api-key:281
+5594548fec053d3d32e4abfd9f476eb189c6537b:test/remote.relay.test.js:generic-api-key:106
+1d8f701515cf8e18929a583a3540e6819d27b22e:test/remote.relay.test.js:generic-api-key:81
+954caf8e0b43a7e55af868e9117601476fe9b5af:test/verdictreview.test.js:generic-api-key:124
+3b3c50b332fcf72cf63840e9c9dfc8081adc8f7e:test/remote-push.test.js:generic-api-key:107
