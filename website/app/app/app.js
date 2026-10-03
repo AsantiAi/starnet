@@ -4009,6 +4009,11 @@ const App = (() => {
     const a = agents.get(w.agentId);                      // the live registry, same one the world reads
     return (a && a.name) ? a.name : (w.agentId || 'AGENT');
   }
+  // the INBOX row names its agent in that agent's own colour, exactly as its CREW card does (a group row: the lead's)
+  function railAgentColorAttr(w) {
+    const a = agents.get(w.agentId);
+    return a && a.color ? ' style="color:' + U.esc(a.color) + '"' : '';
+  }
   // Compact excerpt of the latest visible turn; never an invented completion claim.
   // Share search/export filtering so hidden tool/system chatter stays hidden.
   function railReceipt(w) {
@@ -4034,7 +4039,9 @@ const App = (() => {
   }
   function railRowTip(w, st, project = false) {
     const full = railModelFull(w);
-    return (w.title || 'General') + (w.archived ? ' · archived' : '') + (st.status ? ' · ' + st.status : '')
+    // the latest line rides the hover tip: the row itself is name + agent + time (NO SENTENCES UNDER TILES)
+    const latest = !project && typeof railReceipt === 'function' ? railReceipt(w) : '';
+    return (w.title || 'General') + (latest ? ' — ' + latest : '') + (w.archived ? ' · archived' : '') + (st.status ? ' · ' + st.status : '')
       + (Workstreams.unread(w) && !st.dot.includes('unseen') ? ' · unread activity' : '')
       + (w.kind === 'task' ? ' · board: ' + w.lane : '')
       + (full ? ' · last run on ' + full : '')
@@ -4084,7 +4091,7 @@ const App = (() => {
       return groupHead + '<li class="' + rowClass(w, st, activeId) + '" data-id="' + U.esc(w.id) + '" tabindex="' + (w.id === railFocusId ? '0' : '-1') + '" role="option" aria-selected="' + (w.id === activeId ? 'true' : 'false') + '" aria-posinset="' + (index + 1) + '" aria-setsize="' + rows.length + '" aria-label="' + U.esc(railRowLabel(w, st)) + '" aria-keyshortcuts="Shift+F10" title="' + U.esc(tip) + '">' +
         '<span class="' + st.dot + '" aria-hidden="true"></span>' +
         (w.pinned ? '<span class="ws-pin" aria-hidden="true">★</span>' : '') +
-        '<span class="ws-agent" aria-hidden="true">' + U.esc(railAgentName(w)) + '</span>' +
+        '<span class="ws-agent" aria-hidden="true"' + railAgentColorAttr(w) + '>' + U.esc(railAgentName(w)) + '</span>' +
         '<span class="ws-title">' + U.esc(title) + '</span>' +
         '<span class="ws-meta">' + U.esc(st.meta) + '</span>' +
         '<span class="ws-receipt" aria-hidden="true">' + U.esc(railReceipt(w)) + '</span>' +
