@@ -96,18 +96,39 @@
     // A turn with NO tools still says so: a Claude Code model told about station powers in the system prompt otherwise
     // improvises its own native tool-call markup as TEXT (live 09-28: '<invoke name="Bash">…' leaked into a chat reply).
     if (!list.length) return '# Tools\nNo tools are available in this turn. Answer in plain prose only: never write tool-call markup (<tool_call>, <invoke>, <function_calls>) and never claim to have run anything.';
+    /* THE MODEL'S OWN CALL FORMAT (2026-10-02). The protocol used to be <tool_call>{json}</tool_call>, and Claude
+       drifted back to the <invoke>/<parameter> markup it is trained on (live: a whole game written as <invoke
+       name="fs_write"> blocks the adapter could not see — nothing ran, and the run read as "every tool result came
+       back empty"). Asking for the format it already writes ends the drift, and a raw parameter value carries a
+       file as-is, with none of the JSON escaping that broke big writes. <tool_call> blocks are still understood. */
     return [
       '# Tools',
-      'You cannot execute anything yourself; StarNet runs tools for you. To call a tool, write a block exactly like:',
-      CALL_OPEN + '{"name": "<tool name>", "arguments": {<arguments matching its parameters>}}' + CALL_CLOSE,
+      'You cannot execute anything yourself; StarNet runs tools for you. To call tools, end your reply with a block exactly like:',
+      '<function_calls>',
+      '<invoke name="TOOL_NAME">',
+      '<parameter name="PARAM_NAME">value</parameter>',
+      '</invoke>',
+      '</function_calls>',
       'Rules:',
-      '- You may write several ' + CALL_OPEN + ' blocks in one reply. After the last one, STOP: the results arrive in the next message as <tool_result> blocks.',
+      '- Write a string value raw, with no quotes and no escaping: file contents go in exactly as they should be saved. Write numbers, booleans, arrays and objects as JSON.',
+      '- Several <invoke> blocks inside one <function_calls> block run together. After </function_calls>, STOP and write nothing more: the results arrive in the next message as <tool_result> blocks, and anything written after the block is discarded.',
       '- Use only the tools listed below. Never write <tool_result> blocks yourself and never invent a result.',
-      '- When no tool is needed, answer normally without any ' + CALL_OPEN + ' block.',
+      '- When no tool is needed, answer normally without any tool block.',
       '',
       'Available tools:',
       list.join('\n')
     ].join('\n');
+  }
+  // A prior call, rendered the way the model is asked to write one (string values raw, everything else JSON).
+  function invokeText(name, args) {
+    let body = '';
+    if (args && typeof args === 'object' && !Array.isArray(args)) {
+      for (const k of Object.keys(args)) {
+        const v = args[k];
+        body += '<parameter name="' + k + '">' + (typeof v === 'string' ? v : JSON.stringify(v)) + '</parameter>\n';
+      }
+    } else if (args != null && args !== '') body += '<parameter name="arguments">' + (typeof args === 'string' ? args : JSON.stringify(args)) + '</parameter>\n';
+    return '<invoke name="' + String(name || '') + '">\n' + body + '</invoke>';
   }
 
   /* Leading system messages become the CLI system prompt; everything after is rendered as a tagged transcript
@@ -131,12 +152,14 @@
       else if (m.role === 'tool') lines.push('<tool_result id="' + String(m.tool_call_id || '') + '">\n' + textOf(m.content) + '\n</tool_result>');
       else if (m.role === 'assistant') {
         let body = textOf(m.content);
+        const calls = [];
         for (const tc of (Array.isArray(m.tool_calls) ? m.tool_calls : [])) {
           const fn = (tc && tc.function) || {};
           let args = fn.arguments;
           if (typeof args === 'string') { try { args = JSON.parse(args || '{}'); } catch (_) { args = String(args); } }
-          body += (body ? '\n' : '') + CALL_OPEN + JSON.stringify({ id: tc && tc.id, name: fn.name, arguments: args == null ? {} : args }) + CALL_CLOSE;
+          calls.push(invokeText(fn.name, args == null ? {} : args));
         }
+        if (calls.length) body += (body ? '\n' : '') + '<function_calls>\n' + calls.join('\n') + '\n</function_calls>';
         lines.push('<assistant>\n' + body + '\n</assistant>');
       }
     }
@@ -145,49 +168,162 @@
     return { system: system.join('\n\n'), input: lines.join('\n') };
   }
 
-  /* Streaming splitter: passes prose through as soon as it cannot be the start of a <tool_call> block, and
-     captures each complete block's body. */
-  function makeCallSplitter() {
-    let buf = '', inCall = false;
+  /* STREAMING CALL READER. Prose passes through as soon as it cannot be the start of a call; a call is announced
+     ({ start: name }) the moment its tool name has streamed in, and its body follows when it closes ({ body }). Two
+     shapes are read: <invoke name="…"><parameter name="…">…</parameter></invoke>, optionally inside <function_calls>
+     (the format the prompt asks for), and the older <tool_call>{json}</tool_call>.
+     WHY ANNOUNCE EARLY (2026-10-02, reproduced live): a turn that writes a game is ONE call holding the whole file;
+     the adapter yielded nothing until it closed, and the run read "waiting for 6:15" with no sign of life.
+     WHY STOP ({ stop: true }): the API ends a turn at the close of its call block and waits for the results. Here
+     `claude -p` runs with no tools, so nothing stops it: the model wrote a call, heard nothing back, wrote the next
+     one on a guess, and finally told the Commander "every tool result is coming back empty". The reader ends the
+     turn when the call block is over: at </function_calls>, or at the first thing after a call that is not another
+     call. Anything the model writes past that point is a guess at results it has not seen. */
+  const PFX = '(?:[A-Za-z_][\\w-]*:)?';   // a tag may carry a namespace prefix
+  const OPEN_RE = new RegExp('<tool_call>|<' + PFX + 'function_calls>|<' + PFX + 'invoke\\s+name="([^"]{1,200})"\\s*>');
+  const INVOKE_CLOSE_RE = new RegExp('</' + PFX + 'invoke>', 'g');
+  const WRAP_CLOSE_RE = new RegExp('^</' + PFX + 'function_calls>');
+  const PARAM_RE = new RegExp('<' + PFX + 'parameter\\s+name="([^"]{1,200})"\\s*>([\\s\\S]*?)</' + PFX + 'parameter>', 'g');
+  const OPEN_PARAM_RE = new RegExp('<' + PFX + 'parameter\\s+name="([^"]{1,200})"\\s*>([\\s\\S]*)$');
+  const NAME_SCAN = 400;   // a <tool_call>'s name leads its JSON; past this many chars without one, stop looking
+  const HOLD = 80;         // a trailing '<…' this short with no '>' yet may still become a call tag: hold it back
+  function announcedName(buf) {
+    const head = buf.slice(0, NAME_SCAN);
+    const at = head.search(/"arguments"\s*:/);   // never read a "name" field from inside the arguments
+    const m = /"name"\s*:\s*"((?:[^"\\]|\\.){1,200})"/.exec(at >= 0 ? head.slice(0, at) : head);
+    return m ? m[1].trim() : '';
+  }
+  function makeCallSplitter(opts) {
+    const enabled = !(opts && opts.enabled === false);
+    // mode: 'prose' | 'call' (inside one call) | 'next' (a call or <function_calls> just passed: another call, or the end?)
+    let buf = '', mode = 'prose', kind = '', named = false, scan = 0, calls = 0, stopped = false;
+    function addText(out, s) {
+      if (!s) return;
+      out.text += s;
+      const last = out.items[out.items.length - 1];
+      if (last && last.text != null) last.text += s; else out.items.push({ text: s });
+    }
+    const couldOpen = tail => tail.length <= HOLD && tail.indexOf('>') < 0;
+    function stop(out) { stopped = true; out.stop = true; buf = ''; return out; }
     function drain(out) {
       for (;;) {
-        if (!inCall) {
-          const at = buf.indexOf(CALL_OPEN);
-          if (at >= 0) { out.text += buf.slice(0, at); buf = buf.slice(at + CALL_OPEN.length); inCall = true; continue; }
-          let keep = 0;
-          for (let k = Math.min(CALL_OPEN.length - 1, buf.length); k > 0; k--) {
-            if (buf.endsWith(CALL_OPEN.slice(0, k))) { keep = k; break; }
+        if (stopped) { buf = ''; return out; }
+        if (mode === 'prose') {
+          const m = enabled ? OPEN_RE.exec(buf) : null;
+          if (m) {
+            addText(out, buf.slice(0, m.index));
+            buf = buf.slice(m.index + m[0].length);
+            if (m[0] === CALL_OPEN) { mode = 'call'; kind = 'json'; named = false; scan = 0; continue; }
+            if (m[1] == null) { mode = 'next'; continue; }   // <function_calls>: its calls follow
+            mode = 'call'; kind = 'invoke'; named = true; scan = 0;
+            out.items.push({ start: m[1].trim() });
+            continue;
           }
-          out.text += buf.slice(0, buf.length - keep);
+          let keep = 0;
+          if (enabled) { const lt = buf.lastIndexOf('<'); if (lt >= 0 && couldOpen(buf.slice(lt))) keep = buf.length - lt; }
+          addText(out, buf.slice(0, buf.length - keep));
           buf = buf.slice(buf.length - keep);
           return out;
         }
-        const end = buf.indexOf(CALL_CLOSE);
-        if (end < 0) return out;
-        out.calls.push(buf.slice(0, end));
-        buf = buf.slice(end + CALL_CLOSE.length);
-        inCall = false;
+        if (mode === 'call') {
+          // the close-tag search resumes where the last one stopped: a file-sized call is scanned once, not per delta
+          if (kind === 'json') {
+            if (!named) {
+              const name = announcedName(buf);
+              if (name) { named = true; out.items.push({ start: name }); }
+              else if (buf.length > NAME_SCAN) named = null;   // no name up front: the block is judged when it closes
+            }
+            const end = buf.indexOf(CALL_CLOSE, scan);
+            if (end < 0) { scan = Math.max(0, buf.length - (CALL_CLOSE.length - 1)); return out; }
+            out.items.push({ body: buf.slice(0, end), kind, closed: true });
+            buf = buf.slice(end + CALL_CLOSE.length);
+          } else {
+            INVOKE_CLOSE_RE.lastIndex = scan;
+            const c = INVOKE_CLOSE_RE.exec(buf);
+            if (!c) { scan = Math.max(0, buf.length - HOLD); return out; }
+            out.items.push({ body: buf.slice(0, c.index), kind, closed: true });
+            buf = buf.slice(c.index + c[0].length);
+          }
+          calls++; mode = 'next'; continue;
+        }
+        // 'next': whitespace, then another call, the end of the block, or anything else (the block is over)
+        const ws = buf.replace(/^\s+/, '');
+        if (!ws) return out;
+        if (WRAP_CLOSE_RE.test(ws)) {
+          if (calls) return stop(out);
+          buf = ws.replace(WRAP_CLOSE_RE, ''); mode = 'prose'; continue;   // an empty block: nothing to run
+        }
+        const m = OPEN_RE.exec(ws);
+        if (m && m.index === 0) { buf = ws; mode = 'prose'; continue; }   // the prose branch opens it at once
+        if (ws[0] === '<' && couldOpen(ws)) return out;                   // '<inv…' or '</function_c…' still arriving
+        if (calls) return stop(out);
+        addText(out, '<function_calls>' + buf); buf = ''; mode = 'prose';  // a <function_calls> with no call was prose
+        return out;
       }
     }
     return {
-      push(delta) { buf += String(delta || ''); return drain({ text: '', calls: [] }); },
-      // A block the model never closed still counts as a call when its body parses; otherwise it is prose.
+      push(delta) { buf += String(delta || ''); return drain({ text: '', items: [], stop: false }); },
+      // A call the model never closed (the output limit cut it) still counts when it was announced or its body parses.
       end() {
-        const out = { text: '', calls: [] };
-        if (inCall) { if (parseCall(buf)) out.calls.push(buf); else out.text += CALL_OPEN + buf; }
-        else out.text += buf;
-        buf = ''; inCall = false;
+        const out = { text: '', items: [], stop: false };
+        if (!stopped) {
+          if (mode === 'call') {
+            if (kind === 'invoke' || named === true || parseCall(buf)) out.items.push({ body: buf, kind, closed: false });
+            else addText(out, CALL_OPEN + buf);
+          } else if (mode === 'prose') addText(out, buf);
+        }
+        buf = ''; mode = 'prose'; named = false; scan = 0;
         return out;
       }
     };
   }
 
   function parseCall(body) {
-    let j;
-    try { j = JSON.parse(String(body || '').trim()); } catch (_) { return null; }
+    const raw = String(body || '').trim();
+    let j = null;
+    try { j = JSON.parse(raw); } catch (_) {
+      // A file-sized call's commonest slip is a raw newline or tab inside a string. The shared repair ladder escapes
+      // those; a repair that had to CLOSE an open string means the call was cut off, and that is never accepted.
+      try {
+        const d = require('./sanitize.js').repairToolCallArgumentsDetailed(raw);
+        if (d && !d.closedOpenString) j = JSON.parse(d.text);
+      } catch (_) { j = null; }
+    }
     if (!j || typeof j !== 'object' || typeof j.name !== 'string' || !j.name.trim()) return null;
     const args = j.arguments != null ? j.arguments : (j.input != null ? j.input : {});
     return { name: j.name.trim(), args: typeof args === 'string' ? args : JSON.stringify(args) };
+  }
+  /* An ANNOUNCED call whose body will not parse (cut off by the output limit, or broken past repair) still goes to the
+     loop as that call, its arguments text handed over as written: the loop's own repair ladder fixes it or refuses it
+     with a reason the model reads ("NOT executed — reissue it complete"). It used to be dumped as prose, which put a
+     whole game's source into the chat and wrote no file. */
+  function looseCall(body, name) {
+    const s = String(body || '');
+    const at = s.search(/"arguments"\s*:/);
+    const args = at >= 0 ? s.slice(at).replace(/^"arguments"\s*:\s*/, '').replace(/\}\s*$/, '').trim() : '';
+    return { name, args: args || '{}' };
+  }
+  // One <parameter> value: raw text for a string parameter (a file arrives exactly as written), JSON for the rest.
+  function paramValue(raw, schema) {
+    const t = schema && schema.type;
+    const types = Array.isArray(t) ? t : (t ? [t] : []);
+    if (types.indexOf('string') >= 0) return raw;
+    const s = raw.trim();
+    if (!types.length && !/^(?:[[{"]|-?\d|true$|false$|null$)/.test(s)) return raw;
+    try { return JSON.parse(s); } catch (_) { return raw; }   // not JSON after all: hand the text over, the tool validates it
+  }
+  /* An <invoke> body -> { name, args } (args = a JSON string, as the loop takes it). A call the output limit cut off
+     inside a parameter is handed over with that value still OPEN, so the loop's repair ladder sees a cut-off value
+     and refuses it ("NOT executed — reissue it complete") instead of writing half a file. */
+  function invokeCall(name, body, props, closed) {
+    const args = {};
+    let m, last = 0;
+    PARAM_RE.lastIndex = 0;
+    while ((m = PARAM_RE.exec(body))) { args[m[1]] = paramValue(m[2], props && props[m[1]]); last = PARAM_RE.lastIndex; }
+    const open = closed ? null : OPEN_PARAM_RE.exec(body.slice(last));
+    if (!open) return { name, args: JSON.stringify(args) };
+    const head = JSON.stringify(args).slice(0, -1);
+    return { name, args: head + (head.length > 1 ? ',' : '') + JSON.stringify(open[1]) + ':' + JSON.stringify(open[2]).slice(0, -1) };
   }
 
   /* The local-CLI plumbing the provider AND the sign-in driver share: find the binary, build its station-free env,
@@ -427,15 +563,30 @@
       child.stdin.on('error', e => failNote('claudecli.stdin', e));
       try { child.stdin.end(prompt.input || ''); } catch (e) { failNote('claudecli.stdin', e); }
 
-      const splitter = makeCallSplitter();
+      const splitter = makeCallSplitter({ enabled: Array.isArray(req.tools) && req.tools.length > 0 });
+      const props = {};   // tool name -> its parameter schemas: a string <parameter> stays raw, the rest parse as JSON
+      for (const t of (Array.isArray(req.tools) ? req.tools : [])) {
+        const fn = t && t.function;
+        if (fn && fn.name) props[String(fn.name)] = (fn.parameters && fn.parameters.properties) || {};
+      }
       let callIndex = 0, sawText = false, result = null, apiKeySource = null, apiError = '';
+      let blockDone = false, streamUsage = null;   // the call block ended the turn (see the reader's STOP)
+      const callId = index => 'call_cli_' + idTag + '_' + turn + '_' + index;
+      let open = null;   // the call a tool_start already announced, whose block has not closed yet
       function* emitSplit(part) {
-        if (part.text) { sawText = true; yield { type: 'text', delta: part.text }; }
-        for (const body of part.calls) {
-          const call = parseCall(body);
-          if (!call) { yield { type: 'text', delta: CALL_OPEN + body + CALL_CLOSE }; continue; }
-          const index = callIndex++;
-          yield { type: 'tool_start', index, id: 'call_cli_' + idTag + '_' + turn + '_' + index, name: call.name };
+        for (const it of part.items) {
+          if (it.text != null) { if (it.text) { sawText = true; yield { type: 'text', delta: it.text }; } continue; }
+          if (it.start) {
+            open = { index: callIndex++, name: it.start };
+            yield { type: 'tool_start', index: open.index, id: callId(open.index), name: it.start };
+            continue;
+          }
+          const was = open; open = null;
+          const call = it.kind === 'invoke' ? invokeCall(was ? was.name : '', it.body, props[was ? was.name : ''], it.closed)
+            : (parseCall(it.body) || (was ? looseCall(it.body, was.name) : null));
+          if (!call) { sawText = true; yield { type: 'text', delta: CALL_OPEN + it.body + (it.closed ? CALL_CLOSE : '') }; continue; }
+          const index = was ? was.index : callIndex++;
+          if (!was) yield { type: 'tool_start', index, id: callId(index), name: call.name };
           yield { type: 'tool_args', index, chunk: call.args };
           yield { type: 'tool_done', index };
         }
@@ -459,15 +610,15 @@
           try { j = JSON.parse(line); } catch (_) { continue; }
           if (j.type === 'system' && j.subtype === 'init') apiKeySource = j.apiKeySource == null ? null : String(j.apiKeySource);
           else if (j.type === 'stream_event' && j.event && j.event.type === 'content_block_delta' && j.event.delta && j.event.delta.type === 'text_delta') {
-            yield* emitSplit(splitter.push(j.event.delta.text));
-          } else if (j.type === 'assistant' && j.error) apiError = String(j.error);
+            const part = splitter.push(j.event.delta.text);
+            yield* emitSplit(part);
+            if (part.stop) { blockDone = true; break; }
+          } else if (j.type === 'stream_event' && j.event && j.event.type === 'message_start') streamUsage = Object.assign({}, j.event.message && j.event.message.usage);
+          else if (j.type === 'stream_event' && j.event && j.event.type === 'message_delta' && j.event.usage) streamUsage = Object.assign(streamUsage || {}, j.event.usage);
+          else if (j.type === 'assistant' && j.error) apiError = String(j.error);
           else if (j.type === 'result') result = j;
         }
         if (signal && signal.aborted) return;
-        if (!result) {
-          const tail = stderr.trim().split(/\r?\n/).slice(-3).join(' ').slice(0, 400);
-          throw new Error('Claude Code exited with code ' + exitCode + ' before answering' + (tail ? ': ' + tail : ''));
-        }
         const usageChunk = () => {
           const u = result.usage || {};
           const uncached = Number(u.input_tokens) || 0, cacheWrite = Number(u.cache_creation_input_tokens) || 0;
@@ -487,6 +638,19 @@
             }
           };
         };
+        if (blockDone) {
+          // The calls are complete; the rest of this generation is the model guessing at results. `finally` ends the
+          // child, so no result line comes: book what the stream itself reported (the input side is exact; output is
+          // the last count the stream gave, which can run short of the tokens spent before the stop).
+          result = { usage: streamUsage || {}, total_cost_usd: NaN };
+          yield usageChunk();
+          yield { type: 'done', finishReason: 'tool_calls', truncated: false };
+          return;
+        }
+        if (!result) {
+          const tail = stderr.trim().split(/\r?\n/).slice(-3).join(' ').slice(0, 400);
+          throw new Error('Claude Code exited with code ' + exitCode + ' before answering' + (tail ? ': ' + tail : ''));
+        }
         if (result.is_error || (result.subtype && result.subtype !== 'success')) {
           // a failed turn can still have been BILLED (an API-key sign-in pays for the tokens it used): report what the
           // CLI's result line says it cost before failing, so the ledger and the caps see it (sweep 2026-10-02)

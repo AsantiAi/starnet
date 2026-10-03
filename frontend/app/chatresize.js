@@ -44,11 +44,17 @@
   try { const s = parseInt(localStorage.getItem(KEY), 10); if (s) apply(s); } catch (_) {}
 
   let dragging = false, pendingW = null, moveRaf = 0;
+  // A COMMS reading the newest line stays on it while the seam moves: re-wrapping at a new width
+  // changes row heights, and the browser's scroll anchoring holds the TOP of the view still, so the
+  // bottom drifted up to ~180px mid-drag. Pinned = at the bottom when the drag began.
+  const log = document.getElementById('chat-log');
+  let pinned = false;
+  const repin = () => { if (pinned && log) log.scrollTop = log.scrollHeight; };
   // coalesce to one width write per frame: pointermove can fire several times between paints, and each
   // write resizes the centre stage's canvas — batching to rAF keeps the resize cadence in step with paint.
   function flushMove() {
     moveRaf = 0;
-    if (pendingW != null) { apply(pendingW); pendingW = null; }
+    if (pendingW != null) { apply(pendingW); pendingW = null; repin(); }
   }
   function onMove(e) {
     if (!dragging) return;
@@ -64,6 +70,8 @@
     if (moveRaf) { cancelAnimationFrame(moveRaf); moveRaf = 0; }
     if (pendingW != null) { apply(pendingW); pendingW = null; }   // land the final position the rAF hadn't flushed yet
     document.body.classList.remove('col-resizing');
+    repin();   // rows that sat out the drag (app.css col-resizing) wrap to the final width now
+    pinned = false;
     try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
     const cur = getComputedStyle(game).getPropertyValue('--chat-w').trim();
     try { if (cur) localStorage.setItem(KEY, parseInt(cur, 10)); } catch (_) {}
@@ -71,6 +79,7 @@
   }
   handle.addEventListener('pointerdown', e => {
     dragging = true;
+    pinned = !!log && log.scrollHeight - log.clientHeight - log.scrollTop <= 2;
     document.body.classList.add('col-resizing');
     try { handle.setPointerCapture(e.pointerId); } catch (_) {}
     e.preventDefault();
