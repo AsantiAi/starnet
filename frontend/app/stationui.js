@@ -4984,10 +4984,14 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         out.push({ provider: pid, key: '', model: activeModel, oauth: true, expired: oauthProvExpired(pid) });
       }
     });
+    // CLAUDE CODE holds no key: the user's own CLI owns the sign-in, so its row rides the CLI's truth (claudeCliSt
+    // from `claude auth status`), never a stored credential. Through addProvider it needed BOTH the active provider
+    // AND a saved key — i.e. it never listed (2026-10-02 report: "signed in, but not in the connected section").
+    if (claudeCliSt && claudeCliSt.loggedIn) out.push({ provider: 'claude-cli', key: '', model: active === 'claude-cli' && h.getModel ? (h.getModel() || '') : '', claude: true });
     // OpenRouter BYOK: desktop keeps the key in the OS keychain (getKey returns ''); configured() reports it's set.
     function addProvider(provider) {
-      if (!provider || isOAuthProvider(provider) || out.some(k => k.provider === provider)) return;
-      if ((provider === 'ollama' || provider === 'claude-cli') && provider !== active) return;
+      if (!provider || provider === 'claude-cli' || isOAuthProvider(provider) || out.some(k => k.provider === provider)) return;
+      if (provider === 'ollama' && provider !== active) return;
       // Truthful list: only providers with an ACTUALLY-stored credential show a row/badge (never DEVMODE-fabricated).
       // hasStoredCredential is the honest getter; fall back to the older signals if an old harness lacks it.
       const set = h.hasStoredCredential ? h.hasStoredCredential(provider)
@@ -5194,9 +5198,22 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
       // but ACTIVE is reserved for a selected model whose endpoint/credential probe proved it can run.
       const health = providerHealth[k.provider];
       const selected = k.provider === active && !!k.model;
-      const runnable = !!(selected && health && health.reachable && health.credentialVerified);
+      // CLAUDE CODE has no key to verify: its row exists only while the CLI proves the sign-in (same rule as its card)
+      const runnable = !!(selected && health && health.reachable && (health.credentialVerified || k.claude));
       const runState = runnable ? '<span class="key-stat on">ACTIVE</span>'
         : selected ? '<span class="key-stat">SELECTED</span>' : '<span class="key-stat">idle</span>';
+      if (k.claude) {
+        const plan = claudeCliPlan(claudeCliSt).replace(/^ · /, '');
+        return '<div class="key-row">' +
+          '<span class="conn-dot"></span>' +
+          '<div class="key-main">' +
+          '<div class="key-top"><span class="key-prov">' + esc(provName(k.provider)) + '</span>' +
+          '<code class="key-mask" title="signed in through Claude Code, which keeps the sign-in; StarNet never holds it">' + esc(claudeCliSt.email || 'Claude sign-in') + '</code></div>' +
+          '<div class="key-meta">model <b>' + esc(k.model || '—') + '</b> · ' + runState +
+          (plan ? ' · <span class="key-stat">' + esc(plan) + '</span>' : '') +
+          ' · <span class="key-stat">no API key needed</span></div>' +
+          '</div></div>';
+      }
       // grok/kimi (the other keyless device-code sign-ins) render through the SHARED oauth row below — same
       // semantics as codex, parameterized by provider id, so the codex block is not copy-pasted per provider.
       if (k.oauth && k.provider !== 'codex') return oauthKeyRow(k, runState);
