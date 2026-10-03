@@ -159,6 +159,10 @@ const throwsMsg = async (fn) => { try { await fn(); return ''; } catch (e) { ret
       A.ok(seenPatch && seenPatch.byAgent === true && /as the crew set it up/.test(seenPatch.prompt) && !/Commander's own words/.test(seenPatch.prompt), 'QA 10-02: a crew edit reaches the station as the crew (its grants drop) and never claims to be the Commander\'s words');
       await apps.schedule(a.id, { every: 'every 6h', task: 'two' });
       A.ok(seenPatch && seenPatch.byAgent === false && /Commander's own words/.test(seenPatch.prompt), 'the Commander\'s own SAVE stays the Commander\'s words');
+      // review 10-02: a crew edit that changes only HOW OFTEN keeps the exact prompt — no grant drop, no relabel
+      const before = seenPatch.prompt;
+      await apps.schedule(a.id, { every: 'every 12h', task: 'two', byAgent: true });
+      A.ok(seenPatch && seenPatch.byAgent === false && seenPatch.prompt === before && seenPatch.schedule === 'every 12h', 'a crew schedule-only change keeps the prompt byte-for-byte (grants and the Commander\'s words stay)');
       cron.update = upd; }
     A.ok(!jobs.has('orphan'), 'an orphan routine of the same app (from a race) is retired');
     A.ok(told.every((t) => t[0] === 'data'), 'a schedule change refreshes the bar only — it never reloads the open app window');
