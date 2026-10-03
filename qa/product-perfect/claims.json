@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "48ebcfb868d4c182dc745c762e35ca835c98e19d",
+    "sourceCommit": "d9bfe08d8137b2371c34553d6ea77e79d0eec831",
     "pathSetSha256": "69557b650ba864c7feca1f652d8ced6433f5239e587cdf6a9368c966a54f4c65",
     "files": [
       {
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 709031,
-        "sha256": "7342206942c67796faa430732a62358089aea1226736b3fc6f13deaf6816db88"
+        "bytes": 709940,
+        "sha256": "05da4510abbc40476e8a7e4763dbe0dc89cf7371d6122d4285b1f0a5b90ec902"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -1158,8 +1158,8 @@
       },
       {
         "path": "frontend/app/stationui.js",
-        "bytes": 823279,
-        "sha256": "35416d5c05c4eb9392744f40ae3bd58dff84b1081739324e8ab66109933decc6"
+        "bytes": 823379,
+        "sha256": "dab4d3457a3f221dc20ba5688bcbbba3f9c4e2da5c69b64837696424b78d7f39"
       },
       {
         "path": "frontend/app/stepin.js",
@@ -1533,8 +1533,8 @@
       },
       {
         "path": "frontend/css/comms.css",
-        "bytes": 52975,
-        "sha256": "64e9c4154f4092c5b255ac4754c8774d281324bdda439982d93b7c7973e6ba5f"
+        "bytes": 53614,
+        "sha256": "782b19c46d7ce047cc3778f58bd08ecbda504dc24cbb2137f84133854788f5e1"
       },
       {
         "path": "frontend/css/crew-glass.css",
