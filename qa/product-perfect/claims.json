@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "1c13eb529e97697a82bff36e0356d3b48d048a01",
+    "sourceCommit": "e58003f8873796095d4a561793791fda628b7a30",
     "pathSetSha256": "69557b650ba864c7feca1f652d8ced6433f5239e587cdf6a9368c966a54f4c65",
     "files": [
       {
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 419301,
-        "sha256": "65ca21476a17eea43477cf1f240a70acf9eaf5c2e711a6beace0a0053c10afe1"
+        "bytes": 419829,
+        "sha256": "1d586a548baf69ec2dee8fb6c4970c025cf6432c242270237e11b06007b62d00"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
@@ -1608,8 +1608,8 @@
       },
       {
         "path": "frontend/css/pipglass.css",
-        "bytes": 55311,
-        "sha256": "1af545a0ea71857967a080d94ab0d0aef07463f2692cfaa4ef0a89278bb8c6cc"
+        "bytes": 62439,
+        "sha256": "37b624e1ce39c7c10a7a20d6000c0349abec64626c1189dec26b056d57f9d1a7"
       },
       {
         "path": "frontend/css/plugins.css",
