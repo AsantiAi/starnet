@@ -58,7 +58,7 @@ const ModelDock = (() => {
   };
   // CLAUDE CODE sits with the other subscription sign-ins (2026-10-02): at 15.5 its handful of models sank under
   // OpenRouter's whole catalog, and only an exact "claude code" search found them.
-  const PROVIDER_RANK = { starnet: -1, codex: 0, 'claude-cli': 0.5, grok: 1, kimi: 2, openrouter: 3, openai: 4, anthropic: 5, gemini: 6, xai: 7, groq: 8, mistral: 9, deepseek: 10, together: 11, fireworks: 12, perplexity: 13, cerebras: 14, ollama: 15, custom: 16 };
+  const PROVIDER_RANK = { starnet: -1, codex: 0, grok: 1, kimi: 2, 'claude-cli': 2.5, openrouter: 3, openai: 4, anthropic: 5, gemini: 6, xai: 7, groq: 8, mistral: 9, deepseek: 10, together: 11, fireworks: 12, perplexity: 13, cerebras: 14, ollama: 15, custom: 16 };
 
   let opts = {};
   let wired = false;
