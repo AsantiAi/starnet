@@ -23528,7 +23528,7 @@ function callOwnRoute(method, url, body) {
       end(c) {
         if (c != null) chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(String(c)));
         const text = Buffer.concat(chunks).toString('utf8');
-        let json = null; try { json = text ? JSON.parse(text) : null; } catch (_) {}
+        let json = null; try { json = text ? JSON.parse(text) : null; } catch (_) { json = null; }   // a non-JSON answer travels as `text` below
         finish({ status, json, text: json ? '' : text.slice(0, 400) });
       }
     };
