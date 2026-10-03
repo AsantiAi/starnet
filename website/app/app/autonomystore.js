@@ -56,8 +56,9 @@ const AutonomyStore = (() => {
   function init() { get(); return refresh(); }
   function refresh() { return enqueue(() => request()); }
   function write(transform, resumeHalt) { return enqueue(async () => {
-    // Never combine a one-axis change with unverified axes from an old cache.
-    const current = loaded ? get() : normalize((await request()).summary);
+    // Never combine a one-axis change with unverified axes from an old cache: the server's posture is read first every
+    // time, because the lead (station.power autonomy.set) or a phone can change it while this page holds its copy.
+    const current = normalize((await request()).summary);
     return request({ posture: transform(current), resumeHalt: resumeHalt === true });
   }); }
   function applyPreset(id) { return write(p => ready() ? Autonomy.applyPreset(p, id) : p, true); }

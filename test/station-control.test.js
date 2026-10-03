@@ -112,7 +112,10 @@ A.ok(/unknown station change/.test(cardFor({ action: 'nope' })), 'an unknown act
 
 // ---- route actions call exactly their button's route ----
 {
-  const s = stubs((m, u) => u === '/api/plugins' ? { status: 200, json: { plugins: [{ id: 'p1', digest: 'd9' }] } } : { status: 200, json: { ok: true } });
+  // the lists a change checks first (a change to something that is not there is refused): what this station holds
+  const LISTS = { '/api/plugins': { plugins: [{ id: 'p1', digest: 'd9' }] }, '/api/connectors': { connectors: [{ id: 'github' }] },
+    '/api/permissions': { grants: ['path:C:\\p'] }, '/api/nightshift/focus': { avoid: [{ ref: 'C:\\p' }] }, '/api/skills': { skills: [{ slug: 'pdf' }] } };
+  const s = stubs((m, u) => m === 'GET' && LISTS[u] ? { status: 200, json: LISTS[u] } : { status: 200, json: { ok: true } });
   const t = make(s);
   const want = [
     ['control', 'memory.forget', { agent: 'NOVA', id: 'm1' }, 'POST', '/api/memory/forget', { agentId: 'NOVA', id: 'm1', reason: 'commander via chat' }],

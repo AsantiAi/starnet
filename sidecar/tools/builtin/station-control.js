@@ -85,13 +85,21 @@
   // ---- permissions & autonomy ----
   def('fullpower.set', { takes: '{on}', power: a => onOff(a.on),
     card: a => onOff(a.on) ? 'turn on station-wide FULL POWER: every agent acts on this computer without asking.' : 'turn station-wide FULL POWER off.',
-    run: (a, env) => env.route('POST', '/api/permissions/bypass', { on: onOff(a.on) }) });
+    run: async (a, env) => {
+      const r = await env.route('POST', '/api/permissions/bypass', { on: onOff(a.on) });
+      if (!onOff(a.on) && r && r.status < 400 && r.json && r.json.envFullAccess) return refusal('the Full Power switch is off, but Full Power STAYS ON: StarNet was started with SKYNET_FULL_ACCESS set, and only restarting it without that ends it');
+      return r;
+    } });
   def('permission.grant', { takes: '{key: "cabinet:write"}', power: () => true, card: a => 'grant a standing approval for ' + clip(a.key, 40) + ' (no more asking for it).',
     run: (a, env) => env.route('POST', '/api/permissions/grant', { key: a.key }) });
   def('permission.revoke', { takes: '{key}', card: a => 'revoke the standing approval ' + clip(a.key, 40) + '.',
-    run: (a, env) => env.route('POST', '/api/permissions/revoke', { key: a.key }) });
+    run: async (a, env) => {
+      const held = await heldGrants(env);
+      if (held && held.indexOf(String(a.key || '')) < 0) return refusal('there is no standing approval "' + clip(a.key, 60) + '" (held: ' + (clip(held.join(', '), 300) || 'none') + ')');
+      return env.route('POST', '/api/permissions/revoke', { key: a.key });
+    } });
   def('autonomy.set', { takes: '{initiative?: wait|propose|leash|free, reach?: observe|sandbox|reach, leashPerDay?: 1-12}', power: () => true,
-    card: a => 'set the autonomy dial: ' + ['initiative', 'reach', 'leashPerDay'].filter(k => a[k] != null).map(k => k + ' ' + clip(a[k], 12)).join(', ') + ' (this never lifts an E-STOP).',
+    card: a => 'set the autonomy dial: ' + ['initiative', 'reach', 'leashPerDay'].filter(k => a[k] != null).map(k => k + ' ' + clip(a[k], 12)).join(', ') + ' (a level that builds lets the night shift build while you are away; this never lifts an E-STOP).',
     run: async (a, env) => {
       const cur = await env.route('GET', '/api/autonomy/posture');
       const s = (cur.json && cur.json.summary) || {};
@@ -103,7 +111,7 @@
     run: async (a, env) => {
       // ⛔ /api/cron/arm also lifts the routines E-STOP in either direction: never touch it while the station is halted
       const h = await env.route('GET', '/api/halt');
-      if (h.json && h.json.halted) return refusal('the station is under an E-STOP. Only the Commander lifts it (RESUME AUTOMATION in the top bar); the scheduler was not changed');
+      if (h.json && h.json.halted) return refusal('the station (or part of it) is halted (an E-STOP or a paused overseer). Only the Commander resumes it (RESUME AUTOMATION in the top bar); the scheduler was not changed');
       return env.route('POST', '/api/cron/arm', { enabled: onOff(a.on) });
     } });
   def('nightshift.focus', { takes: '{ref (an absolute trusted-project path, a thread id, or "goal"), kind?: project|thread|goal} — or {clear:true}',
@@ -111,7 +119,9 @@
     run: (a, env) => a.clear ? env.route('DELETE', '/api/nightshift/focus') : env.route('POST', '/api/nightshift/focus', { ref: a.ref, kind: a.kind }) });
   def('nightshift.avoid', { takes: '{ref, kind?} — or {ref, allow:true} to take it off the list',
     card: a => a.allow ? 'let autonomy work on ' + q(a.ref) + ' again.' : 'put ' + q(a.ref) + ' off-limits for autonomy.',
-    run: (a, env) => a.allow ? env.route('DELETE', '/api/nightshift/avoid?ref=' + enc(String(a.ref || ''))) : env.route('POST', '/api/nightshift/avoid', { ref: a.ref, kind: a.kind }) });
+    run: async (a, env) => a.allow
+      ? ((await listed(env, '/api/nightshift/focus', 'avoid', e => e.ref === a.ref)) || env.route('DELETE', '/api/nightshift/avoid?ref=' + enc(String(a.ref || ''))))
+      : env.route('POST', '/api/nightshift/avoid', { ref: a.ref, kind: a.kind }) });
 
   // ---- memory & learning ----
   def('memory.forget', { takes: '{agent, id}', card: a => 'make ' + q(a.agent || 'agent') + ' forget memory ' + clip(a.id, 40) + ' (it will not be learned again).',
@@ -126,15 +136,17 @@
     run: (a, env) => env.route('POST', '/api/memory/config', pick(a, ['reflectEnabled', 'reflectCooldownMs', 'failureReviewEnabled', 'failureReviewCooldownMs'])) });
   def('learning.set', { takes: '{on}', card: a => (onOff(a.on) ? 'resume' : 'pause') + ' learning about you.',
     run: (a, env) => env.route('POST', '/api/personalization', { enabled: onOff(a.on) }) });
-  def('learning.wipe', { takes: '{}', card: () => 'WIPE what the station has learned about your interests (interests, scouting, recommendations).',
+  def('learning.wipe', { takes: '{}', card: () => 'WIPE what the station has learned about your interests (interests, scouting, recommendations), with the night shift\'s learning, declined study topics and workflow takeover notes.',
     run: (a, env) => env.route('DELETE', '/api/personalization') });
 
   // ---- connections, abilities, skills ----
-  def('connector.remove', { takes: '{id}', card: a => 'disconnect and remove the connector ' + q(a.id) + '.', run: (a, env) => env.route('POST', '/api/connectors/remove', { id: a.id }) });
+  def('connector.remove', { takes: '{id}', card: a => 'disconnect and remove the connector ' + q(a.id) + '.',
+    run: async (a, env) => (await listed(env, '/api/connectors', 'connectors', c => c.id === a.id)) || env.route('POST', '/api/connectors/remove', { id: a.id }) });
   def('connector.refresh', { takes: '{id}', card: a => 'reconnect the connector ' + q(a.id) + '.', run: (a, env) => env.route('POST', '/api/connectors/refresh', { id: a.id }) });
   def('ability.set', { takes: '{id (a toolset id from station.settings connections), on}', power: a => onOff(a.on), card: a => 'switch the ' + q(a.id) + ' abilities ' + (onOff(a.on) ? 'on' : 'off') + ' for the whole station.',
     run: (a, env) => env.route('POST', '/api/toolsets/' + enc(String(a.id || '')), { enabled: onOff(a.on) }) });
-  def('skill.set', { takes: '{slug, on}', card: a => 'switch the skill ' + q(a.slug) + ' ' + (onOff(a.on) ? 'on' : 'off') + '.', run: (a, env) => env.route('POST', '/api/skills/toggle', { slug: a.slug, enabled: onOff(a.on) }) });
+  def('skill.set', { takes: '{slug, on}', card: a => 'switch the skill ' + q(a.slug) + ' ' + (onOff(a.on) ? 'on' : 'off') + '.',
+    run: async (a, env) => (await listed(env, '/api/skills', 'skills', s => (s.slug || s.id) === a.slug)) || env.route('POST', '/api/skills/toggle', { slug: a.slug, enabled: onOff(a.on) }) });
   def('skill.install', { takes: '{slug}', power: () => true, card: a => 'install ' + q(a.slug) + ' from the Skill Market (a verified package).', run: (a, env) => env.route('POST', '/api/skill-market/install', { slug: a.slug }) });
   def('skill.uninstall', { takes: '{slug}', card: a => 'uninstall the market skill ' + q(a.slug) + '.', run: (a, env) => env.route('POST', '/api/skill-market/uninstall', { slug: a.slug }) });
   def('key.set', { takes: '{id, on}', power: a => onOff(a.on), card: a => (onOff(a.on) ? 'enable' : 'disable') + ' the saved API key ' + q(a.id) + '.', run: (a, env) => env.route('POST', '/api/servicekeys/toggle', { id: a.id, enabled: onOff(a.on) }) });
@@ -154,14 +166,23 @@
     run: (a, env) => env.route('POST', '/api/hooks/allow', { event: a.event, command: a.command }) });
 
   // ---- apps, projects, files, deliverables ----
-  def('app.delete', { takes: '{id}', card: a => 'DELETE the app ' + q(a.id) + '.', run: (a, env) => env.route('POST', '/api/apps/delete', { id: a.id }) });
+  def('app.delete', { takes: '{id}', card: a => 'DELETE the app ' + q(a.id) + ' with its saved data and its refresh routine.', run: (a, env) => env.route('POST', '/api/apps/delete', { id: a.id }) });
   def('app.rename', { takes: '{id, name}', card: a => 'rename the app ' + q(a.id) + ' to ' + q(a.name) + '.', run: (a, env) => env.route('POST', '/api/apps/rename', { id: a.id, name: a.name }) });
   def('project.trust', { takes: '{path}', power: () => true, card: a => 'trust the folder ' + clip(a.path, 160) + ': agents may read and change files there.',
     run: (a, env) => env.route('POST', '/api/projects/bless', { path: a.path }) });
-  def('project.untrust', { takes: '{root}', card: a => 'stop trusting the folder ' + clip(a.root, 160) + '.', run: (a, env) => env.route('POST', '/api/permissions/revoke', { key: 'path:' + String(a.root || '') }) });
+  def('project.untrust', { takes: '{root}', card: a => 'stop trusting the folder ' + clip(a.root, 160) + '.',
+    run: async (a, env) => {
+      // the grant is keyed by the exact stored root: match it the way a path is written (case, slashes, a trailing one)
+      const held = await heldGrants(env);
+      if (!held) return refusal('the standing approvals could not be read, so nothing was changed');
+      const want = folderKey(a.root);
+      const key = held.find(k => /^path:/.test(k) && folderKey(k.slice(5)) === want);
+      if (!key) return refusal('the folder ' + clip(a.root, 120) + ' is not trusted (trusted: ' + (clip(held.filter(k => /^path:/.test(k)).map(k => k.slice(5)).join(', '), 300) || 'none') + ')');
+      return env.route('POST', '/api/permissions/revoke', { key });
+    } });
   def('checkpoint.restore', { takes: '{agent, snapshot}', card: a => 'rewind ' + q(a.agent || 'agent') + '\'s workspace to the checkpoint ' + clip(a.snapshot, 40) + ' (an undo point is saved first).',
     run: (a, env) => env.route('POST', '/api/checkpoint/restore', { agentId: a.agent || 'agent', snapshotId: a.snapshot }) });
-  def('deliverable.decide', { takes: '{agent, runId, decision: keep|discard|later}', power: a => a.decision === 'keep', card: a => ({ keep: 'KEEP', discard: 'DISCARD', later: 'leave for later' }[a.decision] || 'decide on') + ' the away-work deliverable ' + clip(a.runId, 40) + ' from ' + q(a.agent || 'agent') + '.',
+  def('deliverable.decide', { takes: '{agent, runId, decision: keep|discard|later}', power: a => a.decision === 'keep', card: a => ({ keep: 'KEEP', discard: 'DISCARD', later: 'leave for later' }[a.decision] || 'decide on') + ' the away-work deliverable ' + clip(a.runId, 40) + ' from ' + q(a.agent || 'agent') + ({ keep: ' (it lands as a git branch in its project, or a copy in its folder)', discard: ' (its files are deleted)' }[a.decision] || '') + '.',
     // destPath is deliberately never forwarded: the route copies files to any path it is given
     run: (a, env) => ['keep', 'discard', 'later'].indexOf(a.decision) < 0 ? refusal('decision is keep, discard or later')
       : env.route('POST', '/api/workshop/decide', { agentId: a.agent || 'agent', runId: a.runId, decision: a.decision }) });
@@ -177,6 +198,15 @@
     for (const k of ['reach', 'mode', 'decision']) if (typeof o[k] === 'string') o[k] = o[k].trim().toLowerCase();
     return o;
   }
+  // the standing grants (null = unreadable); a listing check that returns a refusal when nothing matches, or null to go on
+  async function heldGrants(env) { const r = await env.route('GET', '/api/permissions'); return r && r.status < 400 && r.json && Array.isArray(r.json.grants) ? r.json.grants : null; }
+  async function listed(env, url, field, match) {
+    const r = await env.route('GET', url);
+    const rows = r && r.status < 400 && r.json && Array.isArray(r.json[field]) ? r.json[field] : null;
+    if (!rows) return refusal('that list could not be read, so nothing was changed');
+    return rows.some(x => x && match(x)) ? null : refusal('there is no such ' + field.replace(/s$/, '') + ' on this station (station.settings lists them)');
+  }
+  const folderKey = p => String(p || '').trim().replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
   function pick(o, keys) { const out = {}; for (const k of keys) if (o && Object.prototype.hasOwnProperty.call(o, k)) out[k] = o[k]; return out; }
   function refusal(error) { return { status: 409, json: { error }, refused: true }; }
 
@@ -202,12 +232,12 @@
       ['GET', '/api/servicekeys', j => ({ keys: (j.keys || []).map(k => ({ id: k.id, name: k.name, enabled: k.enabled, autonomous: k.autonomous })) })],
       ['GET', '/api/toolsets', j => ({ abilities: (j.toolsets || []).map(t => ({ id: t.id, label: t.label || t.name, enabled: t.enabled })) })], ['GET', '/api/spotify/status', j => ({ spotify: !!j.connected })]],
     skills: [['GET', '/api/skills', j => ({ skills: (j.skills || []).map(s => ({ slug: s.slug || s.id, name: s.name, enabled: s.enabled })) })],
-      ['GET', '/api/skill-market', j => ({ market: (j.entries || []).map(e => ({ slug: e.slug, name: e.name, installed: !!e.installed, version: e.version })) })]],
+      ['GET', '/api/skill-market', j => ({ market: (j.entries || []).map(e => ({ slug: e.slug, name: e.name, installed: /^(installed|update|bundled|tampered)$/.test(String(e.status || '')), status: e.status, version: e.version })) })]],
     apps: [['GET', '/api/apps', j => ({ apps: (j.apps || []).map(x => ({ id: x.id, name: x.name })), routinesOn: j.routinesOn })]],
-    projects: [['GET', '/api/projects', j => ({ projects: (j.projects || []).map(p => ({ name: p.name || p.label, root: p.root, trusted: !!p.blessed })) })]],
+    projects: [['GET', '/api/projects', j => ({ projects: (j.projects || []).map(p => ({ name: p.displayPath || p.root, root: p.root, trusted: !!p.blessed })) })]],
     checkpoints: [['GET', a => '/api/checkpoint?agent=' + enc(a.agent || 'agent'), j => ({ enabled: j.enabled, snapshots: (j.snapshots || []).slice(0, 30) })]],
     deliverables: [['GET', a => '/api/workshop/pending?agent=' + enc(a.agent || 'agent')]],
-    extensions: [['GET', '/api/plugins', j => ({ plugins: (j.plugins || []).map(p => ({ id: p.id, name: p.name, active: !!p.active, approved: !!(p.allowed || p.approved) })) })], ['GET', '/api/hooks', j => ({ hooks: j.hooks, pending: j.pending })]],
+    extensions: [['GET', '/api/plugins', j => ({ plugins: (j.plugins || []).map(p => ({ id: p.id, name: p.name, active: !!p.active, approved: !p.pending, pending: !!p.pending })) })], ['GET', '/api/hooks', j => ({ hooks: j.hooks, pending: j.pending })]],
     actions: { catalog: true }
   };
   const MAX_OUT = 14000;
@@ -255,7 +285,7 @@
           const u = typeof url === 'function' ? url(args || {}) : url;
           const r = await callRoute(method, u, undefined);
           const key = u.replace(/^\/api\//, '').replace(/\?.*$/, '');
-          if (r.status >= 400 || !r.json) { out[key] = { unreadable: errorOf(r) }; continue; }
+          if (r.status >= 400 || !r.json || r.json.ok === false) { out[key] = { unreadable: errorOf(r) }; continue; }
           try { out[key] = view ? view(r.json) : r.json; } catch (_) { out[key] = r.json; }
         }
         return { content: shape(out), summary: sec };
@@ -284,7 +314,7 @@
             return refuse('the provider "' + clip(a.provider, 30) + '" is not connected on this station (no key or sign-in): the Commander connects it in Settings › AI & MODELS first');
           }
           const r = spec.page ? await page('station.control', Object.assign({}, a, { action: spec.name })) : await spec.run(a, env);
-          if (!r || r.status >= 400 || r.refused) return refuse(errorOf(r));
+          if (!r || r.status >= 400 || r.refused || (r.json && r.json.ok === false)) return refuse(errorOf(r));
           return { content: shape({ done: spec.name, result: r.json }), summary: spec.name };
         }
       };
