@@ -27,6 +27,11 @@
    resolves to 1, i.e. these are the shipped numbers untouched.
    --chat-w (chatresize.js, the draggable COMMS seam) and --crew-w (leftrail.js, the CREW seam) are
    written in VISUAL px for the same reason, so a dragged width means the same thing at every text size. */
+/* Both seam widths are read ONLY by #screen-game's own grid (the element they are written on). A plain
+   custom property INHERITS, so every seam-drag frame re-styled every element of the station — ~1000 COMMS
+   spans, ~16ms a frame, a 20-30fps drag (10-02). Not inheriting, a width write re-styles one element. */
+@property --chat-w { syntax: '*'; inherits: false; }
+@property --crew-w { syntax: '*'; inherits: false; }
 #screen-game.active {
   display: grid;
   grid-template-rows: calc(64px * var(--cz)) 1fr calc(44px * var(--cz));
@@ -2337,6 +2342,14 @@ body.crew-rail-off .crew-resizer { display: none; }
 /* while dragging: column-resize cursor everywhere + no text selection + canvas ignores the pointer */
 body.col-resizing { cursor: col-resize; user-select: none; }
 body.col-resizing #stage { pointer-events: none; }
+/* while dragging: COMMS rows scrolled out of view skip re-wrapping at every new width. A full COMMS
+   (the 400-row DOM cap) re-wrapped every row each frame — ~8ms of layout, a 30fps drag; this held 60
+   (10-02). Rows ON screen lay out as always, and every row lays out once at the final width on release.
+   `auto` keeps each row's real last height, so the scrollbar doesn't jump. Only DURING the drag — the
+   containment would clip a hover tip or glow reaching outside a row, and nothing hovers mid-drag; the
+   two one-line glow rows are left out for the same reason. chatresize.js keeps a pinned COMMS pinned. */
+#chat-log > .cmsg { contain-intrinsic-size: auto 90px; }
+body.col-resizing #chat-log > .cmsg:not(.broadcast):not(.trim-marker) { content-visibility: auto; }
 
 /* ---------- CREW / SESSIONS divider: drag the rail's own horizontal split (leftrail.js) ----------
    Same law as the column seams: THE HIT ZONE MUST SIT ON THE SEAM THE EYE SEES. Here the seam the
@@ -5350,7 +5363,9 @@ select.fbc-sel:focus { border-color: var(--ph); box-shadow: inset 0 2px 5px rgba
   border: 1px solid var(--ph-faint); border-left: 3px solid var(--ph-dim);
   background: rgba(0, 0, 0, 0.22); border-radius: var(--r-sm); padding: 6px 11px;
 }
-.perm-grants .set-row:has(> .bb) > span:first-child { flex: 1 1 auto; min-width: 0; font-size: 13px; }
+/* a class, never a bare `span`: every non-subject :has() rule's right-hand side joins ONE invalidation set Chrome
+   applies from <body> on DOM ticks — a bare `span` here re-styled every COMMS span each second (10-02) */
+.perm-grants .set-row > .perm-label { flex: 1 1 auto; min-width: 0; font-size: 13px; }
 .perm-grants .set-row:has(> .bb) > .bb { flex: 0 0 auto; margin-left: auto; }
 .perm-grants .set-about { margin-top: 4px; }
 .perm-grants .set-row:not(:has(> .bb)) { margin: 4px 0 0; opacity: 0.75; }

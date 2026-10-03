@@ -7110,7 +7110,12 @@ const World = (() => {
       if (!initGL(W, H)) return false;
       const gl = _gl;
       if (glContextLost(gl)) return abandonCurveGL('WebGL context lost before draw');
-      if (_glc.width !== W || _glc.height !== H) { _glc.width = W; _glc.height = H; }
+      // GROW-ONLY drawing buffer (10-02): resizing a WebGL canvas makes Chrome wait on the GPU, and a seam drag
+      // resized it every frame (~5ms of a 16ms frame, a stuttering drag). The warp draws into the W×H BOTTOM-LEFT
+      // corner (GL's viewport origin) of a buffer rounded up to 256px, and only that corner is blitted back —
+      // the same pixels, without a reallocation per frame.
+      const bw = Math.max(_glc.width, Math.ceil(W / 256) * 256), bh = Math.max(_glc.height, Math.ceil(H / 256) * 256);
+      if (_glc.width !== bw || _glc.height !== bh) { _glc.width = bw; _glc.height = bh; }
       if (glContextLost(gl)) return abandonCurveGL('WebGL context lost during resize');
       // OUTPUT SANITY PROBE (2026-07-20, the mac theme-wash report): the warp only MOVES pixels and
       // applies a channel-NEUTRAL vignette, so the frame's global per-channel ratios must survive it.
@@ -7138,7 +7143,7 @@ const World = (() => {
       // dead offscreen canvas is copied over a healthy 2D frame and the camera feed goes permanently black.
       if (glContextLost(gl)) return abandonCurveGL('WebGL context lost during draw');
       ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'source-over';
-      ctx.clearRect(0, 0, W, H); ctx.drawImage(_glc, 0, 0);   // blit the warped result back onto the visible feed
+      ctx.clearRect(0, 0, W, H); ctx.drawImage(_glc, 0, _glc.height - H, W, H, 0, 0, W, H);   // blit the warped W×H corner back onto the visible feed
       if (pre) {
         const post = probeMeans(cv);   // cv now holds the blitted GL output
         const preSum = pre[0] + pre[1] + pre[2], postSum = post[0] + post[1] + post[2];
