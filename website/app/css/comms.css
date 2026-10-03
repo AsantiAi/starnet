@@ -66,11 +66,18 @@
 }
 .cmsg:hover .cmsg-ts, .cmsg:focus-within .cmsg-ts { opacity: .7; }
 
-/* GROUPING — a same-speaker continuation collapses its whole header (chip + stamp), so a run of turns
-   reads as one card, matching the base grouping law (which only hid the bare .who). A tool rail / beat
-   between two prose rows breaks the adjacency, so the header correctly reappears after an interruption. */
+/* GROUPING — a same-speaker continuation collapses its callsign, so a run of turns reads as one card. A
+   tool rail / beat between two prose rows breaks the adjacency, so the full header reappears after it.
+   A continuation keeps its STAMP (Andrew 10-03: hovering a grouped turn showed no time at all): the
+   header stays as one slim stamp-only line — the callsign stays collapsed, so the run still reads as one
+   speaker, and the stamp keeps its slot (hover-revealed, no reflow) without covering the message text.
+   (A floated/absolute stamp was tried first: it sat on top of the first line of prose.) */
 .cmsg.agent + .cmsg.agent > .cmsg-head,
-.cmsg.user  + .cmsg.user  > .cmsg-head { display: none; }
+.cmsg.user  + .cmsg.user  > .cmsg-head { display: flex; justify-content: flex-end; margin: 4px 0 0; min-height: 0; }
+.cmsg.agent + .cmsg.agent > .cmsg-head > .who,
+.cmsg.user  + .cmsg.user  > .cmsg-head > .who { display: none; }
+body.glass-demo #chat-log .cmsg.agent + .cmsg.agent > .cmsg-head,
+body.glass-demo #chat-log .cmsg.user  + .cmsg.user  > .cmsg-head { margin: 2px 0 2px; min-height: 0; }
 
 /* agent transmission card: the existing left phosphor rail + a faint recessed fill and hairline inset,
    airy not boxy. Keeps the base padding-left so grouped bodies still align under the rail. SCOPED to
