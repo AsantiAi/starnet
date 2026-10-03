@@ -7896,7 +7896,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
               const pv = eg && eg.provenance;
               if (pv) earnedTxt = ' <span class="dim">— ◈ earned' + (pv.runs ? ' after ' + esc(String(pv.runs)) + ' tasks' : '') + (pv.confidence ? ' at ' + esc(String(pv.confidence)) + '%' : '') + '</span>';
             } catch (_) {}
-            rows.push('<div class="set-row"><span>✓ ' + esc(plabel(k)) + (hint ? ' <span class="dim">— ' + esc(hint) + '</span>' : '') + ' <span class="dim">— ' + esc(pwhen(snap, k)) + '</span>' + earnedTxt + '</span> <button class="bb sm danger" data-perm-revoke="' + esc(k) + '">✕ REVOKE</button></div>');
+            rows.push('<div class="set-row"><span class="perm-label">✓ ' + esc(plabel(k)) + (hint ? ' <span class="dim">— ' + esc(hint) + '</span>' : '') + ' <span class="dim">— ' + esc(pwhen(snap, k)) + '</span>' + earnedTxt + '</span> <button class="bb sm danger" data-perm-revoke="' + esc(k) + '">✕ REVOKE</button></div>');
           });
           held.filter(k => curated.indexOf(k) < 0).forEach(k => {
             // A raw danger key (`path:C:\…`, `mcp:<id>`) is truthful but asks the reader to know the grammar on
@@ -7920,7 +7920,7 @@ const StationUI = typeof document === 'undefined' ? {} : (() => {
         if (offers.length) {
           rows.push('<div class="set-row"><span class="dim">— pre-approve a capability —</span></div>');
           offers.forEach(k => {
-            rows.push('<div class="set-row"><span>' + esc(plabel(k)) + '</span> <button class="bb sm" data-perm-grant="' + esc(k) + '">GRANT</button></div>');
+            rows.push('<div class="set-row"><span class="perm-label">' + esc(plabel(k)) + '</span> <button class="bb sm" data-perm-grant="' + esc(k) + '">GRANT</button></div>');
           });
         }
         return rows.join('');
