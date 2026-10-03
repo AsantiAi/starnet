@@ -672,13 +672,13 @@ body.glass-demo .con-rail-item.con-toptab .con-rail-glyph.has-ico { width: 16px;
    NAME on top in its own colour (as on its CREW card) with the time, the session title under it (two lines at
    most). The latest message is the row's hover tip (app.js
    railRowTip), never a sentence under the name. Rows rest quiet on hairlines; only the selected one is a
-   card. The lamp is the crew card's housed round lamp, every state kept by colour + rhythm; a row that needs
+   card. The lamp stays the station's square glass lamp with every state glyph; a row that needs
    you says "Approval needed" / "Reply needed" in gold where the time sits.
    ============================================================ */
 body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams { gap: 1px; padding: 4px 4px 8px; }
 body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row {
   position: relative; margin: 0 6px; min-height: 0; padding: 7px 10px 8px;
-  grid-template-columns: 8px minmax(0, 1fr) auto auto;
+  grid-template-columns: 12px minmax(0, 1fr) auto auto;
   grid-template-areas:
     "dot agent pin   meta"
     ".   title title title";
@@ -704,24 +704,10 @@ body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row.attn:not(.s
   background: linear-gradient(165deg, rgba(var(--gold-rgb), .08), transparent 60%); border-color: rgba(var(--gold-rgb), .3);
 }
 
-/* the lamp: the crew card's housed round lamp, beside the agent's name */
-body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot {
-  justify-self: center; align-self: center; flex: none; width: 8px; height: 8px; margin: 0;
-  border: 0; border-radius: 50%; overflow: visible;
-  color: color-mix(in srgb, var(--text) 26%, var(--panel2)); background: currentColor; box-shadow: var(--cg-lamp);
-  opacity: 1; animation: none;
-}
-body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot::before,
-body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot::after { content: none; }
-body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot.unseen { color: var(--gold); box-shadow: var(--cg-lamp), 0 0 6px rgba(var(--gold-rgb), .55); }
-body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot.working { color: var(--ph-bright); box-shadow: var(--cg-lamp), 0 0 6px rgba(var(--ph-rgb), .6); animation: wsPulse 1.15s ease-in-out infinite; }
-body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot.connecting { color: transparent; background: transparent; box-shadow: none; outline: 1px dashed var(--ph-dim); outline-offset: -1px; }
-body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot.reply { color: var(--gold); box-shadow: var(--cg-lamp), 0 0 6px rgba(var(--gold-rgb), .6); animation: wsPulseUrgent .72s ease-in-out infinite; }
-body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot.approval { color: var(--bad); box-shadow: var(--cg-lamp), 0 0 6px color-mix(in srgb, var(--bad) 60%, transparent); animation: wsPulseUrgent .72s ease-in-out infinite; }
-body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot.failed { color: var(--bad); box-shadow: var(--cg-lamp); animation: gd-session-failure 1.6s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) {
-  body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot { animation: none; }
-}
+/* the lamp is the station's own SQUARE glass lamp (glass-demo.css: empty when read, lit core when unread, the
+   scan / reply strokes / approval mark / failure X inside it). Andrew 10-03: the one thing he did not want
+   changed. This block only seats it on the agent's line. */
+body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-row > .ws-dot { justify-self: start; align-self: center; margin: 0; }
 
 /* line 2: the session's title, full width, two lines at most */
 body.glass-demo.rows-inbox:not(.hud-mode) #left #workstreams .ws-title {
