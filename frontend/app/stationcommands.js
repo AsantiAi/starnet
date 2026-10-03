@@ -78,6 +78,130 @@ const StationCommands = (() => {
     try { if (App.refreshRail) App.refreshRail(); } catch (_) {}
   }
 
+  /* STATION CONTROL helpers (station.control). A crew member by id or by the name the Commander says; a session (chat,
+     never a task card: task.manage owns those) by id or name, archived ones included so they can be restored. */
+  function resolveCrew(ref) {
+    if (typeof App === 'undefined' || !App.agents) throw new Error('the crew roster is not ready yet');
+    const want = String(ref || '').trim(), crew = App.agents() || [];
+    if (!want) throw new Error('name which crew member (an id or a name from station.settings)');
+    const hit = crew.find(x => x.id === want) || crew.filter(x => String(x.name || '').toLowerCase() === want.toLowerCase())[0];
+    if (!hit) throw new Error('there is no crew member "' + want + '". The crew: ' + crew.map(x => x.name + ' (' + x.id + ')').join(', '));
+    return hit;
+  }
+  function resolveChat(want) {
+    if (typeof Workstreams === 'undefined' || !Workstreams.list) throw new Error('sessions are not ready yet');
+    want = String(want || '').trim();
+    if (!want) throw new Error('name which session');
+    const gid = Workstreams.generalId ? Workstreams.generalId() : null;
+    const rows = (Workstreams.list({ includeArchived: true }) || []).filter(w => w && w.kind !== 'task')
+      .map(w => ({ w, title: String(w.title != null ? w.title : (w.id === gid ? 'General' : '')).trim() }));
+    const lower = want.toLowerCase();
+    const byId = rows.filter(r => r.w.id === want), byTitle = rows.filter(r => r.title && r.title.toLowerCase() === lower);
+    const hits = byId.length ? byId : byTitle;
+    if (hits.length === 1) return hits[0];
+    const names = rows.map(r => r.title + (r.w.archived ? ' (archived)' : '')).filter(Boolean).join(', ');
+    throw new Error(hits.length > 1 ? 'more than one session is called "' + want + '": use its id from station.settings' : 'there is no session called "' + want + '"' + (names ? '. Sessions: ' + names : ''));
+  }
+  // the save on disk must show the change before it is reported: flush, read back, check the agent's row
+  async function proveCrewSaved(id, check, what) {
+    if (typeof CloudSave === 'undefined' || !CloudSave.flush || !CloudSave.pull) throw new Error('durable agent storage is unavailable; do not report ' + what + ' as done');
+    if (App.configSynced && await App.configSynced() === false) throw new Error('the crew roster did not reach the station; ' + what + ' may be local only — do not report it as done');
+    App.persist();
+    if (!await CloudSave.flush({ force: true })) throw new Error('the agent save was refused; do not report ' + what + ' as done');
+    const saved = await CloudSave.pull();
+    const row = saved && (((saved.agents || []).find(x => x && x.id === id)) || (saved.agent && saved.agent.id === id ? saved.agent : null));
+    if (!check(row || null)) throw new Error('the saved station does not show ' + what + '; do not report it as done');
+  }
+  async function agentControl(act, a) {
+    const cfg = App.agentConfig || {};
+    const x = resolveCrew(a.agent);
+    const row = () => (App.agents() || []).find(r => r.id === x.id) || null;
+    if (act === 'agent.model') {
+      const model = String(a.model || '').trim(), provider = String(a.provider || '').trim() || (model ? (x.provider || '') : '');
+      if (!cfg.setModel) throw new Error('model pins are not available on this page');
+      const ok = a.effort != null ? cfg.setModel(x.id, model, provider, String(a.effort)) : cfg.setModel(x.id, model, provider);
+      if (!ok) throw new Error('the model could not be set');
+      await proveCrewSaved(x.id, r => r && (r.model || '') === model, 'the model change');
+      const now = row();
+      return { agent: x.name, model: now.model || 'follows the station default', provider: now.provider, reasoningEffort: now.reasoningEffort, applies: 'next run' };
+    }
+    if (act === 'agent.personality') {
+      const pid = String(a.personality || '').trim().toLowerCase();
+      if (typeof Personas === 'undefined' || !Personas.exists(pid)) throw new Error('"' + pid + '" is not a personality. Choose: ' + (typeof Personas !== 'undefined' ? Personas.list().map(p => p.id).join(', ') : 'none loaded'));
+      if (!cfg.setPersona || !cfg.setPersona(x.id, pid)) throw new Error('the personality could not be set');
+      await proveCrewSaved(x.id, r => r && r.personaId === row().personaId, 'the personality change');
+      return { agent: x.name, personality: row().personaId, applies: 'next reply' };
+    }
+    if (act === 'agent.rename') {
+      if (!cfg.setName || !cfg.setName(x.id, a.name)) throw new Error('that name could not be used (it needs letters; names are up to 18 characters)');
+      const nm = row().name;
+      await proveCrewSaved(x.id, r => r && r.name === nm, 'the rename');
+      return { agent: x.id, was: x.name, name: nm };
+    }
+    if (act === 'agent.skin') {
+      const sk = String(a.skin || '').trim();
+      if (!cfg.setSkin || !cfg.setSkin(x.id, sk)) throw new Error('"' + sk + '" is not a skin; station.settings lists them under options.skin');
+      await proveCrewSaved(x.id, r => r && r.skin === sk, 'the new skin');
+      return { agent: x.name, skin: sk };
+    }
+    if (act === 'agent.approval') {
+      const mode = a.mode === 'full' ? 'full' : a.mode === 'ask' ? 'ask' : '';
+      if (!mode) throw new Error('approval is "ask" or "full"');
+      if (!App.setApproval || !App.setApproval(x.id, mode)) throw new Error('the approval mode could not be set');
+      await proveCrewSaved(x.id, r => r && (r.approvalMode || 'ask') === mode, 'the approval change');
+      return { agent: x.name, approval: mode, applies: 'next run' };
+    }
+    if (act === 'agent.reach') {
+      const p = String(a.reach || '').trim();
+      if (!App.setExecutionProfile || !await App.setExecutionProfile(x.id, p)) throw new Error('"' + p + '" could not be set (reach is one of station-gear, safe-cell, remote-ssh, trusted-project, this-computer; the station refused it otherwise)');
+      await proveCrewSaved(x.id, r => r && r.executionProfile === p, 'the reach change');
+      return { agent: x.name, reach: p, applies: 'next run' };
+    }
+    if (act === 'agent.away_work') {
+      if (!cfg.setWorkshop || !await cfg.setWorkshop(x.id, !!a.on)) throw new Error('the station did not record the away-work change');
+      await proveCrewSaved(x.id, r => r && !!r.workshop === !!a.on, 'the away-work change');
+      return { agent: x.name, awayWork: !!a.on };
+    }
+    if (act === 'agent.delete') {
+      if (x.id === 'agent' || x.role === 'orchestrator') throw new Error(x.name + ' is the Overseer and cannot be deleted');
+      if (!cfg.deleteAgent || !await cfg.deleteAgent(x.id)) throw new Error('the station refused to delete ' + x.name + ' (it may be working right now: stop it first)');
+      await proveCrewSaved(x.id, r => !r, 'the deletion');
+      return { deleted: x.name, id: x.id, note: 'its notebook and workspace were archived, not wiped' };
+    }
+    throw new Error('unknown agent action "' + act + '"');
+  }
+  async function sessionControl(act, a) {
+    const sc = App.sessionControl || {};
+    const hit = resolveChat(a.session), id = hit.w.id, label = hit.title || 'General';
+    const rowOf = save => (save.workstreams || []).find(w => w && w.id === id);
+    if (act === 'session.rename') {
+      const title = String(a.title || '').trim().slice(0, 80);
+      if (!title) throw new Error('a renamed session needs a title');
+      const gid = Workstreams.generalId ? Workstreams.generalId() : null;
+      const clash = (Workstreams.list({ includeArchived: true }) || []).find(w => w.id !== id && String(w.title || (w.id === gid ? 'General' : '')).trim().toLowerCase() === title.toLowerCase());
+      if (clash) throw new Error('a session called "' + title + '" already exists');
+      if (!sc.rename || !await sc.rename(id, title)) throw new Error('the session could not be renamed');
+      await persistWorkstreams(save => { const w = rowOf(save); return !!w && w.title === title; });
+      return { id, was: label, title };
+    }
+    if (act === 'session.pin') {
+      if (!sc.pin || !sc.pin(id, a.pinned !== false)) throw new Error('the session could not be pinned');
+      await persistWorkstreams(save => { const w = rowOf(save); return !!w && !!w.pinned === (a.pinned !== false); });
+      return { session: label, pinned: a.pinned !== false };
+    }
+    if (act === 'session.archive') {
+      if (!sc.archive || !await sc.archive(id, a.archived !== false)) throw new Error('the session could not be ' + (a.archived !== false ? 'archived' : 'restored') + (id === (Workstreams.generalId && Workstreams.generalId()) ? ' (General cannot be archived)' : ''));
+      await persistWorkstreams(save => { const w = rowOf(save); return !!w && !!w.archived === (a.archived !== false); });
+      return { session: label, archived: a.archived !== false };
+    }
+    if (act === 'session.delete') {
+      if (!sc.remove || !await sc.remove(id)) throw new Error('the session could not be deleted (General cannot be deleted, and a session that is working must be stopped first)');
+      await persistWorkstreams(save => !rowOf(save) && (save.deletedIds || []).indexOf(id) >= 0);
+      return { deleted: label, id };
+    }
+    throw new Error('unknown session action "' + act + '"');
+  }
+
   /* Delivery crosses browser pages, and frontend workstream ids are page-local until their saves converge.
      Prefer the id that launched the run; if this page does not know it, heal ONLY by a unique exact title.
      Substring matching is deliberately forbidden here: an automatic fold must never guess its destination. */
@@ -805,6 +929,45 @@ const StationCommands = (() => {
       if (typeof Channels !== 'undefined' && Channels.end) Channels.end(hit.w.id);
       try { if (typeof App !== 'undefined' && App.refreshRail) App.refreshRail(); } catch (_) {}
       return { settled: true, session: hit.w.title || 'General', resolvedBy: hit.resolvedBy };
+    },
+
+    /* STATION CONTROL (2026-10-02, "the agent can do anything the Commander asks"): what the Dossier CONFIG card, the
+       session rail's ⋯ menu and Settings › LOOK & SOUND show and change, for station.settings / station.control. Every
+       change runs the button's own setter and is proven by reading the save back (the roster/save) or localStorage
+       (the look), so a change that did not stick is a refusal, never a "done". */
+    'station.settings': () => {
+      if (typeof App === 'undefined' || !App.agents) throw new Error('the crew roster is not ready yet');
+      const out = {
+        crew: App.agents().map(a => ({ id: a.id, name: a.name, role: a.role, model: a.model || 'follows the station default', provider: a.provider || null,
+          reasoningEffort: a.reasoningEffort || null, approval: a.approvalMode || 'ask', reach: a.executionProfile, personality: a.personaId || null,
+          skin: a.skin || null, awayWork: !!a.workshop }))
+      };
+      if (typeof Workstreams !== 'undefined' && Workstreams.list) {
+        const gid = Workstreams.generalId ? Workstreams.generalId() : null;
+        out.sessions = (Workstreams.list({ includeArchived: true }) || []).filter(w => w && w.kind !== 'task').map(w => ({ id: w.id,
+          title: w.title != null ? w.title : (w.id === gid ? 'General' : null), agentId: w.agentId || 'agent', pinned: !!w.pinned, archived: !!w.archived,
+          group: w.conversationMode === 'group' }));
+      }
+      if (typeof StationUI !== 'undefined' && StationUI.lookNow) out.look = StationUI.lookNow();
+      out.options = {
+        approval: ['ask', 'full'], reach: ['station-gear', 'safe-cell', 'remote-ssh', 'trusted-project', 'this-computer'],
+        personality: typeof Personas !== 'undefined' && Personas.list ? Personas.list().map(p => p.id) : [],
+        skin: typeof DATA !== 'undefined' && DATA.SKINS ? Object.keys(DATA.SKINS) : [],
+        look: typeof StationUI !== 'undefined' && StationUI.lookOptions ? StationUI.lookOptions() : null
+      };
+      return out;
+    },
+    'station.control': async (a) => {
+      const act = String((a && a.action) || '');
+      if (/^agent\./.test(act)) return agentControl(act, a);
+      if (/^session\./.test(act)) return sessionControl(act, a);
+      if (act === 'look.set') {
+        if (typeof StationUI === 'undefined' || !StationUI.setLook) throw new Error('the look settings are not loaded on this page');
+        const r = StationUI.setLook(a.look);
+        if (!r.saved) throw new Error('the look changed on screen but this browser did not keep it (local storage refused) — it will reset on restart; do not report it as saved');
+        return r;
+      }
+      throw new Error('this page has no station control "' + act + '"; reload it');
     },
 
     /* Who is on the roster and what each one is for — the list a delegate call has to choose from. */

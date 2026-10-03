@@ -1,0 +1,287 @@
+/* sidecar/tools/builtin/station-control.js — the lead changes the STATION for the Commander, from chat.
+
+   WHY (Andrew 2026-10-02: "agents need to now be able to do anything themselves if the user asks … safely"): an audit of
+   every UI control against the lead's tools found ~40 things only a click could do — an agent's model, approval, reach,
+   personality, name, skin or deletion; renaming, pinning, archiving or deleting a session; forgetting a memory or pausing
+   learning; spending caps, Full Power, the autonomy dial, the scheduler; removing a connector, a skill from the market,
+   an app; the look of the station. These three tools close that, each change taking the SAME path its button takes:
+     • a page-owned setting (the crew roster, the session rail, LOOK & SOUND) runs the page's own setter over the station
+       bridge and is proven by reading the save back (frontend/app/stationcommands.js station.control);
+     • a server-owned setting calls the SAME /api route its window calls, in-process (deps.route), so every validator,
+       store write and live re-apply runs exactly as it does for a click.
+
+   THE SAFETY SHAPE ("safely"):
+     • station.settings READS (no consent). station.control CHANGES (the approval card in ASK, its own consent class,
+       locked once the run read untrusted content). station.power ESCALATES — anything that widens what agents may do
+       or spend without asking (Full Power, raising caps, the autonomy dial, the scheduler on, unattended key use, a
+       standing grant, trusting a folder, approving plugin/hook code, an agent to FULL or onto this computer). It has a
+       SEPARATE consent class, so an "always" given to a theme change can never pre-approve an escalation, and it is
+       refused on any run nobody is watching (a routine, the night shift, a webhook) — an unattended run can never
+       widen its own leash.
+     • Never, from any tool: entering or reading a credential (keys and sign-ins stay the Commander's: connectors.list
+       raises the CONNECT chip), answering a permission prompt, or lifting the E-STOP. The two routes that would lift a
+       halt as a side effect are guarded here: the autonomy dial is written with resumeHalt:false, and the scheduler is
+       never switched while the station is halted.
+     • Every result is what the route or the save read-back says. A refusal is returned as REFUSED: … so the model
+       cannot report a change that did not land.
+
+   makeStationControlTools({ station, route, surface, ownerTrusted, providerReady }) — station: the bridge
+   ({ request(verb,args) }); route(method, url, body) -> { status, json, text } (the sidecar's own route table, in-process);
+   surface: the run's surface ('interactive' | 'autonomous' | …); providerReady(id) -> bool (a provider has a credential). */
+'use strict';
+(function (root, factory) {
+  const api = factory();
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else { root.SK = root.SK || {}; root.SK.tools = root.SK.tools || {}; (root.SK.tools.builtin = root.SK.tools.builtin || {}).stationControl = api; }
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+
+  const clip = (s, n) => { s = String(s == null ? '' : s).replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
+  const q = s => '"' + clip(s, 60) + '"';
+  const onOff = v => v === true || v === 'on' || v === 'true';
+  const enc = encodeURIComponent;
+  const REACH_WIDE = ['trusted-project', 'this-computer'];
+
+  /* THE CATALOG. Each action: what it takes (`takes`, shown to the model), its tier (`power(args)` true = station.power
+     only), the card's sentence (`card(args)`, host-written — never the model's own words), and `run(args, env)`.
+     `page:true` runs over the station bridge (verb station.control); everything else calls a route. */
+  const A = {};
+  const def = (name, spec) => { A[name] = Object.assign({ name, power: () => false }, spec); };
+
+  // ---- the crew (page: the Dossier CONFIG card's own setters) ----
+  def('agent.model', { page: true, takes: '{agent, model ("" = follow the station default), provider?, effort?}',
+    card: a => (a.model ? 'set ' + q(a.agent) + ' to the model ' + q(a.model) + (a.provider ? ' on ' + clip(a.provider, 30) : '') + (a.effort ? ', reasoning ' + clip(a.effort, 20) : '') : 'set ' + q(a.agent) + ' to follow the station\'s default model') + '.' });
+  def('agent.personality', { page: true, takes: '{agent, personality}', card: a => 'give ' + q(a.agent) + ' the ' + clip(a.personality, 30) + ' personality.' });
+  def('agent.rename', { page: true, takes: '{agent, name}', card: a => 'rename ' + q(a.agent) + ' to ' + q(a.name) + '.' });
+  def('agent.skin', { page: true, takes: '{agent, skin}', card: a => 'change ' + q(a.agent) + '\'s look to the ' + clip(a.skin, 30) + ' skin.' });
+  def('agent.approval', { page: true, takes: '{agent, mode: ask|full}', power: a => a.mode === 'full',
+    card: a => a.mode === 'full' ? 'put ' + q(a.agent) + ' on FULL POWER: it acts without asking you first, every run from now on.' : 'make ' + q(a.agent) + ' ask you before it acts.' });
+  def('agent.reach', { page: true, takes: '{agent, reach: station-gear|safe-cell|remote-ssh|trusted-project|this-computer}', power: a => REACH_WIDE.indexOf(a.reach) >= 0,
+    card: a => 'set ' + q(a.agent) + '\'s reach to ' + clip(a.reach, 30) + (a.reach === 'this-computer' ? ': files and terminal anywhere on this computer.' : a.reach === 'trusted-project' ? ': files and terminal in your trusted projects.' : '.') });
+  def('agent.away_work', { page: true, takes: '{agent, on}', power: a => onOff(a.on),
+    card: a => onOff(a.on) ? 'let ' + q(a.agent) + ' build things in its own workspace while you are away.' : 'stop ' + q(a.agent) + ' building while you are away.' });
+  def('agent.delete', { page: true, takes: '{agent}', card: a => 'DELETE ' + q(a.agent) + ' from the crew (its notebook and workspace are archived, not wiped).' });
+
+  // ---- sessions (page: the rail's ⋯ menu) ----
+  def('session.rename', { page: true, takes: '{session, title}', card: a => 'rename the session ' + q(a.session) + ' to ' + q(a.title) + '.' });
+  def('session.pin', { page: true, takes: '{session, pinned?}', card: a => (a.pinned === false ? 'unpin ' : 'pin ') + 'the session ' + q(a.session) + '.' });
+  def('session.archive', { page: true, takes: '{session, archived?}', card: a => (a.archived === false ? 'restore ' : 'archive ') + 'the session ' + q(a.session) + '.' });
+  def('session.delete', { page: true, takes: '{session}', card: a => 'DELETE the session ' + q(a.session) + ' and its conversation.' });
+
+  // ---- look & sound (page: Settings › LOOK & SOUND) ----
+  def('look.set', { page: true, takes: '{look: {theme?, textScale?, crtGlass?, flicker?, sound?, roomLighting?, backdrop?, …}} (station.settings lists every key and value)',
+    card: a => 'change the station\'s look: ' + clip(Object.keys(a.look || {}).map(k => k + ' ' + (typeof a.look[k] === 'object' ? JSON.stringify(a.look[k]) : a.look[k])).join(', ') || 'nothing named', 160) + '.' });
+
+  // ---- spending (Settings › SPENDING LIMITS, AI & MODELS › backup models) ----
+  def('budget.set', { takes: '{perRun?, perAgent?, perDay?, global?} in dollars (0 = no cap, null = back to default)', power: () => true,
+    card: a => 'set your spending limits: ' + ['perRun', 'perAgent', 'perDay', 'global'].filter(k => k in a).map(k => k + ' ' + (a[k] === 0 ? 'NO CAP' : a[k] == null ? 'default' : '$' + a[k])).join(', ') + '.',
+    run: (a, env) => env.route('POST', '/api/budget/caps', pick(a, ['perRun', 'perAgent', 'perDay', 'global'])) });
+  def('budget.resume', { takes: '{scope: day|global}', power: () => true, card: a => 'grant one more cap\'s worth of headroom on the ' + clip(a.scope, 10) + ' spending pool.',
+    run: (a, env) => env.route('POST', '/api/budget/resume', { scope: a.scope }) });
+  def('fallback.set', { takes: '{models: ["model id", …] | null}', card: a => a.models ? 'set your backup models to ' + clip((a.models || []).join(', '), 160) + '.' : 'reset your backup models to the default.',
+    run: (a, env) => env.route('POST', '/api/fallback/chain', { models: a.models == null ? null : a.models }) });
+
+  // ---- permissions & autonomy ----
+  def('fullpower.set', { takes: '{on}', power: a => onOff(a.on),
+    card: a => onOff(a.on) ? 'turn on station-wide FULL POWER: every agent acts on this computer without asking.' : 'turn station-wide FULL POWER off.',
+    run: (a, env) => env.route('POST', '/api/permissions/bypass', { on: onOff(a.on) }) });
+  def('permission.grant', { takes: '{key: "cabinet:write"}', power: () => true, card: a => 'grant a standing approval for ' + clip(a.key, 40) + ' (no more asking for it).',
+    run: (a, env) => env.route('POST', '/api/permissions/grant', { key: a.key }) });
+  def('permission.revoke', { takes: '{key}', card: a => 'revoke the standing approval ' + clip(a.key, 40) + '.',
+    run: (a, env) => env.route('POST', '/api/permissions/revoke', { key: a.key }) });
+  def('autonomy.set', { takes: '{initiative?: wait|propose|leash|free, reach?: observe|sandbox|reach, leashPerDay?: 1-12}', power: () => true,
+    card: a => 'set the autonomy dial: ' + ['initiative', 'reach', 'leashPerDay'].filter(k => a[k] != null).map(k => k + ' ' + clip(a[k], 12)).join(', ') + ' (this never lifts an E-STOP).',
+    run: async (a, env) => {
+      const cur = await env.route('GET', '/api/autonomy/posture');
+      const s = (cur.json && cur.json.summary) || {};
+      const posture = { initiative: a.initiative || s.initiative, reach: a.reach || s.reach, leashPerDay: a.leashPerDay != null ? Number(a.leashPerDay) : s.leashPerDay };
+      // ⛔ resumeHalt:false — this route lifts the E-STOP when asked to; only the Commander lifts it
+      return env.route('POST', '/api/autonomy/posture', { posture, resumeHalt: false });
+    } });
+  def('scheduler.set', { takes: '{on}', power: a => onOff(a.on), card: a => (onOff(a.on) ? 'turn routines ON: scheduled jobs start running unattended.' : 'turn routines OFF.'),
+    run: async (a, env) => {
+      // ⛔ /api/cron/arm also lifts the routines E-STOP in either direction: never touch it while the station is halted
+      const h = await env.route('GET', '/api/halt');
+      if (h.json && h.json.halted) return refusal('the station is under an E-STOP. Only the Commander lifts it (RESUME AUTOMATION in the top bar); the scheduler was not changed');
+      return env.route('POST', '/api/cron/arm', { enabled: onOff(a.on) });
+    } });
+  def('nightshift.focus', { takes: '{ref (an absolute trusted-project path, a thread id, or "goal"), kind?: project|thread|goal} — or {clear:true}',
+    card: a => a.clear ? 'clear what autonomy focuses on.' : 'point autonomy at ' + q(a.ref) + '.',
+    run: (a, env) => a.clear ? env.route('DELETE', '/api/nightshift/focus') : env.route('POST', '/api/nightshift/focus', { ref: a.ref, kind: a.kind }) });
+  def('nightshift.avoid', { takes: '{ref, kind?} — or {ref, allow:true} to take it off the list',
+    card: a => a.allow ? 'let autonomy work on ' + q(a.ref) + ' again.' : 'put ' + q(a.ref) + ' off-limits for autonomy.',
+    run: (a, env) => a.allow ? env.route('DELETE', '/api/nightshift/avoid?ref=' + enc(String(a.ref || ''))) : env.route('POST', '/api/nightshift/avoid', { ref: a.ref, kind: a.kind }) });
+
+  // ---- memory & learning ----
+  def('memory.forget', { takes: '{agent, id}', card: a => 'make ' + q(a.agent || 'agent') + ' forget memory ' + clip(a.id, 40) + ' (it will not be learned again).',
+    run: (a, env) => env.route('POST', '/api/memory/forget', { agentId: a.agent || 'agent', id: a.id, reason: 'commander via chat' }) });
+  def('memory.pin', { takes: '{agent, id, pinned?}', card: a => (a.pinned === false ? 'unpin' : 'pin') + ' memory ' + clip(a.id, 40) + ' for ' + q(a.agent || 'agent') + '.',
+    run: (a, env) => env.route('POST', '/api/memory/pin', { agentId: a.agent || 'agent', id: a.id, pinned: a.pinned !== false }) });
+  def('memory.edit', { takes: '{agent, id, content}', card: a => 'rewrite ' + q(a.agent || 'agent') + '\'s memory ' + clip(a.id, 40) + ' as: "' + clip(a.content, 200) + '".',
+    run: (a, env) => env.route('POST', '/api/memory/edit', { agentId: a.agent || 'agent', id: a.id, content: a.content }) });
+  def('memory.reset', { takes: '{agent}', card: a => 'WIPE everything ' + q(a.agent || 'agent') + ' has learned (its notebook, to-do list and declined list).',
+    run: (a, env) => env.route('POST', '/api/memory/reset', { agentId: a.agent || 'agent' }) });
+  def('memory.settings', { takes: '{reflectEnabled?, reflectCooldownMs?, failureReviewEnabled?, failureReviewCooldownMs?}', card: a => 'change memory settings: ' + clip(JSON.stringify(pick(a, ['reflectEnabled', 'reflectCooldownMs', 'failureReviewEnabled', 'failureReviewCooldownMs'])), 160) + '.',
+    run: (a, env) => env.route('POST', '/api/memory/config', pick(a, ['reflectEnabled', 'reflectCooldownMs', 'failureReviewEnabled', 'failureReviewCooldownMs'])) });
+  def('learning.set', { takes: '{on}', card: a => (onOff(a.on) ? 'resume' : 'pause') + ' learning about you.',
+    run: (a, env) => env.route('POST', '/api/personalization', { enabled: onOff(a.on) }) });
+  def('learning.wipe', { takes: '{}', card: () => 'WIPE what the station has learned about your interests (interests, scouting, recommendations).',
+    run: (a, env) => env.route('DELETE', '/api/personalization') });
+
+  // ---- connections, abilities, skills ----
+  def('connector.remove', { takes: '{id}', card: a => 'disconnect and remove the connector ' + q(a.id) + '.', run: (a, env) => env.route('POST', '/api/connectors/remove', { id: a.id }) });
+  def('connector.refresh', { takes: '{id}', card: a => 'reconnect the connector ' + q(a.id) + '.', run: (a, env) => env.route('POST', '/api/connectors/refresh', { id: a.id }) });
+  def('ability.set', { takes: '{id (a toolset id from station.settings connections), on}', card: a => 'switch the ' + q(a.id) + ' abilities ' + (onOff(a.on) ? 'on' : 'off') + ' for the whole station.',
+    run: (a, env) => env.route('POST', '/api/toolsets/' + enc(String(a.id || '')), { enabled: onOff(a.on) }) });
+  def('skill.set', { takes: '{slug, on}', card: a => 'switch the skill ' + q(a.slug) + ' ' + (onOff(a.on) ? 'on' : 'off') + '.', run: (a, env) => env.route('POST', '/api/skills/toggle', { slug: a.slug, enabled: onOff(a.on) }) });
+  def('skill.install', { takes: '{slug}', card: a => 'install ' + q(a.slug) + ' from the Skill Market (a verified package).', run: (a, env) => env.route('POST', '/api/skill-market/install', { slug: a.slug }) });
+  def('skill.uninstall', { takes: '{slug}', card: a => 'uninstall the market skill ' + q(a.slug) + '.', run: (a, env) => env.route('POST', '/api/skill-market/uninstall', { slug: a.slug }) });
+  def('key.set', { takes: '{id, on}', card: a => (onOff(a.on) ? 'enable' : 'disable') + ' the saved API key ' + q(a.id) + '.', run: (a, env) => env.route('POST', '/api/servicekeys/toggle', { id: a.id, enabled: onOff(a.on) }) });
+  def('key.unattended', { takes: '{id, on}', power: a => onOff(a.on), card: a => onOff(a.on) ? 'let routines spend the API key ' + q(a.id) + ' while nobody is watching.' : 'stop routines using the API key ' + q(a.id) + ' unattended.',
+    run: (a, env) => env.route('POST', '/api/servicekeys/autonomy', { id: a.id, autonomous: onOff(a.on) }) });
+  def('key.remove', { takes: '{id}', card: a => 'delete the saved API key ' + q(a.id) + '.', run: (a, env) => env.route('POST', '/api/servicekeys/remove', { id: a.id }) });
+  def('spotify.disconnect', { takes: '{}', card: () => 'disconnect Spotify.', run: (a, env) => env.route('POST', '/api/spotify/disconnect') });
+  def('channels.notify', { takes: '{on}', card: a => (onOff(a.on) ? 'send' : 'stop sending') + ' completed-work updates to your chat channels.', run: (a, env) => env.route('POST', '/api/channels/notify', { on: onOff(a.on) }) });
+  def('plugin.approve', { takes: '{id}', power: () => true, card: a => 'approve the plugin ' + q(a.id) + ' exactly as its code stands now, so it runs.',
+    run: async (a, env) => {
+      const l = await env.route('GET', '/api/plugins');
+      const p = ((l.json && l.json.plugins) || []).find(x => x && x.id === a.id);
+      if (!p) return refusal('there is no plugin "' + clip(a.id, 40) + '"');
+      return env.route('POST', '/api/plugins/allow', { id: a.id, digest: p.digest });
+    } });
+  def('hook.approve', { takes: '{event, command}', power: () => true, card: a => 'approve the automatic command "' + clip(a.command, 120) + '" on ' + clip(a.event, 30) + ': it will run by itself every time.',
+    run: (a, env) => env.route('POST', '/api/hooks/allow', { event: a.event, command: a.command }) });
+
+  // ---- apps, projects, files, deliverables ----
+  def('app.delete', { takes: '{id}', card: a => 'DELETE the app ' + q(a.id) + '.', run: (a, env) => env.route('POST', '/api/apps/delete', { id: a.id }) });
+  def('app.rename', { takes: '{id, name}', card: a => 'rename the app ' + q(a.id) + ' to ' + q(a.name) + '.', run: (a, env) => env.route('POST', '/api/apps/rename', { id: a.id, name: a.name }) });
+  def('project.trust', { takes: '{path}', power: () => true, card: a => 'trust the folder ' + clip(a.path, 160) + ': agents may read and change files there.',
+    run: (a, env) => env.route('POST', '/api/projects/bless', { path: a.path }) });
+  def('project.untrust', { takes: '{root}', card: a => 'stop trusting the folder ' + clip(a.root, 160) + '.', run: (a, env) => env.route('POST', '/api/permissions/revoke', { key: 'path:' + String(a.root || '') }) });
+  def('checkpoint.restore', { takes: '{agent, snapshot}', card: a => 'rewind ' + q(a.agent || 'agent') + '\'s workspace to the checkpoint ' + clip(a.snapshot, 40) + ' (an undo point is saved first).',
+    run: (a, env) => env.route('POST', '/api/checkpoint/restore', { agentId: a.agent || 'agent', snapshotId: a.snapshot }) });
+  def('deliverable.decide', { takes: '{agent, runId, decision: keep|discard|later}', card: a => ({ keep: 'KEEP', discard: 'DISCARD', later: 'leave for later' }[a.decision] || 'decide on') + ' the away-work deliverable ' + clip(a.runId, 40) + ' from ' + q(a.agent || 'agent') + '.',
+    // destPath is deliberately never forwarded: the route copies files to any path it is given
+    run: (a, env) => ['keep', 'discard', 'later'].indexOf(a.decision) < 0 ? refusal('decision is keep, discard or later')
+      : env.route('POST', '/api/workshop/decide', { agentId: a.agent || 'agent', runId: a.runId, decision: a.decision }) });
+
+  function pick(o, keys) { const out = {}; for (const k of keys) if (o && Object.prototype.hasOwnProperty.call(o, k)) out[k] = o[k]; return out; }
+  function refusal(error) { return { status: 409, json: { error }, refused: true }; }
+
+  /* the approval card's words for a station.control / station.power call (index.js consentSummary) — host-written from
+     the catalog, never the model's own framing. A verb phrase: the COMMS card reads "<AGENT> wants to <this>" and a
+     paired phone's lock screen shows the same words. */
+  function cardFor(args) {
+    const spec = A[String((args && args.action) || '')];
+    if (!spec) return 'make an unknown station change (it will be refused, and nothing will change)';
+    const a = (args && args.args && typeof args.args === 'object') ? args.args : {};
+    try { return spec.card(a).replace(/\.$/, ''); } catch (_) { return 'make the station change ' + spec.name; }
+  }
+
+  /* READS for station.settings: one section at a time, so a 32k model is not handed every store at once */
+  const SECTIONS = {
+    crew: { page: true },   // crew, sessions, look + the options for each (the page's own state)
+    spending: [['GET', '/api/budget/status', j => ({ caps: j.caps, envDefaults: j.envDefaults, spentToday: j.spentToday, lifetime: j.lifetime })], ['GET', '/api/fallback/chain']],
+    permissions: [['GET', '/api/permissions'], ['GET', '/api/halt', j => ({ halted: j.halted })]],
+    autonomy: [['GET', '/api/autonomy/posture', j => ({ summary: j.summary })], ['GET', '/api/cron', j => ({ routinesOn: j.enabled, halted: j.halted, jobs: (j.jobs || []).length })], ['GET', '/api/nightshift/focus'], ['GET', '/api/halt', j => ({ halted: j.halted })]],
+    memory: [['GET', a => '/api/memory/records?agent=' + enc(a.agent || 'agent'), j => ({ agentId: j.agentId, records: (j.records || []).slice(0, 60).map(r => ({ id: r.id, kind: r.kind, title: r.title, body: clip(r.body, 160), pinned: !!r.pinned })) })],
+      ['GET', '/api/memory/config'], ['GET', '/api/personalization', j => ({ learning: j.enabled })]],
+    connections: [['GET', '/api/connectors', j => ({ connectors: (j.connectors || []).map(c => ({ id: c.id, label: c.label, enabled: c.enabled, state: c.state || c.status })) })],
+      ['GET', '/api/servicekeys', j => ({ keys: (j.keys || []).map(k => ({ id: k.id, name: k.name, enabled: k.enabled, autonomous: k.autonomous })) })],
+      ['GET', '/api/toolsets', j => ({ abilities: (j.toolsets || []).map(t => ({ id: t.id, label: t.label || t.name, enabled: t.enabled })) })], ['GET', '/api/spotify/status', j => ({ spotify: !!j.connected })]],
+    skills: [['GET', '/api/skills', j => ({ skills: (j.skills || []).map(s => ({ slug: s.slug || s.id, name: s.name, enabled: s.enabled })) })],
+      ['GET', '/api/skill-market', j => ({ market: (j.entries || []).map(e => ({ slug: e.slug, name: e.name, installed: !!e.installed, version: e.version })) })]],
+    apps: [['GET', '/api/apps', j => ({ apps: (j.apps || []).map(x => ({ id: x.id, name: x.name })), routinesOn: j.routinesOn })]],
+    projects: [['GET', '/api/projects', j => ({ projects: (j.projects || []).map(p => ({ name: p.name || p.label, root: p.root, trusted: !!p.blessed })) })]],
+    checkpoints: [['GET', a => '/api/checkpoint?agent=' + enc(a.agent || 'agent'), j => ({ enabled: j.enabled, snapshots: (j.snapshots || []).slice(0, 30) })]],
+    deliverables: [['GET', a => '/api/workshop/pending?agent=' + enc(a.agent || 'agent')]],
+    extensions: [['GET', '/api/plugins', j => ({ plugins: (j.plugins || []).map(p => ({ id: p.id, name: p.name, active: !!p.active, approved: !!(p.allowed || p.approved) })) })], ['GET', '/api/hooks', j => ({ hooks: j.hooks, pending: j.pending })]],
+    actions: { catalog: true }
+  };
+  const MAX_OUT = 14000;
+
+  function makeStationControlTools(deps) {
+    deps = deps || {};
+    const station = (deps.station && typeof deps.station.request === 'function') ? deps.station : null;
+    const route = typeof deps.route === 'function' ? deps.route : null;
+    const providerReady = typeof deps.providerReady === 'function' ? deps.providerReady : null;
+    const watched = deps.surface === 'interactive' || deps.ownerTrusted === true;
+    const refuse = (error, summary) => ({ content: 'REFUSED: ' + error + ' — do not report this change as done.', summary: summary || 'refused' });
+
+    async function page(verb, args) {
+      if (!station) return { status: 503, json: { error: 'this run has no station page attached — open StarNet to change this' } };
+      let out; try { out = await station.request(verb, args || {}); } catch (e) { out = { ok: false, error: String((e && e.message) || e) }; }
+      return out && out.ok ? { status: 200, json: out.result } : { status: 409, json: { error: String((out && out.error) || 'the station did not answer') } };
+    }
+    async function callRoute(method, url, body) {
+      if (!route) return { status: 503, json: { error: 'station settings are not reachable from this run' } };
+      try { return await route(method, url, body); } catch (e) { return { status: 500, json: { error: String((e && e.message) || e) } }; }
+    }
+    const env = { route: callRoute, page };
+    const errorOf = r => String((r && r.json && (r.json.error || r.json.reason)) || (r && r.text) || ('the station answered ' + (r && r.status)));
+    const shape = obj => { let s; try { s = JSON.stringify(obj); } catch (_) { s = '{}'; } return s.length > MAX_OUT ? s.slice(0, MAX_OUT) + '… (cut: ask for one section)' : s; };
+
+    const settingsTool = {
+      name: 'station.settings', capability: 'orchestrator', scope: 'read', requiresConsent: false, timeoutMs: 20000,
+      description: 'READ the Commander\'s station settings before changing them with station.control / station.power. section: crew (each agent\'s model, approval, reach, personality, skin; every session; the look; the allowed values for each) | spending | permissions | autonomy | memory {agent} | connections | skills | apps | projects | checkpoints {agent} | deliverables {agent} | extensions | actions (every change you can make and what it takes).',
+      schema: { type: 'object', properties: { section: { type: 'string', enum: Object.keys(SECTIONS) }, agent: { type: 'string' } } },
+      run: async (args) => {
+        const sec = String((args && args.section) || 'crew'), spec = SECTIONS[sec];
+        if (!spec) return refuse('there is no settings section "' + clip(sec, 30) + '"; use one of ' + Object.keys(SECTIONS).join(', '));
+        if (spec.catalog) {
+          // [station.power] = always an escalation; [station.power when …] = only the value that widens access or spending
+          const rows = Object.values(A).map(x => x.name + ' ' + x.takes + (x.power({}) ? '  [station.power]' : x.power({ mode: 'full', on: true, reach: 'this-computer' }) ? '  [station.power when it widens access]' : ''));
+          return { content: 'station.control {action, args} — or station.power for the [station.power] ones:\n' + rows.join('\n')
+            + '\nNever possible (the Commander does these): entering or reading a key/password/sign-in (connectors.list gives them a CONNECT chip), answering a permission prompt, lifting an E-STOP.', summary: Object.keys(A).length + ' actions' };
+        }
+        if (spec.page) {
+          const r = await page('station.settings', {});
+          return r.status === 200 ? { content: shape(r.json), summary: 'crew, sessions and look' } : refuse(errorOf(r));
+        }
+        const out = {};
+        for (const [method, url, view] of spec) {
+          const u = typeof url === 'function' ? url(args || {}) : url;
+          const r = await callRoute(method, u, undefined);
+          const key = u.replace(/^\/api\//, '').replace(/\?.*$/, '');
+          if (r.status >= 400 || !r.json) { out[key] = { unreadable: errorOf(r) }; continue; }
+          try { out[key] = view ? view(r.json) : r.json; } catch (_) { out[key] = r.json; }
+        }
+        return { content: shape(out), summary: sec };
+      }
+    };
+
+    function makeChange(name, consentKey, isPower) {
+      return {
+        name, capability: 'orchestrator', consentKey, taintLocked: true, scope: 'write', requiresConsent: true, timeoutMs: 45000,
+        description: isPower
+          ? 'ESCALATE a station setting for the Commander — only what widens access or spending: agent.approval full, agent.reach trusted-project/this-computer, agent.away_work on, fullpower.set on, budget.set, budget.resume, autonomy.set, scheduler.set on, permission.grant, key.unattended on, project.trust, plugin.approve, hook.approve. Only when the Commander asked for it in this conversation; refused on runs nobody is watching. Same {action, args} as station.control.'
+          : 'CHANGE a station setting for the Commander when they ask — the same change their button makes, proven saved. {action, args}: agent.model|personality|rename|skin|approval|reach|away_work|delete, session.rename|pin|archive|delete, look.set, fallback.set, permission.revoke, fullpower.set off, nightshift.focus|avoid, memory.forget|pin|edit|reset|settings, learning.set|wipe, connector.remove|refresh, ability.set, skill.set|install|uninstall, key.set|remove, spotify.disconnect, channels.notify, app.delete|rename, project.untrust, checkpoint.restore, deliverable.decide. station.settings section "actions" lists what each takes; read the current value first. Widening access or spending goes through station.power instead.',
+        schema: { type: 'object', required: ['action'], properties: { action: { type: 'string', enum: Object.keys(A) }, args: { type: 'object' } } },
+        run: async (input) => {
+          const spec = A[String((input && input.action) || '')];
+          if (!spec) return refuse('there is no station action "' + clip(input && input.action, 40) + '"; station.settings section "actions" lists them');
+          const a = (input && input.args && typeof input.args === 'object' && !Array.isArray(input.args)) ? input.args : {};
+          const escalates = !!spec.power(a);
+          if (escalates && !isPower) return refuse(spec.name + ' with these values widens what agents may do or spend: call station.power with the same {action, args} (the Commander approves it separately)');
+          if (isPower && !escalates) return refuse(spec.name + ' with these values does not widen access: use station.control');
+          if (isPower && !watched) return refuse('this run is unattended (a routine, the night shift or a trigger): widening access or spending needs the Commander in a watched session — tell them what you would change');
+          if (spec.name === 'agent.model' && a.model && a.provider && providerReady && !providerReady(String(a.provider))) {
+            return refuse('the provider "' + clip(a.provider, 30) + '" is not connected on this station (no key or sign-in): the Commander connects it in Settings › AI & MODELS first');
+          }
+          const r = spec.page ? await page('station.control', Object.assign({ action: spec.name }, a)) : await spec.run(a, env);
+          if (!r || r.status >= 400 || r.refused) return refuse(errorOf(r));
+          return { content: shape({ done: spec.name, result: r.json }), summary: spec.name };
+        }
+      };
+    }
+    const controlTool = makeChange('station.control', 'station.control', false);
+    const powerTool = makeChange('station.power', 'station.power', true);
+
+    return {
+      settingsTool, controlTool, powerTool,
+      register(reg) { reg.register(settingsTool); reg.register(controlTool); reg.register(powerTool); return reg; }
+    };
+  }
+
+  return { makeStationControlTools, cardFor, ACTIONS: A };
+});

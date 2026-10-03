@@ -4425,6 +4425,41 @@ const App = (() => {
       if (typeof StationUI !== 'undefined' && StationUI.notify) StationUI.notify((nowArchived ? 'archived ' : 'restored ') + '“' + label + '”', '', undefined, { transient: true });
     }
   }
+  /* SESSION CONTROL for the lead's station.control: the rail's ⋯ menu without the clicks. Same store calls, the same
+     group-chat pause/rename/remove first, the same busy guard on delete, then the rail repaints and the save persists.
+     Each returns true only when the store accepted the change; the caller proves it durable by reading the save back. */
+  async function renameSession(id, title) {
+    const w = Workstreams.get(id); if (!w) return false;
+    const v = String(title || '').trim().slice(0, 80);
+    if (!v) return false;
+    if (w.conversationMode === 'group' && typeof GroupChat !== 'undefined') await GroupChat.rename(id, v);
+    if (!Workstreams.rename(id, v)) return false;
+    persist();
+    if (id === Workstreams.activeId() && typeof Chat !== 'undefined' && Chat.load) { const a = Workstreams.active(); if (a) Chat.load(a); }
+    renderRail();
+    return true;
+  }
+  function pinSession(id, pinned) {
+    const w = Workstreams.get(id); if (!w) return false;
+    if (!!w.pinned !== !!pinned) Workstreams.pin(id, !!pinned);
+    renderRail(); persist();
+    return true;
+  }
+  async function archiveSession(id, archived) {
+    const w = Workstreams.get(id); if (!w || id === Workstreams.generalId()) return false;
+    if (!!w.archived === !!archived) return true;
+    const wasActive = (id === Workstreams.activeId());
+    if (archived && w.conversationMode === 'group' && typeof GroupChat !== 'undefined') await GroupChat.pause(id);
+    if (!Workstreams.archive(id, !!archived)) return false;
+    if (wasActive && Workstreams.activeId() !== id) loadActiveStream();
+    renderRail(); persist();
+    return true;
+  }
+  async function removeSession(id) {
+    const w = Workstreams.get(id); if (!w || id === Workstreams.generalId()) return false;
+    if (w.conversationMode === 'group' && typeof GroupChat !== 'undefined') { await GroupChat.remove(id); return deleteWorkstream(id, true); }
+    return deleteWorkstream(id);
+  }
   function deleteWorkstream(id, groupDeleted) {
     const w = Workstreams.get(id); const label = w ? (w.title || 'General') : '';
     if (w && w.conversationMode === 'group' && !groupDeleted && typeof GroupChat !== 'undefined') {
@@ -5685,5 +5720,9 @@ const App = (() => {
     station: () => station,
     setApproval: setAgentApproval,
     setExecutionProfile: setAgentExecutionProfile,
-    setStationProvider: setStationProvider };
+    setStationProvider: setStationProvider,
+    // station.control (the lead changes the station for the Commander): the Dossier CONFIG card's own setters and the
+    // session rail's ⋯ menu, so a change asked for in chat takes the exact path the buttons take
+    agentConfig: { setModel: setAgentModelPin, setPersona: setAgentPersona, setName: setAgentName, setSkin: setAgentSkin, setWorkshop: setAgentWorkshop, deleteAgent: deleteAgent },
+    sessionControl: { rename: renameSession, pin: pinSession, archive: archiveSession, remove: removeSession } };
 })();
