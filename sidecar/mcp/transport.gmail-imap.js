@@ -18,6 +18,7 @@
    Privacy: mailbox read access — google-relay-guard.js treats this endpoint like restricted Gmail, so mail
    content never reaches StarNet Managed. */
 
+const { note: failNote } = require('../failopen.js');
 const crypto = require('node:crypto');
 const imap = require('./imap-client.js');
 const smtp = require('./smtp-client.js');
@@ -220,7 +221,7 @@ function makeGmailImapTransport(opts) {
     catch (e) { return textResult(e.message, true); }
     const recipients = [].concat(a.to || [], a.cc || [], a.bcc || []).map(mailboxOf);
     let socket = null, timedOut = false;
-    const cancel = () => { if (socket) { try { socket.destroy(); } catch (_) {} } };
+    const cancel = () => { if (socket) { try { socket.destroy(); } catch (e) { failNote('mcp.gmailImap.cancel', e); } } };
     if (reqId != null) live.set(reqId, cancel);
     const timer = setTimeout(() => { timedOut = true; cancel(); }, timeoutMs);   // overall deadline, not just idle
     try {
@@ -289,7 +290,7 @@ function makeGmailImapTransport(opts) {
 
   return {
     send, onMessage(cb) { receive = cb; },
-    close() { closed = true; for (const abort of live.values()) { try { abort(); } catch (_) {} } live.clear(); }
+    close() { closed = true; for (const abort of live.values()) { try { abort(); } catch (e) { failNote('mcp.gmailImap.abort', e); } } live.clear(); }
   };
 }
 

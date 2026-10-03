@@ -22,6 +22,7 @@
 
    Not covered (derived content, see docs/GOOGLE_REVIEW_BUILD.md): an assistant's own prose that restates a
    message, memory notes or files the agent wrote from Google content. */
+const { note: failNote } = require('../failopen.js');
 const WITHHELD = '[Withheld: this Gmail / Google Drive result stays on this computer and is never sent to StarNet Managed. '
   + 'Switch this agent to your own model provider to work with it.]';
 
@@ -32,7 +33,7 @@ function makeGoogleRelayGuard({ googleClient, tools, mcpToolName, configs, extra
   // [{ service, matches(cfg) -> bool, tools: [{ name }] }] — non-OAuth mailbox connectors held to the restricted rule.
   const extras = Array.isArray(extraRestricted) ? extraRestricted.filter(x => x && x.service && typeof x.matches === 'function') : [];
   function restrictedService(cfg) {
-    for (const x of extras) { try { if (x.matches(cfg)) return x.service; } catch (_) {} }
+    for (const x of extras) { try { if (x.matches(cfg)) return x.service; } catch (e) { failNote('mcp.relayGuard.match', e); } }
     const svc = googleClient.serviceOf(cfg);
     return svc && googleClient.SERVICES[svc] && googleClient.SERVICES[svc].tier === 'restricted' ? svc : null;
   }

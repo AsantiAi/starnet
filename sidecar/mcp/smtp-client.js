@@ -9,6 +9,7 @@
    SECRET HYGIENE: the AUTH line is written once and never stored, echoed or logged. An auth failure is reported
    as kind 'auth' WITHOUT the server's reply text. Every path (success, error, timeout) destroys the socket. */
 
+const { note: failNote } = require('../failopen.js');
 const tls = require('node:tls');
 
 class SmtpError extends Error {
@@ -69,7 +70,7 @@ function sendMail(opts) {
         err.message += ' after the message was transmitted; it may have been sent, so check the Sent folder before retrying';
         err.effectUnknown = true;
       }
-      try { socket.destroy(); } catch (_) {}
+      try { socket.destroy(); } catch (e) { failNote('mcp.smtp.destroy', e); }
       if (err) reject(err); else resolve(value);
     }
     socket.setTimeout(idleMs, () => finish(new SmtpError('the mail server did not respond in time', 'timeout')));

@@ -12,6 +12,7 @@
    SECRET HYGIENE: the password is written to the socket once (LOGIN) and is never stored on the session, echoed
    into an error, or logged. Server text is only surfaced for non-auth failures, and never for the LOGIN command. */
 
+const { note: failNote } = require('../failopen.js');
 const tls = require('node:tls');
 
 class ImapError extends Error {
@@ -114,7 +115,7 @@ function openSession(opts) {
       if (fatal) return;
       fatal = err;
       closed = true;
-      try { socket.destroy(); } catch (_) {}
+      try { socket.destroy(); } catch (e) { failNote('mcp.imap.destroy', e); }
       if (!greeted) { greeted = true; rejectOpen(err); }
       if (current) { const c = current; current = null; c.reject(err); }
     }
@@ -271,13 +272,13 @@ function openSession(opts) {
 
     async function logout() {
       if (fatal || closed) return;
-      try { await command(['LOGOUT'], { logout: true }); } catch (_) {}
+      try { await command(['LOGOUT'], { logout: true }); } catch (e) { failNote('mcp.imap.logout', e); }
       close();
     }
     function close() {
       closed = true;
       if (!fatal) fatal = new ImapError('the mail session is closed', 'closed');
-      try { socket.destroy(); } catch (_) {}
+      try { socket.destroy(); } catch (e) { failNote('mcp.imap.close', e); }
       if (current) { const c = current; current = null; c.reject(fatal); }
     }
 
