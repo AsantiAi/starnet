@@ -4034,7 +4034,9 @@ const App = (() => {
   }
   function railRowTip(w, st, project = false) {
     const full = railModelFull(w);
-    return (w.title || 'General') + (w.archived ? ' · archived' : '') + (st.status ? ' · ' + st.status : '')
+    // the latest line rides the hover tip: the row itself is name + agent + time (NO SENTENCES UNDER TILES)
+    const latest = !project && typeof railReceipt === 'function' ? railReceipt(w) : '';
+    return (w.title || 'General') + (latest ? ' — ' + latest : '') + (w.archived ? ' · archived' : '') + (st.status ? ' · ' + st.status : '')
       + (Workstreams.unread(w) && !st.dot.includes('unseen') ? ' · unread activity' : '')
       + (w.kind === 'task' ? ' · board: ' + w.lane : '')
       + (full ? ' · last run on ' + full : '')
