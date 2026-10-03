@@ -6122,6 +6122,7 @@ const cronDriver = makeCronDriver({
       const hs = { buf: '', errMsg: null, usd: 0 };
       const sink = (name, payload) => {
         const p = payload || {};
+        if (name === 'agent.run.end' && p && p.reason === 'cancelled') hs.stopped = true;   // STOP on this step: the line stops here, never hands its half answer on
         if (name === 'agent.token') { hs.buf += (p.delta || ''); return; }
         if (name === 'agent.tool_call') hs.buf = '';
         if (name === 'agent.run.error') hs.errMsg = p.message || 'run error';
@@ -6157,7 +6158,7 @@ const cronDriver = makeCronDriver({
         });
       } catch (e) { hs.errMsg = hs.errMsg || ('run failed: ' + ((e && e.message) || e)); }
       finally { runsMeta.delete(hopRunId); }
-      return { text: hs.buf, usd: hs.usd, error: hs.errMsg };
+      return { text: hs.buf, usd: hs.usd, error: hs.errMsg || (hs.stopped ? 'stopped by you' : null) };
     }
   })
 });
@@ -14865,6 +14866,7 @@ async function handleCronRun(req, res) {
             const hopSink = (name, payload) => {
               try { emit(name, payload); } catch (_) {}
               const p = payload || {};
+              if (name === 'agent.run.end' && p && p.reason === 'cancelled') hs.stopped = true;   // STOP on this step: the line stops here, never hands its half answer on
               if (name === 'agent.token') hs.buf += (p.delta || '');
               else if (name === 'agent.tool_call') hs.buf = '';
               else if (name === 'agent.run.error') hs.errMsg = p.message || 'run error';
@@ -14900,7 +14902,7 @@ async function handleCronRun(req, res) {
               });
             } catch (e) { hs.errMsg = hs.errMsg || ('run failed: ' + ((e && e.message) || e)); }
             finally { runsMeta.delete(hopRunId); }
-            return { text: hs.buf, usd: hs.usd, error: hs.errMsg };
+            return { text: hs.buf, usd: hs.usd, error: hs.errMsg || (hs.stopped ? 'stopped by you' : null) };
           }
         });
         if (line && String(line.text || '').trim()) state.buf = line.text;

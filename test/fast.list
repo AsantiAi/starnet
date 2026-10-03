@@ -754,6 +754,7 @@ test/channels.setup-guide.test.js
 test/channels.hub.test.js
 test/channels.forwarded-taint.test.js
 test/channels.workline-transcript.test.js
+test/line-hop-stop.test.js
 test/cross-surface-continuity.test.js
 test/channels.outbox.test.js
 test/channels.commands.test.js
