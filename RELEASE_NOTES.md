@@ -1,6 +1,6 @@
 # StarNet v0.13.1
 
-A repair update: web requests work again, group chats save and show who is in them, COMMS reads like a conversation, crew no longer freeze in the halls, each floor OUTBOX shows only its own line's work, and schedules let you pick who they run as.
+A repair update: web requests work again, group chats save and show who is in them, COMMS reads like a conversation, crew no longer freeze in the halls, each floor OUTBOX shows only its own line's work, schedules let you pick who they run as, and spending limits hold during retries.
 
 ## Fixed
 
@@ -11,7 +11,16 @@ A repair update: web requests work again, group chats save and show who is in th
 
 ### Group chats
 
-- TODO: group chat fixes (pending merge of the group chat repair).
+- **Adding an agent saves at once.** + ADD and REMOVE now save the moment you press them. Before, an add was only staged until a save key that could sit below the window's edge, so minimizing StarNet lost it. IN THIS CHAT lists only members the station has confirmed.
+- **@ works in every chat.** Type @ in any chat to pick an agent from a menu over the message box (arrow keys, Enter or Tab to pick, Esc to close, @all in a group). Picking an agent who is not in the chat adds them first: a direct chat becomes a group, and from General a new group opens beside it.
+- **Names with spaces.** "@RESEARCHER 2" now reaches RESEARCHER 2, not RESEARCHER. A crew agent outside the chat is named as "not in this chat yet", and an unknown @name tells you how to send it as plain text.
+- **You can tell it is a group.** Group rows carry a [GROUP] tag, the COMMS header leads with [ GROUP ] and lists the members in their colour (past two lines, the rest fold into +N), and the transcript speaks the same conversation style as COMMS.
+- **Groups you are not viewing still reach you.** Replies, questions and approvals in another group now show on its row (Working, Reply needed, Approval needed) and mark it unread. Before, an approval there could go unseen until it was automatically denied after 5 minutes.
+- **A steadier transcript.** Text you select stays selected while agents reply, every message has a copy key, and back-to-back replies from different agents each show their name.
+- **Pauses are explicit.** A paused group shows one CONTINUE, a reply the pause stopped is named under its message with a RETRY, and sending to a paused group no longer starts work queued before the pause ahead of your message.
+- **Approvals fit.** Approval keys sit on the first line of their row and rows that need you sort first, so ALLOW ONCE and DENY are no longer clipped in a short window.
+- **A group survives crew changes.** Deleting an agent that sat in a group no longer breaks the group: it leaves the group, @all and plain messages go to the members still on the crew, and if it led the group the lead passes on.
+- **Turning a chat into a group** no longer fails on one oversized or missing attachment; the readable files are shared and the message names the one that was not.
 
 ### COMMS readability
 
@@ -42,10 +51,10 @@ A repair update: web requests work again, group chats save and show who is in th
 
 ### Spending, providers & delegation
 
-- **Spending limits hold during retries.** A run now checks its per-run limit and the station's spending caps before every retry and recovery attempt, not only between turns, so retrying can no longer carry a run past a limit.
-- **Quest refresh respects spending caps.** Refreshing quests by hand is skipped, with the reason, when a spending cap has been reached.
-- **OpenRouter key check is real.** Checking OpenRouter now tests your current key against OpenRouter itself; before, a reachable model list alone could report it as working.
-- **Delegated work can be verified.** A lead asked to confirm work it dispatched can now look the run up, instead of concluding the worker never ran. The worker's Dossier RECORD tab shows that run up front as "delegated by" its lead.
+- **Spending limits hold during retries.** A run now checks its per-run limit and the station's spending caps before every retry and recovery attempt, not only between turns, so a run stops retrying once a limit is reached.
+- **Quest refresh respects spending caps.** Quest refresh, automatic or by hand, no longer calls a provider once a spending cap is reached; the Quests panel marks the cycle skipped.
+- **Provider status tells the truth about keys.** In Settings, OpenRouter now tests your saved key against OpenRouter itself and can show VERIFIED. A custom endpoint whose model list is public no longer shows VERIFIED for a key it never tested.
+- **Delegated work can be verified.** A lead asked to confirm work it dispatched can now look up the finished run, instead of concluding the worker never ran. The worker's Dossier RECORD tab shows that run up front as "delegated by" its lead.
 
 ## Known issues
 
