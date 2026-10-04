@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "b4f3b258582dc4b16124cbc53d3e72a947d8db49",
+    "sourceCommit": "2f29ee92669bf222992c503892d5357a154bbd25",
     "pathSetSha256": "fac5552f81f0dd00ab64856cfdfc9f107fcb0517a3ef0449f4018b13e983e609",
     "files": [
       {
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 424805,
-        "sha256": "c2d92cfc0ae4bb68c55cbe8fa37537dff55e79a9d022761c9061380896e501c8"
+        "bytes": 424873,
+        "sha256": "cfdc5bedae2b6923d470aafa820f1350f00c5eab58d3c84e797db445baba17e5"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 716320,
-        "sha256": "bdfd41cdfdf49c64a6bd23919f8d4221533090ba961ca1d111daafef7781da3c"
+        "bytes": 716435,
+        "sha256": "fdb44e9f6f4081f5a02a2e893f329ec87795f9cba62ccb08c871bd47fb77790e"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -543,8 +543,8 @@
       },
       {
         "path": "frontend/app/group-chat.js",
-        "bytes": 66517,
-        "sha256": "20b12ca9aa77a983d5f3e2f6da8bdd9385c6230e5c186751537881c16c4a5320"
+        "bytes": 68643,
+        "sha256": "472b83adc131697a1661d024af0fd0cc44a8fa6e5b6ddfe067f4488d37494248"
       },
       {
         "path": "frontend/app/harness.js",
@@ -1498,8 +1498,8 @@
       },
       {
         "path": "frontend/css/app.css",
-        "bytes": 415800,
-        "sha256": "f6fe7de502fd85f0123570f2afd5e6a81903bc8bf0776be9603ac51e662a66ac"
+        "bytes": 415830,
+        "sha256": "bd02ba556d0bc53b741c626b06f467d3a1f400b3a64df780d8be3e6b5015ed55"
       },
       {
         "path": "frontend/css/asciifx.css",
