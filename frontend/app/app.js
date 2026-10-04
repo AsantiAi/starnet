@@ -3240,10 +3240,9 @@ const App = (() => {
     World.spawn(agent);
     World.setOnClick(openWorldAgent);
     World.setOnArcade(() => { if (typeof StationUI !== 'undefined' && StationUI.openArcade) StationUI.openArcade(); });   // click a cabinet → BREACH PROTOCOL
-    // 2026-07-16 UX fix: the OUTBOX click opens the OUTBOX window — one clean list of ALL uncollected
-    // finished work, readable + rateable in place (the old path fired a one-crate chat beat, which read
-    // as a context-free popup). The window's footer links to the LOGBOOK for the full run history.
-    if (World.setOnOutbox) World.setOnOutbox(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('outbox'); });
+    // A FLOOR OUTBOX IS ITS OWN LINE'S (Andrew 10-03): the click opens the workflow that ships into THAT OUTBOX — its
+    // newest result, its last jobs — never DELIVERABLES (every finished run on the station) and never another line's work.
+    if (World.setOnOutbox) World.setOnOutbox(ob => { if (typeof WorkflowsWindow !== 'undefined' && WorkflowsWindow.openOutbox) WorkflowsWindow.openOutbox(ob && ob.id); });
     if (World.setOnMissionBoard) World.setOnMissionBoard(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('quests'); });   // G1b: click the MISSION BOARD → the QUEST LOG (the board is a projection, never a gate)
     if (World.setOnTrophyCase) World.setOnTrophyCase(() => { if (typeof StationUI !== 'undefined' && StationUI.openTerm) StationUI.openTerm('trophies'); });   // G3b: click the TROPHY CASE → the TROPHY surface (a projection of real completions, never a gate)
     // a PLUGIN TERMINAL is the plugin's body: a click opens its window. An unbound or turned-off one says so and opens

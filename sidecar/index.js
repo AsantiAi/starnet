@@ -15727,9 +15727,37 @@ async function deliverableRows() {
       }
     }
   }
+  /* WORKFLOW JOBS (Andrew 10-03: "a user clicks the outbox of a conveyor system, they only see the output from that
+     specific system, but it should ALSO show up in deliverables"). Every job a line finished is ONE library row — the
+     ask, what the line delivered (the job record's own output), and every file any of its steps wrote — so a text-only
+     result is filed here too and stays after its TO REVIEW crate is collected. Its stages' runs fold INTO that row
+     (never listed again as loose run rows). A job where no step ran is not output (its text is the route's warning) and is left out. */
+  const jobOfRun = new Map(), jobRows = [];
+  for (const job of ((lineJobs && Array.isArray(lineJobs.jobs)) ? lineJobs.jobs : [])) {
+    if (!job || job.status === 'running') continue;
+    const output = String(job.output || '').trim();
+    if (job.status !== 'delivered' && !((job.runs || []).length && output)) continue;   // nothing ran: its text is a warning, not output
+    const last = (job.runs || [])[0] || null;   // newest-first: [0] is the stage whose reply the line delivered
+    const ask = String(job.text || '').replace(/\s+/g, ' ').trim();
+    const row = {
+      id: 'line:' + job.id, agentId: (last && last.agentId) || '', runId: (last && last.runId) || '', jobId: job.id, line: job.line,
+      title: ((job.name ? job.name + ' — ' : '') + (ask || 'workflow job')).slice(0, 120), source: 'workflow',
+      status: job.status === 'delivered' ? 'produced' : 'failed', kind: 'workflow',
+      summary: output.replace(/\s+/g, ' ').slice(0, 220), output: output, authored: false, ask: String(job.text || ''),
+      files: [], createdAt: job.endedAt || job.startedAt || 0, updatedAt: job.endedAt || job.startedAt || 0,
+      actions: { open: false, keep: false, discard: false }
+    };
+    jobRows.push(row);
+    for (const r of (job.runs || [])) if (r && r.runId) jobOfRun.set(r.runId, row);
+  }
   for (const run of runStore.list(null, { limit: 1000 })) {
     if (/^workshop-/.test(String(run.streamId || ''))) continue;
     const arts = run.artifacts || [];
+    const jobRow = jobOfRun.get(run.runId);
+    if (jobRow) {   // a workflow stage: its files join its job's row (deduped by path)
+      for (const a of arts) if (a.path && !jobRow.files.some(f => f.path === a.path)) jobRow.files.push(deliverableFile(run.agentId, run.runId, a, false, run.projectRoot || ''));
+      continue;
+    }
     // A run with no artifacts AND no name is not a deliverable — it is a conversation, and COMMS owns those.
     // But a run the agent explicitly NAMED belongs here even if it wrote nothing to disk: dropping it would
     // silently discard a declaration the agent made on the record, and the Commander would have no way to know
@@ -15764,6 +15792,7 @@ async function deliverableRows() {
       rows.push({ id: 'run:' + run.runId + ':' + i, agentId: run.agentId, runId: run.runId, title: path.basename(p || a.target || (run.title + ' output')), source: 'run', status: status, kind: a.kind, summary: '', authored: false, ask: ask, files, target: a.target || '', size: deliverableSize(files), createdAt: run.ts || 0, updatedAt: run.ts || 0, actions: { open: files.length > 0, keep: false, discard: false } });
     });
   }
+  for (const row of jobRows) { row.size = deliverableSize(row.files); row.actions.open = row.files.length > 0; rows.push(row); }
   // DELIVERABLE ORGANIZATION — stamp the two DERIVED fields on every row, whatever source built it. Done in one
   // pass here rather than in each of the three loops above so there is exactly ONE place that decides how a
   // deliverable is attributed and filed. Both answers come from the run log; neither is ever model-supplied.
