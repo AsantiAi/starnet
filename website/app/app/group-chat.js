@@ -145,7 +145,9 @@ const GroupChat = (() => {
       body #chat-panel #gc-log>.gc-message.cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable)+.gc-message.cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable):not(.gc-cont){margin-top:6px}
       body #chat-panel #gc-log>.gc-message.cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable)+.gc-message.cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable):not(.gc-cont)>.cmsg-head{display:flex;justify-content:flex-start;margin:0 2px 4px}
       body #chat-panel #gc-log>.gc-message.cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable)+.gc-message.cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable):not(.gc-cont)>.cmsg-head>.who{display:inline-block}
-      #gc-log>.gc-masthead{flex:0 0 auto}#gc-log .gc-masthead .bc-name{margin:0 2px}#gc-log .gc-masthead .gc-how{text-transform:none;letter-spacing:.4px;opacity:.75}
+      #gc-log>.gc-masthead{flex:0 0 auto}#gc-log .gc-masthead .bc-name{margin:0 2px}
+      body #chat-panel #gc-log .cmsg.broadcast.gc-masthead .bc-line.gc-how{text-transform:none;letter-spacing:.4px;opacity:.75}
+      body #chat-panel #gc-log .gc-message.agent .who.gc-who:is(:hover,:focus-visible){color:var(--ph-bright);text-shadow:0 0 5px var(--ph-glow)}
       .gc-message.draft .body{opacity:.85}.gc-message.draft .body::after{content:'▌';color:var(--ph);animation:1s steps(1) infinite comms-blink}
       .gc-message .gc-partial{display:block;margin-top:4px;font-size:12px;letter-spacing:.5px;color:var(--gold)}
       #gc-recipients:not(:empty){padding:4px 12px;font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:var(--ph-dim);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
@@ -191,7 +193,7 @@ const GroupChat = (() => {
       .gc-picker-footer{flex:0 0 auto;position:sticky;bottom:0;display:flex;align-items:center;gap:8px;padding:10px 0 0;border-top:1px solid var(--ph-faint);background:var(--panel)}.gc-picker-footer .gc-delta{flex:1 1 auto;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--ph-dim)}
       .gc-picker-footer .gc-delta.ok{color:var(--ph)}.gc-picker-footer .bb.primary{color:var(--ph-bright);border-color:var(--ph-dim)}
     `; document.head.append(css);
-    discover().catch(showError);
+    discover().catch(e => { notice = e.message || String(e); });   // quiet: nobody asked yet (and the website embed has no sidecar)
     watch();
   }
   /* A group you are not looking at still owes you its news: replies land, questions wait, approvals expire in 5 minutes.
@@ -508,6 +510,8 @@ const GroupChat = (() => {
     if (!origin) throw new Error('Open a chat first');
     if (origin.conversationMode === 'group') throw new Error('This chat is already a group');
     const lead = origin.agentId || 'agent', general = isGeneral(origin);
+    // the words in THIS chat's box, taken now: if you switch chats while it is created, the box holds another chat's words
+    const box = $('chat-input'), draft = box && active?.id === origin.id ? box.value : (composerDrafts.get(origin.id) || '');
     const members = [lead, ...ids.filter(id => id !== lead)];
     if (!general && typeof Chat !== 'undefined' && Chat.isBusy && active?.id === origin.id && Chat.isBusy()) throw new Error(name(lead) + ' is still working in this chat. Let the run finish (or stop it), then add agents.');
     if (typeof App !== 'undefined' && App.pushRoster) await App.pushRoster();   // the backend must know every agent it seats
@@ -516,10 +520,12 @@ const GroupChat = (() => {
     const g = await api(general ? { op: 'create', id, members, leadId: lead, title }
       : { op: 'create', id, conversionKey: origin.id, history: origin.history, originalAgentId: lead, members, leadId: lead, title });
     adopt(g); save();
-    // the words in the message box travel with the conversation (General's box is left empty: they moved)
-    const input = $('chat-input'), draft = input ? input.value : '';
-    composerDrafts.set(g.id, draft); if (general) composerDrafts.set(origin.id, '');
+    const still = !active || active.id === origin.id;
+    // the words in the message box travel with the conversation — what is in it NOW if you stayed (you may have kept
+    // typing), the snapshot if you left (the box holds another chat's words). General's box is left empty: they moved.
+    composerDrafts.set(g.id, still && box ? box.value : draft); if (general) composerDrafts.set(origin.id, '');
     if (pickerFor === origin.id) pickerFor = g.id;
+    if (!still) return g;   // you moved on while it was created: it waits in the rail, you are not pulled back
     active = null;   // a same-id conversion must rebind COMMS (bind returns early for the session it already shows)
     if (typeof App !== 'undefined' && App.openWorkstream) App.openWorkstream(g.id);
     if (typeof Chat !== 'undefined' && Chat.load) Chat.load(Workstreams.get(g.id));
@@ -552,7 +558,8 @@ const GroupChat = (() => {
   // the handle written into the message: the agent's name when it is one word no one else wears, else its stable id
   function handleFor(id) {
     const list = crew(), nm = list.find(a => a.id === id)?.name || id;
-    const clash = list.some(a => a.id !== id && (a.name.toLowerCase() === nm.toLowerCase() || a.id === nm));
+    const lower = nm.toLowerCase();
+    const clash = list.some(a => a.id !== id && (a.name.toLowerCase() === lower || a.id === nm || a.name.toLowerCase().startsWith(lower + ' ')));
     return /^[\w-]+$/.test(nm) && !clash ? nm : id;
   }
   function autocomplete() {
@@ -609,9 +616,12 @@ const GroupChat = (() => {
       mentionBusy = false;
     }
     const handle = item.all ? 'all' : handleFor(item.id);
-    const text = ctx.original.slice(0, ctx.start) + '@' + handle + ' ' + ctx.original.slice(ctx.end);
-    input.value = text;
-    const caret = ctx.start + handle.length + 2; if (input.setSelectionRange) input.setSelectionRange(caret, caret);
+    // the box may have moved on while the agent was being added: splice into what is there NOW, never the snapshot
+    const cur = input.value, head = ctx.original.slice(0, ctx.end);
+    if (cur.slice(0, ctx.end) === head) {
+      input.value = cur.slice(0, ctx.start) + '@' + handle + ' ' + cur.slice(ctx.end).replace(/^ /, '');
+      const caret = cur === ctx.original ? ctx.start + handle.length + 2 : input.value.length; if (input.setSelectionRange) input.setSelectionRange(caret, caret);
+    }
     draftKey = null; selected = []; replyTo = null; recipientLabel(); closeMentions(); if (input.focus) input.focus();
     if (typeof Chat !== 'undefined' && Chat.autoGrowInput) Chat.autoGrowInput();
   }
@@ -619,6 +629,7 @@ const GroupChat = (() => {
   function mentionKey(e) {
     const list = $('gc-mentions');
     if (!mentionItems.length || !list || !list.children.length) return false;
+    if (!mentionCtx || $('chat-input')?.value !== mentionCtx.original) { closeMentions(); return false; }   // stale menu: the box moved on
     const n = mentionItems.length;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); mentionSel = (mentionSel + (e.key === 'ArrowDown' ? 1 : -1) + n) % n; renderMentions(); return true; }
     if ((e.key === 'Enter' && !e.shiftKey && !e.isComposing) || (e.key === 'Tab' && !e.shiftKey)) { e.preventDefault(); acceptMention(mentionItems[mentionSel]); return true; }
@@ -631,16 +642,24 @@ const GroupChat = (() => {
     if (!ws || ws.conversationMode === 'group') return [];
     const plain = String(text || '').replace(/```[\s\S]*?```|`[^`]*`/g, '').replace(/^>.*$/gm, '');
     const list = crew(), out = [];
-    for (const m of plain.matchAll(/(?:^|\s)@([\w-]+)/g)) {
-      const hd = m[1], exact = list.find(a => a.id === hd);
-      const hits = exact ? [exact] : list.filter(a => a.name.toLowerCase() === hd.toLowerCase());
+    for (const m of plain.matchAll(/(?:^|\s)@(?=[\w-])/g)) {
+      const rest = plain.slice(m.index + m[0].length), hd = rest.match(/^[\w-]+/)[0];
+      const named = list.filter(a => rest.slice(0, a.name.length).toLowerCase() === a.name.toLowerCase() && !/[\w-]/.test(rest.charAt(a.name.length)));
+      const best = Math.max(0, ...named.map(a => a.name.length)), longest = named.filter(a => a.name.length === best);
+      const exact = best > hd.length ? null : list.find(a => a.id === hd);
+      const hits = exact ? [exact] : longest;
       if (hits.length !== 1) continue;
       const id = hits[0].id; if (id !== (ws.agentId || 'agent') && !out.includes(id)) out.push(id);
     }
     return out;
   }
+  const converting = new Map();   // origin id → the conversion in flight (a second Enter must not create a second group)
   async function startWith(ids) {
-    try { closeMentions(); return await startGroup(active, ids); } catch (e) { showError(e); return null; }
+    const origin = active; if (!origin) return null;
+    if (converting.has(origin.id)) return converting.get(origin.id);
+    const run = (async () => { try { closeMentions(); return await startGroup(origin, ids); } catch (e) { showError(e); return null; } finally { converting.delete(origin.id); } })();
+    converting.set(origin.id, run);
+    return run;
   }
 
   async function answerQuestion(id, questionId, text) {
@@ -771,10 +790,12 @@ const GroupChat = (() => {
         outEmpty.replaceChildren();
         if (!outs.length) { outEmpty.append('Your whole crew is already in this chat. Recruit more under CREW.'); }
         hint.replaceChildren('Talk to one agent with ', h('b', {}, '@name'), '. Without an @, ', h('b', {}, name(leadNow())), ' answers. Everyone here sees the whole conversation and its shared files.');
+        if (current) shown = current.members.join('\n') + '|' + current.leadId;
         delta.textContent = status || (current ? ins.length + (ins.length === 1 ? ' agent' : ' agents') + ' in this chat' : '+ ADD starts a group chat');
         delta.classList.toggle('ok', statusOk);
       }
-      pickerRepaint = g => { if (!saving) { current = g; render(); } };
+      let shown = '';
+      pickerRepaint = g => { const k = g.members.join('\n') + '|' + g.leadId; current = g; if (!saving && k !== shown) render(); };
       if (search) search.addEventListener('input', render);
       render();
     } catch (e) {
