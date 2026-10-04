@@ -402,6 +402,23 @@ const a1 = R.importRecipe({ name: 'Dup', task: 'Do {a}.' });
 const a2 = R.importRecipe({ name: 'Dup', task: 'Do {b}.' });
 A.ok(a1.recipe.id !== a2.recipe.id, 'two imports of the same name get distinct ids (never overwrite): ' + a1.recipe.id + ' vs ' + a2.recipe.id);
 A.eq(R.customs().length, 2, 'both imports persisted as separate customs');
+// SAME-NAME GUARD (user feedback 10-03): the second import is told about the clash and lands under a distinct name
+A.eq(a1.renamedFrom, undefined, 'the first import of a fresh name is not renamed');
+A.eq(a2.recipe.name, 'Dup (2)', 'a re-import of an existing name lands as "Dup (2)", never an indistinguishable twin');
+A.eq(a2.renamedFrom, 'Dup', 'the import reports which name it clashed with');
+A.eq(a2.clashId, a1.recipe.id, 'the import reports which recipe it clashed with');
+A.eq(R.findByName('  dup ').id, a1.recipe.id, 'findByName ignores case and outer spacing');
+A.eq(R.findByName('Dup', a1.recipe.id), null, 'findByName skips the recipe being edited (exceptId)');
+A.eq(R.uniqueName('Dup'), 'Dup (3)', 'uniqueName picks the next free suffix');
+// saved timestamps: stamped on save, createdAt kept and updatedAt moved on an in-place edit
+A.ok(Number.isFinite(a1.recipe.createdAt) && Number.isFinite(a1.recipe.updatedAt), 'a saved custom carries createdAt/updatedAt');
+const realNow = Date.now; Date.now = () => a1.recipe.updatedAt + 5000;
+const reSaved = R.saveCustom(Object.assign({}, R.get(a1.recipe.id), { task: 'Do {a} better.' }));
+Date.now = realNow;
+A.eq(reSaved.id, a1.recipe.id, 'an edit saves in place (same id)');
+A.eq(reSaved.createdAt, a1.recipe.createdAt, 'an edit keeps the original createdAt');
+A.eq(reSaved.updatedAt, a1.recipe.updatedAt + 5000, 'an edit moves updatedAt');
+A.ok(!('updatedAt' in R.exportRecipe(a1.recipe.id)), 'timestamps are local provenance — never exported');
 R.removeCustom(a1.recipe.id); R.removeCustom(a2.recipe.id);
 
 /* goalKeywordScore(): deterministic keyword overlap (name+tagline+tags), case-insensitive, >=3-char words. */

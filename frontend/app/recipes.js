@@ -441,7 +441,11 @@
       // G3a seed callouts: a recipe the AGENT authored from an observed pattern (seedstore.save) carries this
       // durable flag, so a later pitch/suggestion/digest that reuses it can CREDIT the Commander's saved seed.
       // A hand-authored save-your-own recipe leaves it false — only agent-minted seeds get the callout.
-      seedborn: !!r.seedborn
+      seedborn: !!r.seedborn,
+      // when this custom was first saved / last saved (ms). Local provenance only — never exported. A record saved
+      // before these existed carries null and shows no date (never an invented one).
+      createdAt: Number.isFinite(r.createdAt) ? r.createdAt : null,
+      updatedAt: Number.isFinite(r.updatedAt) ? r.updatedAt : null
     };
   }
   // the browse category implied by a tag map: the highest-weighted known lane, or 'general'. code/research map
@@ -718,9 +722,27 @@
     // which share the bay's preview-state map; specialties mint custom-<slug>, missions custom-recipe-<slug>.
     rec.id = isExistingCustom ? recipe.id : uniqueId('custom-recipe-' + (slugify(recipe.name) || 'mission'));
     const idx = customs.findIndex(c => c.id === rec.id);
+    const now = Date.now();
+    rec.createdAt = (idx >= 0 && customs[idx].createdAt) || rec.createdAt || now;
+    rec.updatedAt = now;
     if (idx >= 0) customs[idx] = rec; else customs.push(rec);
     writeStore();
     return Object.assign({}, rec);
+  }
+
+  // SAME-NAME GUARD (user feedback 10-03: two customs with the exact same name, no way to tell which was current).
+  // findByName: another visible recipe (builtin or custom, not exceptId) whose name matches ignoring case/spacing.
+  // uniqueName: the first free "Name (2)", "Name (3)"… so an import never lands a silent twin.
+  function nameKey(n) { return String(n || '').trim().replace(/\s+/g, ' ').toLowerCase(); }
+  function findByName(name, exceptId) {
+    const k = nameKey(name); if (!k) return null;
+    return list().find(r => r.id !== exceptId && nameKey(r.name) === k) || null;
+  }
+  function uniqueName(name) {
+    const base = String(name || '').trim();
+    if (!findByName(base)) return base;
+    let n = 2; while (findByName(base + ' (' + n + ')')) n++;
+    return base + ' (' + n + ')';
   }
 
   function removeCustom(id) {
@@ -836,9 +858,13 @@
     if (!v.ok) return v;
     // strip any id from the draft so saveCustom always mints a fresh one (the file's id lives on in forkedFrom).
     const clean = Object.assign({}, v.recipe); delete clean.id;
+    // a name already on the station gets a numbered suffix and the caller is told (renamedFrom) — re-importing an
+    // edited file used to land an indistinguishable twin of the recipe it was meant to update.
+    const clash = findByName(clean.name);
+    if (clash) clean.name = uniqueName(clean.name);
     try {
       const saved = saveCustom(clean);
-      return { ok: true, recipe: saved };
+      return clash ? { ok: true, recipe: saved, renamedFrom: clash.name, clashId: clash.id } : { ok: true, recipe: saved };
     } catch (e) { return { ok: false, error: (e && e.message) || 'could not save the imported recipe' }; }
   }
 
@@ -1107,6 +1133,7 @@
     TAGS, GEAR_TYPES, CADENCES, CATEGORIES, SOURCES, PARAM_TYPES, RAIL_BUCKETS, railBucket,
     list, builtins, customs: customList, get, exists,
     fillTask, requiredMissing, paramsFromTemplate, draft, forkFrom, mintFromRun, saveCustom, removeCustom, impliesOutbound,
+    findByName, uniqueName,
     // SOP recipes: typed acceptance -> run-body postconditions contract; prose helpers for the dossier/editor
     ACCEPTANCE_TYPES, STEPS_MAX, ACCEPTANCE_MAX, postconditionsFor, acceptanceLabel,
     // R6 marketplace surface
