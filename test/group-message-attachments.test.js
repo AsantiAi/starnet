@@ -60,8 +60,12 @@ const deps = { fs, path, root, now: () => ++sequence, id: () => 'id' + (++sequen
     assert.equal((await api.file(converted.id, aid)).content, 'cHJvb2Y=');
     assert.deepEqual(await api.create(request), converted, 'lost conversion response is safe to retry');
     await assert.rejects(api.create({ ...request, history: [...history, { role: 'user', content: 'new work after the first conversion' }] }), /already exists/, 'changed retry history cannot be silently ignored');
-    await assert.rejects(api.create({ ...request, id: 'bad-conversion', history: [{ role: 'user', content: 'keep me', attachments: [{ path: '.attachments/proof' }, { path: '.attachments/missing' }] }] }), /unavailable/);
-    await assert.rejects(api.get('bad-conversion'), /not found/, 'failed file import creates no partial group');
+    // (10-04) one unreadable/oversized old attachment used to block the conversion FOREVER ("START GROUP CHAT" never
+    // worked for that chat). Now the readable files are shared and the message names the one that was not, and why.
+    const partial = await api.create({ ...request, id: 'partial-conversion', conversionKey: 'partial-conversion', history: [{ role: 'user', content: 'keep me', attachments: [{ path: '.attachments/proof' }, { path: '.attachments/missing', name: 'gone.png' }] }] });
+    assert.equal(partial.artifacts.length, 1, 'the readable file is still shared');
+    assert.deepEqual(partial.messages[0].artifactIds, [partial.artifacts[0].id]);
+    assert.equal(partial.messages[0].content, 'keep me\n[attachment not shared: gone.png (File unavailable)]', 'the unshared file is named on its message, never silently dropped');
     api.close(); api = makeGroupSessions(deps); await api.ready;
     assert.equal((await api.file(converted.id, aid)).content, 'cHJvb2Y=', 'imported file bytes survive restart');
     assert.deepEqual((await api.create(request)).messages[0].artifactIds, [aid], 'conversion retry survives restart');

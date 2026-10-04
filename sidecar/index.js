@@ -16894,6 +16894,9 @@ async function handleAgentDelete(req, res) {
       return keep;
     });
   } catch (e) { console.warn('[agent.delete] cron cleanup failed:', (e && e.message) || e); }
+  // GROUP CHATS: a deleted agent leaves every group it sat in (a lead hands over to who remains). Left on record it
+  // made every later invite/rename/@all — and every plain message, when it led — fail in that group.
+  try { await groupSessions.dropAgent(agentId); } catch (e) { console.warn('[agent.delete] group cleanup failed:', (e && e.message) || e); }
   // clear any live in-RAM per-agent proposal/study queues so a gone agent can't land a turn-in later.
   try {
     for (const [rid, b] of proposalsByRun) { if (b && b.agentId === agentId) proposalsByRun.delete(rid); }
@@ -22314,7 +22317,9 @@ function saveNightshiftHalt(next) {
   nightshiftState = next;
 }
 function handleHalt(req, res) {
-  if (typeof groupSessions !== 'undefined') groupSessions.halt().catch(e => console.warn('[groups] halt persistence failed:', e.message));
+  // a group-store fault must never skip the rest of the E-STOP (killAll, the durable stand-down stamps)
+  try { if (typeof groupSessions !== 'undefined') groupSessions.halt().catch(e => console.warn('[groups] halt persistence failed:', e.message)); }
+  catch (e) { console.warn('[groups] halt failed:', (e && e.message) || e); }
   const tgInflight = (telegram && telegram.hub && telegram.hub._internals) ? telegram.hub._internals.inflight : null;
   const dcInflight = (discord && discord.hub && discord.hub._internals) ? discord.hub._internals.inflight : null;
   // EVERY connected channel's hub, not just the two bespoke slots — a Slack/Matrix/Signal run must die on E-STOP too.
