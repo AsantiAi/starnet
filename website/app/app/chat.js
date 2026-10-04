@@ -453,6 +453,7 @@ const Chat = (() => {
     // stamped the same minute as the one above becomes one message (same rule row() applies at creation)
     for (let n = anchor, p = anchor.previousElementSibling; p && n.classList.contains('agent'); n = p, p = p.previousElementSibling) {
       if (!p.classList.contains('agent') || !p.classList.contains('cmsg') || p.matches('.nudge,.consent,.turnin,.tool,.deliverable')) break;
+      p.classList.add('cont-next');
       const a = n.querySelector(':scope > .cmsg-head > .cmsg-ts'), b = p.querySelector(':scope > .cmsg-head > .cmsg-ts');
       if (a && b && a.textContent === b.textContent) n.classList.add('ts-repeat');
     }
@@ -2143,6 +2144,7 @@ const Chat = (() => {
       // CSS drops its slim stamp line so a run of turns reads as one message. A different minute keeps it.
       const prev = log.lastElementChild;
       if (prev && prev.classList && prev.classList.contains(role) && prev.classList.contains('cmsg')) {
+        prev.classList.add('cont-next');   // its bracket runs on into this row (comms-convo.css drops the shared ticks)
         const pts = prev.querySelector(':scope > .cmsg-head > .cmsg-ts');
         if (pts && pts.textContent === ts.textContent) d.classList.add('ts-repeat');
       }
