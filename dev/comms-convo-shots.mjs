@@ -87,6 +87,7 @@ const OVERLAP = `(() => {
     console.log('  pill', JSON.stringify(await evalJS(cdp, `(() => { const p = document.querySelector('.comms-newpill'); if (!p) return null; const c = getComputedStyle(p); return { cls: p.className, text: p.textContent, color: c.color, op: c.opacity, fill: c.webkitTextFillColor, fs: c.fontSize, ti: c.textIndent, ls: c.letterSpacing, ov: c.overflow, w: Math.round(p.getBoundingClientRect().width) }; })()`)));
     await evalJS(cdp, `(() => { const l = document.getElementById('chat-log'); l.scrollTop = l.scrollHeight; })()`);
     await sleep(300); await shootPanel(cdp, 'bottom');
+    if (process.env.SKYNET_SHOT_PROBE) console.log('  probe', JSON.stringify(await evalJS(cdp, process.env.SKYNET_SHOT_PROBE)));
     console.log('  stamps', JSON.stringify(await evalJS(cdp, OVERLAP)));
     console.log('  order', JSON.stringify(await evalJS(cdp, `[...document.querySelectorAll('#chat-log > *')].slice(-8).map(e => e.className.replace('cmsg ', '') + ':' + (e.textContent || '').trim().slice(0, 28))`)));
     await evalJS(cdp, `(() => { const c = [...document.querySelectorAll('#chat-log .comms-presence.resolved.has-fold')].pop(); if (c) c.click(); const l = document.getElementById('chat-log'); l.scrollTop = l.scrollHeight; return !!c; })()`);
