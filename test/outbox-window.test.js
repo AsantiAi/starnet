@@ -25,14 +25,28 @@ const world = read('frontend/app/world.js');
 const css = read('frontend/css/app.css');
 
 /* ---- ONE PLACE FOR FINISHED WORK (Andrew 10-02): the list is DELIVERABLES' TO REVIEW section, not a window ----
-   Every old door (the chute, the digest, chat) still says openTerm('outbox'); the alias lands it in DELIVERABLES. */
+   Every old door (the digest, chat) still says openTerm('outbox'); the alias lands it in DELIVERABLES. The floor chute does NOT. */
 const stationui = read('frontend/app/stationui.js');
 A.ok(!/registerWindow\('outbox'/.test(station), 'OUTBOX is no longer a window of its own (no second place for finished work)');
 A.ok(/window\.OutboxView = \{[\s\S]{0,80}build: buildOutbox/.test(station), 'the list exports OutboxView.build for DELIVERABLES to mount');
 A.ok(/outbox:\s*\{ term: 'deliverables', section: 'review'/.test(stationui), "TERM_ALIAS routes 'outbox' to DELIVERABLES § review");
 A.ok(/deliverables:\['DELIVERABLES',[\s\S]{0,600}OutboxView\.build\(host\)/.test(stationui), 'the DELIVERABLES window mounts TO REVIEW above its library');
 A.ok(!/\{ id: 'outbox', k: 'outbox'/.test(stationui), 'MY WORK carries no OUTBOX tab');
-A.ok(/setOnOutbox\(\(\)\s*=>\s*\{[^}]*openTerm\('outbox'\)/.test(app), "the world's OUTBOX click opens finished work (never the old one-crate beat)");
+/* A FLOOR OUTBOX IS ITS OWN LINE'S (Andrew 10-03: "the outbox should only show output of the specific conveyor system, it
+   should never link back to deliverables"): the chute click opens the workflow that ships into THAT outbox, never the
+   station-wide DELIVERABLES; its pallet stacks only that line's shipped jobs (the INBOX plate's own number). */
+const onOb = (app.match(/World\.setOnOutbox\(([^\n]*)\);/) || [])[1] || '';
+A.ok(/WorkflowsWindow\.openOutbox\(ob && ob\.id\)/.test(onOb), "the world's OUTBOX click opens its own line (WorkflowsWindow.openOutbox with the clicked prop)");
+A.ok(!/openTerm\('outbox'\)|deliverables/i.test(onOb), 'the floor OUTBOX never opens DELIVERABLES / the station-wide TO REVIEW list');
+const wfw = read('frontend/app/windows/workflows.js');
+const openOb = wfw.slice(wfw.indexOf('function openOutbox'), wfw.indexOf("UI().registerWindow('workflows'"));
+A.ok(/x\.outbox === propId \|\| \(x\.outboxes \|\| \[\]\)\.indexOf\(propId\)/.test(openOb), 'openOutbox finds the line by THIS outbox prop');
+A.ok(/view: 'line', line: l\.key/.test(openOb) && /line-jobs\?line='/.test(openOb), "openOutbox opens that line and reads only that line's jobs");
+A.ok(!/deliverables|navigateWork/i.test(openOb.replace(/^\s*\/\*[\s\S]*?\*\//m, '')), 'openOutbox never routes through DELIVERABLES');
+A.ok(/openOutbox,/.test(wfw), 'WorkflowsWindow exports openOutbox');
+const pallet = world.slice(world.indexOf('function drawShippedPallet'), world.indexOf('function drawPallet'));
+A.ok(/routingPlan\.lineOfProp\[ob\.id\]/.test(pallet) && /lineStats\.byLine\[lid\]/.test(pallet) && /\.shipped/.test(pallet), "each OUTBOX's pallet = its own line's SHIPPED (the line plate's number)");
+A.ok(!/shipStats/.test(pallet), 'the pallet never stacks the station-wide shipped count');
 A.ok(!/reviewNext\(\)/.test(app), 'app.js no longer drives the one-crate-at-a-time review beat from the chute');
 
 /* ---- collapsed row = title + real-output description + meta, and NOTHING else ---- */
