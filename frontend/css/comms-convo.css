@@ -60,9 +60,21 @@ body #chat-panel #chat-log .cmsg.ts-repeat:is(.agent, .user) > .cmsg-head { disp
 /* callsigns read as station type: the same RGB-fringe phosphor the CREW names wear */
 body #chat-panel #chat-log .cmsg:is(.agent, .user) > .cmsg-head > .who { text-shadow: var(--pg-glow-soft, none); letter-spacing: 1.4px; }
 
-/* ---- THE COMMANDER — right side, gold: a terminal INPUT line, not a box (Andrew 10-03: "idk if im a fan of the
-   text boxes … clean fallout new vegas pip boy / tron / terminal ASCII"). A `>` prompt, gold-tinted type, the gold
-   rail on its edge, and a faint scanline field fading in from that rail — no outline, no plate. ---- */
+/* ---- THE BRACKET — both speakers' text sits in an open terminal bracket: a 2px rail with short END TICKS at its top
+   and bottom ( [ for the agent, ] for the Commander ), no fill. It is the same mark as the [ TODAY ] break, the
+   end-ticked station rules and the [ SHOW ME ] keys — one ASCII language (Andrew 10-03/04: "idk if im a fan of the text
+   boxes" → "would like to see a different approach then the fade" → "try what u think would look absolute best";
+   flat tint / rail-only / dither were shot side by side, the bracket won). --rail paints the rail AND its ticks, so
+   hover brightens the whole bracket; a row that continues into the next (.cont-next, chat.js) drops its bottom tick
+   and the continuation drops its top one, so a split reply reads as ONE bracket. ---- */
+body #chat-panel #chat-log :is(.cmsg.user, .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable)) > .body {
+  --tt: 10px; --tb: 10px;
+  background:
+    linear-gradient(var(--rail), var(--rail)) var(--rx, left) top / var(--tt) 2px no-repeat,
+    linear-gradient(var(--rail), var(--rail)) var(--rx, left) bottom / var(--tb) 2px no-repeat;
+}
+
+/* ---- THE COMMANDER — right side, gold: a terminal INPUT line — a `>` prompt, gold-tinted type, the ] bracket ---- */
 body #chat-panel #chat-log .cmsg.user {
   align-self: flex-end; width: fit-content; max-width: 86%; min-width: 0;
   padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none;
@@ -72,20 +84,21 @@ body #chat-panel #chat-log .cmsg.user > .cmsg-head {
   justify-content: flex-start; gap: 8px; margin: 0 2px 4px; min-height: 0;
 }
 body #chat-panel #chat-log .cmsg.user > .body {
-  display: block; padding: 3px 12px 4px 10px;
-  border: 0; border-right: 2px solid rgba(var(--gold-rgb), .65); border-radius: 0;
-  background: linear-gradient(270deg, rgba(var(--gold-rgb), .075), transparent 85%);
-  box-shadow: none;
+  --rail: rgba(var(--gold-rgb), .6); --rx: right;
+  display: block; padding: 4px 14px 5px 10px;
+  border: 0; border-right: 2px solid var(--rail); border-radius: 0; box-shadow: none;
   color: color-mix(in srgb, var(--gold) 45%, var(--text));
 }
 body #chat-panel #chat-log .cmsg.user > .body::before { content: '> '; color: var(--gold); opacity: .75; }
-body #chat-panel #chat-log .cmsg.user:is(:hover, :focus-within) > .body { border-right-color: var(--gold); }
+body #chat-panel #chat-log .cmsg.user:is(:hover, :focus-within) > .body { --rail: var(--gold); }
+body #chat-panel #chat-log .cmsg.user.cont-next > .body { --tb: 0px; }
+body #chat-panel #chat-log .cmsg.user + .cmsg.user > .body { --tt: 0px; }
 body #chat-panel #chat-log .cmsg.user .chat-attach-view { justify-content: flex-end; }
 /* the ⧉ rides the header line on the stamp's side (the reserved lane in comms.css / glass-comms.css) */
 body #chat-panel #chat-log .cmsg.user > .cmsg-copy { top: -2px; }
 
-/* ---- THE AGENT — the Commander's line, mirrored: callsign + stamp above, the text on a phosphor rail with a faint
-   field fading out from it. No face, no box (Andrew 10-03: "keep the name as is without the pfp"). ---- */
+/* ---- THE AGENT — the Commander's line, mirrored: callsign + stamp above, the text in the [ bracket. No face, no box
+   (Andrew 10-03: "keep the name as is without the pfp"). ---- */
 body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) {
   padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none;
 }
@@ -93,12 +106,14 @@ body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not
   border: 0; background: none; box-shadow: none;
 }
 body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) > .body {
-  display: block; padding: 3px 10px 4px 12px;
-  border-left: 2px solid rgba(var(--ph-rgb), .5);
-  background: linear-gradient(90deg, rgba(var(--ph-rgb), .05), transparent 85%);
+  --rail: rgba(var(--ph-rgb), .5);
+  display: block; padding: 4px 10px 5px 14px;
+  border-left: 2px solid var(--rail);
 }
-body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable):is(:hover, :focus-within) > .body { border-left-color: var(--ph); }
-body #chat-panel #chat-log .cmsg.agent.err > .body { border-left-color: var(--bad); }
+body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable):is(:hover, :focus-within) > .body { --rail: var(--ph); }
+body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable).cont-next > .body { --tb: 0px; }
+body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) + .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) > .body { --tt: 0px; }
+body #chat-panel #chat-log .cmsg.agent.err > .body { --rail: var(--bad); }
 body #chat-panel #chat-log .cmsg.agent > .cmsg-head {
   justify-content: flex-start; align-items: baseline; gap: 8px; margin: 0 2px 4px; min-height: 0;
 }
@@ -157,11 +172,14 @@ body #chat-panel #chat-log .cmsg .body .md-pre {
 /* list bullets as the station's ▸ glyph, the pipboy list marker */
 body #chat-panel #chat-log .cmsg .body .md-list:not(ol) > li::marker { content: '▸  '; color: var(--ph); }
 
-/* ---- ASIDES (the agent's gentle nudge) — a gold rail like every beat, not a framed card ---- */
+/* ---- ASIDES (the agent's gentle nudge) — the same open bracket, in the beat family's gold, not a framed card ---- */
 body #chat-panel #chat-log > .cmsg.agent.nudge {
-  margin: 4px 0 2px; padding: 4px 10px 4px 12px;
-  border: 0; border-left: 2px solid rgba(var(--gold-rgb), .55); border-radius: 0;
-  background: linear-gradient(90deg, rgba(var(--gold-rgb), .06), transparent 80%); box-shadow: none;
+  --rail: rgba(var(--gold-rgb), .55);
+  margin: 4px 0 2px; padding: 5px 10px 5px 14px;
+  border: 0; border-left: 2px solid var(--rail); border-radius: 0; box-shadow: none;
+  background:
+    linear-gradient(var(--rail), var(--rail)) left top / 10px 2px no-repeat,
+    linear-gradient(var(--rail), var(--rail)) left bottom / 10px 2px no-repeat;
 }
 
 /* ---- CHOICES — bracketed terminal keys: [ SHOW ME ]  [ NOT NOW ] ---- */
