@@ -7,6 +7,7 @@ test/group-message-attachments.test.js
 test/bay-name-legibility.test.js
 test/group-sessions.edge.test.js
 test/group-chat-picker.test.js
+test/group-sessions.repair.test.js
 test/contract.test.js
 test/events-contract.test.js
 test/clock-rng.test.js
