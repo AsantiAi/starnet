@@ -6551,7 +6551,7 @@ const World = (() => {
       if (convey && convey.peekBoxes && typeof PropRemaster !== 'undefined' && PropRemaster.enabled('filter')) {
         for (const box of convey.peekBoxes()) if (!(box.sink > 0)) scanningTiles.add(box.x + ':' + box.y);
       }
-      if (PropSprites.setOutboxCrates) PropSprites.setOutboxCrates(returnCrates());   // G2.3: uncollected while-away work stacks on the chute
+      if (PropSprites.setOutboxCrates) PropSprites.setOutboxCrates(outboxCrateMap());   // G2.3: each chute stacks only ITS line's uncollected results (10-03)
       if (PropSprites.setMissionPins) { const mp = missionPinCounts(now); PropSprites.setMissionPins(mp[0], mp[1], mp[2], mp[3]); maybePinProposal(now, mp[3]); }   // G1b/G1c: open quests pin to the MISSION BOARD; a station-gap keeps it breathing; a jammed routine flags an amber JAM stub; G4: pending proposals + the walk-and-pin body
       if (PropSprites.setTrophyCount) PropSprites.setTrophyCount(trophyCount(now));   // G3b: earned trophies stand behind glass in the TROPHY CASE
       if (PropSprites.setJourneyStage) {
@@ -8332,13 +8332,14 @@ const World = (() => {
     }
     ctx.restore();
   }
-  // the hover-glance tag over a clickable OUTBOX: crates pending → "N TO REVIEW — CLICK"; pallet only →
-  // the LOGBOOK click-through. Names what the stacked boxes ARE and what the click does (the 2026-07-16
-  // confusion: "boxes showing output but I can't see it"). A glance, never a window (hover law).
+  // the hover-glance tag over a clickable OUTBOX: names what the stacked boxes ARE and what the click does (the
+  // 2026-07-16 confusion: "boxes showing output but I can't see it"). THIS chute's line only (10-03): its own waiting
+  // results, else its line's results; a chute on no line says so. A glance, never a window (hover law).
   function drawOutboxHoverTag(now) {
     if (!hoverOutbox) return;
-    const n = returnCrates();
-    const text = n > 0 ? (n + ' TO REVIEW — CLICK') : 'FINISHED WORK — CLICK';
+    const onLine = !!(routingPlan && routingPlan.lineOfProp && routingPlan.lineOfProp[hoverOutbox.id]);
+    const n = onLine ? (outboxCrateMap()[hoverOutbox.id] | 0) : 0;
+    const text = !onLine ? 'NOT ON A WORKFLOW' : n > 0 ? (n + ' TO REVIEW — CLICK') : 'THIS LINE’S RESULTS — CLICK';
     ctx.save();
     ctx.font = NAG_FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
     ctx.shadowBlur = 3; ctx.shadowColor = n > 0 ? '#ffd88a' : '#62ff9e';
@@ -8362,10 +8363,43 @@ const World = (() => {
   function setOnTrophyCase(fn) { onTrophyCase = fn; }   // G3b: click a placed TROPHY CASE → open the trophy surface
   function setOnPluginTerminal(fn) { onPluginTerminal = fn; }   // click a placed PLUGIN TERMINAL → that plugin's window (or why not)
   function setOnDesk(fn) { onDesk = fn; }   // DESK SCREEN: click an agent's workstation → that agent's live work (deskscreen.js)
-  // G2.3 — the live uncollected-crate count (ReturnStore's pending ledger). Read per-frame for the
-  // OUTBOX sprite stack and by the hit-test below; 0 when the store isn't loaded (headless tests).
+  // G2.3 — the live uncollected-crate count (ReturnStore's pending ledger); 0 when the store isn't loaded (headless tests).
   function returnCrates() {
     try { return (typeof ReturnStore !== 'undefined' && ReturnStore.pendingCount) ? (ReturnStore.pendingCount() | 0) : 0; } catch (_) { return 0; }
+  }
+  /* PER-OUTBOX CRATES (Andrew 10-03: an OUTBOX shows only ITS conveyor's output). A pending row belongs to a line only
+     when a line-job record PROVES it: the row's run stream is a job sent down that line (/api/line-jobs streamId → line).
+     Routines, chats and while-away runs are no conveyor's output — they wait in DELIVERABLES › TO REVIEW, never on a
+     chute. Memoized on (pending count, stream join, plan) so the per-frame read stays cheap. */
+  let lineJobStream = {};   // job streamId -> line key, from the server's line-job records (refreshed with the line plates)
+  let crateMemo = null, crateKey = null;
+  function outboxCrateMap() {
+    const n = returnCrates(), key = [n, lineJobStream, routingPlan];
+    if (crateKey && crateKey.every((v, i) => v === key[i])) return crateMemo;
+    const by = {}, outOf = {};
+    try {
+      if (n > 0 && routingPlan && routingPlan.lineOfProp && geo && geo.props) {
+        for (const p of geo.props) if (p.t === 'outbox') { const l = routingPlan.lineOfProp[p.id]; if (l && !outOf[l]) outOf[l] = p.id; }
+        for (const r of ReturnStore.pendingRows()) {
+          const l = r && r.streamId ? lineJobStream[r.streamId] : null, ob = l ? outOf[l] : null;
+          if (ob) by[ob] = (by[ob] | 0) + 1;
+        }
+      }
+    } catch (_) {}
+    crateMemo = by; crateKey = key;
+    return by;
+  }
+  function pollLineJobStreams() {
+    try {
+      fetch(apiUrl('/api/line-jobs?limit=100'), { cache: 'no-store' })
+        .then(r => (r.ok ? r.json() : null))
+        .then(j => {
+          if (!j || !Array.isArray(j.jobs)) return;   // no answer — keep the last known join
+          const m = {};
+          for (const x of j.jobs) if (x && x.streamId && x.line) m[x.streamId] = x.line;
+          lineJobStream = m;
+        }).catch(() => {});
+    } catch (_) {}
   }
   // hit-test: the OUTBOX chute under a world-space point — ALWAYS clickable while placed: the click opens THIS
   // OUTBOX's own line in WORKFLOWS (its newest result, its last jobs — 10-03), and an OUTBOX on no line says so,
@@ -9151,6 +9185,7 @@ const World = (() => {
   }
   function pollLineStats() {
     if (typeof fetch === 'undefined' || typeof LineWatch === 'undefined') return;
+    pollLineJobStreams();   // the per-OUTBOX crate join rides the line plates' cadence (60 s + shortly after a line run)
     const since = LineWatch.localMidnight(Date.now());
     try {
       fetch(apiUrl('/api/routing/lines/stats?since=' + since), { cache: 'no-store' })

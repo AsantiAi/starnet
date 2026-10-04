@@ -295,14 +295,16 @@
       // does NOT fall back to the deliverable's summary: that sentence is already on the row directly above, and
       // reprinting it here would put the same words on screen twice, forty pixels apart. A section that repeats
       // what you just read is the added complexity this pass exists to remove.
-      const back = sec('WHAT CAME BACK', (run && run.deliveryText) ? '<div class="dlv-said">' + esc(run.deliveryText) + '</div>' : '');
+      // (a WORKFLOW job's row carries what the line delivered — the job record's own output — 10-03)
+      const said = (run && run.deliveryText) || r.output || '';
+      const back = sec('WHAT CAME BACK', said ? '<div class="dlv-said">' + esc(said) + '</div>' : '');
       // THE FILES — each openable on its own, with the size measured off disk.
       const fileRows = files.length
         ? '<ul class="dlv-files">' + (r.files || []).map((f, fi) => f.openUrl
             ? '<li><a class="bb sm' + (r.main && f.path === r.main ? ' dlv-hero' : '') + '" data-file="' + fi + '" href="' + esc(fileHref(f)) + '" target="_blank" rel="noopener">OPEN</a><span class="dlv-fname">' + esc(f.path) + '</span><span class="dlv-fsize">' + esc(fmtSize(f.bytes)) + '</span>' + (r.main && f.path === r.main ? '<span class="dlv-fmain">the main one</span>' : '') + '</li>'
             : '<li><span class="dlv-fname off">' + esc(f.path) + '</span><span class="dlv-fsize">no longer available</span></li>').join('') + '</ul>'
         : '<p class="dlv-none">This run recorded no files.</p>';
-      const openSession = (run && run.streamId) ? '<button class="bb sm" data-act="session">↗ OPEN THE FULL CONVERSATION</button>' : '';
+      const openSession = (r.jobId ? '<button class="bb sm" data-act="workflow">OPEN IN WORKFLOWS</button>' : '') + ((run && run.streamId) ? '<button class="bb sm" data-act="session">↗ OPEN THE FULL CONVERSATION</button>' : '');
       const decide = ((r.actions && r.actions.keep) ? '<button class="bb sm" data-act="keep">KEEP IT</button>' : '') +
         ((r.actions && r.actions.discard) ? '<button class="bb sm danger" data-act="discard">DISCARD</button>' : '');
       const acts = (openSession || decide) ? '<div class="row dlv-acts">' + openSession + decide + '</div>' : '';
@@ -468,6 +470,13 @@
           try { App.openWorkstream(sid); if (typeof StationUI !== 'undefined') StationUI.h.workConversation('deliverables'); return; } catch (_) {}
         }
         return say('Could not open that session from here.', true);
+      }
+      // a WORKFLOW job's row opens its own record in WORKFLOWS (its line, its steps, NEEDS CHANGES / SEND IT AGAIN)
+      if (b.dataset.act === 'workflow') {
+        if (typeof WorkflowsWindow === 'undefined' || !WorkflowsWindow.open || !WorkflowsWindow.showJob) return say('The WORKFLOWS window is not available here.', true);
+        WorkflowsWindow.open({ view: 'line', line: r.line, job: null }, 'deliverables');
+        WorkflowsWindow.showJob(r.jobId);
+        return;
       }
       if (b.dataset.act === 'discard' && b.dataset.wired === '1') return;   // its own ArmConfirm listener owns it
       decide(r, b.dataset.act, b);

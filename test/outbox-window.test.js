@@ -118,7 +118,22 @@ A.ok(/\bpendingRows\b/.test(rstore.slice(rstore.lastIndexOf('return {'))), 'Retu
 const outboxAtFn = world.slice(world.indexOf('function outboxAt'), world.indexOf('function outboxAt') + 700);
 A.ok(!/returnCrates\(\)\s*<=\s*0/.test(outboxAtFn), 'outboxAt has NO crate-count gate (the window has honest content in every state — mirrors the MISSION BOARD)');
 A.ok(/function drawOutboxHoverTag/.test(world) && /drawOutboxHoverTag\(now\)/.test(world), 'the hover-glance tag draws each frame while a chute is hovered');
-A.ok(/TO REVIEW — CLICK/.test(world) && /FINISHED WORK — CLICK/.test(world), 'hover copy names the click in both states (crates pending / none)');
+A.ok(/TO REVIEW — CLICK/.test(world) && /THIS LINE’S RESULTS — CLICK/.test(world) && /NOT ON A WORKFLOW/.test(world), 'hover copy names the click in every state (its line’s crates pending / its line’s results / on no line)');
+const hoverFn = world.slice(world.indexOf('function drawOutboxHoverTag'), world.indexOf('function drawBeltHoverTag'));
+A.ok(/outboxCrateMap\(\)\[hoverOutbox\.id\]/.test(hoverFn) && !/returnCrates\(\)/.test(hoverFn), 'the hover count is THIS chute’s line crates, never the station-wide pending count');
+// each chute stacks only its OWN line's waiting results (a pending row proven a line job's by its stream); the rest wait in DELIVERABLES
+const crateFn = world.slice(world.indexOf('function outboxCrateMap'), world.indexOf('function pollLineJobStreams'));
+A.ok(/lineJobStream\[r\.streamId\]/.test(crateFn) && /routingPlan\.lineOfProp\[p\.id\]/.test(crateFn), 'per-outbox crates join pending rows to a line through the line-job stream record');
+A.ok(/setOutboxCrates\(outboxCrateMap\(\)\)/.test(world) && !/setOutboxCrates\(returnCrates\(\)\)/.test(world), 'the chute sprites get the per-outbox map, never the station-wide count');
+const ps = read('frontend/app/propsprites.js');
+A.ok(/outboxCrates\[f\.id\]/.test(ps), 'PropSprites reads each outbox’s own crate count by prop id');
+// …and every finished workflow job is ALSO filed in DELIVERABLES (Andrew 10-03): one library row per job, text-only results included
+const sidecar = read('sidecar/index.js');
+const dRows = sidecar.slice(sidecar.indexOf('async function deliverableRows'), sidecar.indexOf('function deliverableProjectFacet'));
+A.ok(/lineJobs\.jobs/.test(dRows) && /id: 'line:' \+ job\.id/.test(dRows) && /kind: 'workflow'/.test(dRows) && /output: output/.test(dRows), 'DELIVERABLES lists every finished workflow job as its own row with the delivered output');
+A.ok(/jobOfRun\.get\(run\.runId\)/.test(dRows), 'a workflow stage’s files fold into its job row (never double-listed as loose run rows)');
+const dlv = read('frontend/app/deliverables.js');
+A.ok(/r\.output/.test(dlv) && /data-act="workflow"/.test(dlv) && /dataset\.act === 'workflow'/.test(dlv), 'the DELIVERABLES drawer shows a job’s output and opens it in WORKFLOWS');
 
 /* ---- digest beat: the always-available door ---- */
 const digestFn = chat.slice(chat.indexOf('function awayDigest'), chat.indexOf('function awayReview'));
