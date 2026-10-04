@@ -37,6 +37,9 @@ dev/.scratch-free-chain/
 dev/.shots-deliverables/
 dev/.shots-wallcorner/
 dev/.shots-walljoin/
+# COMMS conversation seed + shooter (seed-comms-convo.js / comms-convo-shots.mjs; never committed)
+dev/.scratch-comms-convo*/
+dev/.shots-comms-convo/
 
 # rust / tauri desktop shell build output
 src-tauri/target/
