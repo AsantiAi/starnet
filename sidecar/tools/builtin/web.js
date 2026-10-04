@@ -261,6 +261,10 @@
   // A DNS failure is not evidence that the destination is safe, so fail closed.
   function nodeLookup(host) { const dns = require('node:dns'); return dns.promises.lookup(host, { all: true }); }
   async function assertResolvedSafe(u, lookup) {
+    const addrs = await resolvedSafeAddrs(u, lookup);
+    return addrs && addrs[0];
+  }
+  async function resolvedSafeAddrs(u, lookup) {
     if (!lookup) return;
     const h = hostOf(u);
     if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h) || h.indexOf(':') >= 0) return;   // already a literal
@@ -281,7 +285,7 @@
       if (!net.isIP(ip)) throw new Error('resolver returned an invalid IP address for ' + h);
       if (isPrivateV4(ip) || isPrivateV6(ip)) throw new Error('refusing: ' + u.hostname + ' resolves to private address ' + ip);
     }
-    return addrs[0];
+    return addrs;
   }
 
   // ---------- HTML -> readable text (web_fetch fallback) ----------
@@ -438,14 +442,33 @@
     // address validated for this hop. The URL stays intact for Host and TLS SNI.
     // Closing after the body is read prevents an old connection from carrying
     // the next hop past its own DNS validation.
+    // Node 20+ connects with autoSelectFamily on, which asks the lookup for { all: true } and expects an ARRAY
+    // of {address, family}. Answering (address, family) there made Node read `undefined` as the list, so every
+    // pinned request died as "fetch failed" (cause ERR_INVALID_IP_ADDRESS) — web_request could reach nothing
+    // (user report, 0.12.5 + 0.13.0). The list holds every VALIDATED address, so a v6-less network still
+    // reaches v4; the single-address shape keeps the first one.
     async function fetchPinned(u, init) {
-      const address = await assertResolvedSafe(u, doLookup);
-      const dispatcher = address ? makePinnedAgent({ connect: {
-        lookup(hostname, options, callback) { callback(null, address.address, address.family); }
+      const addrs = await resolvedSafeAddrs(u, doLookup);
+      const pinned = addrs ? addrs.map(a => ({ address: a.address, family: a.family || net.isIP(a.address) })) : null;
+      const dispatcher = pinned ? makePinnedAgent({ connect: {
+        lookup(hostname, options, callback) {
+          if (options && options.all) callback(null, pinned.map(a => Object.assign({}, a)));
+          else callback(null, pinned[0].address, pinned[0].family);
+        }
       } }) : null;
       try {
         const r = await doFetch(u.href, dispatcher ? Object.assign({}, init, { dispatcher }) : init);
         return { status: r.status, ct: r.headers.get('content-type') || '', loc: r.headers.get('location') || '', body: await readBodyBounded(r) };
+      } catch (e) {
+        // undici's whole message is "fetch failed"; the reason lives on .cause. Name its code + host (never the
+        // raw cause: with auth.in:"query" the request URL carries a key) so a failure is diagnosable from the
+        // transcript instead of an unactionable slogan. Same shape as telegram.transport.js errOf.
+        const c = e && e.cause;
+        if (c && e instanceof Error && /^fetch failed$/.test(e.message)) {
+          const detail = [c.code || c.name || '', c.hostname || c.address || ''].filter(Boolean).join(' ');
+          if (detail) e.message = 'fetch failed (' + detail + ')';
+        }
+        throw e;
       } finally {
         if (dispatcher) await dispatcher.close();
       }
