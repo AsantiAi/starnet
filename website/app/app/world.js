@@ -2623,6 +2623,7 @@ const World = (() => {
     const list = [];
     if (agent && !agent.unplaced) list.push(agent);
     for (const b of crew) if (b && !b.unplaced) list.push(b);
+    releaseStalled(list, now);   // every body, even a lone one — see STALL WATCHDOG below
     if (list.length < 2) return;
     const R = PERSONAL_TILES * T, R2 = R * R;
     const anchored = b => !!(b.sitting || b.seated);   // seated only — see the note above: a walk-in is exactly when they cross
@@ -2679,12 +2680,15 @@ const World = (() => {
       seizeFromIdle(b);                                     // drop the in-flight idle goal + any seat claim it had reserved
       b.pathPts = null; b.target = null; b.state = 'idle'; b.idleUntil = now + U.irnd(300, 900);
     }
-    /* STALL WATCHDOG (2026-10-03, Andrew: three crew stood in a hall for 30+ minutes). The backstop for
-       every hold above and any we have not found yet: a body that WANTS to go somewhere (has a target) but
-       has not covered STALL_PX in STALL_MS is not waiting, it is stuck. Every deliberate hold is shorter —
-       belt-yield and stroll pauses < 2s, a traffic agreement expires at 10s — and seated, social, gather and
-       approval-waiting bodies own their own timers. Drop the leg and re-plan: work re-paths to its seat
-       (tick / stepCrewToSeat re-plot a null target, around the bodies standing there now), idle re-decides. */
+  }
+
+  /* STALL WATCHDOG (2026-10-03, Andrew: three crew stood in a hall for 30+ minutes). The backstop for
+     every hold above and any we have not found yet: a body that WANTS to go somewhere (has a target) but
+     has not covered STALL_PX in STALL_MS is not waiting, it is stuck. Every deliberate hold is shorter —
+     belt-yield and stroll pauses < 2s, a traffic agreement expires at 10s — and seated, social, gather and
+     approval-waiting bodies own their own timers. Drop the leg and re-plan: work re-paths to its seat
+     (tick / stepCrewToSeat re-plot a null target, around the bodies standing there now), idle re-decides. */
+  function releaseStalled(list, now) {
     for (const b of list) {
       if (!b.target || b.sitting || b.seated || b.goal === 'social' || b.goal === 'gather' || b.goal === 'awaiting') { b.stallAt = 0; continue; }
       if (!b.stallAt || Math.hypot(b.px - b.stallX, b.py - b.stallY) > STALL_PX) { b.stallAt = now; b.stallX = b.px; b.stallY = b.py; continue; }
