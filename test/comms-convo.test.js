@@ -85,5 +85,6 @@ A.ok(dots.length === 2 && dots.every(a => a <= .06), 'the dither stays LIGHT (ce
 
 /* ---------- 9. no hover glow on the agent's message (Andrew 10-04) ---------- */
 A.ok(!/:not\(\.deliverable\):is\(:hover, :focus-within\) > \.body \{[^}]*--rail/.test(css), 'hovering an agent message never lights its rail');
+A.ok(!/\.cmsg\.user:is\(:hover, :focus-within\) > \.body \{[^}]*(--rail|border-right-color)/.test(css), "hovering the Commander's message never lights its gold rail");
 
 A.report('comms-convo.test');

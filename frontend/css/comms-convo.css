@@ -87,7 +87,7 @@ body #chat-panel #chat-log .cmsg.user > .body {
   color: color-mix(in srgb, var(--gold) 45%, var(--text));
 }
 body #chat-panel #chat-log .cmsg.user > .body::before { content: '> '; color: var(--gold); opacity: .75; }
-body #chat-panel #chat-log .cmsg.user:is(:hover, :focus-within) > .body { --rail: var(--gold); }
+/* no hover glow on the Commander's message either (Andrew 10-04): the gold rail holds its level */
 body #chat-panel #chat-log .cmsg.user .chat-attach-view { justify-content: flex-end; }
 /* the ⧉ rides the header line on the stamp's side (the reserved lane in comms.css / glass-comms.css) */
 body #chat-panel #chat-log .cmsg.user > .cmsg-copy { top: -2px; }
