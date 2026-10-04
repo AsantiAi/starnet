@@ -60,21 +60,18 @@ body #chat-panel #chat-log .cmsg.ts-repeat:is(.agent, .user) > .cmsg-head { disp
 /* callsigns read as station type: the same RGB-fringe phosphor the CREW names wear */
 body #chat-panel #chat-log .cmsg:is(.agent, .user) > .cmsg-head > .who { text-shadow: var(--pg-glow-soft, none); letter-spacing: 1.4px; }
 
-/* ---- THE BRACKET — both speakers' text sits in an open terminal bracket: a 2px rail with short END TICKS at its top
-   and bottom ( [ for the agent, ] for the Commander ), no fill. It is the same mark as the [ TODAY ] break, the
-   end-ticked station rules and the [ SHOW ME ] keys — one ASCII language (Andrew 10-03/04: "idk if im a fan of the text
-   boxes" → "would like to see a different approach then the fade" → "try what u think would look absolute best";
-   flat tint / rail-only / dither were shot side by side, the bracket won). --rail paints the rail AND its ticks, so
-   hover brightens the whole bracket; a row that continues into the next (.cont-next, chat.js) drops its bottom tick
-   and the continuation drops its top one, so a split reply reads as ONE bracket. ---- */
+/* ---- THE DITHER FIELD — both speakers' text sits on its rail over a faint 1px ordered-dither field: pipglass's own
+   lit-row material (a checker of phosphor cells, crisp, no gradient), kept LIGHT so it reads as a lit terminal region,
+   not a box (Andrew 10-04: shown flat / rail-only / bracket / dither side by side → "make variant 4 a bit lighter on
+   the text boxes"). --dot is the cell colour: phosphor for the agent, gold for the Commander. A split reply's rows
+   touch (the continuation margin below), so the field and rail run unbroken. ---- */
 body #chat-panel #chat-log :is(.cmsg.user, .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable)) > .body {
-  --tt: 10px; --tb: 10px;
-  background:
-    linear-gradient(var(--rail), var(--rail)) var(--rx, left) top / var(--tt) 2px no-repeat,
-    linear-gradient(var(--rail), var(--rail)) var(--rx, left) bottom / var(--tb) 2px no-repeat;
+  --dot: rgba(var(--ph-rgb), .042);
+  background: repeating-conic-gradient(var(--dot) 0 25%, transparent 0 50%) 0 0 / 2px 2px;
 }
+body #chat-panel #chat-log .cmsg.user > .body { --dot: rgba(var(--gold-rgb), .05); }
 
-/* ---- THE COMMANDER — right side, gold: a terminal INPUT line — a `>` prompt, gold-tinted type, the ] bracket ---- */
+/* ---- THE COMMANDER — right side, gold: a terminal INPUT line — a `>` prompt, gold-tinted type, the gold rail ---- */
 body #chat-panel #chat-log .cmsg.user {
   align-self: flex-end; width: fit-content; max-width: 86%; min-width: 0;
   padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none;
@@ -84,20 +81,18 @@ body #chat-panel #chat-log .cmsg.user > .cmsg-head {
   justify-content: flex-start; gap: 8px; margin: 0 2px 4px; min-height: 0;
 }
 body #chat-panel #chat-log .cmsg.user > .body {
-  --rail: rgba(var(--gold-rgb), .6); --rx: right;
+  --rail: rgba(var(--gold-rgb), .6);
   display: block; padding: 4px 14px 5px 10px;
   border: 0; border-right: 2px solid var(--rail); border-radius: 0; box-shadow: none;
   color: color-mix(in srgb, var(--gold) 45%, var(--text));
 }
 body #chat-panel #chat-log .cmsg.user > .body::before { content: '> '; color: var(--gold); opacity: .75; }
 body #chat-panel #chat-log .cmsg.user:is(:hover, :focus-within) > .body { --rail: var(--gold); }
-body #chat-panel #chat-log .cmsg.user.cont-next > .body { --tb: 0px; }
-body #chat-panel #chat-log .cmsg.user + .cmsg.user > .body { --tt: 0px; }
 body #chat-panel #chat-log .cmsg.user .chat-attach-view { justify-content: flex-end; }
 /* the ⧉ rides the header line on the stamp's side (the reserved lane in comms.css / glass-comms.css) */
 body #chat-panel #chat-log .cmsg.user > .cmsg-copy { top: -2px; }
 
-/* ---- THE AGENT — the Commander's line, mirrored: callsign + stamp above, the text in the [ bracket. No face, no box
+/* ---- THE AGENT — the Commander's line, mirrored: callsign + stamp above, the text on the phosphor rail. No face, no box
    (Andrew 10-03: "keep the name as is without the pfp"). ---- */
 body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) {
   padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none;
@@ -111,8 +106,6 @@ body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not
   border-left: 2px solid var(--rail);
 }
 body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable):is(:hover, :focus-within) > .body { --rail: var(--ph); }
-body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable).cont-next > .body { --tb: 0px; }
-body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) + .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) > .body { --tt: 0px; }
 body #chat-panel #chat-log .cmsg.agent.err > .body { --rail: var(--bad); }
 body #chat-panel #chat-log .cmsg.agent > .cmsg-head {
   justify-content: flex-start; align-items: baseline; gap: 8px; margin: 0 2px 4px; min-height: 0;
@@ -172,14 +165,12 @@ body #chat-panel #chat-log .cmsg .body .md-pre {
 /* list bullets as the station's ▸ glyph, the pipboy list marker */
 body #chat-panel #chat-log .cmsg .body .md-list:not(ol) > li::marker { content: '▸  '; color: var(--ph); }
 
-/* ---- ASIDES (the agent's gentle nudge) — the same open bracket, in the beat family's gold, not a framed card ---- */
+/* ---- ASIDES (the agent's gentle nudge) — the same rail + light dither, in the beat family's gold, not a framed card ---- */
 body #chat-panel #chat-log > .cmsg.agent.nudge {
   --rail: rgba(var(--gold-rgb), .55);
   margin: 4px 0 2px; padding: 5px 10px 5px 14px;
   border: 0; border-left: 2px solid var(--rail); border-radius: 0; box-shadow: none;
-  background:
-    linear-gradient(var(--rail), var(--rail)) left top / 10px 2px no-repeat,
-    linear-gradient(var(--rail), var(--rail)) left bottom / 10px 2px no-repeat;
+  background: repeating-conic-gradient(rgba(var(--gold-rgb), .05) 0 25%, transparent 0 50%) 0 0 / 2px 2px;
 }
 
 /* ---- CHOICES — bracketed terminal keys: [ SHOW ME ]  [ NOT NOW ] ---- */
