@@ -2593,6 +2593,8 @@ const World = (() => {
   const PERSONAL_TILES = 0.8;      // min centre-to-centre spacing, in tiles. < 1 so adjacent-tile beats never fight it.
   const SEP_JAM_MS = 2500;         // continuously shoved while walking for this long → give up on the leg and re-decide
   const SEP_PASSES = 4;            // relaxation sweeps per frame — a pile of three needs more than one pass to settle
+  const STALL_MS = 12000;          // a body with somewhere to go that has not moved STALL_PX in this long is stuck → re-plan
+  const STALL_PX = 3;
   function nudgeBody(b, dx, dy) {
     const nx = b.px + dx, ny = b.py + dy;
     const t = tileOf(nx, ny);
@@ -2675,6 +2677,22 @@ const World = (() => {
       if (now - b.sepSince < SEP_JAM_MS) continue;
       b.sepSince = 0;
       seizeFromIdle(b);                                     // drop the in-flight idle goal + any seat claim it had reserved
+      b.pathPts = null; b.target = null; b.state = 'idle'; b.idleUntil = now + U.irnd(300, 900);
+    }
+    /* STALL WATCHDOG (2026-10-03, Andrew: three crew stood in a hall for 30+ minutes). The backstop for
+       every hold above and any we have not found yet: a body that WANTS to go somewhere (has a target) but
+       has not covered STALL_PX in STALL_MS is not waiting, it is stuck. Every deliberate hold is shorter —
+       belt-yield and stroll pauses < 2s, a traffic agreement expires at 10s — and seated, social, gather and
+       approval-waiting bodies own their own timers. Drop the leg and re-plan: work re-paths to its seat
+       (tick / stepCrewToSeat re-plot a null target, around the bodies standing there now), idle re-decides. */
+    for (const b of list) {
+      if (!b.target || b.sitting || b.seated || b.goal === 'social' || b.goal === 'gather' || b.goal === 'awaiting') { b.stallAt = 0; continue; }
+      if (!b.stallAt || Math.hypot(b.px - b.stallX, b.py - b.stallY) > STALL_PX) { b.stallAt = now; b.stallX = b.px; b.stallY = b.py; continue; }
+      if (now - b.stallAt < STALL_MS) continue;
+      b.stallAt = 0;
+      const plan = trafficPlans.get(b); if (plan) clearTraffic(plan);
+      followOf.delete(b);
+      if (!(b.working || b.goal === 'work' || b.goal === 'summon' || b.goal === 'fetch')) seizeFromIdle(b);
       b.pathPts = null; b.target = null; b.state = 'idle'; b.idleUntil = now + U.irnd(300, 900);
     }
   }
