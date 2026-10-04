@@ -528,8 +528,18 @@
       if (!job) { notify('could not load this routine — refresh and try again', 'warn'); return; }
       const host = document.createElement('div');
       host.className = 'rt-edit mc-form';
+      // RUN AS — reassign a routine to another crew member without asking the lead in COMMS (user feedback
+      // 10-03: recipe schedules landed on the Overseer and could only be moved by chat). A routine whose agent
+      // left the station keeps its own id as an option, so opening the form never silently retargets it.
+      const curAgent = job.agentId || 'agent';
+      const runAsOpts = roster.map(a => ({ id: a.id, name: a.name || a.id }));
+      if (!runAsOpts.some(a => a.id === curAgent)) runAsOpts.unshift({ id: curAgent, name: curAgent + ' (not on station)' });
+      const runAsField = job.noAgent ? '' :
+        '<label class="sn-menu-field">Run as<select class="key-input" data-edit-agent>' +
+          runAsOpts.map(a => '<option value="' + esc(a.id) + '"' + (a.id === curAgent ? ' selected' : '') + '>' + esc(a.name) + '</option>').join('') +
+        '</select></label>';
       host.innerHTML =
-        '<label class="sn-menu-field">Name<input class="key-input" data-edit-name maxlength="80" autocomplete="off"></label>' +
+        '<label class="sn-menu-field">Name<input class="key-input" data-edit-name maxlength="80" autocomplete="off"></label>' + runAsField +
         '<label class="sn-menu-field">What should it do?<textarea class="key-input" data-edit-prompt rows="5" maxlength="' + EDIT_PROMPT_MAX + '" style="resize:vertical"></textarea></label>' +
         '<div class="mc-detail" data-edit-error role="alert" hidden></div>' +
         '<div class="mc-acts"><button class="bb xs" data-edit="save">✓ SAVE CHANGES</button>' +
@@ -556,6 +566,8 @@
         const patch = {};
         if (name !== (job.name || '')) patch.name = name;
         if (prompt !== (job.prompt || '')) patch.prompt = prompt;
+        const agentEl = host.querySelector('[data-edit-agent]');
+        if (agentEl && agentEl.value && agentEl.value !== curAgent) patch.agentId = agentEl.value;
         if (!Object.keys(patch).length) { closeEdit(); return; }
         editSaving = true;
         action.disabled = true; action.textContent = '… saving';
