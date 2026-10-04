@@ -60,7 +60,9 @@ body #chat-panel #chat-log .cmsg.ts-repeat:is(.agent, .user) > .cmsg-head { disp
 /* callsigns read as station type: the same RGB-fringe phosphor the CREW names wear */
 body #chat-panel #chat-log .cmsg:is(.agent, .user) > .cmsg-head > .who { text-shadow: var(--pg-glow-soft, none); letter-spacing: 1.4px; }
 
-/* ---- THE COMMANDER — a gold transmission plate that hugs its text, right side, gold rail on its edge ---- */
+/* ---- THE COMMANDER — right side, gold: a terminal INPUT line, not a box (Andrew 10-03: "idk if im a fan of the
+   text boxes … clean fallout new vegas pip boy / tron / terminal ASCII"). A `>` prompt, gold-tinted type, the gold
+   rail on its edge, and a faint scanline field fading in from that rail — no outline, no plate. ---- */
 body #chat-panel #chat-log .cmsg.user {
   align-self: flex-end; width: fit-content; max-width: 86%; min-width: 0;
   padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none;
@@ -70,13 +72,14 @@ body #chat-panel #chat-log .cmsg.user > .cmsg-head {
   justify-content: flex-start; gap: 8px; margin: 0 2px 4px; min-height: 0;
 }
 body #chat-panel #chat-log .cmsg.user > .body {
-  display: block; padding: 8px 12px 9px;
-  border: 1px solid rgba(var(--gold-rgb), .24); border-right: 2px solid rgba(var(--gold-rgb), .7); border-radius: 4px 0 0 4px;
-  background: linear-gradient(176deg, rgba(var(--gold-rgb), .085), rgba(var(--gold-rgb), .03) 60%);
-  box-shadow: inset 0 1px 0 rgba(var(--gold-rgb), .08);
-  color: var(--text);
+  display: block; padding: 3px 12px 4px 10px;
+  border: 0; border-right: 2px solid rgba(var(--gold-rgb), .65); border-radius: 0;
+  background: linear-gradient(270deg, rgba(var(--gold-rgb), .075), transparent 85%);
+  box-shadow: none;
+  color: color-mix(in srgb, var(--gold) 45%, var(--text));
 }
-body #chat-panel #chat-log .cmsg.user:is(:hover, :focus-within) > .body { border-color: rgba(var(--gold-rgb), .42); border-right-color: var(--gold); }
+body #chat-panel #chat-log .cmsg.user > .body::before { content: '> '; color: var(--gold); opacity: .75; }
+body #chat-panel #chat-log .cmsg.user:is(:hover, :focus-within) > .body { border-right-color: var(--gold); }
 body #chat-panel #chat-log .cmsg.user .chat-attach-view { justify-content: flex-end; }
 /* the ⧉ rides the header line on the stamp's side (the reserved lane in comms.css / glass-comms.css) */
 body #chat-panel #chat-log .cmsg.user > .cmsg-copy { top: -2px; }
@@ -120,24 +123,65 @@ body #chat-panel #chat-log .comms-presence.resolved.err { color: var(--bad); opa
 body #chat-panel #chat-log .comms-presence.resolved.stopped { color: var(--gold); opacity: .85; }
 body #chat-panel #chat-log .run-fold { margin: 2px 0 6px 14px; }
 
-/* ---- STATION LINES (trophies, quests, level-ups) — one centered terminal tag, not a card in the conversation ---- */
+/* ---- STATION LINES (trophies, quests, level-ups) — a ruled ASCII line, the time break's sibling: ─┐ ◆ TROPHY … ┌─.
+   No box (Andrew 10-03: not a fan of the text boxes). ---- */
 body #chat-panel #chat-log .cmsg.broadcast {
-  display: flex; justify-content: center; margin: 4px 0; padding: 0;
+  display: flex !important; align-items: center; gap: 10px; margin: 6px 2px; padding: 0;
   border: 0 !important; background: none !important; box-shadow: none !important;
 }
-body #chat-panel #chat-log .cmsg.broadcast .bc-stack { align-items: center; gap: 4px; max-width: 100%; }
+body #chat-panel #chat-log .cmsg.broadcast::before,
+body #chat-panel #chat-log .cmsg.broadcast::after {
+  content: "" !important; display: block !important; flex: 1 1 12px; min-width: 12px; max-width: none; height: 4px; align-self: center;
+  margin-top: 4px; background: none !important; opacity: 1 !important;
+  border-top: 1px solid rgba(var(--ph-rgb), .24);
+}
+body #chat-panel #chat-log .cmsg.broadcast::before { border-left: 1px solid rgba(var(--ph-rgb), .24); }
+body #chat-panel #chat-log .cmsg.broadcast::after { border-right: 1px solid rgba(var(--ph-rgb), .24); }
+body #chat-panel #chat-log .cmsg.broadcast.broadcast-gold::before,
+body #chat-panel #chat-log .cmsg.broadcast.broadcast-gold::after { border-color: rgba(var(--gold-rgb), .34); }
+body #chat-panel #chat-log .cmsg.broadcast .bc-stack { flex: 0 1 auto; align-items: center; gap: 2px; max-width: calc(100% - 44px); }
 body #chat-panel #chat-log .cmsg.broadcast .bc-line {
-  display: inline-block; max-width: 100%; padding: 4px 12px; text-align: center;
-  border: 1px solid rgba(var(--ph-rgb), .2); border-radius: 4px;
-  background: rgba(var(--ph-rgb), .035); color: var(--text);
-  letter-spacing: 1px; text-transform: uppercase; text-shadow: var(--pg-glow-soft, none);
+  display: block; max-width: 100%; padding: 0; text-align: center;
+  border: 0; border-radius: 0; background: none; color: var(--text);
+  font-size: var(--sn-type-meta, 13px) !important; letter-spacing: 1px; text-transform: uppercase; text-shadow: var(--pg-glow-soft, none);
 }
-body #chat-panel #chat-log .cmsg.broadcast .bc-line.bc-gold {
-  color: var(--gold); border-color: rgba(var(--gold-rgb), .3); background: rgba(var(--gold-rgb), .06);
-}
-body #chat-panel #chat-log .cmsg.broadcast.broadcast-warn .bc-line { color: var(--warn); border-color: currentColor; }
+body #chat-panel #chat-log .cmsg.broadcast .bc-line.bc-gold { color: var(--gold); }
+body #chat-panel #chat-log .cmsg.broadcast.broadcast-warn .bc-line { color: var(--warn); }
 body #chat-panel #chat-log .cmsg.broadcast .bc-glyph { width: auto; }
-body #chat-panel #chat-log .cmsg.broadcast .bc-line > .bc-glyph:first-child { display: none; }   /* the ▸ lead-in: the tag already frames it */
+body #chat-panel #chat-log .cmsg.broadcast .bc-line > .bc-glyph:first-child { display: none; }   /* the ▸ lead-in: the rule already frames it */
+
+/* ---- TERMINAL TYPE IN THE PROSE — code reads as lit phosphor, not as outlined boxes ---- */
+body #chat-panel #chat-log .cmsg .body .md-code {
+  border: 0; border-radius: 2px; padding: 0 3px;
+  background: rgba(var(--ph-rgb), .09); color: var(--ph-bright);
+}
+body #chat-panel #chat-log .cmsg .body .md-pre {
+  border: 0; border-left: 1px solid rgba(var(--ph-rgb), .4); border-radius: 0;
+  background: rgba(0, 0, 0, .22); padding: 6px 36px 6px 12px;
+}
+/* list bullets as the station's ▸ glyph, the pipboy list marker */
+body #chat-panel #chat-log .cmsg .body .md-list:not(ol) > li::marker { content: '▸  '; color: var(--ph); }
+
+/* ---- ASIDES (the agent's gentle nudge) — a gold rail like every beat, not a framed card ---- */
+body #chat-panel #chat-log > .cmsg.agent.nudge {
+  margin: 4px 0 2px; padding: 4px 10px 4px 12px;
+  border: 0; border-left: 2px solid rgba(var(--gold-rgb), .55); border-radius: 0;
+  background: linear-gradient(90deg, rgba(var(--gold-rgb), .06), transparent 80%); box-shadow: none;
+}
+
+/* ---- CHOICES — bracketed terminal keys: [ SHOW ME ]  [ NOT NOW ] ---- */
+body #chat-panel #chat-log .choice-row { gap: 6px; }
+body #chat-panel #chat-log .choice-row .choice {
+  min-height: 0; padding: 2px 6px; border: 1px solid transparent; border-radius: 2px;
+  background: none; box-shadow: none; color: var(--ph);
+  font-size: var(--sn-type-control, 15px) !important; letter-spacing: 1px; text-transform: uppercase; text-shadow: var(--pg-glow-soft, none);
+}
+body #chat-panel #chat-log .choice-row .choice::before { content: '[ '; color: rgba(var(--ph-rgb), .55); }
+body #chat-panel #chat-log .choice-row .choice::after { content: ' ]'; color: rgba(var(--ph-rgb), .55); }
+body #chat-panel #chat-log .choice-row .choice:is(:hover, :focus-visible) {
+  color: var(--ph-bright); background: rgba(var(--ph-rgb), .1); border-color: rgba(var(--ph-rgb), .35);
+}
+body #chat-panel #chat-log .choice-row .choice.quiet { color: var(--text); opacity: .7; }
 /* a summary too long for a narrow panel wraps as TEXT: the fold chevron rides its last word, never stranded hard-right */
 body #chat-panel #chat-log .comms-presence.resolved.has-fold { display: block; }
 body #chat-panel #chat-log .comms-presence.resolved .cp-chev { display: inline-block; margin-left: 6px; }
