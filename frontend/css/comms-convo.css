@@ -13,7 +13,7 @@
                     ╭───────────────────╮
                     │ can you look at … │
                     ╰───────────────────╯
-     [face] NOVA  3:42 PM                  the agent's turn: face + callsign + stamp, plain prose on a quiet rail
+     NOVA  3:42 PM                         the agent's turn: callsign + stamp, the text on a phosphor rail + faint field
      │ Here's what I found …
        ■ RUN COMPLETE · 2.2s · 3 tools ▸   the run summary as the reply's FOOTER (chat.js settleSummaryUnderReply)
    Space separates exchanges; nothing between a question and its answer but the answer.
@@ -84,31 +84,26 @@ body #chat-panel #chat-log .cmsg.user .chat-attach-view { justify-content: flex-
 /* the ⧉ rides the header line on the stamp's side (the reserved lane in comms.css / glass-comms.css) */
 body #chat-panel #chat-log .cmsg.user > .cmsg-copy { top: -2px; }
 
-/* ---- THE AGENT — face + callsign + stamp over plain prose on a quiet phosphor rail ---- */
+/* ---- THE AGENT — the Commander's line, mirrored: callsign + stamp above, the text on a phosphor rail with a faint
+   field fading out from it. No face, no box (Andrew 10-03: "keep the name as is without the pfp"). ---- */
 body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) {
-  padding: 2px 6px 4px 12px;
-  border: 0; border-left: 2px solid rgba(var(--ph-rgb), .22); border-radius: 0;
-  background: none; box-shadow: none;
+  padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none;
 }
 body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable):is(:hover, :focus-within) {
-  border: 0; border-left: 2px solid rgba(var(--ph-rgb), .45);
-  background: linear-gradient(90deg, rgba(var(--ph-rgb), .035), transparent 80%); box-shadow: none;
+  border: 0; background: none; box-shadow: none;
 }
-body #chat-panel #chat-log .cmsg.agent.err { border-left-color: var(--bad); }
+body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) > .body {
+  display: block; padding: 3px 10px 4px 12px;
+  border-left: 2px solid rgba(var(--ph-rgb), .5);
+  background: linear-gradient(90deg, rgba(var(--ph-rgb), .05), transparent 85%);
+}
+body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable):is(:hover, :focus-within) > .body { border-left-color: var(--ph); }
+body #chat-panel #chat-log .cmsg.agent.err > .body { border-left-color: var(--bad); }
 body #chat-panel #chat-log .cmsg.agent > .cmsg-head {
-  justify-content: flex-start; align-items: center; gap: 8px; margin: 0 0 5px; min-height: 0;
+  justify-content: flex-start; align-items: baseline; gap: 8px; margin: 0 2px 4px; min-height: 0;
 }
 body #chat-panel #chat-log .cmsg.agent > .cmsg-head > .cmsg-ts { margin-left: 0; }
 body #chat-panel #chat-log .cmsg.agent > .cmsg-copy { top: 0; }
-/* the face: a housed portrait well, the CREW row's recipe at a callsign's size */
-body #chat-panel #chat-log .cmsg-face {
-  flex: 0 0 auto; display: inline-flex; align-items: flex-end; justify-content: center;
-  width: 20px; height: 24px; margin-right: -2px; overflow: hidden;
-  border: 1px solid rgba(var(--ph-rgb), .24); border-radius: 3px;
-  background: rgba(0, 0, 0, .3); box-shadow: inset 0 1px 2px rgba(0, 0, 0, .35);
-}
-body #chat-panel #chat-log .cmsg-face img { display: block; width: 16px; height: 22px; object-fit: contain; image-rendering: auto; }
-body #chat-panel #chat-log .cmsg-face img[hidden] { display: none; }
 
 /* ---- RUN SUMMARY — the reply's quiet footer, not a row of its own ---- */
 body #chat-panel #chat-log .comms-presence.resolved {
@@ -185,10 +180,9 @@ body #chat-panel #chat-log .choice-row .choice.quiet { color: var(--text); opaci
 /* a summary too long for a narrow panel wraps as TEXT: the fold chevron rides its last word, never stranded hard-right */
 body #chat-panel #chat-log .comms-presence.resolved.has-fold { display: block; }
 body #chat-panel #chat-log .comms-presence.resolved .cp-chev { display: inline-block; margin-left: 6px; }
-/* a same-speaker follow-up continues the message above: one unbroken rail, and no face/callsign repeated (a
+/* a same-speaker follow-up continues the message above: one unbroken rail, no callsign repeated (a
    different-minute follow-up keeps only its stamp — the callsign already sits on the row above) */
-body #chat-panel #chat-log > .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) + .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) { margin-top: -6px; padding-top: 6px; }
-body #chat-panel #chat-log > .cmsg.agent + .cmsg.agent > .cmsg-head > .cmsg-face { display: none; }
+body #chat-panel #chat-log > .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) + .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) { margin-top: -6px; }
 
 /* ---- JUMP-TO-LATEST — readable in both states. The "new messages" state inked its text dark for the old lit
    phosphor fill, but the glass layer swapped that fill for a near-clear one: dark ink on a dark panel, a blank box.

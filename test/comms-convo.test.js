@@ -72,4 +72,8 @@ A.ok(/\.cmsg\.user > \.body::before \{ content: '> '/.test(css), 'the Commander 
 A.ok(/\.cmsg\.broadcast \.bc-line \{[^}]*border: 0;[^}]*background: none;/.test(css), 'station lines are ruled ASCII lines, not boxed tags');
 A.ok(/\.choice-row \.choice::before \{ content: '\[ '/.test(css), 'choices are [ bracketed ] terminal keys');
 
+/* ---------- 7. the agent's line mirrors the Commander's: name as is, no portrait (Andrew 10-03: "without the pfp") ---------- */
+A.ok(!/agentFace|cmsg-face/.test(src) && !/cmsg-face/.test(css), 'no portrait beside the agent callsign');
+A.ok(/:not\(\.deliverable\) > \.body \{[^}]*border-left: 2px solid/.test(css), 'the agent text rides a phosphor rail (the Commander line, mirrored)');
+
 A.report('comms-convo.test');

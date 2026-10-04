@@ -2147,8 +2147,6 @@ const Chat = (() => {
         if (pts && pts.textContent === ts.textContent) d.classList.add('ts-repeat');
       }
       timeBreak(at);
-      // the speaker's FACE beside the callsign — the same station body the floor and CREW draw (a cached thumb)
-      if (role === 'agent') { const face = agentFace(who.textContent, opts && opts.agentId); if (face) head.appendChild(face); }
       head.appendChild(who); head.appendChild(ts);
       d.appendChild(head); d.appendChild(body);
     } else {
@@ -2196,19 +2194,6 @@ const Chat = (() => {
     const d = document.createElement('div'); d.className = 'cmsg-timebreak'; d.setAttribute('role', 'separator');
     const t = document.createElement('span'); t.className = 'tb-when'; t.textContent = fmtBreak(at);
     d.appendChild(t); log.appendChild(d);
-  }
-  // a small portrait for an agent row — resolved from the live roster by the row's speaker (or its agentId). Null when the
-  // roster can't name the speaker: no face is better than the wrong one.
-  function agentFace(whoText, agentId) {
-    if (typeof AgentPortraits === 'undefined' || !AgentPortraits.paint || typeof App === 'undefined' || !App.agents) return null;
-    const list = App.agents() || [];
-    const rec = (agentId && list.find(a => a && a.id === agentId)) || list.find(a => a && String(a.name || a.id) === whoText) || null;
-    if (!rec) return null;
-    const s = document.createElement('span'); s.className = 'cmsg-face'; s.setAttribute('aria-hidden', 'true');
-    const img = document.createElement('img'); img.alt = ''; img.draggable = false; img.hidden = true;
-    s.appendChild(img);
-    AgentPortraits.paint(img, rec);   // the SAME cached portrait crop the COMMS header shows (hidden until it lands)
-    return s;
   }
   // stamp: omitted → live now (real); a number/Date → the turn's stored real time; false → no stamp (replay of a
   // legacy turn that carries no time — never fabricate the current clock).
