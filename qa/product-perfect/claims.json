@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "b95a70b39e0f9a127938b7f16decc79192434ecc",
+    "sourceCommit": "9dfa57b9c37c2e0b2d2ca7b6f931e1095fbb9ed4",
     "pathSetSha256": "fac5552f81f0dd00ab64856cfdfc9f107fcb0517a3ef0449f4018b13e983e609",
     "files": [
       {
@@ -1528,8 +1528,8 @@
       },
       {
         "path": "frontend/css/comms-convo.css",
-        "bytes": 16901,
-        "sha256": "31daeaa7ed67f99ec01546276a82449c2b613f0341b080dc3508faa2d4a78ff5"
+        "bytes": 16865,
+        "sha256": "7f63e1e1ef7e7135df5d470a11354dbe772485368f60eb1d222ef9e688423dfd"
       },
       {
         "path": "frontend/css/comms-layout.css",
