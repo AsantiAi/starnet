@@ -89,4 +89,14 @@ for(const name of ['crewEngineStep','stepCrewToSeat','tick']){
   A.ok(Math.hypot(a.px-start[0][0],a.py-start[0][1])>24&&Math.hypot(b.px-start[1][0],b.py-start[1][1])>24,'crossing walkers never hold for each other in a ring');
   A.eq(f.errors,[],'ring break preserves wall clearance');
 }
+{
+  // STALL WATCHDOG: whatever holds a body that has somewhere to go (a hold rule nobody has found yet,
+  // modelled here as a body that cannot cover ground), it re-plans after STALL_MS instead of standing forever.
+  const f=fixture(),a=f.body(10,15,10,23),w=f.body(5,6,13,6);a.speed=1e-9;w.speed=1e-9;w.working=true;
+  f.step(600);A.ok(!!a.target&&!!w.target,'a short hold keeps its route');
+  f.step(200);
+  A.eq([a.target,a.state],[null,'idle'],'a body held still with somewhere to go drops the stuck leg and re-decides');
+  A.eq(f.dropped,1,'only the idle body is seized: a working body keeps its goal and just re-plots');
+  A.eq([w.target,w.working],[null,true],'the working body re-plans with its work intact');
+}
 A.report('hallway-traffic');

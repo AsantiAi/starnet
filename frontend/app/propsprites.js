@@ -11209,10 +11209,11 @@ const PropSprites = (() => {
   // TRUTH: a call that the gate denied or that errored never did the work, so it must NOT read as the green surge.
   function pulseProp(id, cap, ok) { if (!id) return; propPulse[id] = { at: now, cap: cap || '', bad: ok === false }; }
 
-  // G2.3 — uncollected while-away work: the world layer feeds the ReturnStore's pending-crate count
-  // here each frame; the OUTBOX sprite stacks that many banked-product crates (cap 5 + counter).
+  // G2.3 — uncollected work: the world layer feeds the ReturnStore's pending crates here each frame; the OUTBOX
+  // sprite stacks that many banked-product crates (cap 5 + counter). PER OUTBOX (10-03): a map propId -> count, so
+  // each chute stacks only ITS line's waiting results (a bare number = every chute, the legacy single-outbox form).
   let outboxCrates = 0;
-  function setOutboxCrates(n) { outboxCrates = Math.max(0, n | 0); }
+  function setOutboxCrates(n) { outboxCrates = (n && typeof n === 'object') ? n : Math.max(0, n | 0); }
 
   // G1b — the MISSION BOARD's live readout: `pins` = how many quests are OPEN in the (visible) quest log,
   // `hot` = a station-gap fix-it quest is currently open (the board breathes gold). The world layer feeds
@@ -11355,7 +11356,7 @@ const PropSprites = (() => {
     }
     if (f.t === 'bunk') o.sleeper = !!f.sleeper;      // a dormant body is IN it → hold the quilt back for drawOver
     if (f.t === 'jukebox') o.live = jukeConnected;   // dead until Spotify is connected in TOOLSETS (object=capability truth)
-    if (f.t === 'outbox') o.crates = outboxCrates;   // G2.3: uncollected while-away runs stack as crates
+    if (f.t === 'outbox') o.crates = (outboxCrates && typeof outboxCrates === 'object') ? Math.max(0, outboxCrates[f.id] | 0) : outboxCrates;   // G2.3: THIS chute's uncollected results stack as crates
     if (f.t === 'missionboard') { o.pins = missionPins; o.hot = missionHot; o.jam = missionJam; o.proposals = missionProposals; }   // G1b/G1c: open quests pinned + the station-gap beacon + the routine-JAM amber stub; G4: pending autojob PROPOSAL cards
     if (f.t === 'trophycase') { o.trophies = trophyCount; o.journeyStage = journeyStage; }   // earned trophies + distinct reached-goal crown beacons
     /* ORIENTATION. `r` = quarter turns clockwise (0 = south, the shipped facing), `m` = mirrored.

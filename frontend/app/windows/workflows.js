@@ -81,7 +81,7 @@ const WorkflowsWindow = (() => {
       const intake = st.propById(c.intakes[0]) || {};
       const steps = flow.order.map((pid, k) => { const p = st.propById(pid) || {}; return { id: pid, n: k + 1, role: p.role || '', agentId: p.agentId || '', brief: p.brief || '', hands: p.hands || '', desk: hasCompute(p.agentId, pid) }; });
       lines.push({ key: c.key, name: String(intake.label || '').trim() || ('Workflow ' + (i + 1)), intakeId: c.intakes[0], flow, ready, steps,
-        loops: (flow.gates || []).some(g => g.kind === 'loop'), outbox: flow.outbox && flow.outbox.propId });
+        loops: (flow.gates || []).some(g => g.kind === 'loop'), outbox: flow.outbox && flow.outbox.propId, outboxes: (c.outboxes || []).slice() });
     });
     return { st, lines };
   }
@@ -758,8 +758,23 @@ const WorkflowsWindow = (() => {
       return showJob(hit.id).then(() => true);
     }, () => false);
   }
+  /* THE FLOOR OUTBOX IS ITS OWN LINE'S (Andrew 10-03: "the outbox should only show output of the specific conveyor system, it
+     should never link back to deliverables"): clicking an OUTBOX on the floor opens the workflow that ships into it — its newest
+     finished result first (NEW JOB + its last jobs one key away), or the job riding it right now. Never DELIVERABLES, never another
+     line's work. An OUTBOX on no workflow ships nothing: it says so and shows the workflows (false = the caller had no window to open). */
+  function openOutbox(propId) {
+    const f = floor();
+    const l = f && propId ? f.lines.find(x => x.outbox === propId || (x.outboxes || []).indexOf(propId) >= 0) : null;
+    if (!l) { notify('This OUTBOX isn’t at the end of a workflow yet — nothing ships into it. Belt it to a line in Build Mode.', 'warn'); open({ view: 'list', job: null, step: null }); return false; }
+    open({ view: 'line', line: l.key, job: null, step: null, msg: null });
+    return getJSON('/api/line-jobs?line=' + encodeURIComponent(l.key) + '&limit=1').then(({ status, j }) => {
+      const last = status === 200 && j && Array.isArray(j.jobs) ? j.jobs[0] : null;
+      if (last && last.status !== 'running' && S.view === 'line' && S.line === l.key && !S.job) return showJob(last.id).then(() => true);
+      return true;
+    }, () => true);
+  }
   if (UI() && UI().registerWindow) UI().registerWindow('workflows', 'WORKFLOWS', build, { className: 'wfw-win' });
-  return { open, openLine: key => open({ view: 'line', line: key, job: null }), openNew: () => open({ view: 'new' }), openByStream, showJob,
+  return { open, openLine: key => open({ view: 'line', line: key, job: null }), openNew: () => open({ view: 'new' }), openByStream, openOutbox, showJob,
     _state: S, _floor: floor, _pick: pickStarter, _create: create, _send: send, _useFix: useFix, _styleKept: styleKept, _putStyleBack: putStyleBack, _exampleBrief: exampleBrief, EX_HEAD };   // (the _ seams are test/eval reads)
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = WorkflowsWindow;

@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "71142a759dc0907e8d0b85b6f2e14e671dc68a9b",
+    "sourceCommit": "11f7a3bfdb7ab6d8cb8b9e9b28b97a57a5235e2e",
     "pathSetSha256": "69557b650ba864c7feca1f652d8ced6433f5239e587cdf6a9368c966a54f4c65",
     "files": [
       {
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 423297,
-        "sha256": "9c8b0fe28752b0fa45000f06c819b85f445a38c7de47923061784f23d5fe891d"
+        "bytes": 423259,
+        "sha256": "ba70084744b504c258ef9c96a6764087441396c62290d49e70f1d0e454de04ec"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
@@ -423,8 +423,8 @@
       },
       {
         "path": "frontend/app/deliverables.js",
-        "bytes": 35232,
-        "sha256": "5948acc60cbb74dda085d121f2b2c76355cbb0d47cd14092c808283de812a8a6"
+        "bytes": 35945,
+        "sha256": "308139d935ed6527cc3664b50d1de29bbf7790c88c3cc45c739de176c201585f"
       },
       {
         "path": "frontend/app/deskscreen.js",
@@ -663,8 +663,8 @@
       },
       {
         "path": "frontend/app/marketplace.js",
-        "bytes": 277030,
-        "sha256": "0d0dc91520b44cef66549acdd0e57fc843f253e8b95d01f9dea9c2eab0395c22"
+        "bytes": 273200,
+        "sha256": "0fb3ce2313b7f7df1bbfc90713df505bde3ea64b833dfa0475bb6ccb71768e16"
       },
       {
         "path": "frontend/app/mint.js",
@@ -848,8 +848,8 @@
       },
       {
         "path": "frontend/app/propsprites.js",
-        "bytes": 808812,
-        "sha256": "8465950729407ee59620ccd4c5bc375c6b56459d9cdb637e4f3a1b73ca74a08a"
+        "bytes": 809090,
+        "sha256": "d8848258268da6925d2346a3b0abdf09eb4c718841891ae25646b156775c8d5d"
       },
       {
         "path": "frontend/app/prospect.js",
@@ -973,8 +973,8 @@
       },
       {
         "path": "frontend/app/recipes.js",
-        "bytes": 77883,
-        "sha256": "7fa4931dcb70690a5375b8193bbd50712b5a2240c864aef859fae5692bcfcaa5"
+        "bytes": 76179,
+        "sha256": "100fe853fd4e91987818a858fb9ac84e00906bcb682d5ee4b3abc381a74c875a"
       },
       {
         "path": "frontend/app/recledger.js",
@@ -1353,8 +1353,8 @@
       },
       {
         "path": "frontend/app/windows/routines.js",
-        "bytes": 66271,
-        "sha256": "5d781c1fdaa3123d82d32268a260cd3603ea664204bd1a1d5d516efeebc55591"
+        "bytes": 65199,
+        "sha256": "37d824c06d87d13ea73bfae31de40efe433b8a63c4a1628418c5294127dfabc5"
       },
       {
         "path": "frontend/app/windows/trophies.js",
@@ -1363,8 +1363,8 @@
       },
       {
         "path": "frontend/app/windows/workflows.js",
-        "bytes": 67687,
-        "sha256": "178759c5c88294a860855ff85a60baf43939d88ee66fe09a1650c01a9dff7e6b"
+        "bytes": 69097,
+        "sha256": "ce2ad84ca75c8082762a8dd24c66972c323efcbaac9bcc8e1150d33e7dcbb549"
       },
       {
         "path": "frontend/app/workflowline.js",
@@ -1423,8 +1423,8 @@
       },
       {
         "path": "frontend/app/world.js",
-        "bytes": 825241,
-        "sha256": "21704e75934654df20f0247d79bd2f9ea4a80975b796f42782d2619677977e89"
+        "bytes": 829701,
+        "sha256": "a1b3aab13abc305aab30e89d456ef9e3465ce775a1e35fd127fb85ba2851e5d5"
       },
       {
         "path": "frontend/app/worldlab.js",

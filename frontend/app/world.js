@@ -2593,6 +2593,8 @@ const World = (() => {
   const PERSONAL_TILES = 0.8;      // min centre-to-centre spacing, in tiles. < 1 so adjacent-tile beats never fight it.
   const SEP_JAM_MS = 2500;         // continuously shoved while walking for this long → give up on the leg and re-decide
   const SEP_PASSES = 4;            // relaxation sweeps per frame — a pile of three needs more than one pass to settle
+  const STALL_MS = 12000;          // a body with somewhere to go that has not moved STALL_PX in this long is stuck → re-plan
+  const STALL_PX = 3;
   function nudgeBody(b, dx, dy) {
     const nx = b.px + dx, ny = b.py + dy;
     const t = tileOf(nx, ny);
@@ -2621,6 +2623,7 @@ const World = (() => {
     const list = [];
     if (agent && !agent.unplaced) list.push(agent);
     for (const b of crew) if (b && !b.unplaced) list.push(b);
+    releaseStalled(list, now);   // every body, even a lone one — see STALL WATCHDOG below
     if (list.length < 2) return;
     const R = PERSONAL_TILES * T, R2 = R * R;
     const anchored = b => !!(b.sitting || b.seated);   // seated only — see the note above: a walk-in is exactly when they cross
@@ -2675,6 +2678,25 @@ const World = (() => {
       if (now - b.sepSince < SEP_JAM_MS) continue;
       b.sepSince = 0;
       seizeFromIdle(b);                                     // drop the in-flight idle goal + any seat claim it had reserved
+      b.pathPts = null; b.target = null; b.state = 'idle'; b.idleUntil = now + U.irnd(300, 900);
+    }
+  }
+
+  /* STALL WATCHDOG (2026-10-03, Andrew: three crew stood in a hall for 30+ minutes). The backstop for
+     every hold above and any we have not found yet: a body that WANTS to go somewhere (has a target) but
+     has not covered STALL_PX in STALL_MS is not waiting, it is stuck. Every deliberate hold is shorter —
+     belt-yield and stroll pauses < 2s, a traffic agreement expires at 10s — and seated, social, gather and
+     approval-waiting bodies own their own timers. Drop the leg and re-plan: work re-paths to its seat
+     (tick / stepCrewToSeat re-plot a null target, around the bodies standing there now), idle re-decides. */
+  function releaseStalled(list, now) {
+    for (const b of list) {
+      if (!b.target || b.sitting || b.seated || b.goal === 'social' || b.goal === 'gather' || b.goal === 'awaiting') { b.stallAt = 0; continue; }
+      if (!b.stallAt || Math.hypot(b.px - b.stallX, b.py - b.stallY) > STALL_PX) { b.stallAt = now; b.stallX = b.px; b.stallY = b.py; continue; }
+      if (now - b.stallAt < STALL_MS) continue;
+      b.stallAt = 0;
+      const plan = trafficPlans.get(b); if (plan) clearTraffic(plan);
+      followOf.delete(b);
+      if (!(b.working || b.goal === 'work' || b.goal === 'summon' || b.goal === 'fetch')) seizeFromIdle(b);
       b.pathPts = null; b.target = null; b.state = 'idle'; b.idleUntil = now + U.irnd(300, 900);
     }
   }
@@ -6529,7 +6551,7 @@ const World = (() => {
       if (convey && convey.peekBoxes && typeof PropRemaster !== 'undefined' && PropRemaster.enabled('filter')) {
         for (const box of convey.peekBoxes()) if (!(box.sink > 0)) scanningTiles.add(box.x + ':' + box.y);
       }
-      if (PropSprites.setOutboxCrates) PropSprites.setOutboxCrates(returnCrates());   // G2.3: uncollected while-away work stacks on the chute
+      if (PropSprites.setOutboxCrates) PropSprites.setOutboxCrates(outboxCrateMap());   // G2.3: each chute stacks only ITS line's uncollected results (10-03)
       if (PropSprites.setMissionPins) { const mp = missionPinCounts(now); PropSprites.setMissionPins(mp[0], mp[1], mp[2], mp[3]); maybePinProposal(now, mp[3]); }   // G1b/G1c: open quests pin to the MISSION BOARD; a station-gap keeps it breathing; a jammed routine flags an amber JAM stub; G4: pending proposals + the walk-and-pin body
       if (PropSprites.setTrophyCount) PropSprites.setTrophyCount(trophyCount(now));   // G3b: earned trophies stand behind glass in the TROPHY CASE
       if (PropSprites.setJourneyStage) {
@@ -8310,13 +8332,14 @@ const World = (() => {
     }
     ctx.restore();
   }
-  // the hover-glance tag over a clickable OUTBOX: crates pending → "N TO REVIEW — CLICK"; pallet only →
-  // the LOGBOOK click-through. Names what the stacked boxes ARE and what the click does (the 2026-07-16
-  // confusion: "boxes showing output but I can't see it"). A glance, never a window (hover law).
+  // the hover-glance tag over a clickable OUTBOX: names what the stacked boxes ARE and what the click does (the
+  // 2026-07-16 confusion: "boxes showing output but I can't see it"). THIS chute's line only (10-03): its own waiting
+  // results, else its line's results; a chute on no line says so. A glance, never a window (hover law).
   function drawOutboxHoverTag(now) {
     if (!hoverOutbox) return;
-    const n = returnCrates();
-    const text = n > 0 ? (n + ' TO REVIEW — CLICK') : 'FINISHED WORK — CLICK';
+    const onLine = !!(routingPlan && routingPlan.lineOfProp && routingPlan.lineOfProp[hoverOutbox.id]);
+    const n = onLine ? (outboxCrateMap()[hoverOutbox.id] | 0) : 0;
+    const text = !onLine ? 'NOT ON A WORKFLOW' : n > 0 ? (n + ' TO REVIEW — CLICK') : 'THIS LINE’S RESULTS — CLICK';
     ctx.save();
     ctx.font = NAG_FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
     ctx.shadowBlur = 3; ctx.shadowColor = n > 0 ? '#ffd88a' : '#62ff9e';
@@ -8340,15 +8363,47 @@ const World = (() => {
   function setOnTrophyCase(fn) { onTrophyCase = fn; }   // G3b: click a placed TROPHY CASE → open the trophy surface
   function setOnPluginTerminal(fn) { onPluginTerminal = fn; }   // click a placed PLUGIN TERMINAL → that plugin's window (or why not)
   function setOnDesk(fn) { onDesk = fn; }   // DESK SCREEN: click an agent's workstation → that agent's live work (deskscreen.js)
-  // G2.3 — the live uncollected-crate count (ReturnStore's pending ledger). Read per-frame for the
-  // OUTBOX sprite stack and by the hit-test below; 0 when the store isn't loaded (headless tests).
+  // G2.3 — the live uncollected-crate count (ReturnStore's pending ledger); 0 when the store isn't loaded (headless tests).
   function returnCrates() {
     try { return (typeof ReturnStore !== 'undefined' && ReturnStore.pendingCount) ? (ReturnStore.pendingCount() | 0) : 0; } catch (_) { return 0; }
   }
-  // hit-test: the OUTBOX chute under a world-space point — ALWAYS clickable while placed (2026-07-16:
-  // the click opens the OUTBOX window, which has honest content in every state — pending crates,
-  // or the "finished work lands here" empty state — so the affordance is never dead, mirroring the
-  // MISSION BOARD). The stacks spill above AND below the footprint, so the box extends both ways.
+  /* PER-OUTBOX CRATES (Andrew 10-03: an OUTBOX shows only ITS conveyor's output). A pending row belongs to a line only
+     when a line-job record PROVES it: the row's run stream is a job sent down that line (/api/line-jobs streamId → line).
+     Routines, chats and while-away runs are no conveyor's output — they wait in DELIVERABLES › TO REVIEW, never on a
+     chute. Memoized on (pending count, stream join, plan) so the per-frame read stays cheap. */
+  let lineJobStream = {};   // job streamId -> line key, from the server's line-job records (refreshed with the line plates)
+  let crateMemo = null, crateKey = null;
+  function outboxCrateMap() {
+    const n = returnCrates(), key = [n, lineJobStream, routingPlan];
+    if (crateKey && crateKey.every((v, i) => v === key[i])) return crateMemo;
+    const by = {}, outOf = {};
+    try {
+      if (n > 0 && routingPlan && routingPlan.lineOfProp && geo && geo.props) {
+        for (const p of geo.props) if (p.t === 'outbox') { const l = routingPlan.lineOfProp[p.id]; if (l && !outOf[l]) outOf[l] = p.id; }
+        for (const r of ReturnStore.pendingRows()) {
+          const l = r && r.streamId ? lineJobStream[r.streamId] : null, ob = l ? outOf[l] : null;
+          if (ob) by[ob] = (by[ob] | 0) + 1;
+        }
+      }
+    } catch (_) {}
+    crateMemo = by; crateKey = key;
+    return by;
+  }
+  function pollLineJobStreams() {
+    try {
+      fetch(apiUrl('/api/line-jobs?limit=100'), { cache: 'no-store' })
+        .then(r => (r.ok ? r.json() : null))
+        .then(j => {
+          if (!j || !Array.isArray(j.jobs)) return;   // no answer — keep the last known join
+          const m = {};
+          for (const x of j.jobs) if (x && x.streamId && x.line) m[x.streamId] = x.line;
+          lineJobStream = m;
+        }).catch(() => {});
+    } catch (_) {}
+  }
+  // hit-test: the OUTBOX chute under a world-space point — ALWAYS clickable while placed: the click opens THIS
+  // OUTBOX's own line in WORKFLOWS (its newest result, its last jobs — 10-03), and an OUTBOX on no line says so,
+  // so the affordance is never dead, mirroring the MISSION BOARD. The stacks spill above AND below the footprint, so the box extends both ways.
   function outboxAt(wp) {
     if (!geo || !geo.props) return null;
     for (const p of geo.props) {
@@ -9130,6 +9185,7 @@ const World = (() => {
   }
   function pollLineStats() {
     if (typeof fetch === 'undefined' || typeof LineWatch === 'undefined') return;
+    pollLineJobStreams();   // the per-OUTBOX crate join rides the line plates' cadence (60 s + shortly after a line run)
     const since = LineWatch.localMidnight(Date.now());
     try {
       fetch(apiUrl('/api/routing/lines/stats?since=' + since), { cache: 'no-store' })
@@ -10540,10 +10596,12 @@ const World = (() => {
      SERVER truth: completed runs (reason 'done') since LOCAL midnight via /api/runs — bumped
      optimistically on agent.run.end and reconciled by a 60s poll, so a page reload never zeroes the
      day. No OUTBOX on the floor → no pallet (the outbox IS the shipping surface); nothing draws until
-     the server has actually answered (known), so it can never flash a fake number. Clicking the outbox
-     with no pending return-crates opens the LOGBOOK — the shift record behind the stack. */
+     the server has actually answered (known), so it can never flash a fake number.
+     EACH OUTBOX STACKS ONLY ITS OWN LINE (Andrew 10-03: the outbox is that conveyor's, never the whole station's): the pallet
+     is the line plate's own SHIPPED (/api/routing/lines/stats — jobs that left through THAT line's OUTBOX today), so the
+     pallet and the INBOX plate can never disagree. An OUTBOX on no line ships nothing and stacks nothing. shipStats stays
+     the station-wide day count the run ticker reads ("· N SHIPPED TODAY"). Clicking an OUTBOX opens its line's results. */
   let shipStats = { day: '', done: 0, known: false };
-  let shipFlash = -1e9;   // fnow of the latest shipped job — the newest crate pops for ~0.9s
   const shipDay = () => { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
   const shipMidnight = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
   function pollShipStats() {
@@ -10566,14 +10624,22 @@ const World = (() => {
   function bumpShipped() {
     const day = shipDay();
     if (shipStats.day !== day) shipStats = { day, done: 0, known: shipStats.known };
-    shipStats.done++; shipFlash = fnow;
+    shipStats.done++;
     return shipStats.done;
   }
+  const palletSeen = new Map();   // outbox propId -> { done, at }: the line's last drawn count (a rise pops the newest crate)
   function drawShippedPallet(now) {
-    if (!shipStats.known || shipStats.done <= 0 || !geo || !geo.props) return;
-    const ob = geo.props.find(p => p.t === 'outbox');
-    if (!ob) return;
-    const done = shipStats.done;
+    if (!lineStats.known || !routingPlan || !routingPlan.lineOfProp || !geo || !geo.props) return;
+    for (const ob of geo.props) {
+      if (ob.t !== 'outbox') continue;
+      const lid = routingPlan.lineOfProp[ob.id], s = lid ? lineStats.byLine[lid] : null;
+      const done = s ? (s.shipped | 0) : 0;
+      const seen = palletSeen.get(ob.id);
+      if (!seen || seen.done !== done) palletSeen.set(ob.id, { done, at: (seen && done > seen.done) ? now : -1e9 });
+      if (done > 0) drawPallet(ob, done, now - palletSeen.get(ob.id).at);
+    }
+  }
+  function drawPallet(ob, done, since) {
     const PERROW = 4, MAXVIS = 12, shown = Math.min(done, MAXVIS);
     const baseX = (ob.x + (ob.w || 1) / 2) * T;
     const baseY = (ob.y + (ob.h || 1)) * T + 6;   // the pallet sits on the floor in front of the chute
@@ -10581,7 +10647,7 @@ const World = (() => {
     if (linkStaleDim) ctx.globalAlpha = 0.3;   // E1: link down → this count is last-known, not live
     for (let i = 0; i < shown; i++) {
       const row = (i / PERROW) | 0, col = i % PERROW;
-      const pop = (i === shown - 1 && now - shipFlash < 900) ? 1 - (now - shipFlash) / 900 : 0;
+      const pop = (i === shown - 1 && since < 900) ? 1 - since / 900 : 0;
       drawShipCrate(baseX + (col - (PERROW - 1) / 2) * 10, baseY - row * 6, pop);
     }
     ctx.font = NAG_FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
