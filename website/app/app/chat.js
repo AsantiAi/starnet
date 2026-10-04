@@ -3620,6 +3620,12 @@ const Chat = (() => {
     const beat = beatCards && beatCards.claim({ kind: 'rate', runId: runId, node: r.d });
     if (!beat) { if (r.d && r.d.parentNode) r.d.remove(); return false; }
     workRateControl(r.body, agentId, runId, () => { beat.decide(); beat.finish(); });
+    // INLINE (Andrew 10-03: "i dont like that its big and centered, shouldnt even pop up in such a big box make it
+    // smaller"): the standalone ask is one slim row under the run it rates — label + two small thumbs. It lands right
+    // under that run's footer, so the "task · run id" line moves into the row's hover tip instead of printing.
+    r.d.classList.add('rate-inline');
+    const ref = r.body.querySelector('.work-rate-reference');
+    if (ref && ref.title) r.body.setAttribute('data-tip', ref.title);
     autoscroll();
     return true;
   }
