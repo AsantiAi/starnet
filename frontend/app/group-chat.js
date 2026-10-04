@@ -122,7 +122,7 @@ const GroupChat = (() => {
     if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => fitPeople($('gc-header')?.querySelector?.('.gc-people'))).observe(header);
     const css = h('style'); css.textContent = `
       #group-chat{position:relative;display:flex;flex:1 1 0;min-width:0;min-height:0;flex-direction:column;overflow:hidden;color:var(--text);background:transparent;padding:0;gap:0}
-      #group-chat[hidden],#gc-header[hidden]{display:none}
+      #group-chat[hidden],#gc-header[hidden],#group-chat .gc-files[hidden]{display:none}
       #comms-idbar{flex:0 0 auto;flex-wrap:nowrap}#comms-idbar.gc-group>.comms-agent-wrap,#comms-idbar.gc-group>#comms-agent-model,#chat-panel #comms-idbar.gc-group>.comms-identity,#chat-panel #comms-idbar.gc-group>.comms-portrait{display:none}
       #gc-header{display:flex;align-items:center;gap:10px;flex:1;min-width:0;color:var(--ph)}
       .gc-badge{flex:0 0 auto;align-self:center;font-size:12px;line-height:18px;letter-spacing:1.5px;color:var(--ph-bright);text-shadow:var(--pg-glow-soft,none);white-space:nowrap}
@@ -142,6 +142,9 @@ const GroupChat = (() => {
       #gc-log .gc-message .who.gc-who{cursor:pointer;user-select:none;border:0;background:none;padding:0;font:inherit;text-transform:uppercase;text-align:left;width:auto;min-height:0;box-shadow:none}
       #gc-log .gc-message .who.gc-who:hover{color:var(--ph-bright)}
       #gc-log .gc-message .who.gc-who::after{content:' @';opacity:0;font-size:11px;letter-spacing:0;transition:opacity .12s}#gc-log .gc-message .who.gc-who:hover::after{opacity:.8}
+      body #chat-panel #gc-log>.gc-message.cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable)+.gc-message.cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable):not(.gc-cont){margin-top:6px}
+      body #chat-panel #gc-log>.gc-message.cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable)+.gc-message.cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable):not(.gc-cont)>.cmsg-head{display:flex;justify-content:flex-start;margin:0 2px 4px}
+      body #chat-panel #gc-log>.gc-message.cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable)+.gc-message.cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable):not(.gc-cont)>.cmsg-head>.who{display:inline-block}
       #gc-log>.gc-masthead{flex:0 0 auto}#gc-log .gc-masthead .bc-name{margin:0 2px}#gc-log .gc-masthead .gc-how{text-transform:none;letter-spacing:.4px;opacity:.75}
       .gc-message.draft .body{opacity:.85}.gc-message.draft .body::after{content:'▌';color:var(--ph);animation:1s steps(1) infinite comms-blink}
       .gc-message .gc-partial{display:block;margin-top:4px;font-size:12px;letter-spacing:.5px;color:var(--gold)}
@@ -163,13 +166,13 @@ const GroupChat = (() => {
       #gc-files .gc-file:hover,#gc-files .gc-file.open{border-color:var(--ph-dim);background:rgba(var(--ph-rgb),.055);color:var(--ph-bright)}#gc-files .gc-file .tc-glyph{color:var(--ph-dim)}#gc-files .gc-file span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       #gc-preview{flex:0 1 auto;min-height:0;overflow:auto;padding:0 12px 8px}#gc-preview:empty{display:none}#gc-preview h4{margin:6px 0 2px;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:var(--ph)}#gc-preview small{color:var(--ph-dim);font-size:11px;margin-right:10px}
       #gc-preview{white-space:pre-wrap;overflow-wrap:anywhere}#gc-preview a{color:var(--ph);font-size:11px;letter-spacing:1px}#gc-preview .gc-message{margin-top:6px}
-      #gc-states{flex:0 0 auto;max-height:25%;overflow:auto;padding:0 12px 4px}
+      #gc-states{flex:0 0 auto;max-height:45%;overflow:auto;padding:0 12px 4px}
       .gc-state{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin:4px 0 2px;padding:6px 11px;border-left:2px solid var(--ph);border-radius:0 4px 4px 0;background:linear-gradient(180deg,var(--ph-faint),rgba(0,0,0,.25));font-size:13px;letter-spacing:.5px;color:var(--ph-bright)}
       .gc-state .gc-dot{flex:0 0 auto;color:var(--ph);text-shadow:0 0 6px var(--ph-glow);animation:1s steps(1) infinite comms-blink}.gc-state .gc-verb{letter-spacing:1.5px;text-transform:uppercase}.gc-state .gc-what{color:var(--ph-dim);font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis}
       .gc-state.hold{border-left-color:var(--gold);background:linear-gradient(180deg,color-mix(in srgb,var(--gold) 14%,transparent),rgba(0,0,0,.25))}.gc-state.hold .gc-dot,.gc-state.hold .gc-verb{color:var(--gold);animation:none;text-shadow:none}
       .gc-state.bad{border-left-color:var(--bad)}.gc-state.bad .gc-dot,.gc-state.bad .gc-verb{color:var(--bad);animation:none;text-shadow:none}
       .gc-state .gc-approval{flex:1 0 100%;font-size:12px;color:var(--text);opacity:.9;overflow-wrap:anywhere}.gc-state .bb{margin-left:auto!important;font-size:11px!important;min-height:20px!important;padding:0 6px!important}.gc-state .bb+.bb{margin-left:0!important}
-      #gc-questions{flex:0 1 auto;max-height:35%;overflow:auto}.gc-question{padding:8px 12px;border-left:2px solid var(--gold);background:var(--panel2);font-size:14px}.gc-question p{margin:5px 0}.gc-question-choices{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0}.gc-question small,.gc-transfer{color:var(--ph-dim);font-size:12px}.gc-transfer{padding:2px 0 5px 14px;flex:0 0 auto}
+      #gc-questions{flex:0 0 auto;max-height:50%;overflow:auto}.gc-question{padding:8px 12px;border-left:2px solid var(--gold);background:var(--panel2);font-size:14px}.gc-question p{margin:5px 0}.gc-question-choices{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0}.gc-question small,.gc-transfer{color:var(--ph-dim);font-size:12px}.gc-transfer{padding:2px 0 5px 14px;flex:0 0 auto}
       #gc-notice:empty{display:none}#gc-notice{flex:0 0 auto;padding:4px 12px;font-size:13px;color:var(--gold);overflow-wrap:anywhere}
       /* the picker fills its window: the two lists share the height and scroll on their own, the footer never leaves view */
       .gc-picker{min-width:0;min-height:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:10px}.gc-picker>.key-input{flex:0 0 auto;display:block;width:100%;box-sizing:border-box;margin:0}
@@ -189,6 +192,46 @@ const GroupChat = (() => {
       .gc-picker-footer .gc-delta.ok{color:var(--ph)}.gc-picker-footer .bb.primary{color:var(--ph-bright);border-color:var(--ph-dim)}
     `; document.head.append(css);
     discover().catch(showError);
+    watch();
+  }
+  /* A group you are not looking at still owes you its news: replies land, questions wait, approvals expire in 5 minutes.
+     Every few seconds (never while the window is hidden) the station-wide list says what each group is doing, and the
+     rail reads it: unread activity, "Reply needed", "Approval needed", working. All of it is backend state. */
+  const states = new Map();
+  let watching = false, watchTimer = 0;
+  function stateOf(id) {
+    if (group && group.id === id && active?.id === id) {
+      const t = group.turns || [];
+      return { approvals: t.filter(x => x.state === 'waiting for approval').length, questions: (group.questions || []).filter(q => q.state === 'pending').length,
+        busy: !group.paused && t.some(x => x.state === 'queued' || ['connecting', 'running', 'waiting for approval', 'waiting for answer', 'stopping'].includes(x.state)), paused: !!group.paused };
+    }
+    return states.get(id) || null;
+  }
+  function attentionIds() { return [...states.keys()].filter(id => { const st = stateOf(id); return st && (st.approvals || st.questions); }); }
+  function watch() {
+    if (watching) return; watching = true;
+    const tick = async () => {
+      try {
+        if (typeof document === 'undefined' || !document.hidden) {
+          const result = await api(); roster = result.roster || roster;
+          let changed = false;
+          for (const g of result.groups || []) {
+            const next = { approvals: g.approvals || 0, questions: g.questions || 0, busy: !!g.busy && !g.paused, paused: !!g.paused };
+            if (JSON.stringify(states.get(g.id) || null) !== JSON.stringify(next)) { states.set(g.id, next); changed = true; }
+            const known = Workstreams.get(g.id), was = membersById.get(g.id);
+            if (!known) { if (Workstreams.isDeleted && Workstreams.isDeleted(g.id)) continue; if (adopt(g)) changed = true; }   // a session you deleted stays deleted
+            else if (!was || was.join('\n') !== (g.members || []).join('\n') || known.title !== g.title) { adopt(g); changed = true; }
+            const ws = Workstreams.get(g.id);
+            if (ws && g.id !== active?.id && g.updatedAt && g.updatedAt > (ws.lastActiveAt || 0)) { ws.lastActiveAt = g.updatedAt; changed = true; }
+          }
+          if (changed) save();
+        }
+      } catch (_) { /* the open group's own poll reports errors; the watch stays quiet and retries */ }
+      clearTimeout(watchTimer); watchTimer = setTimeout(tick, 4000);
+    };
+    watchTimer = setTimeout(tick, 4000);
+    // back from a minimize: look now, not up to 4 s later
+    if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('visibilitychange', () => { if (!document.hidden) { clearTimeout(watchTimer); tick(); } });
   }
   async function discover() {
     const result = await api(); roster = result.roster;
@@ -224,7 +267,10 @@ const GroupChat = (() => {
       const id = active.id, result = await api(null, '?id=' + encodeURIComponent(id));
       if (gen !== generation) return;
       group = result; paint();
-    } catch (e) { if (gen === generation) showError(e); }
+    } catch (e) {
+      if (gen === generation) showError(/not found/i.test(e.message || '') ? new Error('This group no longer exists on this station. Delete it from the session list.') : e);
+      if (/not found/i.test(e.message || '')) return;   // never poll a gone group every 900 ms forever
+    }
     if (gen === generation && active?.conversationMode === 'group') timer = setTimeout(() => poll(gen), 900);
   }
   // the turn's REAL recorded time (never the current clock for a message that carries none)
@@ -254,8 +300,12 @@ const GroupChat = (() => {
     participantsHeader($('gc-header'), group.members, !!group.paused, group.leadId);
     if (pickerFor === group.id && pickerRepaint) pickerRepaint(group);
     const log = $('gc-log'), bottom = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
-    const previousRows = new Map([...log.querySelectorAll('[data-message-id]')].map(row => [row.dataset.messageId, row]));
-    log.replaceChildren(masthead(group));
+    /* RECONCILE, never rebuild. Every node is keyed and kept while its content is unchanged, so text you selected in an
+       older message survives the 900 ms poll while an agent streams (replaceChildren used to wipe it every tick). */
+    const previous = new Map([...log.children].filter(n => n._gcKey).map(n => [n._gcKey, n]));
+    const nodes = [];
+    const keep = (key, sig, build) => { let n = previous.get(key); if (!n || n._gcSig !== sig) { n = build(); n._gcKey = key; n._gcSig = sig; } nodes.push(n); return n; };
+    keep('masthead', JSON.stringify([group.members, group.leadId, group.members.map(name), group.members.map(colorOf)]), () => masthead(group));
     /* Speaker on every reply. An agent's name is the reply affordance: click it and the next
        message goes to that agent (no button under every bubble). The agent's roster colour
        carries the rail and the name, so who-said-what reads at a glance across N speakers. */
@@ -263,6 +313,15 @@ const GroupChat = (() => {
       if (author === 'user') return h('span', { class: 'who' }, 'COMMANDER');
       const who = h('button', { type: 'button', class: 'who gc-who', 'aria-label': 'Reply to ' + name(author), onclick: () => { replyTo = target || null; selected = [author]; recipientLabel(); $('chat-input').focus(); } }, name(author).toUpperCase());
       return who;
+    };
+    // the direct chat's copy key, on every message: the message as it was written
+    const copyKey = content => {
+      const cp = h('button', { type: 'button', class: 'cmsg-copy', 'aria-label': 'Copy message', 'data-tip': 'copy message', 'data-copy-label': 'Copy message' }, '⧉');
+      cp.addEventListener('click', () => {
+        const done = ok => { cp.classList.add(ok ? 'copied' : 'copy-failed'); setTimeout(() => cp.classList.remove('copied', 'copy-failed'), 1400); };
+        try { navigator.clipboard.writeText(content).then(() => done(true), () => done(false)); } catch (_) { done(false); }
+      });
+      return cp;
     };
     let prevAt = 0, prevAuthor = null, prevClock = '';
     for (const m of group.messages) {
@@ -275,15 +334,15 @@ const GroupChat = (() => {
       const at = stampOf(m.at), clock = at ? clockLabel(at) : '';
       if (at) {
         if (!prevAt || new Date(prevAt).toDateString() !== at.toDateString() || at.getTime() - prevAt >= 30 * 60000) {
-          const tb = h('div', { class: 'cmsg-timebreak', role: 'separator' }); tb.append(h('span', { class: 'tb-when' }, breakLabel(at))); log.append(tb);
+          const label = breakLabel(at);
+          keep('tb:' + m.id, label, () => { const tb = h('div', { class: 'cmsg-timebreak', role: 'separator' }); tb.append(h('span', { class: 'tb-when' }, label)); return tb; });
           prevAuthor = null;
         }
         prevAt = at.getTime();
       }
       const rowKey = JSON.stringify([m, content, attachments, group.members, name(m.author), colorOf(m.author), clock]);
-      let row = previousRows.get(m.id);
-      if (!row || row._gcMessageKey !== rowKey) {
-        row = h('article', { class: 'gc-message cmsg' + (m.author === 'user' ? ' user' : ' agent'), 'data-message-id': m.id });
+      const row = keep('m:' + m.id, rowKey, () => {
+        const row = h('article', { class: 'gc-message cmsg' + (m.author === 'user' ? ' user' : ' agent'), 'data-message-id': m.id });
         const body = h('div', { class: 'body' });
         if (typeof Chat !== 'undefined' && Chat.renderProse) Chat.renderProse(body, content); else body.textContent = content;
         const color = colorOf(m.author); if (color) { row.style.setProperty('--gc-c', color); body.style.setProperty('--rail', color); }
@@ -294,55 +353,83 @@ const GroupChat = (() => {
         } else row.append(who, body);
         if (m.partial) row.append(h('small', { class: 'gc-partial' }, 'partial · work did not complete'));
         if (attachments.length) renderMessageAttachments(row, group.id, attachments);
-        row._gcMessageKey = rowKey;
-      }
+        row.append(copyKey(content));
+        return row;
+      });
       // a same-speaker follow-up stamped the same minute reads as one message (the direct chat's rule)
       row.classList.toggle('ts-repeat', !!clock && prevAuthor === m.author && prevClock === clock);
-      log.append(row);
+      // the COMMS rule that drops the callsign on an agent row after an agent row assumes ONE agent; here the row
+      // above may be someone else, so only a true same-speaker follow-up continues it
+      row.classList.toggle('gc-cont', prevAuthor === m.author);
       prevAuthor = m.author; prevClock = clock;
+      // replies a PAUSE stopped before they ran (E-STOP, a restart, PAUSE — then a new message carried on): said under
+      // the message they were for, with the one key that runs them now
+      const unrun = m.author === 'user' ? group.turns.filter(t => t.origin === m.id && t.state === 'stopped' && t.reason === 'Paused before it ran' && !group.turns.some(x => x.retryOf === t.id)) : [];
+      if (unrun.length) {
+        const say = unrun.map(t => name(t.agentId)).join(', ') + ' did not run · stopped by the pause';
+        keep('ps:' + m.id, say, () => { const line = h('div', { class: 'gc-transfer' }, say + ' '); line.append(button('RETRY', async () => { for (const t of unrun) await action('retry', { turnId: t.id }); })); return line; });
+        prevAuthor = null;
+      }
       for (const next of group.turns.filter(t => m.turnId && t.parent === m.turnId && !t.questionId && t.state !== 'stopped')) {
-        log.append(h('div', { class: 'gc-transfer' }, next.recoveryOf ? name(next.agentId) + ' was asked to check a handoff that did not start' :
-          name(m.author) + ' asked ' + name(next.agentId) + ' to follow up'));
+        const say = next.recoveryOf ? name(next.agentId) + ' was asked to check a handoff that did not start' : name(m.author) + ' asked ' + name(next.agentId) + ' to follow up';
+        keep('tr:' + next.id, say, () => h('div', { class: 'gc-transfer' }, say));
         prevAuthor = null;
       }
     }
     for (const t of group.turns) if (t.draft) {
-      const row = h('article', { class: 'gc-message cmsg agent draft' }), body = h('div', { class: 'body' }, t.draft); const color = colorOf(t.agentId);
-      if (color) { row.style.setProperty('--gc-c', color); body.style.setProperty('--rail', color); }
-      row.append(h('span', { class: 'who' }, name(t.agentId).toUpperCase()), body); log.append(row);
+      // a streaming reply keeps its row; only its text moves
+      const n = keep('dr:' + t.id, name(t.agentId) + colorOf(t.agentId), () => {
+        const row = h('article', { class: 'gc-message cmsg agent draft' }), body = h('div', { class: 'body' }); const color = colorOf(t.agentId);
+        if (color) { row.style.setProperty('--gc-c', color); body.style.setProperty('--rail', color); }
+        row.append(h('span', { class: 'who' }, name(t.agentId).toUpperCase()), body); row._gcBody = body; return row;
+      });
+      if (n._gcBody && n._gcBody.textContent !== t.draft) n._gcBody.textContent = t.draft;
     }
+    for (let i = 0; i < nodes.length; i++) { const cur = log.children[i]; if (cur !== nodes[i]) log.insertBefore(nodes[i], cur || null); }
+    while (log.children.length > nodes.length) log.lastElementChild.remove();
     /* Turn state in the same voice as the direct chat's presence card: dot · NAME · verb.
        Truthful: 'running' only once the sidecar reports it; before that the word is 'connecting'. */
     const questions = $('gc-questions'); questions.replaceChildren();
     for (const q of (group.questions || []).filter(q => q.state === 'pending')) {
       const id = group.id, card = h('div', { class: 'gc-question', role: 'group', 'aria-label': name(q.agentId) + ' needs your answer' });
       card.append(h('div', { class: 'gc-verb' }, name(q.agentId) + ' · waiting for your answer'), h('p', {}, q.question));
-      if (q.reason) card.append(h('p', {}, q.reason));
-      if (q.sample) card.append(h('small', {}, 'A starting point · draft'), h('p', { style: 'white-space:pre-wrap' }, q.sample));
       const choices = h('div', { class: 'gc-question-choices' });
       for (const option of q.options) choices.append(button(option, () => {
         if (!q.multiSelect && q.mode !== 'conversation') return answerQuestion(id, q.id, option);
         const input = $('chat-input'); const parts = input.value ? input.value.split('; ') : [];
         if (!parts.includes(option)) parts.push(option); input.value = parts.join('; '); draftKey = null; input.focus();
       }));
-      card.append(choices, h('small', {}, q.multiSelect ? 'Choose any that apply, then send your answer below.' : 'Choose an answer or reply in the message box.')); questions.append(card);
+      card.append(choices, h('small', {}, q.multiSelect ? 'Choose any that apply, then send your answer below.' : 'Choose an answer or reply in the message box.'));
+      if (q.reason) card.append(h('p', {}, q.reason));
+      if (q.sample) card.append(h('small', {}, 'A starting point · draft'), h('p', { style: 'white-space:pre-wrap' }, q.sample));
+      questions.append(card);
     }
     const states = $('gc-states'); states.replaceChildren();
     const VERB = { queued: 'queued', held: 'ready', connecting: 'connecting…', running: 'working', 'waiting for answer': 'waiting for your answer', 'waiting for approval': 'needs approval', stopping: 'stopping', failed: 'failed', interrupted: 'interrupted', stopped: 'stopped' };
-    for (const t of group.turns.slice(-15)) {
+    const pendingQ = (group.questions || []).find(q => q.state === 'pending');
+    const needsYou = t => t.state === 'waiting for approval' || t.state === 'held' || (t.state === 'queued' && group.paused);
+    let continueShown = false;
+    for (const t of group.turns.slice(-15).sort((a, b) => needsYou(b) - needsYou(a))) {
       if (t.state === 'waiting for answer' && (group.questions || []).some(q => q.turnId === t.id && q.state === 'pending')) continue;
       const needsAttention = ['queued', 'held', 'queued', 'held', 'connecting', 'running', 'waiting for approval', 'waiting for answer', 'stopping'].includes(t.state) ||
         (t === group.turns.at(-1) && ['failed', 'interrupted'].includes(t.state));
       if (!needsAttention) continue;
       const tone = ['failed', 'interrupted'].includes(t.state) ? ' bad' : ['held', 'waiting for approval', 'queued', 'stopped'].includes(t.state) ? ' hold' : '';
       const row = h('div', { class: 'gc-state' + tone, 'data-turn-id': t.id });
-      row.append(h('span', { class: 'gc-dot', 'aria-hidden': 'true' }, '●'), h('span', { class: 'gc-verb', style: colorOf(t.agentId) && !tone ? 'color:' + colorOf(t.agentId) : '' }, name(t.agentId)), h('span', { class: 'gc-what' }, t.quiet && ['connecting', 'running'].includes(t.state) ? 'no recent activity; still running' : t.reason && t.state === 'queued' ? t.reason : VERB[t.state] || t.state));
+      // a queued turn says WHY it waits: the pause, or a question someone else owes an answer to
+      const what = t.quiet && ['connecting', 'running'].includes(t.state) ? 'no recent activity; still running'
+        : t.state === 'queued' && group.paused ? 'paused — CONTINUE runs it, or send a new message'
+        : t.state === 'queued' && pendingQ && pendingQ.agentId !== t.agentId ? 'waits for your answer to ' + name(pendingQ.agentId)
+        : t.reason && t.state === 'queued' ? t.reason : VERB[t.state] || t.state;
+      row.append(h('span', { class: 'gc-dot', 'aria-hidden': 'true' }, '●'), h('span', { class: 'gc-verb', style: colorOf(t.agentId) && !tone ? 'color:' + colorOf(t.agentId) : '' }, name(t.agentId)), h('span', { class: 'gc-what' }, what));
+      if (t.state === 'queued' && group.paused && !continueShown) { continueShown = true; row.append(button('CONTINUE', () => action('resume'))); }
       if (t.state === 'held' && t.reason) row.append(h('span', { class: 'gc-what' }, t.reason));
       if (t.state === 'held') row.append(button('CONTINUE', () => action('continue')));
       if (['failed', 'interrupted', 'stopped'].includes(t.state)) row.append(button('RETRY', () => action('retry', { turnId: t.id })));
       if (t.approval) {
-        row.append(h('div', { class: 'gc-approval' }, t.approval.tool + ' · ' + t.approval.argsSummary));
+        // the keys first (line one), the argument text under them: a short window clips text, never the decision
         for (const decision of ['once', 'deny']) row.append(button(decision === 'once' ? 'ALLOW ONCE' : 'DENY', async () => { await api({ op: 'answer', id: group.id, promptId: t.approval.promptId, decision }); }));
+        row.append(h('div', { class: 'gc-approval' }, t.approval.tool + ' · ' + t.approval.argsSummary));
       }
       states.append(row);
     }
@@ -568,7 +655,8 @@ const GroupChat = (() => {
     const reply = replyTo, recipients = [...selected], key = draftKey || (draftKey = uid()); busy = true;
     try {
       const question = (group?.questions || []).find(q => q.state === 'pending');
-      if (question && !/(?:^|\s)@/.test(value) && !recipients.length && !options.attachments?.length) {
+      // a plain reply — or one aimed at the asker (their name clicked) — answers the waiting question
+      if (question && !/(?:^|\s)@/.test(value) && (!recipients.length || (recipients.length === 1 && recipients[0] === question.agentId)) && !options.attachments?.length) {
         await answerQuestion(id, question.id, String(value).trim()); composerDrafts.delete(id); draftKey = null; return true;
       }
       const artifactIds = [];
@@ -585,9 +673,9 @@ const GroupChat = (() => {
         if (!artifact) throw new Error('Attachment was not confirmed. Your file is still staged.');
         sharedAttachments.set(attachmentKey, artifact.id); artifactIds.push(artifact.id);
       }
-      if (paused) await api({ op: 'control', id, action: 'resume' });
+      // a paused group (E-STOP, a restart, PAUSE) resumes INSIDE the send, only once the message is valid
       const result = await api({ op: 'send', id, key, text: String(value || '').trim() || 'Please review the attached files.', replyTo: reply,
-        recipients: /(?:^|\s)@/.test(value) ? [] : recipients, artifactIds });
+        recipients: /(?:^|\s)@/.test(value) ? [] : recipients, artifactIds, ...(paused ? { resume: true } : {}) });
       for (const file of options.attachments || []) sharedAttachments.delete(id + ':' + file.id);
       composerDrafts.delete(id);
       if (active?.id === id) { group = result; closeMentions(); selected = []; replyTo = null; draftKey = null; notice = ''; $('gc-notice').textContent = ''; paint(); }
@@ -695,7 +783,9 @@ const GroupChat = (() => {
     }
   }
   async function rename(id, title) { const state = await api(null, '?id=' + encodeURIComponent(id)); await api({ op: 'configure', id, revision: state.revision, title }); return true; }
-  async function remove(id) { await api({ op: 'control', id, action: 'delete' }); }
-  async function pause(id) { await api({ op: 'control', id, action: 'pause' }); }
-  return { bind, sendText, discover, rename, remove, pause, isBusy, stop, mentionKey, mentionTargets, startWith, membersOf: id => membersById.get(id) || null };
+  // a group the backend already lost is already gone: deleting or archiving it must still finish on this side
+  const goneOk = e => { if (!/not found/i.test(e.message || '')) throw e; };
+  async function remove(id) { await api({ op: 'control', id, action: 'delete' }).catch(goneOk); states.delete(id); }
+  async function pause(id) { await api({ op: 'control', id, action: 'pause' }).catch(goneOk); }
+  return { bind, sendText, discover, rename, remove, pause, isBusy, stop, mentionKey, mentionTargets, startWith, stateOf, attentionIds, membersOf: id => membersById.get(id) || null };
 })();

@@ -16,6 +16,8 @@ class Element {
   append(...nodes) { for (const n of nodes) { const e = typeof n === 'string' ? Object.assign(new Element('#text'), { textContent: n }) : n; e.parentElement = this; this.children.push(e); } }
   replaceChildren(...nodes) { for (const e of this.children) e.parentElement = null; this.children = []; this.textContent = ''; this.append(...nodes); }
   before(node) { this.parentElement.append(node); }
+  insertBefore(node, ref) { node.remove(); const i = ref ? this.children.indexOf(ref) : -1; node.parentElement = this; if (i < 0) this.children.push(node); else this.children.splice(i, 0, node); return node; }
+  get lastElementChild() { return this.children[this.children.length - 1] || null; }
   remove() { if (this.parentElement) this.parentElement.children = this.parentElement.children.filter(e => e !== this); this.parentElement = null; }
 }
 const walk = e => [e, ...e.children.flatMap(walk)];
