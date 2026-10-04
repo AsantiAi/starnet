@@ -970,6 +970,8 @@ const Chat = (() => {
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSlash(); return; }
         // any other key falls through to normal typing → the 'input' listener re-filters the palette
       }
+      // @ MENU (group-chat.js) owns ↑ ↓ Enter Tab Esc while it lists agents over the message box
+      if (typeof GroupChat !== 'undefined' && GroupChat.mentionKey && GroupChat.mentionKey(e)) return;
       // INPUT HISTORY — recall starts only from an EMPTY box (a draft in progress is never hijacked);
       // once recalling, ArrowUp/ArrowDown walk the sent list, ArrowDown past the newest restores the draft.
       if (e.key === 'ArrowUp' && sentHistory.length && (histIdx >= 0 || input.value === '')) {
@@ -1042,6 +1044,20 @@ const Chat = (() => {
       return;
     }
     if (t) recordSent(t);
+    // "@finn take a look" from a DIRECT chat reaches FINN: the chat becomes a group with them first (General stays
+    // General — a fresh group opens beside it), then the message goes to that group. A refusal (the agent here is
+    // still mid-run, the backend said no) keeps the words in the box and says why.
+    const pulled = activeWs && activeWs.conversationMode !== 'group' && t && typeof GroupChat !== 'undefined' && GroupChat.mentionTargets ? GroupChat.mentionTargets(t, activeWs) : [];
+    if (pulled.length) {
+      const g = await GroupChat.startWith(pulled);
+      const ws = g && Workstreams.get(g.id);
+      if (!ws || activeWs?.id !== ws.id) return;
+      if (hasStaged) await settleAttachments();
+      const atts = pendingAtts.filter(entry => entry.status === 'ready' && entry.ref).map(entry => entry.ref);
+      const sent = await GroupChat.sendText(t, { attachments: atts, attachmentAgent: ws.agentId });
+      if (sent && activeWs?.id === ws.id) { takeAttachments(); if (input.value.trim() === t) input.value = ''; closeSlash(); autoGrowInput(); }
+      return;
+    }
     if (activeWs?.conversationMode === 'group' && typeof GroupChat !== 'undefined') {
       const ws = activeWs;
       if (hasStaged) await settleAttachments();
@@ -9784,5 +9800,5 @@ const Chat = (() => {
   // only" gate maybeStandaloneRate uses — so a pure-chat run is never bottle-offered. Used by App.runBottleInfo (R5).
   function runDidWork(id) { const w = id ? runWork.get(id) : null; return !!(w && ((w.toolsOk || 0) >= 1 || (w.delivered || 0) >= 1)); }
 
-  return { init, load, send, continuityDiagnostics, refreshStarters, sendOrQueue, continueConnectorTask, stopActive, status, localLine, broadcast, renderProse, setSystem, getHistory, contextRef, abort, isBusy, beatBusy: skillBeatBusy, beginInterview, endInterview, echoUser, prefill, autoGrowInput, choices, clearChoices, retireDeskPrompt, typeLine, nudge, clearNudge, offerCuriosity, offerFork, planGoalPath, briefingReceipt, isComposerEngaged, canFocusSession, runMeta, runDidWork, awayDigest, awayReview, awayRate, sampleCard, workshopReturn, refreshIdBar: renderIdBar, refreshGroupControls: updateControls, refreshAgentIdentity, setRosterStatus, askBudgetSpent, spendAsk };
+  return { init, load, send, continuityDiagnostics, refreshStarters, sendOrQueue, continueConnectorTask, stopActive, status, localLine, broadcast, renderProse, setSystem, getHistory, contextRef, abort, isBusy, beatBusy: skillBeatBusy, beginInterview, endInterview, echoUser, prefill, autoGrowInput, choices, clearChoices, retireDeskPrompt, typeLine, nudge, clearNudge, offerCuriosity, offerFork, planGoalPath, briefingReceipt, isComposerEngaged, canFocusSession, runMeta, runDidWork, awayDigest, awayReview, awayRate, sampleCard, workshopReturn, refreshIdBar: renderIdBar, refreshGroupControls: updateControls, refreshAgentIdentity, setRosterStatus, askBudgetSpent, spendAsk, clockLabel: fmtClock, breakLabel: fmtBreak };
 })();

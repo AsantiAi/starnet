@@ -4,7 +4,7 @@
 
    Loaded LAST (after pipglass.css) so it settles the transcript's reading layer in one place instead of adding a
    seventh tug-of-war between app / comms / interface / glass-comms / readability / beat-cards. Every rule is scoped
-   `body #chat-panel #chat-log …` (two ids) so it outranks the older class-heavy selectors by specificity, not by
+   `body #chat-panel :is(#chat-log, #gc-log) …` (two ids — the group transcript speaks the same language, Andrew 10-04) so it outranks the older class-heavy selectors by specificity, not by
    !important — the only !important here answers beat-cards' own !important on the broadcast block.
 
    The shape, top to bottom of one exchange:
@@ -23,150 +23,150 @@
    texture under text. Theme tokens only. */
 
 /* ---- rhythm: a new exchange opens with air, the answer sits close to its question ---- */
-body #chat-panel #chat-log { gap: 6px; }
-body #chat-panel #chat-log > .cmsg.user { margin-top: 12px; }
-body #chat-panel #chat-log > .cmsg-timebreak + .cmsg.user,
-body #chat-panel #chat-log > .cmsg.user:first-child { margin-top: 0; }
-body #chat-panel #chat-log > .cmsg.user + .cmsg.user { margin-top: 0; }
+body #chat-panel :is(#chat-log, #gc-log) { gap: 6px; }
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg.user { margin-top: 12px; }
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg-timebreak + .cmsg.user,
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg.user:first-child { margin-top: 0; }
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg.user + .cmsg.user { margin-top: 0; }
 
 /* ---- TIME BREAK — the day + clock where a conversation (re)starts ---- */
-body #chat-panel #chat-log > .cmsg-timebreak {
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg-timebreak {
   display: flex; align-items: center; gap: 10px;
   margin: 14px 2px 2px; flex: 0 0 auto;
 }
-body #chat-panel #chat-log > .cmsg-timebreak:first-child { margin-top: 2px; }
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg-timebreak:first-child { margin-top: 2px; }
 /* a Pip-Boy rule: a 1px line with a short END TICK dropping from each outer end */
-body #chat-panel #chat-log > .cmsg-timebreak::before,
-body #chat-panel #chat-log > .cmsg-timebreak::after {
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg-timebreak::before,
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg-timebreak::after {
   content: ""; flex: 1 1 auto; height: 4px; align-self: flex-start; margin-top: calc(.6em);
   border-top: 1px solid rgba(var(--ph-rgb), .28);
 }
-body #chat-panel #chat-log > .cmsg-timebreak::before { border-left: 1px solid rgba(var(--ph-rgb), .28); }
-body #chat-panel #chat-log > .cmsg-timebreak::after { border-right: 1px solid rgba(var(--ph-rgb), .28); }
-body #chat-panel #chat-log > .cmsg-timebreak .tb-when {
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg-timebreak::before { border-left: 1px solid rgba(var(--ph-rgb), .28); }
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg-timebreak::after { border-right: 1px solid rgba(var(--ph-rgb), .28); }
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg-timebreak .tb-when {
   flex: 0 0 auto; font-size: var(--sn-type-meta, 13px); letter-spacing: 1.2px; text-transform: uppercase;
   color: var(--ph); opacity: .72; white-space: nowrap; font-variant-numeric: tabular-nums;
   text-shadow: var(--pg-glow-soft, none);
 }
-body #chat-panel #chat-log > .cmsg-timebreak .tb-when::before { content: '[ '; opacity: .6; }
-body #chat-panel #chat-log > .cmsg-timebreak .tb-when::after { content: ' ]'; opacity: .6; }
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg-timebreak .tb-when::before { content: '[ '; opacity: .6; }
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg-timebreak .tb-when::after { content: ' ]'; opacity: .6; }
 
 /* ---- STAMPS — always readable (they were hover-only: "hard to see when you sent things") ---- */
-body #chat-panel #chat-log .cmsg:is(.agent, .user) .cmsg-ts { opacity: .62; color: var(--text); }
-body #chat-panel #chat-log .cmsg:is(.agent, .user):is(:hover, :focus-within) .cmsg-ts { opacity: .9; }
+body #chat-panel :is(#chat-log, #gc-log) .cmsg:is(.agent, .user) .cmsg-ts { opacity: .62; color: var(--text); }
+body #chat-panel :is(#chat-log, #gc-log) .cmsg:is(.agent, .user):is(:hover, :focus-within) .cmsg-ts { opacity: .9; }
 /* a same-speaker follow-up stamped the same minute as the row above: one message, one stamp */
-body #chat-panel #chat-log .cmsg.ts-repeat:is(.agent, .user) > .cmsg-head { display: none; }
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.ts-repeat:is(.agent, .user) > .cmsg-head { display: none; }
 
 /* callsigns read as station type: the same RGB-fringe phosphor the CREW names wear */
-body #chat-panel #chat-log .cmsg:is(.agent, .user) > .cmsg-head > .who { text-shadow: var(--pg-glow-soft, none); letter-spacing: 1.4px; }
+body #chat-panel :is(#chat-log, #gc-log) .cmsg:is(.agent, .user) > .cmsg-head > .who { text-shadow: var(--pg-glow-soft, none); letter-spacing: 1.4px; }
 
 /* ---- THE DITHER FIELD — both speakers' text sits on its rail over a faint 1px ordered-dither field: pipglass's own
    lit-row material (a checker of phosphor cells, crisp, no gradient), kept LIGHT so it reads as a lit terminal region,
    not a box (Andrew 10-04: shown flat / rail-only / bracket / dither side by side → "make variant 4 a bit lighter on
    the text boxes"). --dot is the cell colour: phosphor for the agent, gold for the Commander. A split reply's rows
    touch (the continuation margin below), so the field and rail run unbroken. ---- */
-body #chat-panel #chat-log :is(.cmsg.user, .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable)) > .body {
+body #chat-panel :is(#chat-log, #gc-log) :is(.cmsg.user, .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable)) > .body {
   --dot: rgba(var(--ph-rgb), .042);
   background: repeating-conic-gradient(var(--dot) 0 25%, transparent 0 50%) 0 0 / 2px 2px;
 }
-body #chat-panel #chat-log .cmsg.user > .body { --dot: rgba(var(--gold-rgb), .05); }
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.user > .body { --dot: rgba(var(--gold-rgb), .05); }
 
 /* ---- THE COMMANDER — right side, gold: a terminal INPUT line — a `>` prompt, gold-tinted type, the gold rail ---- */
-body #chat-panel #chat-log .cmsg.user {
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.user {
   align-self: flex-end; width: fit-content; max-width: 86%; min-width: 0;
   padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none;
 }
-body #chat-panel #chat-log .cmsg.user:is(:hover, :focus-within) { border: 0; background: none; box-shadow: none; }
-body #chat-panel #chat-log .cmsg.user > .cmsg-head {
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.user:is(:hover, :focus-within) { border: 0; background: none; box-shadow: none; }
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.user > .cmsg-head {
   justify-content: flex-start; gap: 8px; margin: 0 2px 4px; min-height: 0;
 }
-body #chat-panel #chat-log .cmsg.user > .body {
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.user > .body {
   --rail: rgba(var(--gold-rgb), .6);
   display: block; padding: 4px 14px 5px 10px;
   border: 0; border-right: 2px solid var(--rail); border-radius: 0; box-shadow: none;
   color: color-mix(in srgb, var(--gold) 45%, var(--text));
 }
-body #chat-panel #chat-log .cmsg.user > .body::before { content: '> '; color: var(--gold); opacity: .75; }
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.user > .body::before { content: '> '; color: var(--gold); opacity: .75; }
 /* no hover glow on the Commander's message either (Andrew 10-04): the gold rail holds its level */
-body #chat-panel #chat-log .cmsg.user .chat-attach-view { justify-content: flex-end; }
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.user .chat-attach-view { justify-content: flex-end; }
 /* the ⧉ rides the header line on the stamp's side (the reserved lane in comms.css / glass-comms.css) */
-body #chat-panel #chat-log .cmsg.user > .cmsg-copy { top: -2px; }
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.user > .cmsg-copy { top: -2px; }
 
 /* ---- THE AGENT — the Commander's line, mirrored: callsign + stamp above, the text on the phosphor rail. No face, no box
    (Andrew 10-03: "keep the name as is without the pfp"). ---- */
-body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) {
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) {
   padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none;
 }
-body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable):is(:hover, :focus-within) {
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable):is(:hover, :focus-within) {
   border: 0; background: none; box-shadow: none;
 }
-body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) > .body {
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) > .body {
   --rail: rgba(var(--ph-rgb), .5);
   display: block; padding: 4px 10px 5px 14px;
   border-left: 2px solid var(--rail);
 }
 /* no hover glow on the agent's message (Andrew 10-04): the rail holds its level; only the stamp + copy key answer the hover */
-body #chat-panel #chat-log .cmsg.agent.err > .body { --rail: var(--bad); }
-body #chat-panel #chat-log .cmsg.agent > .cmsg-head {
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.agent.err > .body { --rail: var(--bad); }
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.agent > .cmsg-head {
   justify-content: flex-start; align-items: baseline; gap: 8px; margin: 0 2px 4px; min-height: 0;
 }
-body #chat-panel #chat-log .cmsg.agent > .cmsg-head > .cmsg-ts { margin-left: 0; }
-body #chat-panel #chat-log .cmsg.agent > .cmsg-copy { top: 0; }
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.agent > .cmsg-head > .cmsg-ts { margin-left: 0; }
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.agent > .cmsg-copy { top: 0; }
 
 /* ---- RUN SUMMARY — the reply's quiet footer, not a row of its own ---- */
-body #chat-panel #chat-log .comms-presence.resolved {
+body #chat-panel :is(#chat-log, #gc-log) .comms-presence.resolved {
   margin: -2px 0 2px 14px; padding: 1px 0; min-height: 0;
   border: 0; border-radius: 0; background: none; box-shadow: none;
   font-size: var(--sn-type-meta, 13px); letter-spacing: .6px; line-height: 1.4;
   color: var(--text); opacity: .5;
 }
-body #chat-panel #chat-log .comms-presence.resolved.has-fold:is(:hover, :focus-visible) { opacity: .9; color: var(--ph); }
-body #chat-panel #chat-log .comms-presence.resolved.open { opacity: .85; }
-body #chat-panel #chat-log .comms-presence.resolved.err { color: var(--bad); opacity: .9; }
-body #chat-panel #chat-log .comms-presence.resolved.stopped { color: var(--gold); opacity: .85; }
-body #chat-panel #chat-log .run-fold { margin: 2px 0 6px 14px; }
+body #chat-panel :is(#chat-log, #gc-log) .comms-presence.resolved.has-fold:is(:hover, :focus-visible) { opacity: .9; color: var(--ph); }
+body #chat-panel :is(#chat-log, #gc-log) .comms-presence.resolved.open { opacity: .85; }
+body #chat-panel :is(#chat-log, #gc-log) .comms-presence.resolved.err { color: var(--bad); opacity: .9; }
+body #chat-panel :is(#chat-log, #gc-log) .comms-presence.resolved.stopped { color: var(--gold); opacity: .85; }
+body #chat-panel :is(#chat-log, #gc-log) .run-fold { margin: 2px 0 6px 14px; }
 
 /* ---- STATION LINES (trophies, quests, level-ups) — a ruled ASCII line, the time break's sibling: ─┐ ◆ TROPHY … ┌─.
    No box (Andrew 10-03: not a fan of the text boxes). ---- */
-body #chat-panel #chat-log .cmsg.broadcast {
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.broadcast {
   display: flex !important; align-items: center; gap: 10px; margin: 6px 2px; padding: 0;
   border: 0 !important; background: none !important; box-shadow: none !important;
 }
-body #chat-panel #chat-log .cmsg.broadcast::before,
-body #chat-panel #chat-log .cmsg.broadcast::after {
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.broadcast::before,
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.broadcast::after {
   content: "" !important; display: block !important; flex: 1 1 12px; min-width: 12px; max-width: none; height: 4px; align-self: center;
   margin-top: 4px; background: none !important; opacity: 1 !important;
   border-top: 1px solid rgba(var(--ph-rgb), .24);
 }
-body #chat-panel #chat-log .cmsg.broadcast::before { border-left: 1px solid rgba(var(--ph-rgb), .24); }
-body #chat-panel #chat-log .cmsg.broadcast::after { border-right: 1px solid rgba(var(--ph-rgb), .24); }
-body #chat-panel #chat-log .cmsg.broadcast.broadcast-gold::before,
-body #chat-panel #chat-log .cmsg.broadcast.broadcast-gold::after { border-color: rgba(var(--gold-rgb), .34); }
-body #chat-panel #chat-log .cmsg.broadcast .bc-stack { flex: 0 1 auto; align-items: center; gap: 2px; max-width: calc(100% - 44px); }
-body #chat-panel #chat-log .cmsg.broadcast .bc-line {
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.broadcast::before { border-left: 1px solid rgba(var(--ph-rgb), .24); }
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.broadcast::after { border-right: 1px solid rgba(var(--ph-rgb), .24); }
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.broadcast.broadcast-gold::before,
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.broadcast.broadcast-gold::after { border-color: rgba(var(--gold-rgb), .34); }
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.broadcast .bc-stack { flex: 0 1 auto; align-items: center; gap: 2px; max-width: calc(100% - 44px); }
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.broadcast .bc-line {
   display: block; max-width: 100%; padding: 0; text-align: center;
   border: 0; border-radius: 0; background: none; color: var(--text);
   font-size: var(--sn-type-meta, 13px) !important; letter-spacing: 1px; text-transform: uppercase; text-shadow: var(--pg-glow-soft, none);
 }
-body #chat-panel #chat-log .cmsg.broadcast .bc-line.bc-gold { color: var(--gold); }
-body #chat-panel #chat-log .cmsg.broadcast.broadcast-warn .bc-line { color: var(--warn); }
-body #chat-panel #chat-log .cmsg.broadcast .bc-glyph { width: auto; }
-body #chat-panel #chat-log .cmsg.broadcast .bc-line > .bc-glyph:first-child { display: none; }   /* the ▸ lead-in: the rule already frames it */
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.broadcast .bc-line.bc-gold { color: var(--gold); }
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.broadcast.broadcast-warn .bc-line { color: var(--warn); }
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.broadcast .bc-glyph { width: auto; }
+body #chat-panel :is(#chat-log, #gc-log) .cmsg.broadcast .bc-line > .bc-glyph:first-child { display: none; }   /* the ▸ lead-in: the rule already frames it */
 
 /* ---- TERMINAL TYPE IN THE PROSE — code reads as lit phosphor, not as outlined boxes ---- */
-body #chat-panel #chat-log .cmsg .body .md-code {
+body #chat-panel :is(#chat-log, #gc-log) .cmsg .body .md-code {
   border: 0; border-radius: 2px; padding: 0 3px;
   background: rgba(var(--ph-rgb), .09); color: var(--ph-bright);
 }
-body #chat-panel #chat-log .cmsg .body .md-pre {
+body #chat-panel :is(#chat-log, #gc-log) .cmsg .body .md-pre {
   border: 0; border-left: 1px solid rgba(var(--ph-rgb), .4); border-radius: 0;
   background: rgba(0, 0, 0, .22); padding: 6px 36px 6px 12px;
 }
 /* list bullets as the station's ▸ glyph, the pipboy list marker */
-body #chat-panel #chat-log .cmsg .body .md-list:not(ol) > li::marker { content: '▸  '; color: var(--ph); }
+body #chat-panel :is(#chat-log, #gc-log) .cmsg .body .md-list:not(ol) > li::marker { content: '▸  '; color: var(--ph); }
 
 /* ---- ASIDES (the agent's gentle nudge) — the same rail + light dither, in the beat family's gold, not a framed card ---- */
-body #chat-panel #chat-log > .cmsg.agent.nudge {
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg.agent.nudge {
   --rail: rgba(var(--gold-rgb), .55);
   margin: 4px 0 2px; padding: 5px 10px 5px 14px;
   border: 0; border-left: 2px solid var(--rail); border-radius: 0; box-shadow: none;
@@ -174,24 +174,24 @@ body #chat-panel #chat-log > .cmsg.agent.nudge {
 }
 
 /* ---- CHOICES — bracketed terminal keys: [ SHOW ME ]  [ NOT NOW ] ---- */
-body #chat-panel #chat-log .choice-row { gap: 6px; }
-body #chat-panel #chat-log .choice-row .choice {
+body #chat-panel :is(#chat-log, #gc-log) .choice-row { gap: 6px; }
+body #chat-panel :is(#chat-log, #gc-log) .choice-row .choice {
   min-height: 0; padding: 2px 6px; border: 1px solid transparent; border-radius: 2px;
   background: none; box-shadow: none; color: var(--ph);
   font-size: var(--sn-type-control, 15px) !important; letter-spacing: 1px; text-transform: uppercase; text-shadow: var(--pg-glow-soft, none);
 }
-body #chat-panel #chat-log .choice-row .choice::before { content: '[ '; color: rgba(var(--ph-rgb), .55); }
-body #chat-panel #chat-log .choice-row .choice::after { content: ' ]'; color: rgba(var(--ph-rgb), .55); }
-body #chat-panel #chat-log .choice-row .choice:is(:hover, :focus-visible) {
+body #chat-panel :is(#chat-log, #gc-log) .choice-row .choice::before { content: '[ '; color: rgba(var(--ph-rgb), .55); }
+body #chat-panel :is(#chat-log, #gc-log) .choice-row .choice::after { content: ' ]'; color: rgba(var(--ph-rgb), .55); }
+body #chat-panel :is(#chat-log, #gc-log) .choice-row .choice:is(:hover, :focus-visible) {
   color: var(--ph-bright); background: rgba(var(--ph-rgb), .1); border-color: rgba(var(--ph-rgb), .35);
 }
-body #chat-panel #chat-log .choice-row .choice.quiet { color: var(--text); opacity: .7; }
+body #chat-panel :is(#chat-log, #gc-log) .choice-row .choice.quiet { color: var(--text); opacity: .7; }
 /* a summary too long for a narrow panel wraps as TEXT: the fold chevron rides its last word, never stranded hard-right */
-body #chat-panel #chat-log .comms-presence.resolved.has-fold { display: block; }
-body #chat-panel #chat-log .comms-presence.resolved .cp-chev { display: inline-block; margin-left: 6px; }
+body #chat-panel :is(#chat-log, #gc-log) .comms-presence.resolved.has-fold { display: block; }
+body #chat-panel :is(#chat-log, #gc-log) .comms-presence.resolved .cp-chev { display: inline-block; margin-left: 6px; }
 /* a same-speaker follow-up continues the message above: one unbroken rail, no callsign repeated (a
    different-minute follow-up keeps only its stamp — the callsign already sits on the row above) */
-body #chat-panel #chat-log > .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) + .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) { margin-top: -6px; }
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) + .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable) { margin-top: -6px; }
 
 /* ---- JUMP-TO-LATEST — readable in both states. The "new messages" state inked its text dark for the old lit
    phosphor fill, but the glass layer swapped that fill for a near-clear one: dark ink on a dark panel, a blank box.
@@ -210,28 +210,28 @@ body #chat-panel .comms-newpill:hover { color: var(--ph-bright); background: col
 /* ---- RATE THE WORK — a slim inline row under the run it rates, never a big centered card (Andrew 10-03).
    Only the standalone COMMS ask (.rate-inline, chat.js workRateBeat); the OUTBOX review and turn-in cards keep
    their own layout. The task · run-id reference is the row's hover tip. ---- */
-body #chat-panel #chat-log > .cmsg.work-rate.rate-inline {
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg.work-rate.rate-inline {
   align-self: flex-start; margin: 0 0 4px 14px; padding: 0; min-width: 0; max-width: 100%;
   border: 0; border-radius: 0; background: none; box-shadow: none; text-align: left;
 }
-body #chat-panel #chat-log > .cmsg.work-rate.rate-inline > .who { display: none; }
-body #chat-panel #chat-log > .cmsg.work-rate.rate-inline [data-rate-run] {
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg.work-rate.rate-inline > .who { display: none; }
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg.work-rate.rate-inline [data-rate-run] {
   display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; justify-content: flex-start; gap: 8px; text-align: left;
 }
-body #chat-panel #chat-log > .cmsg.work-rate.rate-inline .work-rate-reference { display: none; }
-body #chat-panel #chat-log > .cmsg.work-rate.rate-inline .work-rate-label {
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg.work-rate.rate-inline .work-rate-reference { display: none; }
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg.work-rate.rate-inline .work-rate-label {
   font-size: var(--sn-type-meta, 13px) !important; letter-spacing: 1.2px; text-transform: uppercase;
   color: var(--text); opacity: .55; text-shadow: none;
 }
-body #chat-panel #chat-log > .cmsg.work-rate.rate-inline .consent-btns { display: inline-flex; gap: 4px; margin: 0; }
-body #chat-panel #chat-log > .cmsg.work-rate.rate-inline .consent-btn.thumb {
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg.work-rate.rate-inline .consent-btns { display: inline-flex; gap: 4px; margin: 0; }
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg.work-rate.rate-inline .consent-btn.thumb {
   width: 28px; min-width: 28px; height: 22px; min-height: 22px; padding: 0;
   display: inline-grid; place-items: center; border-radius: 4px;
   border: 1px solid rgba(var(--ph-rgb), .22); background: rgba(var(--ph-rgb), .03); box-shadow: none;
 }
-body #chat-panel #chat-log > .cmsg.work-rate.rate-inline .consent-btn.thumb:is(:hover, :focus-visible) {
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg.work-rate.rate-inline .consent-btn.thumb:is(:hover, :focus-visible) {
   border-color: var(--ph); background: rgba(var(--ph-rgb), .1); box-shadow: none;
 }
-body #chat-panel #chat-log > .cmsg.work-rate.rate-inline .consent-btn.thumb-down:is(:hover, :focus-visible) { border-color: var(--bad); }
-body #chat-panel #chat-log > .cmsg.work-rate.rate-inline .thumb-px { width: 13px; height: 13px; filter: none; }
-body #chat-panel #chat-log > .cmsg.work-rate.rate-inline .consent-result { font-size: var(--sn-type-meta, 13px) !important; letter-spacing: 1px; opacity: .8; }
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg.work-rate.rate-inline .consent-btn.thumb-down:is(:hover, :focus-visible) { border-color: var(--bad); }
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg.work-rate.rate-inline .thumb-px { width: 13px; height: 13px; filter: none; }
+body #chat-panel :is(#chat-log, #gc-log) > .cmsg.work-rate.rate-inline .consent-result { font-size: var(--sn-type-meta, 13px) !important; letter-spacing: 1px; opacity: .8; }

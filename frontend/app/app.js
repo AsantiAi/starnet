@@ -4045,7 +4045,7 @@ const App = (() => {
   function railModelFull(w) { return (w.lastModel || '').trim(); }
   function railRowLabel(w, st, project = false) {
     const title = w.title || 'General', name = railAgentName(w);
-    return title + ' session' + (name === title ? '' : ', ' + name) + (st.status ? ', ' + st.status : '')
+    return title + (w.conversationMode === 'group' ? ' group chat' : ' session') + (name === title ? '' : ', ' + name) + (st.status ? ', ' + st.status : '')
       + (Workstreams.unread(w) && !st.dot.includes('unseen') ? ', unread activity' : '')
       + (project ? '; Enter to open' : '; Enter to open; Shift+F10 for actions');
   }
@@ -4103,6 +4103,8 @@ const App = (() => {
       return groupHead + '<li class="' + rowClass(w, st, activeId) + '" data-id="' + U.esc(w.id) + '" tabindex="' + (w.id === railFocusId ? '0' : '-1') + '" role="option" aria-selected="' + (w.id === activeId ? 'true' : 'false') + '" aria-posinset="' + (index + 1) + '" aria-setsize="' + rows.length + '" aria-label="' + U.esc(railRowLabel(w, st)) + '" aria-keyshortcuts="Shift+F10" title="' + U.esc(tip) + '">' +
         '<span class="' + st.dot + '" aria-hidden="true"></span>' +
         (w.pinned ? '<span class="ws-pin" aria-hidden="true">★</span>' : '') +
+        // a group chat says so on the row itself: the COMPACT rail hides the agent line that names its members
+        (w.conversationMode === 'group' ? '<span class="ws-gc" aria-hidden="true">GROUP</span>' : '') +
         '<span class="ws-agent" aria-hidden="true"' + railAgentColorAttr(w) + '>' + U.esc(railAgentName(w)) + '</span>' +
         '<span class="ws-title">' + U.esc(title) + '</span>' +
         '<span class="ws-meta">' + U.esc(st.meta) + '</span>' +

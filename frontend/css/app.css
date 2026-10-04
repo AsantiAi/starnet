@@ -3191,6 +3191,12 @@ body.rows-inbox #workstreams .ws-kebab { grid-area: meta; }
 .ws-arch-row.on { color: var(--ph); }
 /* pinned rows sort to the top AND carry a small gold star so the "kept" state is legible at a glance */
 .ws-pin { flex: 0 0 auto; font-size: 10px; line-height: 1; color: var(--gold); text-shadow: 0 0 6px rgba(var(--gold-rgb),.5); }
+/* a GROUP chat row says so before its title: the COMPACT row hides the agent line that names its members.
+   The INBOX row (a grid) already names every member on that line, so the tag stays out of its grid. */
+.ws-gc { flex: 0 0 auto; font-size: 10px; line-height: 1; letter-spacing: 1px; color: var(--ph); white-space: nowrap; text-shadow: var(--pg-glow-soft, none); }
+.ws-gc::before { content: '['; margin-right: 2px; opacity: .6; }
+.ws-gc::after { content: ']'; margin-left: 2px; opacity: .6; }
+body.rows-inbox #workstreams .ws-gc { display: none; }
 /* the ⋯ button is the discoverable twin of right-click: hidden until the row is hovered, where it takes the meta slot */
 .ws-kebab {
   display: none; flex: 0 0 auto; font-family: inherit; font-size: 15px; line-height: 1; letter-spacing: 1px;
