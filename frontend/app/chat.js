@@ -430,7 +430,32 @@ const Chat = (() => {
     } else {
       card.setAttribute('role', 'note');
     }
+    settleSummaryUnderReply(card);
     autoscroll();
+  }
+  /* THE SUMMARY IS THE REPLY'S FOOTER. The live card re-pins itself to the bottom on each elapsed tick, so where it
+     resolved depended on timing: a quick run left "■ RUN COMPLETE" wedged between the Commander's question and the
+     answer, a slow one left it under the answer. It now always settles directly under this run's last prose row
+     (with its fold), so a turn reads question → answer → quiet footer. Stops at the next Commander turn; a run
+     that spoke no prose leaves the card where it is. */
+  function settleSummaryUnderReply(card) {
+    if (!card || !card.parentNode) return;
+    const fold = card.nextElementSibling && card.nextElementSibling.classList.contains('run-fold') ? card.nextElementSibling : null;
+    let anchor = null;
+    for (let n = (fold || card).nextElementSibling; n; n = n.nextElementSibling) {
+      if (n.classList.contains('user')) break;
+      if (n.classList.contains('cmsg') && n.classList.contains('agent') && !n.matches('.nudge,.consent,.turnin,.tool,.deliverable')) anchor = n;
+    }
+    if (!anchor) return;
+    anchor.after(card);
+    if (fold) card.after(fold);
+    // the rails that split the answer into paragraphs just folded away, so its rows are ADJACENT now — a follow-up row
+    // stamped the same minute as the one above becomes one message (same rule row() applies at creation)
+    for (let n = anchor, p = anchor.previousElementSibling; p && n.classList.contains('agent'); n = p, p = p.previousElementSibling) {
+      if (!p.classList.contains('agent') || !p.classList.contains('cmsg') || p.matches('.nudge,.consent,.turnin,.tool,.deliverable')) break;
+      const a = n.querySelector(':scope > .cmsg-head > .cmsg-ts'), b = p.querySelector(':scope > .cmsg-head > .cmsg-ts');
+      if (a && b && a.textContent === b.textContent) n.classList.add('ts-repeat');
+    }
   }
   // POST-RUN DEDUPE: when a recap card is about to render (it owns cost · duration · model + the artifact list),
   // strip the metrics from the already-resolved presence line above it so the two don't print the same numbers.
@@ -2109,9 +2134,21 @@ const Chat = (() => {
     // NO stamp rather than fabricate the current clock (the module's own rule + truthful telemetry).
     const stampVal = opts && opts.stamp;
     if (stampVal && (stampVal === true || !isNaN(new Date(stampVal).getTime()))) {
+      const at = stampVal === true ? new Date() : new Date(stampVal);
       const head = document.createElement('span'); head.className = 'cmsg-head';
       const ts = document.createElement('span'); ts.className = 'cmsg-ts';
-      ts.textContent = fmtClock(stampVal === true ? null : new Date(stampVal));
+      ts.textContent = fmtClock(at);
+      d.dataset.ts = String(at.getTime());
+      // A CONTINUATION (same speaker, adjacent) whose stamp reads the same as the row right above says nothing new:
+      // CSS drops its slim stamp line so a run of turns reads as one message. A different minute keeps it.
+      const prev = log.lastElementChild;
+      if (prev && prev.classList && prev.classList.contains(role) && prev.classList.contains('cmsg')) {
+        const pts = prev.querySelector(':scope > .cmsg-head > .cmsg-ts');
+        if (pts && pts.textContent === ts.textContent) d.classList.add('ts-repeat');
+      }
+      timeBreak(at);
+      // the speaker's FACE beside the callsign — the same station body the floor and CREW draw (a cached thumb)
+      if (role === 'agent') { const face = agentFace(who.textContent, opts && opts.agentId); if (face) head.appendChild(face); }
       head.appendChild(who); head.appendChild(ts);
       d.appendChild(head); d.appendChild(body);
     } else {
@@ -2130,6 +2167,48 @@ const Chat = (() => {
     pruneLog();
     autoscroll();
     return { d, body };
+  }
+  /* TIME BREAKS — "when did I send that?" (Andrew 10-03: hard to see when you sent things). The first stamped turn in
+     the log, a new calendar day, or a silence of TIME_BREAK_MS gets a centered divider naming the day + clock, the way
+     a messenger marks a conversation picking back up. Reads only REAL stamps (data-ts), so a legacy turn with no
+     recorded time never invents one. */
+  const TIME_BREAK_MS = 30 * 60 * 1000;
+  function lastStampMs() {
+    let n = log && log.lastElementChild, hops = 0;
+    while (n && hops++ < 80) { if (n.dataset && n.dataset.ts) return +n.dataset.ts; n = n.previousElementSibling; }
+    return 0;
+  }
+  function fmtBreak(at) {
+    const now = new Date();
+    const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const daysAgo = Math.round((day(now) - day(at)) / 86400000);
+    const h = at.getHours(), m = at.getMinutes();
+    const clock = ((h % 12) || 12) + ':' + (m < 10 ? '0' : '') + m + ' ' + (h < 12 ? 'AM' : 'PM');
+    const dayName = daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday'
+      : CLOCK_MONTHS[at.getMonth()] + ' ' + at.getDate() + (at.getFullYear() !== now.getFullYear() ? ', ' + at.getFullYear() : '');
+    return dayName + ' · ' + clock;
+  }
+  function timeBreak(at) {
+    if (!log || isNaN(at.getTime())) return;
+    const prev = lastStampMs();
+    const sameDay = prev && new Date(prev).toDateString() === at.toDateString();
+    if (prev && sameDay && at.getTime() - prev < TIME_BREAK_MS) return;
+    const d = document.createElement('div'); d.className = 'cmsg-timebreak'; d.setAttribute('role', 'separator');
+    const t = document.createElement('span'); t.className = 'tb-when'; t.textContent = fmtBreak(at);
+    d.appendChild(t); log.appendChild(d);
+  }
+  // a small portrait for an agent row — resolved from the live roster by the row's speaker (or its agentId). Null when the
+  // roster can't name the speaker: no face is better than the wrong one.
+  function agentFace(whoText, agentId) {
+    if (typeof AgentPortraits === 'undefined' || !AgentPortraits.paint || typeof App === 'undefined' || !App.agents) return null;
+    const list = App.agents() || [];
+    const rec = (agentId && list.find(a => a && a.id === agentId)) || list.find(a => a && String(a.name || a.id) === whoText) || null;
+    if (!rec) return null;
+    const s = document.createElement('span'); s.className = 'cmsg-face'; s.setAttribute('aria-hidden', 'true');
+    const img = document.createElement('img'); img.alt = ''; img.draggable = false; img.hidden = true;
+    s.appendChild(img);
+    AgentPortraits.paint(img, rec);   // the SAME cached portrait crop the COMMS header shows (hidden until it lands)
+    return s;
   }
   // stamp: omitted → live now (real); a number/Date → the turn's stored real time; false → no stamp (replay of a
   // legacy turn that carries no time — never fabricate the current clock).
@@ -2277,19 +2356,6 @@ const Chat = (() => {
     // COALESCE INTO ONE BLOCK: consecutive station lines share a single broadcast row (a centered stack
     // inside the same hairline chrome) instead of each claiming a full transcript row — four trophies
     // land as one quiet moment, not four rows wedged between the Commander and their agent.
-    let d = null, stack = null;
-    const last = log.lastElementChild;
-    if (last && last.classList && last.classList.contains('broadcast')) { d = last; stack = d.querySelector('.bc-stack'); }
-    if (!d || !stack) {
-      d = document.createElement('div');
-      d.className = 'cmsg broadcast' + (opts.tone === 'gold' ? ' broadcast-gold' : '');
-      d.setAttribute('role', 'status');   // a live-region system line for AT (it renders no speaker chip)
-      stack = document.createElement('span'); stack.className = 'bc-stack';
-      d.appendChild(stack);
-      log.appendChild(d);
-    }
-    const line = document.createElement('span');
-    line.className = 'bc-line' + (opts.tone === 'gold' ? ' bc-gold' : '');   // tone rides the LINE (a shared block can mix tones)
     const raw = String(text == null ? '' : text);
     // ONE MOMENT, ONE TROPHY LINE (first-hour walk 2026-09-28: three TROPHY EARNED rows landed back to back after the
     // first good answer). A trophy that joins a block whose last line is already a trophy line folds into it —
@@ -2315,6 +2381,21 @@ const Chat = (() => {
       autoscroll();
       return true;
     }
+    // the block is only opened once we KNOW a new line will land in it. It used to be appended before the trophy fold
+    // above, so a second trophy folding into an earlier block left an EMPTY block behind — a blank box in the transcript.
+    let d = null, stack = null;
+    const last = log.lastElementChild;
+    if (last && last.classList && last.classList.contains('broadcast')) { d = last; stack = d.querySelector('.bc-stack'); }
+    if (!d || !stack) {
+      d = document.createElement('div');
+      d.className = 'cmsg broadcast' + (opts.tone === 'gold' ? ' broadcast-gold' : '');
+      d.setAttribute('role', 'status');   // a live-region system line for AT (it renders no speaker chip)
+      stack = document.createElement('span'); stack.className = 'bc-stack';
+      d.appendChild(stack);
+      log.appendChild(d);
+    }
+    const line = document.createElement('span');
+    line.className = 'bc-line' + (opts.tone === 'gold' ? ' bc-gold' : '');   // tone rides the LINE (a shared block can mix tones)
     if (raw.indexOf(TROPHY) === 0) { line.dataset.trophies = JSON.stringify([raw.slice(TROPHY.length).trim()]); lastTrophyLine = line; lastTrophyAt = Date.now(); }
     const hi = opts.highlight ? String(opts.highlight) : '';
     const ix = hi ? raw.indexOf(hi) : -1;
