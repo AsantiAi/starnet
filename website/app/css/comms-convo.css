@@ -105,7 +105,7 @@ body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not
   display: block; padding: 4px 10px 5px 14px;
   border-left: 2px solid var(--rail);
 }
-body #chat-panel #chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable):is(:hover, :focus-within) > .body { --rail: var(--ph); }
+/* no hover glow on the agent's message (Andrew 10-04): the rail holds its level; only the stamp + copy key answer the hover */
 body #chat-panel #chat-log .cmsg.agent.err > .body { --rail: var(--bad); }
 body #chat-panel #chat-log .cmsg.agent > .cmsg-head {
   justify-content: flex-start; align-items: baseline; gap: 8px; margin: 0 2px 4px; min-height: 0;
