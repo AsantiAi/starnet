@@ -8367,10 +8367,9 @@ const World = (() => {
   function returnCrates() {
     try { return (typeof ReturnStore !== 'undefined' && ReturnStore.pendingCount) ? (ReturnStore.pendingCount() | 0) : 0; } catch (_) { return 0; }
   }
-  // hit-test: the OUTBOX chute under a world-space point — ALWAYS clickable while placed (2026-07-16:
-  // the click opens the OUTBOX window, which has honest content in every state — pending crates,
-  // or the "finished work lands here" empty state — so the affordance is never dead, mirroring the
-  // MISSION BOARD). The stacks spill above AND below the footprint, so the box extends both ways.
+  // hit-test: the OUTBOX chute under a world-space point — ALWAYS clickable while placed: the click opens THIS
+  // OUTBOX's own line in WORKFLOWS (its newest result, its last jobs — 10-03), and an OUTBOX on no line says so,
+  // so the affordance is never dead, mirroring the MISSION BOARD. The stacks spill above AND below the footprint, so the box extends both ways.
   function outboxAt(wp) {
     if (!geo || !geo.props) return null;
     for (const p of geo.props) {
@@ -10562,10 +10561,12 @@ const World = (() => {
      SERVER truth: completed runs (reason 'done') since LOCAL midnight via /api/runs — bumped
      optimistically on agent.run.end and reconciled by a 60s poll, so a page reload never zeroes the
      day. No OUTBOX on the floor → no pallet (the outbox IS the shipping surface); nothing draws until
-     the server has actually answered (known), so it can never flash a fake number. Clicking the outbox
-     with no pending return-crates opens the LOGBOOK — the shift record behind the stack. */
+     the server has actually answered (known), so it can never flash a fake number.
+     EACH OUTBOX STACKS ONLY ITS OWN LINE (Andrew 10-03: the outbox is that conveyor's, never the whole station's): the pallet
+     is the line plate's own SHIPPED (/api/routing/lines/stats — jobs that left through THAT line's OUTBOX today), so the
+     pallet and the INBOX plate can never disagree. An OUTBOX on no line ships nothing and stacks nothing. shipStats stays
+     the station-wide day count the run ticker reads ("· N SHIPPED TODAY"). Clicking an OUTBOX opens its line's results. */
   let shipStats = { day: '', done: 0, known: false };
-  let shipFlash = -1e9;   // fnow of the latest shipped job — the newest crate pops for ~0.9s
   const shipDay = () => { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
   const shipMidnight = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
   function pollShipStats() {
@@ -10588,14 +10589,22 @@ const World = (() => {
   function bumpShipped() {
     const day = shipDay();
     if (shipStats.day !== day) shipStats = { day, done: 0, known: shipStats.known };
-    shipStats.done++; shipFlash = fnow;
+    shipStats.done++;
     return shipStats.done;
   }
+  const palletSeen = new Map();   // outbox propId -> { done, at }: the line's last drawn count (a rise pops the newest crate)
   function drawShippedPallet(now) {
-    if (!shipStats.known || shipStats.done <= 0 || !geo || !geo.props) return;
-    const ob = geo.props.find(p => p.t === 'outbox');
-    if (!ob) return;
-    const done = shipStats.done;
+    if (!lineStats.known || !routingPlan || !routingPlan.lineOfProp || !geo || !geo.props) return;
+    for (const ob of geo.props) {
+      if (ob.t !== 'outbox') continue;
+      const lid = routingPlan.lineOfProp[ob.id], s = lid ? lineStats.byLine[lid] : null;
+      const done = s ? (s.shipped | 0) : 0;
+      const seen = palletSeen.get(ob.id);
+      if (!seen || seen.done !== done) palletSeen.set(ob.id, { done, at: (seen && done > seen.done) ? now : -1e9 });
+      if (done > 0) drawPallet(ob, done, now - palletSeen.get(ob.id).at);
+    }
+  }
+  function drawPallet(ob, done, since) {
     const PERROW = 4, MAXVIS = 12, shown = Math.min(done, MAXVIS);
     const baseX = (ob.x + (ob.w || 1) / 2) * T;
     const baseY = (ob.y + (ob.h || 1)) * T + 6;   // the pallet sits on the floor in front of the chute
@@ -10603,7 +10612,7 @@ const World = (() => {
     if (linkStaleDim) ctx.globalAlpha = 0.3;   // E1: link down → this count is last-known, not live
     for (let i = 0; i < shown; i++) {
       const row = (i / PERROW) | 0, col = i % PERROW;
-      const pop = (i === shown - 1 && now - shipFlash < 900) ? 1 - (now - shipFlash) / 900 : 0;
+      const pop = (i === shown - 1 && since < 900) ? 1 - since / 900 : 0;
       drawShipCrate(baseX + (col - (PERROW - 1) / 2) * 10, baseY - row * 6, pop);
     }
     ctx.font = NAG_FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
