@@ -2957,7 +2957,10 @@ const Marketplace = (() => {
     // MAKE ROUTINE panel — revealed when launchMode==='routine'. Cadence defaults to the recipe's suggested one.
     const outbound = hasRecipes() && Recipes.impliesOutbound(r);
     const warnLine = outbound
-      ? '<div class="mkt-r-warn">⚠ this routine runs UNATTENDED. its directive looks like it may SEND or WRITE something — while you’re away it can only reason &amp; draft, so it will leave the result on the desk, not actually send. (a heads-up, not a block.)</div>'
+      // HONEST about the gate (10-03): the backend refuses unattended connector/send calls by default, but an agent
+      // on Full Access, the master bypass, or a routine granted connected tools DOES send — "it will not actually
+      // send" was a promise the harness can't keep. Name the conditions instead.
+      ? '<div class="mkt-r-warn">⚠ this routine runs UNATTENDED and its directive looks like it may SEND or WRITE something. by default unattended sends are refused, so it can only draft — but if this agent has Full Access, or you grant the routine connected tools, it WILL send without asking. (a heads-up, not a block.)</div>'
       : '';
     const armNote = (cronJobs != null && !cronArmed)
       ? '<div class="mkt-r-warn dim">◷ scheduling is currently OFF — your routine is saved but dormant until you enable the scheduler in AUTOMATE › SCHEDULES.</div>' : '';
