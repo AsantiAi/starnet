@@ -83,4 +83,7 @@ A.ok(/repeating-conic-gradient\(var\(--dot\) 0 25%, transparent 0 50%\) 0 0 \/ 2
 const dots = [...css.matchAll(/--dot: rgba\(var\(--(?:ph|gold)-rgb\), (\.\d+)\)/g)].map(m => +m[1]);
 A.ok(dots.length === 2 && dots.every(a => a <= .06), 'the dither stays LIGHT (cell alpha ≤ .06), lighter than the shot variant (.075/.09)');
 
+/* ---------- 9. no hover glow on the agent's message (Andrew 10-04) ---------- */
+A.ok(!/:not\(\.deliverable\):is\(:hover, :focus-within\) > \.body \{[^}]*--rail/.test(css), 'hovering an agent message never lights its rail');
+
 A.report('comms-convo.test');
