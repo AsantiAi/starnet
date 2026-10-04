@@ -316,4 +316,17 @@ const clock = { now: () => clk };
   A.ok(!('cronJobId' in s.record({ runId: 'i1' })), 'a non-scheduled run has no cronJobId key');
 }
 
+// ---- #57: delegatedBy (additive) — who delegated a worker run; absent on every other row, survives a replay ----
+{
+  const io = memIo();
+  let s = makeRunStore({ io, clock });
+  const w = s.record({ runId: 'w1', parentRunId: 'lead1', delegatedBy: 'strategist', agentId: 'strategist-2', reason: 'done' });
+  A.eq(w.delegatedBy, 'strategist', 'a worker row records the lead that delegated it');
+  const plain = s.record({ runId: 'c1', parentRunId: 'w1', agentId: 'strategist', reason: 'done' });
+  A.ok(!('delegatedBy' in plain), 'a row without a delegator keeps its old shape (no empty field)');
+  A.ok(!('delegatedBy' in s.record({ runId: 'x1', delegatedBy: 'bad id!', reason: 'done' })), 'a malformed delegator id is dropped');
+  s = makeRunStore({ io, clock });
+  A.eq(s.latest('w1').delegatedBy, 'strategist', 'delegatedBy survives a replay from disk');
+}
+
 A.report('runstore.test');

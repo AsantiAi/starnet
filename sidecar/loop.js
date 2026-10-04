@@ -1475,6 +1475,27 @@
     }
 
     emit('agent.run.start', { agentId, runId, trigger, model });
+    // Reconcile each attempt before enforcing the same spending limits again. Retries and
+    // post-compaction calls are paid work too, even when the turn counter does not advance.
+    function stopForSpend() {
+      if (spentUsd >= maxCostUsd) return end('budget', { budgetScope: 'run', budgetCapUsd: maxCostUsd });   // per-RUN hard ceiling
+      // per-RUN token ceiling for turns nothing could price (the $ ceiling above is blind to them — see maxUnpricedTokens)
+      if (unpricedTokens >= maxUnpricedTokens) {
+        return end('budget', { budgetScope: 'run', unpricedModel: unpricedModel || model, unpricedTokens, unpricedCapTokens: maxUnpricedTokens });
+      }
+      // CROSS-RUN BUDGET: day/global pool over the ledger. check() emits any threshold crossing itself and
+      // returns a block descriptor when a soft cap is reached (no resume headroom left) -> stop as 'budget'.
+      if (budget) {
+        const b = budget.check(spentUsd);
+        if (b && b.unknown) {
+          emit('agent.run.error', { agentId, runId, message: 'Spend history is unavailable or not durably saved. Restore the ledger and restart StarNet before continuing with spending limits.', transient: false });
+          return end('error', { failureStage: 'budget', failureCode: 'spend_history_unavailable' });
+        }
+        if (b) return end('budget', { budgetScope: b.scope, budgetCapUsd: b.cap });
+      }
+      return null;
+    }
+
     // Admission may have promoted a Commander-configured fallback because the selected primary is definitively
     // tool-less. Emit it after run.start so the UI receives a truthful, ordered lifecycle receipt even though no
     // failed provider request was needed to discover the incompatibility.
@@ -1497,21 +1518,8 @@
         // fall through: the grace turn runs below. Tools stay ON THE WIRE (see GRACE TURN NEVER DISPATCHES after
         // the stream) — but any call it emits is dropped, never executed, and the run ends max_iters.
       }
-      if (spentUsd >= maxCostUsd) return end('budget', { budgetScope: 'run', budgetCapUsd: maxCostUsd });   // per-RUN hard ceiling
-      // per-RUN token ceiling for turns nothing could price (the $ ceiling above is blind to them — see maxUnpricedTokens)
-      if (unpricedTokens >= maxUnpricedTokens) {
-        return end('budget', { budgetScope: 'run', unpricedModel: unpricedModel || model, unpricedTokens, unpricedCapTokens: maxUnpricedTokens });
-      }
-      // CROSS-RUN BUDGET: day/global pool over the ledger. check() emits any threshold crossing itself and
-      // returns a block descriptor when a soft cap is reached (no resume headroom left) -> stop as 'budget'.
-      if (budget) {
-        const b = budget.check(spentUsd);
-        if (b && b.unknown) {
-          emit('agent.run.error', { agentId, runId, message: 'Spend history is unavailable or not durably saved. Restore the ledger and restart StarNet before continuing with spending limits.', transient: false });
-          return end('error', { failureStage: 'budget', failureCode: 'spend_history_unavailable' });
-        }
-        if (b) return end('budget', { budgetScope: b.scope, budgetCapUsd: b.cap });
-      }
+      const spendStop = stopForSpend();
+      if (spendStop) return spendStop;
       // COMPUTE GATE: a model turn needs a compute capability (a computer in the room).
       if (capCtx && typeof capCtx.canRun === 'function' && !capCtx.canRun()) {
         emit('capdenied', { agentId, need: 'compute', reason: capCtx.computeReason || 'no compute capability in room' });
@@ -1582,6 +1590,9 @@
       let retrySent = false;   // this attempt re-sends the turn after a provider.retry (its first heartbeat goes out at once)
       while (true) {
         bookUsage(usage, usageModel);   // a re-entry after retry/compress/fallback: book the partial attempt BEFORE the reset
+        if (signal.aborted) return end('cancelled');
+        const attemptSpendStop = stopForSpend();
+        if (attemptSpendStop) return attemptSpendStop;
         acc.text = ''; acc.toolCalls = {}; acc.reasoning = []; streamedTextChunks = []; usage = null; lastFinishReason = null;
         usageModel = model;
         let streamErr = null;

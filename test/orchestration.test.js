@@ -1096,6 +1096,52 @@ const leadCtx = () => ({ agentId: 'agent', emit: () => {} });
   await dispatchTool.run({workers:[{agentId:'researcher',prompt:'Prepare the draft'}]}, {agentId:'lead',emit:()=>{},consent:{}});
   A.ok(ro.calls[0].system.includes(understanding),'worker receives the latest in-turn understanding at dispatch');
 }
+
+// ---- #57: a FOREGROUND dispatch is real but never in the background list — team.subagents must say so, and a runId
+//      must be checkable against the durable run history (the same rows the Dossier RECORD reads) ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sk-orch-57-'));
+  try {
+    const subagents = makeSubagentManager({ fs, pathMod: path, file: path.join(root, 'subagents.json'), clock: { now: () => 1000 }, emit: () => {}, newId: counter() });
+    const history = new Map();   // stand-in for runStore.latest: the host records every worker run at run end
+    const ro = fakeRunOnce(async (o) => {
+      history.set(o.runId, { runId: o.runId, agentId: o.agentId, parentRunId: o.parentRunId || '', delegatedBy: o.delegatedBy || '', reason: 'done', model: 'x-ai/grok-4.6', usd: 0.02, durationMs: 4200, toolsOk: 0 });
+      return { reason: 'done', messages: [{ role: 'assistant', content: 'banana47' }], usd: 0.02, durationMs: 4200 };
+    });
+    const roster = new Map([['strategist-2', { system: 'S' }]]);
+    const { dispatchTool, subagentsTool } = makeOrchestrationTools({ runOnce: ro, roster: () => roster, key: 'k', model: 'm', newId: counter(), subagents, runRecord: id => history.get(id) || null });
+    const ctx = { agentId: 'strategist', runId: 'lead_run_1', emit: () => {} };
+    const row = JSON.parse((await dispatchTool.run({ workers: [{ agentId: 'strategist-2', prompt: "reply with exactly 'banana47'" }] }, ctx)).content)[0];
+    A.eq(ro.calls[0].delegatedBy, 'strategist', 'a worker run is stamped with the lead that delegated it (run history + Dossier read this)');
+    A.eq(row.result, 'banana47', 'the foreground dispatch returned the worker\'s real text');
+
+    const listed = await subagentsTool.run({ agentId: 'strategist-2' }, ctx);
+    A.ok(/only tracks BACKGROUND/.test(listed.content) && /runId/.test(listed.content), 'an empty team.subagents says it cannot see foreground dispatches and how to verify one');
+    A.ok(listed.content.trim() !== '[]', 'an empty list is never a bare [] a lead can read as "nothing ran"');
+
+    const verified = await subagentsTool.run({ runId: row.runId }, ctx);
+    const rec = JSON.parse(verified.content);
+    A.ok(rec.recorded === true && rec.agentId === 'strategist-2' && rec.runId === row.runId, 'team.subagents {runId} confirms the dispatched run from run history');
+    A.eq(rec.delegatedBy, 'strategist', 'the confirmation names who delegated it');
+
+    // a later lead run (e.g. the next Telegram message) can still verify it — the row carries delegatedBy
+    const later = JSON.parse((await subagentsTool.run({ runId: row.runId }, { agentId: 'strategist', runId: 'lead_run_2', emit: () => {} })).content);
+    A.eq(later.recorded, true, 'a later run of the same lead can still verify its earlier dispatch');
+
+    const stranger = await subagentsTool.run({ runId: row.runId }, { agentId: 'someone-else', runId: 'other_run', emit: () => {} });
+    A.eq(stranger.summary, 'not found', 'another lead cannot read this lead\'s delegated run');
+    const missing = await subagentsTool.run({ runId: 'never_ran' }, ctx);
+    A.eq(missing.summary, 'not found', 'an unknown runId is reported as not found, never as success');
+
+    // rows written before delegatedBy existed fall back to the parent run's owner
+    history.set('legacy_worker', { runId: 'legacy_worker', agentId: 'strategist-2', parentRunId: 'legacy_lead', reason: 'done' });
+    history.set('legacy_lead', { runId: 'legacy_lead', agentId: 'strategist', reason: 'done' });
+    A.eq(JSON.parse((await subagentsTool.run({ runId: 'legacy_worker' }, ctx)).content).recorded, true, 'a pre-delegatedBy row verifies through its parent run\'s owner');
+
+    const noHistory = makeOrchestrationTools({ runOnce: ro, roster: () => roster, key: 'k', model: 'm', newId: counter(), subagents }).subagentsTool;
+    A.eq((await noHistory.run({ runId: row.runId }, ctx)).summary, 'unavailable', 'without a run-history reader the lookup says so instead of guessing');
+  } finally { try { fs.rmSync(root, { recursive: true, force: true }); } catch (_) {} }
+}
 A.report('orchestration.test');
 
 })();
