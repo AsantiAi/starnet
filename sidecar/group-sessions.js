@@ -60,6 +60,17 @@ function makeGroupSessions(d) {
   function liveLead(g) { const here = liveMembers(g); return here.includes(g.leadId) ? g.leadId : here.includes('agent') ? 'agent' : here[0]; }
   // the turn the group's worker is executing right now (a live worker can be asked to stop; anything else just stops)
   const workingTurn = new Map();
+  // anyone leaving (removed, or departed from the crew): their queued work stops and their questions close — a question
+  // left open by someone who can never answer it would block the whole group (pump waits on any pending question)
+  function retire(g, staying, reason) {
+    let abort = null;
+    for (const t of g.turns) if (!staying.includes(t.agentId)) {
+      if (['queued', 'held'].includes(t.state)) { t.state = 'stopped'; t.reason = reason; }
+      if (ACTIVE.has(t.state)) { const ac = stopTurn(g, t, reason); if (ac) abort = ac; }
+    }
+    cancelQuestions(g, q => !staying.includes(q.agentId));
+    return abort;
+  }
   function stopTurn(g, t, reason) {
     if (workingTurn.get(g.id) === t.id && controllers.has(g.id)) { t.state = 'stopping'; if (reason) t.reason = reason; return controllers.get(g.id); }
     t.state = 'stopped'; t.reason = reason || 'Stopped'; delete t.approval; return null;
@@ -152,17 +163,17 @@ function makeGroupSessions(d) {
     for (const m of plain.matchAll(/(?:^|\s)@(?=[\w-])/g)) {
       const rest = plain.slice(m.index + m[0].length), h = rest.match(/^[\w-]+/)[0];
       if (h.toLowerCase() === 'all') return here.slice();
-      const named = list => {
-        const hits = list.filter(a => rest.slice(0, a.name.length).toLowerCase() === a.name.toLowerCase() && !/[\w-]/.test(rest.charAt(a.name.length)));
-        const best = Math.max(0, ...hits.map(a => a.name.length));
-        return hits.filter(a => a.name.length === best);
-      };
-      const exact = mem.filter(a => a.id === h);
-      const choices = exact.length ? exact : named(mem);
-      if (choices.length === 1) { if (!ids.includes(choices[0].id)) ids.push(choices[0].id); continue; }
-      if (choices.length > 1) fail('Unknown or ambiguous @' + h + '; choose a participant from autocomplete');
-      const outside = crew.filter(a => !here.includes(a.id) && (a.id === h || named([a]).length));
+      // the longest NAME on the whole crew that the text starts with — so "@SCOUT 2" is SCOUT 2 even when only SCOUT
+      // sits in this chat (then it is refused as "not in this chat", never sent to SCOUT)
+      const hits = crew.filter(a => rest.slice(0, a.name.length).toLowerCase() === a.name.toLowerCase() && !/[\w-]/.test(rest.charAt(a.name.length)));
+      const best = Math.max(0, ...hits.map(a => a.name.length)), longest = hits.filter(a => a.name.length === best);
+      const exact = best > h.length ? [] : mem.filter(a => a.id === h);   // a longer name beats a bare id token
+      const inChat = exact.length ? exact : longest.filter(a => here.includes(a.id));
+      if (inChat.length === 1) { if (!ids.includes(inChat[0].id)) ids.push(inChat[0].id); continue; }
+      if (inChat.length > 1) fail('Unknown or ambiguous @' + h + '; choose a participant from autocomplete');
+      const outside = longest.length ? longest : crew.filter(a => a.id === h);
       if (outside.length === 1) fail(outside[0].name + ' is not in this chat yet. Add them from the @ list, then send.');
+      if (outside.length > 1) fail('Unknown or ambiguous @' + h + '; choose a participant from autocomplete');
       fail('Unknown @' + h + ': no one in this chat has that name. Pick an agent from the @ list, or wrap it in `backticks` to send it as text.');
     }
     if (ids.length) return ids;
@@ -214,11 +225,14 @@ function makeGroupSessions(d) {
   async function invite(id, b) {
     await ready;
     const agentId = identifier(b.agentId);
+    let abort = null;
     await update(id, g => {
       if (g.deleting) fail('Session is being deleted', 409);
       g.members = admit(g.members, [...new Set([...g.members, agentId])]);
+      abort = retire(g, g.members, 'Left the crew');
       if (!g.members.includes(g.leadId)) g.leadId = liveLead(g);
     });
+    if (abort) abort.abort();
     return publicGroup(get(id));
   }
   async function ask(id, turnId, fields, signal) {
@@ -282,13 +296,11 @@ function makeGroupSessions(d) {
       if (b.revision !== g.revision) fail('Session changed; refresh and try again', 409);
       const ids = admit(g.members, b.members || g.members);
       // an explicit lead must stay; a lead that LEFT (removed here, or deleted from the crew) hands over to who remains
-      const lead = b.leadId ? b.leadId : ids.includes(g.leadId) ? g.leadId : ids.includes('agent') ? 'agent' : ids[0];
+      // a lead that has LEFT the crew can't be honoured even when named (the picker names the lead it last saw)
+      const onCrew = new Set(roster().map(a => a.id)), named = b.leadId && onCrew.has(b.leadId) ? b.leadId : null;
+      const lead = named || (ids.includes(g.leadId) ? g.leadId : ids.includes('agent') ? 'agent' : ids[0]);
       if (!ids.includes(lead)) fail('Choose a lead who remains in the group');
-      for (const t of g.turns) if (!ids.includes(t.agentId)) {
-        if (['queued', 'held'].includes(t.state)) t.state = 'stopped';
-        if (ACTIVE.has(t.state)) { const ac = stopTurn(g, t, 'Participant removed'); if (ac) abort = ac; }
-      }
-      cancelQuestions(g, q => !ids.includes(q.agentId));
+      abort = retire(g, ids, 'Participant removed');
       g.members = ids; g.leadId = lead;
       if (b.instructions !== undefined) g.instructions = text(b.instructions, 8000);
       if (b.title !== undefined) g.title = text(b.title, 80);

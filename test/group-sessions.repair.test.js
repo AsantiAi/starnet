@@ -38,6 +38,12 @@ async function waitFor(fn) { for (let n = 0; n < 200; n++) { if (await fn()) ret
     await api.send(g.id, { key: 'code', text: 'install `@types/node` please' }); await api.idle(g.id);
     assert.equal(seen.at(-1).t.agentId, 'agent', 'a backticked @word is text and the lead answers');
 
+    // ---- the longest name is read across the whole CREW: "@RESEARCHER 2" with only RESEARCHER here is refused, not misrouted ----
+    const onlyOne = await api.create({ members: ['agent', 'researcher'] });
+    await assert.rejects(api.send(onlyOne.id, { key: 'r2out', text: '@RESEARCHER 2 look at this' }), /RESEARCHER 2 is not in this chat yet/);
+    assert.equal((await api.get(onlyOne.id)).messages.length, 0, 'nothing was sent to RESEARCHER');
+    await api.send(onlyOne.id, { key: 'r2case', text: '@researcher 2 is fine' }).catch(e => assert.match(e.message, /RESEARCHER 2 is not in this chat/));
+
     // ---- a member who LEFT the crew no longer breaks the group ----
     crew = crew.filter(a => a.id !== 'agent');   // the lead is gone from the roster (no dropAgent yet: the worst case)
     const before = seen.length;
@@ -112,6 +118,30 @@ async function waitFor(fn) { for (let n = 0; n < 200; n++) { if (await fn()) ret
     assert.ok(read, 'group.read is offered');
     await api.send(f.id, { key: 'm3', text: '@engineer here it is', artifactIds: [orphan] }); await api.idle(f.id);
     assert.match(seen.at(-1).ctx.messages[0].content, /secret\.pdf/, 'once a message carries it, it is shared');
+
+    // ---- a departed member's open question closes when the membership is next written (it blocked the group for good) ----
+    const qq = await api.create({ members: ['agent', 'engineer', 'outside'] });
+    execute = async o => { if (o.t.agentId === 'engineer') await o.askCommander({ question: 'Which tone?', options: ['casual'] }); return finish('ok'); };
+    await api.send(qq.id, { key: 'ask2', text: '@engineer draft it' });
+    await waitFor(async () => ((await api.get(qq.id)).questions || []).some(x => x.state === 'pending'));
+    const crewBefore = crew; crew = crew.filter(a => a.id !== 'engineer');
+    await api.invite(qq.id, { agentId: 'researcher-2' }); await api.idle(qq.id);
+    let qqs = await api.get(qq.id);
+    assert.ok(!qqs.members.includes('engineer'), 'the departed member left on the next write');
+    assert.ok(!(qqs.questions || []).some(x => x.state === 'pending'), 'their question no longer blocks the group');
+    const blockedBefore = seen.length;
+    await api.send(qq.id, { key: 'after-q', text: '@outside are you there' }); await api.idle(qq.id);
+    assert.equal(seen.length, blockedBefore + 1, 'the group runs again');
+    // ---- REMOVE works when the picker names a lead that has left the crew ----
+    crew = crewBefore;
+    const led = await api.create({ members: ['engineer', 'outside', 'researcher-2'], leadId: 'engineer' });
+    crew = crew.filter(a => a.id !== 'engineer');
+    const ls = await api.get(led.id);
+    const removed = await api.configure(led.id, { revision: ls.revision, members: ['engineer', 'researcher-2'], leadId: 'engineer' });
+    assert.deepEqual(removed.members, ['researcher-2'], 'REMOVE saved (the departed lead quietly left)');
+    assert.equal(removed.leadId, 'researcher-2', 'the lead handed over to who remains');
+    await assert.rejects(api.configure(led.id, { revision: removed.revision, members: ['researcher-2'], leadId: 'outside' }), /lead who remains/, 'a live lead outside the chat is still refused');
+    crew = crewBefore;
 
     // ---- the station-wide list says what is waiting on the Commander ----
     const listed = (await api.list()).groups.find(x => x.id === q.id);

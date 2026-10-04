@@ -4114,10 +4114,9 @@ const App = (() => {
       return groupHead + '<li class="' + rowClass(w, st, activeId) + '" data-id="' + U.esc(w.id) + '" tabindex="' + (w.id === railFocusId ? '0' : '-1') + '" role="option" aria-selected="' + (w.id === activeId ? 'true' : 'false') + '" aria-posinset="' + (index + 1) + '" aria-setsize="' + rows.length + '" aria-label="' + U.esc(railRowLabel(w, st)) + '" aria-keyshortcuts="Shift+F10" title="' + U.esc(tip) + '">' +
         '<span class="' + st.dot + '" aria-hidden="true"></span>' +
         (w.pinned ? '<span class="ws-pin" aria-hidden="true">★</span>' : '') +
-        // a group chat says so on the row itself: the COMPACT rail hides the agent line that names its members
-        (w.conversationMode === 'group' ? '<span class="ws-gc" aria-hidden="true">GROUP</span>' : '') +
         '<span class="ws-agent" aria-hidden="true"' + railAgentColorAttr(w) + '>' + U.esc(railAgentName(w)) + '</span>' +
-        '<span class="ws-title">' + U.esc(title) + '</span>' +
+        // a group chat says so on the row itself, inside the title cell so every rail layout places it (compact, attention, inbox)
+        '<span class="ws-title">' + (w.conversationMode === 'group' ? '<span class="ws-gc" aria-hidden="true">GROUP</span>' : '') + U.esc(title) + '</span>' +
         '<span class="ws-meta">' + U.esc(st.meta) + '</span>' +
         '<span class="ws-receipt" aria-hidden="true">' + U.esc(railReceipt(w)) + '</span>' +
         '<button class="ws-kebab" tabindex="-1" aria-label="session actions" title="session actions">⋯</button>' +
@@ -4318,6 +4317,8 @@ const App = (() => {
   // instead we switch to the agent's most-recent live workstream, or MINT a fresh one bound to that agentId
   // (the same Workstreams.create({agentId}) seam summon uses). switchWorkstream then repoints the focused agent
   // (its model/provider/effort) + Chat.load. Returns the target workstream id, or null for an unknown agent.
+  // a 1:1 agent pick never lands in (or rebinds) a GROUP that agent happens to lead: a group's agentId is only its lead
+  function isGroupWs(w) { return !!w && w.conversationMode === 'group'; }
   function selectAgent(agentId) {
     const id = String(agentId || '');
     const a = agents.get(id); if (!a) return null;
@@ -4327,7 +4328,7 @@ const App = (() => {
     // law above only protects conversations with content. General (the hero's home) and any stream with
     // history / runs / a live run keep their binding and fall through to the switch-or-mint path.
     const cur = Workstreams.active();
-    if (cur && cur.id !== Workstreams.generalId() && cur.conversationMode !== 'group' && (cur.agentId || 'agent') !== id
+    if (cur && cur.id !== Workstreams.generalId() && !isGroupWs(cur) && (cur.agentId || 'agent') !== id
         && !(cur.history && cur.history.length) && !(cur.runIds && cur.runIds.length)
         && !(typeof Channels !== 'undefined' && Channels.isBusy(cur.id))
         && Workstreams.setAgent(cur.id, id)) {
@@ -4339,8 +4340,7 @@ const App = (() => {
     // prefer this agent's existing streams (most-recently-active first — Workstreams.list() is already sorted
     // pinned>recent); the General default stream (title==null) is only NOVA/hero's home, so a specialist that
     // has no stream yet gets a fresh one titled with its name (mirrors summon's Workstreams.create).
-    // a 1:1 pick never lands in a GROUP that agent happens to lead (a group's agentId is only its lead)
-    const mine = Workstreams.list().filter(w => (w.agentId || 'agent') === id && w.conversationMode !== 'group');
+    const mine = Workstreams.list().filter(w => (w.agentId || 'agent') === id && !isGroupWs(w));
     let ws = mine[0] || null;
     if (!ws) ws = Workstreams.create(a.name, { agentId: id, activate: false });
     if (!ws) return null;

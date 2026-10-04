@@ -27,7 +27,7 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
 const roster = [{ id: 'agent', name: 'Lead' }, { id: 'peer', name: 'Peer' }, { id: 'third', name: 'Third' }];
 const ok = result => ({ status: 200, ok: true, json: async () => ({ ok: true, result }) });
 const success = () => ok({ roster, groups: [] });
-async function boot({ general = false } = {}) {
+async function boot({ general = false, crew = roster } = {}) {
   const body = new Element('body'); body.attached = true;
   const head = new Element('head'); head.attached = true;
   for (const id of ['comms-idbar', 'chat-input', 'chat-log', 'chat-queued', 'chat-inputrow']) { const e = new Element('div'); e.id = id; body.append(e); }
@@ -37,7 +37,7 @@ async function boot({ general = false } = {}) {
   const document = { body, head, createElement: tag => new Element(tag), createTextNode: t => Object.assign(new Element('#text'), { textContent: t }), getElementById: find };
   const ctx = vm.createContext({ document, console, crypto: { randomUUID: () => 'test' }, clearTimeout() {}, setTimeout() {}, queueMicrotask, Chat: {},
     fetch: (url, init) => { const b = init && init.body ? JSON.parse(init.body) : null; sent.push({ url, body: b }); return request(url, b); },
-    App: { pushRoster: () => push(), agents: () => roster, persist() {}, refreshRail() {}, openWorkstream: id => opened.push(id) },
+    App: { pushRoster: () => push(), agents: () => crew, persist() {}, refreshRail() {}, openWorkstream: id => opened.push(id) },
     StationUI: { toggleTerm(key, title, build, opts) { opens++; const shell = new Element('div'); shell.id = 'test-window'; body.append(shell); build(shell); onClose = opts.onClose; }, closeTerm() { onClose?.(); find('test-window')?.remove(); }, notify() {} },
     Workstreams: { get: id => workstreams.get(id), adopt: o => { const w = { ...o }; workstreams.set(o.id, w); return w; }, generalId: () => general ? 'direct' : 'general-home' } });
   vm.runInContext(source + '\nglobalThis.GroupChat = GroupChat;\nGroupChat.bind({id:"direct",agentId:"agent",history:[{role:"user",content:"hi"}],title:"Direct"});', ctx);
@@ -166,5 +166,29 @@ const group = (members, extra = {}) => ({ id: 'direct', title: 'Direct', members
   assert.deepEqual(T('`@peer` and\n> @third quoted'), [], 'code and quotes are not mentions');
   assert.deepEqual(T('@nobody hi'), [], 'an unknown handle is left alone');
   assert.deepEqual(T('@peer', { id: 'g', agentId: 'agent', conversationMode: 'group' }), [], 'a group resolves its own mentions on the backend');
+  // ---- a stale @ menu (the box was sent/cleared) closes and gives the key back: Esc must reach the run's interrupt ----
+  await at.type('ping @pe'); assert.ok(at.find('gc-mentions').children.length > 0);
+  at.find('chat-input').value = '';   // what a SEND-chip send leaves behind
+  assert.equal((await at.key('Escape')).handled, false, 'Esc on a stale menu falls through to the composer (interrupt)');
+  assert.equal(at.find('gc-mentions').children.length, 0, 'and the stale menu is gone');
+
+  // ---- "@SCOUT" is never written when another name extends it ("@SCOUT " + "2 more" would read as SCOUT 2) ----
+  const scouts = await boot({ crew: [{ id: 'agent', name: 'Lead' }, { id: 'scout', name: 'SCOUT' }, { id: 'scout-2', name: 'SCOUT 2' }] });
+  scouts.request((url, b) => Promise.resolve(!b ? success() : ok(group(b.members))));
+  await scouts.type('@scout');
+  const scoutRow = walk(scouts.find('gc-mentions')).find(e => e.attrs.role === 'option' && /^\s*SCOUT\s/.test(text(e)) && !/SCOUT 2/.test(text(e)));
+  assert.ok(scoutRow, 'SCOUT is offered'); scoutRow.events.click(); await settle();
+  assert.equal(scouts.find('chat-input').value, '@scout ', 'the stable id is written, not a name another name extends');
+  const S = t => [...scouts.ctx.GroupChat.mentionTargets(t, { id: 'x', agentId: 'agent' })];
+  assert.deepEqual(S('@SCOUT 2 more ideas'), ['scout-2'], 'a typed handle resolves to the LONGEST crew name, as the backend will');
+  assert.deepEqual(S('@SCOUT, then'), ['scout'], 'the shorter name still resolves on its own');
+
+  // ---- two Enters during one conversion make ONE group ----
+  const twice = await boot({ general: true });
+  let creates = 0; const gate = deferred();
+  twice.request((url, b) => { if (!b) return Promise.resolve(success()); if (b.op === 'create') { creates++; return gate.promise.then(() => ok({ ...group(b.members), id: b.id })); } throw new Error('unexpected ' + b.op); });
+  const one = twice.ctx.GroupChat.startWith(['peer']), two = twice.ctx.GroupChat.startWith(['peer']);
+  gate.resolve(); const [g1, g2] = await Promise.all([one, two]);
+  assert.equal(creates, 1, 'a second Enter joins the conversion in flight'); assert.equal(g1, g2);
   console.log('group-chat-picker: loading, failure, cancellation, + ADD/✕ REMOVE save at once, nothing claimed before the backend, General never converted, @ menu in a direct chat with keyboard pick, exact @handle resolution PASS');
 })().catch(e => { console.error(e); process.exitCode = 1; });

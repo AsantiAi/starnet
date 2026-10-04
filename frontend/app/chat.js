@@ -1053,6 +1053,7 @@ const Chat = (() => {
       const ws = g && Workstreams.get(g.id);
       if (!ws || activeWs?.id !== ws.id) return;
       if (hasStaged) await settleAttachments();
+      if (activeWs?.id !== ws.id) return;   // you moved on while the files uploaded: the message stays in the box
       const atts = pendingAtts.filter(entry => entry.status === 'ready' && entry.ref).map(entry => entry.ref);
       const sent = await GroupChat.sendText(t, { attachments: atts, attachmentAgent: ws.agentId });
       if (sent && activeWs?.id === ws.id) { takeAttachments(); if (input.value.trim() === t) input.value = ''; closeSlash(); autoGrowInput(); }
