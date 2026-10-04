@@ -3930,7 +3930,11 @@ const App = (() => {
   // Pending consent belongs to a session. Multiple sessions on one agent remain distinct;
   // deleted/orphaned channels cannot contribute a count with nowhere to open.
   function railPendingIds() {
-    return new Set(typeof Channels === 'undefined' ? [] : Channels.pendingIds().filter(id => Workstreams.get(id)));
+    const ids = typeof Channels === 'undefined' ? [] : Channels.pendingIds().filter(id => Workstreams.get(id));
+    // a GROUP waiting on the Commander (a question, an approval that expires in 5 minutes) — read off the backend's
+    // group list (group-chat.js watch), since group runs never pass through Channels
+    if (typeof GroupChat !== 'undefined' && GroupChat.attentionIds) for (const id of GroupChat.attentionIds()) if (Workstreams.get(id) && !ids.includes(id)) ids.push(id);
+    return new Set(ids);
   }
   function syncRailAttention(pending) {
     railAttentionKey = [...pending].sort().join('\n');
@@ -3983,6 +3987,13 @@ const App = (() => {
       const question = pending.tool === 'brief.ask';
       return { dot: question ? 'ws-dot needsyou reply' : 'ws-dot needsyou approval', meta: question ? 'Reply needed' : 'Approval needed', busy: Channels.isBusy(w.id), attn: true, status: question ? 'waiting for your answer' : 'awaiting your approval' };
     }
+    // a GROUP's runs live in the group coordinator, not Channels: its row reads the backend group state instead
+    const gs = w.conversationMode === 'group' && typeof GroupChat !== 'undefined' && GroupChat.stateOf ? GroupChat.stateOf(w.id) : null;
+    if (gs && (gs.approvals || gs.questions)) {
+      const ask = !gs.approvals;
+      return { dot: ask ? 'ws-dot needsyou reply' : 'ws-dot needsyou approval', meta: ask ? 'Reply needed' : 'Approval needed', busy: !!gs.busy, attn: true, status: ask ? 'waiting for your answer' : 'awaiting your approval' };
+    }
+    if (gs && gs.busy) return { dot: 'ws-dot working', meta: 'Working', busy: true, attn: false, status: 'agents are working in this group' };
     if (typeof Channels !== 'undefined' && Channels.isBusy(w.id)) {
       if (!Channels.runIdOf(w.id)) {
         return { dot: 'ws-dot connecting', meta: 'Connecting', busy: true, attn: false, status: 'connecting to the model' };
@@ -4045,7 +4056,7 @@ const App = (() => {
   function railModelFull(w) { return (w.lastModel || '').trim(); }
   function railRowLabel(w, st, project = false) {
     const title = w.title || 'General', name = railAgentName(w);
-    return title + ' session' + (name === title ? '' : ', ' + name) + (st.status ? ', ' + st.status : '')
+    return title + (w.conversationMode === 'group' ? ' group chat' : ' session') + (name === title ? '' : ', ' + name) + (st.status ? ', ' + st.status : '')
       + (Workstreams.unread(w) && !st.dot.includes('unseen') ? ', unread activity' : '')
       + (project ? '; Enter to open' : '; Enter to open; Shift+F10 for actions');
   }
@@ -4103,6 +4114,8 @@ const App = (() => {
       return groupHead + '<li class="' + rowClass(w, st, activeId) + '" data-id="' + U.esc(w.id) + '" tabindex="' + (w.id === railFocusId ? '0' : '-1') + '" role="option" aria-selected="' + (w.id === activeId ? 'true' : 'false') + '" aria-posinset="' + (index + 1) + '" aria-setsize="' + rows.length + '" aria-label="' + U.esc(railRowLabel(w, st)) + '" aria-keyshortcuts="Shift+F10" title="' + U.esc(tip) + '">' +
         '<span class="' + st.dot + '" aria-hidden="true"></span>' +
         (w.pinned ? '<span class="ws-pin" aria-hidden="true">★</span>' : '') +
+        // a group chat says so on the row itself: the COMPACT rail hides the agent line that names its members
+        (w.conversationMode === 'group' ? '<span class="ws-gc" aria-hidden="true">GROUP</span>' : '') +
         '<span class="ws-agent" aria-hidden="true"' + railAgentColorAttr(w) + '>' + U.esc(railAgentName(w)) + '</span>' +
         '<span class="ws-title">' + U.esc(title) + '</span>' +
         '<span class="ws-meta">' + U.esc(st.meta) + '</span>' +
@@ -4314,7 +4327,7 @@ const App = (() => {
     // law above only protects conversations with content. General (the hero's home) and any stream with
     // history / runs / a live run keep their binding and fall through to the switch-or-mint path.
     const cur = Workstreams.active();
-    if (cur && cur.id !== Workstreams.generalId() && (cur.agentId || 'agent') !== id
+    if (cur && cur.id !== Workstreams.generalId() && cur.conversationMode !== 'group' && (cur.agentId || 'agent') !== id
         && !(cur.history && cur.history.length) && !(cur.runIds && cur.runIds.length)
         && !(typeof Channels !== 'undefined' && Channels.isBusy(cur.id))
         && Workstreams.setAgent(cur.id, id)) {
@@ -4326,7 +4339,8 @@ const App = (() => {
     // prefer this agent's existing streams (most-recently-active first — Workstreams.list() is already sorted
     // pinned>recent); the General default stream (title==null) is only NOVA/hero's home, so a specialist that
     // has no stream yet gets a fresh one titled with its name (mirrors summon's Workstreams.create).
-    const mine = Workstreams.list().filter(w => (w.agentId || 'agent') === id);
+    // a 1:1 pick never lands in a GROUP that agent happens to lead (a group's agentId is only its lead)
+    const mine = Workstreams.list().filter(w => (w.agentId || 'agent') === id && w.conversationMode !== 'group');
     let ws = mine[0] || null;
     if (!ws) ws = Workstreams.create(a.name, { agentId: id, activate: false });
     if (!ws) return null;

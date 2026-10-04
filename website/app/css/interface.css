@@ -85,14 +85,14 @@ body {
 .comms-identity .comms-agent-select:hover { background: var(--ph-faint); border-color: var(--ui-edge); }
 .comms-identity .comms-agent-model { flex: none; text-align: left; font-size: 12px; opacity: 1; }
 #chat-log { padding: 6px 7px 12px; gap: 9px; box-shadow: var(--ui-well); background-color: rgba(0,0,0,.14); }
-#chat-log .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable):not(.reply) {
+:is(#chat-log, #gc-log) .cmsg.agent:not(.tool):not(.consent):not(.turnin):not(.nudge):not(.deliverable):not(.reply) {
   padding-block: 5px 10px; background: linear-gradient(90deg, rgba(var(--ph-rgb), .04), transparent 85%);
 }
-#chat-log .cmsg.user { padding-block: 5px 10px; background: rgba(var(--gold-rgb), .035); }
-#chat-log .cmsg .who { font-size: 12px; letter-spacing: 1.5px; }
-#chat-log .cmsg.agent .who { color: var(--ph); }
-#chat-log .cmsg.user .who { opacity: .85; }
-#chat-log .cmsg .cmsg-ts { font-size: 11px; }
+:is(#chat-log, #gc-log) .cmsg.user { padding-block: 5px 10px; background: rgba(var(--gold-rgb), .035); }
+:is(#chat-log, #gc-log) .cmsg .who { font-size: 12px; letter-spacing: 1.5px; }
+:is(#chat-log, #gc-log) .cmsg.agent .who { color: var(--ph); }
+:is(#chat-log, #gc-log) .cmsg.user .who { opacity: .85; }
+:is(#chat-log, #gc-log) .cmsg .cmsg-ts { font-size: 11px; }
 #chat-panel #chat-inputrow {
   display: flex; flex-direction: column; align-items: stretch; gap: 9px;
   margin-top: 10px; padding: 11px; background: var(--panel2);

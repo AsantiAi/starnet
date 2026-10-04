@@ -387,35 +387,35 @@ body.glass-demo:not(.hud-mode) #screen-game :is(#crew-sum, #topbar .tb-lbl, #top
    their copy key, inline code split its box across lines. The conversation layout (agent left on a phosphor rail,
    Commander right on gold, inverted name chips — comms.css) is untouched; only the reply's typography changes.
    ============================================================ */
-body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-b { color: var(--ph); text-shadow: 0 0 4px rgba(var(--ph-rgb), .38); }
-body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-list li > .md-b:first-child { text-decoration: none; }
+body.glass-demo:not(.hud-mode) :is(#chat-log, #gc-log) .cmsg .body .md-b { color: var(--ph); text-shadow: 0 0 4px rgba(var(--ph-rgb), .38); }
+body.glass-demo:not(.hud-mode) :is(#chat-log, #gc-log) .cmsg .body .md-list li > .md-b:first-child { text-decoration: none; }
 /* a heading is a Pip-Boy section label: amber small caps on a rule that runs to the edge */
-body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-h {
+body.glass-demo:not(.hud-mode) :is(#chat-log, #gc-log) .cmsg .body .md-h {
   display: flex; align-items: center; gap: 9px;
   margin: 1.05em 0 .45em; font-size: .86em; letter-spacing: 2px; text-transform: uppercase;
   color: var(--ph); text-shadow: 0 0 5px rgba(var(--ph-rgb), .4);
 }
-body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-h::after { content: ''; flex: 1 1 auto; height: 1px; background: rgba(var(--ph-rgb), .32); }
-body.glass-demo:not(.hud-mode) #chat-log .cmsg .body > .md-h:first-child { margin-top: .2em; }
+body.glass-demo:not(.hud-mode) :is(#chat-log, #gc-log) .cmsg .body .md-h::after { content: ''; flex: 1 1 auto; height: 1px; background: rgba(var(--ph-rgb), .32); }
+body.glass-demo:not(.hud-mode) :is(#chat-log, #gc-log) .cmsg .body > .md-h:first-child { margin-top: .2em; }
 /* inline code keeps its box when it wraps */
-body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-code {
+body.glass-demo:not(.hud-mode) :is(#chat-log, #gc-log) .cmsg .body .md-code {
   padding: 0 5px; border-radius: 4px; border-color: rgba(var(--ph-rgb), .24); background: rgba(var(--ph-rgb), .08);
   -webkit-box-decoration-break: clone; box-decoration-break: clone;
 }
 /* a code block wraps inside its glass well; the copy key never sits on top of the text */
-body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-pre-wrap { margin: .55em 0; }
-body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-pre {
+body.glass-demo:not(.hud-mode) :is(#chat-log, #gc-log) .cmsg .body .md-pre-wrap { margin: .55em 0; }
+body.glass-demo:not(.hud-mode) :is(#chat-log, #gc-log) .cmsg .body .md-pre {
   white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: hidden;
   padding: 10px 42px 10px 12px; font-size: 14px; line-height: 1.45;
   background: rgba(0, 0, 0, .3); border: 1px solid rgba(var(--ph-rgb), .22); border-left: 2px solid var(--ph-dim); border-radius: 8px;
 }
-body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-copy { top: 7px; right: 7px; }
+body.glass-demo:not(.hud-mode) :is(#chat-log, #gc-log) .cmsg .body .md-copy { top: 7px; right: 7px; }
 /* tables and lists */
-body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-table-scroll { border: 1px solid rgba(var(--ph-rgb), .2); border-radius: 8px; }
-body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-table :is(th, td) { border: 0; border-bottom: 1px solid rgba(var(--ph-rgb), .14); padding: .35em .7em; }
-body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-table tr:last-child td { border-bottom: 0; }
-body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-table th { background: rgba(var(--ph-rgb), .08); color: var(--ph); letter-spacing: 1px; }
-body.glass-demo:not(.hud-mode) #chat-log .cmsg .body .md-list li::marker { color: var(--ph); }
+body.glass-demo:not(.hud-mode) :is(#chat-log, #gc-log) .cmsg .body .md-table-scroll { border: 1px solid rgba(var(--ph-rgb), .2); border-radius: 8px; }
+body.glass-demo:not(.hud-mode) :is(#chat-log, #gc-log) .cmsg .body .md-table :is(th, td) { border: 0; border-bottom: 1px solid rgba(var(--ph-rgb), .14); padding: .35em .7em; }
+body.glass-demo:not(.hud-mode) :is(#chat-log, #gc-log) .cmsg .body .md-table tr:last-child td { border-bottom: 0; }
+body.glass-demo:not(.hud-mode) :is(#chat-log, #gc-log) .cmsg .body .md-table th { background: rgba(var(--ph-rgb), .08); color: var(--ph); letter-spacing: 1px; }
+body.glass-demo:not(.hud-mode) :is(#chat-log, #gc-log) .cmsg .body .md-list li::marker { color: var(--ph); }
 
 /* ============================================================
    DECISION CARDS (Andrew 10-02, on the north-star question card: "make it look cleaner maybe slightly less so

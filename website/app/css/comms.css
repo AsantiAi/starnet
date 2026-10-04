@@ -76,8 +76,8 @@
 .cmsg.user  + .cmsg.user  > .cmsg-head { display: flex; justify-content: flex-end; margin: 4px 0 0; min-height: 0; }
 .cmsg.agent + .cmsg.agent > .cmsg-head > .who,
 .cmsg.user  + .cmsg.user  > .cmsg-head > .who { display: none; }
-body.glass-demo #chat-log .cmsg.agent + .cmsg.agent > .cmsg-head,
-body.glass-demo #chat-log .cmsg.user  + .cmsg.user  > .cmsg-head { margin: 2px 0 2px; min-height: 0; }
+body.glass-demo :is(#chat-log, #gc-log) .cmsg.agent + .cmsg.agent > .cmsg-head,
+body.glass-demo :is(#chat-log, #gc-log) .cmsg.user  + .cmsg.user  > .cmsg-head { margin: 2px 0 2px; min-height: 0; }
 
 /* agent transmission card: the existing left phosphor rail + a faint recessed fill and hairline inset,
    airy not boxy. Keeps the base padding-left so grouped bodies still align under the rail. SCOPED to
