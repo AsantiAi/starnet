@@ -78,4 +78,15 @@ for(const name of ['crewEngineStep','stepCrewToSeat','tick']){
   A.ok(min>=9.6,'faster follower preserves space behind a slower walker');
   A.eq(f.dropped,0,'following does not trigger jam abandonment');
 }
+{
+  // X-crossing freeze (2026-10-03): side by side, each bound across the other's line, each read the
+  // other as "ahead and going my way" and held for it — forever, since a holder is idle and jam release
+  // only frees walkers. Positions are the exact frozen state a 3-tile-hall fuzz trial reached.
+  const f=fixture(3),a=f.body(10,15,10,15),b=f.body(11,15,11,15);
+  a.px=170.9;a.py=251;a.target={x:186,y:95};b.px=180.5;b.py=251;b.target={x:162,y:167};
+  for(const x of [a,b]){x.pathPts=[];x.pathIdx=0;x.state='walk';}
+  const start=[[a.px,a.py],[b.px,b.py]];f.step(400);
+  A.ok(Math.hypot(a.px-start[0][0],a.py-start[0][1])>24&&Math.hypot(b.px-start[1][0],b.py-start[1][1])>24,'crossing walkers never hold for each other in a ring');
+  A.eq(f.errors,[],'ring break preserves wall clearance');
+}
 A.report('hallway-traffic');

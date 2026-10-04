@@ -2412,6 +2412,17 @@ const World = (() => {
   // A passing agreement belongs to these bodies, targets and geometry only. It
   // never replaces their work/social goals or survives a refit or a new command.
   const trafficPlans = new WeakMap(), trafficRetry = new WeakMap();
+  // who each body is holding behind this frame; a stale entry (its body stopped stepping) is ignored
+  const followOf = new WeakMap();
+  function followLeadsTo(from, target, now) {
+    for (let cur = from, hops = 0; cur && hops < 32; hops++) {
+      const f = followOf.get(cur);
+      if (!f || now - f.at > 100) return false;
+      if (f.leader === target) return true;
+      cur = f.leader;
+    }
+    return false;
+  }
   function trafficDistance(p, a, b) {
     const dx=b.x-a.x,dy=b.y-a.y,n=dx*dx+dy*dy;
     const t=n ? Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/n)) : 0;
@@ -2474,6 +2485,10 @@ const World = (() => {
     }
     // Match a slower walker instead of repeatedly shoving its back. This check
     // runs every frame; the more expensive refuge search below is throttled.
+    // FOLLOW RINGS (2026-10-03, Andrew: three crew frozen in a hall "for minutes"): two walkers crossing
+    // at an X each see the other "ahead and going my way", so each holds for the other forever — and
+    // a holder is 'idle', which jam release never touches. Never wait on a body whose own wait chain
+    // leads back to us; the body that closes the ring walks on and the ring is gone next frame.
     if(!plan&&b.target){
       const dx=b.target.x-b.px,dy=b.target.y-b.py,d=Math.hypot(dx,dy),R=PERSONAL_TILES*T;
       if(d>1)for(const other of allBodies()){
@@ -2481,11 +2496,13 @@ const World = (() => {
         const ox=other.px-b.px,oy=other.py-b.py,ahead=(ox*dx+oy*dy)/d;
         if(ahead>0&&ahead<R+3&&Math.abs(ox*dy-oy*dx)/d<R&&
           (other.target.x-other.px)*dx+(other.target.y-other.py)*dy>0&&
-          geo.clearFootSegment(b.px,b.py,other.px,other.py,blocked)){
+          geo.clearFootSegment(b.px,b.py,other.px,other.py,blocked)&&!followLeadsTo(other,b,now)){
+          followOf.set(b,{leader:other,at:now});
           b.state='idle';b.spd=0;return true;
         }
       }
     }
+    followOf.delete(b);
     if(!plan&&b.target&&now>=(trafficRetry.get(b)||0)){
       trafficRetry.set(b,now+250);
       const dx=b.target.x-b.px,dy=b.target.y-b.py,d=Math.hypot(dx,dy),R=PERSONAL_TILES*T;
