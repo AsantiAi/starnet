@@ -39,6 +39,7 @@ const Marketplace = (() => {
   // R3 launch/routine state: the live cron jobs (fetched once when the recipes dossier renders) so a recipe can
   // show a "● live — every morning" indicator, and whether the launch pane is in RUN-NOW or MAKE-ROUTINE mode.
   let cronJobs = null, cronArmed = false, launchMode = 'run', launchCadence = null;
+  let launchRunAs = null;   // MAKE ROUTINE's RUN AS pick (an agent id); null = the host's ctx.agentId
   let launchPreviewOpen = false;                  // "WHAT GETS SENT" — open by default: seeing the real directive before you commit IS the point
   let tab = 'agents';                            // 'agents' | 'recipes'
   let glassOpen = false;
@@ -233,7 +234,7 @@ const Marketplace = (() => {
     opener = trigger;
     ctx = context || {};
     view = ctx.firstValue ? 'firstvalue' : 'grid'; editingId = null; editingRecipeId = null; launchId = null; pendingMintKey = null; pendingMintTemplate = null; pendingScoutRecipeId = null; scoutSeedDraft = null;
-    editForkedFrom = null; editSourceRunId = null;
+    editForkedFrom = null; editSourceRunId = null; launchRunAs = null;
     importStep = 'detect'; importFound = null; importDetecting = false; importScanning = false;
     importScan = null; importOrigin = null; importName = ''; importErr = '';
     laneFilter = 'all'; catFilter = 'all'; query = '';
@@ -1212,16 +1213,23 @@ const Marketplace = (() => {
     const parent = (r.source === 'fork' && r.forkedFrom) ? Recipes.get(r.forkedFrom) : null;
     const forkLine = (r.source === 'fork')
       ? '<div class="mkt-r-fork">⑃ tweaked from <b>' + esc(parent ? parent.name : r.forkedFrom) + '</b></div>' : '';
+    // when YOUR recipe was last saved — tells two similar customs apart. No stamp (saved before 10-03) = no line.
+    const savedLine = (r.custom && r.updatedAt)
+      ? '<div class="mkt-r-fork mkt-r-saved">✎ saved ' + esc(scoutRelTime(r.updatedAt)) + '</div>' : '';
     const cadHint = r.cadence
       ? '<div class="mkt-r-cadhint">◷ naturally recurring — suggests <b>' + esc(cadenceLabel(r.cadence)) + '</b></div>' : '';
     // TWEAK + EXPORT are on EVERY dossier (fork/export any recipe); EDIT/DELETE only on your own customs.
     const tweakBtn = '<button class="bb sm mkt-recipe-tweak" data-id="' + esc(r.id) + '">CUSTOMIZE A COPY</button>';
     const exportBtn = '<button class="bb sm mkt-recipe-export" data-id="' + esc(r.id) + '" title="download this recipe as a portable JSON file">DOWNLOAD RECIPE</button>';
-    const custActs = r.custom
-      ? '<div class="mkt-cta-row">' + tweakBtn +
-        '<button class="bb sm mkt-recipe-edit" data-id="' + esc(r.id) + '">✐ EDIT</button>' + exportBtn +
+    // your own recipe: ✐ EDIT + ⌫ DELETE sit in the dossier header. They used to live in the third tab of a
+    // collapsed details block, behind COPY — users couldn't find delete at all, and a copy saved under the old
+    // name looked exactly like an edit that "didn't stick" next to an unchanged twin (user feedback 10-03).
+    const ownActs = r.custom
+      ? '<div class="mkt-cta-row mkt-own-acts">' +
+        '<button class="bb sm mkt-recipe-edit" data-id="' + esc(r.id) + '" title="change this recipe in place">✐ EDIT</button>' +
         '<button class="bb sm danger mkt-recipe-del" data-id="' + esc(r.id) + '">⌫ DELETE</button></div>'
-      : '<div class="mkt-cta-row">' + tweakBtn + exportBtn + '</div>';
+      : '';
+    const custActs = '<div class="mkt-cta-row">' + tweakBtn + exportBtn + '</div>';
     const intakeRows = (r.intake || []).map(e =>
       '<div class="mkt-intake" data-dim="' + esc(e.dimension) + '"><div class="mkt-lbl">' + esc(e.question) +
         (e.reason ? ' <span class="mkt-lbl-hint">— ' + esc(e.reason) + '</span>' : '') + '</div>' +
@@ -1247,10 +1255,10 @@ const Marketplace = (() => {
     const reuse = '<p class="mkt-detail-note">Make a version of your own, or run this recipe on a schedule.</p>' +
       '<div class="mkt-reuse-actions">' + custActs +
       '<button class="bb sm mkt-launch-options" data-id="' + esc(r.id) + '">SET UP A SCHEDULE</button></div>' +
-      liveRoutineBadgeHTML(r) + forkLine;
+      liveRoutineBadgeHTML(r) + forkLine + savedLine;
     return '<div class="mkt-dos-scroll mkt-recipe-simple"><div class="mkt-dos-hero">' +
       '<div class="mkt-dos-hi"><div class="mkt-dos-name">' + esc(r.name) + '</div>' +
-      '<div class="mkt-dos-tag">' + esc(r.tagline) + '</div></div></div>' +
+      '<div class="mkt-dos-tag">' + esc(r.tagline) + '</div>' + ownActs + '</div></div>' +
       '<div class="mkt-inline-launch">' + requiredFields +
       '<details class="mkt-brief mkt-recipe-details"><summary>Options &amp; recipe details</summary>' +
       '<div class="mkt-recipe-detail-tabs" role="tablist" aria-label="Recipe details">' + tabs + '</div>' +
@@ -2533,7 +2541,9 @@ const Marketplace = (() => {
         if (!res.ok) { sfx('bad'); note('could not import: ' + (res.error || 'malformed recipe file'), 'bad'); return; }
         // land the Commander on their freshly imported recipe (MINE view, dossier focused on it).
         focusRecipe = res.recipe.id; catFilter = 'mine'; view = 'grid';
-        sfx('click'); note('imported recipe: ' + res.recipe.name + ' — it’s in YOUR RECIPES', 'good');
+        if (res.renamedFrom) {
+          sfx('click'); note('imported as “' + res.recipe.name + '” — “' + res.renamedFrom + '” already exists. to replace it, delete the old one and rename this', 'warn');
+        } else { sfx('click'); note('imported recipe: ' + res.recipe.name + ' — it’s in YOUR RECIPES', 'good'); }
         renderBar(); renderStage();
       };
       reader.onerror = () => { sfx('bad'); note('could not read that file', 'bad'); };
@@ -2818,6 +2828,25 @@ const Marketplace = (() => {
     html += '<option value="custom"' + (launchCadence === 'custom' ? ' selected' : '') + '>custom…</option>';
     return html;
   }
+  // RUN AS — which crew member a scheduled recipe fires as. Before this, MAKE ROUTINE always posted the active
+  // workstream's agent (usually the Overseer) and the only way to move it was asking the lead in COMMS (user
+  // feedback 10-03). The roster is the live crew (StationUI.h.present); the host's ctx.agentId stays the default
+  // and is kept as an option even when it isn't on the roster, so the pick never silently changes the target.
+  function runAsRoster() {
+    const live = (typeof StationUI !== 'undefined' && StationUI.h && Array.isArray(StationUI.h.present)) ? StationUI.h.present : [];
+    const list = live.filter(a => a && a.id).map(a => ({ id: String(a.id), name: String(a.name || a.id) }));
+    const def = (ctx && ctx.agentId) || 'agent';
+    if (!list.some(a => a.id === def)) list.unshift({ id: def, name: (ctx && ctx.agentName) || def });
+    return list;
+  }
+  function runAsId() {
+    const def = (ctx && ctx.agentId) || 'agent';
+    return (launchRunAs && runAsRoster().some(a => a.id === launchRunAs)) ? launchRunAs : def;
+  }
+  function runAsName() {
+    const id = runAsId(), a = runAsRoster().find(x => x.id === id);
+    return (a && a.name) || id;
+  }
   /* ---------- TYPED FILL-IN CONTROLS (the launch form's inputs) ----------
      One textarea for every kind of value made the form lie about what it wanted: "point me at a file" meant
      "type an absolute path from memory", and a recipe with two sensible options gave no hint that there were
@@ -2928,12 +2957,18 @@ const Marketplace = (() => {
     // MAKE ROUTINE panel — revealed when launchMode==='routine'. Cadence defaults to the recipe's suggested one.
     const outbound = hasRecipes() && Recipes.impliesOutbound(r);
     const warnLine = outbound
-      ? '<div class="mkt-r-warn">⚠ this routine runs UNATTENDED. its directive looks like it may SEND or WRITE something — while you’re away it can only reason &amp; draft, so it will leave the result on the desk, not actually send. (a heads-up, not a block.)</div>'
+      // HONEST about the gate (10-03): the backend refuses unattended connector/send calls by default, but an agent
+      // on Full Access, the master bypass, or a routine granted connected tools DOES send — "it will not actually
+      // send" was a promise the harness can't keep. Name the conditions instead.
+      ? '<div class="mkt-r-warn">⚠ this routine runs UNATTENDED and its directive looks like it may SEND or WRITE something. by default unattended sends are refused, so it can only draft — but if this agent has Full Access, or you grant the routine connected tools, it WILL send without asking. (a heads-up, not a block.)</div>'
       : '';
     const armNote = (cronJobs != null && !cronArmed)
       ? '<div class="mkt-r-warn dim">◷ scheduling is currently OFF — your routine is saved but dormant until you enable the scheduler in AUTOMATE › SCHEDULES.</div>' : '';
     const routinePanel = (launchMode === 'routine')
       ? '<div class="mkt-r-routine">' +
+          '<label class="mkt-lbl">RUN AS<select class="mkt-in" id="mkt-l-runas">' +
+            runAsRoster().map(a => '<option value="' + esc(a.id) + '"' + (a.id === runAsId() ? ' selected' : '') + '>' + esc(a.name) + '</option>').join('') +
+          '</select></label>' +
           '<label class="mkt-lbl">CADENCE<select class="mkt-in" id="mkt-l-cad">' + launchCadenceOptionsHTML() + '</select></label>' +
           '<label class="mkt-lbl mkt-l-custom" id="mkt-l-custom-wrap"' + (launchCadence === 'custom' ? '' : ' hidden') + '>CUSTOM SCHEDULE ' +
             '<span class="mkt-lbl-hint">— “every 6h”, “in 2h”, or a 5-field cron “0 9 * * 1”</span>' +
@@ -2950,7 +2985,7 @@ const Marketplace = (() => {
           '<button class="bb sm mkt-do-launch">▸ START SESSION</button>' +
           '<button class="bb sm mkt-do-makeroutine" title="puts this recipe on a schedule — it becomes a ROUTINE you can manage in AUTOMATE › SCHEDULES">◷ MAKE ROUTINE</button></div>';
     const modeNote = (launchMode === 'routine')
-      ? '◷ fills the blanks ONCE, then runs the same directive on your chosen cadence as <b>' + esc(who) + '</b> — it becomes a ROUTINE (manage or stop it any time in AUTOMATE › SCHEDULES).'
+      ? '◷ fills the blanks ONCE, then runs the same directive on your chosen cadence as <b class="mkt-runas-name">' + esc(runAsName()) + '</b> — it becomes a ROUTINE (manage or stop it any time in AUTOMATE › SCHEDULES).'
       : '▸ opens a new session and starts this workflow with <b>' + esc(who) + '</b>.';
     /* WHAT GETS SENT — the filled directive, live. The dossier shows the raw template with its {tokens}; the last
        thing the Commander saw before committing used to be a form full of blanks, so the actual instruction the
@@ -3130,6 +3165,11 @@ const Marketplace = (() => {
       sfx('click'); paintSchedPreview();
     });
     if (customIn) customIn.addEventListener('input', paintSchedPreview);
+    const runAsSel = stage.querySelector('#mkt-l-runas');
+    if (runAsSel) runAsSel.addEventListener('change', () => {
+      launchRunAs = runAsSel.value || null; sfx('click');
+      const nm = stage.querySelector('.mkt-runas-name'); if (nm) nm.textContent = runAsName();
+    });
     if (launchMode === 'routine') paintSchedPreview();
 
     // SCHEDULE IT — fill the params ONCE, convert cadence → schedule, POST /api/cron with meta.recipeId.
@@ -3151,11 +3191,11 @@ const Marketplace = (() => {
   }
   // POST /api/cron for MAKE ROUTINE. The filled directive is the routine's prompt (params filled ONCE, now); the
   // meta.recipeId stamps provenance so the ROUTINES console + the recipe dossier can both show the link. The agentId
-  // targets the current run's agent (ctx.agentId) if the host handed one, else the default 'agent'.
+  // targets the RUN AS pick (runAsId: the chosen crew member, else the host's ctx.agentId, else 'agent').
   function makeRoutine(r, values, schedule) {
     const prompt = Recipes.fillTask(r, values);
     if (!prompt) { sfx('bad'); note('nothing to schedule — the directive is empty', 'bad'); return; }
-    const agentId = (ctx && ctx.agentId) || 'agent';
+    const agentId = runAsId();
     const body = {
       name: r.name, prompt, schedule, agentId,
       enabled: true, deliver: 'local', repeat: { times: null },
@@ -3177,7 +3217,7 @@ const Marketplace = (() => {
         if (d && d.duplicate) { sfx('bad'); note('a similar routine already exists' + (d.job && d.job.name ? (': "' + d.job.name + '"') : '') + ' — nothing new was created', 'warn'); if (btn) { btn.disabled = false; btn.textContent = '◷ SCHEDULE IT'; } return; }
         cronJobs = null;   // invalidate the cache so the dossier's live-routine badge refreshes
         sfx('click');
-        note('routine scheduled: ' + r.name + ' — ' + cadenceLabel(launchCadence === 'custom' ? null : launchCadence).replace('one-shot', 'on your schedule') + '. find it in AUTOMATE › SCHEDULES.', 'good');
+        note('routine scheduled: ' + r.name + ' as ' + runAsName() + ' — ' + cadenceLabel(launchCadence === 'custom' ? null : launchCadence).replace('one-shot', 'on your schedule') + '. find it in AUTOMATE › SCHEDULES.', 'good');
         launchId = null; launchMode = 'run'; close();
       })
       .catch(() => { sfx('bad'); note('could not reach the scheduler', 'bad'); if (btn) { btn.disabled = false; btn.textContent = '◷ SCHEDULE IT'; } });
@@ -3496,12 +3536,20 @@ const Marketplace = (() => {
     repaint();
 
     const save = stage.querySelector('.mkt-do-recipe-save');
+    let dupArmedFor = null;   // SAME-NAME GUARD: the name the Commander already saw the clash warning for
     if (save) save.addEventListener('click', () => {
       const editing = editingRecipeId && hasRecipes() ? Recipes.get(editingRecipeId) : null;
       const name = (stage.querySelector('#mkt-r-name').value || '').trim();
       const task = (stage.querySelector('#mkt-r-task').value || '').trim();
       if (!name) { sfx('bad'); note('give your recipe a name', 'bad'); stage.querySelector('#mkt-r-name').focus(); return; }
       if (!task) { sfx('bad'); note('write the directive your agent should run', 'bad'); stage.querySelector('#mkt-r-task').focus(); return; }
+      // two recipes with one name can't be told apart in the list — warn once; a second SAVE keeps both on purpose.
+      const clash = Recipes.findByName ? Recipes.findByName(name, editing ? editing.id : null) : null;
+      if (clash && dupArmedFor !== name.toLowerCase()) {
+        dupArmedFor = name.toLowerCase(); sfx('bad');
+        note('a recipe named “' + clash.name + '” already exists — rename this one, or SAVE again to keep both', 'warn');
+        stage.querySelector('#mkt-r-name').focus(); return;
+      }
       syncParamsFromDOM(); syncStepsFromDOM(); syncAcceptFromDOM();
       const explicit = editParams.filter(p => p.key).map(paramOut);
       // an acceptance row that is still blank (no path / no command) is not a check — drop it rather than save a
