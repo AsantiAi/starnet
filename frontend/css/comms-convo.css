@@ -159,3 +159,32 @@ body #chat-panel .comms-newpill.hasnew {
 }
 body #chat-panel .comms-newpill.hasnew::before { background: var(--ph-bright); }
 body #chat-panel .comms-newpill:hover { color: var(--ph-bright); background: color-mix(in srgb, var(--panel2) 78%, var(--ph)); border-color: var(--ph-bright); box-shadow: 0 4px 14px rgba(0, 0, 0, .5); }
+
+/* ---- RATE THE WORK — a slim inline row under the run it rates, never a big centered card (Andrew 10-03).
+   Only the standalone COMMS ask (.rate-inline, chat.js workRateBeat); the OUTBOX review and turn-in cards keep
+   their own layout. The task · run-id reference is the row's hover tip. ---- */
+body #chat-panel #chat-log > .cmsg.work-rate.rate-inline {
+  align-self: flex-start; margin: 0 0 4px 14px; padding: 0; min-width: 0; max-width: 100%;
+  border: 0; border-radius: 0; background: none; box-shadow: none; text-align: left;
+}
+body #chat-panel #chat-log > .cmsg.work-rate.rate-inline > .who { display: none; }
+body #chat-panel #chat-log > .cmsg.work-rate.rate-inline [data-rate-run] {
+  display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; justify-content: flex-start; gap: 8px; text-align: left;
+}
+body #chat-panel #chat-log > .cmsg.work-rate.rate-inline .work-rate-reference { display: none; }
+body #chat-panel #chat-log > .cmsg.work-rate.rate-inline .work-rate-label {
+  font-size: var(--sn-type-meta, 13px) !important; letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--text); opacity: .55; text-shadow: none;
+}
+body #chat-panel #chat-log > .cmsg.work-rate.rate-inline .consent-btns { display: inline-flex; gap: 4px; margin: 0; }
+body #chat-panel #chat-log > .cmsg.work-rate.rate-inline .consent-btn.thumb {
+  width: 28px; min-width: 28px; height: 22px; min-height: 22px; padding: 0;
+  display: inline-grid; place-items: center; border-radius: 4px;
+  border: 1px solid rgba(var(--ph-rgb), .22); background: rgba(var(--ph-rgb), .03); box-shadow: none;
+}
+body #chat-panel #chat-log > .cmsg.work-rate.rate-inline .consent-btn.thumb:is(:hover, :focus-visible) {
+  border-color: var(--ph); background: rgba(var(--ph-rgb), .1); box-shadow: none;
+}
+body #chat-panel #chat-log > .cmsg.work-rate.rate-inline .consent-btn.thumb-down:is(:hover, :focus-visible) { border-color: var(--bad); }
+body #chat-panel #chat-log > .cmsg.work-rate.rate-inline .thumb-px { width: 13px; height: 13px; filter: none; }
+body #chat-panel #chat-log > .cmsg.work-rate.rate-inline .consent-result { font-size: var(--sn-type-meta, 13px) !important; letter-spacing: 1px; opacity: .8; }

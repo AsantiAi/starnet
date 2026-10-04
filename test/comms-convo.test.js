@@ -61,4 +61,9 @@ A.ok(!/border-radius:\s*(999px|50%|[1-9]\d+px)/.test(css), 'no pills or round bu
 A.ok(!/#[0-9a-fA-F]{3,8}\b/.test(css.replace(/\/\*[\s\S]*?\*\//g, '')), 'no hardcoded hex colours — theme tokens only');
 A.ok(/\.cmsg:is\(\.agent, \.user\) \.cmsg-ts \{ opacity: \.62/.test(css), 'stamps are visible at rest, not hover-only');
 
+/* ---------- 5. the standalone rate ask is a slim inline row, not a big centered card (Andrew 10-03) ---------- */
+A.ok(/r\.d\.classList\.add\('rate-inline'\)/.test(src), 'workRateBeat marks the standalone ask .rate-inline');
+A.ok(/\.cmsg\.work-rate\.rate-inline \{[^}]*border: 0;[^}]*background: none;/.test(css), 'the inline rate row has no card frame');
+A.ok(/\.rate-inline \.work-rate-reference \{ display: none; \}/.test(css), 'the task · run reference rides the hover tip, not a printed line');
+
 A.report('comms-convo.test');
