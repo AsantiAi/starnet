@@ -76,9 +76,11 @@ A.ok(/\.choice-row \.choice::before \{ content: '\[ '/.test(css), 'choices are [
 A.ok(!/agentFace|cmsg-face/.test(src) && !/cmsg-face/.test(css), 'no portrait beside the agent callsign');
 A.ok(/:not\(\.deliverable\) > \.body \{[^}]*border-left: 2px solid/.test(css), 'the agent text rides a phosphor rail (the Commander line, mirrored)');
 
-/* ---------- 8. the bracket, not the fade (10-04: "would like to see a different approach then the fade") ---------- */
+/* ---------- 8. a light dither field, not a fade (10-04: "a different approach then the fade" → "make variant 4 a bit
+   lighter on the text boxes") ---------- */
 A.ok(!/linear-gradient\((90|270)deg/.test(css), 'no fading fields behind speech');
-A.ok(/var\(--rx, left\) top \/ var\(--tt\) 2px no-repeat/.test(css), 'speech sits in an open bracket: rail + end ticks drawn from --rail');
-A.ok(/cont-next/.test(src) && /\.cont-next > \.body \{ --tb: 0px; \}/.test(css), 'a split reply reads as ONE bracket (shared ticks dropped)');
+A.ok(/repeating-conic-gradient\(var\(--dot\) 0 25%, transparent 0 50%\) 0 0 \/ 2px 2px/.test(css), 'speech sits on a 1px ordered-dither field (pipglass lit-row material)');
+const dots = [...css.matchAll(/--dot: rgba\(var\(--(?:ph|gold)-rgb\), (\.\d+)\)/g)].map(m => +m[1]);
+A.ok(dots.length === 2 && dots.every(a => a <= .06), 'the dither stays LIGHT (cell alpha ≤ .06), lighter than the shot variant (.075/.09)');
 
 A.report('comms-convo.test');
