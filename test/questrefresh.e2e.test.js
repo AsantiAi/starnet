@@ -113,6 +113,40 @@ const QUIET = { SKYNET_THREAD_MINE: '0', SKYNET_SKILL_REVIEW: '0', SKYNET_SKILL_
 const CRED = { SKYNET_OPENROUTER_KEY: 'sk-or-v1-questrefresh-fake', SKYNET_DEFAULT_MODEL: 'test/model' };
 
 (async () => {
+  // Automatic and manual auxiliary work share the station's persisted spending pools.
+  for (const scope of ['day', 'global', 'unknown']) {
+    const mock = await startMock('NONE');
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'sk-qrefresh-budget-'));
+    seedEvidence(ws); seedAutonomy(ws, 'propose');
+    fs.writeFileSync(path.join(ws, 'ledger.jsonl'), scope === 'unknown' ? 'not valid ledger JSON\n'
+      : JSON.stringify({ runId: 'spent', agentId: 'station', usd: 1.25, turns: 1, tokens: 10, model: 'fixture', ts: Date.now() }) + '\n');
+    let child = null;
+    try {
+      const up = await boot(9280 + (process.pid % 10), Object.assign({}, CRED, QUIET, {
+        SKYNET_WORKSPACES: ws, SKYNET_OPENROUTER_BASE: mock.base,
+        SKYNET_BUDGET_PER_DAY: scope !== 'global' ? '1' : '0', SKYNET_BUDGET_GLOBAL: scope === 'global' ? '1' : '0'
+      }), 20); child = up.child;
+      const base = 'http://' + HOST + ':' + up.port, token = await bootToken(base, base);
+      const headers = { Origin: base, 'X-StarNet-Token': token, 'Content-Type': 'application/json' };
+      const post = async (route, body) => (await fetch(base + route, { method: 'POST', headers, body: JSON.stringify(body || {}) })).json();
+      const first = await pollRefresh(base, token, s => !s.inFlight && s.ledger.length > 0, 'budget boot decision');
+      A.eq(mock.calls.quest, 0, scope + ': boot refresh does not buy a request');
+      A.ok(first.ledger.some(e => e.outcome === 'skipped' && /spend|budget/i.test(e.reason)), scope + ': visible spending stand-down');
+      await post('/api/quests/refresh/run');
+      await pollRefresh(base, token, s => !s.inFlight && s.ledger.length > first.ledger.length, 'manual budget decision');
+      A.eq(mock.calls.quest, 0, scope + ': manual refresh is not a budget resume');
+      if (scope !== 'unknown') {
+        await post('/api/budget/resume', { scope });
+        await post('/api/quests/refresh/run');
+        await pollRefresh(base, token, s => !s.inFlight && s.ledger.some(e => e.outcome === 'none'), 'resumed refresh');
+        A.eq(mock.calls.quest, 1, scope + ': explicit budget resume restores the request');
+      }
+    } finally {
+      if (child) { child.kill(); await new Promise(resolve => child.once('exit', resolve)); }
+      await new Promise(resolve => mock.server.close(resolve));
+      fs.rmSync(ws, { recursive: true, force: true });
+    }
+  }
   /* ===== RESTART WAIT: no background provider call or quest mutation; manual refresh survives ===== */
   {
     const mock = await startMock([

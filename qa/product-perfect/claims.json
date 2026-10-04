@@ -18,7 +18,7 @@
   "expectedClaimCount": 37,
   "releaseSurface": {
     "algorithm": "sha256",
-    "sourceCommit": "2f29ee92669bf222992c503892d5357a154bbd25",
+    "sourceCommit": "cd3920185bda8f32aa86914540a84e00ad03dc7e",
     "pathSetSha256": "fac5552f81f0dd00ab64856cfdfc9f107fcb0517a3ef0449f4018b13e983e609",
     "files": [
       {
@@ -173,8 +173,8 @@
       },
       {
         "path": "frontend/app/app.js",
-        "bytes": 424873,
-        "sha256": "cfdc5bedae2b6923d470aafa820f1350f00c5eab58d3c84e797db445baba17e5"
+        "bytes": 423259,
+        "sha256": "ba70084744b504c258ef9c96a6764087441396c62290d49e70f1d0e454de04ec"
       },
       {
         "path": "frontend/app/approved-sheet-effects.js",
@@ -338,8 +338,8 @@
       },
       {
         "path": "frontend/app/chat.js",
-        "bytes": 716435,
-        "sha256": "fdb44e9f6f4081f5a02a2e893f329ec87795f9cba62ccb08c871bd47fb77790e"
+        "bytes": 714977,
+        "sha256": "4d9415bd9bfedc8709c998b4ef91178b452158c46988fad112ee68c9ecb64ba3"
       },
       {
         "path": "frontend/app/chatresize.js",
@@ -543,8 +543,8 @@
       },
       {
         "path": "frontend/app/group-chat.js",
-        "bytes": 68643,
-        "sha256": "472b83adc131697a1661d024af0fd0cc44a8fa6e5b6ddfe067f4488d37494248"
+        "bytes": 40272,
+        "sha256": "56681080cfa0b6bedcd904bc7f6bf3ebfe842b51439159750139bb99f308a813"
       },
       {
         "path": "frontend/app/harness.js",
@@ -1328,8 +1328,8 @@
       },
       {
         "path": "frontend/app/windows/logbook.js",
-        "bytes": 12636,
-        "sha256": "3281e8bdad42ea6b7a19388ae30d9c6b21712260ff1a018e77c2c4b39a49d4f3"
+        "bytes": 13198,
+        "sha256": "9d8b27bea140c1b918c5a07d9ce3047f2bd3955e345ed5baf6a0ae3fe561a436"
       },
       {
         "path": "frontend/app/windows/loops.js",
@@ -1498,8 +1498,8 @@
       },
       {
         "path": "frontend/css/app.css",
-        "bytes": 415830,
-        "sha256": "bd02ba556d0bc53b741c626b06f467d3a1f400b3a64df780d8be3e6b5015ed55"
+        "bytes": 415246,
+        "sha256": "0c0567643cbc6c7925df5df8cd4f7e677233433d8b7b7d83b67fa1d09e677d12"
       },
       {
         "path": "frontend/css/asciifx.css",
@@ -1528,8 +1528,8 @@
       },
       {
         "path": "frontend/css/comms-convo.css",
-        "bytes": 18024,
-        "sha256": "dd4fd9192150c827b1de6577310e1bc4f4e84fee39a1921074d7da5f2274f84a"
+        "bytes": 16868,
+        "sha256": "a91344c74c31e2c17acf349715ce515386049608a8144b8b26ae47b2e2075a5b"
       },
       {
         "path": "frontend/css/comms-layout.css",
@@ -1538,8 +1538,8 @@
       },
       {
         "path": "frontend/css/comms.css",
-        "bytes": 53642,
-        "sha256": "2d0d1a1db5987084a49c6c4e2ee17fa9590b0944dc71fa9f5eea195b6dc0c6ae"
+        "bytes": 53614,
+        "sha256": "782b19c46d7ce047cc3778f58bd08ecbda504dc24cbb2137f84133854788f5e1"
       },
       {
         "path": "frontend/css/crew-glass.css",
@@ -1553,8 +1553,8 @@
       },
       {
         "path": "frontend/css/glass-comms.css",
-        "bytes": 25600,
-        "sha256": "502290a7e2d10633dff6189214adef659e14cb52d9553ba13e3cdffec4993293"
+        "bytes": 25250,
+        "sha256": "d298c5bd50b9d245cd2ddc84c775d16abe4d6a008d7a63a3e53d590ce37e9aa6"
       },
       {
         "path": "frontend/css/glass-demo.css",
@@ -1568,8 +1568,8 @@
       },
       {
         "path": "frontend/css/interface.css",
-        "bytes": 34046,
-        "sha256": "d56ab811268793cc1371a046f965f0e1f8bb4ced37285df5328714d722691374"
+        "bytes": 33962,
+        "sha256": "9962c14a69b2c97b00997b60889f0aeb730f3ec4e9d4dc130dc96aba75b63c0b"
       },
       {
         "path": "frontend/css/linewatch.css",
@@ -1613,8 +1613,8 @@
       },
       {
         "path": "frontend/css/pipglass.css",
-        "bytes": 60973,
-        "sha256": "fb12fe5fb10422814e07dc809d0909c2323a837d5d994b7dbfdeb1ca17f30d99"
+        "bytes": 60777,
+        "sha256": "721e1fa64dbacbf8251f1f76e935e5edd16fa7b152c1d08f9e9861d5ac707d68"
       },
       {
         "path": "frontend/css/plugins.css",

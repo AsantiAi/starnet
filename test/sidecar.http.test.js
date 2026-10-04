@@ -534,6 +534,10 @@ function boot(port, workspaces, attemptsLeft, extraEnv) {
     A.eq(offlineProbe.body.reachable, false, 'offline custom endpoint is not reachable');
     A.eq(offlineProbe.body.catalogAvailable, false, 'offline custom endpoint has no proven catalog');
     const probeServer = http.createServer((rq, rs) => {
+      if (rq.url.endsWith('/auth/key')) {
+        rs.writeHead(rq.headers.authorization === 'Bearer probe-good-key' ? 200 : 401, { 'Content-Type': 'application/json' });
+        return rs.end(JSON.stringify({ data: { label: 'credential probe fixture' } }));
+      }
       if (rq.url.indexOf('/chat/completions') >= 0) {
         if (rq.headers.authorization !== 'Bearer probe-good-key') { rs.writeHead(401); return rs.end('rejected'); }
         rs.writeHead(200, { 'Content-Type': 'text/event-stream' });
@@ -555,6 +559,15 @@ function boot(port, workspaces, attemptsLeft, extraEnv) {
       A.eq(wrongCandidate.body.credentialVerified, false, 'candidate-key validation rejects a key that fails the inference wire');
       const goodCandidate = await j('POST', '/api/providers/validate', { provider: 'custom', baseUrl: liveBase, key: 'probe-good-key', model: 'local/proven-model' });
       A.eq(goodCandidate.body.credentialVerified, true, 'candidate-key validation proves the exact key on the inference wire');
+      const routerCandidate = await j('POST', '/api/providers/validate', { provider: 'openrouter', baseUrl: liveBase, key: 'probe-good-key' });
+      A.eq(routerCandidate.body.credentialVerified, true, 'OpenRouter candidate validation proves the authenticated key endpoint');
+      const routerHealth = await j('POST', '/api/providers/probe', { provider: 'openrouter', baseUrl: liveBase, key: 'probe-good-key' });
+      A.eq(routerHealth.body.credentialVerified, true, 'saved-key health preserves the same authenticated OpenRouter proof');
+      const rejectedHealth = await j('POST', '/api/providers/probe', { provider: 'openrouter', baseUrl: liveBase, key: 'probe-wrong-key' });
+      A.eq(rejectedHealth.body.credentialVerified, false, 'replacing a valid key with an invalid key cannot reuse prior verification');
+      A.eq(rejectedHealth.body.catalogAvailable, true, 'rejected credential does not erase the independently reachable public catalog');
+      const customHealth = await j('POST', '/api/providers/probe', { provider: 'custom', baseUrl: liveBase, key: 'probe-wrong-key' });
+      A.eq(customHealth.body.credentialVerified, false, 'public custom catalog cannot verify a supplied key rejected by inference');
     } finally { await new Promise(resolve => probeServer.close(resolve)); }
 
     const pushOpenAi = await fetch(B + '/api/key', {

@@ -53,7 +53,38 @@ async function run(provider, extra) {
 }
 
 (async () => {
+  // A recovery attempt is a new paid call, even though it stays in the same turn.
+  for (const scope of ['run', 'day', 'unpriced']) {
+    const p = scripted(() => ({ events: [
+      { type: 'usage', usage: { prompt_tokens: 12, completion_tokens: 12, total_tokens: 24, ...(scope === 'unpriced' ? {} : { cost: 1.25 }) } },
+      { type: 'text', delta: 'partial answer' },
+      { type: 'done', finishReason: null, truncated: true }
+    ] }));
+    const extra = scope === 'day' ? { budget: { check: spent => spent >= 1 ? { scope: 'day', cap: 1 } : null } }
+      : scope === 'unpriced' ? { cost: makeCostEngine({ priceOf: () => null }), limits: { maxUnpricedTokens: 20 } }
+      : { limits: { maxCostUsd: 1 } };
+    const { res, seq } = await run(p, extra);
+    A.eq(p.calls.length, 1, scope + ': no second paid request after the failed attempt exhausts the cap');
+    A.eq(res.reason, 'budget', scope + ': the recovery stops with truthful budget reason');
+    A.eq(res.budgetScope, scope === 'day' ? 'day' : 'run', scope + ': names the limiting scope');
+    A.eq(seq.filter(e => e.name === 'agent.cost').length, 1, scope + ': partial usage is booked exactly once');
+    A.eq(res.usd, scope === 'unpriced' ? 0 : 1.25, scope + ': no duplicate or discarded partial charge');
+  }
   // ---- 1. the ladder, pre-stream: 503, 503, answer ----
+  {
+    const p = scripted(() => ({ events: answer('should not be bought') }));
+    let folds = 0;
+    const { res } = await run(p, {
+      messages: [{ role: 'user', content: 'old question' }, { role: 'assistant', content: 'old answer' }, { role: 'user', content: 'new question' }],
+      context: require('../sidecar/context.js').makeContext({ contextLimit: 10, compactAt: 0.65, keepTail: 1 }),
+      summarize: async () => { folds++; return { summary: 'S', usd: 1.25, tokens: 10 }; },
+      limits: { maxCostUsd: 1 }
+    });
+    A.eq(folds, 1, 'preflight compaction consumes the run allowance');
+    A.eq(p.calls.length, 0, 'no generation after preflight compaction exhausts the cap');
+    A.eq(res.reason, 'budget', 'post-compaction exhaustion reports budget');
+    A.eq(res.usd, 1.25, 'compaction charge remains accounted');
+  }
   {
     const p = scripted(n => (n <= 2 ? { throw: httpErr(503, 'upstream overloaded') } : { events: answer('ok') }));
     const { res, seq, sleeps, recov, dropped, retries } = await run(p);
