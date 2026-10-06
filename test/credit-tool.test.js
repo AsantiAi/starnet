@@ -4,6 +4,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const A = require('./_assert.js');
 const { makeRegistry } = require('../sidecar/tools/registry.js');
 const { makeCreditTools } = require('../sidecar/tools/builtin/credit.js');
@@ -71,6 +72,13 @@ function assertRedacted(label, value) {
   A.ok(/credit\/cases\//.test(drafted.content), 'summary names the file path');
   assertRedacted('draft', drafted);
 
+  const hostileBureauIntake = JSON.parse(JSON.stringify(intake));
+  hostileBureauIntake.bureau = '../../../../outside';
+  const hostileReview = await registry.dispatch({ name: 'credit.review_case', args: { reportPath: FIX, intake: hostileBureauIntake } }, {});
+  A.eq(hostileReview.ok, true, 'an unsupported bureau is handled as a review hold');
+  A.ok(/MISSING FIELDS: valid bureau/.test(hostileReview.content), 'an unsupported/path-shaped bureau is rejected');
+  A.ok(/Case c-bureau-0000-5555 status NEEDS_REVIEW/.test(hostileReview.content), 'the fallback case id does not include path input');
+
   const listed = await registry.dispatch({ name: 'credit.list_drafts', args: {} }, {});
   A.eq(listed.ok, true, 'list tool runs');
   A.ok(/DRAFT/.test(listed.content), 'list shows the draft status');
@@ -78,5 +86,29 @@ function assertRedacted(label, value) {
 
   const outside = await registry.dispatch({ name: 'credit.parse_report', args: { path: '/etc/passwd' } }, {});
   A.eq(outside.ok, false, 'a path outside the workspace is refused');
+
+  // The lexical workspace check must not be bypassable with an in-workspace symlink.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'starnet-credit-path-'));
+  try {
+    const workspace = path.join(tmp, 'workspace');
+    const external = path.join(tmp, 'external.txt');
+    fs.mkdirSync(workspace);
+    fs.writeFileSync(external, 'external synthetic report');
+    fs.symlinkSync(external, path.join(workspace, 'linked-report.txt'));
+    const isolated = makeCreditTools({
+      fs: fs,
+      storeFs: makeMemoryFs(),
+      pathMod: path,
+      root: workspace,
+      clock: { now: () => Date.parse('2026-10-06T12:00:00.000Z') }
+    });
+    const isolatedRegistry = makeRegistry();
+    isolated.register(isolatedRegistry);
+    const linked = await isolatedRegistry.dispatch({ name: 'credit.parse_report', args: { path: 'linked-report.txt' } }, {});
+    A.eq(linked.ok, false, 'a workspace symlink to an external file is refused');
+    A.ok(/outside the workspace/i.test(linked.content), 'symlink refusal explains the workspace boundary');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
   A.report('credit-tool.test');
 })();

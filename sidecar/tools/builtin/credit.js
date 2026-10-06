@@ -35,12 +35,24 @@
     }
 
     function underRoot(p) {
-      const abs = pathMod.resolve(root || process.cwd(), String(p || ''));
-      if (root) {
-        const base = pathMod.resolve(root);
-        if (abs !== base && abs.indexOf(base + pathMod.sep) !== 0) return { error: 'That path is outside the workspace.' };
+      const base = pathMod.resolve(root || process.cwd());
+      const abs = pathMod.resolve(base, String(p || ''));
+      if (!root) return { abs: abs };
+      if (abs !== base && abs.indexOf(base + pathMod.sep) !== 0) return { error: 'That path is outside the workspace.' };
+
+      // A lexical path check alone can be bypassed by a symlink inside the workspace
+      // that points to a report (or arbitrary file) outside it. Resolve both paths
+      // before handing the path to the extractor.
+      try {
+        const realBase = fs.realpathSync(base);
+        const realAbs = fs.realpathSync(abs);
+        if (realAbs !== realBase && realAbs.indexOf(realBase + pathMod.sep) !== 0) {
+          return { error: 'That path is outside the workspace.' };
+        }
+        return { abs: realAbs };
+      } catch (_) {
+        return { error: 'That path could not be resolved inside the workspace.' };
       }
-      return { abs: abs };
     }
 
     async function loadReport(p) {

@@ -14,12 +14,14 @@
   'use strict';
 
   const ROUND1 = new Set(['round1', 'round1-bureau', 'round1 bureau dispute', 'bureau-dispute', 'bureau dispute']);
+  const VALID_BUREAUS = new Set(['equifax', 'experian', 'transunion']);
 
   function caseIdFor(intake) {
     if (intake && intake.caseId && /^[A-Za-z0-9_-]{1,80}$/.test(intake.caseId)) return intake.caseId;
     const consumer = (intake && intake.consumer) || {};
     const ssn = norm.last4of(consumer.ssnLast4) || 'xxxx';
-    const bureau = norm.normBureau(intake && intake.bureau) || 'bureau';
+    const normalizedBureau = norm.normBureau(intake && intake.bureau);
+    const bureau = VALID_BUREAUS.has(normalizedBureau) ? normalizedBureau : 'bureau';
     const acct = (intake && intake.accounts && intake.accounts[0]) || {};
     const last4 = norm.last4of(acct.last4 || acct.accountNumber) || 'na';
     return 'c-' + bureau + '-' + ssn + '-' + last4;
@@ -29,7 +31,7 @@
     const missing = [];
     const src = intake || {};
     if (!norm.clean(src.letterType)) missing.push('letter type');
-    if (!norm.normBureau(src.bureau)) missing.push('bureau');
+    if (!VALID_BUREAUS.has(norm.normBureau(src.bureau))) missing.push('valid bureau');
     const c = src.consumer || {};
     if (!norm.clean(c.fullName)) missing.push('full legal name');
     if (!norm.clean(c.addressLine1) || !norm.clean(c.cityStateZip)) missing.push('mailing address');
