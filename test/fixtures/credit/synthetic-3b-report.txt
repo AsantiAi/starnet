@@ -1,0 +1,921 @@
+                     powered by
+
+
+
+
+Three Bureau Credit Report
+
+
+Alex R. Testperson
+September 01, 2026
+                             Three Bureau Credit Report
+Alex Testperson | September 01, 2026
+
+
+1. Report Summary                                         1
+
+2. Revolving Accounts                                     3
+
+  2.1 Example Bank Card (CLOSED)                          3
+
+  2.2 Sample Card Services (CLOSED)                       6
+
+  2.3 Demo Credit Union                                   9
+
+  2.4 Placeholder Store Card (CLOSED)                     11
+
+3. Mortgage Accounts                                      12
+
+  3.1 Demo Mortgage Co                                    12
+
+4. Installment Accounts                                   15
+
+  4.1 Test Student Loan (CLOSED)                          15
+
+5. Other Accounts                                         18
+
+  5.1 Example Bank Card (CLOSED)                          18
+
+6. Consumer Statements                                    21
+
+7. Personal Information                                   22
+
+8. Inquiries                                              24
+
+9. Public Records                                         25
+
+10. Collections                                           26
+
+11. Dispute File Information                              28
+
+1. Report Summary
+Review this summary for a quick view of key information contained in your credit file, as well as your resulting credit scores
+and ratings.
+
+                                       Equifax                           Experian                    TransUnion
+ Report Date                           September 01, 2026                September 01, 2026          September 01, 2026
+ Average Account Age                   4 Years, 2 Months                 4 Years, 1 Months           4 Years, 0 Months
+ Oldest Account                        Demo Mortgage Co                  Demo Mortgage Co            Demo Mortgage Co
+                                       Mar 2018                          Mar 2018                    Mar 2018
+
+
+
+Credit Score and Rating
+Your credit score and rating are not part of your credit report, but are derived from the information in your file.
+
+
+               Equifax                                       Experian                          TransUnion
+                   610                                          605                                    612
+                    Fair                                        Fair                                   Fair
+
+
+Other Credit Items
+Your credit report includes information about instances of non-account items that may affect your credit score and rating.
+The table below is a summary of non-account related items on your report.
+
+    Consumer Statements                             0                                                  0                                                  0
+    Personal Information                            4                                                  3                                                  4
+    Inquiries                                       1                                                  3                                                  2
+    Public Records                                  0                                                  0                                                  0
+    Collections                                     1                                                  1                                                  1
+
+
+
+
+Sep 01, 2026 Three Bureau Credit Report powered by Equifax                                                Page 1 of 30
+2. Revolving Accounts
+Revolving accounts are those that include a credit limit and require a minimum monthly payment, such as credit cards.
+
+
+2.1 Example Bank Card (CLOSED)
+Your debt-to-credit ratio represents the amount of credit you're using and make up 30% of your credit score. It's calculated
+by dividing an account's reported balance by it is credit limit. The idea range for your debt-to-credit ratio is 30% or less.
+
+                                       Equifax                           Experian                    TransUnion
+ Reported                              Yes                               Yes                         Yes
+ Account Number                        xxxxxxxxxxxxx 1111                xxxxxxxx 2222               xxxxxxxxxxxx 1111
+ Account Status                        Closed                            Closed                      Closed
+ Credit Limit                          $2,000                            $2,000                      $2,000
+ Reported Balance                      $0                                $0                          $0
+
+
+
+Payment History
+This tables below show up to 7 years of monthly payment history for this account. The numbers in each cell indicate the
+number of days a payment was due; the letters indicate other account events, such as bankruptcy or collections.
+
+
+Equifax
+
+ Year       Jan         Feb         Mar         Apr          May   Jun         Jul       Aug   Sep        Oct     Nov       Dec
+ 2026
+ 2025
+
+
+Experian
+
+ Year       Jan         Feb         Mar         Apr          May   Jun         Jul       Aug   Sep        Oct     Nov       Dec
+ 2026
+ 2025
+
+
+TransUnion
+
+ Year       Jan         Feb         Mar         Apr          May   Jun         Jul       Aug   Sep        Oct     Nov       Dec
+ 2026
+ 2025
+
+
+
+
+Payment Summary
+The tables below shows a summary of 7 years of monthly payment history for this account as reported by each bureau.
+
+                                       Equifax                 Experian                       TransUnion
+ 30 Days Past Due                      0                       0                              0
+ 60 Days Past Due                      0                       0                              0
+ 90 Days Past Due                      0                       0                              0
+ 120 Days Past Due                     0                       0                              0
+ Collection Account                    0                       0                              0
+ Charge Off                            0                       0                              0
+ Included in Bankruptcy                0                       0                              0
+ Repossession                          0                       0                              0
+ Too New to Rate                       0                       0                              0
+ No Data Available                     13                      13                             13
+
+
+
+Account Details
+View the detailed information about this account. Contact the creditor or lender if you have any question.
+
+                                       Equifax                 Experian                       TransUnion
+ Account Type                          Revolving               Revolving                      Revolving
+ Loan Type                             creditcard              creditcard                     creditcard
+ Creditor Classification               Unknown                 Unknown                        Unknown
+ Status                                Pays as Agreed          Pays as Agreed                 Pays as Agreed
+ Activity Designator                   Closed                  Closed                         Closed
+ Date Opened                           Jan 01, 2024            Jan 01, 2024                   Jan 01, 2024
+ Date Closed                           Jun 01, 2026            N/A                            Jun 01, 2026
+ Date Reported                         Jul 01, 2026            Jul 01, 2026                   Jul 01, 2026
+ Date Of Last Activity                 N/A                     N/A                            N/A
+ Date Of First Delinquency             N/A                     N/A                            N/A
+ Deferred Payment Start Date           N/A                     N/A                            N/A
+ Balloon Payment Date                  N/A                     N/A                            N/A
+ Term Duration                         0                       0                              0
+ Term Frequency                        N/A                     rev                            N/A
+ Month Reviewed                        11                      12                             11
+ Balance                               $0                      $0                             $0
+ Credit Limit                          $2,000                  $2,000                         $2,000
+ High Credit                           $740                    $740                           $740
+ Monthly Payment Amount                $0                      $0                             $0
+ Actual Payment Amount                 N/A                     N/A                            N/A
+ Amount Past Due                       $0                      $0                             $0
+ Balloon Payment Amount                N/A                     N/A                            N/A
+ Charge Off Amount                     N/A                     N/A                            N/A
+
+
+Comments                                                     Contact
+- ACCOUNT CLOSED BY CREDIT GRANTOR                           EXAMPLE BANK
+- ACCOUNT PAID AND CLOSED                                    P.O. BOX 00001
+- THIS IS AN ACCOUNT IN GOOD STANDING                        ANYTOWN,TX 79000
+- LAST PAID:                                                 (800) 5550100-null
+
+
+
+
+Sep 01, 2026 Three Bureau Credit Report powered by Equifax                                                Page 2 of 30
+2.2 Sample Card Services (CLOSED)
+Your debt-to-credit ratio represents the amount of credit you're using and make up 30% of your credit score. It's calculated
+by dividing an account's reported balance by it is credit limit. The idea range for your debt-to-credit ratio is 30% or less.
+
+                                       Equifax                           Experian                    TransUnion
+ Reported                              Yes                               Yes                         Yes
+ Account Number                        xxxxxxxx 3333                     xxxxxxxx 3333               xxxxxxxxxxxx 4444
+ Account Status                        Closed                            Closed                      Closed
+ Credit Limit                          $8,000                            $8,000                      $8,000
+ Reported Balance                      $9,120                            $9,180                      $9,180
+
+
+
+Payment History
+This tables below show up to 7 years of monthly payment history for this account. The numbers in each cell indicate the
+number of days a payment was due; the letters indicate other account events, such as bankruptcy or collections.
+
+
+Experian
+
+ Year       Jan         Feb         Mar         Apr          May   Jun         Jul       Aug   Sep        Oct     Nov       Dec
+ 2026
+ 2025
+
+
+TransUnion
+
+ Year       Jan         Feb         Mar         Apr          May   Jun         Jul       Aug   Sep        Oct     Nov       Dec
+ 2026
+ 2025
+
+
+
+
+Payment Summary
+The tables below shows a summary of 7 years of monthly payment history for this account as reported by each bureau.
+
+                                       Equifax                 Experian                       TransUnion
+ 30 Days Past Due                      N/A                     0                              0
+ 60 Days Past Due                      N/A                     1                              1
+ 90 Days Past Due                      N/A                     0                              0
+ 120 Days Past Due                     N/A                     2                              1
+ Collection Account                    N/A                     0                              0
+
+
+
+
+Sep 01, 2026 Three Bureau Credit Report powered by Equifax                                                Page 3 of 30
+                                       Equifax                 Experian                       TransUnion
+ Charge Off                            N/A                     0                              0
+ Included in Bankruptcy                N/A                     0                              0
+ Repossession                          N/A                     0                              0
+ Too New to Rate                       N/A                     0                              0
+ No Data Available                     N/A                     20                             32
+
+
+
+Account Details
+View the detailed information about this account. Contact the creditor or lender if you have any question.
+
+                                       Equifax                 Experian                       TransUnion
+ Account Type                          Revolving               Revolving                      Revolving
+ Loan Type                             creditcard              creditcard                     unknownloantype
+ Creditor Classification               Unknown                 Unknown                        Unknown
+ Status                                Over 120 Days Past Due  Over 120 Days Past Due         Over 120 Days Past Due
+ Activity Designator                   Closed                  Closed                         Closed
+ Date Opened                           May 01, 2024            May 01, 2024                   May 01, 2024
+ Date Closed                           Jun 01, 2026            N/A                            Jun 01, 2026
+ Date Reported                         Jul 01, 2026            Aug 01, 2026                   Aug 01, 2026
+ Date Of Last Activity                 Apr 01, 2026            N/A                            Mar 01, 2026
+ Date Of First Delinquency             N/A                     N/A                            N/A
+ Deferred Payment Start Date           N/A                     N/A                            N/A
+ Balloon Payment Date                  N/A                     N/A                            N/A
+ Term Duration                         0                       0                              0
+ Term Frequency                        N/A                     rev                            min
+ Month Reviewed                        25                      19                             26
+ Balance                               $9,120                  $9,180                         $9,180
+ Credit Limit                          $8,000                  $8,000                         $8,000
+ High Credit                           $9,120                  $9,180                         $9,180
+ Monthly Payment Amount                $250                    $90                            $90
+ Actual Payment Amount                 N/A                     N/A                            N/A
+ Amount Past Due                       $6,400                  $6,950                         $6,950
+ Balloon Payment Amount                N/A                     N/A                            N/A
+ Charge Off Amount                     N/A                     N/A                            N/A
+
+
+Comments                                                     Contact
+- ACCOUNT CLOSED                                             SAMPLE CARD SERVICES
+- LAST REPORTED DELINQUENCIES: 08/2026=R6                    200 EXAMPLE AVE STE 1
+- LAST REPORTED DELINQUENCIES: 07/2026=R5,05/2026=R3         SAMPLETOWN,DE 19000
+- ACCOUNT CLOSED BY CREDIT GRANTOR                           (800) 5550200-null
+- LAST PAID: 03/2026
+- 120 DAYS PAST DUE
+
+
+
+
+Sep 01, 2026 Three Bureau Credit Report powered by Equifax                                                Page 4 of 30
+2.3 Demo Credit Union
+Your debt-to-credit ratio represents the amount of credit you're using and make up 30% of your credit score. It's calculated
+by dividing an account's reported balance by it is credit limit. The idea range for your debt-to-credit ratio is 30% or less.
+
+                                       Equifax                           Experian                    TransUnion
+ Reported                              Yes                               Yes                         Yes
+ Account Number                        xxxxxxxxxxxx 5555                 xxxxxxxx 5555               xxxxxxxxxxxx 5555
+ Account Status                        Pays as Agreed                    Pays as Agreed              Pays as Agreed
+ Credit Limit                          $5,000                            $5,000                      $5,000
+ Reported Balance                      $1,200                            $1,200                      $1,200
+
+
+
+Payment History
+This tables below show up to 7 years of monthly payment history for this account. The numbers in each cell indicate the
+number of days a payment was due; the letters indicate other account events, such as bankruptcy or collections.
+
+
+Equifax
+
+ Year       Jan         Feb         Mar         Apr          May   Jun         Jul       Aug   Sep        Oct     Nov       Dec
+ 2026
+ 2025
+
+
+Experian
+
+ Year       Jan         Feb         Mar         Apr          May   Jun         Jul       Aug   Sep        Oct     Nov       Dec
+ 2026
+ 2025
+
+
+TransUnion
+
+ Year       Jan         Feb         Mar         Apr          May   Jun         Jul       Aug   Sep        Oct     Nov       Dec
+ 2026
+ 2025
+
+
+
+
+Payment Summary
+The tables below shows a summary of 7 years of monthly payment history for this account as reported by each bureau.
+
+                                       Equifax                 Experian                       TransUnion
+ 30 Days Past Due                      0                       0                              0
+ 60 Days Past Due                      0                       0                              0
+ 90 Days Past Due                      0                       0                              0
+ 120 Days Past Due                     0                       0                              0
+ Collection Account                    0                       0                              0
+ Charge Off                            0                       0                              0
+ Included in Bankruptcy                0                       0                              0
+ Repossession                          0                       0                              0
+ Too New to Rate                       0                       0                              0
+ No Data Available                     12                      11                             13
+
+
+
+Account Details
+View the detailed information about this account. Contact the creditor or lender if you have any question.
+
+                                       Equifax                 Experian                       TransUnion
+ Account Type                          Revolving               Revolving                      Revolving
+ Loan Type                             creditcard              creditcard                     creditcard
+ Creditor Classification               Unknown                 Unknown                        Unknown
+ Status                                Pays as Agreed          Pays as Agreed                 Pays as Agreed
+ Activity Designator                   Open                    Open                           Open
+ Date Opened                           Aug 01, 2025            Aug 01, 2025                   Aug 01, 2025
+ Date Closed                           N/A                     N/A                            N/A
+ Date Reported                         Aug 01, 2026            Aug 01, 2026                   Aug 01, 2026
+ Date Of Last Activity                 Aug 01, 2026            N/A                            Aug 01, 2026
+ Date Of First Delinquency             N/A                     N/A                            N/A
+ Deferred Payment Start Date           N/A                     N/A                            N/A
+ Balloon Payment Date                  N/A                     N/A                            N/A
+ Term Duration                         0                       0                              0
+ Term Frequency                        N/A                     rev                            min
+ Month Reviewed                        12                      13                             11
+ Balance                               $1,200                  $1,200                         $1,200
+ Credit Limit                          $5,000                  $5,000                         $5,000
+ High Credit                           $1,200                  $1,200                         $1,200
+ Monthly Payment Amount                $35                     $35                            $35
+ Actual Payment Amount                 N/A                     N/A                            N/A
+ Amount Past Due                       $0                      $150                           $0
+ Balloon Payment Amount                N/A                     N/A                            N/A
+ Charge Off Amount                     N/A                     N/A                            N/A
+
+
+Comments                                                     Contact
+- CREDIT CARD                                                DEMO CREDIT UNION
+- OPEN ACCOUNT                                               ONE SAMPLE PLAZA   000001
+- LAST PAID: 08/2026                                         SAMPLEVILLE,VA 22000
+- THIS IS AN ACCOUNT IN GOOD STANDING                        (888) 5550300-null
+
+
+
+
+Sep 01, 2026 Three Bureau Credit Report powered by Equifax                                                Page 5 of 30
+2.4 Placeholder Store Card (CLOSED)
+Your debt-to-credit ratio represents the amount of credit you're using and make up 30% of your credit score. It's calculated
+by dividing an account's reported balance by it is credit limit. The idea range for your debt-to-credit ratio is 30% or less.
+
+                                       Equifax                 Experian                        TransUnion
+ Reported                              Yes                     No                              No
+ Account Number                        xxxxxxxxxxxx 1212       N/A                             N/A
+ Account Status                        Closed                  N/A                             N/A
+ Credit Limit                          $1,000                  N/A                             N/A
+ Reported Balance                      $0                      N/A                             N/A
+
+
+
+Payment History
+This tables below show up to 7 years of monthly payment history for this account. The numbers in each cell indicate the
+number of days a payment was due; the letters indicate other account events, such as bankruptcy or collections.
+
+
+You currently have no Payment History on your credit file.
+
+
+Payment Summary
+The tables below shows a summary of 7 years of monthly payment history for this account as reported by each bureau.
+
+
+Account Details
+View the detailed information about this account. Contact the creditor or lender if you have any question.
+
+
+You currently have no Account Details on your credit file.
+
+Comments                                                         Contact
+- ACCOUNT PAID AND CLOSED                                        PLACEHOLDER STORE CARD
+- CLOSED OR PAID ACCOUNT/ZERO BALANCE                            C O P.O. BOX 00012
+                                                                 STORETOWN,FL 32000
+                                                                 (866) 5551212-null
+
+
+
+
+Sep 01, 2026 Three Bureau Credit Report powered by Equifax                                                Page 6 of 30
+3. Mortgage Accounts
+Mortgage accounts are real estate loans that require payment on a monthly basis until the loan is paid off.
+
+
+3.1 Demo Mortgage Co
+Your debt-to-credit ratio represents the amount of credit you're using and make up 30% of your credit score. It's calculated
+by dividing an account's reported balance by it is credit limit. The idea range for your debt-to-credit ratio is 30% or less.
+
+                                       Equifax                           Experian                    TransUnion
+ Reported                              Yes                               Yes                         Yes
+ Account Number                        xxxxxx 6666                       xxxxxx 6666                 xxxxxx 6666
+ Account Status                        Pays as Agreed                    Pays as Agreed              Pays as Agreed
+ Credit Limit                          N/A                               N/A                         N/A
+ Reported Balance                      $200,000                          $200,000                    $200,000
+
+
+
+Payment History
+This tables below show up to 7 years of monthly payment history for this account. The numbers in each cell indicate the
+number of days a payment was due; the letters indicate other account events, such as bankruptcy or collections.
+
+
+Equifax
+
+ Year       Jan         Feb         Mar         Apr          May   Jun         Jul       Aug   Sep        Oct     Nov       Dec
+ 2026
+ 2025
+
+
+Experian
+
+ Year       Jan         Feb         Mar         Apr          May   Jun         Jul       Aug   Sep        Oct     Nov       Dec
+ 2026
+ 2025
+
+
+TransUnion
+
+ Year       Jan         Feb         Mar         Apr          May   Jun         Jul       Aug   Sep        Oct     Nov       Dec
+ 2026
+ 2025
+
+
+
+
+Payment Summary
+The tables below shows a summary of 7 years of monthly payment history for this account as reported by each bureau.
+
+                                       Equifax                 Experian                       TransUnion
+ 30 Days Past Due                      0                       0                              0
+ 60 Days Past Due                      0                       0                              0
+ 90 Days Past Due                      0                       0                              0
+ 120 Days Past Due                     0                       0                              0
+ Collection Account                    0                       0                              0
+ Charge Off                            0                       0                              0
+ Included in Bankruptcy                0                       0                              0
+ Repossession                          0                       0                              0
+ Too New to Rate                       0                       0                              0
+ No Data Available                     0                       0                              0
+
+
+
+Account Details
+View the detailed information about this account. Contact the creditor or lender if you have any question.
+
+                                       Equifax                 Experian                       TransUnion
+ Account Type                          Mortgage                Mortgage                       Mortgage
+ Loan Type                             conventionalrealestatemortgage  conventionalrealestatemortgage  conventionalrealestatemortgage
+ Creditor Classification               Unknown                 Unknown                        Unknown
+ Status                                Pays as Agreed          Pays as Agreed                 Pays as Agreed
+ Activity Designator                   Open                    Open                           Open
+ Date Opened                           Mar 01, 2018            Mar 01, 2018                   Mar 01, 2018
+ Date Closed                           N/A                     N/A                            N/A
+ Date Reported                         Aug 01, 2026            Aug 01, 2026                   Aug 01, 2026
+ Date Of Last Activity                 Aug 01, 2026            Aug 01, 2026                   Aug 01, 2026
+ Date Of First Delinquency             N/A                     N/A                            N/A
+ Deferred Payment Start Date           N/A                     N/A                            N/A
+ Balloon Payment Date                  N/A                     N/A                            N/A
+ Term Duration                         360                     360                            360
+ Term Frequency                        monthly                 monthly                        monthly
+ Month Reviewed                        99                      99                             99
+ Balance                               $200,000                $200,000                       $200,000
+ Credit Limit                          N/A                     N/A                            N/A
+ High Credit                           $220,000                $220,000                       $220,000
+ Monthly Payment Amount                $1,500                  $1,500                         $1,500
+ Actual Payment Amount                 N/A                     N/A                            N/A
+ Amount Past Due                       $0                      $0                             $0
+ Balloon Payment Amount                N/A                     N/A                            N/A
+ Charge Off Amount                     N/A                     N/A                            N/A
+
+
+Comments                                                     Contact
+- CONVENTIONAL REAL ESTATE MORTGAGE                          DEMO MORTGAGE CO
+- THIS IS AN ACCOUNT IN GOOD STANDING                        PO BOX 00006
+                                                             MORTGAGETOWN,FL 33000
+                                                             (800) 5550600-null
+
+
+
+
+Sep 01, 2026 Three Bureau Credit Report powered by Equifax                                                Page 7 of 30
+4. Installment Accounts
+Installment accounts are loans that require payment on a monthly basis until the loan is paid off, such as auto or student loans.
+
+
+4.1 Test Student Loan (CLOSED)
+Your debt-to-credit ratio represents the amount of credit you're using and make up 30% of your credit score. It's calculated
+by dividing an account's reported balance by it is credit limit. The idea range for your debt-to-credit ratio is 30% or less.
+
+                                       Equifax                           Experian                    TransUnion
+ Reported                              Yes                               No                          No
+ Account Number                        xxxxxxxxxx 7777                   N/A                         N/A
+ Account Status                        Closed                            N/A                         N/A
+ Credit Limit                          $0                                N/A                         N/A
+ Reported Balance                      $0                                N/A                         N/A
+
+
+
+Payment History
+This tables below show up to 7 years of monthly payment history for this account. The numbers in each cell indicate the
+number of days a payment was due; the letters indicate other account events, such as bankruptcy or collections.
+
+
+Equifax
+
+ Year       Jan         Feb         Mar         Apr          May   Jun         Jul       Aug   Sep        Oct     Nov       Dec
+ 2026
+ 2025
+
+
+
+
+Payment Summary
+The tables below shows a summary of 7 years of monthly payment history for this account as reported by each bureau.
+
+                                       Equifax                 Experian                       TransUnion
+ 30 Days Past Due                      0                       N/A                            N/A
+ 60 Days Past Due                      0                       N/A                            N/A
+ 90 Days Past Due                      0                       N/A                            N/A
+ 120 Days Past Due                     3                       N/A                            N/A
+ Collection Account                    0                       N/A                            N/A
+ Charge Off                            0                       N/A                            N/A
+ Included in Bankruptcy                0                       N/A                            N/A
+ Repossession                          0                       N/A                            N/A
+ Too New to Rate                       0                       N/A                            N/A
+ No Data Available                     40                      N/A                            N/A
+
+
+
+Account Details
+View the detailed information about this account. Contact the creditor or lender if you have any question.
+
+                                       Equifax                 Experian                       TransUnion
+ Account Type                          Installment             N/A                            N/A
+ Loan Type                             educationloan           N/A                            N/A
+ Creditor Classification               Unknown                 N/A                            N/A
+ Status                                Over 120 Days Past Due  N/A                            N/A
+ Activity Designator                   Closed                  N/A                            N/A
+ Date Opened                           Sep 01, 2019            N/A                            N/A
+ Date Closed                           Jan 01, 2023            N/A                            N/A
+ Date Reported                         Jan 01, 2023            N/A                            N/A
+ Date Of Last Activity                 N/A                     N/A                            N/A
+ Date Of First Delinquency             N/A                     N/A                            N/A
+ Deferred Payment Start Date           N/A                     N/A                            N/A
+ Balloon Payment Date                  N/A                     N/A                            N/A
+ Term Duration                         120                     N/A                            N/A
+ Term Frequency                        N/A                     N/A                            N/A
+ Month Reviewed                        40                      N/A                            N/A
+ Balance                               $0                      N/A                            N/A
+ Credit Limit                          $0                      N/A                            N/A
+ High Credit                           $3,500                  N/A                            N/A
+ Monthly Payment Amount                $0                      N/A                            N/A
+ Actual Payment Amount                 N/A                     N/A                            N/A
+ Amount Past Due                       $0                      N/A                            N/A
+ Balloon Payment Amount                N/A                     N/A                            N/A
+ Charge Off Amount                     N/A                     N/A                            N/A
+
+
+Comments                                                     Contact
+- TRANSFERRED TO ANOTHER LENDER                              TEST STUDENT LOAN
+- STUDENT LOAN                                               PO BOX 00007
+                                                             LOANCITY,NE 68000
+                                                             (888) 5550700-null
+
+
+
+
+Sep 01, 2026 Three Bureau Credit Report powered by Equifax                                                Page 8 of 30
+5. Other Accounts
+
+
+5.1 Example Bank Card (CLOSED)
+Your debt-to-credit ratio represents the amount of credit you're using and make up 30% of your credit score. It's calculated
+by dividing an account's reported balance by it is credit limit. The idea range for your debt-to-credit ratio is 30% or less.
+
+                                       Equifax                           Experian                    TransUnion
+ Reported                              Yes                               Yes                         Yes
+ Account Number                        xxxxxxxxxxxxx 8888                xxxxxxxx 9999               xxxxxxxxxxxx 8888
+ Account Status                        Closed                            Closed                      Closed
+ Credit Limit                          $0                                $0                          $0
+ Reported Balance                      $4,100                            $4,100                      $4,100
+
+
+
+Payment History
+This tables below show up to 7 years of monthly payment history for this account. The numbers in each cell indicate the
+number of days a payment was due; the letters indicate other account events, such as bankruptcy or collections.
+
+
+Experian
+
+ Year       Jan         Feb         Mar         Apr          May   Jun         Jul       Aug   Sep        Oct     Nov       Dec
+ 2026
+ 2025
+
+
+
+
+Payment Summary
+The tables below shows a summary of 7 years of monthly payment history for this account as reported by each bureau.
+
+                                       Equifax                 Experian                       TransUnion
+ 30 Days Past Due                      N/A                     0                              N/A
+ 60 Days Past Due                      N/A                     0                              N/A
+ 90 Days Past Due                      N/A                     0                              N/A
+ 120 Days Past Due                     N/A                     0                              N/A
+ Collection Account                    N/A                     0                              N/A
+ Charge Off                            N/A                     0                              N/A
+ Included in Bankruptcy                N/A                     0                              N/A
+ Repossession                          N/A                     0                              N/A
+ Too New to Rate                       N/A                     0                              N/A
+ No Data Available                     N/A                     12                             N/A
+
+
+
+Account Details
+View the detailed information about this account. Contact the creditor or lender if you have any question.
+
+                                       Equifax                 Experian                       TransUnion
+ Account Type                          Other                   Other                          Other
+ Loan Type                             creditcard              unknownloantype                creditcard
+ Creditor Classification               Unknown                 Unknown                        Unknown
+ Status                                Collection Account      Collection Account             Collection Account
+ Activity Designator                   Closed                  Closed                         Closed
+ Date Opened                           Nov 01, 2023            Nov 01, 2023                   Nov 01, 2023
+ Date Closed                           N/A                     N/A                            Jul 01, 2026
+ Date Reported                         Sep 01, 2026            Sep 01, 2026                   Sep 01, 2026
+ Date Of Last Activity                 May 01, 2026            N/A                            N/A
+ Date Of First Delinquency             N/A                     N/A                            N/A
+ Deferred Payment Start Date           N/A                     N/A                            N/A
+ Balloon Payment Date                  N/A                     N/A                            N/A
+ Term Duration                         0                       1                              0
+ Term Frequency                        N/A                     N/A                            N/A
+ Month Reviewed                        12                      1                              0
+ Balance                               $4,100                  $4,100                         $4,100
+ Credit Limit                          $0                      $0                             $0
+ High Credit                           $9,000                  $9,000                         $9,000
+ Monthly Payment Amount                $0                      $0                             $0
+ Actual Payment Amount                 N/A                     N/A                            N/A
+ Amount Past Due                       $450                    $450                           $450
+ Balloon Payment Amount                N/A                     N/A                            N/A
+ Charge Off Amount                     $4,100                  $4,100                         $4,100
+
+
+Comments                                                     Contact
+- ACCOUNT CLOSED                                             EXAMPLE BANK
+- COLLECTION ACCOUNT                                         P.O. BOX 00001
+- DATE FIRST MAJOR DELINQUENCY REPORTED: 09/01/2026          ANYTOWN,TX 79000
+- LAST REPORTED DELINQUENCIES: 09/2026=O9                    (800) 5550100-null
+- LAST PAID:
+
+
+
+
+Sep 01, 2026 Three Bureau Credit Report powered by Equifax                                                Page 9 of 30
+6. Consumer Statements
+Consumer statements are personal notes of up to 100 words (200 words if you live in Maine) you can attach to your credit
+file to explain the circumstances behind any negative information or to dispute information you feel is incorrect even
+though a creditor has verified it as correct. Consumer statements are voluntary and have no impact on your credit score.
+
+
+You currently have no Consumer Statements on your credit file.
+
+
+
+
+Sep 01, 2026 Three Bureau Credit Report powered by Equifax                                               Page 10 of 30
+7. Personal Information
+Creditors use your personal information primarily to identify you. This information has no impact on your credit score.
+
+
+Identification
+Identification is the information in your credit file that indicates your current identification as reported to Equifax, Experian,
+and TransUnion. It does not affect your credit score or rating.
+
+                                       Equifax                     Experian                          TransUnion
+ Name                                  Testperson Alex             Testperson Alex                   Testperson Alex
+ Formerly Known As                     TESTPERSON ALEX R,          N/A                               Testperson-Smith Alex
+                                       TESTPERSONSMITH
+                                       ALEX
+ Social Security Number                xxxxx 0000                  xxxxx 0000                        xxxxx 0000
+ Date Of Birth                         Jan 01, 1990                Jan 01, 1990                      Jan 01, 1990
+
+
+
+Contact Information
+Contact information is the information in your credit file that indicates your current address as reported to Equifax,
+Experian, and TransUnion. It does not affect your credit score or rating.
+
+                            Equifax                          Experian                           TransUnion
+ Information Reported       Yes                              No                                 No
+ Address                    100 SAMPLE ST                    N/A                                N/A
+                            ANYTOWN, FL 30000
+ Status                     Current                          N/A                                N/A
+ Date Reported              8/1/26                           N/A                                N/A
+ Information Reported       Yes                              Yes                                Yes
+ Address                    200 EXAMPLE AVE                  300 DEMO RD                        400 PLACEHOLDER LN APT 1
+                            SAMPLEVILLE, FL 30001            SAMPLEVILLE, FL 30002              SAMPLEVILLE, FL 30002
+ Status                     Former                           Former                             Former
+ Date Reported              7/1/26                           4/15/23                            6/12/20
+
+
+
+Employment History
+Employment history is the information in your credit file that indicates your current and former employment as reported to
+Equifax, Experian, and TransUnion. It does not affect your credit score or rating.
+
+
+Experian
+
+
+
+
+
+Sep 01, 2026 Three Bureau Credit Report powered by Equifax                                               Page 11 of 30
+Company                            Occupation                Start Date   End Date   Status    Address
+EXAMPLE WIDGETS LLC                N/A                       Mar 20, 2024 N/A        Current   N/A
+
+TransUnion
+Company                            Occupation                Start Date   End Date   Status    Address
+EXAMPLE WIDGETS LLC                N/A                       N/A          N/A        Former    N/A
+SELF EMPLOYED                      N/A                       N/A          N/A        Former    N/A
+CONSULTANT
+
+
+
+
+Sep 01, 2026 Three Bureau Credit Report powered by Equifax                                               Page 12 of 30
+8. Inquiries
+Inquiries are requests from creditors and lenders to view your credit report. Inquiries stay on your credit report for up to
+three years and may negatively impact your credit score.
+
+
+Hard Inquiries
+Hard inquiries -- those made by potential creditors -- may lower your score if too many occur within a certain timeframe.
+Hard inquiries stay on your credit report for up to three years, but only impact your credit score for up to one year.
+
+
+Equifax
+ Date                                  Company                   Address
+ Dec 15, 2025                          DEMO CREDIT UNION         1 SAMPLE PLAZA
+                                                                 SAMPLEVILLE, VA     22000
+
+Experian
+ Date                                  Company                   Address
+ Oct 13, 2025                          DEMO CREDIT UNION         1 SAMPLE PLAZA
+                                                                 SAMPLEVILLE, VA 22000
+ Aug 12, 2025                          EXAMPLE BANK              PO BOX 00001
+                                                                 ANYTOWN, TX 79000
+ Aug 12, 2025                          UNKNOWN AUTO FINANCE      PO BOX 00099
+                                                                 NOWHERE, OH 44000
+
+TransUnion
+ Date                                  Company                   Address
+ Aug 12, 2025                          EXAMPLE BK                P O BOX 00001
+                                                                 ANYTOWN, TX 79000
+ Aug 12, 2025                          DEMO CU                   1 SAMPLE PLAZA
+                                                                 SAMPLEVILLE, VA 22000
+
+
+
+Soft Inquiries
+Soft inquiries, such as reviewing your own credit file, have no impact on your credit score. Soft inquires stay on your credit
+report for up to one year.
+
+
+You currently have no Soft Inquiries on your credit file.
+
+
+
+
+Sep 01, 2026 Three Bureau Credit Report powered by Equifax                                               Page 13 of 30
+9. Public Records
+A public record is a legal document issued by local or federal government that is typically accessible by the public. Only
+public records pertaining to finance will appear on your credit report. Public records stay on your credit report for 5 to 10
+years and have a negative impact on your credit score
+
+
+Bankruptcies
+Bankruptcies are a legal status granted by a state or federal court that indicates you are unable to pay off outstanding
+
+
+You currently have no Bankruptcies on your credit file.
+
+Judgments
+Judgments are a legal status granted by a small claims court that indicates you must pay back an outstanding debt.
+
+
+You currently have no Judgments on your credit file.
+
+Liens
+A lien is a legal claim on an asset, such as your house or car, a creditor or lender can take possession of and use to pay
+
+
+You currently have no Liens on your credit file.
+
+
+
+
+
+Sep 01, 2026 Three Bureau Credit Report powered by Equifax                                               Page 14 of 30
+10. Collections
+Collections are accounts with outstanding debt that have been sold by a creditor to a collections agency.Collections stay
+on your credit report for 7 years plus 180 days from the date the account first became past due. They negatively impact
+your credit score.
+
+
+Equifax
+
+Date Reported: Sep 01, 2026
+Agency Client: EXAMPLE BANK
+
+
+ Date Assigned                         Nov 01, 2023
+ Original Amount Owed                  N/A
+ Amount                                $4,100
+ Status Date                           Sep 01, 2026
+ Balance Date                          Sep 01, 2026
+ Purge Date                            N/A
+ Account Designator Code               INDIVIDUAL_ACCOUNT
+ Account Number                        xxxxxxxxxxxxx 8888
+
+
+TransUnion
+
+Date Reported: Sep 01, 2026
+Agency Client: EXAMPLE BK
+
+
+ Date Assigned                         Nov 01, 2023
+ Original Amount Owed                  N/A
+ Amount                                $4,100
+ Status Date                           Sep 01, 2026
+ Balance Date                          Sep 01, 2026
+ Purge Date                            N/A
+ Account Designator Code               INDIVIDUAL_ACCOUNT
+ Account Number                        xxxxxxxxxxxx 8888
+
+
+Experian
+
+Date Reported: Sep 01, 2026
+Agency Client: EXAMPLE BK
+
+
+ Date Assigned                         Nov 01, 2023
+ Original Amount Owed                  N/A
+ Amount                                $4,100
+ Status Date                           Sep 01, 2026
+
+
+
+
+Sep 01, 2026 Three Bureau Credit Report powered by Equifax                                               Page 15 of 30
+Balance Date                           Sep 01, 2026
+Purge Date                             N/A
+Account Designator Code                INDIVIDUAL_ACCOUNT
+Account Number                         xxxxxxxx 9999
+
+
+
+
+
+
+
+
+Sep 01, 2026 Three Bureau Credit Report powered by Equifax                                               Page 16 of 30
+11. Dispute File Information
+If you believe that any of the information found on this report is incorrect, there are 3 ways to launch an investigation about
+the information in this report.
+
+
+When you file a dispute, the credit bureau you contact is required to investigate your dispute within 30 days. They will not
+remove accurate data unless it is outdated or cannot be verified.
+
+
+
+
+Sep 01, 2026 Three Bureau Credit Report powered by Equifax                                               Page 17 of 30

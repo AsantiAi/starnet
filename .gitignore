@@ -15,6 +15,8 @@ Desktop.ini
 
 # agent runtime workspaces / notes (created by tools at run time)
 workspaces/
+# credit-dispute case files (draft letters and intake copies; may contain consumer facts)
+credit/cases/
 sidecar/workspaces/
 sidecar/workspaces.*/
 # preview/verify sidecar workspaces (per-worktree launch.json SKYNET_WORKSPACES)

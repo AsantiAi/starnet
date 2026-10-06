@@ -1052,3 +1052,9 @@ test/prose-links-desktop.test.js
 test/comms-receipts-count.test.js
 test/rail-agent-empty-archived.test.js
 test/run-stop-handles.test.js
+test/credit-parse.test.js
+test/credit-review.test.js
+test/credit-letters.test.js
+test/credit-validate-letter.test.js
+test/credit-tool.test.js
+test/credit-fixture-pii.test.js

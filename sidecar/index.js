@@ -77,6 +77,7 @@ const CodeMode = require('./tools/builtin/code.js');                      // cod
 const { makeCodeTools } = CodeMode;
 const { makeSkillTools } = require('./tools/builtin/skills.js');    // H4: the agent's reusable skill library tools
 const Todo = require('./tools/builtin/todo.js');
+const Credit = require('./tools/builtin/credit.js');   // credit.parse_report / review_case / draft_letters / list_drafts — DRAFT only, no send
 const DeliverableTool = require('./tools/builtin/deliverable.js');   // deliverable_note — the agent NAMES its finished work (prose only; never status/crew)
 const { makeImageTools } = require('./tools/builtin/image.js');           // STUDIO: image_generate / image_analyze (OpenRouter multimodal)
 const { makeConnectorTools } = require('./tools/builtin/connectors.js');  // WEB: connectors.list — what the station HAS wired, and what it could (read-only, no secrets)
@@ -18618,6 +18619,7 @@ async function runOnceCore(o) {
     }
   }).register(registry);   // H4: skill.write/list/view/manage — the agent's reusable procedure library (memory capability)
   Todo.makeTodoTool({ store: notebookStore }).register(registry);   // in-session task plan — shares the notebook's per-agent kv store ('todo:'+agentId)
+  Credit.makeCreditTools({ fs: fs, pathMod: path, spawn: childSpawn, root: WORKSPACES, clock: { now: () => Date.now() } }).register(registry);   // credit disputes: parse, review, DRAFT letters, list drafts — never send or approve
   DeliverableTool.makeDeliverableTool({ notes: deliverableNotes }).register(registry);   // deliverable_note — the agent's OWN name for what it made; drained by runOnce at run end
   makeToolSearchTool({ registry }).register(registry);   // tool.search — finds a GRANTED but unadvertised tool (CAP_REGISTRY `deferred: true`) and reveals it for the rest of the run; rides the computer object so no surface is stranded
   makeCodeTools({}).register(registry);   // code.run — child Node/vm owns no authority; every nested read returns through this run's parent dispatcher

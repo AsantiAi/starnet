@@ -1,0 +1,21 @@
+{
+  "letterType": "round1 bureau dispute",
+  "bureau": "experian",
+  "letterDate": "October 6, 2026",
+  "confirmed": true,
+  "consumer": {
+    "fullName": "Alex R. Testperson",
+    "addressLine1": "100 SAMPLE ST",
+    "cityStateZip": "ANYTOWN, FL 30000",
+    "ssnLast4": "0000"
+  },
+  "accounts": [
+    {
+      "furnisher": "Demo Credit Union",
+      "accountNumber": "xxxxxxxx 5555",
+      "last4": "5555",
+      "reportDate": "September 01, 2026",
+      "reportedValues": { "accountStatus": "Pays as Agreed" }
+    }
+  ]
+}
