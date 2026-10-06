@@ -37,7 +37,7 @@ const IMPACT_SET = new Set(Object.keys(IMPACTS).map(k => IMPACTS[k]));
 // it cannot even call what it finds, it only makes it advertisable. Same live-caught failure as 'taskbrief'
 // above: without an entry here it fell through to EXTERNAL_UNKNOWN and the authority layer refused it, so
 // every DEFERRED tool became permanently unreachable while looking, from the outside, merely "not found".
-const SAFE_BUILTIN_CAPS = new Set(['compute', 'cabinet', 'memory', 'quest', 'studio', 'orchestrator', 'taskbrief', 'toolsearch', 'code', 'stationinfo']);
+const SAFE_BUILTIN_CAPS = new Set(['compute', 'cabinet', 'memory', 'quest', 'studio', 'orchestrator', 'taskbrief', 'toolsearch', 'code', 'stationinfo', 'credit']);
 
 function impactOfTool(tool) {
   tool = tool || {};

@@ -83,7 +83,17 @@
       { capId: 'apps', tool: 'app.write', scope: 'write', requiresConsent: false, network: false, deferred: true },
       { capId: 'apps', tool: 'app.check', scope: 'read', requiresConsent: false, network: false, deferred: true },
       { capId: 'apps', tool: 'app.publish', scope: 'write', requiresConsent: false, network: false, deferred: true },
-      { capId: 'apps', tool: 'app.schedule', scope: 'write', requiresConsent: false, network: false, deferred: true }
+      { capId: 'apps', tool: 'app.schedule', scope: 'write', requiresConsent: false, network: false, deferred: true },
+      // CREDIT DISPUTES (v1, manual upload): parse a three-bureau report, flag incomplete or unmatched
+      // intake for a person, and save a round-1 bureau letter as DRAFT. Rides `computer` so a station
+      // without a cabinet can still draft into the workspace. capId is 'credit', NOT 'compute' (resolve.js
+      // treats a 'compute' grant as the COMPUTE GATE and never emits it as a callable tool). No
+      // TOOLSETS_META row: this is not a toggleable family, and there is no send, mail, or approve tool.
+      // Deferred, like apps: the Legal Assistant reaches them through tool.search. (see tools/builtin/credit.js)
+      { capId: 'credit', tool: 'credit.parse_report', scope: 'read', requiresConsent: false, network: false, deferred: true },
+      { capId: 'credit', tool: 'credit.review_case', scope: 'read', requiresConsent: false, network: false, deferred: true },
+      { capId: 'credit', tool: 'credit.draft_letters', scope: 'write', requiresConsent: false, network: false, deferred: true },
+      { capId: 'credit', tool: 'credit.list_drafts', scope: 'read', requiresConsent: false, network: false, deferred: true }
     ],
     notebook: [
       { capId: 'memory', tool: 'notebook.write', scope: 'write', requiresConsent: false, network: false },   // private sandboxed memory — no consent gate (see notebook.js)
