@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StarNet dispute desk</title>
+<style>
+  :root {
+    --ink: #14120e;
+    --ink-2: #1e1b16;
+    --line: #3a3428;
+    --amber: #f0a202;
+    --amber-dim: #c4842a;
+    --paper: #f4efe4;
+    --paper-ink: #241c12;
+    --muted: #b7ab96;
+    --text: #f6f0e4;
+    --block: #e15a3a;
+    --review: #e2b657;
+    --info: #8fb9c9;
+    --draft: #8fce6a;
+    --fix: #e15a3a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--ink);
+    color: var(--text);
+    font: 16px/1.45 "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+  }
+  body { display: flex; flex-direction: column; min-height: 100vh; }
+  header {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    align-items: flex-end;
+    padding: 22px 28px 18px;
+    border-bottom: 1px solid var(--line);
+    background: var(--ink-2);
+  }
+  .mark { font-variant: small-caps; letter-spacing: 0.14em; color: var(--amber); font-size: 13px; }
+  h1 { margin: 4px 0 0; font-size: 32px; font-weight: 600; letter-spacing: -0.02em; }
+  .lede { margin: 6px 0 0; max-width: 46rem; color: var(--muted); }
+  .bureaus { display: flex; gap: 8px; flex-wrap: wrap; }
+  .bureaus span {
+    border: 1px solid var(--line);
+    padding: 4px 10px;
+    border-radius: 999px;
+    color: var(--amber);
+    font-size: 13px;
+    letter-spacing: 0.04em;
+  }
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(260px, 340px) 1fr;
+    min-height: 0;
+  }
+  #case-queue, #case-review { min-height: 420px; }
+  #case-queue {
+    border-right: 1px solid var(--line);
+    padding: 18px 16px 28px;
+    background: #17150f;
+  }
+  #case-queue h2, #case-review h2 { margin: 0 0 12px; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber-dim); }
+  #case-list { display: flex; flex-direction: column; gap: 8px; }
+  .case {
+    text-align: left;
+    width: 100%;
+    color: inherit;
+    background: #221e18;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 12px 10px;
+    cursor: pointer;
+    font: inherit;
+  }
+  .case[aria-current="true"] { border-color: var(--amber); }
+  .case strong { display: block; font-size: 16px; }
+  .case small { color: var(--muted); }
+  .pill {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    background: #2a261e;
+  }
+  .pill.DRAFT { color: var(--draft); }
+  .pill.DRAFT_NEEDS_FIX, .pill.NEEDS_REVIEW { color: var(--fix); }
+  #case-review { padding: 18px 28px 40px; }
+  .empty, .loading { color: var(--muted); }
+  .flags { display: flex; flex-direction: column; gap: 6px; margin: 0 0 18px; padding: 0; list-style: none; }
+  .flags li { padding: 8px 10px; background: #221e18; border-left: 3px solid var(--info); }
+  .flags li.BLOCK { border-color: var(--block); }
+  .flags li.REVIEW { border-color: var(--review); }
+  .letter {
+    background: var(--paper);
+    color: var(--paper-ink);
+    padding: 28px 32px;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    font: 15px/1.5 "Iowan Old Style", Palatino, Georgia, serif;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+  }
+  .meta { color: var(--muted); font-size: 14px; }
+  footer {
+    padding: 12px 28px 16px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 13px;
+  }
+  @media (max-width: 800px) {
+    main { grid-template-columns: 1fr; }
+    #case-queue { border-right: 0; border-bottom: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="mark">StarNet · credit disputes</div>
+    <h1>Dispute desk</h1>
+    <p class="lede">Round-1 bureau drafts saved by the credit tools. This page only reads <code>credit/cases/</code>. It does not draft, mail, fax, or approve a letter.</p>
+  </div>
+  <div class="bureaus" aria-label="Bureaus">
+    <span>Equifax</span>
+    <span>Experian</span>
+    <span>TransUnion</span>
+  </div>
+</header>
+<main>
+  <section id="case-queue" aria-label="Case queue">
+    <h2>Case queue</h2>
+    <div id="case-list" class="loading">Loading saved cases…</div>
+  </section>
+  <section id="case-review" aria-label="Case review">
+    <h2>Review</h2>
+    <div id="review-body" class="empty">Select a case to read its flags and the DRAFT letter. A letter stays a draft until a person handles it outside this desk.</div>
+  </section>
+</main>
+<footer>
+  Local only, 127.0.0.1:8765. Status values are DRAFT, DRAFT_NEEDS_FIX, or NEEDS_REVIEW. Nothing on this desk sends a dispute.
+</footer>
+<script>
+(function () {
+  var listEl = document.getElementById('case-list');
+  var reviewEl = document.getElementById('review-body');
+  var selected = '';
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
+  }
+
+  function pill(status) {
+    var s = status || 'NEEDS_REVIEW';
+    return '<span class="pill ' + esc(s) + '">' + esc(s) + '</span>';
+  }
+
+  function accountsLine(accounts) {
+    if (!accounts || !accounts.length) return 'No disputed accounts on the letter yet.';
+    return accounts.map(function (a) {
+      return esc(a.furnisher || 'furnisher') + ' · last4 ' + esc(a.last4 || 'none') + (a.pattern ? ' · pattern ' + esc(a.pattern) : '');
+    }).join('<br>');
+  }
+
+  function renderList(cases, roots) {
+    if (!cases.length) {
+      var where = (roots && roots.length)
+        ? 'Folders checked: ' + roots.map(esc).join(', ') + '.'
+        : 'No credit/cases folder was found yet. On a Mac that is ~/Library/Application Support/ai.skynet.harness/workspaces/credit/cases.';
+      listEl.className = 'empty';
+      listEl.innerHTML = 'No saved cases. This desk only reads them. ' + where;
+      return;
+    }
+    listEl.className = '';
+    listEl.innerHTML = cases.map(function (c) {
+      var current = c.caseId === selected ? ' aria-current="true"' : '';
+      return '<button class="case" type="button" data-id="' + esc(c.caseId) + '"' + current + '>'
+        + '<strong>' + esc(c.caseId) + '</strong>'
+        + '<small>' + esc(c.bureau || 'bureau pending') + '</small>'
+        + pill(c.status)
+        + '</button>';
+    }).join('');
+    Array.prototype.forEach.call(listEl.querySelectorAll('.case'), function (btn) {
+      btn.addEventListener('click', function () { openCase(btn.getAttribute('data-id')); });
+    });
+  }
+
+  function renderReview(data) {
+    var c = data.case;
+    var flags = (c.flags || []).map(function (f) {
+      return '<li class="' + esc(f.severity || 'INFO') + '"><strong>' + esc(f.severity || 'INFO') + '</strong> '
+        + esc(f.code || '') + (f.where ? ' @ ' + esc(f.where) : '') + (f.pattern ? ' · pattern ' + esc(f.pattern) : '')
+        + (f.detail ? '<br>' + esc(f.detail) : '') + '</li>';
+    }).join('');
+    var missing = (c.missingFields || []).length
+      ? '<p class="meta">Missing fields: ' + esc(c.missingFields.join(', ')) + '</p>' : '';
+    var letters = (c.letters || []).map(function (letter) {
+      return '<h3>' + esc(letter.bureau || 'letter') + ' ' + pill(letter.status) + '</h3>'
+        + '<p class="meta">' + accountsLine(letter.accounts) + '</p>'
+        + (letter.wordSpacingNote ? '<p class="meta">' + esc(letter.wordSpacingNote) + '</p>' : '')
+        + '<article class="letter">' + esc(letter.markdown || 'No letter file on disk.') + '</article>';
+    }).join('');
+    if (!letters) letters = '<p class="empty">No round-1 letter was drafted for this case. The flags above are the review hold.</p>';
+    reviewEl.className = '';
+    reviewEl.innerHTML = '<h3>' + esc(c.caseId) + ' ' + pill(c.status) + '</h3>'
+      + (c.reportDate ? '<p class="meta">Report date ' + esc(c.reportDate) + '</p>' : '')
+      + missing
+      + '<ul class="flags">' + (flags || '<li class="INFO">No flags stored on this case.</li>') + '</ul>'
+      + letters;
+  }
+
+  function openCase(id) {
+    selected = id;
+    Array.prototype.forEach.call(listEl.querySelectorAll('.case'), function (btn) {
+      if (btn.getAttribute('data-id') === id) btn.setAttribute('aria-current', 'true');
+      else btn.removeAttribute('aria-current');
+    });
+    reviewEl.className = 'loading';
+    reviewEl.textContent = 'Opening ' + id + '…';
+    fetch('/api/cases/' + encodeURIComponent(id), { headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.body.ok) throw new Error((res.body && res.body.error) || 'could not open case');
+        renderReview(res.body);
+      })
+      .catch(function (err) {
+        reviewEl.className = 'empty';
+        reviewEl.textContent = err.message || String(err);
+      });
+  }
+
+  fetch('/api/cases', { headers: { 'Accept': 'application/json' } })
+    .then(function (r) { return r.json(); })
+    .then(function (body) {
+      var cases = (body && body.cases) || [];
+      renderList(cases, body && body.roots);
+      if (cases.length) openCase(cases[0].caseId);
+    })
+    .catch(function (err) {
+      listEl.className = 'empty';
+      listEl.textContent = 'The case list could not be read. ' + (err.message || err);
+    });
+})();
+</script>
+</body>
+</html>
