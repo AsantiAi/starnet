@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
-# scripts/dashboard-daemon.sh — keep the local StarNet dashboard listening.
+# scripts/dashboard-daemon.sh — keep the local StarNet dispute desk listening.
 #
-# The dashboard is http://127.0.0.1:8765 (scripts/dashboard-server.js).
-# Closing the terminal, backgrounding this script, or a browser tab going
-# idle must not take it down. Idle sockets are closed by the server; if the
-# server process itself dies, this supervisor starts it again.
+# The desk is http://127.0.0.1:8765 (scripts/dashboard-server.js).
+# It serves scripts/dashboard/index.html: the case queue and the round-1
+# DRAFT letters already saved under credit/cases/. It only reads those
+# files. Closing the terminal, backgrounding this script, or a browser tab
+# going idle must not take it down. Idle sockets are closed by the server;
+# if the server process itself dies, this supervisor starts it again.
 #
 # This wrapper does not touch the p165 pipeline or case payload files.
+#
+# If a daemon is already running and you just pulled this page, restart it
+# so the process loads the dispute desk instead of the old one-line page:
+#   bash scripts/dashboard-daemon.sh restart
 #
 # macOS (Intel iMac, bash 3.2 from /bin/bash is enough):
 #   bash scripts/dashboard-daemon.sh start
