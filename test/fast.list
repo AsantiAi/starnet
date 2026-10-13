@@ -1058,3 +1058,4 @@ test/credit-letters.test.js
 test/credit-validate-letter.test.js
 test/credit-tool.test.js
 test/credit-fixture-pii.test.js
+test/dashboard-desk.test.js
