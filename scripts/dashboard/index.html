@@ -3,141 +3,350 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>StarNet dispute desk</title>
+<title>Disputes · Asanti Management and Services LLC</title>
 <style>
   :root {
-    --ink: #14120e;
-    --ink-2: #1e1b16;
-    --line: #3a3428;
-    --amber: #f0a202;
-    --amber-dim: #c4842a;
-    --paper: #f4efe4;
-    --paper-ink: #241c12;
-    --muted: #b7ab96;
-    --text: #f6f0e4;
-    --block: #e15a3a;
-    --review: #e2b657;
-    --info: #8fb9c9;
-    --draft: #8fce6a;
-    --fix: #e15a3a;
+    --green: #2f5d46;
+    --green-ink: #1e3b2d;
+    --ink: #1c2b24;
+    --muted: #6d7872;
+    --line: #e4e7e2;
+    --bg: #f3f4f1;
+    --card: #ffffff;
+    --amber: #b5761d;
+    --amber-bar: #e0a04a;
+    --amber-bg: #f8ecd4;
+    --red: #c2412d;
+    --shadow: 0 1px 2px rgba(28, 43, 36, 0.04);
   }
   * { box-sizing: border-box; }
-  html, body {
-    margin: 0;
-    min-height: 100%;
-    background: var(--ink);
-    color: var(--text);
-    font: 16px/1.45 "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); }
+  body {
+    font: 15px/1.45 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+    min-height: 100vh;
   }
-  body { display: flex; flex-direction: column; min-height: 100vh; }
-  header {
+  button, input { font: inherit; color: inherit; }
+  header.top {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
+    align-items: center;
+    gap: 16px;
+    padding: 18px 28px 10px;
+  }
+  .brand-name {
+    font-family: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+    font-size: 20px;
+    color: var(--green);
+    letter-spacing: -0.01em;
+  }
+  .brand-sub {
+    margin-top: 2px;
+    color: var(--green);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+  }
+  .tabbar {
     display: flex;
-    justify-content: space-between;
-    gap: 24px;
-    align-items: flex-end;
-    padding: 22px 28px 18px;
-    border-bottom: 1px solid var(--line);
-    background: var(--ink-2);
-  }
-  .mark { font-variant: small-caps; letter-spacing: 0.14em; color: var(--amber); font-size: 13px; }
-  h1 { margin: 4px 0 0; font-size: 32px; font-weight: 600; letter-spacing: -0.02em; }
-  .lede { margin: 6px 0 0; max-width: 46rem; color: var(--muted); }
-  .bureaus { display: flex; gap: 8px; flex-wrap: wrap; }
-  .bureaus span {
-    border: 1px solid var(--line);
-    padding: 4px 10px;
+    gap: 4px;
+    padding: 4px;
+    background: #e7e9e4;
     border-radius: 999px;
-    color: var(--amber);
+  }
+  .tabbar button {
+    border: 0;
+    background: transparent;
+    color: var(--green-ink);
+    border-radius: 999px;
+    padding: 8px 18px;
+    cursor: pointer;
+  }
+  .tabbar button[aria-selected="true"] {
+    background: var(--green);
+    color: #fff;
+  }
+  .online {
+    justify-self: end;
+    color: var(--muted);
     font-size: 13px;
-    letter-spacing: 0.04em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .online i {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #3c9a62;
+    display: inline-block;
   }
   main {
-    flex: 1;
     display: grid;
-    grid-template-columns: minmax(260px, 340px) 1fr;
-    min-height: 0;
+    grid-template-columns: 300px 1fr;
+    min-height: calc(100vh - 78px);
   }
-  #case-queue, #case-review { min-height: 420px; }
   #case-queue {
+    background: #fbfbfa;
     border-right: 1px solid var(--line);
-    padding: 18px 16px 28px;
-    background: #17150f;
+    padding: 8px 16px 28px;
   }
-  #case-queue h2, #case-review h2 { margin: 0 0 12px; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber-dim); }
-  #case-list { display: flex; flex-direction: column; gap: 8px; }
+  #case-queue h2 {
+    margin: 8px 4px 12px;
+    font-size: 15px;
+    font-weight: 650;
+  }
+  .search {
+    position: relative;
+    margin-bottom: 14px;
+  }
+  .search svg {
+    position: absolute;
+    left: 12px;
+    top: 11px;
+    width: 16px;
+    height: 16px;
+    stroke: #8b948e;
+    fill: none;
+  }
+  #case-search {
+    width: 100%;
+    border: 1px solid #e1e4df;
+    background: #fff;
+    border-radius: 10px;
+    padding: 9px 12px 9px 36px;
+    outline: none;
+  }
+  #case-search:focus { border-color: var(--green); }
+  #case-list { display: flex; flex-direction: column; gap: 10px; }
   .case {
     text-align: left;
     width: 100%;
-    color: inherit;
-    background: #221e18;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 12px 12px 10px;
+    background: #fff;
+    border: 1px solid #e6e8e3;
+    border-radius: 12px;
+    padding: 12px 14px 12px;
     cursor: pointer;
-    font: inherit;
+    box-shadow: var(--shadow);
   }
-  .case[aria-current="true"] { border-color: var(--amber); }
-  .case strong { display: block; font-size: 16px; }
-  .case small { color: var(--muted); }
+  .case[aria-current="true"] {
+    border-color: var(--green);
+    box-shadow: inset 0 0 0 1px var(--green);
+    background: #f7faf7;
+  }
+  .case .idline { color: var(--muted); font-size: 13px; }
+  .case strong {
+    display: block;
+    margin: 2px 0 8px;
+    font-size: 16px;
+    font-weight: 700;
+  }
   .pill {
     display: inline-block;
-    margin-top: 8px;
-    padding: 2px 8px;
+    padding: 3px 8px;
     border-radius: 999px;
     font-size: 12px;
-    letter-spacing: 0.06em;
-    background: #2a261e;
+    background: #eef1ee;
+    color: #4e5a54;
   }
-  .pill.DRAFT { color: var(--draft); }
-  .pill.DRAFT_NEEDS_FIX, .pill.NEEDS_REVIEW { color: var(--fix); }
-  #case-review { padding: 18px 28px 40px; }
-  .empty, .loading { color: var(--muted); }
-  .flags { display: flex; flex-direction: column; gap: 6px; margin: 0 0 18px; padding: 0; list-style: none; }
-  .flags li { padding: 8px 10px; background: #221e18; border-left: 3px solid var(--info); }
-  .flags li.BLOCK { border-color: var(--block); }
-  .flags li.REVIEW { border-color: var(--review); }
+  .pill.DRAFT, .pill.NEEDS_REVIEW { background: var(--amber-bg); color: #8d5e16; }
+  .pill.DRAFT_NEEDS_FIX { background: #fde8e4; color: var(--red); }
+  #case-review { padding: 8px 28px 36px; min-width: 0; }
+  .kicker { margin: 0; color: var(--muted); font-size: 13px; }
+  .title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .client, .section-title, .empty-state h2 {
+    font-family: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+    font-weight: 560;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .client { margin: 4px 0 0; font-size: 40px; line-height: 1.05; }
+  .section-title { margin: 22px 0 12px; font-size: 28px; }
+  .progress {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+    list-style: none;
+    margin: 22px 0 18px;
+    padding: 0;
+  }
+  .progress li { text-align: center; color: #a0a8a3; font-size: 12px; }
+  .progress .bar {
+    display: block;
+    height: 6px;
+    border-radius: 99px;
+    background: #e3e6e2;
+    margin-bottom: 8px;
+  }
+  .progress .done { color: var(--ink); }
+  .progress .done .bar { background: var(--green); }
+  .progress .now { color: var(--amber); font-weight: 650; }
+  .progress .now .bar { background: var(--amber-bar); }
+  .stats, .stats5 {
+    display: grid;
+    gap: 14px;
+  }
+  .stats { grid-template-columns: repeat(3, 1fr); }
+  .stats5 { grid-template-columns: repeat(5, 1fr); margin: 16px 0; }
+  .stat {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 16px 18px 14px;
+    box-shadow: var(--shadow);
+  }
+  .stat span { display: block; color: var(--muted); font-size: 14px; margin-bottom: 8px; }
+  .stat b {
+    font-family: "Iowan Old Style", Palatino, Georgia, serif;
+    font-size: 36px;
+    font-weight: 520;
+    letter-spacing: -0.03em;
+  }
+  .stat.ok b { color: var(--green); font-size: 30px; }
+  .stat .n-green { color: #2f8a55; }
+  .stat .n-blue { color: #2a62c9; }
+  .stat .n-red { color: var(--red); }
+  .stat .n-amber { color: var(--amber); }
+  .letters {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  .letter-card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 16px 16px 14px;
+    box-shadow: var(--shadow);
+    min-width: 0;
+  }
+  .bureau-chip {
+    display: inline-block;
+    background: #e7f2ea;
+    color: var(--green);
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 12px;
+    font-weight: 650;
+  }
+  .letter-card h3 { margin: 10px 0 4px; font-size: 20px; }
+  .letter-card p { margin: 0 0 6px; color: #3d4a44; font-size: 14px; }
+  .letter-card .who { color: var(--muted); min-height: 2.6em; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .btn {
+    border-radius: 10px;
+    padding: 8px 12px;
+    cursor: pointer;
+    background: #fff;
+    border: 1px solid #d5d9d4;
+  }
+  .btn.primary { background: var(--green); border-color: var(--green); color: #fff; }
+  .btn.danger { color: var(--red); border-color: #e7b2a8; }
+  .btn.ghost { background: #fff; }
   .letter {
-    background: var(--paper);
-    color: var(--paper-ink);
-    padding: 28px 32px;
-    border-radius: 4px;
+    margin-top: 12px;
+    background: #fafaf7;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px;
     white-space: pre-wrap;
-    font: 15px/1.5 "Iowan Old Style", Palatino, Georgia, serif;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+    font: 13px/1.45 "Iowan Old Style", Palatino, Georgia, serif;
+    max-height: 280px;
+    overflow: auto;
+    color: #241c12;
   }
-  .meta { color: var(--muted); font-size: 14px; }
+  .flags { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .flags li { background: #fff; border: 1px solid var(--line); border-left: 3px solid #8fb9c9; border-radius: 8px; padding: 8px 10px; }
+  .flags li.BLOCK { border-left-color: var(--red); }
+  .flags li.REVIEW { border-left-color: var(--amber-bar); }
+  .round { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+  .table-wrap {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    overflow: auto;
+    box-shadow: var(--shadow);
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; color: var(--muted); font-weight: 550; padding: 12px 14px; }
+  td { padding: 12px 14px; border-top: 1px solid #eef0ec; vertical-align: middle; }
+  .chip {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 3px 8px;
+    background: #eef1ee;
+    color: #5c675f;
+    font-size: 12px;
+  }
+  .chip.pending { background: var(--amber-bg); color: #8d5e16; }
+  .chip.fix { background: #fde8e4; color: var(--red); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin: 10px 2px 0; color: var(--muted); font-size: 13px; }
+  .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .history { margin-top: 22px; }
+  .hist {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin: 0 0 12px;
+  }
+  .rail { display: flex; flex-direction: column; align-items: center; width: 12px; }
+  .rail b { width: 10px; height: 10px; border-radius: 50%; background: #c5cbc6; display: block; }
+  .rail b.on { background: var(--green); }
+  .rail s { width: 2px; height: 22px; background: #e1e4df; display: block; text-decoration: none; }
+  .empty, .loading, .empty-state p, .fine { color: var(--muted); }
+  .empty-state {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 28px 24px;
+    margin-top: 16px;
+  }
+  .empty-state h2 { margin: 0 0 8px; font-size: 28px; }
+  .fine { font-size: 13px; margin: 14px 0 0; }
+  #desk-note { margin-top: 10px; }
   footer {
-    padding: 12px 28px 16px;
-    border-top: 1px solid var(--line);
+    padding: 8px 28px 16px;
     color: var(--muted);
-    font-size: 13px;
+    font-size: 12px;
+  }
+  @media (max-width: 1100px) {
+    .letters, .stats5 { grid-template-columns: 1fr 1fr; }
+    .stats { grid-template-columns: 1fr; }
   }
   @media (max-width: 800px) {
-    main { grid-template-columns: 1fr; }
+    header.top, main { display: block; }
+    .online { margin-top: 8px; }
+    .letters, .stats5 { grid-template-columns: 1fr; }
     #case-queue { border-right: 0; border-bottom: 1px solid var(--line); }
   }
 </style>
 </head>
 <body>
-<header>
-  <div>
-    <div class="mark">StarNet · credit disputes</div>
-    <h1>Dispute desk</h1>
-    <p class="lede">Round-1 bureau drafts saved by the credit tools. This page only reads <code>credit/cases/</code>. It does not draft, mail, fax, or approve a letter.</p>
+<header class="top">
+  <div class="brand">
+    <div class="brand-name">Asanti Management and Services LLC</div>
+    <div class="brand-sub">DISPUTES</div>
   </div>
-  <div class="bureaus" aria-label="Bureaus">
-    <span>Equifax</span>
-    <span>Experian</span>
-    <span>TransUnion</span>
+  <div class="tabbar" role="tablist" aria-label="Desk">
+    <button type="button" id="tab-case-view" role="tab" aria-selected="true" aria-controls="case-review">Case view</button>
+    <button type="button" id="tab-disputes" role="tab" aria-selected="false" aria-controls="case-review">Disputes</button>
   </div>
+  <div class="online"><i></i> Desk online · local only</div>
 </header>
 <main>
   <section id="case-queue" aria-label="Case queue">
-    <h2>Case queue</h2>
+    <h2>Find a case</h2>
+    <label class="search">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke-width="2"></circle><path d="M20 20l-3.5-3.5" stroke-width="2"></path></svg>
+      <input id="case-search" type="search" placeholder="Search name or case #" autocomplete="off">
+    </label>
     <div id="case-list" class="loading">Loading saved cases…</div>
   </section>
   <section id="case-review" aria-label="Case review">
-    <h2>Review</h2>
     <div id="review-body" class="empty">Select a case to read its flags and the DRAFT letter. A letter stays a draft until a person handles it outside this desk.</div>
   </section>
 </main>
@@ -148,7 +357,26 @@
 (function () {
   var listEl = document.getElementById('case-list');
   var reviewEl = document.getElementById('review-body');
+  var searchEl = document.getElementById('case-search');
+  var tabCase = document.getElementById('tab-case-view');
+  var tabDisputes = document.getElementById('tab-disputes');
   var selected = '';
+  var tab = 'case';
+  var casesCache = [];
+  var rootsCache = [];
+  var current = null;
+  var names = {};
+  var BUREAUS = ['equifax', 'experian', 'transunion'];
+  var BUREAU_NAME = { equifax: 'Equifax', experian: 'Experian', transunion: 'TransUnion' };
+  var PATTERN_REASON = {
+    A: 'Status and amount past due conflict',
+    B: 'Date of first delinquency not reported',
+    D: 'Collection missing original creditor',
+    E: 'Bureaus do not match',
+    H: 'Inquiry not tied to a tradeline',
+    I: 'No field-level defect on the tradeline'
+  };
+  var STAGES = ['Uploaded', 'Intake', 'Drafting done', 'Your approval', 'Mailed', 'Resolved'];
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -158,17 +386,117 @@
 
   function pill(status) {
     var s = status || 'NEEDS_REVIEW';
-    return '<span class="pill ' + esc(s) + '">' + esc(s) + '</span>';
+    return '<span class="pill ' + esc(s) + '">' + esc(pillText(s)) + '</span>';
+  }
+
+  function pillText(status) {
+    if (status === 'DRAFT') return 'Draft needs approval';
+    if (status === 'DRAFT_NEEDS_FIX') return 'Draft needs a fix';
+    if (status === 'NEEDS_REVIEW') return 'Needs review';
+    return status || 'Needs review';
+  }
+
+  function prettyDate(iso) {
+    if (!iso) return '';
+    var m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return String(iso);
+    var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[Number(m[2]) - 1] + ' ' + Number(m[3]);
+  }
+
+  function bureauName(b) {
+    var k = String(b || '').toLowerCase();
+    return BUREAU_NAME[k] || (b || 'Bureau');
+  }
+
+  function stageIndex(status) {
+    if (status === 'DRAFT') return 3;
+    if (status === 'DRAFT_NEEDS_FIX') return 2;
+    return 1;
+  }
+
+  function displayName(c) {
+    var letters = (c && c.letters) || [];
+    for (var i = 0; i < letters.length; i++) {
+      var md = letters[i].markdown || '';
+      var line = md.split('\n').map(function (s) { return s.trim(); }).filter(Boolean)[0] || '';
+      if (line && line.length < 80 && line.indexOf(' ') >= 0 && line.indexOf(':') < 0) return line;
+    }
+    return '';
   }
 
   function accountsLine(accounts) {
     if (!accounts || !accounts.length) return 'No disputed accounts on the letter yet.';
-    return accounts.map(function (a) {
-      return esc(a.furnisher || 'furnisher') + ' · last4 ' + esc(a.last4 || 'none') + (a.pattern ? ' · pattern ' + esc(a.pattern) : '');
-    }).join('<br>');
+    var counts = [];
+    var index = {};
+    accounts.forEach(function (a) {
+      var name = a.furnisher || 'furnisher';
+      if (index[name] == null) { index[name] = counts.length; counts.push({ name: name, n: 0 }); }
+      counts[index[name]].n++;
+    });
+    return counts.map(function (row) {
+      return esc(row.name) + (row.n > 1 ? ' ×' + row.n : '');
+    }).join(', ');
+  }
+
+  function reasonFor(c, account) {
+    var last4 = account.last4 || '';
+    var flags = (c && c.flags) || [];
+    var hit = flags.filter(function (f) {
+      var where = String(f.where || '');
+      return last4 && where.indexOf(last4) >= 0;
+    })[0];
+    if (hit && hit.detail) return hit.detail;
+    if (account.clientClaim) return account.clientClaim;
+    return PATTERN_REASON[account.pattern] || (account.pattern ? 'Pattern ' + account.pattern : 'See the draft');
+  }
+
+  function disputeRows(c) {
+    var map = {};
+    var order = [];
+    (c.letters || []).forEach(function (letter) {
+      var bureau = String(letter.bureau || '').toLowerCase();
+      (letter.accounts || []).forEach(function (a) {
+        var key = (a.furnisher || '') + '|' + (a.last4 || '');
+        if (!map[key]) {
+          map[key] = {
+            furnisher: a.furnisher || '',
+            last4: a.last4 || '',
+            pattern: a.pattern || '',
+            reason: reasonFor(c, a),
+            bureaus: {},
+            status: letter.status || c.status || 'DRAFT'
+          };
+          order.push(map[key]);
+        }
+        if (bureau) map[key].bureaus[bureau] = true;
+      });
+    });
+    return order;
+  }
+
+  function sortCases(cases) {
+    return cases.slice().sort(function (a, b) {
+      var da = a.reportDate || '';
+      var db = b.reportDate || '';
+      if (da !== db) return da < db ? 1 : -1;
+      return String(a.caseId).localeCompare(String(b.caseId));
+    });
+  }
+
+  function visibleCases() {
+    var q = (searchEl && searchEl.value || '').trim().toLowerCase();
+    return sortCases(casesCache).filter(function (c) {
+      if (!q) return true;
+      var name = (names[c.caseId] || '').toLowerCase();
+      var blob = [c.caseId, c.bureau, c.status, c.reportDate, name].join(' ').toLowerCase();
+      (c.accounts || []).forEach(function (a) { blob += ' ' + (a.furnisher || '') + ' ' + (a.last4 || ''); });
+      return blob.indexOf(q) >= 0;
+    });
   }
 
   function renderList(cases, roots) {
+    var shown = visibleCases();
     if (!cases.length) {
       var where = (roots && roots.length)
         ? 'Folders checked: ' + roots.map(esc).join(', ') + '.'
@@ -177,12 +505,22 @@
       listEl.innerHTML = 'No saved cases. This desk only reads them. ' + where;
       return;
     }
+    if (!shown.length) {
+      listEl.className = 'empty';
+      listEl.innerHTML = 'No case matches that search.';
+      return;
+    }
     listEl.className = '';
-    listEl.innerHTML = cases.map(function (c) {
+    listEl.innerHTML = shown.map(function (c) {
       var current = c.caseId === selected ? ' aria-current="true"' : '';
+      var when = prettyDate(c.reportDate);
+      var title = names[c.caseId] && names[c.caseId] !== c.caseId ? names[c.caseId] : '';
+      var idline = title
+        ? esc(c.caseId) + (when ? ' · ' + esc(when) : '')
+        : (when ? esc(when) : 'Saved case');
       return '<button class="case" type="button" data-id="' + esc(c.caseId) + '"' + current + '>'
-        + '<strong>' + esc(c.caseId) + '</strong>'
-        + '<small>' + esc(c.bureau || 'bureau pending') + '</small>'
+        + '<div class="idline">' + idline + '</div>'
+        + '<strong>' + esc(title || c.caseId) + '</strong>'
         + pill(c.status)
         + '</button>';
     }).join('');
@@ -191,28 +529,159 @@
     });
   }
 
-  function renderReview(data) {
-    var c = data.case;
+  function progressHtml(status) {
+    var at = stageIndex(status);
+    return '<ol class="progress">' + STAGES.map(function (label, i) {
+      var cls = i < at ? 'done' : (i === at ? 'now' : '');
+      return '<li class="' + cls + '"><span class="bar"></span>' + esc(label) + '</li>';
+    }).join('') + '</ol>';
+  }
+
+  function rulesCheck(c) {
+    var blocked = (c.flags || []).some(function (f) { return f.severity === 'BLOCK'; });
+    var bad = (c.letters || []).some(function (l) { return l.validator && l.validator.pass === false; });
+    var missing = (c.missingFields || []).length > 0;
+    if (c.status === 'DRAFT' && !blocked && !bad && !missing) return { ok: true, text: 'Passed' };
+    return { ok: false, text: 'Needs review' };
+  }
+
+  function letterCards(c) {
+    var byBureau = {};
+    (c.letters || []).forEach(function (letter) {
+      byBureau[String(letter.bureau || '').toLowerCase()] = letter;
+    });
+    if (!(c.letters || []).length) {
+      return '<p class="empty">No round-1 letter was drafted for this case. The flags above are the review hold.</p>';
+    }
+    return '<div class="letters">' + BUREAUS.map(function (key) {
+      var letter = byBureau[key];
+      if (!letter) {
+        return '<article class="letter-card"><span class="bureau-chip">' + esc(BUREAU_NAME[key]) + '</span>'
+          + '<h3>No draft yet</h3><p class="who">This bureau has no round-1 letter on the case.</p></article>';
+      }
+      var n = (letter.accounts || []).length;
+      return '<article class="letter-card">'
+        + '<span class="bureau-chip">' + esc(bureauName(letter.bureau)) + '</span>'
+        + '<h3>Draft letter</h3>'
+        + '<p>' + n + ' disputed account' + (n === 1 ? '' : 's') + '</p>'
+        + '<p class="who">' + accountsLine(letter.accounts) + '</p>'
+        + '<div class="actions">'
+        + '<button type="button" class="btn primary" data-act="approve">Approve</button>'
+        + '<button type="button" class="btn" data-act="preview">Preview PDF</button>'
+        + '<button type="button" class="btn danger" data-act="reject">Reject</button>'
+        + '</div>'
+        + '<article class="letter" hidden>' + esc(letter.markdown || 'No letter file on disk.') + '</article>'
+        + '</article>';
+    }).join('') + '</div>';
+  }
+
+  function chipFor(status) {
+    if (status === 'DRAFT') return '<span class="chip pending">Draft — awaiting review</span>';
+    if (status === 'DRAFT_NEEDS_FIX') return '<span class="chip fix">Draft needs a fix</span>';
+    if (status === 'NEEDS_REVIEW') return '<span class="chip pending">Needs review</span>';
+    return '<span class="chip">' + esc(status || 'Draft') + '</span>';
+  }
+
+  function bureauCell(row, key) {
+    if (row.bureaus[key]) return '<span class="chip">Disputed</span>';
+    return '<span class="chip">—</span>';
+  }
+
+  function renderCase(c) {
+    var name = names[c.caseId] || c.caseId;
+    var when = prettyDate(c.reportDate);
+    var rows = disputeRows(c);
+    var rules = rulesCheck(c);
+    var missing = (c.missingFields || []).length
+      ? '<p class="meta">Missing fields: ' + esc(c.missingFields.join(', ')) + '</p>' : '';
     var flags = (c.flags || []).map(function (f) {
       return '<li class="' + esc(f.severity || 'INFO') + '"><strong>' + esc(f.severity || 'INFO') + '</strong> '
         + esc(f.code || '') + (f.where ? ' @ ' + esc(f.where) : '') + (f.pattern ? ' · pattern ' + esc(f.pattern) : '')
         + (f.detail ? '<br>' + esc(f.detail) : '') + '</li>';
     }).join('');
-    var missing = (c.missingFields || []).length
-      ? '<p class="meta">Missing fields: ' + esc(c.missingFields.join(', ')) + '</p>' : '';
-    var letters = (c.letters || []).map(function (letter) {
-      return '<h3>' + esc(letter.bureau || 'letter') + ' ' + pill(letter.status) + '</h3>'
-        + '<p class="meta">' + accountsLine(letter.accounts) + '</p>'
-        + (letter.wordSpacingNote ? '<p class="meta">' + esc(letter.wordSpacingNote) + '</p>' : '')
-        + '<article class="letter">' + esc(letter.markdown || 'No letter file on disk.') + '</article>';
-    }).join('');
-    if (!letters) letters = '<p class="empty">No round-1 letter was drafted for this case. The flags above are the review hold.</p>';
     reviewEl.className = '';
-    reviewEl.innerHTML = '<h3>' + esc(c.caseId) + ' ' + pill(c.status) + '</h3>'
-      + (c.reportDate ? '<p class="meta">Report date ' + esc(c.reportDate) + '</p>' : '')
+    reviewEl.innerHTML = '<div class="title-row"><div>'
+      + '<p class="kicker">' + esc(c.caseId) + (when ? ' · report ' + esc(when) : '') + '</p>'
+      + '<h2 class="client">' + esc(name) + '</h2></div>'
+      + '<button type="button" class="btn ghost" data-act="flags">View original report</button></div>'
+      + progressHtml(c.status)
+      + '<div class="stats">'
+      + '<div class="stat"><span>Accounts on drafts</span><b>' + rows.length + '</b></div>'
+      + '<div class="stat"><span>Negative accounts</span><b>' + rows.filter(function (r) { return r.pattern; }).length + '</b></div>'
+      + '<div class="stat' + (rules.ok ? ' ok' : '') + '"><span>Rules check</span><b>' + (rules.ok ? '✓ ' : '') + esc(rules.text) + '</b></div>'
+      + '</div>'
+      + '<h2 class="section-title">Letters waiting for your approval</h2>'
+      + letterCards(c)
+      + '<p class="fine">Drafts only. Approve, reject, and mailing are not done on this page.</p>'
+      + '<p id="desk-note" class="fine" hidden>This desk only reads saved drafts. Nothing was approved, rejected, uploaded, or sent.</p>'
       + missing
-      + '<ul class="flags">' + (flags || '<li class="INFO">No flags stored on this case.</li>') + '</ul>'
-      + letters;
+      + '<div id="flag-block" hidden><ul class="flags">' + (flags || '<li class="INFO">No flags stored on this case.</li>') + '</ul></div>';
+  }
+
+  function renderDisputes(c) {
+    var name = names[c.caseId] || c.caseId;
+    var when = prettyDate(c.reportDate);
+    var rows = disputeRows(c);
+    var pending = rows.filter(function (r) { return r.status === 'DRAFT' || r.status === 'DRAFT_NEEDS_FIX' || r.status === 'NEEDS_REVIEW'; }).length;
+    var body;
+    if (!rows.length) {
+      body = '<div class="empty-state"><h2>No dispute results yet</h2>'
+        + '<p>Saved drafts with disputed accounts will show here. This desk does not upload a report or mail a letter.</p></div>';
+    } else {
+      body = '<div class="stats5">'
+        + '<div class="stat"><span>Disputed</span><b>' + rows.length + '</b></div>'
+        + '<div class="stat"><span>Deleted</span><b class="n-green">0</b></div>'
+        + '<div class="stat"><span>Updated</span><b class="n-blue">0</b></div>'
+        + '<div class="stat"><span>Still reporting</span><b class="n-red">0</b></div>'
+        + '<div class="stat"><span>Pending</span><b class="n-amber">' + pending + '</b></div>'
+        + '</div>'
+        + '<div class="table-wrap"><table><thead><tr>'
+        + '<th>Creditor</th><th>Account</th><th>Reason disputed</th><th>Equifax</th><th>Experian</th><th>TransUnion</th><th>Status</th>'
+        + '</tr></thead><tbody>'
+        + rows.map(function (row) {
+          var mask = row.last4 ? '****' + esc(row.last4) : '—';
+          return '<tr><td>' + esc(row.furnisher || '—') + '</td><td>' + mask + '</td><td>' + esc(row.reason) + '</td>'
+            + '<td>' + bureauCell(row, 'equifax') + '</td>'
+            + '<td>' + bureauCell(row, 'experian') + '</td>'
+            + '<td>' + bureauCell(row, 'transunion') + '</td>'
+            + '<td>' + chipFor(row.status) + '</td></tr>';
+        }).join('')
+        + '</tbody></table></div>'
+        + '<div class="legend"><span><i style="background:#d7efe0"></i>Deleted</span>'
+        + '<span><i style="background:#d6e4ff"></i>Updated</span>'
+        + '<span><i style="background:#f8d0cb"></i>Still reporting</span>'
+        + '<span><i style="background:#f3e2b8"></i>Pending</span></div>';
+    }
+    var history = when
+      ? '<div class="history"><h2 class="section-title">Report history</h2>'
+        + '<div class="hist"><div class="rail"><b class="on"></b><s></s></div><div><strong>' + esc(when) + '</strong> · Report on file'
+        + (rows.length ? ' · ' + rows.length + ' disputed account' + (rows.length === 1 ? '' : 's') + ' on the drafts' : '') + '</div></div>'
+        + '<div class="hist"><div class="rail"><b></b></div><div><span class="empty">Next</span> · Next report: compare results here</div></div></div>'
+      : '';
+    reviewEl.className = '';
+    reviewEl.innerHTML = '<div class="title-row"><div>'
+      + '<h2 class="client">' + esc(name) + ' · Disputed accounts</h2>'
+      + '<p class="round">Round 1 draft' + (when ? ' — report ' + esc(when) : '') + '. Results after mailing are not on this desk.</p></div>'
+      + '<button type="button" class="btn primary" data-act="upload">Upload new report</button></div>'
+      + body + history
+      + '<p id="desk-note" class="fine" hidden>This desk only reads saved drafts. Nothing was approved, rejected, uploaded, or sent.</p>';
+  }
+
+  function renderReview(data) {
+    var c = data.case;
+    current = c;
+    var found = displayName(c);
+    if (found) names[c.caseId] = found;
+    if (tab === 'disputes') renderDisputes(c);
+    else renderCase(c);
+    renderList(casesCache, rootsCache);
+  }
+
+  function setTab(next) {
+    tab = next;
+    tabCase.setAttribute('aria-selected', next === 'case' ? 'true' : 'false');
+    tabDisputes.setAttribute('aria-selected', next === 'disputes' ? 'true' : 'false');
+    if (current) renderReview({ case: current });
   }
 
   function openCase(id) {
@@ -235,12 +704,36 @@
       });
   }
 
+  tabCase.addEventListener('click', function () { setTab('case'); });
+  tabDisputes.addEventListener('click', function () { setTab('disputes'); });
+  searchEl.addEventListener('input', function () { renderList(casesCache, rootsCache); });
+  reviewEl.addEventListener('click', function (ev) {
+    var btn = ev.target.closest('[data-act]');
+    if (!btn) return;
+    var act = btn.getAttribute('data-act');
+    if (act === 'preview') {
+      var card = btn.closest('.letter-card');
+      var letter = card && card.querySelector('.letter');
+      if (letter) letter.hidden = !letter.hidden;
+      return;
+    }
+    if (act === 'flags') {
+      var block = document.getElementById('flag-block');
+      if (block) block.hidden = !block.hidden;
+      return;
+    }
+    var note = document.getElementById('desk-note');
+    if (note) note.hidden = false;
+  });
+
   fetch('/api/cases', { headers: { 'Accept': 'application/json' } })
     .then(function (r) { return r.json(); })
     .then(function (body) {
-      var cases = (body && body.cases) || [];
-      renderList(cases, body && body.roots);
-      if (cases.length) openCase(cases[0].caseId);
+      casesCache = (body && body.cases) || [];
+      rootsCache = (body && body.roots) || [];
+      renderList(casesCache, rootsCache);
+      var first = visibleCases()[0];
+      if (first) openCase(first.caseId);
     })
     .catch(function (err) {
       listEl.className = 'empty';
